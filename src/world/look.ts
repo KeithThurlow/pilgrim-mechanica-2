@@ -4,12 +4,13 @@ import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 
 export const LOOK_DEFAULTS = {
+  // Harsh bright sun (Keith 2026-10-24): high, white-hot, strong contrast, shadows still cool rather than black.
   sunAzimuth: 215,
-  sunElevation: 38,
-  sunIntensity: 3.2,
-  skyFill: 1.6,
-  exposure: 0.8,
-  haze: 0.55,
+  sunElevation: 58,
+  sunIntensity: 5,
+  skyFill: 1.1,
+  exposure: 0.72,
+  haze: 0.4,
   shadowBox: 70,
 };
 export type LookValues = typeof LOOK_DEFAULTS;
@@ -41,7 +42,7 @@ export class DesertLook {
     this.fill = new THREE.HemisphereLight(0x6f98ea, 0x8a6a5a, 1);
     scene.add(this.fill);
 
-    this.sun = new THREE.DirectionalLight(0xffe0b5, 3);
+    this.sun = new THREE.DirectionalLight(0xfff0dc, 3);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
@@ -50,7 +51,8 @@ export class DesertLook {
   }
 
   /** viewDistance: how far the camera can see (the streaming radius), so haze hides the edge of the world. */
-  update(focus: THREE.Vector3, viewDistance: number) {
+  /** shadowScale grows the shadow box with the camera's zoom, so far views still have shadows across the screen. */
+  update(focus: THREE.Vector3, viewDistance: number, shadowScale = 1) {
     const v = this.v;
     this.renderer.toneMappingExposure = v.exposure;
     this.fill.intensity = v.skyFill;
@@ -58,13 +60,14 @@ export class DesertLook {
     const az = (v.sunAzimuth * Math.PI) / 180, el = (v.sunElevation * Math.PI) / 180;
     const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
     // Snap the shadow box to texels so shadows don't shimmer as the focus moves.
-    const texel = (v.shadowBox * 2) / this.sun.shadow.mapSize.x;
+    const box = v.shadowBox * shadowScale;
+    const texel = (box * 2) / this.sun.shadow.mapSize.x;
     const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
     this.sun.target.position.set(fx, focus.y, fz);
     this.sun.position.set(fx, focus.y, fz).addScaledVector(dir, 150);
     const cam = this.sun.shadow.camera;
-    if (cam.right !== v.shadowBox) {
-      cam.left = -v.shadowBox; cam.right = v.shadowBox; cam.top = v.shadowBox; cam.bottom = -v.shadowBox;
+    if (Math.abs(cam.right - box) > 0.5) {
+      cam.left = -box; cam.right = box; cam.top = box; cam.bottom = -box;
       cam.near = 1; cam.far = 400;
       cam.updateProjectionMatrix();
     }

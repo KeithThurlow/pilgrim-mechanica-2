@@ -29,7 +29,7 @@ const TRACERS = 48, PUFFS = 90, SPARKS = 60, CASINGS = 240;
 
 interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean }
 interface Puff { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; vel: THREE.Vector3; age: number; life: number; size: number }
-interface Bit { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; spin: THREE.Vector3; rot: THREE.Euler; rest: boolean }
+interface Bit { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; spin: THREE.Vector3; rot: THREE.Euler; rest: boolean; landed: boolean }
 
 export class MinigunFx {
   readonly group = new THREE.Group();
@@ -44,6 +44,9 @@ export class MinigunFx {
   private casingI = 0;
   private flashes: { mesh: THREE.Object3D; light: THREE.PointLight; t: number }[] = [];
   private round = 0;
+  /** Called where a round hits the ground, and where a casing first lands (for sound). */
+  onHit: ((at: THREE.Vector3) => void) | null = null;
+  onCasingLand: ((at: THREE.Vector3) => void) | null = null;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
@@ -111,11 +114,12 @@ export class MinigunFx {
     const c = this.casingBits[this.casingI++ % CASINGS];
     c.pos.copy(eject);
     c.vel.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));
-    c.age = 0; c.life = 7; c.rest = false;
+    c.age = 0; c.life = 7; c.rest = false; c.landed = false;
     c.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
   }
 
   private impact(at: THREE.Vector3, dir: THREE.Vector3) {
+    this.onHit?.(at);
     const k = this.v.hitDust;
     if (k <= 0) return;
     const fwd = new THREE.Vector3(dir.x, 0, dir.z).normalize();
@@ -178,6 +182,7 @@ export class MinigunFx {
         const g = this.ground.height(b.pos.x, b.pos.z) + 0.03;
         if (b.pos.y < g) {
           b.pos.y = g;
+          if (bounce && !b.landed) { b.landed = true; this.onCasingLand?.(b.pos); }
           if (!bounce || Math.abs(b.vel.y) < 0.8) { b.rest = true; b.rot.x = Math.PI / 2 * Math.round(b.rot.x / (Math.PI / 2)); }
           else { b.vel.y *= -0.32; b.vel.x *= 0.5; b.vel.z *= 0.5; b.spin.multiplyScalar(0.5); }
         }
@@ -192,5 +197,5 @@ export class MinigunFx {
 }
 
 function bit(): Bit {
-  return { pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 1, life: 0, spin: new THREE.Vector3(), rot: new THREE.Euler(), rest: true };
+  return { pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 1, life: 0, spin: new THREE.Vector3(), rot: new THREE.Euler(), rest: true, landed: true };
 }

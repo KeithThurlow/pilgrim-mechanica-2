@@ -29,6 +29,7 @@ export const WALKER_DEFAULTS = {
   hipHeight: 3.2,
   hipWidth: 0.95,
   footSpread: 1.05,
+  walkSpread: 0.75,
   toeOut: 6,
   kneeOut: 6,
   bob: 0.06,
@@ -47,6 +48,10 @@ export const WALKER_DEFAULTS = {
   cannon: 0.95,
   cannonRake: 28,
   swingTuck: 30,
+  hockExtend: 0.85,
+  hockCompress: 3,
+  hockMinSlow: 18,
+  hockMinFast: 3,
   ankleHeight: 0.3,
   ankleBack: 0.12,
 };
@@ -76,7 +81,8 @@ export const WALKER_PARAMS: Param[] = [
 
   { key: "hipHeight", label: "Hip height (m)", min: 2, max: 4.2, step: 0.01, group: "Body" },
   { key: "hipWidth", label: "Hip width (m)", min: 0.4, max: 1.6, step: 0.01, group: "Body" },
-  { key: "footSpread", label: "Foot spread (m)", min: 0.3, max: 2, step: 0.01, group: "Body" },
+  { key: "footSpread", label: "Stance width, standing (m)", min: 0.3, max: 2, step: 0.01, group: "Body", tip: "Each foot this far from the centre line when standing" },
+  { key: "walkSpread", label: "Stance width, walking (m)", min: 0.2, max: 2, step: 0.01, group: "Body", tip: "Feet come in closer under the body once moving" },
   { key: "toeOut", label: "Toe out (°)", min: -10, max: 30, step: 1, group: "Body" },
   { key: "kneeOut", label: "Knees out (°)", min: -10, max: 30, step: 1, group: "Body" },
   { key: "bob", label: "Body bob (m)", min: 0, max: 0.3, step: 0.005, group: "Body" },
@@ -93,8 +99,12 @@ export const WALKER_PARAMS: Param[] = [
   { key: "femur", label: "Thigh (m)", min: 0.8, max: 2.5, step: 0.01, group: "Legs" },
   { key: "shin", label: "Shin (m)", min: 0.8, max: 2.5, step: 0.01, group: "Legs" },
   { key: "cannon", label: "Cannon (m)", min: 0.3, max: 2, step: 0.01, group: "Legs", tip: "The raised back bone between hock and ankle" },
-  { key: "cannonRake", label: "Cannon rake (°)", min: 0, max: 60, step: 1, group: "Legs" },
+  { key: "cannonRake", label: "Cannon rake (°)", min: 0, max: 60, step: 1, group: "Legs", tip: "Cannon angle back from the hip-ankle line" },
   { key: "swingTuck", label: "Hock tuck in swing (°)", min: 0, max: 80, step: 1, group: "Legs" },
+  { key: "hockExtend", label: "Hock opens at push-off", min: 0, max: 1, step: 0.01, group: "Legs", tip: "As the foot trails behind, the hock opens until the cannon lines up with the shin (1 = fully straight)" },
+  { key: "hockCompress", label: "Hock gives under load (°)", min: 0, max: 15, step: 0.1, group: "Legs" },
+  { key: "hockMinSlow", label: "Cannon from vertical, walking (°)", min: -10, max: 40, step: 1, group: "Legs", tip: "The cannon never tips closer to vertical than this" },
+  { key: "hockMinFast", label: "Cannon from vertical, sprinting (°)", min: -10, max: 40, step: 1, group: "Legs" },
   { key: "ankleHeight", label: "Ankle height (m)", min: 0.05, max: 0.6, step: 0.01, group: "Legs" },
   { key: "ankleBack", label: "Ankle behind plate centre (m)", min: -0.4, max: 0.4, step: 0.01, group: "Legs" },
 ];
@@ -107,11 +117,13 @@ export const WALKER_PARAMS: Param[] = [
 export const RAMPART_LEGS: Partial<WalkerValues> = {
   hipHeight: 3.05,
   hipWidth: 0.78,
-  footSpread: 1.28,
   femur: 1.717,
   shin: 0.749,
   cannon: 1.083,
   cannonRake: 22.4,
+  // Stance widths: the old game's values for this size (old lab 1.4 / 0.95 x 3.05 / 4.4), not the model's wide rest pose.
+  footSpread: 0.97,
+  walkSpread: 0.66,
   ankleHeight: 0.153,
   ankleBack: 0,
 };

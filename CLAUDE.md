@@ -52,7 +52,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   (not saved), e.g. `?set=sunAzimuth:120,height:12`.
 - Walker lab: `?cam=game|close|side|back|feet`, `?model=standin` (box walker), `?flat` (no dunes),
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
-  `?manual` (no demo).
+  `?manual` (no demo), `?zoom=metres` (game camera distance).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 
 ## Layout
@@ -65,7 +65,8 @@ src/core/               app (renderer, loop), hud (frame time), tweaks (slider p
 src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze)
 src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, rampart (model rig), walkerBody (stand-in)
-src/look/               toon (cel shading and ink outlines for units)
+src/look/               toon (unit materials, optional cel bands, ink outlines)
+src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 footfall (prints, dust), minigun (tracers, flash, hits, casings)
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
@@ -78,12 +79,15 @@ docs/                   design.md (the game), decisions.md (log)
 - **The ground is a function.** `DuneField.height(x, z)` is pure and deterministic: chunks, feet, vehicles and AI all
   read the same function, so any chunk can be built in any order and nothing disagrees about where the ground is.
 - Mech scale: the Rampart is about 4.4 m to the hood, hips at 3.05 m; walk 4 m/s, sprint 6.5 m/s (from the old project).
-- Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom to 45° at 12 m.
+- Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom from 45° at 12 m
+  out to 55° at 80 m.
   Judge looks and readability from that camera first; close views are for detail.
 - Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left button
   fires.
 - Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;
   read proportions from the model's joint markers rather than hardcoding them.
+- Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the
+  first click or key press.
 - Sims step at a fixed 120 Hz inside the frame (see the walker lab) so feel doesn't change with frame rate.
 
 ## State

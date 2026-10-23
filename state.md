@@ -15,19 +15,43 @@ How to update it:
 | System | State | Where | Lab |
 | --- | --- | --- | --- |
 | Lab core | Renderer and loop (WebGPU, WebGL 2 fallback), frame-time HUD, slider panel (saved per lab, `?set=` overrides, Copy values), WASD input | `src/core/` | all |
-| Game camera | High isometric view (Keith 2026-10-24): 50° down at 40 m, fixed facing so W is up the screen, scroll zooms to 45° at 12 m, smooth follow; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
+| Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Transverse dunes across the wind (slip faces 30-38°), meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
-| Desert light | Warm sun, strong cool sky fill (blue-slate shadows, not black), haze at the streaming edge, shadow box following the focus | `src/world/look.ts` | terrain, walker |
-| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
+| Desert light | Harsh bright midday sun (Keith 2026-10-24: high, white-hot, strong contrast), cool sky fill so shadows stay blue-slate rather than black, haze at the streaming edge, shadow box following the focus. Fixed time of day | `src/world/look.ts` | terrain, walker |
+| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straight lower leg at push-off (from the old lab); stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
 | Rampart | The old project's v4 mech on the walker sim: each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
 | Upper body | Twin-stick (Keith 2026-10-24): torso turns toward the mouse aim at a capped rate within a limit from the legs; guns track the rest inside their arc; spin-up before rounds, alternating guns, recoil, torso shake | `src/mech/upper.ts` | walker |
 | Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hit dust thrown downrange and sparks, casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
-| Cel look | Toon bands over vertex colours, inverted-hull ink outlines at constant pixel width (warm dark brown), for units and mechs only (the environment stays outline-free) | `src/look/toon.ts` | walker |
+| Unit look | Ordinary lit materials over the model's vertex colours by default (Keith 2026-10-24: try it without cel shading); cel bands as a toggle; inverted-hull ink outline at constant pixel width (warm dark brown, its own slider, 0 = off), units and mechs only | `src/look/toon.ts` | walker |
+| Minigun sound | Ported from the old game: spit per round, a growl loop per gun (level and pitch follow the spin; each gun its own voice, offset and detuned so the two beat against each other), spin-up and spin-down, dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; capped voices, same-instant gate, pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
 | Footfall FX | Footprints (pooled, oldest recycled) and dust puffs | `src/fx/footfall.ts` | walker |
-| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees); terrain (determinism, slopes) | `tools/*-check.ts` | `npm test` |
+| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees); terrain (determinism, slopes); audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
-| Not started | Convoy, salvage, enemies and swarms, explosions, radar, mech classes, sound, a game page; an ammo belt from drum to gun; a modelled power pack | | |
+| Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
+
+## Known gaps
+
+Things that exist in a partial or stand-in form, or that couldn't be done yet. Remove a line when it's fixed.
+
+- **No ammo belt** from each back drum to its gun. The link model is converted (`public/models/ammo-belt-link.glb`);
+  the Rampart's pods have no feed-in point yet, so one needs choosing on the model.
+- **Power pack is a stand-in** built from boxes in `rampart.ts`; it needs a modelled one in the Rampart's construction.
+- **Old weapon kit models missing:** only the half and full back drums, the belt link and the Rampart itself were in
+  Git LFS. The Light and Heavy miniguns, hand cannons and missile pods would need rebuilding from the old repo's
+  `tools/blender/weapons/` (`docs/assets.md`).
+- **Rampart rocket box hidden, not removed:** it's still in `rampart.glb`.
+- **Blender sources not in this repo:** the Rampart's scripts (`rampart_v4.py`, `export_game.py`, kits) live in the old
+  repo; changes to the model mean going back there and converting again with `tools/fbx-to-glb.ts`.
+- **Vite never run in the cloud workspace** (no npm registry there): builds are typechecked and bundled with esbuild
+  and screenshotted headless. The first `npm install` on Keith's PC creates the lockfile.
+- **Headless shots are WebGL on a software renderer**, so their frame times mean nothing; real numbers come from
+  Keith's PC.
+- **Two guns' tracking is near instant and identical**, so their growls sit close in phase; detune and loop offsets
+  keep them apart, but the old game's drift between guns (Keith 2026-10-24) isn't there. A small per-gun tracking
+  lag would bring it back if wanted.
+- **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
+  ported yet; only the minigun's.
 
 ## In progress
 
@@ -35,8 +59,11 @@ Nothing right now.
 
 ## Next candidates (ask Keith which)
 
-- Convoy lab: a slow convoy of tracked and wheeled vehicles riding the dunes (suspension faked from the height
-  function), with the range ring around it.
+- Convoy lab: the convoy as Keith described it 2026-10-24 (`docs/design.md`): platforms of different sizes riding the
+  dunes, the biggest on tracks carrying the mech bays and gantries, and a crane that swings out to pick a mech up
+  from alongside and set it down. Propose the plan first (rule 9).
+- Day-night cycle (Keith 2026-10-24), feeding salvage outcomes.
+- Port the old mech joint, stomp and thrum sounds.
 - Swarm lab: hundreds of instanced enemies chasing the mech over the dunes, with a frame-time budget.
 - Swarm targets for the miniguns: something to shoot, with hits, knockback and death.
 - Explosions (the old project's), and an ammo belt from each drum to its gun.
@@ -44,6 +71,20 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Walk fixes, far zoom, minigun sound, no cel shading, harsh sun (Claude, cloud session)
+- Keith: the cannon looked locked to one angle and the gait unbelievably wide; let the camera go out until the mech
+  is about half size; bring over the minigun sounds; try the mech without cel shading and a harsher bright sun.
+- Walker: cannon angle now measured from the hip-ankle line (pitches through the stride), gives under load, opens
+  at push-off, never tips past vertical (`hockExtend`, `hockCompress`, `hockMinSlow/Fast`); stance narrows from
+  `footSpread` to `walkSpread` once moving; the Rampart uses the old game's widths (0.97 / 0.66 m), no longer its
+  wide rest pose. Camera: far zoom 55° at 80 m, log-even scroll steps, `?zoom=` flag; haze and shadows scale with
+  zoom. Sound: `src/audio/synth.ts` (old SfxSynth recipes), `sfx.ts` (player), `minigunAudio.ts`; hit and casing
+  hooks in `src/fx/minigun.ts`. Look: `celShading` toggle (off), ink 1.2 px; sun 5 at 58°, fill 1.1, exposure 0.72.
+  New `tools/audio-check.ts` in `npm test`. Gaps listed under Known gaps. Convoy, salvage and day-night direction
+  written into `docs/design.md`.
+- Checked: typecheck, `npm test` (walker both leg sets, terrain, audio), headless shots: side filmstrip on flat,
+  back, close (shaded and lit sides), game view firing, far zoom; no console errors. Sound not heard (headless).
 
 ### 2026-10-24 · Rampart, twin hull miniguns, twin-stick, iso camera, cel look (Claude, cloud session)
 - Keith: bring over the v4 mech and its minigun, miniguns on both hull sides, a power pack or backpack, WASD

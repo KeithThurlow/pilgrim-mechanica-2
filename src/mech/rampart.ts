@@ -68,12 +68,15 @@ export class RampartBody {
     return body;
   }
 
-  /** Leg proportions measured from the model's joints: apply these to the walker tuning so the IK fits the parts. */
+  /**
+   * Leg proportions measured from the model's joints: apply these to the walker tuning so the IK fits the parts.
+   * Stance width is not taken from the model: its rest pose stands far wider than it walks.
+   */
   legValues(): Partial<WalkerValues> {
     const r = this.rest;
     const hip = r.Thigh_L, knee = r.Shin_L, hock = r.Cannon_L, foot = r.Foot_L;
     return {
-      hipHeight: hip.y, hipWidth: hip.x, footSpread: foot.x,
+      hipHeight: hip.y, hipWidth: hip.x,
       femur: hip.distanceTo(knee), shin: knee.distanceTo(hock), cannon: hock.distanceTo(foot),
       cannonRake: (Math.atan2(-(hock.z - foot.z), hock.y - foot.y) * 180) / Math.PI,
       ankleHeight: foot.y, ankleBack: 0,
@@ -160,7 +163,7 @@ export class RampartBody {
         part.position.set(x, 0, 0);
         look.apply(part);
         // The drums carry another brand's paint: tint them into the Rampart's olive.
-        (part.material as THREE.MeshToonMaterial).color.setHex(0x8b9160);
+        look.tint(part, 0x8b9160);
         back.add(part);
       });
     }
@@ -226,7 +229,7 @@ function powerPack(look: ToonLook) {
     const m = new THREE.Mesh(geo);
     m.scale.set(...size); m.position.set(...at); m.rotation.set(...rot);
     look.apply(m);
-    (m.material as THREE.MeshToonMaterial).color.setHex(tint);
+    look.tint(m, tint);
     g.add(m);
   };
   const khaki = 0xb7a77c, olive = 0x6c7546, dark = 0x3e3c35;

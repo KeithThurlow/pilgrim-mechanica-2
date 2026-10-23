@@ -20,17 +20,20 @@ import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { FootfallFx } from "../../src/fx/footfall";
 import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
+import { Sfx, SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
+import { MinigunAudio } from "../../src/audio/minigunAudio";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
 const canvas = app.renderer.domElement;
 
 const V = {
-  ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, radius: 3, shadowBox: 40,
+  ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, radius: 4, shadowBox: 40,
 };
 const DEFAULTS = { ...V };
-// Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet.
+// Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
+// ?zoom=metres (game camera distance).
 const straight = params.get("walk") === "straight";
 
 const toon = new ToonLook(V);
@@ -48,6 +51,11 @@ scene.add(rampart ? rampart.root : standIn!.root);
 const steps = new FootfallFx();
 const gunFx = new MinigunFx(field, V);
 scene.add(steps.group, gunFx.group);
+// Sound starts on the first click or key press (browser rule).
+const sfx = new Sfx(V, camera);
+const gunAudio = new MinigunAudio(sfx);
+gunFx.onHit = (at) => gunAudio.hit(at);
+gunFx.onCasingLand = (at) => gunAudio.casing(at);
 
 const stepTimes: number[] = [];
 let clock = 0;
@@ -106,7 +114,7 @@ const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "se
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -148,6 +156,7 @@ upper.reset(0.3);
 follow.copy(sim.pelvis);
 streamer.fill(sim.pos.x, sim.pos.z);
 setCam(camName);
+if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
 const lastFollow = follow.clone();
 const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
 const muzzle = new THREE.Vector3(), dir = new THREE.Vector3(), hit = new THREE.Vector3(), eject = new THREE.Vector3();
@@ -190,9 +199,13 @@ app.onTick((rawDt) => {
       if (!rayGround(muzzle, d, field, V.range, hit)) hit.copy(muzzle).addScaledVector(d, V.range);
       rampart.eject(s, eject);
       gunFx.shot(s === 1 ? 0 : 1, muzzle, d, hit, eject, left.clone().multiplyScalar(s));
+      gunAudio.shot(muzzle);
       rounds++;
     }
+    const firing = trigger && upper.spin >= V.fireFrom;
+    gunAudio.update(dt, trigger, firing, upper.spin, [rampart.muzzle(1, new THREE.Vector3()), rampart.muzzle(-1, new THREE.Vector3())]);
   }
+  sfx.update();
   steps.update(dt);
   gunFx.update(dt);
 
@@ -214,12 +227,14 @@ app.onTick((rawDt) => {
   toon.update(camera, canvas.clientHeight);
 
   streamer.update(sim.pos.x, sim.pos.z);
-  look.update(follow, V.radius * V.chunkSize);
+  // Haze and shadows scale with the zoom: fog counts from the camera, and far views need a bigger shadow box.
+  const camDist = camera.position.distanceTo(follow);
+  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
 
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}%`);
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin ${(upper.spin * 100).toFixed(0)}% · ${rounds} rounds`);
+  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin ${(upper.spin * 100).toFixed(0)}% · ${rounds} rounds${sfx.running ? "" : " · click for sound"}`);
 });

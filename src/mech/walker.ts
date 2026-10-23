@@ -62,6 +62,9 @@ export class Foot {
   pos = new Vector3(); up = new Vector3(0, 1, 0); yaw = 0; pitch = 0;
   /** Ground height the body rides on for this foot. */
   groundY = 0;
+  /** Cannon angle back from the hip-ankle line (radians), and its value at lift-off. */
+  theta = 0;
+  liftTheta = 0;
   pose: LegPose = {
     hip: new Vector3(), knee: new Vector3(), hock: new Vector3(), ankle: new Vector3(), foot: new Vector3(), toe: new Vector3(),
     footQ: new Quaternion(), legFwd: new Vector3(),
@@ -124,6 +127,7 @@ export class WalkerSim {
       this.groundAt(ft.planted, ft.plantedUp);
       ft.plantedYaw = heading + ft.side * this.v.toeOut * D2R;
       ft.pos.copy(ft.planted); ft.up.copy(ft.plantedUp); ft.yaw = ft.plantedYaw; ft.pitch = 0;
+      ft.theta = ft.liftTheta = this.v.cannonRake * D2R;
     }
     const g = this.ground.height(x, z);
     this.bodyY.x = g + this.v.hipHeight; this.bodyY.v = 0;
@@ -132,6 +136,8 @@ export class WalkerSim {
   }
 
   stride() { return this.v.strideBase + this.v.stridePerSpeed * this.speed; }
+  /** Each foot's distance from the centre line: footSpread standing, coming in to walkSpread once moving. */
+  spread() { return this.v.footSpread + (this.v.walkSpread - this.v.footSpread) * clamp(this.speed / 1.5, 0, 1); }
   duty() { return this.v.duty + (this.v.dutyFast - this.v.duty) * clamp(this.speed / Math.max(0.1, this.v.sprintSpeed), 0, 1); }
 
   update(dt: number, cmd: MoveCommand) {
@@ -213,6 +219,7 @@ export class WalkerSim {
     f.liftYaw = f.yaw;
     f.liftPitch = f.pitch;
     f.liftUp.copy(f.plantedUp);
+    f.liftTheta = f.theta;
     this.aim(f);
   }
 
@@ -236,7 +243,7 @@ export class WalkerSim {
     const h = this.heading + this.turnSpeed * remain * 0.5;
     const fw = forwardOf(h, this.t.f), lf = leftOf(h, this.t.l);
     const ahead = d * S * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
-    f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * v.footSpread);
+    f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * this.spread());
     this.groundAt(f.target, f.targetUp);
     f.targetYaw = h + f.side * v.toeOut * D2R;
   }
@@ -356,13 +363,41 @@ export class WalkerSim {
       P.ankle.copy(f.pos).addScaledVector(upNow, v.ankleHeight).addScaledVector(fwNow, -v.ankleBack);
 
       forwardOf(this.heading + f.side * v.kneeOut * D2R, P.legFwd);
-      const tuck = f.swinging ? v.swingTuck * Math.sin(Math.PI * f.u) : 0;
-      const rake = (v.cannonRake + tuck) * D2R;
       const reach = v.femur + v.shin - 0.002;
 
-      // Cannon: up and back from the ankle; if the hip is out of reach, swing it toward the hip until it isn't.
-      const dirRake = new Vector3().copy(UP).multiplyScalar(Math.cos(rake)).addScaledVector(P.legFwd, -Math.sin(rake));
-      const dirHip = new Vector3().subVectors(P.hip, P.ankle).normalize();
+      // Cannon angle, measured back from the hip-ankle line in the leg plane, so the whole lower leg pitches as the
+      // leg swings under the body. Planted: the rake, compressed a little under load, opening toward a straight
+      // lower leg (cannon in line with the shin) as the foot trails into push-off. Swinging: back to the rake from
+      // the lift-off angle, with a tuck in the middle that lifts the foot.
+      const toHip = new Vector3().subVectors(P.hip, P.ankle);
+      const planeUp = toHip.clone().addScaledVector(P.legFwd, -toHip.dot(P.legFwd)).normalize();
+      const rake = v.cannonRake * D2R;
+      let theta: number;
+      if (f.swinging) {
+        const t = f.u;
+        theta = f.liftTheta + (rake - f.liftTheta) * smooth(0, 0.5, t) + v.swingTuck * D2R * Math.sin(Math.PI * Math.min(1, t / 0.85));
+      } else {
+        theta = rake + v.hockCompress * D2R * (1 + Math.max(0, -this.impact.x) * 20);
+        const ext = v.hockExtend * smooth(0.3, 1, f.stanceT);
+        if (ext > 0) {
+          // The cannon angle that lines it up with the shin: two-bone IK of thigh and (shin + cannon) to the ankle.
+          const l2 = v.shin + v.cannon, dm = Math.min(v.femur + l2 - 0.002, Math.max(0.01, toHip.length()));
+          const dirM = toHip.clone().negate().normalize(); // hip -> ankle
+          const ca = clamp((v.femur * v.femur + dm * dm - l2 * l2) / (2 * v.femur * dm), -1, 1);
+          const pp = P.legFwd.clone().addScaledVector(dirM, -P.legFwd.dot(dirM)).normalize();
+          const knee = P.hip.clone().addScaledVector(dirM, v.femur * ca).addScaledVector(pp, v.femur * Math.sqrt(1 - ca * ca));
+          const toK = knee.sub(P.ankle);
+          theta += (Math.atan2(-toK.dot(P.legFwd), toK.dot(planeUp)) - theta) * ext;
+        }
+        // Never tip the cannon past vertical (hock ahead of the foot); how close it may get grows with speed.
+        const minT = (v.hockMinSlow + (v.hockMinFast - v.hockMinSlow) * clamp(this.speed / Math.max(0.1, v.sprintSpeed), 0, 1)) * D2R;
+        theta = Math.max(theta, minT - Math.atan2(toHip.dot(P.legFwd), toHip.dot(UP)));
+      }
+      f.theta = theta;
+
+      // If the hip is still out of reach, swing the cannon toward the hip until it isn't.
+      const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
+      const dirHip = toHip.clone().normalize();
       P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
       if (P.hock.distanceTo(P.hip) > reach) {
         let lo = 0, hi = 1;
