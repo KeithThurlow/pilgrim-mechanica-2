@@ -1,0 +1,98 @@
+// Walker tuning: every feel value for the procedural walk. Metres, seconds, degrees.
+// Starting values come from the old walker lab's Mechanical walk (build 65, Keith 2026-10-19), scaled to a mech
+// about 5 m to the top of the hull; the names are new and the old lab's 140 sliders are cut to what matters here.
+import type { Param } from "../core/tweaks";
+
+export const WALKER_DEFAULTS = {
+  // Move
+  walkSpeed: 4,
+  sprintSpeed: 6.5,
+  accel: 3,
+  decel: 5,
+  turnRate: 120,
+  turnSlow: 0.6,
+  // Gait
+  strideBase: 2.6,
+  stridePerSpeed: 0.45,
+  duty: 0.64,
+  dutyFast: 0.54,
+  stanceBack: 0.15,
+  liftHeight: 0.75,
+  liftHold: 0.14,
+  liftBox: 0.8,
+  stomp: 1,
+  stompShare: 0.16,
+  rollOff: 22,
+  swingCurl: 30,
+  footClear: 0.3,
+  // Body
+  hipHeight: 3.2,
+  hipWidth: 0.95,
+  footSpread: 1.05,
+  toeOut: 6,
+  kneeOut: 6,
+  bob: 0.06,
+  impact: 2.2,
+  weightShift: 0.08,
+  crunchRoll: 4,
+  shoulderLevel: 0.8,
+  speedLean: 1.5,
+  // Terrain
+  slopePitch: 0.35,
+  footTiltMax: 28,
+  downhillReach: 0.55,
+  // Legs
+  femur: 1.65,
+  shin: 1.5,
+  cannon: 0.95,
+  cannonRake: 28,
+  swingTuck: 30,
+  ankleHeight: 0.3,
+};
+export type WalkerValues = typeof WALKER_DEFAULTS;
+
+export const WALKER_PARAMS: Param[] = [
+  { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
+  { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
+  { key: "accel", label: "Speed up (m/s²)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "Low = heavy, takes time to get going" },
+  { key: "decel", label: "Slow down (m/s²)", min: 0.5, max: 20, step: 0.1, group: "Move" },
+  { key: "turnRate", label: "Turn rate (°/s)", min: 20, max: 720, step: 5, group: "Move", tip: "How fast the heading swings toward the stick: low commits to a direction" },
+  { key: "turnSlow", label: "Slow through turns", min: 0, max: 1, step: 0.01, group: "Move" },
+
+  { key: "strideBase", label: "Stride at rest (m)", min: 0.5, max: 6, step: 0.05, group: "Gait", tip: "Length of a full cycle (two steps) near zero speed" },
+  { key: "stridePerSpeed", label: "Stride per m/s", min: 0, max: 1.5, step: 0.01, group: "Gait", tip: "Higher = longer, slower steps when fast" },
+  { key: "duty", label: "Foot planted share", min: 0.5, max: 0.85, step: 0.01, group: "Gait", tip: "Share of the cycle each foot is down at a walk; above 0.5 one foot is always down" },
+  { key: "dutyFast", label: "Planted share at sprint", min: 0.4, max: 0.85, step: 0.01, group: "Gait" },
+  { key: "stanceBack", label: "Plant behind", min: -0.3, max: 0.5, step: 0.01, group: "Gait", tip: "Shifts where feet land: positive lands them nearer the hips" },
+  { key: "liftHeight", label: "Step height (m)", min: 0.05, max: 1.8, step: 0.01, group: "Gait" },
+  { key: "liftHold", label: "Lift before travel", min: 0, max: 0.4, step: 0.01, group: "Gait", tip: "The foot rises straight up before it moves forward: mechanical" },
+  { key: "liftBox", label: "Hydraulic ease", min: 0, max: 1, step: 0.01, group: "Gait", tip: "Harder start and stop to the foot's travel" },
+  { key: "stomp", label: "Stomp", min: 0, max: 1, step: 0.01, group: "Gait", tip: "The foot hangs over its spot, then drops straight down" },
+  { key: "stompShare", label: "Stomp time share", min: 0.05, max: 0.35, step: 0.01, group: "Gait" },
+  { key: "rollOff", label: "Heel lift at push-off (°)", min: 0, max: 60, step: 1, group: "Gait" },
+  { key: "swingCurl", label: "Toes down in swing (°)", min: 0, max: 70, step: 1, group: "Gait" },
+  { key: "footClear", label: "Ground clearance (m)", min: 0, max: 1, step: 0.01, group: "Gait", tip: "Swing feet stay this far above the ground under them, so they clear crests" },
+
+  { key: "hipHeight", label: "Hip height (m)", min: 2, max: 4.2, step: 0.01, group: "Body" },
+  { key: "hipWidth", label: "Hip width (m)", min: 0.4, max: 1.6, step: 0.01, group: "Body" },
+  { key: "footSpread", label: "Foot spread (m)", min: 0.3, max: 2, step: 0.01, group: "Body" },
+  { key: "toeOut", label: "Toe out (°)", min: -10, max: 30, step: 1, group: "Body" },
+  { key: "kneeOut", label: "Knees out (°)", min: -10, max: 30, step: 1, group: "Body" },
+  { key: "bob", label: "Body bob (m)", min: 0, max: 0.3, step: 0.005, group: "Body" },
+  { key: "impact", label: "Plant thud", min: 0, max: 8, step: 0.05, group: "Body", tip: "How hard the body drops onto each footfall" },
+  { key: "weightShift", label: "Weight shift (m)", min: 0, max: 0.4, step: 0.005, group: "Body", tip: "The pelvis moves over the planted foot" },
+  { key: "crunchRoll", label: "Hip roll (°)", min: 0, max: 15, step: 0.1, group: "Body", tip: "The pelvis rolls onto the loaded leg (AT-ST hips)" },
+  { key: "shoulderLevel", label: "Hull stays level", min: 0, max: 1, step: 0.01, group: "Body", tip: "The hull counters the hip roll: 1 = perfectly level cab" },
+  { key: "speedLean", label: "Lean into acceleration (°)", min: 0, max: 8, step: 0.1, group: "Body" },
+
+  { key: "slopePitch", label: "Pitch with slope", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "How much the body tips with the ground; 0 = always level" },
+  { key: "footTiltMax", label: "Foot tilt limit (°)", min: 0, max: 45, step: 1, group: "Terrain", tip: "Feet lie flat on slopes up to this angle" },
+  { key: "downhillReach", label: "Sink to the low foot", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "On slopes the body drops toward the lower foot so that leg can reach" },
+
+  { key: "femur", label: "Thigh (m)", min: 0.8, max: 2.5, step: 0.01, group: "Legs" },
+  { key: "shin", label: "Shin (m)", min: 0.8, max: 2.5, step: 0.01, group: "Legs" },
+  { key: "cannon", label: "Cannon (m)", min: 0.3, max: 2, step: 0.01, group: "Legs", tip: "The raised back bone between hock and ankle" },
+  { key: "cannonRake", label: "Cannon rake (°)", min: 0, max: 60, step: 1, group: "Legs" },
+  { key: "swingTuck", label: "Hock tuck in swing (°)", min: 0, max: 80, step: 1, group: "Legs" },
+  { key: "ankleHeight", label: "Ankle height (m)", min: 0.1, max: 0.6, step: 0.01, group: "Legs" },
+];
