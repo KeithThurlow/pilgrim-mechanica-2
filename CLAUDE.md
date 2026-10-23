@@ -50,8 +50,9 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
   (not saved), e.g. `?set=sunAzimuth:120,height:12`.
-- Walker lab: `?cam=game|close|side|feet`, `?flat` (no dunes), `?walk=straight` (constant heading for filmstrips),
-  `?sprint` (with `walk=straight`), `?manual` (no auto walk).
+- Walker lab: `?cam=game|close|side|back|feet`, `?model=standin` (box walker), `?flat` (no dunes),
+  `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
+  `?manual` (no demo).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 
 ## Layout
@@ -62,8 +63,11 @@ index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
 src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze)
-src/mech/               walker (sim), walkerTuning (params), walkerBody (stand-in model)
-src/fx/                 footfall (prints, dust)
+src/core/isoCamera.ts   the high isometric game camera
+src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, rampart (model rig), walkerBody (stand-in)
+src/look/               toon (cel shading and ink outlines for units)
+src/fx/                 footfall (prints, dust), minigun (tracers, flash, hits, casings)
+public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
 docs/                   design.md (the game), decisions.md (log)
 ```
@@ -73,7 +77,13 @@ docs/                   design.md (the game), decisions.md (log)
 - Units: metres, seconds; degrees in tuning, radians in code. Y up. Heading 0 faces +Z; +X is the mech's left.
 - **The ground is a function.** `DuneField.height(x, z)` is pure and deterministic: chunks, feet, vehicles and AI all
   read the same function, so any chunk can be built in any order and nothing disagrees about where the ground is.
-- Mech scale: about 5 m to the top of the hull, hips at 3.2 m; walk 4 m/s, sprint 6.5 m/s (from the old project).
+- Mech scale: the Rampart is about 4.4 m to the hood, hips at 3.05 m; walk 4 m/s, sprint 6.5 m/s (from the old project).
+- Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom to 45° at 12 m.
+  Judge looks and readability from that camera first; close views are for detail.
+- Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left button
+  fires.
+- Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;
+  read proportions from the model's joint markers rather than hardcoding them.
 - Sims step at a fixed 120 Hz inside the frame (see the walker lab) so feel doesn't change with frame rate.
 
 ## State

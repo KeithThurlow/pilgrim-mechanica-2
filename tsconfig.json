@@ -15,5 +15,6 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "labs", "tools/*.ts"]
+  "include": ["src", "labs", "tools/*.ts"],
+  "exclude": ["tools/fbx-to-glb.ts"]
 }

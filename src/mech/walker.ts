@@ -106,6 +106,10 @@ export class WalkerSim {
     this.reset(0, 0, 0);
   }
 
+  /** Body pitch (nose down +) and roll (left side up +), radians: for an upper body riding on the hips. */
+  get bodyPitch() { return this.pitch.x; }
+  get bodyRoll() { return this.roll.x; }
+
   reset(x: number, z: number, heading: number) {
     this.pos.set(x, 0, z);
     this.heading = heading;
@@ -349,7 +353,7 @@ export class WalkerSim {
       const fwNow = new Vector3(0, 0, 1).applyQuaternion(P.footQ);
       P.foot.copy(f.pos);
       P.toe.copy(f.pos).addScaledVector(fwNow, TOE_LEN);
-      P.ankle.copy(f.pos).addScaledVector(upNow, v.ankleHeight).addScaledVector(fwNow, -0.12);
+      P.ankle.copy(f.pos).addScaledVector(upNow, v.ankleHeight).addScaledVector(fwNow, -v.ankleBack);
 
       forwardOf(this.heading + f.side * v.kneeOut * D2R, P.legFwd);
       const tuck = f.swinging ? v.swingTuck * Math.sin(Math.PI * f.u) : 0;

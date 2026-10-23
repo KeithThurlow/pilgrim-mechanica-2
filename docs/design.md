@@ -15,7 +15,16 @@ Keith's pitch, 2026-10-24, written up by Claude. Direction, not final: correct a
 - **No load screens.** Leaving and returning to the convoy is seamless; the world keeps moving past.
 - **A radar in the village** shows salvage relative to the convoy. When something comes up, you decide whether to go.
 
+## Camera and controls
+
+- **High isometric view** (Keith 2026-10-24: the game was designed for it): 50 degrees down at about 40 m, zoom in
+  to about 45 degrees at 12 m.
+- **Twin-stick:** WASD moves, the mouse aims the torso and guns, separately (Keith 2026-10-24).
+
 ## Mechs
+
+- **Starting mech: the Rampart** (the old project's v4 study), with hull-mounted miniguns on both sides and a
+  backpack: ammo drums under a power pack (Keith 2026-10-24).
 
 - **Several mechs in the convoy**, chosen per trip: a light, fast one that can't fight much; a medium all-rounder;
   a heavy one that stays near the convoy but chews through swarms and salvages fast.
@@ -37,6 +46,4 @@ Keith's pitch, 2026-10-24, written up by Claude. Direction, not final: correct a
 - Swarm scaling: by time out, by distance from the convoy, or both?
 - Smarter enemies (bosses, guards on high-value salvage) alongside the data-oriented swarm: how many, how they're
   marked on the radar.
-- Camera: top-down / isometric like Halls of Torment, or closer behind the mech? (Labs default to a 50-degree game
-  view at about 34 m, close to the old game's 50 degrees at 40 m.)
 - Who steers the convoy: no one for now (Keith 2026-10-24: get the gameplay loop right first; a story loop later).

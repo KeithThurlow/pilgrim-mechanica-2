@@ -13,7 +13,7 @@ if (!existsSync(root)) { console.error("No dist/: run `npm run build` first."); 
 const out = resolve(import.meta.dirname, "../shots");
 mkdirSync(out, { recursive: true });
 
-const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml", ".glb": "model/gltf-binary" };
 const server = createServer((req, res) => {
   let p = join(root, decodeURIComponent(req.url.split("?")[0]));
   if (existsSync(p) && statSync(p).isDirectory()) p = join(p, "index.html");
@@ -24,8 +24,9 @@ const server = createServer((req, res) => {
 const port = server.address().port;
 
 const DEFAULT = [
-  "/labs/walker/?cam=game",
+  "/labs/walker/?cam=game&fire",
   "/labs/walker/?cam=close&set=sunAzimuth:30,sunElevation:40",
+  "/labs/walker/?cam=back&walk=straight&set=sunAzimuth:200,sunElevation:40",
   "/labs/walker/?cam=side&flat&walk=straight&set=sunAzimuth:125,sunElevation:30",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",

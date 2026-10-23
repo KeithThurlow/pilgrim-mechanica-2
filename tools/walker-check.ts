@@ -3,7 +3,7 @@
 // knees bending backwards, planted feet sliding. Run: npm test (or npx tsx tools/walker-check.ts).
 import { Vector3 } from "three";
 import { WalkerSim } from "../src/mech/walker";
-import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
+import { WALKER_DEFAULTS, RAMPART_LEGS } from "../src/mech/walkerTuning";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 interface Run { name: string; seconds: number; cmd: (t: number) => { x: number; z: number; sprint: boolean } }
@@ -18,11 +18,17 @@ const runs: Run[] = [
 
 const dt = 1 / 60;
 let failed = false;
+const builds = [
+  { name: "stand-in", values: { ...WALKER_DEFAULTS } },
+  { name: "rampart", values: { ...WALKER_DEFAULTS, ...RAMPART_LEGS } },
+];
+for (const build of builds) {
+console.log(`-- ${build.name} legs`);
 for (const r of runs) {
   const terrain = { ...TERRAIN_DEFAULTS };
   if (r.name === "flat ground") { terrain.height = 0; terrain.swell = 0; terrain.bumps = 0; }
   const field = new DuneField(terrain);
-  const sim = new WalkerSim({ ...WALKER_DEFAULTS }, field);
+  const sim = new WalkerSim({ ...build.values }, field);
   sim.reset(13, -40, 0.3);
   let bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
   const lastPlant = sim.feet.map(() => new Vector3());
@@ -64,6 +70,7 @@ for (const r of runs) {
     `min swing clearance ${minClear === Infinity ? "-" : minClear.toFixed(2)} m · hip above ground ${minHipToGround.toFixed(2)}..${maxHipToGround.toFixed(2)} m · moved ${sim.pos.length().toFixed(0)} m`;
   console.log((problems.length ? "FAIL " : "ok   ") + line + (problems.length ? "\n       " + problems.join("; ") : ""));
   if (problems.length) failed = true;
+}
 }
 if (failed) throw new Error("walker check failed");
 console.log("walker check passed");

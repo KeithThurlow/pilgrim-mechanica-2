@@ -48,6 +48,7 @@ export const WALKER_DEFAULTS = {
   cannonRake: 28,
   swingTuck: 30,
   ankleHeight: 0.3,
+  ankleBack: 0.12,
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
@@ -94,5 +95,23 @@ export const WALKER_PARAMS: Param[] = [
   { key: "cannon", label: "Cannon (m)", min: 0.3, max: 2, step: 0.01, group: "Legs", tip: "The raised back bone between hock and ankle" },
   { key: "cannonRake", label: "Cannon rake (°)", min: 0, max: 60, step: 1, group: "Legs" },
   { key: "swingTuck", label: "Hock tuck in swing (°)", min: 0, max: 80, step: 1, group: "Legs" },
-  { key: "ankleHeight", label: "Ankle height (m)", min: 0.1, max: 0.6, step: 0.01, group: "Legs" },
+  { key: "ankleHeight", label: "Ankle height (m)", min: 0.05, max: 0.6, step: 0.01, group: "Legs" },
+  { key: "ankleBack", label: "Ankle behind plate centre (m)", min: -0.4, max: 0.4, step: 0.01, group: "Legs" },
 ];
+
+/**
+ * The Rampart's legs, measured from the joint markers in its model (public/models/rampart.glb: Thigh_L hip,
+ * Shin_L knee, Cannon_L hock, Foot_L foot point). The model loader re-measures them at runtime; these copies let
+ * the headless check test the walk with the Rampart's proportions.
+ */
+export const RAMPART_LEGS: Partial<WalkerValues> = {
+  hipHeight: 3.05,
+  hipWidth: 0.78,
+  footSpread: 1.28,
+  femur: 1.717,
+  shin: 0.749,
+  cannon: 1.083,
+  cannonRake: 22.4,
+  ankleHeight: 0.153,
+  ankleBack: 0,
+};

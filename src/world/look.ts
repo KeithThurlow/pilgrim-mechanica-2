@@ -6,9 +6,9 @@ import type { Param } from "../core/tweaks";
 export const LOOK_DEFAULTS = {
   sunAzimuth: 215,
   sunElevation: 38,
-  sunIntensity: 3.4,
-  skyFill: 0.75,
-  exposure: 0.85,
+  sunIntensity: 3.2,
+  skyFill: 1.6,
+  exposure: 0.8,
   haze: 0.55,
   shadowBox: 70,
 };
@@ -38,7 +38,7 @@ export class DesertLook {
     this.fog = new THREE.Fog(HAZE, 120, 400);
     scene.fog = this.fog;
 
-    this.fill = new THREE.HemisphereLight(0x7fa6e6, 0x9a6a48, 1);
+    this.fill = new THREE.HemisphereLight(0x6f98ea, 0x8a6a5a, 1);
     scene.add(this.fill);
 
     this.sun = new THREE.DirectionalLight(0xffe0b5, 3);
