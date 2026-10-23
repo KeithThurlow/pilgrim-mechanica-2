@@ -28,6 +28,9 @@ desert look direction. What came from where: `docs/decisions.md`.
    before calling it done. Labs take URL flags for repeatable shots (below).
 8. **Log decisions** in `docs/decisions.md` (dated, who raised it, who decided). Mark only Keith's calls as his.
 9. **Propose before big builds.** For a new system, outline files, data and key values first and wait for Keith.
+10. **Every change updates `state.md` in the same commit** (Keith 2026-10-24): the system's entry if it changed, a
+   dated line at the top of Changes (what, main files, what was checked, who), and In progress while work spans
+   sessions or agents. Read `state.md` first when you start; it is the shared record between agents.
 
 ## Stack
 
@@ -54,6 +57,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 ## Layout
 
 ```
+state.md                live state of every system, work in progress, change history
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
@@ -72,24 +76,7 @@ docs/                   design.md (the game), decisions.md (log)
 - Mech scale: about 5 m to the top of the hull, hips at 3.2 m; walk 4 m/s, sprint 6.5 m/s (from the old project).
 - Sims step at a fixed 120 Hz inside the frame (see the walker lab) so feel doesn't change with frame rate.
 
-## Current state (2026-10-24)
+## State
 
-- **Terrain:** transverse dunes across the wind (long windward slope, ~30-38 degree slip face), meandering and
-  breaking crests, a crossing dune set, interdune flats, swell and small bumps; streamed in chunks around a focus,
-  nearest first inside a per-frame time budget; vertex-coloured sand (slip faces darker, flats paler); optional
-  faceted look. Desert light: warm sun, cool sky fill, haze at the streaming edge, shadow box following the focus.
-- **Walker:** digitigrade legs (thigh, shin, cannon, three-toe plate) on a pure sim: shared gait phase, duty factor,
-  landing spots predicted on the real ground and tilted to the slope, mechanical swing (lift, hydraulic travel,
-  stomp), heel roll-off, body rides the feet and sinks toward the lower one on slopes, weight shift and hip roll
-  with a level hull, footfall thud, committed heading. Quicker steps when a leg nears full stretch; settle steps
-  when stopped. Stand-in salvage-walker model, footprints and dust. `tools/walker-check.ts` passes on dunes.
-- **Not yet:** the convoy, salvage, enemies and swarms, weapons (the old minigun and explosions), radar, multiple
-  mech classes, sound, a game page.
-
-## Next candidates (ask Keith which)
-
-- Convoy lab: a slow convoy of tracked and wheeled vehicles riding the dunes (suspension faked from the height
-  function), with the range ring around it.
-- Swarm lab: hundreds of instanced enemies chasing the mech over the dunes, with a frame-time budget.
-- Weapons lab: port the old minigun and explosion feel.
-- Walker: arms and a turning torso, leg types (the old lab had Humanoid and Stilt), jump packs.
+Where every system stands, what's in progress, the next candidates and the change history: `state.md`. Read it
+first; update it with every change (rule 10).

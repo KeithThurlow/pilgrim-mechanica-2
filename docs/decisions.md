@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | `state.md` records every change and the live state of each system, updated in the same commit | Keith | Keith | Makes working across agents easier; rule 10 in `CLAUDE.md`. |
 | 2026-10-24 | Old walker code is a guideline, not something to port line by line | Keith | Keith | The new walker is a fresh, smaller sim (`src/mech/walker.ts`); starting tuning values come from the old lab's build 65 Mechanical walk, scaled to metres. |
 | 2026-10-24 | Feet must place properly on the ground for the player's mech; enemies and swarms can be cheaper | Keith | Keith | The ground is a pure height function so feet query it exactly. |
 | 2026-10-24 | The convoy isn't steered by the player for now; it travels over procedural land | Keith | Keith | Gameplay loop first, story loop later. |
