@@ -35,7 +35,7 @@ export const WARBAND_DEFAULTS = {
   sixDamage: 12,
   sixSpread: 1.5,
   tankRate: 0.2,
-  tankDamage: 60,
+  tankDamage: 35,
   tankSpread: 0.8,
   tankTurn: 25,
   techHull: 140,

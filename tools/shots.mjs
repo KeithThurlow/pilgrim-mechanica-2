@@ -31,6 +31,8 @@ const DEFAULT = [
   "/labs/warband/?dt=0.033&set=spawnDistance:45",
   "/labs/bandits/?dt=0.033&set=spawnFrom:30",
   "/labs/robots/?dt=0.033&set=robotSpawnFrom:40",
+  "/labs/convoy/?dt=0.033",
+  "/labs/convoy/?deploy&dt=0.1&zoom=60",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",
 ];
