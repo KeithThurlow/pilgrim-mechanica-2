@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | POI step 1 built with Claude's values: tier 1-2 cells 400 m (tier 3 twice, 4-5 four times), 75% of cells hold one, at least 140 m apart, the flattest of 6 spots in a cell; pads levelled at the mean of the ground they cover, the swell cancelled under them; road and pads stack (`ModifierStack`); salvage reach 7 m from the hips, progress kept when you step away, scrap paid per spot, a section banked when its last spot is done, a noise every 0.6 s heard within 160 m (nothing listens yet) | Claude | Claude | All sliders (`labs/pois/`). Values per kind (scrap and strip time) are first guesses. |
 | 2026-10-25 | Salvage for now: hold E at a salvage spot; one currency (scrap); item drops of various rarities later ("dopamine hits") | Keith | Keith | `docs/proposal-pois.md` |
 | 2026-10-25 | Bandit camps and fortresses are built from wreckage (crashed spaceships and the like) | Keith | Keith | The sister project's ship crashes are reference, "wasn't pointed off that well". |
 | 2026-10-25 | Biome regions at least 5 km across; rocky ground always walkable for now | Keith | Keith | Border band and region size are sliders; the convoy crossing the shallows (slowed) is Claude's default until Keith says otherwise. |

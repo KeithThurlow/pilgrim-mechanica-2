@@ -1,4 +1,4 @@
-# Proposal: points of interest, by how much they ask of you (not built; waiting for Keith)
+# Proposal: points of interest, by how much they ask of you (approved by Keith 2026-10-25; step 1 built)
 
 Keith 2026-10-25: many levels of points of interest (POIs).
 - Small ones: rock outcrops, debris fields with something in them, crashes, wrecks, abandoned battlefields.

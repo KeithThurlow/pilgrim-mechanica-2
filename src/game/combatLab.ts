@@ -53,6 +53,12 @@ export interface CombatLabOptions<E extends object> {
   actions?: { label: string; onClick: () => void; active?: () => boolean }[];
   /** Extra things for the Report (e.g. wave number). */
   report?: () => Record<string, unknown>;
+  /** Called with the dune field before any ground is streamed (e.g. to add ground modifiers). */
+  setup?: (field: DuneField, values: BaseValues & E) => void;
+  /** The lab's own demo: what the mech does while the demo runs (null: the shared demo this frame). No demo dashes. */
+  demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: boolean } | null;
+  /** After any slider changes (after the shared handling, e.g. the dunes rebuilt). */
+  onChange?: (key: string) => void;
 }
 
 export interface CombatLab<E extends object> {
@@ -72,6 +78,10 @@ export interface CombatLab<E extends object> {
   deaths: DeathPhysics;
   /** Load another Rampart (bandit mechs). */
   loadRampart: () => Promise<RampartBody>;
+  /** The terrain chunks (rebuildArea after the ground changes). */
+  streamer: TerrainStreamer;
+  /** Is the demo driving? */
+  demoOn: () => boolean;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -84,6 +94,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const toon = new ToonLook(V);
   const field = new DuneField(V);
   if (params.has("flat")) { field.v = { ...V, height: 0, swell: 0, bumps: 0 }; field.update(); }
+  o.setup?.(field, V);
   const streamer = new TerrainStreamer(field, V);
   scene.add(streamer.group);
   const look = new DesertLook(scene, app.renderer, V);
@@ -140,7 +151,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "camera", label: "Camera", groups: ["Camera"] },
     ],
     onFocus: () => { if (!picking) selector?.clear(); },
-    onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
+    onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } o.onChange?.(k); },
   });
   const regions = body.regions();
   selector = new Selector(app, {
@@ -188,6 +199,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     onFrame: (fn) => frames.push(fn),
     hud: (k, t) => app.hud.set(k, t),
     loadRampart: () => RampartBody.load(toon),
+    streamer,
+    demoOn: () => auto,
   };
 
   // For headless debugging and tests: the lab on the page (window.__lab).
@@ -221,7 +234,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let trigger = false;
     let cursor: Aim | null = null;
     lock = null;
-    if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
+    const own = auto && o.demo ? o.demo(clock, dt) : null;
+    if (own) { ({ cmd, aim, trigger } = own); lastDemo = { aim, trigger }; cursor = aim; }
+    else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
     else {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
       if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) {
@@ -244,7 +259,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       else player.tryDash(Math.sin(player.sim.heading), Math.cos(player.sim.heading));
     }
     // The demo sidesteps now and then, to show the dash off.
-    if (auto && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
+    if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
     player.step(dt, cmd, aim, trigger);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
