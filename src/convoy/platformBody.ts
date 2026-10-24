@@ -12,9 +12,9 @@ import type { CraneValues } from "./crane";
 import { RAIL } from "./carry";
 
 const PAL = {
-  steel: 0x6e6b64,
-  deck: 0x55524c,
-  dark: 0x302d29,
+  steel: 0x8f8a7f,
+  deck: 0x8a8274,
+  dark: 0x4a453e,
   tyre: 0x232120,
   hub: 0x8a857a,
   rust: 0x8a4a2a,
@@ -29,7 +29,7 @@ const PAL = {
 };
 const KIND_PAINT = { bay: 0x7a7458, workshop: PAL.teal, housing: PAL.sand, fuel: PAL.rust } as const;
 
-const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.2, flatShading: true });
+const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true }); // no environment map: metalness only darkens
 const ROPE = new THREE.MeshStandardMaterial({ color: 0x1d1b19, roughness: 0.6, metalness: 0.4 });
 
 type V3 = [number, number, number];
@@ -238,7 +238,7 @@ export class CraneBody {
     this.platformBody.root.add(this.turret);
 
     this.jib = mesh(new THREE.BufferGeometry(), this.group);
-    const rg = new THREE.CylinderGeometry(0.06, 0.06, 1, 6).translate(0, -0.5, 0);
+    const rg = new THREE.CylinderGeometry(0.12, 0.12, 1, 6).translate(0, -0.5, 0);
     this.rope = mesh(rg, this.group, ROPE);
     this.rope.castShadow = false;
     // Cradle: a yoke with two arms that hook under the hull.
@@ -262,10 +262,14 @@ export class CraneBody {
       const k = new Kit();
       const L = v.craneJib;
       // A lattice-ish jib: two chords and a top chord, cross plates, and a sheave at the tip.
-      for (const sx of [1, -1]) k.box([0.18, 0.18, L], [sx * 0.45, 0, L / 2], PAL.ochre);
-      k.box([0.18, 0.18, L], [0, 0.7, L / 2], PAL.ochre);
-      for (let z = 1; z < L; z += 1.6) k.box([1, 0.8, 0.1], [0, 0.35, z], PAL.ochre, [0.5, 0, 0]);
-      k.cyl(0.45, 0.9, [0, 0, L], PAL.dark, [0, 0, Math.PI / 2], 10);
+      // Chunky enough to read from the 40 m game camera; a dark band every few metres reads as lattice.
+      for (const sx of [1, -1]) k.box([0.45, 0.45, L], [sx * 0.75, 0, L / 2], PAL.ochre);
+      k.box([0.45, 0.45, L], [0, 1.1, L / 2], PAL.ochre);
+      for (let z = 1.2; z < L - 0.5; z += 2.4) {
+        k.box([1.9, 0.25, 0.25], [0, 0.05, z], PAL.dark);
+        for (const sx of [1, -1]) k.box([0.2, 1.3, 0.2], [sx * 0.4, 0.55, z + 1.2], PAL.ochre, [0, 0, sx * 0.55]);
+      }
+      k.cyl(0.6, 1.8, [0, 0.3, L], PAL.dark, [0, 0, Math.PI / 2], 10);
       this.jib.geometry.dispose();
       this.jib.geometry = k.build();
     }
