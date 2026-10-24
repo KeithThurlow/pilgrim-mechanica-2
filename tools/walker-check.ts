@@ -31,6 +31,8 @@ for (const r of runs) {
   const sim = new WalkerSim({ ...build.values }, field);
   sim.reset(13, -40, 0.3);
   let bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
+  // Push-off shape (Keith 2026-10-24: the thigh swung too far back and the knee went straight): measured late in each stance.
+  let thighBackMax = 0, kneeMax = 0;
   const lastPlant = sim.feet.map(() => new Vector3());
   const wasPlanted = sim.feet.map(() => false);
   const frames = Math.round(r.seconds / dt);
@@ -44,6 +46,13 @@ for (const r of runs) {
       const off = new Vector3().subVectors(P.knee, P.hip);
       off.addScaledVector(line, -off.dot(line));
       if (!Number.isFinite(P.knee.x) || off.dot(P.legFwd) < -0.01) kneeBack++;
+      if (!f.swinging && f.stanceT > 0.85) {
+        const th = new Vector3().subVectors(P.knee, P.hip);
+        const back = (Math.atan2(-th.dot(P.legFwd), -th.y) * 180) / Math.PI;
+        thighBackMax = Math.max(thighBackMax, back);
+        const a = new Vector3().subVectors(P.hip, P.knee).normalize(), b = new Vector3().subVectors(P.hock, P.knee).normalize();
+        kneeMax = Math.max(kneeMax, (Math.acos(Math.max(-1, Math.min(1, a.dot(b)))) * 180) / Math.PI);
+      }
       if (!f.swinging) {
         if (wasPlanted[k]) { const s = lastPlant[k].distanceTo(f.planted); maxSlide = Math.max(maxSlide, s); if (s > 0.001) slide++; }
         lastPlant[k].copy(f.planted);
@@ -64,10 +73,11 @@ for (const r of runs) {
   if (s.scuffs > 0) problems.push(`${s.scuffs} swing-foot frames under the ground`);
   if (bothAir > 0) problems.push(`${bothAir} frames with both feet in the air`);
   if (kneeBack > 0) problems.push(`${kneeBack} knee-backwards frames`);
+  if (kneeMax > 172) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°)`);
   if (slide > 0) problems.push(`planted feet slid ${slide} frames (max ${maxSlide.toFixed(3)} m)`);
   if (r.name !== "start and stop" && s.steps < r.seconds * 1.2) problems.push(`only ${s.steps} steps`);
   const line = `${r.name.padEnd(16)} steps ${String(s.steps).padStart(4)} · reach misses ${(over * 100).toFixed(2)}% · ` +
-    `min swing clearance ${minClear === Infinity ? "-" : minClear.toFixed(2)} m · hip above ground ${minHipToGround.toFixed(2)}..${maxHipToGround.toFixed(2)} m · moved ${sim.pos.length().toFixed(0)} m`;
+    `min swing clearance ${minClear === Infinity ? "-" : minClear.toFixed(2)} m · hip above ground ${minHipToGround.toFixed(2)}..${maxHipToGround.toFixed(2)} m · push-off: thigh back ${thighBackMax.toFixed(0)}°, knee ${kneeMax.toFixed(0)}° · moved ${sim.pos.length().toFixed(0)} m`;
   console.log((problems.length ? "FAIL " : "ok   ") + line + (problems.length ? "\n       " + problems.join("; ") : ""));
   if (problems.length) failed = true;
 }

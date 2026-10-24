@@ -8,7 +8,9 @@ import type { Param } from "../core/tweaks";
 
 export const TOON_DEFAULTS = {
   celShading: 0,
-  inkWidth: 1.2,
+  inkWidth: 0,
+  paintRoughness: 0.55,
+  paintMetal: 0.05,
   shadeFloor: 0.42,
   shadeMid: 0.72,
 };
@@ -16,7 +18,9 @@ export type ToonValues = typeof TOON_DEFAULTS;
 
 export const TOON_PARAMS: Param[] = [
   { key: "celShading", label: "Cel shading", min: 0, max: 1, step: 1, group: "Cel look", tip: "Off: ordinary lit materials (Keith 2026-10-24: try it without). The ink outline is separate" },
-  { key: "inkWidth", label: "Ink width (px)", min: 0, max: 5, step: 0.05, group: "Cel look", tip: "0 = no outline" },
+  { key: "inkWidth", label: "Ink width (px)", min: 0, max: 5, step: 0.05, group: "Cel look", tip: "0 = no outline (default since Keith 2026-10-24)" },
+  { key: "paintRoughness", label: "Paint roughness", min: 0.05, max: 1, step: 0.01, group: "Cel look", onRelease: true },
+  { key: "paintMetal", label: "Paint metalness", min: 0, max: 1, step: 0.01, group: "Cel look", tip: "Painted armour is mostly not metallic", onRelease: true },
   { key: "shadeFloor", label: "Shadow band", min: 0, max: 1, step: 0.01, group: "Cel look", tip: "Brightness of the darkest band" },
   { key: "shadeMid", label: "Mid band", min: 0, max: 1, step: 0.01, group: "Cel look" },
 ];
@@ -29,7 +33,7 @@ export class ToonLook {
   readonly ink: THREE.MeshBasicNodeMaterial;
   private bands = new Uint8Array(3 * 4);
   private meshes: { mesh: THREE.Mesh; tint: number }[] = [];
-  private cel = -1;
+  private cel = -1; // material key: cel on/off and paint values; a change swaps the materials
 
   constructor(public v: ToonValues) {
     this.gradient = new THREE.DataTexture(this.bands, 3, 1, THREE.RGBAFormat);
@@ -57,7 +61,7 @@ export class ToonLook {
   update(camera: THREE.PerspectiveCamera, viewportHeight: number) {
     const perPx = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, viewportHeight);
     this.inkScale.value = this.v.inkWidth * perPx;
-    const cel = this.v.celShading > 0.5 ? 1 : 0;
+    const cel = (this.v.celShading > 0.5 ? 1 : 0) + this.v.paintRoughness * 10 + this.v.paintMetal * 1000;
     if (cel !== this.cel) { this.cel = cel; this.swapMaterials(); }
     this.ink.visible = this.v.inkWidth > 0;
     const cur = this.bands[0] / 255, mid = this.bands[4] / 255;
@@ -66,7 +70,7 @@ export class ToonLook {
 
   material(vertexColors: boolean, tint = 0xffffff) {
     if (this.v.celShading > 0.5) return new THREE.MeshToonMaterial({ color: tint, vertexColors, gradientMap: this.gradient });
-    return new THREE.MeshStandardMaterial({ color: tint, vertexColors, roughness: 0.62, metalness: 0.25, flatShading: false });
+    return new THREE.MeshStandardMaterial({ color: tint, vertexColors, roughness: this.v.paintRoughness, metalness: this.v.paintMetal });
   }
 
   /** Recolour a mesh this look manages (keeps the colour across cel on/off swaps). */

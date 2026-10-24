@@ -14,19 +14,20 @@ How to update it:
 
 | System | State | Where | Lab |
 | --- | --- | --- | --- |
-| Lab core | Renderer and loop (WebGPU, WebGL 2 fallback), frame-time HUD, slider panel (saved per lab, `?set=` overrides, Copy values), WASD input | `src/core/` | all |
+| Lab core | Renderer and loop (WebGPU, WebGL 2 fallback), frame-time HUD, slider panel (saved per lab with the defaults they were saved against, so a changed default in code wins over a stale save; `?set=` overrides, Copy values), WASD input, frame capture | `src/core/` | all |
+| Report box | A Report button in every lab: a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is not in git | `src/core/report.ts`, `tools/report-plugin.ts` | all |
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Transverse dunes across the wind (slip faces 30-38°), meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
-| Desert light | Harsh bright midday sun (Keith 2026-10-24: high, white-hot, strong contrast), cool sky fill so shadows stay blue-slate rather than black, haze at the streaming edge, shadow box following the focus. Fixed time of day | `src/world/look.ts` | terrain, walker |
-| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straight lower leg at push-off (from the old lab); stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
+| Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
+| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over its toes, with feet planted further forward, so it pushes off the toes instead of trailing a straight leg (Keith 2026-10-24); stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
 | Rampart | The old project's v4 mech on the walker sim: each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
-| Upper body | Twin-stick (Keith 2026-10-24): torso turns toward the mouse aim at a capped rate within a limit from the legs; guns track the rest inside their arc; spin-up before rounds, alternating guns, recoil, torso shake | `src/mech/upper.ts` | walker |
+| Upper body | Twin-stick: torso turns toward the mouse aim at a capped rate within a limit from the legs. Each hull gun on its own (Keith 2026-10-24): aims from its own shoulder, swings inward at full speed and outward slower (so the arms turn at different speeds as the aim sweeps), its own spin-up, fire cone and fire clock (small left/right spin and rate splits), recoil; a limited drum per gun (1200 rounds), R resupplies in the lab | `src/mech/upper.ts` | walker |
 | Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hit dust thrown downrange and sparks, casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
-| Unit look | Ordinary lit materials over the model's vertex colours by default (Keith 2026-10-24: try it without cel shading); cel bands as a toggle; inverted-hull ink outline at constant pixel width (warm dark brown, its own slider, 0 = off), units and mechs only | `src/look/toon.ts` | walker |
-| Minigun sound | Ported from the old game: spit per round, a growl loop per gun (level and pitch follow the spin; each gun its own voice, offset and detuned so the two beat against each other), spin-up and spin-down, dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; capped voices, same-instant gate, pan by screen position. Starts on the first click or key | `src/audio/` | walker |
+| Unit look | Plain lit paint (dielectric, roughness 0.55) over the model's vertex colours; no outline by default (Keith 2026-10-24); cel bands and the ink outline are still toggles | `src/look/toon.ts` | walker |
+| Minigun sound | Ported from the old game, every gun its own voice: its own spin-up (pitched to its spin-up time) and spin-down from its muzzle, its own growl following its own spin and firing (offset and detuned), a spit per round ungated between the guns; dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
 | Footfall FX | Footprints (pooled, oldest recycled) and dust puffs | `src/fx/footfall.ts` | walker |
-| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees); terrain (determinism, slopes); audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
+| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes); audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
 
@@ -47,9 +48,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   and screenshotted headless. The first `npm install` on Keith's PC creates the lockfile.
 - **Headless shots are WebGL on a software renderer**, so their frame times mean nothing; real numbers come from
   Keith's PC.
-- **Two guns' tracking is near instant and identical**, so their growls sit close in phase; detune and loop offsets
-  keep them apart, but the old game's drift between guns (Keith 2026-10-24) isn't there. A small per-gun tracking
-  lag would bring it back if wanted.
+- **No ambient occlusion pass**: crevices only get the AO baked into the Rampart's vertex colours. A screen-space AO
+  (Three's GTAO node) would ground the mech and the dunes further.
+- **Shadows stop at the edge of the shadow area** (it follows the focus and grows with zoom); with a very low sun,
+  far dunes don't shadow.
+- **The walk may still not match the old lab's feel**: push-off is closer (heel lift, plant position), but the old
+  lab's swing was blended in joint angles and had AT-ST hip arms; this sim uses a foot path and IK. Keith to judge.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -71,6 +75,21 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Desert lighting, no outline, independent guns, ammo, push-off, dune shadows, Report box (Claude, cloud session)
+- Keith: something still drew outlines; the shading looked like a 90s model with the gamma off, not a tank in the
+  desert; each gun should be its own gun and sound (arms swinging inward faster than outward, not one arm faster);
+  limited ammo per trip; the thigh swung too far back at push-off; dunes cast no shadows; a report box in the app
+  that reaches the Claude Code session on his PC.
+- Light: sky environment (PMREM of a procedural dome), Neutral tone mapping, sun 3.2, env 0.5 (A/B of ACES, AgX,
+  Neutral); dunes cast shadows; shadow area and haze scale with the camera in both labs. Colour space checked: the
+  Rampart's vertex colours are linear and read correctly. Look: ink width 0, paint dielectric. Saved slider values
+  now carry their defaults, so changed defaults reach Keith's browser. Guns: per-gun aim, inward/outward tracking,
+  spin, cone, clock, drums; sound per gun. Walk: `rollOff` 48 from `rollStart` 0.6, `stanceBack` 0.05,
+  `hockExtend` 0.45. Report box: `src/core/report.ts`, `tools/report-plugin.ts`, `app.capture()`.
+- Checked: typecheck, `npm test` (walker, new upper check, terrain, audio), the report loop end to end in headless
+  Chromium (note, screenshot and values written, inbox line added), shots of close, game, side, low-sun terrain.
+  Sound not heard.
 
 ### 2026-10-24 · Walk fixes, far zoom, minigun sound, no cel shading, harsh sun (Claude, cloud session)
 - Keith: the cannon looked locked to one angle and the gait unbelievably wide; let the camera go out until the mech

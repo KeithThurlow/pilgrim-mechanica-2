@@ -4,6 +4,12 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | A Report box in every lab that reaches the Claude Code session on Keith's PC (`reports/inbox.md`, replies in `reports/replies.md`) | Keith | Keith | Like his web modelling app's in-app agent link. |
+| 2026-10-24 | Limited ammunition per trip; munition depots worth a detour | Keith | Keith | Per-gun drums in the walker lab (1200 rounds, Claude's default). |
+| 2026-10-24 | Each gun is its own gun and sound; arms swing inward faster than outward instead of one arm faster | Keith | Keith | Outward at 0.55 of the tracking speed (Claude's default); small spin and rate splits kept as sliders. |
+| 2026-10-24 | No outline on the mech; lighting should read like a tank in the desert sun | Keith | Keith | Sky environment + Neutral tone mapping, picked by A/B (Claude). |
+| 2026-10-24 | Push off from the toes sooner; the thigh shouldn't swing so far back | Keith | Keith | Heel lift 48° from 60% of the stance, feet planted further forward (values Claude's, after the old lab's 52°). |
+| 2026-10-24 | Dunes cast shadows | Keith | Keith | |
 | 2026-10-24 | Convoy: platforms of different sizes, the largest on tracks with the mech bays and smaller-than-before gantries; a crane picks the mech up from alongside; on board the mech drives one big platform, the pilot walks the rest | Keith | Keith | `docs/design.md`. Not built yet. |
 | 2026-10-24 | A full day-night cycle that changes salvage outcomes | Keith | Keith | Not built; labs use a fixed midday sun. |
 | 2026-10-24 | Try the mech without cel shading, under a harsher bright sun | Keith | Keith | Cel shading is a toggle (off); the ink outline stays as its own slider (Claude's default, 1.2 px). |

@@ -35,9 +35,16 @@ export interface PanelOptions<V extends Values> {
 
 export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
   const storeKey = `pm2:${o.id}`;
+  // Saved values come back, except where the default has changed since they were saved: a new default in code
+  // wins over a stale save (otherwise tuning changes pushed by an agent never show up in Keith's browser).
   try {
-    const saved = JSON.parse(localStorage.getItem(storeKey) || "{}") as Values;
-    for (const p of o.params) if (typeof saved[p.key] === "number") (o.values as Values)[p.key] = saved[p.key];
+    const saved = JSON.parse(localStorage.getItem(storeKey) || "{}") as { v?: Values; d?: Values };
+    if (saved.v && saved.d) {
+      for (const p of o.params) {
+        const val = saved.v[p.key], def = saved.d[p.key];
+        if (typeof val === "number" && def === o.defaults[p.key]) (o.values as Values)[p.key] = val;
+      }
+    }
   } catch { /* storage blocked or corrupt: run on defaults */ }
   // URL overrides for reviews and scripted tests, not saved: ?set=sunAzimuth:120,skyFill:1.2
   const known = new Set(o.params.map((p) => p.key));
@@ -46,7 +53,7 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
     if (k && known.has(k) && Number.isFinite(Number(val))) (o.values as Values)[k] = Number(val);
   }
   const save = () => {
-    try { localStorage.setItem(storeKey, JSON.stringify(o.values)); } catch { /* ignore */ }
+    try { localStorage.setItem(storeKey, JSON.stringify({ v: o.values, d: o.defaults })); } catch { /* ignore */ }
   };
 
   const root = document.createElement("aside");

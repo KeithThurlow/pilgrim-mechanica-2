@@ -31,6 +31,10 @@ desert look direction. What came from where: `docs/decisions.md`.
 10. **Every change updates `state.md` in the same commit** (Keith 2026-10-24): the system's entry if it changed, a
    dated line at the top of Changes (what, main files, what was checked, who), and In progress while work spans
    sessions or agents. Read `state.md` first when you start; it is the shared record between agents.
+11. **Check the report inbox.** Keith reports from inside the labs (the Report button). Reports land in
+   `reports/inbox.md` on his PC (`reports/<id>.md` has the note, a screenshot, the URL and every tuning value). When
+   you start, and when Keith says he's reported something, read the inbox, handle the open lines, tick them
+   (`- [x]`) and answer each in `reports/replies.md` (`<id>: what you did`), which shows back in the box.
 
 ## Stack
 
@@ -59,6 +63,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ```
 state.md                live state of every system, work in progress, change history
+reports/                Keith's in-lab reports and your replies (local only, not in git)
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input

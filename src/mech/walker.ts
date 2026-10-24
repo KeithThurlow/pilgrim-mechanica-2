@@ -265,7 +265,7 @@ export class WalkerSim {
     const v = this.v;
     if (!f.swinging) {
       // Planted; late in the stance the heel lifts and the foot rolls over its toes.
-      const roll = v.rollOff * D2R * smooth(0.78, 1, f.stanceT);
+      const roll = v.rollOff * D2R * smooth(v.rollStart, 1, f.stanceT);
       f.up.copy(f.plantedUp);
       f.yaw = f.plantedYaw;
       f.pitch = roll;

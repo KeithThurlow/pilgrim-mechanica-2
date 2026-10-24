@@ -41,6 +41,13 @@ Keith's pitch, 2026-10-24, written up by Claude. Direction, not final: correct a
 - **On board, the mech can be piloted around one large mech platform** (the loading bay). To reach the other parts of
   the convoy you hop out and walk around as the human pilot.
 
+## Ammunition (Keith 2026-10-24)
+
+- **You head out with a limited amount of ammunition**, so a trip runs against two clocks: the convoy rolling away and
+  your rounds running out. Each gun's drum counts down (in the walker lab today: 1200 rounds a gun).
+- **Munition depots** (or caches, wrecks with ammo) out in the world are worth a detour on the way out: resupply
+  first, then go for the salvage.
+
 ## Salvage (open)
 
 - Keith 2026-10-24, undecided: does the pilot hop out of the mech to salvage on foot, or can the mech salvage? (The

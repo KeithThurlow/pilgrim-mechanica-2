@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import { readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { reportPlugin } from "./tools/report-plugin";
 
 // Every folder in labs/ with an index.html is its own page, so adding a lab never touches this file.
 const root = import.meta.dirname;
@@ -11,6 +12,8 @@ const labs = Object.fromEntries(
 );
 
 export default defineConfig({
+  // The Report box in every lab posts here in dev (tools/report-plugin.ts).
+  plugins: [reportPlugin(root)],
   server: { host: true, open: "/" },
   build: {
     target: "es2022",

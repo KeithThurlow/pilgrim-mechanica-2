@@ -131,6 +131,8 @@ export class TerrainStreamer {
     const mesh = new THREE.Mesh(g, this.material);
     mesh.position.set(ox, 0, oz);
     mesh.receiveShadow = true;
+    // Dunes cast shadows too (Keith 2026-10-24: a low sun should throw dune shadows), inside the sun's shadow box.
+    mesh.castShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     this.group.add(mesh);

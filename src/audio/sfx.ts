@@ -91,19 +91,20 @@ export class Sfx {
     return Math.max(-0.8, Math.min(0.8, p.x * 0.6));
   }
 
-  play(kind: SfxKind, at: THREE.Vector3, volume = 1) {
+  /** rate: playback speed (and pitch) multiplier on top of the small random jitter. */
+  play(kind: SfxKind, at: THREE.Vector3, volume = 1, rate = 1, gated = true) {
     if (!this.running) return;
     const pan = this.panFor(at);
     if (pan === null) return;
     const now = this.ctx.currentTime;
-    if (now - (this.last.get(kind) ?? -1) < GATE) return;
+    if (gated && now - (this.last.get(kind) ?? -1) < GATE) return;
     const list = this.playing.get(kind) ?? [];
     if (list.length >= PER_KIND) { try { list.shift()!.stop(); } catch { /* already ended */ } }
     this.last.set(kind, now);
     const vs = this.buffers.get(kind)!;
     const src = this.ctx.createBufferSource();
     src.buffer = vs[Math.floor(Math.random() * vs.length)];
-    src.playbackRate.value = 0.94 + Math.random() * 0.12;
+    src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
     const g = this.ctx.createGain();
     g.gain.value = volume * (this.v[LEVEL[kind]] as number);
     const p = this.ctx.createStereoPanner();

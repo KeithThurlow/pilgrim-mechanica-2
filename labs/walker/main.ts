@@ -5,6 +5,7 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createApp } from "../../src/core/app";
+import { installReport } from "../../src/core/report";
 import { tweakPanel } from "../../src/core/tweaks";
 import { Keys } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
@@ -125,6 +126,7 @@ const panel = tweakPanel({
   ],
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
 });
+installReport(app, "walker", V);
 // The Rampart's leg lengths come from its model, so the IK fits its parts whatever was saved.
 if (rampart) { Object.assign(V, rampart.legValues()); panel.refresh(); }
 
@@ -167,6 +169,8 @@ app.onTick((rawDt) => {
   clock += dt;
 
   keys.move(camera, stick);
+  if (keys.has("KeyR")) upper.resupply();
+  if (auto && upper.guns[0].ammo < 100) upper.resupply(); // the demo never runs dry
   if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
   let cmd: MoveCommand;
   if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
@@ -202,8 +206,7 @@ app.onTick((rawDt) => {
       gunAudio.shot(muzzle);
       rounds++;
     }
-    const firing = trigger && upper.spin >= V.fireFrom;
-    gunAudio.update(dt, trigger, firing, upper.spin, [rampart.muzzle(1, new THREE.Vector3()), rampart.muzzle(-1, new THREE.Vector3())]);
+    gunAudio.update(dt, trigger, upper.guns, [rampart.muzzle(1, new THREE.Vector3()), rampart.muzzle(-1, new THREE.Vector3())]);
   }
   sfx.update();
   steps.update(dt);
@@ -236,5 +239,5 @@ app.onTick((rawDt) => {
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}%`);
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin ${(upper.spin * 100).toFixed(0)}% · ${rounds} rounds${sfx.running ? "" : " · click for sound"}`);
+  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo}${sfx.running ? "" : " · click for sound"}`);
 });

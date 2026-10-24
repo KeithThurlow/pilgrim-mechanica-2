@@ -4,7 +4,7 @@ import * as THREE from "three/webgpu";
 export class Keys {
   private down = new Set<string>();
   constructor() {
-    addEventListener("keydown", (e) => { if (!(e.target instanceof HTMLInputElement)) this.down.add(e.code); });
+    addEventListener("keydown", (e) => { if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) this.down.add(e.code); });
     addEventListener("keyup", (e) => this.down.delete(e.code));
     addEventListener("blur", () => this.down.clear());
   }

@@ -52,3 +52,14 @@ summary { cursor: pointer; color: #7fc0d0; font-size: 12px; letter-spacing: 0.06
   .panel { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; max-height: 55%; }
   .help { display: none; }
 }
+
+/* Report box (src/core/report.ts) */
+.report-btn { position: fixed; left: 10px; bottom: 44px; z-index: 5; }
+.report {
+  position: fixed; left: 10px; bottom: 84px; width: min(380px, calc(100% - 20px)); z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+}
+.report textarea { width: 100%; margin-top: 6px; background: #121417; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; font: 13px var(--sans); padding: 6px; }
+.report-status { color: var(--muted); font-size: 12px; align-self: center; }
+.report-replies { white-space: pre-wrap; max-height: 200px; overflow: auto; font: 12px var(--mono); color: var(--muted); margin: 6px 0 0; }
+@media (max-width: 899px) { .report-btn { bottom: auto; top: 10px; right: auto; left: 50%; transform: translateX(-50%); } }

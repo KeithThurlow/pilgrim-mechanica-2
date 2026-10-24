@@ -15,6 +15,8 @@ export interface App {
   onTick(fn: Tick): void;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N */
   params: URLSearchParams;
+  /** A PNG data URL of the next rendered frame (taken right after it renders, before the canvas clears). */
+  capture(): Promise<string>;
 }
 
 export async function createApp(container: HTMLElement): Promise<App> {
@@ -43,6 +45,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   resize();
 
   const ticks: Tick[] = [];
+  const captures: ((url: string) => void)[] = [];
   let last = performance.now(), time = 0;
   renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -52,8 +55,17 @@ export async function createApp(container: HTMLElement): Promise<App> {
     time += dt;
     for (const t of ticks) t(dt, time);
     renderer.render(scene, camera);
+    if (captures.length) {
+      let url = "";
+      try { url = renderer.domElement.toDataURL("image/png"); } catch { /* tainted or lost: send without */ }
+      for (const c of captures.splice(0)) c(url);
+    }
     hud.frame(raw * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles);
   });
 
-  return { renderer, scene, camera, hud, backend, onTick: (fn) => ticks.push(fn), params };
+  return {
+    renderer, scene, camera, hud, backend, params,
+    onTick: (fn) => ticks.push(fn),
+    capture: () => new Promise<string>((res) => captures.push(res)),
+  };
 }

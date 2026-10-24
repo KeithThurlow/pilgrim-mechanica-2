@@ -4,6 +4,7 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createApp } from "../../src/core/app";
+import { installReport } from "../../src/core/report";
 import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
@@ -41,6 +42,7 @@ tweakPanel({
   ],
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
 });
+installReport(app, "terrain", V);
 
 // The marker: a tall post so it reads from far out.
 const marker = new THREE.Group();
@@ -77,7 +79,9 @@ app.onTick((dt) => {
   controls.update();
 
   streamer.update(focus.x, focus.z);
-  look.update(focus, V.radius * V.chunkSize);
+  // Haze counts from the camera, and the shadow area grows with distance so dune shadows reach across the view.
+  const camDist = camera.position.distanceTo(focus);
+  look.update(focus, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
 
   const s = streamer.stats;
   app.hud.set("chunks", `chunks ${s.loaded} · built ${s.built} in ${s.buildMs.toFixed(1)} ms · queued ${s.pending}`);

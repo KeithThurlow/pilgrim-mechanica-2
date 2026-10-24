@@ -1,6 +1,6 @@
 // Upper body: a torso that turns on the waist toward the aim point, independent of where the legs walk
 // (twin-stick: WASD drives the legs, the mouse drives the torso and guns), plus two hull-mounted miniguns
-// that track within a small arc, spin up before they fire, alternate shots and kick back.
+// that track within a small arc, each on its own: own tracking speed, spin-up, fire cone and clock, and kick back.
 // Pure simulation like the legs: no rendering.
 import type { Param } from "../core/tweaks";
 
@@ -21,6 +21,12 @@ export const UPPER_DEFAULTS = {
   recoilReturn: 9,
   recoilMax: 0.14,
   torsoKick: 0.25,
+  outwardTrack: 0.55,
+  spinSplit: 0.15,
+  rateSplit: 0.06,
+  fireCone: 4,
+  gunSpacing: 1.02,
+  ammoPerGun: 1200,
 };
 export type UpperValues = typeof UPPER_DEFAULTS;
 
@@ -30,13 +36,19 @@ export const UPPER_PARAMS: Param[] = [
   { key: "podYawMax", label: "Gun arc (°)", min: 0, max: 60, step: 1, group: "Torso & guns", tip: "Guns swing this far on their own before the torso has to turn" },
   { key: "podPitchMax", label: "Gun pitch limit (°)", min: 0, max: 45, step: 1, group: "Torso & guns" },
   { key: "podTrack", label: "Gun tracking", min: 1, max: 40, step: 0.5, group: "Torso & guns" },
+  { key: "outwardTrack", label: "Outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Torso & guns", tip: "Share of the tracking speed an arm swings outward, away from the torso (inward is full speed; Keith 2026-10-24). When the aim sweeps sideways one arm swings in while the other swings out, so the guns turn at different speeds" },
+  { key: "fireCone", label: "Fire cone (°)", min: 0.5, max: 30, step: 0.5, group: "Torso & guns", tip: "A gun fires only once it points this close to the aim" },
+  { key: "gunSpacing", label: "Gun spacing (m)", min: 0, max: 3, step: 0.01, group: "Torso & guns", tip: "Each gun aims from its own shoulder, this far from the middle" },
   { key: "spinUp", label: "Spin-up (s)", min: 0.05, max: 2, step: 0.05, group: "Minigun" },
   { key: "spinDown", label: "Spin-down (s)", min: 0.1, max: 4, step: 0.05, group: "Minigun" },
   { key: "spinRpm", label: "Barrel rpm", min: 100, max: 3000, step: 10, group: "Minigun" },
   { key: "fireFrom", label: "Fires from spin", min: 0, max: 1, step: 0.01, group: "Minigun", tip: "Share of full spin before rounds come out" },
   { key: "fireRate", label: "Rounds/s per gun", min: 1, max: 60, step: 0.5, group: "Minigun" },
+  { key: "spinSplit", label: "Left vs right spin-up", min: -0.6, max: 0.6, step: 0.01, group: "Minigun", tip: "Positive: the left gun spins up faster by this share" },
+  { key: "rateSplit", label: "Left vs right fire rate", min: -0.3, max: 0.3, step: 0.005, group: "Minigun", tip: "The guns' clocks run this far apart, so their rounds drift in and out of step" },
   { key: "spread", label: "Spread (°)", min: 0, max: 15, step: 0.1, group: "Minigun" },
   { key: "range", label: "Range (m)", min: 5, max: 80, step: 1, group: "Minigun" },
+  { key: "ammoPerGun", label: "Rounds per gun", min: 50, max: 10000, step: 50, group: "Minigun", tip: "What each gun's drum holds when you head out (Keith 2026-10-24: limited ammo per trip); R resupplies in the lab" },
   { key: "recoil", label: "Kick per shot (m)", min: 0, max: 0.2, step: 0.005, group: "Minigun" },
   { key: "recoilReturn", label: "Kick return", min: 1, max: 30, step: 0.5, group: "Minigun" },
   { key: "recoilMax", label: "Kick limit (m)", min: 0, max: 0.5, step: 0.01, group: "Minigun" },
@@ -53,10 +65,20 @@ export interface Gun {
   /** Aim relative to the torso, radians. */
   yaw: number;
   pitch: number;
-  /** Barrel spin angle, radians. */
+  /** This gun's own barrel spin 0..1, and its spin angle (radians). */
+  spin: number;
   spinAngle: number;
   /** Recoil push back along the barrel, metres. */
   kick: number;
+  /** Pointing at the aim within its fire cone. */
+  onTarget: boolean;
+  /** Rounds coming out this step. */
+  firing: boolean;
+  /** This gun's spin-up time (s), from spinUp and the split. */
+  spinUpTime: number;
+  clock: number;
+  /** Rounds left in this gun's drum. */
+  ammo: number;
 }
 
 export interface Aim {
@@ -64,28 +86,31 @@ export interface Aim {
   x: number; y: number; z: number;
 }
 
+const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0 });
+
 export class UpperSim {
   /** Torso yaw in world space (radians, heading convention). */
   torsoYaw = 0;
-  /** 0..1 barrel spin. */
+  /** The faster gun's spin 0..1 (for readouts). */
   spin = 0;
-  guns: [Gun, Gun] = [
-    { side: 1, yaw: 0, pitch: 0, spinAngle: 0, kick: 0 },
-    { side: -1, yaw: 0, pitch: 0, spinAngle: 0, kick: 0 },
-  ];
+  guns: [Gun, Gun] = [gun(1), gun(-1)];
   /** Small torso jitter from firing, radians. */
   shake = 0;
-  private shotClock = 0;
-  private next = 0;
   /** True while the aim point is inside the guns' reach (arc and turn limit). */
   onTarget = false;
 
   constructor(public v: UpperValues) {}
 
-  reset(yaw: number) { this.torsoYaw = yaw; this.spin = 0; this.shotClock = 0; }
+  reset(yaw: number) { this.torsoYaw = yaw; for (const g of this.guns) { g.spin = 0; g.clock = 0; } this.resupply(); }
+
+  /** Fill both drums. */
+  resupply() { for (const g of this.guns) g.ammo = this.v.ammoPerGun; }
 
   /**
-   * legsHeading: where the legs face. shoulder: world position of the gun line (x, y, z). aim: target or null.
+   * legsHeading: where the legs face. shoulder: world position of the middle of the gun line. aim: target or null.
+   * Each gun works on its own (Keith 2026-10-24): it aims from its own shoulder, swings inward faster than outward
+   * (so the two arms turn at different speeds as the aim sweeps), spins up on its own, and only fires inside its fire cone, on its own clock. So the two
+   * start, drift and stop at slightly different times, and sound like two guns rather than one.
    * Returns the sides that fired a round this step (one entry per round).
    */
   update(dt: number, legsHeading: number, shoulder: { x: number; y: number; z: number }, aim: Aim | null, trigger: boolean): (1 | -1)[] {
@@ -95,46 +120,53 @@ export class UpperSim {
     if (aim) want = Math.atan2(aim.x - shoulder.x, aim.z - shoulder.z);
     const lim = v.torsoLimit * D2R;
     const rel = clamp(wrap(want - legsHeading), -lim, lim);
-    const target = legsHeading + rel;
     const step = v.torsoTurnRate * D2R * dt;
-    const err = wrap(target - this.torsoYaw);
-    this.torsoYaw = wrap(this.torsoYaw + clamp(err, -step, step));
-    // Keep the torso inside the limit even when the legs swing under it.
+    this.torsoYaw = wrap(this.torsoYaw + clamp(wrap(legsHeading + rel - this.torsoYaw), -step, step));
     const now = wrap(this.torsoYaw - legsHeading);
     if (Math.abs(now) > lim) this.torsoYaw = wrap(legsHeading + Math.sign(now) * lim);
 
-    // Guns: the rest of the aim, inside their own arc.
-    const yawLeft = aim ? wrap(want - this.torsoYaw) : 0;
-    const dist = aim ? Math.hypot(aim.x - shoulder.x, aim.z - shoulder.z) : 10;
-    const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) : 0;
-    const ymax = v.podYawMax * D2R, pmax = v.podPitchMax * D2R;
-    const k = 1 - Math.exp(-v.podTrack * dt);
-    for (const g of this.guns) {
-      g.yaw += (clamp(yawLeft, -ymax, ymax) - g.yaw) * k;
-      g.pitch += (clamp(pitchWant, -pmax, pmax) - g.pitch) * k;
-      g.kick += (0 - g.kick) * (1 - Math.exp(-v.recoilReturn * dt));
-    }
-    this.onTarget = !!aim && Math.abs(yawLeft) <= ymax + 0.02;
-
-    // Spin up while the trigger is held, wind down after; rounds once spun past fireFrom.
-    this.spin = trigger ? Math.min(1, this.spin + dt / v.spinUp) : Math.max(0, this.spin - dt / v.spinDown);
-    const spinRate = (v.spinRpm / 60) * Math.PI * 2 * this.spin;
-    for (const g of this.guns) g.spinAngle = (g.spinAngle + spinRate * dt) % (Math.PI * 2);
-    this.shake *= Math.exp(-dt * 18);
-
+    const ymax = v.podYawMax * D2R, pmax = v.podPitchMax * D2R, cone = v.fireCone * D2R;
+    const lx = Math.cos(this.torsoYaw), lz = -Math.sin(this.torsoYaw); // torso's left
+    const spinRate = (v.spinRpm / 60) * Math.PI * 2;
     const shots: (1 | -1)[] = [];
-    if (trigger && this.spin >= v.fireFrom) {
-      // Both guns at fireRate each, alternating.
-      this.shotClock += dt * v.fireRate * 2 * (0.6 + 0.4 * this.spin);
-      while (this.shotClock >= 1) {
-        this.shotClock -= 1;
-        const g = this.guns[this.next];
-        this.next = 1 - this.next;
-        g.kick = Math.min(v.recoilMax, g.kick + v.recoil);
-        this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
-        shots.push(g.side);
-      }
-    } else this.shotClock = Math.min(this.shotClock, 0.99);
+    this.onTarget = false;
+    this.spin = 0;
+    for (const g of this.guns) {
+      // Aim from this gun's own shoulder, so the two converge on the aim point.
+      const gx = shoulder.x + lx * g.side * v.gunSpacing, gz = shoulder.z + lz * g.side * v.gunSpacing;
+      const yawWant = aim ? wrap(Math.atan2(aim.x - gx, aim.z - gz) - this.torsoYaw) : 0;
+      const dist = aim ? Math.hypot(aim.x - gx, aim.z - gz) : 10;
+      const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) : 0;
+      // Each arm swings inward (toward the torso) at full speed and outward slower. Yaw grows toward the mech's
+      // left, so for the left arm (+1) a rising yaw is outward, and for the right arm (-1) a falling one is.
+      const yawTo = clamp(yawWant, -ymax, ymax);
+      const outward = Math.sign(yawTo - g.yaw) === g.side;
+      const kYaw = 1 - Math.exp(-v.podTrack * (outward ? v.outwardTrack : 1) * dt);
+      const kPitch = 1 - Math.exp(-v.podTrack * dt);
+      g.yaw += (yawTo - g.yaw) * kYaw;
+      g.pitch += (clamp(pitchWant, -pmax, pmax) - g.pitch) * kPitch;
+      g.kick += (0 - g.kick) * (1 - Math.exp(-v.recoilReturn * dt));
+      g.onTarget = !!aim && Math.abs(wrap(yawWant - g.yaw)) <= cone && Math.abs(pitchWant - g.pitch) <= cone * 2;
+      this.onTarget ||= g.onTarget;
+
+      g.spinUpTime = v.spinUp * (1 - g.side * v.spinSplit);
+      g.spin = trigger ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
+      g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
+      this.spin = Math.max(this.spin, g.spin);
+
+      g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && g.ammo > 0;
+      if (g.firing) {
+        g.clock += dt * v.fireRate * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
+        while (g.clock >= 1 && g.ammo > 0) {
+          g.clock -= 1;
+          g.ammo--;
+          g.kick = Math.min(v.recoilMax, g.kick + v.recoil);
+          this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
+          shots.push(g.side);
+        }
+      } else g.clock = Math.min(g.clock, 0.99);
+    }
+    this.shake *= Math.exp(-dt * 18);
     return shots;
   }
 }
