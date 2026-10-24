@@ -129,6 +129,9 @@ export class Battlefield {
       this.pt.copy(from).addScaledVector(d, nearD);
       near.damage(dmg, this.pt, d);
       if (passes > 0 && near.canPierce?.()) {
+        // Through and out: the body still shows the hit (a puff, or a few sparks off a small robot).
+        if (near.surface === "flesh") this.gunFx.onFleshHit?.(this.pt, d);
+        else if (near.surface === "metal") this.gunFx.sparksAt(this.pt, this.back.copy(d).negate(), 3, 6);
         passes--;
         dmg *= o.pierceFalloff ?? 0.7;
         base += nearD + 0.9;

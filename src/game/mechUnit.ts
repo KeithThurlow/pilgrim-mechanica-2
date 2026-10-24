@@ -137,6 +137,14 @@ export class MechUnit implements Hittable {
     for (const s of fired) {
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
+      // The barrel's heading carries the guns' lag, but its pitch also carries the hull's lean and the muzzle sits
+      // below and ahead of the shoulder the guns aim from, so rounds went ~2 m low at 20 m (Keith: "very hard to hit").
+      // Keep the heading; pitch the round so it arrives at the aim's height at the aim's distance.
+      if (aim) {
+        const hx = this.dir.x, hz = this.dir.z, hl = Math.hypot(hx, hz);
+        const flat = Math.hypot(aim.x - this.muzzle.x, aim.z - this.muzzle.z);
+        if (hl > 1e-4 && flat > 1) this.dir.set((hx / hl) * flat, aim.y - this.muzzle.y, (hz / hl) * flat).normalize();
+      }
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);

@@ -23,7 +23,7 @@ export const INFANTRY_DEFAULTS = {
   banditSpacing: 1.2,
   sepStrength: 3,
   bodyGap: 0.55,
-  hp: 30,
+  hp: 12,
   fireRange: 45,
   spreadDeg: 6,
   burstRounds: 4,
