@@ -97,7 +97,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Biomes: shots of step 1 to look at; step 2 water effects (wading) and step 3 outcrop scatter next.
+- Biomes: step 1 in. Shallows and desert borders read well; rocky ground still reads as grey plateaus (rock needs real geometry: boulders, broken edges, step 3). Next: step 2 water effects (wading), the rocky-to-shallows border (rock stepping into water), step 3 scatter.
 - POIs step 1 (placement, salvage on E, tiers 1-2): an agent on a worktree branch.
 
 ## Next candidates (ask Keith which)
