@@ -5,7 +5,13 @@
 // convoy rolls, turns and speeds up keeps it on the platform (never past the edge, planted feet on the deck plane, legs
 // in reach, no sliding when standing); parking settles it in a bay and holds it there, E stands it up; walking onto a
 // launch pad has the crane put it on the sand beside the convoy at the convoy's velocity (stepping off first
-// cancels); the swing is bounded and dies down. Run: npm test (or npx tsx tools/convoy-check.ts).
+// cancels); the swing is bounded and dies down. The train: each car rides on the route (its middle near its line's
+// path) and the gaps between cars stay open through turns, in one line and in two; footbridges stay high enough to walk
+// under and don't overstretch; a mech walks across the train through a gap without being thrown about; escorts never
+// drive into a platform or the mech and hold their station band most of the time; the pipes are the same every time
+// and stay out of the furniture; the tracks and wheels leave ruts and dust at a sane rate.
+// Run: npm test (or npx tsx tools/convoy-check.ts).
+import * as THREE from "three";
 import { WalkerSim, type MoveCommand } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
@@ -15,14 +21,24 @@ import { Convoy, PLATFORM_DEFAULTS, type Platform } from "../src/convoy/platform
 import { Crane, CRANE_DEFAULTS } from "../src/convoy/crane";
 import { CraneCarry, CARRY_DEFAULTS } from "../src/convoy/carry";
 import { DECK_DEFAULTS, deckLayout, walkToSpot } from "../src/convoy/deck";
+import { TRAIN_DEFAULTS, bridgeSpans, REACH_MAX, REACH_MIN, type Span } from "../src/convoy/train";
+import { TRACK_DEFAULTS, trackPods, treadAt, treadLength } from "../src/convoy/tracks";
+import { PIPE_DEFAULTS, generatePipes } from "../src/convoy/pipes";
+import { furniture, furnBox } from "../src/convoy/furniture";
+import { ConvoyTrail, TRAIL_DEFAULTS } from "../src/convoy/trail";
+import { EscortGroup, ESCORT_DEFAULTS, rectGap } from "../src/convoy/escort";
+import { CONVOY_LAYOUT } from "../src/convoy/platform";
 
 const DT = 1 / 120;
 const problems: string[] = [];
 const fail = (s: string) => { problems.push(s); console.log("  FAIL " + s); };
 const D2R = Math.PI / 180;
 
-function world(over: Partial<typeof ROUTE_DEFAULTS> = {}) {
-  const V = { ...TERRAIN_DEFAULTS, ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS, ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...over };
+function world(over: Partial<typeof ROUTE_DEFAULTS & typeof TRAIN_DEFAULTS & typeof ESCORT_DEFAULTS> = {}) {
+  const V = {
+    ...TERRAIN_DEFAULTS, ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS, ...WALKER_DEFAULTS,
+    ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...LEG_TYPES.rampart.values, ...over,
+  };
   const field = new DuneField(V);
   const route = new ConvoyRoute(V, 13, -40);
   field.modifier = route;
@@ -391,6 +407,214 @@ for (const speed of [4, 6]) {
   if (peak > 4) fail(`the cradle swung ${peak.toFixed(1)} m out`);
   if (later > Math.max(0.1, peak * 0.25)) fail(`the swing didn't die down (${later.toFixed(2)} m after 40 s)`);
   if (!Number.isFinite(cr.cradle.x + cr.cradle.y + cr.cradle.z)) fail("cradle went non-finite");
+}
+
+
+/** Corners of a platform's footprint in world x/z. */
+function corners(p: Platform): [number, number][] {
+  const out: [number, number][] = [];
+  for (const sx of [1, -1]) for (const sz of [1, -1]) { const w = p.toWorld(sx * p.spec.width / 2, 0, sz * p.spec.length / 2); out.push([w.x, w.z]); }
+  return out;
+}
+/** Clear distance between two platforms' footprints (0 if they overlap): vertex-to-rectangle both ways. */
+function footGap(a: Platform, b: Platform) {
+  let d = Infinity;
+  for (const [x, z] of corners(a)) d = Math.min(d, rectGap(b, x, z));
+  for (const [x, z] of corners(b)) d = Math.min(d, rectGap(a, x, z));
+  return Math.max(0, d);
+}
+/** Distance from a platform's middle to its line's path along the route (searching near its station). */
+function offPath(w: World, p: Platform) {
+  let best = Infinity;
+  for (let d = -p.spec.length / 2; d <= p.spec.length / 2; d += 0.25) {
+    const q = w.route.offsetAt(w.route.s + p.along + d, p.side);
+    best = Math.min(best, Math.hypot(q.x - p.x, q.z - p.z));
+  }
+  return best;
+}
+
+// 9. The train: five minutes of driving with turns and speed changes, in one line and in two.
+for (const lanes of [1, 2]) {
+  console.log(`-- train, ${lanes === 1 ? "one line" : "two lines"}`);
+  const w = world({ trainLanes: lanes, bridgeCount: lanes === 1 ? 1 : 2 });
+  const { V } = w;
+  let worstPath = 0, worstGap = Infinity, worstClear = Infinity, nan = false, worstSide = Infinity, down = 0, spansSeen = 0;
+  const stretch = [Infinity, 0];
+  const frames = 300 * 120;
+  let spans: Span[] = [];
+  for (let i = 0; i < frames; i++) {
+    const t = i * DT;
+    if (Math.abs(t - 40) < DT / 2) V.convoyHeading = 80;
+    if (Math.abs(t - 110) < DT / 2) { V.convoyHeading = -70; V.convoySpeed = 6; V.convoyTurn = 4; }
+    if (Math.abs(t - 200) < DT / 2) { V.convoyHeading = 120; V.convoySpeed = 3; }
+    w.convoy.update(DT);
+    if (i % 30 !== 0) continue;
+    const ps = w.convoy.platforms;
+    for (const p of ps) {
+      if (!Number.isFinite(p.x + p.y + p.z + p.heading)) nan = true;
+      worstPath = Math.max(worstPath, offPath(w, p));
+      if (p.follows >= 0) worstGap = Math.min(worstGap, footGap(ps[p.follows], p));
+    }
+    // Two lines: cars side by side stay apart too.
+    if (lanes === 2) for (let a = 1; a < ps.length; a++) for (let b = a + 1; b < ps.length; b++) if (ps[a].lane !== ps[b].lane) worstSide = Math.min(worstSide, footGap(ps[a], ps[b]));
+    spans = bridgeSpans(ps, V, spans);
+    for (const s of spans) {
+      spansSeen++;
+      if (s.lifted) continue;
+      down++;
+      const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y, s.b.z - s.a.z);
+      stretch[0] = Math.min(stretch[0], len / s.rest); stretch[1] = Math.max(stretch[1], len / s.rest);
+      // Underside over the sand along the span (the gangway's stringers hang 0.4 m under the walkway).
+      for (let k = 0; k <= 10; k++) {
+        const f = k / 10, x = s.a.x + (s.b.x - s.a.x) * f, y = s.a.y + (s.b.y - s.a.y) * f, z = s.a.z + (s.b.z - s.a.z) * f;
+        worstClear = Math.min(worstClear, y - 0.4 - w.field.height(x, z));
+      }
+    }
+  }
+  console.log(`  ${w.convoy.platforms.length} cars over ${w.convoy.length.toFixed(0)} m · middles off their path up to ${worstPath.toFixed(2)} m · narrowest gap ${worstGap.toFixed(2)} m (slider ${V.trainGap})${lanes === 2 ? ` · lines apart ${worstSide.toFixed(2)} m` : ""} · bridges down ${((down / Math.max(1, spansSeen)) * 100).toFixed(0)}% of the time at ${(stretch[0] * 100).toFixed(0)}-${(stretch[1] * 100).toFixed(0)}% of rest, lowest ${worstClear.toFixed(2)} m over the sand`);
+  if (nan) fail("a car went non-finite");
+  if (worstPath > 1.5) fail(`a car's middle strayed ${worstPath.toFixed(2)} m off its line's path`);
+  if (worstGap < V.trainGap - 0.75) fail(`the gap between cars closed to ${worstGap.toFixed(2)} m (slider ${V.trainGap})`);
+  if (lanes === 2 && worstSide < 3) fail(`cars in the two lines came within ${worstSide.toFixed(2)} m`);
+  if (worstClear < 5.2) fail(`a footbridge hung ${worstClear.toFixed(2)} m over the sand (the mech is 4.4 m to the hood)`);
+  if (stretch[1] > REACH_MAX + 0.01 || stretch[0] < REACH_MIN - 0.01) fail(`a lowered footbridge stretched to ${(stretch[1] * 100).toFixed(0)}% or squeezed to ${(stretch[0] * 100).toFixed(0)}%`);
+  if (down / Math.max(1, spansSeen) < 0.7) fail(`footbridges down only ${((down / spansSeen) * 100).toFixed(0)}% of the time`);
+}
+
+// 10. Walking across the train through a gap: the mech gets to the other side and is never thrown by the push-out.
+{
+  console.log("-- walking through a gap");
+  const w = world();
+  for (let i = 0; i < 240; i++) w.convoy.update(DT);
+  const ps = w.convoy.platforms, car = ps[2], lead = ps[car.follows];
+  const mid = () => {
+    const a = lead.toWorld(0, 0, -lead.spec.length / 2), b = car.toWorld(0, 0, car.spec.length / 2);
+    return { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+  };
+  let m = mid();
+  w.sim.reset(m.x + car.left.x * 18, m.z + car.left.z * 18, car.heading);
+  let worstJump = 0, near = 0, t = 0, crossed = false;
+  for (; t < 40; t += DT) {
+    m = mid();
+    const tx = m.x - car.left.x * 18, tz = m.z - car.left.z * 18;
+    const dx = tx - w.sim.pos.x, dz = tz - w.sim.pos.z, d = Math.hypot(dx, dz) || 1;
+    const k = car.speed / w.V.walkSpeed;
+    const cmd = { x: (dx / d) * 0.85 + car.fwd.x * k, z: (dz / d) * 0.85 + car.fwd.z * k, sprint: true };
+    const l = Math.hypot(cmd.x, cmd.z);
+    if (l > 1) { cmd.x /= l; cmd.z /= l; }
+    w.convoy.update(DT);
+    w.sim.update(DT, cmd);
+    const walked = { x: w.sim.pos.x, z: w.sim.pos.z };
+    for (const p of ps) { const o = p.pushOut(w.sim.pos.x, w.sim.pos.z, 2); if (o) { w.sim.pos.x = o.x; w.sim.pos.z = o.z; } }
+    worstJump = Math.max(worstJump, Math.hypot(w.sim.pos.x - walked.x, w.sim.pos.z - walked.z));
+    for (const p of ps) if (rectGap(p, w.sim.pos.x, w.sim.pos.z) < 0.5) near++;
+    if (car.toLocal(w.sim.pos.x, w.sim.pos.z).x < -(car.spec.width / 2 + 4)) { crossed = true; break; }
+  }
+  console.log(`  crossed: ${crossed} in ${t.toFixed(1)} s · biggest push-out in a step ${worstJump.toFixed(3)} m · frames within 0.5 m of a footprint ${near}`);
+  if (!crossed) fail("the mech couldn't walk through the gap between cars");
+  if (worstJump > 0.25) fail(`the push-out moved the mech ${worstJump.toFixed(2)} m in one step walking through a ${w.V.trainGap} m gap`);
+}
+
+// 11. Escorts: three minutes alongside a turning convoy, a mech walking beside the train and then standing in their way.
+{
+  console.log("-- escorts");
+  const w = world();
+  for (let i = 0; i < 240; i++) w.convoy.update(DT);
+  const esc = new EscortGroup(w.V, w.convoy, w.field);
+  esc.reset();
+  const frames = 180 * 120;
+  let onStation = 0, samples = 0, worstPlat = Infinity, worstMech = Infinity, nan = false, flipped = 0;
+  const mech = { x: 0, z: 0 };
+  const up = new THREE.Vector3();
+  for (let i = 0; i < frames; i++) {
+    const t = i * DT;
+    if (Math.abs(t - 30) < DT / 2) w.V.convoyHeading = 60;
+    if (Math.abs(t - 90) < DT / 2) { w.V.convoyHeading = -30; w.V.convoySpeed = 5.5; }
+    w.convoy.update(DT);
+    // The mech: beside the bay on the left for the first minute, then standing on the first escort's line ahead of
+    // it, then on the second one's (the other side).
+    if (t < 60) { const q = w.convoy.bay.toWorld(16, 0, 0); mech.x = q.x; mech.z = q.z; }
+    else if (Math.abs(t - 60) < DT / 2 || Math.abs(t - 120) < DT / 2) {
+      const e = esc.list[t < 100 ? 0 : 1];
+      const q = w.route.offsetAt(e.s + 45, e.side * w.V.escortOut);
+      mech.x = q.x; mech.z = q.z;
+    }
+    esc.update(DT, mech);
+    if (i % 12 !== 0) continue;
+    for (const e of esc.list) {
+      const s = e.sim;
+      if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) nan = true;
+      if (up.set(0, 1, 0).applyQuaternion(s.quat).y < 0.5) flipped++;
+      for (const p of w.convoy.platforms) worstPlat = Math.min(worstPlat, rectGap(p, s.pos.x, s.pos.z, e.half * 0.6));
+      worstMech = Math.min(worstMech, Math.hypot(s.pos.x - mech.x, s.pos.z - mech.z) - e.half * 0.6);
+      samples++;
+      if (Math.abs(Math.abs(e.out) - w.V.escortOut) <= w.V.escortBand + w.V.escortWeave && Math.sign(e.out) === e.side) onStation++;
+    }
+  }
+  const share = onStation / Math.max(1, samples);
+  console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
+  if (nan) fail("an escort went non-finite");
+  if (worstPlat < 1) fail(`an escort came within ${worstPlat.toFixed(2)} m of a platform`);
+  if (worstMech < 3) fail(`an escort drove within ${worstMech.toFixed(2)} m of the mech`);
+  if (share < 0.8) fail(`escorts on station only ${(share * 100).toFixed(0)}% of the time`);
+  if (flipped) fail("an escort tipped over");
+}
+
+// 12. Pipes: the same every time, some on every platform, out of the furniture and on the platform.
+{
+  console.log("-- pipes");
+  const V = { ...PIPE_DEFAULTS };
+  let total = 0, inside = 0, off = 0, differ = 0;
+  CONVOY_LAYOUT.forEach((spec, index) => {
+    const D = spec.tracked ? PLATFORM_DEFAULTS.convoyBayDeck : PLATFORM_DEFAULTS.convoyDeckHeight;
+    const { items } = furniture(spec, D);
+    const site = { length: spec.length, width: spec.width, deck: D, mounts: items.filter((f) => f.mount).map(furnBox), keepOut: items.filter((f) => !f.mount).map(furnBox), walkable: spec.kind === "bay", index };
+    const a = generatePipes(site, V), b = generatePipes(site, V);
+    if (JSON.stringify(a) !== JSON.stringify(b)) differ++;
+    total += a.runs;
+    if (a.runs === 0) fail(`no pipes on the ${spec.name}`);
+    const boxes = items.map(furnBox);
+    for (const t of a.tubes) for (let k = 0; k <= 8; k++) {
+      const f = k / 8, x = t.a[0] + (t.b[0] - t.a[0]) * f, y = t.a[1] + (t.b[1] - t.a[1]) * f, z = t.a[2] + (t.b[2] - t.a[2]) * f;
+      for (const bx of boxes) if (Math.abs(x - bx.x) < bx.hx - 0.06 && Math.abs(y - bx.y) < bx.hy - 0.06 && Math.abs(z - bx.z) < bx.hz - 0.06) inside++;
+      if (Math.abs(x) > spec.width / 2 + 1 || Math.abs(z) > spec.length / 2 + 0.2 || y < 0.5) off++;
+    }
+  });
+  const none = generatePipes({ length: 24, width: 10, deck: 3.2, mounts: [], keepOut: [], walkable: false, index: 0 }, { ...V, pipeDensity: 0 });
+  console.log(`  ${total} runs on ${CONVOY_LAYOUT.length} platforms · tube points inside furniture ${inside} · off the platform ${off} · differ between runs ${differ}`);
+  if (differ) fail("pipes differ between two runs with the same seed");
+  if (inside) fail(`${inside} pipe points inside furniture`);
+  if (off) fail(`${off} pipe points off the platform`);
+  if (none.tubes.length) fail("pipes with density 0");
+}
+
+// 13. Tracks and the trail: tread loops close, the bottom run sits on the ground, ruts and dust at a sane rate.
+{
+  console.log("-- tracks and trail");
+  const w = world();
+  const bay = w.convoy.bay;
+  for (const pod of trackPods(bay.spec, w.V)) {
+    const L = treadLength(pod), a = treadAt(pod, 0), b = treadAt(pod, L);
+    if (Math.hypot(a.y - b.y, a.z - b.z) > 1e-6) fail("tread loop doesn't close");
+    if (Math.abs(treadAt(pod, (pod.z0 - pod.z1) / 2).y) > 1e-9) fail("tread bottom run not on the ground");
+    if (pod.z0 > bay.spec.length / 2 || pod.z1 < -bay.spec.length / 2 || Math.abs(pod.x) + pod.w / 2 > bay.halfW + 1e-6) fail("a track pod sticks out of the platform's footprint");
+  }
+  let dust = 0, ruts = 0;
+  const fx = {
+    dust: {
+      wheel: (_x: number, _y: number, _z: number, _vx: number, _vz: number, m: number, _s: number, acc: number) => { acc += m * 0.5; while (acc >= 1) { acc -= 1; dust++; } return acc; },
+      surfaceAt: () => "sand" as const,
+    },
+    marks: { rut: () => { ruts++; } },
+  };
+  const trail = new ConvoyTrail(w.V, fx, w.field);
+  const secs = 60;
+  for (let i = 0; i < secs * 120; i++) { w.convoy.update(DT); if (i % 2 === 0) trail.update(w.convoy.platforms); }
+  console.log(`  ${secs} s at ${w.V.convoySpeed} m/s: ${ruts} ruts (${(ruts / secs).toFixed(1)}/s), ${dust} dust puffs (${(dust / secs).toFixed(1)}/s)`);
+  if (ruts < secs) fail("too few ruts behind the convoy");
+  if (ruts / secs > 40) fail(`ruts at ${(ruts / secs).toFixed(0)} a second (the mark pool is 900)`);
+  if (dust / secs > 250) fail(`dust at ${(dust / secs).toFixed(0)} puffs a second`);
+  if (dust < secs) fail("no dust from the convoy");
 }
 
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("convoy check failed"); }

@@ -33,6 +33,8 @@ const DEFAULT = [
   "/labs/robots/?dt=0.033&set=robotSpawnFrom:40",
   "/labs/convoy/?dt=0.033",
   "/labs/convoy/?deploy&dt=0.1&zoom=60",
+  "/labs/convoy/?manual&dt=0.1&zoom=80&watch=gap2",
+  "/labs/convoy/?manual&dt=0.1&zoom=40&watch=0&set=convoyHeading:90,convoyWander:0",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",
 ];

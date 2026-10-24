@@ -11,6 +11,7 @@ import type { Param } from "../core/tweaks";
 import type { Ground, WalkerSim } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
 import type { Platform } from "./platform";
+import { landingXs, LANDING_IN, LANDING_HALF } from "./train";
 
 export const DECK_DEFAULTS = {
   deckMechRadius: 1.5,
@@ -41,8 +42,8 @@ export const BAY_W = 5.4, BAY_L = 7;
 /** Cab depth at the front of the bay platform. */
 export const CAB_DEPTH = 3.6;
 
-/** The bay platform's layout from its size, the crane's mount and the deck values. */
-export function deckLayout(p: Platform, v: DeckValues & { craneMount: number }) {
+/** The bay platform's layout from its size, the crane's mount and the deck values (and the footbridges' landings). */
+export function deckLayout(p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
   const { length: L, width: W } = p.spec;
   const spots: Spot[] = [
     { x: v.deckParkX, z: v.deckParkZ, kind: "park" },
@@ -62,6 +63,8 @@ export function deckLayout(p: Platform, v: DeckValues & { craneMount: number }) 
     { x: -(W / 2 - 2.2), z: -L / 2 + 4, hx: 1.5, hz: 2 },
     { x: W / 2 - 1.8, z: -L / 2 + 3.7, hx: 0.6, hz: 1.3 },
   ];
+  // Footbridge landing towers on the tail (the bay leads, so the next car's bridges land here).
+  for (const x of landingXs(v.bridgeCount ?? 0, W)) blocks.push({ x, z: -L / 2 + LANDING_IN, hx: LANDING_HALF, hz: LANDING_HALF });
   return { spots, blocks, halfW: W / 2, halfL: L / 2 };
 }
 
@@ -131,7 +134,7 @@ export function rideDeck(sim: WalkerSim, p: Platform, was: PoseSnap) {
 }
 
 /** Keep a walking mech on the deck and out of the furniture. Returns true if it was pushed. */
-export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneMount: number }) {
+export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
   const lay = deckLayout(p, v), r = v.deckMechRadius;
   const l = p.toLocal(sim.pos.x, sim.pos.z);
   let x = Math.max(-lay.halfW + r, Math.min(lay.halfW - r, l.x));
