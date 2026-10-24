@@ -52,7 +52,29 @@ export interface GroundSample {
   flat: number;
 }
 
+/**
+ * Something that reshapes the dunes in places (the convoy's flattened road, src/convoy/route.ts). It must be a pure
+ * function of position given its stored data, so feet, wheels and chunks still agree.
+ */
+export interface GroundModifier {
+  /** Fill out for (x, z); return false (fast) where it has no effect. */
+  at(x: number, z: number, out: ModifierSample): boolean;
+}
+export interface ModifierSample {
+  /** 0: the dunes untouched .. 1: the flat floor. */
+  w: number;
+  /** Height added on top (berms at the road's edges), metres. */
+  berm: number;
+  /** Floor height above the swell, metres. */
+  lift: number;
+  /** Share of the small bumps kept on the floor. */
+  rough: number;
+}
+
 export class DuneField {
+  /** Optional reshaping (the convoy road). Null: plain dunes. */
+  modifier: GroundModifier | null = null;
+  private mod: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
   private n: Noise2;
   private seed = -1;
   private c = 1;
@@ -93,6 +115,14 @@ export class DuneField {
     out.h = swell + dune + bumps;
     out.crest = v.height > 0 ? Math.max(0, dune) / Math.max(0.01, v.height) : 0;
     out.flat = flat;
+    const m = this.mod;
+    if (this.modifier && this.modifier.at(x, z, m)) {
+      // Blend toward a smooth floor that rides the swell, plus berms at the edges.
+      const floor = swell + m.lift + bumps * m.rough;
+      out.h = lerp(out.h, floor, m.w) + m.berm;
+      out.crest *= 1 - m.w;
+      out.flat = Math.max(flat, m.w);
+    }
     return out;
   }
 

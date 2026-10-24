@@ -49,6 +49,7 @@ export class TerrainStreamer {
   private uWind = uniform(new THREE.Vector2(1, 0));
   readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0 };
   private chunks = new Map<string, Chunk>();
+  private dirty = new Set<string>();
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
 
@@ -74,6 +75,21 @@ export class TerrainStreamer {
   rebuildAll() {
     for (const c of this.chunks.values()) this.dispose(c);
     this.chunks.clear();
+    this.dirty.clear();
+  }
+
+  /**
+   * Rebuild the loaded chunks overlapping a box (after the ground changed there, e.g. the convoy's road extending).
+   * They're rebuilt in place, nearest first under the frame budget, so no holes show while they wait.
+   */
+  rebuildArea(x0: number, z0: number, x1: number, z1: number) {
+    const s = this.v.chunkSize;
+    const a = Math.floor(Math.min(x0, x1) / s), b = Math.floor(Math.max(x0, x1) / s);
+    const c = Math.floor(Math.min(z0, z1) / s), d = Math.floor(Math.max(z0, z1) / s);
+    for (let cz = c; cz <= d; cz++) for (let cx = a; cx <= b; cx++) {
+      const k = cx + "," + cz;
+      if (this.chunks.has(k)) this.dirty.add(k);
+    }
   }
 
   setFacets(on: boolean) {
@@ -109,10 +125,26 @@ export class TerrainStreamer {
       this.chunks.set(cx + "," + cz, this.build(cx, cz));
       built++;
     }
+    // Chunks whose ground changed: rebuilt in place, nearest first, at least one a frame.
+    if (this.dirty.size) {
+      const order = [...this.dirty].map((k) => { const c = this.chunks.get(k); return { k, c, d: c ? Math.hypot(c.cx - ccx, c.cz - ccz) : 0 }; });
+      order.sort((p, q) => p.d - q.d);
+      let redone = 0;
+      for (const { k, c } of order) {
+        if (redone > 0 && performance.now() - t0 > this.v.budgetMs) break;
+        this.dirty.delete(k);
+        if (!c) continue;
+        const fresh = this.build(c.cx, c.cz);
+        this.dispose(c);
+        this.chunks.set(k, fresh);
+        redone++;
+      }
+      built += redone;
+    }
     this.stats.built = built;
     this.stats.buildMs = performance.now() - t0;
     this.stats.loaded = this.chunks.size;
-    this.stats.pending = missing.length - built;
+    this.stats.pending = missing.length - built + this.dirty.size;
   }
 
   /** Build every chunk within the radius now (for tests and first frames). */
