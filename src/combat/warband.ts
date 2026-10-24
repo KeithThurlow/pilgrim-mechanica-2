@@ -35,6 +35,17 @@ export const WARBAND_DEFAULTS = {
   spawnDistance: 110,
   waveGap: 6,
   rutEvery: 1.6,
+  techTopSpeed: 20,
+  techAccel: 7,
+  techGrip: 5,
+  techDrift: 0.35,
+  techSteer: 32,
+  truckTopSpeed: 14,
+  truckAccel: 4,
+  truckGrip: 5.5,
+  truckDrift: 0.22,
+  truckSteer: 28,
+  avoidSteep: 26,
   blastLift: 6,
   blastSpin: 4,
   blastPush: 4,
@@ -68,6 +79,17 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "blastLift", label: "Wreck thrown up (m/s)", min: 0, max: 20, step: 0.1, group: "Raider wrecks", tip: "A killed vehicle blows up and is thrown: it can roll over and land on its roof" },
   { key: "blastSpin", label: "Wreck spin (rad/s)", min: 0, max: 15, step: 0.1, group: "Raider wrecks" },
   { key: "blastPush", label: "Wreck pushed along the hit (m/s)", min: 0, max: 20, step: 0.1, group: "Raider wrecks" },
+  { key: "techTopSpeed", label: "Technical: top speed (m/s)", min: 4, max: 40, step: 0.5, group: "Raider driving" },
+  { key: "techAccel", label: "Technical: acceleration", min: 1, max: 20, step: 0.1, group: "Raider driving" },
+  { key: "techGrip", label: "Technical: grip", min: 0.5, max: 15, step: 0.1, group: "Raider driving", tip: "How hard the tyres bleed off sideways sliding" },
+  { key: "techDrift", label: "Technical: drift", min: 0, max: 1, step: 0.01, group: "Raider driving", tip: "How readily hard turns break into a slide" },
+  { key: "techSteer", label: "Technical: steering lock (°)", min: 10, max: 50, step: 1, group: "Raider driving" },
+  { key: "truckTopSpeed", label: "Gun truck: top speed (m/s)", min: 4, max: 40, step: 0.5, group: "Raider driving" },
+  { key: "truckAccel", label: "Gun truck: acceleration", min: 1, max: 20, step: 0.1, group: "Raider driving" },
+  { key: "truckGrip", label: "Gun truck: grip", min: 0.5, max: 15, step: 0.1, group: "Raider driving" },
+  { key: "truckDrift", label: "Gun truck: drift", min: 0, max: 1, step: 0.01, group: "Raider driving" },
+  { key: "truckSteer", label: "Gun truck: steering lock (°)", min: 10, max: 50, step: 1, group: "Raider driving" },
+  { key: "avoidSteep", label: "Steer round slopes over (°)", min: 10, max: 60, step: 1, group: "Raider driving", tip: "Drivers turn aside rather than drive up a dune face steeper than this (the trucks bog down past about 36°)" },
   { key: "rutEvery", label: "Tyre rut every (m)", min: 0.4, max: 6, step: 0.1, group: "War band" },
 ];
 
@@ -235,6 +257,10 @@ export class Warband {
 
   private drive(r: Raider, dt: number, player: MechUnit) {
     const v = this.v, s = r.sim, T = player.sim.pelvis;
+    // Driving sliders apply live.
+    const tr = r.kind === "gunTruck";
+    s.v.topSpeed = tr ? v.truckTopSpeed : v.techTopSpeed; s.v.accel = tr ? v.truckAccel : v.techAccel;
+    s.v.grip = tr ? v.truckGrip : v.techGrip; s.v.drift = tr ? v.truckDrift : v.techDrift; s.v.maxSteer = tr ? v.truckSteer : v.techSteer;
     let throttle = 0, steer = 0;
     if (!r.alive) {
       if (r.deadFor === 0) this.blowUp(r);
@@ -276,7 +302,27 @@ export class Warband {
     }
     if (dist < 7) { ax += (dx / dist) * (7 - dist) * 3; az += (dz / dist) * (7 - dist) * 3; }
     tx += ax * 2; tz += az * 2;
-    const desired = Math.atan2(tx - s.pos.x, tz - s.pos.z);
+    let desired = Math.atan2(tx - s.pos.x, tz - s.pos.z);
+    // Round slopes too steep to climb first; keeping clear of the mech (below) wins over that.
+    desired = this.aroundSteep(s.pos.x, s.pos.z, desired);
+    // Never drive into the mech. From well out, if the line ahead would cut inside the clearance, aim for the line
+    // that grazes it instead (the side nearer the way it wants to go); inside, swerve out along the tangent.
+    const clear = r.kind === "gunTruck" ? 11 : 9;
+    if (dist >= clear && dist < 35) {
+      const toMech = Math.atan2(-dx, -dz);
+      const graze = Math.asin(Math.min(1, clear / dist));
+      const off = wrap(desired - toMech);
+      if (Math.abs(off) < graze) desired = toMech + (off >= 0 ? 1 : -1) * graze;
+    }
+    if (dist < clear) {
+      // Turn to the side the nose already points (never a 180° about-turn, which dithers left and right), out along
+      // the tangent and further out the closer it is.
+      const toMech = Math.atan2(-dx, -dz);
+      const side = wrap(s.heading - toMech) >= 0 ? 1 : -1;
+      const t = Math.max(0, (dist - 2) / (clear - 2));
+      desired = toMech + side * (Math.PI / 2 + (1 - t) * 0.7);
+      want = top * (0.45 + 0.35 * t);
+    }
     const err = wrap(desired - s.heading);
     steer = clamp(err * 1.8, -1, 1);
     // Slow for hard turns so they slide round rather than spin.
@@ -327,6 +373,20 @@ export class Warband {
     }
     s.vel.copy(r.tumbleVel);
     r.body.update(s, r.turretYaw, r.turretPitch);
+  }
+
+  /**
+   * If the way ahead climbs a face steeper than avoidSteep, try headings either side (widening) and take the nearest
+   * one that doesn't; the trucks can't climb slip faces, so they drive round them like a driver would.
+   */
+  private aroundSteep(x: number, z: number, heading: number) {
+    const g = this.bf.field, look = 7, limit = Math.tan(this.v.avoidSteep * D2R);
+    const climb = (h: number) => (g.height(x + Math.sin(h) * look, z + Math.cos(h) * look) - g.height(x, z)) / look;
+    if (climb(heading) < limit) return heading;
+    for (const off of [0.35, 0.7, 1.05, 1.4, 1.75]) {
+      for (const sgn of [1, -1]) if (climb(heading + sgn * off) < limit) return heading + sgn * off;
+    }
+    return heading;
   }
 
   private stepCar(r: Raider, dt: number, throttle: number, steer: number) {

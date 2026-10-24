@@ -6,7 +6,19 @@ import type { Param } from "../core/tweaks";
 import { WalkerSim, leftOf, type MoveCommand } from "../mech/walker";
 import type { WalkerValues } from "../mech/walkerTuning";
 import { UpperSim, type UpperValues, type Aim } from "../mech/upper";
-import type { RampartBody } from "../mech/rampart";
+import type { UpperSim as UpperSimT } from "../mech/upper";
+
+/** What a mech unit needs from its model: the Rampart, or the stand-in walker (no guns). */
+export interface MechBody {
+  readonly root: THREE.Object3D;
+  readonly armed: boolean;
+  update(sim: WalkerSim, upper: UpperSimT): void;
+  shoulderLine(out?: THREE.Vector3): THREE.Vector3;
+  muzzle(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
+  barrel(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
+  eject(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
+  paint(look: ToonLook, color: number | null): void;
+}
 import type { ToonLook } from "../look/toon";
 import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
@@ -61,7 +73,7 @@ export class MechUnit implements Hittable {
   constructor(
     private bf: Battlefield,
     readonly v: MechUnitValues,
-    readonly body: RampartBody,
+    readonly body: MechBody,
     private look: ToonLook,
     readonly team: number,
     /** First of the two muzzle-flash slots this mech's guns use (0 for the player: those carry the flash lights). */
@@ -109,7 +121,7 @@ export class MechUnit implements Hittable {
     const sub = Math.max(1, Math.ceil(dt * 120));
     for (let i = 0; i < sub; i++) {
       sim.update(dt / sub, cmd);
-      for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, trigger)) fired.push(s);
+      for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, trigger && body.armed)) fired.push(s);
     }
     body.update(sim, upper);
     const left = leftOf(upper.torsoYaw);
@@ -124,7 +136,7 @@ export class MechUnit implements Hittable {
         ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player" }
         : { voice: "other" });
     }
-    if (this.player) {
+    if (this.player && body.armed) {
       this.bf.gunAudio.update(dt, trigger, upper.guns, [body.muzzle(1, new THREE.Vector3()), body.muzzle(-1, new THREE.Vector3())]);
     }
   }

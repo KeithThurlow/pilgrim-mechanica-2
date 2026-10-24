@@ -13,21 +13,21 @@ import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
-import { rayGround, screenToGround } from "../../src/world/raycast";
-import { WalkerSim, leftOf, type MoveCommand } from "../../src/mech/walker";
+import { screenToGround } from "../../src/world/raycast";
+import type { MoveCommand } from "../../src/mech/walker";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
-import { UpperSim, UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
+import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import { WalkerBody } from "../../src/mech/walkerBody";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
-import { SandMarks, MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
-import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS, type HitSurface } from "../../src/fx/minigun";
+import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
+import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
 import { WreckStandIns } from "../../src/world/wrecks";
-import { DustSim, DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
-import { DustDraw } from "../../src/fx/dustDraw";
-import { Sfx, SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
-import { MinigunAudio } from "../../src/audio/minigunAudio";
+import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
+import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
+import { Battlefield } from "../../src/game/battlefield";
+import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -35,7 +35,7 @@ const canvas = app.renderer.domElement;
 
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, radius: 4, shadowBox: 30,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS, radius: 4, shadowBox: 30,
 };
 const DEFAULTS = { ...V };
 // Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
@@ -49,8 +49,6 @@ const streamer = new TerrainStreamer(field, V);
 scene.add(streamer.group);
 const look = new DesertLook(scene, app.renderer, V);
 
-const sim = new WalkerSim(V, field);
-const upper = new UpperSim(V);
 const rampart = params.get("model") === "standin" ? null : await RampartBody.load(toon);
 const standIn = rampart ? null : new WalkerBody();
 // The leg archetype's walk and feet become this lab's defaults (so sliders still save over them); the model's own
@@ -59,45 +57,22 @@ const legType = LEG_TYPES[rampart ? "rampart" : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
-// Prints, craters and slide trails pressed into the sand.
-const marks = new SandMarks(field, V);
-const gunFx = new MinigunFx(field, V);
-scene.add(marks.group, gunFx.group);
-// Sand dust from the feet and the rounds (after Keith's reference video).
-const dust = new DustSim(V, field);
-const dustDraw = new DustDraw(dust, field);
-scene.add(dustDraw.group);
-gunFx.onSandHit = (at, d, k) => { dust.hit(at.x, at.y, at.z, d.x, d.z, k); marks.crater(at.x, at.z, k); };
-// ?surface=gravel|dirt|concrete: pretend the ground is that, to tune the other surfaces before the terrain has them.
-const forcedSurface = params.get("surface");
-if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
-// Sound starts on the first click or key press (browser rule).
-const sfx = new Sfx(V, camera);
-const gunAudio = new MinigunAudio(sfx);
-gunFx.onHit = (at, surface) => gunAudio.hit(at, surface);
 // Steel to shoot at near the start: rounds spark off these and tear up the sand everywhere else.
 const wrecks = new WreckStandIns(field, [
   { x: 22, z: -28, yaw: 0.6, kind: "hulk" },
   { x: 6, z: -26, yaw: -0.4, kind: "plate" },
   { x: 15, z: -18, yaw: 1.2, kind: "tank" },
 ]);
-scene.add(wrecks.group);
-gunFx.onCasingLand = (at) => gunAudio.casing(at);
-
-const stepTimes: number[] = [];
+// The shared battlefield (dust, prints and craters, gun effects and sound) and the mech on it, as in the combat labs.
+const bf = new Battlefield(field, V, camera, wrecks);
+scene.add(bf.group);
+const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
+const { sim, upper } = mech;
+const dust = bf.dust;
+// ?surface=gravel|dirt|concrete: pretend the ground is that, to tune the other surfaces before the terrain has them.
+const forcedSurface = params.get("surface");
+if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
 let clock = 0;
-sim.onFootfall = (f, k) => {
-  marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
-  dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1), sim.vel.x, sim.vel.z);
-};
-// Toe kick: sand flicked back from a foot as it leaves the ground, more the faster it goes.
-sim.onLiftOff = (f, k) => {
-  if (k < 0.15) return;
-  const hd = sim.heading;
-  dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1));
-  stepTimes.push(clock);
-  while (stepTimes.length && clock - stepTimes[0] > 3) stepTimes.shift();
-};
 
 // Cameras: the iso game camera, plus orbiting review views.
 const iso = new IsoCamera(camera, canvas, V);
@@ -211,21 +186,16 @@ reticle.renderOrder = 10;
 scene.add(reticle);
 
 field.update();
-sim.reset(13, -40, 0.3);
-upper.reset(0.3);
+mech.reset(13, -40, 0.3);
 follow.copy(sim.pelvis);
 streamer.fill(sim.pos.x, sim.pos.z);
 setCam(camName);
 if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
 const lastFollow = follow.clone();
-const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
-const muzzle = new THREE.Vector3(), dir = new THREE.Vector3(), hit = new THREE.Vector3(), eject = new THREE.Vector3();
-let rounds = 0;
-const sunDir = new THREE.Vector3();
+const stick = new THREE.Vector3(), aimPt = new THREE.Vector3();
 // ?aimat=x,z: hold the aim on a fixed point (repeatable shots of hits).
 const aimAtArg = params.get("aimat")?.split(",").map(Number);
 const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], y: field.height(aimAtArg[0], aimAtArg[1]) + 0.8, z: aimAtArg[1] } : null;
-const steelAt = new THREE.Vector3(), steelN = new THREE.Vector3();
 
 // ?dt=seconds: every frame advances this much time, however long it took to draw (repeatable headless shots).
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
@@ -249,40 +219,7 @@ app.onTick((rawDt) => {
   // No firing while selecting (hold V).
   const trigger = !sel.active && (params.has("fire") || mouseDown || keys.has("KeyF") || (auto && !straight && clock % 6 > 3.2));
 
-  if (rampart) rampart.shoulderLine(shoulder); else shoulder.copy(sim.pelvis).setY(sim.pelvis.y + 1.3);
-  const fired: (1 | -1)[] = [];
-  const sub = Math.max(1, Math.ceil(dt * 120));
-  for (let i = 0; i < sub; i++) {
-    sim.update(dt / sub, cmd);
-    for (const s of upper.update(dt / sub, sim.heading, shoulder, aim, trigger && !!rampart)) fired.push(s);
-  }
-  if (rampart) rampart.update(sim, upper); else standIn!.update(sim);
-
-  if (rampart) {
-    const left = leftOf(upper.torsoYaw);
-    const spread = (V.spread * Math.PI) / 180;
-    for (const s of fired) {
-      rampart.muzzle(s, muzzle);
-      rampart.barrel(s, dir);
-      // Spread: tilt inside the cone, then wherever that ray meets the ground (or full range in the air).
-      const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
-      const d = dir.clone().add(tilt.addScaledVector(dir, -tilt.dot(dir))).normalize();
-      let reach = V.range;
-      if (rayGround(muzzle, d, field, V.range, hit)) reach = muzzle.distanceTo(hit);
-      else hit.copy(muzzle).addScaledVector(d, V.range);
-      // Steel in the way before the sand: the round strikes it instead.
-      let surface: HitSurface = "sand";
-      if (wrecks.hit(muzzle, d, reach, steelAt, steelN)) { hit.copy(steelAt); surface = "metal"; }
-      rampart.eject(s, eject);
-      gunFx.shot(s === 1 ? 0 : 1, muzzle, d, hit, eject, left.clone().multiplyScalar(s), surface, surface === "metal" ? steelN : undefined);
-      gunAudio.shot(muzzle);
-      rounds++;
-    }
-    gunAudio.update(dt, trigger, upper.guns, [rampart.muzzle(1, new THREE.Vector3()), rampart.muzzle(-1, new THREE.Vector3())]);
-  }
-  sfx.update();
-  marks.update(dt, sunDir);
-  gunFx.update(dt);
+  mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;
   if (aim) {
@@ -305,14 +242,12 @@ app.onTick((rawDt) => {
   // Haze and shadows scale with the zoom: fog counts from the camera, and far views need a bigger shadow box.
   const camDist = camera.position.distanceTo(follow);
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
-  dust.update(dt);
-  camera.updateMatrixWorld();
-  dustDraw.update(camera, sunDir.subVectors(look.sun.position, look.sun.target.position).normalize(), V, look.sun);
+  bf.update(dt, camera, look);
 
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
-  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
+  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${gunFx.hits.sand} steel ${gunFx.hits.metal}${sfx.running ? "" : " · click for sound"}`);
+  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 });

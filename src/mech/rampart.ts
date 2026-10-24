@@ -205,6 +205,8 @@ export class RampartBody {
     back.add(powerPack(look));
   }
 
+  /** Has guns (the battlefield's mech unit fires them). */
+  readonly armed = true;
   private paints: { mesh: THREE.Mesh; base: number }[] | null = null;
   /**
    * Repaint the whole mech (e.g. red for bandit mechs, near black for a wreck); null puts its own paint back.

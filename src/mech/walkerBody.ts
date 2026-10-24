@@ -119,7 +119,17 @@ export class WalkerBody {
     return { legs, hull: [this.hull, this.pelvisMesh] };
   }
 
+  /** No guns on the stand-in: the battlefield's mech unit reads these and never fires. */
+  readonly armed = false;
+  private last = new THREE.Vector3();
+  shoulderLine(out = new THREE.Vector3()) { return out.copy(this.last).setY(this.last.y + 1.3); }
+  muzzle(_side: 1 | -1, out = new THREE.Vector3()) { return out.copy(this.last); }
+  barrel(_side: 1 | -1, out = new THREE.Vector3()) { return out.set(0, 0, 1); }
+  eject(_side: 1 | -1, out = new THREE.Vector3()) { return out.copy(this.last); }
+  paint(_look: unknown, _color: number | null) {}
+
   update(sim: WalkerSim) {
+    this.last.copy(sim.pelvis);
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(sim.pelvisQ);
     this.hull.position.copy(sim.pelvis);
     this.hull.quaternion.copy(sim.hullQ);

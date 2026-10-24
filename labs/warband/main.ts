@@ -6,6 +6,7 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { combatLab } from "../../src/game/combatLab";
 import { MechUnit } from "../../src/game/mechUnit";
+import type { RampartBody } from "../../src/mech/rampart";
 import { Warband, WARBAND_DEFAULTS, WARBAND_PARAMS } from "../../src/combat/warband";
 
 const RED = 0xc4523f;
@@ -15,10 +16,10 @@ const lab = await combatLab({
   title: "War band",
   defaults: WARBAND_DEFAULTS,
   params: WARBAND_PARAMS,
-  topics: [{ id: "raiders", label: "Raiders", groups: ["War band", "Raider guns", "Raider health", "Raider wrecks"] }],
+  topics: [{ id: "raiders", label: "Raiders", groups: ["War band", "Raider driving", "Raider guns", "Raider health", "Raider wrecks"] }],
   selectables: [{
     topic: "raiders", label: "Raiders",
-    objects: () => warband ? [...warband.raiders.flatMap((r) => r.body.meshes()), ...warband.mechs.flatMap((m) => m.body.regions().hull)] : [],
+    objects: () => warband ? [...warband.raiders.flatMap((r) => r.body.meshes()), ...warband.mechs.flatMap((m) => (m.body as RampartBody).regions().hull)] : [],
   }],
   actions: [{ label: "Next band", onClick: () => warband?.spawn(lab.player.sim.pelvis) }],
   report: () => ({ band: warband?.waves ?? 0 }),
