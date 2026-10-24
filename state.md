@@ -115,6 +115,10 @@ Nothing right now.
 
 ## Changes
 
+### 2026-10-24 · Death physics cost cut (Claude, cloud session)
+- The dead now collide only with the floor (and wrecks with each other), not with their own neighbouring parts:
+  40 moving ragdolls went from about 3.8 to 2.1 ms a 60 Hz frame (Node, software); default cap 30.
+
 ### 2026-10-24 · Death physics with Rapier: ragdolls and wrecks (Claude, cloud session)
 - Keith approved the plan. New `src/physics/deaths.ts` (world of the dead, heightfield floor, ragdoll and wreck
   builders, cap, freezing, clearing), `bodies.ts` (bandit and robot layouts), `deadDraw.ts` (instanced boxes),

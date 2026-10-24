@@ -15,7 +15,7 @@ export const DEATH_DEFAULTS = {
   deathSpin: 1,
   jointDamping: 2,
   liveFor: 7,
-  maxRagdolls: 40,
+  maxRagdolls: 30,
   bodyStays: 14,
   floorSize: 120,
 };
@@ -85,7 +85,7 @@ export class DeathPhysics {
       const px = cx - size / 2 + (r / n) * size, pz = cz - size / 2 + (c / n) * size;
       heights[r * (n + 1) + c] = this.ground.height(px, pz);
     }
-    const desc = RAPIER.ColliderDesc.heightfield(n, n, heights, { x: size, y: 1, z: size }).setTranslation(cx, 0, cz).setFriction(0.9);
+    const desc = RAPIER.ColliderDesc.heightfield(n, n, heights, { x: size, y: 1, z: size }).setTranslation(cx, 0, cz).setFriction(0.9).setCollisionGroups(FLOOR);
     this.floor = this.world.createCollider(desc);
     this.floorAt.set(cx, 0, cz);
   }
@@ -111,7 +111,7 @@ export class DeathPhysics {
         .setAngvel({ x: (Math.random() - 0.5) * v.deathSpin * 4, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 })
         .setLinearDamping(0.1).setAngularDamping(v.jointDamping * 0.15);
       const b = w.createRigidBody(desc);
-      w.createCollider(RAPIER.ColliderDesc.cuboid(p.half[0], p.half[1], p.half[2]).setDensity(p.mass ?? 600).setFriction(0.8), b);
+      w.createCollider(RAPIER.ColliderDesc.cuboid(p.half[0], p.half[1], p.half[2]).setDensity(p.mass ?? 600).setFriction(0.8).setCollisionGroups(BODY), b);
       bodies.push(b);
     }
     const made: RAPIER.ImpulseJoint[] = [];
@@ -144,8 +144,8 @@ export class DeathPhysics {
       .setAngvel({ x: dirZ * spin * v.deathSpin + (Math.random() - 0.5) * spin, y: (Math.random() - 0.5) * spin * 0.5, z: -dirX * spin * v.deathSpin + (Math.random() - 0.5) * spin })
       .setAngularDamping(0.3);
     const b = w.createRigidBody(desc);
-    w.createCollider(RAPIER.ColliderDesc.cuboid(half[0], half[1], half[2]).setDensity(250).setFriction(0.7), b);
-    w.createCollider(RAPIER.ColliderDesc.cuboid(cab.half[0], cab.half[1], cab.half[2]).setTranslation(cab.at[0], cab.at[1], cab.at[2]).setDensity(150).setFriction(0.7), b);
+    w.createCollider(RAPIER.ColliderDesc.cuboid(half[0], half[1], half[2]).setDensity(250).setFriction(0.7).setCollisionGroups(WRECK), b);
+    w.createCollider(RAPIER.ColliderDesc.cuboid(cab.half[0], cab.half[1], cab.half[2]).setTranslation(cab.at[0], cab.at[1], cab.at[2]).setDensity(150).setFriction(0.7).setCollisionGroups(WRECK), b);
     const d: Dead = {
       parts: [{ half, at: [0, 0, 0], color: 0 }], bodies: [b], joints: [], pos: [new Vector3()], quat: [new Quaternion()],
       age: 0, live: true, kind: "vehicle", sink: 0, done: false,
@@ -201,3 +201,10 @@ export class DeathPhysics {
 }
 
 const UP = new Vector3(0, 1, 0);
+// Collision groups (16 bits membership, 16 bits filter): the floor is group 1 and meets everything; the dead are
+// group 2 and meet only the floor (bodies passing through each other is cheap and rarely seen; touching their own
+// neighbouring parts at every joint was most of the cost and made limbs jitter).
+const FLOOR = (0x0001 << 16) | 0xffff;
+const BODY = (0x0002 << 16) | 0x0001;
+// Vehicle wrecks also meet each other.
+const WRECK = (0x0004 << 16) | 0x0005;
