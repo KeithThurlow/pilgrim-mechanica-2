@@ -75,6 +75,8 @@ lab.onFrame((dt) => {
   sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 3 }, (fx, fy, fz, tx, ty, tz) => {
     if (!player.alive) return;
     from.set(fx, fy, fz);
+    // Only with a clear line: no shooting through the dunes.
+    if (!bf.canSee(from, p)) return;
     dir.set(tx - fx, ty - fy, tz - fz).normalize();
     const drawn = Math.random() < V.tracerShare;
     if (drawn) slot = slot >= 19 ? 2 : slot + 1;

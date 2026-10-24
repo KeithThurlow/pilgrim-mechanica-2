@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Robot swarm: small quadrupeds leap on and cling (biting) until shot, stomped or shaken off; big ones hold off and fire heavy bursts | Keith | Keith | Clinging and shaking off are Claude's take on "swarm the mech" (values are sliders). |
 | 2026-10-24 | In the combat labs the mech takes damage; no salvage drops yet (fun first, Keith has ideas for salvage) | Keith | Keith | |
 | 2026-10-24 | Bandit mechs are red Ramparts for now | Keith | Keith | |
 | 2026-10-24 | A convoy crane lab: cranes on 6-7 big platforms pick the mech up and drop it off beside the moving convoy | Keith | Keith | In `docs/proposal-combat-labs.md`; the convoy may flatten the sand ahead (long term). |

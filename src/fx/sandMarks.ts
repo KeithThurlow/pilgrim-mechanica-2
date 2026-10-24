@@ -80,8 +80,9 @@ export class SandMarks {
     const k = this.uDepth.mul(deep).mul(0.6);
     const n = vec3(hx.negate().mul(k), float(2 * e), hz.negate().mul(k)).normalize();
     // Relief: how much brighter or darker than flat sand this bit faces the sun.
-    const flatLit = max(sunL.y, 0.05);
-    const relief = clamp(n.dot(sunL).div(flatLit).sub(1), -1, 1);
+    // The difference from flat sand's lighting (not a ratio: on a slope facing away from the sun flat sand is barely
+    // lit, and a ratio blew the whole quad dark, Keith's war band shot).
+    const relief = clamp(n.dot(sunL).sub(sunL.y).mul(2.5), -1, 1);
     const churn = max(h0.negate(), 0).mul(this.uDark).mul(0.35); // disturbed sand in the hollow reads darker
     const lightCol = vec3(0.86, 0.68, 0.46), darkCol = vec3(0.24, 0.15, 0.08);
     const lit = step(0, relief.sub(churn));

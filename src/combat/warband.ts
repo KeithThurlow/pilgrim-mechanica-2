@@ -125,6 +125,9 @@ export class Raider implements Hittable {
   tumbleVel = new THREE.Vector3();
   tumbleSpin = new THREE.Vector3();
   tumbling = false;
+  /** Line of sight to the mech, re-checked every quarter second. */
+  hasLos = true;
+  losClock = Math.random() * 0.25;
   wheelAcc = [0, 0, 0, 0];
   rutAcc = 0;
   private a = new THREE.Vector3();
@@ -423,6 +426,10 @@ export class Warband {
     r.turretPitch += clamp(wantPitch - r.turretPitch, -turn, turn);
     const off = Math.abs(wrap(wantYaw - r.turretYaw));
     if (flat > v.gunRange || off > 6 * D2R) return;
+    // Hold fire while a dune is in the way (checked a few times a second, not every round).
+    r.losClock -= dt;
+    if (r.losClock <= 0) { r.losClock = 0.25; r.hasLos = this.bf.canSee(this.muzzle, T); }
+    if (!r.hasLos) return;
     const truck = r.kind === "gunTruck";
     r.fireClock += dt * (truck ? v.truckRate : v.techRate);
     while (r.fireClock >= 1) {

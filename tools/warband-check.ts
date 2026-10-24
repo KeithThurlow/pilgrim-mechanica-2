@@ -23,6 +23,7 @@ const bf = {
   marks: { rut() {}, crater() {}, print() {} },
   sfx: { play() {} },
   fire() { shots++; return null; },
+  canSee() { return true; },
 } as unknown as Battlefield;
 const pelvis = new THREE.Vector3(0, field.height(0, 0) + 3, 0);
 const player = { sim: { pelvis, pos: pelvis.clone().setY(field.height(0, 0)) }, alive: true } as unknown as MechUnit;

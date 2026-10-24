@@ -112,6 +112,19 @@ export class Battlefield {
     return struck;
   }
 
+  /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
+  canSee(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    const d = this.hit.subVectors(to, from);
+    const len = d.length();
+    if (len < 1e-3) return true;
+    d.divideScalar(len);
+    // March the line against the ground; stop a little short of the target (its feet are on the sand).
+    for (let t = 1.5; t < len - 1.5; t += 1.5) {
+      if (from.y + d.y * t < this.field.height(from.x + d.x * t, from.z + d.z * t)) return false;
+    }
+    return true;
+  }
+
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
     this.sfx.update();
