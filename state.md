@@ -122,6 +122,9 @@ Nothing right now.
 
 ## Changes
 
+### 2026-10-25 · Points of interest proposed (Claude)
+- Keith: POIs at many levels of commitment (outcrops, debris fields, wrecks, abandoned battlefields, crashed ships, bandit camps, a bandit fortress in about 9 sections); desolate and unsettled, few old structures. Plan in `docs/proposal-pois.md` (5 tiers, value split into sections you can bank and leave, placement as a pure seeded function like the ground, a minimal salvage action first). Waiting for Keith.
+
 ### 2026-10-25 · Biome blending proposed (Claude)
 - Keith: desert, rocky desolation and shallows with outcrops; first, blending one biome into the next. Plan in `docs/proposal-biomes.md` (a biome map inside the pure ground function, per-biome heights met pairwise rather than averaged, surfaces from the same weights, height-and-noise blended look; water and outcrops as steps 2 and 3). Waiting for Keith.
 
