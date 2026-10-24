@@ -7,9 +7,9 @@ import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Platform } from "./platform";
 import type { Crane } from "./crane";
-import type { CarryValues } from "./carry";
 import type { CraneValues } from "./crane";
 import { RAIL } from "./carry";
+import { deckLayout, BAY_W, BAY_L, type DeckValues } from "./deck";
 
 const PAL = {
   steel: 0x8f8a7f,
@@ -30,9 +30,12 @@ const PAL = {
 const KIND_PAINT = { bay: 0x7a7458, workshop: PAL.teal, housing: PAL.sand, fuel: PAL.rust } as const;
 
 const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true }); // no environment map: metalness only darkens
+/** Deck markings get their own material so hold-V can light them apart from the platform. */
+const MARK_MAT = MAT.clone();
 const ROPE = new THREE.MeshStandardMaterial({ color: 0x1d1b19, roughness: 0.6, metalness: 0.4 });
 
 type V3 = [number, number, number];
+const DOWN = new THREE.Vector3(0, -1, 0);
 
 /** Collects coloured boxes and cylinders, merged into one geometry. */
 class Kit {
@@ -79,21 +82,25 @@ export class PlatformBody {
   /** Rides the platform (local frame: x left, y up, z forward). */
   readonly root = new THREE.Group();
   private hull: THREE.Mesh | null = null;
+  private marks: THREE.Mesh | null = null;
   private wheels: Wheel[] = [];
   private built = "";
   private m = new THREE.Matrix4();
 
-  constructor(readonly platform: Platform, private carry: (CarryValues & CraneValues) | null) {
+  constructor(readonly platform: Platform, private carry: (CraneValues & DeckValues) | null) {
     this.root.matrixAutoUpdate = false;
     this.root.name = platform.spec.name;
   }
 
   /** Meshes for hold-V selection. */
   meshes(): THREE.Object3D[] { return [this.root]; }
+  /** The mech bay's deck markings and service tower (parking bays, launch pads, set-down pad), for hold-V. */
+  deckMeshes(): THREE.Object3D[] { return this.marks ? [this.marks] : []; }
 
   update() {
     const p = this.platform;
-    const key = `${p.deck}|${this.carry?.craneBaySlot}|${this.carry?.craneMount}`;
+    const c = this.carry;
+    const key = c ? `${p.deck}|${c.craneSetDown}|${c.craneMount}|${c.deckParkX}|${c.deckParkZ}|${c.deckLaunchX}|${c.deckPadRadius}` : `${p.deck}`;
     if (key !== this.built) { this.build(); this.built = key; }
     this.m.makeBasis(new THREE.Vector3(p.left.x, p.left.y, p.left.z), new THREE.Vector3(p.up.x, p.up.y, p.up.z), new THREE.Vector3(p.fwd.x, p.fwd.y, p.fwd.z));
     this.m.setPosition(p.x, p.y, p.z);
@@ -104,6 +111,7 @@ export class PlatformBody {
 
   private build() {
     if (this.hull) { this.root.remove(this.hull); this.hull.geometry.dispose(); }
+    if (this.marks) { this.root.remove(this.marks); this.marks.geometry.dispose(); this.marks = null; }
     for (const w of this.wheels) { this.root.remove(w.mesh); w.mesh.geometry.dispose(); }
     this.wheels = [];
     const p = this.platform, { length: L, width: W, tracked, kind } = p.spec, D = p.deck;
@@ -129,7 +137,7 @@ export class PlatformBody {
       }
       if (deployZ !== null) {
         // Deploy zone: hazard stripes on the deck edge where the crane swings the mech out.
-        for (let i = 0; i < 8; i++) k.box([1.6, 0.05, 0.45], [x - sx * 0.9, D + 0.03, deployZ - 3.5 + i], i % 2 ? PAL.dark : PAL.orange, [0, sx * 0.5, 0]);
+        for (let i = 0; i < 8; i++) k.box([0.7, 0.05, 0.45], [x - sx * 0.45, D + 0.03, deployZ - 3.5 + i], i % 2 ? PAL.dark : PAL.orange, [0, sx * 0.5, 0]);
       }
     }
     for (const y of railY) k.box([W - 0.2, 0.08, 0.08], [0, y, -L / 2 + 0.1], PAL.hazard);
@@ -167,20 +175,36 @@ export class PlatformBody {
 
     // What it carries.
     if (kind === "bay" && this.carry) {
-      const slot = this.carry.craneBaySlot;
-      // Bay outline (hazard), pad, and service towers either side (open above: the crane lifts the mech straight out).
-      const bw = 6, bl = 7;
-      k.box([bw, 0.04, bl], [0, D + 0.02, slot], PAL.dark);
-      for (const sx of [1, -1]) k.box([0.3, 0.06, bl], [sx * bw / 2, D + 0.04, slot], PAL.hazard);
-      for (const sz of [1, -1]) k.box([bw + 0.3, 0.06, 0.3], [0, D + 0.04, slot + sz * bl / 2], PAL.hazard);
-      for (const sx of [1, -1]) {
-        const x = sx * (bw / 2 + 1.4);
-        for (const sz of [1, -1]) k.box([0.3, 4.6, 0.3], [x + sx * 0.5, D + 2.3, slot + sz * 1.6], PAL.steel);
-        for (const y of [1.6, 3.2]) k.box([1.6, 0.15, 3.8], [x, D + y, slot], PAL.ochre);
-        k.box([0.08, 0.9, 3.6], [x - sx * 0.75, D + 3.7, slot], PAL.hazard);
-        k.box([0.6, 0.6, 0.6], [x + sx * 0.4, D + 4.9, slot + 1.6], PAL.bone);
+      const lay = deckLayout(p, this.carry), mk = new Kit();
+      for (const s of lay.spots) {
+        if (s.kind === "park") {
+          // Parking bay: dark pad, hazard outline, a chevron pointing forward (park facing the cab).
+          mk.box([BAY_W, 0.04, BAY_L], [s.x, D + 0.02, s.z], PAL.dark);
+          for (const sx of [1, -1]) mk.box([0.25, 0.06, BAY_L], [s.x + sx * BAY_W / 2, D + 0.04, s.z], PAL.hazard);
+          for (const sz of [1, -1]) mk.box([BAY_W + 0.25, 0.06, 0.25], [s.x, D + 0.04, s.z + sz * BAY_L / 2], PAL.hazard);
+          for (const sx of [1, -1]) mk.box([0.25, 0.06, 1.6], [s.x + sx * 0.5, D + 0.05, s.z + BAY_L / 2 - 1.4], PAL.bone, [0, -sx * 0.6, 0]);
+        } else if (s.kind === "launch") {
+          // Launch pad: orange ring of plates and a cross, by the rail gap.
+          const r = this.carry.deckPadRadius;
+          for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            mk.box([0.5, 0.05, (2 * Math.PI * r) / 12 - 0.15], [s.x + Math.cos(a) * r, D + 0.03, s.z + Math.sin(a) * r], i % 2 ? PAL.dark : PAL.orange, [0, -a, 0]);
+          }
+          mk.box([r * 1.2, 0.05, 0.3], [s.x, D + 0.03, s.z], PAL.orange);
+          mk.box([0.3, 0.05, r * 1.2], [s.x, D + 0.03, s.z], PAL.orange);
+        } else {
+          // Set-down pad: a bone-coloured square where the crane puts a picked-up mech.
+          for (const sx of [1, -1]) mk.box([0.2, 0.05, 4], [s.x + sx * 2, D + 0.03, s.z], PAL.bone);
+          for (const sz of [1, -1]) mk.box([4.2, 0.05, 0.2], [s.x, D + 0.03, s.z + sz * 2], PAL.bone);
+        }
       }
-      // Parts racks and a tool hut aft of the bay.
+      // Service tower between the parking bays: posts, two walkways, a light on top.
+      const tz = this.carry.deckParkZ;
+      for (const sx of [1, -1]) for (const sz of [1, -1]) mk.box([0.25, 4.6, 0.25], [sx * 0.6, D + 2.3, tz + sz * 1.7], PAL.steel);
+      for (const y of [1.6, 3.2]) mk.box([1.6, 0.15, 3.8], [0, D + y, tz], PAL.ochre);
+      mk.box([0.6, 0.6, 0.6], [0, D + 4.9, tz + 1.6], PAL.bone);
+      this.marks = mesh(mk.build(), this.root, MARK_MAT);
+      // Parts racks and a tool hut aft (the deck's furniture: deck.ts walks round the same boxes).
       k.box([3, 2.6, 4], [-(W / 2 - 2.2), D + 1.3, -L / 2 + 4], PAL.teal);
       k.box([3.4, 0.2, 4.4], [-(W / 2 - 2.2), D + 2.7, -L / 2 + 4], PAL.dark);
       for (let i = 0; i < 3; i++) k.box([1.2, 1.2, 1.2], [W / 2 - 1.8, D + 0.6 + (i === 2 ? 1.2 : 0), -L / 2 + 3 + (i % 2) * 1.4], PAL.ochre);
@@ -224,6 +248,9 @@ export class CraneBody {
   private mast: THREE.Mesh;
   private jibLen = -1;
   private e = new THREE.Euler();
+  private dir = new THREE.Vector3();
+  private lean = new THREE.Quaternion();
+  private yaw = new THREE.Quaternion();
 
   constructor(readonly crane: Crane, private platformBody: PlatformBody) {
     const t = new Kit();
@@ -279,10 +306,15 @@ export class CraneBody {
     this.turret.rotation.set(0, cr.slew, 0);
     this.jib.position.set(cr.base.x, cr.base.y, cr.base.z);
     this.jib.quaternion.setFromEuler(this.e.set(-cr.luff, p.heading + cr.slew, 0, "YXZ"));
+    // Rope from the tip to the swinging cradle; the cradle hangs in line with it.
     this.rope.position.set(cr.tip.x, cr.tip.y, cr.tip.z);
-    this.rope.scale.set(1, Math.max(0.1, cr.hoist), 1);
+    this.dir.set(cr.cradle.x - cr.tip.x, cr.cradle.y - cr.tip.y, cr.cradle.z - cr.tip.z);
+    const len = Math.max(0.1, this.dir.length());
+    this.lean.setFromUnitVectors(DOWN, this.dir.divideScalar(len));
+    this.rope.quaternion.copy(this.lean);
+    this.rope.scale.set(1, len, 1);
     this.cradle.position.set(cr.cradle.x, cr.cradle.y, cr.cradle.z);
     // Arms either side of a carried mech (which is turned to face along the platform).
-    this.cradle.rotation.set(0, p.heading, 0);
+    this.cradle.quaternion.copy(this.lean).multiply(this.yaw.setFromEuler(this.e.set(0, p.heading, 0)));
   }
 }
