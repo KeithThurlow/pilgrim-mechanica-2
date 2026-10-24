@@ -205,6 +205,17 @@ export class MechUnit implements Hittable {
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
+  /** A blast at a point: hurt if it reaches the hull's capsule, full at the centre, half at the edge. */
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+    if (!this.alive) return 0;
+    const p = this.sim.pelvis;
+    const y = Math.min(Math.max(at.y, p.y - 2.4), p.y + 1.6);
+    const d = Math.max(0, Math.hypot(at.x - p.x, at.y - y, at.z - p.z) - this.v.hitRadius);
+    if (d > radius) return 0;
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir);
+    return 1;
+  }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3) {
     if (!this.alive) return;
     if (this.dash.active) amount *= this.v.dashDamageCut;

@@ -7,7 +7,7 @@ import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
-import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD } from "../../src/combat/infantry";
+import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD, INFANTRY_MAX } from "../../src/combat/infantry";
 import { InfantryDraw, BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS, CLOTH } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
@@ -21,12 +21,26 @@ const WAVE_DEFAULTS = {
   banditDamage: 0.6,
   tracerShare: 0.3,
   stompReach: 2.4,
+  rocketShare: 0.06,
+  rocketEvery: 6,
+  rocketSpeed: 16,
+  rocketArc: 2.5,
+  rocketRadius: 2.8,
+  rocketDamage: 18,
+  rocketLead: 0.5,
 };
 const WAVE_PARAMS: Param[] = [
   { key: "swarmSize", label: "Bandits on the field", min: 0, max: 1000, step: 10, group: "Bandit waves", tip: "Groups keep coming until this many are up" },
   { key: "groupSize", label: "Group size", min: 1, max: 200, step: 1, group: "Bandit waves" },
   { key: "groupEvery", label: "A group every (s)", min: 0.2, max: 30, step: 0.1, group: "Bandit waves" },
   { key: "spawnFrom", label: "They come from (m)", min: 30, max: 250, step: 5, group: "Bandit waves" },
+  { key: "rocketShare", label: "Rocketeers (share)", min: 0, max: 0.5, step: 0.01, group: "Bandit rockets", tip: "Some bandits carry a launcher: a slow rocket whose landing spot is marked, so you can dash out" },
+  { key: "rocketEvery", label: "A rocket every (s)", min: 1, max: 30, step: 0.5, group: "Bandit rockets" },
+  { key: "rocketSpeed", label: "Rocket speed (m/s)", min: 4, max: 60, step: 1, group: "Bandit rockets" },
+  { key: "rocketArc", label: "Rocket arc (m)", min: 0, max: 20, step: 0.5, group: "Bandit rockets" },
+  { key: "rocketRadius", label: "Blast radius (m)", min: 0.5, max: 8, step: 0.1, group: "Bandit rockets" },
+  { key: "rocketDamage", label: "Blast damage", min: 0, max: 200, step: 1, group: "Bandit rockets" },
+  { key: "rocketLead", label: "Lead on a moving mech (0-1)", min: 0, max: 1.5, step: 0.05, group: "Bandit rockets", tip: "How much of your walk they aim ahead for; a dash isn't predicted" },
   { key: "banditDamage", label: "Damage per bandit round", min: 0, max: 20, step: 0.1, group: "Bandit waves" },
   { key: "tracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Bandit waves", tip: "Hundreds fire at once: only this share draw a tracer and make a sound; the rest still hit" },
   { key: "stompReach", label: "Stomp reach (m)", min: 0, max: 6, step: 0.1, group: "Bandit waves", tip: "A footfall knocks down or kills bandits this close" },
@@ -39,7 +53,7 @@ const lab = await combatLab({
   title: "Bandit swarm",
   defaults: { ...INFANTRY_DEFAULTS, ...WAVE_DEFAULTS, ...BANDIT_LOOK_DEFAULTS },
   params: [...WAVE_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
-  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] }],
+  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandit rockets", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] }],
   selectables: [{ topic: "bandits", label: "Bandits", objects: () => (draw ? [draw.mesh] : []) }],
   actions: [{ label: "Group now", onClick: () => spawnGroup() }],
   report: () => ({ bandits: swarm?.count ?? 0 }),
@@ -69,6 +83,7 @@ function spawnGroup() {
   sw.spawn(Math.round(V.groupSize), p.x + Math.sin(a) * V.spawnFrom, p.z + Math.cos(a) * V.spawnFrom, 4 + Math.sqrt(V.groupSize));
 }
 
+const rocketClock = new Float32Array(INFANTRY_MAX);
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 let groupClock = Infinity, slot = 2; // the first group comes at once
 lab.targets = () => {
@@ -83,11 +98,21 @@ lab.onFrame((dt) => {
   groupClock += dt;
   if (sw.count < V.swarmSize && groupClock >= V.groupEvery) { groupClock = 0; spawnGroup(); }
   const p = player.sim.pelvis;
-  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 3 }, (fx, fy, fz, tx, ty, tz) => {
+  for (let i = 0; i < rocketClock.length; i++) rocketClock[i] -= dt;
+  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 3 }, (fx, fy, fz, tx, ty, tz, i) => {
     if (!player.alive) return;
     from.set(fx, fy, fz);
     // Only with a clear line: no shooting through the dunes.
     if (!bf.canSee(from, p)) return;
+    // Rocketeers (every Nth bandit by its slot) lob a slow rocket at where you'll be instead of the burst.
+    if ((i * 0.618034) % 1 < V.rocketShare) {
+      if (rocketClock[i] > 0) return;
+      rocketClock[i] = V.rocketEvery * (0.8 + Math.random() * 0.4);
+      const dist = Math.hypot(p.x - fx, p.z - fz), flight = dist / Math.max(1, V.rocketSpeed);
+      const v = player.sim.vel;
+      bf.lob(2, from, p.x + v.x * flight * V.rocketLead, p.z + v.z * flight * V.rocketLead, flight, V.rocketArc, V.rocketRadius, V.rocketDamage);
+      return;
+    }
     dir.set(tx - fx, ty - fy, tz - fz).normalize();
     const drawn = Math.random() < V.tracerShare;
     if (drawn) slot = slot >= 19 ? 2 : slot + 1;

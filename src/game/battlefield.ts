@@ -2,6 +2,8 @@
 // sound, steel wrecks, and everything that can be shot. One `fire` call resolves a round against all of it (the
 // nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
 import * as THREE from "three/webgpu";
+import { Shells, type Shell } from "./shells";
+import { ShellsDraw, SHELL_FX_DEFAULTS, type ShellFxValues } from "../fx/shellsDraw";
 import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
 import { rayGround } from "../world/raycast";
@@ -13,7 +15,7 @@ import { MinigunFx, type MinigunFxValues, type HitSurface } from "../fx/minigun"
 import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 
-export type BattlefieldValues = DustValues & MarkValues & MinigunFxValues & SfxValues;
+export type BattlefieldValues = DustValues & MarkValues & MinigunFxValues & SfxValues & Partial<ShellFxValues>;
 
 /** Anything a round can hit. */
 export interface Hittable {
@@ -60,6 +62,9 @@ export class Battlefield {
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
   readonly targets: Hittable[] = [];
+  /** Slow telegraphed shells (lob) and their landing marks. */
+  readonly shells = new Shells();
+  readonly shellsDraw: ShellsDraw;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   private hit = new THREE.Vector3();
   private steelAt = new THREE.Vector3();
@@ -73,7 +78,11 @@ export class Battlefield {
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
     this.dustDraw = new DustDraw(this.dust, field);
-    this.group.add(this.marks.group, this.gunFx.group, this.dustDraw.group);
+    // Labs that don't list the telegraph sliders still get their defaults.
+    const sv = v as BattlefieldValues & Record<string, unknown>;
+    for (const [k, val] of Object.entries(SHELL_FX_DEFAULTS)) if (!(k in sv)) sv[k] = val;
+    this.shellsDraw = new ShellsDraw(this.shells, field, v as unknown as ShellFxValues);
+    this.group.add(this.marks.group, this.gunFx.group, this.dustDraw.group, this.shellsDraw.group);
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
@@ -158,6 +167,33 @@ export class Battlefield {
     return struck;
   }
 
+  /**
+   * Lob a telegraphed shell from `from` to land on the ground at (x, z) after `flight` seconds, bursting with `radius`
+   * and `damage` (falling off to half at the edge) on everything of another team. The landing ring shows at once.
+   */
+  lob(team: number, from: THREE.Vector3, x: number, z: number, flight: number, arc: number, radius: number, damage: number): Shell {
+    const to = this.hit.set(x, this.field.height(x, z), z);
+    this.sfx.play("brap", from, 1.3, 0.45, false);
+    return this.shells.lob(team, from, to, flight, arc, radius, damage);
+  }
+
+  private burst(s: Shell) {
+    const p = s.to, k = Math.max(0.5, s.radius / 3);
+    for (let i = 0; i < 18 * k; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6 * k;
+      this.dust.emit(1, p.x, p.y + Math.random() * 0.5, p.z, Math.cos(a) * sp, 2 + Math.random() * 5 * k, Math.sin(a) * sp, 0.5 + Math.random() * 0.7, 2.5 + Math.random() * 3, 0.9);
+    }
+    for (let i = 0; i < 20 * k; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 9;
+      this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
+    }
+    this.dust.stomp(p.x, p.y, p.z, 1.6 * k);
+    this.marks.crater(p.x, p.z, 4 * k);
+    this.sfx.play("brap", p, 1.8, 0.4, false);
+    const down = this.back.set(0, -1, 0);
+    for (const t of this.targets) if (t.alive && t.team !== s.team && t.splash) t.splash(p, s.radius, s.damage, down);
+  }
+
   /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
   canSee(from: THREE.Vector3, to: THREE.Vector3): boolean {
     const d = this.hit.subVectors(to, from);
@@ -175,6 +211,9 @@ export class Battlefield {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
     this.sfx.update();
     this.marks.update(dt, this.sunDir);
+    this.shells.update(dt, (s) => this.burst(s));
+    for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
+    this.shellsDraw.update();
     this.gunFx.update(dt);
     this.dust.update(dt);
     camera.updateMatrixWorld();

@@ -118,6 +118,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-24 · Telegraphed shells: tank shells and bandit rockets you can dash out of (Claude)
+- Keith: give the player skill against the swarms (efficient targeting, dodging), so some enemies need slower, telegraphed weapons. `src/game/shells.ts` (pure: lobbed shells that land on a marked spot after a flight time), `src/fx/shellsDraw.ts` (a pulsing ring on the sand the size of the blast, a disc filling in as it comes down, a glowing slug with a smoke trail; "Telegraphs" sliders under Hits and dust), `Battlefield.lob` and a burst (dust, crater, thud) that damages through each target's `splash` (the mech now has one: falls off to half at the edge). The tank now lobs shells at where your walk takes you (22 m/s, 4 m blast, 35 damage, lead 0.6); a share of bandits (6%) are rocketeers lobbing a slow rocket every ~6 s (18 damage, 2.8 m) instead of firing bursts ("Bandit rockets"). Dashes aren't predicted: a dash gets you out of the ring.
+- Checked: typecheck; `tools/shells-check.ts` (lands on its mark on time, arc height, lands once), warband-check (the tank lobs), infantry-check.
+
 ### 2026-10-24 · Dash on Space (Claude)
 - Keith: Space dodges or lunges the way WASD points, on charges. `src/mech/dash.ts` (pure: 2 charges, 3 s each, a front-loaded 9 m shove over 0.45 s, crouch and lean); `walker.ts` gains `push` (planted feet skid with the body, a swinging foot's target is carried), `crouch`, `leanPitch`, `leanRoll`; `MechUnit.tryDash` with a sand burst, skid spray and furrows, damage taken ×0.5 while dashing, `onDash` for the labs: bandits are knocked flying (`InfantrySwarm.shove`), clinging robots thrown off and small ones in the way bowled over. Combat labs: Space, HUD dots, the demo sidesteps every 7 s. "Dash" group under Your mech. Check: `tools/dash-check.ts` (distance on the dunes walking and standing, skidding feet on the sand, no NaN, charges).
 
