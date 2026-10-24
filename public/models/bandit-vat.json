@@ -1,0 +1,70 @@
+{
+ "version": 1,
+ "vertices": 1409,
+ "triangles": 2272,
+ "frames": 134,
+ "height": 1.829,
+ "clothRef": [
+  0.4503,
+  0.2665,
+  0.1458
+ ],
+ "clips": {
+  "aim": {
+   "start": 0,
+   "frames": 37,
+   "fps": 12,
+   "loop": true,
+   "speed": 0,
+   "duration": 3.1
+  },
+  "run": {
+   "start": 37,
+   "frames": 22,
+   "fps": 30,
+   "loop": true,
+   "speed": 3.226,
+   "duration": 0.7333
+  },
+  "sprint": {
+   "start": 59,
+   "frames": 20,
+   "fps": 30,
+   "loop": true,
+   "speed": 4.423,
+   "duration": 0.6667
+  },
+  "runFire": {
+   "start": 79,
+   "frames": 17,
+   "fps": 30,
+   "loop": true,
+   "speed": 4.808,
+   "duration": 0.5667
+  },
+  "walkFire": {
+   "start": 96,
+   "frames": 24,
+   "fps": 24,
+   "loop": true,
+   "speed": 1.586,
+   "duration": 1
+  },
+  "flinch": {
+   "start": 120,
+   "frames": 14,
+   "fps": 30,
+   "loop": false,
+   "speed": 0,
+   "duration": 0.4333
+  }
+ },
+ "offsets": {
+  "pos": 0,
+  "normal": 1510448,
+  "colour": 1888060,
+  "index": 1910604,
+  "rest": 1924236
+ },
+ "source": "Vanguard by T. Choonyung (Mixamo), 11376 tris thinned; clips: Stances/Rifle_Idle_Aim.fbx, Rifle/Rifle_Run_F.fbx, Locomotion/Sprint_F.fbx, Rifle/Rifle_Run_F_Firing_A.fbx, Rifle/Rifle_Walk_F_Firing.fbx, Reactions/Hit_Flinch.fbx"
+}

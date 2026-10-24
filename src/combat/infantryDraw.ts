@@ -1,16 +1,40 @@
-// Draws the bandit swarm (infantry.ts): one instanced, merged low-poly stand-in figure (legs, torso, head wrap, a
-// rifle), about 1.8 m tall, in a few raider cloth colours. No skeleton: running is a bob, a forward lean and a
-// little sway; downed bandits topple flat along the way they were thrown and get back up; the dead lie flat, then
-// sink into the sand and vanish before their slot is reused.
+// Draws the bandit swarm (infantry.ts). Two looks on a slider (banditLook):
+//  1 Vanguard (Keith 2026-10-24): Mixamo's Vanguard baked to an animation texture (banditVat.ts), all bandits in
+//    one instanced mesh, each with its own clip, time and rate, crossfading on a change: run in (speed-matched to
+//    the sim), sprint away when fleeing, rifle aim when standing to shoot, walk-and-fire when moving in the band
+//    (played backward when backing off), a flinch when hit. The armour plates take the raider cloth colour.
+//  0 boxes: the merged low-poly stand-in, running as a bob, a lean and a sway.
+// Downed bandits topple flat along the way they were thrown (the pose frozen) and get back up; the dead lie flat,
+// then sink into the sand (unless the death physics draws them: hideDead).
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { InfantrySwarm, INFANTRY_MAX, DOWN, DEAD, EMPTY } from "./infantry";
+import type { Param } from "../core/tweaks";
+import { InfantrySwarm, INFANTRY_MAX, DOWN, DEAD, EMPTY, FIRING, FLEEING } from "./infantry";
+import { BanditVatMesh, type BanditVatData } from "./banditVat";
+import { BanditAnim, type AnimClip } from "./banditAnim";
+import { VAT_CLIPS, type VatClipName } from "./banditVatFormat";
 
 /** Raider cloth: rust, dusty khaki, faded indigo, olive. */
-const CLOTH = [0x9a4a2c, 0xb59c72, 0x4e5a78, 0x6b6a3e];
+export const CLOTH = [0x9a4a2c, 0xb59c72, 0x4e5a78, 0x6b6a3e];
+
+export const BANDIT_LOOK_DEFAULTS = {
+  banditLook: 1,
+  banditAnimSpeed: 1,
+  banditFade: 0.2,
+  banditScale: 1.8,
+};
+export type BanditLookValues = typeof BANDIT_LOOK_DEFAULTS;
+export const BANDIT_LOOK_PARAMS: Param[] = [
+  { key: "banditLook", label: "Look (0 boxes, 1 Vanguard)", min: 0, max: 1, step: 1, group: "Bandits: look", tip: "Vanguard is the Mixamo character baked to an animation texture" },
+  { key: "banditAnimSpeed", label: "Play speed ×", min: 0.2, max: 3, step: 0.05, group: "Bandits: look", tip: "On top of matching the run to the bandit's speed" },
+  { key: "banditFade", label: "Crossfade on clip change (s)", min: 0, max: 1, step: 0.01, group: "Bandits: look" },
+  { key: "banditScale", label: "Height (m)", min: 1.2, max: 2.6, step: 0.01, group: "Bandits: look", tip: "Drawn height; the hit cylinder is Hit height under Bandits" },
+];
 
 /** Look values that aren't feel (kept here; the lead can promote any to sliders). */
 const BOB = 0.07, LEAN = 0.14, SWAY = 0.06, STRIDE = 1.6, FALL_RATE = 6, SINK = 0.7;
+/** Below this a bandit stands (aim); rates for the moving clips stay within these. */
+const STAND = 0.6, RATE_MIN = 0.4, RATE_MAX = 2.2, FLINCH_MAX_SPEED = 2;
 
 function part(w: number, h: number, d: number, x: number, y: number, z: number, rgb: number): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
@@ -43,10 +67,17 @@ function figure(): THREE.BufferGeometry {
 
 export class InfantryDraw {
   readonly group = new THREE.Group();
-  readonly mesh: THREE.InstancedMesh;
+  /** The box look. */
+  readonly boxes: THREE.InstancedMesh;
+  /** The baked look (null when the bake didn't load). */
+  readonly vat: BanditVatMesh | null = null;
+  private anim: BanditAnim | null = null;
+  private clipId = {} as Record<VatClipName, number>;
   private tilt = new Float32Array(INFANTRY_MAX);
   private phase = new Float32Array(INFANTRY_MAX);
   private gen = new Uint32Array(INFANTRY_MAX);
+  private lastHp = new Float32Array(INFANTRY_MAX);
+  private rows = new Float32Array(8);
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private qa = new THREE.Quaternion();
@@ -57,26 +88,52 @@ export class InfantryDraw {
   private ay = new THREE.Vector3(0, 1, 0);
   private az = new THREE.Vector3(0, 0, 1);
 
-  constructor(private swarm: InfantrySwarm) {
+  constructor(private swarm: InfantrySwarm, public look: BanditLookValues = { ...BANDIT_LOOK_DEFAULTS }, vat: BanditVatData | null = null) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
-    this.mesh = new THREE.InstancedMesh(figure(), mat, INFANTRY_MAX);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(INFANTRY_MAX * 3), 3);
-    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
-    this.mesh.frustumCulled = false;
-    this.mesh.count = 0;
-    this.group.add(this.mesh);
+    this.boxes = new THREE.InstancedMesh(figure(), mat, INFANTRY_MAX);
+    this.boxes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.boxes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(INFANTRY_MAX * 3), 3);
+    this.boxes.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this.boxes.castShadow = true;
+    this.boxes.receiveShadow = true;
+    this.boxes.frustumCulled = false;
+    this.boxes.count = 0;
+    this.group.add(this.boxes);
+
+    if (vat) {
+      this.vat = new BanditVatMesh(vat, INFANTRY_MAX);
+      const h = vat.header;
+      const clips: AnimClip[] = VAT_CLIPS.map((name, k) => {
+        this.clipId[name] = k;
+        return { ...h.clips[name], cycle: name !== "aim" && name !== "flinch" };
+      });
+      this.anim = new BanditAnim(clips, INFANTRY_MAX);
+      const ref = h.clothRef;
+      CLOTH.forEach((hex, k) => { const c = new THREE.Color(hex); this.vat!.tints[k].setRGB(c.r / ref[0], c.g / ref[1], c.b / ref[2]); });
+      this.vat.mesh.raycast = (rc, hits) => this.pick(rc, hits);
+      this.group.add(this.vat.mesh);
+    }
   }
 
+  /** The look being drawn (for the hold-V selector). */
+  get mesh(): THREE.Object3D { return this.useVat ? this.vat!.mesh : this.boxes; }
+
+  private get useVat(): boolean { return !!this.vat && this.look.banditLook >= 0.5; }
+
   update(dt: number): void {
-    const sw = this.swarm, v = sw.v, mesh = this.mesh;
+    const sw = this.swarm, v = sw.v, vat = this.useVat ? this.vat : null, anim = this.anim, L = this.look;
+    this.boxes.visible = !vat;
+    if (this.vat) this.vat.mesh.visible = !!vat;
+    const bakedH = this.vat?.data.header.height ?? 1.8;
     let n = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
-      if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.tilt[i] = 0; this.phase[i] = sw.seed[i] * 6.283; }
+      const fresh = this.gen[i] !== sw.gen[i];
+      if (fresh) {
+        this.gen[i] = sw.gen[i]; this.tilt[i] = 0; this.phase[i] = sw.seed[i] * 6.283; this.lastHp[i] = sw.hp[i];
+        if (anim) anim.reset(i, this.clipId.run, sw.seed[i] * 2);
+      }
 
       const speed = Math.hypot(sw.vx[i], sw.vz[i]);
       const flat = st === DOWN || st === DEAD;
@@ -94,6 +151,9 @@ export class InfantryDraw {
           scale = 1 - k * k;
         }
       }
+      const size = 0.94 + sw.seed[i] * 0.12;
+      const hit = sw.hp[i] < this.lastHp[i] - 1e-4;
+      this.lastHp[i] = sw.hp[i];
 
       if (tilt > 0.001) {
         // Lie along the fall: the figure's up turns toward fallYaw.
@@ -101,6 +161,8 @@ export class InfantryDraw {
         this.qa.setFromAxisAngle(this.ax, tilt * Math.PI * 0.5);
         this.q.multiply(this.qa);
         y += tilt * 0.18;
+      } else if (vat) {
+        this.q.setFromAxisAngle(this.ay, sw.heading[i]);
       } else {
         // Run cycle: bob, lean into the run, sway side to side.
         this.phase[i] += (speed / STRIDE) * Math.PI * dt;
@@ -113,17 +175,70 @@ export class InfantryDraw {
         this.q.multiply(this.qa);
       }
 
-      this.p.set(sw.px[i], y, sw.pz[i]);
-      this.s.setScalar(scale * (0.94 + sw.seed[i] * 0.12));
-      this.m.compose(this.p, this.q, this.s);
-      mesh.setMatrixAt(n, this.m);
-      this.c.setHex(CLOTH[sw.look[i] & 3]).multiplyScalar(0.85 + sw.seed[i] * 0.3);
-      if (st === DEAD) this.c.multiplyScalar(0.7);
-      mesh.setColorAt(n, this.c);
+      if (vat && anim) {
+        const s = (L.banditScale / bakedH) * size * scale;
+        this.choose(i, st, speed, hit, s);
+        anim.step(i, dt, L.banditFade);
+        anim.rows(i, this.rows, 0);
+        vat.place.setXYZW(n, sw.px[i], y, sw.pz[i], s);
+        vat.turn.setXYZW(n, this.q.x, this.q.y, this.q.z, this.q.w);
+        vat.animA.setXYZW(n, this.rows[0], this.rows[1], this.rows[2], this.rows[3]);
+        const shade = (0.85 + sw.seed[i] * 0.3) * (st === DEAD ? 0.7 : 1);
+        vat.animB.setXYZW(n, this.rows[4], this.rows[5], this.rows[6], (sw.look[i] & 3) * 4 + shade);
+      } else {
+        this.p.set(sw.px[i], y, sw.pz[i]);
+        this.s.setScalar(scale * size);
+        this.m.compose(this.p, this.q, this.s);
+        this.boxes.setMatrixAt(n, this.m);
+        this.c.setHex(CLOTH[sw.look[i] & 3]).multiplyScalar(0.85 + sw.seed[i] * 0.3);
+        if (st === DEAD) this.c.multiplyScalar(0.7);
+        this.boxes.setColorAt(n, this.c);
+      }
       n++;
     }
-    mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (vat) vat.count = n;
+    else {
+      this.boxes.count = n;
+      this.boxes.instanceMatrix.needsUpdate = true;
+      if (this.boxes.instanceColor) this.boxes.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** Pick bandit i's clip and rate from what the sim says it's doing. s: its drawn scale against the bake. */
+  private choose(i: number, st: number, speed: number, hit: boolean, s: number): void {
+    const anim = this.anim!, id = this.clipId, clips = anim.clips, sw = this.swarm, k = this.look.banditAnimSpeed;
+    const matched = (clip: number, along: number) => {
+      const r = along / Math.max(0.1, clips[clip].speed * s);
+      return Math.sign(r || 1) * Math.min(RATE_MAX, Math.max(RATE_MIN, Math.abs(r))) * k;
+    };
+    if (st === DOWN || st === DEAD) { anim.play(i, anim.clip[i], 0); return; } // pose held while toppled
+    if (anim.clip[i] === id.flinch && anim.left(i) > 0 && speed < FLINCH_MAX_SPEED) { anim.play(i, id.flinch, k); return; }
+    if (hit && speed < FLINCH_MAX_SPEED) { anim.play(i, id.flinch, k, true); return; }
+    if (st === FLEEING) { anim.play(i, id.sprint, matched(id.sprint, speed)); return; }
+    if (speed < STAND) { anim.play(i, id.aim, k); return; }
+    if (st === FIRING) {
+      // Moving while shooting: forward or back along the way it faces (backing off plays the walk backward).
+      const h = sw.heading[i], along = sw.vx[i] * Math.sin(h) + sw.vz[i] * Math.cos(h);
+      const signed = Math.sign(along || 1) * Math.max(Math.abs(along), speed * 0.5);
+      if (along > 2.5) anim.play(i, id.runFire, matched(id.runFire, along));
+      else anim.play(i, id.walkFire, matched(id.walkFire, signed));
+      return;
+    }
+    anim.play(i, id.run, matched(id.run, speed));
+  }
+
+  /** Hold-V picking: each drawn bandit as a sphere round its middle. */
+  private pick(rc: THREE.Raycaster, hits: THREE.Intersection[]): void {
+    const sw = this.swarm, c = new THREE.Vector3(), sphere = new THREE.Sphere(c, 0.6), at = new THREE.Vector3();
+    let best: THREE.Intersection | null = null;
+    for (let i = 0; i < sw.hi; i++) {
+      const st = sw.state[i];
+      if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
+      c.set(sw.px[i], sw.py[i] + 0.9, sw.pz[i]);
+      if (!rc.ray.intersectSphere(sphere, at)) continue;
+      const d = rc.ray.origin.distanceTo(at);
+      if (d >= rc.near && d <= rc.far && (!best || d < best.distance)) best = { distance: d, point: at.clone(), object: this.vat!.mesh };
+    }
+    if (best) hits.push(best);
   }
 }

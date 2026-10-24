@@ -16,5 +16,5 @@
     "resolveJsonModule": true
   },
   "include": ["src", "labs", "tools/*.ts"],
-  "exclude": ["tools/fbx-to-glb.ts", "tools/report-plugin.ts"]
+  "exclude": ["tools/fbx-to-glb.ts", "tools/report-plugin.ts", "tools/bandit-vat-check.ts"]
 }
