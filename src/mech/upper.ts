@@ -146,7 +146,11 @@ export class UpperSim {
       g.yaw += (yawTo - g.yaw) * kYaw;
       g.pitch += (clamp(pitchWant, -pmax, pmax) - g.pitch) * kPitch;
       g.kick += (0 - g.kick) * (1 - Math.exp(-v.recoilReturn * dt));
-      g.onTarget = !!aim && Math.abs(wrap(yawWant - g.yaw)) <= cone && Math.abs(pitchWant - g.pitch) <= cone * 2;
+      // On target: the gun has swung as close as it can go (its clamped aim), and the aim is inside its arc (else it
+      // waits for the torso). Pitch only needs the gun to have reached its limit: a target close under the guns
+      // asks for more depression than they have, and they should still fire (bug 2026-10-24: they never did).
+      const inArc = Math.abs(yawWant) <= ymax + cone;
+      g.onTarget = !!aim && inArc && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(clamp(pitchWant, -pmax, pmax) - g.pitch) <= cone * 2;
       this.onTarget ||= g.onTarget;
 
       g.spinUpTime = v.spinUp * (1 - g.side * v.spinSplit);

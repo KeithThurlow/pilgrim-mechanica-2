@@ -6,7 +6,7 @@ import * as THREE from "three/webgpu";
 import { Synth, rng } from "./synth";
 import type { Param } from "../core/tweaks";
 
-export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtHit" | "casing";
+export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtHit" | "metalHit" | "casing";
 
 export const SFX_DEFAULTS = {
   masterVolume: 0.35,
@@ -15,6 +15,7 @@ export const SFX_DEFAULTS = {
   spinLevel: 0.375,
   brapLevel: 0.19,
   dirtLevel: 0.32,
+  metalLevel: 0.3,
   casingLevel: 0.18,
   growlDetune: 1.7,
 };
@@ -27,12 +28,13 @@ export const SFX_PARAMS: Param[] = [
   { key: "spinLevel", label: "Spin-up / down", min: 0, max: 2, step: 0.01, group: "Sound" },
   { key: "brapLevel", label: "Impact brap", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "dirtLevel", label: "Dirt hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
+  { key: "metalLevel", label: "Metal hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "casingLevel", label: "Casings", min: 0, max: 1, step: 0.01, group: "Sound" },
   { key: "growlDetune", label: "Gun detune (%)", min: 0, max: 10, step: 0.1, group: "Sound", tip: "The two guns' growls run this far apart in pitch, so they beat against each other" },
 ];
 
 const LEVEL: Record<SfxKind, keyof SfxValues> = {
-  spit: "spitLevel", spinUp: "spinLevel", spinDown: "spinLevel", growl: "growlLevel", brap: "brapLevel", dirtHit: "dirtLevel", casing: "casingLevel",
+  spit: "spitLevel", spinUp: "spinLevel", spinDown: "spinLevel", growl: "growlLevel", brap: "brapLevel", dirtHit: "dirtLevel", metalHit: "metalLevel", casing: "casingLevel",
 };
 const PER_KIND = 5, GATE = 0.025;
 
@@ -81,6 +83,8 @@ export class Sfx {
     add("brap", variants(4, 5, (r) => S.scale(S.mix(S.thump(0.18, 170 + r() * 50, 58, 0.95), S.noise(r, 0.13, 1300 + r() * 500, 0.6, 0.0015),
       S.noise(r, 0.24, 420, 0.45, 0.004), S.delay(S.lowPass(S.crackle(r, 0.22, 0.5), 1800), 0.03)), 0.8)));
     add("dirtHit", variants(4, 6, (r) => S.mix(S.noise(r, 0.16, 900, 0.55, 0.001), S.thump(0.12, 120, 60, 0.45), S.crackle(r, 0.15, 0.2))));
+    // A round on steel (the old game's BulletImpact): a bright tick of noise and a short clang.
+    add("metalHit", variants(4, 8, (r) => S.mix(S.noise(r, 0.05, 5000, 0.35, 0.001), S.clang(r, 0.08, 0.12 + r() * 0.06))));
     add("casing", variants(3, 7, (r) => S.casingTonk(r)));
   }
 

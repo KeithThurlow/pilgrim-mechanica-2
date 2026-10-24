@@ -56,6 +56,8 @@ export class Foot {
   swinging = false;
   /** Swing progress 0..1 (0 while planted). */
   u = 0;
+  /** Knee turned outward at the hip while squashed (degrees, eased). */
+  splay = 0;
   /** Stance progress 0..1 (0 while swinging). */
   stanceT = 0;
   planted = new Vector3(); plantedUp = new Vector3(0, 1, 0); plantedYaw = 0;
@@ -109,6 +111,8 @@ export class WalkerSim {
   private roll = new Spring(120, 22);
   private pitch = new Spring(60, 15);
   private accelSmooth = 0;
+  /** Ground rise per metre along the heading (+ uphill), smoothed. */
+  grade = 0;
   private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
@@ -151,7 +155,14 @@ export class WalkerSim {
     const v = this.v;
     this.stats.frames++;
 
-    // Heading swings toward the stick at a capped rate, and the walk slows through the turn.
+    // Grade along the heading: slows the walk uphill; shapes the stance downhill (aim, body).
+    {
+      const fw = forwardOf(this.heading, this.t.f);
+      const hA = this.ground.height(this.pos.x + fw.x * 2, this.pos.z + fw.z * 2);
+      const hB = this.ground.height(this.pos.x - fw.x * 2, this.pos.z - fw.z * 2);
+      this.grade += ((hA - hB) / 4 - this.grade) * Math.min(1, dt * 4);
+    }
+    // Heading swings toward the stick at a capped rate, and the walk slows through the turn (and uphill).
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
     let want = 0;
     if (mag > 0.05) {
@@ -161,6 +172,7 @@ export class WalkerSim {
       this.heading = wrap(this.heading + dh);
       this.turnSpeed = dh / dt;
       want = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed) * (1 - v.turnSlow * Math.min(1, Math.abs(err) / (Math.PI / 2)));
+      want *= 1 - v.uphillSlow * smooth(0, 0.35, this.grade);
     } else this.turnSpeed = 0;
     const prev = this.speed;
     const rate = want > this.speed ? v.accel : v.decel;
@@ -249,7 +261,8 @@ export class WalkerSim {
     const remain = ((1 - f.u) * (1 - d)) / cps;
     const h = this.heading + this.turnSpeed * remain * 0.5;
     const fw = forwardOf(h, this.t.f), lf = leftOf(h, this.t.l);
-    const ahead = d * S * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
+    // Downhill the feet plant in closer under the body, so the legs don't reach out ahead and tiptoe down.
+    const ahead = d * S * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed) * (1 - v.downhillPlant * smooth(0, 0.35, -this.grade));
     f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * this.spread());
     this.groundAt(f.target, f.targetUp);
     f.targetYaw = h + f.side * v.toeOut * D2R;
@@ -328,7 +341,8 @@ export class WalkerSim {
     const under = this.ground.height(this.pos.x, this.pos.z);
     const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
     const bob = v.bob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * smooth(0.05, 1, this.speed);
-    this.bodyY.step(ref + v.hipHeight, dt);
+    const down = smooth(0, 0.35, -this.grade);
+    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down, dt);
     this.impact.step(0, dt);
 
     // Weight onto the planted leg: shift over it, roll the pelvis down onto it.
@@ -337,16 +351,35 @@ export class WalkerSim {
     this.roll.step(-shift * v.crunchRoll * D2R, dt);
 
     // Pitch with the ground along the heading, and lean into acceleration.
+    // Downhill the body tips forward less (it keeps its weight back over the feet).
     const fw = forwardOf(this.heading, this.t.f);
-    const hA = this.ground.height(this.pos.x + fw.x * 2, this.pos.z + fw.z * 2);
-    const hB = this.ground.height(this.pos.x - fw.x * 2, this.pos.z - fw.z * 2);
-    const slope = Math.atan((hA - hB) / 4);
-    this.pitch.step(-slope * v.slopePitch + clamp(this.accelSmooth / 3, -1, 1) * v.speedLean * D2R, dt);
+    const slope = Math.atan(this.grade);
+    const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
+    this.pitch.step(-slope * pitchShare + clamp(this.accelSmooth / 3, -1, 1) * v.speedLean * D2R, dt);
 
+    // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
+    const back = v.downhillSitBack * down;
     const l = leftOf(this.heading, this.t.l);
-    this.pelvis.set(this.pos.x + l.x * this.lat.x, this.bodyY.x + this.impact.x + bob, this.pos.z + l.z * this.lat.x);
+    this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob, this.pos.z + l.z * this.lat.x - fw.z * back);
     this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
     this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+  }
+
+  /**
+   * Thigh angle forward of straight down (radians) if the cannon sits at theta, or NaN if the hip can't reach.
+   * Same geometry as the leg solve below.
+   */
+  private thighAngle(P: LegPose, planeUp: Vector3, theta: number) {
+    const v = this.v;
+    const hock = this.t.b.copy(P.ankle).addScaledVector(planeUp, Math.cos(theta) * v.cannon).addScaledVector(P.legFwd, -Math.sin(theta) * v.cannon);
+    const toHock = this.t.a.subVectors(hock, P.hip);
+    const dist = toHock.length();
+    if (dist > v.femur + v.shin - 0.002 || dist < Math.abs(v.femur - v.shin) + 0.05) return NaN;
+    toHock.divideScalar(dist);
+    const cosA = clamp((v.femur * v.femur + dist * dist - v.shin * v.shin) / (2 * v.femur * dist), -1, 1);
+    const fwd = P.legFwd.dot(toHock), dn = -toHock.y;
+    // The thigh is the hip-hock line turned forward by the knee angle, in the leg plane.
+    return Math.atan2(fwd, dn) + Math.acos(cosA);
   }
 
   private plateForward(up: Vector3, yaw: number, out: Vector3) {
@@ -377,7 +410,12 @@ export class WalkerSim {
       P.toe.copy(P.toeHinge).addScaledVector(new Vector3(0, 0, 1).applyQuaternion(P.toeQ), Math.max(0, v.toeLength - v.toeHinge));
       P.ankle.copy(f.pos).addScaledVector(upNow, v.ankleHeight).addScaledVector(fwNow, -v.ankleBack);
 
-      forwardOf(this.heading + f.side * v.kneeOut * D2R, P.legFwd);
+      // A squashed planted leg also turns its knee outward at the hip (thighSplay per unit of compression), so the
+      // thigh angles out to the side instead of standing straight up and down (Keith 2026-10-24, side slopes).
+      const rest = Math.max(0.5, v.hipHeight - v.ankleHeight);
+      const squash = f.swinging ? 0 : clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.6);
+      f.splay += ((v.thighSplay * squash) - f.splay) * 0.15;
+      forwardOf(this.heading + f.side * (v.kneeOut + f.splay) * D2R, P.legFwd);
       const reach = v.femur + v.shin - 0.002;
 
       // Cannon angle, measured back from the hip-ankle line in the leg plane, so the whole lower leg pitches as the
@@ -407,6 +445,25 @@ export class WalkerSim {
         // Never tip the cannon past vertical (hock ahead of the foot); how close it may get grows with speed.
         const minT = (v.hockMinSlow + (v.hockMinFast - v.hockMinSlow) * clamp(this.speed / Math.max(0.1, v.sprintSpeed), 0, 1)) * D2R;
         theta = Math.max(theta, minT - Math.atan2(toHip.dot(P.legFwd), toHip.dot(UP)));
+      }
+      // A planted leg that's compressed (the uphill leg on a side slope, the front leg climbing) folds at the hip:
+      // pick the cannon angle that swings the thigh forward by thighFold per unit of compression, instead of letting
+      // the short lower leg take it all while the long thigh hangs straight down (Keith 2026-10-24).
+      if (!f.swinging && v.thighFold > 0) {
+        if (squash > 0.01) {
+          const base = this.thighAngle(P, planeUp, theta);
+          const want = base + v.thighFold * D2R * squash;
+          let best = theta, bestCost = Infinity;
+          // Folding the long thigh forward over the short shin tips the cannon forward of vertical: allowed while squashed.
+          for (let k = -12; k <= 16; k++) {
+            const t = theta + k * 3 * D2R;
+            const ang = this.thighAngle(P, planeUp, t);
+            if (!Number.isFinite(ang)) continue;
+            const cost = Math.abs(ang - want) + 0.15 * Math.abs(t - theta);
+            if (cost < bestCost) { bestCost = cost; best = t; }
+          }
+          theta = best;
+        }
       }
       f.theta = theta;
 

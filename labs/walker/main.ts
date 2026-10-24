@@ -22,7 +22,8 @@ import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { FootfallFx } from "../../src/fx/footfall";
-import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
+import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS, type HitSurface } from "../../src/fx/minigun";
+import { WreckStandIns } from "../../src/world/wrecks";
 import { Sfx, SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { MinigunAudio } from "../../src/audio/minigunAudio";
 
@@ -62,7 +63,14 @@ scene.add(steps.group, gunFx.group);
 // Sound starts on the first click or key press (browser rule).
 const sfx = new Sfx(V, camera);
 const gunAudio = new MinigunAudio(sfx);
-gunFx.onHit = (at) => gunAudio.hit(at);
+gunFx.onHit = (at, surface) => gunAudio.hit(at, surface);
+// Steel to shoot at near the start: rounds spark off these and tear up the sand everywhere else.
+const wrecks = new WreckStandIns(field, [
+  { x: 22, z: -28, yaw: 0.6, kind: "hulk" },
+  { x: 6, z: -26, yaw: -0.4, kind: "plate" },
+  { x: 15, z: -18, yaw: 1.2, kind: "tank" },
+]);
+scene.add(wrecks.group);
 gunFx.onCasingLand = (at) => gunAudio.casing(at);
 
 const stepTimes: number[] = [];
@@ -137,7 +145,8 @@ const panel = tweakPanel({
   topics: [
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
-    { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Sound"] },
+    { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Minigun FX", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -155,6 +164,7 @@ selector = new Selector(app, {
     ...(r.gunLeft ? [{ topic: "guns", label: "Left minigun", objects: () => r.gunLeft! }] : []),
     ...(r.gunRight ? [{ topic: "guns", label: "Right minigun", objects: () => r.gunRight! }] : []),
     ...(r.back ? [{ topic: "guns", label: "Ammo drums", objects: () => r.back! }] : []),
+    { topic: "hits", label: "Steel wreck (hits)", objects: () => wrecks.meshes },
   ],
   ground: { topic: "dunes", label: "Dunes", field },
   sky: { topic: "light", label: "Light and sky" },
@@ -198,6 +208,10 @@ const lastFollow = follow.clone();
 const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
 const muzzle = new THREE.Vector3(), dir = new THREE.Vector3(), hit = new THREE.Vector3(), eject = new THREE.Vector3();
 let rounds = 0;
+// ?aimat=x,z: hold the aim on a fixed point (repeatable shots of hits).
+const aimAtArg = params.get("aimat")?.split(",").map(Number);
+const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], y: field.height(aimAtArg[0], aimAtArg[1]) + 0.8, z: aimAtArg[1] } : null;
+const steelAt = new THREE.Vector3(), steelN = new THREE.Vector3();
 
 app.onTick((rawDt) => {
   const dt = rawDt * (slow ? 0.25 : 1);
@@ -214,6 +228,7 @@ app.onTick((rawDt) => {
 
   let aim: Aim | null = null;
   if (auto) aim = straight ? null : demoAim(clock);
+  else if (aimAt) aim = aimAt;
   else if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y, z: aimPt.z };
   // No firing while selecting (hold V).
   const trigger = !sel.active && (params.has("fire") || mouseDown || keys.has("KeyF") || (auto && !straight && clock % 6 > 3.2));
@@ -236,9 +251,14 @@ app.onTick((rawDt) => {
       // Spread: tilt inside the cone, then wherever that ray meets the ground (or full range in the air).
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = dir.clone().add(tilt.addScaledVector(dir, -tilt.dot(dir))).normalize();
-      if (!rayGround(muzzle, d, field, V.range, hit)) hit.copy(muzzle).addScaledVector(d, V.range);
+      let reach = V.range;
+      if (rayGround(muzzle, d, field, V.range, hit)) reach = muzzle.distanceTo(hit);
+      else hit.copy(muzzle).addScaledVector(d, V.range);
+      // Steel in the way before the sand: the round strikes it instead.
+      let surface: HitSurface = "sand";
+      if (wrecks.hit(muzzle, d, reach, steelAt, steelN)) { hit.copy(steelAt); surface = "metal"; }
       rampart.eject(s, eject);
-      gunFx.shot(s === 1 ? 0 : 1, muzzle, d, hit, eject, left.clone().multiplyScalar(s));
+      gunFx.shot(s === 1 ? 0 : 1, muzzle, d, hit, eject, left.clone().multiplyScalar(s), surface, surface === "metal" ? steelN : undefined);
       gunAudio.shot(muzzle);
       rounds++;
     }
@@ -275,5 +295,5 @@ app.onTick((rawDt) => {
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}%`);
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo}${sfx.running ? "" : " · click for sound"}`);
+  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${gunFx.hits.sand} steel ${gunFx.hits.metal}${sfx.running ? "" : " · click for sound"}`);
 });

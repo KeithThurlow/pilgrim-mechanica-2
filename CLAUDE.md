@@ -59,7 +59,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   (not saved), e.g. `?set=sunAzimuth:120,height:12`.
 - Walker lab: `?cam=game|close|side|back|feet`, `?model=standin` (box walker), `?flat` (no dunes),
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
-  `?manual` (no demo), `?zoom=metres` (game camera distance).
+  `?manual` (no demo), `?zoom=metres` (game camera distance), `?aimat=x,z` (hold the aim on a point; steel wrecks
+  near the start at 22,-28 / 6,-26 / 15,-18).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 
 ## Layout
@@ -70,7 +71,7 @@ reports/                Keith's in-lab reports and your replies (local only, not
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
-src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze)
+src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze), wrecks (steel stand-ins)
 src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)

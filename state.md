@@ -20,16 +20,16 @@ How to update it:
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Transverse dunes across the wind, tall and close (14 m high, 44 m apart; Keith 2026-10-24), steepest crests near 69°, meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
 | Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
-| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over the ball of the foot while a hinged toe segment stays flat and pushes, then the toes curl under through the swing and open flat for the stomp (Keith 2026-10-24); feet planted further forward; stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
+| Walker | Digitigrade legs on a pure sim (slopes, Keith 2026-10-24: a squashed planted leg folds its thigh forward and turns its knee out at the hip; slows uphill with the grade; downhill keeps full speed, plants the feet in under the body, sits the hips back and low and tips less nose-down): gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over the ball of the foot while a hinged toe segment stays flat and pushes, then the toes curl under through the swing and open flat for the stomp (Keith 2026-10-24); feet planted further forward; stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
 | Leg types | Archetype presets of walker tuning (proportions, stance, gait, feet): stand-in and Rampart (shorter stride, toe hinge 0.14 m, toes to 0.85 m); the old game's Humanoid, Short humanoid and Stilt go here when they have models. The lab takes the archetype as its defaults; the model's measured bone lengths always win | `src/mech/legTypes.ts` | walker |
 | Rampart | The old project's v4 mech on the walker sim (feet split at the toe hinge into heel block and toes): each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
 | Upper body | Twin-stick: torso turns toward the mouse aim at a capped rate within a limit from the legs. Each hull gun on its own (Keith 2026-10-24): aims from its own shoulder, swings inward at full speed and outward slower (so the arms turn at different speeds as the aim sweeps), its own spin-up, fire cone and fire clock (small left/right spin and rate splits), recoil; a limited drum per gun (1200 rounds), R resupplies in the lab | `src/mech/upper.ts` | walker |
-| Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hit dust thrown downrange and sparks, casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
+| Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hits by surface (Keith 2026-10-24, after the old game): sand gets a low layer of opaque dust balls shoved downrange along the ground in streamers that sink back in, plus dust and grit kicked up; steel gets ricochet sparks, a few back off the face, and dark smoke; steel wreck stand-ins (`src/world/wrecks.ts`) to shoot at, rounds strike the first steel before the sand; a clang for steel hits; casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
 | Unit look | Plain lit paint (dielectric, roughness 0.55) over the model's vertex colours; no outline by default (Keith 2026-10-24); cel bands and the ink outline are still toggles | `src/look/toon.ts` | walker |
 | Minigun sound | Ported from the old game, every gun its own voice: its own spin-up (pitched to its spin-up time) and spin-down from its muzzle, its own growl following its own spin and firing (offset and detuned), a spit per round ungated between the guns; dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
 | Footfall FX | Footprints (pooled, oldest recycled) and dust puffs | `src/fx/footfall.ts` | walker |
-| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
+| Checks | Slopes on tilted planes (the uphill thigh folds, slower uphill, full speed downhill with the feet under the hips; `tools/slope-check.ts`); a close target under the guns' depression still fired on; walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
 
@@ -61,6 +61,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   leg-frames (zigzag) and its knee runs straight at push-off; the walker checks were loosened for dunes to allow it.
   A walker that adapts its stride and stance to slope would let them tighten again.
 - **Toe split is one hinge per foot** (all toes bend together) and the Rampart's back spur stays rigid on the heel.
+- **Only two hit surfaces** (sand, steel) and the steel is box stand-ins; the old game also had rock, concrete, wood
+  and flesh, ground marks and gouges.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -82,6 +84,27 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Guns fire again, slope walking, minigun hits by surface (Claude, cloud session)
+- Keith: on a side slope the squashed leg's thigh stays straight up and down; slow down uphill; downhill the legs
+  reach out in front and tiptoe with the weight out front, so keep the feet planted under the mech at full speed;
+  the guns stopped firing; minigun hits should tear sand along the ground and kick dust up, sand by sand and sparks
+  off metal, like the old game.
+- Guns: a target closer than the guns could depress to was never "on target", so they never fired; the test now
+  compares the clamped aim (`src/mech/upper.ts`), with a close-target case in `tools/upper-check.ts`.
+- Walker (`walker.ts`, Terrain sliders): `thighFold` 250 (cannon angle searched for a thigh folded forward by
+  compression, tipping the cannon forward of vertical if it must: the Rampart's long thigh over its short shin can't
+  fold otherwise), `thighSplay` 90 (knee turned out), `uphillSlow` 0.35, `downhillPlant` 0.45, `downhillSitBack`
+  0.35 m, `downhillCrouch` 0.3 m, `downhillLevel` 0.25. Grade along the heading is now one smoothed value.
+- Hits (`src/fx/minigun.ts`, new "Minigun hits" sliders and a Hits topic): pooled instanced dust balls (2400), grit
+  and sparks; `HitSurface` passed per round; `src/world/wrecks.ts`; `metalHit` sound (old BulletImpact recipe).
+  New lab flag `?aimat=x,z`.
+- Checked: typecheck, `npm test` (new slope check: uphill thigh 22° off vertical vs 10° before on a 19° side slope;
+  2.68 m/s up a 17° grade, 4.0 down; downhill feet 0.01 m from under the hips vs 0.82 m out in front
+  before), headless shots of sand and steel hits. Rebased on Keith's tall dunes: Rampart reach misses on them drop
+  from 2.0 / 6.8 / 10.2% (walk, sprint, zigzag) to 0.2 / 3.9 / 2.0% with the slope changes; hit sizes scaled down to
+  suit his hit size 2.1. Sound not heard; software rendering runs at 1 fps, so the low
+  layer's streaming motion wasn't seen moving and needs Keith's eye.
 
 ### 2026-10-24 · Keith's walker lab values as defaults; tall dunes; checks loosened (Claude, Keith's PC)
 - Keith's copied walker lab values became the defaults: gun spin-up 0.8 s, range 45 m; shorter tracers, bigger hit

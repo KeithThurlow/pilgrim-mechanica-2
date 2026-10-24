@@ -35,12 +35,18 @@ for (let i = 0; i < 600; i++) {
     if (!wasFiring[g.side] && g.firing && restart[g.side] === undefined) restart[g.side] = i * dt;
   }
 }
+// A target close in front, under the guns' depression limit (the cursor near the mech in the iso view), must still
+// be fired on by both guns.
+sim.reset(0);
+const close: Record<number, number> = { 1: 0, [-1]: 0 };
+for (let i = 0; i < 480; i++) for (const s of sim.update(dt, 0, shoulder, { x: 0, y: 0, z: 5 }, true)) close[s]++;
+if (close[1] === 0 || close[-1] === 0) problems.push(`close target not fired on (L ${close[1]}, R ${close[-1]})`);
 const gap = Math.abs((restart[1] ?? 99) - (restart[-1] ?? 99));
 if (restart[1] === undefined || restart[-1] === undefined) problems.push("a gun never came back on target after the aim jumped");
 else if (gap < 0.02) problems.push(`both guns came back on target together (${(gap * 1000).toFixed(0)} ms apart)`);
 if (counts[1] === 0 || counts[-1] === 0) problems.push("a gun never fired");
 if (counts[1] > v.ammoPerGun || counts[-1] > v.ammoPerGun) problems.push("a gun fired past an empty drum");
 if (maxYaw > (v.podYawMax * Math.PI) / 180 + 1e-6) problems.push("a gun swung past its arc");
-console.log(`rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
+console.log(`close target: L ${close[1]} R ${close[-1]} rounds · rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("upper check failed"); }
 console.log("upper check passed");

@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | On slopes a squashed leg uses its thigh at the hip; slow uphill; downhill full speed with the feet planted under the mech | Keith | Keith | Fold forward plus knee turned out, values Claude's (sliders under Terrain). |
+| 2026-10-24 | Minigun hits by surface, like the old game: sand torn up low along the ground plus dust kicked up; sparks off metal | Keith | Keith | Opaque dust balls (the old HitDust streamers); steel wreck stand-ins to test (Claude). |
 | 2026-10-24 | Taller, closer dunes (14 m high, 44 m apart) with the terrain and walker checks loosened to allow them | Keith | Keith | Crests reach about 69°; dune runs allow 15% reach misses and skip the straight-knee rule, flat ground keeps the strict limits (Claude's split). |
 | 2026-10-24 | Hold V to select things in the scene; a click opens only that thing's options; the panel opens on topics, not every slider | Keith | Keith | Ground opens the dunes, sky the light (Claude's defaults). Applies to every lab. |
 | 2026-10-24 | Feet get a toe joint: roll over the ball at push-off with the toes flat, curl the toes through the swing | Keith | Keith | One hinge per foot (Claude's default); Rampart hinge where its toes begin. |

@@ -141,6 +141,19 @@ export class Synth {
   }
 
   /** Sparse random pops (debris, crackle after a blast). */
+  /** A struck steel plate: four inharmonic partials decaying fast (the old SfxSynth's Clang). */
+  clang(r: Rng, len: number, gain: number) {
+    const s = new Float32Array(this.n(len));
+    const base = 600 + r() * 400, ratios = [1, 1.47, 2.09, 2.76];
+    for (let i = 0; i < s.length; i++) {
+      const t = i / this.rate;
+      let v = 0;
+      for (let p = 0; p < ratios.length; p++) v += Math.sin(2 * Math.PI * base * ratios[p] * t) * Math.exp(-(8 + p * 6) * t / len) / (p + 1);
+      s[i] = v * gain * Math.min(1, t / 0.001);
+    }
+    return s;
+  }
+
   crackle(r: Rng, len: number, gain: number) {
     const s = new Float32Array(this.n(len));
     for (let i = 0; i < s.length; i++) {

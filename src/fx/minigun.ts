@@ -1,5 +1,9 @@
-// Minigun effects: tracers from the muzzle to the ground, a flash and light per shot, hit dust thrown downrange
-// with a few sparks, and brass casings that eject outboard and bounce on the real ground.
+// Minigun effects: tracers from the muzzle to what they hit, a flash and light per shot, hits by surface, and brass
+// casings that eject outboard and bounce on the real ground.
+// Hits (after the old game's MiniBlast and HitDust, Keith 2026-10-24): sand gets two layers, a low one of opaque dust
+// balls torn up and shoved downrange along the ground in streamers that sink back into it, and a kick of dust and grit
+// thrown upward; steel gets sparks (mostly ricocheting on along the round, a few back off the face), a hot glint and a
+// little dark smoke.
 import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
 import type { Param } from "../core/tweaks";
@@ -12,6 +16,19 @@ export const MINIGUN_FX_DEFAULTS = {
   flashLight: 40,
   hitDust: 2.1,
   casingKick: 1.5,
+  sandLow: 6,
+  sandCarry: 5.5,
+  sandStreamers: 2,
+  sandLowSize: 0.22,
+  sandLowLife: 1.1,
+  sandCone: 25,
+  sandKick: 2,
+  sandKickSpeed: 3.2,
+  sandKickSize: 0.2,
+  sandGrit: 5,
+  metalSparks: 9,
+  metalSparkSpeed: 11,
+  metalSmoke: 1,
 };
 export type MinigunFxValues = typeof MINIGUN_FX_DEFAULTS;
 
@@ -21,21 +38,42 @@ export const MINIGUN_FX_PARAMS: Param[] = [
   { key: "tracerEvery", label: "Tracer every Nth round", min: 1, max: 5, step: 1, group: "Minigun FX" },
   { key: "flashSize", label: "Muzzle flash size", min: 0, max: 3, step: 0.05, group: "Minigun FX" },
   { key: "flashLight", label: "Flash light", min: 0, max: 200, step: 1, group: "Minigun FX" },
-  { key: "hitDust", label: "Hit dust", min: 0, max: 3, step: 0.05, group: "Minigun FX" },
+  { key: "hitDust", label: "Hit size", min: 0, max: 3, step: 0.05, group: "Minigun FX", tip: "Scales every hit effect" },
   { key: "casingKick", label: "Casing eject speed", min: 0, max: 8, step: 0.1, group: "Minigun FX" },
+  { key: "sandLow", label: "Low dust balls per hit", min: 0, max: 16, step: 1, group: "Minigun hits", tip: "The low layer torn up and pushed along the ground" },
+  { key: "sandCarry", label: "Low dust push (m/s)", min: 0, max: 14, step: 0.1, group: "Minigun hits", tip: "How fast the round's momentum shoves the low layer downrange" },
+  { key: "sandStreamers", label: "Streamers per hit", min: 1, max: 4, step: 1, group: "Minigun hits" },
+  { key: "sandLowSize", label: "Low dust size (m)", min: 0.05, max: 1, step: 0.01, group: "Minigun hits" },
+  { key: "sandLowLife", label: "Low dust life (s)", min: 0.2, max: 3, step: 0.05, group: "Minigun hits" },
+  { key: "sandCone", label: "Low dust spread (°)", min: 0, max: 80, step: 1, group: "Minigun hits" },
+  { key: "sandKick", label: "Kicked-up dust balls", min: 0, max: 8, step: 1, group: "Minigun hits", tip: "The dust thrown upward from the strike" },
+  { key: "sandKickSpeed", label: "Kick speed (m/s)", min: 0, max: 10, step: 0.1, group: "Minigun hits" },
+  { key: "sandKickSize", label: "Kicked dust size (m)", min: 0.05, max: 1, step: 0.01, group: "Minigun hits" },
+  { key: "sandGrit", label: "Sand grit per hit", min: 0, max: 16, step: 1, group: "Minigun hits" },
+  { key: "metalSparks", label: "Sparks off steel", min: 0, max: 30, step: 1, group: "Minigun hits" },
+  { key: "metalSparkSpeed", label: "Spark speed (m/s)", min: 2, max: 30, step: 0.5, group: "Minigun hits" },
+  { key: "metalSmoke", label: "Smoke off steel", min: 0, max: 4, step: 1, group: "Minigun hits" },
 ];
 
-const TRACERS = 48, PUFFS = 90, SPARKS = 60, CASINGS = 240;
+/** What a round struck: the sand, or something steel (a wreck, a hull). */
+export type HitSurface = "sand" | "metal";
 
-interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean }
-interface Puff { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; vel: THREE.Vector3; age: number; life: number; size: number }
+const TRACERS = 48, BALLS = 2400, SPARKS = 600, GRIT = 600, CASINGS = 240;
+
+interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3 }
+/** An opaque low-poly dust ball. low: hugs the ground and sinks back into it; else a kicked-up puff that rises and slows. */
+interface Ball { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; size: number; low: boolean; drag: number }
 interface Bit { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; spin: THREE.Vector3; rot: THREE.Euler; rest: boolean; landed: boolean }
 
 export class MinigunFx {
   readonly group = new THREE.Group();
   private tracers: Tracer[] = [];
-  private puffs: Puff[] = [];
-  private puffI = 0;
+  private balls: THREE.InstancedMesh;
+  private ballBits: Ball[] = [];
+  private ballI = 0;
+  private grit: THREE.InstancedMesh;
+  private gritBits: Bit[] = [];
+  private gritI = 0;
   private sparks: THREE.InstancedMesh;
   private sparkBits: Bit[] = [];
   private sparkI = 0;
@@ -44,12 +82,15 @@ export class MinigunFx {
   private casingI = 0;
   private flashes: { mesh: THREE.Object3D; light: THREE.PointLight; t: number }[] = [];
   private round = 0;
-  /** Called where a round hits the ground, and where a casing first lands (for sound). */
-  onHit: ((at: THREE.Vector3) => void) | null = null;
+  /** Called where a round hits, with what it hit, and where a casing first lands (for sound). */
+  onHit: ((at: THREE.Vector3, surface: HitSurface) => void) | null = null;
+  /** Hits so far by surface (HUD and tests). */
+  hits = { sand: 0, metal: 0 };
   onCasingLand: ((at: THREE.Vector3) => void) | null = null;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
+  private tint = new THREE.Color();
 
   constructor(private ground: Ground, public v: MinigunFxValues) {
     const tracerGeo = new THREE.BoxGeometry(0.07, 0.07, 1).translate(0, 0, -0.5);
@@ -59,25 +100,24 @@ export class MinigunFx {
       mesh.visible = false;
       mesh.frustumCulled = false;
       this.group.add(mesh);
-      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false });
+      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0) });
     }
-    const ball = new THREE.IcosahedronGeometry(1, 1);
-    for (let i = 0; i < PUFFS; i++) {
-      const mat = new THREE.MeshStandardMaterial({ color: 0xe2c193, roughness: 1, transparent: true, opacity: 0, depthWrite: false, flatShading: true });
-      const mesh = new THREE.Mesh(ball, mat);
-      mesh.visible = false;
-      this.group.add(mesh);
-      this.puffs.push({ mesh, mat, vel: new THREE.Vector3(), age: 0, life: 1, size: 1 });
-    }
-    this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 0.05, 0.25), new THREE.MeshBasicMaterial({ color: 0xffd27a, toneMapped: false }), SPARKS);
+    // Opaque low-poly balls (the old game's dust puffs): they read from the high camera, and need no sorting.
+    this.balls = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), BALLS);
+    this.balls.castShadow = false;
+    const white = new THREE.Color(1, 1, 1);
+    for (let i = 0; i < BALLS; i++) { this.balls.setColorAt(i, white); this.ballBits.push({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 1, life: 0, size: 0, low: true, drag: 3 }); }
+    this.grit = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshStandardMaterial({ color: 0x9a7a50, roughness: 1 }), GRIT);
+    this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.04, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: 0xffd27a, toneMapped: false }), SPARKS);
     this.casings = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 0.13, 6).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.8, roughness: 0.35 }), CASINGS);
     this.casings.castShadow = true;
-    for (const im of [this.sparks, this.casings]) {
+    for (const im of [this.balls, this.grit, this.sparks, this.casings]) {
       im.frustumCulled = false;
       for (let i = 0; i < im.count; i++) im.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
       this.group.add(im);
     }
     for (let i = 0; i < SPARKS; i++) this.sparkBits.push(bit());
+    for (let i = 0; i < GRIT; i++) this.gritBits.push(bit());
     for (let i = 0; i < CASINGS; i++) this.casingBits.push(bit());
 
     const flashGeo = new THREE.PlaneGeometry(1, 1);
@@ -93,8 +133,11 @@ export class MinigunFx {
     }
   }
 
-  /** One round from a muzzle toward a ground point (already spread). eject: casing port; outboard: unit direction. */
-  shot(gun: 0 | 1, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3, outboard: THREE.Vector3) {
+  /**
+   * One round from a muzzle to where it strikes (already spread). surface and normal: what it struck there.
+   * eject: casing port; outboard: unit direction.
+   */
+  shot(gun: 0 | 1, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3, outboard: THREE.Vector3, surface: HitSurface = "sand", normal?: THREE.Vector3) {
     this.round++;
     const f = this.flashes[gun];
     f.t = 0.045;
@@ -109,6 +152,7 @@ export class MinigunFx {
     // Every round flies (it times the hit); only every Nth shows as a tracer.
     const t = this.tracers.find((x) => !x.live) ?? this.tracers[this.round % TRACERS];
     t.from.copy(muzzle); t.to.copy(hit); t.dist = muzzle.distanceTo(hit); t.t = 0; t.live = true;
+    t.surface = surface; t.normal.copy(normal ?? UP);
     t.mesh.visible = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0;
 
     const c = this.casingBits[this.casingI++ % CASINGS];
@@ -118,26 +162,83 @@ export class MinigunFx {
     c.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
   }
 
-  private impact(at: THREE.Vector3, dir: THREE.Vector3) {
-    this.onHit?.(at);
+  private impact(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3) {
+    this.hits[surface]++;
+    this.onHit?.(at, surface);
     const k = this.v.hitDust;
     if (k <= 0) return;
-    const fwd = new THREE.Vector3(dir.x, 0, dir.z).normalize();
-    for (let i = 0; i < 3; i++) {
-      const p = this.puffs[this.puffI++ % PUFFS];
-      p.mesh.position.copy(at).add(new THREE.Vector3(0, 0.1, 0));
-      const a = (Math.random() - 0.5) * 1.4;
-      const d = fwd.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
-      p.vel.copy(d).multiplyScalar((1.5 + Math.random() * 3) * k).add(new THREE.Vector3(0, 0.6 + Math.random() * 1.2, 0));
-      p.age = 0; p.life = 0.7 + Math.random() * 0.8; p.size = (0.18 + Math.random() * 0.22) * k;
-      p.mesh.visible = true;
+    if (surface === "metal") this.steel(at, dir, normal, k);
+    else this.sand(at, dir, k);
+  }
+
+  /** A round into sand: the low layer shoved downrange, the kick thrown up, and grit. */
+  private sand(at: THREE.Vector3, dir: THREE.Vector3, k: number) {
+    const v = this.v;
+    const fwd = this.s.set(dir.x, 0, dir.z);
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, 1);
+    fwd.normalize();
+    const along = fwd.clone();
+    // Low layer: streamers of balls along the round's travel, biggest at the strike, pushed on together and sinking.
+    const streamers = Math.max(1, Math.round(v.sandStreamers));
+    const per = Math.max(1, Math.round(v.sandLow / streamers));
+    for (let s = 0; s < streamers; s++) {
+      const d = along.clone().applyAxisAngle(UP, (Math.random() * 2 - 1) * v.sandCone * D2R);
+      const side = new THREE.Vector3(-d.z, 0, d.x).multiplyScalar((Math.random() * 2 - 1) * 0.6);
+      const speed = v.sandCarry * (0.6 + Math.random() * 0.55);
+      for (let i = 0; i < per; i++) {
+        const u = per > 1 ? i / (per - 1) : 0;
+        const p = new THREE.Vector3().copy(at).addScaledVector(d, i * 0.18 * k);
+        p.y = this.ground.height(p.x, p.z) + 0.05;
+        const vel = d.clone().multiplyScalar(speed * (0.7 + 0.4 * u)).add(side).setY(0.25 + Math.random() * 0.3);
+        this.ball(p, vel, v.sandLowSize * k * (1.15 - 0.75 * u) * (0.85 + Math.random() * 0.25), v.sandLowLife * (1.1 - 0.3 * u) * (0.8 + Math.random() * 0.4), true, 3, SAND_LOW);
+      }
     }
-    for (let i = 0; i < 2; i++) {
+    // The kick: a few balls thrown up and a little back toward the gun, slowing as they rise.
+    for (let i = 0; i < v.sandKick; i++) {
+      const p = new THREE.Vector3().copy(at).setY(at.y + 0.1);
+      const vel = new THREE.Vector3((Math.random() - 0.5) * 1.2, 1, (Math.random() - 0.5) * 1.2).multiplyScalar(v.sandKickSpeed * (0.6 + Math.random() * 0.6)).addScaledVector(along, -0.6 + Math.random() * 1.6);
+      this.ball(p, vel, v.sandKickSize * k * (0.7 + Math.random() * 0.5), 0.7 + Math.random() * 0.6, false, 2.6, SAND_KICK);
+    }
+    // Grit: sand thrown up in an arc, mostly on downrange.
+    for (let i = 0; i < v.sandGrit; i++) {
+      const g = this.gritBits[this.gritI++ % GRIT];
+      g.pos.copy(at).setY(at.y + 0.05);
+      g.vel.copy(along).multiplyScalar((Math.random() * 1.6 - 0.4) * 3).add(new THREE.Vector3((Math.random() - 0.5) * 2.5, 2.5 + Math.random() * 4 * k, (Math.random() - 0.5) * 2.5));
+      g.spin.set((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20);
+      g.age = 0; g.life = 0.5 + Math.random() * 0.4; g.rest = false; g.landed = false;
+    }
+  }
+
+  /** A round off steel: sparks mostly on along the round (a ricochet spread), a few back off the face; a little smoke. */
+  private steel(at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3, k: number) {
+    const v = this.v;
+    const n = Math.round(v.metalSparks * Math.min(2, k));
+    // Reflect the round off the face for the ricochet cone; the rest spray back off the face.
+    const refl = dir.clone().addScaledVector(normal, -2 * dir.dot(normal)).normalize();
+    for (let i = 0; i < n; i++) {
       const s = this.sparkBits[this.sparkI++ % SPARKS];
-      s.pos.copy(at);
-      s.vel.copy(fwd).multiplyScalar(4 + Math.random() * 6).add(new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 4, (Math.random() - 0.5) * 5));
-      s.age = 0; s.life = 0.25 + Math.random() * 0.2; s.rest = false;
+      const ahead = i < n * 0.7;
+      const base = ahead ? refl : normal;
+      const cone = ahead ? 0.5 : 1.1;
+      s.pos.copy(at).addScaledVector(normal, 0.05);
+      s.vel.set(base.x + (Math.random() - 0.5) * cone, base.y + (Math.random() - 0.3) * cone, base.z + (Math.random() - 0.5) * cone).normalize()
+        .multiplyScalar(v.metalSparkSpeed * (ahead ? 0.6 + Math.random() * 0.6 : 0.3 + Math.random() * 0.4));
+      s.age = 0; s.life = 0.18 + Math.random() * 0.3; s.rest = false;
     }
+    for (let i = 0; i < v.metalSmoke; i++) {
+      const p = new THREE.Vector3().copy(at).addScaledVector(normal, 0.15);
+      const vel = normal.clone().multiplyScalar(0.8 + Math.random() * 0.8).add(new THREE.Vector3(0, 0.6, 0));
+      this.ball(p, vel, 0.16 * k * (0.7 + Math.random() * 0.6), 0.5 + Math.random() * 0.4, false, 3, STEEL_SMOKE);
+    }
+  }
+
+  private ball(at: THREE.Vector3, vel: THREE.Vector3, size: number, life: number, low: boolean, drag: number, color: THREE.Color) {
+    const i = this.ballI++ % BALLS;
+    const b = this.ballBits[i];
+    b.pos.copy(at); b.vel.copy(vel); b.size = size; b.life = life; b.age = 0; b.low = low; b.drag = drag;
+    this.tint.copy(color).multiplyScalar(0.92 + Math.random() * 0.16);
+    this.balls.setColorAt(i, this.tint);
+    this.balls.instanceColor!.needsUpdate = true;
   }
 
   update(dt: number) {
@@ -153,24 +254,40 @@ export class MinigunFx {
       t.mesh.position.copy(t.from).addScaledVector(dir, head);
       t.mesh.lookAt(t.mesh.position.clone().add(dir));
       t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
-      if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.impact(t.to, dir.clone()); }
+      if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.impact(t.to, dir.clone(), t.surface, t.normal); }
     }
-    for (const p of this.puffs) {
-      if (!p.mesh.visible) continue;
-      p.age += dt;
-      const u = p.age / p.life;
-      if (u >= 1) { p.mesh.visible = false; continue; }
-      p.vel.multiplyScalar(Math.exp(-dt * 3.5));
-      p.vel.y -= dt * 0.6;
-      p.mesh.position.addScaledVector(p.vel, dt);
-      p.mesh.scale.setScalar(p.size * (0.5 + u * 1.8));
-      p.mat.opacity = 0.42 * (1 - u) * Math.min(1, u * 10);
-    }
+    this.stepBalls(dt);
     this.stepBits(this.sparkBits, this.sparks, dt, false);
+    this.stepBits(this.gritBits, this.grit, dt, false, true);
     this.stepBits(this.casingBits, this.casings, dt, true);
   }
 
-  private stepBits(bits: Bit[], im: THREE.InstancedMesh, dt: number, bounce: boolean) {
+  /** Low balls billow out fast, slide on along the ground and sink back into it; kicked balls rise, slow and shrink. */
+  private stepBalls(dt: number) {
+    const im = this.balls;
+    let any = false;
+    this.ballBits.forEach((b, i) => {
+      if (b.age >= b.life) return;
+      any = true;
+      b.age += dt;
+      const u = b.age / b.life;
+      if (u >= 1) { im.setMatrixAt(i, this.m.makeScale(0, 0, 0)); return; }
+      const damp = Math.exp(-dt * b.drag);
+      b.vel.x *= damp; b.vel.z *= damp;
+      b.vel.y = b.low ? b.vel.y * damp - dt * 0.8 : b.vel.y * damp - dt * 1.2;
+      b.pos.addScaledVector(b.vel, dt);
+      const g = this.ground.height(b.pos.x, b.pos.z);
+      // Grows fast, then shrinks away; low balls also settle toward (and into) the ground as they go.
+      const grow = Math.min(1, u * 6) * (1 - u * u);
+      const r = b.size * (0.5 + grow);
+      if (b.low) b.pos.y = Math.min(b.pos.y, g + r * (0.55 - 0.8 * u));
+      else b.pos.y = Math.max(b.pos.y, g + r * 0.3);
+      im.setMatrixAt(i, this.m.compose(b.pos, this.q.identity(), this.s.set(r, r * (b.low ? 0.7 : 1), r)));
+    });
+    if (any) im.instanceMatrix.needsUpdate = true;
+  }
+
+  private stepBits(bits: Bit[], im: THREE.InstancedMesh, dt: number, bounce: boolean, tumble = false) {
     bits.forEach((b, i) => {
       if (b.age >= b.life) return;
       b.age += dt;
@@ -189,12 +306,17 @@ export class MinigunFx {
       }
       const k = bounce ? 1 : 1 - b.age / b.life;
       this.q.setFromEuler(b.rot);
-      if (!bounce) this.q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), b.vel.clone().normalize());
+      if (!bounce && !tumble) this.q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), b.vel.clone().normalize());
       im.setMatrixAt(i, this.m.compose(b.pos, this.q, this.s.set(k, k, k)));
     });
     im.instanceMatrix.needsUpdate = true;
   }
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
+const D2R = Math.PI / 180;
+// Sand in the low layer reads a touch darker (torn-up, shaded) than the pale kick above it.
+const SAND_LOW = new THREE.Color(0xc9a978), SAND_KICK = new THREE.Color(0xe3c99b), STEEL_SMOKE = new THREE.Color(0x4a4744);
 
 function bit(): Bit {
   return { pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 1, life: 0, spin: new THREE.Vector3(), rot: new THREE.Euler(), rest: true, landed: true };

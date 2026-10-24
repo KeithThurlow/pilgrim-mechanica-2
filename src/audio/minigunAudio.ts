@@ -43,9 +43,10 @@ export class MinigunAudio {
   /** One round's spit from its own gun (not gated against the other gun's rounds). */
   shot(muzzle: THREE.Vector3) { this.sfx.play("spit", muzzle, 1, 1, false); }
 
-  hit(at: THREE.Vector3) {
+  hit(at: THREE.Vector3, surface: "sand" | "metal" = "sand") {
     const sfx = this.sfx;
-    sfx.play("dirtHit", at, 0.9 + Math.random() * 0.2);
+    if (surface === "metal") sfx.play("metalHit", at, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.25);
+    else sfx.play("dirtHit", at, 0.9 + Math.random() * 0.2);
     this.pending++;
     const now = sfx.ctx.currentTime;
     if (now - this.lastBrap < BRAP_INTERVAL) return;
