@@ -10,13 +10,13 @@ export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtH
 
 export const SFX_DEFAULTS = {
   masterVolume: 0.35,
-  spitLevel: 0.27,
-  growlLevel: 1.05,
+  spitLevel: 0.05,
+  growlLevel: 1.22,
   spinLevel: 0.375,
-  brapLevel: 0.4,
-  dirtLevel: 0.24,
+  brapLevel: 0.19,
+  dirtLevel: 0.32,
   casingLevel: 0.18,
-  growlDetune: 3,
+  growlDetune: 1.7,
 };
 export type SfxValues = typeof SFX_DEFAULTS;
 

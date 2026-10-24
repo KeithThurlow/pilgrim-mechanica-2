@@ -18,8 +18,9 @@ for (let z = -1500; z <= 1500; z += 3.7) for (let x = -1500; x <= 1500; x += 3.7
   n++;
 }
 steepShare /= n;
-if (maxSlope > 45) problems.push(`slopes up to ${maxSlope.toFixed(0)} deg (cliffs)`);
-if (steepShare > 0.08) problems.push(`${(steepShare * 100).toFixed(1)}% of ground steeper than 30 deg`);
+// Loosened for the tall dunes (Keith 2026-10-24: height 14 m, spacing 44 m reach about 69 deg on the steepest crests).
+if (maxSlope > 75) problems.push(`slopes up to ${maxSlope.toFixed(0)} deg (cliffs)`);
+if (steepShare > 0.12) problems.push(`${(steepShare * 100).toFixed(1)}% of ground steeper than 30 deg`);
 console.log(`heights ${minH.toFixed(1)}..${maxH.toFixed(1)} m · steepest ${maxSlope.toFixed(0)} deg · steeper than 30 deg: ${(steepShare * 100).toFixed(1)}% · ${n} samples`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("terrain check failed"); }
 console.log("terrain check passed");

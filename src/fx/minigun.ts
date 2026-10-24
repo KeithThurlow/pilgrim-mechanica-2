@@ -6,12 +6,12 @@ import type { Param } from "../core/tweaks";
 
 export const MINIGUN_FX_DEFAULTS = {
   tracerSpeed: 220,
-  tracerLength: 3.2,
+  tracerLength: 1.2,
   tracerEvery: 1,
-  flashSize: 0.9,
+  flashSize: 1,
   flashLight: 40,
-  hitDust: 1,
-  casingKick: 3.2,
+  hitDust: 2.1,
+  casingKick: 1.5,
 };
 export type MinigunFxValues = typeof MINIGUN_FX_DEFAULTS;
 

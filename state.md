@@ -18,7 +18,7 @@ How to update it:
 | Topics and selection | The panel opens on topic buttons only (Keith 2026-10-24: too many sliders); a topic shows just its slider groups, All shows everything; Reset and Copy act on the shown topic. Hold V: things under the cursor light up with their name, a click opens their topic (walker lab: legs, hull, each minigun, ammo drums, ground = dunes, sky = light; terrain lab: marker, dunes, light). No firing while V is held | `src/core/tweaks.ts`, `src/core/select.ts` | all |
 | Report box | A Report button in every lab (reports say what was selected and which topic was open): a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is not in git | `src/core/report.ts`, `tools/report-plugin.ts` | all |
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
-| Terrain | Transverse dunes across the wind (slip faces 30-38°), meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
+| Terrain | Transverse dunes across the wind, tall and close (14 m high, 44 m apart; Keith 2026-10-24), steepest crests near 69°, meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
 | Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
 | Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over the ball of the foot while a hinged toe segment stays flat and pushes, then the toes curl under through the swing and open flat for the stomp (Keith 2026-10-24); feet planted further forward; stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
 | Leg types | Archetype presets of walker tuning (proportions, stance, gait, feet): stand-in and Rampart (shorter stride, toe hinge 0.14 m, toes to 0.85 m); the old game's Humanoid, Short humanoid and Stilt go here when they have models. The lab takes the archetype as its defaults; the model's measured bone lengths always win | `src/mech/legTypes.ts` | walker |
@@ -29,7 +29,7 @@ How to update it:
 | Minigun sound | Ported from the old game, every gun its own voice: its own spin-up (pitched to its spin-up time) and spin-down from its muzzle, its own growl following its own spin and firing (offset and detuned), a spit per round ungated between the guns; dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
 | Footfall FX | Footprints (pooled, oldest recycled) and dust puffs | `src/fx/footfall.ts` | walker |
-| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes); audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
+| Checks | Walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
 
@@ -57,6 +57,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **The walk may still not match the old lab's feel**: push-off now rolls over hinged toes and the Rampart has a
   shorter stride, but the old lab's swing was blended in joint angles and had AT-ST hip arms; this sim uses a foot
   path and IK. Keith to judge.
+- **Legs can't fully handle the tall dunes**: on steep slip faces the Rampart's feet fall out of reach on up to 10% of
+  leg-frames (zigzag) and its knee runs straight at push-off; the walker checks were loosened for dunes to allow it.
+  A walker that adapts its stride and stance to slope would let them tighten again.
 - **Toe split is one hinge per foot** (all toes bend together) and the Rampart's back spur stays rigid on the heel.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
@@ -79,6 +82,15 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Keith's walker lab values as defaults; tall dunes; checks loosened (Claude, Keith's PC)
+- Keith's copied walker lab values became the defaults: gun spin-up 0.8 s, range 45 m; shorter tracers, bigger hit
+  dust, softer casing kick (`upper.ts`, `minigun.ts`); sound levels (`sfx.ts`); dunes 14 m high, 44 m apart, meander
+  0.7 (`terrain.ts`); sun 36° up, no tone mapping, haze 0.5 (`look.ts`); walker lab shadow box 30. Leg-type values
+  left as committed (his copy predates the Rampart's shorter stride).
+- Tall dunes fail the old limits (69° crests, reach misses up to 10%, knee straight on steep push-offs), so Keith
+  asked for looser checks: `terrain-check.ts` slopes to 75°, steep share 12%; `walker-check.ts` dune runs 15% reach
+  misses and no straight-knee rule, flat ground unchanged. `npm test` and `npm run build` pass.
 
 ### 2026-10-24 · Topics and hold-V selection (Claude, cloud session)
 - Keith: overwhelmed by sliders last time; hold V, click a part (legs, minigun, dunes) and get only its options.

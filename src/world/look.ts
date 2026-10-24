@@ -7,15 +7,15 @@ import type { Param } from "../core/tweaks";
 
 export const LOOK_DEFAULTS = {
   sunAzimuth: 215,
-  sunElevation: 58,
+  sunElevation: 36,
   // Picked from an A/B of ACES, AgX and Neutral on the Rampart (2026-10-24): Neutral keeps the sand and paint colour,
   // AgX greyed everything out.
   sunIntensity: 3.2,
   envIntensity: 0.5,
   skyFill: 0,
   exposure: 1,
-  toneMap: 2,
-  haze: 0.4,
+  toneMap: 0,
+  haze: 0.5,
   shadowBox: 70,
 };
 export type LookValues = typeof LOOK_DEFAULTS;

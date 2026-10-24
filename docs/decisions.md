@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Taller, closer dunes (14 m high, 44 m apart) with the terrain and walker checks loosened to allow them | Keith | Keith | Crests reach about 69°; dune runs allow 15% reach misses and skip the straight-knee rule, flat ground keeps the strict limits (Claude's split). |
 | 2026-10-24 | Hold V to select things in the scene; a click opens only that thing's options; the panel opens on topics, not every slider | Keith | Keith | Ground opens the dunes, sky the light (Claude's defaults). Applies to every lab. |
 | 2026-10-24 | Feet get a toe joint: roll over the ball at push-off with the toes flat, curl the toes through the swing | Keith | Keith | One hinge per foot (Claude's default); Rampart hinge where its toes begin. |
 | 2026-10-24 | Legs come as archetypes (presets of walker tuning), ready for the old game's other leg types | Keith | Keith | `src/mech/legTypes.ts`. |
