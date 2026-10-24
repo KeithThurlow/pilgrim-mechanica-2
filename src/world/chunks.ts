@@ -38,8 +38,8 @@ const C = {
   flat: new THREE.Color().setHex(0xdcb98f, THREE.SRGBColorSpace),
   // Rocky land: sand in the hollows a little greyer; rock tops grey-brown, risers red-brown.
   rockSand: new THREE.Color().setHex(0xccb08a, THREE.SRGBColorSpace),
-  rockTop: new THREE.Color().setHex(0xa38f7b, THREE.SRGBColorSpace),
-  rockFace: new THREE.Color().setHex(0x7b5a48, THREE.SRGBColorSpace),
+  rockTop: new THREE.Color().setHex(0x94806c, THREE.SRGBColorSpace),
+  rockFace: new THREE.Color().setHex(0x7a5040, THREE.SRGBColorSpace),
   // Shallows: wet sand at the waterline, the floor under the water.
   wet: new THREE.Color().setHex(0x9c8261, THREE.SRGBColorSpace),
   floor: new THREE.Color().setHex(0x7d7a5f, THREE.SRGBColorSpace),

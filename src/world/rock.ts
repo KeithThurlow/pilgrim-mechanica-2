@@ -7,8 +7,8 @@ import { Noise2, smoothstep, lerp } from "./noise";
 export const ROCK_DEFAULTS = {
   rockHeight: 22,
   rockScale: 170,
-  rockStep: 3.2,
-  rockFace: 0.22,
+  rockStep: 4.5,
+  rockFace: 0.3,
   rockTerrace: 0.8,
   rockRidge: 0.45,
   rockRough: 0.25,

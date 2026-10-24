@@ -11,7 +11,7 @@ export const SHALLOWS_DEFAULTS = {
   barShare: 0.16,
   barScale: 90,
   outcropShare: 0.1,
-  outcropHeight: 5,
+  outcropHeight: 4,
   outcropScale: 40,
   waterClear: 0.3,
   waterDeep: 0.85,
@@ -54,11 +54,13 @@ export class ShallowsGround {
     // Outcrops: sparse rock knuckles standing out of the water, steep sided, rough topped.
     let rock = 0;
     if (v.outcropShare > 0) {
-      const o = n.fbm(x / v.outcropScale + 41.7, z / v.outcropScale - 13.1, 3) * 0.5 + 0.5;
-      const k = smoothstep(1 - v.outcropShare * 2.4, 1 - v.outcropShare * 1.7, o);
+      // fbm rarely leaves about ±0.5, so the share maps onto that range (0.1 → the top tenth or so).
+      const o = n.fbm(x / v.outcropScale + 41.7, z / v.outcropScale - 13.1, 3);
+      const t0 = 0.5 - 2 * v.outcropShare;
+      const k = smoothstep(t0, t0 + 0.22, o);
       if (k > 0) {
         // Rise from the floor (no lip where an outcrop starts), steepening to a rough top.
-        const top = W + v.outcropHeight * (0.6 + 0.4 * n.fbm(x / 7, z / 7, 2));
+        const top = W + v.outcropHeight * (0.65 + 0.35 * n.fbm(x / 12, z / 12, 2));
         const nh = h + (top - h) * k * k * (3 - 2 * k);
         if (nh > h) { rock = smoothstep(0.1, 0.5, k); h = nh; }
       }
