@@ -169,6 +169,13 @@ export class DustSim {
     this.drag[i] = this.curDrag || (kind === CLOUD ? this.v.cloudDrag : this.v.clumpDrag);
   }
 
+  /** A puff of a given darkness (0 sand .. 1 dark), e.g. smoke off steel or a burning wreck. */
+  smoke(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, dens: number, dark: number) {
+    this.curTint = dark;
+    this.emit(CLOUD, x, y, z, vx, vy, vz, size, life, dens);
+    this.curTint = 0;
+  }
+
   /** Dust and clump multipliers for the ground at a point (and sets the tint for what's emitted next). */
   private ground_(x: number, z: number): [number, number] {
     const v = this.v, s = this.surfaceAt(x, z);

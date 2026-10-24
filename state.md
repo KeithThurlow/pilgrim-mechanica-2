@@ -83,6 +83,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **No ragdolls yet** (Keith 2026-10-24: deaths should have physics): wrecks tumble on a hand-rolled throw, bandits
   are thrown and fall over; real ragdolls for people and robots want Rapier.
 - **Bandits shoot through dunes** (no line of sight test).
+- **No concrete surface for hits yet** (dust plus a few sparks when something concrete exists); the grey wreck
+  stand-ins are steel.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -112,6 +114,13 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Steel hits: sparks and soft smoke, no solid balls (Claude, cloud session)
+- Keith: solid ball impacts on gunfire (bandit rounds on the mech, the minigun on the grey wrecks); steel should
+  spark (concrete would be dust and some sparks).
+- `minigun.ts`: the opaque ball pool is gone; steel smoke goes to the dust system through `onSteelSmoke`
+  (`Battlefield` wires it); `dust.smoke()` for dark puffs (also used for burning wrecks and destroyed mechs).
+- Checked: typecheck, `npm test`, close-up of the bandit lab (sparks at the mech's feet, no balls).
 
 ### 2026-10-24 · War band and bandit swarm labs, shared battlefield, vehicles (Claude, cloud session + two helper agents)
 - Keith: the mech takes damage; no salvage yet; bandit mechs are red Ramparts; a convoy crane lab later; kills should

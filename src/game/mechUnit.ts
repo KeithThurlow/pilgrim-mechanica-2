@@ -154,8 +154,8 @@ export class MechUnit implements Hittable {
     const p = this.sim.pelvis, dust = this.bf.dust;
     for (let i = 0; i < 26; i++) {
       const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 3;
-      dust.emit(1, p.x + Math.cos(a), p.y - 1 + Math.random() * 2, p.z + Math.sin(a), Math.cos(a) * s, 1 + Math.random() * 2, Math.sin(a) * s,
-        0.8 + Math.random() * 0.8, 3 + Math.random() * 3, 0.85);
+      dust.smoke(p.x + Math.cos(a), p.y - 1 + Math.random() * 2, p.z + Math.sin(a), Math.cos(a) * s, 1 + Math.random() * 2, Math.sin(a) * s,
+        0.8 + Math.random() * 0.8, 3 + Math.random() * 3, 0.85, 0.75);
     }
     this.bf.dust.stomp(p.x, p.y - 3, p.z, 2.5);
   }

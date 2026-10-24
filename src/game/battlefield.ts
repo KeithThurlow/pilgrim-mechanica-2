@@ -62,6 +62,12 @@ export class Battlefield {
     this.gunAudio = new MinigunAudio(this.sfx);
     this.gunFx.onSandHit = (at, d, k) => { this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); this.marks.crater(at.x, at.z, k); };
     this.gunFx.onHit = (at, surface) => this.gunAudio.hit(at, surface);
+    this.gunFx.onSteelSmoke = (at, n, puffs, k) => {
+      for (let i = 0; i < puffs; i++) {
+        this.dust.smoke(at.x + n.x * 0.2, at.y + n.y * 0.2, at.z + n.z * 0.2, n.x * (0.6 + Math.random()), 0.6 + n.y + Math.random() * 0.5, n.z * (0.6 + Math.random()),
+          0.18 * Math.sqrt(k), 0.7 + Math.random() * 0.5, 0.6, 0.85);
+      }
+    };
     // A round through a body: a puff of dust and cloth off it, no crater.
     this.gunFx.onFleshHit = (at, d) => {
       for (let i = 0; i < 3; i++) {

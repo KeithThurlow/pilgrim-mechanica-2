@@ -243,7 +243,7 @@ export class Warband {
       else { throttle = s.speed > 0.5 ? -0.6 : 0; this.stepCar(r, dt, throttle, 0); }
       if (r.deadFor < 6 && Math.random() < dt * 8) {
         // Burning out: dark smoke from the wreck.
-        this.bf.dust.emit(1, s.pos.x, s.pos.y + 1.2, s.pos.z, (Math.random() - 0.5), 1.5 + Math.random(), (Math.random() - 0.5), 0.5, 3, 0.75);
+        this.bf.dust.smoke(s.pos.x, s.pos.y + 1.2, s.pos.z, (Math.random() - 0.5), 1.5 + Math.random(), (Math.random() - 0.5), 0.5, 3, 0.75, 0.9);
       }
       return;
     }
