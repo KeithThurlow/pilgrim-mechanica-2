@@ -4,9 +4,16 @@
 // Steering is a bicycle model (yaw rate = speed / wheelbase * tan(steer)), capped by what the tyres can hold plus a
 // drift allowance, so hard turns at speed let the heading run ahead of the velocity and the truck slides. Tyres bleed
 // off sideways velocity with `grip`, up to `cornerG`; once sliding they hold less (`drift`). Slopes pull along the
-// surface (climbs slow it, descents speed it up a little). Four spring-damper wheels carry the body: height, pitch
-// and roll come out of them; a hard stop keeps the chassis off the ground, and a heavier fall when airborne keeps
-// jumps rare and short.
+// surface (climbs slow it, descents speed it up a little). Spring-damper wheels carry the body: height, pitch and
+// roll come out of them; a hard stop keeps the chassis off the ground, and a heavier fall when airborne keeps jumps
+// rare and short.
+//
+// Axles: a kind has a steering group at the front (`frontAxles`, the second one steering `steer2` as much) and a
+// driven group at the back (`rearAxles`), `axleGap` apart within a group; `wheelbase` runs between the two groups'
+// centres. Tandem axles scrub in turns (`tandemScrub`), so six- and eight-wheelers turn wider. Wheels are listed
+// axle by axle from the front, left then right (a four-wheeler is FL, FR, RL, RR as before).
+// Tracked kinds (`tracked` 1) skid-steer: steer is a turn rate (`pivotRate`, also at a standstill), no drift; the
+// "wheels" are the road wheels along each track (`roadWheels` per side over `wheelbase`).
 //
 // Conventions: heading 0 faces +Z, +X is the vehicle's left; steer + turns left. pitch + is nose up, roll + is the
 // left side up.
@@ -50,6 +57,18 @@ export const CAR_DEFAULTS = {
   stickRange: 3,
   airGravity: 2.5,
   airLevel: 1.5,
+  // Axles (layout values are per kind, not sliders: the body is built from them)
+  frontAxles: 1,
+  rearAxles: 1,
+  axleGap: 1.4,
+  steer2: 0.7,
+  tandemScrub: 0.8,
+  // Tracks (tracked kinds only)
+  tracked: 0,
+  roadWheels: 5,
+  pivotRate: 40,
+  pivotAtSpeed: 0.6,
+  pivotDrag: 2,
 };
 export type CarValues = typeof CAR_DEFAULTS;
 
@@ -86,9 +105,15 @@ export const CAR_PARAMS: Param[] = [
   { key: "stickRange", label: "Stick range (m)", min: 0.5, max: 10, step: 0.1, group: G, tip: "Above this height over the ground the stick lets go" },
   { key: "airGravity", label: "Air gravity", min: 1, max: 4, step: 0.05, group: G, tip: "Heavier fall when off the ground: short, punchy jumps" },
   { key: "airLevel", label: "Air levelling", min: 0, max: 6, step: 0.1, group: G, tip: "How fast the body levels out in the air" },
+  { key: "axleGap", label: "Axle gap (m)", min: 0.9, max: 2.5, step: 0.05, group: G, tip: "Between axles in a group (six- and eight-wheelers, road wheels)" },
+  { key: "steer2", label: "Second axle steer share", min: 0, max: 1, step: 0.01, group: G, tip: "How much the second steering axle turns, of the first (eight-wheelers)" },
+  { key: "tandemScrub", label: "Tandem scrub", min: 0, max: 2, step: 0.01, group: G, tip: "Extra wheelbase per extra axle: tandem axles fight the turn, so big trucks turn wider" },
+  { key: "pivotRate", label: "Tracks: turn rate (°/s)", min: 5, max: 120, step: 1, group: G, tip: "Skid steering: how fast a tracked vehicle turns, also on the spot" },
+  { key: "pivotAtSpeed", label: "Tracks: turn at top speed", min: 0.1, max: 1, step: 0.01, group: G, tip: "Share of the turn rate left at top speed" },
+  { key: "pivotDrag", label: "Tracks: turning drag (m/s²)", min: 0, max: 10, step: 0.1, group: G, tip: "Slowdown while the tracks drive against each other" },
 ];
 
-export type CarKind = "technical" | "gunTruck";
+export type CarKind = "technical" | "gunTruck" | "sixWheeler" | "warRig" | "tank";
 /** Per-kind overrides on CAR_DEFAULTS (the defaults are the technical). */
 export const CAR_KINDS: Record<CarKind, Partial<CarValues>> = {
   technical: {},
@@ -97,10 +122,58 @@ export const CAR_KINDS: Record<CarKind, Partial<CarValues>> = {
     grip: 5.5, cornerG: 0.8, drift: 0.22, wheelbase: 4.6, track: 2.3, rideHeight: 1.15, wheelRadius: 0.6,
     suspFreq: 1.4, travel: 0.35, droop: 0.7,
   },
+  // A heavier gun truck on three axles (one steering, two driven), an autocannon on a ring; about 7.5 m long.
+  sixWheeler: {
+    topSpeed: 12, accel: 3.2, brake: 8, reverseSpeed: 4, maxSteer: 30, maxYawRate: 65, yawResponse: 5,
+    grip: 6, cornerG: 0.75, drift: 0.15, wheelbase: 4.3, track: 2.3, rideHeight: 1.2, wheelRadius: 0.6,
+    suspFreq: 1.3, travel: 0.35, droop: 0.7, rearAxles: 2, axleGap: 1.4, maxClimb: 34, climb: 0.6,
+  },
+  // The war band's lead truck: an armoured hauler on four axles, the front two steering; about 11.5 m long.
+  warRig: {
+    topSpeed: 11, accel: 2.6, brake: 6, reverseSpeed: 3, coast: 1.2, maxSteer: 30, steerRate: 100, maxYawRate: 45,
+    yawResponse: 3.5, grip: 6, cornerG: 0.6, drift: 0.1, maxSlide: 25, wheelbase: 6.4, track: 2.5, rideHeight: 1.35,
+    wheelRadius: 0.7, suspFreq: 1.2, suspDamp: 0.6, travel: 0.4, droop: 0.8, frontAxles: 2, rearAxles: 2,
+    axleGap: 1.55, steer2: 0.7, maxClimb: 32, climb: 0.45, airGravity: 3,
+  },
+  // A makeshift tank on tracks: turns on the spot, slow, very heavy, a big slow turret.
+  tank: {
+    topSpeed: 8, accel: 3, brake: 7, reverseSpeed: 3.5, coast: 1.5, climb: 0.5, yawResponse: 4, grip: 12, cornerG: 1.2,
+    drift: 0, maxSlide: 12, wheelbase: 4.4, track: 2.9, rideHeight: 0.95, wheelRadius: 0.36, suspFreq: 1.5,
+    suspDamp: 0.8, travel: 0.25, droop: 0.35, maxClimb: 40, bog: 8, airGravity: 3, tracked: 1, roadWheels: 5,
+    pivotRate: 36, pivotAtSpeed: 0.6, pivotDrag: 0.8,
+  },
 };
 
 /** Tuning values for a kind: defaults with that kind's overrides. */
 export function carValues(kind: CarKind): CarValues { return { ...CAR_DEFAULTS, ...CAR_KINDS[kind] }; }
+
+export interface Axle {
+  /** Offset from the body centre along the body, metres (+ forward). */
+  z: number;
+  /** Share of the steering angle (0 = fixed). */
+  steer: number;
+  drive: boolean;
+}
+
+/** The axles front to back, from a kind's layout values (two wheels each: left then right). */
+export function carAxles(v: CarValues): Axle[] {
+  const out: Axle[] = [];
+  if (v.tracked) {
+    const n = Math.max(2, Math.round(v.roadWheels));
+    for (let k = 0; k < n; k++) out.push({ z: v.wheelbase / 2 - (k * v.wheelbase) / (n - 1), steer: 0, drive: true });
+    return out;
+  }
+  const nF = clamp(Math.round(v.frontAxles), 1, 3), nR = clamp(Math.round(v.rearAxles), 1, 4);
+  for (let k = 0; k < nF; k++) out.push({ z: v.wheelbase / 2 + ((nF - 1) / 2 - k) * v.axleGap, steer: v.steer2 ** k, drive: false });
+  for (let k = 0; k < nR; k++) out.push({ z: -v.wheelbase / 2 + ((nR - 1) / 2 - k) * v.axleGap, steer: 0, drive: true });
+  return out;
+}
+
+/** Overall length over the outer axles (for hit capsules and wrecks): add the overhangs. */
+export function axleSpan(v: CarValues) {
+  const a = carAxles(v);
+  return a[0].z - a[a.length - 1].z;
+}
 
 export interface Wheel {
   /** Contact point on the ground (when airborne: the bottom of the hanging wheel). */
@@ -125,6 +198,12 @@ const MIN_CENTRE_CLEAR = 0.25;
 /** Fastest the body may be thrown upward by the ground (m/s): a safety net, not a feel value. */
 const MAX_RISE = 10;
 
+const newWheel = (): Wheel => ({ pos: new Vector3(), slip: 0, compress: 0, steer: 0, spin: 0, grounded: true });
+/** Wheels nearer the body centre than this (along it) bottom out by lifting the body, not tipping it. */
+const CENTRE_BAND = 0.5;
+/** Corner a wheel bottoms out in: front/back/middle x left/right. */
+const cornerOf = (mx: number, mz: number) => (Math.abs(mz) < CENTRE_BAND ? 2 : mz > 0 ? 0 : 1) * 2 + (mx > 0 ? 0 : 1);
+
 export class CarSim {
   pos = new Vector3();
   heading = 0;
@@ -137,20 +216,32 @@ export class CarSim {
   pitch = 0;
   roll = 0;
   quat = new Quaternion();
-  wheels: Wheel[] = [0, 1, 2, 3].map(() => ({ pos: new Vector3(), slip: 0, compress: 0, steer: 0, spin: 0, grounded: true }));
-  /** Wheels on the ground this step (0..4). */
+  /** Axle by axle from the front, left then right (a four-wheeler: FL, FR, RL, RR). Tracked: road wheels. */
+  wheels: Wheel[] = [];
+  /** The axles front to back (from the layout values; the wheel list is rebuilt if their number changes). */
+  axles: Axle[] = [];
+  /** Wheels on the ground this step (0..wheels.length). */
   contacts = 4;
-  /** Current front wheel angle, radians (+ left). */
+  /** Current steering angle of the front axle, radians (+ left); 0 on tracked kinds. */
   steerAngle = 0;
 
   private vy = 0;
   private pitchRate = 0;
   private rollRate = 0;
-  private groundH = [0, 0, 0, 0];
-  private prevGroundH = [0, 0, 0, 0];
-  /** Where the wheel spots were sampled (x, z pairs), for the ground slope. */
-  private spotX = [0, 0, 0, 0];
-  private spotZ = [0, 0, 0, 0];
+  private groundH: number[] = [];
+  private prevGroundH: number[] = [];
+  /** Where the wheel spots were sampled (x, z), for the ground slope. */
+  private spotX: number[] = [];
+  private spotZ: number[] = [];
+  /** Per wheel: mount offset in the body frame (x left, z forward), steer share, driven. */
+  private mx: number[] = [];
+  private mz: number[] = [];
+  private share: number[] = [];
+  private driven: boolean[] = [];
+  private over: number[] = [];
+  private worst: number[] = [-1, -1, -1, -1, -1, -1];
+  /** Wheelbase the bicycle model turns on: the groups' spacing plus tandem scrub. */
+  private wbEff = 1;
   private slope = [0, 0];
   private t = { e: new Euler(0, 0, 0, "YXZ"), a: new Vector3(), f: new Vector3(), l: new Vector3() };
 
@@ -158,42 +249,81 @@ export class CarSim {
     this.reset(0, 0, 0);
   }
 
-  /** Wheel mount offsets in the body frame (x left, z forward): FL, FR, RL, RR. */
-  private mount(i: number, out: Vector3) {
+  /** Indices of the rearmost axle's wheels (left, right): where the tyre ruts are laid. */
+  rearWheels(): number[] {
+    const n = this.wheels.length;
+    return [n - 2, n - 1];
+  }
+
+  /** Axles and wheel mounts from the current values (every step, so the sliders apply live). */
+  private layout() {
     const v = this.v;
-    return out.set((i % 2 === 0 ? 1 : -1) * v.track / 2, 0, (i < 2 ? 1 : -1) * v.wheelbase / 2);
+    this.axles = carAxles(v);
+    const n = this.axles.length * 2;
+    if (this.wheels.length !== n) {
+      this.wheels = Array.from({ length: n }, newWheel);
+      for (const a of [this.groundH, this.prevGroundH, this.spotX, this.spotZ, this.mx, this.mz, this.share, this.over]) a.length = n;
+      this.driven.length = n;
+    }
+    for (let k = 0; k < this.axles.length; k++) {
+      const a = this.axles[k];
+      for (let sd = 0; sd < 2; sd++) {
+        const i = k * 2 + sd;
+        this.mx[i] = (sd === 0 ? 1 : -1) * v.track / 2;
+        this.mz[i] = a.z;
+        this.share[i] = a.steer;
+        this.driven[i] = a.drive;
+      }
+    }
+    this.wbEff = v.tracked ? v.wheelbase : v.wheelbase + v.tandemScrub * v.axleGap * Math.max(0, this.axles.length - 2);
+  }
+
+  /** Wheel mount offset in the body frame (x left, z forward). */
+  private mount(i: number, out: Vector3) {
+    return out.set(this.mx[i], 0, this.mz[i]);
   }
 
   reset(x: number, z: number, heading: number) {
+    this.layout();
     this.heading = heading;
     this.speed = 0; this.lateral = 0; this.yawRate = 0; this.vy = 0; this.steerAngle = 0;
     this.pitchRate = 0; this.rollRate = 0;
-    // Start on a plane fitted to the four wheel spots.
-    const v = this.v, s = Math.sin(heading), c = Math.cos(heading);
-    for (let i = 0; i < 4; i++) {
+    // Start on a plane fitted to the wheel spots.
+    const v = this.v, s = Math.sin(heading), c = Math.cos(heading), n = this.wheels.length;
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
       const m = this.mount(i, this.t.a);
       this.spotX[i] = x + m.x * c + m.z * s; this.spotZ[i] = z - m.x * s + m.z * c;
       this.groundH[i] = this.ground.height(this.spotX[i], this.spotZ[i]);
       this.prevGroundH[i] = this.groundH[i];
+      sum += this.groundH[i];
     }
-    const [fl, fr, rl, rr] = this.groundH;
     this.groundSlope();
     this.pitch = Math.atan(this.slope[0]);
     this.roll = Math.atan(this.slope[1]);
-    this.pos.set(x, (fl + fr + rl + rr) / 4 + v.rideHeight, z);
+    this.pos.set(x, sum / n + v.rideHeight, z);
     this.updateQuat();
     this.vel.set(0, 0, 0);
     this.placeWheels(0, 0);
   }
 
-  /** Ground rise per metre forward and to the left, fitted through the four wheel spots (into this.slope). */
+  /** Ground rise per metre forward and to the left, a least-squares fit through the wheel spots (into this.slope). */
   private groundSlope() {
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
-    const X = this.spotX, Z = this.spotZ, H = this.groundH;
-    const df = ((X[0] + X[1] - X[2] - X[3]) * fx + (Z[0] + Z[1] - Z[2] - Z[3]) * fz) / 2;
-    const dl = ((X[0] + X[2] - X[1] - X[3]) * fz - (Z[0] + Z[2] - Z[1] - Z[3]) * fx) / 2;
-    this.slope[0] = (H[0] + H[1] - H[2] - H[3]) / 2 / Math.max(0.3, df);
-    this.slope[1] = (H[0] + H[2] - H[1] - H[3]) / 2 / Math.max(0.3, dl);
+    const X = this.spotX, Z = this.spotZ, H = this.groundH, n = this.wheels.length;
+    let cx = 0, cz = 0, ch = 0;
+    for (let i = 0; i < n; i++) { cx += X[i]; cz += Z[i]; ch += H[i]; }
+    cx /= n; cz /= n; ch /= n;
+    let ff = 0, fh = 0, ll = 0, lh = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = X[i] - cx, dz = Z[i] - cz, h = H[i] - ch;
+      const f = dx * fx + dz * fz, l = dx * fz - dz * fx;
+      ff += f * f; fh += f * h; ll += l * l; lh += l * h;
+    }
+    // Spread of the spots along and across (the wheelbase and track on a four-wheeler), never under 0.3 m.
+    const sf = 2 * Math.sqrt(ff / n), sl = 2 * Math.sqrt(ll / n);
+    this.slope[0] = fh / ((Math.max(1e-6, sf) * Math.max(0.3, sf) * n) / 4);
+    this.slope[1] = lh / ((Math.max(1e-6, sl) * Math.max(0.3, sl) * n) / 4);
     return this.slope;
   }
 
@@ -202,18 +332,23 @@ export class CarSim {
     this.quat.setFromEuler(this.t.e);
   }
 
-  /** throttle -1..1 (negative brakes, then reverses slowly), steer -1..1 (+ = turn left). Call at a fixed 120 Hz. */
+  /**
+   * throttle -1..1 (negative brakes, then reverses slowly), steer -1..1 (+ = turn left; on tracks a turn rate, also
+   * standing still). Call at a fixed 120 Hz.
+   */
   update(dt: number, throttle: number, steer: number) {
     const v = this.v, t = this.t;
+    this.layout();
+    const n = this.wheels.length, tracked = v.tracked > 0.5;
     throttle = clamp(Number.isFinite(throttle) ? throttle : 0, -1, 1);
     steer = clamp(Number.isFinite(steer) ? steer : 0, -1, 1);
     const top = Math.max(0.1, v.topSpeed);
-    const traction = this.contacts / 4;
+    const traction = this.contacts / n;
 
-    // --- Steering: front wheels slew toward the stick; less lock at speed.
+    // --- Steering: front wheels slew toward the stick; less lock at speed. Tracks have no steering wheels.
     const spd = Math.abs(this.speed);
     const lock = v.maxSteer * D2R * (1 - (1 - v.steerAtSpeed) * smooth(0, 1, spd / top));
-    const want = steer * lock, rate = v.steerRate * D2R * dt;
+    const want = tracked ? 0 : steer * lock, rate = v.steerRate * D2R * dt;
     this.steerAngle += clamp(want - this.steerAngle, -rate, rate);
 
     // --- Ground slope under the wheels (rise per metre forward and to the left).
@@ -239,24 +374,32 @@ export class CarSim {
     if (goingUp && a * this.speed >= 0) a *= 1 - 0.8 * dig;
     a *= traction;
     a += pull * traction * (goingUp ? v.climb : v.descent);
-    // Coasting drag (and the same drag holds the car on a gentle slope when stopped), plus the bog on steep climbs.
+    // Coasting drag (and the same drag holds the car on a gentle slope when stopped), plus the bog on steep climbs,
+    // plus the tracks scrubbing while they turn.
     const bog = v.bog * smooth(v.maxClimb * D2R, (v.maxClimb + 20) * D2R, climbAng);
-    const drag = ((throttle === 0 ? v.coast : v.coast * 0.3) + bog) * traction;
+    const scrub = tracked ? v.pivotDrag * Math.min(1, Math.abs(this.yawRate) / Math.max(1e-3, v.pivotRate * D2R)) : 0;
+    const drag = ((throttle === 0 ? v.coast : v.coast * 0.3) + bog + scrub) * traction;
     let next = this.speed + a * dt;
     if (Math.abs(next) <= drag * dt) next = 0; else next -= Math.sign(next) * drag * dt;
     // Never past top speed (descents push it toward a soft ceiling) or reverse speed.
     if (next > top) next = Math.max(top, next - (next - top) * 4 * dt);
     this.speed = clamp(next, -v.reverseSpeed * 1.05, top * 1.06);
 
-    // --- Yaw: bicycle model, capped by what the tyres hold plus a drift allowance that lets the heading run ahead
-    // of the velocity; the allowance closes as the slide widens, so a held drift settles instead of spinning out.
-    const bike = (this.speed / v.wheelbase) * Math.tan(this.steerAngle);
+    // --- Yaw. Wheels: bicycle model, capped by what the tyres hold plus a drift allowance that lets the heading run
+    // ahead of the velocity; the allowance closes as the slide widens, so a held drift settles instead of spinning
+    // out. Tracks: the stick is a turn rate, less of it at speed.
     const cornerA = v.cornerG * GRAV;
-    const slide0 = Math.atan2(Math.abs(this.lateral), Math.max(0.5, spd));
-    const holdA = cornerA * (1 - v.drift * smooth(6 * D2R, 22 * D2R, slide0));
-    const allow = 1 + 2 * v.drift * (1 - smooth(0.3 * v.maxSlide * D2R, 0.8 * v.maxSlide * D2R, slide0));
-    const yawCap = Math.min(v.maxYawRate * D2R, (holdA / Math.max(1, spd)) * allow);
-    const yawTarget = clamp(bike, -yawCap, yawCap);
+    let yawTarget: number;
+    if (tracked) {
+      yawTarget = steer * v.pivotRate * D2R * (1 - (1 - v.pivotAtSpeed) * smooth(0, 1, spd / top));
+    } else {
+      const bike = (this.speed / this.wbEff) * Math.tan(this.steerAngle);
+      const slide0 = Math.atan2(Math.abs(this.lateral), Math.max(0.5, spd));
+      const holdA = cornerA * (1 - v.drift * smooth(6 * D2R, 22 * D2R, slide0));
+      const allow = 1 + 2 * v.drift * (1 - smooth(0.3 * v.maxSlide * D2R, 0.8 * v.maxSlide * D2R, slide0));
+      const yawCap = Math.min(v.maxYawRate * D2R, (holdA / Math.max(1, spd)) * allow);
+      yawTarget = clamp(bike, -yawCap, yawCap);
+    }
     if (traction > 0) this.yawRate += (yawTarget - this.yawRate) * (1 - Math.exp(-v.yawResponse * traction * dt));
     else this.yawRate *= Math.exp(-0.5 * dt);
     const dpsi = this.yawRate * dt;
@@ -288,12 +431,14 @@ export class CarSim {
     this.pos.x += vx * dt;
     this.pos.z += vz * dt;
 
-    // --- Suspension: four spring-dampers carry the body (heave, pitch, roll per unit mass).
-    const w0 = 2 * Math.PI * v.suspFreq, kw = (w0 * w0) / 4, cw = (2 * v.suspDamp * w0) / 4;
-    const Ip = (v.wheelbase / 2) ** 2, Ir = (v.track / 2) ** 2;
-    let fy = 0, tp = 0, tr = 0, contacts = 0, maxGroundRate = -Infinity;
+    // --- Suspension: spring-dampers carry the body (heave, pitch, roll per unit mass), shared over the wheels.
+    const w0 = 2 * Math.PI * v.suspFreq, kw = (w0 * w0) / n, cw = (2 * v.suspDamp * w0) / n;
+    let Ip = 0, Ir = 0;
+    for (let i = 0; i < n; i++) { Ip += this.mz[i] ** 2; Ir += this.mx[i] ** 2; }
+    Ip = Math.max(0.05, Ip / n); Ir = Math.max(0.05, Ir / n);
+    let fy = 0, tp = 0, tr = 0, contacts = 0;
     const cp = Math.cos(this.pitch), cr = Math.cos(this.roll);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < n; i++) {
       const m = this.mount(i, t.a);
       const lx = m.x, lz = m.z;
       m.applyQuaternion(this.quat);
@@ -307,9 +452,8 @@ export class CarSim {
       if (grounded) {
         contacts++;
         const groundRate = (gh - this.prevGroundH[i]) / dt;
-        maxGroundRate = Math.max(maxGroundRate, groundRate);
         const cornerRate = this.vy + this.pitchRate * lz * cp + this.rollRate * lx * cr;
-        const F = Math.max(0, GRAV / 4 + kw * comp + cw * (groundRate - cornerRate));
+        const F = Math.max(0, GRAV / n + kw * comp + cw * (groundRate - cornerRate));
         fy += F; tp += F * lz * cp; tr += F * lx * cr;
       }
       this.wheels[i].compress = comp;
@@ -337,33 +481,45 @@ export class CarSim {
     this.roll = clamp(this.roll + this.rollRate * dt, -1.0, 1.0);
     this.updateQuat();
 
-    // --- Hard stops: no corner past its bump travel. A corner that bottoms out is pushed up by the body rising and
-    // tipping a third each (so a slip face ahead tilts the nose up instead of vaulting the whole truck), and the
-    // bump costs forward speed (`bumpLoss`): running into a steep face slows it like a wall would.
+    // --- Hard stops: no wheel past its bump travel. The worst-bottomed wheel of each corner (front, back or middle,
+    // left or right) pushes the body up by rising and tipping a third each (so a slip face ahead tilts the nose up
+    // instead of vaulting the whole truck; a middle wheel lifts instead of tipping), and the bump costs forward speed
+    // (`bumpLoss`): running into a steep face slows it like a wall would.
+    const worst = this.worst;
     for (let pass = 0; pass < 2; pass++) {
+      worst.fill(-1);
+      for (let i = 0; i < n; i++) {
+        const m = this.mount(i, t.a).applyQuaternion(this.quat);
+        const o = (this.over[i] = this.groundH[i] + v.rideHeight - v.travel - (this.pos.y + m.y));
+        if (o <= 0) continue;
+        const q = cornerOf(this.mx[i], this.mz[i]);
+        if (worst[q] < 0 || o > this.over[worst[q]]) worst[q] = i;
+      }
       let hit = false;
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < n; i++) {
+        if (worst[cornerOf(this.mx[i], this.mz[i])] !== i) continue;
         const m = this.mount(i, t.a);
-        const lx = m.x, lz = m.z;
+        const lx = m.x, lz = m.z, mid = Math.abs(lz) < CENTRE_BAND;
         m.applyQuaternion(this.quat);
         const over = this.groundH[i] + v.rideHeight - v.travel - (this.pos.y + m.y);
         if (over <= 0) continue;
         hit = true;
         const cp2 = Math.max(0.2, Math.cos(this.pitch)), cr2 = Math.max(0.2, Math.cos(this.roll));
-        this.pos.y += over / 3;
-        this.pitch += over / 3 / (lz * cp2);
+        this.pos.y += mid ? (over * 2) / 3 : over / 3;
+        if (!mid) this.pitch += over / 3 / (lz * cp2);
         this.roll += over / 3 / (lx * cr2);
         if (pass > 0) continue;
         const groundRate = (this.groundH[i] - this.prevGroundH[i]) / dt;
         const cornerRate = this.vy + this.pitchRate * lz * cp2 + this.rollRate * lx * cr2;
         // Velocity: only stop the corner sinking further (moving it up with the ground is done by position, so a
-        // steep face never throws the body into the air); the bump's size still costs speed.
+        // steep face never throws the body into the air); the bump's size still costs speed, but only while the
+        // ground under the wheel rises (a long truck resting bottomed in a hollow isn't held there).
         const dv = Math.min(0, groundRate) - cornerRate;
-        const loss = Math.min(Math.abs(this.speed), Math.max(0, groundRate - cornerRate) * v.bumpLoss);
+        const loss = Math.min(Math.abs(this.speed), Math.max(0, Math.min(groundRate, groundRate - cornerRate)) * v.bumpLoss);
         this.speed -= Math.sign(this.speed) * loss;
         if (dv > 0) {
-          this.vy += dv / 3;
-          this.pitchRate += dv / 3 / lz;
+          this.vy += mid ? (dv * 2) / 3 : dv / 3;
+          if (!mid) this.pitchRate += dv / 3 / lz;
           this.rollRate += dv / 3 / lx;
         }
       }
@@ -386,25 +542,26 @@ export class CarSim {
 
   /** Wheel contacts, steer, spin and slip for drawing and dust. */
   private placeWheels(dt: number, throttle: number) {
-    const v = this.v, t = this.t, top = Math.max(0.1, v.topSpeed);
+    const v = this.v, t = this.t, top = Math.max(0.1, v.topSpeed), tracked = v.tracked > 0.5;
     // Wheelspin pulling away hard, lock-up braking hard.
     const spinUp = throttle > 0 && this.speed >= 0 ? throttle * clamp(1 - this.speed / (top * 0.45), 0, 1) : 0;
     const lockUp = throttle < 0 && this.speed > 1 ? -throttle * 0.6 : 0;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i];
       const m = this.mount(i, t.a);
-      const lz = m.z;
+      const lx = m.x, lz = m.z;
       m.applyQuaternion(this.quat);
       const x = this.pos.x + m.x, z = this.pos.z + m.z;
-      const front = i < 2;
-      w.steer = front ? this.steerAngle : 0;
+      const front = !this.driven[i];
+      w.steer = this.steerAngle * this.share[i];
       if (w.grounded) {
         w.pos.set(x, this.ground.height(x, z), z);
       } else {
         const hang = this.pos.y + m.y - v.rideHeight - v.droop;
         w.pos.set(x, hang, z);
       }
-      const roll = this.speed / v.wheelRadius;
+      // Tracks run at their own side's speed (the inside one slower in a turn, backwards in a pivot).
+      const roll = (tracked ? this.speed - this.yawRate * lx : this.speed) / v.wheelRadius;
       const spinExtra = spinUp * (front ? 0.3 : 1) * 25;
       w.spin += (roll + (w.grounded ? spinExtra : 0)) * dt * (lockUp > 0.5 && w.grounded ? 0.2 : 1);
       if (w.spin > 1e4 || w.spin < -1e4) w.spin %= 2 * Math.PI;
@@ -413,9 +570,14 @@ export class CarSim {
       const side = this.lateral + this.yawRate * lz;
       const st = w.steer;
       const across = side * Math.cos(st) - this.speed * Math.sin(st);
-      const latSlip = clamp(Math.abs(across) / 5, 0, 1);
       const longSlip = (front ? 0.3 : 1) * spinUp * 0.9 + lockUp;
-      w.slip = clamp(latSlip + longSlip, 0, 1);
+      if (tracked) {
+        // Skid steering scrubs the tracks sideways along their length and drags them against each other.
+        w.slip = clamp((Math.abs(across) + (Math.abs(this.yawRate) * v.track) / 2) / 3 + longSlip * 0.5, 0, 1);
+      } else {
+        const latSlip = clamp(Math.abs(across) / 5, 0, 1);
+        w.slip = clamp(latSlip + longSlip, 0, 1);
+      }
     }
   }
 }
