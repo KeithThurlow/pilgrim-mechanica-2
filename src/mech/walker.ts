@@ -33,6 +33,7 @@ export interface LegPose {
 
 const D2R = Math.PI / 180;
 const UP = new Vector3(0, 1, 0);
+const CARRY_Q = new Quaternion();
 const MIN_CYCLE = 0.55; // cycles/s used to finish a step when the body has stopped
 const RE_AIM_UNTIL = 0.72; // swing progress after which the landing spot is locked
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
@@ -154,6 +155,33 @@ export class WalkerSim {
     this.pelvis.set(x, this.bodyY.x, z);
     this.pose();
   }
+
+  /**
+   * Moving ground (a convoy deck): move the whole walker rigidly, turned by dyaw about (px, pz) then shifted by
+   * (dx, dy, dz). Body, height spring, planted feet and swing lift/landing spots ride along, so a mech standing on a
+   * moving platform keeps its footing; its own walking stays relative to the ground under it.
+   */
+  carry(dx: number, dy: number, dz: number, dyaw: number, px: number, pz: number) {
+    const c = Math.cos(dyaw), s = Math.sin(dyaw);
+    const turn = (p: Vector3) => { const x = p.x, z = p.z; p.x = x * c + z * s; p.z = z * c - x * s; };
+    const move = (p: Vector3) => { p.x -= px; p.z -= pz; turn(p); p.x += px + dx; p.y += dy; p.z += pz + dz; };
+    move(this.pos); move(this.pelvis);
+    turn(this.vel);
+    this.heading = wrap(this.heading + dyaw);
+    this.bodyY.x += dy;
+    const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
+    this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
+    for (const f of this.feet) {
+      move(f.planted); move(f.lift); move(f.target); move(f.pos);
+      turn(f.plantedUp); turn(f.liftUp); turn(f.targetUp); turn(f.up);
+      f.plantedYaw += dyaw; f.liftYaw += dyaw; f.targetYaw += dyaw; f.yaw += dyaw;
+      f.groundY += dy;
+    }
+    this.pose();
+  }
+
+  /** Solve the legs for the body and feet as they stand (after writing the pose from outside, e.g. a crane holding the mech). */
+  solve() { this.pose(); }
 
   stride() { return this.v.strideBase + this.v.stridePerSpeed * this.speed; }
   /** Each foot's distance from the centre line: footSpread standing, coming in to walkSpread once moving. */

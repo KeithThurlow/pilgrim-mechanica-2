@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Aboard the convoy the mech walks the moving deck to a parking bay (where the pilot will climb out); to launch it walks back to the launch spot and the crane takes it out; the crane's motion is the countdown; the crane slower, with the mech swinging on the rope | Keith | Keith | Claude's takes: two parking bays (E parks: the mech kneels; E stands it up), a launch pad on each side by the crane (stand on one for 0.8 s; that side is the side it's put down), a set-down pad for pick-ups, the swing is a damped 2D pendulum driven by the jib's and platform's accelerations, held over the spot until it settles before setting down; G still launches from anywhere on the deck. All values sliders. |
 | 2026-10-24 | Dash on Space in the WASD direction, on charges (2, 3 s each) | Keith | Keith | Distance, time and charges are Claude's values (sliders). `docs/proposal-dash-and-jump.md`. |
 | 2026-10-24 | Skill against the swarms: some enemy weapons are slow and telegraphed so they can be dodged (with the dash) | Keith | Keith | First: lobbed shells with a ground marker (tank, later the big robots). |
 | 2026-10-24 | The player's minigun rounds pierce light bodies and splash swarm units near the impact | Keith | Claude | Keith: hitboxes too small "or the minigun needs more piercing ability and a slight AOE". Values are sliders (Rounds). |
