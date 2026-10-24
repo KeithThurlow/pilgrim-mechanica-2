@@ -23,7 +23,7 @@ export const INFANTRY_DEFAULTS = {
   banditSpacing: 1.2,
   sepStrength: 3,
   bodyGap: 0.55,
-  hp: 30,
+  hp: 12,
   fireRange: 45,
   spreadDeg: 6,
   burstRounds: 4,
@@ -112,7 +112,7 @@ const HASH_SIZE = 4096, HASH_MASK = HASH_SIZE - 1;
 const EVENTS_MAX = 2048;
 
 export interface InfantryTarget { x: number; y: number; z: number; radius: number }
-export type ShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number) => void;
+export type ShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, shooter: number) => void;
 
 export class InfantrySwarm {
   readonly px = new Float32Array(INFANTRY_MAX); readonly py = new Float32Array(INFANTRY_MAX); readonly pz = new Float32Array(INFANTRY_MAX);
@@ -405,7 +405,7 @@ export class InfantrySwarm {
     const el = Math.hypot(ex, ey, ez); ex /= el; ey /= el; ez /= el;
     const reach = Math.max(L, dist) * 1.5;
     this.shots++;
-    onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach);
+    onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, i);
   }
 
   /** Nearest standing bandit hit by a ray (vertical cylinder of radius × height), or null. */
@@ -468,6 +468,25 @@ export class InfantrySwarm {
   }
 
   /** A mech foot landing: closest killed, within radius knocked down, a little further pushed away. */
+  /** A dashing mech ploughs through: standing bandits within radius are hurt and knocked flying along and away. */
+  shove(x: number, z: number, radius: number, dirX: number, dirZ: number, speed: number, damage: number): number {
+    let n = 0;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DOWN) continue;
+      const dx = this.px[i] - x, dz = this.pz[i] - z, d = Math.hypot(dx, dz);
+      if (d >= radius) continue;
+      const nx = d > 1e-5 ? dx / d : dirX, nz = d > 1e-5 ? dz / d : dirZ;
+      const ox = dirX + nx, oz = dirZ + nz, ol = Math.hypot(ox, oz) || 1;
+      n++;
+      if (this.damage(i, damage, ox / ol, oz / ol)) continue;
+      this.state[i] = DOWN; this.stateTime[i] = 0;
+      this.fallYaw[i] = Math.atan2(ox, oz);
+      this.vx[i] = (ox / ol) * speed; this.vz[i] = (oz / ol) * speed;
+      this.fear[i] += this.v.fearPerDeath;
+    }
+    return n;
+  }
+
   stomp(x: number, z: number, radius: number): void {
     const v = this.v, kill = radius * v.stompKill, push = radius * v.stompPush;
     for (let i = 0; i < this.hi; i++) {

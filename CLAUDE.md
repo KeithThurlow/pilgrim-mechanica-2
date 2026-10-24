@@ -65,7 +65,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?surface=gravel|dirt|concrete` (dust as if the ground were that).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`.
-- Convoy lab: `?manual`, `?aboard` (start on the bay), `?deploy` (start deploying), `?zoom`, `?dt`, `?flat`; G deploys.
+- Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
+  (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`; E parks in a bay, G launches from anywhere.
 
 ## Layout
 
@@ -82,7 +83,8 @@ src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock)
-src/convoy/             route (heading + flattened road), platform, crane, carry (pick-up/deploy), platformBody
+src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
+                        launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), platformBody
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),

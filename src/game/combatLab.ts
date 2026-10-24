@@ -22,6 +22,7 @@ import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../fx/minigun";
 import { DUST_DEFAULTS, DUST_PARAMS } from "../fx/dust";
+import { SHELL_FX_DEFAULTS, SHELL_FX_PARAMS } from "../fx/shellsDraw";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../audio/sfx";
 import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
@@ -32,10 +33,10 @@ import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -109,6 +110,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
   addEventListener("pointerup", () => { mouseDown = false; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // Space: dash the way WASD points (Keith 2026-10-24), on charges.
+  let dashPressed = false;
+  addEventListener("keydown", (e) => {
+    if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    e.preventDefault();
+    dashPressed = true;
+    auto = false;
+  });
 
   const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
   let selector: Selector | null = null;
@@ -122,10 +131,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Mech health", "Torso & guns", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
-      { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
+      { id: "hits", label: "Hits and dust", groups: ["Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
       { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -228,6 +237,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     }
     if (sel.active) trigger = false;
 
+    if (dashPressed) {
+      dashPressed = false;
+      // With no keys held, dash the way the legs face.
+      if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
+      else player.tryDash(Math.sin(player.sim.heading), Math.cos(player.sim.heading));
+    }
+    // The demo sidesteps now and then, to show the dash off.
+    if (auto && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
     player.step(dt, cmd, aim, trigger);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
@@ -263,7 +280,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)`);
-    app.hud.set("guns", `ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
+    const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges));
+    app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
 }

@@ -33,6 +33,7 @@ export interface LegPose {
 
 const D2R = Math.PI / 180;
 const UP = new Vector3(0, 1, 0);
+const CARRY_Q = new Quaternion();
 const MIN_CYCLE = 0.55; // cycles/s used to finish a step when the body has stopped
 const RE_AIM_UNTIL = 0.72; // swing progress after which the landing spot is locked
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
@@ -115,6 +116,14 @@ export class WalkerSim {
   private accelSmooth = 0;
   /** Ground rise per metre along the heading (+ uphill), smoothed. */
   grade = 0;
+  /**
+   * Outside motion (a dash): world velocity added to the body; planted feet skid along with it instead of stepping.
+   * crouch lowers the hips (m); leanPitch / leanRoll tilt the body (radians, nose down + / left side up +).
+   */
+  push = new Vector3();
+  crouch = 0;
+  leanPitch = 0;
+  leanRoll = 0;
   private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
@@ -146,6 +155,33 @@ export class WalkerSim {
     this.pelvis.set(x, this.bodyY.x, z);
     this.pose();
   }
+
+  /**
+   * Moving ground (a convoy deck): move the whole walker rigidly, turned by dyaw about (px, pz) then shifted by
+   * (dx, dy, dz). Body, height spring, planted feet and swing lift/landing spots ride along, so a mech standing on a
+   * moving platform keeps its footing; its own walking stays relative to the ground under it.
+   */
+  carry(dx: number, dy: number, dz: number, dyaw: number, px: number, pz: number) {
+    const c = Math.cos(dyaw), s = Math.sin(dyaw);
+    const turn = (p: Vector3) => { const x = p.x, z = p.z; p.x = x * c + z * s; p.z = z * c - x * s; };
+    const move = (p: Vector3) => { p.x -= px; p.z -= pz; turn(p); p.x += px + dx; p.y += dy; p.z += pz + dz; };
+    move(this.pos); move(this.pelvis);
+    turn(this.vel);
+    this.heading = wrap(this.heading + dyaw);
+    this.bodyY.x += dy;
+    const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
+    this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
+    for (const f of this.feet) {
+      move(f.planted); move(f.lift); move(f.target); move(f.pos);
+      turn(f.plantedUp); turn(f.liftUp); turn(f.targetUp); turn(f.up);
+      f.plantedYaw += dyaw; f.liftYaw += dyaw; f.targetYaw += dyaw; f.yaw += dyaw;
+      f.groundY += dy;
+    }
+    this.pose();
+  }
+
+  /** Solve the legs for the body and feet as they stand (after writing the pose from outside, e.g. a crane holding the mech). */
+  solve() { this.pose(); }
 
   stride() { return this.v.strideBase + this.v.stridePerSpeed * this.speed; }
   /** Each foot's distance from the centre line: footSpread standing, coming in to walkSpread once moving. */
@@ -182,6 +218,15 @@ export class WalkerSim {
     this.accelSmooth += ((this.speed - prev) / dt - this.accelSmooth) * Math.min(1, dt * 6);
     forwardOf(this.heading, this.vel).multiplyScalar(this.speed);
     this.pos.addScaledVector(this.vel, dt);
+    if (this.push.lengthSq() > 1e-6) {
+      // Skid: the body is shoved and the planted feet slide with it, kept on the sand.
+      this.pos.addScaledVector(this.push, dt);
+      for (const f of this.feet) {
+        if (f.swinging) { f.lift.addScaledVector(this.push, dt); f.target.addScaledVector(this.push, dt); this.groundAt(f.target, f.targetUp); continue; }
+        f.planted.addScaledVector(this.push, dt);
+        this.groundAt(f.planted, f.plantedUp);
+      }
+    }
 
     // Gait phase.
     const S = this.stride(), d = this.duty();
@@ -345,20 +390,20 @@ export class WalkerSim {
     const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
     const bob = v.bob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * smooth(0.05, 1, this.speed);
     const down = smooth(0, 0.35, -this.grade);
-    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down, dt);
+    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down - this.crouch, dt);
     this.impact.step(0, dt);
 
     // Weight onto the planted leg: shift over it, roll the pelvis down onto it.
     const shift = (a.swinging ? 0 : 1) * a.side + (b.swinging ? 0 : 1) * b.side; // +1 left planted only, -1 right only
     this.lat.step(shift * v.weightShift, dt);
-    this.roll.step(-shift * v.crunchRoll * D2R, dt);
+    this.roll.step(-shift * v.crunchRoll * D2R + this.leanRoll, dt);
 
     // Pitch with the ground along the heading, and lean into acceleration.
     // Downhill the body tips forward less (it keeps its weight back over the feet).
     const fw = forwardOf(this.heading, this.t.f);
     const slope = Math.atan(this.grade);
     const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
-    this.pitch.step(-slope * pitchShare + (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R, dt);
+    this.pitch.step(-slope * pitchShare + (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R + this.leanPitch, dt);
 
     // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
     const back = v.downhillSitBack * down;

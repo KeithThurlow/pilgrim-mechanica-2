@@ -20,11 +20,13 @@ export interface MechBody {
   paint(look: ToonLook, color: number | null): void;
 }
 import type { ToonLook } from "../look/toon";
+import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable } from "./battlefield";
 
 export const MECH_DEFAULTS = {
+  ...DASH_DEFAULTS,
   hull: 1500,
   roundDamage: 9,
   roundPierce: 2,
@@ -37,6 +39,7 @@ export const MECH_DEFAULTS = {
 export type MechValues = typeof MECH_DEFAULTS;
 
 export const MECH_PARAMS: Param[] = [
+  ...DASH_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 5000, step: 10, group: "Mech health" },
   { key: "roundDamage", label: "Minigun round damage", min: 0, max: 60, step: 0.5, group: "Mech health", tip: "What each of the player's rounds takes off whatever it hits" },
   { key: "roundPierce", label: "Rounds pierce (light bodies)", min: 0, max: 6, step: 1, group: "Rounds", tip: "How many bandits or small robots one round carries on through" },
@@ -69,6 +72,9 @@ export class MechUnit implements Hittable {
   damageScale = 1;
   /** Called on each footfall with where and how hard (stomps for infantry, later). */
   onStomp: ((x: number, z: number, strength: number) => void) | null = null;
+  /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
+  onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
+  readonly dash: Dash;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -90,6 +96,7 @@ export class MechUnit implements Hittable {
     readonly player: boolean,
   ) {
     this.sim = new WalkerSim(v, bf.field);
+    this.dash = new Dash(v);
     this.upper = new UpperSim(v);
     this.health = v.hull;
     const sim = this.sim, dust = bf.dust;
@@ -105,6 +112,18 @@ export class MechUnit implements Hittable {
       this.stepTimes.push(this.clock);
       while (this.stepTimes.length && this.clock - this.stepTimes[0] > 3) this.stepTimes.shift();
     };
+  }
+
+  /**
+   * Dash along (x, z) (world; any length): a front-loaded shove that skids the planted feet. Returns true if it went
+   * (a charge was free). While it runs, onDash is called each frame with where the mech is and which way it goes.
+   */
+  tryDash(x: number, z: number): boolean {
+    if (!this.alive || !this.dash.start(x, z)) return false;
+    // The hydraulics bang: a burst of sand off both feet.
+    for (const f of this.sim.feet) this.bf.dust.stomp(f.pos.x, f.pos.y, f.pos.z, 1.3, -this.dash.dirX * 4, -this.dash.dirZ * 4);
+    this.bf.sfx.play("brap", this.sim.pelvis, 0.9, 0.35, false);
+    return true;
   }
 
   get maxHealth() { return this.hullOverride ?? this.v.hull; }
@@ -127,16 +146,43 @@ export class MechUnit implements Hittable {
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
     const sub = Math.max(1, Math.ceil(dt * 120));
+    const dash = this.dash;
     for (let i = 0; i < sub; i++) {
+      dash.update(dt / sub);
+      sim.push.set(dash.vx, 0, dash.vz);
+      sim.crouch = dash.crouch;
+      // Lean into the dash: along the heading pitches the nose, across it rolls.
+      const fwd = dash.dirX * Math.sin(sim.heading) + dash.dirZ * Math.cos(sim.heading);
+      const side = dash.dirX * Math.cos(sim.heading) - dash.dirZ * Math.sin(sim.heading);
+      sim.leanPitch = dash.lean * fwd;
+      sim.leanRoll = -dash.lean * side;
       sim.update(dt / sub, cmd);
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, trigger && body.armed)) fired.push(s);
     }
     body.update(sim, upper);
+    if (dash.active) {
+      // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
+      const sp = Math.hypot(dash.vx, dash.vz);
+      for (const f of sim.feet) {
+        if (f.swinging || sp < 2) continue;
+        this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, dash.vx, dash.vz, sp * dt, 1, 0);
+        if (Math.random() < dt * 20) this.bf.marks.rut(f.pos.x, f.pos.z, Math.atan2(dash.dirX, dash.dirZ), 0.9, Math.max(0.6, sp * dt * 2));
+      }
+      this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
+    }
     const left = leftOf(upper.torsoYaw);
     const spread = (v.spread * Math.PI) / 180;
     for (const s of fired) {
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
+      // The barrel's heading carries the guns' lag, but its pitch also carries the hull's lean and the muzzle sits
+      // below and ahead of the shoulder the guns aim from, so rounds went ~2 m low at 20 m (Keith: "very hard to hit").
+      // Keep the heading; pitch the round so it arrives at the aim's height at the aim's distance.
+      if (aim) {
+        const hx = this.dir.x, hz = this.dir.z, hl = Math.hypot(hx, hz);
+        const flat = Math.hypot(aim.x - this.muzzle.x, aim.z - this.muzzle.z);
+        if (hl > 1e-4 && flat > 1) this.dir.set((hx / hl) * flat, aim.y - this.muzzle.y, (hz / hl) * flat).normalize();
+      }
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
@@ -159,8 +205,20 @@ export class MechUnit implements Hittable {
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
+  /** A blast at a point: hurt if it reaches the hull's capsule, full at the centre, half at the edge. */
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+    if (!this.alive) return 0;
+    const p = this.sim.pelvis;
+    const y = Math.min(Math.max(at.y, p.y - 2.4), p.y + 1.6);
+    const d = Math.max(0, Math.hypot(at.x - p.x, at.y - y, at.z - p.z) - this.v.hitRadius);
+    if (d > radius) return 0;
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir);
+    return 1;
+  }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3) {
     if (!this.alive) return;
+    if (this.dash.active) amount *= this.v.dashDamageCut;
     this.health -= amount;
     this.hurt += amount;
     void at; void dir;

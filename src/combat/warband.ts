@@ -38,6 +38,10 @@ export const WARBAND_DEFAULTS = {
   tankDamage: 35,
   tankSpread: 0.8,
   tankTurn: 25,
+  tankShellSpeed: 22,
+  tankShellArc: 7,
+  tankShellRadius: 4,
+  tankLead: 0.6,
   techHull: 140,
   truckHull: 380,
   sixHull: 650,
@@ -95,6 +99,10 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "tankRate", label: "Tank: rounds/s", min: 0.05, max: 2, step: 0.01, group: "Raider guns" },
   { key: "tankDamage", label: "Tank: damage per round", min: 0, max: 300, step: 1, group: "Raider guns" },
   { key: "tankSpread", label: "Tank: spread (°)", min: 0, max: 5, step: 0.1, group: "Raider guns" },
+  { key: "tankShellSpeed", label: "Tank: shell speed (m/s)", min: 5, max: 80, step: 1, group: "Raider guns", tip: "Slow, lobbed and marked where it lands: dash out of the ring" },
+  { key: "tankShellArc", label: "Tank: shell arc (m)", min: 0, max: 30, step: 0.5, group: "Raider guns" },
+  { key: "tankShellRadius", label: "Tank: blast radius (m)", min: 0.5, max: 10, step: 0.1, group: "Raider guns" },
+  { key: "tankLead", label: "Tank: lead on a moving mech (0-1)", min: 0, max: 1.5, step: 0.05, group: "Raider guns" },
   { key: "tankTurn", label: "Tank: turret turn (°/s)", min: 5, max: 120, step: 1, group: "Raider guns" },
   { key: "techHull", label: "Technical: hit points", min: 10, max: 2000, step: 10, group: "Raider health" },
   { key: "truckHull", label: "Gun truck: hit points", min: 10, max: 4000, step: 10, group: "Raider health" },
@@ -539,7 +547,13 @@ export class Warband {
         const spread = g.spread * D2R;
         const tilt = this.tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
-        this.bf.fire(t.slot, RAIDERS, this.muzzle, d, v.gunRange + 6, g.damage, { flashScale: g.flash, voice: "other", hitScale: g.hit });
+        if (r.kind === "tank") {
+          // A slow lobbed shell at where the mech will be (its walk, not a dash), marked on the sand.
+          const P = player.sim.pos, pv = player.sim.vel;
+          const flight = Math.hypot(P.x - this.muzzle.x, P.z - this.muzzle.z) / Math.max(1, v.tankShellSpeed);
+          this.bf.lob(RAIDERS, this.muzzle, P.x + pv.x * flight * v.tankLead, P.z + pv.z * flight * v.tankLead, flight, v.tankShellArc, v.tankShellRadius, g.damage);
+          this.bf.gunFx.shot(t.slot, this.muzzle, d, this.muzzle, null, null, "sand", undefined, g.flash, 0);
+        } else this.bf.fire(t.slot, RAIDERS, this.muzzle, d, v.gunRange + 6, g.damage, { flashScale: g.flash, voice: "other", hitScale: g.hit });
         if (r.kind === "tank") {
           // The cannon kicks sand up round the tank.
           this.bf.dust.stomp(s.pos.x, s.pos.y - s.v.rideHeight, s.pos.z, 1.2);

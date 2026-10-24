@@ -1,9 +1,11 @@
 // Convoy lab (Keith 2026-10-24, docs/proposal-convoy.md): the convoy village rolling over the dunes, laying a
 // flattened road that stays behind it; the player's Rampart on twin-stick walks alongside. Walk into the crane's range
-// and it picks the mech up and sets it in the bay; G deploys it over the side you aim at, back onto the sand at the
-// convoy's speed. Until you take over, a demo walks in, rides, deploys, walks off and comes back.
-// Flags: ?manual (no demo), ?aboard (start in the bay), ?deploy (start in the bay and deploy at once), ?zoom=metres,
-// ?dt=0.033, ?flat.
+// and it picks the mech up (swinging on its rope) and sets it on the deck; walk about the moving deck, park in a bay
+// (E, again to stand), or stand on a launch pad by the crane and it lifts you out and down beside the convoy at its
+// speed (G launches from where you stand). Until you take over, a demo walks in, is picked up, parks, stands, walks
+// to a launch pad, is launched, walks off and comes back.
+// Flags: ?manual (no demo), ?aboard (start on the deck), ?deploy (start on the deck and launch at once), ?park (start
+// parked), ?hang (start hanging from the crane over the sand), ?zoom=metres, ?dt=0.033, ?flat.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { createApp } from "../../src/core/app";
@@ -32,6 +34,7 @@ import { ConvoyRoute, ROUTE_DEFAULTS, ROUTE_PARAMS } from "../../src/convoy/rout
 import { Convoy, PLATFORM_DEFAULTS, PLATFORM_PARAMS } from "../../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS, CRANE_PARAMS } from "../../src/convoy/crane";
 import { CraneCarry, CARRY_DEFAULTS, CARRY_PARAMS } from "../../src/convoy/carry";
+import { DECK_DEFAULTS, DECK_PARAMS, deckLayout, walkToSpot } from "../../src/convoy/deck";
 import { PlatformBody, CraneBody } from "../../src/convoy/platformBody";
 
 const app = await createApp(document.getElementById("view")!);
@@ -40,12 +43,12 @@ const canvas = app.renderer.domElement;
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS,
+  ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   radius: 5, shadowBox: 60,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ROUTE_PARAMS, ...PLATFORM_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...ROUTE_PARAMS, ...PLATFORM_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
@@ -81,6 +84,12 @@ scene.add(body.root);
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);
 const sim = player.sim;
+// No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
+{
+  const fall = sim.onFootfall, lift = sim.onLiftOff;
+  sim.onFootfall = (f, k) => { if (!carry.ground.onDeck) fall?.(f, k); };
+  sim.onLiftOff = (f, k) => { if (!carry.ground.onDeck) lift?.(f, k); };
+}
 
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();
@@ -91,8 +100,12 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-let deployAsked = false;
-addEventListener("keydown", (e) => { if (e.code === "KeyG" && !(e.target instanceof HTMLInputElement)) { deployAsked = true; auto = false; } });
+let deployAsked = false, parkAsked = false;
+addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement || e.repeat) return;
+  if (e.code === "KeyG") { deployAsked = true; auto = false; }
+  if (e.code === "KeyE") { parkAsked = true; auto = false; }
+});
 
 /** Start over: convoy at the origin, mech off to its left (or in the bay). */
 function restart() {
@@ -100,10 +113,23 @@ function restart() {
   crane.place();
   streamer.rebuildAll();
   const p = convoy.bay, at = p.toWorld(32, 0, V.craneMount + 25);
+  carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
   player.reset(at.x, at.z, p.heading);
-  carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true;
-  if (params.has("aboard") || params.has("deploy")) carry.putAboard(sim);
-  if (params.has("deploy")) carry.deploy(1);
+  crane.calm();
+  if (params.has("aboard") || params.has("deploy") || params.has("park")) carry.putAboard(sim);
+  if (params.has("deploy")) carry.deploy(sim, 1);
+  if (params.has("park")) {
+    // Into the left parking bay and settle there.
+    const b = deckLayout(p, V).spots[0], w = p.toWorld(b.x, 0, b.z);
+    sim.reset(w.x, w.z, p.heading);
+    carry.togglePark(sim);
+  }
+  if (params.has("hang")) {
+    // Hanging from the crane out over the sand beside the bay, as if just picked up.
+    const w = p.toWorld(16, 0, V.craneMount + 6);
+    player.reset(w.x, w.z, p.heading);
+    carry.grab(sim);
+  }
   streamer.fill(sim.pos.x, sim.pos.z);
 }
 
@@ -119,12 +145,14 @@ const panel = tweakPanel({
   defaults: DEFAULTS,
   actions: [
     { label: "Demo", onClick: () => { auto = !auto; }, active: () => auto },
-    { label: "Deploy (G)", onClick: () => { deployAsked = true; auto = false; } },
+    { label: "Launch (G)", onClick: () => { deployAsked = true; auto = false; } },
+    { label: "Park (E)", onClick: () => { parkAsked = true; auto = false; } },
     { label: "Restart", onClick: () => restart() },
   ],
   topics: [
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Formation", "Platforms"] },
-    { id: "cranes", label: "Cranes", groups: ["Crane", "Pick-up and deploy"] },
+    { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch"] },
+    { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Mech health", "Torso & guns", "Minigun", "Move"] },
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
@@ -143,6 +171,7 @@ const regions = body.regions();
 selector = new Selector(app, {
   items: [
     { topic: "cranes", label: "Crane", objects: () => craneBody.meshes() },
+    { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },
     { topic: "convoy", label: "Convoy platforms", objects: () => bodies.flatMap((b) => b.meshes()) },
     { topic: "legs", label: "Legs", objects: () => regions.legs },
     { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
@@ -171,23 +200,37 @@ if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
 const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
 let clock = 0;
 
-// Demo: walk in beside the bay, ride a while, deploy (alternating sides), walk off out of range, come back.
-const demo = { aboardFor: 0, awayFor: 0, leaving: false, side: 1 as 1 | -1 };
+// Demo: walk in beside the bay, picked up, walk to a parking bay and park, stand, walk to a launch pad (sides
+// alternate), launched, walk off out of range, come back.
+const demo = { stage: "park" as "park" | "launch", wait: 0, awayFor: 0, leaving: false, side: 1 as 1 | -1 };
 function demoCmd(dt: number): MoveCommand {
-  const p = convoy.bay;
-  if (carry.state === "aboard") {
-    demo.aboardFor += dt;
-    if (demo.aboardFor > 6) { carry.deploy(demo.side); demo.side = -demo.side as 1 | -1; demo.aboardFor = 0; }
-    return { x: 0, z: 0, sprint: false };
+  const p = convoy.bay, still = { x: 0, z: 0, sprint: false };
+  const spots = deckLayout(p, V).spots;
+  if (carry.state === "aboard" || carry.state === "parked" || carry.state === "launching") {
+    if (carry.state === "parked") {
+      demo.wait += dt;
+      if (demo.wait > 5 && carry.phase === "settle") { carry.togglePark(sim); demo.stage = "launch"; }
+      return still;
+    }
+    if (carry.state === "launching") return still;
+    if (demo.stage === "park") {
+      const b = spots.find((s) => s.kind === "park" && Math.sign(s.x) === demo.side)!;
+      const c = walkToSpot(sim, p, b.x, b.z, 0.5);
+      if (c.x === 0 && c.z === 0) { demo.wait += dt; if (demo.wait > 0.8 && carry.togglePark(sim)) demo.wait = 0; }
+      return c;
+    }
+    const pad = spots.find((s) => s.kind === "launch" && s.side === demo.side)!;
+    return walkToSpot(sim, p, pad.x, pad.z, 0.5);
   }
-  if (carry.state === "landing") demo.leaving = true;
+  if (carry.state === "landing") { demo.leaving = true; demo.stage = "park"; demo.wait = 0; }
   if (carry.state === "walking" && demo.leaving) {
     // Off to the side and ahead a little, until out of range for a few seconds.
     if (carry.armed) demo.awayFor += dt;
-    if (demo.awayFor > 5) { demo.awayFor = 0; demo.leaving = false; }
+    if (demo.awayFor > 5) { demo.awayFor = 0; demo.leaving = false; demo.side = -demo.side as 1 | -1; }
     const l = p.toLocal(sim.pos.x, sim.pos.z), s = Math.sign(l.x) || 1;
     return { x: p.left.x * s + p.fwd.x * 0.8, z: p.left.z * s + p.fwd.z * 0.8, sprint: true };
   }
+  if (carry.state === "lifting") return still;
   // Walk to a spot beside the crane, keeping up with the convoy.
   const l = p.toLocal(sim.pos.x, sim.pos.z), s = Math.sign(l.x) || 1;
   const at = p.toWorld(s * 15, 0, V.craneMount + 4);
@@ -218,8 +261,9 @@ app.onTick((rawDt) => {
     // Over the side the aim is on (left if no aim).
     const p = convoy.bay;
     const side = aim ? (p.toLocal(aim.x, aim.z).x >= 0 ? 1 : -1) : 1;
-    carry.deploy(side);
+    carry.deploy(sim, side);
   }
+  if (parkAsked) { parkAsked = false; carry.togglePark(sim); }
 
   // Convoy, crane and carry at 120 Hz; the walker steps once for the frame (it substeps itself) unless held.
   const sub = Math.max(1, Math.ceil(dt * 120));
@@ -228,11 +272,14 @@ app.onTick((rawDt) => {
     convoy.update(dt / sub);
     out = carry.update(dt / sub, sim, cmd);
   }
+  // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
+  carry.ride(sim);
   if (out) {
     player.step(dt, out, aim, trigger && carry.state === "walking");
-    if (V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
+    carry.keep(sim);
+    if (!carry.ground.onDeck && V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
   } else {
-    // Held by the crane or riding the deck: the guns still track the aim, the body is posed from the hold.
+    // Held by the crane or parked: the guns still track the aim, the body is posed from the hold.
     body.shoulderLine(shoulder);
     player.upper.update(dt, sim.heading, shoulder, aim, false);
     body.update(sim, player.upper);
@@ -258,5 +305,5 @@ app.onTick((rawDt) => {
   const p = convoy.bay;
   app.hud.set("convoy", `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
-  app.hud.set("crane", `crane: ${carry.phase || (carry.state === "aboard" ? "parked over the bay" : "stowed")} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · picked up ${carry.pickups}, deployed ${carry.deploys}${bf.sfx.running ? "" : " · click for sound"}`);
+  app.hud.set("crane", `crane: ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });
