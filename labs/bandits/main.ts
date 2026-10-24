@@ -8,7 +8,8 @@ import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
 import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD } from "../../src/combat/infantry";
-import { InfantryDraw } from "../../src/combat/infantryDraw";
+import { InfantryDraw, BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS, CLOTH } from "../../src/combat/infantryDraw";
+import { loadBanditVat } from "../../src/combat/banditVat";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
 
@@ -36,9 +37,9 @@ let draw: InfantryDraw | null = null;
 const lab = await combatLab({
   id: "bandits-lab",
   title: "Bandit swarm",
-  defaults: { ...INFANTRY_DEFAULTS, ...WAVE_DEFAULTS },
-  params: [...WAVE_PARAMS, ...INFANTRY_PARAMS],
-  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies"] }],
+  defaults: { ...INFANTRY_DEFAULTS, ...WAVE_DEFAULTS, ...BANDIT_LOOK_DEFAULTS },
+  params: [...WAVE_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
+  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] }],
   selectables: [{ topic: "bandits", label: "Bandits", objects: () => (draw ? [draw.mesh] : []) }],
   actions: [{ label: "Group now", onClick: () => spawnGroup() }],
   report: () => ({ bandits: swarm?.count ?? 0 }),
@@ -46,13 +47,14 @@ const lab = await combatLab({
 const { V, bf, player, field } = lab;
 const sw = new InfantrySwarm(V, field);
 swarm = sw;
-draw = new InfantryDraw(sw);
+// Vanguard baked to an animation texture (Keith 2026-10-24); boxes if it fails to load.
+const vat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
+draw = new InfantryDraw(sw, V, vat);
 lab.app.scene.add(draw.group);
 const target = new InfantryTarget(sw, 2);
 bf.targets.push(target);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.stompReach * Math.min(1.5, k));
 // Deaths go to the physics as ragdolls (Keith 2026-10-24), in the bandit's cloth colour.
-const CLOTH = [0x9a4a2c, 0xb59c72, 0x4e5a78, 0x6b6a3e];
 sw.hideDead = true;
 sw.onDeath = (i, nx, nz, speed) => {
   lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
