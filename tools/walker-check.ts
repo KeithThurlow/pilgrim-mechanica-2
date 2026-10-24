@@ -3,7 +3,8 @@
 // knees bending backwards, planted feet sliding. Run: npm test (or npx tsx tools/walker-check.ts).
 import { Vector3 } from "three";
 import { WalkerSim } from "../src/mech/walker";
-import { WALKER_DEFAULTS, RAMPART_LEGS } from "../src/mech/walkerTuning";
+import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
+import { LEG_TYPES } from "../src/mech/legTypes";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 interface Run { name: string; seconds: number; cmd: (t: number) => { x: number; z: number; sprint: boolean } }
@@ -19,8 +20,8 @@ const runs: Run[] = [
 const dt = 1 / 60;
 let failed = false;
 const builds = [
-  { name: "stand-in", values: { ...WALKER_DEFAULTS } },
-  { name: "rampart", values: { ...WALKER_DEFAULTS, ...RAMPART_LEGS } },
+  { name: "stand-in", values: { ...WALKER_DEFAULTS, ...LEG_TYPES.standin.values } },
+  { name: "rampart", values: { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values } },
 ];
 for (const build of builds) {
 console.log(`-- ${build.name} legs`);

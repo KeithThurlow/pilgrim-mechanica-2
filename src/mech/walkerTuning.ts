@@ -55,6 +55,10 @@ export const WALKER_DEFAULTS = {
   hockMinFast: 3,
   ankleHeight: 0.3,
   ankleBack: 0.12,
+  // Feet: where the toes hinge (the ball of the foot) and how far they reach, ahead of the foot's ground point.
+  toeHinge: 0.25,
+  toeLength: 0.62,
+  toeCurl: 35,
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
@@ -109,23 +113,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "hockMinFast", label: "Cannon from vertical, sprinting (°)", min: -10, max: 40, step: 1, group: "Legs" },
   { key: "ankleHeight", label: "Ankle height (m)", min: 0.05, max: 0.6, step: 0.01, group: "Legs" },
   { key: "ankleBack", label: "Ankle behind plate centre (m)", min: -0.4, max: 0.4, step: 0.01, group: "Legs" },
+  { key: "toeHinge", label: "Toe hinge (m)", min: 0, max: 1, step: 0.01, group: "Feet", tip: "Where the toes bend, ahead of the foot's ground point: the ball of the foot, which the heel rolls over at push-off" },
+  { key: "toeLength", label: "Toe reach (m)", min: 0.1, max: 1.5, step: 0.01, group: "Feet", tip: "From the foot's ground point to the toe tips" },
+  { key: "toeCurl", label: "Toe curl in swing (°)", min: -40, max: 80, step: 1, group: "Feet", tip: "How far the toes curl under as the leg is pulled through (negative bends them up)" },
 ];
-
-/**
- * The Rampart's legs, measured from the joint markers in its model (public/models/rampart.glb: Thigh_L hip,
- * Shin_L knee, Cannon_L hock, Foot_L foot point). The model loader re-measures them at runtime; these copies let
- * the headless check test the walk with the Rampart's proportions.
- */
-export const RAMPART_LEGS: Partial<WalkerValues> = {
-  hipHeight: 3.05,
-  hipWidth: 0.78,
-  femur: 1.717,
-  shin: 0.749,
-  cannon: 1.083,
-  cannonRake: 22.4,
-  // Stance widths: the old game's values for this size (old lab 1.4 / 0.95 x 3.05 / 4.4), not the model's wide rest pose.
-  footSpread: 0.97,
-  walkSpread: 0.66,
-  ankleHeight: 0.153,
-  ankleBack: 0,
-};

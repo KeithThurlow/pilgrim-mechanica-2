@@ -53,7 +53,7 @@ function placeBone(m: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, side: 
 
 interface LegMeshes {
   thigh: THREE.Mesh; thighPlate: THREE.Mesh; knee: THREE.Mesh; shin: THREE.Mesh; hock: THREE.Mesh; cannon: THREE.Mesh;
-  sleeve: THREE.Mesh; rod: THREE.Mesh; hipJoint: THREE.Mesh; foot: THREE.Group;
+  sleeve: THREE.Mesh; rod: THREE.Mesh; hipJoint: THREE.Mesh; foot: THREE.Group; toe: THREE.Group;
 }
 
 export class WalkerBody {
@@ -91,7 +91,10 @@ export class WalkerBody {
       const foot = new THREE.Group();
       part(boneGeo, W.steel, foot, [0.78, 0.22, 0.9], [0, 0, 0.05]); // sole plate
       part(boxGeo, W.plate, foot, [0.66, 0.12, 0.7], [0, 0.28, 0.0]);
-      for (const sx of [0.2, -0.2]) part(boxGeo, W.steel, foot, [0.24, 0.18, 0.55], [sx, 0.09, 0.62], [0.12, sx * 0.6, 0]); // front toes
+      // Front toes on a hinge at the ball of the foot (positioned from the tuning each frame).
+      const toe = new THREE.Group();
+      foot.add(toe);
+      for (const sx of [0.2, -0.2]) part(boxGeo, W.steel, toe, [0.24, 0.18, 0.5], [sx, 0.09, 0.22], [0, sx * 0.6, 0]);
       part(boxGeo, W.steel, foot, [0.2, 0.16, 0.45], [0, 0.08, -0.55]); // back spur
       this.root.add(foot);
       const leg: LegMeshes = {
@@ -104,7 +107,7 @@ export class WalkerBody {
         cannon: part(boneGeo, W.plate, this.root),
         sleeve: part(cylGeo, W.joint, this.root),
         rod: part(cylGeo, W.rod, this.root),
-        foot,
+        foot, toe,
       };
       return leg;
     });
@@ -141,5 +144,7 @@ export class WalkerBody {
     placeBone(L.rod, mid.clone().lerp(s0, 0.15), s1, side, 0.1, 0.1);
     L.foot.position.copy(P.foot);
     L.foot.quaternion.copy(P.footQ);
+    L.toe.position.set(0, 0, P.toeHinge.distanceTo(P.foot));
+    L.toe.quaternion.copy(P.footQ).invert().multiply(P.toeQ);
   }
 }

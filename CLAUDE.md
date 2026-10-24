@@ -69,7 +69,7 @@ labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
 src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze)
 src/core/isoCamera.ts   the high isometric game camera
-src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, rampart (model rig), walkerBody (stand-in)
+src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 footfall (prints, dust), minigun (tracers, flash, hits, casings)

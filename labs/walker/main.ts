@@ -17,6 +17,7 @@ import { WalkerSim, leftOf, type MoveCommand } from "../../src/mech/walker";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UpperSim, UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import { WalkerBody } from "../../src/mech/walkerBody";
+import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { FootfallFx } from "../../src/fx/footfall";
@@ -48,6 +49,11 @@ const sim = new WalkerSim(V, field);
 const upper = new UpperSim(V);
 const rampart = params.get("model") === "standin" ? null : await RampartBody.load(toon);
 const standIn = rampart ? null : new WalkerBody();
+// The leg archetype's walk and feet become this lab's defaults (so sliders still save over them); the model's own
+// bone lengths are facts and always win.
+const legType = LEG_TYPES[rampart ? "rampart" : "standin"];
+Object.assign(V, legType.values, rampart?.legValues() ?? {});
+Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
 const steps = new FootfallFx();
 const gunFx = new MinigunFx(field, V);
@@ -127,7 +133,7 @@ const panel = tweakPanel({
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
 });
 installReport(app, "walker", V);
-// The Rampart's leg lengths come from its model, so the IK fits its parts whatever was saved.
+// The Rampart's bone lengths come from its model, so the IK fits its parts whatever was saved.
 if (rampart) { Object.assign(V, rampart.legValues()); panel.refresh(); }
 
 /** Demo: wanders with stops and sprints, sweeps the aim around and fires bursts. Deterministic, so shots repeat. */

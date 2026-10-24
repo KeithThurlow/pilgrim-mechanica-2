@@ -19,8 +19,9 @@ How to update it:
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Transverse dunes across the wind (slip faces 30-38°), meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
 | Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
-| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over its toes, with feet planted further forward, so it pushes off the toes instead of trailing a straight leg (Keith 2026-10-24); stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
-| Rampart | The old project's v4 mech on the walker sim: each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
+| Walker | Digitigrade legs on a pure sim: gait phase, duty factor, landing spots predicted on the ground and tilted to slope, mechanical swing and stomp, heel roll-off, body rides the feet and sinks toward the lower one, weight shift and hip roll with a level hull, footfall thud, committed heading, quicker steps near full stretch, settle steps when stopped. Cannon angle measured from the hip-ankle line so the lower leg pitches through the stride, gives under load, opens toward a straighter lower leg at push-off; the heel lifts from 60% of the stance and the foot rolls 48° over the ball of the foot while a hinged toe segment stays flat and pushes, then the toes curl under through the swing and open flat for the stomp (Keith 2026-10-24); feet planted further forward; stance comes in from standing to walking width | `src/mech/walker.ts`, `walkerTuning.ts` | walker |
+| Leg types | Archetype presets of walker tuning (proportions, stance, gait, feet): stand-in and Rampart (shorter stride, toe hinge 0.14 m, toes to 0.85 m); the old game's Humanoid, Short humanoid and Stilt go here when they have models. The lab takes the archetype as its defaults; the model's measured bone lengths always win | `src/mech/legTypes.ts` | walker |
+| Rampart | The old project's v4 mech on the walker sim (feet split at the toe hinge into heel block and toes): each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
 | Upper body | Twin-stick: torso turns toward the mouse aim at a capped rate within a limit from the legs. Each hull gun on its own (Keith 2026-10-24): aims from its own shoulder, swings inward at full speed and outward slower (so the arms turn at different speeds as the aim sweeps), its own spin-up, fire cone and fire clock (small left/right spin and rate splits), recoil; a limited drum per gun (1200 rounds), R resupplies in the lab | `src/mech/upper.ts` | walker |
 | Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hit dust thrown downrange and sparks, casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
 | Unit look | Plain lit paint (dielectric, roughness 0.55) over the model's vertex colours; no outline by default (Keith 2026-10-24); cel bands and the ink outline are still toggles | `src/look/toon.ts` | walker |
@@ -52,8 +53,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   (Three's GTAO node) would ground the mech and the dunes further.
 - **Shadows stop at the edge of the shadow area** (it follows the focus and grows with zoom); with a very low sun,
   far dunes don't shadow.
-- **The walk may still not match the old lab's feel**: push-off is closer (heel lift, plant position), but the old
-  lab's swing was blended in joint angles and had AT-ST hip arms; this sim uses a foot path and IK. Keith to judge.
+- **The walk may still not match the old lab's feel**: push-off now rolls over hinged toes and the Rampart has a
+  shorter stride, but the old lab's swing was blended in joint angles and had AT-ST hip arms; this sim uses a foot
+  path and IK. Keith to judge.
+- **Toe split is one hinge per foot** (all toes bend together) and the Rampart's back spur stays rigid on the heel.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -75,6 +78,16 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Toe joint and leg archetypes (Claude, cloud session)
+- Keith: the toes need rigging for the walk to look right, pushing off and curling as the leg comes through; be
+  ready for different leg archetypes, as the old game had.
+- Sim: a toe hinge per foot (`toeHinge`, `toeLength`, `toeCurl`): at push-off the foot pivots about the ball and the
+  toes stay flat; in swing the toes start bent up, curl under, open flat before the stomp; `LegPose.toeHinge/toeQ`.
+  `src/mech/legTypes.ts` (stand-in, Rampart); `RAMPART_LEGS` moved there. Rampart foot mesh split at the hinge
+  (heel block and toes); stand-in toes hinged too. Rampart stride shortened (2.3 + 0.4 per m/s): thigh back at
+  push-off 7° walking, 13° sprinting; a steeper heel lift was tried and made it worse (reach misses, knee 175°).
+- Checked: typecheck, `npm test`, side filmstrip of the lower legs (toes flat at push-off, curled in swing).
 
 ### 2026-10-24 · Desert lighting, no outline, independent guns, ammo, push-off, dune shadows, Report box (Claude, cloud session)
 - Keith: something still drew outlines; the shading looked like a 90s model with the gamma off, not a tank in the

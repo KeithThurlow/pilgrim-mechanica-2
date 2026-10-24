@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Feet get a toe joint: roll over the ball at push-off with the toes flat, curl the toes through the swing | Keith | Keith | One hinge per foot (Claude's default); Rampart hinge where its toes begin. |
+| 2026-10-24 | Legs come as archetypes (presets of walker tuning), ready for the old game's other leg types | Keith | Keith | `src/mech/legTypes.ts`. |
 | 2026-10-24 | A Report box in every lab that reaches the Claude Code session on Keith's PC (`reports/inbox.md`, replies in `reports/replies.md`) | Keith | Keith | Like his web modelling app's in-app agent link. |
 | 2026-10-24 | Limited ammunition per trip; munition depots worth a detour | Keith | Keith | Per-gun drums in the walker lab (1200 rounds, Claude's default). |
 | 2026-10-24 | Each gun is its own gun and sound; arms swing inward faster than outward instead of one arm faster | Keith | Keith | Outward at 0.55 of the tracking speed (Claude's default); small spin and rate splits kept as sliders. |

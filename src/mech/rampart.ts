@@ -11,6 +11,7 @@ import type { WalkerSim, LegPose } from "./walker";
 import type { UpperSim } from "./upper";
 import type { WalkerValues } from "./walkerTuning";
 import type { ToonLook } from "../look/toon";
+import { LEG_TYPES } from "./legTypes";
 
 const loader = new GLTFLoader();
 const X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(), M = new THREE.Matrix4();
@@ -23,6 +24,30 @@ function boneQuat(a: THREE.Vector3, b: THREE.Vector3, side: THREE.Vector3, out: 
   X.normalize();
   Z.crossVectors(X, Y);
   return out.setFromRotationMatrix(M.makeBasis(X, Y, Z));
+}
+
+/** Split a rest-space geometry into the triangles behind and ahead of z (by each triangle's centre). */
+function splitAtZ(g: THREE.BufferGeometry, z: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  const src = g.index ? g.toNonIndexed() : g;
+  const pos = src.attributes.position;
+  const back: number[] = [], front: number[] = [];
+  for (let t = 0; t < pos.count; t += 3) {
+    const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
+    (cz > z ? front : back).push(t, t + 1, t + 2);
+  }
+  const pick = (verts: number[]) => {
+    const out = new THREE.BufferGeometry();
+    for (const name of Object.keys(src.attributes)) {
+      const a = src.attributes[name] as THREE.BufferAttribute, n = a.itemSize;
+      // Through the accessors, so normalised integer colours come out as plain floats.
+      const get = [a.getX, a.getY, a.getZ, a.getW].map((f) => f.bind(a));
+      const arr = new Float32Array(verts.length * n);
+      verts.forEach((v, i) => { for (let k = 0; k < n; k++) arr[i * n + k] = get[k](v); });
+      out.setAttribute(name, new THREE.BufferAttribute(arr, n));
+    }
+    return out;
+  };
+  return [pick(back), pick(front)];
 }
 
 /** Mirror a rest-space geometry across x = 0 and fix its winding so faces stay outward. */
@@ -51,7 +76,7 @@ export class RampartBody {
   readonly root = new THREE.Group();
   private pelvis = new THREE.Group();
   private hull = new THREE.Group();
-  private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group }[] = [];
+  private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   private rest: Record<string, THREE.Vector3> = {};
   private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3() };
@@ -121,10 +146,17 @@ export class RampartBody {
         mesh(geo[`Part_${name}_${s}`], `${name}_${s}`, pivot, frame(a, boneQuat(a, b, side, new THREE.Quaternion())));
         return { pivot, restLen: a.distanceTo(b) };
       };
+      // Foot: split at the toe hinge into the heel block and the toes, so the toes bend at the ball of the foot.
       const foot = new THREE.Group();
       this.root.add(foot);
-      mesh(geo[`Part_Foot_${s}`], `Foot_${s}`, foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
-      this.legs.push({ thigh: bone("Thigh", hip, knee), shin: bone("Shin", knee, hock), cannon: bone("Cannon", hock, fp), foot });
+      const hingeZ = LEG_TYPES.rampart.values.toeHinge ?? 0.14;
+      const [heelGeo, toeGeo] = splitAtZ(geo[`Part_Foot_${s}`], fp.z + hingeZ);
+      mesh(heelGeo, `Foot_${s}`, foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
+      const toe = new THREE.Group();
+      toe.position.set(0, 0, hingeZ);
+      foot.add(toe);
+      mesh(toeGeo, `Toes_${s}`, toe, frame(new THREE.Vector3(fp.x, 0, fp.z + hingeZ)));
+      this.legs.push({ thigh: bone("Thigh", hip, knee), shin: bone("Shin", knee, hock), cannon: bone("Cannon", hock, fp), foot, toe });
     }
 
     // Miniguns on both shoulders: the right pod as modelled, and its mirror on the left.
@@ -203,6 +235,8 @@ export class RampartBody {
     set(L.cannon, P.hock, P.ankle);
     L.foot.position.copy(P.foot);
     L.foot.quaternion.copy(P.footQ);
+    // Toe bend relative to the foot: toeQ = footQ * bend.
+    L.toe.quaternion.copy(L.foot.quaternion).invert().multiply(P.toeQ);
   }
 
   /** World position of a gun's muzzle (side +1 left, -1 right). */

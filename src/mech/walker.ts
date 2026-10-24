@@ -1,7 +1,7 @@
 // Procedural digitigrade walker: pure simulation, no rendering. Give it a ground function and a stick each frame;
 // it moves the body, times the steps, places each foot on the ground, and solves the legs.
 //
-//   hip -> knee (bends forward) -> hock (bends back) -> ankle -> foot plate, three toes
+//   hip -> knee (bends forward) -> hock (bends back) -> ankle -> foot plate -> toes (hinged at the ball of the foot)
 //
 // Gait: one phase drives both feet half a cycle apart. A foot is planted (world-locked) for `duty` of the cycle and
 // swings for the rest. At lift-off it picks a landing spot where the body will be when it lands, on the ground
@@ -20,7 +20,11 @@ export interface Ground {
 export interface MoveCommand { x: number; z: number; sprint: boolean }
 
 export interface LegPose {
-  hip: Vector3; knee: Vector3; hock: Vector3; ankle: Vector3; foot: Vector3; toe: Vector3;
+  hip: Vector3; knee: Vector3; hock: Vector3; ankle: Vector3; foot: Vector3;
+  /** Toe hinge (ball of the foot) and toe tip. */
+  toeHinge: Vector3; toe: Vector3;
+  /** Toe segment orientation (like footQ, bent at the hinge). */
+  toeQ: Quaternion;
   /** Foot plate orientation (y up off the sole, z toward the toes). */
   footQ: Quaternion;
   /** The leg's bending plane forward direction. */
@@ -29,7 +33,6 @@ export interface LegPose {
 
 const D2R = Math.PI / 180;
 const UP = new Vector3(0, 1, 0);
-const TOE_LEN = 0.55;
 const MIN_CYCLE = 0.55; // cycles/s used to finish a step when the body has stopped
 const RE_AIM_UNTIL = 0.72; // swing progress after which the landing spot is locked
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
@@ -60,13 +63,16 @@ export class Foot {
   target = new Vector3(); targetUp = new Vector3(0, 1, 0); targetYaw = 0;
   /** Current plate centre, up, yaw and toe-down pitch. */
   pos = new Vector3(); up = new Vector3(0, 1, 0); yaw = 0; pitch = 0;
+  /** Toe angle at the hinge, relative to the foot: + curls the toes down and under, - bends them up. */
+  toe = 0; liftToe = 0;
   /** Ground height the body rides on for this foot. */
   groundY = 0;
   /** Cannon angle back from the hip-ankle line (radians), and its value at lift-off. */
   theta = 0;
   liftTheta = 0;
   pose: LegPose = {
-    hip: new Vector3(), knee: new Vector3(), hock: new Vector3(), ankle: new Vector3(), foot: new Vector3(), toe: new Vector3(),
+    hip: new Vector3(), knee: new Vector3(), hock: new Vector3(), ankle: new Vector3(), foot: new Vector3(),
+    toeHinge: new Vector3(), toe: new Vector3(), toeQ: new Quaternion(),
     footQ: new Quaternion(), legFwd: new Vector3(),
   };
   constructor(public side: 1 | -1, public offset: number) {}
@@ -218,6 +224,7 @@ export class WalkerSim {
     f.lift.copy(f.pos);
     f.liftYaw = f.yaw;
     f.liftPitch = f.pitch;
+    f.liftToe = f.toe;
     f.liftUp.copy(f.plantedUp);
     f.liftTheta = f.theta;
     this.aim(f);
@@ -264,18 +271,20 @@ export class WalkerSim {
   private moveFoot(f: Foot) {
     const v = this.v;
     if (!f.swinging) {
-      // Planted; late in the stance the heel lifts and the foot rolls over its toes.
+      // Planted; late in the stance the heel lifts and the foot rolls up over the ball of the foot, while the toes
+      // stay flat on the ground and push (Keith 2026-10-24: push off from the toes).
       const roll = v.rollOff * D2R * smooth(v.rollStart, 1, f.stanceT);
       f.up.copy(f.plantedUp);
       f.yaw = f.plantedYaw;
       f.pitch = roll;
+      f.toe = -roll;
       f.pos.copy(f.planted);
       if (roll > 0) {
-        // Pivot the plate centre about the toe tip.
+        // Pivot the plate centre about the toe hinge.
         const fw = this.plateForward(f.plantedUp, f.plantedYaw, this.t.f);
-        const tip = this.t.b.copy(f.planted).addScaledVector(fw, TOE_LEN);
+        const hinge = this.t.b.copy(f.planted).addScaledVector(fw, v.toeHinge);
         const axis = this.t.a.crossVectors(f.plantedUp, fw).normalize(); // points to the foot's left
-        f.pos.sub(tip).applyAxisAngle(axis, roll).add(tip);
+        f.pos.sub(hinge).applyAxisAngle(axis, roll).add(hinge);
       }
       f.groundY = f.planted.y;
       return;
@@ -297,14 +306,18 @@ export class WalkerSim {
     let y = baseY + v.liftHeight * liftK;
     // Clear the ground under the foot (stepping up a dune face).
     const g = this.ground.height(f.pos.x, f.pos.z);
-    const gToe = this.ground.height(f.pos.x + Math.sin(f.yaw) * TOE_LEN, f.pos.z + Math.cos(f.yaw) * TOE_LEN);
+    const gToe = this.ground.height(f.pos.x + Math.sin(f.yaw) * v.toeLength, f.pos.z + Math.cos(f.yaw) * v.toeLength);
     y = Math.max(y, Math.max(g, gToe) + v.footClear * liftK);
     f.pos.y = y;
     if (y < g - 0.02) this.stats.scuffs++;
 
     f.up.copy(f.liftUp).lerp(f.targetUp, e).normalize();
     f.yaw = f.liftYaw + wrap(f.targetYaw - f.liftYaw) * e;
-    f.pitch = f.liftPitch * (1 - smooth(0, 0.45, u)) + v.swingCurl * D2R * Math.sin(Math.PI * Math.min(1, u / Math.max(0.3, 1 - stompT))) * (1 - smooth(1 - stompT, 1, u));
+    const swingEnv = Math.sin(Math.PI * Math.min(1, u / Math.max(0.3, 1 - stompT))) * (1 - smooth(1 - stompT, 1, u));
+    f.pitch = f.liftPitch * (1 - smooth(0, 0.45, u)) + v.swingCurl * D2R * swingEnv;
+    // Toes: still bent up from the push-off as the foot leaves, curling under as the leg is pulled through, then
+    // opening flat before the stomp.
+    f.toe = f.liftToe * (1 - smooth(0, 0.3, u)) + v.toeCurl * D2R * swingEnv;
     f.groundY = baseY;
   }
 
@@ -359,7 +372,9 @@ export class WalkerSim {
       const upNow = new Vector3(0, 1, 0).applyQuaternion(P.footQ);
       const fwNow = new Vector3(0, 0, 1).applyQuaternion(P.footQ);
       P.foot.copy(f.pos);
-      P.toe.copy(f.pos).addScaledVector(fwNow, TOE_LEN);
+      P.toeHinge.copy(f.pos).addScaledVector(fwNow, v.toeHinge);
+      P.toeQ.copy(P.footQ).multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), f.toe));
+      P.toe.copy(P.toeHinge).addScaledVector(new Vector3(0, 0, 1).applyQuaternion(P.toeQ), Math.max(0, v.toeLength - v.toeHinge));
       P.ankle.copy(f.pos).addScaledVector(upNow, v.ankleHeight).addScaledVector(fwNow, -v.ankleBack);
 
       forwardOf(this.heading + f.side * v.kneeOut * D2R, P.legFwd);
