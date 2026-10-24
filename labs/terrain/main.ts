@@ -44,7 +44,7 @@ const panel = tweakPanel({
     { label: "New seed", onClick: () => { V.seed = 1 + Math.floor(Math.random() * 99); field.update(); streamer.rebuildAll(); } },
   ],
   topics: [
-    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
+    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "drive", label: "Marker", groups: ["Drive"] },
     { id: "light", label: "Light", groups: ["Look"] },
   ],

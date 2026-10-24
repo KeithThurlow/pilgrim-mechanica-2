@@ -22,6 +22,7 @@ export const TERRAIN_DEFAULTS = {
   swell: 5,
   swellScale: 420,
   bumps: 0.25,
+  crestSoft: 0.06,
 };
 export type TerrainValues = typeof TERRAIN_DEFAULTS;
 
@@ -39,6 +40,7 @@ export const TERRAIN_PARAMS: Param[] = [
   { key: "variety", label: "Height variety", min: 0, max: 1, step: 0.01, group: "Shape", onRelease: true },
   { key: "swell", label: "Swell (m)", min: 0, max: 20, step: 0.1, group: "Shape", tip: "Slow rise and fall under the dunes", onRelease: true },
   { key: "swellScale", label: "Swell scale (m)", min: 100, max: 1200, step: 10, group: "Shape", onRelease: true },
+  { key: "crestSoft", label: "Rounded crests", min: 0, max: 0.2, step: 0.005, group: "Shape", tip: "Rounds the crest and the foot of each slip face (share of the dune spacing), for the soft simple shapes of Keith's reference video", onRelease: true },
   { key: "bumps", label: "Small bumps (m)", min: 0, max: 1, step: 0.01, group: "Shape", tip: "Metre-scale lumps: a good test for foot placement", onRelease: true },
 ];
 
@@ -104,21 +106,34 @@ export class DuneField {
     u += v.warp * L * n.fbm(x / (L * 1.9) + 31.7 + o, z / (L * 1.9) - 7.3, 3);
 
     const su = u / L, k = Math.floor(su), f = su - k;
-    const ws = 1 - v.slip;
-    let prof: number, flat = 0;
-    if (f < ws) {
-      const start = v.flats * ws;
-      const t = (f - start) / (ws - start);
-      prof = t <= 0 ? 0 : smoothstep(0, 1, t);
-      flat = t <= 0 ? 1 : 1 - smoothstep(0, 0.15, t);
-    } else {
-      prof = 1 - smoothstep(0, 1, (f - ws) / v.slip);
-    }
-
+    // The profile, softened by averaging it across crestSoft of the spacing: rounds the crest and the slip face's foot.
+    const d = v.crestSoft;
+    const P = d > 0 ? (this.profile(f - d) + 2 * this.profile(f) + this.profile(f + d)) / 4 : this.profile(f);
+    const prof = P, flat = this.flatAt(f);
     const amp = v.height * (1 - v.variety * 0.6 + v.variety * 0.6 * n.fbm(x / (L * 2.3) + o, z / (L * 2.3), 2));
     // Breakup: each crest (index k) rises and falls along its length, so dunes come in separate pieces.
     const mask = smoothstep(-0.15, 0.35, n.fbm(w / (L * 0.95) + o, k * 1.73 + 0.5, 2));
     return { h: amp * prof * lerp(1 - v.breakup, 1, mask), flat };
+  }
+
+  /** Height of one dune across its period (f in 0..1, wraps): flat floor, windward rise, steep slip face. */
+  private profile(f: number) {
+    const v = this.v;
+    f = f - Math.floor(f);
+    const ws = 1 - v.slip;
+    if (f < ws) {
+      const start = v.flats * ws;
+      const t = (f - start) / (ws - start);
+      return t <= 0 ? 0 : smoothstep(0, 1, t);
+    }
+    return 1 - smoothstep(0, 1, (f - ws) / v.slip);
+  }
+
+  private flatAt(f: number) {
+    const v = this.v, ws = 1 - v.slip;
+    if (f >= ws) return 0;
+    const start = v.flats * ws, t = (f - start) / (ws - start);
+    return t <= 0 ? 1 : 1 - smoothstep(0, 0.15, t);
   }
 
   /** Surface normal by central differences; written into out = [x, y, z]. */

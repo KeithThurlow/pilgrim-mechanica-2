@@ -17,6 +17,7 @@ export const LOOK_DEFAULTS = {
   toneMap: 0,
   haze: 0.5,
   shadowBox: 70,
+  shadowSoft: 6,
 };
 export type LookValues = typeof LOOK_DEFAULTS;
 
@@ -30,6 +31,7 @@ export const LOOK_PARAMS: Param[] = [
   { key: "toneMap", label: "Tone mapping (0 ACES, 1 AgX, 2 Neutral)", min: 0, max: 2, step: 1, group: "Look" },
   { key: "haze", label: "Haze", min: 0, max: 1, step: 0.01, group: "Look", tip: "How close the horizon haze starts" },
   { key: "shadowBox", label: "Shadow area (m)", min: 20, max: 200, step: 5, group: "Look" },
+  { key: "shadowSoft", label: "Shadow softness", min: 0, max: 12, step: 0.1, group: "Look", tip: "Blur of the shadow edges (Keith 2026-10-24: the reference video's dune shadows are soft)" },
 ];
 
 const SKY_TOP = 0x3f78c9, SKY_HORIZON = 0xd9e2e6, SAND = 0xc99a66, HAZE = 0xe6d6bc;
@@ -90,6 +92,7 @@ export class DesertLook {
     this.scene.environmentIntensity = v.envIntensity;
     this.fill.intensity = v.skyFill;
     this.sun.intensity = v.sunIntensity;
+    this.sun.shadow.radius = v.shadowSoft;
     const az = (v.sunAzimuth * Math.PI) / 180, el = (v.sunElevation * Math.PI) / 180;
     const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
     // Snap the shadow box to texels so shadows don't shimmer as the focus moves.

@@ -2,10 +2,13 @@
 // round shading (lit on the sun side, browner and darker underneath, thicker puffs shading themselves), and a depth
 // fade so they melt into the sand and wrap round the mech. Under each puff, a soft shadow laid on the sand, pushed
 // away from the sun by the puff's height (the dark band under the trail in Keith's reference video).
+// Puffs also receive the sun's shadows (Keith 2026-10-24: dust in shade was as bright as dust in the sun): each
+// pixel looks up the sun's shadow map where it sits on its sprite, four taps for a soft edge. They don't shadow
+// each other.
 import * as THREE from "three/webgpu";
 import {
   instancedBufferAttribute, uv, vec3, float, uniform, mx_fractal_noise_float, mx_noise_float, smoothstep, mix, time,
-  linearDepth, viewportLinearDepth, cameraNear, cameraFar, max, clamp,
+  linearDepth, viewportLinearDepth, cameraNear, cameraFar, max, clamp, texture, vec2, vec4, cos, sin,
 } from "three/tsl";
 import { DustSim, DUST_MAX, CLOUD, type DustValues } from "./dust";
 import type { Ground } from "../mech/walker";
@@ -30,6 +33,15 @@ export class DustDraw {
   private uSoft = uniform(1.2);
   private uShadow = uniform(0.45);
   private uBillow = uniform(0.4);
+  private uInShadow = uniform(0.6);
+  private uCamRight = uniform(new THREE.Vector3(1, 0, 0));
+  private uCamUp = uniform(new THREE.Vector3(0, 1, 0));
+  private uTap = uniform(0.002);
+  private uBias = uniform(-0.002);
+  private mat: THREE.SpriteNodeMaterial;
+  private shadowWired = false;
+  /** Pieces of the puff shader kept to rebuild its colour once the sun's shadow map exists. */
+  private parts!: { col: THREE.Node<"vec3">; p: THREE.Node<"vec2">; seed: THREE.Node<"float">; centre: THREE.Node<"vec3">; size: THREE.Node<"float"> };
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
@@ -40,7 +52,7 @@ export class DustDraw {
   constructor(private sim: DustSim, private ground: Ground) {
     for (const a of [this.posAttr, this.sizeAttr, this.dataAttr, this.shadowAlpha]) a.setUsage(THREE.DynamicDrawUsage);
 
-    const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, -
+    const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, surface darkness
     const p = uv().mul(2).sub(1);
     const r = p.length();
     const seed = data.y;
@@ -60,11 +72,14 @@ export class DustDraw {
     const thick = data.x;
     const shadeMix = clamp(float(1).sub(lit).mul(this.uShadeAmt.mul(1.6)).add(thick.mul(this.uShadeAmt).mul(0.35)), 0, 1);
     const clumpDark = mix(float(0.82), float(1), data.z); // clumps (kind 0) read darker, heavier sand
-    const col = mix(this.uLit, this.uShade, shadeMix).mul(this.uBright).mul(clumpDark);
+    const col = mix(this.uLit, this.uShade, shadeMix).mul(this.uBright).mul(clumpDark).mul(float(1).sub(data.w.mul(0.55)));
 
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false });
-    mat.positionNode = instancedBufferAttribute<"vec3">(this.posAttr);
-    mat.scaleNode = instancedBufferAttribute<"float">(this.sizeAttr);
+    this.mat = mat;
+    const centre = instancedBufferAttribute<"vec3">(this.posAttr), size = instancedBufferAttribute<"float">(this.sizeAttr);
+    this.parts = { col, p, seed, centre, size };
+    mat.positionNode = centre;
+    mat.scaleNode = size;
     mat.rotationNode = seed.mul(6.283);
     mat.colorNode = col;
     mat.opacityNode = shape.mul(grain).mul(thick).mul(soft);
@@ -87,9 +102,41 @@ export class DustDraw {
     this.group.add(this.shadows, this.sprite);
   }
 
-  /** sunDir: unit vector from the ground toward the sun. */
-  update(camera: THREE.Camera, sunDir: THREE.Vector3, v: DustValues) {
+  /** Once the renderer has made the sun's shadow map: shade each puff pixel by it (soft, four taps). */
+  private wireShadows(light: THREE.DirectionalLight) {
+    const depthTex = light.shadow.map?.depthTexture;
+    if (!depthTex) return;
+    this.shadowWired = true;
+    const { col, p, seed, centre, size } = this.parts;
+    // Where this pixel sits in the world: on the sprite's plane, facing the camera, turned by its rotation.
+    const a = seed.mul(6.283), c = cos(a), sn = sin(a);
+    const q = vec2(p.x.mul(c).sub(p.y.mul(sn)), p.x.mul(sn).add(p.y.mul(c))).mul(size.mul(0.5));
+    const world = centre.add(this.uCamRight.mul(q.x)).add(this.uCamUp.mul(q.y));
+    const sc = uniform(light.shadow.matrix).mul(vec4(world, 1));
+    const xyz = sc.xyz.div(sc.w);
+    const suv = vec2(xyz.x, xyz.y.oneMinus()), z = xyz.z.add(this.uBias);
+    const t = this.uTap;
+    const tap = (dx: number, dy: number) => texture(depthTex, suv.add(vec2(t.mul(dx), t.mul(dy)))).compare(z);
+    const vis = tap(1, 0.4).add(tap(-1, -0.4)).add(tap(0.4, -1)).add(tap(-0.4, 1)).mul(0.25);
+    // In shade the puff loses its sunlit side: toward the shaded brown, darker.
+    const shaded = mix(col, this.uShade.mul(0.8).mul(this.uBright), this.uInShadow);
+    this.mat.colorNode = mix(shaded, col, vis);
+    this.mat.needsUpdate = true;
+  }
+
+  /** sunDir: unit vector from the ground toward the sun. sun: the light whose shadows the dust receives. */
+  update(camera: THREE.Camera, sunDir: THREE.Vector3, v: DustValues, sun?: THREE.DirectionalLight) {
     const sim = this.sim;
+    if (sun && !this.shadowWired) this.wireShadows(sun);
+    if (sun) {
+      const sc = sun.shadow.camera as THREE.OrthographicCamera;
+      this.uTap.value = v.dustShadowBlur / Math.max(1, sc.right - sc.left);
+      this.uBias.value = sun.shadow.bias - 0.0015;
+    }
+    this.uInShadow.value = v.inShadow;
+    const me = camera.matrixWorld.elements;
+    this.uCamRight.value.set(me[0], me[1], me[2]).normalize();
+    this.uCamUp.value.set(me[4], me[5], me[6]).normalize();
     this.uBright.value = v.dustBright; this.uShadeAmt.value = v.dustShade; this.uFray.value = v.edgeFray;
     this.uGrain.value = v.grain; this.uSoft.value = v.softDistance; this.uShadow.value = v.shadowStrength; this.uBillow.value = v.billow;
     this.uSunView.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
@@ -111,7 +158,7 @@ export class DustDraw {
       const i = ord[j];
       P[j * 3] = sim.px[i]; P[j * 3 + 1] = sim.py[i]; P[j * 3 + 2] = sim.pz[i];
       S[j] = sim.radius[i] * 2;
-      D[j * 4] = Math.min(1, sim.alpha[i]); D[j * 4 + 1] = sim.seed[i]; D[j * 4 + 2] = sim.kind[i]; D[j * 4 + 3] = 0;
+      D[j * 4] = Math.min(1, sim.alpha[i]); D[j * 4 + 1] = sim.seed[i]; D[j * 4 + 2] = sim.kind[i]; D[j * 4 + 3] = sim.tint[i];
       // Shadow: down the sun's ray from the puff to the sand (two steps to land on the dune), facing the slope.
       const k = sim.kind[i] === CLOUD ? 1 : 0.6;
       let h = sim.py[i] - this.ground.height(sim.px[i], sim.pz[i]);

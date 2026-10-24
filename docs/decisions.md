@@ -4,6 +4,10 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Dust receives shadows from other things (not from itself) | Keith | Keith | Shadow-map lookups per dust pixel, four taps (Claude). |
+| 2026-10-24 | Dust leaves in the direction of what made it, then the wind takes over; minigun hits throw plumes | Keith | Keith | Refs `plume.png`, `plume2.png`. |
+| 2026-10-24 | How much dust comes off depends on the surface: sand most, gravel little, dirt clods, concrete none | Keith | Keith | Multipliers are sliders (Claude's values); terrain has only sand so far. |
+| 2026-10-24 | Dunes should look like the reference video: simple soft shapes, no shading triangles | Keith | Keith | Rounded crests, per-pixel sand detail, softer shadows (Claude). |
 | 2026-10-24 | While moving, the mech leans over its feet: centre of gravity forward over the feet, not behind them (downhill too) | Keith | Keith | Feet land nearer the hips and a 4° lean with speed (Claude's values). |
 | 2026-10-24 | Dust is built and tuned in the walker lab, no separate dust lab | Keith | Keith | Target: Keith's reference video `art-refs/particles/m2-res_1080p.mp4` in the old repo. |
 | 2026-10-24 | On slopes a squashed leg uses its thigh at the hip; slow uphill; downhill full speed with the feet planted under the mech | Keith | Keith | Fold forward plus knee turned out, values Claude's (sliders under Terrain). |

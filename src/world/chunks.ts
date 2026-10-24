@@ -2,15 +2,19 @@
 // nearest missing chunks first, a few per frame inside a time budget, far chunks dropped.
 // Chunks at the same resolution share edge vertices exactly, so there are no seams.
 import * as THREE from "three/webgpu";
+import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp } from "three/tsl";
 import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "./terrain";
 
 export const STREAM_DEFAULTS = {
   chunkSize: 64,
-  segments: 48,
+  segments: 64,
   radius: 5,
   budgetMs: 4,
   facets: 0,
+  sandGrain: 0.5,
+  sandSpecks: 0.45,
+  sandRipples: 0.35,
 };
 export type StreamValues = typeof STREAM_DEFAULTS;
 
@@ -20,6 +24,9 @@ export const STREAM_PARAMS: Param[] = [
   { key: "segments", label: "Grid per chunk", min: 8, max: 128, step: 4, group: "Streaming", tip: "Vertices per chunk side; chunk size / grid = metres per vertex", onRelease: true },
   { key: "budgetMs", label: "Build budget (ms/frame)", min: 0.5, max: 16, step: 0.5, group: "Streaming", tip: "Time per frame spent building new chunks" },
   { key: "facets", label: "Faceted look", min: 0, max: 1, step: 1, group: "Look" },
+  { key: "sandGrain", label: "Sand grain", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Soft mottling across the sand" },
+  { key: "sandSpecks", label: "Specks", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Tiny dark grains and pebbles, as in Keith's reference video" },
+  { key: "sandRipples", label: "Wind ripples", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Fine ripples across the wind" },
 ];
 
 // Sand palette (sRGB): warm windward faces, darker slip faces, paler hardpan flats.
@@ -28,21 +35,36 @@ const C = {
   windward: new THREE.Color().setHex(0xe6b780, THREE.SRGBColorSpace),
   crest: new THREE.Color().setHex(0xf3d3a2, THREE.SRGBColorSpace),
   slip: new THREE.Color().setHex(0xc4824f, THREE.SRGBColorSpace),
-  flat: new THREE.Color().setHex(0xd9b896, THREE.SRGBColorSpace),
+  flat: new THREE.Color().setHex(0xdcb98f, THREE.SRGBColorSpace),
 };
 
 interface Chunk { mesh: THREE.Mesh; cx: number; cz: number }
 
 export class TerrainStreamer {
   readonly group = new THREE.Group();
-  readonly material: THREE.MeshStandardMaterial;
+  readonly material: THREE.MeshStandardNodeMaterial;
+  private uGrain = uniform(0.5);
+  private uSpecks = uniform(0.45);
+  private uRipples = uniform(0.35);
+  private uWind = uniform(new THREE.Vector2(1, 0));
   readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0 };
   private chunks = new Map<string, Chunk>();
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
 
   constructor(private field: DuneField, public v: StreamValues) {
-    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+    // Sand surface in the shader, per pixel (the vertex colours carry only the broad dune shading): soft mottling,
+    // sparse dark specks and faint ripples across the wind. Nothing per vertex, so no triangles show.
+    this.material = new THREE.MeshStandardNodeMaterial({ roughness: 0.95, metalness: 0 }); // colours come in through colorNode
+    const xz = positionWorld.xz;
+    const mott = mx_noise_float(vec3(xz.mul(0.35), float(1.7))).mul(0.5).add(mx_noise_float(vec3(xz.mul(1.3), float(4.1))).mul(0.25));
+    const speckN = mx_noise_float(vec3(xz.mul(5.5), float(9.3)));
+    const speck = smoothstep(0.55, 0.75, speckN).mul(this.uSpecks).mul(0.35);
+    const across = xz.dot(this.uWind);
+    const warp = mx_noise_float(vec3(xz.mul(0.12), float(2.2))).mul(4);
+    const ripple = sin(across.mul(9).add(warp)).mul(this.uRipples).mul(0.035);
+    const shade = clamp(float(1).add(mott.mul(this.uGrain).mul(0.12)).add(ripple).sub(speck), 0.5, 1.3);
+    this.material.colorNode = vertexColor().mul(shade);
     this.group.name = "terrain";
   }
 
@@ -58,6 +80,9 @@ export class TerrainStreamer {
 
   update(fx: number, fz: number) {
     this.setFacets(this.v.facets > 0.5);
+    this.uGrain.value = this.v.sandGrain; this.uSpecks.value = this.v.sandSpecks; this.uRipples.value = this.v.sandRipples;
+    const [wx, wz] = this.field.wind();
+    this.uWind.value.set(wx, wz);
     const size = this.v.chunkSize, r = this.v.radius;
     const ccx = Math.floor(fx / size), ccz = Math.floor(fz / size);
 
@@ -102,7 +127,7 @@ export class TerrainStreamer {
     const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3);
     const ox = cx * size, oz = cz * size;
     const s: GroundSample = { h: 0, crest: 0, flat: 0 };
-    const nn = [0, 1, 0];
+    const nn = [0, 1, 0], wide = [0, 1, 0];
     const [wx, wz] = this.field.wind();
     const tmp = new THREE.Color();
     for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) {
@@ -115,12 +140,13 @@ export class TerrainStreamer {
       // Colour: trough to windward to crest by height on the dune, slip faces darker, flats paler.
       const cr = Math.pow(Math.min(1, s.crest), 0.8);
       tmp.copy(C.trough).lerp(C.windward, Math.min(1, cr * 1.6)).lerp(C.crest, Math.max(0, cr - 0.6) * 2);
-      const steep = 1 - nn[1], downwind = nn[0] * wx + nn[2] * wz;
+      // Colour reads a wide normal (2 m) so the slip-face tint fades smoothly instead of following the grid.
+      this.field.normal(x, z, wide, 2);
+      const steep = 1 - wide[1], downwind = wide[0] * wx + wide[2] * wz;
       const slipK = smooth(0.12, 0.35, steep) * smooth(0.02, 0.2, downwind);
       tmp.lerp(C.slip, slipK * 0.75);
-      tmp.lerp(C.flat, s.flat * 0.6);
-      const speck = 1 + 0.05 * (hash(Math.floor(x * 1.3), Math.floor(z * 1.3)) - 0.5);
-      col[i * 3] = tmp.r * speck; col[i * 3 + 1] = tmp.g * speck; col[i * 3 + 2] = tmp.b * speck;
+      tmp.lerp(C.flat, s.flat * 0.25);
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -163,8 +189,3 @@ export class TerrainStreamer {
 }
 
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-function hash(x: number, z: number) {
-  let h = (x * 374761393 + z * 668265263) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}

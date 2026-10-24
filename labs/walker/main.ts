@@ -67,6 +67,9 @@ const dust = new DustSim(V, field);
 const dustDraw = new DustDraw(dust, field);
 scene.add(dustDraw.group);
 gunFx.onSandHit = (at, d, k) => dust.hit(at.x, at.y, at.z, d.x, d.z, k);
+// ?surface=gravel|dirt|concrete: pretend the ground is that, to tune the other surfaces before the terrain has them.
+const forcedSurface = params.get("surface");
+if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
 // Sound starts on the first click or key press (browser rule).
 const sfx = new Sfx(V, camera);
 const gunAudio = new MinigunAudio(sfx);
@@ -90,7 +93,7 @@ const plateQ = (up: THREE.Vector3, yaw: number) => {
 };
 sim.onFootfall = (f, k) => {
   steps.footfall(f.planted, plateQ(f.plantedUp, f.plantedYaw), k);
-  dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1));
+  dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1), sim.vel.x, sim.vel.z);
 };
 // Toe kick: sand flicked back from a foot as it leaves the ground, more the faster it goes.
 sim.onLiftOff = (f, k) => {
@@ -158,11 +161,11 @@ const panel = tweakPanel({
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain", "Dust: sources"] },
-    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources"] },
+    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
     { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Minigun FX", "Sound"] },
-    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
+    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
   ],
@@ -309,7 +312,7 @@ app.onTick((rawDt) => {
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
   dust.update(dt);
   camera.updateMatrixWorld();
-  dustDraw.update(camera, sunDir.subVectors(look.sun.position, look.sun.target.position).normalize(), V);
+  dustDraw.update(camera, sunDir.subVectors(look.sun.position, look.sun.target.position).normalize(), V, look.sun);
 
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
