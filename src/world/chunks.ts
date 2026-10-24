@@ -44,8 +44,8 @@ const C = {
   wet: new THREE.Color().setHex(0x9c8261, THREE.SRGBColorSpace),
   floor: new THREE.Color().setHex(0x7d7a5f, THREE.SRGBColorSpace),
   // Water: clear and pale at the shore, green-teal with depth, foam at the edge.
-  waterShallow: new THREE.Color().setHex(0x9fbfae, THREE.SRGBColorSpace),
-  waterDeep: new THREE.Color().setHex(0x3e6e6c, THREE.SRGBColorSpace),
+  waterShallow: new THREE.Color().setHex(0x7fae9f, THREE.SRGBColorSpace),
+  waterDeep: new THREE.Color().setHex(0x2f6465, THREE.SRGBColorSpace),
   foam: new THREE.Color().setHex(0xeef2e8, THREE.SRGBColorSpace),
 };
 
@@ -91,7 +91,7 @@ export class TerrainStreamer {
     const depth = attribute<"float">("depth"), fade = attribute<"float">("fade");
     const shimmer = mx_noise_float(vec3(xz.mul(0.6), time.mul(0.35))).mul(0.06).add(mx_noise_float(vec3(xz.mul(2.1), time.mul(0.8))).mul(0.03));
     this.waterMaterial.colorNode = vertexColor().mul(float(1).add(shimmer));
-    this.waterMaterial.opacityNode = clamp(this.uClear.add(this.uDeep.sub(this.uClear).mul(smoothstep(0, 1.2, depth))).add(float(1).sub(smoothstep(0, 0.12, depth)).mul(0.5)), 0, 1).mul(fade);
+    this.waterMaterial.opacityNode = clamp(this.uClear.add(this.uDeep.sub(this.uClear).mul(smoothstep(0, 1.2, depth))).add(float(1).sub(smoothstep(0, 0.06, depth)).mul(0.3)), 0, 1).mul(fade);
   }
 
   /** Drop every chunk (after the terrain shape or grid changes); they stream back in nearest first. */
@@ -252,7 +252,7 @@ export class TerrainStreamer {
       const d = water - hs[i];
       dep[i] = Math.max(0, d);
       tmp.copy(C.waterShallow).lerp(C.waterDeep, smooth(0, 1.4, d));
-      tmp.lerp(C.foam, (1 - smooth(0, 0.12, d)) * 0.7);
+      tmp.lerp(C.foam, (1 - smooth(0, 0.06, d)) * 0.45);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
       // Fade out where the shallows end (no water in desert troughs) and just above the shore (the foam line).
       fade[i] = smooth(0.15, 0.6, wsA[i]) * (d > -0.05 ? 1 : 0);
