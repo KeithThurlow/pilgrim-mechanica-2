@@ -2,7 +2,7 @@
 // nearest missing chunks first, a few per frame inside a time budget, far chunks dropped.
 // Chunks at the same resolution share edge vertices exactly, so there are no seams.
 import * as THREE from "three/webgpu";
-import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp, cameraPosition } from "three/tsl";
+import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp, cameraPosition, attribute, time } from "three/tsl";
 import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "./terrain";
 
@@ -36,19 +36,35 @@ const C = {
   crest: new THREE.Color().setHex(0xf3d3a2, THREE.SRGBColorSpace),
   slip: new THREE.Color().setHex(0xc4824f, THREE.SRGBColorSpace),
   flat: new THREE.Color().setHex(0xdcb98f, THREE.SRGBColorSpace),
+  // Rocky land: sand in the hollows a little greyer; rock tops grey-brown, risers red-brown.
+  rockSand: new THREE.Color().setHex(0xccb08a, THREE.SRGBColorSpace),
+  rockTop: new THREE.Color().setHex(0xa38f7b, THREE.SRGBColorSpace),
+  rockFace: new THREE.Color().setHex(0x7b5a48, THREE.SRGBColorSpace),
+  // Shallows: wet sand at the waterline, the floor under the water.
+  wet: new THREE.Color().setHex(0x9c8261, THREE.SRGBColorSpace),
+  floor: new THREE.Color().setHex(0x7d7a5f, THREE.SRGBColorSpace),
+  // Water: clear and pale at the shore, green-teal with depth, foam at the edge.
+  waterShallow: new THREE.Color().setHex(0x9fbfae, THREE.SRGBColorSpace),
+  waterDeep: new THREE.Color().setHex(0x3e6e6c, THREE.SRGBColorSpace),
+  foam: new THREE.Color().setHex(0xeef2e8, THREE.SRGBColorSpace),
 };
 
-interface Chunk { mesh: THREE.Mesh; cx: number; cz: number }
+interface Chunk { mesh: THREE.Mesh; water: THREE.Mesh | null; cx: number; cz: number }
 
 export class TerrainStreamer {
   readonly group = new THREE.Group();
   readonly material: THREE.MeshStandardNodeMaterial;
+  /** Water over the shallows (chunks with shallows below the water level get a water sheet). */
+  readonly waterMaterial: THREE.MeshStandardNodeMaterial;
+  private uClear = uniform(0.3);
+  private uDeep = uniform(0.85);
   private uGrain = uniform(0.5);
   private uSpecks = uniform(0.45);
   private uRipples = uniform(0.35);
   private uWind = uniform(new THREE.Vector2(1, 0));
   readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0 };
   private chunks = new Map<string, Chunk>();
+  private c2 = new THREE.Color();
   private dirty = new Set<string>();
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
@@ -69,6 +85,13 @@ export class TerrainStreamer {
     const shade = clamp(float(1).add(mott.mul(this.uGrain).mul(0.12)).add(ripple).sub(speck), 0.5, 1.3);
     this.material.colorNode = vertexColor().mul(shade);
     this.group.name = "terrain";
+
+    // Water: colour per vertex (depth tint and foam), opacity from depth; a slow shimmer of small ripples.
+    this.waterMaterial = new THREE.MeshStandardNodeMaterial({ transparent: true, depthWrite: false, roughness: 0.12, metalness: 0 });
+    const depth = attribute<"float">("depth"), fade = attribute<"float">("fade");
+    const shimmer = mx_noise_float(vec3(xz.mul(0.6), time.mul(0.35))).mul(0.06).add(mx_noise_float(vec3(xz.mul(2.1), time.mul(0.8))).mul(0.03));
+    this.waterMaterial.colorNode = vertexColor().mul(float(1).add(shimmer));
+    this.waterMaterial.opacityNode = clamp(this.uClear.add(this.uDeep.sub(this.uClear).mul(smoothstep(0, 1.2, depth))).add(float(1).sub(smoothstep(0, 0.12, depth)).mul(0.5)), 0, 1).mul(fade);
   }
 
   /** Drop every chunk (after the terrain shape or grid changes); they stream back in nearest first. */
@@ -99,6 +122,8 @@ export class TerrainStreamer {
   update(fx: number, fz: number) {
     this.setFacets(this.v.facets > 0.5);
     this.uGrain.value = this.v.sandGrain; this.uSpecks.value = this.v.sandSpecks; this.uRipples.value = this.v.sandRipples;
+    const sh = this.field.shallows;
+    if (sh) { this.uClear.value = sh.v.waterClear; this.uDeep.value = sh.v.waterDeep; }
     const [wx, wz] = this.field.wind();
     this.uWind.value.set(wx, wz);
     const size = this.v.chunkSize, r = this.v.radius;
@@ -164,6 +189,10 @@ export class TerrainStreamer {
     const nn = [0, 1, 0], wide = [0, 1, 0];
     const [wx, wz] = this.field.wind();
     const tmp = new THREE.Color();
+    const water = this.field.waterLevel;
+    let maxWs = 0;
+    const wsA = water !== null ? new Float32Array(count) : null;
+    const hs = new Float32Array(count);
     for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) {
       const x = ox + k * step, z = oz + j * step;
       this.field.sample(x, z, s);
@@ -179,8 +208,20 @@ export class TerrainStreamer {
       const steep = 1 - wide[1], downwind = wide[0] * wx + wide[2] * wz;
       const slipK = smooth(0.12, 0.35, steep) * smooth(0.02, 0.2, downwind);
       tmp.lerp(C.slip, slipK * 0.75);
-      tmp.lerp(C.flat, s.flat * 0.25);
+      tmp.lerp(C.flat, s.flat * 0.25 * (1 - (s.wr ?? 0)));
+      // Biomes: rocky land's sand greyer, bare rock by steepness (tops grey, risers red-brown); shallows wet and dark.
+      const wr = s.wr ?? 0, ws = s.ws ?? 0, rock = s.rock ?? 0;
+      if (wr > 0) tmp.lerp(C.rockSand, wr * 0.6);
+      if (rock > 0) tmp.lerp(this.c2.copy(C.rockTop).lerp(C.rockFace, smooth(0.15, 0.45, steep)), rock);
+      if (water !== null && ws > 0) {
+        const above = s.h - water;
+        tmp.lerp(C.wet, ws * (1 - smooth(0.05, 0.8, above)) * (1 - rock * 0.7));
+        tmp.lerp(C.floor, ws * smooth(0, 0.6, -above) * (1 - rock));
+        if (above < 0.3) maxWs = Math.max(maxWs, ws);
+      }
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+      if (wsA) wsA[i] = ws;
+      hs[i] = s.h;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -196,7 +237,41 @@ export class TerrainStreamer {
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     this.group.add(mesh);
-    return { mesh, cx, cz };
+    const waterMesh = water !== null && maxWs > 0 && wsA ? this.buildWater(ox, oz, n, step, water, wsA, hs) : null;
+    return { mesh, water: waterMesh, cx, cz };
+  }
+
+  /** A water sheet over the chunk at the water level: depth from the ground under each vertex, faded by the shallows' weight. */
+  private buildWater(ox: number, oz: number, n: number, step: number, water: number, wsA: Float32Array, hs: Float32Array) {
+    const row = n + 1, count = row * row;
+    const pos = new Float32Array(count * 3), col = new Float32Array(count * 3), dep = new Float32Array(count), fade = new Float32Array(count);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      const k = i % row, j = Math.floor(i / row);
+      pos[i * 3] = k * step; pos[i * 3 + 1] = water; pos[i * 3 + 2] = j * step;
+      const d = water - hs[i];
+      dep[i] = Math.max(0, d);
+      tmp.copy(C.waterShallow).lerp(C.waterDeep, smooth(0, 1.4, d));
+      tmp.lerp(C.foam, (1 - smooth(0, 0.12, d)) * 0.7);
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+      // Fade out where the shallows end (no water in desert troughs) and just above the shore (the foam line).
+      fade[i] = smooth(0.15, 0.6, wsA[i]) * (d > -0.05 ? 1 : 0);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(count * 3).map((_, q) => (q % 3 === 1 ? 1 : 0)), 3));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.setAttribute("depth", new THREE.BufferAttribute(dep, 1));
+    g.setAttribute("fade", new THREE.BufferAttribute(fade, 1));
+    g.setIndex(this.sharedIndex(n));
+    g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, this.waterMaterial);
+    m.position.set(ox, 0, oz);
+    m.renderOrder = 1;
+    m.matrixAutoUpdate = false;
+    m.updateMatrix();
+    this.group.add(m);
+    return m;
   }
 
   private sharedIndex(n: number) {
@@ -214,6 +289,7 @@ export class TerrainStreamer {
   }
 
   private dispose(c: Chunk) {
+    if (c.water) { this.group.remove(c.water); c.water.geometry.setIndex(null); c.water.geometry.dispose(); }
     this.group.remove(c.mesh);
     // The index is shared, so only drop the per-chunk attributes.
     const g = c.mesh.geometry;

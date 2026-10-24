@@ -97,7 +97,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-Nothing right now.
+- Biomes: shots of step 1 to look at; step 2 water effects (wading) and step 3 outcrop scatter next.
+- POIs step 1 (placement, salvage on E, tiers 1-2): an agent on a worktree branch.
 
 ## Next candidates (ask Keith which)
 
@@ -121,6 +122,10 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-25 · Biomes step 1: desert, rocky, shallows and the borders between them (Claude)
+- Keith approved the biome plan (regions at least 5 km, rocky always walkable). `src/world/biomes.ts` (warped Voronoi regions, 5 km, borders blended over 300 m, weights exactly 1 inside a region), `rock.ts` (terraced shelves, ridges, lumps, sand in hollows), `shallows.ts` (floor under a still water level, sandbars, outcrops), blended in `DuneField.sample` pairwise: rock rises through flattening sand; land sinks into the shallows. Labs without biome sliders stay all desert. `chunks.ts`: rock and wet-sand colours, a water sheet over shallows (depth tint, foam, shimmer). `DuneField.surfaceAt` feeds the dust (rock and water: none; rocky sand: gravel). Terrain lab: Biomes topic, "Next border", `?biome=`, `?border`; walker lab `?biome=mix|rocky|shallows`.
+- Checked: `tools/biome-check.ts` (weights, determinism, no step over 0.2 m in 0.1 m anywhere, rocky under 45°, shallows never past the knee, height() 0.85 vs 0.6 µs); terrain, walker, slope, convoy, car, warband checks. Shots pending.
 
 ### 2026-10-25 · Points of interest proposed (Claude)
 - Keith: POIs at many levels of commitment (outcrops, debris fields, wrecks, abandoned battlefields, crashed ships, bandit camps, a bandit fortress in about 9 sections); desolate and unsettled, few old structures. Plan in `docs/proposal-pois.md` (5 tiers, value split into sections you can bank and leave, placement as a pure seeded function like the ground, a minimal salvage action first). Waiting for Keith.

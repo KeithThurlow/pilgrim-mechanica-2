@@ -10,6 +10,9 @@ import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
+import { BIOME_DEFAULTS, BIOME_PARAMS } from "../../src/world/biomes";
+import { ROCK_DEFAULTS, ROCK_PARAMS } from "../../src/world/rock";
+import { SHALLOWS_DEFAULTS, SHALLOWS_PARAMS } from "../../src/world/shallows";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera } = app;
@@ -20,7 +23,7 @@ const DRIVE_PARAMS: Param[] = [
   { key: "heading", label: "Marker heading", min: 0, max: 360, step: 1, group: "Drive" },
 ];
 
-const V = { ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DRIVE_DEFAULTS };
+const V = { ...TERRAIN_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DRIVE_DEFAULTS };
 const DEFAULTS = { ...V };
 if (app.params.has("seed")) V.seed = Number(app.params.get("seed"));
 
@@ -29,21 +32,23 @@ const streamer = new TerrainStreamer(field, V);
 scene.add(streamer.group);
 const look = new DesertLook(scene, app.renderer, V);
 
-const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
+const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
 let running = !app.params.has("shot");
 let selector: Selector | null = null;
 let picking = false;
 const panel = tweakPanel({
   id: "terrain-lab",
   title: "Terrain lab",
-  params: [...DRIVE_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...DRIVE_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
     { label: "Driving", onClick: () => { running = !running; }, active: () => running },
+    { label: "Next border", onClick: () => toBorder() },
     { label: "New seed", onClick: () => { V.seed = 1 + Math.floor(Math.random() * 99); field.update(); streamer.rebuildAll(); } },
   ],
   topics: [
+    { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "drive", label: "Marker", groups: ["Drive"] },
     { id: "light", label: "Light", groups: ["Look"] },
@@ -78,6 +83,30 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.47;
 controls.target.copy(focus);
 field.update(); // apply any saved or URL values loaded by the panel
+
+const NAMES = ["desert", "rocky", "shallows"];
+function dominant(x: number, z: number) {
+  const w = field.biomes!.weights(x, z);
+  return w.desert >= w.rocky && w.desert >= w.shallows ? 0 : w.rocky >= w.shallows ? 1 : 2;
+}
+/** Drive the marker along its heading to the next biome border and stop just short of it, facing across. */
+function toBorder() {
+  if (!field.biomes) return;
+  const h = (V.heading * Math.PI) / 180, dx = Math.sin(h), dz = Math.cos(h);
+  const start = dominant(focus.x, focus.z);
+  for (let t = 20; t < 40000; t += 20) {
+    if (dominant(focus.x + dx * t, focus.z + dz * t) !== start) {
+      focus.x += dx * (t - V.biomeBlend * 0.75); focus.z += dz * (t - V.biomeBlend * 0.75);
+      break;
+    }
+  }
+  streamer.rebuildAll();
+}
+// ?biome=desert|rocky|shallows shows only that one; ?border drives to the first border along the heading.
+const only = app.params.get("biome");
+if (only && NAMES.includes(only)) V.biomeOnly = NAMES.indexOf(only);
+field.update();
+if (app.params.has("border")) toBorder();
 streamer.fill(focus.x, focus.z);
 
 app.onTick((dt) => {
@@ -103,5 +132,7 @@ app.onTick((dt) => {
 
   const s = streamer.stats;
   app.hud.set("chunks", `chunks ${s.loaded} · built ${s.built} in ${s.buildMs.toFixed(1)} ms · queued ${s.pending}`);
-  app.hud.set("pos", `x ${focus.x.toFixed(0)} z ${focus.z.toFixed(0)} · ground ${focus.y.toFixed(1)} m`);
+  const w = field.biomes ? field.biomes.weights(focus.x, focus.z) : null;
+  const bio = w ? ` · desert ${(w.desert * 100).toFixed(0)}% rocky ${(w.rocky * 100).toFixed(0)}% shallows ${(w.shallows * 100).toFixed(0)}%` : "";
+  app.hud.set("pos", `x ${focus.x.toFixed(0)} z ${focus.z.toFixed(0)} · ground ${focus.y.toFixed(1)} m${bio}`);
 });

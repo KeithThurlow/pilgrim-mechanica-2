@@ -77,6 +77,8 @@ export class Battlefield {
     this.marks = new SandMarks(field, v);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
+    // Biomes: rock and water throw no dust, rocky sand less (the ground knows what it's made of).
+    if (field.biomes) this.dust.surfaceAt = (x, z) => field.surfaceAt(x, z);
     this.dustDraw = new DustDraw(this.dust, field);
     // Labs that don't list the telegraph sliders still get their defaults.
     const sv = v as BattlefieldValues & Record<string, unknown>;
