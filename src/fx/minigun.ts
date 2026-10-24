@@ -19,6 +19,7 @@ export const MINIGUN_FX_DEFAULTS = {
   metalSparks: 9,
   metalSparkSpeed: 11,
   metalSmoke: 1,
+  sparkSize: 2.5,
 };
 export type MinigunFxValues = typeof MINIGUN_FX_DEFAULTS;
 
@@ -33,6 +34,7 @@ export const MINIGUN_FX_PARAMS: Param[] = [
   { key: "sandGrit", label: "Sand grit per hit", min: 0, max: 16, step: 1, group: "Minigun hits" },
   { key: "metalSparks", label: "Sparks off steel", min: 0, max: 30, step: 1, group: "Minigun hits" },
   { key: "metalSparkSpeed", label: "Spark speed (m/s)", min: 2, max: 30, step: 0.5, group: "Minigun hits" },
+  { key: "sparkSize", label: "Spark size", min: 0.5, max: 6, step: 0.1, group: "Minigun hits" },
   { key: "metalSmoke", label: "Smoke off steel", min: 0, max: 4, step: 1, group: "Minigun hits" },
 ];
 
@@ -204,12 +206,12 @@ export class MinigunFx {
       t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
       if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.impact(t.to, dir.clone(), t.surface, t.normal); }
     }
-    this.stepBits(this.sparkBits, this.sparks, dt, false);
+    this.stepBits(this.sparkBits, this.sparks, dt, false, false, this.v.sparkSize);
     this.stepBits(this.gritBits, this.grit, dt, false, true);
     this.stepBits(this.casingBits, this.casings, dt, true);
   }
 
-  private stepBits(bits: Bit[], im: THREE.InstancedMesh, dt: number, bounce: boolean, tumble = false) {
+  private stepBits(bits: Bit[], im: THREE.InstancedMesh, dt: number, bounce: boolean, tumble = false, size = 1) {
     bits.forEach((b, i) => {
       if (b.age >= b.life) return;
       b.age += dt;
@@ -226,7 +228,7 @@ export class MinigunFx {
           else { b.vel.y *= -0.32; b.vel.x *= 0.5; b.vel.z *= 0.5; b.spin.multiplyScalar(0.5); }
         }
       }
-      const k = bounce ? 1 : 1 - b.age / b.life;
+      const k = (bounce ? 1 : 1 - b.age / b.life) * size;
       this.q.setFromEuler(b.rot);
       if (!bounce && !tumble) this.q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), b.vel.clone().normalize());
       im.setMatrixAt(i, this.m.compose(b.pos, this.q, this.s.set(k, k, k)));

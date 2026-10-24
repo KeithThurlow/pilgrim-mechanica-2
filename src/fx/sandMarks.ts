@@ -7,13 +7,15 @@ import * as THREE from "three/webgpu";
 import { instancedBufferAttribute, uv, vec2, vec3, float, uniform, smoothstep, mix, max, abs, exp, clamp, mx_noise_float, length, step } from "three/tsl";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { sunReach } from "../world/raycast";
 
 export const MARK_DEFAULTS = {
   markDepth: 0.9,
-  markLife: 45,
+  markLife: 20,
   markDark: 0.55,
+  markRim: 0.4,
   printSize: 1,
-  craterSize: 0.55,
+  craterSize: 0.35,
   craterEvery: 3,
   slideOnSlope: 1,
 };
@@ -22,6 +24,7 @@ export type MarkValues = typeof MARK_DEFAULTS;
 export const MARK_PARAMS: Param[] = [
   { key: "markDepth", label: "Mark depth (look)", min: 0, max: 3, step: 0.05, group: "Sand marks", tip: "How deep prints and craters look: strength of the lit rim and shaded wall" },
   { key: "markLife", label: "Marks last (s)", min: 2, max: 240, step: 1, group: "Sand marks" },
+  { key: "markRim", label: "Lit rim strength", min: 0, max: 1.5, step: 0.01, group: "Sand marks", tip: "How bright the sun side of a print's rim gets; none in a dune's shade" },
   { key: "markDark", label: "Churned sand darkness", min: 0, max: 1, step: 0.01, group: "Sand marks" },
   { key: "printSize", label: "Footprint size ×", min: 0.3, max: 2, step: 0.01, group: "Sand marks" },
   { key: "craterSize", label: "Round crater size (m)", min: 0.1, max: 2, step: 0.01, group: "Sand marks" },
@@ -48,6 +51,10 @@ export class SandMarks {
   private rounds = 0;
   private uDepth = uniform(1.2);
   private uDark = uniform(0.55);
+  private uRim = uniform(0.4);
+  /** Per mark: 1 in the sun, 0 in a dune's shade (marched when laid); no sun relief in the shade. */
+  private lit = new Float32Array(MAX_MARKS).fill(1);
+  private lastSun = new THREE.Vector3(0.5, 0.6, 0.5).normalize();
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private v3 = new THREE.Vector3();
@@ -86,7 +93,8 @@ export class SandMarks {
     const churn = max(h0.negate(), 0).mul(this.uDark).mul(0.35); // disturbed sand in the hollow reads darker
     const lightCol = vec3(0.86, 0.68, 0.46), darkCol = vec3(0.24, 0.15, 0.08);
     const lit = step(0, relief.sub(churn));
-    const amount = abs(relief).mul(0.9).add(churn);
+    // The sun side of the rim stays faint (Keith: bright rings); the shaded side and the churn carry the mark.
+    const amount = abs(relief).mul(mix(float(0.9), this.uRim, lit)).add(churn);
     // Inside the quad only (both shapes stay well within it), faded with age.
     const edge = float(1).sub(smoothstep(0.85, 1.0, max(abs(p.x), abs(p.y))));
     const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -140,6 +148,7 @@ export class SandMarks {
     this.mesh.setMatrixAt(i, this.m);
     this.mesh.instanceMatrix.needsUpdate = true;
     const D = this.data.array as Float32Array;
+    this.lit[i] = sunReach(this.ground, x, this.ground.height(x, z) + 0.3, z, this.lastSun);
     D[i * 4] = kind; D[i * 4 + 1] = 1; D[i * 4 + 2] = depth; D[i * 4 + 3] = Math.random();
     this.born[i] = this.t;
     this.depth0[i] = depth;
@@ -151,6 +160,8 @@ export class SandMarks {
     this.t += dt;
     this.uDepth.value = this.v.markDepth;
     this.uDark.value = this.v.markDark;
+    this.uRim.value = this.v.markRim;
+    this.lastSun.copy(sunDir);
     const D = this.data.array as Float32Array, S = this.sun.array as Float32Array;
     const life = Math.max(1, this.v.markLife);
     for (let i = 0; i < this.used; i++) {
@@ -160,6 +171,8 @@ export class SandMarks {
       this.q.copy(this.quats[i]).invert();
       this.v3.copy(sunDir).applyQuaternion(this.q);
       // The decal's local z runs along the mark; the uv's y runs the other way, so flip z for the shader's frame.
+      // In a dune's shade there's no sun to light the relief: only the churned hollow shows.
+      this.v3.multiplyScalar(this.lit[i]);
       S[i * 3] = this.v3.x; S[i * 3 + 1] = this.v3.y; S[i * 3 + 2] = -this.v3.z;
     }
     this.data.needsUpdate = true;

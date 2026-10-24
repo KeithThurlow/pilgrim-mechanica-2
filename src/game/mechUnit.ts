@@ -149,6 +149,8 @@ export class MechUnit implements Hittable {
     return rayCapsule(o, d, this.a, this.b, this.v.hitRadius, maxDist);
   }
 
+  normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3) {
     if (!this.alive) return;
     this.health -= amount;
@@ -174,6 +176,15 @@ export class MechUnit implements Hittable {
 }
 
 /** Distance along a unit ray to a capsule (segment a-b, radius r), or -1. */
+/** Outward normal of a capsule (axis a-b) at a point on its surface. */
+export function capsuleNormal(at: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const l2 = abx * abx + aby * aby + abz * abz || 1;
+  const t = Math.max(0, Math.min(1, ((at.x - a.x) * abx + (at.y - a.y) * aby + (at.z - a.z) * abz) / l2));
+  out.set(at.x - (a.x + abx * t), at.y - (a.y + aby * t), at.z - (a.z + abz * t));
+  return out.lengthSq() > 1e-8 ? out.normalize() : out.set(0, 1, 0);
+}
+
 export function rayCapsule(o: THREE.Vector3, d: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, r: number, maxDist: number): number {
   // Closest approach between the ray and the segment, then a sphere test there (good enough for hits).
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;

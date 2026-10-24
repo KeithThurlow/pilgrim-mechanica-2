@@ -1,0 +1,5 @@
+2026-10-24T05-51-49-walker: Marks now last 20 s (was 45), the sun side of the rim is faint (new slider "Lit rim strength"), and a mark laid in a dune's shade gets no sun relief, only the darker churned hollow, so no more bright spots in shade.
+2026-10-24T05-53-52-warband: Soft lock is in: the guns take the enemy under the cursor, else the one nearest the line from the mech through the cursor (orange brackets show it; sliders in Your mech > Targeting). Sparks on vehicles and mechs now ricochet off the real surface instead of straight back at you, and are bigger (Spark size slider).
+2026-10-24T05-56-32-bandits: Bandit damage 1.5 → 0.6 a round (raiders and bandit mechs down too), and the soft lock works on bandits (centre of mass, so the rounds go into the body).
+2026-10-24T06-01-12-walker: Dust now also checks the dunes itself: each puff looks toward the sun over the sand (on the CPU) and takes the shaded colour when a dune is in the way, so hill shadow no longer depends on the shadow map. Tell me if it still looks off.
+2026-10-24T06-01-54-walker: Round craters 0.55 → 0.35 m.

@@ -27,14 +27,15 @@ import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
 import { DeadDraw } from "../physics/deadDraw";
+import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from "./targeting";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -60,8 +61,8 @@ export interface CombatLab<E extends object> {
   bf: Battlefield;
   toon: ToonLook;
   player: MechUnit;
-  /** Set by the lab: where the demo should shoot (the nearest live enemy), or null. */
-  nearestEnemy: () => THREE.Vector3 | null;
+  /** Set by the lab: every live enemy the guns could take (centre of mass, radius, a stable key). */
+  targets: () => TargetCandidate[];
   /** The lab's per-frame work, after the player has moved and before the effects draw. */
   onFrame: (fn: (dt: number) => void) => void;
   /** Extra HUD line. */
@@ -121,7 +122,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Mech health", "Torso & guns", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Mech health", "Torso & guns", "Minigun", "Move"] },
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
@@ -154,6 +155,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   );
   reticle.renderOrder = 10;
   scene.add(reticle);
+  const lockMat = new THREE.LineBasicMaterial({ color: 0xff6a3d, depthTest: false, transparent: true, toneMapped: false });
+  const lockMark = new THREE.LineSegments(lockBrackets(), lockMat);
+  lockMark.renderOrder = 11;
+  scene.add(lockMark);
   const hurtEl = document.createElement("div");
   hurtEl.className = "hurt";
   document.body.appendChild(hurtEl);
@@ -170,7 +175,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
   const lab: CombatLab<E> = {
     app, V, field, bf, toon, player, deaths,
-    nearestEnemy: () => null,
+    targets: () => [],
     onFrame: (fn) => frames.push(fn),
     hud: (k, t) => app.hud.set(k, t),
     loadRampart: () => RampartBody.load(toon),
@@ -182,13 +187,18 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
 
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
-  function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
+  function demo(t: number, cands: TargetCandidate[]): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
     const a = t * 0.12;
     const cmd = { x: Math.sin(a), z: Math.cos(a), sprint: false };
-    const e = lab.nearestEnemy();
+    const p = player.sim.pos;
+    let e: TargetCandidate | null = null, bd = Infinity;
+    for (const c of cands) { const d = Math.hypot(c.x - p.x, c.z - p.z); if (d < bd) { bd = d; e = c; } }
     if (!e) return { cmd, aim: null, trigger: false };
-    return { cmd, aim: { x: e.x, y: e.y, z: e.z }, trigger: e.distanceTo(player.sim.pos) < V.range + 5 };
+    return { cmd, aim: { x: e.x, y: e.y, z: e.z }, trigger: bd < V.range + 5 };
   }
+  const targeting = new Targeting();
+  const ndc = new THREE.Vector2(), caster = new THREE.Raycaster();
+  let lock: ReturnType<Targeting["pick"]> = null;
 
   const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
   app.onTick((rawDt) => {
@@ -200,10 +210,20 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
     let trigger = false;
-    if (auto) { ({ cmd, aim, trigger } = demo(clock)); lastDemo = { aim, trigger }; }
+    let cursor: Aim | null = null;
+    lock = null;
+    if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
     else {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
-      if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
+      if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) {
+        cursor = aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
+        // Soft lock: the guns take the enemy under the cursor ray, else the one nearest the line of fire.
+        const r = canvas.getBoundingClientRect();
+        ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
+        caster.setFromCamera(ndc, camera);
+        lock = targeting.pick(lab.targets(), { rayO: caster.ray.origin, rayD: caster.ray.direction, from: player.sim.pos, cursor: aimPt, range: V.range }, V);
+        if (lock) aim = { x: lock.target.x, y: lock.target.y, z: lock.target.z };
+      }
       trigger = mouseDown || keys.has("KeyF");
     }
     if (sel.active) trigger = false;
@@ -216,10 +236,19 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     deadDraw.update();
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
-    reticle.visible = !!aim;
-    if (aim) {
-      reticle.position.set(aim.x, field.height(aim.x, aim.z) + 0.06, aim.z);
-      (reticle.material as THREE.MeshBasicMaterial).color.setHex(player.upper.onTarget ? 0xffb347 : 0x9a958c);
+    reticle.visible = !!cursor;
+    if (cursor) {
+      reticle.position.set(cursor.x, field.height(cursor.x, cursor.z) + 0.06, cursor.z);
+      (reticle.material as THREE.MeshBasicMaterial).color.setHex(player.upper.onTarget && !lock ? 0xffb347 : 0x9a958c);
+    }
+    // The lock: brackets round the target's centre of mass, facing the camera.
+    lockMark.visible = !!lock;
+    if (lock) {
+      const t = lock.target;
+      lockMark.position.set(t.x, t.y, t.z);
+      lockMark.quaternion.copy(camera.quaternion);
+      lockMark.scale.setScalar(Math.max(1, t.r * 1.3));
+      lockMat.color.setHex(player.upper.onTarget ? 0xff6a3d : 0xb0a89a);
     }
 
     follow.lerp(new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z), Math.min(1, rawDt * 6));
@@ -237,4 +266,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("guns", `ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
+}
+
+/** Four corner brackets on a unit square (the lock mark). */
+function lockBrackets() {
+  const a = 1, b = 0.45, pts: number[] = [];
+  for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+    pts.push(sx * a, sy * a, 0, sx * (a - b), sy * a, 0, sx * a, sy * a, 0, sx * a, sy * (a - b), 0);
+  }
+  return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
 }

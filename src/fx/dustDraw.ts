@@ -12,6 +12,7 @@ import {
 } from "three/tsl";
 import { DustSim, DUST_MAX, CLOUD, SPRAY, type DustValues } from "./dust";
 import type { Ground } from "../mech/walker";
+import { sunReach } from "../world/raycast";
 
 export class DustDraw {
   readonly group = new THREE.Group();
@@ -20,6 +21,11 @@ export class DustDraw {
   private sizeAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX * 2), 2);
   private rotAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
   private dataAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX * 4), 4);
+  /** Per sprite: 1 in the sun, 0 behind a dune (marched against the ground toward the sun on the CPU). */
+  private sunAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX).fill(1), 1);
+  /** Per puff (sim index): the same, smoothed; each puff is re-marched every few frames. */
+  private sunVis = new Float32Array(DUST_MAX).fill(1);
+  private frame = 0;
   private shadows: THREE.InstancedMesh;
   private shadowAlpha = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
   private order = new Uint16Array(DUST_MAX);
@@ -44,7 +50,7 @@ export class DustDraw {
   private mat: THREE.SpriteNodeMaterial;
   private shadowWired = false;
   /** Pieces of the puff shader kept to rebuild its colour once the sun's shadow map exists. */
-  private parts!: { col: THREE.Node<"vec3">; p: THREE.Node<"vec2">; seed: THREE.Node<"float">; centre: THREE.Node<"vec3">; size: THREE.Node<"float"> };
+  private parts!: { col: THREE.Node<"vec3">; p: THREE.Node<"vec2">; seed: THREE.Node<"float">; centre: THREE.Node<"vec3">; size: THREE.Node<"float">; sunVis: THREE.Node<"float"> };
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
@@ -53,7 +59,7 @@ export class DustDraw {
   private nn = [0, 1, 0];
 
   constructor(private sim: DustSim, private ground: Ground) {
-    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha]) a.setUsage(THREE.DynamicDrawUsage);
+    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha, this.sunAttr]) a.setUsage(THREE.DynamicDrawUsage);
 
     const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, surface darkness
     const p = uv().mul(2).sub(1);
@@ -81,11 +87,13 @@ export class DustDraw {
     this.mat = mat;
     const centre = instancedBufferAttribute<"vec3">(this.posAttr), size2 = instancedBufferAttribute<"vec2">(this.sizeAttr);
     const size = size2.y;
-    this.parts = { col, p, seed, centre, size };
+    const sunVis = instancedBufferAttribute<"float">(this.sunAttr);
+    this.parts = { col, p, seed, centre, size, sunVis };
     mat.positionNode = centre;
     mat.scaleNode = size2;
     mat.rotationNode = instancedBufferAttribute<"float">(this.rotAttr);
-    mat.colorNode = col;
+    // Behind a dune (the CPU march) the puff takes the shaded colour; the shadow map adds the mech's and the rest.
+    mat.colorNode = mix(mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow), col, sunVis);
     mat.opacityNode = shape.mul(grain).mul(thick).mul(soft);
     this.sprite = new THREE.Sprite(mat);
     this.sprite.count = 0;
@@ -111,7 +119,7 @@ export class DustDraw {
     const depthTex = light.shadow.map?.depthTexture;
     if (!depthTex) return;
     this.shadowWired = true;
-    const { col, p, seed, centre, size } = this.parts;
+    const { col, p, seed, centre, size, sunVis } = this.parts;
     // Where to look up the shadow: across the puff sideways and up (never down into the sand under it, which
     // striped the dust with the sand's own shadow), so a puff half in shade is shaded across it.
     void seed;
@@ -124,7 +132,7 @@ export class DustDraw {
     const vis = tap(1, 0.4).add(tap(-1, -0.4)).add(tap(0.4, -1)).add(tap(-0.4, 1)).mul(0.25);
     // In shade the puff loses its sunlit side: toward the shaded brown, darker.
     const shaded = mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow);
-    this.mat.colorNode = mix(shaded, col, vis);
+    this.mat.colorNode = mix(shaded, col, vis.min(sunVis));
     this.mat.needsUpdate = true;
   }
 
@@ -157,6 +165,8 @@ export class DustDraw {
     const P = this.posAttr.array as Float32Array, S = this.sizeAttr.array as Float32Array, D = this.dataAttr.array as Float32Array;
     const R = this.rotAttr.array as Float32Array;
     const SA = this.shadowAlpha.array as Float32Array;
+    const SV = this.sunAttr.array as Float32Array;
+    this.frame++;
     let ns = 0;
     const sy = Math.max(0.15, sunDir.y);
     for (let j = 0; j < n; j++) {
@@ -172,6 +182,12 @@ export class DustDraw {
         R[j] = sim.seed[i] * 6.283;
         S[j * 2] = S[j * 2 + 1] = sim.radius[i] * 2;
       }
+      // Hill shadow on the puff: every 4th frame per puff, march toward the sun over the dunes.
+      if ((i + this.frame) % 4 === 0) {
+        const target = sunReach(this.ground, sim.px[i], sim.py[i] + sim.radius[i] * 0.3, sim.pz[i], sunDir);
+        this.sunVis[i] += (target - this.sunVis[i]) * (sim.age[i] < 0.1 ? 1 : 0.5);
+      }
+      SV[j] = this.sunVis[i];
       D[j * 4] = Math.min(1, sim.alpha[i]); D[j * 4 + 1] = sim.seed[i]; D[j * 4 + 2] = sim.kind[i]; D[j * 4 + 3] = sim.tint[i];
       // Shadow: down the sun's ray from the puff to the sand (two steps to land on the dune), facing the slope.
       const k = sim.kind[i] === CLOUD ? 1 : sim.kind[i] === SPRAY ? 0.3 : 0.6;
@@ -191,7 +207,7 @@ export class DustDraw {
     }
     this.sprite.count = n;
     this.shadows.count = ns;
-    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha]) { a.clearUpdateRanges(); a.addUpdateRange(0, Math.max(1, n) * a.itemSize); a.needsUpdate = true; }
+    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha, this.sunAttr]) { a.clearUpdateRanges(); a.addUpdateRange(0, Math.max(1, n) * a.itemSize); a.needsUpdate = true; }
     this.shadows.instanceMatrix.needsUpdate = true;
   }
 }

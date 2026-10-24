@@ -4,6 +4,12 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Soft lock by ray: the guns take the enemy under the cursor (along the camera ray, so tall things count by their body), else the one nearest the line of fire from the mech through the cursor; rounds go for centre of mass | Keith | Keith | `src/game/targeting.ts`; widths and cone are sliders (Claude's values). The old game's rule (nearest the cursor inside a 15° cone) was the starting point. |
+| 2026-10-24 | War band gets bigger vehicles: six-wheelers, a War Rig lead truck (eight wheels, front four steer, two turrets) and a makeshift tank | Keith | Keith | Default band: 5 technicals, 2 gun trucks, 1 six-wheeler, 1 War Rig, 1 tank, 1 bandit mech. Guns and hulls are Claude's values. |
+| 2026-10-24 | Enemy damage down: bandits 1.5 → 0.6 a round, technicals 2.5 → 1.2, gun trucks 11 → 6, bandit mechs ×0.35 → ×0.2 | Keith | Claude | Keith: "a few things probably need their damage tuned down". |
+| 2026-10-24 | Small robots become four-legged starfish that scuttle and tear at the mech's plating when latched; big ones tall stilt walkers with long shadows | Keith | Keith | Being built. |
+| 2026-10-24 | Back-mounted rockets and mortars later get ground targeting painted like a military targeting laser (mortars over hills) | Keith | open | Not built; noted with AoE for later. |
+| 2026-10-24 | Dust and sand marks get dune shadow from a march toward the sun on the CPU, on top of the shadow map | Claude | Claude | Hill shadow on the dust and marks no longer depends on the shadow map's area or its lookup. |
 | 2026-10-24 | In-lab reports (`reports/`) are committed to git so any agent can read and answer them | Keith | Keith | Only Keith reports; revisit if other people start sending reports. Reports are cleaned up as they're fixed: delete the report's `.md` and `.png` and its line in `inbox.md` in the commit that fixes it. |
 | 2026-10-24 | Convoy pick-up is automatic: a crane animation, and the mech is picked up as long as it stays in range until the crane connects | Keith | Keith | `docs/proposal-convoy.md` |
 | 2026-10-24 | The convoy's direction is a slider for now; the flattened route stays behind as a road back to the convoy | Keith | Keith | |

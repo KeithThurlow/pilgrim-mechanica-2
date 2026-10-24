@@ -6,6 +6,7 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
+import type { TargetCandidate } from "../../src/game/targeting";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
@@ -64,15 +65,13 @@ function spawnPack() {
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
 let packClock = Infinity, slot = 2; // the first pack comes at once
-lab.nearestEnemy = () => {
-  let bi = -1, bd = Infinity;
-  const p = player.sim.pos;
+lab.targets = () => {
+  const out: TargetCandidate[] = [];
   for (let i = 0; i < sw.hi; i++) {
     if (sw.state[i] >= DOWN) continue; // skip down, dead, empty
-    const d = (sw.px[i] - p.x) ** 2 + (sw.pz[i] - p.z) ** 2;
-    if (d < bd) { bd = d; bi = i; }
+    out.push({ x: sw.px[i], y: sw.py[i] + 0.5, z: sw.pz[i], r: Math.max(0.6, sw.size[i] * 0.5), key: i });
   }
-  return bi < 0 ? null : new THREE.Vector3(sw.px[bi], sw.py[bi] + 0.5, sw.pz[bi]);
+  return out;
 };
 lab.onFrame((dt) => {
   packClock += dt;

@@ -70,6 +70,6 @@ if (closest < 3.5) problems.push(`a vehicle drove into the mech (${closest.toFix
 if (bandShare < 0.35) problems.push(`only ${(bandShare * 100).toFixed(0)}% of circling samples were in their band`);
 if (below) problems.push(`${below} wrecks ended under the sand`);
 if (wb.waves <= firstWave) problems.push("no next band after the first was beaten");
-console.log(`band of ${v.bandTechnicals + v.bandTrucks}: ${shots} rounds fired in 60 s · closest pass ${closest.toFixed(1)} m · circling in band ${(bandShare * 100).toFixed(0)}% · wrecks settled ${settled} · bands ${wb.waves}`);
+console.log(`band of ${v.bandTechnicals + v.bandTrucks + v.bandSixWheelers + v.bandWarRigs + v.bandTanks} (technicals, gun trucks, six-wheelers, War Rig, tank): ${shots} rounds fired in 60 s · closest pass ${closest.toFixed(1)} m · circling in band ${(bandShare * 100).toFixed(0)}% · wrecks settled ${settled} · bands ${wb.waves}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("warband check failed"); }
 console.log("warband check passed");

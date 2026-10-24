@@ -3,8 +3,8 @@
 // hold off and trade fire. The mech takes damage and is rebuilt a few seconds after it's destroyed. Each band beaten
 // brings the next. Until you take over, a demo walks, aims at the nearest raider and fires.
 import "../../src/core/lab.css";
-import * as THREE from "three/webgpu";
 import { combatLab } from "../../src/game/combatLab";
+import type { TargetCandidate } from "../../src/game/targeting";
 import { MechUnit } from "../../src/game/mechUnit";
 import type { RampartBody } from "../../src/mech/rampart";
 import { Warband, WARBAND_DEFAULTS, WARBAND_PARAMS } from "../../src/combat/warband";
@@ -39,11 +39,11 @@ const wb: Warband = new Warband(bf, V, (): MechUnit | null => spare.find((m) => 
 warband = wb;
 lab.app.scene.add(wb.group);
 
-lab.nearestEnemy = () => {
-  let best: THREE.Vector3 | null = null, bestD = Infinity;
-  for (const r of wb.raiders) if (r.alive) { const d = r.sim.pos.distanceTo(player.sim.pos); if (d < bestD) { bestD = d; best = r.sim.pos; } }
-  for (const m of wb.mechs) if (m.alive) { const d = m.sim.pos.distanceTo(player.sim.pos); if (d < bestD) { bestD = d; best = m.sim.pelvis; } }
-  return best;
+lab.targets = () => {
+  const out: TargetCandidate[] = [];
+  for (const r of wb.raiders) if (r.alive) out.push({ x: r.sim.pos.x, y: r.centreY, z: r.sim.pos.z, r: r.shape.radius + 0.5, key: r });
+  for (const m of wb.mechs) if (m.alive) out.push({ x: m.sim.pelvis.x, y: m.sim.pelvis.y + 0.6, z: m.sim.pelvis.z, r: V.hitRadius, key: m });
+  return out;
 };
 lab.onFrame((dt) => {
   wb.update(dt, player);

@@ -6,6 +6,7 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
+import type { TargetCandidate } from "../../src/game/targeting";
 import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD } from "../../src/combat/infantry";
 import { InfantryDraw } from "../../src/combat/infantryDraw";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
@@ -16,7 +17,7 @@ const WAVE_DEFAULTS = {
   groupSize: 40,
   groupEvery: 3,
   spawnFrom: 90,
-  banditDamage: 1.5,
+  banditDamage: 0.6,
   tracerShare: 0.3,
   stompReach: 2.4,
 };
@@ -66,15 +67,13 @@ function spawnGroup() {
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 let groupClock = Infinity, slot = 2; // the first group comes at once
-lab.nearestEnemy = () => {
-  let bi = -1, bd = Infinity;
-  const p = player.sim.pos;
+lab.targets = () => {
+  const out: TargetCandidate[] = [];
   for (let i = 0; i < sw.hi; i++) {
     if (sw.state[i] >= DEAD - 1) continue; // skip down, dead, empty
-    const d = (sw.px[i] - p.x) ** 2 + (sw.pz[i] - p.z) ** 2;
-    if (d < bd) { bd = d; bi = i; }
+    out.push({ x: sw.px[i], y: sw.py[i] + V.banditHeight * 0.55, z: sw.pz[i], r: Math.max(0.6, V.banditRadius), key: i });
   }
-  return bi < 0 ? null : new THREE.Vector3(sw.px[bi], sw.py[bi] + 1, sw.pz[bi]);
+  return out;
 };
 lab.onFrame((dt) => {
   groupClock += dt;

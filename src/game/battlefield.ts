@@ -23,6 +23,8 @@ export interface Hittable {
   /** Distance along the ray (unit dir) to this thing, or -1 if missed within maxDist. */
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number;
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3): void;
+  /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
+  normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
 }
 
 export interface FireOptions {
@@ -103,7 +105,7 @@ export class Battlefield {
     if (struck) {
       hit.copy(muzzle).addScaledVector(d, reach);
       surface = struck.surface;
-      normal = this.back.copy(d).negate();
+      normal = struck.normalAt ? struck.normalAt(hit, this.back) : this.back.copy(d).negate();
       struck.damage(damage, hit, d);
     }
     if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1);
