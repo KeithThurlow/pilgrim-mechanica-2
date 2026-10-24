@@ -24,11 +24,12 @@ How to update it:
 | Leg types | Archetype presets of walker tuning (proportions, stance, gait, feet): stand-in and Rampart (shorter stride, toe hinge 0.14 m, toes to 0.85 m); the old game's Humanoid, Short humanoid and Stilt go here when they have models. The lab takes the archetype as its defaults; the model's measured bone lengths always win | `src/mech/legTypes.ts` | walker |
 | Rampart | The old project's v4 mech on the walker sim (feet split at the toe hinge into heel block and toes): each part rides its bone, leg lengths read from the model's joint markers; hull miniguns on both shoulders (right pod mirrored onto the left in place of the rocket box), barrels spin, pods track and kick; half-width ammo drum per gun (olive) under a stand-in power pack (boxes) | `src/mech/rampart.ts`, `public/models/` | walker (default) |
 | Upper body | Twin-stick: torso turns toward the mouse aim at a capped rate within a limit from the legs. Each hull gun on its own (Keith 2026-10-24): aims from its own shoulder, swings inward at full speed and outward slower (so the arms turn at different speeds as the aim sweeps), its own spin-up, fire cone and fire clock (small left/right spin and rate splits), recoil; a limited drum per gun (1200 rounds), R resupplies in the lab | `src/mech/upper.ts` | walker |
-| Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hits by surface (Keith 2026-10-24, after the old game): sand gets a low layer of opaque dust balls shoved downrange along the ground in streamers that sink back in, plus dust and grit kicked up; steel gets ricochet sparks, a few back off the face, and dark smoke; steel wreck stand-ins (`src/world/wrecks.ts`) to shoot at, rounds strike the first steel before the sand; a clang for steel hits; casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
+| Minigun FX | Tracers to the ground (spread cone, ray against the height function), muzzle flash and light, hits by surface (Keith 2026-10-24): sand hits feed the dust system (a low layer torn up and pushed downrange, dust thrown up) plus grit; steel gets ricochet sparks, a few back off the face, and dark smoke; steel wreck stand-ins (`src/world/wrecks.ts`) to shoot at, rounds strike the first steel before the sand; a clang for steel hits; casings ejected outboard bouncing on the ground; aim reticle amber when the guns bear, grey while turning | `src/fx/minigun.ts`, `src/world/raycast.ts` | walker |
 | Unit look | Plain lit paint (dielectric, roughness 0.55) over the model's vertex colours; no outline by default (Keith 2026-10-24); cel bands and the ink outline are still toggles | `src/look/toon.ts` | walker |
 | Minigun sound | Ported from the old game, every gun its own voice: its own spin-up (pitched to its spin-up time) and spin-down from its muzzle, its own growl following its own spin and firing (offset and detuned), a spit per round ungated between the guns; dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
-| Footfall FX | Footprints (pooled, oldest recycled) and dust puffs | `src/fx/footfall.ts` | walker |
+| Footfall FX | Footprints (pooled, oldest recycled) as soft rounded hollows; the dust of each stomp and toe kick goes to the dust system | `src/fx/footfall.ts` | walker |
+| Dust | After Keith's reference video (old repo `art-refs/particles/m2-res_1080p.mp4`): one pool of 4096 puffs, two kinds: clumps (dense, darker, thrown low, settling) and cloud (grows 3.5×, rises, drifts on the wind, hangs about 5 s). Sources: stomps, toe kicks as feet leave the sand (more when sprinting), minigun rounds into sand. Drawn as soft sorted sprites with noise-frayed grainy edges, faked round shading (pale on the sun side, browner beneath) and a depth fade into the sand and the mech; a soft shadow under each puff, cast down the sun's ray onto the dune. Sliders: Dust topic (Dust, Dust: look, Dust: sources) | `src/fx/dust.ts` (sim), `src/fx/dustDraw.ts` | walker |
 | Checks | Slopes on tilted planes (the uphill thigh folds, slower uphill, full speed downhill with the feet under the hips; `tools/slope-check.ts`); a close target under the guns' depression still fired on; walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
@@ -63,6 +64,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **Toe split is one hinge per foot** (all toes bend together) and the Rampart's back spur stays rigid on the heel.
 - **Only two hit surfaces** (sand, steel) and the steel is box stand-ins; the old game also had rock, concrete, wood
   and flesh, ground marks and gouges.
+- **Dust shadows not seen clearly yet** in headless shots (the low dust sits close to its own shadow at a 36° sun);
+  `shadowStrength` may need raising. Dust colour is fixed, not driven by the sun or the time of day.
+- **Footprints are still flat decals**, not ruts pressed into the sand as in the reference video.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -82,8 +86,25 @@ Nothing right now.
 - Explosions (the old project's), and an ammo belt from each drum to its gun.
 - A modelled power pack (Blender, in the Rampart's construction) to replace the box stand-in.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
+- A real sprint cycle with a flight phase, more like a human sprint (Keith 2026-10-24: push-off extension only makes
+  sense with both feet leaving the ground).
+- Ground pass after the reference video: sand grain speckle, fine ripples, ruts that stay, pebbles and scrub.
 
 ## Changes
+
+### 2026-10-24 · Sand dust after Keith's reference video (Claude, cloud session)
+- Keith: the dust in `art-refs/particles/m2-res_1080p.mp4` (old repo) is the target: sand kicked up by the wheels,
+  picked up by the air, casting shadows, swallowing the vehicle when it drives back through. Built in the walker lab
+  (Keith: no separate dust lab).
+- Studied the video frame by frame: a dense lumpy band rolled out low, a soft grainy cloud blooming above it that
+  drifts and hangs 4-6 s, a soft shadow band under the trail, depth-soft against everything.
+- New `src/fx/dust.ts` (sim, sliders) and `src/fx/dustDraw.ts` (TSL sprites and shadow discs). Sources: walker
+  `onLiftOff` hook (new) for toe kicks, stomps, minigun sand hits (`onSandHit`; the opaque sand balls and their
+  sliders are gone, grit stays). Footprints redrawn as soft rounded hollows (they were plain rectangles). New lab
+  flag `?dt=` (fixed time per frame) so headless shots play at true speed.
+- Checked: typecheck, `npm test`, headless shots walking, sprinting and firing at 16 m and from the 40 m game camera;
+  two looks compared, the browner, lumpier one kept (`dustShade` 0.85, `billow` 0.7, `cloudDensity` 0.65,
+  `edgeFray` 0.7). Frame cost not measurable here (software renderer); look at the HUD on Keith's PC.
 
 ### 2026-10-24 · The mech leans over its feet while moving (Claude, cloud session)
 - Keith: while moving the centre of gravity should sit further over the feet, leaning over itself; the feet looked

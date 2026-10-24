@@ -104,6 +104,8 @@ export class WalkerSim {
   stats: WalkerStats = { steps: 0, overreach: 0, scuffs: 0, frames: 0 };
   /** Called on each footfall with the foot and a strength around 1. */
   onFootfall: ((f: Foot, strength: number) => void) | null = null;
+  /** Called as a foot leaves the ground (strength around 1, more with speed). */
+  onLiftOff: ((f: Foot, strength: number) => void) | null = null;
 
   private bodyY = new Spring(70, 16);
   private impact = new Spring(260, 30);
@@ -240,6 +242,7 @@ export class WalkerSim {
     f.liftUp.copy(f.plantedUp);
     f.liftTheta = f.theta;
     this.aim(f);
+    this.onLiftOff?.(f, clamp(this.speed / Math.max(0.1, this.v.walkSpeed), 0, 2));
   }
 
   private land(f: Foot) {

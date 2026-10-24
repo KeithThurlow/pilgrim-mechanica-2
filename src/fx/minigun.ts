@@ -1,8 +1,7 @@
 // Minigun effects: tracers from the muzzle to what they hit, a flash and light per shot, hits by surface, and brass
 // casings that eject outboard and bounce on the real ground.
-// Hits (after the old game's MiniBlast and HitDust, Keith 2026-10-24): sand gets two layers, a low one of opaque dust
-// balls torn up and shoved downrange along the ground in streamers that sink back into it, and a kick of dust and grit
-// thrown upward; steel gets sparks (mostly ricocheting on along the round, a few back off the face), a hot glint and a
+// Hits (Keith 2026-10-24): sand hits feed the shared dust system (dust.ts: a low layer torn up and shoved downrange,
+// dust thrown up) plus grit; steel gets sparks (mostly ricocheting on along the round, a few back off the face), a hot glint and a
 // little dark smoke.
 import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
@@ -16,15 +15,6 @@ export const MINIGUN_FX_DEFAULTS = {
   flashLight: 40,
   hitDust: 2.1,
   casingKick: 1.5,
-  sandLow: 6,
-  sandCarry: 5.5,
-  sandStreamers: 2,
-  sandLowSize: 0.22,
-  sandLowLife: 1.1,
-  sandCone: 25,
-  sandKick: 2,
-  sandKickSpeed: 3.2,
-  sandKickSize: 0.2,
   sandGrit: 5,
   metalSparks: 9,
   metalSparkSpeed: 11,
@@ -40,15 +30,6 @@ export const MINIGUN_FX_PARAMS: Param[] = [
   { key: "flashLight", label: "Flash light", min: 0, max: 200, step: 1, group: "Minigun FX" },
   { key: "hitDust", label: "Hit size", min: 0, max: 3, step: 0.05, group: "Minigun FX", tip: "Scales every hit effect" },
   { key: "casingKick", label: "Casing eject speed", min: 0, max: 8, step: 0.1, group: "Minigun FX" },
-  { key: "sandLow", label: "Low dust balls per hit", min: 0, max: 16, step: 1, group: "Minigun hits", tip: "The low layer torn up and pushed along the ground" },
-  { key: "sandCarry", label: "Low dust push (m/s)", min: 0, max: 14, step: 0.1, group: "Minigun hits", tip: "How fast the round's momentum shoves the low layer downrange" },
-  { key: "sandStreamers", label: "Streamers per hit", min: 1, max: 4, step: 1, group: "Minigun hits" },
-  { key: "sandLowSize", label: "Low dust size (m)", min: 0.05, max: 1, step: 0.01, group: "Minigun hits" },
-  { key: "sandLowLife", label: "Low dust life (s)", min: 0.2, max: 3, step: 0.05, group: "Minigun hits" },
-  { key: "sandCone", label: "Low dust spread (°)", min: 0, max: 80, step: 1, group: "Minigun hits" },
-  { key: "sandKick", label: "Kicked-up dust balls", min: 0, max: 8, step: 1, group: "Minigun hits", tip: "The dust thrown upward from the strike" },
-  { key: "sandKickSpeed", label: "Kick speed (m/s)", min: 0, max: 10, step: 0.1, group: "Minigun hits" },
-  { key: "sandKickSize", label: "Kicked dust size (m)", min: 0.05, max: 1, step: 0.01, group: "Minigun hits" },
   { key: "sandGrit", label: "Sand grit per hit", min: 0, max: 16, step: 1, group: "Minigun hits" },
   { key: "metalSparks", label: "Sparks off steel", min: 0, max: 30, step: 1, group: "Minigun hits" },
   { key: "metalSparkSpeed", label: "Spark speed (m/s)", min: 2, max: 30, step: 0.5, group: "Minigun hits" },
@@ -84,6 +65,8 @@ export class MinigunFx {
   private round = 0;
   /** Called where a round hits, with what it hit, and where a casing first lands (for sound). */
   onHit: ((at: THREE.Vector3, surface: HitSurface) => void) | null = null;
+  /** A round into the sand: where, its flat travel direction, and the hit size (the dust system makes the dust). */
+  onSandHit: ((at: THREE.Vector3, dir: THREE.Vector3, k: number) => void) | null = null;
   /** Hits so far by surface (HUD and tests). */
   hits = { sand: 0, metal: 0 };
   onCasingLand: ((at: THREE.Vector3) => void) | null = null;
@@ -171,34 +154,15 @@ export class MinigunFx {
     else this.sand(at, dir, k);
   }
 
-  /** A round into sand: the low layer shoved downrange, the kick thrown up, and grit. */
+  /** A round into sand: the dust (via onSandHit) and grit. */
   private sand(at: THREE.Vector3, dir: THREE.Vector3, k: number) {
     const v = this.v;
     const fwd = this.s.set(dir.x, 0, dir.z);
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, 1);
     fwd.normalize();
     const along = fwd.clone();
-    // Low layer: streamers of balls along the round's travel, biggest at the strike, pushed on together and sinking.
-    const streamers = Math.max(1, Math.round(v.sandStreamers));
-    const per = Math.max(1, Math.round(v.sandLow / streamers));
-    for (let s = 0; s < streamers; s++) {
-      const d = along.clone().applyAxisAngle(UP, (Math.random() * 2 - 1) * v.sandCone * D2R);
-      const side = new THREE.Vector3(-d.z, 0, d.x).multiplyScalar((Math.random() * 2 - 1) * 0.6);
-      const speed = v.sandCarry * (0.6 + Math.random() * 0.55);
-      for (let i = 0; i < per; i++) {
-        const u = per > 1 ? i / (per - 1) : 0;
-        const p = new THREE.Vector3().copy(at).addScaledVector(d, i * 0.18 * k);
-        p.y = this.ground.height(p.x, p.z) + 0.05;
-        const vel = d.clone().multiplyScalar(speed * (0.7 + 0.4 * u)).add(side).setY(0.25 + Math.random() * 0.3);
-        this.ball(p, vel, v.sandLowSize * k * (1.15 - 0.75 * u) * (0.85 + Math.random() * 0.25), v.sandLowLife * (1.1 - 0.3 * u) * (0.8 + Math.random() * 0.4), true, 3, SAND_LOW);
-      }
-    }
-    // The kick: a few balls thrown up and a little back toward the gun, slowing as they rise.
-    for (let i = 0; i < v.sandKick; i++) {
-      const p = new THREE.Vector3().copy(at).setY(at.y + 0.1);
-      const vel = new THREE.Vector3((Math.random() - 0.5) * 1.2, 1, (Math.random() - 0.5) * 1.2).multiplyScalar(v.sandKickSpeed * (0.6 + Math.random() * 0.6)).addScaledVector(along, -0.6 + Math.random() * 1.6);
-      this.ball(p, vel, v.sandKickSize * k * (0.7 + Math.random() * 0.5), 0.7 + Math.random() * 0.6, false, 2.6, SAND_KICK);
-    }
+    // The dust itself (the low layer torn up and pushed downrange, and the dust thrown up) is the shared dust system.
+    this.onSandHit?.(at, along, k);
     // Grit: sand thrown up in an arc, mostly on downrange.
     for (let i = 0; i < v.sandGrit; i++) {
       const g = this.gritBits[this.gritI++ % GRIT];
@@ -314,9 +278,7 @@ export class MinigunFx {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
-const D2R = Math.PI / 180;
-// Sand in the low layer reads a touch darker (torn-up, shaded) than the pale kick above it.
-const SAND_LOW = new THREE.Color(0xc9a978), SAND_KICK = new THREE.Color(0xe3c99b), STEEL_SMOKE = new THREE.Color(0x4a4744);
+const STEEL_SMOKE = new THREE.Color(0x4a4744);
 
 function bit(): Bit {
   return { pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 1, life: 0, spin: new THREE.Vector3(), rot: new THREE.Euler(), rest: true, landed: true };

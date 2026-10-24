@@ -24,6 +24,8 @@ import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { FootfallFx } from "../../src/fx/footfall";
 import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS, type HitSurface } from "../../src/fx/minigun";
 import { WreckStandIns } from "../../src/world/wrecks";
+import { DustSim, DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
+import { DustDraw } from "../../src/fx/dustDraw";
 import { Sfx, SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { MinigunAudio } from "../../src/audio/minigunAudio";
 
@@ -33,7 +35,7 @@ const canvas = app.renderer.domElement;
 
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, radius: 4, shadowBox: 30,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, radius: 4, shadowBox: 30,
 };
 const DEFAULTS = { ...V };
 // Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
@@ -60,6 +62,11 @@ scene.add(rampart ? rampart.root : standIn!.root);
 const steps = new FootfallFx();
 const gunFx = new MinigunFx(field, V);
 scene.add(steps.group, gunFx.group);
+// Sand dust from the feet and the rounds (after Keith's reference video).
+const dust = new DustSim(V, field);
+const dustDraw = new DustDraw(dust, field);
+scene.add(dustDraw.group);
+gunFx.onSandHit = (at, d, k) => dust.hit(at.x, at.y, at.z, d.x, d.z, k);
 // Sound starts on the first click or key press (browser rule).
 const sfx = new Sfx(V, camera);
 const gunAudio = new MinigunAudio(sfx);
@@ -83,6 +90,13 @@ const plateQ = (up: THREE.Vector3, yaw: number) => {
 };
 sim.onFootfall = (f, k) => {
   steps.footfall(f.planted, plateQ(f.plantedUp, f.plantedYaw), k);
+  dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1));
+};
+// Toe kick: sand flicked back from a foot as it leaves the ground, more the faster it goes.
+sim.onLiftOff = (f, k) => {
+  if (k < 0.15) return;
+  const hd = sim.heading;
+  dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1));
   stepTimes.push(clock);
   while (stepTimes.length && clock - stepTimes[0] > 3) stepTimes.shift();
 };
@@ -132,7 +146,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -143,10 +157,11 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain", "Dust: sources"] },
+    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
-    { id: "hits", label: "Hits", groups: ["Minigun hits", "Minigun FX", "Sound"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Minigun FX", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -208,13 +223,16 @@ const lastFollow = follow.clone();
 const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
 const muzzle = new THREE.Vector3(), dir = new THREE.Vector3(), hit = new THREE.Vector3(), eject = new THREE.Vector3();
 let rounds = 0;
+const sunDir = new THREE.Vector3();
 // ?aimat=x,z: hold the aim on a fixed point (repeatable shots of hits).
 const aimAtArg = params.get("aimat")?.split(",").map(Number);
 const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], y: field.height(aimAtArg[0], aimAtArg[1]) + 0.8, z: aimAtArg[1] } : null;
 const steelAt = new THREE.Vector3(), steelN = new THREE.Vector3();
 
+// ?dt=seconds: every frame advances this much time, however long it took to draw (repeatable headless shots).
+const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 app.onTick((rawDt) => {
-  const dt = rawDt * (slow ? 0.25 : 1);
+  const dt = (fixedDt || rawDt) * (slow ? 0.25 : 1);
   clock += dt;
 
   keys.move(camera, stick);
@@ -289,11 +307,14 @@ app.onTick((rawDt) => {
   // Haze and shadows scale with the zoom: fog counts from the camera, and far views need a bigger shadow box.
   const camDist = camera.position.distanceTo(follow);
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+  dust.update(dt);
+  camera.updateMatrixWorld();
+  dustDraw.update(camera, sunDir.subVectors(look.sun.position, look.sun.target.position).normalize(), V);
 
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
-  app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}%`);
+  app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${gunFx.hits.sand} steel ${gunFx.hits.metal}${sfx.running ? "" : " · click for sound"}`);
 });
