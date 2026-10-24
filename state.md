@@ -92,7 +92,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Next: convoy pass 2 (train layout with gaps and footbridges, Dune-style trapezoid tracks, track marks and dust, piping, vehicles aboard and escorts).
+- Convoy pass 2, an agent on a worktree branch (train layout with gaps and footbridges, Dune-style trapezoid tracks, track marks and dust, piping, vehicles aboard and escorts).
 
 ## Next candidates (ask Keith which)
 
