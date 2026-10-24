@@ -110,6 +110,7 @@ const SHOT = {
   [MID]: { flash: 0.7, hit: 0.6 },
   [BIG]: { flash: 1.2, hit: 1 },
 } as Record<number, { flash: number; hit: number }>;
+let wadeTick = 0;
 lab.onFrame((dt) => {
   packClock += dt;
   if (sw.count < V.robotSwarmSize && packClock >= V.robotGroupEvery) { packClock = 0; spawnPack(); }
@@ -139,6 +140,16 @@ lab.onFrame((dt) => {
       tear.bite(x, y, z, p.x, p.z);
       tear.bite(x, y, z, p.x, p.z);
     });
+  // Wading: a sixth of the swarm a frame checks for water and leaves rings as it moves.
+  if (bf.water) {
+    wadeTick = (wadeTick + 1) % 6;
+    for (let i = wadeTick; i < sw.hi; i += 6) {
+      if (!(sw.state[i] < DOWN)) continue;
+      const sp = Math.hypot(sw.vx[i], sw.vz[i]);
+      if (sp < 0.3 || Math.random() > sp * dt * 6 / Math.max(0.3, V.wakeEvery)) continue;
+      if (bf.inWater(sw.px[i], sw.pz[i])) bf.water.ripple(sw.px[i], sw.pz[i], 0.35, 0.8);
+    }
+  }
   draw!.update(dt);
   tear.update(dt);
   lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · destroyed ${target.kills}`);

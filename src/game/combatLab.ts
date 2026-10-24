@@ -23,6 +23,10 @@ import { MARK_DEFAULTS, MARK_PARAMS } from "../fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../fx/minigun";
 import { DUST_DEFAULTS, DUST_PARAMS } from "../fx/dust";
 import { SHELL_FX_DEFAULTS, SHELL_FX_PARAMS } from "../fx/shellsDraw";
+import { WATER_FX_DEFAULTS, WATER_FX_PARAMS } from "../fx/water";
+import { BIOME_DEFAULTS, BIOME_PARAMS } from "../world/biomes";
+import { ROCK_DEFAULTS, ROCK_PARAMS } from "../world/rock";
+import { SHALLOWS_DEFAULTS, SHALLOWS_PARAMS } from "../world/shallows";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../audio/sfx";
 import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
@@ -33,10 +37,10 @@ import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -89,6 +93,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const { scene, camera, params } = app;
   const canvas = app.renderer.domElement;
   const V = { ...BASE_DEFAULTS, ...o.defaults } as BaseValues & E;
+  // ?biome=mix|desert|rocky|shallows (desert by default).
+  { const b = new URLSearchParams(location.search).get("biome"); if (b) (V as { biomeOnly: number }).biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[b] ?? 0; }
   const DEFAULTS = { ...V };
 
   const toon = new ToonLook(V);
@@ -130,7 +136,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     auto = false;
   });
 
-  const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
+  const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
   let selector: Selector | null = null;
   let picking = false;
   const panel = tweakPanel({
@@ -145,8 +151,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
-      { id: "hits", label: "Hits and dust", groups: ["Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
+      { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
+      { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
       { id: "camera", label: "Camera", groups: ["Camera"] },
     ],

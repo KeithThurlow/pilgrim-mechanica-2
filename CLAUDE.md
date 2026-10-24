@@ -64,7 +64,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
   `?surface=gravel|dirt|concrete` (dust as if the ground were that).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
-- Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`.
+- Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
+  `?biome=mix|rocky|shallows` (desert by default). Walker lab takes `?biome=` too.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
@@ -82,7 +83,8 @@ src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
-src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings)
+src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings),
+                        water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line

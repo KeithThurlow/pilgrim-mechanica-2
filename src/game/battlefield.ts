@@ -3,6 +3,8 @@
 // nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
+import { WaterFx, WATER_FX_DEFAULTS, type WaterFxValues } from "../fx/water";
+import { WaterDraw } from "../fx/waterDraw";
 import { ShellsDraw, SHELL_FX_DEFAULTS, type ShellFxValues } from "../fx/shellsDraw";
 import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
@@ -65,6 +67,10 @@ export class Battlefield {
   /** Slow telegraphed shells (lob) and their landing marks. */
   readonly shells = new Shells();
   readonly shellsDraw: ShellsDraw;
+  /** Ripples and splashes on the shallows' water (null where the ground has no water). */
+  readonly water: WaterFx | null = null;
+  private waterDraw: WaterDraw | null = null;
+  private wsamp = { h: 0, crest: 0, flat: 0 } as import("../world/terrain").GroundSample;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   private hit = new THREE.Vector3();
   private steelAt = new THREE.Vector3();
@@ -79,6 +85,13 @@ export class Battlefield {
     this.dust = new DustSim(v, field);
     // Biomes: rock and water throw no dust, rocky sand less (the ground knows what it's made of).
     if (field.biomes) this.dust.surfaceAt = (x, z) => field.surfaceAt(x, z);
+    if (field.waterLevel !== null) {
+      const sv0 = v as BattlefieldValues & Record<string, unknown>;
+      for (const [k, val] of Object.entries(WATER_FX_DEFAULTS)) if (!(k in sv0)) sv0[k] = val;
+      this.water = new WaterFx(v as unknown as WaterFxValues, field.waterLevel);
+      this.waterDraw = new WaterDraw(this.water);
+      this.group.add(this.waterDraw.group);
+    }
     this.dustDraw = new DustDraw(this.dust, field);
     // Labs that don't list the telegraph sliders still get their defaults.
     const sv = v as BattlefieldValues & Record<string, unknown>;
@@ -88,7 +101,11 @@ export class Battlefield {
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
-    this.gunFx.onSandHit = (at, d, k) => { this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k); };
+    this.gunFx.onSandHit = (at, d, k) => {
+      // Into water: a spray of drops and rings instead of dust and a crater.
+      if (this.inWater(at.x, at.z)) { this.water!.splash(at.x, at.z, 0.35 + k * 0.5, d.x * 0.4, d.z * 0.4, 1.4); return; }
+      this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k);
+    };
     this.gunFx.onHit = (at, surface) => this.gunAudio.hit(at, surface);
     this.gunFx.onSteelSmoke = (at, n, puffs, k) => {
       for (let i = 0; i < puffs; i++) {
@@ -169,6 +186,13 @@ export class Battlefield {
     return struck;
   }
 
+  /** Is (x, z) under the shallows' water (deep enough to splash)? */
+  inWater(x: number, z: number, depth = 0.04): boolean {
+    if (!this.water) return false;
+    const s = this.field.sample(x, z, this.wsamp);
+    return (s.ws ?? 0) > 0.3 && s.h < this.water.level - depth;
+  }
+
   /**
    * Lob a telegraphed shell from `from` to land on the ground at (x, z) after `flight` seconds, bursting with `radius`
    * and `damage` (falling off to half at the edge) on everything of another team. The landing ring shows at once.
@@ -181,6 +205,14 @@ export class Battlefield {
 
   private burst(s: Shell) {
     const p = s.to, k = Math.max(0.5, s.radius / 3);
+    if (this.inWater(p.x, p.z)) {
+      this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
+      for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
+      this.sfx.play("brap", p, 1.6, 0.5, false);
+      const down0 = this.back.set(0, -1, 0);
+      for (const t of this.targets) if (t.alive && t.team !== s.team && t.splash) t.splash(p, s.radius, s.damage, down0);
+      return;
+    }
     for (let i = 0; i < 18 * k; i++) {
       const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6 * k;
       this.dust.emit(1, p.x, p.y + Math.random() * 0.5, p.z, Math.cos(a) * sp, 2 + Math.random() * 5 * k, Math.sin(a) * sp, 0.5 + Math.random() * 0.7, 2.5 + Math.random() * 3, 0.9);
@@ -216,6 +248,7 @@ export class Battlefield {
     this.shells.update(dt, (s) => this.burst(s));
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
+    if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
     this.dust.update(dt);
     camera.updateMatrixWorld();

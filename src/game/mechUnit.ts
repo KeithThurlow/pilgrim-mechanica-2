@@ -75,6 +75,7 @@ export class MechUnit implements Hittable {
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
+  private wakeAcc = 0;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -101,12 +102,19 @@ export class MechUnit implements Hittable {
     this.health = v.hull;
     const sim = this.sim, dust = bf.dust;
     sim.onFootfall = (f, k) => {
+      // In the shallows: a splash and rings instead of a print and dust.
+      if (bf.inWater(f.planted.x, f.planted.z)) {
+        bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.5, sim.vel.x * 0.1, sim.vel.z * 0.1);
+        this.onStomp?.(f.planted.x, f.planted.z, k);
+        return;
+      }
       bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       this.onStomp?.(f.planted.x, f.planted.z, k);
     };
     sim.onLiftOff = (f, k) => {
       if (k < 0.15) return;
+      if (bf.inWater(f.pos.x, f.pos.z)) { bf.water!.splash(f.pos.x, f.pos.z, 0.25 * k, -Math.sin(sim.heading) * 0.5, -Math.cos(sim.heading) * 0.5, 0.6); return; }
       const hd = sim.heading;
       dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1));
       this.stepTimes.push(this.clock);
@@ -160,13 +168,22 @@ export class MechUnit implements Hittable {
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, trigger && body.armed)) fired.push(s);
     }
     body.update(sim, upper);
+    // Wading: the body pushes a wake (rings dropped as it moves, overlapping into a V).
+    const bf = this.bf;
+    if (bf.water) {
+      const moved = Math.hypot(sim.vel.x, sim.vel.z) * dt + Math.hypot(dash.vx, dash.vz) * dt;
+      if (moved > 0 && bf.inWater(sim.pos.x, sim.pos.z, 0.15)) {
+        this.wakeAcc = bf.water.wake(sim.pos.x, sim.pos.z, moved, this.wakeAcc, 0.7, 1.4);
+        if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
+      }
+    }
     if (dash.active) {
       // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
       const sp = Math.hypot(dash.vx, dash.vz);
       for (const f of sim.feet) {
         if (f.swinging || sp < 2) continue;
         this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, dash.vx, dash.vz, sp * dt, 1, 0);
-        if (Math.random() < dt * 20) this.bf.marks.rut(f.pos.x, f.pos.z, Math.atan2(dash.dirX, dash.dirZ), 0.9, Math.max(0.6, sp * dt * 2));
+        if (Math.random() < dt * 20 && !this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.rut(f.pos.x, f.pos.z, Math.atan2(dash.dirX, dash.dirZ), 0.9, Math.max(0.6, sp * dt * 2));
       }
       this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     }

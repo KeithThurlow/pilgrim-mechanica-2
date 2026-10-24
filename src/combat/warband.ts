@@ -490,13 +490,19 @@ export class Warband {
     // Wheels throw dust and leave ruts.
     s.wheels.forEach((w, i) => {
       if (!w.grounded || Math.abs(s.speed) < 0.5) return;
+      // Through water: a wake and spray off the wheels instead of dust.
+      if (this.bf.inWater?.(w.pos.x, w.pos.z)) {
+        r.wheelAcc[i] = this.bf.water!.wake(w.pos.x, w.pos.z, moved, r.wheelAcc[i], 0.5, 1.2);
+        if (Math.random() < Math.abs(s.speed) * 0.02) this.bf.water!.splash(w.pos.x, w.pos.z, 0.4, -s.vel.x * 0.05, -s.vel.z * 0.05, 0.7);
+        return;
+      }
       r.wheelAcc[i] = this.bf.dust.wheel(w.pos.x, w.pos.y, w.pos.z, s.vel.x, s.vel.z, moved, w.slip, r.wheelAcc[i]);
     });
     r.rutAcc += moved;
     if (r.rutAcc >= this.v.rutEvery) {
       r.rutAcc = 0;
       const width = r.kind === "technical" ? 0.45 : r.kind === "tank" ? 0.8 : 0.6;
-      for (const i of s.rearWheels()) { const w = s.wheels[i]; if (w.grounded) this.bf.marks.rut(w.pos.x, w.pos.z, s.heading, width, this.v.rutEvery * 1.15); }
+      for (const i of s.rearWheels()) { const w = s.wheels[i]; if (w.grounded && !this.bf.inWater?.(w.pos.x, w.pos.z)) this.bf.marks.rut(w.pos.x, w.pos.z, s.heading, width, this.v.rutEvery * 1.15); }
     }
     this.pose(r);
   }

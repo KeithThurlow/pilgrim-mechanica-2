@@ -94,6 +94,7 @@ lab.targets = () => {
   }
   return out;
 };
+let wadeTick = 0;
 lab.onFrame((dt) => {
   groupClock += dt;
   if (sw.count < V.swarmSize && groupClock >= V.groupEvery) { groupClock = 0; spawnGroup(); }
@@ -118,6 +119,16 @@ lab.onFrame((dt) => {
     if (drawn) slot = slot >= 19 ? 2 : slot + 1;
     bf.fire(slot, 2, from, dir, V.fireRange + 5, V.banditDamage, drawn ? { flashScale: 0.35, voice: "other", hitScale: 0.3 } : { tracer: false, voice: "none" });
   });
+  // Wading: a sixth of the swarm a frame checks for water and leaves rings as it moves.
+  if (bf.water) {
+    wadeTick = (wadeTick + 1) % 6;
+    for (let i = wadeTick; i < sw.hi; i += 6) {
+      if (!(sw.state[i] < DEAD - 1)) continue;
+      const sp = Math.hypot(sw.vx[i], sw.vz[i]);
+      if (sp < 0.3 || Math.random() > sp * dt * 6 / Math.max(0.3, V.wakeEvery)) continue;
+      if (bf.inWater(sw.px[i], sw.pz[i])) bf.water.ripple(sw.px[i], sw.pz[i], 0.3, 0.8);
+    }
+  }
   draw!.update(dt);
   lab.hud("bandits", `bandits ${sw.count} up · killed ${target.kills} · rounds at you ${sw.shots}`);
 });
