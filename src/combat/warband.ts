@@ -9,6 +9,7 @@ import { CarBody } from "../vehicles/carBody";
 import { rayCapsule, type MechUnit } from "../game/mechUnit";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
+import type { DeathPhysics, Dead } from "../physics/deaths";
 
 export const WARBAND_DEFAULTS = {
   bandTechnicals: 5,
@@ -125,6 +126,8 @@ export class Raider implements Hittable {
   tumbleVel = new THREE.Vector3();
   tumbleSpin = new THREE.Vector3();
   tumbling = false;
+  /** The wreck in the death physics (when there is one): it moves the body until it's cleared. */
+  wreck: Dead | null = null;
   /** Line of sight to the mech, re-checked every quarter second. */
   hasLos = true;
   losClock = Math.random() * 0.25;
@@ -179,6 +182,8 @@ export class Warband {
     readonly v: WarbandValues,
     /** Makes a bandit mech (a red Rampart already loaded, unparented), or null to skip them. */
     private makeMech: (() => MechUnit | null) | null,
+    /** Death physics for wrecks (Rapier); without it wrecks use a simple throw. */
+    private deaths: DeathPhysics | null = null,
   ) {}
 
   /** Bring in a band from a random direction, spawnDistance out from the target. */
@@ -240,7 +245,8 @@ export class Warband {
     for (let i = this.raiders.length - 1; i >= 0; i--) {
       const r = this.raiders[i];
       const far = r.sim.pos.distanceTo(target) > v.spawnDistance * 1.6;
-      if ((!r.alive && r.deadFor > 25) || (r.alive && r.mode === "flee" && far)) this.remove(r, i);
+      const cleared = r.wreck ? r.wreck.done : r.deadFor > 25;
+      if ((!r.alive && cleared) || (r.alive && r.mode === "flee" && far)) this.remove(r, i);
     }
     for (let i = this.mechs.length - 1; i >= 0; i--) {
       const m = this.mechs[i];
@@ -268,7 +274,11 @@ export class Warband {
     if (!r.alive) {
       if (r.deadFor === 0) this.blowUp(r);
       r.deadFor += dt;
-      if (r.tumbling) this.tumble(r, dt);
+      if (r.wreck) {
+        s.pos.copy(r.wreck.pos[0]); s.pos.y -= r.wreck.sink;
+        s.quat.copy(r.wreck.quat[0]);
+        r.body.update(s, r.turretYaw, r.turretPitch);
+      } else if (r.tumbling) this.tumble(r, dt);
       else { throttle = s.speed > 0.5 ? -0.6 : 0; this.stepCar(r, dt, throttle, 0); }
       if (r.deadFor < 6 && Math.random() < dt * 8) {
         // Burning out: dark smoke from the wreck.
@@ -350,6 +360,14 @@ export class Warband {
     bf.dust.stomp(p.x, p.y - 0.8, p.z, 2.5 * big);
     bf.marks.crater(p.x, p.z, 6 * big);
     bf.sfx.play("brap", p, 2, 0.55, false);
+    // Thrown by the blast. With the death physics, a real rigid body that can roll over and slide down a dune.
+    if (this.deaths) {
+      const cv = s.v;
+      r.wreck = this.deaths.wreck([cv.track / 2 + 0.2, 0.45, cv.wheelbase / 2 + 0.85],
+        { half: [cv.track / 2 - 0.05, 0.45, 0.75], at: [0, 0.85, cv.wheelbase / 2 - 0.45] },
+        s.pos, s.quat, s.vel, r.hitDir.x, r.hitDir.z, v.blastLift / big, v.blastSpin / big);
+      return;
+    }
     // Thrown: up, along the killing round, spinning end over end and sideways (it can land on its roof).
     r.tumbling = true;
     r.tumbleVel.copy(s.vel).addScaledVector(r.hitDir, v.blastPush).setY(v.blastLift * (0.7 + Math.random() * 0.6) / big);

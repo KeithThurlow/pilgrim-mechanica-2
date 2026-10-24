@@ -1,4 +1,4 @@
-# Proposal: the convoy, its cranes and its escort (waiting for Keith)
+# Proposal: the convoy, its cranes and its escort (Keith's answers in; not built yet)
 
 Keith 2026-10-24: the base is a convoy village that never stops rolling. A fleet of 6-7 large platform vehicles, the
 biggest on tracks carrying the mech bays and gantries. Cranes on the platforms pick the mech up when it's in range and
@@ -43,8 +43,10 @@ convoy visibly flatten the terrain in front of it. Nothing here is built yet.
   pick-up), the release speed match.
 - Platform suspension, track sag.
 
-## Open questions for Keith
+## Answers (Keith 2026-10-24)
 
-- Pick-up: automatic when you stay in range, or a key press once in range?
-- Is the convoy's direction steered by anyone yet, or a slider in the lab for now (Keith: the player doesn't steer it)?
-- Should the flattened corridor stay flat behind the convoy (a road across the desert) or slowly fill back in?
+- Pick-up is automatic with a crane animation: as long as the mech stays in range and the crane connects, it's
+  picked up. Leave range before the cradle grips and it doesn't happen.
+- The convoy's direction is a slider for now.
+- The flattened route stays behind the convoy: a road across the desert that players can follow back to the convoy
+  if they fall behind, or use to track their way home.

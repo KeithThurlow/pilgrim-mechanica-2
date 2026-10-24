@@ -9,12 +9,12 @@ import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 
 export const MARK_DEFAULTS = {
-  markDepth: 1.2,
+  markDepth: 0.9,
   markLife: 45,
   markDark: 0.55,
   printSize: 1,
   craterSize: 0.55,
-  craterEvery: 2,
+  craterEvery: 3,
   slideOnSlope: 1,
 };
 export type MarkValues = typeof MARK_DEFAULTS;

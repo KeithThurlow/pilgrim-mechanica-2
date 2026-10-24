@@ -9,6 +9,7 @@ import { combatLab } from "../../src/game/combatLab";
 import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD } from "../../src/combat/infantry";
 import { InfantryDraw } from "../../src/combat/infantryDraw";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
+import { BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
 
 const WAVE_DEFAULTS = {
   swarmSize: 300,
@@ -49,6 +50,13 @@ lab.app.scene.add(draw.group);
 const target = new InfantryTarget(sw, 2);
 bf.targets.push(target);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.stompReach * Math.min(1.5, k));
+// Deaths go to the physics as ragdolls (Keith 2026-10-24), in the bandit's cloth colour.
+const CLOTH = [0x9a4a2c, 0xb59c72, 0x4e5a78, 0x6b6a3e];
+sw.hideDead = true;
+sw.onDeath = (i, nx, nz, speed) => {
+  lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
+    { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed);
+};
 
 function spawnGroup() {
   const a = Math.random() * Math.PI * 2;

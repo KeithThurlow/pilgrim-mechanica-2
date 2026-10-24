@@ -75,7 +75,7 @@ export class InfantryDraw {
     let n = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
-      if (st === EMPTY) continue;
+      if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
       if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.tilt[i] = 0; this.phase[i] = sw.seed[i] * 6.283; }
 
       const speed = Math.hypot(sw.vx[i], sw.vz[i]);

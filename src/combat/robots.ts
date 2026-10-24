@@ -727,6 +727,11 @@ export class RobotSwarm {
     return best < 0 ? null : { index: best, dist: bestT };
   }
 
+  /** Called when a robot dies: its index, the flat direction it was thrown and how hard (m/s). */
+  onDeath: ((i: number, nx: number, nz: number, speed: number) => void) | null = null;
+  /** True when something else draws the dead (the death physics' ragdolls): the drawer then hides them. */
+  hideDead = false;
+
   private kill(i: number, dirX: number, dirZ: number) {
     const v = this.v, l = Math.hypot(dirX, dirZ);
     const nx = l > 1e-6 ? dirX / l : Math.sin(this.heading[i]), nz = l > 1e-6 ? dirZ / l : Math.cos(this.heading[i]);
@@ -744,6 +749,7 @@ export class RobotSwarm {
       this.spin[i] = (this.rand() < 0.5 ? -1 : 1) * (6 + this.rand() * 8);
     }
     this.count--;
+    this.onDeath?.(i, nx, nz, Math.hypot(this.vx[i], this.vz[i]));
   }
 
   /** Damage a live robot; returns true if this killed it. Small wrecks are thrown along (dirX, dirZ). */

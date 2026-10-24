@@ -441,6 +441,11 @@ export class InfantrySwarm {
     return best < 0 ? null : { index: best, dist: bestT };
   }
 
+  /** Called when a bandit dies: its index, the flat direction it was thrown and how hard (m/s). */
+  onDeath: ((i: number, nx: number, nz: number, speed: number) => void) | null = null;
+  /** True when something else draws the dead (the death physics' ragdolls): the drawer then hides them. */
+  hideDead = false;
+
   private kill(i: number, dirX: number, dirZ: number, throwSpeed: number) {
     const l = Math.hypot(dirX, dirZ);
     const nx = l > 1e-6 ? dirX / l : Math.sin(this.heading[i]), nz = l > 1e-6 ? dirZ / l : Math.cos(this.heading[i]);
@@ -450,6 +455,7 @@ export class InfantrySwarm {
     this.fallYaw[i] = Math.atan2(nx, nz);
     this.count--;
     if (this.evN < EVENTS_MAX) { this.evX[this.evN] = this.px[i]; this.evZ[this.evN] = this.pz[i]; this.evN++; }
+    this.onDeath?.(i, nx, nz, s);
   }
 
   /** Damage a live bandit; returns true if this killed it. Death throws the body along (dirX, dirZ). */

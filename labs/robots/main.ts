@@ -9,6 +9,7 @@ import { combatLab } from "../../src/game/combatLab";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
+import { ROBOT_PARTS, ROBOT_JOINTS } from "../../src/physics/bodies";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -47,6 +48,13 @@ lab.app.scene.add(draw.group);
 const target = new RobotTarget(sw, 3);
 bf.targets.push(target);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k));
+// Deaths go to the physics: the body and its four legs fall apart loosely (small ones fly, big ones fold).
+sw.hideDead = true;
+sw.onDeath = (i, nx, nz, speed) => {
+  const s = sw.size[i], big = sw.kind[i] === 1;
+  lab.deaths.ragdoll(ROBOT_PARTS(s, 0xd6d3cc, 0x34363a), ROBOT_JOINTS(s), sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
+    { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, big ? 1 : Math.max(3, speed));
+};
 
 function spawnPack() {
   const a = Math.random() * Math.PI * 2;

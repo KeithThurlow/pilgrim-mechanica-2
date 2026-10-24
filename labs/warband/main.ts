@@ -35,7 +35,7 @@ for (let i = 0; i < 2; i++) {
   b.paint(toon, RED);
   spare.push(m);
 }
-const wb: Warband = new Warband(bf, V, (): MechUnit | null => spare.find((m) => !wb.mechs.includes(m)) ?? null);
+const wb: Warband = new Warband(bf, V, (): MechUnit | null => spare.find((m) => !wb.mechs.includes(m)) ?? null, lab.deaths);
 warband = wb;
 lab.app.scene.add(wb.group);
 

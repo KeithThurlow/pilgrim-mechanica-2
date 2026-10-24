@@ -30,7 +30,7 @@ How to update it:
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
 | Sand marks | Footprints, round craters (every 2nd round) and slide trails where a step breaks sand loose on a steep face, all flat decals whose shader lights a small hollow-and-rim height field from the sun (lit rim, shaded wall, churned darker sand inside); deeper on steeper sand; fade over 45 s, 900 pooled. Sliders: Sand marks (Legs, Dust, Hits topics) | `src/fx/sandMarks.ts` | walker |
 | Dust | After Keith's reference video (old repo `art-refs/particles/m2-res_1080p.mp4`): one pool of 4096 puffs, two kinds: clumps (dense, darker, thrown low, settling) and cloud (grows 3.5×, rises, drifts on the wind, hangs about 5 s). Sources: stomps (sand shoved out and carried along the walk), toe kicks as feet leave the sand (more when sprinting), minigun rounds into sand (spray streaks flung up and forward that fall back in a third of a second for the punch, thick packets churned up and shoved downrange, plus a plume thrown up and forward that strings into a column, after Keith's plume refs). Dust keeps the push of whatever threw it, then the wind takes over after `windIn`. Ground surfaces (sand, gravel, dirt, concrete) scale dust and clumps and darken them; only sand exists so far (`?surface=` to try the others). Puffs receive the sun's shadows (shadow map, four soft taps per pixel, looked up across and above the puff so the sand under it can't stripe it), so dust in shade takes a pale sky-lit grey-brown; they don't shadow each other. Drawn as soft sorted sprites with noise-frayed grainy edges, faked round shading (pale on the sun side, browner beneath) and a depth fade into the sand and the mech; a soft shadow under each puff, cast down the sun's ray onto the dune. Sliders: Dust topic (Dust, Dust: look, Dust: sources, Dust: surfaces) | `src/fx/dust.ts` (sim), `src/fx/dustDraw.ts` | walker |
-| Checks | Robot swarm (on ground, crowding, latching, firing, kills, stomps and shake-off); war band (seeded: no NaN, no vehicle flipped off the ground, rounds fired, gun runs, circling in band, never into the mech, wrecks settle, the next band comes); vehicles on dunes and flat; the bandit swarm; slopes on tilted planes (the uphill thigh folds, slower uphill, full speed downhill with the feet under the hips; `tools/slope-check.ts`); a close target under the guns' depression still fired on; walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
+| Checks | Death physics (floor matches the dunes, a thrown ragdoll lands that way in one piece, the cap, clearing); robot swarm (on ground, crowding, latching, firing, kills, stomps and shake-off); war band (seeded: no NaN, no vehicle flipped off the ground, rounds fired, gun runs, circling in band, never into the mech, wrecks settle, the next band comes); vehicles on dunes and flat; the bandit swarm; slopes on tilted planes (the uphill thigh folds, slower uphill, full speed downhill with the feet under the hips; `tools/slope-check.ts`); a close target under the guns' depression still fired on; walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Battlefield | The shared combat stage (`src/game/battlefield.ts`): dust, sand marks, gun effects and sound, wrecks, and every target; `fire()` resolves a round against the nearest unit of another team, steel or sand, draws it and applies damage. `src/game/combatLab.ts` is the shell every combat lab shares (terrain, light, the player's Rampart on twin-stick, iso camera, panel with topics and hold-V, Report, hull bar and red edge when hit, demo) | `src/game/` | warband, bandits |
 | Mech unit | Walker + guns + Rampart model + health as one unit (`src/game/mechUnit.ts`), for the player and bandit mechs (red Ramparts, Keith 2026-10-24); hits on a capsule from the feet past the hull; destroyed: dark wreck and smoke; the player's is rebuilt after a few seconds (lab) | `src/game/mechUnit.ts` | warband, bandits |
@@ -38,6 +38,7 @@ How to update it:
 | War band | Raider technicals and gun trucks circle the mech at range and make gun runs a few at a time (attack tokens), turrets track with a turn rate and spread, hurt ones flee; drivers steer round dune faces too steep to climb and never drive into the mech (they aim for a line grazing a clearance round it and turn out to the side their nose points); driving sliders per kind; bandit mechs hold off and strafe; killed vehicles blow up (blast, crater) and are thrown, tumbling and landing on their side or roof; bands keep coming | `src/combat/warband.ts` | warband |
 | Bandit swarm | Hundreds on foot (SoA pool, spatial hash): run in fanned out, hold a firing band and shoot in bursts, separation, morale (deaths nearby frighten them into running, they rally later), stomps knock down or kill, bodies thrown and sink; 400 at about 0.4 ms a step | `src/combat/infantry.ts`, `infantryDraw.ts`, `infantryTarget.ts` | bandits |
 | Robot swarm | Quadrupeds (Keith 2026-10-24) on a two-bone diagonal trot: small ones (0.9 m, 8 m/s, 12 hp) run as a pack, leap from 5 m and cling to the mech biting, until shot off, stomped off or shaken off at a run, a fifth hang back and shoot; big ones (4 m, 400 hp, a tenth) stalk in, stop at 18-30 m and fire heavy bursts, ignore stomps; 300 at about 0.6 ms a step | `src/combat/robots.ts`, `robotsDraw.ts`, `robotTarget.ts` | robots |
+| Death physics | Rapier world holding only the dead (Keith 2026-10-24): bandit ragdolls (11 boxes, hinged knees and elbows), robot ragdolls (body and four two-part legs), raider wrecks as rigid bodies that can roll over; thrown by the kill; a heightfield floor from the dune function following the player; the oldest freeze past a cap, all sink and clear after a while | `src/physics/deaths.ts`, `bodies.ts`, `deadDraw.ts` | warband, bandits, robots |
 | Not started | Convoy (direction in `docs/design.md`), salvage, convoy escort and cranes, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
 
 ## Known gaps
@@ -80,9 +81,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   steering); the rest of `CAR_PARAMS` (suspension, slopes) stays at the kind presets.
 - **A raider can still rarely pass within about 2 m of the mech** (about one band in six in unseeded runs); the
   check runs seeded.
-- **No ragdolls yet** (Keith 2026-10-24: deaths should have physics): wrecks tumble on a hand-rolled throw, bandits
-  are thrown and fall over. Rapier is now a dependency (0.12, copied into the cloud workspace from Keith's PC since the
-  npm registry is blocked there), not used yet.
+- **Ragdolls are boxes** (the bandit and robot stand-ins' parts as plain boxes); bandit mechs still just go dark
+  where they fall (no topple). Rapier in the cloud workspace is a copy from Keith's PC (npm blocked there).
 - **No concrete surface for hits yet** (dust plus a few sparks when something concrete exists); the grey wreck
   stand-ins are steel.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
@@ -97,7 +97,6 @@ Nothing right now.
 - **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built.
 - **The convoy, its cranes and escort**: plan in `docs/proposal-convoy.md` (route, a flattened corridor in the height
   function, platforms, a crane state machine for deploy and pick-up, escorts), waiting for Keith.
-- Death physics with Rapier: ragdolls for bandits and robots, wrecks that roll over properly (Keith 2026-10-24).
 
 - Convoy lab: the convoy as Keith described it 2026-10-24 (`docs/design.md`): platforms of different sizes riding the
   dunes, the biggest on tracks carrying the mech bays and gantries, and a crane that swings out to pick a mech up
@@ -115,6 +114,17 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Death physics with Rapier: ragdolls and wrecks (Claude, cloud session)
+- Keith approved the plan. New `src/physics/deaths.ts` (world of the dead, heightfield floor, ragdoll and wreck
+  builders, cap, freezing, clearing), `bodies.ts` (bandit and robot layouts), `deadDraw.ts` (instanced boxes),
+  `tools/deaths-check.ts` (in `npm test`; it caught the floor transposed against the dunes). Swarms: `onDeath`
+  and `hideDead`; war band wrecks use the physics (the old throw is the fallback without it); the combat shell
+  steps it and adds a Deaths topic. Sand marks: craters every 3rd round, depth 0.9 (too many in the robot shot).
+- Convoy answers recorded in `docs/proposal-convoy.md` (automatic crane pick-up while in range, direction slider,
+  the route stays as a road).
+- Checked: typecheck, `npm test` (ten checks, deaths 0.7 ms a step with 9 ragdolls), robot lab shot (robots read
+  well, clingers on the mech). Ragdoll and wreck shots rendering.
 
 ### 2026-10-24 · Rapier added as a dependency (Claude, cloud session)
 - `@dimforge/rapier3d-compat` ~0.12.0 in `package.json` (the version on Keith's PC); in the cloud workspace it was

@@ -90,7 +90,7 @@ export class RobotsDraw {
     this.nLeg = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
-      if (st === EMPTY) continue;
+      if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
       if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.roll[i] = 0; }
       const S = sw.size[i], big = sw.kind[i] === BIG, dead = st === DEAD;
       const speed = Math.hypot(sw.vx[i], sw.vz[i]);

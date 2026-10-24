@@ -43,7 +43,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 - **Three.js r186** (`three/webgpu`: WebGPU renderer, falls back to WebGL 2 by itself), **TypeScript**, **Vite**.
 - Shaders, when needed: TSL (`three/tsl`), which compiles to WGSL or GLSL. Classic materials also work.
-- Physics: none yet. Rapier (`@dimforge/rapier3d-compat`, WebAssembly) when we need collisions or vehicles.
+- Physics: Rapier (`@dimforge/rapier3d-compat` 0.12, WebAssembly) for death physics only (ragdolls, wrecks); the
+  living run on their own sims.
 - No game engine, no ECS library yet. Swarms will need data-oriented arrays and instanced meshes; add structure
   when a system needs it, not before.
 
@@ -83,6 +84,7 @@ src/game/               battlefield (shared combat stage), mechUnit (a mech with
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         robots (quadruped swarm) + robotsDraw, robotTarget
+src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
 docs/                   design.md (the game), decisions.md (log)

@@ -25,14 +25,16 @@ import { DUST_DEFAULTS, DUST_PARAMS } from "../fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../audio/sfx";
 import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
+import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
+import { DeadDraw } from "../physics/deadDraw";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -64,6 +66,8 @@ export interface CombatLab<E extends object> {
   onFrame: (fn: (dt: number) => void) => void;
   /** Extra HUD line. */
   hud: (key: string, text: string) => void;
+  /** Death physics: ragdolls and wrecks (Rapier). */
+  deaths: DeathPhysics;
   /** Load another Rampart (bandit mechs). */
   loadRampart: () => Promise<RampartBody>;
 }
@@ -83,6 +87,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const look = new DesertLook(scene, app.renderer, V);
   const bf = new Battlefield(field, V, camera);
   scene.add(bf.group);
+  await initPhysics();
+  const deaths = new DeathPhysics(V, field);
+  const deadDraw = new DeadDraw(deaths);
+  scene.add(deadDraw.group);
 
   const body = await RampartBody.load(toon);
   Object.assign(V, LEG_TYPES.rampart.values, body.legValues());
@@ -115,6 +123,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Mech health", "Torso & guns", "Minigun", "Move"] },
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
+      { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -160,7 +169,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const frames: ((dt: number) => void)[] = [];
 
   const lab: CombatLab<E> = {
-    app, V, field, bf, toon, player,
+    app, V, field, bf, toon, player, deaths,
     nearestEnemy: () => null,
     onFrame: (fn) => frames.push(fn),
     hud: (k, t) => app.hud.set(k, t),
@@ -197,6 +206,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     player.step(dt, cmd, aim, trigger);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
+    deaths.follow(player.sim.pos.x, player.sim.pos.z);
+    deaths.step(dt);
+    deadDraw.update();
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
     reticle.visible = !!aim;
@@ -216,6 +228,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
+    app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)`);
     app.hud.set("guns", `ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
