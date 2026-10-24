@@ -92,7 +92,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-Nothing right now.
+- Convoy pass 1b (crane swing, walking the deck, parking spots, launch spot): an agent on a worktree branch.
+- Next: robot redesign (terraforming machines: small scrappers, medium, few big four-legged excavators); convoy pass 2 (train layout with gaps and footbridges, Dune-style trapezoid tracks, track marks and dust, piping, vehicles aboard and escorts).
 
 ## Next candidates (ask Keith which)
 
@@ -116,6 +117,11 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Rounds pierce and splash; small arms read small; mech tougher (Claude)
+- Keith's playtest: swarms too hard to hit, the mech doesn't feel powerful. `Battlefield.fire` now carries a round through light bodies (`canPierce`: bandits, small robots; `roundPierce` 2, 70% kept each) and splashes swarm units near where it ends (`splash` on the swarm targets; `roundSplash` 1.6 m at `roundSplashShare` 0.5, half at the edge), so a near miss into the sand at their feet still counts. New "Rounds" group under Your mech. Hull 1000 → 1500; robot bite 1.5 → 0.8, small shot 2 → 1.2, big shot 15 → 10.
+- Small arms read small: `FireOptions.hitScale` scales sparks, dust and grit, and below 0.6 leaves no crater (bandits and small robots 0.3, technicals 0.4, gun trucks 0.75, enemy mechs 0.7, tank 1.6).
+- Checked: typecheck; walker, upper, infantry, warband, robots, deaths, targeting, convoy, bandit-vat checks.
 
 ### 2026-10-24 · Bandits as Mixamo's Vanguard on an animation texture (agent)
 - Keith approved the plan. Offline baker `tools/mixamo/` (FBXLoader in Node with the embedded PNG caught and decoded, meshoptimizer thinning 11.4k → 2.2k tris, a box rifle, clips retargeted by bone name with the hips scaled and the walk taken out, CPU skinning per frame) writes `public/models/bandit-vat.{json,bin}` (1409 vertices × 134 frames, half-float positions, RG8 normals, 1.9 MB). Runtime `src/combat/banditVat.ts` (TSL vertex shader, instanced geometry), `banditAnim.ts` (clip playback, pure), `infantryDraw.ts` (clip by state, `banditLook`/`banditAnimSpeed`/`banditFade`/`banditScale` sliders). Sim untouched; deaths still go to the ragdolls.

@@ -95,7 +95,7 @@ lab.onFrame((dt) => {
       const drawn = big || Math.random() < V.robotTracerShare;
       if (drawn) slot = slot >= 19 ? 2 : slot + 1;
       bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, big ? V.robotBigShotDamage : V.robotShotDamage,
-        drawn ? { flashScale: big ? 1.2 : 0.35, voice: "other" } : { tracer: false, voice: "none" });
+        drawn ? { flashScale: big ? 1.2 : 0.35, voice: "other", hitScale: big ? 1 : 0.3 } : { tracer: false, voice: "none" });
     },
     (i, damage) => {
       if (!player.alive) return;

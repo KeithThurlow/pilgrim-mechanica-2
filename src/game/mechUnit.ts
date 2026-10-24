@@ -25,8 +25,12 @@ import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable } from "./battlefield";
 
 export const MECH_DEFAULTS = {
-  hull: 1000,
+  hull: 1500,
   roundDamage: 9,
+  roundPierce: 2,
+  roundPierceKeep: 0.7,
+  roundSplash: 1.6,
+  roundSplashShare: 0.5,
   hitRadius: 1.7,
   respawn: 4,
 };
@@ -35,6 +39,10 @@ export type MechValues = typeof MECH_DEFAULTS;
 export const MECH_PARAMS: Param[] = [
   { key: "hull", label: "Hull (hit points)", min: 50, max: 5000, step: 10, group: "Mech health" },
   { key: "roundDamage", label: "Minigun round damage", min: 0, max: 60, step: 0.5, group: "Mech health", tip: "What each of the player's rounds takes off whatever it hits" },
+  { key: "roundPierce", label: "Rounds pierce (light bodies)", min: 0, max: 6, step: 1, group: "Rounds", tip: "How many bandits or small robots one round carries on through" },
+  { key: "roundPierceKeep", label: "Damage kept per pierce", min: 0, max: 1, step: 0.05, group: "Rounds" },
+  { key: "roundSplash", label: "Splash radius (m)", min: 0, max: 5, step: 0.1, group: "Rounds", tip: "Where a round ends (sand or body), swarm units this close take a share: rounds into the sand at their feet still count" },
+  { key: "roundSplashShare", label: "Splash damage share", min: 0, max: 1.5, step: 0.05, group: "Rounds", tip: "Share of the round's damage at the centre of the splash (half that at its edge)" },
   { key: "hitRadius", label: "Hit size (m)", min: 0.5, max: 3, step: 0.05, group: "Mech health", tip: "Radius of the capsule rounds hit, from the feet up past the hull" },
   { key: "respawn", label: "Rebuilt after (s)", min: 0.5, max: 20, step: 0.5, group: "Mech health", tip: "Lab only: a destroyed player mech stands up again after this long" },
 ];
@@ -133,8 +141,8 @@ export class MechUnit implements Hittable {
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, v.range, v.roundDamage * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player" }
-        : { voice: "other" });
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", pierce: v.roundPierce, pierceFalloff: v.roundPierceKeep, splash: v.roundSplash, splashShare: v.roundSplashShare }
+        : { voice: "other", hitScale: 0.7 });
     }
     if (this.player && body.armed) {
       this.bf.gunAudio.update(dt, trigger, upper.guns, [body.muzzle(1, new THREE.Vector3()), body.muzzle(-1, new THREE.Vector3())]);

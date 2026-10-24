@@ -23,6 +23,10 @@ export interface Hittable {
   /** Distance along the ray (unit dir) to this thing, or -1 if missed within maxDist. */
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number;
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3): void;
+  /** Swarms: damage everything of theirs within radius of a point (a round's splash); returns how many were hit. */
+  splash?(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3): number;
+  /** After a hit: can a round carry on through what it just hit (light bodies), or does it stop there? */
+  canPierce?(): boolean;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
 }
@@ -36,6 +40,15 @@ export interface FireOptions {
   voice?: "player" | "other" | "none";
   /** Draw the tracer (default) or resolve the round without one (for crowds of small arms). */
   tracer?: boolean;
+  /** Size of the impact effects (1 the minigun; small arms about 0.35: few small sparks, little dust, no crater). */
+  hitScale?: number;
+  /** How many light bodies (bandits, small robots) a round carries on through, each pass at piercing falloff. */
+  pierce?: number;
+  /** Splash at the impact (sand or body): radius (m) and the share of the round's damage to each swarm unit in it. */
+  splash?: number;
+  splashShare?: number;
+  /** Damage kept after each body a round pierces. */
+  pierceFalloff?: number;
 }
 
 export class Battlefield {
@@ -52,6 +65,8 @@ export class Battlefield {
   private steelAt = new THREE.Vector3();
   private steelN = new THREE.Vector3();
   private back = new THREE.Vector3();
+  private from = new THREE.Vector3();
+  private pt = new THREE.Vector3();
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     this.marks = new SandMarks(field, v);
@@ -62,7 +77,7 @@ export class Battlefield {
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
-    this.gunFx.onSandHit = (at, d, k) => { this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); this.marks.crater(at.x, at.z, k); };
+    this.gunFx.onSandHit = (at, d, k) => { this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k); };
     this.gunFx.onHit = (at, surface) => this.gunAudio.hit(at, surface);
     this.gunFx.onSteelSmoke = (at, n, puffs, k) => {
       for (let i = 0; i < puffs; i++) {
@@ -96,19 +111,45 @@ export class Battlefield {
       reach = muzzle.distanceTo(this.steelAt);
       hit.copy(this.steelAt); surface = "metal"; normal = this.steelN;
     }
+    // The round: nearest unit of another team; light bodies let it carry on through (pierce), losing some punch each.
     let struck: Hittable | null = null;
-    for (const t of this.targets) {
-      if (!t.alive || t.team === team) continue;
-      const dist = t.hitRay(muzzle, d, reach);
-      if (dist >= 0 && dist < reach) { reach = dist; struck = t; }
+    const from = this.from.copy(muzzle);
+    let base = 0, dmg = damage, passes = o.pierce ?? 0;
+    for (;;) {
+      let near: Hittable | null = null, nearD = reach - base;
+      for (const t of this.targets) {
+        if (!t.alive || t.team === team) continue;
+        const dist = t.hitRay(from, d, nearD);
+        if (dist >= 0 && dist < nearD) { nearD = dist; near = t; }
+      }
+      if (!near) break;
+      // Re-run the winner's ray so its own "last hit" is this one (later targets in the loop may have overwritten nothing,
+      // but each adapter remembers only its own nearest).
+      near.hitRay(from, d, nearD + 1e-3);
+      this.pt.copy(from).addScaledVector(d, nearD);
+      near.damage(dmg, this.pt, d);
+      if (passes > 0 && near.canPierce?.()) {
+        passes--;
+        dmg *= o.pierceFalloff ?? 0.7;
+        base += nearD + 0.9;
+        from.copy(this.pt).addScaledVector(d, 0.9);
+        if (base >= reach) break;
+        continue;
+      }
+      struck = near;
+      reach = base + nearD;
+      hit.copy(this.pt);
+      break;
     }
     if (struck) {
-      hit.copy(muzzle).addScaledVector(d, reach);
       surface = struck.surface;
       normal = struck.normalAt ? struck.normalAt(hit, this.back) : this.back.copy(d).negate();
-      struck.damage(damage, hit, d);
     }
-    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1);
+    // Splash: everything of theirs near where the round ends (the sand at their feet, or the body it stopped in).
+    if (o.splash && o.splashShare) {
+      for (const t of this.targets) if (t.alive && t.team !== team && t.splash) t.splash(hit, o.splash, damage * o.splashShare, d);
+    }
+    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1, o.hitScale ?? 1);
     if (o.voice === "player") this.gunAudio.shot(muzzle);
     else if (o.voice !== "none") this.sfx.play("spit", muzzle, 0.55, 0.7 + Math.random() * 0.15, true);
     return struck;

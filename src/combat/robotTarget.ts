@@ -4,7 +4,7 @@
 import * as THREE from "three/webgpu";
 import type { Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import type { RobotSwarm } from "./robots";
+import { DOWN, SMALL, type RobotSwarm } from "./robots";
 
 export class RobotTarget implements Hittable {
   readonly surface: HitSurface = "metal";
@@ -21,6 +21,24 @@ export class RobotTarget implements Hittable {
     this.last = h ? h.index : -1;
     this.lastLeg = h ? h.leg : false;
     return h ? h.dist : -1;
+  }
+
+  /** Small robots are light: a round carries on through one; the big ones stop it. */
+  canPierce() { return this.last >= 0 && this.swarm.kind[this.last] === SMALL; }
+
+  /** Small robots whose hub is within radius of the point (the big ones shrug off splash). */
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+    const sw = this.swarm, r2 = radius * radius;
+    let n = 0;
+    for (let i = 0; i < sw.hi; i++) {
+      if (sw.state[i] >= DOWN || sw.kind[i] !== SMALL) continue;
+      const dx = sw.px[i] - at.x, dy = sw.hubY[i] - at.y, dz = sw.pz[i] - at.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > r2) continue;
+      if (sw.damage(i, damage * (1 - 0.5 * Math.sqrt(d2) / radius), dir.x, dir.z)) this.kills++;
+      n++;
+    }
+    return n;
   }
 
   /** A round into a tripod's leg does only part of its damage (robotBigLegDamage). */

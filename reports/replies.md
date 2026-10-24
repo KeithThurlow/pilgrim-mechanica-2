@@ -3,3 +3,6 @@
 2026-10-24T05-56-32-bandits: Bandit damage 1.5 → 0.6 a round (raiders and bandit mechs down too), and the soft lock works on bandits (centre of mass, so the rounds go into the body).
 2026-10-24T06-01-12-walker: Dust now also checks the dunes itself: each puff looks toward the sun over the sand (on the CPU) and takes the shaded colour when a dune is in the way, so hill shadow no longer depends on the shadow map. Tell me if it still looks off.
 2026-10-24T06-01-54-walker: Round craters 0.55 → 0.35 m.
+2026-10-24T08-20-15-bandits: Your rounds now pierce up to 2 bandits or small robots (70% damage kept each) and splash 1.6 m where they land, so rounds into the sand at their feet still hurt them. Sliders in Your mech > Rounds. Hull 1500.
+2026-10-24T08-21-22-bandits: Small arms now make small sparks and little dust on your mech, and no craters in the sand (a hit scale per gun; bandits 0.3).
+2026-10-24T08-23-19-robots: Same pierce and splash on small robots (the big ones stop rounds and shrug off splash). Robot damage down (bite 0.8, shot 1.2, big 10).

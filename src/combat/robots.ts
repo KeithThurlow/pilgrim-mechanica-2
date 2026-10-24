@@ -47,7 +47,7 @@ export const ROBOT_DEFAULTS = {
   robotLatchRing: 1.05,
   robotLatchLow: 1,
   robotLatchHigh: 4,
-  robotBiteDamage: 1.5,
+  robotBiteDamage: 0.8,
   robotBiteInterval: 0.4,
   robotShakeSpeed: 4.5,
   robotShakeTime: 2.5,
@@ -60,7 +60,7 @@ export const ROBOT_DEFAULTS = {
   robotShootSlack: 6,
   robotShotInterval: 1.1,
   robotShotSpread: 5,
-  robotShotDamage: 2,
+  robotShotDamage: 1.2,
   // Big ones.
   robotBigShare: 0.1,
   robotBigSize: 3,
@@ -86,7 +86,7 @@ export const ROBOT_DEFAULTS = {
   robotBigPause: 2.4,
   robotBigAim: 1.2,
   robotBigSpread: 2.5,
-  robotBigShotDamage: 15,
+  robotBigShotDamage: 10,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,

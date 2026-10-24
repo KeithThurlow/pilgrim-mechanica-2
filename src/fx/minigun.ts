@@ -43,7 +43,7 @@ export type HitSurface = "sand" | "metal" | "flesh";
 
 const TRACERS = 160, FLASHES = 24, SPARKS = 600, GRIT = 600, CASINGS = 240;
 
-interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3 }
+interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3; scale: number }
 interface Bit { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; spin: THREE.Vector3; rot: THREE.Euler; rest: boolean; landed: boolean }
 
 export class MinigunFx {
@@ -84,7 +84,7 @@ export class MinigunFx {
       mesh.visible = false;
       mesh.frustumCulled = false;
       this.group.add(mesh);
-      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0) });
+      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0), scale: 1 });
     }
     this.grit = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshStandardMaterial({ color: 0x9a7a50, roughness: 1 }), GRIT);
     this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.04, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: 0xffd27a, toneMapped: false }), SPARKS);
@@ -117,7 +117,7 @@ export class MinigunFx {
    * One round from a muzzle to where it strikes (already spread). surface and normal: what it struck there.
    * eject: casing port; outboard: unit direction.
    */
-  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1) {
+  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1) {
     this.round++;
     const f = this.flashes[Math.max(0, Math.min(FLASHES - 1, gun))];
     f.t = 0.045;
@@ -131,7 +131,7 @@ export class MinigunFx {
     // Every round flies (it times the hit); only every Nth shows as a tracer.
     const t = this.tracers.find((x) => !x.live) ?? this.tracers[this.round % TRACERS];
     t.from.copy(muzzle); t.to.copy(hit); t.dist = muzzle.distanceTo(hit); t.t = 0; t.live = true;
-    t.surface = surface; t.normal.copy(normal ?? UP);
+    t.surface = surface; t.normal.copy(normal ?? UP); t.scale = hitScale;
     t.mesh.visible = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0;
 
     if (!eject || !outboard) return;
@@ -142,10 +142,10 @@ export class MinigunFx {
     c.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
   }
 
-  private impact(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3) {
+  private impact(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3, scale = 1) {
     this.hits[surface]++;
     this.onHit?.(at, surface);
-    const k = this.v.hitDust;
+    const k = this.v.hitDust * scale;
     if (k <= 0) return;
     if (surface === "metal") this.steel(at, dir, normal, k);
     else if (surface === "flesh") this.onFleshHit?.(at, new THREE.Vector3(dir.x, 0, dir.z).normalize());
@@ -162,7 +162,7 @@ export class MinigunFx {
     // The dust itself (the low layer torn up and pushed downrange, and the dust thrown up) is the shared dust system.
     this.onSandHit?.(at, along, k);
     // Grit: sand thrown up in an arc, mostly on downrange.
-    for (let i = 0; i < v.sandGrit; i++) {
+    for (let i = 0; i < Math.round(v.sandGrit * Math.min(1, k / Math.max(1e-3, v.hitDust))); i++) {
       const g = this.gritBits[this.gritI++ % GRIT];
       g.pos.copy(at).setY(at.y + 0.05);
       g.vel.copy(along).multiplyScalar((Math.random() * 1.6 - 0.4) * 3).add(new THREE.Vector3((Math.random() - 0.5) * 2.5, 2.5 + Math.random() * 4 * k, (Math.random() - 0.5) * 2.5));
@@ -218,7 +218,7 @@ export class MinigunFx {
       t.mesh.position.copy(t.from).addScaledVector(dir, head);
       t.mesh.lookAt(t.mesh.position.clone().add(dir));
       t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
-      if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.impact(t.to, dir.clone(), t.surface, t.normal); }
+      if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.impact(t.to, dir.clone(), t.surface, t.normal, t.scale); }
     }
     this.stepBits(this.sparkBits, this.sparks, dt, false, false, this.v.sparkSize);
     this.stepBits(this.gritBits, this.grit, dt, false, true);

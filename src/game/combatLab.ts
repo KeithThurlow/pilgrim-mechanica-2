@@ -122,7 +122,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Targeting", "Mech health", "Torso & guns", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Mech health", "Torso & guns", "Minigun", "Move"] },
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },

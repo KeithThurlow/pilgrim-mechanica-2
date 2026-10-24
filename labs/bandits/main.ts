@@ -89,7 +89,7 @@ lab.onFrame((dt) => {
     dir.set(tx - fx, ty - fy, tz - fz).normalize();
     const drawn = Math.random() < V.tracerShare;
     if (drawn) slot = slot >= 19 ? 2 : slot + 1;
-    bf.fire(slot, 2, from, dir, V.fireRange + 5, V.banditDamage, drawn ? { flashScale: 0.35, voice: "other" } : { tracer: false, voice: "none" });
+    bf.fire(slot, 2, from, dir, V.fireRange + 5, V.banditDamage, drawn ? { flashScale: 0.35, voice: "other", hitScale: 0.3 } : { tracer: false, voice: "none" });
   });
   draw!.update(dt);
   lab.hud("bandits", `bandits ${sw.count} up · killed ${target.kills} · rounds at you ${sw.shots}`);

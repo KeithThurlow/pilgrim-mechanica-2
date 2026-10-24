@@ -504,10 +504,10 @@ export class Warband {
   private gun(r: Raider, i: number) {
     const v = this.v;
     const k = r.kind === "warRig" ? (i === 0 ? "gunTruck" : "sixWheeler") : r.kind;
-    if (k === "technical") return { rate: v.techRate, damage: v.techDamage, spread: v.techSpread, flash: 0.6 };
-    if (k === "gunTruck") return { rate: v.truckRate, damage: v.truckDamage, spread: v.truckSpread, flash: 1.3 };
-    if (k === "sixWheeler") return { rate: v.sixRate, damage: v.sixDamage, spread: v.sixSpread, flash: 1.6 };
-    return { rate: v.tankRate, damage: v.tankDamage, spread: v.tankSpread, flash: 2.6 };
+    if (k === "technical") return { rate: v.techRate, damage: v.techDamage, spread: v.techSpread, flash: 0.6, hit: 0.4 };
+    if (k === "gunTruck") return { rate: v.truckRate, damage: v.truckDamage, spread: v.truckSpread, flash: 1.3, hit: 0.75 };
+    if (k === "sixWheeler") return { rate: v.sixRate, damage: v.sixDamage, spread: v.sixSpread, flash: 1.6, hit: 1 };
+    return { rate: v.tankRate, damage: v.tankDamage, spread: v.tankSpread, flash: 2.6, hit: 1.6 };
   }
 
   private gunner(r: Raider, dt: number, player: MechUnit) {
@@ -539,7 +539,7 @@ export class Warband {
         const spread = g.spread * D2R;
         const tilt = this.tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
-        this.bf.fire(t.slot, RAIDERS, this.muzzle, d, v.gunRange + 6, g.damage, { flashScale: g.flash, voice: "other" });
+        this.bf.fire(t.slot, RAIDERS, this.muzzle, d, v.gunRange + 6, g.damage, { flashScale: g.flash, voice: "other", hitScale: g.hit });
         if (r.kind === "tank") {
           // The cannon kicks sand up round the tank.
           this.bf.dust.stomp(s.pos.x, s.pos.y - s.v.rideHeight, s.pos.z, 1.2);
