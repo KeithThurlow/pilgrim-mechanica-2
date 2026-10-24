@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | In-lab reports (`reports/`) are committed to git so any agent can read and answer them | Keith | Keith | Only Keith reports; revisit if other people start sending reports. Reports are cleaned up as they're fixed: delete the report's `.md` and `.png` and its line in `inbox.md` in the commit that fixes it. |
 | 2026-10-24 | Convoy pick-up is automatic: a crane animation, and the mech is picked up as long as it stays in range until the crane connects | Keith | Keith | `docs/proposal-convoy.md` |
 | 2026-10-24 | The convoy's direction is a slider for now; the flattened route stays behind as a road back to the convoy | Keith | Keith | |
 | 2026-10-24 | Death physics with Rapier: ragdolls for bandits and robots, rigid-body wrecks for vehicles, in a world that holds only the dead | Claude | Keith | Living units stay on their own sims; cap on moving bodies. |

@@ -70,7 +70,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ```
 state.md                live state of every system, work in progress, change history
-reports/                Keith's in-lab reports and your replies (local only, not in git)
+reports/                Keith's in-lab reports and your replies (in git, so any agent can pick them up; delete one when fixed)
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input

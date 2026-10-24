@@ -1,6 +1,6 @@
 # Report inbox
 
-Reports from the labs, newest last. Tick one (`- [x]`) when handled and answer it in replies.md.
+Reports from the labs, newest last. Answer in replies.md; when one is fixed, delete its line and its files in the fixing commit.
 
 - [ ] 2026-10-24T05-51-49-walker: The step/bullet decals perfist probably a bit too long and they are not lit as expected, or they don't respond to shadows (this creates bright spots on shaded areas ont he ground. (2026-10-24T05-51-49-walker.md)
 - [ ] 2026-10-24T05-53-52-warband: I think some autotargetting is required for this war band raid. also, while hits on my mech spark, hits on the behicles and the enemy mech don't spark. (2026-10-24T05-53-52-warband.md)

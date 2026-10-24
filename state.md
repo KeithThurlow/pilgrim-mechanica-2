@@ -16,7 +16,7 @@ How to update it:
 | --- | --- | --- | --- |
 | Lab core | Renderer and loop (WebGPU, WebGL 2 fallback), frame-time HUD, slider panel (saved per lab with the defaults they were saved against, so a changed default in code wins over a stale save; `?set=` overrides, Copy values), WASD input, frame capture | `src/core/` | all |
 | Topics and selection | The panel opens on topic buttons only (Keith 2026-10-24: too many sliders); a topic shows just its slider groups, All shows everything; Reset and Copy act on the shown topic. Hold V: things under the cursor light up with their name, a click opens their topic (walker lab: legs, hull, each minigun, ammo drums, ground = dunes, sky = light; terrain lab: marker, dunes, light). No firing while V is held | `src/core/tweaks.ts`, `src/core/select.ts` | all |
-| Report box | A Report button in every lab (reports say what was selected and which topic was open): a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is not in git | `src/core/report.ts`, `tools/report-plugin.ts` | all |
+| Report box | A Report button in every lab (reports say what was selected and which topic was open): a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is committed so any agent can read and answer them (Keith 2026-10-24; only Keith reports, revisit if others do). When a report is fixed, delete its `.md`, `.png` and `inbox.md` line in the same commit | `src/core/report.ts`, `tools/report-plugin.ts` | all |
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Rounded crests (`crestSoft`), per-pixel sand surface in the shader (mottling, dark specks, faint wind ripples; colour from a 2 m-wide normal so no grid triangles), soft shadow edges (`shadowSoft`), 1 m grid (Keith 2026-10-24: match the reference video's simple, smooth dunes). Transverse dunes across the wind, tall and close (14 m high, 44 m apart; Keith 2026-10-24), steepest crests near 69°, meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
 | Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
@@ -114,6 +114,12 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Reports go into git (Claude, Keith's PC)
+- Keith: reports should be in git so any agent can interact with them; only he reports, so it's fine for now.
+- `reports/` removed from `.gitignore`; the five reports so far were committed in `46d2b5d`. Comments in
+  `CLAUDE.md` and `tools/report-plugin.ts` updated. All five are still open in `reports/inbox.md`.
+  Keith: clean them up as they're fixed (delete the report's files and inbox line in the fixing commit).
 
 ### 2026-10-24 · Torso no longer jams on targets behind it (Claude, cloud session)
 - Found in the war band lab: the demo took fire without shooting back. A target moving round behind the mech

@@ -4,5 +4,4 @@ shots/
 *.log
 .DS_Store
 .vite/
-reports/
 .claude/worktrees/

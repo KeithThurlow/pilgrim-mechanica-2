@@ -1,7 +1,7 @@
 // Dev-server endpoint for the in-lab Report box (Keith 2026-10-24: report from inside the app straight to the
 // Claude Code session running on the PC). POST /__report writes the note, a screenshot and the full lab state to
 // reports/, and adds a line to reports/inbox.md; GET /__report returns reports/replies.md, so answers written there
-// show up in the box. Only runs under `npm run dev`; reports/ stays out of git.
+// show up in the box. Only runs under `npm run dev`; reports/ is committed so any agent can pick them up.
 import type { Plugin } from "vite";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -46,7 +46,7 @@ export function reportPlugin(root: string): Plugin {
             writeFileSync(join(dir, id + ".md"), md);
             const inbox = join(dir, "inbox.md");
             if (!existsSync(inbox)) {
-              writeFileSync(inbox, "# Report inbox\n\nReports from the labs, newest last. Tick one (`- [x]`) when handled and answer it in replies.md.\n\n");
+              writeFileSync(inbox, "# Report inbox\n\nReports from the labs, newest last. Answer in replies.md; when one is fixed, delete its line and its files in the fixing commit.\n\n");
             }
             const about = r.context?.selected ?? r.context?.topic;
             appendFileSync(inbox, `- [ ] ${id}${about ? ` [${about}]` : ""}: ${r.text.replace(/\s+/g, " ").slice(0, 200)} (${id}.md)\n`);
