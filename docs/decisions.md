@@ -4,6 +4,9 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Salvage for now: hold E at a salvage spot; one currency (scrap); item drops of various rarities later ("dopamine hits") | Keith | Keith | `docs/proposal-pois.md` |
+| 2026-10-25 | Bandit camps and fortresses are built from wreckage (crashed spaceships and the like) | Keith | Keith | The sister project's ship crashes are reference, "wasn't pointed off that well". |
+| 2026-10-25 | Biome regions at least 5 km across; rocky ground always walkable for now | Keith | Keith | Border band and region size are sliders; the convoy crossing the shallows (slowed) is Claude's default until Keith says otherwise. |
 | 2026-10-25 | Points of interest come in levels of commitment, small ones quick to empty, a bandit fortress in about 9 sections you may leave early to get back to the convoy | Keith | Keith | `docs/proposal-pois.md` |
 | 2026-10-25 | The world leans desolate and unsettled: few old structures; people survive on moving vehicles | Keith | Keith (leaning, not certain) | Bandit camps and fortresses stay. |
 | 2026-10-25 | Biomes beyond desert: rocky desolation and shallows with outcrops; first job is blending one into the next | Keith | Keith | `docs/proposal-biomes.md` |
