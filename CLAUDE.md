@@ -88,7 +88,7 @@ src/convoy/             route (heading + flattened road), platform, crane (axes 
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
-                        robots (starfish and tripod swarm) + robotLegs, robotsDraw, robotTarget, robotTearFx
+                        robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots

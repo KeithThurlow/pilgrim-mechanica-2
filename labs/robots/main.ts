@@ -29,7 +29,7 @@ const WAVE_PARAMS: Param[] = [
   { key: "robotGroupSize", label: "Pack size", min: 1, max: 200, step: 1, group: "Robot waves" },
   { key: "robotGroupEvery", label: "A pack every (s)", min: 0.2, max: 30, step: 0.1, group: "Robot waves" },
   { key: "robotSpawnFrom", label: "They come from (m)", min: 30, max: 250, step: 5, group: "Robot waves" },
-  { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Medium and big ones' rounds always show" },
+  { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Medium ones' slugs always show (big ones lob charges)" },
   { key: "robotStompReach", label: "Stomp reach (m)", min: 0, max: 6, step: 0.1, group: "Robot waves", tip: "A footfall knocks off clingers and crushes small ones this close" },
 ];
 
@@ -77,6 +77,13 @@ sw.onDeath = (i, nx, nz, speed) => {
 // Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at the
 // plating, medium ones' saws bite.
 sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
+// Big ones lob charges through the battlefield's shells: a ring on the sand where each lands, filling as it comes
+// down, so a dash takes the mech out of it.
+const lobFrom = new THREE.Vector3();
+sw.onLob = (_i, fx, fy, fz, x, z, flight) => {
+  if (!player.alive) return;
+  bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
+};
 const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
 lab.app.scene.add(tear.group);
 
@@ -134,5 +141,5 @@ lab.onFrame((dt) => {
     });
   draw!.update(dt);
   tear.update(dt);
-  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · destroyed ${target.kills}`);
+  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · destroyed ${target.kills}`);
 });

@@ -25,6 +25,14 @@ let shots = [0, 0, 0], bites = 0, biteDmg = 0, cuts = 0, cutDmg = 0, nan = 0, of
 let legSamples = 0, legMiss = 0, legWorst = 0;
 const walk = { samples: [0, 0, 0], miss: [0, 0, 0], worst: [0, 0, 0], footOff: [0, 0, 0], footOffMax: [0, 0, 0], low: [0, 0, 0], falls: [0, 0, 0] };
 swarm.onFootfall = (i) => { walk.falls[swarm.kind[i]]++; };
+// Big ones lob charges: each lands near the (still) mech after a flight that grows with distance.
+let lobs = 0, lobMiss = 0, lobFlightMin = Infinity, lobFlightMax = 0;
+swarm.onLob = (_i, fx, _fy, fz, x, z, flight) => {
+  lobs++;
+  lobFlightMin = Math.min(lobFlightMin, flight); lobFlightMax = Math.max(lobFlightMax, flight);
+  if (Math.hypot(x - target.x, z - target.z) > ROBOT_DEFAULTS.robotBigLobScatter + 0.5) lobMiss++;
+  if (Math.abs(flight - Math.max(0.6, Math.hypot(target.x - fx, target.z - fz) / ROBOT_DEFAULTS.robotBigLobSpeed)) > 0.01) lobMiss++;
+};
 const hips = new Float32Array(12), feet = new Float32Array(12);
 const hip = v3(), knee = v3(), tip = v3(), foot = v3();
 const steps = 40 * 120;
@@ -109,7 +117,7 @@ const fireDist = (kind: number) => {
 const pct = (a: number, b: number) => ((a / Math.max(1, b)) * 100).toFixed(2) + "%";
 console.log(`rush: 300 robots (${kinds[SMALL]} small, ${kinds[MID]} medium, ${kinds[BIG]} big), 40 s: ${per.toFixed(3)} ms/step`);
 console.log(`      states run ${states[RUN]} leap ${states[LEAP]} latched ${states[LATCHED]} (max ${maxLatched}) fire ${states[FIRE]} cut ${states[CUT]} flung ${states[FLUNG]} down ${states[DOWN]}`);
-console.log(`      firing: medium at ${fireDist(MID)}, big at ${fireDist(BIG)}; rounds small ${shots[SMALL]} medium ${shots[MID]} big ${shots[BIG]}; ${bites} bites (${biteDmg.toFixed(0)} damage); ${cuts} saw strikes (${cutDmg.toFixed(0)} damage)`);
+console.log(`      firing: medium at ${fireDist(MID)}, big at ${fireDist(BIG)}; rounds small ${shots[SMALL]} medium ${shots[MID]}; ${lobs} charges lobbed (flights ${lobFlightMin.toFixed(1)}-${lobFlightMax.toFixed(1)} s); ${bites} bites (${biteDmg.toFixed(0)} damage); ${cuts} saw strikes (${cutDmg.toFixed(0)} damage)`);
 console.log(`      max off ground ${maxOff.toFixed(4)} m, worst crowding ${(crowdedWorst * 100).toFixed(2)}%`);
 console.log(`      small legs: ${pct(legMiss, legSamples)} out of reach (worst ${(legWorst * 100).toFixed(0)}% of reach)`);
 for (const [kind, name] of [[MID, "medium"], [BIG, "big"]] as const) {
@@ -124,7 +132,10 @@ if (nan) fail(`${nan} NaN samples`);
 if (offGround) fail(`${offGround} samples more than 0.15 m off the ground (max ${maxOff.toFixed(3)})`);
 if (crowdedWorst > 0.05) fail(`crowding ${(crowdedWorst * 100).toFixed(1)}% > 5%`);
 if (maxLatched === 0 || bites === 0) fail("nobody latched on and bit");
-if (shots[BIG] === 0) fail("no big one fired");
+if (lobs === 0) fail("no big one lobbed a charge");
+if (shots[BIG] > 0) fail(`big ones fired ${shots[BIG]} hitscan rounds (they should only lob)`);
+if (lobMiss) fail(`${lobMiss} charges aimed off the mech or with the wrong flight time`);
+if (lobFlightMin < 1) fail(`a charge flew only ${lobFlightMin.toFixed(2)} s: too quick to dodge`);
 if (shots[MID] === 0) fail("no medium one fired");
 if (shots[SMALL] === 0) fail("no small shooter fired");
 if (cuts === 0) fail(`no medium one landed a saw strike (${sawCut} samples winding up or lunging)`);
@@ -178,6 +189,38 @@ if (smallR < 0 || midR < 0 || bigR < 0) fail("aimed rays missed");
 else {
   if (midR < smallR * 3) fail("medium one not much tougher than a small one");
   if (bigR < midR * 3) fail("big one not much tougher than a medium one");
+}
+
+// Dodging the tells: a medium one's slug goes where the mech was when the tell began, and its saw lunge goes where
+// the mech was when the wind-up ended, so a dash (a jump of 9 m here) during either takes the mech clear.
+{
+  const tellMid = (cutter: boolean) => {
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 1, robotMidCutterShare: cutter ? 1 : 0 }, field, 21);
+    const t = { x: 200, y: field.height(200, 200) + 3, z: 200, radius: 2 };
+    sw.spawn(1, cutter ? 207 : 212, 200, 0);
+    let tellSeen = 0, dashed = false, hitNear = 0, hitFar = 0, struck = 0;
+    for (let s = 0; s < 12 * 120; s++) {
+      sw.update(dt, t, (fx, fy, fz, tx, ty, tz) => {
+        // Closest approach of the slug's line to the mech now.
+        const dx = tx - fx, dy = ty - fy, dz = tz - fz, L = Math.hypot(dx, dy, dz);
+        const wx = t.x - fx, wy = t.y - fy, wz = t.z - fz, k = (wx * dx + wy * dy + wz * dz) / (L * L);
+        const miss = Math.hypot(wx - dx * k, wy - dy * k, wz - dz * k);
+        if (miss < t.radius) hitNear++; else hitFar++;
+      }, undefined, () => { struck++; });
+      if (sw.tell[0]) tellSeen++;
+      // Dash 9 m sideways a third of a second into the first tell.
+      if (!dashed && tellSeen * dt >= 0.3) { t.z += 9; t.y = field.height(t.x, t.z) + 3; dashed = true; }
+      // Done once the attack has gone off (the slug fired, or the saw attack over).
+      if (dashed && (cutter ? sw.state[0] !== CUT : hitNear + hitFar > 0)) break;
+    }
+    return { tellSeen: tellSeen * dt, dashed, hitNear, hitFar, struck };
+  };
+  const shot = tellMid(false), saw = tellMid(true);
+  console.log(`tells: medium shot tell ${shot.tellSeen.toFixed(2)} s, after a dash its slug ${shot.hitFar ? "misses" : "still hits"}; saw wind-up ${saw.tellSeen.toFixed(2)} s, after a dash the saw ${saw.struck ? "still strikes" : "misses"}`);
+  if (shot.tellSeen < 0.5) fail(`a medium one's shot tell lasted ${shot.tellSeen.toFixed(2)} s (< 0.5)`);
+  if (!shot.dashed || shot.hitNear || !shot.hitFar) fail("a dash during a medium one's shot tell didn't dodge the slug");
+  if (saw.tellSeen < 0.5) fail(`a medium one's saw wind-up lasted ${saw.tellSeen.toFixed(2)} s (< 0.5)`);
+  if (!saw.dashed || saw.struck) fail("a dash during a medium one's saw wind-up didn't dodge the saw");
 }
 
 // Stomp: let a pack latch on, then stomp right by the mech.

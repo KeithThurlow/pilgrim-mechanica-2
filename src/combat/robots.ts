@@ -80,7 +80,8 @@ export const ROBOT_DEFAULTS = {
   robotMidStepTime: 0.28,
   robotMidStepAt: 0.22,
   robotMidStepLift: 0.4,
-  robotMidShotInterval: 1.8,
+  robotMidShotInterval: 2.4,
+  robotMidShotWindup: 0.65,
   robotMidShotSpread: 3,
   robotMidShotDamage: 3,
   robotMidCutRange: 4,
@@ -111,11 +112,16 @@ export const ROBOT_DEFAULTS = {
   robotBigLegHit: 0.45,
   robotBigLegDamage: 0.5,
   robotBigArc: 12,
-  robotBigBurst: 5,
-  robotBigRoundInterval: 0.14,
-  robotBigPause: 2.4,
-  robotBigAim: 1.2,
-  robotBigSpread: 2.5,
+  robotBigBurst: 2,
+  robotBigRoundInterval: 0.7,
+  robotBigPause: 4,
+  robotBigAim: 1.5,
+  robotBigWindup: 0.8,
+  robotBigLobSpeed: 14,
+  robotBigLobArc: 9,
+  robotBigLobRadius: 3.5,
+  robotBigLobLead: 0.7,
+  robotBigLobScatter: 2,
   robotBigShotDamage: 10,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
@@ -194,10 +200,11 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotMidStepAt", label: "Step when off by (× spread)", min: 0.05, max: 1, step: 0.01, group: GM },
   { key: "robotMidStepLift", label: "Step lift (m)", min: 0, max: 2, step: 0.05, group: GM },
   { key: "robotMidShotInterval", label: "Shot every (s)", min: 0.2, max: 8, step: 0.05, group: GM },
+  { key: "robotMidShotWindup", label: "Shot tell (s)", min: 0, max: 2, step: 0.05, group: GM, tip: "Lamps flash red and it rears back before each slug; the aim is fixed where the mech was when the tell started, so a dash takes you out of it" },
   { key: "robotMidShotSpread", label: "Shot spread (°)", min: 0, max: 15, step: 0.1, group: GM },
   { key: "robotMidShotDamage", label: "Shot damage", min: 0, max: 40, step: 0.5, group: GM, tip: "For the lab: what a medium one's slug does to the mech" },
   { key: "robotMidCutRange", label: "Saw attack from (m)", min: 0.5, max: 12, step: 0.1, group: GM, tip: "Distance to the mech's side where one winds up its saw" },
-  { key: "robotMidCutWindup", label: "Saw wind-up (s)", min: 0, max: 3, step: 0.05, group: GM, tip: "Rears back, saw spinning up, lamp red: time to step away" },
+  { key: "robotMidCutWindup", label: "Saw wind-up (s)", min: 0, max: 3, step: 0.05, group: GM, tip: "Rears back, saw spinning up, lamp red: time to step away. The lunge goes where the mech was when the wind-up ended" },
   { key: "robotMidLungeSpeed", label: "Lunge speed (m/s)", min: 0, max: 20, step: 0.1, group: GM },
   { key: "robotMidLungeTime", label: "Lunge time (s)", min: 0.05, max: 1.5, step: 0.05, group: GM },
   { key: "robotMidCutReach", label: "Saw reaches (m)", min: 0, max: 5, step: 0.05, group: GM, tip: "The saw hits if its edge ends the lunge within this of the mech's side" },
@@ -223,12 +230,17 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigLegHit", label: "Arm hit radius (m)", min: 0, max: 1.5, step: 0.01, group: G2, tip: "Rounds hit the arm legs (boom, stick, bucket) within this" },
   { key: "robotBigLegDamage", label: "Arm hits count (×)", min: 0, max: 2, step: 0.05, group: G2, tip: "Damage share of a round into an arm leg rather than the chassis" },
   { key: "robotBigArc", label: "Fires within (°)", min: 1, max: 90, step: 1, group: G2, tip: "Only fires when turned this close to the mech" },
-  { key: "robotBigBurst", label: "Rounds per burst", min: 1, max: 20, step: 1, group: G2 },
-  { key: "robotBigRoundInterval", label: "Time between rounds (s)", min: 0.03, max: 1, step: 0.01, group: G2 },
-  { key: "robotBigPause", label: "Pause between bursts (s)", min: 0.2, max: 8, step: 0.05, group: G2 },
-  { key: "robotBigAim", label: "Aim before first burst (s)", min: 0, max: 4, step: 0.05, group: G2 },
-  { key: "robotBigSpread", label: "Spread (°)", min: 0, max: 15, step: 0.1, group: G2 },
-  { key: "robotBigShotDamage", label: "Round damage", min: 0, max: 100, step: 0.5, group: G2, tip: "For the lab: what a big one's round does to the mech" },
+  { key: "robotBigBurst", label: "Charges per volley", min: 1, max: 10, step: 1, group: G2 },
+  { key: "robotBigRoundInterval", label: "Time between charges (s)", min: 0.1, max: 3, step: 0.05, group: G2 },
+  { key: "robotBigPause", label: "Pause between volleys (s)", min: 0.5, max: 12, step: 0.1, group: G2 },
+  { key: "robotBigAim", label: "Aim before first volley (s)", min: 0, max: 6, step: 0.05, group: G2 },
+  { key: "robotBigWindup", label: "Tell before a volley (s)", min: 0, max: 3, step: 0.05, group: G2, tip: "Gun lamp red and the chassis rears before each volley" },
+  { key: "robotBigLobSpeed", label: "Charge speed (m/s)", min: 3, max: 60, step: 0.5, group: G2, tip: "Ground speed of the lobbed charge: flight time is distance over this. Slower gives more time to dash out of the marked ring" },
+  { key: "robotBigLobArc", label: "Charge arc (m)", min: 0, max: 40, step: 0.5, group: G2 },
+  { key: "robotBigLobRadius", label: "Blast radius (m)", min: 0.5, max: 12, step: 0.1, group: G2 },
+  { key: "robotBigLobLead", label: "Lead on the mech's walk (×)", min: 0, max: 1.5, step: 0.05, group: G2, tip: "Aims where the mech will be after this share of the flight at its current velocity: 0 aims where it is, 1 full lead" },
+  { key: "robotBigLobScatter", label: "Scatter (m)", min: 0, max: 10, step: 0.1, group: G2 },
+  { key: "robotBigShotDamage", label: "Charge damage", min: 0, max: 100, step: 0.5, group: G2, tip: "For the lab: what a big one's charge does at the blast's centre" },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
   { key: "robotStompReach", label: "Stomp knocks off below (m)", min: 0, max: 6, step: 0.1, group: G3, tip: "Latched ones lower than this near the foot are knocked off" },
@@ -293,6 +305,16 @@ export class RobotSwarm {
   readonly shooter = new Uint8Array(ROBOT_MAX);
   /** Medium ones: time until the saw can attack again. */
   readonly cutClock = new Float32Array(ROBOT_MAX);
+  /** 1 while an attack is telegraphed (a medium one's shot or saw wind-up, a big one's volley): lamps red, rearing. */
+  readonly tell = new Uint8Array(ROBOT_MAX);
+  /**
+   * A big one lobs a charge: robot, muzzle (world), where it will land (x, z) and its flight time. The lab hands it
+   * to the battlefield's shells (a marked ring on the sand that fills as it comes down).
+   */
+  onLob: ((i: number, fx: number, fy: number, fz: number, x: number, z: number, flight: number) => void) | null = null;
+  /** Charges lobbed since construction. */
+  lobs = 0;
+  private aim: RobotTarget = { x: 0, y: 0, z: 0, radius: 2 };
   /** Latch spot taken while leaping or latched (-1 none). */
   readonly slot = new Int16Array(ROBOT_MAX).fill(-1);
   readonly fireClock = new Float32Array(ROBOT_MAX);
@@ -685,6 +707,7 @@ export class RobotSwarm {
 
       // Desired velocity.
       let wx = 0, wz = 0, face = NaN, lunge = false;
+      this.tell[i] = st === CUT && stateTime[i] < v.robotMidCutWindup + v.robotMidLungeTime ? 1 : 0;
       const hill = Math.max(0.3, Math.min(1 + v.robotDownhill, 1 - this.slope[i] * v.robotUphill));
       if (st === RUN) {
         const spd = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * this.speedK[i] * hill;
@@ -711,9 +734,13 @@ export class RobotSwarm {
         const near = big ? v.robotBigNear : mid ? v.robotMidNear : v.robotShootNear;
         if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
       } else if (st === CUT) {
-        face = Math.atan2(ux, uz);
+        // It tracks the mech through the wind-up, then lunges where the mech was: a dash in time takes you clear.
         const t = stateTime[i], w = v.robotMidCutWindup;
-        if (t >= w && t < w + v.robotMidLungeTime) { wx = ux * v.robotMidLungeSpeed; wz = uz * v.robotMidLungeSpeed; lunge = true; }
+        if (t < w) { face = Math.atan2(ux, uz); this.ax[i] = ux; this.az[i] = uz; }
+        else {
+          face = Math.atan2(this.ax[i], this.az[i]);
+          if (t < w + v.robotMidLungeTime) { wx = this.ax[i] * v.robotMidLungeSpeed; wz = this.az[i] * v.robotMidLungeSpeed; lunge = true; }
+        }
       }
 
       const turn = (big ? v.robotBigTurn : mid ? v.robotMidTurn : v.robotTurn) * DEG * dt;
@@ -783,17 +810,28 @@ export class RobotSwarm {
         dh = Math.abs(Math.atan2(Math.sin(dh), Math.cos(dh)));
         this.fireClock[i] -= dt;
         if (big) {
+          // Volleys of lobbed charges that land on a marked ring (telegraphed: dash out of it), after a tell.
           if (this.fireClock[i] <= 0 && dh < v.robotBigArc * DEG) {
             if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotBigBurst));
-            this.fire(i, target, v.robotBigSpread * DEG, this.hubY[i] - size[i] * BIG_BODY_H * 0.3, size[i] * 0.62, BIG, onShot);
+            this.lob(i, target);
             this.burstLeft[i]--;
             this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotBigRoundInterval : v.robotBigPause * (0.7 + 0.6 * this.rand());
           }
+          this.tell[i] = this.burstLeft[i] > 0 || this.fireClock[i] <= v.robotBigWindup ? 1 : 0;
         } else if (mid) {
-          if (this.fireClock[i] <= 0 && dh < 0.3) {
-            this.fire(i, target, v.robotMidShotSpread * DEG, this.hubY[i] + size[i] * 0.08, size[i] * 0.45, MID, onShot);
+          // The tell: the aim fixes on where the mech is, lamps flash and it rears back; then the slug goes there.
+          if (this.burstLeft[i] === 0 && this.fireClock[i] <= v.robotMidShotWindup) {
+            this.burstLeft[i] = 1;
+            this.ax[i] = target.x; this.ay[i] = target.y; this.az[i] = target.z;
+          }
+          if (this.fireClock[i] <= 0 && this.burstLeft[i] === 1) {
+            const aim = this.aim;
+            aim.x = this.ax[i]; aim.y = this.ay[i]; aim.z = this.az[i]; aim.radius = target.radius;
+            this.fire(i, aim, v.robotMidShotSpread * DEG, this.hubY[i] + size[i] * 0.08, size[i] * 0.45, MID, onShot);
+            this.burstLeft[i] = 0;
             this.fireClock[i] = v.robotMidShotInterval * (0.7 + 0.6 * this.rand());
           }
+          this.tell[i] = this.burstLeft[i];
         } else if (this.fireClock[i] <= 0 && dh < 0.5) {
           this.fire(i, target, v.robotShotSpread * DEG, this.hubY[i] + size[i] * HUB_H * 0.3, size[i] * 0.25, SMALL, onShot);
           this.fireClock[i] = v.robotShotInterval * (0.7 + 0.6 * this.rand());
@@ -973,6 +1011,21 @@ export class RobotSwarm {
     if (vx[i] * vx[i] + vz[i] * vz[i] > 1e-6) { px[i] += vx[i] * dt; pz[i] += vz[i] * dt; }
     py[i] = this.ground.height(px[i], pz[i]);
     return true;
+  }
+
+  /**
+   * A big one's lobbed charge from the gun under its chassis: aimed where the mech will be after a share of the flight
+   * (robotBigLobLead) at its walk velocity, scattered a little; flight time from the distance and the charge's speed.
+   */
+  private lob(i: number, t: RobotTarget) {
+    const v = this.v, h = this.heading[i], S = this.size[i];
+    const fx = this.px[i] + Math.sin(h) * S * 0.75, fz = this.pz[i] + Math.cos(h) * S * 0.75, fy = this.hubY[i] - S * BIG_BODY_H * 0.3;
+    const d0 = Math.hypot(t.x - fx, t.z - fz);
+    const flight = Math.max(0.6, d0 / Math.max(1, v.robotBigLobSpeed));
+    const lead = v.robotBigLobLead * flight, r = v.robotBigLobScatter * Math.sqrt(this.rand()), a = this.rand() * Math.PI * 2;
+    const x = t.x + this.tvx * lead + Math.cos(a) * r, z = t.z + this.tvz * lead + Math.sin(a) * r;
+    this.lobs++; this.shots++;
+    this.onLob?.(i, fx, fy, fz, x, z, flight);
   }
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */

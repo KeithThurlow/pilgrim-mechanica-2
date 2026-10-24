@@ -195,6 +195,9 @@ export class RobotsDraw {
       if (t < w) { const k = t / w; pitch = -0.28 * k * (2 - k); spin = 10 + 60 * k; alarm = Math.sin(t * 30) > -0.3; }
       else if (t < w + L) { pitch = 0.16; spin = 70; alarm = true; }
       else { const k = Math.min(1, (t - w - L) / Math.max(0.05, v.robotMidCutRecover)); pitch = 0.16 * (1 - k); spin = 70 * (1 - k) + 9 * k; }
+    } else if (st === FIRE && sw.tell[i]) {
+      // Shot tell: rears back, lamps flashing red.
+      pitch = -0.14; alarm = Math.sin(this.time * 30) > -0.3;
     } else if (dead) spin = 0;
     this.sawA[i] += spin * dt;
     q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, pitch); q.multiply(qa);
@@ -244,8 +247,9 @@ export class RobotsDraw {
     const st = sw.state[i], dead = st === DEAD, S = sw.size[i], h = sw.heading[i], H = sw.heightOf(i);
     let y = sw.hubY[i];
     if (dead) y = this.collapse(i, y, BIG_BODY_H);
-    let pitch = 0;
-    if (st === FIRE) pitch = Math.max(0, 0.05 - sw.fireClock[i] * 0.3); // recoil nod
+    // Volley tell: the chassis rears back and the gun lamp flashes red; each charge kicks it back further.
+    const tell = st === FIRE && sw.tell[i] === 1;
+    const pitch = tell ? 0.07 + Math.max(0, 0.08 - (sw.v.robotBigRoundInterval - sw.fireClock[i]) * 0.3) * (sw.burstLeft[i] > 0 ? 1 : 0) : 0;
     q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, -pitch); q.multiply(qa);
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
@@ -255,7 +259,9 @@ export class RobotsDraw {
     const cabY = BIG_BODY_H * 0.3 + 0.12, off = dead ? 0x201810 : 0;
     this.lamp(m, 0.14, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
     this.lamp(m, 0.26, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
-    this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (st === FIRE ? ALARM : LAMP));
+    const flash = tell && Math.sin(this.time * 24) > -0.2;
+    this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (flash ? ALARM : LAMP));
+    this.lamp(m, 0, -BIG_BODY_H * 0.3, 0.83, 0.07, 0.07, 0.02, off || (flash ? ALARM : 0x301008));
     const beat = (Math.sin(this.time * 5 + sw.seed[i] * 20) + 1) * 0.5;
     this.c.setHex(AMBER).multiplyScalar(0.35 + 0.65 * beat);
     this.lamp(m, 0.2, BIG_BODY_H * 0.3 + 0.33, 0.24, 0.045, 0.05, 0.045, off || this.c.getHex());
