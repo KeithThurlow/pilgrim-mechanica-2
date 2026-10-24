@@ -1,0 +1,142 @@
+// Headless robot swarm check: 300 quadrupeds (10% big) rush a stationary mech over the tall dunes. Fails on NaN,
+// robots off the ground (other than leaping, latched or flung), robots piled on each other, nobody latching or
+// firing, a slow update; then rays kill a small and a big one (the big one taking far more), and a stomp knocks
+// latched ones off.
+// Run: npm test (or npx tsx tools/robots-check.ts).
+import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, DOWN, DEAD, BIG, SMALL, isAirborne } from "../src/combat/robots";
+import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+
+const field = new DuneField({ ...TERRAIN_DEFAULTS });
+const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS }, field, 7);
+const target = { x: 0, y: field.height(0, 0) + 3, z: 0, radius: 2 };
+const dt = 1 / 120;
+let failed = false;
+const fail = (m: string) => { console.log(`FAIL: ${m}`); failed = true; };
+
+swarm.spawn(300, 70, 0, 16);
+let bigs = 0;
+for (let i = 0; i < swarm.hi; i++) if (swarm.kind[i] === BIG) bigs++;
+let smallShots = 0, bigShots = 0, bites = 0, biteDmg = 0, nan = 0, offGround = 0, maxOff = 0, crowdedWorst = 0, ms = 0, maxLatched = 0;
+const steps = 30 * 120;
+
+function crowded(): number {
+  // Share of grounded live robots overlapping another's hard body by more than a third.
+  let n = 0, liveN = 0;
+  for (let i = 0; i < swarm.hi; i++) {
+    const s = swarm.state[i];
+    if (s >= DEAD || isAirborne(s)) continue;
+    liveN++;
+    let close = false;
+    const ri = swarm.size[i] * ROBOT_DEFAULTS.robotGap;
+    swarm.near(swarm.px[i], swarm.pz[i], ri + 2.5, (j) => {
+      if (j === i) return;
+      const rj = swarm.size[j] * ROBOT_DEFAULTS.robotGap;
+      if (Math.hypot(swarm.px[i] - swarm.px[j], swarm.pz[i] - swarm.pz[j]) < (ri + rj) * 0.66) close = true;
+    });
+    if (close) n++;
+  }
+  return liveN ? n / liveN : 0;
+}
+
+for (let s = 0; s < steps; s++) {
+  const t0 = performance.now();
+  swarm.update(dt, target, (_a, _b, _c, _d, _e, _f, big) => { if (big) bigShots++; else smallShots++; }, (_i, d) => { bites++; biteDmg += d; });
+  ms += performance.now() - t0;
+  maxLatched = Math.max(maxLatched, swarm.latchedCount);
+  for (let i = 0; i < swarm.hi; i++) {
+    const st = swarm.state[i];
+    if (st >= DEAD) continue;
+    const x = swarm.px[i], y = swarm.py[i], z = swarm.pz[i];
+    if (!Number.isFinite(x + y + z + swarm.vx[i] + swarm.vz[i] + swarm.heading[i] + swarm.gait[i])) { nan++; continue; }
+    if (isAirborne(st)) continue;
+    const off = Math.abs(y - field.height(x, z));
+    maxOff = Math.max(maxOff, off);
+    if (off > 0.15) offGround++;
+  }
+  if (s % 60 === 59) crowdedWorst = Math.max(crowdedWorst, crowded());
+}
+const per = ms / steps;
+const states = [0, 0, 0, 0, 0, 0, 0];
+for (let i = 0; i < swarm.hi; i++) if (swarm.state[i] <= DEAD) states[swarm.state[i]]++;
+let bigMin = Infinity, bigMax = 0;
+for (let i = 0; i < swarm.hi; i++) if (swarm.kind[i] === BIG && swarm.state[i] === FIRE) {
+  const d = Math.hypot(swarm.px[i] - target.x, swarm.pz[i] - target.z); bigMin = Math.min(bigMin, d); bigMax = Math.max(bigMax, d);
+}
+console.log(`rush: 300 robots (${bigs} big), 30 s: ${per.toFixed(3)} ms/step`);
+console.log(`      states run ${states[RUN]} leap ${states[LEAP]} latched ${states[LATCHED]} (max ${maxLatched}) fire ${states[FIRE]} flung ${states[FLUNG]} down ${states[DOWN]}`);
+console.log(`      big ones firing at ${bigMin.toFixed(1)}-${bigMax.toFixed(1)} m; rounds small ${smallShots} big ${bigShots}; ${bites} bites (${biteDmg.toFixed(0)} damage)`);
+console.log(`      max off ground ${maxOff.toFixed(4)} m, worst crowding ${(crowdedWorst * 100).toFixed(2)}%`);
+if (nan) fail(`${nan} NaN samples`);
+if (offGround) fail(`${offGround} samples more than 0.15 m off the ground (max ${maxOff.toFixed(3)})`);
+if (crowdedWorst > 0.05) fail(`crowding ${(crowdedWorst * 100).toFixed(1)}% > 5%`);
+if (maxLatched === 0 || bites === 0) fail("nobody latched on and bit");
+if (bigShots === 0) fail("no big one fired");
+if (smallShots === 0) fail("no small shooter fired");
+if (per > 2) fail(`update too slow: ${per.toFixed(3)} ms per step > 2`);
+
+// Kills: rounds of 9 at a standing small one and a big one, from 12 m off, aimed at the body centre.
+function roundsToKill(kind: number): number {
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: kind === BIG ? 1 : 0 }, field, 5);
+  sw.spawn(1, 30, 30, 0);
+  const far = { x: 400, y: 0, z: 400, radius: 2 };
+  sw.update(dt, far, () => {});
+  const i = 0, S = sw.size[i];
+  let rounds = 0;
+  while (sw.state[i] < DEAD && rounds < 1000) {
+    const cy = sw.py[i] + S * 0.5;
+    const ox = sw.px[i] + 12, oy = cy + 2, oz = sw.pz[i] + 1;
+    const h = sw.hitRay(ox, oy, oz, sw.px[i] - ox, cy - oy, sw.pz[i] - oz, 100);
+    if (!h || h.index !== i) return -1;
+    sw.damage(i, 9, -1, 0);
+    rounds++;
+  }
+  // The wreck settles on the ground.
+  for (let s = 0; s < 3 * 120; s++) sw.update(dt, far, () => {});
+  const off = Math.abs(sw.py[i] - field.height(sw.px[i], sw.pz[i]));
+  if (off > 0.05) fail(`a ${kind === BIG ? "big" : "small"} wreck stayed ${off.toFixed(2)} m off the ground`);
+  return rounds;
+}
+const smallR = roundsToKill(SMALL), bigR = roundsToKill(BIG);
+console.log(`kills: small one ${smallR} rounds, big one ${bigR} rounds (9 damage each)`);
+if (smallR < 0 || bigR < 0) fail("aimed rays missed");
+else if (bigR < smallR * 10) fail("big one not much tougher than a small one");
+
+// Stomp: let a pack latch on, then stomp right by the mech.
+const lsw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotShooterShare: 0 }, field, 11);
+const lt = { x: 100, y: field.height(100, 100) + 3, z: 100, radius: 2 };
+lsw.spawn(40, 115, 100, 4);
+for (let s = 0; s < 8 * 120 && lsw.latchedCount < 12; s++) lsw.update(dt, lt, () => {});
+const before = lsw.latchedCount;
+let low = 0;
+for (let i = 0; i < lsw.hi; i++) if (lsw.state[i] === LATCHED && lsw.py[i] - lsw.baseY < ROBOT_DEFAULTS.robotStompReach) low++;
+lsw.stomp(lt.x + 1, lt.z, 2.5);
+const after = lsw.latchedCount;
+let flung = 0;
+for (let i = 0; i < lsw.hi; i++) if (lsw.state[i] === FLUNG) flung++;
+for (let s = 0; s < 3 * 120; s++) lsw.update(dt, { ...lt, x: lt.x + 0.0001 }, () => {});
+let stuck = 0;
+for (let i = 0; i < lsw.hi; i++) if (lsw.state[i] === FLUNG) stuck++;
+if (stuck) fail(`${stuck} knocked-off robots still in the air after 3 s`);
+console.log(`stomp: ${before} latched (${low} low), ${before - after} knocked off, ${flung} in the air`);
+if (before === 0) fail("nobody latched for the stomp test");
+else if (before - after === 0) fail("stomp knocked nobody off");
+
+// Shake: latched ones come off a mech running fast.
+const ssw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotShooterShare: 0 }, field, 13);
+const st = { x: -100, y: field.height(-100, -100) + 3, z: -100, radius: 2 };
+ssw.spawn(30, -112, -100, 3);
+for (let s = 0; s < 8 * 120 && ssw.latchedCount < 8; s++) ssw.update(dt, st, () => {});
+const held = ssw.latchedCount;
+const heldIdx: number[] = [];
+for (let i = 0; i < ssw.hi; i++) if (ssw.state[i] === LATCHED) heldIdx.push(i);
+for (let s = 0; s < 6 * 120; s++) {
+  st.x += 6.5 * dt; st.y = field.height(st.x, st.z) + 3;
+  ssw.update(dt, st, () => {});
+}
+const shaken = heldIdx.filter((i) => ssw.state[i] !== LATCHED).length;
+console.log(`shake: ${held} latched, ${shaken} shaken off after 6 s at 6.5 m/s (${ssw.latchedCount} on now, counting new ones)`);
+if (held === 0) fail("nobody latched for the shake test");
+else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
+
+if (failed) throw new Error("robots check failed");
+console.log("robots check passed");
