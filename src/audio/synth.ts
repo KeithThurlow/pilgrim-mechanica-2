@@ -189,6 +189,27 @@ export class Synth {
     return s;
   }
 
+  /**
+   * Something cutting and tearing at steel plate (robots on the mech): a wavering metal screech with an inharmonic
+   * partial, chattering on and off like teeth catching, over bright hissing grit.
+   */
+  grind(r: Rng, len: number, gain: number) {
+    const s = new Float32Array(this.n(len));
+    const f0 = 1900 + r() * 1100, chatter = 28 + r() * 30, wob = 5 + r() * 5;
+    let ph = 0, lp = 0;
+    for (let i = 0; i < s.length; i++) {
+      const t = i / this.rate;
+      const env = Math.min(1, t / 0.015) * Math.min(1, (len - t) / 0.09);
+      ph += (f0 * (1 + 0.05 * Math.sin(2 * Math.PI * wob * t)) * (1 + 0.015 * (r() - 0.5))) / this.rate;
+      const tone = Math.sin(2 * Math.PI * ph) + 0.45 * Math.sin(2 * Math.PI * 2.37 * ph) + 0.2 * Math.sin(2 * Math.PI * 3.9 * ph);
+      const ch = 0.5 + 0.5 * Math.max(0, Math.sin(2 * Math.PI * chatter * t + Math.sin(t * 13) * 2));
+      const n = r() * 2 - 1;
+      lp += 0.35 * (n - lp);
+      s[i] = (tone * 0.3 * ch + (n - lp) * 0.7 * (0.5 + 0.5 * ch)) * env * gain;
+    }
+    return s;
+  }
+
   lowPass(part: Float32Array, hz: number) {
     const a = 1 - Math.exp((-2 * Math.PI * hz) / this.rate), s = new Float32Array(part.length);
     let lp = 0;
@@ -211,6 +232,11 @@ export class Synth {
   }
 
   scale(part: Float32Array, k: number) { for (let i = 0; i < part.length; i++) part[i] *= k; return part; }
+}
+
+/** Robots cutting at the mech's plating: a chattering steel screech with a little clank as a tooth catches. */
+export function grindRecipe(S: Synth, r: Rng) {
+  return S.mix(S.grind(r, 0.3 + r() * 0.2, 0.55), S.delay(S.clang(r, 0.06, 0.1), 0.02 + r() * 0.1));
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);

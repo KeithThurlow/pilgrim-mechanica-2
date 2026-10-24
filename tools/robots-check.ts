@@ -1,9 +1,11 @@
-// Headless robot swarm check: 300 quadrupeds (10% big) rush a stationary mech over the tall dunes. Fails on NaN,
+// Headless robot swarm check: 300 robots (10% big tripods) rush a stationary mech over the tall dunes. Fails on NaN,
 // robots off the ground (other than leaping, latched or flung), robots piled on each other, nobody latching or
-// firing, a slow update; then rays kill a small and a big one (the big one taking far more), and a stomp knocks
-// latched ones off.
+// firing, a slow update, small ones' legs out of reach, tripod feet off the sand while planted or legs out of reach,
+// tripods that never step; then rays kill a small and a big one (the big one taking far more, its legs hittable),
+// and a stomp knocks latched ones off.
 // Run: npm test (or npx tsx tools/robots-check.ts).
-import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, DOWN, DEAD, BIG, SMALL, isAirborne } from "../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, DOWN, DEAD, BIG, SMALL, isAirborne, robotCentre } from "../src/combat/robots";
+import { S_THIGH, S_SHIN, B_THIGH, B_SHIN, BIG_LEGS, bigHip, bigBend, solveKnee } from "../src/combat/robotLegs";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
@@ -17,19 +19,23 @@ swarm.spawn(300, 70, 0, 16);
 let bigs = 0;
 for (let i = 0; i < swarm.hi; i++) if (swarm.kind[i] === BIG) bigs++;
 let smallShots = 0, bigShots = 0, bites = 0, biteDmg = 0, nan = 0, offGround = 0, maxOff = 0, crowdedWorst = 0, ms = 0, maxLatched = 0;
+let legSamples = 0, legMiss = 0, legWorst = 0, tripodSamples = 0, tripodMiss = 0, tripodWorst = 0, footOff = 0, footOffMax = 0, footfalls = 0, hubLow = 0;
+swarm.onFootfall = () => { footfalls++; };
+const hips = new Float32Array(12), feet = new Float32Array(12), hip = { x: 0, y: 0, z: 0 };
 const steps = 30 * 120;
 
 function crowded(): number {
-  // Share of grounded live robots overlapping another's hard body by more than a third.
+  // Share of grounded live small ones overlapping another's hard body by more than a third (tripods have no body on
+  // the ground: small ones run between their legs).
   let n = 0, liveN = 0;
   for (let i = 0; i < swarm.hi; i++) {
     const s = swarm.state[i];
-    if (s >= DEAD || isAirborne(s)) continue;
+    if (s >= DEAD || isAirborne(s) || swarm.kind[i] === BIG) continue;
     liveN++;
     let close = false;
     const ri = swarm.size[i] * ROBOT_DEFAULTS.robotGap;
     swarm.near(swarm.px[i], swarm.pz[i], ri + 2.5, (j) => {
-      if (j === i) return;
+      if (j === i || swarm.kind[j] === BIG) return;
       const rj = swarm.size[j] * ROBOT_DEFAULTS.robotGap;
       if (Math.hypot(swarm.px[i] - swarm.px[j], swarm.pz[i] - swarm.pz[j]) < (ri + rj) * 0.66) close = true;
     });
@@ -52,6 +58,34 @@ for (let s = 0; s < steps; s++) {
     const off = Math.abs(y - field.height(x, z));
     maxOff = Math.max(maxOff, off);
     if (off > 0.15) offGround++;
+    if (s % 10 !== 0) continue;
+    const S = swarm.size[i];
+    if (swarm.kind[i] === BIG) {
+      // Tripods: planted feet on the sand, every leg within reach of its hip, the body well up.
+      const H = swarm.hubY[i] - y, reach = (B_THIGH + B_SHIN) * H;
+      if (H < swarm.heightOf(i) * 0.7) hubLow++;
+      for (let k = 0; k < BIG_LEGS; k++) {
+        const f = i * BIG_LEGS + k;
+        if (swarm.stepT[f] < 0) {
+          const fo = Math.abs(swarm.footY[f] - field.height(swarm.footX[f], swarm.footZ[f]));
+          footOffMax = Math.max(footOffMax, fo);
+          if (fo > 0.05) footOff++;
+        }
+        bigHip(x, swarm.hubY[i], z, S, swarm.heading[i], k, hip);
+        const d = Math.hypot(swarm.footX[f] - hip.x, swarm.footY[f] - hip.y, swarm.footZ[f] - hip.z) / reach;
+        tripodSamples++; tripodWorst = Math.max(tripodWorst, d);
+        if (d > 1) tripodMiss++;
+      }
+    } else if (st === RUN || st === FIRE) {
+      // Small ones: every foot within reach of its hip.
+      swarm.smallLegPose(i, hips, feet);
+      const reach = (S_THIGH + S_SHIN) * S;
+      for (let k = 0; k < 4; k++) {
+        const d = Math.hypot(feet[k * 3] - hips[k * 3], feet[k * 3 + 1] - hips[k * 3 + 1], feet[k * 3 + 2] - hips[k * 3 + 2]) / reach;
+        legSamples++; legWorst = Math.max(legWorst, d);
+        if (d > 1) legMiss++;
+      }
+    }
   }
   if (s % 60 === 59) crowdedWorst = Math.max(crowdedWorst, crowded());
 }
@@ -66,6 +100,13 @@ console.log(`rush: 300 robots (${bigs} big), 30 s: ${per.toFixed(3)} ms/step`);
 console.log(`      states run ${states[RUN]} leap ${states[LEAP]} latched ${states[LATCHED]} (max ${maxLatched}) fire ${states[FIRE]} flung ${states[FLUNG]} down ${states[DOWN]}`);
 console.log(`      big ones firing at ${bigMin.toFixed(1)}-${bigMax.toFixed(1)} m; rounds small ${smallShots} big ${bigShots}; ${bites} bites (${biteDmg.toFixed(0)} damage)`);
 console.log(`      max off ground ${maxOff.toFixed(4)} m, worst crowding ${(crowdedWorst * 100).toFixed(2)}%`);
+console.log(`      small legs: ${(legMiss / Math.max(1, legSamples) * 100).toFixed(2)}% out of reach (worst ${(legWorst * 100).toFixed(0)}% of reach)`);
+console.log(`      tripods: ${footfalls} footfalls, planted feet off the sand ${footOff} (max ${footOffMax.toFixed(3)} m), legs out of reach ${(tripodMiss / Math.max(1, tripodSamples) * 100).toFixed(2)}% (worst ${(tripodWorst * 100).toFixed(0)}%), body low ${hubLow}`);
+if (legMiss / Math.max(1, legSamples) > 0.02) fail("small ones' feet out of reach more than 2% of the time");
+if (footOff) fail(`${footOff} planted tripod feet off the sand (max ${footOffMax.toFixed(3)} m)`);
+if (tripodMiss / Math.max(1, tripodSamples) > 0.01) fail("tripod feet out of reach more than 1% of the time");
+if (footfalls < bigs * 3) fail(`tripods hardly stepped (${footfalls} footfalls)`);
+if (hubLow) fail(`${hubLow} samples of a tripod's body sagging below 70% of its height`);
 if (nan) fail(`${nan} NaN samples`);
 if (offGround) fail(`${offGround} samples more than 0.15 m off the ground (max ${maxOff.toFixed(3)})`);
 if (crowdedWorst > 0.05) fail(`crowding ${(crowdedWorst * 100).toFixed(1)}% > 5%`);
@@ -80,13 +121,14 @@ function roundsToKill(kind: number): number {
   sw.spawn(1, 30, 30, 0);
   const far = { x: 400, y: 0, z: 400, radius: 2 };
   sw.update(dt, far, () => {});
-  const i = 0, S = sw.size[i];
+  const i = 0;
   let rounds = 0;
+  const c = { x: 0, y: 0, z: 0 };
   while (sw.state[i] < DEAD && rounds < 1000) {
-    const cy = sw.py[i] + S * 0.5;
-    const ox = sw.px[i] + 12, oy = cy + 2, oz = sw.pz[i] + 1;
-    const h = sw.hitRay(ox, oy, oz, sw.px[i] - ox, cy - oy, sw.pz[i] - oz, 100);
-    if (!h || h.index !== i) return -1;
+    robotCentre(sw, i, c);
+    const ox = c.x + 12, oy = c.y + 2, oz = c.z + 1;
+    const h = sw.hitRay(ox, oy, oz, c.x - ox, c.y - oy, c.z - oz, 100);
+    if (!h || h.index !== i || h.leg) return -1;
     sw.damage(i, 9, -1, 0);
     rounds++;
   }
@@ -95,6 +137,20 @@ function roundsToKill(kind: number): number {
   const off = Math.abs(sw.py[i] - field.height(sw.px[i], sw.pz[i]));
   if (off > 0.05) fail(`a ${kind === BIG ? "big" : "small"} wreck stayed ${off.toFixed(2)} m off the ground`);
   return rounds;
+}
+// A tripod's leg: a ray across the middle of a shin hits it, as a leg.
+{
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 1 }, field, 5);
+  sw.spawn(1, 30, 30, 0);
+  sw.update(dt, { x: 400, y: 0, z: 400, radius: 2 }, () => {});
+  const H = sw.hubY[0] - sw.py[0], foot = { x: sw.footX[0], y: sw.footY[0], z: sw.footZ[0] }, knee = { x: 0, y: 0, z: 0 };
+  bigHip(sw.px[0], sw.hubY[0], sw.pz[0], sw.size[0], sw.heading[0], 0, hip);
+  const b = bigBend(sw.heading[0], 0, { x: 0, y: 0, z: 0 });
+  solveKnee(hip, foot, B_THIGH * H, B_SHIN * H, b.x, b.y, b.z, knee);
+  const mx = foot.x + (knee.x - foot.x) * 0.2, my = foot.y + (knee.y - foot.y) * 0.2, mz = foot.z + (knee.z - foot.z) * 0.2;
+  const h = sw.hitRay(mx + 20, my, mz + 3, -20, 0, -3, 100);
+  console.log(`legs: a ray at foot 0's shin ${h ? (h.leg ? "hits the leg" : "hits the body") : "misses"}`);
+  if (!h || !h.leg) fail("a ray across a tripod's lower leg didn't hit it");
 }
 const smallR = roundsToKill(SMALL), bigR = roundsToKill(BIG);
 console.log(`kills: small one ${smallR} rounds, big one ${bigR} rounds (9 damage each)`);

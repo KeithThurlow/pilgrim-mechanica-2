@@ -83,7 +83,7 @@ src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slide
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell)
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
-                        robots (quadruped swarm) + robotsDraw, robotTarget
+                        robots (starfish and tripod swarm) + robotLegs, robotsDraw, robotTarget, robotTearFx
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots

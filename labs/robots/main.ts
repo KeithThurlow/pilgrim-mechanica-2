@@ -1,7 +1,8 @@
-// Robot swarm lab (Keith 2026-10-24): hostile quadruped robots swarming across the dunes. Most are small and fast:
-// they pour in as a pack, leap onto the mech and cling on, biting, until shot off, stomped off or shaken off at a run;
-// a few hang back and shoot. A few big ones stalk in slowly, stop at range and fire heavy bursts, and take a lot of
-// killing. Power and threat at once.
+// Robot swarm lab (Keith 2026-10-24): hostile robots swarming across the dunes. Most are small four-legged starfish
+// that scuttle in any direction: they pour in as a pack, leap onto the mech and cling on, tearing at its plating
+// (sparks, scraps of plate, a grinding screech), until shot off, stomped off or shaken off at a run; a few hang back
+// and shoot. A few big ones are War of the Worlds tripods that swing in from the side on long legs, stop at range
+// and fire heavy bursts from high up, and take a lot of killing. Power and threat at once.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -9,7 +10,8 @@ import { combatLab } from "../../src/game/combatLab";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
-import { ROBOT_PARTS, ROBOT_JOINTS } from "../../src/physics/bodies";
+import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
+import { robotRagdoll } from "../../src/physics/bodies";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -33,9 +35,9 @@ let draw: RobotsDraw | null = null;
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...WAVE_DEFAULTS },
-  params: [...WAVE_PARAMS, ...ROBOT_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: big ones", "Robots: attack"] }],
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS },
+  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: big ones", "Robots: attack", "Robots: tearing"] }],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
@@ -48,13 +50,18 @@ lab.app.scene.add(draw.group);
 const target = new RobotTarget(sw, 3);
 bf.targets.push(target);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k));
-// Deaths go to the physics: the body and its four legs fall apart loosely (small ones fly, big ones fold).
+// Deaths go to the physics: hub or hood and the legs fall apart loosely (small ones fly, tripods topple from height).
 sw.hideDead = true;
 sw.onDeath = (i, nx, nz, speed) => {
-  const s = sw.size[i], big = sw.kind[i] === 1;
-  lab.deaths.ragdoll(ROBOT_PARTS(s, 0xd6d3cc, 0x34363a), ROBOT_JOINTS(s), sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
+  const big = sw.kind[i] === 1;
+  const { parts, joints } = robotRagdoll(sw, i, big ? 0x8e918f : 0xd6d3cc, big ? 0x34373b : 0x45484c);
+  lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
     { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, big ? 1 : Math.max(3, speed));
 };
+// Tripod feet coming down kick up the sand; latched small ones tear at the plating.
+sw.onFootfall = (_i, x, y, z) => bf.dust.stomp(x, y, z, 0.45);
+const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
+lab.app.scene.add(tear.group);
 
 function spawnPack() {
   const a = Math.random() * Math.PI * 2;
@@ -89,7 +96,12 @@ lab.onFrame((dt) => {
       bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, big ? V.robotBigShotDamage : V.robotShotDamage,
         drawn ? { flashScale: big ? 1.2 : 0.35, voice: "other" } : { tracer: false, voice: "none" });
     },
-    (i, damage) => { if (player.alive) player.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up); });
+    (i, damage) => {
+      if (!player.alive) return;
+      player.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up);
+      tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z);
+    });
   draw!.update(dt);
+  tear.update(dt);
   lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · destroyed ${target.kills}`);
 });
