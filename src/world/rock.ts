@@ -5,14 +5,14 @@ import type { Param } from "../core/tweaks";
 import { Noise2, smoothstep, lerp } from "./noise";
 
 export const ROCK_DEFAULTS = {
-  rockHeight: 16,
-  rockScale: 260,
+  rockHeight: 22,
+  rockScale: 170,
   rockStep: 3.2,
-  rockFace: 0.35,
+  rockFace: 0.22,
   rockTerrace: 0.8,
   rockRidge: 0.45,
-  rockRough: 0.5,
-  rockSand: 0.3,
+  rockRough: 0.25,
+  rockSand: 0.35,
 };
 export type RockValues = typeof ROCK_DEFAULTS;
 
@@ -50,7 +50,7 @@ export class RockGround {
       const q = base / v.rockStep, k = Math.floor(q), f = q - k;
       base = lerp(base, (k + smoothstep(1 - v.rockFace, 1, f)) * v.rockStep, v.rockTerrace);
     }
-    const h = base + v.rockRough * n.fbm(x / 5 + 2.2, z / 5 - 8.8, 2);
+    const h = base + v.rockRough * n.fbm(x / 9 + 2.2, z / 9 - 8.8, 2);
     const sand = this.sandLevel();
     out.h = Math.max(h, sand);
     out.bare = smoothstep(sand, sand + 0.6, h);

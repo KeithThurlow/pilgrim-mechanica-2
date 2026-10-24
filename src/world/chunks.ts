@@ -212,10 +212,16 @@ export class TerrainStreamer {
       // Biomes: rocky land's sand greyer, bare rock by steepness (tops grey, risers red-brown); shallows wet and dark.
       const wr = s.wr ?? 0, ws = s.ws ?? 0, rock = s.rock ?? 0;
       if (wr > 0) tmp.lerp(C.rockSand, wr * 0.6);
-      if (rock > 0) tmp.lerp(this.c2.copy(C.rockTop).lerp(C.rockFace, smooth(0.15, 0.45, steep)), rock);
+      if (rock > 0) {
+        // Rock: tops grey-brown, risers red-brown, with strata bands by height so the shelves read as layered stone.
+        const band = 0.5 + 0.5 * Math.sin(s.h * 3.9 + Math.sin(x * 0.05) * 0.6);
+        this.c2.copy(C.rockTop).lerp(C.rockFace, smooth(0.08, 0.3, steep));
+        this.c2.multiplyScalar(0.9 + 0.14 * band * smooth(0.05, 0.25, steep));
+        tmp.lerp(this.c2, rock);
+      }
       if (water !== null && ws > 0) {
         const above = s.h - water;
-        tmp.lerp(C.wet, ws * (1 - smooth(0.05, 0.8, above)) * (1 - rock * 0.7));
+        tmp.lerp(C.wet, ws * (1 - smooth(0.05, 1.6, above) * 0.6) * (1 - rock * 0.7));
         tmp.lerp(C.floor, ws * smooth(0, 0.6, -above) * (1 - rock));
         if (above < 0.3) maxWs = Math.max(maxWs, ws);
       }

@@ -8,7 +8,7 @@ export const SHALLOWS_DEFAULTS = {
   waterLevel: -1.5,
   shallowDepth: 0.9,
   barHeight: 0.5,
-  barShare: 0.3,
+  barShare: 0.16,
   barScale: 90,
   outcropShare: 0.1,
   outcropHeight: 5,
@@ -55,10 +55,12 @@ export class ShallowsGround {
     let rock = 0;
     if (v.outcropShare > 0) {
       const o = n.fbm(x / v.outcropScale + 41.7, z / v.outcropScale - 13.1, 3) * 0.5 + 0.5;
-      const k = smoothstep(1 - v.outcropShare, 1 - v.outcropShare * 0.2, o);
+      const k = smoothstep(1 - v.outcropShare * 2.4, 1 - v.outcropShare * 1.7, o);
       if (k > 0) {
-        const top = W + v.outcropHeight * (0.6 + 0.4 * n.fbm(x / 7, z / 7, 2)) * k;
-        if (top > h) { rock = smoothstep(0, 0.5, k); h = top; }
+        // Rise from the floor (no lip where an outcrop starts), steepening to a rough top.
+        const top = W + v.outcropHeight * (0.6 + 0.4 * n.fbm(x / 7, z / 7, 2));
+        const nh = h + (top - h) * k * k * (3 - 2 * k);
+        if (nh > h) { rock = smoothstep(0.1, 0.5, k); h = nh; }
       }
     }
     out.h = h; out.rock = rock;
