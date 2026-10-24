@@ -52,7 +52,9 @@ console.log(`  old stance     ${fmt(downOff)}`);
 if (side.thigh < sideOff.thigh + 8) problems.push("the uphill leg's thigh doesn't fold forward on a side slope");
 if (up.speed > flat.speed * 0.9) problems.push("no slowdown uphill");
 if (down.speed < flat.speed * 0.95) problems.push("slows down downhill");
-if (Math.abs(down.cogAhead) > 0.25) problems.push("downhill the feet aren't under the hips");
+// The body leans over its feet while moving (Keith 2026-10-24): downhill no less than on the flat, and never behind them.
+if (down.cogAhead < Math.min(0.1, flat.cogAhead - 0.15)) problems.push("downhill the hips sit back behind the feet");
+if (flat.cogAhead < 0.25) problems.push("walking, the hips aren't forward over the feet");
 for (const [name, r] of [["side", side], ["up", up], ["down", down]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("slope check failed"); }
 console.log("slope check passed");

@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | While moving, the mech leans over its feet: centre of gravity forward over the feet, not behind them (downhill too) | Keith | Keith | Feet land nearer the hips and a 4° lean with speed (Claude's values). |
+| 2026-10-24 | Dust is built and tuned in the walker lab, no separate dust lab | Keith | Keith | Target: Keith's reference video `art-refs/particles/m2-res_1080p.mp4` in the old repo. |
 | 2026-10-24 | On slopes a squashed leg uses its thigh at the hip; slow uphill; downhill full speed with the feet planted under the mech | Keith | Keith | Fold forward plus knee turned out, values Claude's (sliders under Terrain). |
 | 2026-10-24 | Minigun hits by surface, like the old game: sand torn up low along the ground plus dust kicked up; sparks off metal | Keith | Keith | Opaque dust balls (the old HitDust streamers); steel wreck stand-ins to test (Claude). |
 | 2026-10-24 | Taller, closer dunes (14 m high, 44 m apart) with the terrain and walker checks loosened to allow them | Keith | Keith | Crests reach about 69°; dune runs allow 15% reach misses and skip the straight-knee rule, flat ground keeps the strict limits (Claude's split). |

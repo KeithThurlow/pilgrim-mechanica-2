@@ -355,7 +355,7 @@ export class WalkerSim {
     const fw = forwardOf(this.heading, this.t.f);
     const slope = Math.atan(this.grade);
     const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
-    this.pitch.step(-slope * pitchShare + clamp(this.accelSmooth / 3, -1, 1) * v.speedLean * D2R, dt);
+    this.pitch.step(-slope * pitchShare + (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R, dt);
 
     // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
     const back = v.downhillSitBack * down;
