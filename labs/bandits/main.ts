@@ -57,7 +57,7 @@ function spawnGroup() {
 }
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
-let groupClock = 0, slot = 2;
+let groupClock = Infinity, slot = 2; // the first group comes at once
 lab.nearestEnemy = () => {
   let bi = -1, bd = Infinity;
   const p = player.sim.pos;

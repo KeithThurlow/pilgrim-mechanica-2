@@ -28,6 +28,9 @@ const DEFAULT = [
   "/labs/walker/?cam=close&set=sunAzimuth:30,sunElevation:40",
   "/labs/walker/?cam=back&walk=straight&set=sunAzimuth:200,sunElevation:40",
   "/labs/walker/?cam=side&flat&walk=straight&set=sunAzimuth:125,sunElevation:30",
+  "/labs/warband/?dt=0.033&set=spawnDistance:45",
+  "/labs/bandits/?dt=0.033&set=spawnFrom:30",
+  "/labs/robots/?dt=0.033&set=robotSpawnFrom:40",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",
 ];

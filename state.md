@@ -93,8 +93,9 @@ Nothing right now.
 
 ## Next candidates (ask Keith which)
 
-- **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built;
-  next the convoy escort and the convoy cranes (deploy and pick-up).
+- **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built.
+- **The convoy, its cranes and escort**: plan in `docs/proposal-convoy.md` (route, a flattened corridor in the height
+  function, platforms, a crane state machine for deploy and pick-up, escorts), waiting for Keith.
 - Death physics with Rapier: ragdolls for bandits and robots, wrecks that roll over properly (Keith 2026-10-24).
 
 - Convoy lab: the convoy as Keith described it 2026-10-24 (`docs/design.md`): platforms of different sizes riding the
@@ -113,6 +114,10 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Convoy proposal; combat labs in the shots; first enemies at once (Claude, cloud session, Keith away)
+- `docs/proposal-convoy.md` (not built, rule 9). `tools/shots.mjs` covers the three combat labs. Bandit and robot
+  labs send their first group at once instead of after the first gap.
 
 ### 2026-10-24 · Robot swarm lab; enemies hold fire behind dunes; sand marks on shaded slopes (Claude, cloud session, Keith away)
 - Robot swarm sim, drawer and check by a helper agent (`src/combat/robots.ts`, `robotsDraw.ts`,

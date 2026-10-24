@@ -55,7 +55,7 @@ function spawnPack() {
 }
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
-let packClock = 0, slot = 2;
+let packClock = Infinity, slot = 2; // the first pack comes at once
 lab.nearestEnemy = () => {
   let bi = -1, bd = Infinity;
   const p = player.sim.pos;
