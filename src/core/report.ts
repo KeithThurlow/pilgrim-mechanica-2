@@ -5,7 +5,8 @@
 import type { App } from "./app";
 import type { Values } from "./tweaks";
 
-export function installReport(app: App, lab: string, values: Values) {
+/** context: extra facts for the report, e.g. what's selected and which panel topic is open. */
+export function installReport(app: App, lab: string, values: Values, context?: () => Record<string, unknown>) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "report-btn";
@@ -46,6 +47,7 @@ export function installReport(app: App, lab: string, values: Values) {
       text: note, lab, url: location.href, image,
       hud: (document.querySelector(".hud") as HTMLElement | null)?.innerText ?? "",
       camera: { position: app.camera.position.toArray().map((v) => +v.toFixed(2)), fov: app.camera.fov },
+      context: context?.() ?? {},
       values,
     };
     try {

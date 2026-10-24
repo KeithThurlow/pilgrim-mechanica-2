@@ -5,6 +5,7 @@ import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
+import { Selector } from "../../src/core/select";
 import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
@@ -30,7 +31,9 @@ const look = new DesertLook(scene, app.renderer, V);
 
 const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
 let running = !app.params.has("shot");
-tweakPanel({
+let selector: Selector | null = null;
+let picking = false;
+const panel = tweakPanel({
   id: "terrain-lab",
   title: "Terrain lab",
   params: [...DRIVE_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
@@ -40,9 +43,14 @@ tweakPanel({
     { label: "Driving", onClick: () => { running = !running; }, active: () => running },
     { label: "New seed", onClick: () => { V.seed = 1 + Math.floor(Math.random() * 99); field.update(); streamer.rebuildAll(); } },
   ],
+  topics: [
+    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
+    { id: "drive", label: "Marker", groups: ["Drive"] },
+    { id: "light", label: "Light", groups: ["Look"] },
+  ],
+  onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
 });
-installReport(app, "terrain", V);
 
 // The marker: a tall post so it reads from far out.
 const marker = new THREE.Group();
@@ -51,6 +59,16 @@ post.position.y = 3;
 post.castShadow = true;
 marker.add(post);
 scene.add(marker);
+
+// Hold V and click: the marker, the ground (dunes) or the sky (light).
+selector = new Selector(app, {
+  items: [{ topic: "drive", label: "Marker (the convoy stand-in)", objects: () => [marker] }],
+  ground: { topic: "dunes", label: "Dunes", field },
+  sky: { topic: "light", label: "Light and sky" },
+  onPick: (topic) => { picking = true; panel.focus(topic); picking = false; },
+});
+const sel = selector;
+installReport(app, "terrain", V, () => ({ selected: sel.selection, topic: panel.focused }));
 
 const focus = new THREE.Vector3();
 camera.position.set(-60, 70, -60);

@@ -1,6 +1,9 @@
 // Live tuning panel built from a parameter list. Every feel value in the project goes through one of these,
 // so tuning never needs a code change. Values are edited in place, saved per lab in localStorage,
 // and Copy gives JSON to paste back into code as new defaults.
+// Topics (Keith 2026-10-24: too many sliders at once): a lab names what's in it (the legs, the minigun, the dunes)
+// and which slider groups belong to each. The panel opens on the topic buttons only; picking one, or selecting the
+// thing in the scene (hold V, src/core/select.ts), shows just its groups. "All" shows everything.
 
 export interface Param {
   key: string;
@@ -23,6 +26,13 @@ export interface Action {
   active?: () => boolean;
 }
 
+export interface Topic {
+  id: string;
+  label: string;
+  /** Slider groups (Param.group) this topic shows. */
+  groups: string[];
+}
+
 export interface PanelOptions<V extends Values> {
   id: string;
   title: string;
@@ -30,7 +40,10 @@ export interface PanelOptions<V extends Values> {
   values: V;
   defaults: Readonly<V>;
   actions?: Action[];
+  topics?: Topic[];
   onChange?: (key: keyof V & string) => void;
+  /** Called when the shown topic changes (null = none, "all" = everything). */
+  onFocus?: (topic: string | null) => void;
 }
 
 export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
@@ -92,6 +105,25 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
     it.out.textContent = isToggle(p) ? (v ? "on" : "off") : v.toFixed(dec);
   };
 
+  // Topic buttons, and a hint while nothing is picked.
+  const topics = o.topics ?? [];
+  const topicButtons = new Map<string, HTMLButtonElement>();
+  let focused: string | null = topics.length ? null : "all";
+  const hint = document.createElement("p");
+  hint.className = "panel-hint";
+  hint.textContent = "Hold V and click something to tune it, or pick a topic.";
+  if (topics.length) {
+    const row = document.createElement("div");
+    row.className = "row topics";
+    for (const t of [...topics, { id: "all", label: "All", groups: [] }]) {
+      const el = button(t.label, () => focus(focused === t.id ? null : t.id));
+      topicButtons.set(t.id, el);
+      row.appendChild(el);
+    }
+    body.appendChild(row);
+    body.appendChild(hint);
+  }
+
   const groups = new Map<string, HTMLElement>();
   for (const p of o.params) {
     let g = groups.get(p.group);
@@ -130,25 +162,53 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
     show(p);
   }
 
+  // The params the current topic shows (all of them under "All" or without topics).
+  const shownParams = () => {
+    if (focused === "all") return o.params;
+    const t = topics.find((x) => x.id === focused);
+    return t ? o.params.filter((p) => t.groups.includes(p.group)) : [];
+  };
+
   const tools = document.createElement("div");
   tools.className = "row";
   tools.append(
     button("Reset", () => {
-      for (const p of o.params) { (o.values as Values)[p.key] = o.defaults[p.key]; show(p); }
+      const ps = shownParams();
+      for (const p of ps) { (o.values as Values)[p.key] = o.defaults[p.key]; show(p); }
       save();
-      for (const p of o.params) o.onChange?.(p.key as keyof V & string);
+      for (const p of ps) o.onChange?.(p.key as keyof V & string);
     }),
     button("Copy values", async () => {
-      const text = JSON.stringify(Object.fromEntries(o.params.map((p) => [p.key, o.values[p.key]])), null, 1);
+      const text = JSON.stringify(Object.fromEntries(shownParams().map((p) => [p.key, o.values[p.key]])), null, 1);
       try { await navigator.clipboard.writeText(text); } catch { prompt("Values", text); }
     }),
   );
   body.appendChild(tools);
 
+  function focus(id: string | null) {
+    focused = id;
+    const t = topics.find((x) => x.id === id);
+    for (const [name, el] of groups) {
+      const on = id === "all" || !!t?.groups.includes(name);
+      el.hidden = !on;
+      if (t && on) (el as HTMLDetailsElement).open = true;
+    }
+    for (const [tid, el] of topicButtons) el.classList.toggle("on", tid === id);
+    hint.hidden = id !== null;
+    tools.hidden = id === null;
+    title.textContent = t ? `${o.title} · ${t.label}` : o.title;
+    if (id !== null) root.classList.add("open");
+    o.onFocus?.(id);
+  }
+  focus(focused);
+
   document.body.appendChild(root);
   refreshActions();
   return {
     refresh: () => { for (const p of o.params) show(p); refreshActions(); },
+    /** Show one topic's sliders (null = none, "all" = everything). */
+    focus,
+    get focused() { return focused; },
   };
 }
 

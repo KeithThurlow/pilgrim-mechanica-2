@@ -6,6 +6,7 @@ import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
+import { Selector } from "../../src/core/select";
 import { tweakPanel } from "../../src/core/tweaks";
 import { Keys } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
@@ -118,6 +119,8 @@ addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
+let selector: Selector | null = null;
+let picking = false; // a scene pick opens the topic itself; a topic button forgets the scene pick
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
@@ -130,9 +133,35 @@ const panel = tweakPanel({
     { label: "Game cam", onClick: () => setCam("game"), active: () => camName === "game" },
     ...Object.keys(CAMS).map((n) => ({ label: n[0].toUpperCase() + n.slice(1), onClick: () => setCam(n), active: () => camName === n })),
   ],
+  // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
+  topics: [
+    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
+    { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
+    { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Sound"] },
+    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Streaming"] },
+    { id: "light", label: "Light", groups: ["Look", "Cel look"] },
+    { id: "camera", label: "Camera", groups: ["Camera"] },
+  ],
+  onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },
 });
-installReport(app, "walker", V);
+// Hold V and click: the legs, the hull, either minigun, the drums, the ground (dunes) or the sky (light).
+const regions = rampart?.regions() ?? standIn!.regions();
+const r = regions as Partial<ReturnType<RampartBody["regions"]>>;
+selector = new Selector(app, {
+  items: [
+    { topic: "legs", label: "Legs", objects: () => regions.legs },
+    { topic: "hull", label: "Hull", objects: () => regions.hull },
+    ...(r.gunLeft ? [{ topic: "guns", label: "Left minigun", objects: () => r.gunLeft! }] : []),
+    ...(r.gunRight ? [{ topic: "guns", label: "Right minigun", objects: () => r.gunRight! }] : []),
+    ...(r.back ? [{ topic: "guns", label: "Ammo drums", objects: () => r.back! }] : []),
+  ],
+  ground: { topic: "dunes", label: "Dunes", field },
+  sky: { topic: "light", label: "Light and sky" },
+  onPick: (topic) => { picking = true; panel.focus(topic); picking = false; },
+});
+const sel = selector;
+installReport(app, "walker", V, () => ({ selected: sel.selection, topic: panel.focused }));
 // The Rampart's bone lengths come from its model, so the IK fits its parts whatever was saved.
 if (rampart) { Object.assign(V, rampart.legValues()); panel.refresh(); }
 
@@ -186,7 +215,8 @@ app.onTick((rawDt) => {
   let aim: Aim | null = null;
   if (auto) aim = straight ? null : demoAim(clock);
   else if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y, z: aimPt.z };
-  const trigger = params.has("fire") || mouseDown || keys.has("KeyF") || (auto && !straight && clock % 6 > 3.2);
+  // No firing while selecting (hold V).
+  const trigger = !sel.active && (params.has("fire") || mouseDown || keys.has("KeyF") || (auto && !straight && clock % 6 > 3.2));
 
   if (rampart) rampart.shoulderLine(shoulder); else shoulder.copy(sim.pelvis).setY(sim.pelvis.y + 1.3);
   const fired: (1 | -1)[] = [];

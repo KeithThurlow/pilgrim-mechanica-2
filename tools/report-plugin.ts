@@ -6,7 +6,7 @@ import type { Plugin } from "vite";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-interface Report { text: string; lab: string; url: string; image?: string; hud?: string; camera?: unknown; values?: Record<string, number> }
+interface Report { text: string; lab: string; url: string; image?: string; hud?: string; camera?: unknown; context?: Record<string, unknown>; values?: Record<string, number> }
 
 const fence = "```";
 
@@ -38,7 +38,7 @@ export function reportPlugin(root: string): Plugin {
             }
             const md = [
               `# Report ${id}`, "", r.text, "",
-              `- Lab: ${r.lab}`, `- URL: ${r.url}`, `- Camera: ${JSON.stringify(r.camera)}`, "",
+              `- Lab: ${r.lab}`, `- About: ${JSON.stringify(r.context ?? {})}`, `- URL: ${r.url}`, `- Camera: ${JSON.stringify(r.camera)}`, "",
               image,
               "## HUD", "", fence, r.hud ?? "", fence, "",
               "## Tuning values", "", fence + "json", JSON.stringify(r.values ?? {}, null, 1), fence, "",
@@ -48,7 +48,8 @@ export function reportPlugin(root: string): Plugin {
             if (!existsSync(inbox)) {
               writeFileSync(inbox, "# Report inbox\n\nReports from the labs, newest last. Tick one (`- [x]`) when handled and answer it in replies.md.\n\n");
             }
-            appendFileSync(inbox, `- [ ] ${id}: ${r.text.replace(/\s+/g, " ").slice(0, 200)} (${id}.md)\n`);
+            const about = r.context?.selected ?? r.context?.topic;
+            appendFileSync(inbox, `- [ ] ${id}${about ? ` [${about}]` : ""}: ${r.text.replace(/\s+/g, " ").slice(0, 200)} (${id}.md)\n`);
             server.config.logger.info(`report: ${id}`, { timestamp: true });
             res.setHeader("content-type", "application/json");
             res.end(JSON.stringify({ ok: true, id }));

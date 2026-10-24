@@ -76,6 +76,8 @@ export class RampartBody {
   readonly root = new THREE.Group();
   private pelvis = new THREE.Group();
   private hull = new THREE.Group();
+  private torso: THREE.Object3D | null = null;
+  private back: THREE.Object3D | null = null;
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   private rest: Record<string, THREE.Vector3> = {};
@@ -134,7 +136,7 @@ export class RampartBody {
     this.root.add(this.pelvis, this.hull);
     mesh(geo.Part_Pelvis, "pelvis", this.pelvis, frame(pelvisRest));
     const hullFrame = frame(waistRest);
-    mesh(geo.Part_Torso, "torso", this.hull, hullFrame);
+    this.torso = mesh(geo.Part_Torso, "torso", this.hull, hullFrame);
 
     // Legs: thigh hip->knee, shin knee->hock, cannon hock->foot point, foot on the ground under the foot point.
     const side = new THREE.Vector3(1, 0, 0);
@@ -184,6 +186,7 @@ export class RampartBody {
 
     // Back: a half-width ammo drum per gun, a power pack raised above them.
     const back = new THREE.Group();
+    this.back = back;
     back.position.set(0, 0.25, -1.12);
     this.hull.add(back);
     for (const [drum, x] of [[drumR, -0.5], [drumL, 0.5]] as const) {
@@ -237,6 +240,13 @@ export class RampartBody {
     L.foot.quaternion.copy(P.footQ);
     // Toe bend relative to the foot: toeQ = footQ * bend.
     L.toe.quaternion.copy(L.foot.quaternion).invert().multiply(P.toeQ);
+  }
+
+  /** The model's parts by region, for selection (hold V): each list is what to raycast and light up. */
+  regions() {
+    const legs = this.legs.flatMap((L) => [L.thigh.pivot, L.shin.pivot, L.cannon.pivot, L.foot]);
+    const gun = (side: 1 | -1) => [this.pods.find((p) => p.side === side)!.yawPitch];
+    return { legs, hull: [this.pelvis, this.torso!], gunLeft: gun(1), gunRight: gun(-1), back: [this.back!] };
   }
 
   /** World position of a gun's muzzle (side +1 left, -1 right). */

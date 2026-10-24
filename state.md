@@ -15,7 +15,8 @@ How to update it:
 | System | State | Where | Lab |
 | --- | --- | --- | --- |
 | Lab core | Renderer and loop (WebGPU, WebGL 2 fallback), frame-time HUD, slider panel (saved per lab with the defaults they were saved against, so a changed default in code wins over a stale save; `?set=` overrides, Copy values), WASD input, frame capture | `src/core/` | all |
-| Report box | A Report button in every lab: a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is not in git | `src/core/report.ts`, `tools/report-plugin.ts` | all |
+| Topics and selection | The panel opens on topic buttons only (Keith 2026-10-24: too many sliders); a topic shows just its slider groups, All shows everything; Reset and Copy act on the shown topic. Hold V: things under the cursor light up with their name, a click opens their topic (walker lab: legs, hull, each minigun, ammo drums, ground = dunes, sky = light; terrain lab: marker, dunes, light). No firing while V is held | `src/core/tweaks.ts`, `src/core/select.ts` | all |
+| Report box | A Report button in every lab (reports say what was selected and which topic was open): a note plus screenshot, lab, URL, camera, HUD and every tuning value go to the dev server, written to `reports/` with a line in `reports/inbox.md` for the Claude Code session on Keith's PC; `reports/replies.md` shows back in the box. Without the dev server the report downloads as a file. `reports/` is not in git | `src/core/report.ts`, `tools/report-plugin.ts` | all |
 | Game camera | High isometric view (Keith 2026-10-24): starts 50° down at 40 m, fixed facing so W is up the screen, scroll zooms from 45° at 12 m out to 55° at 80 m (mech about half size; Keith 2026-10-24), smooth follow; haze and shadow box scale with zoom; review cameras (close, side, back, feet) orbit | `src/core/isoCamera.ts` | walker |
 | Terrain | Transverse dunes across the wind (slip faces 30-38°), meandering, breaking crests, crossing set, interdune flats, swell, bumps; pure height function; chunks streamed nearest first under a per-frame budget; vertex-coloured sand, optional facets | `src/world/terrain.ts`, `chunks.ts` | terrain |
 | Desert light | Midday desert: a hard high sun, a procedural sky environment (blue above, pale horizon, warm sand below) for soft light, reflections and the sand bounce under vehicles, Neutral tone mapping (picked over ACES and AgX by A/B), haze from the camera, a shadow area that grows with the zoom; dunes cast shadows. Fixed time of day | `src/world/look.ts`, `chunks.ts` | terrain, walker |
@@ -78,6 +79,16 @@ Nothing right now.
 - Walker: leg types (the old lab had Humanoid and Stilt), jump packs.
 
 ## Changes
+
+### 2026-10-24 · Topics and hold-V selection (Claude, cloud session)
+- Keith: overwhelmed by sliders last time; hold V, click a part (legs, minigun, dunes) and get only its options.
+- `src/core/tweaks.ts`: topics (id, label, slider groups), panel opens on the topic buttons, `focus()`; `src/core/select.ts`:
+  hold-V selector (raycast registered parts, emissive highlight, cursor tag, ground and sky picks, capture-phase
+  click so orbit and firing never see it). Regions on the Rampart (`regions()`: legs, hull, each gun, drums) and the
+  stand-in. Both labs declare topics and selectables; reports carry the selection and topic. `[hidden]` now wins in
+  the lab CSS.
+- Checked: typecheck, headless test holding V over the left minigun, a thigh, a foot, the torso, the drums and the
+  ground: each lit up with its name and opened the right topic.
 
 ### 2026-10-24 · Toe joint and leg archetypes (Claude, cloud session)
 - Keith: the toes need rigging for the walk to look right, pushing off and curling as the leg comes through; be

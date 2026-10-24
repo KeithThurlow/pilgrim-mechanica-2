@@ -113,6 +113,12 @@ export class WalkerBody {
     });
   }
 
+  /** Parts by region, for selection (hold V). */
+  regions() {
+    const legs = this.legs.flatMap((L) => [L.thigh, L.thighPlate, L.knee, L.shin, L.hock, L.cannon, L.sleeve, L.rod, L.hipJoint, L.foot]);
+    return { legs, hull: [this.hull, this.pelvisMesh] };
+  }
+
   update(sim: WalkerSim) {
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(sim.pelvisQ);
     this.hull.position.copy(sim.pelvis);

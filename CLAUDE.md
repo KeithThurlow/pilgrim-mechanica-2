@@ -18,6 +18,9 @@ desert look direction. What came from where: `docs/decisions.md`.
    itself). Tune a system in its lab, not in the whole game. New system = new lab first.
 3. **Every feel value is a slider.** Tuning values live in a params list (`Param[]` plus a defaults object) next to
    the system and show in the lab's panel (`src/core/tweaks.ts`). Never hardcode a value someone will want to tune.
+   Group the sliders into **topics** (what they tune: the legs, a gun, the dunes) and register the matching parts with
+   the **hold-V selector** (`src/core/select.ts`), so Keith can click a thing and see only its sliders (Keith
+   2026-10-24). New sliders go in an existing group or a new group added to a topic, never loose.
 4. **Every lab shows frame time** (`src/core/hud.ts`, automatic via `createApp`). We don't optimise early, but we
    always see the cost of what we add. Budget: 16.7 ms on Keith's PC.
 5. **Small files, one job each.** Simulation is separate from rendering (e.g. `walker.ts` is pure maths, `walkerBody.ts`
