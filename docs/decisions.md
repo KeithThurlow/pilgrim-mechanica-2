@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Small robots become four-legged starfish that scuttle and crab any way; latched ones tear at the mech (sparks, plating, grinding); big ones become tall War of the Worlds stilt walkers that come in from the side and cast long shadows | Keith | Keith | Claude's takes: tripods (three legs, one step at a time), body 10 m up, leg hits do half damage, latched effects ride the bites; all sliders. |
 | 2026-10-24 | Soft lock by ray: the guns take the enemy under the cursor (along the camera ray, so tall things count by their body), else the one nearest the line of fire from the mech through the cursor; rounds go for centre of mass | Keith | Keith | `src/game/targeting.ts`; widths and cone are sliders (Claude's values). The old game's rule (nearest the cursor inside a 15° cone) was the starting point. |
 | 2026-10-24 | War band gets bigger vehicles: six-wheelers, a War Rig lead truck (eight wheels, front four steer, two turrets) and a makeshift tank | Keith | Keith | Default band: 5 technicals, 2 gun trucks, 1 six-wheeler, 1 War Rig, 1 tank, 1 bandit mech. Guns and hulls are Claude's values. |
 | 2026-10-24 | Enemy damage down: bandits 1.5 → 0.6 a round, technicals 2.5 → 1.2, gun trucks 11 → 6, bandit mechs ×0.35 → ×0.2 | Keith | Claude | Keith: "a few things probably need their damage tuned down". |

@@ -1,5 +1,9 @@
 // Ragdoll layouts for the death physics (parts in the body's own frame: origin at the feet, facing +Z, +X left).
 import type { PartSpec, JointSpec } from "./deaths";
+import { BIG, type RobotSwarm } from "../combat/robots";
+import {
+  HUB_R, HUB_H, HUB_Y, S_THIGH, S_SHIN, SMALL_LEGS, BIG_LEGS, B_BODY_H, B_THIGH, B_SHIN, bigHip, bigBend, solveKnee, smallLegs, type V3,
+} from "../combat/robotLegs";
 
 const SKIN = 0xb08060, DARK = 0x3a3128;
 
@@ -30,24 +34,60 @@ export const BANDIT_JOINTS: JointSpec[] = [
   { a: 8, b: 10, at: [-0.26, 1.21, 0], hinge: [1, 0, 0], limits: [-2.4, 0.05] },
 ];
 
+
+/** A part as a box along a segment from a to b (body frame), thickness t (full width). */
+function segPart(a: number[], b: number[], t: number, color: number, mass?: number): PartSpec {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz) || 1e-3;
+  // Rotation taking +Y onto the segment.
+  const nx = dx / len, ny = dy / len, nz = dz / len;
+  let q: [number, number, number, number] = [nz, 0, -nx, 1 + ny];
+  if (1 + ny < 1e-6) q = [1, 0, 0, 0];
+  const ql = Math.hypot(...q);
+  q = [q[0] / ql, q[1] / ql, q[2] / ql, q[3] / ql];
+  return { half: [t / 2, len / 2, t / 2], at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], color, mass, rot: q };
+}
+
 /**
- * A quadruped robot of body length s (m): a body and four legs of thigh and shin, hips loose, knees
- * hinged. Measurements follow the robot drawer's.
+ * Robot i's ragdoll in its pose as it died, in its own frame (origin on the sand under it, facing +Z): the hub (small,
+ * four legs) or the high hood (tripods, three long legs), each leg a thigh and a shin on loose joints. A tripod falls
+ * from its full height, legs and all.
  */
-export const ROBOT_PARTS = (s: number, body: number, leg: number): PartSpec[] => {
-  const parts: PartSpec[] = [{ half: [0.25 * s, 0.15 * s, 0.5 * s], at: [0, 0.5 * s, 0], color: body, mass: 900 }];
-  for (const [x, z] of [[0.28, 0.36], [-0.28, 0.36], [0.28, -0.36], [-0.28, -0.36]]) {
-    parts.push({ half: [0.04 * s, 0.17 * s, 0.04 * s], at: [x * s, 0.36 * s, z * s], color: leg });
-    parts.push({ half: [0.035 * s, 0.18 * s, 0.035 * s], at: [x * s, 0.1 * s, z * s], color: leg });
+export function robotRagdoll(sw: RobotSwarm, i: number, body: number, leg: number): { parts: PartSpec[]; joints: JointSpec[] } {
+  const S = sw.size[i], h = sw.heading[i], ox = sw.px[i], oy = sw.py[i], oz = sw.pz[i];
+  const sh = Math.sin(h), ch = Math.cos(h);
+  // World to the body's own frame (yaw undone).
+  const toLocal = (x: number, y: number, z: number) => { const dx = x - ox, dz = z - oz; return [dx * ch - dz * sh, y - oy, dx * sh + dz * ch]; };
+  const parts: PartSpec[] = [], joints: JointSpec[] = [];
+  const hip: V3 = { x: 0, y: 0, z: 0 }, knee: V3 = { x: 0, y: 0, z: 0 }, foot: V3 = { x: 0, y: 0, z: 0 }, bend: V3 = { x: 0, y: 0, z: 0 };
+  if (sw.kind[i] === BIG) {
+    const H = sw.hubY[i] - oy;
+    parts.push({ half: [0.45 * S, B_BODY_H * 0.4 * S, 0.5 * S], at: [0, H, 0], color: body, mass: 900 });
+    for (let k = 0; k < BIG_LEGS; k++) {
+      const f = i * BIG_LEGS + k;
+      bigHip(ox, sw.hubY[i], oz, S, h, k, hip);
+      foot.x = sw.footX[f]; foot.y = sw.footY[f]; foot.z = sw.footZ[f];
+      bigBend(h, k, bend);
+      solveKnee(hip, foot, B_THIGH * H, B_SHIN * H, bend.x, bend.y, bend.z, knee);
+      const a = toLocal(hip.x, hip.y, hip.z), kn = toLocal(knee.x, knee.y, knee.z), ft = toLocal(foot.x, foot.y, foot.z);
+      const thigh = parts.length;
+      parts.push(segPart(a, kn, 0.1 * S, leg, 500), segPart(kn, ft, 0.08 * S, leg, 500));
+      joints.push({ a: 0, b: thigh, at: a as [number, number, number] }, { a: thigh, b: thigh + 1, at: kn as [number, number, number] });
+    }
+    return { parts, joints };
   }
-  return parts;
-};
-export const ROBOT_JOINTS = (s: number): JointSpec[] => {
-  const j: JointSpec[] = [];
-  [[0.28, 0.36], [-0.28, 0.36], [0.28, -0.36], [-0.28, -0.36]].forEach(([x, z], k) => {
-    const thigh = 1 + k * 2, shin = 2 + k * 2;
-    j.push({ a: 0, b: thigh, at: [x * s, 0.5 * s, z * s] });
-    j.push({ a: thigh, b: shin, at: [x * s, 0.2 * s, z * s], hinge: [1, 0, 0], limits: [-2, 2] });
-  });
-  return j;
-};
+  // Small: the standing pose on flat sand.
+  parts.push({ half: [HUB_R * 0.85 * S, HUB_H * 0.5 * S, HUB_R * 0.85 * S], at: [0, HUB_Y * S, 0], color: body, mass: 900 });
+  const hips = new Float32Array(12), feet = new Float32Array(12);
+  smallLegs(0, 0, 0, S, 0, 0, 0, 0, 0, 0, 0, 0, 0, hips, feet);
+  for (let k = 0; k < SMALL_LEGS; k++) {
+    hip.x = hips[k * 3]; hip.y = hips[k * 3 + 1]; hip.z = hips[k * 3 + 2];
+    foot.x = feet[k * 3]; foot.y = feet[k * 3 + 1]; foot.z = feet[k * 3 + 2];
+    const r = Math.hypot(hip.x, hip.z) || 1;
+    solveKnee(hip, foot, S_THIGH * S, S_SHIN * S, (hip.x / r) * 0.6, 1, (hip.z / r) * 0.6, knee);
+    const a = [hip.x, hip.y, hip.z], kn = [knee.x, knee.y, knee.z], ft = [foot.x, foot.y, foot.z];
+    const thigh = parts.length;
+    parts.push(segPart(a, kn, 0.075 * S, leg), segPart(kn, ft, 0.06 * S, leg));
+    joints.push({ a: 0, b: thigh, at: a as [number, number, number] }, { a: thigh, b: thigh + 1, at: kn as [number, number, number] });
+  }
+  return { parts, joints };
+}

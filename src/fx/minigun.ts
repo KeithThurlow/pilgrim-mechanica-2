@@ -191,6 +191,20 @@ export class MinigunFx {
     if (v.metalSmoke > 0) this.onSteelSmoke?.(at, normal, v.metalSmoke, k);
   }
 
+  /**
+   * Sparks off steel that no round made (robots cutting at plating): count sparks sprayed out of the face (normal,
+   * unit) in a wide cone at about speed m/s, short-lived. Shares the round sparks' pool.
+   */
+  sparksAt(at: THREE.Vector3, normal: THREE.Vector3, count: number, speed: number) {
+    for (let i = 0; i < count; i++) {
+      const s = this.sparkBits[this.sparkI++ % SPARKS];
+      s.pos.copy(at).addScaledVector(normal, 0.03);
+      s.vel.set(normal.x + (Math.random() - 0.5) * 1.6, normal.y + (Math.random() - 0.2) * 1.4, normal.z + (Math.random() - 0.5) * 1.6).normalize()
+        .multiplyScalar(speed * (0.4 + Math.random() * 0.8));
+      s.age = 0; s.life = 0.12 + Math.random() * 0.25; s.rest = false;
+    }
+  }
+
   update(dt: number) {
     for (const f of this.flashes) {
       f.t -= dt;

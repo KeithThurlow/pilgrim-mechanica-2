@@ -3,10 +3,10 @@
 // whose level and pitch are bent every frame. Same rules as the old SfxPlayer: a per-kind voice cap and a
 // same-instant gate, so a minigun's rounds never sum into distortion.
 import * as THREE from "three/webgpu";
-import { Synth, rng } from "./synth";
+import { Synth, rng, grindRecipe } from "./synth";
 import type { Param } from "../core/tweaks";
 
-export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtHit" | "metalHit" | "casing";
+export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtHit" | "metalHit" | "casing" | "grind";
 
 export const SFX_DEFAULTS = {
   masterVolume: 0.35,
@@ -17,6 +17,7 @@ export const SFX_DEFAULTS = {
   dirtLevel: 0.32,
   metalLevel: 0.3,
   casingLevel: 0.18,
+  grindLevel: 0.3,
   growlDetune: 1.7,
 };
 export type SfxValues = typeof SFX_DEFAULTS;
@@ -30,11 +31,12 @@ export const SFX_PARAMS: Param[] = [
   { key: "dirtLevel", label: "Dirt hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "metalLevel", label: "Metal hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "casingLevel", label: "Casings", min: 0, max: 1, step: 0.01, group: "Sound" },
+  { key: "grindLevel", label: "Robots tearing at plating", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "growlDetune", label: "Gun detune (%)", min: 0, max: 10, step: 0.1, group: "Sound", tip: "The two guns' growls run this far apart in pitch, so they beat against each other" },
 ];
 
 const LEVEL: Record<SfxKind, keyof SfxValues> = {
-  spit: "spitLevel", spinUp: "spinLevel", spinDown: "spinLevel", growl: "growlLevel", brap: "brapLevel", dirtHit: "dirtLevel", metalHit: "metalLevel", casing: "casingLevel",
+  spit: "spitLevel", spinUp: "spinLevel", spinDown: "spinLevel", growl: "growlLevel", brap: "brapLevel", dirtHit: "dirtLevel", metalHit: "metalLevel", casing: "casingLevel", grind: "grindLevel",
 };
 const PER_KIND = 5, GATE = 0.025;
 
@@ -86,6 +88,7 @@ export class Sfx {
     // A round on steel (the old game's BulletImpact): a bright tick of noise and a short clang.
     add("metalHit", variants(4, 8, (r) => S.mix(S.noise(r, 0.05, 5000, 0.35, 0.001), S.clang(r, 0.08, 0.12 + r() * 0.06))));
     add("casing", variants(3, 7, (r) => S.casingTonk(r)));
+    add("grind", variants(4, 9, (r) => grindRecipe(S, r)));
   }
 
   /** Stereo pan from where a point sits on screen (-0.8 left .. 0.8 right); null when well off screen. */

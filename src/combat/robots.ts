@@ -1,12 +1,20 @@
-// Hostile quadruped robots, the sim (no drawing: robotsDraw.ts draws it). Keith 2026-10-24: "robots that are
-// quadrupeds, and they kind of swarm across the land. Most ... quite small, but some of them are larger. ... a sense
-// of power in their mech, but also a sense of threat."
+// Hostile robots, the sim (no drawing: robotsDraw.ts draws it; shapes and leg maths in robotLegs.ts). Keith
+// 2026-10-24: "robots ... swarm across the land. Most ... quite small, but some of them are larger. ... a sense of
+// power in their mech, but also a sense of threat." Reshaped the same day (Keith): the small ones are four-legged
+// starfish that scuttle and crab in any direction without turning, and tear at the mech's plating once they're on
+// it; the big ones are War of the Worlds tripods, a small body high up on very long thin legs, that come in from the
+// side and throw long shadows.
 // Small ones pour over the dunes as a pack (spatial-hash separation plus alignment), close in fast, leap onto the
 // mech and latch on, biting until shot off, stomped off or shaken off by a fast mech; a share hang back and plink.
-// Big ones advance steadily, stop at mid range and fire heavy bursts; stomps don't move them and they turn slowly.
-// Structure of arrays, ROBOT_MAX slots; dead slots are reused once their wreck has sunk (or oldest wreck first).
+// Their hub drifts round slowly as they run (the legs carry them any way). Big ones swing in from the flank, stop
+// at mid range and fire heavy bursts from the high body; their three feet are planted on the sand and step one at a
+// time; stomps don't move them. Structure of arrays, ROBOT_MAX slots; dead slots are reused once their wreck has
+// sunk (or oldest wreck first).
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import {
+  HUB_Y, HUB_H, BIG_LEGS, B_FOOT_R, B_BODY_H, bigLegAngle, bigHeight, bigHip, bigBend, solveKnee, smallLegs, B_THIGH, B_SHIN, type V3,
+} from "./robotLegs";
 
 export const ROBOT_DEFAULTS = {
   // Small ones: the pack.
@@ -14,6 +22,7 @@ export const ROBOT_DEFAULTS = {
   robotSpeedJitter: 0.15,
   robotAccel: 5,
   robotTurn: 600,
+  robotDrift: 50,
   robotUphill: 0.9,
   robotDownhill: 0.25,
   robotFlank: 35,
@@ -25,7 +34,8 @@ export const ROBOT_DEFAULTS = {
   robotHp: 12,
   robotSize: 0.9,
   robotSizeJitter: 0.12,
-  robotStride: 0.9,
+  robotStride: 0.7,
+  robotFootLift: 0.14,
   robotKeepOut: 0.6,
   robotWaitDist: 4,
   // Small ones: leap, latch, bite.
@@ -34,7 +44,7 @@ export const ROBOT_DEFAULTS = {
   robotLeapArc: 1.6,
   robotLatchReach: 2.2,
   robotMaxLatched: 24,
-  robotLatchRing: 0.85,
+  robotLatchRing: 1.05,
   robotLatchLow: 1,
   robotLatchHigh: 4,
   robotBiteDamage: 1.5,
@@ -53,16 +63,23 @@ export const ROBOT_DEFAULTS = {
   robotShotDamage: 2,
   // Big ones.
   robotBigShare: 0.1,
-  robotBigSize: 4,
+  robotBigSize: 3,
+  robotBigHeight: 10,
   robotBigSizeJitter: 0.12,
   robotBigHp: 400,
-  robotBigSpeed: 4,
+  robotBigSpeed: 3,
   robotBigAccel: 1.5,
   robotBigTurn: 45,
+  robotBigFlank: 60,
+  robotBigSpacing: 12,
   robotBigNear: 18,
   robotBigFar: 30,
   robotBigSlack: 8,
-  robotBigStride: 2.6,
+  robotBigStepTime: 0.7,
+  robotBigStepAt: 0.3,
+  robotBigStepLift: 1.8,
+  robotBigLegHit: 0.35,
+  robotBigLegDamage: 0.5,
   robotBigArc: 12,
   robotBigBurst: 5,
   robotBigRoundInterval: 0.14,
@@ -91,7 +108,8 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
   { key: "robotSpeedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: G1 },
   { key: "robotAccel", label: "Acceleration (1/s)", min: 0.5, max: 20, step: 0.1, group: G1 },
-  { key: "robotTurn", label: "Turn rate (°/s)", min: 30, max: 1440, step: 10, group: G1 },
+  { key: "robotTurn", label: "Shooters turn (°/s)", min: 30, max: 1440, step: 10, group: G1, tip: "How fast a small shooter turns its hub to aim" },
+  { key: "robotDrift", label: "Hub drift (°/s)", min: 0, max: 360, step: 1, group: G1, tip: "Small ones crab any way without turning; the hub just drifts round this fast (each its own way)" },
   { key: "robotUphill", label: "Uphill slows", min: 0, max: 4, step: 0.05, group: G1, tip: "Speed lost per unit of slope climbed" },
   { key: "robotDownhill", label: "Downhill boost (max)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotFlank", label: "Flank fan (°)", min: 0, max: 80, step: 1, group: G1, tip: "How wide the pack fans out round the mech on the way in" },
@@ -101,9 +119,10 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotAlign", label: "Pack alignment", min: 0, max: 1, step: 0.01, group: G1, tip: "How much each one matches its neighbours' run: 0 loose, 1 a tight pack" },
   { key: "robotAlignRadius", label: "Pack radius (m)", min: 1, max: 8, step: 0.1, group: G1 },
   { key: "robotHp", label: "Health", min: 1, max: 100, step: 1, group: G1 },
-  { key: "robotSize", label: "Body length (m)", min: 0.4, max: 2, step: 0.05, group: G1 },
+  { key: "robotSize", label: "Size (m)", min: 0.4, max: 2, step: 0.05, group: G1, tip: "Hub centre to foot is about 0.6 × this" },
   { key: "robotSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G1 },
-  { key: "robotStride", label: "Stride (× size)", min: 0.3, max: 3, step: 0.05, group: G1, tip: "Ground covered per gait cycle, sets how fast the legs trot" },
+  { key: "robotStride", label: "Stride (× size)", min: 0.2, max: 3, step: 0.05, group: G1, tip: "Ground covered per gait cycle, sets how fast the legs scuttle" },
+  { key: "robotFootLift", label: "Foot lift (× size)", min: 0, max: 0.4, step: 0.01, group: G1 },
   { key: "robotKeepOut", label: "Keep clear of mech (m)", min: 0, max: 4, step: 0.05, group: G1 },
   { key: "robotWaitDist", label: "Circle at when full (m)", min: 1, max: 15, step: 0.5, group: G1, tip: "With every latch spot taken, the rest circle this far beyond the mech" },
   { key: "robotLeapRange", label: "Leap from (m)", min: 1, max: 15, step: 0.1, group: G3, tip: "Distance to the mech's side where a small one jumps" },
@@ -128,16 +147,23 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotShotSpread", label: "Shooter spread (°)", min: 0, max: 20, step: 0.1, group: G3 },
   { key: "robotShotDamage", label: "Shooter round damage", min: 0, max: 30, step: 0.5, group: G3, tip: "For the lab: what a small one's round does to the mech" },
   { key: "robotBigShare", label: "Big ones (share)", min: 0, max: 1, step: 0.01, group: G2 },
-  { key: "robotBigSize", label: "Body length (m)", min: 1.5, max: 8, step: 0.05, group: G2 },
+  { key: "robotBigSize", label: "Body size (m)", min: 1, max: 8, step: 0.05, group: G2 },
+  { key: "robotBigHeight", label: "Body height (m)", min: 4, max: 20, step: 0.1, group: G2, tip: "How high the tripod carries its body; the legs scale with it" },
   { key: "robotBigSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G2 },
   { key: "robotBigHp", label: "Health", min: 10, max: 3000, step: 10, group: G2 },
   { key: "robotBigSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: G2 },
   { key: "robotBigAccel", label: "Acceleration (1/s)", min: 0.2, max: 10, step: 0.1, group: G2 },
   { key: "robotBigTurn", label: "Turn rate (°/s)", min: 5, max: 360, step: 1, group: G2 },
+  { key: "robotBigFlank", label: "Come in from the side (°)", min: 0, max: 90, step: 1, group: G2, tip: "How far round to the flank they swing on the way in" },
+  { key: "robotBigSpacing", label: "Keep apart (m)", min: 0, max: 40, step: 0.5, group: G2 },
   { key: "robotBigNear", label: "Stops from (m)", min: 5, max: 60, step: 0.5, group: G2 },
   { key: "robotBigFar", label: "Stops up to (m)", min: 6, max: 80, step: 0.5, group: G2 },
   { key: "robotBigSlack", label: "Chase again past (m)", min: 1, max: 30, step: 0.5, group: G2 },
-  { key: "robotBigStride", label: "Stride (× size)", min: 0.2, max: 2, step: 0.05, group: G2 },
+  { key: "robotBigStepTime", label: "Step time (s)", min: 0.15, max: 3, step: 0.05, group: G2, tip: "How long one leg takes to swing" },
+  { key: "robotBigStepAt", label: "Step when off by (× spread)", min: 0.05, max: 1, step: 0.01, group: G2, tip: "A foot steps when it's this far (× the feet's spread) from where it wants to be" },
+  { key: "robotBigStepLift", label: "Step lift (m)", min: 0, max: 6, step: 0.1, group: G2 },
+  { key: "robotBigLegHit", label: "Leg hit radius (m)", min: 0, max: 1.5, step: 0.01, group: G2, tip: "Rounds hit the long legs within this" },
+  { key: "robotBigLegDamage", label: "Leg hits count (×)", min: 0, max: 2, step: 0.05, group: G2, tip: "Damage share of a round into a leg rather than the body" },
   { key: "robotBigArc", label: "Fires within (°)", min: 1, max: 90, step: 1, group: G2, tip: "Only fires when turned this close to the mech" },
   { key: "robotBigBurst", label: "Rounds per burst", min: 1, max: 20, step: 1, group: G2 },
   { key: "robotBigRoundInterval", label: "Time between rounds (s)", min: 0.03, max: 1, step: 0.01, group: G2 },
@@ -154,15 +180,10 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotDeathPop", label: "Death pop up (m/s)", min: 0, max: 10, step: 0.1, group: G1 },
   { key: "robotFriction", label: "Wreck slide friction", min: 0.5, max: 20, step: 0.1, group: G1 },
   { key: "robotGravity", label: "Gravity (m/s²)", min: 2, max: 40, step: 0.5, group: G1 },
-  { key: "robotHitScale", label: "Hit size (× body)", min: 0.5, max: 2.5, step: 0.05, group: G1, tip: "Rounds test an ellipsoid the body's size times this" },
+  { key: "robotHitScale", label: "Hit size (× body)", min: 0.5, max: 2.5, step: 0.05, group: G1, tip: "Rounds test an ellipsoid round the hub (small) or body (big), its size times this" },
   { key: "robotBodyLife", label: "Wrecks stay (s)", min: 1, max: 60, step: 0.5, group: G1 },
   { key: "robotSinkTime", label: "Sink at the end (s)", min: 0.1, max: 10, step: 0.1, group: G1 },
 ];
-
-/** Body proportions, × size (body length). The drawer builds to these so hits match the look. */
-export const BODY_W = 0.5, BODY_H = 0.3, BODY_Y = 0.5;
-/** Legs: hip spread along and across the body, upper and lower segment lengths, all × size. */
-export const HIP_X = 0.28, HIP_Z = 0.36, THIGH = 0.33, SHIN = 0.36;
 
 export const ROBOT_MAX = 1024;
 export const RUN = 0, LEAP = 1, LATCHED = 2, FIRE = 3, FLUNG = 4, DOWN = 5, DEAD = 6;
@@ -215,6 +236,21 @@ export class RobotSwarm {
   readonly seed = new Float32Array(ROBOT_MAX);
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(ROBOT_MAX);
+  /**
+   * World height of the body's centre (the hub for small ones, the high body for tripods); px, pz are under it. py is
+   * the sand under the robot when it stands, the hub itself while leaping or latched.
+   */
+  readonly hubY = new Float32Array(ROBOT_MAX);
+  /** Tripod feet (3 per robot, world x y z): where each foot is, and while stepping (stepT ≥ 0) where from and to. */
+  readonly footX = new Float32Array(ROBOT_MAX * BIG_LEGS); readonly footY = new Float32Array(ROBOT_MAX * BIG_LEGS); readonly footZ = new Float32Array(ROBOT_MAX * BIG_LEGS);
+  /** Step progress 0..1 per tripod foot; -1 planted. */
+  readonly stepT = new Float32Array(ROBOT_MAX * BIG_LEGS).fill(-1);
+  private sfx0 = new Float32Array(ROBOT_MAX * BIG_LEGS); private sfy0 = new Float32Array(ROBOT_MAX * BIG_LEGS); private sfz0 = new Float32Array(ROBOT_MAX * BIG_LEGS);
+  private sfx1 = new Float32Array(ROBOT_MAX * BIG_LEGS); private sfy1 = new Float32Array(ROBOT_MAX * BIG_LEGS); private sfz1 = new Float32Array(ROBOT_MAX * BIG_LEGS);
+  /** A tripod foot coming down: robot, foot world position (dust, sound). */
+  onFootfall: ((i: number, x: number, y: number, z: number) => void) | null = null;
+  /** Set by hitRay: the last hit was on a tripod's leg (not its body). */
+  hitLeg = false;
   /** Live (not DEAD) robots. */
   count = 0;
   /** One past the highest slot ever used: loops stop here. */
@@ -294,11 +330,46 @@ export class RobotSwarm {
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
       this.gen[i]++;
       this.count++;
+      if (big) {
+        // Feet planted where they want to be, the body at its height above them.
+        const H = this.heightOf(i), spread = B_FOOT_R * H;
+        let fy = 0;
+        for (let k = 0; k < BIG_LEGS; k++) {
+          const a = bigLegAngle(this.heading[i], k), f = i * BIG_LEGS + k;
+          this.footX[f] = x + Math.sin(a) * spread; this.footZ[f] = z + Math.cos(a) * spread;
+          this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
+          this.stepT[f] = -1;
+          fy += this.footY[f];
+        }
+        this.hubY[i] = (this.py[i] + fy / BIG_LEGS) * 0.5 + H;
+      } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
     }
   }
 
-  /** Hard body radius (m). */
-  private rad(i: number) { return this.size[i] * this.v.robotGap; }
+  /**
+   * A standing small one's legs (world, 3 × 4 floats each): hips on the hub tilted with the slope under it, feet on
+   * the sand sweeping along its run. The drawer and the checks both use this.
+   */
+  smallLegPose(i: number, hips: Float32Array | number[], feet: Float32Array | number[]) {
+    const v = this.v, S = this.size[i], x = this.px[i], y = this.py[i], z = this.pz[i];
+    const e = S * 0.4;
+    const gx = (this.ground.height(x + e, z) - this.ground.height(x - e, z)) / (2 * e);
+    const gz = (this.ground.height(x, z + e) - this.ground.height(x, z - e)) / (2 * e);
+    const sp = Math.hypot(this.vx[i], this.vz[i]);
+    const move = this.state[i] === DOWN ? 0 : Math.min(1, sp / 3);
+    const mx = sp > 1e-3 ? (this.vx[i] / sp) * move : 0, mz = sp > 1e-3 ? (this.vz[i] / sp) * move : 0;
+    const bob = Math.abs(Math.sin(this.gait[i] * 2)) * 0.03 * S * move;
+    smallLegs(x, y, z, S, this.heading[i], gx, gz, this.gait[i], mx, mz, S * v.robotStride, S * v.robotFootLift * move, bob, hips, feet);
+  }
+
+  /** Body height above the sand for a tripod (m). */
+  heightOf(i: number) { return bigHeight(this.size[i], this.v.robotBigHeight, this.v.robotBigSize); }
+
+  /**
+   * Hard body radius on the ground (m). A tripod has none down there: small ones run between its legs (it keeps
+   * other tripods off with robotBigSpacing instead).
+   */
+  private rad(i: number) { return this.kind[i] === BIG ? 0 : this.size[i] * this.v.robotGap; }
 
   private hashOf(x: number, z: number): number {
     const ix = Math.floor(x * this.inv), iz = Math.floor(z * this.inv);
@@ -493,6 +564,12 @@ export class RobotSwarm {
           const want = keep + v.robotWaitDist * (0.6 + 0.8 * this.range[i]), side = this.flank[i] < 0 ? -1 : 1;
           const radial = Math.max(-1, Math.min(1, (dist - want) * 0.3));
           wx = (ux * radial - uz * side * 0.7) * spd * 0.5; wz = (uz * radial + ux * side * 0.7) * spd * 0.5;
+        } else if (big) {
+          // Tripods swing round to the flank on the way in and come at the mech from the side.
+          const f = this.flank[i], side = (f < 0 ? -1 : 1) * (0.5 + 0.5 * Math.abs(f));
+          const fa = side * v.robotBigFlank * DEG * Math.min(1, Math.max(0, dist - v.robotBigFar) / 40);
+          const c = Math.cos(fa), sn = Math.sin(fa);
+          wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
         } else {
           const fa = this.flank[i] * v.robotFlank * DEG * Math.min(1, dist / 50);
           const c = Math.cos(fa), sn = Math.sin(fa);
@@ -511,7 +588,7 @@ export class RobotSwarm {
       } else {
         // Separation (soft), alignment with the pack, and a hard gap (positional, applied after the loop).
         let sx = 0, sz = 0, avx = 0, avz = 0, an = 0;
-        const xi = px[i], zi = pz[i], ri = this.rad(i), wide = Math.max(reach, ri + this.maxRad);
+        const xi = px[i], zi = pz[i], ri = this.rad(i), wide = Math.max(reach, ri + this.maxRad, big ? v.robotBigSpacing : 0);
         const inv = this.inv;
         const x0 = Math.floor((xi - wide) * inv), x1 = Math.floor((xi + wide) * inv);
         const z0 = Math.floor((zi - wide) * inv), z1 = Math.floor((zi + wide) * inv);
@@ -522,7 +599,7 @@ export class RobotSwarm {
             if (j === i) continue;
             const dx = xi - px[j], dz = zi - pz[j], d2 = dx * dx + dz * dz;
             const rj = this.rad(j), gap = ri + rj;
-            const soft = Math.max(sp, gap * 1.3);
+            const soft = big && this.kind[j] === BIG ? Math.max(sp, v.robotBigSpacing) : Math.max(sp, gap * 1.3);
             if (d2 >= soft * soft && d2 >= ar2) continue;
             const d = Math.sqrt(d2);
             let nx: number, nz: number;
@@ -548,20 +625,18 @@ export class RobotSwarm {
         }
         const steer = Math.min(1, (big ? v.robotBigAccel : v.robotAccel) * dt);
         vx[i] += (wx - vx[i]) * steer; vz[i] += (wz - vz[i]) * steer;
-        // Big ones only walk the way they face: their body has to turn first.
-        const speed2 = vx[i] * vx[i] + vz[i] * vz[i];
-        if (Number.isNaN(face) && speed2 > 0.25) face = Math.atan2(vx[i], vz[i]);
+        // Neither kind has to face where it walks: small ones crab on four legs, tripods step any way. A tripod
+        // keeps its gun head turned on the mech; a small one's hub just drifts round unless it's aiming.
+        if (big && Number.isNaN(face)) face = Math.atan2(ux, uz);
         if (!Number.isNaN(face)) {
           let dh = face - this.heading[i];
           dh = Math.atan2(Math.sin(dh), Math.cos(dh));
           this.heading[i] += Math.max(-turn, Math.min(turn, dh));
         }
-        if (big && speed2 > 1e-4) {
-          const hx = Math.sin(this.heading[i]), hz = Math.cos(this.heading[i]);
-          const along = Math.max(st === FIRE ? -v.robotBigSpeed : 0, vx[i] * hx + vz[i] * hz);
-          const side = (vx[i] * hz - vz[i] * hx) * 0.3;
-          vx[i] = hx * along + hz * side; vz[i] = hz * along - hx * side;
-        }
+      }
+      if (!big && Number.isNaN(face) && st !== DOWN) {
+        const drift = v.robotDrift * DEG * (this.seed[i] * 2 - 1) * Math.min(1.5, 0.3 + Math.hypot(vx[i], vz[i]) / Math.max(1, v.robotRunSpeed));
+        this.heading[i] += drift * dt;
       }
 
       // Guns.
@@ -572,12 +647,12 @@ export class RobotSwarm {
         if (big) {
           if (this.fireClock[i] <= 0 && dh < v.robotBigArc * DEG) {
             if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotBigBurst));
-            this.fire(i, target, v.robotBigSpread * DEG, size[i] * (BODY_Y + BODY_H * 0.3), 0.55, true, onShot);
+            this.fire(i, target, v.robotBigSpread * DEG, this.hubY[i] - size[i] * B_BODY_H * 0.2, size[i] * 0.55, true, onShot);
             this.burstLeft[i]--;
             this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotBigRoundInterval : v.robotBigPause * (0.7 + 0.6 * this.rand());
           }
         } else if (this.fireClock[i] <= 0 && dh < 0.5) {
-          this.fire(i, target, v.robotShotSpread * DEG, size[i] * (BODY_Y + BODY_H * 0.3), 0.55, false, onShot);
+          this.fire(i, target, v.robotShotSpread * DEG, this.hubY[i] + size[i] * HUB_H * 0.3, size[i] * 0.25, false, onShot);
           this.fireClock[i] = v.robotShotInterval * (0.7 + 0.6 * this.rand());
         }
       }
@@ -600,15 +675,63 @@ export class RobotSwarm {
       if (run > 1e-4) {
         const k = Math.min(1, dt * 4);
         this.slope[i] += ((y - oy) / run - this.slope[i]) * k;
-        if (s !== DOWN) {
-          const stride = size[i] * (this.kind[i] === BIG ? v.robotBigStride : v.robotStride);
-          this.gait[i] += (run / Math.max(0.05, stride)) * Math.PI * 2;
-        }
+        if (s !== DOWN && this.kind[i] !== BIG) this.gait[i] += (run / Math.max(0.05, size[i] * v.robotStride)) * Math.PI * 2;
       }
+      if (this.kind[i] === BIG) this.stepTripod(i, dt);
+    }
+    // Body centres.
+    for (let i = 0; i < this.hi; i++) {
+      const s = state[i];
+      if (s === EMPTY || s === DEAD || this.kind[i] === BIG) continue;
+      this.hubY[i] = py[i] + size[i] * (s === RUN || s === FIRE ? HUB_Y : s === DOWN ? HUB_Y * 0.6 : s === FLUNG ? HUB_H * 0.5 : 0);
     }
     // Keep gait phases bounded (Float32 loses the fraction on big numbers).
     for (let i = 0; i < this.hi; i++) if (this.gait[i] > 1000) this.gait[i] -= Math.PI * 2 * 150;
   }
+
+  /**
+   * A tripod's feet: planted ones stay put; when one has fallen too far behind where it wants to be (out on its
+   * spoke, led along the walk) it swings there in an arc, one at a time (two when the body runs ahead). The body
+   * rides at its height over the sand under it and its feet.
+   */
+  private stepTripod(i: number, dt: number) {
+    const v = this.v, H = this.heightOf(i), spread = B_FOOT_R * H;
+    const T = Math.max(0.1, v.robotBigStepTime), lead = T * 1.5;
+    const x = this.px[i], z = this.pz[i];
+    let stepping = 0, worst = -1, worstE = 0, sumY = 0;
+    const ix = this.idealX, iz = this.idealZ;
+    for (let k = 0; k < BIG_LEGS; k++) {
+      const f = i * BIG_LEGS + k, a = bigLegAngle(this.heading[i], k);
+      ix[k] = x + Math.sin(a) * spread + this.vx[i] * lead; iz[k] = z + Math.cos(a) * spread + this.vz[i] * lead;
+      if (this.stepT[f] >= 0) {
+        stepping++;
+        const t = Math.min(1, this.stepT[f] + dt / T), e = t * t * (3 - 2 * t);
+        this.stepT[f] = t;
+        this.footX[f] = this.sfx0[f] + (this.sfx1[f] - this.sfx0[f]) * e;
+        this.footZ[f] = this.sfz0[f] + (this.sfz1[f] - this.sfz0[f]) * e;
+        this.footY[f] = this.sfy0[f] + (this.sfy1[f] - this.sfy0[f]) * e + 4 * v.robotBigStepLift * t * (1 - t);
+        if (t >= 1) {
+          this.stepT[f] = -1;
+          this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
+          this.onFootfall?.(i, this.footX[f], this.footY[f], this.footZ[f]);
+        }
+      } else {
+        const err = Math.hypot(this.footX[f] - ix[k], this.footZ[f] - iz[k]);
+        if (err > worstE) { worstE = err; worst = k; }
+      }
+      sumY += this.footY[f];
+    }
+    const at = v.robotBigStepAt * spread;
+    if (worst >= 0 && ((stepping === 0 && worstE > at) || (stepping === 1 && worstE > at * 2.5))) {
+      const f = i * BIG_LEGS + worst;
+      this.sfx0[f] = this.footX[f]; this.sfy0[f] = this.footY[f]; this.sfz0[f] = this.footZ[f];
+      this.sfx1[f] = ix[worst]; this.sfz1[f] = iz[worst]; this.sfy1[f] = this.ground.height(ix[worst], iz[worst]);
+      this.stepT[f] = 0;
+    }
+    const want = (this.py[i] + sumY / BIG_LEGS) * 0.5 + H;
+    this.hubY[i] += (want - this.hubY[i]) * Math.min(1, dt * 2.5);
+  }
+  private idealX = new Float32Array(BIG_LEGS); private idealZ = new Float32Array(BIG_LEGS);
 
   private leaping(): number {
     let n = 0;
@@ -625,7 +748,7 @@ export class RobotSwarm {
     this.slotPos(k, this.tmp);
     const d0 = Math.hypot(this.tmp[0] - this.px[i], this.tmp[2] - this.pz[i]);
     const T = Math.max(0.3, d0 / Math.max(0.5, v.robotLeapSpeed));
-    this.lx[i] = this.px[i]; this.ly[i] = this.py[i]; this.lz[i] = this.pz[i];
+    this.lx[i] = this.px[i]; this.ly[i] = this.hubY[i]; this.lz[i] = this.pz[i];
     this.ax[i] = this.tmp[0] + this.tvx * T; this.ay[i] = this.tmp[1]; this.az[i] = this.tmp[2] + this.tvz * T;
     this.leapT[i] = T;
     this.state[i] = LEAP; this.stateTime[i] = 0;
@@ -665,9 +788,10 @@ export class RobotSwarm {
     return true;
   }
 
-  private fire(i: number, t: RobotTarget, spread: number, muzzleY: number, fwd: number, big: boolean, onShot: RobotShotFn) {
-    const h = this.heading[i], sz = this.size[i];
-    const fx = this.px[i] + Math.sin(h) * sz * fwd, fz = this.pz[i] + Math.cos(h) * sz * fwd, fy = this.py[i] + muzzleY;
+  /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */
+  private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, big: boolean, onShot: RobotShotFn) {
+    const h = this.heading[i];
+    const fx = this.px[i] + Math.sin(h) * fwd, fz = this.pz[i] + Math.cos(h) * fwd;
     let dx = t.x - fx, dy = t.y - fy, dz = t.z - fz;
     const L = Math.hypot(dx, dy, dz) || 1;
     dx /= L; dy /= L; dz /= L;
@@ -683,49 +807,61 @@ export class RobotSwarm {
     onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, big);
   }
 
-  /** Nearest live robot hit by a ray (an ellipsoid round the body, sized by size × hit scale), or null. */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number } | null {
+  /**
+   * Nearest live robot hit by a ray, or null. Small ones: a squat ellipsoid round the hub (its size × hit scale).
+   * Tripods: an ellipsoid round the high body, and thin capsules down the legs (hitLeg says which was hit).
+   */
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number; leg: boolean } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const k = this.v.robotHitScale;
-    let best = -1, bestT = maxDist;
+    let best = -1, bestT = maxDist, bestLeg = false;
     for (let i = 0; i < this.hi; i++) {
       const s = this.state[i];
       if (s >= DEAD) continue;
       const S = this.size[i];
-      // Quick reject: bounding sphere.
-      const cy = this.py[i] + (s === LATCHED ? 0 : S * BODY_Y * (s === DOWN ? 0.4 : 1));
-      const qx = ox - this.px[i], qy = oy - cy, qz = oz - this.pz[i];
+      if (this.kind[i] === BIG) {
+        const H = this.hubY[i] - this.py[i];
+        // Quick reject: a sphere round the whole tripod.
+        const qx = ox - this.px[i], qy = oy - (this.py[i] + H * 0.55), qz = oz - this.pz[i];
+        const R = H * 0.85 + S;
+        const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
+        if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
+        const t = rayEllipsoid(ox - this.px[i], oy - this.hubY[i], oz - this.pz[i], dx, dy, dz, S * 0.5 * k, S * B_BODY_H * 0.5 * k, S * 0.5 * k);
+        if (t >= 0 && t < bestT) { bestT = t; best = i; bestLeg = false; }
+        const r = this.v.robotBigLegHit;
+        if (r <= 0) continue;
+        const L1 = B_THIGH * H, L2 = B_SHIN * H, hip = this.hp3, knee = this.kn3, foot = this.ft3;
+        for (let g = 0; g < BIG_LEGS; g++) {
+          const f = i * BIG_LEGS + g;
+          bigHip(this.px[i], this.hubY[i], this.pz[i], S, this.heading[i], g, hip);
+          foot.x = this.footX[f]; foot.y = this.footY[f]; foot.z = this.footZ[f];
+          const b = bigBend(this.heading[i], g, this.bd3);
+          solveKnee(hip, foot, L1, L2, b.x, b.y, b.z, knee);
+          let tl = raySegment(ox, oy, oz, dx, dy, dz, hip, knee, r);
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestLeg = true; }
+          tl = raySegment(ox, oy, oz, dx, dy, dz, knee, foot, r);
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestLeg = true; }
+        }
+        continue;
+      }
+      const cy = this.hubY[i], qx = ox - this.px[i], qy = oy - cy, qz = oz - this.pz[i];
       const R = S * 0.5 * k;
       const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
-      if (c0 > 0 && b0 > 0) continue;
-      if (b0 * b0 - c0 < 0) continue;
-      let t: number;
-      if (s === LATCHED || s === LEAP || s === FLUNG) {
-        // Clinging or tumbling: the bounding sphere shrunk a little.
-        const r = R * 0.75, c = qx * qx + qy * qy + qz * qz - r * r, disc = b0 * b0 - c;
-        if (disc < 0) continue;
-        t = -b0 - Math.sqrt(disc);
-        if (t < 0) t = c < 0 ? 0 : -1;
-      } else {
-        // Ellipsoid in the body frame: half length, half width, half height.
-        const h = this.heading[i], sh = Math.sin(h), ch = Math.cos(h);
-        const ea = S * 0.5 * k, eb = S * BODY_W * 0.5 * k, ec = S * BODY_H * 0.5 * k * 1.6;
-        const lqz = (qx * sh + qz * ch) / ea, lqx = (qx * ch - qz * sh) / eb, lqy = qy / ec;
-        const ldz = (dx * sh + dz * ch) / ea, ldx = (dx * ch - dz * sh) / eb, ldy = dy / ec;
-        const a = ldx * ldx + ldy * ldy + ldz * ldz;
-        const b = lqx * ldx + lqy * ldy + lqz * ldz;
-        const c = lqx * lqx + lqy * lqy + lqz * lqz - 1;
-        const disc = b * b - a * c;
-        if (disc < 0) continue;
-        t = (-b - Math.sqrt(disc)) / a;
-        if (t < 0) t = c < 0 ? 0 : -1;
-      }
-      if (t >= 0 && t < bestT) { bestT = t; best = i; }
+      if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
+      // Standing: flat across the legs, squat in height; clinging or tumbling: a ball.
+      const flat = s === RUN || s === FIRE || s === DOWN;
+      const t = flat
+        ? rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.45 * k, S * 0.22 * k, S * 0.45 * k)
+        : rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.34 * k, S * 0.34 * k, S * 0.34 * k);
+      if (t >= 0 && t < bestT) { bestT = t; best = i; bestLeg = false; }
     }
-    return best < 0 ? null : { index: best, dist: bestT };
+    this.hitLeg = best >= 0 && bestLeg;
+    return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg };
   }
+  private hp3: V3 = { x: 0, y: 0, z: 0 }; private kn3: V3 = { x: 0, y: 0, z: 0 };
+  private ft3: V3 = { x: 0, y: 0, z: 0 }; private bd3: V3 = { x: 0, y: 0, z: 0 };
 
   /** Called when a robot dies: its index, the flat direction it was thrown and how hard (m/s). */
   onDeath: ((i: number, nx: number, nz: number, speed: number) => void) | null = null;
@@ -785,4 +921,39 @@ export class RobotSwarm {
       this.vx[i] = nx * v.robotStompThrow * (0.5 + k); this.vz[i] = nz * v.robotStompThrow * (0.5 + k);
     }
   }
+}
+
+/**
+ * Robot i's centre of mass in world space (the hub for small ones, the high body for tripods) into out; returns its
+ * body radius (m), for aiming and lock-on.
+ */
+export function robotCentre(sw: RobotSwarm, i: number, out: { x: number; y: number; z: number }): number {
+  out.x = sw.px[i]; out.y = sw.hubY[i]; out.z = sw.pz[i];
+  return sw.kind[i] === BIG ? sw.size[i] * 0.5 : sw.size[i] * 0.35;
+}
+
+/** Ray (from q relative to the ellipsoid's centre, unit d) against an axis-aligned ellipsoid; distance or -1. */
+function rayEllipsoid(qx: number, qy: number, qz: number, dx: number, dy: number, dz: number, ex: number, ey: number, ez: number): number {
+  const lqx = qx / ex, lqy = qy / ey, lqz = qz / ez, ldx = dx / ex, ldy = dy / ey, ldz = dz / ez;
+  const a = ldx * ldx + ldy * ldy + ldz * ldz, b = lqx * ldx + lqy * ldy + lqz * ldz, c = lqx * lqx + lqy * lqy + lqz * lqz - 1;
+  const disc = b * b - a * c;
+  if (disc < 0) return -1;
+  const t = (-b - Math.sqrt(disc)) / a;
+  if (t >= 0) return t;
+  return c < 0 ? 0 : -1;
+}
+
+/** Ray (origin o, unit d) against a capsule from a to b of radius r: distance to about where it enters, or -1. */
+function raySegment(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, a: V3, b: V3, r: number): number {
+  const vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z;
+  const wx = ox - a.x, wy = oy - a.y, wz = oz - a.z;
+  const B = dx * vx + dy * vy + dz * vz, C = vx * vx + vy * vy + vz * vz, D = dx * wx + dy * wy + dz * wz, E = vx * wx + vy * wy + vz * wz;
+  const den = C - B * B;
+  let tc = den > 1e-9 ? (E - B * D) / den : C > 1e-9 ? E / C : 0;
+  tc = Math.max(0, Math.min(1, tc));
+  const sc = Math.max(0, B * tc - D);
+  const px = wx + dx * sc - vx * tc, py = wy + dy * sc - vy * tc, pz = wz + dz * sc - vz * tc;
+  const d2 = px * px + py * py + pz * pz;
+  if (d2 > r * r) return -1;
+  return Math.max(0, sc - Math.sqrt(r * r - d2));
 }

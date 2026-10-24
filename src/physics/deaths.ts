@@ -32,8 +32,8 @@ export const DEATH_PARAMS: Param[] = [
   { key: "floorSize", label: "Physics floor (m)", min: 40, max: 300, step: 10, group: "Death physics", tip: "Size of the patch of dunes the physics knows, centred on the camera" },
 ];
 
-/** A box part in a body's own frame (origin at its feet, facing +Z). */
-export interface PartSpec { half: [number, number, number]; at: [number, number, number]; color: number; mass?: number }
+/** A box part in a body's own frame (origin at its feet, facing +Z), optionally turned (a quaternion x y z w). */
+export interface PartSpec { half: [number, number, number]; at: [number, number, number]; color: number; mass?: number; rot?: [number, number, number, number] }
 /** A joint between parts a and b at a point in the body's own frame; hinge: about this axis with limits. */
 export interface JointSpec { a: number; b: number; at: [number, number, number]; hinge?: [number, number, number]; limits?: [number, number] }
 
@@ -100,13 +100,16 @@ export class DeathPhysics {
     const base = this.q.setFromAxisAngle(UP, yaw);
     const bodies: RAPIER.RigidBody[] = [];
     const push = strength * v.deathPush;
+    const turned = new Quaternion();
     for (const p of parts) {
       const at = this.v3.set(p.at[0], p.at[1], p.at[2]).applyQuaternion(base);
       // Upper parts get more of the push, so a body folds over instead of sliding.
       const tall = 0.4 + Math.min(1, p.at[1] / 1.6);
+      turned.copy(base);
+      if (p.rot) turned.multiply(new Quaternion(p.rot[0], p.rot[1], p.rot[2], p.rot[3]));
       const desc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(x + at.x, y + at.y, z + at.z)
-        .setRotation({ x: base.x, y: base.y, z: base.z, w: base.w })
+        .setRotation({ x: turned.x, y: turned.y, z: turned.z, w: turned.w })
         .setLinvel(vel.x + dirX * push * tall, vel.y + push * v.deathLift * tall, vel.z + dirZ * push * tall)
         .setAngvel({ x: (Math.random() - 0.5) * v.deathSpin * 4, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 })
         .setLinearDamping(0.1).setAngularDamping(v.jointDamping * 0.15);
@@ -117,8 +120,8 @@ export class DeathPhysics {
     const made: RAPIER.ImpulseJoint[] = [];
     for (const j of joints) {
       const A = parts[j.a], B = parts[j.b];
-      const a1 = { x: j.at[0] - A.at[0], y: j.at[1] - A.at[1], z: j.at[2] - A.at[2] };
-      const a2 = { x: j.at[0] - B.at[0], y: j.at[1] - B.at[1], z: j.at[2] - B.at[2] };
+      // Anchors in each part's own frame (undo a turned part's rotation). Hinges assume unturned parts.
+      const a1 = anchor(j.at, A), a2 = anchor(j.at, B);
       const data = j.hinge ? RAPIER.JointData.revolute(a1, a2, { x: j.hinge[0], y: j.hinge[1], z: j.hinge[2] }) : RAPIER.JointData.spherical(a1, a2);
       if (j.hinge && j.limits) { data.limitsEnabled = true; data.limits = j.limits; }
       made.push(w.createImpulseJoint(data, bodies[j.a], bodies[j.b], true));
@@ -201,6 +204,13 @@ export class DeathPhysics {
 }
 
 const UP = new Vector3(0, 1, 0);
+
+/** A joint point (body frame) relative to a part, in the part's own (possibly turned) frame. */
+function anchor(at: [number, number, number], p: PartSpec) {
+  const v = new Vector3(at[0] - p.at[0], at[1] - p.at[1], at[2] - p.at[2]);
+  if (p.rot) v.applyQuaternion(new Quaternion(p.rot[0], p.rot[1], p.rot[2], p.rot[3]).invert());
+  return { x: v.x, y: v.y, z: v.z };
+}
 // Collision groups (16 bits membership, 16 bits filter): the floor is group 1 and meets everything; the dead are
 // group 2 and meet only the floor (bodies passing through each other is cheap and rarely seen; touching their own
 // neighbouring parts at every joint was most of the cost and made limbs jitter).

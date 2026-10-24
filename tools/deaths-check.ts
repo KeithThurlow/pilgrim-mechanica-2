@@ -3,7 +3,8 @@
 // cap freezes the oldest, and bodies are cleared at the end. Run: npm test (or npx tsx tools/deaths-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { DeathPhysics, DEATH_DEFAULTS, initPhysics } from "../src/physics/deaths";
-import { BANDIT_PARTS, BANDIT_JOINTS } from "../src/physics/bodies";
+import { BANDIT_PARTS, BANDIT_JOINTS, robotRagdoll } from "../src/physics/bodies";
+import { RobotSwarm, ROBOT_DEFAULTS, BIG } from "../src/combat/robots";
 
 await initPhysics();
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
@@ -41,6 +42,33 @@ if (!(torso.x > 0.5)) problems.push(`ragdoll thrown along +X ended at x=${torso.
 if (torso.y > 0.6 || torso.y < -0.05) problems.push(`ragdoll torso not lying on the ground (y=${torso.y.toFixed(2)})`);
 const spread = Math.max(...rd.pos.map((p) => p.distanceTo(torso)));
 if (spread > 1.6) problems.push(`ragdoll came apart (a part ${spread.toFixed(2)} m from the torso)`);
+
+// Robot ragdolls (turned leg parts): a small one and a tripod collapse in one piece and come to rest on the sand.
+const rsw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0.5 }, flat, 3);
+rsw.spawn(2, 0, 0, 0.1);
+rsw.update(1 / 120, { x: 300, y: 0, z: 300, radius: 2 }, () => {});
+const robotNotes: string[] = [];
+for (let i = 0; i < 2; i++) {
+  const big = rsw.kind[i] === BIG, { parts, joints } = robotRagdoll(rsw, i, 0, 0);
+  const pr = new DeathPhysics(v, flat);
+  pr.follow(0, 0);
+  const d = pr.ragdoll(parts, joints, rsw.px[i], rsw.py[i], rsw.pz[i], rsw.heading[i], { x: 0, y: 0, z: 0 }, 1, 0, big ? 1 : 3);
+  // Turned parts start where they were laid out: one step must not tear the joints apart.
+  const start = d.pos.map((p) => p.clone());
+  pr.step(1 / 60);
+  const jump = Math.max(...d.pos.map((p, k) => p.distanceTo(start[k])));
+  for (let s = 0; s < 60 * 8; s++) pr.step(1 / 60);
+  const hub = d.pos[0], legLen = big ? (rsw.hubY[i] - rsw.py[i]) * 1.4 : rsw.size[i];
+  const far = Math.max(...d.pos.map((p) => p.distanceTo(hub)));
+  const low = Math.min(...d.pos.map((p) => p.y));
+  robotNotes.push(`${big ? "tripod" : "small"}: first step moves parts ≤${jump.toFixed(2)} m, hub at ${hub.y.toFixed(2)} m, parts within ${far.toFixed(1)} m`);
+  if (d.pos.some((p) => !Number.isFinite(p.x + p.y + p.z))) problems.push(`NaN in a ${big ? "tripod" : "small"} robot ragdoll`);
+  if (jump > 0.3) problems.push(`${big ? "tripod" : "small"} robot ragdoll jumped ${jump.toFixed(2)} m on its first step (joints misplaced)`);
+  if (far > legLen) problems.push(`${big ? "tripod" : "small"} robot ragdoll came apart (a part ${far.toFixed(1)} m from the hub)`);
+  if (low < -0.3) problems.push(`${big ? "tripod" : "small"} robot ragdoll part ${low.toFixed(2)} m under the sand`);
+  if (big && hub.y > 3) problems.push(`tripod hood still ${hub.y.toFixed(1)} m up after 8 s`);
+}
+console.log("robots: " + robotNotes.join(" · "));
 
 // Cap: past maxRagdolls the oldest freeze.
 const p3 = new DeathPhysics({ ...v, maxRagdolls: 5 }, flat);
