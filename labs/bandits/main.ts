@@ -46,6 +46,8 @@ const lab = await combatLab({
 });
 const { V, bf, player, field } = lab;
 const sw = new InfantrySwarm(V, field);
+// A dash ploughs through them.
+player.onDash = (x, z, dx, dz) => { if (sw.shove(x, z, V.dashShoveRadius, dx, dz, V.dashShove, V.dashShoveDamage)) bf.sfx.play("brap", player.sim.pelvis, 0.6, 0.6, false); };
 swarm = sw;
 // Vanguard baked to an animation texture (Keith 2026-10-24); boxes if it fails to load.
 const vat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });

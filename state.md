@@ -118,6 +118,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-24 · Dash on Space (Claude)
+- Keith: Space dodges or lunges the way WASD points, on charges. `src/mech/dash.ts` (pure: 2 charges, 3 s each, a front-loaded 9 m shove over 0.45 s, crouch and lean); `walker.ts` gains `push` (planted feet skid with the body, a swinging foot's target is carried), `crouch`, `leanPitch`, `leanRoll`; `MechUnit.tryDash` with a sand burst, skid spray and furrows, damage taken ×0.5 while dashing, `onDash` for the labs: bandits are knocked flying (`InfantrySwarm.shove`), clinging robots thrown off and small ones in the way bowled over. Combat labs: Space, HUD dots, the demo sidesteps every 7 s. "Dash" group under Your mech. Check: `tools/dash-check.ts` (distance on the dunes walking and standing, skidding feet on the sand, no NaN, charges).
+
 ### 2026-10-24 · Rounds pierce and splash; small arms read small; mech tougher (Claude)
 - Keith's playtest: swarms too hard to hit, the mech doesn't feel powerful. `Battlefield.fire` now carries a round through light bodies (`canPierce`: bandits, small robots; `roundPierce` 2, 70% kept each) and splashes swarm units near where it ends (`splash` on the swarm targets; `roundSplash` 1.6 m at `roundSplashShare` 0.5, half at the edge), so a near miss into the sand at their feet still counts. New "Rounds" group under Your mech. Hull 1000 → 1500; robot bite 1.5 → 0.8, small shot 2 → 1.2, big shot 15 → 10.
 - Small arms read small: `FireOptions.hitScale` scales sparks, dust and grit, and below 0.6 leaves no crater (bandits and small robots 0.3, technicals 0.4, gun trucks 0.75, enemy mechs 0.7, tank 1.6).

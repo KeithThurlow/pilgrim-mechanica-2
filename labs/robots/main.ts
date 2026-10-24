@@ -8,7 +8,7 @@ import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
-import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, robotCentre } from "../../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, SMALL, robotCentre } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
@@ -45,6 +45,17 @@ const lab = await combatLab({
 });
 const { V, bf, player, field } = lab;
 const sw = new RobotSwarm(V, field);
+// A dash throws clingers off and bowls over small ones in the way.
+player.onDash = (x, z, dx, dz) => {
+  const r2 = V.dashShoveRadius * V.dashShoveRadius;
+  for (let i = 0; i < sw.hi; i++) {
+    const st = sw.state[i];
+    if (st === LATCHED) { sw.shake[i] = 1e3; continue; }
+    if (st >= DOWN || sw.kind[i] !== SMALL) continue;
+    const ox = sw.px[i] - x, oz = sw.pz[i] - z;
+    if (ox * ox + oz * oz < r2) sw.damage(i, V.dashShoveDamage, dx, dz);
+  }
+};
 swarm = sw;
 draw = new RobotsDraw(sw);
 lab.app.scene.add(draw.group);

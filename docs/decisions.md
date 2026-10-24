@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Dash on Space in the WASD direction, on charges (2, 3 s each) | Keith | Keith | Distance, time and charges are Claude's values (sliders). `docs/proposal-dash-and-jump.md`. |
+| 2026-10-24 | Skill against the swarms: some enemy weapons are slow and telegraphed so they can be dodged (with the dash) | Keith | Keith | First: lobbed shells with a ground marker (tank, later the big robots). |
 | 2026-10-24 | The player's minigun rounds pierce light bodies and splash swarm units near the impact | Keith | Claude | Keith: hitboxes too small "or the minigun needs more piercing ability and a slight AOE". Values are sliders (Rounds). |
 | 2026-10-24 | Combat should feel reasonably powerful (a later-game mech); dodge/dash next, a jump unlocked by an item later (jump walls to reach salvage) | Keith | Keith | Hull up, enemy damage down; dash and jump to be proposed. |
 | 2026-10-24 | Robots are autonomous terraforming machines: small scrappers tearing things down, a medium size, a few huge four-legged excavators whose legs are long excavator arms; functional looks | Keith | Keith | Replaces the tripods (fewer giants). |

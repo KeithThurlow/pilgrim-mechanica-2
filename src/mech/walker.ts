@@ -115,6 +115,14 @@ export class WalkerSim {
   private accelSmooth = 0;
   /** Ground rise per metre along the heading (+ uphill), smoothed. */
   grade = 0;
+  /**
+   * Outside motion (a dash): world velocity added to the body; planted feet skid along with it instead of stepping.
+   * crouch lowers the hips (m); leanPitch / leanRoll tilt the body (radians, nose down + / left side up +).
+   */
+  push = new Vector3();
+  crouch = 0;
+  leanPitch = 0;
+  leanRoll = 0;
   private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
@@ -182,6 +190,15 @@ export class WalkerSim {
     this.accelSmooth += ((this.speed - prev) / dt - this.accelSmooth) * Math.min(1, dt * 6);
     forwardOf(this.heading, this.vel).multiplyScalar(this.speed);
     this.pos.addScaledVector(this.vel, dt);
+    if (this.push.lengthSq() > 1e-6) {
+      // Skid: the body is shoved and the planted feet slide with it, kept on the sand.
+      this.pos.addScaledVector(this.push, dt);
+      for (const f of this.feet) {
+        if (f.swinging) { f.lift.addScaledVector(this.push, dt); f.target.addScaledVector(this.push, dt); this.groundAt(f.target, f.targetUp); continue; }
+        f.planted.addScaledVector(this.push, dt);
+        this.groundAt(f.planted, f.plantedUp);
+      }
+    }
 
     // Gait phase.
     const S = this.stride(), d = this.duty();
@@ -345,20 +362,20 @@ export class WalkerSim {
     const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
     const bob = v.bob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * smooth(0.05, 1, this.speed);
     const down = smooth(0, 0.35, -this.grade);
-    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down, dt);
+    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down - this.crouch, dt);
     this.impact.step(0, dt);
 
     // Weight onto the planted leg: shift over it, roll the pelvis down onto it.
     const shift = (a.swinging ? 0 : 1) * a.side + (b.swinging ? 0 : 1) * b.side; // +1 left planted only, -1 right only
     this.lat.step(shift * v.weightShift, dt);
-    this.roll.step(-shift * v.crunchRoll * D2R, dt);
+    this.roll.step(-shift * v.crunchRoll * D2R + this.leanRoll, dt);
 
     // Pitch with the ground along the heading, and lean into acceleration.
     // Downhill the body tips forward less (it keeps its weight back over the feet).
     const fw = forwardOf(this.heading, this.t.f);
     const slope = Math.atan(this.grade);
     const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
-    this.pitch.step(-slope * pitchShare + (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R, dt);
+    this.pitch.step(-slope * pitchShare + (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R + this.leanPitch, dt);
 
     // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
     const back = v.downhillSitBack * down;

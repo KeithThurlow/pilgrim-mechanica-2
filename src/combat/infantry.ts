@@ -468,6 +468,25 @@ export class InfantrySwarm {
   }
 
   /** A mech foot landing: closest killed, within radius knocked down, a little further pushed away. */
+  /** A dashing mech ploughs through: standing bandits within radius are hurt and knocked flying along and away. */
+  shove(x: number, z: number, radius: number, dirX: number, dirZ: number, speed: number, damage: number): number {
+    let n = 0;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DOWN) continue;
+      const dx = this.px[i] - x, dz = this.pz[i] - z, d = Math.hypot(dx, dz);
+      if (d >= radius) continue;
+      const nx = d > 1e-5 ? dx / d : dirX, nz = d > 1e-5 ? dz / d : dirZ;
+      const ox = dirX + nx, oz = dirZ + nz, ol = Math.hypot(ox, oz) || 1;
+      n++;
+      if (this.damage(i, damage, ox / ol, oz / ol)) continue;
+      this.state[i] = DOWN; this.stateTime[i] = 0;
+      this.fallYaw[i] = Math.atan2(ox, oz);
+      this.vx[i] = (ox / ol) * speed; this.vz[i] = (oz / ol) * speed;
+      this.fear[i] += this.v.fearPerDeath;
+    }
+    return n;
+  }
+
   stomp(x: number, z: number, radius: number): void {
     const v = this.v, kill = radius * v.stompKill, push = radius * v.stompPush;
     for (let i = 0; i < this.hi; i++) {
