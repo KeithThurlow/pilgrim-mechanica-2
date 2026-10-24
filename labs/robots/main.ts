@@ -1,18 +1,20 @@
-// Robot swarm lab (Keith 2026-10-24): hostile robots swarming across the dunes. Most are small four-legged starfish
-// that scuttle in any direction: they pour in as a pack, leap onto the mech and cling on, tearing at its plating
-// (sparks, scraps of plate, a grinding screech), until shot off, stomped off or shaken off at a run; a few hang back
-// and shoot. A few big ones are War of the Worlds tripods that swing in from the side on long legs, stop at range
-// and fire heavy bursts from high up, and take a lot of killing. Power and threat at once.
+// Robot swarm lab (Keith 2026-10-24): autonomous terraforming machines swarming across the dunes, in three sizes.
+// Most are small four-legged scrappers that scuttle any way: they pour in as a pack, leap onto the mech and cling on,
+// tearing at its plating (sparks, scraps of plate, a grinding screech), until shot off, stomped off or shaken off at
+// a run; a few hang back and shoot. Medium cutters walk in on four crab legs: some hold at range firing slugs, the
+// rest close in, rear back with the saw spinning up and lunge. A few big excavators swing in from the side on four
+// long excavator-arm legs, stop at range and fire heavy bursts from high up, and take a lot of killing.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
-import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, robotCentre } from "../../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, BIG, MID, SMALL, robotCentre } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
+import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -27,7 +29,7 @@ const WAVE_PARAMS: Param[] = [
   { key: "robotGroupSize", label: "Pack size", min: 1, max: 200, step: 1, group: "Robot waves" },
   { key: "robotGroupEvery", label: "A pack every (s)", min: 0.2, max: 30, step: 0.1, group: "Robot waves" },
   { key: "robotSpawnFrom", label: "They come from (m)", min: 30, max: 250, step: 5, group: "Robot waves" },
-  { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Big ones' rounds always show" },
+  { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Medium and big ones' rounds always show" },
   { key: "robotStompReach", label: "Stomp reach (m)", min: 0, max: 6, step: 0.1, group: "Robot waves", tip: "A footfall knocks off clingers and crushes small ones this close" },
 ];
 
@@ -38,7 +40,7 @@ const lab = await combatLab({
   title: "Robot swarm",
   defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS },
   params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: big ones", "Robots: attack", "Robots: tearing"] }],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones"] }],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
@@ -51,16 +53,19 @@ lab.app.scene.add(draw.group);
 const target = new RobotTarget(sw, 3);
 bf.targets.push(target);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k));
-// Deaths go to the physics: hub or hood and the legs fall apart loosely (small ones fly, tripods topple from height).
+// Deaths go to the physics: the body and its leg parts fall apart loosely (small ones fly, walkers fold where they
+// stand, excavators topple from height).
 sw.hideDead = true;
+const RAG = [[0x9a9c9e, 0x4a4d51], [YELLOW, YELLOW_DIRTY], [YELLOW, GREY]];
 sw.onDeath = (i, nx, nz, speed) => {
-  const big = sw.kind[i] === 1;
-  const { parts, joints } = robotRagdoll(sw, i, big ? 0x8e918f : 0xd6d3cc, big ? 0x34373b : 0x45484c);
+  const kind = sw.kind[i], [body, leg] = RAG[kind];
+  const { parts, joints } = robotRagdoll(sw, i, body, leg);
   lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-    { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, big ? 1 : Math.max(3, speed));
+    { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
 };
-// Tripod feet coming down kick up the sand; latched small ones tear at the plating.
-sw.onFootfall = (_i, x, y, z) => bf.dust.stomp(x, y, z, 0.45);
+// Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at the
+// plating, medium ones' saws bite.
+sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
 const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
 lab.app.scene.add(tear.group);
 
@@ -77,32 +82,46 @@ lab.targets = () => {
   for (let i = 0; i < sw.hi; i++) {
     if (sw.state[i] >= DOWN) continue; // skip down, dead, empty
     const c = { x: 0, y: 0, z: 0, r: 0, key: i as unknown };
-    c.r = Math.max(0.6, robotCentre(sw, i, c)); // the hub, or a tripod's high body
+    c.r = Math.max(0.6, robotCentre(sw, i, c)); // the hub, or a walker's chassis
     out.push(c);
   }
   return out;
 };
+const SHOT = {
+  [SMALL]: { flash: 0.35, hit: 0.3 },
+  [MID]: { flash: 0.7, hit: 0.6 },
+  [BIG]: { flash: 1.2, hit: 1 },
+} as Record<number, { flash: number; hit: number }>;
 lab.onFrame((dt) => {
   packClock += dt;
   if (sw.count < V.robotSwarmSize && packClock >= V.robotGroupEvery) { packClock = 0; spawnPack(); }
   const p = player.sim.pelvis;
   sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 2, vx: player.sim.vel.x, vz: player.sim.vel.z },
-    (fx, fy, fz, tx, ty, tz, big) => {
+    (fx, fy, fz, tx, ty, tz, kind) => {
       if (!player.alive) return;
       from.set(fx, fy, fz);
       if (!bf.canSee(from, p)) return;
       dir.set(tx - fx, ty - fy, tz - fz).normalize();
-      const drawn = big || Math.random() < V.robotTracerShare;
+      const drawn = kind !== SMALL || Math.random() < V.robotTracerShare;
       if (drawn) slot = slot >= 19 ? 2 : slot + 1;
-      bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, big ? V.robotBigShotDamage : V.robotShotDamage,
-        drawn ? { flashScale: big ? 1.2 : 0.35, voice: "other", hitScale: big ? 1 : 0.3 } : { tracer: false, voice: "none" });
+      const damage = kind === BIG ? V.robotBigShotDamage : kind === MID ? V.robotMidShotDamage : V.robotShotDamage;
+      const look = SHOT[kind];
+      bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, damage,
+        drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
     },
     (i, damage) => {
       if (!player.alive) return;
       player.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up);
       tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z);
+    },
+    (_i, damage, x, y, z) => {
+      if (!player.alive) return;
+      // A saw strike: the damage plus a heavier spray of sparks and a torn plate where the blade bites the hull.
+      player.damage(damage, bitePos.set(x, y, z), up);
+      tear.bite(x, y, z, p.x, p.z);
+      tear.bite(x, y, z, p.x, p.z);
     });
   draw!.update(dt);
   tear.update(dt);
-  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · destroyed ${target.kills}`);
+  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · destroyed ${target.kills}`);
 });

@@ -1,45 +1,26 @@
-// Draws the robot swarm (robots.ts; shapes from robotLegs.ts). Keith 2026-10-24: small ones are four-legged
-// starfish, a low faceted hub with legs splayed out on the diagonals, scuttling any way; big ones are War of the
-// Worlds tripods, a small hood high up on three very long thin legs that cast long shadows.
-// Instanced: hubs, tripod hoods, eyes, guns, and every leg as a thigh and a shin (two-bone, knees up and out).
-// Standing small ones take their feet from the sim's leg pose (robots.ts smallLegPose); latched ones lie flat on the
-// hull, legs gripping round them and raking; leaping ones fly splayed with their underside to the mech; flung and
-// dead small ones tumble with their legs curled. Tripods' feet come from the sim (planted, stepping).
+// Draws the robot swarm (robots.ts; shapes from robotLegs.ts, stand-in geometry from robotShapes.ts). Keith
+// 2026-10-24: autonomous terraforming machines in industrial paint. Small scrappers: a low hub with a cutting disc,
+// four legs splayed on the diagonals; medium cutters: a crab chassis with a spinning saw and a scrap bin, four legs
+// with knees up and a ram on each thigh; big excavators: a chassis high up on four excavator arms (boom, stick, rams,
+// hoses) with buckets for feet, casting long shadows.
+// All instanced: bodies per size, saw blades, buckets, box beams (walker leg bones), pipes (small legs, rams, rods,
+// hoses), knuckles at the joints, and lamps. Standing small ones take their feet from the sim's leg pose; latched ones
+// lie flat on the hull, legs gripping and raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take
+// every leg from the sim (planted, stepping) through RobotSwarm.legPose.
 import * as THREE from "three/webgpu";
-import { RobotSwarm, ROBOT_MAX, BIG, LEAP, LATCHED, FIRE, DOWN, DEAD, EMPTY, RUN } from "./robots";
+import { RobotSwarm, ROBOT_MAX, BIG, MID, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
-  HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, BIG_LEGS, B_BODY_H, B_THIGH, B_SHIN,
-  bigHip, bigBend, solveKnee, type V3,
+  HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_X, MID_SAW_Y, MID_SAW_Z,
+  MID_SAW_R, MID_BODY_H, BIG_BODY_H, solveKnee, type V3,
 } from "./robotLegs";
+import {
+  smallBodyGeometry, midBodyGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
+  YELLOW, YELLOW_DIRTY, GREY, DARK, BLACK, CHROME,
+} from "./robotShapes";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
-const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5, HOOD_LONG = 1.15;
-const PANEL = 0xd9d8d0, PANEL_BIG = 0x8e918f, LEG = 0x45484c, LEG_BIG = 0x34373b, GUN = 0x2f3134, EYE = 0xff2a1a;
-
-/** The small hub: a low faceted puck (× size), flat underneath, a shallow dome on top. */
-function hubGeometry(): THREE.BufferGeometry {
-  const R = HUB_R, H = HUB_H;
-  const pts = [[0, -0.5], [0.72, -0.5], [1, -0.12], [0.96, 0.18], [0.66, 0.44], [0.28, 0.58], [0, 0.6]]
-    .map(([r, y]) => new THREE.Vector2(r * R, y * H));
-  return new THREE.LatheGeometry(pts, 8).toNonIndexed();
-}
-
-/** The tripod's hood (× size): a wide flat dome over a narrower belly, a little longer than wide. */
-function hoodGeometry(): THREE.BufferGeometry {
-  const H = B_BODY_H;
-  const pts = [[0, -0.5], [0.5, -0.46], [0.8, -0.22], [1, 0], [0.92, 0.16], [0.68, 0.34], [0.32, 0.48], [0, 0.5]]
-    .map(([r, y]) => new THREE.Vector2(r * 0.5, y * H));
-  const g = new THREE.LatheGeometry(pts, 10).toNonIndexed();
-  g.scale(1, 1, HOOD_LONG);
-  return g;
-}
-
-/** A leg segment: unit length hanging down from its top (y 0 to -1), unit thickness, tapering a little. */
-function segGeometry(taper: number): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(0.5, 0.5 * taper, 1, 6);
-  g.translate(0, -0.5, 0);
-  return g;
-}
+const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5;
+const LEG_SMALL = 0x4a4d51, LAMP = 0xfff0c8, AMBER = 0xffa31a, ALARM = 0xff3418, RAM = 0x3b3d40;
 
 function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, shadow = true): THREE.InstancedMesh {
   const m = new THREE.InstancedMesh(geo, mat, n);
@@ -52,57 +33,75 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, sh
   return m;
 }
 
+/** An instanced mesh with a running count for this frame. */
+class Pool {
+  n = 0;
+  constructor(readonly mesh: THREE.InstancedMesh, readonly cap: number) {}
+  put(m: THREE.Matrix4, c: THREE.Color) {
+    if (this.n >= this.cap) return;
+    this.mesh.setMatrixAt(this.n, m); this.mesh.setColorAt(this.n, c); this.n++;
+  }
+  finish() {
+    this.mesh.count = this.n; this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.n = 0;
+  }
+}
+
 export class RobotsDraw {
   readonly group = new THREE.Group();
-  readonly hubs: THREE.InstancedMesh;
-  readonly hoods: THREE.InstancedMesh;
-  readonly thighs: THREE.InstancedMesh;
-  readonly shins: THREE.InstancedMesh;
-  readonly eyes: THREE.InstancedMesh;
-  readonly guns: THREE.InstancedMesh;
+  private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool;
+  private saws: Pool; private buckets: Pool; private beams: Pool; private pipes: Pool; private knuckles: Pool; private lamps: Pool;
   private roll = new Float32Array(ROBOT_MAX);
+  private sawA = new Float32Array(ROBOT_MAX);
   private gen = new Uint32Array(ROBOT_MAX);
-  private q = new THREE.Quaternion(); private qa = new THREE.Quaternion();
+  private time = 0;
+  private q = new THREE.Quaternion(); private qa = new THREE.Quaternion(); private qb = new THREE.Quaternion();
   private p = new THREE.Vector3(); private s = new THREE.Vector3();
   private m = new THREE.Matrix4(); private ml = new THREE.Matrix4(); private m2 = new THREE.Matrix4(); private mb = new THREE.Matrix4();
-  private c = new THREE.Color();
-  private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3();
-  private bend = new THREE.Vector3(); private dir = new THREE.Vector3(); private tmp = new THREE.Vector3();
+  private c = new THREE.Color(); private white = new THREE.Color(1, 1, 1);
+  private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3(); private tip = new THREE.Vector3();
+  private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3(); private head = new THREE.Vector3();
+  private va = new THREE.Vector3(); private vb = new THREE.Vector3(); private d1 = new THREE.Vector3(); private d2 = new THREE.Vector3();
+  private n1 = new THREE.Vector3(); private n2 = new THREE.Vector3(); private sp = new THREE.Vector3(); private tg = new THREE.Vector3();
   private bx = new THREE.Vector3(); private by = new THREE.Vector3(); private bz = new THREE.Vector3();
-  private down = new THREE.Vector3(0, -1, 0);
   private ax = new THREE.Vector3(1, 0, 0); private ay = new THREE.Vector3(0, 1, 0); private az = new THREE.Vector3(0, 0, 1);
   private hips = new Float32Array(SMALL_LEGS * 3); private feet = new Float32Array(SMALL_LEGS * 3);
-  private h3: V3 = { x: 0, y: 0, z: 0 }; private f3: V3 = { x: 0, y: 0, z: 0 }; private k3: V3 = { x: 0, y: 0, z: 0 }; private b3: V3 = { x: 0, y: 0, z: 0 };
-  private nLeg = 0;
+  private h3: V3 = { x: 0, y: 0, z: 0 }; private k3: V3 = { x: 0, y: 0, z: 0 }; private t3: V3 = { x: 0, y: 0, z: 0 }; private f3: V3 = { x: 0, y: 0, z: 0 };
 
   constructor(private swarm: RobotSwarm) {
-    const panel = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.35, flatShading: true });
-    const leg = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.5, flatShading: true });
-    const eye = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    this.hubs = instanced(hubGeometry(), panel, ROBOT_MAX);
-    this.hoods = instanced(hoodGeometry(), panel, ROBOT_MAX);
-    this.thighs = instanced(segGeometry(0.85), leg, ROBOT_MAX * SMALL_LEGS);
-    this.shins = instanced(segGeometry(0.55), leg, ROBOT_MAX * SMALL_LEGS);
-    this.eyes = instanced(new THREE.BoxGeometry(1, 1, 1), eye, ROBOT_MAX, false);
-    this.guns = instanced(new THREE.BoxGeometry(1, 1, 1), leg, ROBOT_MAX);
-    this.group.add(this.hubs, this.hoods, this.thighs, this.shins, this.eyes, this.guns);
+    const paint = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.25, flatShading: true });
+    const lamp = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const pool = (geo: THREE.BufferGeometry, n: number, mat: THREE.Material = paint, shadow = true) => {
+      const mesh = instanced(geo, mat, n, shadow);
+      this.group.add(mesh);
+      return new Pool(mesh, n);
+    };
+    this.smallBodies = pool(smallBodyGeometry(), ROBOT_MAX);
+    this.midBodies = pool(midBodyGeometry(), ROBOT_MAX);
+    this.bigBodies = pool(bigBodyGeometry(), 256);
+    this.saws = pool(sawGeometry(), ROBOT_MAX);
+    this.buckets = pool(bucketGeometry(), 256 * WALK_LEGS);
+    this.beams = pool(beamGeometry(), ROBOT_MAX * 8);
+    this.pipes = pool(pipeGeometry(), ROBOT_MAX * 10);
+    this.knuckles = pool(knuckleGeometry(), ROBOT_MAX * 8);
+    this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), ROBOT_MAX * 3, lamp, false);
   }
 
   update(dt: number): void {
     const sw = this.swarm;
-    this.nLeg = 0; this.hubI = 0; this.eyeN = 0; this.hoodI = 0; this.gunI = 0;
+    this.time += dt;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
-      if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.roll[i] = 0; }
-      if (sw.kind[i] === BIG) this.tripod(i); else this.small(i, dt);
+      if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.roll[i] = 0; this.sawA[i] = 0; }
+      const k = sw.kind[i];
+      if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
-    const fin = (mesh: THREE.InstancedMesh, n: number) => { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; };
-    fin(this.hubs, this.hubI); fin(this.hoods, this.hoodI); fin(this.eyes, this.eyeN); fin(this.guns, this.gunI);
-    fin(this.thighs, this.nLeg); fin(this.shins, this.nLeg);
+    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.saws, this.buckets, this.beams, this.pipes, this.knuckles, this.lamps]) p.finish();
   }
 
-  /** One small robot. */
+  /** One small scrapper. */
   private small(i: number, dt: number) {
     const sw = this.swarm, v = sw.v;
     const { q, qa, p, s, m, c, tmp, hips, feet } = this;
@@ -147,21 +146,15 @@ export class RobotsDraw {
       qa.setFromAxisAngle(this.az, st === DOWN ? this.roll[i] * (sw.seed[i] < 0.5 ? 1 : -1) : sw.tumble[i]); q.multiply(qa);
     }
 
-    // Hub and eye.
+    // Hub and lamp.
     m.compose(p, q, s.set(S, S, S));
-    this.hubs.setMatrixAt(this.hubI, m);
-    c.setHex(PANEL).multiplyScalar(0.86 + sw.seed[i] * 0.2);
+    c.copy(this.white).multiplyScalar(0.86 + sw.seed[i] * 0.2);
     if (dead) c.multiplyScalar(0.4); else if (st === DOWN) c.multiplyScalar(0.85);
-    this.hubs.setColorAt(this.hubI, c);
-    this.ml.compose(tmp.set(0, HUB_H * 0.05, HUB_R * 0.93), qa.identity(), s.set(0.11, 0.05, 0.05));
-    this.eyes.setMatrixAt(this.eyeN, this.m2.multiplyMatrices(m, this.ml));
-    c.setHex(dead ? 0x201010 : EYE); if (st === FIRE && !dead) c.multiplyScalar(1.3);
-    this.eyes.setColorAt(this.eyeN, c);
-    this.hubI++; this.eyeN++;
+    this.smallBodies.put(m, c);
+    this.lamp(m, 0, HUB_H * 0.2, HUB_R * 0.97, 0.07, 0.045, 0.04, dead ? 0x201810 : st === FIRE ? ALARM : LAMP);
 
-    // Legs.
+    // Legs: thin pipes, knees up.
     const L1 = S_THIGH * S, L2 = S_SHIN * S;
-    c.setHex(LEG); if (dead) c.multiplyScalar(0.5);
     for (let k = 0; k < SMALL_LEGS; k++) {
       const a = Math.PI / 4 + k * (Math.PI / 2), sa = Math.sin(a), ca = Math.cos(a);
       if (standing) {
@@ -180,63 +173,180 @@ export class RobotsDraw {
       }
       // Knees up (off the hub's top side) and out along the leg's spoke.
       this.local(this.bend, null, sa * 0.6, 1, ca * 0.6);
-      this.leg(this.hip, this.foot, L1, L2, this.bend, S * 0.075, S * 0.06);
+      solveKnee(this.hip, this.foot, L1, L2, this.bend.x, this.bend.y, this.bend.z, this.knee);
+      c.setHex(LEG_SMALL); if (dead) c.multiplyScalar(0.5);
+      this.pipe(this.hip, this.knee, S * 0.075, c);
+      c.setHex(DARK); if (dead) c.multiplyScalar(0.5);
+      this.pipe(this.knee, this.foot, S * 0.055, c);
     }
   }
 
-  private hubI = 0; private eyeN = 0; private hoodI = 0; private gunI = 0;
-
-  /** One tripod: hood high up, eye and gun at the front, three long legs to its feet on the sand. */
-  private tripod(i: number) {
+  /** One medium cutter: chassis, saw, lamps, four crab legs with a ram on each thigh. */
+  private mid(i: number, dt: number) {
     const sw = this.swarm, v = sw.v;
-    const { q, qa, p, s, m, c, tmp } = this;
+    const { q, qa, p, s, m, c } = this;
     const st = sw.state[i], dead = st === DEAD, S = sw.size[i], h = sw.heading[i];
     let y = sw.hubY[i];
-    if (dead) {
-      // Folds down onto its legs and sinks at the end (only when the death physics isn't drawing it).
-      const k = Math.min(1, sw.stateTime[i] / COLLAPSE), gy = sw.py[i] + S * B_BODY_H * 0.5;
-      y = y + (gy - y) * k * k;
-      const left = v.robotBodyLife - sw.stateTime[i];
-      if (left < v.robotSinkTime) y -= (1 - Math.max(0, left) / Math.max(0.01, v.robotSinkTime)) * SINK * S;
-    }
-    let pitch = 0;
-    if (st === FIRE) pitch = Math.max(0, 0.06 - sw.fireClock[i] * 0.4); // recoil nod
-    q.setFromAxisAngle(this.ay, h);
-    qa.setFromAxisAngle(this.ax, -pitch); q.multiply(qa);
+    if (dead) y = this.collapse(i, y, MID_BODY_H);
+    // The saw attack reads from far off: it rears back with the blade spinning up, then pitches into the lunge.
+    let pitch = 0, spin = 9, alarm = false;
+    if (st === CUT) {
+      const t = sw.stateTime[i], w = Math.max(0.01, v.robotMidCutWindup), L = v.robotMidLungeTime;
+      if (t < w) { const k = t / w; pitch = -0.28 * k * (2 - k); spin = 10 + 60 * k; alarm = Math.sin(t * 30) > -0.3; }
+      else if (t < w + L) { pitch = 0.16; spin = 70; alarm = true; }
+      else { const k = Math.min(1, (t - w - L) / Math.max(0.05, v.robotMidCutRecover)); pitch = 0.16 * (1 - k); spin = 70 * (1 - k) + 9 * k; }
+    } else if (dead) spin = 0;
+    this.sawA[i] += spin * dt;
+    q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, pitch); q.multiply(qa);
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
-    this.hoods.setMatrixAt(this.hoodI, m);
-    c.setHex(PANEL_BIG).multiplyScalar(0.9 + sw.seed[i] * 0.2); if (dead) c.multiplyScalar(0.4);
-    this.hoods.setColorAt(this.hoodI, c);
-    this.hoodI++;
-    // Eye: a red slit across the front of the hood; gun: a barrel slung under the front.
-    this.ml.compose(tmp.set(0, B_BODY_H * 0.02, 0.5 * HOOD_LONG * 0.97), qa.identity(), s.set(0.42, 0.05, 0.05));
-    this.eyes.setMatrixAt(this.eyeN, this.m2.multiplyMatrices(m, this.ml));
-    c.setHex(dead ? 0x201010 : EYE); if (st === FIRE && !dead) c.multiplyScalar(1.4);
-    this.eyes.setColorAt(this.eyeN, c);
-    this.eyeN++;
-    this.ml.compose(tmp.set(0, -B_BODY_H * 0.3, 0.42), qa.identity(), s.set(0.09, 0.09, 0.75));
-    this.guns.setMatrixAt(this.gunI, this.m2.multiplyMatrices(m, this.ml));
-    c.setHex(GUN); if (dead) c.multiplyScalar(0.6);
-    this.guns.setColorAt(this.gunI, c);
-    this.gunI++;
+    c.copy(this.white).multiplyScalar(0.85 + sw.seed[i] * 0.2); if (dead) c.multiplyScalar(0.4);
+    this.midBodies.put(m, c);
+    // Blade.
+    this.qb.copy(q).multiply(qa.setFromAxisAngle(this.ax, this.sawA[i]));
+    this.local(this.tmp, p, MID_SAW_X * S, MID_SAW_Y * S, MID_SAW_Z * S);
+    this.m2.compose(this.tmp, this.qb, s.setScalar(S * MID_SAW_R));
+    c.copy(this.white); if (dead) c.multiplyScalar(0.5);
+    this.saws.put(this.m2, c);
+    // Lamps: two on the cab, a beacon on its mast (red and flashing while it winds up the saw).
+    const cabY = MID_BODY_H * 0.4 + 0.06, lampC = dead ? 0x201810 : alarm ? ALARM : LAMP;
+    this.lamp(m, 0.12, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
+    this.lamp(m, 0.2, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
+    const blink = Math.sin(this.time * 6 + sw.seed[i] * 20) > 0;
+    this.lamp(m, 0.16, MID_BODY_H * 0.4 + 0.24, 0.2, 0.05, 0.05, 0.05, dead ? 0x201810 : alarm ? ALARM : blink ? AMBER : 0x6a3a08);
     // Legs.
-    const H = sw.hubY[i] - sw.py[i], L1 = B_THIGH * H, L2 = B_SHIN * H;
-    c.setHex(LEG_BIG); if (dead) c.multiplyScalar(0.5);
-    for (let k = 0; k < BIG_LEGS; k++) {
-      const f = i * BIG_LEGS + k;
-      bigHip(p.x, y, p.z, S, h, k, this.h3);
-      this.f3.x = sw.footX[f]; this.f3.y = sw.footY[f]; this.f3.z = sw.footZ[f];
-      bigBend(h, k, this.b3);
-      solveKnee(this.h3, this.f3, L1, L2, this.b3.x, this.b3.y, this.b3.z, this.k3);
-      this.hip.set(this.h3.x, this.h3.y, this.h3.z); this.knee.set(this.k3.x, this.k3.y, this.k3.z); this.foot.set(this.f3.x, this.f3.y, this.f3.z);
-      this.seg(this.thighs, this.hip, this.knee, S * 0.1);
-      this.seg(this.shins, this.knee, this.foot, S * 0.08);
-      this.nLeg++;
+    const { hip, knee, tip, foot } = this;
+    for (let k = 0; k < WALK_LEGS; k++) {
+      sw.legPose(i, k, this.h3, this.k3, this.t3, this.f3, y);
+      hip.set(this.h3.x, this.h3.y, this.h3.z); knee.set(this.k3.x, this.k3.y, this.k3.z); foot.set(this.t3.x, this.t3.y, this.t3.z);
+      const a = h + MID_SPEC.angles[k];
+      this.sp.set(Math.sin(a), 0, Math.cos(a)); this.tg.set(Math.cos(a), 0, -Math.sin(a));
+      c.setHex(YELLOW); if (dead) c.multiplyScalar(0.45);
+      this.beam(this.beams, hip, knee, S * 0.07, S * 0.09, this.tg, c);
+      c.setHex(GREY); if (dead) c.multiplyScalar(0.45);
+      this.beam(this.beams, knee, foot, S * 0.05, S * 0.065, this.tg, c);
+      c.setHex(DARK); if (dead) c.multiplyScalar(0.5);
+      this.knuckle(knee, S * 0.09, c);
+      // Thigh ram: from the chassis above the hip to the thigh's top side.
+      this.d1.subVectors(knee, hip).normalize();
+      this.upNormal(this.d1, this.n1);
+      this.va.copy(hip).addScaledVector(this.ay, S * 0.1).addScaledVector(this.sp, -S * 0.04);
+      this.vb.copy(hip).addScaledVector(this.d1, hip.distanceTo(knee) * 0.6).addScaledVector(this.n1, S * 0.06);
+      this.ram(this.va, this.vb, S * 0.032, dead);
+      void tip;
     }
   }
 
-  /** Hub orientation from its up axis and a facing (x, z): +Y up, +Z the facing made square to up. */
+  /** One big excavator: chassis, lamps, four arm legs (boom, stick, three rams, a hose, bucket). */
+  private big(i: number) {
+    const sw = this.swarm;
+    const { q, qa, p, s, m, c } = this;
+    const st = sw.state[i], dead = st === DEAD, S = sw.size[i], h = sw.heading[i], H = sw.heightOf(i);
+    let y = sw.hubY[i];
+    if (dead) y = this.collapse(i, y, BIG_BODY_H);
+    let pitch = 0;
+    if (st === FIRE) pitch = Math.max(0, 0.05 - sw.fireClock[i] * 0.3); // recoil nod
+    q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, -pitch); q.multiply(qa);
+    p.set(sw.px[i], y, sw.pz[i]);
+    m.compose(p, q, s.set(S, S, S));
+    c.copy(this.white).multiplyScalar(0.88 + sw.seed[i] * 0.16); if (dead) c.multiplyScalar(0.4);
+    this.bigBodies.put(m, c);
+    // Lamps: two work lights on the cab, one under the gun, a turning beacon.
+    const cabY = BIG_BODY_H * 0.3 + 0.12, off = dead ? 0x201810 : 0;
+    this.lamp(m, 0.14, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
+    this.lamp(m, 0.26, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
+    this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (st === FIRE ? ALARM : LAMP));
+    const beat = (Math.sin(this.time * 5 + sw.seed[i] * 20) + 1) * 0.5;
+    this.c.setHex(AMBER).multiplyScalar(0.35 + 0.65 * beat);
+    this.lamp(m, 0.2, BIG_BODY_H * 0.3 + 0.33, 0.24, 0.045, 0.05, 0.045, off || this.c.getHex());
+    // Arm legs.
+    const { hip, knee, tip, foot, d1, d2, n1, n2, sp, tg, va, vb } = this;
+    const L1 = BIG_SPEC.L1 * H, L2 = BIG_SPEC.L2 * H, bucketH = BIG_SPEC.toe * H;
+    for (let k = 0; k < WALK_LEGS; k++) {
+      sw.legPose(i, k, this.h3, this.k3, this.t3, this.f3, y);
+      hip.set(this.h3.x, this.h3.y, this.h3.z); knee.set(this.k3.x, this.k3.y, this.k3.z);
+      tip.set(this.t3.x, this.t3.y, this.t3.z); foot.set(this.f3.x, this.f3.y, this.f3.z);
+      const a = h + BIG_SPEC.angles[k];
+      sp.set(Math.sin(a), 0, Math.cos(a)); tg.set(Math.cos(a), 0, -Math.sin(a));
+      d1.subVectors(knee, hip).normalize(); d2.subVectors(tip, knee).normalize();
+      this.upNormal(d1, n1);
+      // The stick's outer side (away from the body), for the bucket ram.
+      n2.crossVectors(tg, d2).normalize(); if (n2.dot(sp) < 0) n2.negate();
+      const dim = dead ? 0.45 : 1;
+      // Boom: from the hip up to the elbow, deep in its own plane. Stick: from its head (past the elbow) to the bucket.
+      c.setHex(YELLOW).multiplyScalar(dim);
+      this.beam(this.beams, hip, knee, S * 0.085, S * 0.13, tg, c);
+      this.head.copy(knee).addScaledVector(d2, -0.09 * H);
+      c.setHex(YELLOW_DIRTY).multiplyScalar(dim);
+      this.beam(this.beams, this.head, tip, S * 0.065, S * 0.095, tg, c);
+      c.setHex(DARK).multiplyScalar(dim);
+      this.knuckle(knee, S * 0.11, c);
+      this.knuckle(tip, S * 0.07, c);
+      // Rams: boom lift under the boom from the chassis; stick ram on top of the boom to the stick's head; bucket ram
+      // down the stick's outside.
+      va.copy(hip).addScaledVector(this.ay, -S * 0.12).addScaledVector(sp, -S * 0.05);
+      vb.copy(hip).addScaledVector(d1, L1 * 0.42).addScaledVector(n1, -S * 0.07);
+      this.ram(va, vb, S * 0.04, dead);
+      va.copy(hip).addScaledVector(d1, L1 * 0.5).addScaledVector(n1, S * 0.08);
+      vb.copy(this.head).addScaledVector(n2, S * 0.03);
+      this.ram(va, vb, S * 0.035, dead);
+      va.copy(knee).addScaledVector(d2, L2 * 0.12).addScaledVector(n2, S * 0.065);
+      vb.copy(tip).addScaledVector(d2, -L2 * 0.1).addScaledVector(n2, S * 0.065);
+      this.ram(va, vb, S * 0.03, dead);
+      // A hose along the boom's top.
+      va.copy(hip).addScaledVector(n1, S * 0.075); vb.copy(knee).addScaledVector(n1, S * 0.06);
+      c.setHex(BLACK); this.pipe(va, vb, S * 0.018, c);
+      // Bucket: hangs from the stick's end, teeth down in the sand, curling as the leg swings over.
+      const f = i * WALK_LEGS + k, t = sw.stepT[f];
+      const curl = t >= 0 ? Math.sin(Math.PI * t) * 0.9 : 0;
+      this.basis(this.ay, sp.x, sp.z);
+      this.q.multiply(qa.setFromAxisAngle(this.ax, -curl));
+      this.m2.compose(tip, this.q, s.setScalar(bucketH));
+      c.copy(this.white).multiplyScalar(dead ? 0.45 : 0.9 + sw.seed[i] * 0.1);
+      this.buckets.put(this.m2, c);
+      // The body's frame for the lamps has been overwritten: restore it for the next leg's use of q (none).
+      void foot;
+    }
+    // Leave this.q as the body's (nothing after this reads it, but keep it sane).
+    this.q.setFromAxisAngle(this.ay, h);
+  }
+
+  /** A dead walker's body height: settling onto its legs over COLLAPSE seconds, sinking at the end. */
+  private collapse(i: number, y: number, bodyH: number): number {
+    const sw = this.swarm, v = sw.v, S = sw.size[i];
+    const k = Math.min(1, sw.stateTime[i] / COLLAPSE), gy = sw.py[i] + S * bodyH * 0.5;
+    y = y + (gy - y) * k * k;
+    const left = v.robotBodyLife - sw.stateTime[i];
+    if (left < v.robotSinkTime) y -= (1 - Math.max(0, left) / Math.max(0.01, v.robotSinkTime)) * SINK * S;
+    return y;
+  }
+
+  /** A hydraulic ram from a to b: a dark barrel over the first 60%, a chrome rod out of it. */
+  private ram(a: THREE.Vector3, b: THREE.Vector3, r: number, dead: boolean) {
+    const { c, tmp2 } = this;
+    tmp2.copy(a).lerp(b, 0.6);
+    c.setHex(RAM); if (dead) c.multiplyScalar(0.5);
+    this.pipe(a, tmp2, r * 2, c);
+    tmp2.copy(a).lerp(b, 0.45);
+    c.setHex(CHROME); if (dead) c.multiplyScalar(0.5);
+    this.pipe(tmp2, b, r, c);
+  }
+
+  /** A lamp in a body's frame m (local metres × the body's scale): an unlit box of colour hex. */
+  private lamp(m: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, hex: number) {
+    this.ml.compose(this.tmp.set(x, y, z), this.qa.identity(), this.s.set(w, h, d));
+    this.mb.multiplyMatrices(m, this.ml);
+    this.lamps.put(this.mb, this.c.setHex(hex));
+  }
+
+  /** The up-facing normal of a segment direction d within its leg's plane (the plane holding d and world up). */
+  private upNormal(d: THREE.Vector3, out: THREE.Vector3) {
+    out.copy(this.ay).addScaledVector(d, -d.y);
+    if (out.lengthSq() < 1e-6) out.set(1, 0, 0);
+    out.normalize();
+  }
+
+  /** Orientation from an up axis and a facing (x, z) into this.q: +Y up, +Z the facing made square to up. */
   private basis(up: THREE.Vector3, fx: number, fz: number) {
     const { bx, bz } = this;
     bz.set(fx, 0, fz).addScaledVector(up, -(fx * up.x + fz * up.z));
@@ -247,29 +357,38 @@ export class RobotsDraw {
     this.q.setFromRotationMatrix(this.mb);
   }
 
-  /** A point given in the hub's frame (metres) to world: rotated by the hub, plus origin (null: a direction). */
+  /** A point given in the hub's frame (metres) to world: rotated by this.q, plus origin (null: a direction). */
   private local(out: THREE.Vector3, origin: THREE.Vector3 | null, x: number, y: number, z: number) {
     out.set(x, y, z).applyQuaternion(this.q);
     if (origin) out.add(origin);
   }
 
-  /** Two-bone leg from hip to foot (clamped to reach), the knee pushed along bend. */
-  private leg(hip: THREE.Vector3, foot: THREE.Vector3, L1: number, L2: number, bend: THREE.Vector3, t1: number, t2: number) {
-    solveKnee(hip, foot, L1, L2, bend.x, bend.y, bend.z, this.knee);
-    this.seg(this.thighs, hip, this.knee, t1);
-    this.seg(this.shins, this.knee, foot, t2);
-    this.nLeg++;
+  /** A box beam from a to b, w across (along side) and d deep, narrowing to taper at b. */
+  private beam(pool: Pool, a: THREE.Vector3, b: THREE.Vector3, w: number, d: number, side: THREE.Vector3, c: THREE.Color) {
+    const { by, bx, bz, m } = this;
+    by.subVectors(b, a);
+    const len = by.length();
+    if (len < 1e-5) return;
+    by.multiplyScalar(1 / len);
+    bx.copy(side).addScaledVector(by, -side.dot(by));
+    if (bx.lengthSq() < 1e-6) bx.set(1, 0, 0).addScaledVector(by, -by.x);
+    bx.normalize();
+    bz.crossVectors(bx, by);
+    m.makeBasis(bx.multiplyScalar(w), by.multiplyScalar(len), bz.multiplyScalar(d));
+    m.setPosition(a);
+    pool.put(m, c);
   }
 
-  private seg(mesh: THREE.InstancedMesh, a: THREE.Vector3, b: THREE.Vector3, thick: number) {
-    const { dir, s, m } = this;
-    dir.subVectors(b, a);
-    const len = dir.length();
-    if (len > 1e-6) dir.multiplyScalar(1 / len); else dir.set(0, -1, 0);
-    this.qa.setFromUnitVectors(this.down, dir);
-    s.set(thick, Math.max(1e-4, len), thick);
-    m.compose(a, this.qa, s);
-    mesh.setMatrixAt(this.nLeg, m);
-    mesh.setColorAt(this.nLeg, this.c);
+  /** A round pipe from a to b of diameter dia. */
+  private pipe(a: THREE.Vector3, b: THREE.Vector3, dia: number, c: THREE.Color) {
+    this.tmp.set(0, 1, 0);
+    if (Math.abs(b.y - a.y) > 0.9 * a.distanceTo(b)) this.tmp.set(1, 0, 0);
+    this.beam(this.pipes, a, b, dia, dia, this.tmp, c);
+  }
+
+  /** A knuckle (pin housing) at p. */
+  private knuckle(at: THREE.Vector3, size: number, c: THREE.Color) {
+    this.m.compose(at, this.qa.identity(), this.s.setScalar(size));
+    this.knuckles.put(this.m, c);
   }
 }

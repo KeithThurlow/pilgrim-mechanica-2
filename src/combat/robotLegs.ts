@@ -1,8 +1,10 @@
 // Robot shapes and leg maths, pure numbers (no drawing): the sim, the drawer, the hit test, the ragdolls and the
 // checks all build from these, so what you see is what gets hit and what falls over.
-// Small ones (Keith 2026-10-24): a low hub with four legs splayed out on the diagonals like a starfish, scuttling
-// in any direction without turning. Big ones: War of the Worlds tripods, a small body high up on three very long
-// thin legs that step one at a time.
+// Keith 2026-10-24: the robots are autonomous terraforming machines in three sizes.
+// Small scrappers: a low hub with four legs splayed out on the diagonals like a starfish, scuttling in any direction
+// without turning. Medium cutters: a crab-like chassis on four legs, knees up over the body, a circular saw at the
+// front and a scrap bin on its back. Big excavators: a small chassis high up on four very long legs that are
+// excavator arms (boom, stick and bucket; the bucket is the foot), stepping one at a time.
 
 /** Small hub (× size): radius, thickness, centre height when standing; hips on the rim, feet out at FOOT_R. */
 export const HUB_R = 0.24, HUB_H = 0.15, HUB_Y = 0.3;
@@ -11,14 +13,32 @@ export const HIP_R = 0.2, FOOT_R = 0.62, S_THIGH = 0.3, S_SHIN = 0.42;
 export const SMALL_LEGS = 4;
 export const SMALL_PHASE = [0, Math.PI, 0, Math.PI];
 
-/** Tripod (big): body radius and height × size; hips × size out from the centre; feet × height out; legs × height. */
-export const BIG_LEGS = 3;
-export const B_BODY_H = 0.5, B_HIP_R = 0.32, B_FOOT_R = 0.42, B_THIGH = 0.5, B_SHIN = 0.78;
+/** Legs per walker (medium and big): planted feet that step (the sim keeps them). */
+export const WALK_LEGS = 4;
+
+/**
+ * A walker's legs. Hips sit on the chassis at `angles` from the heading, `hipR` × size out and `hipDrop` × size below
+ * the body centre; feet want to be `footR` × height out on the same spoke. The leg is two bones (`L1`, `L2` × height:
+ * thigh and shin, or boom and stick) with the knee pushed out along the spoke and up by `bendUp`; the second bone ends
+ * `toe` × height above the foot (an excavator's bucket hangs below it; 0 is a pointed foot). Lengths are measured
+ * from the body's height above the ground, so a taller one has longer legs.
+ */
+export interface WalkSpec { angles: number[]; hipR: number; hipDrop: number; footR: number; L1: number; L2: number; toe: number; bendUp: number }
+
+const DEG = Math.PI / 180;
+/** Medium cutters: legs out to the sides like a crab (front and rear pairs), the front left clear for the saw. */
+export const MID_SPEC: WalkSpec = { angles: [55, 125, 235, 305].map((d) => d * DEG), hipR: 0.34, hipDrop: 0.06, footR: 1.25, L1: 0.8, L2: 1.15, toe: 0, bendUp: 0.9 };
+/** Big excavators: an X of four booms off the chassis corners, sticks dropping steeply to buckets planted on the sand. */
+export const BIG_SPEC: WalkSpec = { angles: [45, 135, 225, 315].map((d) => d * DEG), hipR: 0.4, hipDrop: 0.1, footR: 0.82, L1: 0.78, L2: 0.95, toe: 0.13, bendUp: 0.45 };
+
+/** Small body (centre to a cutting disc's edge, × size): for the drawer and sparks. */
+export const SMALL_DISC = 0.33;
+/** Medium body dims (× size): saw centre ahead of and beside the body centre, saw radius; big gun muzzle ahead. */
+export const MID_SAW_Z = 0.62, MID_SAW_X = -0.2, MID_SAW_Y = -0.02, MID_SAW_R = 0.27;
+export const MID_BODY_H = 0.24, BIG_BODY_H = 0.3;
 
 /** Angle of small leg k (radians, 0 = +Z) for a robot facing h. */
 export const smallLegAngle = (h: number, k: number) => h + Math.PI / 4 + k * (Math.PI / 2);
-/** Angle of tripod leg k for a robot facing h (one leg straight back, two forward on the sides). */
-export const bigLegAngle = (h: number, k: number) => h + Math.PI / 3 + k * ((Math.PI * 2) / 3);
 
 export interface V3 { x: number; y: number; z: number }
 
@@ -67,19 +87,32 @@ export function smallLegs(x: number, y: number, z: number, S: number, h: number,
   }
 }
 
-/** Height of a tripod's body centre above the ground for body size S (scaled from the height slider at the size slider). */
-export const bigHeight = (S: number, heightAt: number, sizeAt: number) => heightAt * (S / Math.max(0.1, sizeAt));
+/** Height of a walker's body centre above the ground for body size S (scaled from the height slider at the size slider). */
+export const walkHeight = (S: number, heightAt: number, sizeAt: number) => heightAt * (S / Math.max(0.1, sizeAt));
 
-/** A tripod's hip k (world) for body centre (x, y, z), facing h, body size S. */
-export function bigHip(x: number, y: number, z: number, S: number, h: number, k: number, out: V3): V3 {
-  const a = bigLegAngle(h, k);
-  out.x = x + Math.sin(a) * B_HIP_R * S; out.y = y - B_BODY_H * S * 0.35; out.z = z + Math.cos(a) * B_HIP_R * S;
+/** A walker's hip k (world) for body centre (x, y, z), facing h, body size S. */
+export function walkHip(spec: WalkSpec, x: number, y: number, z: number, S: number, h: number, k: number, out: V3): V3 {
+  const a = h + spec.angles[k];
+  out.x = x + Math.sin(a) * spec.hipR * S; out.y = y - spec.hipDrop * S; out.z = z + Math.cos(a) * spec.hipR * S;
   return out;
 }
 
-/** A tripod's knee bends out from the body and up: the stilt's high joint. */
-export function bigBend(h: number, k: number, out: V3): V3 {
-  const a = bigLegAngle(h, k);
-  out.x = Math.sin(a); out.y = 0.6; out.z = Math.cos(a);
+/** Where foot k wants to stand (x, z) for a walker at (x, z) of height H facing h. */
+export function walkHome(spec: WalkSpec, x: number, z: number, H: number, h: number, k: number, out: V3): V3 {
+  const a = h + spec.angles[k];
+  out.x = x + Math.sin(a) * spec.footR * H; out.z = z + Math.cos(a) * spec.footR * H;
   return out;
+}
+
+/**
+ * Leg k's knee (or elbow) and the end of its second bone (`tip`: the stick's end above the bucket, or the foot itself)
+ * for a hip and a foot on the sand. The knee goes out along the hip's spoke and up. Returns the hip-tip distance over
+ * the reach (above 1: the foot is out of reach and the tip was pulled in).
+ */
+export function walkLeg(spec: WalkSpec, hip: V3, foot: V3, H: number, h: number, k: number, knee: V3, tip: V3): number {
+  const a = h + spec.angles[k];
+  tip.x = foot.x; tip.y = foot.y + spec.toe * H; tip.z = foot.z;
+  const L1 = spec.L1 * H, L2 = spec.L2 * H;
+  const d = solveKnee(hip, tip, L1, L2, Math.sin(a), spec.bendUp, Math.cos(a), knee);
+  return d / (L1 + L2);
 }

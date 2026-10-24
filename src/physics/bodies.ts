@@ -1,8 +1,8 @@
 // Ragdoll layouts for the death physics (parts in the body's own frame: origin at the feet, facing +Z, +X left).
 import type { PartSpec, JointSpec } from "./deaths";
-import { BIG, type RobotSwarm } from "../combat/robots";
+import { BIG, SMALL, type RobotSwarm } from "../combat/robots";
 import {
-  HUB_R, HUB_H, HUB_Y, S_THIGH, S_SHIN, SMALL_LEGS, BIG_LEGS, B_BODY_H, B_THIGH, B_SHIN, bigHip, bigBend, solveKnee, smallLegs, type V3,
+  HUB_R, HUB_H, HUB_Y, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, BIG_BODY_H, MID_BODY_H, solveKnee, smallLegs, type V3,
 } from "../combat/robotLegs";
 
 const SKIN = 0xb08060, DARK = 0x3a3128;
@@ -48,30 +48,34 @@ function segPart(a: number[], b: number[], t: number, color: number, mass?: numb
 }
 
 /**
- * Robot i's ragdoll in its pose as it died, in its own frame (origin on the sand under it, facing +Z): the hub (small,
- * four legs) or the high hood (tripods, three long legs), each leg a thigh and a shin on loose joints. A tripod falls
- * from its full height, legs and all.
+ * Robot i's ragdoll in its pose as it died, in its own frame (origin on the sand under it, facing +Z), each joint
+ * loose: a small one's hub and four legs (thigh and shin); a medium one's chassis and four legs; a big one's high
+ * chassis and four arm legs as boom, stick and bucket, falling from its full height.
  */
 export function robotRagdoll(sw: RobotSwarm, i: number, body: number, leg: number): { parts: PartSpec[]; joints: JointSpec[] } {
   const S = sw.size[i], h = sw.heading[i], ox = sw.px[i], oy = sw.py[i], oz = sw.pz[i];
   const sh = Math.sin(h), ch = Math.cos(h);
   // World to the body's own frame (yaw undone).
-  const toLocal = (x: number, y: number, z: number) => { const dx = x - ox, dz = z - oz; return [dx * ch - dz * sh, y - oy, dx * sh + dz * ch]; };
+  const toLocal = (p: V3): [number, number, number] => { const dx = p.x - ox, dz = p.z - oz; return [dx * ch - dz * sh, p.y - oy, dx * sh + dz * ch]; };
   const parts: PartSpec[] = [], joints: JointSpec[] = [];
-  const hip: V3 = { x: 0, y: 0, z: 0 }, knee: V3 = { x: 0, y: 0, z: 0 }, foot: V3 = { x: 0, y: 0, z: 0 }, bend: V3 = { x: 0, y: 0, z: 0 };
-  if (sw.kind[i] === BIG) {
-    const H = sw.hubY[i] - oy;
-    parts.push({ half: [0.45 * S, B_BODY_H * 0.4 * S, 0.5 * S], at: [0, H, 0], color: body, mass: 900 });
-    for (let k = 0; k < BIG_LEGS; k++) {
-      const f = i * BIG_LEGS + k;
-      bigHip(ox, sw.hubY[i], oz, S, h, k, hip);
-      foot.x = sw.footX[f]; foot.y = sw.footY[f]; foot.z = sw.footZ[f];
-      bigBend(h, k, bend);
-      solveKnee(hip, foot, B_THIGH * H, B_SHIN * H, bend.x, bend.y, bend.z, knee);
-      const a = toLocal(hip.x, hip.y, hip.z), kn = toLocal(knee.x, knee.y, knee.z), ft = toLocal(foot.x, foot.y, foot.z);
-      const thigh = parts.length;
-      parts.push(segPart(a, kn, 0.1 * S, leg, 500), segPart(kn, ft, 0.08 * S, leg, 500));
-      joints.push({ a: 0, b: thigh, at: a as [number, number, number] }, { a: thigh, b: thigh + 1, at: kn as [number, number, number] });
+  const hip: V3 = { x: 0, y: 0, z: 0 }, knee: V3 = { x: 0, y: 0, z: 0 }, tip: V3 = { x: 0, y: 0, z: 0 }, foot: V3 = { x: 0, y: 0, z: 0 };
+  const kind = sw.kind[i];
+  if (kind !== SMALL) {
+    const big = kind === BIG, H = sw.hubY[i] - oy;
+    parts.push(big
+      ? { half: [0.38 * S, BIG_BODY_H * 0.5 * S, 0.45 * S], at: [0, H, 0], color: body, mass: 900 }
+      : { half: [0.3 * S, MID_BODY_H * 0.5 * S, 0.4 * S], at: [0, H, 0], color: body, mass: 900 });
+    for (let k = 0; k < WALK_LEGS; k++) {
+      sw.legPose(i, k, hip, knee, tip, foot);
+      const a = toLocal(hip), kn = toLocal(knee), tp = toLocal(tip), ft = toLocal(foot);
+      const first = parts.length;
+      parts.push(segPart(a, kn, (big ? 0.13 : 0.07) * S, leg, 500), segPart(kn, tp, (big ? 0.1 : 0.055) * S, leg, 500));
+      joints.push({ a: 0, b: first, at: a }, { a: first, b: first + 1, at: kn });
+      if (big) {
+        // The bucket: a squat block from the stick's end down to the sand.
+        parts.push(segPart(tp, ft, 0.26 * S, 0x4a4840, 700));
+        joints.push({ a: first + 1, b: first + 2, at: tp });
+      }
     }
     return { parts, joints };
   }
@@ -84,10 +88,10 @@ export function robotRagdoll(sw: RobotSwarm, i: number, body: number, leg: numbe
     foot.x = feet[k * 3]; foot.y = feet[k * 3 + 1]; foot.z = feet[k * 3 + 2];
     const r = Math.hypot(hip.x, hip.z) || 1;
     solveKnee(hip, foot, S_THIGH * S, S_SHIN * S, (hip.x / r) * 0.6, 1, (hip.z / r) * 0.6, knee);
-    const a = [hip.x, hip.y, hip.z], kn = [knee.x, knee.y, knee.z], ft = [foot.x, foot.y, foot.z];
+    const a: [number, number, number] = [hip.x, hip.y, hip.z], kn: [number, number, number] = [knee.x, knee.y, knee.z], ft = [foot.x, foot.y, foot.z];
     const thigh = parts.length;
     parts.push(segPart(a, kn, 0.075 * S, leg), segPart(kn, ft, 0.06 * S, leg));
-    joints.push({ a: 0, b: thigh, at: a as [number, number, number] }, { a: thigh, b: thigh + 1, at: kn as [number, number, number] });
+    joints.push({ a: 0, b: thigh, at: a }, { a: thigh, b: thigh + 1, at: kn });
   }
   return { parts, joints };
 }

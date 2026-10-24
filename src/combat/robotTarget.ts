@@ -1,10 +1,11 @@
 // The robot swarm as one target for the battlefield: rounds test every robot's body through the swarm's spatial
-// hit test (hubs, tripod bodies and legs), and the nearest one hit takes the damage (steel: rounds spark off them);
-// a tripod hit in a leg takes only a share.
+// hit test (hubs, medium and big chassis, the big ones' arm legs), and the nearest one hit takes the damage (steel:
+// rounds spark off them); a big one hit in an arm leg takes only a share. Small ones are light (rounds carry on
+// through, splash hurts them fully); medium and big ones stop rounds; medium ones take a share of splash, big ones none.
 import * as THREE from "three/webgpu";
 import type { Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import { DOWN, SMALL, type RobotSwarm } from "./robots";
+import { DOWN, SMALL, MID, type RobotSwarm } from "./robots";
 
 export class RobotTarget implements Hittable {
   readonly surface: HitSurface = "metal";
@@ -23,25 +24,31 @@ export class RobotTarget implements Hittable {
     return h ? h.dist : -1;
   }
 
-  /** Small robots are light: a round carries on through one; the big ones stop it. */
+  /** Small robots are light: a round carries on through one; medium and big ones stop it. */
   canPierce() { return this.last >= 0 && this.swarm.kind[this.last] === SMALL; }
 
-  /** Small robots whose hub is within radius of the point (the big ones shrug off splash). */
+  /**
+   * Robots whose body is within radius of the point: small ones take it all, medium ones a share (robotMidSplash,
+   * measured to the chassis' edge), big ones shrug it off.
+   */
   splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
-    const sw = this.swarm, r2 = radius * radius;
+    const sw = this.swarm, midK = sw.v.robotMidSplash;
     let n = 0;
     for (let i = 0; i < sw.hi; i++) {
-      if (sw.state[i] >= DOWN || sw.kind[i] !== SMALL) continue;
+      if (sw.state[i] >= DOWN) continue;
+      const kind = sw.kind[i];
+      if (kind !== SMALL && (kind !== MID || midK <= 0)) continue;
       const dx = sw.px[i] - at.x, dy = sw.hubY[i] - at.y, dz = sw.pz[i] - at.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 > r2) continue;
-      if (sw.damage(i, damage * (1 - 0.5 * Math.sqrt(d2) / radius), dir.x, dir.z)) this.kills++;
+      const d = Math.max(0, Math.sqrt(dx * dx + dy * dy + dz * dz) - (kind === MID ? sw.size[i] * 0.4 : 0));
+      if (d > radius) continue;
+      const k = kind === MID ? midK : 1;
+      if (sw.damage(i, damage * k * (1 - (0.5 * d) / radius), dir.x, dir.z)) this.kills++;
       n++;
     }
     return n;
   }
 
-  /** A round into a tripod's leg does only part of its damage (robotBigLegDamage). */
+  /** A round into a big one's arm leg does only part of its damage (robotBigLegDamage). */
   damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3) {
     if (this.last < 0) return;
     const k = this.lastLeg ? this.swarm.v.robotBigLegDamage : 1;
