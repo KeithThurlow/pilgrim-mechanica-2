@@ -80,3 +80,6 @@ body.selecting #view canvas { cursor: crosshair; }
   font: 12px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: #1b1206; background: var(--accent);
   padding: 4px 10px; border-radius: 4px;
 }
+
+/* Combat labs: a red edge when the player's mech takes hits */
+.hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px 30px rgba(200, 40, 20, 0.85); transition: opacity 0.08s; }

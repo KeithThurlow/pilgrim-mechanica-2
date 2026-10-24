@@ -37,9 +37,9 @@ export const MINIGUN_FX_PARAMS: Param[] = [
 ];
 
 /** What a round struck: the sand, or something steel (a wreck, a hull). */
-export type HitSurface = "sand" | "metal";
+export type HitSurface = "sand" | "metal" | "flesh";
 
-const TRACERS = 48, BALLS = 2400, SPARKS = 600, GRIT = 600, CASINGS = 240;
+const TRACERS = 160, FLASHES = 24, BALLS = 2400, SPARKS = 600, GRIT = 600, CASINGS = 240;
 
 interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3 }
 /** An opaque low-poly dust ball. low: hugs the ground and sinks back into it; else a kicked-up puff that rises and slows. */
@@ -61,14 +61,17 @@ export class MinigunFx {
   private casings: THREE.InstancedMesh;
   private casingBits: Bit[] = [];
   private casingI = 0;
-  private flashes: { mesh: THREE.Object3D; light: THREE.PointLight; t: number }[] = [];
+  /** Muzzle flashes by gun slot: 0 and 1 are the player's guns (with a light); the rest are other guns (no light, so the shaders never change). */
+  private flashes: { mesh: THREE.Object3D; light: THREE.PointLight | null; t: number }[] = [];
   private round = 0;
   /** Called where a round hits, with what it hit, and where a casing first lands (for sound). */
   onHit: ((at: THREE.Vector3, surface: HitSurface) => void) | null = null;
   /** A round into the sand: where, its flat travel direction, and the hit size (the dust system makes the dust). */
   onSandHit: ((at: THREE.Vector3, dir: THREE.Vector3, k: number) => void) | null = null;
   /** Hits so far by surface (HUD and tests). */
-  hits = { sand: 0, metal: 0 };
+  hits = { sand: 0, metal: 0, flesh: 0 };
+  /** A round into a body (bandits): where and its flat travel; the battlefield makes a small dust burst. */
+  onFleshHit: ((at: THREE.Vector3, dir: THREE.Vector3) => void) | null = null;
   onCasingLand: ((at: THREE.Vector3) => void) | null = null;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -105,13 +108,14 @@ export class MinigunFx {
 
     const flashGeo = new THREE.PlaneGeometry(1, 1);
     const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd38a, toneMapped: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < FLASHES; i++) {
       const mesh = new THREE.Group();
       for (const r of [0, Math.PI / 2]) { const p = new THREE.Mesh(flashGeo, flashMat); p.rotation.z = r; p.scale.set(0.35, 1, 1); p.rotation.x = Math.PI / 2; mesh.add(p); }
       const face = new THREE.Mesh(flashGeo, flashMat); face.scale.setScalar(0.7); mesh.add(face);
       mesh.visible = false;
-      const light = new THREE.PointLight(0xffb15a, 0, 14, 2);
-      this.group.add(mesh, light);
+      const light = i < 2 ? new THREE.PointLight(0xffb15a, 0, 14, 2) : null;
+      this.group.add(mesh);
+      if (light) this.group.add(light);
       this.flashes.push({ mesh, light, t: 0 });
     }
   }
@@ -120,17 +124,16 @@ export class MinigunFx {
    * One round from a muzzle to where it strikes (already spread). surface and normal: what it struck there.
    * eject: casing port; outboard: unit direction.
    */
-  shot(gun: 0 | 1, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3, outboard: THREE.Vector3, surface: HitSurface = "sand", normal?: THREE.Vector3) {
+  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1) {
     this.round++;
-    const f = this.flashes[gun];
+    const f = this.flashes[Math.max(0, Math.min(FLASHES - 1, gun))];
     f.t = 0.045;
     f.mesh.visible = this.v.flashSize > 0;
     f.mesh.position.copy(muzzle);
     f.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
     f.mesh.rotateZ(Math.random() * Math.PI);
-    f.mesh.scale.setScalar(this.v.flashSize * (0.7 + Math.random() * 0.6));
-    f.light.position.copy(muzzle).addScaledVector(dir, 0.4);
-    f.light.intensity = this.v.flashLight;
+    f.mesh.scale.setScalar(this.v.flashSize * flashScale * (0.7 + Math.random() * 0.6));
+    if (f.light) { f.light.position.copy(muzzle).addScaledVector(dir, 0.4); f.light.intensity = this.v.flashLight; }
 
     // Every round flies (it times the hit); only every Nth shows as a tracer.
     const t = this.tracers.find((x) => !x.live) ?? this.tracers[this.round % TRACERS];
@@ -138,6 +141,7 @@ export class MinigunFx {
     t.surface = surface; t.normal.copy(normal ?? UP);
     t.mesh.visible = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0;
 
+    if (!eject || !outboard) return;
     const c = this.casingBits[this.casingI++ % CASINGS];
     c.pos.copy(eject);
     c.vel.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));
@@ -151,6 +155,7 @@ export class MinigunFx {
     const k = this.v.hitDust;
     if (k <= 0) return;
     if (surface === "metal") this.steel(at, dir, normal, k);
+    else if (surface === "flesh") this.onFleshHit?.(at, new THREE.Vector3(dir.x, 0, dir.z).normalize());
     else this.sand(at, dir, k);
   }
 
@@ -208,7 +213,7 @@ export class MinigunFx {
   update(dt: number) {
     for (const f of this.flashes) {
       f.t -= dt;
-      if (f.t <= 0) { f.mesh.visible = false; f.light.intensity = 0; }
+      if (f.t <= 0) { f.mesh.visible = false; if (f.light) f.light.intensity = 0; }
     }
     for (const t of this.tracers) {
       if (!t.live) continue;

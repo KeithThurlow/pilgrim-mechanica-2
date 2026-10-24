@@ -10,9 +10,9 @@ import type { Ground } from "../mech/walker";
 export const INFANTRY_DEFAULTS = {
   runSpeed: 4.5,
   speedJitter: 0.15,
-  accel: 6,
-  turnRate: 540,
-  uphillSlow: 1.4,
+  banditAccel: 6,
+  banditTurn: 540,
+  banditUphill: 1.4,
   downhillBoost: 0.3,
   flankAngle: 30,
   bandNear: 14,
@@ -20,7 +20,7 @@ export const INFANTRY_DEFAULTS = {
   bandSlack: 6,
   backOff: 2,
   keepOut: 2,
-  spacing: 1.2,
+  banditSpacing: 1.2,
   sepStrength: 3,
   bodyGap: 0.55,
   hp: 30,
@@ -33,7 +33,7 @@ export const INFANTRY_DEFAULTS = {
   muzzleHeight: 1.35,
   moraleRadius: 9,
   fearPerDeath: 1,
-  fleeAt: 3,
+  banditFleeAt: 3,
   bravery: 0.3,
   fearDecay: 0.35,
   dread: 0.4,
@@ -45,22 +45,22 @@ export const INFANTRY_DEFAULTS = {
   downTime: 1.5,
   stompKill: 0.45,
   stompPush: 1.8,
-  stompSpeed: 5,
+  banditStompSpeed: 5,
   deathThrow: 3,
   bodyFriction: 6,
   bodyLife: 8,
   sinkTime: 2,
-  height: 1.8,
-  radius: 0.35,
+  banditHeight: 1.8,
+  banditRadius: 0.35,
 };
 export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
 export const INFANTRY_PARAMS: Param[] = [
   { key: "runSpeed", label: "Run speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Bandits" },
   { key: "speedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: "Bandits", tip: "Each bandit's own speed, so the swarm strings out" },
-  { key: "accel", label: "Acceleration (1/s)", min: 0.5, max: 20, step: 0.1, group: "Bandits" },
-  { key: "turnRate", label: "Turn rate (°/s)", min: 30, max: 1440, step: 10, group: "Bandits" },
-  { key: "uphillSlow", label: "Uphill slows", min: 0, max: 4, step: 0.05, group: "Bandits", tip: "Speed lost per unit of slope climbed" },
+  { key: "banditAccel", label: "Acceleration (1/s)", min: 0.5, max: 20, step: 0.1, group: "Bandits" },
+  { key: "banditTurn", label: "Turn rate (°/s)", min: 30, max: 1440, step: 10, group: "Bandits" },
+  { key: "banditUphill", label: "Uphill slows", min: 0, max: 4, step: 0.05, group: "Bandits", tip: "Speed lost per unit of slope climbed" },
   { key: "downhillBoost", label: "Downhill boost (max)", min: 0, max: 1, step: 0.01, group: "Bandits" },
   { key: "flankAngle", label: "Flank fan (°)", min: 0, max: 80, step: 1, group: "Bandits", tip: "How wide they fan out round the mech on the way in" },
   { key: "bandNear", label: "Firing band near (m)", min: 4, max: 40, step: 0.5, group: "Bandits", tip: "Closer than this they back off while shooting" },
@@ -68,12 +68,12 @@ export const INFANTRY_PARAMS: Param[] = [
   { key: "bandSlack", label: "Chase again past (m)", min: 1, max: 20, step: 0.5, group: "Bandits", tip: "How far the mech must pull away before a shooter runs after it again" },
   { key: "backOff", label: "Back-off speed (m/s)", min: 0, max: 5, step: 0.1, group: "Bandits" },
   { key: "keepOut", label: "Keep clear of mech (m)", min: 0, max: 8, step: 0.1, group: "Bandits", tip: "Beyond the mech's radius" },
-  { key: "spacing", label: "Spacing (m)", min: 0.4, max: 3, step: 0.05, group: "Bandits", tip: "Neighbours closer than this steer apart" },
+  { key: "banditSpacing", label: "Spacing (m)", min: 0.4, max: 3, step: 0.05, group: "Bandits", tip: "Neighbours closer than this steer apart" },
   { key: "sepStrength", label: "Separation push (m/s)", min: 0, max: 10, step: 0.1, group: "Bandits" },
   { key: "bodyGap", label: "Hard body gap (m)", min: 0.2, max: 1.2, step: 0.01, group: "Bandits", tip: "Never closer than this: pushed apart in place" },
   { key: "hp", label: "Health", min: 1, max: 200, step: 1, group: "Bandits" },
-  { key: "height", label: "Hit height (m)", min: 1, max: 2.5, step: 0.05, group: "Bandits" },
-  { key: "radius", label: "Hit radius (m)", min: 0.15, max: 0.8, step: 0.01, group: "Bandits" },
+  { key: "banditHeight", label: "Hit height (m)", min: 1, max: 2.5, step: 0.05, group: "Bandits" },
+  { key: "banditRadius", label: "Hit radius (m)", min: 0.15, max: 0.8, step: 0.01, group: "Bandits" },
   { key: "fireRange", label: "Fire range (m)", min: 5, max: 80, step: 1, group: "Bandits: guns" },
   { key: "spreadDeg", label: "Spread (°)", min: 0, max: 20, step: 0.1, group: "Bandits: guns" },
   { key: "burstRounds", label: "Rounds per burst", min: 1, max: 12, step: 1, group: "Bandits: guns" },
@@ -83,7 +83,7 @@ export const INFANTRY_PARAMS: Param[] = [
   { key: "muzzleHeight", label: "Muzzle height (m)", min: 0.5, max: 2, step: 0.01, group: "Bandits: guns" },
   { key: "moraleRadius", label: "Sees deaths within (m)", min: 1, max: 30, step: 0.5, group: "Bandits: morale" },
   { key: "fearPerDeath", label: "Fear per death", min: 0, max: 3, step: 0.05, group: "Bandits: morale", tip: "Full at the bandit, half at the edge of the radius" },
-  { key: "fleeAt", label: "Flees at fear", min: 0.5, max: 20, step: 0.1, group: "Bandits: morale" },
+  { key: "banditFleeAt", label: "Flees at fear", min: 0.5, max: 20, step: 0.1, group: "Bandits: morale" },
   { key: "bravery", label: "Bravery spread ±", min: 0, max: 0.8, step: 0.01, group: "Bandits: morale" },
   { key: "fearDecay", label: "Fear fades (/s)", min: 0, max: 3, step: 0.01, group: "Bandits: morale" },
   { key: "dread", label: "Fear near the mech (/s)", min: 0, max: 3, step: 0.01, group: "Bandits: morale", tip: "Fear gained each second standing close to the mech" },
@@ -95,7 +95,7 @@ export const INFANTRY_PARAMS: Param[] = [
   { key: "downTime", label: "Down for (s)", min: 0.2, max: 6, step: 0.05, group: "Bandits: stomp & bodies" },
   { key: "stompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: "Bandits: stomp & bodies" },
   { key: "stompPush", label: "Stomp pushes within (× radius)", min: 1, max: 4, step: 0.05, group: "Bandits: stomp & bodies" },
-  { key: "stompSpeed", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: "Bandits: stomp & bodies" },
+  { key: "banditStompSpeed", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: "Bandits: stomp & bodies" },
   { key: "deathThrow", label: "Death throw (m/s)", min: 0, max: 12, step: 0.1, group: "Bandits: stomp & bodies" },
   { key: "bodyFriction", label: "Body slide friction", min: 0.5, max: 20, step: 0.1, group: "Bandits: stomp & bodies" },
   { key: "bodyLife", label: "Bodies stay (s)", min: 1, max: 60, step: 0.5, group: "Bandits: stomp & bodies" },
@@ -207,7 +207,7 @@ export class InfantrySwarm {
 
   private buildHash() {
     const { cellStart, cellFill, cellOf, sorted, state } = this;
-    this.inv = 1 / Math.max(0.3, this.v.spacing);
+    this.inv = 1 / Math.max(0.3, this.v.banditSpacing);
     cellStart.fill(0);
     for (let i = 0; i < this.hi; i++) {
       if (state[i] >= DEAD) continue;
@@ -250,11 +250,11 @@ export class InfantrySwarm {
     this.evN = 0;
 
     const keep = target.radius + v.keepOut;
-    const sp = v.spacing, sp2 = sp * sp, gap = v.bodyGap;
-    const turn = v.turnRate * DEG * dt;
-    const steer = Math.min(1, v.accel * dt);
+    const sp = v.banditSpacing, sp2 = sp * sp, gap = v.bodyGap;
+    const turn = v.banditTurn * DEG * dt;
+    const steer = Math.min(1, v.banditAccel * dt);
     const spread = v.spreadDeg * DEG;
-    const fleeAt = v.fleeAt;
+    const fleeAt = v.banditFleeAt;
     const cx = this.cx, cz = this.cz;
 
     for (let i = 0; i < this.hi; i++) {
@@ -298,7 +298,7 @@ export class InfantrySwarm {
       // Desired velocity.
       let wx = 0, wz = 0, face = NaN;
       const climb = this.slope[i];
-      const hill = Math.max(0.35, Math.min(1 + v.downhillBoost, 1 - climb * v.uphillSlow));
+      const hill = Math.max(0.35, Math.min(1 + v.downhillBoost, 1 - climb * v.banditUphill));
       if (st === ADVANCE) {
         // Fan out round the mech on the way in; straight at it once close.
         const fa = this.flank[i] * v.flankAngle * DEG * Math.min(1, dist / 60);
@@ -413,7 +413,7 @@ export class InfantrySwarm {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
-    const r = this.v.radius, r2 = r * r, H = this.v.height;
+    const r = this.v.banditRadius, r2 = r * r, H = this.v.banditHeight;
     const a = dx * dx + dz * dz;
     let best = -1, bestT = maxDist;
     for (let i = 0; i < this.hi; i++) {
@@ -470,15 +470,15 @@ export class InfantrySwarm {
       const dx = this.px[i] - x, dz = this.pz[i] - z, d = Math.hypot(dx, dz);
       if (d >= push) continue;
       const nx = d > 1e-5 ? dx / d : 1, nz = d > 1e-5 ? dz / d : 0;
-      if (d < kill) { this.kill(i, nx, nz, v.stompSpeed); continue; }
+      if (d < kill) { this.kill(i, nx, nz, v.banditStompSpeed); continue; }
       const k = 1 - d / push;
       if (d < radius) {
         this.state[i] = DOWN; this.stateTime[i] = 0;
         this.fallYaw[i] = Math.atan2(nx, nz);
-        this.vx[i] = nx * v.stompSpeed * (0.5 + k); this.vz[i] = nz * v.stompSpeed * (0.5 + k);
+        this.vx[i] = nx * v.banditStompSpeed * (0.5 + k); this.vz[i] = nz * v.banditStompSpeed * (0.5 + k);
         this.fear[i] += v.fearPerDeath;
       } else {
-        this.vx[i] += nx * v.stompSpeed * k; this.vz[i] += nz * v.stompSpeed * k;
+        this.vx[i] += nx * v.banditStompSpeed * k; this.vz[i] += nz * v.banditStompSpeed * k;
       }
     }
   }

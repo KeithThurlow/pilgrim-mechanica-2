@@ -205,6 +205,22 @@ export class RampartBody {
     back.add(powerPack(look));
   }
 
+  private paints: { mesh: THREE.Mesh; base: number }[] | null = null;
+  /**
+   * Repaint the whole mech (e.g. red for bandit mechs, near black for a wreck); null puts its own paint back.
+   * The colour multiplies the model's vertex colours, so the panel shading stays.
+   */
+  paint(look: ToonLook, color: number | null) {
+    if (!this.paints) {
+      this.paints = [];
+      this.root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && !m.userData.ink) this.paints!.push({ mesh: m, base: (m.material as THREE.MeshStandardMaterial).color.getHex() });
+      });
+    }
+    for (const { mesh, base } of this.paints) look.tint(mesh, color === null ? base : color);
+  }
+
   update(sim: WalkerSim, upper: UpperSim) {
     const t = this.tmp;
     const left = t.left.set(1, 0, 0).applyQuaternion(sim.pelvisQ);

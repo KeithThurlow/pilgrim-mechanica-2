@@ -1,0 +1,51 @@
+// War band lab (Keith 2026-10-24): the player's Rampart against a raider war band on the dunes. Pickups with
+// machine guns and bigger gun trucks circle the mech and make gun runs a few at a time; bandit mechs (red Ramparts)
+// hold off and trade fire. The mech takes damage and is rebuilt a few seconds after it's destroyed. Each band beaten
+// brings the next. Until you take over, a demo walks, aims at the nearest raider and fires.
+import "../../src/core/lab.css";
+import * as THREE from "three/webgpu";
+import { combatLab } from "../../src/game/combatLab";
+import { MechUnit } from "../../src/game/mechUnit";
+import { Warband, WARBAND_DEFAULTS, WARBAND_PARAMS } from "../../src/combat/warband";
+
+const RED = 0xc4523f;
+let warband: Warband | null = null;
+const lab = await combatLab({
+  id: "warband-lab",
+  title: "War band",
+  defaults: WARBAND_DEFAULTS,
+  params: WARBAND_PARAMS,
+  topics: [{ id: "raiders", label: "Raiders", groups: ["War band", "Raider guns", "Raider health", "Raider wrecks"] }],
+  selectables: [{
+    topic: "raiders", label: "Raiders",
+    objects: () => warband ? [...warband.raiders.flatMap((r) => r.body.meshes()), ...warband.mechs.flatMap((m) => m.body.regions().hull)] : [],
+  }],
+  actions: [{ label: "Next band", onClick: () => warband?.spawn(lab.player.sim.pelvis) }],
+  report: () => ({ band: warband?.waves ?? 0 }),
+});
+const { V, bf, toon, player } = lab;
+
+// Bandit mechs: red Ramparts, loaded ahead so a band can field them at once.
+const spare: MechUnit[] = [];
+for (let i = 0; i < 2; i++) {
+  const b = await lab.loadRampart();
+  const m = new MechUnit(bf, V, b, toon, 2, 20 + i * 2, false);
+  m.paint = RED;
+  b.paint(toon, RED);
+  spare.push(m);
+}
+const wb: Warband = new Warband(bf, V, (): MechUnit | null => spare.find((m) => !wb.mechs.includes(m)) ?? null);
+warband = wb;
+lab.app.scene.add(wb.group);
+
+lab.nearestEnemy = () => {
+  let best: THREE.Vector3 | null = null, bestD = Infinity;
+  for (const r of wb.raiders) if (r.alive) { const d = r.sim.pos.distanceTo(player.sim.pos); if (d < bestD) { bestD = d; best = r.sim.pos; } }
+  for (const m of wb.mechs) if (m.alive) { const d = m.sim.pos.distanceTo(player.sim.pos); if (d < bestD) { bestD = d; best = m.sim.pelvis; } }
+  return best;
+};
+lab.onFrame((dt) => {
+  wb.update(dt, player);
+  const live = wb.raiders.filter((r) => r.alive).length;
+  lab.hud("band", `band ${wb.waves} · raiders ${live} live, ${wb.raiders.length - live} wrecked · bandit mechs ${wb.mechs.filter((m) => m.alive).length}`);
+});

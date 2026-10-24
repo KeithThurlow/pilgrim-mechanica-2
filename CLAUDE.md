@@ -63,6 +63,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
   `?surface=gravel|dirt|concrete` (dust as if the ground were that).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
+- Combat labs (warband, bandits): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`.
 
 ## Layout
 
@@ -77,7 +78,10 @@ src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
-src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides), minigun (tracers, flash, hits, casings)
+src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings)
+src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell)
+src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
+src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
 docs/                   design.md (the game), decisions.md (log)

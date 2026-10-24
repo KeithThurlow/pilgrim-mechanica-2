@@ -4,6 +4,11 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | In the combat labs the mech takes damage; no salvage drops yet (fun first, Keith has ideas for salvage) | Keith | Keith | |
+| 2026-10-24 | Bandit mechs are red Ramparts for now | Keith | Keith | |
+| 2026-10-24 | A convoy crane lab: cranes on 6-7 big platforms pick the mech up and drop it off beside the moving convoy | Keith | Keith | In `docs/proposal-combat-labs.md`; the convoy may flatten the sand ahead (long term). |
+| 2026-10-24 | Deaths should have physics: vehicles overturn, people and robots ragdoll | Keith | Keith | Wrecks tumble on a simple throw now; ragdolls with Rapier next (Claude). |
+| 2026-10-24 | War band lab first, then bandits on foot (built the same day), then robots, escort, cranes | Claude | Keith | Keith: go ahead, use several agents. |
 | 2026-10-24 | Sell the impact: hits and steps press marks into the sand, hits throw a visible spray, cheaply | Keith | Keith | Lit decals with a fake height field, not mesh deformation; spray streaks (Claude). |
 | 2026-10-24 | Combat labs to explore: convoy escort vehicles, raider war bands (incl. bandit mechs), bandits on foot, quadruped robot swarms; power plus threat | Keith | open | Proposal in `docs/proposal-combat-labs.md`; order and details for Keith. |
 | 2026-10-24 | Dust receives shadows from other things (not from itself) | Keith | Keith | Shadow-map lookups per dust pixel, four taps (Claude). |

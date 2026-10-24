@@ -13,7 +13,7 @@ import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 
 export const DUST_DEFAULTS = {
-  windAngle: 70,
+  dustWindAngle: 70,
   windSpeed: 1.4,
   cloudLife: 5,
   cloudGrow: 3.5,
@@ -49,6 +49,8 @@ export const DUST_DEFAULTS = {
   spraySize: 0.12,
   sprayLean: 0.7,
   windIn: 1.2,
+  wheelDust: 0.9,
+  wheelClump: 0.5,
   stepPush: 0.7,
   gravelDust: 0.25,
   gravelClump: 0.35,
@@ -70,7 +72,7 @@ export const DUST_DEFAULTS = {
 export type DustValues = typeof DUST_DEFAULTS;
 
 export const DUST_PARAMS: Param[] = [
-  { key: "windAngle", label: "Wind toward (°)", min: 0, max: 360, step: 1, group: "Dust", tip: "Compass heading the wind carries the dust (0 = +Z)" },
+  { key: "dustWindAngle", label: "Wind toward (°)", min: 0, max: 360, step: 1, group: "Dust", tip: "Compass heading the wind carries the dust (0 = +Z)" },
   { key: "windSpeed", label: "Wind speed (m/s)", min: 0, max: 8, step: 0.05, group: "Dust" },
   { key: "cloudLife", label: "Cloud hangs for (s)", min: 0.5, max: 12, step: 0.1, group: "Dust" },
   { key: "cloudGrow", label: "Cloud grows ×", min: 1, max: 8, step: 0.1, group: "Dust" },
@@ -106,6 +108,8 @@ export const DUST_PARAMS: Param[] = [
   { key: "spraySize", label: "Spray streak width (m)", min: 0.02, max: 0.6, step: 0.01, group: "Dust: sources" },
   { key: "sprayLean", label: "Spray lean downrange", min: 0, max: 2, step: 0.01, group: "Dust: sources" },
   { key: "stepPush", label: "Step pushes dust along", min: 0, max: 2, step: 0.01, group: "Dust: sources", tip: "Share of the mech's speed the stomp's sand carries forward" },
+  { key: "wheelDust", label: "Wheels: dust per metre", min: 0, max: 4, step: 0.05, group: "Dust: sources", tip: "Cloud puffs a rolling wheel throws up per metre, more when it slides" },
+  { key: "wheelClump", label: "Wheels: clumps per metre", min: 0, max: 4, step: 0.05, group: "Dust: sources" },
   { key: "windIn", label: "Wind takes over after (s)", min: 0, max: 5, step: 0.05, group: "Dust", tip: "Dust first keeps the push of whatever threw it, then the wind takes it" },
   { key: "gravelDust", label: "Gravel: dust ×", min: 0, max: 1.5, step: 0.01, group: "Dust: surfaces" },
   { key: "gravelClump", label: "Gravel: chips ×", min: 0, max: 1.5, step: 0.01, group: "Dust: surfaces" },
@@ -259,10 +263,38 @@ export class DustSim {
     this.curTint = 0;
   }
 
+  /**
+   * A wheel rolling over the sand this step: travelled metres, its world velocity and how much it slides (0..1).
+   * Throws a low roost of clumps and a puff of cloud behind it, in proportion to the distance (call every frame).
+   * acc: the caller's per-wheel carry-over (fractional puffs), returned updated.
+   */
+  wheel(x: number, y: number, z: number, vx: number, vz: number, metres: number, slip: number, acc: number): number {
+    const v = this.v;
+    const [dm, cm] = this.ground_(x, z);
+    acc += metres * (0.35 + slip * 1.6) * (v.wheelDust * dm + v.wheelClump * cm);
+    const sp = Math.hypot(vx, vz) || 1;
+    while (acc >= 1) {
+      acc -= 1;
+      const cloud = Math.random() < v.wheelDust * dm / Math.max(1e-6, v.wheelDust * dm + v.wheelClump * cm);
+      const back = 0.25 + Math.random() * 0.35, side = (Math.random() - 0.5) * 1.2;
+      const bx = -vx / sp, bz = -vz / sp;
+      if (cloud) {
+        this.emit(CLOUD, x, y + 0.3, z, vx * 0.15 + bx * 1.5 + -bz * side, 0.4 + Math.random() * 0.7, vz * 0.15 + bz * 1.5 + bx * side,
+          0.5 + Math.random() * 0.4, v.cloudLife * (0.6 + Math.random() * 0.6), v.cloudDensity * 0.9);
+      } else {
+        const s = sp * back;
+        this.emit(CLUMP, x, y + 0.15, z, bx * s + -bz * side * 2, 1 + Math.random() * 2.5 * (0.4 + slip), bz * s + bx * side * 2,
+          0.18 + Math.random() * 0.2, v.clumpLife * (0.6 + Math.random() * 0.5), v.clumpDensity);
+      }
+    }
+    this.curTint = 0;
+    return acc;
+  }
+
   update(dt: number) {
     const v = this.v;
     this.t += dt;
-    const wa = (v.windAngle * Math.PI) / 180, wx = Math.sin(wa) * v.windSpeed, wz = Math.cos(wa) * v.windSpeed;
+    const wa = (v.dustWindAngle * Math.PI) / 180, wx = Math.sin(wa) * v.windSpeed, wz = Math.cos(wa) * v.windSpeed;
     let alive = 0;
     for (let i = 0; i < DUST_MAX; i++) {
       if (this.age[i] >= this.life[i]) { this.alpha[i] = 0; continue; }

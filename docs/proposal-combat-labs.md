@@ -1,4 +1,4 @@
-# Proposal: combat labs (waiting for Keith)
+# Proposal: combat labs (Keith 2026-10-24: go ahead, war band first)
 
 Keith 2026-10-24: labs to explore combat, giving the player a sense of power in the mech and a sense of threat.
 Looks stay stand-ins (boxes and simple shapes) until the feel is right. Nothing here is built yet (rule 9).
@@ -52,14 +52,24 @@ Looks stay stand-ins (boxes and simple shapes) until the feel is right. Nothing 
   numbers, and a few big ones on a slower walk; they flow over the dunes toward the mech and leap at it.
 - Values: numbers, sizes (small 1 m, large 4-6 m), speed, leap range, armour.
 
+### 5. `labs/convoy-cranes/`: deploy and pick-up (Keith 2026-10-24)
+- A fleet of 6-7 large platform vehicles (the biggest on tracks, the mech bays and gantries on it), each with
+  cranes. Stay within a crane's range and it picks the mech up and sets it on a platform (back into the village).
+  To head out, walk onto a deploy zone and a crane lowers the mech beside the moving convoy; the mech has to start
+  walking at once to keep pace, then WASD control comes back.
+- The convoy can travel in any direction (no pathing yet), over reasonably steep ground; flattening the sand in
+  front of it is fine (long term Keith would like the convoy to visibly flatten the terrain ahead: a cool effect).
+- Builds on the vehicle sim (lab 1/2) and the walker; crane sim: a slewing boom with a hoist line and a cradle
+  that grips the mech's hull, with the mech's legs going limp while carried.
+
 ## Suggested order
 
 Warband first (it reuses the vehicle sim that the convoy escort needs, and tests return fire and the mech's guns
 against fast movers), then the bandit swarm (numbers and the power fantasy), then robots, then the convoy escort.
 Keith to choose.
 
-## Open questions for Keith
+## Answers (Keith 2026-10-24)
 
-- Does the mech take damage and die in these labs, or is it a punching bag at first?
-- Should killed bandits and vehicles drop salvage already (the core loop), or later?
-- Bandit mechs: the Rampart model recoloured as a stand-in, or a box walker?
+- The mech takes damage.
+- No salvage drops yet: combat and gameplay fun first, salvage later (Keith has ideas for that part of the loop).
+- Bandit mechs: red versions of the Rampart for now.

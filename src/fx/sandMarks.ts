@@ -113,6 +113,11 @@ export class SandMarks {
     }
   }
 
+  /** A tyre track: a short narrow trough, laid every so often under a rolling wheel. */
+  rut(x: number, z: number, yaw: number, width: number, length: number) {
+    this.add(SLIDE, x, z, yaw, width, length, 0.45);
+  }
+
   /** A round into the sand: a small crater, every Nth round so a burst leaves a churned patch, not a carpet. */
   crater(x: number, z: number, k: number) {
     if (this.rounds++ % Math.max(1, Math.round(this.v.craterEvery)) !== 0) return;
