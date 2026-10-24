@@ -41,12 +41,23 @@ sim.reset(0);
 const close: Record<number, number> = { 1: 0, [-1]: 0 };
 for (let i = 0; i < 480; i++) for (const s of sim.update(dt, 0, shoulder, { x: 0, y: 0, z: 5 }, true)) close[s]++;
 if (close[1] === 0 || close[-1] === 0) problems.push(`close target not fired on (L ${close[1]}, R ${close[-1]})`);
+// A target circling right round the mech (it can't follow behind its limit) must not jam the torso: the guns keep
+// firing whenever the target comes back into reach.
+sim.reset(0);
+let around = 0;
+for (let i = 0; i < 120 * 36; i++) {
+  const a = (i / (120 * 36)) * Math.PI * 4; // twice round in 36 s
+  for (const s of sim.update(dt, 0, shoulder, { x: Math.sin(a) * 25, y: 0, z: Math.cos(a) * 25 }, true)) { void s; around++; }
+}
+const reachable = (v.torsoLimit + v.podYawMax) / 180; // share of the circle the guns can reach
+const fullRate = 2 * v.fireRate * 36;
+if (around < fullRate * reachable * 0.6) problems.push(`target circling the mech: only ${around} rounds (torso jammed?)`);
 const gap = Math.abs((restart[1] ?? 99) - (restart[-1] ?? 99));
 if (restart[1] === undefined || restart[-1] === undefined) problems.push("a gun never came back on target after the aim jumped");
 else if (gap < 0.02) problems.push(`both guns came back on target together (${(gap * 1000).toFixed(0)} ms apart)`);
 if (counts[1] === 0 || counts[-1] === 0) problems.push("a gun never fired");
 if (counts[1] > v.ammoPerGun || counts[-1] > v.ammoPerGun) problems.push("a gun fired past an empty drum");
 if (maxYaw > (v.podYawMax * Math.PI) / 180 + 1e-6) problems.push("a gun swung past its arc");
-console.log(`close target: L ${close[1]} R ${close[-1]} rounds · rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
+console.log(`circling: ${around} rounds · close target: L ${close[1]} R ${close[-1]} rounds · rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("upper check failed"); }
 console.log("upper check passed");

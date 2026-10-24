@@ -119,11 +119,21 @@ export class UpperSim {
     let want = legsHeading;
     if (aim) want = Math.atan2(aim.x - shoulder.x, aim.z - shoulder.z);
     const lim = v.torsoLimit * D2R;
-    const rel = clamp(wrap(want - legsHeading), -lim, lim);
+    // Work in the torso's angle from the legs and move only within ±limit, never across the back: a target behind
+    // used to drag the torso the short way round into its limit, where it jammed with the guns pinned (seen in the
+    // war band lab). Beyond the limit, aim for the nearer limit, keeping to the current side unless the other is
+    // clearly nearer, so a target dead behind doesn't flip it from side to side.
+    const cur = clamp(wrap(this.torsoYaw - legsHeading), -lim, lim);
+    const raw = wrap(want - legsHeading);
+    let rel = raw;
+    if (Math.abs(raw) > lim) {
+      const gapPos = Math.abs(wrap(raw - lim)), gapNeg = Math.abs(wrap(raw + lim));
+      const side = cur >= 0 ? 1 : -1;
+      const gapCur = side > 0 ? gapPos : gapNeg, gapOther = side > 0 ? gapNeg : gapPos;
+      rel = (gapOther + 0.35 < gapCur ? -side : side) * lim;
+    }
     const step = v.torsoTurnRate * D2R * dt;
-    this.torsoYaw = wrap(this.torsoYaw + clamp(wrap(legsHeading + rel - this.torsoYaw), -step, step));
-    const now = wrap(this.torsoYaw - legsHeading);
-    if (Math.abs(now) > lim) this.torsoYaw = wrap(legsHeading + Math.sign(now) * lim);
+    this.torsoYaw = wrap(legsHeading + cur + clamp(rel - cur, -step, step));
 
     const ymax = v.podYawMax * D2R, pmax = v.podPitchMax * D2R, cone = v.fireCone * D2R;
     const lx = Math.cos(this.torsoYaw), lz = -Math.sin(this.torsoYaw); // torso's left

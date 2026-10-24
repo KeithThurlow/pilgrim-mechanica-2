@@ -115,6 +115,13 @@ Nothing right now.
 
 ## Changes
 
+### 2026-10-24 · Torso no longer jams on targets behind it (Claude, cloud session)
+- Found in the war band lab: the demo took fire without shooting back. A target moving round behind the mech
+  dragged the torso the short way round, across the back, into its 120° limit, where it stuck with both guns
+  pinned. `upper.ts` now turns the torso only within its range (to the nearer limit, sticking to its side unless the
+  other is clearly nearer). `tools/upper-check.ts` adds a target circling the mech twice (800 rounds now).
+- `combatLab.ts` puts the lab on `window.__lab` for headless debugging.
+
 ### 2026-10-24 · Death physics cost cut (Claude, cloud session)
 - The dead now collide only with the floor (and wrecks with each other), not with their own neighbouring parts:
   40 moving ragdolls went from about 3.8 to 2.1 ms a 60 Hz frame (Node, software); default cap 30.

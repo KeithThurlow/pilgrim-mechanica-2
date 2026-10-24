@@ -176,6 +176,11 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     loadRampart: () => RampartBody.load(toon),
   };
 
+  // For headless debugging and tests: the lab on the page (window.__lab).
+  (globalThis as unknown as { __lab: unknown }).__lab = lab;
+  let lastDemo: { aim: Aim | null; trigger: boolean } = { aim: null, trigger: false };
+  (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
+
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
   function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
     const a = t * 0.12;
@@ -195,7 +200,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
     let trigger = false;
-    if (auto) ({ cmd, aim, trigger } = demo(clock));
+    if (auto) { ({ cmd, aim, trigger } = demo(clock)); lastDemo = { aim, trigger }; }
     else {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
       if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
