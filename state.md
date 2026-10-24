@@ -81,7 +81,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **A raider can still rarely pass within about 2 m of the mech** (about one band in six in unseeded runs); the
   check runs seeded.
 - **No ragdolls yet** (Keith 2026-10-24: deaths should have physics): wrecks tumble on a hand-rolled throw, bandits
-  are thrown and fall over; real ragdolls for people and robots want Rapier.
+  are thrown and fall over. Rapier is now a dependency (0.12, copied into the cloud workspace from Keith's PC since the
+  npm registry is blocked there), not used yet.
 - **No concrete surface for hits yet** (dust plus a few sparks when something concrete exists); the grey wreck
   stand-ins are steel.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
@@ -114,6 +115,10 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · Rapier added as a dependency (Claude, cloud session)
+- `@dimforge/rapier3d-compat` ~0.12.0 in `package.json` (the version on Keith's PC); in the cloud workspace it was
+  copied from his PC's `node_modules` through the device link. A test world (a ball dropped on a floor) runs.
 
 ### 2026-10-24 · Convoy proposal; combat labs in the shots; first enemies at once (Claude, cloud session, Keith away)
 - `docs/proposal-convoy.md` (not built, rule 9). `tools/shots.mjs` covers the three combat labs. Bandit and robot
