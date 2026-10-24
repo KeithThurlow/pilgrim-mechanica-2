@@ -1,4 +1,6 @@
-// Convoy platforms (pure, no rendering): big vehicles following the route at formation offsets. Each one samples
+// Convoy platforms (pure, no rendering): big vehicles following the route as a train (train.ts). Each one rides on
+// two bogie points on the route (40% of its length ahead of and behind its middle, on its line), so it sits on the
+// chord of the curve and the train snakes through turns. Each one samples
 // the ground under its wheels (or along its tracks), fits a plane through them, and rides toward it on springs, so
 // it heaves, pitches and rolls with the ground like the cars do.
 //
@@ -7,10 +9,9 @@
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import type { ConvoyRoute, RoutePoint } from "./route";
+import { arrange, type TrainValues } from "./train";
 
 export const PLATFORM_DEFAULTS = {
-  convoyGap: 22,
-  convoySide: 11,
   convoyDeckHeight: 3.2,
   convoyBayDeck: 3.6,
   convoySpringHz: 0.7,
@@ -21,8 +22,6 @@ export const PLATFORM_DEFAULTS = {
 export type PlatformValues = typeof PLATFORM_DEFAULTS;
 
 export const PLATFORM_PARAMS: Param[] = [
-  { key: "convoyGap", label: "Row gap (m)", min: 6, max: 60, step: 1, group: "Formation", tip: "Clear gap between rows of platforms" },
-  { key: "convoySide", label: "Column offset (m)", min: 6, max: 24, step: 0.5, group: "Formation", tip: "Paired platforms sit this far either side of the route" },
   { key: "convoyDeckHeight", label: "Deck height (m)", min: 1.5, max: 6, step: 0.1, group: "Platforms", tip: "Wheeled platforms' deck above the ground" },
   { key: "convoyBayDeck", label: "Bay deck height (m)", min: 1.5, max: 6, step: 0.1, group: "Platforms", tip: "The tracked mech-bay platform's deck above the ground" },
   { key: "convoySpringHz", label: "Suspension (Hz)", min: 0.2, max: 3, step: 0.05, group: "Platforms", tip: "How quickly a platform follows the ground's heave, pitch and roll" },
@@ -31,7 +30,7 @@ export const PLATFORM_PARAMS: Param[] = [
   { key: "convoyPush", label: "Platforms shove the mech", min: 0, max: 1, step: 1, group: "Platforms", tip: "A walking mech can't pass through a platform" },
 ];
 
-export type PlatformKind = "bay" | "workshop" | "housing" | "fuel";
+export type PlatformKind = "bay" | "workshop" | "housing" | "fuel" | "motorpool";
 
 export interface PlatformSpec {
   name: string;
@@ -39,19 +38,16 @@ export interface PlatformSpec {
   length: number;
   width: number;
   tracked: boolean;
-  /** Formation row (0 leads) and column (-1 right, 0 middle, +1 left). */
-  row: number;
-  col: -1 | 0 | 1;
 }
 
-/** The convoy: one big tracked mech-bay platform leading, wheeled ones in pairs behind. */
+/** The convoy in train order: the tracked mech bay leads, the tracked workshop next, wheeled cars behind. */
 export const CONVOY_LAYOUT: PlatformSpec[] = [
-  { name: "Mech bay", kind: "bay", length: 40, width: 16, tracked: true, row: 0, col: 0 },
-  { name: "Workshop", kind: "workshop", length: 24, width: 10, tracked: false, row: 1, col: 1 },
-  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false, row: 1, col: -1 },
-  { name: "Fuel", kind: "fuel", length: 24, width: 10, tracked: false, row: 2, col: 1 },
-  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false, row: 2, col: -1 },
-  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false, row: 3, col: 0 },
+  { name: "Mech bay", kind: "bay", length: 40, width: 16, tracked: true },
+  { name: "Workshop", kind: "workshop", length: 30, width: 14, tracked: true },
+  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false },
+  { name: "Motor pool", kind: "motorpool", length: 26, width: 11, tracked: false },
+  { name: "Fuel", kind: "fuel", length: 24, width: 10, tracked: false },
+  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false },
 ];
 
 /** A damped spring toward a target, by frequency (Hz) and damping ratio. */
@@ -77,9 +73,13 @@ export class Platform {
   fwd = { x: 0, y: 0, z: 1 };
   /** Distance travelled (for spinning wheels). */
   travelled = 0;
-  /** Along-route offset from the convoy's head and side offset (m). */
+  /** Along-route offset of its middle from the convoy's head and side offset (m), its line, the car it follows. */
   along = 0;
   side = 0;
+  lane = 0;
+  follows = -1;
+  /** Extra spacing behind the car it follows (m): grows in turns so the inside corners keep the gap open. */
+  spread = 0;
   /** Support points (local x, z) the ground is sampled under. */
   readonly supports: [number, number][] = [];
   /** Highest |pitch| and |roll| seen (degrees), for the check. */
@@ -89,9 +89,11 @@ export class Platform {
   private hPitch = new Spring();
   private started = false;
   private moved = false;
-  private p: RoutePoint = { x: 0, z: 0, heading: 0 };
+  private pf: RoutePoint = { x: 0, z: 0, heading: 0 };
+  private pb: RoutePoint = { x: 0, z: 0, heading: 0 };
+  private pm: RoutePoint = { x: 0, z: 0, heading: 0 };
 
-  constructor(readonly spec: PlatformSpec, public v: PlatformValues, private field: DuneField) {
+  constructor(readonly spec: PlatformSpec, public v: PlatformValues & { trackOut?: number }, private field: DuneField) {
     const { length: L, width: W, tracked } = spec;
     if (tracked) {
       for (const sx of [1, -1]) for (let i = 0; i < 6; i++) this.supports.push([sx * (W / 2 - 1.6), -0.44 * L + (0.88 * L * i) / 5]);
@@ -106,22 +108,20 @@ export class Platform {
   /** Deck top above the origin. */
   get deck() { return this.spec.tracked ? this.v.convoyBayDeck : this.v.convoyDeckHeight; }
 
-  /** Place in the formation: along-route offset from the head and side offset for its row and column. */
-  layout(all: PlatformSpec[]) {
-    const lead = all.find((s) => s.row === 0)?.length ?? 40;
-    const rowLen = (r: number) => Math.max(...all.filter((s) => s.row === r).map((s) => s.length), 0);
-    let a = 0;
-    for (let r = 1; r <= this.spec.row; r++) a -= (r === 1 ? lead : rowLen(r - 1)) / 2 + this.v.convoyGap + rowLen(r) / 2;
-    this.along = a;
-    this.side = this.spec.col * this.v.convoySide;
-  }
+  /** Bogie points along the route either side of the middle, as a share of the length. */
+  static readonly BOGIE = 0.4;
 
-  update(dt: number, route: ConvoyRoute, all: PlatformSpec[]) {
-    this.layout(all);
-    const p = route.offsetAt(route.s + this.along, this.side, this.p);
+  /** Follow the route: the middle between the two bogies, heading along the chord between them (along/side set). */
+  update(dt: number, route: ConvoyRoute) {
+    const bg = this.spec.length * Platform.BOGIE;
+    const fr = route.offsetAt(route.s + this.along + bg, this.side, this.pf);
+    const rr = route.offsetAt(route.s + this.along - bg, this.side, this.pb);
     const px = this.x, pz = this.z, py = this.y;
-    this.x = p.x; this.z = p.z; this.heading = p.heading;
-    const s = Math.sin(p.heading), c = Math.cos(p.heading);
+    // The middle on its line's path, turned along the chord between the bogies (the tangent there on an even curve).
+    const mid = route.offsetAt(route.s + this.along, this.side, this.pm);
+    this.x = mid.x; this.z = mid.z;
+    this.heading = Math.atan2(fr.x - rr.x, fr.z - rr.z);
+    const s = Math.sin(this.heading), c = Math.cos(this.heading);
 
     // Fit a plane h = a + b * lx + k * lz through the ground under the supports (they're symmetric about the middle).
     let sum = 0, sxh = 0, sxx = 0, szh = 0, szz = 0;
@@ -171,11 +171,33 @@ export class Platform {
     return out;
   }
 
+  /** Half the overall width: the deck's, plus the crawler tracks where they stand out past its edges. */
+  get halfW() { return this.spec.width / 2 + (this.spec.tracked ? Math.max(0, this.v.trackOut ?? 0) : 0); }
+
+  /** Distance from (x, z) to the footprint (0 inside). */
+  gapAt(x: number, z: number) {
+    const l = this.toLocal(x, z);
+    return Math.hypot(Math.max(0, Math.abs(l.x) - this.halfW), Math.max(0, Math.abs(l.z) - this.spec.length / 2));
+  }
+
+  /** Clear distance between this footprint and another's (0 if they touch): each one's corners against the other. */
+  gapTo(o: Platform) {
+    let d = Infinity;
+    for (const [a, b] of [[this, o], [o, this]] as const) {
+      for (const sx of [1, -1]) for (const sz of [1, -1]) {
+        const w = a.toWorld(sx * a.halfW, 0, (sz * a.spec.length) / 2, this.cw);
+        d = Math.min(d, b.gapAt(w.x, w.z));
+      }
+    }
+    return d;
+  }
+  private cw = { x: 0, y: 0, z: 0 };
+
   /**
    * Keep a body of radius r out of the platform's footprint: returns the pushed x/z, or null when it's clear.
    */
   pushOut(x: number, z: number, r: number): { x: number; z: number } | null {
-    const p = this.toLocal(x, z), hw = this.spec.width / 2 + r, hl = this.spec.length / 2 + r;
+    const p = this.toLocal(x, z), hw = this.halfW + r, hl = this.spec.length / 2 + r;
     if (Math.abs(p.x) >= hw || Math.abs(p.z) >= hl) return null;
     // Out through the nearest side.
     const ox = hw - Math.abs(p.x), oz = hl - Math.abs(p.z);
@@ -190,20 +212,37 @@ function norm(x: number, y: number, z: number) {
   return { x: x / l, y: y / l, z: z / l };
 }
 
-/** The whole convoy: the route and its platforms. */
+/** Fastest a car drops back from or closes up on the one ahead to keep the gap in turns (m/s). */
+const SPREAD_RATE = 1.5;
+
+/** The whole convoy: the route and its platforms, laid out as a train. */
 export class Convoy {
   readonly platforms: Platform[];
-  constructor(readonly route: ConvoyRoute, v: PlatformValues, field: DuneField, readonly layout: PlatformSpec[] = CONVOY_LAYOUT) {
+  constructor(readonly route: ConvoyRoute, readonly v: PlatformValues & TrainValues, field: DuneField, readonly layout: PlatformSpec[] = CONVOY_LAYOUT) {
     this.platforms = layout.map((s) => new Platform(s, v, field));
+    arrange(this.platforms, v);
   }
   get bay() { return this.platforms.find((p) => p.spec.kind === "bay") ?? this.platforms[0]; }
+  /** Along-route distance from the lead's nose to the last car's tail (m). */
+  get length() { return Math.max(...this.platforms.map((p) => p.spec.length / 2 - p.along)) + this.platforms[0].spec.length / 2; }
   /** Start over with the head at (x, z). */
   reset(x: number, z: number) {
     this.route.reset(x, z);
-    for (const p of this.platforms) { p.reset(); p.update(0, this.route, this.layout); }
+    for (const p of this.platforms) p.spread = 0;
+    arrange(this.platforms, this.v);
+    for (const p of this.platforms) { p.reset(); p.update(0, this.route); }
   }
   update(dt: number) {
     this.route.update(dt);
-    for (const p of this.platforms) p.update(dt, this.route, this.layout);
+    // Sliders apply live: the gaps and lines are laid out again every step.
+    arrange(this.platforms, this.v);
+    for (const p of this.platforms) p.update(dt, this.route);
+    // In a turn the inside corners of neighbouring cars close up: each car drops back (or closes up again) toward
+    // the spacing that keeps trainGap clear at the nearest corners, at no more than SPREAD_RATE m/s.
+    for (const p of this.platforms) {
+      if (p.follows < 0) continue;
+      const want = Math.max(0, p.spread + this.v.trainGap - p.gapTo(this.platforms[p.follows]));
+      p.spread += Math.max(-SPREAD_RATE * dt, Math.min(SPREAD_RATE * dt, (want - p.spread) * 4 * dt));
+    }
   }
 }

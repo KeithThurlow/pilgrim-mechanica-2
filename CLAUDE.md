@@ -66,7 +66,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
-  (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`; E parks in a bay, G launches from anywhere.
+  (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
+  `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
 
 ## Layout
 
@@ -84,7 +85,10 @@ src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
-                        launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), platformBody
+                        launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
+                        layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
+                        furniture, escort (escort driving); drawing: platformBody, trackBody, pipesDraw, bridgeBody,
+                        craneBody, escortBody, kit
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
