@@ -105,6 +105,7 @@ function toBorder() {
 // ?biome=desert|rocky|shallows shows only that one; ?border drives to the first border along the heading.
 const only = app.params.get("biome");
 if (only && NAMES.includes(only)) V.biomeOnly = NAMES.indexOf(only);
+else if (only === "mix") V.biomeOnly = -1;
 field.update();
 if (app.params.has("border")) toBorder();
 streamer.fill(focus.x, focus.z);

@@ -195,6 +195,8 @@ scene.add(reticle);
 field.update();
 mech.reset(13, -40, 0.3);
 follow.copy(sim.pelvis);
+// The hub's biome picker wins over a saved slider.
+if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }
 streamer.fill(sim.pos.x, sim.pos.z);
 setCam(camName);
 if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));

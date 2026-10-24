@@ -10,23 +10,47 @@
     main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
     h1 { font-size: 22px; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 4px; }
     p { color: var(--muted); margin: 0 0 24px; }
-    a.lab { display: block; padding: 14px 16px; margin: 0 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); text-decoration: none; }
-    a.lab:hover { border-color: var(--accent); }
-    a.lab b { display: block; font-size: 16px; }
-    a.lab span { color: var(--muted); font-size: 14px; }
+    .lab { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; margin: 0 0 10px; border: 1px solid var(--line); border-radius: 6px; }
+    .lab:hover { border-color: var(--accent); }
+    .lab a { flex: 1; color: var(--fg); text-decoration: none; min-width: 0; }
+    .lab a b { display: block; font-size: 16px; }
+    .lab a span { color: var(--muted); font-size: 14px; }
+    .lab label { flex: none; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+    .lab select { background: #1f2226; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font: inherit; font-size: 14px; }
+    .lab select:focus { outline: 1px solid var(--accent); }
+    @media (max-width: 520px) { .lab { flex-direction: column; } }
   </style>
 </head>
 <body>
   <main>
     <h1>Pilgrim Mechanica 2</h1>
-    <p>Labs: each system on its own page, tuned live. The game itself comes once the labs feel right.</p>
-    <a class="lab" href="/labs/walker/"><b>Walker lab</b><span>The procedural walker on streamed dunes: WASD to walk, Shift to sprint, mouse to aim, hold left button to fire. Every gait value is a slider.</span></a>
-    <a class="lab" href="/labs/warband/"><b>War band lab</b><span>Raider pickups and gun trucks circle the mech and make gun runs, bandit mechs hold off and trade fire. The mech takes damage.</span></a>
-    <a class="lab" href="/labs/bandits/"><b>Bandit swarm lab</b><span>Hundreds of bandits on foot pour in over the dunes and shoot; mow them down, stomp the close ones, watch their nerve break.</span></a>
-    <a class="lab" href="/labs/robots/"><b>Robot swarm lab</b><span>Quadruped robots pour over the dunes: small ones leap on and cling, biting, until shot, stomped or shaken off; big ones stalk in and fire heavy bursts.</span></a>
-    <a class="lab" href="/labs/convoy/"><b>Convoy lab</b><span>The convoy village rolls over the dunes, flattening a road that stays behind it. Walk into crane range to be picked up and set in the mech bay; G deploys you over the side, onto the sand at the convoy's speed.</span></a>
-    <a class="lab" href="/labs/pois/"><b>POI lab</b><span>Points of interest on the dunes: rock outcrops with scrap caught in them, wreck parts, crashed supply pods, debris fields, dead convoys. Walk up and hold E to strip them for scrap; M shows the overhead map of where they fall.</span></a>
-    <a class="lab" href="/labs/terrain/"><b>Terrain lab</b><span>The dune field streaming around a moving marker (the convoy stand-in): dune shape, streaming cost, desert light.</span></a>
+    <p>Labs: each system on its own page, tuned live. The game itself comes once the labs feel right. Labs with a biome picker launch on that ground (remembered per lab).</p>
+    <div class="lab" data-biome="desert"><a href="/labs/walker/"><b>Walker lab</b><span>The procedural walker on streamed dunes: WASD to walk, Shift to sprint, mouse to aim, hold left button to fire. Every gait value is a slider.</span></a></div>
+    <div class="lab" data-biome="desert"><a href="/labs/warband/"><b>War band lab</b><span>Technicals, gun trucks, six-wheelers, the War Rig and a makeshift tank circle the mech and make gun runs; bandit mechs hold off and trade fire. Space dashes out of the tank's marked shells.</span></a></div>
+    <div class="lab" data-biome="desert"><a href="/labs/bandits/"><b>Bandit swarm lab</b><span>Hundreds of bandits on foot pour in over the dunes and shoot; rocketeers lob slow marked rockets. Mow them down, stomp the close ones, dash through them.</span></a></div>
+    <div class="lab" data-biome="desert"><a href="/labs/robots/"><b>Robot swarm lab</b><span>Terraforming machines: small scrappers leap on and tear at your plating, medium cutters wind up saw lunges, huge four-legged excavators lob marked charges.</span></a></div>
+    <div class="lab"><a href="/labs/convoy/"><b>Convoy lab</b><span>The convoy village rolls over the dunes like a train, flattening a road behind it. Walk into crane range to be picked up, walk the deck, park, and stand on a launch pad to be swung back out.</span></a></div>
+    <div class="lab" data-biome="desert"><a href="/labs/pois/"><b>POI lab</b><span>Points of interest: rock outcrops with scrap caught in them, wreck parts, crashed supply pods, debris fields, dead convoys. Walk up and hold E to strip them for scrap; M shows the overhead map.</span></a></div>
+    <div class="lab" data-biome="mix"><a href="/labs/terrain/"><b>Terrain lab</b><span>The ground streaming around a moving marker: dunes, rocky shelves and shallows, the borders between them ("Next border"), streaming cost, desert light.</span></a></div>
   </main>
+  <script>
+    // A biome picker on each lab that takes one: the link carries ?biome=..., and the choice is remembered per lab.
+    const BIOMES = [["desert", "Desert"], ["rocky", "Rocky"], ["shallows", "Shallows"], ["mix", "Biome map (mixed)"]];
+    for (const card of document.querySelectorAll(".lab[data-biome]")) {
+      const a = card.querySelector("a"), base = a.getAttribute("href"), key = "biome:" + base;
+      let saved = null;
+      try { saved = localStorage.getItem(key); } catch {}
+      const label = document.createElement("label");
+      label.textContent = "Biome";
+      const sel = document.createElement("select");
+      for (const [v, name] of BIOMES) sel.add(new Option(name, v));
+      sel.value = saved && BIOMES.some(([v]) => v === saved) ? saved : card.dataset.biome;
+      const apply = () => { a.href = base + "?biome=" + sel.value; };
+      sel.addEventListener("change", () => { apply(); try { localStorage.setItem(key, sel.value); } catch {} });
+      apply();
+      label.append(sel);
+      card.append(label);
+    }
+  </script>
 </body>
 </html>

@@ -129,6 +129,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Biome picker on the lab hub (Claude)
+- Keith: biome launch choice as a drop-down on the hub. `index.html`: a Biome select (Desert, Rocky, Shallows, Biome map) on the walker, war band, bandits, robots, POI and terrain labs, remembered per lab, sets `?biome=` on the link; the convoy lab has none (it doesn't take biomes yet). The URL's biome now wins over a saved slider in every lab (`combatLab.ts`, walker and terrain labs). Checked: headless hub test (links follow the picker, kept after reload), typecheck.
+
 ### 2026-10-25 · Water effects: ripples, wakes and splashes in the shallows (Claude)
 - Keith asked for ripples that wave out from units moving through water. `src/fx/water.ts` (pure: ripple rings that spread and fade, splash drops that fall back and leave tiny rings, wakes dropping a ring every `wakeEvery` m so they overlap into a V), `src/fx/waterDraw.ts` (instanced soft rings on the water, drop sprites). `Battlefield.water` and `inWater(x, z)`: rounds into water splash instead of dust and craters, shells burst in a big splash; mech footfalls splash and ring instead of prints and dust, lift-offs drip, the body pushes a wake, dashes throw spray, no skid furrows underwater; vehicles' wheels throw wakes and spray, no ruts; bandits and robots wading leave rings (a sixth of each swarm checked per frame). Combat labs take `?biome=mix|rocky|shallows` (desert by default) with the Biomes topic; "Water effects" sliders under Hits and dust.
 - Checked: `tools/water-check.ts` (rings and drops expire, wake spacing, pools wrap, the shallows are under water), warband, walker, dash, infantry, robots checks. Shots pending.

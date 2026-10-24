@@ -192,6 +192,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
   field.update();
   player.reset(0, 0, 0);
+  // The hub's biome picker wins over a saved slider.
+  { const b = new URLSearchParams(location.search).get("biome"); if (b) { (V as { biomeOnly: number }).biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[b] ?? 0; field.update(); } }
   streamer.fill(0, 0);
   const follow = player.sim.pelvis.clone();
   iso.snap(follow);
