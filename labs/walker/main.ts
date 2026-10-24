@@ -21,7 +21,7 @@ import { WalkerBody } from "../../src/mech/walkerBody";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
-import { FootfallFx } from "../../src/fx/footfall";
+import { SandMarks, MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { MinigunFx, MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS, type HitSurface } from "../../src/fx/minigun";
 import { WreckStandIns } from "../../src/world/wrecks";
 import { DustSim, DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
@@ -35,7 +35,7 @@ const canvas = app.renderer.domElement;
 
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, radius: 4, shadowBox: 30,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, radius: 4, shadowBox: 30,
 };
 const DEFAULTS = { ...V };
 // Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
@@ -59,14 +59,15 @@ const legType = LEG_TYPES[rampart ? "rampart" : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
-const steps = new FootfallFx();
+// Prints, craters and slide trails pressed into the sand.
+const marks = new SandMarks(field, V);
 const gunFx = new MinigunFx(field, V);
-scene.add(steps.group, gunFx.group);
+scene.add(marks.group, gunFx.group);
 // Sand dust from the feet and the rounds (after Keith's reference video).
 const dust = new DustSim(V, field);
 const dustDraw = new DustDraw(dust, field);
 scene.add(dustDraw.group);
-gunFx.onSandHit = (at, d, k) => dust.hit(at.x, at.y, at.z, d.x, d.z, k);
+gunFx.onSandHit = (at, d, k) => { dust.hit(at.x, at.y, at.z, d.x, d.z, k); marks.crater(at.x, at.z, k); };
 // ?surface=gravel|dirt|concrete: pretend the ground is that, to tune the other surfaces before the terrain has them.
 const forcedSurface = params.get("surface");
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
@@ -85,14 +86,8 @@ gunFx.onCasingLand = (at) => gunAudio.casing(at);
 
 const stepTimes: number[] = [];
 let clock = 0;
-const plateQ = (up: THREE.Vector3, yaw: number) => {
-  const fw = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  fw.addScaledVector(up, -fw.dot(up)).normalize();
-  const lf = new THREE.Vector3().crossVectors(up, fw).normalize();
-  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lf, up, fw));
-};
 sim.onFootfall = (f, k) => {
-  steps.footfall(f.planted, plateQ(f.plantedUp, f.plantedYaw), k);
+  marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
   dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > V.walkSpeed + 0.5 ? V.sprintKick : 1), sim.vel.x, sim.vel.z);
 };
 // Toe kick: sand flicked back from a foot as it leaves the ground, more the faster it goes.
@@ -149,7 +144,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -160,11 +155,11 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain", "Dust: sources"] },
-    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
+    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
-    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Minigun FX", "Sound"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Sand marks", "Minigun FX", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -286,7 +281,7 @@ app.onTick((rawDt) => {
     gunAudio.update(dt, trigger, upper.guns, [rampart.muzzle(1, new THREE.Vector3()), rampart.muzzle(-1, new THREE.Vector3())]);
   }
   sfx.update();
-  steps.update(dt);
+  marks.update(dt, sunDir);
   gunFx.update(dt);
 
   reticle.visible = !!aim && !!rampart;

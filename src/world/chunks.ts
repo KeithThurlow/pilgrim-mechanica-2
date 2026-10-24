@@ -2,7 +2,7 @@
 // nearest missing chunks first, a few per frame inside a time budget, far chunks dropped.
 // Chunks at the same resolution share edge vertices exactly, so there are no seams.
 import * as THREE from "three/webgpu";
-import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp } from "three/tsl";
+import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp, cameraPosition } from "three/tsl";
 import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "./terrain";
 
@@ -14,7 +14,7 @@ export const STREAM_DEFAULTS = {
   facets: 0,
   sandGrain: 0.5,
   sandSpecks: 0.45,
-  sandRipples: 0.35,
+  sandRipples: 0.25,
 };
 export type StreamValues = typeof STREAM_DEFAULTS;
 
@@ -62,7 +62,9 @@ export class TerrainStreamer {
     const speck = smoothstep(0.55, 0.75, speckN).mul(this.uSpecks).mul(0.35);
     const across = xz.dot(this.uWind);
     const warp = mx_noise_float(vec3(xz.mul(0.12), float(2.2))).mul(4);
-    const ripple = sin(across.mul(9).add(warp)).mul(this.uRipples).mul(0.035);
+    // Ripples fade out with distance: from the game camera they would shimmer into stripes (Keith 2026-10-24, banding).
+    const near = float(1).sub(smoothstep(8, 22, positionWorld.distance(cameraPosition)));
+    const ripple = sin(across.mul(9).add(warp)).mul(this.uRipples).mul(0.035).mul(near);
     const shade = clamp(float(1).add(mott.mul(this.uGrain).mul(0.12)).add(ripple).sub(speck), 0.5, 1.3);
     this.material.colorNode = vertexColor().mul(shade);
     this.group.name = "terrain";

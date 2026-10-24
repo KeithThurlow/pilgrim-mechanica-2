@@ -77,7 +77,7 @@ src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
-src/fx/                 footfall (prints, dust), minigun (tracers, flash, hits, casings)
+src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides), minigun (tracers, flash, hits, casings)
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
 docs/                   design.md (the game), decisions.md (log)

@@ -28,8 +28,8 @@ How to update it:
 | Unit look | Plain lit paint (dielectric, roughness 0.55) over the model's vertex colours; no outline by default (Keith 2026-10-24); cel bands and the ink outline are still toggles | `src/look/toon.ts` | walker |
 | Minigun sound | Ported from the old game, every gun its own voice: its own spin-up (pitched to its spin-up time) and spin-down from its muzzle, its own growl following its own spin and firing (offset and detuned), a spit per round ungated between the guns; dirt hit per round, impact brap gathered every 50 ms, casing tonk on landing; pan by screen position. Starts on the first click or key | `src/audio/` | walker |
 | Stand-in walker | Box salvage walker, kept for testing the walk alone (`?model=standin`) | `src/mech/walkerBody.ts` | walker |
-| Footfall FX | Footprints (pooled, oldest recycled) as soft rounded hollows; the dust of each stomp and toe kick goes to the dust system | `src/fx/footfall.ts` | walker |
-| Dust | After Keith's reference video (old repo `art-refs/particles/m2-res_1080p.mp4`): one pool of 4096 puffs, two kinds: clumps (dense, darker, thrown low, settling) and cloud (grows 3.5×, rises, drifts on the wind, hangs about 5 s). Sources: stomps (sand shoved out and carried along the walk), toe kicks as feet leave the sand (more when sprinting), minigun rounds into sand (thick packets churned up and shoved downrange, plus a plume thrown up and forward that strings into a column, after Keith's plume refs). Dust keeps the push of whatever threw it, then the wind takes over after `windIn`. Ground surfaces (sand, gravel, dirt, concrete) scale dust and clumps and darken them; only sand exists so far (`?surface=` to try the others). Puffs receive the sun's shadows (shadow map, four soft taps per pixel), so dust in shade is dark; they don't shadow each other. Drawn as soft sorted sprites with noise-frayed grainy edges, faked round shading (pale on the sun side, browner beneath) and a depth fade into the sand and the mech; a soft shadow under each puff, cast down the sun's ray onto the dune. Sliders: Dust topic (Dust, Dust: look, Dust: sources, Dust: surfaces) | `src/fx/dust.ts` (sim), `src/fx/dustDraw.ts` | walker |
+| Sand marks | Footprints, round craters (every 2nd round) and slide trails where a step breaks sand loose on a steep face, all flat decals whose shader lights a small hollow-and-rim height field from the sun (lit rim, shaded wall, churned darker sand inside); deeper on steeper sand; fade over 45 s, 900 pooled. Sliders: Sand marks (Legs, Dust, Hits topics) | `src/fx/sandMarks.ts` | walker |
+| Dust | After Keith's reference video (old repo `art-refs/particles/m2-res_1080p.mp4`): one pool of 4096 puffs, two kinds: clumps (dense, darker, thrown low, settling) and cloud (grows 3.5×, rises, drifts on the wind, hangs about 5 s). Sources: stomps (sand shoved out and carried along the walk), toe kicks as feet leave the sand (more when sprinting), minigun rounds into sand (spray streaks flung up and forward that fall back in a third of a second for the punch, thick packets churned up and shoved downrange, plus a plume thrown up and forward that strings into a column, after Keith's plume refs). Dust keeps the push of whatever threw it, then the wind takes over after `windIn`. Ground surfaces (sand, gravel, dirt, concrete) scale dust and clumps and darken them; only sand exists so far (`?surface=` to try the others). Puffs receive the sun's shadows (shadow map, four soft taps per pixel, looked up across and above the puff so the sand under it can't stripe it), so dust in shade takes a pale sky-lit grey-brown; they don't shadow each other. Drawn as soft sorted sprites with noise-frayed grainy edges, faked round shading (pale on the sun side, browner beneath) and a depth fade into the sand and the mech; a soft shadow under each puff, cast down the sun's ray onto the dune. Sliders: Dust topic (Dust, Dust: look, Dust: sources, Dust: surfaces) | `src/fx/dust.ts` (sim), `src/fx/dustDraw.ts` | walker |
 | Checks | Slopes on tilted planes (the uphill thigh folds, slower uphill, full speed downhill with the feet under the hips; `tools/slope-check.ts`); a close target under the guns' depression still fired on; walker on dunes with stand-in and Rampart leg proportions (reach, clearance, sliding, both feet up, knees, knee straight at push-off; reports thigh-back and knee angles at push-off); guns (independent on target, drums, arcs); terrain (determinism, slopes up to 75°, under 12% steeper than 30°). Dune runs allow 15% reach misses and skip the straight-knee rule (tall dunes); flat ground keeps 1% and 172°; audio (finite, under full scale, growl loops without a seam) | `tools/*-check.ts` | `npm test` |
 | Assets | Rampart, back drums, belt link converted from the old repo's FBX; provenance in `docs/assets.md`; converter `tools/fbx-to-glb.ts` | `public/models/` | |
 | Not started | Convoy (direction in `docs/design.md`), salvage, enemies and swarms, explosions, radar, mech classes, day-night cycle, mech joint and footstep sound, a game page | | |
@@ -69,7 +69,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   is darkened from the shadow map but only checked loosely headless.
 - **Plume shape only seen from above** in headless shots (it reads as a dense lump at the strike); its column height
   wants judging in motion.
-- **Footprints are still flat decals**, not ruts pressed into the sand as in the reference video.
+- **Sand marks are lit decals**, not deformed sand: from very low angles they read flat. No tyre ruts yet.
 - **Mech joint, servo and stomp sounds** from the old game (`MechServoSynth`, the layered stomp, the thrum) aren't
   ported yet; only the minigun's.
 
@@ -78,6 +78,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 Nothing right now.
 
 ## Next candidates (ask Keith which)
+
+- **Combat labs (Keith 2026-10-24), proposal waiting for Keith:** `docs/proposal-combat-labs.md`: convoy escort
+  vehicles, raider war bands circling the mech, bandits on foot, quadruped robot swarms.
 
 - Convoy lab: the convoy as Keith described it 2026-10-24 (`docs/design.md`): platforms of different sizes riding the
   dunes, the biggest on tracks carrying the mech bays and gantries, and a crane that swings out to pick a mech up
@@ -95,6 +98,18 @@ Nothing right now.
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-24 · The impact: spray, craters, prints with depth; shade and banding fixes (Claude, cloud session)
+- Keith (two screenshots of the walker lab): no visible impact where rounds hit, only the drifting cloud after; a
+  dark red-brown blob (dust over a dune's shadow); banding on the sand and in the dust; wants pressed prints and
+  churned sand that sell a heavy mech, cheaply.
+- New `src/fx/sandMarks.ts` (replaces `footfall.ts`): prints, craters, slides with sun-lit fake relief. `dust.ts`:
+  spray kind (streaks along their screen motion), plume puffs start compact and opaque. `dustDraw.ts`: sky-lit
+  shade colour, shadow lookups never below the puff (the stripes), vec2 sprite scale and per-puff rotation.
+  `chunks.ts`: ripples fade out beyond about 15 m (they aliased into bands from the game camera), 0.25 default.
+- Proposal for the combat labs Keith described: `docs/proposal-combat-labs.md` (not built, rule 9).
+- Checked: typecheck, `npm test`, headless shots firing at sand (plume, grit and crater rims at the reticle) and
+  walking (a print with a lit rim).
 
 ### 2026-10-24 · Dust in shade, directional dust and plumes, surfaces, smoother dunes (Claude, cloud session)
 - Keith: dust in shadow was as bright as dust in the sun; dust should come off in the direction of what made it

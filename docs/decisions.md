@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-24 | Sell the impact: hits and steps press marks into the sand, hits throw a visible spray, cheaply | Keith | Keith | Lit decals with a fake height field, not mesh deformation; spray streaks (Claude). |
+| 2026-10-24 | Combat labs to explore: convoy escort vehicles, raider war bands (incl. bandit mechs), bandits on foot, quadruped robot swarms; power plus threat | Keith | open | Proposal in `docs/proposal-combat-labs.md`; order and details for Keith. |
 | 2026-10-24 | Dust receives shadows from other things (not from itself) | Keith | Keith | Shadow-map lookups per dust pixel, four taps (Claude). |
 | 2026-10-24 | Dust leaves in the direction of what made it, then the wind takes over; minigun hits throw plumes | Keith | Keith | Refs `plume.png`, `plume2.png`. |
 | 2026-10-24 | How much dust comes off depends on the surface: sand most, gravel little, dirt clods, concrete none | Keith | Keith | Multipliers are sliders (Claude's values); terrain has only sand so far. |

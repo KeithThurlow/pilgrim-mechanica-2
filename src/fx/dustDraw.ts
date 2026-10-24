@@ -8,16 +8,17 @@
 import * as THREE from "three/webgpu";
 import {
   instancedBufferAttribute, uv, vec3, float, uniform, mx_fractal_noise_float, mx_noise_float, smoothstep, mix, time,
-  linearDepth, viewportLinearDepth, cameraNear, cameraFar, max, clamp, texture, vec2, vec4, cos, sin,
+  linearDepth, viewportLinearDepth, cameraNear, cameraFar, max, clamp, texture, vec2, vec4, abs,
 } from "three/tsl";
-import { DustSim, DUST_MAX, CLOUD, type DustValues } from "./dust";
+import { DustSim, DUST_MAX, CLOUD, SPRAY, type DustValues } from "./dust";
 import type { Ground } from "../mech/walker";
 
 export class DustDraw {
   readonly group = new THREE.Group();
   private sprite: THREE.Sprite;
   private posAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX * 3), 3);
-  private sizeAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
+  private sizeAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX * 2), 2);
+  private rotAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
   private dataAttr = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX * 4), 4);
   private shadows: THREE.InstancedMesh;
   private shadowAlpha = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
@@ -26,6 +27,8 @@ export class DustDraw {
   private uSunView = uniform(new THREE.Vector3(0, 1, 0));
   private uLit = uniform(lin(0xe8d3aa));
   private uShade = uniform(lin(0x8c6e4c));
+  /** Dust in shade is lit by the sky: paler and greyer than its own shaded side, not a dark brown (Keith's shot 2026-10-24). */
+  private uShadowCol = uniform(lin(0xa39282));
   private uBright = uniform(1);
   private uShadeAmt = uniform(0.5);
   private uFray = uniform(0.5);
@@ -50,7 +53,7 @@ export class DustDraw {
   private nn = [0, 1, 0];
 
   constructor(private sim: DustSim, private ground: Ground) {
-    for (const a of [this.posAttr, this.sizeAttr, this.dataAttr, this.shadowAlpha]) a.setUsage(THREE.DynamicDrawUsage);
+    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha]) a.setUsage(THREE.DynamicDrawUsage);
 
     const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, surface darkness
     const p = uv().mul(2).sub(1);
@@ -71,16 +74,17 @@ export class DustDraw {
     const lit = clamp(nrm.dot(this.uSunView).mul(0.5).add(0.5).add(body.mul(this.uBillow)), 0, 1);
     const thick = data.x;
     const shadeMix = clamp(float(1).sub(lit).mul(this.uShadeAmt.mul(1.6)).add(thick.mul(this.uShadeAmt).mul(0.35)), 0, 1);
-    const clumpDark = mix(float(0.82), float(1), data.z); // clumps (kind 0) read darker, heavier sand
+    const clumpDark = mix(float(0.8), float(1), float(1).sub(abs(data.z.sub(1)))); // clumps and spray (kinds 0, 2) read darker, heavier sand
     const col = mix(this.uLit, this.uShade, shadeMix).mul(this.uBright).mul(clumpDark).mul(float(1).sub(data.w.mul(0.55)));
 
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false });
     this.mat = mat;
-    const centre = instancedBufferAttribute<"vec3">(this.posAttr), size = instancedBufferAttribute<"float">(this.sizeAttr);
+    const centre = instancedBufferAttribute<"vec3">(this.posAttr), size2 = instancedBufferAttribute<"vec2">(this.sizeAttr);
+    const size = size2.y;
     this.parts = { col, p, seed, centre, size };
     mat.positionNode = centre;
-    mat.scaleNode = size;
-    mat.rotationNode = seed.mul(6.283);
+    mat.scaleNode = size2;
+    mat.rotationNode = instancedBufferAttribute<"float">(this.rotAttr);
     mat.colorNode = col;
     mat.opacityNode = shape.mul(grain).mul(thick).mul(soft);
     this.sprite = new THREE.Sprite(mat);
@@ -108,10 +112,10 @@ export class DustDraw {
     if (!depthTex) return;
     this.shadowWired = true;
     const { col, p, seed, centre, size } = this.parts;
-    // Where this pixel sits in the world: on the sprite's plane, facing the camera, turned by its rotation.
-    const a = seed.mul(6.283), c = cos(a), sn = sin(a);
-    const q = vec2(p.x.mul(c).sub(p.y.mul(sn)), p.x.mul(sn).add(p.y.mul(c))).mul(size.mul(0.5));
-    const world = centre.add(this.uCamRight.mul(q.x)).add(this.uCamUp.mul(q.y));
+    // Where to look up the shadow: across the puff sideways and up (never down into the sand under it, which
+    // striped the dust with the sand's own shadow), so a puff half in shade is shaded across it.
+    void seed;
+    const world = centre.add(this.uCamRight.mul(p.x.mul(size).mul(0.5))).add(vec3(0, size.mul(0.15).add(p.y.max(0).mul(size).mul(0.4)), 0));
     const sc = uniform(light.shadow.matrix).mul(vec4(world, 1));
     const xyz = sc.xyz.div(sc.w);
     const suv = vec2(xyz.x, xyz.y.oneMinus()), z = xyz.z.add(this.uBias);
@@ -119,7 +123,7 @@ export class DustDraw {
     const tap = (dx: number, dy: number) => texture(depthTex, suv.add(vec2(t.mul(dx), t.mul(dy)))).compare(z);
     const vis = tap(1, 0.4).add(tap(-1, -0.4)).add(tap(0.4, -1)).add(tap(-0.4, 1)).mul(0.25);
     // In shade the puff loses its sunlit side: toward the shaded brown, darker.
-    const shaded = mix(col, this.uShade.mul(0.8).mul(this.uBright), this.uInShadow);
+    const shaded = mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow);
     this.mat.colorNode = mix(shaded, col, vis);
     this.mat.needsUpdate = true;
   }
@@ -151,16 +155,26 @@ export class DustDraw {
     }
     const ord = this.order.subarray(0, n).sort((a, b) => this.depth[a] - this.depth[b]);
     const P = this.posAttr.array as Float32Array, S = this.sizeAttr.array as Float32Array, D = this.dataAttr.array as Float32Array;
+    const R = this.rotAttr.array as Float32Array;
     const SA = this.shadowAlpha.array as Float32Array;
     let ns = 0;
     const sy = Math.max(0.15, sunDir.y);
     for (let j = 0; j < n; j++) {
       const i = ord[j];
       P[j * 3] = sim.px[i]; P[j * 3 + 1] = sim.py[i]; P[j * 3 + 2] = sim.pz[i];
-      S[j] = sim.radius[i] * 2;
+      if (sim.kind[i] === SPRAY) {
+        // A streak along its motion on screen, longer the faster it goes.
+        const vx = sim.vx[i], vy = sim.vy[i], vz = sim.vz[i];
+        const sx = e[0] * vx + e[4] * vy + e[8] * vz, sy2 = e[1] * vx + e[5] * vy + e[9] * vz;
+        R[j] = Math.atan2(sy2, sx);
+        S[j * 2] = sim.radius[i] * 2 + Math.hypot(sx, sy2) * 0.05; S[j * 2 + 1] = sim.radius[i] * 2;
+      } else {
+        R[j] = sim.seed[i] * 6.283;
+        S[j * 2] = S[j * 2 + 1] = sim.radius[i] * 2;
+      }
       D[j * 4] = Math.min(1, sim.alpha[i]); D[j * 4 + 1] = sim.seed[i]; D[j * 4 + 2] = sim.kind[i]; D[j * 4 + 3] = sim.tint[i];
       // Shadow: down the sun's ray from the puff to the sand (two steps to land on the dune), facing the slope.
-      const k = sim.kind[i] === CLOUD ? 1 : 0.6;
+      const k = sim.kind[i] === CLOUD ? 1 : sim.kind[i] === SPRAY ? 0.3 : 0.6;
       let h = sim.py[i] - this.ground.height(sim.px[i], sim.pz[i]);
       let x = sim.px[i] - (sunDir.x / sy) * h, z = sim.pz[i] - (sunDir.z / sy) * h;
       h = sim.py[i] - this.ground.height(x, z);
@@ -177,7 +191,7 @@ export class DustDraw {
     }
     this.sprite.count = n;
     this.shadows.count = ns;
-    for (const a of [this.posAttr, this.sizeAttr, this.dataAttr, this.shadowAlpha]) { a.clearUpdateRanges(); a.addUpdateRange(0, Math.max(1, n) * a.itemSize); a.needsUpdate = true; }
+    for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha]) { a.clearUpdateRanges(); a.addUpdateRange(0, Math.max(1, n) * a.itemSize); a.needsUpdate = true; }
     this.shadows.instanceMatrix.needsUpdate = true;
   }
 }

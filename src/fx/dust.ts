@@ -44,6 +44,10 @@ export const DUST_DEFAULTS = {
   plumeSize: 0.3,
   plumeDensity: 0.85,
   plumeDrag: 2.6,
+  sprayCount: 10,
+  spraySpeed: 11,
+  spraySize: 0.12,
+  sprayLean: 0.7,
   windIn: 1.2,
   stepPush: 0.7,
   gravelDust: 0.25,
@@ -97,6 +101,10 @@ export const DUST_PARAMS: Param[] = [
   { key: "plumeSize", label: "Plume puff size (m)", min: 0.05, max: 1.5, step: 0.01, group: "Dust: sources" },
   { key: "plumeDensity", label: "Plume thickness", min: 0, max: 1, step: 0.01, group: "Dust: sources" },
   { key: "plumeDrag", label: "Plume drag", min: 0.2, max: 8, step: 0.05, group: "Dust: sources", tip: "Higher stops the throw sooner, so the puffs string out into a column" },
+  { key: "sprayCount", label: "Round hit: spray streaks", min: 0, max: 30, step: 1, group: "Dust: sources", tip: "The punch: fast streaks of sand flung up and forward at the strike, falling back in a moment" },
+  { key: "spraySpeed", label: "Spray speed (m/s)", min: 1, max: 30, step: 0.5, group: "Dust: sources" },
+  { key: "spraySize", label: "Spray streak width (m)", min: 0.02, max: 0.6, step: 0.01, group: "Dust: sources" },
+  { key: "sprayLean", label: "Spray lean downrange", min: 0, max: 2, step: 0.01, group: "Dust: sources" },
   { key: "stepPush", label: "Step pushes dust along", min: 0, max: 2, step: 0.01, group: "Dust: sources", tip: "Share of the mech's speed the stomp's sand carries forward" },
   { key: "windIn", label: "Wind takes over after (s)", min: 0, max: 5, step: 0.05, group: "Dust", tip: "Dust first keeps the push of whatever threw it, then the wind takes it" },
   { key: "gravelDust", label: "Gravel: dust ×", min: 0, max: 1.5, step: 0.01, group: "Dust: surfaces" },
@@ -118,7 +126,7 @@ export const DUST_PARAMS: Param[] = [
 ];
 
 export const DUST_MAX = 4096;
-export const CLUMP = 0, CLOUD = 1;
+export const CLUMP = 0, CLOUD = 1, SPRAY = 2;
 
 /** What the ground is made of where dust comes off it. */
 export type Surface = "sand" | "gravel" | "dirt" | "concrete";
@@ -230,8 +238,18 @@ export class DustSim {
       let jx = dx * v.plumeLean + sx, jy = 1, jz = dz * v.plumeLean + sz;
       const l = Math.hypot(jx, jy, jz); jx /= l; jy /= l; jz /= l;
       const s = v.plumeSpeed * (0.25 + 0.75 * f);
-      this.emit(CLOUD, x, y + 0.15, z, jx * s, jy * s, jz * s, v.plumeSize * k * (0.7 + Math.random() * 0.5) * (1.2 - 0.5 * f),
+      this.emit(CLOUD, x, y + 0.15, z, jx * s, jy * s, jz * s, v.plumeSize * k * 0.55 * (0.7 + Math.random() * 0.5) * (1.2 - 0.5 * f),
         v.cloudLife * (0.45 + Math.random() * 0.35), v.plumeDensity * (1 - 0.35 * f));
+    }
+    this.curDrag = 0;
+    // Spray: the punch of the strike, fast grains flung up and on, streaking, falling back almost at once.
+    this.curDrag = 0.6;
+    for (let i = 0; i < this.count(v.sprayCount * Math.max(dm, cm)); i++) {
+      const sx = (Math.random() - 0.5) * 1.2, sz = (Math.random() - 0.5) * 1.2;
+      let jx = dx * v.sprayLean + sx, jy = 0.8 + Math.random() * 0.9, jz = dz * v.sprayLean + sz;
+      const l = Math.hypot(jx, jy, jz); jx /= l; jy /= l; jz /= l;
+      const s = v.spraySpeed * (0.5 + Math.random() * 0.7);
+      this.emit(SPRAY, x, y + 0.1, z, jx * s, jy * s, jz * s, v.spraySize * (0.7 + Math.random() * 0.6) * Math.sqrt(k), 0.3 + Math.random() * 0.35, 0.95);
     }
     this.curDrag = 0;
     for (let i = 0; i < this.count(v.hitCloud * dm); i++) {
@@ -264,7 +282,13 @@ export class DustSim {
         this.vy[i] += (v.cloudRise * (0.6 + sd * 0.8) - this.vy[i]) * k;
         this.radius[i] = this.size0[i] * (1 + (v.cloudGrow - 1) * (1 - Math.exp(-u * 4)));
         // Thick from the start, thinning as it spreads.
-        this.alpha[i] = this.dens[i] * Math.min(1, u * 12) * Math.pow(1 - u, 1.4);
+        this.alpha[i] = this.dens[i] * Math.min(1, u * 30) * Math.pow(1 - u, 1.4);
+      } else if (this.kind[i] === SPRAY) {
+        // Spray: ballistic grains, full gravity, a little drag; thin out at the end.
+        const k = Math.exp(-dt * this.drag[i]);
+        this.vx[i] *= k; this.vz[i] *= k; this.vy[i] = this.vy[i] * k - 9.8 * dt;
+        this.radius[i] = this.size0[i];
+        this.alpha[i] = this.dens[i] * (1 - u * u);
       } else {
         // Clumps: thrown, slowed hard, falling and settling on the sand; they puff out a little and fade.
         const k = Math.exp(-dt * this.drag[i]);
