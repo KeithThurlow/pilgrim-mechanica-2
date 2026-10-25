@@ -57,7 +57,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 ## Lab URL flags
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
-  (not saved), e.g. `?set=sunAzimuth:120,height:12`.
+  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing).
 - Walker lab: `?cam=game|close|side|back|feet`, `?model=standin` (box walker), `?flat` (no dunes),
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
   `?manual` (no demo), `?zoom=metres` (game camera distance), `?aimat=x,z` (hold the aim on a point; steel wrecks
@@ -77,6 +77,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
 - Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's, F both;
   keys 1-3 hold to paint a shoulder weapon, release to fire.
+- Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, plus the combat-lab flags.
+  Results go to the screen, the console and `window.__stress`.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in

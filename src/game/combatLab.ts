@@ -37,6 +37,7 @@ import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from 
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
+import type { Costs } from "../core/costs";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
@@ -98,6 +99,9 @@ export interface CombatLab<E extends object> {
   arsenal: Arsenal;
   /** Shake the camera (decays by itself). */
   shake: (k: number) => void;
+  /** Set by a lab to split the frame into stages (src/core/costs.ts): the shell marks its own; a lab's onFrame marks
+   * what it adds. The averaged line shows in the HUD. */
+  costs: Costs | null;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -290,6 +294,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     refresh: () => panel.refresh(),
     arsenal,
     shake,
+    costs: null,
   };
 
   // For headless debugging and tests: the lab on the page (window.__lab).
@@ -314,6 +319,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
   app.onTick((rawDt) => {
     const dt = fixedDt || rawDt;
+    const cst = lab.costs;
+    cst?.begin();
+    bf.costs = cst;
     clock += dt;
     keys.move(camera, stick);
     if (keys.has("KeyR") || (auto && player.upper.guns[0].ammo < 100)) player.upper.resupply();
@@ -366,13 +374,19 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     // The demo sidesteps now and then, to show the dash off.
     if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
     player.dashHold = spaceDown && !auto;
+    cst?.mark("input + lock");
     player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
+    cst?.mark("mech + weapons");
     for (const f of frames) f(dt);
+    cst?.mark("lab");
     craters.update(dt, groundChanged);
+    cst?.mark("craters");
     deaths.follow(player.sim.pos.x, player.sim.pos.z);
     deaths.step(dt);
+    cst?.mark("deaths physics");
     deadDraw.update();
+    cst?.mark("deaths draw");
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
     reticle.visible = !!cursor;
@@ -399,11 +413,15 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       shakeK *= Math.exp(-rawDt * V.shakeDecay);
     }
     toon.update(camera, canvas.clientHeight);
+    cst?.mark("camera");
     streamer.update(player.sim.pos.x, player.sim.pos.z);
+    cst?.mark("terrain streaming");
     const camDist = camera.position.distanceTo(follow);
     look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+    cst?.mark("light");
     bf.update(dt, camera, look);
     arsenalDraw.update();
+    cst?.mark("weapons draw");
     app.hud.set("weapons", arsenal.controls().join(" · "));
     const ds = bf.dentStats;
     app.hud.set("dents", ds.dug ? `blast dents: ${bf.dentQueue.length} queued · last frame ${ds.frameMs.toFixed(1)} ms (${ds.frameDents} dug) · worst ${ds.worstMs.toFixed(1)} ms · one dent ${ds.lastMs.toFixed(1)} ms · ${ds.dug} dug, ${ds.merged} merged` : "");
@@ -414,6 +432,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+    if (cst) app.hud.set("costs", cst.end());
     app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
