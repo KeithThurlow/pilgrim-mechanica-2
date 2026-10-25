@@ -25,6 +25,7 @@ import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
+import { DENT_DEFAULTS, DENT_PARAMS } from "../../src/fx/dents";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
 import { WreckStandIns } from "../../src/world/wrecks";
 import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
@@ -40,7 +41,7 @@ const canvas = app.renderer.domElement;
 
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS, radius: 4, shadowBox: 30,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS, radius: 4, shadowBox: 30,
   // Biomes: desert here unless ?biome=mix (the map) or ?biome=rocky|shallows (only that one).
   ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS,
   // ?bound: the bound spike's values (docs/proposal-bound.md).
@@ -76,12 +77,17 @@ const wrecks = new WreckStandIns(field, [
 // The shared battlefield (dust, prints and craters, gun effects and sound) and the mech on it, as in the combat labs.
 const bf = new Battlefield(field, V, camera, wrecks);
 scene.add(bf.group);
+// Ground marks as dents on a fine patch (Keith 2026-10-25); markMode 0 brings back the decals.
+const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
 const { sim, upper } = mech;
 const dust = bf.dust;
-// ?surface=gravel|dirt|concrete: pretend the ground is that, to tune the other surfaces before the terrain has them.
+// ?surface=gravel|dirt|concrete|snow: pretend the ground is that, to tune the other surfaces before the terrain has
+// them (snow: deep dents, dust as sand until snow has its own).
 const forcedSurface = params.get("surface");
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
+if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "snow") dents.surfaceAt = () => forcedSurface;
+if (forcedSurface === "concrete") dents.surfaceAt = () => null;
 let clock = 0;
 
 // Cameras: the iso game camera, plus orbiting review views.
@@ -122,7 +128,7 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName === "game" && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-// Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs).
+// Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs); ?dash makes the demo dash every 3 s.
 // ?bound (spike): a tap still dashes (on release, under boundTap s); holding Space longer bounds.
 const boundOn = params.has("bound");
 const BOUND_TAP = 0.2;
@@ -149,7 +155,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -160,12 +166,12 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Bound (spike)", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
-    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Sand marks"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Bound (spike)", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents", "Sand marks"] },
+    { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
-    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Sand marks", "Minigun FX", "Sound"] },
-    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Sand marks", "Minigun FX", "Sound"] },
+    { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -217,7 +223,9 @@ reticle.renderOrder = 10;
 scene.add(reticle);
 
 field.update();
-mech.reset(13, -40, 0.3);
+// ?at=x,z: start somewhere else (default 13, -40).
+const at = params.get("at")?.split(",").map(Number);
+mech.reset(at?.[0] ?? 13, at?.[1] ?? -40, 0.3);
 // ?drop=metres: start in the air that high over the sand, as if a crane had just let go (?drop=3,5 also moving at 5 m/s).
 const dropArg = params.get("drop")?.split(",").map(Number);
 function drop() {
@@ -284,6 +292,8 @@ function tick(rawDt: number) {
     const hold = (spaceDown && spaceFor >= BOUND_TAP) || (auto && straight);
     cmd = bound.update(dt, hold, cmd, sim);
   }
+  // The demo sidesteps now and then (with ?dash: every 3 s from 1.5 s; with ?walk=straight for repeatable furrows).
+  if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;
@@ -325,5 +335,9 @@ function tick(rawDt: number) {
   const ll = sim.lastLanding;
   app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
+  const pt = bf.patch?.stats, dw = bf.patch?.win;
+  app.hud.set("dents", bf.marks.denting && pt && dw
+    ? `dents ${dents.res}² over ${dents.size} m · ${dents.stats.brushes} brushes · patch ${pt.vertices} verts ${(pt.triangles / 1000).toFixed(0)}k tris @ ${dw.fine} m · refill ${dw.stats.ms.toFixed(2)} ms (${dw.stats.fineSamples}+${dw.stats.coarseSamples})${dw.ready ? "" : " · filling"}`
+    : "marks: decals");
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 }

@@ -48,14 +48,18 @@ export class PoiDraw {
   readonly meshes: THREE.Mesh[] = [];
   readonly vehicles: CarBody[] = [];
 
-  constructor(readonly site: PoiSite, ground: Ground) {
+  /**
+   * rut: when given, rut discs are offered to it first (the dent layer presses them into the ground); it returns
+   * true if it took one, else the disc is drawn as a flat decal.
+   */
+  constructor(readonly site: PoiSite, ground: Ground, rut?: (d: PropDef) => boolean) {
     const p = site.place;
     const oy = ground.height(p.x, p.z);
     this.group.position.set(p.x, oy, p.z);
     this.group.name = p.kind;
     const parts: THREE.BufferGeometry[] = [];
     for (const d of site.props) {
-      if (d.shape === "disc") { this.decal(d, ground, oy); continue; }
+      if (d.shape === "disc") { if (!(d.tone === "rut" && rut?.(d))) this.decal(d, ground, oy); continue; }
       const g = shape(d);
       if (!g) continue;
       e.set(d.pitch, d.yaw, d.roll, "YXZ");

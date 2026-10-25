@@ -14,12 +14,16 @@ import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
 import { DustSim, type DustValues } from "../fx/dust";
 import { DustDraw } from "../fx/dustDraw";
-import { SandMarks, type MarkValues } from "../fx/sandMarks";
+import { GroundMarks } from "../fx/groundMarks";
+import type { MarkValues } from "../fx/sandMarks";
+import { DentLayer, DENT_DEFAULTS, type DentValues } from "../fx/dents";
+import { DetailPatch } from "../world/detailPatch";
+import type { TerrainStreamer } from "../world/chunks";
 import { MinigunFx, type MinigunFxValues, type HitSurface } from "../fx/minigun";
 import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 
-export type BattlefieldValues = DustValues & MarkValues & MinigunFxValues & SfxValues & Partial<ShellFxValues>;
+export type BattlefieldValues = DustValues & MarkValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues>;
 
 /** Anything a round can hit. */
 export interface Hittable {
@@ -63,7 +67,11 @@ export class Battlefield {
   readonly group = new THREE.Group();
   readonly dust: DustSim;
   readonly dustDraw: DustDraw;
-  readonly marks: SandMarks;
+  /** Every mark on the ground (prints, ruts, furrows, strikes): dents when useDents was called, else decals. */
+  readonly marks: GroundMarks;
+  /** The dent layer and the fine ground patch that draws it (null until useDents). */
+  dents: DentLayer | null = null;
+  patch: DetailPatch | null = null;
   readonly gunFx: MinigunFx;
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
@@ -88,7 +96,10 @@ export class Battlefield {
   private pt = new THREE.Vector3();
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
-    this.marks = new SandMarks(field, v);
+    // Labs that don't list the dent sliders still get their defaults.
+    const dv = v as BattlefieldValues & Record<string, unknown>;
+    for (const [k, val] of Object.entries(DENT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
     // Biomes: rock and water throw no dust, rocky sand less (the ground knows what it's made of).
@@ -194,6 +205,22 @@ export class Battlefield {
     return struck;
   }
 
+  /**
+   * Draw ground marks as dents (Keith 2026-10-25): a GPU dent layer around the camera focus and the fine patch of
+   * ground that shows them (the chunks leave it a hole). Needs the renderer, so headless stages skip it (decals).
+   */
+  useDents(renderer: THREE.WebGPURenderer, streamer: TerrainStreamer) {
+    const v = this.v as BattlefieldValues & DentValues;
+    this.dents = new DentLayer(renderer, this.field, v);
+    this.patch = new DetailPatch(this.field, streamer, this.dents, v);
+    this.marks.dents = this.dents;
+    this.group.add(this.patch.group);
+    return this.dents;
+  }
+
+  /** How far a foot sinks into the ground here (m; looks only, for snow later): 0 without dents. */
+  sinkDepth(x: number, z: number) { return this.marks.denting ? this.dents!.sinkDepth(x, z) : 0; }
+
   /** Is (x, z) under the shallows' water (deep enough to splash)? */
   inWater(x: number, z: number, depth = 0.04): boolean {
     if (!this.water) return false;
@@ -295,7 +322,7 @@ export class Battlefield {
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
     this.dust.stomp(p.x, p.y, p.z, 1.6 * k);
-    this.marks.crater(p.x, p.z, 4 * k);
+    this.marks.blast(p.x, p.z, s.radius);
     this.sfx.play("brap", p, 1.8, 0.4, false);
     const down = this.back.set(0, -1, 0);
     for (const t of this.targets) if (t.alive && t.team !== s.team && t.splash) t.splash(p, s.radius, s.damage, down);
@@ -323,6 +350,13 @@ export class Battlefield {
     this.sfx.update();
     this.marks.update(dt, this.sunDir);
     c?.mark("sand marks");
+    if (this.dents && this.patch) {
+      // The dents and the patch follow the camera focus (the sun's shadow box is centred on it).
+      const f = look.sun.target.position, on = this.marks.denting;
+      if (on) this.dents.update(dt, f.x, f.z);
+      this.patch.update(f.x, f.z, on);
+    }
+    c?.mark("ground dents");
     this.shells.update(dt, (s) => this.burst(s));
     this.digQueued();
     c?.mark("dents");

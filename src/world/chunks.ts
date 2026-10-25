@@ -2,9 +2,10 @@
 // nearest missing chunks first, a few per frame inside a time budget, far chunks dropped.
 // Chunks at the same resolution share edge vertices exactly, so there are no seams.
 import * as THREE from "three/webgpu";
-import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, float, sin, smoothstep, clamp, cameraPosition, attribute, time } from "three/tsl";
+import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, vec4, float, sin, smoothstep, clamp, cameraPosition, attribute, time, abs, max } from "three/tsl";
 import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "./terrain";
+import { groundColour, WATER_COLOURS, smooth } from "./groundColour";
 
 export const STREAM_DEFAULTS = {
   chunkSize: 64,
@@ -29,26 +30,6 @@ export const STREAM_PARAMS: Param[] = [
   { key: "sandRipples", label: "Wind ripples", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Fine ripples across the wind" },
 ];
 
-// Sand palette (sRGB): warm windward faces, darker slip faces, paler hardpan flats.
-const C = {
-  trough: new THREE.Color().setHex(0xc99467, THREE.SRGBColorSpace),
-  windward: new THREE.Color().setHex(0xe6b780, THREE.SRGBColorSpace),
-  crest: new THREE.Color().setHex(0xf3d3a2, THREE.SRGBColorSpace),
-  slip: new THREE.Color().setHex(0xc4824f, THREE.SRGBColorSpace),
-  flat: new THREE.Color().setHex(0xdcb98f, THREE.SRGBColorSpace),
-  // Rocky land: sand in the hollows a little greyer; rock tops grey-brown, risers red-brown.
-  rockSand: new THREE.Color().setHex(0xccb08a, THREE.SRGBColorSpace),
-  rockTop: new THREE.Color().setHex(0xa48c72, THREE.SRGBColorSpace),
-  rockFace: new THREE.Color().setHex(0x6a4232, THREE.SRGBColorSpace),
-  // Shallows: wet sand at the waterline, the floor under the water.
-  wet: new THREE.Color().setHex(0x9c8261, THREE.SRGBColorSpace),
-  floor: new THREE.Color().setHex(0x7d7a5f, THREE.SRGBColorSpace),
-  // Water: clear and pale at the shore, green-teal with depth, foam at the edge.
-  waterShallow: new THREE.Color().setHex(0x7fae9f, THREE.SRGBColorSpace),
-  waterDeep: new THREE.Color().setHex(0x2f6465, THREE.SRGBColorSpace),
-  foam: new THREE.Color().setHex(0xeef2e8, THREE.SRGBColorSpace),
-};
-
 interface Chunk { mesh: THREE.Mesh; water: THREE.Mesh | null; cx: number; cz: number }
 
 export class TerrainStreamer {
@@ -64,7 +45,15 @@ export class TerrainStreamer {
   private uWind = uniform(new THREE.Vector2(1, 0));
   readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0, patched: 0 };
   private chunks = new Map<string, Chunk>();
-  private c2 = new THREE.Color();
+  /**
+   * A hole the chunks leave for the detail patch (src/world/detailPatch.ts): (x0, z0, x1, z1) in world metres, empty
+   * while x1 <= x0. Chunk fragments inside it are dropped, in the shadow pass too, so the patch draws that ground alone.
+   */
+  readonly hole = uniform(new THREE.Vector4(0, 0, 0, 0));
+  /** The per-pixel sand shading (mottling, specks, ripples) as a factor, shared with the detail patch. */
+  readonly shadeNode: THREE.Node<"float">;
+  /** Called with the box whenever ground is rebuilt or patched (rebuildArea, patchArea), or null for rebuildAll. */
+  readonly onRebuild: ((box: [number, number, number, number] | null) => void)[] = [];
   private c3 = new THREE.Color();
   private c4 = new THREE.Color();
   private dirty = new Set<string>();
@@ -85,7 +74,14 @@ export class TerrainStreamer {
     const near = float(1).sub(smoothstep(8, 22, positionWorld.distance(cameraPosition)));
     const ripple = sin(across.mul(9).add(warp)).mul(this.uRipples).mul(0.035).mul(near);
     const shade = clamp(float(1).add(mott.mul(this.uGrain).mul(0.12)).add(ripple).sub(speck), 0.5, 1.3);
+    this.shadeNode = shade;
     this.material.colorNode = vertexColor().mul(shade);
+    // Outside the patch's hole. The chunks keep drawing half a metre into it: the patch's edge lies exactly on their
+    // triangles but with more vertices (T-junctions), so a shared edge would open pixel cracks; the overlap hides them.
+    const hc = vec4(this.hole);
+    const mid = hc.xy.add(hc.zw).mul(0.5), halfW = hc.zw.sub(hc.xy).mul(0.5).sub(0.5);
+    const dd = abs(xz.sub(mid)).sub(halfW);
+    this.material.maskNode = max(dd.x, dd.y).greaterThan(0).or(hc.z.lessThanEqual(hc.x));
     this.group.name = "terrain";
 
     // Water: colour per vertex (depth tint and foam), opacity from depth; a slow shimmer of small ripples.
@@ -101,6 +97,7 @@ export class TerrainStreamer {
     for (const c of this.chunks.values()) this.dispose(c);
     this.chunks.clear();
     this.dirty.clear();
+    for (const f of this.onRebuild) f(null);
   }
 
   /**
@@ -115,6 +112,7 @@ export class TerrainStreamer {
       const k = cx + "," + cz;
       if (this.chunks.has(k)) this.dirty.add(k);
     }
+    for (const f of this.onRebuild) f([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
   }
 
   setFacets(on: boolean) {
@@ -182,37 +180,11 @@ export class TerrainStreamer {
     this.v.budgetMs = b;
   }
 
-  private wide = [0, 1, 0];
   /** One ground vertex at (x, z): the sample into s, the normal into nn, the colour into tmp. */
   private vertex(x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
-    const [wx, wz] = this.field.wind();
-    const water = this.field.waterLevel;
     this.field.sample(x, z, s);
     this.field.normal(x, z, nn);
-    // Colour: trough to windward to crest by height on the dune, slip faces darker, flats paler.
-    const cr = Math.pow(Math.min(1, s.crest), 0.8);
-    tmp.copy(C.trough).lerp(C.windward, Math.min(1, cr * 1.6)).lerp(C.crest, Math.max(0, cr - 0.6) * 2);
-    // Colour reads a wide normal (2 m) so the slip-face tint fades smoothly instead of following the grid.
-    const wide = this.field.normal(x, z, this.wide, 2);
-    const steep = 1 - wide[1], downwind = wide[0] * wx + wide[2] * wz;
-    const slipK = smooth(0.12, 0.35, steep) * smooth(0.02, 0.2, downwind);
-    tmp.lerp(C.slip, slipK * 0.75);
-    tmp.lerp(C.flat, s.flat * 0.25 * (1 - (s.wr ?? 0)));
-    // Biomes: rocky land's sand greyer, bare rock by steepness (tops grey, risers red-brown); shallows wet and dark.
-    const wr = s.wr ?? 0, ws = s.ws ?? 0, rock = s.rock ?? 0;
-    if (wr > 0) tmp.lerp(C.rockSand, wr * 0.6);
-    if (rock > 0) {
-      // Rock: tops grey-brown, risers red-brown, with strata bands by height so the shelves read as layered stone.
-      const band = 0.5 + 0.5 * Math.sin(s.h * 3.9 + Math.sin(x * 0.05) * 0.6);
-      this.c2.copy(C.rockTop).lerp(C.rockFace, smooth(0.08, 0.3, steep));
-      this.c2.multiplyScalar(0.9 + 0.14 * band * smooth(0.05, 0.25, steep));
-      tmp.lerp(this.c2, rock);
-    }
-    if (water !== null && ws > 0) {
-      const above = s.h - water;
-      tmp.lerp(C.wet, ws * (1 - smooth(0.05, 1.6, above) * 0.6) * (1 - rock * 0.7));
-      tmp.lerp(C.floor, ws * smooth(0, 0.6, -above) * (1 - rock));
-    }
+    groundColour(this.field, x, z, s, tmp);
   }
 
   /**
@@ -224,6 +196,7 @@ export class TerrainStreamer {
     const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
     // Normals and the colour's wide normal read the ground 2 m round each vertex.
     x0 -= 2.5; z0 -= 2.5; x1 += 2.5; z1 += 2.5;
+    for (const f of this.onRebuild) f([x0, z0, x1, z1]);
     const a = Math.floor(x0 / size), b = Math.floor(x1 / size), c = Math.floor(z0 / size), d = Math.floor(z1 / size);
     const s: GroundSample = { h: 0, crest: 0, flat: 0 }, nn = [0, 1, 0], tmp = this.c4;
     const water = this.field.waterLevel;
@@ -270,8 +243,8 @@ export class TerrainStreamer {
     const t = this.c3;
     const d = water - h;
     dep[i] = Math.max(0, d);
-    t.copy(C.waterShallow).lerp(C.waterDeep, smooth(0, 1.4, d));
-    t.lerp(C.foam, (1 - smooth(0, 0.06, d)) * 0.45);
+    t.copy(WATER_COLOURS.shallow).lerp(WATER_COLOURS.deep, smooth(0, 1.4, d));
+    t.lerp(WATER_COLOURS.foam, (1 - smooth(0, 0.06, d)) * 0.45);
     col[i * 3] = t.r; col[i * 3 + 1] = t.g; col[i * 3 + 2] = t.b;
     // Fade out where the shallows end (no water in desert troughs) and just above the shore (the foam line).
     fade[i] = smooth(0.15, 0.6, ws) * (d > -0.05 ? 1 : 0);
@@ -368,4 +341,3 @@ export class TerrainStreamer {
   }
 }
 
-const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
