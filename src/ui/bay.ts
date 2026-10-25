@@ -238,8 +238,15 @@ export function bayScreen(o: BayOptions) {
     const lo = copyLoadout(st.loadout);
     let off: Item[] = [];
     try { off = fit(lo, slot, hover); } catch { return box; }
+    // An arm brings its auto-fitted held weapon (as fitItem does).
+    let held: Item | null = null;
+    if (isMountSlot(slot) && hover.kind === "arm") {
+      const side: MountSide = slot === "mountL" ? "L" : "R";
+      held = bestHeld(lo, side, pool().filter((x) => x !== hover));
+      if (held) off.push(...fit(lo, MOUNTS[side].held, held));
+    }
     const then = summary(resolve(lo, o.tuning));
-    box.append(el("div", "bay-sub", `Fitting ${itemName(hover)}`));
+    box.append(el("div", "bay-sub", `Fitting ${itemName(hover)}${held ? ` (holding ${itemName(held)})` : ""}`));
     // What the fit bounces to the stash (the slot's item, and a side's held and shoulder weapons under a hull weapon).
     if (off.length) box.append(el("p", "bay-note bad", `Comes off to the stash: ${off.map(itemName).join(", ")}`));
     let any = false;

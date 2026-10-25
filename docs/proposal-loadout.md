@@ -40,6 +40,11 @@ Keith 2026-10-25:
 
 ## Slots (calling the torso the hull)
 
+> **Superseded by Keith's mounts (2026-10-26, built):** legs, hull, an optional sensor; each hull mount (left, right)
+> takes a hull weapon or an arm, and an arm carries a held weapon plus a shoulder weapon; the pack mount (a pack or a
+> back weapon, key 3); waist mounts left and right. See `src/items/loadout.ts` and `docs/asset-list.md`. The table
+> below is the first version.
+
 | Slot | Takes | What it decides |
 | --- | --- | --- |
 | Legs | leg items (Rampart, Stilt, Siege legs...) | walk and sprint speed, stride, stomp, turn, how much weight it carries well |
