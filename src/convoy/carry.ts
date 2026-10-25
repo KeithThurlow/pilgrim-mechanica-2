@@ -43,7 +43,8 @@ export const CARRY_DEFAULTS = {
   craneLandShake: 0.5,
   craneHover: 0.8,
   craneSwingLean: 0.6,
-  deckParkTime: 1.6,
+  deckParkTime: 0.8,
+  deckRiseTime: 1,
   deckCrouch: 0.85,
   deckParkPitch: 6,
 };
@@ -66,7 +67,8 @@ export const CARRY_PARAMS: Param[] = [
   { key: "craneLandKick", label: "Landing thud", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Share of the fall speed that hits the body's thud spring (squashes the hocks)" },
   { key: "craneLandShake", label: "Landing shake (m)", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Camera shake on touchdown (scaled by how hard it landed)" },
   { key: "craneSwingLean", label: "Body leans with swing", min: 0, max: 1, step: 0.05, group: "Crane swing", tip: "How much of the rope's angle the hanging mech's body takes (1 = hangs rigidly in line with the rope)" },
-  { key: "deckParkTime", label: "Park settle (s)", min: 0.3, max: 5, step: 0.1, group: "Deck", tip: "How long the mech takes to kneel in a parking bay (and stand up again)" },
+  { key: "deckParkTime", label: "Park settle (s)", min: 0.3, max: 5, step: 0.1, group: "Deck", tip: "How long the mech takes to kneel in a parking bay (Keith 2026-10-26: quicker; was 1.6)" },
+  { key: "deckRiseTime", label: "Stand up (s)", min: 0.3, max: 5, step: 0.1, group: "Deck", tip: "How long the parked mech takes to stand up again" },
   { key: "deckCrouch", label: "Park crouch (m)", min: 0, max: 1.6, step: 0.05, group: "Deck", tip: "How far the hips drop when parked" },
   { key: "deckParkPitch", label: "Park nose-down (°)", min: -10, max: 25, step: 0.5, group: "Deck", tip: "How far the hull tips forward when parked" },
 ];
@@ -362,7 +364,7 @@ export class CraneCarry {
         stow();
         const n = this.kneel;
         n.crouch = v.deckCrouch; n.pitch = v.deckParkPitch;
-        n.k = Math.max(0, Math.min(1, n.k + (this.phase === "rise" ? -dt : dt) / Math.max(0.1, v.deckParkTime)));
+        n.k = Math.max(0, Math.min(1, n.k + (this.phase === "rise" ? -dt / Math.max(0.1, v.deckRiseTime) : dt / Math.max(0.1, v.deckParkTime))));
         if (this.phase === "rise" && n.k <= 0) {
           const w = p.toWorld(n.x, 0, n.z);
           this.toDeck(sim, w.x, w.z, p.heading + n.relHeading);

@@ -361,7 +361,7 @@ function pickUp(w: World, label = "") {
   if (drift > 0.05) fail(`a parked mech moved ${drift.toFixed(2)} m on the deck`);
   if (!w.carry.label.includes("pilot can climb out")) fail("HUD doesn't say the pilot can climb out");
   w.carry.togglePark(w.sim);
-  for (let i = 0; i < Math.round((w.V.deckParkTime + 0.3) / DT); i++) tick(w, still);
+  for (let i = 0; i < Math.round((w.V.deckRiseTime + 0.3) / DT); i++) tick(w, still);
   if (w.carry.state !== "aboard") fail(`didn't stand up (state ${w.carry.state})`);
   const before = onDeck(w).l;
   for (let i = 0; i < 360; i++) tick(w, { x: p.fwd.x, z: p.fwd.z, sprint: false });
