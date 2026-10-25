@@ -185,7 +185,7 @@ export function effectiveStats(item: Item): Record<string, number> {
 export interface ResolvedValues {
   walkSpeed: number; sprintSpeed: number; accel: number; strideBase: number; stridePerSpeed: number; impact: number; turnRate: number;
   hull: number; torsoTurnRate: number;
-  dashCharges: number; dashRecharge: number;
+  dashCharges: number; dashRecharge: number; boostFuel: number;
   ammoPerGun: number;
   /** The shared gun sliders, from the first fitted gun (each gun also has its own in `guns`). */
   fireRate: number; spinUp: number; spread: number; range: number; roundDamage: number; roundPierce: number; podYawMax: number; podTrack: number;
@@ -232,7 +232,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const values: ResolvedValues = {
     walkSpeed: legs.walkSpeed, sprintSpeed: legs.sprintSpeed, accel: legs.accel, strideBase: legs.strideBase, stridePerSpeed: legs.stridePerSpeed, impact: legs.impact, turnRate: legs.turnRate,
     hull: hull.hull, torsoTurnRate: hull.torsoTurnRate,
-    dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge,
+    dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
     ammoPerGun: ammo,
     fireRate: first?.fireRate ?? D.fireRate, spinUp: first?.spinUp ?? D.spinUp, spread: first?.spread ?? D.spread, range: first?.range ?? D.range,
     roundDamage: first?.damage ?? D.damage, roundPierce: first?.pierce ?? D.pierce, podYawMax: first?.arc ?? D.arc, podTrack: first?.track ?? D.track,
@@ -270,7 +270,7 @@ export function summary(r: Resolved): SummaryLine[] {
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
     line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
-    line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2),
+    line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
   ];
   for (const [name, g] of [["L", r.guns.left], ["R", r.guns.right]] as const) {
     out.push(

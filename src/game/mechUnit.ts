@@ -78,6 +78,8 @@ export class MechUnit implements Hittable {
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
   private wakeAcc = 0;
+  /** Space still held (boost while the dash's fuel lasts). Set by the lab before step. */
+  dashHold = false;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -158,7 +160,10 @@ export class MechUnit implements Hittable {
     const sub = Math.max(1, Math.ceil(dt * 120));
     const dash = this.dash;
     for (let i = 0; i < sub; i++) {
-      dash.update(dt / sub);
+      // The slope along the slide: + uphill. Read a couple of metres either side of the body.
+      const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
+      const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
+      dash.update(dt / sub, this.dashHold, cmd.x, cmd.z, grade);
       sim.push.set(dash.vx, 0, dash.vz);
       sim.crouch = dash.crouch;
       // Lean into the dash: along the heading pitches the nose, across it rolls.
@@ -240,7 +245,7 @@ export class MechUnit implements Hittable {
 
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3) {
     if (!this.alive) return;
-    if (this.dash.active) amount *= this.v.dashDamageCut;
+    if (this.dash.shoving) amount *= this.v.dashDamageCut;
     this.health -= amount;
     this.hurt += amount;
     void at; void dir;

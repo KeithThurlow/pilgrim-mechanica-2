@@ -13,7 +13,7 @@ const problems: string[] = [];
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
 field.update();
 const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values };
-const dv = { ...DASH_DEFAULTS };
+const dv = { ...DASH_DEFAULTS, dashSlope: 0 }; // distance on the dunes measured without the slope's pull
 const sim = new WalkerSim(v, field);
 const dash = new Dash(dv);
 sim.reset(5, 5, 0);
@@ -45,7 +45,8 @@ for (const [dx, dz, walking] of dirs) {
   while (dash.active) { const h = sim.heading; step({ x: 0, z: walking ? 1 : 0, sprint: false }); walk += sim.speed * dt * ((Math.sin(h) * dx + Math.cos(h) * dz) / l); }
   const along = ((sim.pos.x - x0) * dx + (sim.pos.z - z0) * dz) / l - walk;
   covered.push(along);
-  if (Math.abs(along - dv.dashDistance) > dv.dashDistance * 0.15) problems.push(`a dash covered ${along.toFixed(1)} m of ${dv.dashDistance}`);
+  const want = dv.dashDistance + (dv.dashCarry * dv.dashCarry) / (2 * dv.slideFriction); // the shove, then the glide out
+  if (Math.abs(along - want) > want * 0.15) problems.push(`a dash covered ${along.toFixed(1)} m of ${want.toFixed(1)}`);
 }
 // Charges: spend them all, the next is refused, then they come back.
 for (let i = 0; i < 120 * 10; i++) step({ x: 0, z: 0, sprint: false });
@@ -55,10 +56,39 @@ if (went !== dv.dashCharges) problems.push(`${went} dashes went from full charge
 for (let i = 0; i < 120 * (dv.dashRecharge * dv.dashCharges + 0.5); i++) step({ x: 0, z: 0, sprint: false });
 if (dash.charges !== dv.dashCharges) problems.push(`charges came back to ${dash.charges} of ${dv.dashCharges}`);
 
+// Slope (Keith 2026-10-25: slides work better downhill): on a tilted plane a dash goes further down than up, and a
+// boost held for 2 s carries on gliding downhill well past where it stops going up.
+function onSlope(dirZ: number, boost: boolean) {
+  const g = 0.25; // rises along +z
+  const plane = { height: (_x: number, z: number) => g * z, normal: (_x: number, _z: number, o: number[] = [0, 0, 0]) => { const l = Math.hypot(g, 1); o[0] = 0; o[1] = 1 / l; o[2] = -g / l; return o; } };
+  const s2 = new WalkerSim(v, plane);
+  s2.reset(0, 0, 0);
+  const d2 = new Dash({ ...DASH_DEFAULTS, boostFuel: boost ? 2 : 0 });
+  d2.fuel = d2.v.boostFuel;
+  for (let i = 0; i < 60; i++) s2.update(dt, { x: 0, z: 0, sprint: false });
+  const z0 = s2.pos.z;
+  d2.start(0, dirZ);
+  let t = 0;
+  while ((d2.active || t < 0.1) && t < 20) {
+    const grade = dirZ * g * Math.sign(d2.dirZ || dirZ);
+    d2.update(dt, boost && t < 2, 0, dirZ, d2.dirZ > 0 ? g : -g);
+    void grade;
+    s2.push.set(d2.vx, 0, d2.vz); s2.crouch = d2.crouch;
+    s2.update(dt, { x: 0, z: 0, sprint: false });
+    t += dt;
+  }
+  return Math.abs(s2.pos.z - z0);
+}
+const up = onSlope(1, false), down = onSlope(-1, false), upB = onSlope(1, true), downB = onSlope(-1, true);
+if (!(down > up * 1.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
+if (!(downB > upB * 1.3)) problems.push(`downhill boost ${downB.toFixed(1)} m not clearly longer than uphill ${upB.toFixed(1)} m`);
+if (!(upB > up)) problems.push(`a boost (${upB.toFixed(1)} m) went no further than a dash (${up.toFixed(1)} m)`);
+
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);
 if (misses > 0.15) problems.push(`legs out of reach ${(misses * 100).toFixed(1)}% of frames`);
+console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · 2 s boost: up ${upB.toFixed(1)} m, down ${downB.toFixed(1)} m`);
 console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m (of ${dv.dashDistance}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${went}/${dv.dashCharges}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("dash check failed"); }
 console.log("dash check passed");

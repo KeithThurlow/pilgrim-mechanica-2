@@ -23,4 +23,5 @@ export function applyLoadout(unit: MechUnit, r: Resolved) {
   unit.upper.resupply();
   if (unit.alive) unit.health = unit.maxHealth;
   unit.dash.charges = Math.round(unit.v.dashCharges);
+  unit.dash.fuel = unit.v.boostFuel;
 }

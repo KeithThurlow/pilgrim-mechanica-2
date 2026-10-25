@@ -43,6 +43,7 @@ export const STATS: Record<string, StatInfo> = {
   pierce: { label: "Pierce", better: 1, decimals: 0, whole: true },
   dashCharges: { label: "Dash charges", better: 1, decimals: 0, whole: true },
   dashRecharge: { label: "Dash recharge (s)", better: -1, decimals: 2 },
+  boostFuel: { label: "Boost fuel (s)", better: 1, decimals: 1 },
   ammoPerGun: { label: "Rounds per gun", better: 1, decimals: 0, whole: true },
 };
 
@@ -133,6 +134,11 @@ export const BASES: Base[] = [
   {
     id: "pack-capacitor", name: "Capacitor pack", kind: "pack", tags: ["power"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.8,
     backMounts: 1, stats: { dashCharges: s(3, 0.15), dashRecharge: s(4, 0.1) },
+  },
+  // A booster pack (Keith 2026-10-25: a boost item to slide around on): hold Space after a dash to keep thrusting.
+  {
+    id: "pack-booster", name: "Booster pack", kind: "pack", tags: ["power", "boost"], weight: 2.6, makers: ["Suzaku Dynamics"], look: "rampart-stilt", drop: 0.7,
+    backMounts: 1, stats: { dashCharges: s(2, 0.15), dashRecharge: s(3.5, 0.1), boostFuel: s(2.5, 0.15) },
   },
   // Back mount: ammo for now (a rocket pod or mortar later).
   {

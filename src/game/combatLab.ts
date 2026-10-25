@@ -130,13 +130,16 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   addEventListener("pointerup", () => { mouseDown = false; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   // Space: dash the way WASD points (Keith 2026-10-24), on charges.
-  let dashPressed = false;
+  let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
     if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     e.preventDefault();
     dashPressed = true;
+    spaceDown = true;
     auto = false;
   });
+  addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+  addEventListener("blur", () => { spaceDown = false; });
 
   const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
   let selector: Selector | null = null;
@@ -276,6 +279,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     }
     // The demo sidesteps now and then, to show the dash off.
     if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
+    player.dashHold = spaceDown && !auto;
     player.step(dt, cmd, aim, trigger);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
@@ -311,7 +315,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)`);
-    const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges));
+    const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
+      + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
     app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;

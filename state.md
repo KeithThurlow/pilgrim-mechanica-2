@@ -139,6 +139,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Boost and slide, better downhill (Claude)
+- Keith enjoys the dash's slide: a boost item to slide around on, better downhill than uphill. `src/mech/dash.ts`: after the shove the mech glides on (`dashCarry` 4 m/s against `slideFriction` 5 m/s²); gravity along the slope (`dashSlope` 1.5 × g) speeds a slide downhill and kills it uphill, capped at `slideMax`; with boost fuel (`boostFuel`, 0 by default) holding Space after the dash keeps thrusting toward `boostSpeed`, steered by WASD at `boostTurn`, fuel regenerating when not boosting. Damage cut only during the shove. New item: Booster pack (2.5 s of fuel) in `src/items/bases.ts`; resolve and the bay show boost fuel. Combat labs track Space held; HUD shows the fuel bar when there is fuel.
+- Checked: `tools/dash-check.ts` (on a 14° plane: dash up 8.7 m vs down 21 m; 2 s boost up 34 m vs down 100 m; flat dash 9 m plus its glide), loadout, walker checks.
+
 ### 2026-10-25 · Research: the Snowflow demo (Claude)
 - Keith's link (Noniv/snowflow_demo, MIT, Babylon.js + WGSL). Notes in `docs/research-snowflow.md`: a GPU deformation buffer following the player (toroidal ping-pong, brushes, depth plus berm channels, relax), a one-mesh clipmap terrain displaced in the vertex shader, swept-mesh wakes; what fits us (a GPU dent window replacing sand-mark decals; a CPU crater layer for gameplay; swept wakes for tracked and hover mechs), a distance-field shore pass for the water, and walker, tracked and hover drives as a slot.
 
