@@ -118,7 +118,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Convoy: faster crane, drop-off fall, slower convoy: an agent on a worktree branch.
+- Convoy: faster crane, drop-off fall, slower convoy, plus the dash in the convoy lab: an agent on a worktree branch.
 - Ground dents (GPU dent layer + fine detail patch replacing the sand-mark decals): an agent on a worktree branch.
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
 - Weapons: proposed (`docs/proposal-weapons.md`); starting with Claude's defaults (right button, salvo on release, cooldowns) unless Keith says otherwise.
@@ -147,6 +147,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-25 · Dash in every lab (Keith, Claude)
+- Keith: the combat labs' dash feels really good; put it in all the labs. Walker lab (`labs/walker/main.ts`): Space dashes the way WASD points (or the way the legs face), hold Space to boost with fuel, dash dots and boost bar on the HUD, Dash sliders under Legs. The combat labs (warband, bandits, robots, pois, loadout) already had it through `combatLab.ts`; the convoy lab gets it in the convoy agent's pass.
+- Checked: typecheck, dash, upper and walker checks; in the walker lab in a headless browser, Space spends a charge with no errors.
 
 ### 2026-10-25 · Expedition loop proposed (Claude)
 - Keith's core loop: radar (big on the convoy, small out of range), one arrow home to the return point, fuel and a return estimate, loot at risk until banked, recovery loses loot, 10-15 minute expeditions. Plan in `docs/proposal-expedition.md`.
