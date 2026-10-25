@@ -82,9 +82,17 @@ export interface ModifierSample {
   rough: number;
 }
 
+/**
+ * A height added on top of everything else (blast craters, src/world/craters.ts): pure given its stored data, and
+ * 0 (fast) where it has no effect.
+ */
+export interface GroundLayer { at(x: number, z: number): number }
+
 export class DuneField {
   /** Optional reshaping (the convoy road). Null: plain dunes. */
   modifier: GroundModifier | null = null;
+  /** Optional dents added after the modifier (blast craters). Null: none. */
+  dents: GroundLayer | null = null;
   private mod: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
   private n: Noise2;
   private seed = -1;
@@ -203,6 +211,7 @@ export class DuneField {
       out.crest *= 1 - m.w;
       out.flat = Math.max(out.flat, m.w);
     }
+    if (this.dents) out.h += this.dents.at(x, z);
     return out;
   }
 

@@ -419,6 +419,8 @@ export class Warband {
   private blowUp(r: Raider) {
     const v = this.v, s = r.sim, p = s.pos, bf = this.bf;
     const big = r.shape.blast;
+    // The blast digs a crater where the vehicle stood (blast radius 3 m per unit of blast size).
+    bf.dent(p.x, p.z, 3 * big);
     for (let i = 0; i < 30 * big; i++) {
       const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
       bf.dust.emit(1, p.x, p.y + Math.random(), p.z, Math.cos(a) * sp, 2 + Math.random() * 5, Math.sin(a) * sp, 0.6 + Math.random() * 0.8, 3 + Math.random() * 4, 0.9);

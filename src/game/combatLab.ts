@@ -27,6 +27,7 @@ import { WATER_FX_DEFAULTS, WATER_FX_PARAMS } from "../fx/water";
 import { BIOME_DEFAULTS, BIOME_PARAMS } from "../world/biomes";
 import { ROCK_DEFAULTS, ROCK_PARAMS } from "../world/rock";
 import { SHALLOWS_DEFAULTS, SHALLOWS_PARAMS } from "../world/shallows";
+import { CraterLayer, CRATER_DEFAULTS, CRATER_PARAMS, HARDNESS_KEYS } from "../world/craters";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../audio/sfx";
 import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
@@ -37,10 +38,10 @@ import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -84,6 +85,8 @@ export interface CombatLab<E extends object> {
   loadRampart: () => Promise<RampartBody>;
   /** The terrain chunks (rebuildArea after the ground changes). */
   streamer: TerrainStreamer;
+  /** Blast craters in the ground (bf.dent adds one). */
+  craters: CraterLayer;
   /** Is the demo driving? */
   demoOn: () => boolean;
   /** Show the values again after the lab changed them (e.g. a loadout fitted). */
@@ -110,6 +113,18 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(bf.group);
   await initPhysics();
   const deaths = new DeathPhysics(V, field);
+  // Blast craters as real ground: a layer in the height function; the chunks under a new one are patched in place.
+  const craters = new CraterLayer(V, field);
+  field.dents = craters;
+  bf.craters = craters;
+  let patchMs = 0, patchN = 0;
+  const groundChanged = (x0: number, z0: number, x1: number, z1: number) => {
+    const t0 = performance.now();
+    streamer.patchArea(x0, z0, x1, z1);
+    patchMs = performance.now() - t0; patchN++;
+    deaths.groundChanged();
+  };
+  bf.onGround = groundChanged;
   const deadDraw = new DeadDraw(deaths);
   scene.add(deadDraw.group);
 
@@ -157,13 +172,17 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
-      { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
+      { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Streaming"] },
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
       { id: "camera", label: "Camera", groups: ["Camera"] },
     ],
     onFocus: () => { if (!picking) selector?.clear(); },
-    onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } o.onChange?.(k); },
+    onChange: (k) => {
+      if (shapeKeys.has(k)) { field.update(); craters.invalidate(); streamer.rebuildAll(); }
+      else if (HARDNESS_KEYS.includes(k)) { const b = craters.invalidate(); if (b) groundChanged(b[0], b[1], b[2], b[3]); }
+      o.onChange?.(k);
+    },
   });
   const regions = body.regions();
   selector = new Selector(app, {
@@ -200,6 +219,15 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // The hub's biome picker wins over a saved slider.
   { const b = new URLSearchParams(location.search).get("biome"); if (b) { (V as { biomeOnly: number }).biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[b] ?? 0; field.update(); } }
   streamer.fill(0, 0);
+  // ?craters=N: N blasts round the start (one right under the mech), to see craters without waiting for a fight.
+  if (params.has("craters")) {
+    const n = Math.max(1, Number(params.get("craters")) || 6);
+    for (let i = 0; i < n; i++) {
+      const a = i * 2.4, r = i === 0 ? 0 : 7 + i * 2.2, x = Math.sin(a) * r, z = Math.cos(a) * r, size = i === 0 ? 5 : 3 + (i % 3) * 1.5;
+      if (bf.dent(x, z, size)) bf.marks.crater(x, z, 4 * size / 3);
+    }
+    player.reset(0, 0, 0);
+  }
   const follow = player.sim.pelvis.clone();
   iso.snap(follow);
   if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
@@ -214,6 +242,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     hud: (k, t) => app.hud.set(k, t),
     loadRampart: () => RampartBody.load(toon),
     streamer,
+    craters,
     demoOn: () => auto,
     refresh: () => panel.refresh(),
   };
@@ -283,6 +312,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     player.step(dt, cmd, aim, trigger);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
+    craters.update(dt, groundChanged);
     deaths.follow(player.sim.pos.x, player.sim.pos.z);
     deaths.step(dt);
     deadDraw.update();
@@ -314,7 +344,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
-    app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)`);
+    app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
     app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
