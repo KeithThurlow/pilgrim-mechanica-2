@@ -1,0 +1,66 @@
+{
+ "id": "minigun-l",
+ "class": "Minigun",
+ "size": "L",
+ "mount": "forearm",
+ "brand": "Goliath Earthworks",
+ "side": "right",
+ "rootAt": "trunnion",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_Minigun_L.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 10624,
+ "moving": [
+  {
+   "node": "Spin",
+   "kind": "spin",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "suggestedRpm": 1200,
+   "pivot": [
+    0,
+    0,
+    0.377
+   ]
+  }
+ ],
+ "sockets": {
+  "Muzzle_0": [
+   0,
+   0,
+   1.402
+  ],
+  "Eject": [
+   -0.207,
+   -0.165,
+   0.2453
+  ],
+  "Mount": [
+   0,
+   0.22,
+   0.2142
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim"
+ ],
+ "extra": {
+  "barrels": 6,
+  "barrelRadius": 0.0285,
+  "clusterRadius": 0.075,
+  "belt": {
+   "width": 0.15,
+   "pitch": 0.04,
+   "note": "fixed belt of cartridge links (the AmmoBelt_Link look) from the gun's own box / drum into the left feed throat"
+  }
+ }
+}

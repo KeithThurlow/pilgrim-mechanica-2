@@ -1,0 +1,42 @@
+{
+ "id": "ammo-belt-chute",
+ "class": "AmmoBelt",
+ "size": "Chute",
+ "mount": "belt",
+ "brand": "Goliath Earthworks",
+ "side": "both",
+ "rootAt": "joint",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_AmmoBelt_Chute.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 380,
+ "moving": [],
+ "sockets": {
+  "Prev": [
+   0,
+   0,
+   -0.08
+  ],
+  "Next": [
+   0,
+   0,
+   0.08
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "detail",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim"
+ ],
+ "extra": {
+  "kind": "chute",
+  "pitch": 0.16,
+  "width": 0.34,
+  "thickness": 0.11,
+  "note": "one chute segment: lay one every `pitch` along the curve; the tail tucks into the segment behind and the flared mouth laps 0.1 pitch over the next, so bends up to ~25 degrees per segment stay closed",
+  "minBendRadius": 0.352
+ }
+}

@@ -1,0 +1,89 @@
+{
+ "id": "hand-cannon-l",
+ "class": "HandCannon",
+ "size": "L",
+ "mount": "hand",
+ "brand": "Goliath Earthworks",
+ "side": "right",
+ "rootAt": "trunnion",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_HandCannon_L.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 2560,
+ "moving": [
+  {
+   "node": "Slide",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    -1
+   ],
+   "travel": 0.2105,
+   "pivot": [
+    0,
+    0.2005,
+    -0.1303
+   ]
+  },
+  {
+   "node": "Hammer",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -55,
+   "pivot": [
+    0,
+    0.0852,
+    -0.1654
+   ]
+  },
+  {
+   "node": "Barrel",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -4,
+   "pivot": [
+    0,
+    0.2055,
+    0.9825
+   ]
+  }
+ ],
+ "sockets": {
+  "Muzzle_0": [
+   0,
+   0.2055,
+   1.1629
+  ],
+  "Eject": [
+   -0.1218,
+   0.2506,
+   0.381
+  ],
+  "Grip_R": [
+   0,
+   0,
+   0
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary"
+ ],
+ "extra": {
+  "compensator": "ring",
+  "slideLength": 1.153
+ }
+}

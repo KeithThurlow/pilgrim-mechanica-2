@@ -37,6 +37,8 @@ const DEFAULT = [
   "/labs/convoy/?manual&dt=0.1&zoom=40&watch=0&set=convoyHeading:90,convoyWander:0",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",
+  "/labs/armoury/?model=rocket-launcher-hull&dt=0.02&t=0.35",
+  "/labs/armoury/?model=mortar-heavy&cam=close&dt=0.02&t=0.35",
 ];
 const pages = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT;
 

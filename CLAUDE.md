@@ -69,6 +69,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   the mech). Walker lab takes `?biome=` too.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
+- Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
+  (start the firing cycle there), `?still` (no cycle).
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
@@ -100,6 +102,9 @@ src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
                         robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx
+src/weapons/            library (weapon models by id: GLB at public/models/weapons/<id>.glb or a code stand-in), catalog, parts, weaponModel,
+                        weaponLook + palette (paint sections, schemes, heat, lamps), laserSight, mounts (on the Rampart), demo;
+                        kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins); the weapons agent's sims live here too
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
