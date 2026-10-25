@@ -71,9 +71,9 @@ export class CraneBody {
       this.jib.geometry.dispose();
       this.jib.geometry = k.build();
     }
-    this.mast.position.set(0, D, v.craneMount);
+    this.mast.position.set(0, D, this.crane.mount);
     this.mast.scale.set(1, v.craneMast, 1);
-    this.turret.position.set(0, D + v.craneMast, v.craneMount);
+    this.turret.position.set(0, D + v.craneMast, this.crane.mount);
     this.turret.rotation.set(0, cr.slew, 0);
     this.jib.position.set(cr.base.x, cr.base.y, cr.base.z);
     this.jib.quaternion.setFromEuler(this.e.set(-cr.luff, p.heading + cr.slew, 0, "YXZ"));

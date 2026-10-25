@@ -22,7 +22,7 @@ import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import { WalkerBody } from "../../src/mech/walkerBody";
 import { LEG_TYPES } from "../../src/mech/legTypes";
-import { RampartBody } from "../../src/mech/rampart";
+import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { DENT_DEFAULTS, DENT_PARAMS } from "../../src/fx/dents";
@@ -46,7 +46,7 @@ const V = {
   biomeOnly: ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome") ?? "desert"] ?? 0,
 };
 const DEFAULTS = { ...V };
-// Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
+// Review flags: ?model=standin, ?mech=<variant id> (public/models/mechs/<id>.glb), ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
 // ?zoom=metres (game camera distance).
 const straight = params.get("walk") === "straight";
 
@@ -61,7 +61,7 @@ const rampart = params.get("model") === "standin" ? null : await RampartBody.loa
 const standIn = rampart ? null : new WalkerBody();
 // The leg archetype's walk and feet become this lab's defaults (so sliders still save over them); the model's own
 // bone lengths are facts and always win.
-const legType = LEG_TYPES[rampart ? "rampart" : "standin"];
+const legType = LEG_TYPES[rampart ? mechLegType() : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
@@ -125,14 +125,17 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName === "game" && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-// Space: dash the way WASD points (as in the combat labs); ?dash makes the demo dash every 3 s.
-let dashPressed = false;
+// Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs); ?dash makes the demo dash every 3 s.
+let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   e.preventDefault();
   dashPressed = true;
+  spaceDown = true;
   auto = false;
 });
+addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+addEventListener("blur", () => { spaceDown = false; });
 
 const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
 let selector: Selector | null = null;
@@ -151,7 +154,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Dash", "Terrain", "Dust: sources", "Ground dents", "Sand marks"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Dash", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents", "Sand marks"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -247,9 +250,11 @@ app.onTick((rawDt) => {
 
   if (dashPressed) {
     dashPressed = false;
+    // With no keys held, dash the way the legs face.
     if (stick.lengthSq() > 0.01) mech.tryDash(stick.x, stick.z);
     else mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
   }
+  mech.dashHold = spaceDown && !auto;
   // The demo sidesteps now and then (with ?dash: every 3 s from 1.5 s; with ?walk=straight for repeatable furrows).
   if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
   mech.step(dt, cmd, aim, trigger);
@@ -280,7 +285,9 @@ app.onTick((rawDt) => {
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
-  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
+  const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
+    + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   const pt = bf.patch?.stats, dw = bf.patch?.win;
   app.hud.set("dents", bf.marks.denting && pt && dw

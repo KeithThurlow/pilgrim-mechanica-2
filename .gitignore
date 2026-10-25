@@ -6,3 +6,6 @@ shots/
 .vite/
 .claude/worktrees/
 resources/
+tools/blender/.slots/
+__pycache__/
+docs/mechs/**/*.png

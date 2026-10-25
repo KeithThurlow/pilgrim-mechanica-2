@@ -14,8 +14,13 @@ const out = resolve(import.meta.dirname, "../shots");
 mkdirSync(out, { recursive: true });
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml", ".glb": "model/gltf-binary" };
+// Files missing from dist/ come from public/, so a model exported since the last build (a mech variant's GLB) shows
+// without rebuilding; parallel agents can take shots without each running a build over the others'.
+const pub = resolve(import.meta.dirname, "../public");
 const server = createServer((req, res) => {
-  let p = join(root, decodeURIComponent(req.url.split("?")[0]));
+  const url = decodeURIComponent(req.url.split("?")[0]);
+  let p = join(root, url);
+  if (!existsSync(p) && existsSync(join(pub, url))) p = join(pub, url);
   if (existsSync(p) && statSync(p).isDirectory()) p = join(p, "index.html");
   if (!existsSync(p)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "content-type": types[extname(p)] ?? "application/octet-stream" });
@@ -37,6 +42,8 @@ const DEFAULT = [
   "/labs/convoy/?manual&dt=0.1&zoom=40&watch=0&set=convoyHeading:90,convoyWander:0",
   "/labs/terrain/?shot",
   "/labs/terrain/?shot&view=high",
+  "/labs/armoury/?model=rocket-launcher-hull&dt=0.02&t=0.35",
+  "/labs/armoury/?model=mortar-heavy&cam=close&dt=0.02&t=0.35",
 ];
 const pages = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT;
 

@@ -70,6 +70,17 @@ export class GroundMarks {
     d.stamp(x, z, r, Math.random() * Math.PI * 2, 1, (big ? v.dentBlast : v.dentRound) * Math.sqrt(Math.max(0.2, k)), { mode: "add", comp: 0.25 });
   }
 
+  /**
+   * An explosive's blast of this radius (m) at (x, z): the real crater goes into the true ground (Battlefield.blast
+   * queues it); this is the fine churned bowl and rim on top, sized to the blast.
+   */
+  blast(x: number, z: number, radius: number) {
+    const k = Math.max(0.5, radius / 3);
+    if (!this.denting) { this.decals.crater(x, z, 4 * k); return; }
+    const r = Math.max(0.3, radius * 0.4) * (0.85 + Math.random() * 0.3);
+    this.dents!.stamp(x, z, r, Math.random() * Math.PI * 2, 1, this.v.dentBlast * Math.sqrt(k), { mode: "add", comp: 0.3 });
+  }
+
   update(dt: number, sunDir: THREE.Vector3) {
     this.decals.update(dt, sunDir);
   }

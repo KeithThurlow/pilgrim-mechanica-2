@@ -1,0 +1,67 @@
+{
+ "id": "ammo-drum-back-half",
+ "class": "AmmoDrum",
+ "size": "Back_Half",
+ "mount": "back",
+ "brand": "Goliath Earthworks",
+ "side": "right",
+ "rootAt": "joint",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_AmmoDrum_Back_Half.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 5256,
+ "moving": [],
+ "sockets": {
+  "Mount": [
+   0,
+   0,
+   0
+  ],
+  "FeedOut": [
+   -0.475,
+   0.1705,
+   -0.415
+  ]
+ },
+ "socketFrames": {
+  "FeedOut": {
+   "position": [
+    -0.475,
+    0.1705,
+    -0.415
+   ],
+   "forward": [
+    -1,
+    0,
+    0
+   ],
+   "up": [
+    0,
+    1,
+    0
+   ],
+   "note": "the belt leaves sideways out of the outlet end (toward its gun), its up face (link +Y) up; curl it up toward the up face into the gun's FeedIn (a flat bend)"
+  }
+ },
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim"
+ ],
+ "extra": {
+  "drumLength": 0.54,
+  "drumRadius": 0.31,
+  "beltWidth": 0.3,
+  "outlets": [
+   "R"
+  ],
+  "backWidth": 1.95,
+  "overallWidth": 0.94,
+  "widthOfBack": 0.48,
+  "mountX": 0.487,
+  "note": "hangs behind the Mount (the back plate's front face): place Mount on the mech's back at about waist height, below the power pack. backWidth: the walker's back in game metres (power pack and fuel cells at packSize 1, lab 3.18 x labScale 0.612); mountX: the Mount's offset from the spine toward its gun's side (the _Lside at -mountX)"
+ }
+}

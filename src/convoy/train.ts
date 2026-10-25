@@ -13,7 +13,7 @@ import type { Param } from "../core/tweaks";
 import type { Platform } from "./platform";
 
 export const TRAIN_DEFAULTS = {
-  trainGap: 12,
+  trainGap: 9,
   trainLanes: 1,
   trainLaneSide: 11,
   bridgeCount: 1,

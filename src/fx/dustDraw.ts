@@ -30,6 +30,8 @@ export class DustDraw {
   private shadowAlpha = new THREE.InstancedBufferAttribute(new Float32Array(DUST_MAX), 1);
   private order = new Uint16Array(DUST_MAX);
   private depth = new Float32Array(DUST_MAX);
+  private projView = new THREE.Matrix4();
+  private frustum = new THREE.Frustum();
   private uSunView = uniform(new THREE.Vector3(0, 1, 0));
   private uLit = uniform(lin(0xe8d3aa));
   private uShade = uniform(lin(0x8c6e4c));
@@ -153,11 +155,21 @@ export class DustDraw {
     this.uGrain.value = v.grain; this.uSoft.value = v.softDistance; this.uShadow.value = v.shadowStrength; this.uBillow.value = v.billow;
     this.uSunView.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
 
-    // Live puffs, sorted far to near.
+    // Live puffs in view, sorted far to near. Puffs outside the view (plus a margin for their shadows on the sand) are
+    // left out: the convoy's dust far behind the camera used to be sorted, shaded and sun-marched every frame.
     const e = camera.matrixWorldInverse.elements;
+    this.projView.multiplyMatrices((camera as THREE.PerspectiveCamera).projectionMatrix, camera.matrixWorldInverse);
+    // The camera's own depth convention (WebGPU and WebGL clip depth differently), so the near plane lands right.
+    this.frustum.setFromProjectionMatrix(this.projView, camera.coordinateSystem);
+    const planes = this.frustum.planes, margin = v.dustCullMargin;
     let n = 0;
-    for (let i = 0; i < DUST_MAX; i++) {
+    outer: for (let i = 0; i < DUST_MAX; i++) {
       if (sim.alpha[i] <= 0.002) continue;
+      const x = sim.px[i], y = sim.py[i], z = sim.pz[i], r = sim.radius[i] + margin;
+      for (let k = 0; k < 6; k++) {
+        const pl = planes[k], nn = pl.normal;
+        if (nn.x * x + nn.y * y + nn.z * z + pl.constant < -r) continue outer;
+      }
       this.order[n++] = i;
       this.depth[i] = e[2] * sim.px[i] + e[6] * sim.py[i] + e[10] * sim.pz[i];
     }

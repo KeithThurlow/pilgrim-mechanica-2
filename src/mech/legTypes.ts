@@ -37,4 +37,33 @@ export const LEG_TYPES: Record<string, LegType> = {
       strideBase: 2.3, stridePerSpeed: 0.4,
     },
   },
+  // Rampart variants (src/mech/variants.ts) whose legs differ from the Rampart's; values from their modelling agents.
+  "rampart-stilt": {
+    id: "rampart-stilt",
+    name: "Stilt (Rampart Stilt)",
+    notes:
+      "The old game's legs.stilt x 0.693: a short shin kicked back over a long raked cannon, small feet, high knee " +
+      "lift. Bone lengths from rampart-stilt.glb's markers; a longer stride suits the long cannon.",
+    values: {
+      hipHeight: 3.05, hipWidth: 0.64,
+      femur: 1.247, shin: 0.82, cannon: 1.298, cannonRake: 14.3, ankleHeight: 0.153, ankleBack: 0,
+      footSpread: 0.82, walkSpread: 0.56,
+      toeHinge: 0.12, toeLength: 0.47, toeCurl: 35,
+      strideBase: 2.5, stridePerSpeed: 0.5, liftHeight: 0.9,
+    },
+  },
+  "rampart-siege": {
+    id: "rampart-siege",
+    name: "Heavy walker (Rampart Siege)",
+    notes:
+      "The old game's legs.heavywalker: short thick legs on wide-set hips (0.92 m), stance 1.25x the Rampart's, three " +
+      "toes on one hinge line 0.24 m ahead of the foot point (the foot mesh splits there, so it must match).",
+    values: {
+      hipHeight: 2.72, hipWidth: 0.92,
+      femur: 1.441, shin: 0.679, cannon: 1.017, cannonRake: 18.4, ankleHeight: 0.136, ankleBack: 0,
+      footSpread: 1.2, walkSpread: 0.95,
+      toeHinge: 0.24, toeLength: 0.8, toeCurl: 35,
+      strideBase: 2.1, stridePerSpeed: 0.36,
+    },
+  },
 };

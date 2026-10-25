@@ -1,0 +1,86 @@
+{
+ "id": "minigun-m-left",
+ "class": "Minigun",
+ "size": "M",
+ "mount": "hull",
+ "brand": "Goliath Earthworks",
+ "side": "left",
+ "rootAt": "trunnion",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_Minigun_M_Lside.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 10688,
+ "moving": [
+  {
+   "node": "Spin",
+   "kind": "spin",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "suggestedRpm": 700,
+   "pivot": [
+    0,
+    0,
+    0.7332
+   ]
+  }
+ ],
+ "sockets": {
+  "Muzzle_0": [
+   0,
+   0,
+   2.702
+  ],
+  "Eject": [
+   0.121,
+   -0.33,
+   0.4799
+  ],
+  "FeedIn": [
+   -0.13,
+   -0.355,
+   -0.9
+  ],
+  "Mount": [
+   0,
+   0,
+   0
+  ]
+ },
+ "socketFrames": {
+  "FeedIn": {
+   "position": [
+    -0.13,
+    -0.355,
+    -0.9
+   ],
+   "forward": [
+    0,
+    1,
+    0
+   ],
+   "up": [
+    -1,
+    0,
+    0
+   ],
+   "note": "the belt enters moving up (+Y Unity) into the underside of the rear housing, its up face (link +Y) inboard (toward the drum it came from); the link's across axis is the gun's Z (fore-aft)"
+  }
+ },
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim"
+ ],
+ "extra": {
+  "barrels": 6,
+  "barrelRadius": 0.0418,
+  "clusterRadius": 0.11,
+  "feed": "belt from the gun's own half-width back drum (Weapon_AmmoDrum_Back_Half, _Lside on the left) FeedOut up into FeedIn under the rear housing; the game lays Weapon_AmmoBelt_Link along a curve between the two frames"
+ }
+}

@@ -1,0 +1,39 @@
+{
+ "id": "ammo-belt-link",
+ "class": "AmmoBelt",
+ "size": "Link",
+ "mount": "belt",
+ "brand": "Goliath Earthworks",
+ "side": "both",
+ "rootAt": "joint",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_AmmoBelt_Link.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 468,
+ "moving": [],
+ "sockets": {
+  "Prev": [
+   0,
+   0,
+   -0.0375
+  ],
+  "Next": [
+   0,
+   0,
+   0.0375
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "mechanical",
+  "plating"
+ ],
+ "extra": {
+  "kind": "cartridge",
+  "pitch": 0.075,
+  "width": 0.3,
+  "thickness": 0.0708,
+  "note": "one linked round: lay one every `pitch` along the curve (+Z along the belt, +Y its up face, X across); the clips lap ~0.6 pitch forward onto the next round, so a straight run reads continuous",
+  "minBendRadius": 0.225
+ }
+}

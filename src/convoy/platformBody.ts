@@ -7,7 +7,8 @@ import * as THREE from "three/webgpu";
 import type { Platform } from "./platform";
 import type { CraneValues } from "./crane";
 import { RAIL } from "./carry";
-import { deckLayout, BAY_W, BAY_L, type DeckValues } from "./deck";
+import { deckLayout, bayZ, storesZ, BAY_W, BAY_L, type DeckValues } from "./deck";
+import { deckOutline, halfWidthAt, type Outline } from "./outline";
 import { Kit, kitMesh, KIT_MAT } from "./kit";
 import { PAL, KIND_PAINT, furniture, furnBox, type Box } from "./furniture";
 import { trackPods, type TrackValues } from "./tracks";
@@ -97,30 +98,45 @@ export class PlatformBody {
     const p = this.platform, { length: L, width: W, tracked, kind } = p.spec, D = p.deck, v = this.v;
     const k = new Kit(), paint = KIND_PAINT[kind];
 
-    // Deck plate, chassis and skirts.
-    k.box([W, 0.35, L], [0, D - 0.175, 0], PAL.deck);
-    k.box([W - 0.3, 0.6, L - 0.3], [0, D - 0.65, 0], paint);
+    // Deck plate, chassis and skirts, on the cut-cornered outline (Keith 2026-10-25: not perfect rectangles).
+    const ol = p.outline;
+    slab(k, ol, D - 0.35, D, PAL.deck);
+    slab(k, deckOutline(p.spec, -0.15), D - 0.95, D - 0.35, paint);
     k.box([W * 0.55, 1.2, L * 0.9], [0, D - 1.4, 0], PAL.dark);
     // Deck seams.
-    for (let z = -L / 2 + 4; z < L / 2 - 1; z += 4) k.box([W - 0.4, 0.04, 0.12], [0, D + 0.02, z], PAL.dark);
+    for (let z = -L / 2 + 4; z < L / 2 - 1; z += 4) k.box([2 * halfWidthAt(ol, z) - 0.4, 0.04, 0.12], [0, D + 0.02, z], PAL.dark);
 
-    // Rails along both sides and the back, posts every ~3 m; gaps at the deploy zones on the bay.
+    // Rails round every edge but the front (the cab's), posts every ~3 m; gaps at the deploy zones on a bay.
     const railY = [D + RAIL * 0.5, D + RAIL];
-    const deployZ = this.carry && kind === "bay" ? this.carry.craneMount : null;
-    for (const sx of [1, -1]) {
-      const x = sx * (W / 2 - 0.1);
-      const segs: [number, number][] = deployZ === null ? [[-L / 2, L / 2]] : [[-L / 2, deployZ - 4], [deployZ + 4, L / 2]];
-      for (const [z0, z1] of segs) {
-        if (z1 - z0 < 0.5) continue;
-        for (const y of railY) k.box([0.08, 0.08, z1 - z0], [x, y, (z0 + z1) / 2], PAL.hazard);
-        for (let z = z0; z <= z1 + 0.01; z += Math.max(1.5, (z1 - z0) / Math.max(1, Math.round((z1 - z0) / 3)))) k.box([0.1, RAIL, 0.1], [x, D + RAIL / 2, z], PAL.steel);
+    const deployZ = this.carry && kind === "bay" ? bayZ(p, this.carry).crane : null;
+    const inset = deckOutline(p.spec, -0.1).pts;
+    for (let i = 1; i < inset.length; i++) {
+      const [ax, az] = inset[i], [bx, bz] = inset[(i + 1) % inset.length];
+      // The long sides open at the deploy zone.
+      const side = Math.abs(ax - bx) < 1e-6;
+      const segs: [number, number][] = [[0, 1]];
+      if (side && deployZ !== null) {
+        const t0 = (deployZ - 4 - az) / (bz - az), t1 = (deployZ + 4 - az) / (bz - az);
+        const lo = Math.min(t0, t1), hi = Math.max(t0, t1);
+        segs.length = 0;
+        if (lo > 0) segs.push([0, Math.min(1, lo)]);
+        if (hi < 1) segs.push([Math.max(0, hi), 1]);
       }
-      if (deployZ !== null) {
-        // Deploy zone: hazard stripes on the deck edge where the crane swings the mech out.
-        for (let i = 0; i < 8; i++) k.box([0.7, 0.05, 0.45], [x - sx * 0.45, D + 0.03, deployZ - 3.5 + i], i % 2 ? PAL.dark : PAL.orange, [0, sx * 0.5, 0]);
+      for (const [t0, t1] of segs) {
+        const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        if (len < 0.3) continue;
+        const yaw = Math.atan2(x1 - x0, z1 - z0);
+        for (const y of railY) k.box([0.08, 0.08, len], [(x0 + x1) / 2, y, (z0 + z1) / 2], PAL.hazard, [0, yaw, 0]);
+        const n = Math.max(1, Math.round(len / 3));
+        for (let j = 0; j <= n; j++) k.box([0.1, RAIL, 0.1], [x0 + ((x1 - x0) * j) / n, D + RAIL / 2, z0 + ((z1 - z0) * j) / n], PAL.steel);
       }
     }
-    for (const y of railY) k.box([W - 0.2, 0.08, 0.08], [0, y, -L / 2 + 0.1], PAL.hazard);
+    if (deployZ !== null) for (const sx of [1, -1]) {
+      // Deploy zone: hazard stripes on the deck edge where the crane swings the mech out.
+      const x = sx * (W / 2 - 0.1);
+      for (let i = 0; i < 8; i++) k.box([0.7, 0.05, 0.45], [x - sx * 0.45, D + 0.03, deployZ - 3.5 + i], i % 2 ? PAL.dark : PAL.orange, [0, sx * 0.5, 0]);
+    }
 
     // Running gear: crawler tracks on the big platforms, wheels on the light ones.
     if (tracked) {
@@ -169,7 +185,7 @@ export class PlatformBody {
     } else if (kind === "fuel") {
       for (const sx of [1, -1]) for (let i = -1; i <= 1; i++) k.box([3.3, 0.12, 0.3], [sx * 2.3, D + 3.4, -2 + i * 5], PAL.red);
     } else if (kind === "bay") {
-      k.box([3.4, 0.2, 4.4], [-(W / 2 - 2.2), D + 2.7, -L / 2 + 4], PAL.dark);
+      k.box([3.4, 0.2, 4.4], [-(W / 2 - 2.2), D + 2.7, storesZ(p.spec).stores], PAL.dark);
     }
 
     // Vehicles tied down (the motor pool): posed once on flat ground, hung on the platform, strapped to the deck.
@@ -235,13 +251,13 @@ export class PlatformBody {
         }
       }
       // Service tower between the parking bays: posts, two walkways, a light on top.
-      const tz = this.carry.deckParkZ;
+      const bz = bayZ(p, this.carry), tz = bz.park;
       for (const sx of [1, -1]) for (const sz of [1, -1]) mk.box([0.25, 4.6, 0.25], [sx * 0.6, D + 2.3, tz + sz * 1.7], PAL.steel);
       for (const y of [1.6, 3.2]) mk.box([1.6, 0.15, 3.8], [0, D + y, tz], PAL.ochre);
       mk.box([0.6, 0.6, 0.6], [0, D + 4.9, tz + 1.6], PAL.bone);
       this.marks = kitMesh(mk.build(), this.root, MARK_MAT);
       // Crane foot: a mast on a ring.
-      const mz = this.carry.craneMount;
+      const mz = bz.crane;
       k.cyl(1.8, 0.5, [0, D + 0.25, mz], PAL.steel, [0, 0, 0], 16);
       // Keep pipes off the launch gaps, the pads and bays, the crane ring and the service tower.
       for (const sx of [1, -1]) keep.push({ x: sx * (W / 2 - 1.5), y: D + 1, z: mz, hx: 1.6, hy: 1.5, hz: 4.6 });
@@ -254,8 +270,18 @@ export class PlatformBody {
     const mounts = items.filter((f) => f.mount).map(furnBox);
     const keepOut = [...keep, ...items.filter((f) => !f.mount).map(furnBox)];
     for (const slot of cars) { const cv = carValues(slot.kind); keepOut.push({ x: slot.x, y: D + 1.2, z: slot.z, hx: cv.track / 2 + 0.8, hy: 1.4, hz: cv.wheelbase / 2 + 1.8 }); }
-    const set = generatePipes({ length: L, width: W, deck: D, mounts, keepOut, walkable: kind === "bay", index: this.index }, v);
+    const set = generatePipes({ length: L, width: W, deck: D, mounts, keepOut, walkable: kind === "bay", index: this.index, outline: ol }, v);
     this.pipeRuns = set.runs;
     if (set.tubes.length) this.pipes = kitMesh(pipesGeometry(set), this.root, PIPE_MAT);
   }
+}
+
+/** A flat slab on an outline, from y0 to y1 (platform frame). */
+function slab(k: Kit, o: Outline, y0: number, y1: number, color: number) {
+  const sh = new THREE.Shape(o.pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const g = new THREE.ExtrudeGeometry(sh, { depth: y1 - y0, bevelEnabled: false });
+  // Shape (x, -z) extruded along +z, turned so the extrusion runs up: (x, y, z) -> (x, z, -y).
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, y0, 0);
+  k.geo(g, color);
 }

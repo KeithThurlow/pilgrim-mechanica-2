@@ -1,0 +1,179 @@
+{
+ "id": "missile-pod-l",
+ "class": "MissilePod",
+ "size": "L",
+ "mount": "forearm",
+ "brand": "Stratford-Aegis",
+ "side": "right",
+ "rootAt": "trunnion",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_MissilePod_L.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 3618,
+ "moving": [
+  {
+   "node": "Door_0",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.0644,
+    0.0736,
+    0.5302
+   ]
+  },
+  {
+   "node": "Door_1",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.0644,
+    0.0736,
+    0.5302
+   ]
+  },
+  {
+   "node": "Door_2",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.0644,
+    -0.0054,
+    0.5302
+   ]
+  },
+  {
+   "node": "Door_3",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.0644,
+    -0.0054,
+    0.5302
+   ]
+  },
+  {
+   "node": "Missile_0",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.536,
+   "pivot": [
+    0.0644,
+    0.0395,
+    0.0539
+   ]
+  },
+  {
+   "node": "Missile_1",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.536,
+   "pivot": [
+    -0.0644,
+    0.0395,
+    0.0539
+   ]
+  },
+  {
+   "node": "Missile_2",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.536,
+   "pivot": [
+    0.0644,
+    -0.0395,
+    0.0539
+   ]
+  },
+  {
+   "node": "Missile_3",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.536,
+   "pivot": [
+    -0.0644,
+    -0.0395,
+    0.0539
+   ]
+  }
+ ],
+ "sockets": {
+  "Mount": [
+   0,
+   0.1667,
+   0.1813
+  ],
+  "Muzzle_0": [
+   0.0644,
+   0.0395,
+   0.5833
+  ],
+  "Muzzle_1": [
+   -0.0644,
+   0.0395,
+   0.5833
+  ],
+  "Muzzle_2": [
+   0.0644,
+   -0.0395,
+   0.5833
+  ],
+  "Muzzle_3": [
+   -0.0644,
+   -0.0395,
+   0.5833
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim",
+  "visor"
+ ],
+ "extra": {
+  "tubes": 4,
+  "layout": "2x2",
+  "tubeRadius": 0.0284,
+  "doorOpenDeg": 100,
+  "order": "row by row from the top left, seen from behind"
+ }
+}

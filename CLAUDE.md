@@ -69,8 +69,16 @@ desert look direction. What came from where: `docs/decisions.md`.
   the mech). Walker lab takes `?biome=` too.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
+- Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
+  (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
+- Weapons lab: `?left=`/`?right=minigun|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=`/`?k3=none|rpg|missiles|mortar|
+  linemortar` (k3 also `drums`), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
+  aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
+  it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
+- Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's, F both;
+  keys 1-3 hold to paint a shoulder weapon, release to fire.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
-  (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
+  (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
 
 ## Layout
@@ -90,7 +98,8 @@ src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
-                        loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies)
+                        loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
+                        firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
@@ -103,6 +112,13 @@ src/combat/             warband (raider vehicles and bandit mechs), infantry (ba
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
+src/weapons/            the new weapons, each with its own targeting: tuning (sliders), painter (strip, ring, laser) + painterDraw,
+                        salvo (line rockets), rail, mortar, autocannon (pure sims), arsenal (a mech's weapons on the battlefield)
+                        + arsenalDraw, models (each kind's model: the library's via modelSwap, boxes as the fallback),
+                        projectileDraw, weaponSound, ribbon (ground-hugging marks).
+                        Models: library (by id: GLB at public/models/weapons/<id>.glb, else a code stand-in), catalog, parts,
+                        weaponModel, weaponLook + palette (paint sections, schemes, heat, lamps), laserSight, mounts (on the
+                        Rampart), demo; kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins)
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots
@@ -118,8 +134,8 @@ docs/                   design.md (the game), decisions.md (log)
 - Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom from 45° at 12 m
   out to 55° at 80 m.
   Judge looks and readability from that camera first; close views are for detail.
-- Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left button
-  fires.
+- Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left click
+  fires the left side's weapon and right click the right side's (Keith 2026-10-25), keys 1-4 the shoulder weapons.
 - Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;
   read proportions from the model's joint markers rather than hardcoding them.
 - Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the

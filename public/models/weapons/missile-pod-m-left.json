@@ -1,0 +1,319 @@
+{
+ "id": "missile-pod-m-left",
+ "class": "MissilePod",
+ "size": "M",
+ "mount": "shoulder",
+ "brand": "Stratford-Aegis",
+ "side": "left",
+ "rootAt": "joint",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_MissilePod_M_Lside.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 5556,
+ "moving": [
+  {
+   "node": "Door_0",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.2268,
+    0.0966,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_1",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.0756,
+    0.0966,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_2",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.0756,
+    0.0966,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_3",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.2268,
+    0.0966,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_4",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.2268,
+    -0.007,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_5",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    0.0756,
+    -0.007,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_6",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.0756,
+    -0.007,
+    0.6912
+   ]
+  },
+  {
+   "node": "Door_7",
+   "kind": "hinge",
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "angleDeg": -100,
+   "pivot": [
+    -0.2268,
+    -0.007,
+    0.6912
+   ]
+  },
+  {
+   "node": "Missile_0",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    0.2268,
+    0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_1",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    0.0756,
+    0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_2",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    -0.0756,
+    0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_3",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    -0.2268,
+    0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_4",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    0.2268,
+    -0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_5",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    0.0756,
+    -0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_6",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    -0.0756,
+    -0.0518,
+    0.1517
+   ]
+  },
+  {
+   "node": "Missile_7",
+   "kind": "slide",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "travel": 0.607,
+   "pivot": [
+    -0.2268,
+    -0.0518,
+    0.1517
+   ]
+  }
+ ],
+ "sockets": {
+  "Mount": [
+   0,
+   0,
+   0
+  ],
+  "Muzzle_3": [
+   -0.2268,
+   0.0518,
+   0.75
+  ],
+  "Muzzle_2": [
+   -0.0756,
+   0.0518,
+   0.75
+  ],
+  "Muzzle_1": [
+   0.0756,
+   0.0518,
+   0.75
+  ],
+  "Muzzle_0": [
+   0.2268,
+   0.0518,
+   0.75
+  ],
+  "Muzzle_7": [
+   -0.2268,
+   -0.0518,
+   0.75
+  ],
+  "Muzzle_6": [
+   -0.0756,
+   -0.0518,
+   0.75
+  ],
+  "Muzzle_5": [
+   0.0756,
+   -0.0518,
+   0.75
+  ],
+  "Muzzle_4": [
+   0.2268,
+   -0.0518,
+   0.75
+  ]
+ },
+ "socketFrames": {},
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim",
+  "visor"
+ ],
+ "extra": {
+  "tubes": 8,
+  "layout": "4x2",
+  "tubeRadius": 0.0373,
+  "doorOpenDeg": 100,
+  "order": "row by row from the top left, seen from behind"
+ }
+}

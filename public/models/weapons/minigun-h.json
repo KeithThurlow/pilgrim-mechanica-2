@@ -1,0 +1,96 @@
+{
+ "id": "minigun-h",
+ "class": "Minigun",
+ "size": "H",
+ "mount": "two_handed",
+ "brand": "Goliath Earthworks",
+ "side": "both",
+ "rootAt": "trunnion",
+ "frame": "+Z front (muzzle), +Y up, +X the mech's left; root at the mount or grip; metres at game size",
+ "source": "old repo Assets/_Project/Art/Generated/Weapons/Mech/Weapon_Minigun_H.fbx (+ .json), converted by tools/weapons-import.ts",
+ "tris": 14482,
+ "moving": [
+  {
+   "node": "Spin",
+   "kind": "spin",
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "suggestedRpm": 900,
+   "pivot": [
+    0,
+    0.4,
+    0.7982
+   ]
+  }
+ ],
+ "sockets": {
+  "Muzzle_0": [
+   0,
+   0.4,
+   2.932
+  ],
+  "Eject": [
+   -0.3726,
+   0.0674,
+   0.5236
+  ],
+  "FeedIn": [
+   0.108,
+   -0.0692,
+   0.1152
+  ],
+  "Grip_R": [
+   0,
+   0,
+   0
+  ],
+  "Grip_L": [
+   0,
+   -0.11,
+   1.175
+  ]
+ },
+ "socketFrames": {
+  "FeedIn": {
+   "position": [
+    0.108,
+    -0.0692,
+    0.1152
+   ],
+   "forward": [
+    0,
+    0,
+    1
+   ],
+   "up": [
+    0,
+    1,
+    0
+   ],
+   "note": "the ready drum's inlet: the belt from Weapon_AmmoDrum_Back_Full enters moving forward (+Z), its up face up"
+  }
+ },
+ "paintSections": [
+  "dark",
+  "detail",
+  "lighting",
+  "mechanical",
+  "plating",
+  "secondary",
+  "trim"
+ ],
+ "extra": {
+  "barrels": 8,
+  "barrelRadius": 0.0513,
+  "clusterRadius": 0.1743,
+  "belt": {
+   "width": 0.27,
+   "pitch": 0.07,
+   "note": "fixed belt of cartridge links (the AmmoBelt_Link look) from the gun's own box / drum into the left feed throat"
+  },
+  "feed": "the drum under the gun is a ready drum fed from Weapon_AmmoDrum_Back_Full (FeedOut) through FeedIn on its rear cap"
+ }
+}

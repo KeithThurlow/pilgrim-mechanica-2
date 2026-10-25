@@ -68,6 +68,7 @@ export const DUST_DEFAULTS = {
   softDistance: 1.2,
   shadowStrength: 0.45,
   shadowSize: 1.1,
+  dustCullMargin: 15,
 };
 export type DustValues = typeof DUST_DEFAULTS;
 
@@ -124,6 +125,7 @@ export const DUST_PARAMS: Param[] = [
   { key: "inShadow", label: "Darker in shade", min: 0, max: 1, step: 0.01, group: "Dust: look", tip: "How much dust in the shadow of a dune, the mech or a wreck loses its sunlit side" },
   { key: "dustShadowBlur", label: "Shade edge softness (m)", min: 0, max: 3, step: 0.05, group: "Dust: look" },
   { key: "grain", label: "Grain", min: 0, max: 1, step: 0.01, group: "Dust: look" },
+  { key: "dustCullMargin", label: "Off-screen margin (m)", min: 0, max: 60, step: 1, group: "Dust: look", tip: "Puffs further than this outside the view skip sorting, shading and their ground shadow (they still drift). Raise it if shadows of off-screen dust pop in at the edges (Keith 2026-10-25: far-away convoy dust cost frame time)" },
   { key: "softDistance", label: "Soft into the ground (m)", min: 0.05, max: 4, step: 0.05, group: "Dust: look", tip: "Puffs fade where they meet the sand and the mech instead of cutting a hard line" },
   { key: "shadowStrength", label: "Shadow on the sand", min: 0, max: 1, step: 0.01, group: "Dust: look" },
   { key: "shadowSize", label: "Shadow size ×", min: 0.3, max: 2.5, step: 0.05, group: "Dust: look" },
