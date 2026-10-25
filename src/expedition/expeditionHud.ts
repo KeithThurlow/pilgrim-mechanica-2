@@ -7,6 +7,7 @@ import type { Expedition } from "./expedition";
 import { clock } from "./returnPoint";
 
 const LOCK = `<svg width="12" height="13" viewBox="0 0 12 13" style="vertical-align:-1px"><rect x="1" y="5.5" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M3.3 5.5V4a2.7 2.7 0 0 1 5.4 0v1.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`;
+const SEEK = "#9fd8ff";
 const COL = { ok: "#cfe9df", amber: "#ffb347", red: "#ff6a4a", dim: "#9a958c" };
 
 export interface HudFrame {
@@ -21,6 +22,8 @@ export interface HudFrame {
   /** Show the recall hint (out, alive). */
   canRecall: boolean;
   bankShow: number;
+  /** The active seeker and what it points at (or ""). */
+  seek?: string;
 }
 
 export class ExpeditionHud {
@@ -99,6 +102,7 @@ export class ExpeditionHud {
       lines.push(`<div style="color:${COL.ok}">${LOCK} Banked ◆ ${e.last.scrap} scrap${e.last.items ? ` · ${e.last.items} items` : ""}</div>`);
     }
     lines.push(`<div style="color:${COL.ok};margin-top:4px">Convoy ${LOCK} ◆ ${e.bank.scrap}</div>`);
+    if (f.seek) lines.push(`<div style="color:${SEEK};margin-top:4px">◇ ${f.seek}</div>`);
     if (f.canRecall) {
       const k = Math.round(e.recall * 100);
       lines.push(`<div style="color:${COL.dim};font-weight:500;margin-top:4px">Hold Q: call recovery (loot lost)</div>`);

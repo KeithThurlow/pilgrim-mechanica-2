@@ -8,6 +8,17 @@ import type { WalkerValues } from "../mech/walkerTuning";
 import { UpperSim, triggerOf, type UpperValues, type Aim, type Trigger } from "../mech/upper";
 import type { UpperSim as UpperSimT } from "../mech/upper";
 
+/** Where a part hangs on a mech body: the old names (a gun side, a shoulder, the back) or the asset list's sockets. */
+export type MountSocket = "left" | "right" | "back" | "shoulderL" | "shoulderR"
+  | "HullMount_L" | "HullMount_R" | "Shoulder_L" | "Shoulder_R" | "Grip_L" | "Grip_R" | "Sensor" | "Pack" | "Waist_L" | "Waist_R";
+
+/** Fitted parts a body shows (src/items/loadout.ts Resolved.parts plus which sides have a gun). Optional fields are
+ *  the mounts (Keith 2026-10-26); a body without them reads only the first four. */
+export interface BodyParts {
+  gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean;
+  drumsL?: boolean; drumsR?: boolean; sensor?: boolean; mountL?: "gun" | "arm" | null; mountR?: "gun" | "arm" | null;
+}
+
 /** What a mech unit needs from its model: the Rampart, or the stand-in walker (no guns). */
 export interface MechBody {
   readonly root: THREE.Object3D;
@@ -19,9 +30,10 @@ export interface MechBody {
   eject(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
   paint(look: ToonLook, color: number | null): void;
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
-  showParts?(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }): void;
-  /** Where other weapons' stand-ins hang (a gun side's pivot, or the back mount), and hiding a side's own pod. */
-  mount?(slot: "left" | "right" | "back" | "shoulderL" | "shoulderR"): THREE.Object3D;
+  showParts?(parts: BodyParts): void;
+  /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
+   *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
+  mount?(slot: MountSocket): THREE.Object3D;
   showPod?(side: 1 | -1, on: boolean): void;
 }
 import type { ToonLook } from "../look/toon";

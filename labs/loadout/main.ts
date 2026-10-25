@@ -3,7 +3,7 @@
 // sockets, loot rolls. Legs change the walk, the hull its hull points and torso turn, the pack the dash, weapons the
 // guns (an empty side doesn't fire). The loadout, stash and cargo are saved in this browser.
 // URL flags for shots: ?bay[=slot] opens the bay on a slot (rolls a few items into an empty stash), ?hover=N previews
-// the Nth fitting item, ?fit=slot:base:rarity,... fits rolled items first (e.g. ?fit=armL:arm-rampart:rare,armR:arm-rampart,handR:mg-heavy:epic),
+// the Nth fitting item, ?choice=arm|hull (on a hull mount slot, which list to show), ?fit=slot:base:rarity,... fits rolled items first (e.g. ?fit=mountR:arm-rampart:rare,shoulderR:sh-missiles,mountL:ac-medium:epic),
 // ?fresh ignores the saved bay.
 import "../../src/core/lab.css";
 import { combatLab } from "../../src/game/combatLab";
@@ -78,12 +78,14 @@ if (params.has("bay")) {
     for (let i = 1; i <= 10; i++) st.stash.items.push(rollLoot(i * 101, V));
     for (const r of RARITIES) st.stash.items.push(rollItem(7000 + RARITIES.indexOf(r), V, { kind: "weapon", rarity: r }));
     st.stash.items.push(rollItem(7100, V, { base: "mg-light", rarity: "rare" }), rollItem(7101, V, { base: "arm-wildcat", rarity: "uncommon" }));
+    st.stash.items.push(rollItem(7102, V, { base: "arm-loader", rarity: "rare" }), rollItem(7103, V, { base: "sensor-dish", rarity: "epic" }),
+      rollItem(7104, V, { base: "waist-rack", rarity: "uncommon" }), rollItem(7105, V, { base: "sh-mortar", rarity: "rare" }));
     st.stash.items.push(rollProtocol(31, "overpressure"), rollProtocol(32, "shredder"));
     st.cargo.items.push(rollItem(4242, V, { base: "legs-stilt", rarity: "epic" }));
   }
   bay.open();
-  const slot = (params.get("bay") || "armR") as SlotId;
-  bay.select(SLOTS.includes(slot) ? slot : "armR", params.has("hover") ? Number(params.get("hover")) : -1);
+  const slot = (params.get("bay") || "mountR") as SlotId;
+  bay.select(SLOTS.includes(slot) ? slot : "mountR", params.has("hover") ? Number(params.get("hover")) : -1, params.get("choice") === "arm" ? "arm" : params.get("choice") === "hull" ? "hullWeapon" : null);
 }
 
 // ---- Target dummies ----

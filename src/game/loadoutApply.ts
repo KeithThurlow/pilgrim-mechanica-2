@@ -18,7 +18,9 @@ export function applyLoadout(unit: MechUnit, r: Resolved) {
     g.stats = s && (s.cls || !same(s, unit.v)) ? s : null;
     if (!s) { g.spin = 0; g.firing = false; }
   }
-  unit.body.showParts?.({ gunLeft: !!r.guns.left, gunRight: !!r.guns.right, drums: r.parts.drums, pack: r.parts.pack });
+  // The model: each hull mount's hull weapon or arm (with its held weapon on the gun pivot), drums per waist side, the
+  // pack, the sensor (src/mech/rampart.ts showParts; stand-ins until the parts are modelled).
+  unit.body.showParts?.({ gunLeft: !!r.guns.left, gunRight: !!r.guns.right, ...r.parts });
   // The new weapons (src/weapons): their stand-in models and sims, if the unit carries an arsenal.
   unit.weapons?.configure?.(r);
   // Fitted at the bay: full drums, full hull, dash charges topped up to the new pack.

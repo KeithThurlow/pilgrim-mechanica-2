@@ -10,6 +10,7 @@
 // sound). The picture is in world offsets from the mech (x, z); the drawer turns it to screen-up.
 import type { Param } from "../core/tweaks";
 import type { Unknown } from "./camps";
+import type { SeekTarget } from "./seekers";
 
 export const RADAR_DEFAULTS = {
   convoyRadar: 1500,
@@ -49,7 +50,7 @@ export interface RadarWorld {
   route: { x: number; z: number }[];
   /** The return point (null aboard). */
   home: { x: number; z: number } | null;
-  pois: { id: string; x: number; z: number; tier: number; stripped?: boolean }[];
+  pois: { id: string; x: number; z: number; tier: number; kind?: string; stripped?: boolean }[];
   blobs: { id: string; x: number; z: number; guess: number; awake: boolean }[];
   unknown: Unknown[];
   /** Live robots (only the mech radar shows them). */
@@ -75,6 +76,8 @@ export interface RadarPicture {
   home: { x: number; z: number; dist: number; bearing: number } | null;
   /** Where the link edge is: offset of the convoy's nearest car and the edge radius (convoy mode). */
   edge: { x: number; z: number; r: number } | null;
+  /** What the active seeker points at (offset from the mech), if anything (src/expedition/seekers.ts). */
+  seek?: SeekTarget | null;
 }
 
 /** Distance from the mech to the nearest car of the convoy. */

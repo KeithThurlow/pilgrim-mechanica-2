@@ -9,7 +9,8 @@ import type { Param } from "../core/tweaks";
 import type { PoiSite, SpotDef } from "./site";
 
 export const SALVAGE_DEFAULTS = { salvageReach: 7, stripSpeed: 1, scrapScale: 1, noiseEvery: 0.6, noiseRadius: 160 };
-export type SalvageValues = typeof SALVAGE_DEFAULTS;
+/** Plus the gear's salvage speed (arms, held weapons, a cutting kit: src/items/loadout.ts resolve), when a loadout is fitted. */
+export type SalvageValues = typeof SALVAGE_DEFAULTS & { gearSalvage?: number };
 const G = "Salvage";
 export const SALVAGE_PARAMS: Param[] = [
   { key: "salvageReach", label: "Reach (m)", min: 2, max: 15, step: 0.1, group: G, tip: "From the mech's hips to a spot, flat distance: closer than this and E strips it" },
@@ -82,14 +83,15 @@ export class SalvageSim {
    * One step: the mech's hips (or the pilot on foot) at (x, z), E held or not. reach, rate and noise: the pilot's
    * own (a shorter reach, slower, quieter); the mech's by default.
    */
-  update(dt: number, x: number, z: number, holding: boolean, reach = this.v.salvageReach, rate = 1, noise = 1) {
+  /** gear: the mech's salvage gear counts (false for the pilot stripping by hand). */
+  update(dt: number, x: number, z: number, holding: boolean, reach = this.v.salvageReach, rate = 1, noise = 1, gear = true) {
     // Keep stripping the same spot while it stays in reach; else the nearest.
     const keep = this.active && !this.active.done && Math.hypot(this.active.x - x, this.active.z - z) <= reach ? this.active : null;
     this.inReach = keep ?? this.nearest(x, z, reach);
     this.active = holding ? this.inReach : null;
     const s = this.active;
     if (!s) { this.noiseT = 0; return; }
-    s.progress = Math.min(1, s.progress + (dt * this.v.stripSpeed * rate) / s.time);
+    s.progress = Math.min(1, s.progress + (dt * this.v.stripSpeed * (gear ? this.v.gearSalvage ?? 1 : 1) * rate) / s.time);
     this.noiseT -= dt;
     if (this.noiseT <= 0) { this.noiseT += this.v.noiseEvery; if (noise > 0) this.onNoise?.(s.x, s.z, this.v.noiseRadius * noise); }
     if (s.progress >= 1) {

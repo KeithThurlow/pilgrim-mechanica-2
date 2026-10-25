@@ -195,9 +195,10 @@ const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
 let armedWhenOut = true;
 // The bay screen (src/ui/bay.ts): opened at a bay terminal on foot (E), B anywhere as a lab shortcut.
 const BAY_KEY = "pm2:convoy-lab:bay";
-// A fresh bay fits miniguns, the missile pod on 1 and the big mortar on 2 (2026-10-26: the new weapons out on
-// expeditions); ?left= ?right= ?k1= ?k2= ?k3= (as in the weapons lab) fit those instead.
-const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "mortar", k3: "drums" };
+// A fresh bay fits a mixed build (the mounts, Keith 2026-10-26): a hull minigun on the right, an arm on the left with
+// a light minigun and the missile pod on 1, the power pack; ?left= ?right= ?k1= ?k2= ?k3= (as in the weapons lab) fit
+// those instead.
+const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "none", k3: "pack" };
 const kitFlagged = pickFromParams(kit, params);
 const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
 if (kitFlagged) bayState.loadout = loadoutFor(kit);
@@ -205,9 +206,15 @@ function refit() {
   const r = resolve(bayState.loadout, V);
   bayState.cargo.capacity = r.cargoCapacity;
   applyLoadout(player, r);
+  // The sensor's seekers (its radar range already went into V.mechRadar through the loadout's values).
+  loop.seeker.setModes(r.seekers);
   saveBay(BAY_KEY, bayState);
 }
 refit();
+// Tab cycles the sensor's seeker mode (shown on the radar and in the expedition HUD).
+addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.preventDefault(); loop.seeker.cycle(); } });
+// ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
+for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeker.mode !== params.get("seek"); i++) loop.seeker.cycle();
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
 const terminals: ReturnType<typeof ways.terminals> = [];
 let auto = !params.has("manual") && !params.has("onfoot");

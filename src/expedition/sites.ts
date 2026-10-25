@@ -87,7 +87,7 @@ export class FieldSites {
   update(dt: number, x: number, z: number, holding: boolean, camera: THREE.Camera, foot?: { reach: number; rate: number; noise: number }) {
     this.syncT -= dt;
     if (this.syncT <= 0) { this.syncT = 0.5; this.sync(x, z); }
-    if (foot) this.salvage.update(dt, x, z, holding, foot.reach, foot.rate, foot.noise);
+    if (foot) this.salvage.update(dt, x, z, holding, foot.reach, foot.rate, foot.noise, false);
     else this.salvage.update(dt, x, z, holding);
     this.fx.update(dt, camera, x, z);
   }

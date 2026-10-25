@@ -22,6 +22,7 @@ import { Expedition, EXPEDITION_DEFAULTS, EXPEDITION_PARAMS, ON_SAND as SAND } f
 import { Fuel, FUEL_DEFAULTS, FUEL_PARAMS, fuelWarning } from "./fuel";
 import { returnPoint, craneTracks, RETURN_DEFAULTS, RETURN_PARAMS, type ReturnPoint, type CraneTrack } from "./returnPoint";
 import { RadarZoom, RADAR_DEFAULTS, RADAR_PARAMS, linked, radarPicture, type RadarWorld } from "./radar";
+import { Seeker, SEEKER_DEFAULTS, SEEKER_PARAMS, seekNearest } from "./seekers";
 import { RadarDraw } from "./radarDraw";
 import { RadarSound } from "./radarSound";
 import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
@@ -33,12 +34,12 @@ import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 
 export const LOOP_DEFAULTS = {
-  ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
+  ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
-  ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
+  ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
 ];
 /** Topics for the lab's panel. */
@@ -70,6 +71,8 @@ export class ExpeditionLoop {
   readonly zoom: RadarZoom;
   readonly radar: RadarDraw;
   readonly hud: ExpeditionHud;
+  /** The sensor's seekers (src/expedition/seekers.ts): the lab sets the modes from the loadout and cycles them. */
+  readonly seeker = new Seeker();
   private sound: RadarSound;
   /** Roaming packs, raids and distant blasts (threats.ts), and their marks at the screen's edge. */
   readonly threats: ThreatField;
@@ -215,7 +218,7 @@ export class ExpeditionLoop {
     if (this.slowT <= 0) {
       this.slowT = 0.25;
       const R = v.convoyRadar * 1.1;
-      w.pois = this.sites.poisIn(p.x - R, p.z - R, p.x + R, p.z + R).map((q) => ({ id: q.id, x: q.x, z: q.z, tier: q.tier, stripped: this.sites.stripped(q) }));
+      w.pois = this.sites.poisIn(p.x - R, p.z - R, p.x + R, p.z + R).map((q) => ({ id: q.id, x: q.x, z: q.z, tier: q.tier, kind: q.kind, stripped: this.sites.stripped(q) }));
       this.swarms.blobs(p.x, p.z, R, w.blobs);
       w.unknown = this.camps.unknownNear(p.x, p.z, R);
       w.route = [];
@@ -234,7 +237,10 @@ export class ExpeditionLoop {
     if (zev) this.sound.zoom(zev === "out");
     const range = this.zoom.range;
     const mode = range > Math.sqrt(v.mechRadar * v.convoyRadar) ? "convoy" : "mech";
-    this.radar.draw(dt, radarPicture(v, w, mode), range, (v.camYaw * Math.PI) / 180, sim.heading, warn);
+    const pic = radarPicture(v, w, mode);
+    const sm = this.seeker.mode, seek = sm ? seekNearest(sm, v, w) : null;
+    pic.seek = seek;
+    this.radar.draw(dt, pic, range, (v.camYaw * Math.PI) / 180, sim.heading, warn);
     inp.mark?.("radar draw");
 
     // HUD.
@@ -246,7 +252,7 @@ export class ExpeditionLoop {
     }
     this.hud.update(dt, {
       exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
-      canRecall: exp.state === "out" && player.alive, bankShow: v.bankShow,
+      canRecall: exp.state === "out" && player.alive, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
   }

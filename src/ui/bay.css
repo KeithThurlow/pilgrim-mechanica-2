@@ -23,6 +23,16 @@
 .bay-slot.on { border-color: var(--accent); background: rgba(232, 137, 43, 0.08); }
 .bay-slotname { color: var(--muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
 .bay-name { font-weight: 600; }
+.bay-slot.sub { margin-left: 14px; border-left: 2px solid var(--line); border-radius: 0 4px 4px 0; }
+.bay-mount { border: 1px solid var(--line); border-radius: 5px; padding: 4px 4px 2px; margin: 4px 0 6px; background: rgba(0, 0, 0, 0.14); }
+.bay-mounthead { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 3px; }
+.bay-chips { display: flex; gap: 3px; }
+.bay button.chip { padding: 1px 7px; font-size: 11px; border-radius: 10px; }
+.bay button.chip.on { border-color: var(--accent); color: var(--accent); }
+.bay button.chip.picking { background: rgba(232, 137, 43, 0.18); }
+.bay button.chip:disabled { opacity: 0.35; }
+.bay-notes { display: flex; flex-direction: column; gap: 3px; padding: 7px 10px; border-bottom: 1px solid var(--line); background: rgba(230, 200, 106, 0.1); color: #e6c86a; font-size: 12px; }
+.bay-notes button { align-self: flex-start; }
 .bay-card { border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; padding: 6px 8px; margin: 4px 0 8px; background: rgba(0, 0, 0, 0.18); }
 .bay-cardhead { display: flex; flex-direction: column; margin-bottom: 4px; }
 .bay-cardhead .dim { font-size: 12px; }

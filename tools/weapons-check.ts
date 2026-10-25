@@ -158,35 +158,41 @@ const dt = 1 / 120;
   must(!shoot(0), "an autocannon shell with no lead still hit a crossing truck (lead isn't being tested)");
 }
 
-// ---- Loadout: the new bases fit where the size rules say; resolve gives their classes ----
+// ---- Loadout: the new bases fit where the mount rules say; resolve gives their classes ----
 {
   const lo = defaultLoadout();
-  must(!fitProblem(lo, "armR", makeItem("rail-medium")), "a Medium rail cannon doesn't fit a hull mount");
-  must(!!fitProblem(lo, "handR", makeItem("rail-medium")), "a Medium rail cannon fit a hand");
-  must(!!fitProblem(lo, "armR", makeItem("rail-light")), "a Light rail cannon fit a hull mount");
-  must(!!fitProblem(lo, "handR", makeItem("rail-light")), "a Light rail cannon fit a hand with no arm");
-  must(!fitProblem(lo, "armL", makeItem("ac-medium")), "an autocannon doesn't fit a hull mount");
-  must(!fitProblem(lo, "armL", makeItem("rpg-medium")), "a rocket launcher doesn't fit a hull mount");
+  must(!fitProblem(lo, "mountR", makeItem("rail-medium")), "a Medium rail cannon doesn't fit a hull mount");
+  must(!!fitProblem(lo, "heldR", makeItem("rail-medium")), "a Medium rail cannon was held");
+  must(!!fitProblem(lo, "mountR", makeItem("rail-light")), "a Light rail cannon fit a hull mount");
+  must(!!fitProblem(lo, "heldR", makeItem("rail-light")), "a Light rail cannon was held with no arm");
+  must(!fitProblem(lo, "mountL", makeItem("ac-medium")), "an autocannon doesn't fit a hull mount");
+  must(!fitProblem(lo, "mountL", makeItem("rpg-medium")), "a rocket launcher doesn't fit a hull mount");
+  const arms = defaultLoadout();
+  fit(arms, "mountL", makeItem("arm-rampart", "common", "aL")); fit(arms, "mountR", makeItem("arm-rampart", "common", "aR"));
   for (const id of ["sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"]) {
-    must(!fitProblem(lo, "shoulderL", makeItem(id)) && !fitProblem(lo, "shoulderR", makeItem(id)) && !fitProblem(lo, "back", makeItem(id)), `${id} doesn't fit a shoulder or the back mount`);
-    must(!!fitProblem(lo, "armL", makeItem(id)) && !!fitProblem(lo, "handL", makeItem(id)), `${id} fit an arm or a hand`);
+    must(!!fitProblem(lo, "shoulderL", makeItem(id)), `${id} fit a shoulder on a side with a hull weapon (no arm)`);
+    must(!fitProblem(arms, "shoulderL", makeItem(id)) && !fitProblem(arms, "shoulderR", makeItem(id)) && !fitProblem(lo, "pack", makeItem(id)), `${id} doesn't fit an arm's shoulder or the pack mount`);
+    must(!!fitProblem(lo, "mountL", makeItem(id)) && !!fitProblem(arms, "heldL", makeItem(id)), `${id} fit a hull mount or a hand`);
   }
-  must(!!fitProblem(lo, "shoulderL", makeItem("back-drums")), "ammo drums fit a shoulder");
-  const bare = defaultLoadout(); bare.pack = null; bare.back = null;
-  must(!!fitProblem(bare, "back", makeItem("sh-missiles")), "a missile pod fit the back mount without a power pack");
-  fit(lo, "armR", makeItem("rail-medium"));
-  fit(lo, "armL", makeItem("arm-rampart"));
-  fit(lo, "handL", makeItem("rail-light"));
+  must(!!fitProblem(arms, "shoulderL", makeItem("waist-drums")), "ammo drums fit a shoulder");
+  fit(lo, "mountR", makeItem("rail-medium"));
+  fit(lo, "mountL", makeItem("arm-rampart"));
+  fit(lo, "heldL", makeItem("rail-light"));
   fit(lo, "shoulderL", makeItem("sh-missiles"));
-  fit(lo, "shoulderR", makeItem("sh-mortar"));
-  fit(lo, "back", makeItem("sh-linemortar"));
+  fit(lo, "pack", makeItem("sh-linemortar"));
   const r = resolve(lo);
   must(r.guns.right?.cls === "rail" && !r.guns.right.light && r.guns.right.own === null, "hull rail cannon didn't resolve as a Medium rail on the sliders");
-  must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "hand rail cannon didn't resolve as a Light rail");
-  must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "mortar"], [3, "linemortar"]]) && !r.parts.drums,
-    `shoulder weapons didn't resolve to keys 1-3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}) or drums still shown`);
+  must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "held rail cannon didn't resolve as a Light rail");
+  must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [3, "linemortar"]]) && r.parts.drums && !r.parts.pack,
+    `shoulder weapons didn't resolve to keys 1 and 3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}), the drums went or the pack still shows`);
+  // An arm on the right too (the hull rail bounces), then its shoulder on key 2.
+  const off = fit(lo, "mountR", makeItem("arm-rampart", "common", "aR2"));
+  must(off.some((i) => i.base === "rail-medium"), "an arm didn't bounce the hull weapon");
+  fit(lo, "shoulderR", makeItem("sh-mortar"));
+  must(JSON.stringify(resolve(lo).shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "mortar"], [3, "linemortar"]]), "shoulder weapons didn't resolve to keys 1-3");
   const rolled = rollItem(77, LOOT_DEFAULTS, { base: "ac-medium", rarity: "epic" });
-  fit(lo, "armR", rolled);
+  const off2 = fit(lo, "mountR", rolled);
+  must(off2.some((i) => i.base === "sh-mortar") && !lo.shoulderR, "a hull weapon didn't bounce that side's shoulder weapon");
   const r2 = resolve(lo);
   must(r2.guns.right?.cls === "autocannon" && r2.guns.right.own?.shellSpeed === rolled.stats.shellSpeed, "a rolled autocannon's own stats didn't come through");
   // The default mech still has no new weapons.

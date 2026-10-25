@@ -6,8 +6,9 @@
 // or key fires what and its cooldown, damage per second on the range, what the last shot of each weapon did, and what
 // the blasts' craters cost.
 //
-// URL flags (for shots): ?left=, ?right= (minigun|rail|lightrail|autocannon|rpg), ?k1=, ?k2=, ?k3= (none|rpg|missiles|
-// mortar|linemortar; k3 also drums), ?hold=N:x,z (hold key N aimed there), ?lmb=x,z / ?rmb=x,z (hold a mouse button
+// URL flags (for shots): ?left=, ?right= (minigun|rail|lightmg|lightrail|autocannon|rpg; a side with a shoulder pick
+// becomes an arm), ?k1=, ?k2= (none|rpg|missiles|mortar|linemortar), ?k3= (pack|none|rpg|missiles|mortar|linemortar:
+// a back weapon in place of the pack), ?hold=N:x,z (hold key N aimed there), ?lmb=x,z / ?rmb=x,z (hold a mouse button
 // aimed there), ?aim=x,z, ?fireat=N (let go after N frames, aim held after), ?lockcar (both guns on the first truck,
 // locked), ?start=x,z (where the mech stands), ?manual (no demo).
 import "../../src/core/lab.css";
@@ -23,8 +24,8 @@ import { RangeGround, RANGE_DEFAULTS, RANGE_PARAMS, rangeSpots } from "../../src
 import { RangeCars, RANGE_CAR_DEFAULTS, RANGE_CAR_PARAMS } from "../../src/game/rangeVehicles";
 import { addModifier } from "../../src/world/modifiers";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
-import { ROWS, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
-const KEY = "pm2:weapons-lab:pick2";
+import { ROWS, cleanPick, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
+const KEY = "pm2:weapons-lab:pick3";
 
 let draw: DummiesDraw | null = null;
 let cars: RangeCars | null = null;
@@ -53,8 +54,10 @@ const { V, player, bf, app } = lab;
 const params = app.params;
 
 // ---- The weapon picker: fits items through the loadout, so the mech is what the bay would build ----
-const pick: Pick = { left: "minigun", right: "rpg", k1: "missiles", k2: "mortar", k3: "linemortar" };
-try { Object.assign(pick, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch { /* no saved pick */ }
+// The mounts (Keith 2026-10-26): a shoulder weapon rides on an arm, so key 1's missile pod makes the left side an arm
+// holding a light minigun; the right keeps the hull rocket launcher; the big mortar is the back weapon on key 3.
+const pick: Pick = { left: "minigun", right: "rpg", k1: "missiles", k2: "none", k3: "mortar" };
+try { Object.assign(pick, JSON.parse(localStorage.getItem(KEY) || "{}")); cleanPick(pick); } catch { /* no saved pick */ }
 pickFromParams(pick, params);
 
 function refit() {

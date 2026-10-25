@@ -213,6 +213,22 @@ export class RadarDraw {
         ctx.fillStyle = hc; ctx.fillText(dist(pic.home.dist), lx, ly);
       }
     }
+    // The seeker: a blue diamond on the target, or on the rim pointing at it, with its distance.
+    if (pic.seek) {
+      const [x, y] = at(pic.seek.x, pic.seek.z);
+      const a = Math.atan2(x - c, c - y), out = Math.hypot(x - c, y - c) >= R - 8;
+      const px = out ? c + Math.sin(a) * (R - 4) : x, py = out ? c - Math.cos(a) * (R - 4) : y;
+      ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = "#9fd8ff"; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.lineWidth = 1;
+      ctx.fillRect(-4.5, -4.5, 9, 9); ctx.strokeRect(-4.5, -4.5, 9, 9);
+      ctx.restore();
+      if (out) {
+        const lx = c + Math.sin(a) * (R - 22), ly = c - Math.cos(a) * (R - 22);
+        ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(dist(pic.seek.dist), lx + 1, ly + 1);
+        ctx.fillStyle = "#9fd8ff"; ctx.fillText(dist(pic.seek.dist), lx, ly);
+      }
+    }
     // Label on a plate at the bottom of the scope.
     const label = `${pic.mode === "convoy" ? "CONVOY RADAR" : "MECH RADAR"} · ${dist(range)}`;
     ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";

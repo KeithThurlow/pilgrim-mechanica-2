@@ -1,11 +1,15 @@
 // A quick weapon pick (pure): which weapon on each mouse button and shoulder key, turned into a loadout through the
 // fit rules, so the mech is what the bay would build. The weapons lab's picker and the convoy lab's kit both use it.
-import { defaultLoadout, fit, type Loadout, type SlotId } from "./loadout";
+// The mounts (Keith 2026-10-26, src/items/loadout.ts): a shoulder weapon rides on an arm, so a side with a shoulder
+// pick becomes an arm holding the held version of its gun (a hull minigun -> a light minigun, a rail cannon -> the
+// light rail; the autocannon and rocket launcher have no held version yet, so a light minigun). Key 3 is the pack
+// mount: the power pack, or a back weapon in its place.
+import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadout";
 import { makeItem } from "./generate";
 
-export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightrail: "Light rail (hand)", autocannon: "Autocannon", rpg: "Rocket launcher" } as const;
+export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
-export const BACK = { drums: "Ammo drums", ...SHOULDER } as const;
+export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
 export type SidePick = keyof typeof SIDE;
 export type ShoulderPick = keyof typeof SHOULDER;
 export type BackPick = keyof typeof BACK;
@@ -13,27 +17,42 @@ export interface Pick { left: SidePick; right: SidePick; k1: ShoulderPick; k2: S
 /** Each pick's row: its key, its control, its options. */
 export const ROWS = [["left", "LMB", SIDE], ["right", "RMB", SIDE], ["k1", "Key 1", SHOULDER], ["k2", "Key 2", SHOULDER], ["k3", "Key 3", BACK]] as const;
 
+/** Old picks still read (saved picks, URL flags): k3 "drums" was the back mount's drums, now the pack (drums sit on
+ *  the waist). */
+const OLD: Record<string, string> = { drums: "pack" };
+
 /** Overrides from URL flags (?left=, ?right=, ?k1=, ?k2=, ?k3=); true if any was given. */
 export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
   let any = false;
-  for (const [row, , opts] of ROWS) { const q = params.get(row); if (q && q in opts) { (pick as unknown as Record<string, string>)[row] = q; any = true; } }
+  for (const [row, , opts] of ROWS) {
+    let q = params.get(row);
+    if (q && OLD[q]) q = OLD[q];
+    if (q && q in opts) { (pick as unknown as Record<string, string>)[row] = q; any = true; }
+  }
   return any;
 }
+
+/** Fix up a saved pick from before the mounts. */
+export function cleanPick(pick: Pick): Pick {
+  const p = pick as unknown as Record<string, string>;
+  for (const [row, , opts] of ROWS) { if (OLD[p[row]]) p[row] = OLD[p[row]]; if (!(p[row] in opts)) p[row] = Object.keys(opts)[0]; }
+  return pick;
+}
+
+const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium" };
+const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light" };
+const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar" };
 
 export function loadoutFor(p: Pick): Loadout {
   const lo = defaultLoadout();
   const put = (slot: SlotId, base: string) => fit(lo, slot, makeItem(base, "common", `range-${slot}-${base}`));
-  for (const [side, arm, hand] of [["left", "armL", "handL"], ["right", "armR", "handR"]] as const) {
-    const w = p[side];
-    if (w === "rail") put(arm, "rail-medium");
-    if (w === "autocannon") put(arm, "ac-medium");
-    if (w === "rpg") put(arm, "rpg-medium");
-    if (w === "lightrail") { put(arm, "arm-rampart"); put(hand, "rail-light"); }
+  for (const [side, s, key] of [["left", "L", p.k1], ["right", "R", p.k2]] as const) {
+    const w = p[side], m = MOUNTS[s], shoulder = SHOULDER_BASE[key];
+    if (HULL_BASE[w] && !shoulder) put(m.mount, HULL_BASE[w]!);
+    else { put(m.mount, "arm-rampart"); put(m.held, HELD_BASE[w]); }
+    if (shoulder) put(m.shoulder, shoulder);
   }
-  const shoulderBase = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar" } as Record<string, string>;
-  if (shoulderBase[p.k1]) put("shoulderL", shoulderBase[p.k1]);
-  if (shoulderBase[p.k2]) put("shoulderR", shoulderBase[p.k2]);
-  if (shoulderBase[p.k3]) put("back", shoulderBase[p.k3]);
-  else if (p.k3 === "none") lo.back = null;
+  if (SHOULDER_BASE[p.k3]) put("pack", SHOULDER_BASE[p.k3]);
+  else if (p.k3 === "none") lo.pack = null;
   return lo;
 }

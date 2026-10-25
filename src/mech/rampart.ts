@@ -13,6 +13,14 @@ import type { WalkerValues } from "./walkerTuning";
 import type { ToonLook } from "../look/toon";
 import { LEG_TYPES } from "./legTypes";
 import { MECH_VARIANTS, RAMPART_BACK } from "./variants";
+import type { BodyParts, MountSocket } from "../game/mechUnit";
+
+/**
+ * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
+ * side's gun pivot to a hand below and outboard of the shoulder (the held weapon rides there, smaller than a hull
+ * weapon); the sensor mast stands on the hull; the waist mounts are where the half drums hang.
+ */
+export const MOUNT_STANDIN = { armDrop: 0.75, armOut: 0.3, armFwd: 0.35, heldScale: 0.72, sensorAt: [0, 1.25, -0.2] as [number, number, number] };
 
 const loader = new GLTFLoader();
 
@@ -87,7 +95,13 @@ function mirrored(g: THREE.BufferGeometry) {
 }
 
 interface Bone { pivot: THREE.Group; restLen: number }
-interface PodRig { yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1 }
+interface PodRig {
+  yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1;
+  /** The gun pivot's rest place on the shoulder (an arm moves it to its hand). */
+  home: THREE.Vector3;
+  /** Stand-in arm: the upper arm (fixed to the hull) and the forearm (turns with the aim). */
+  arm: THREE.Group; forearm: THREE.Group;
+}
 
 export class RampartBody {
   readonly root = new THREE.Group();
@@ -100,6 +114,9 @@ export class RampartBody {
   /** Where shoulder weapons stand: on each shoulder (+1 left, -1 right) and on top of the back mount. */
   private shoulderMounts: { side: 1 | -1; g: THREE.Group }[] = [];
   private backTop = new THREE.Group();
+  /** Sensor mast stand-in (the Sensor socket) and the waist sockets (where the drums hang). */
+  private sensor = new THREE.Group();
+  private waists: { side: 1 | -1; g: THREE.Group }[] = [];
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   private rest: Record<string, THREE.Vector3> = {};
@@ -204,7 +221,13 @@ export class RampartBody {
       mesh(sd === -1 ? spinR : mirrored(spinR), `spin_${sd}`, spin, new THREE.Matrix4().compose(axis, spin.quaternion, new THREE.Vector3(1, 1, 1)));
       const muzzle = new THREE.Object3D(); muzzle.position.copy(flip(r.PodMuzzle0_R)).sub(shoulder); kick.add(muzzle);
       const eject = new THREE.Object3D(); eject.position.copy(flip(r.PodEject_R)).sub(shoulder); kick.add(eject);
-      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd });
+      // Stand-in arm (shown when the mount holds an arm): an upper arm hanging from the shoulder, a forearm under the gun.
+      const arm = armUpper(look, sd), forearm = armFore(look);
+      arm.position.copy(yawPitch.position);
+      arm.visible = forearm.visible = false;
+      this.hull.add(arm);
+      yawPitch.add(forearm);
+      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: yawPitch.position.clone(), arm, forearm });
       // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
       const sm = new THREE.Group();
       sm.position.copy(shoulder).sub(waistRest).add(new THREE.Vector3(Math.sign(shoulder.x || sd) * 0.1, 0.75, -0.35));
@@ -219,16 +242,21 @@ export class RampartBody {
     back.position.set(...(variant?.backAt ?? RAMPART_BACK));
     this.hull.add(back);
     for (const [drum, x] of [[drumR, -0.5], [drumL, 0.5]] as const) {
+      // The waist socket on this side (+X is the mech's left): the drum hangs in it.
+      const waist = new THREE.Group();
+      waist.position.set(x, 0, 0);
+      back.add(waist);
+      this.waists.push({ side: x > 0 ? 1 : -1, g: waist });
       drum.updateMatrixWorld(true);
       drum.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
         const part = new THREE.Mesh(m.geometry.clone().applyMatrix4(m.matrixWorld));
-        part.position.set(x, 0, 0);
+        part.userData.side = x > 0 ? 1 : -1;
         look.apply(part);
         // The drums carry another brand's paint: tint them into the Rampart's olive (or the variant's colour).
         look.tint(part, variant?.drumTint ?? 0x8b9160);
-        back.add(part);
+        waist.add(part);
         this.drums.push(part);
       });
     }
@@ -237,23 +265,49 @@ export class RampartBody {
     // A shoulder weapon on the back mount stands on top of the pack (key 3).
     this.backTop.position.set(0, 1.75, -0.1);
     back.add(this.backTop);
+    // The sensor mast (stand-in) on top of the hull.
+    this.sensor.position.set(...MOUNT_STANDIN.sensorAt);
+    this.sensor.add(sensorMast(look));
+    this.hull.add(this.sensor);
   }
 
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
-  showParts(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }) {
-    for (const p of this.pods) p.yawPitch.visible = p.side === 1 ? parts.gunLeft : parts.gunRight;
-    for (const d of this.drums) d.visible = parts.drums;
+  showParts(parts: BodyParts) {
+    const S = MOUNT_STANDIN;
+    for (const p of this.pods) {
+      const L = p.side === 1, arm = (L ? parts.mountL : parts.mountR) === "arm";
+      // An arm: the gun pivot moves down to its hand and the held weapon draws smaller; the arm shows even unarmed.
+      p.yawPitch.visible = (L ? parts.gunLeft : parts.gunRight) || arm;
+      p.yawPitch.position.copy(p.home);
+      if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
+      p.kick.scale.setScalar(arm ? S.heldScale : 1);
+      p.kick.visible = L ? parts.gunLeft : parts.gunRight;
+      p.arm.visible = p.forearm.visible = arm;
+    }
+    for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
     if (this.pack) this.pack.visible = parts.pack;
+    // A back weapon stands on the pack, or lower where the pack would be.
+    this.backTop.position.y = parts.pack ? 1.75 : 0.95;
+    this.sensor.visible = parts.sensor ?? true;
   }
 
   /**
    * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
    * along the barrel, origin on the shoulder), a shoulder mount on the hull, or the top of the back mount (+Z forward).
    */
-  mount(slot: "left" | "right" | "back" | "shoulderL" | "shoulderR"): THREE.Object3D {
-    if (slot === "back") return this.backTop;
-    if (slot === "shoulderL" || slot === "shoulderR") return this.shoulderMounts.find((m) => m.side === (slot === "shoulderL" ? 1 : -1))!.g;
-    return this.pods.find((p) => p.side === (slot === "left" ? 1 : -1))!.kick;
+  mount(slot: MountSocket): THREE.Object3D {
+    switch (slot) {
+      case "back": case "Pack": return this.backTop;
+      case "Sensor": return this.sensor;
+      case "Waist_L": case "Waist_R": return this.waists.find((w) => w.side === (slot === "Waist_L" ? 1 : -1))!.g;
+      case "shoulderL": case "shoulderR": case "Shoulder_L": case "Shoulder_R":
+        return this.shoulderMounts.find((m) => m.side === (slot === "shoulderL" || slot === "Shoulder_L" ? 1 : -1))!.g;
+      default: {
+        // A side's gun pivot: the hull weapon on its hull mount, or the held weapon in the arm's grip.
+        const left = slot === "left" || slot === "HullMount_L" || slot === "Grip_L";
+        return this.pods.find((p) => p.side === (left ? 1 : -1))!.kick;
+      }
+    }
   }
 
   /** Show or hide a side's minigun pod itself (another weapon's stand-in takes its place on the same pivot). */
@@ -338,6 +392,44 @@ export class RampartBody {
   shoulderLine(out = new THREE.Vector3()) {
     return out.copy(this.rest.UpperArm_L).sub(this.rest.Waist).setX(0).applyQuaternion(this.hull.quaternion).add(this.hull.position);
   }
+}
+
+/** Stand-in upper arm (box), from the shoulder down and out to the hand; side +1 left, -1 right. */
+function armUpper(look: ToonLook, side: 1 | -1) {
+  const S = MOUNT_STANDIN, g = new THREE.Group();
+  const len = Math.hypot(S.armDrop, S.armOut, S.armFwd);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, len, 0.38));
+  m.position.set((side * S.armOut) / 2, -S.armDrop / 2, S.armFwd / 2);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-side * S.armOut, S.armDrop, -S.armFwd).normalize());
+  look.apply(m); look.tint(m, 0x6c7546);
+  const joint = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8));
+  look.apply(joint); look.tint(joint, 0x3e3c35);
+  g.add(m, joint);
+  return g;
+}
+/** Stand-in forearm (box) under the gun pivot, along the aim, with a hand block where the grip is. */
+function armFore(look: ToonLook) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 1.1));
+  m.position.set(0, -0.22, 0.25);
+  look.apply(m); look.tint(m, 0xb7a77c);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.3));
+  hand.position.set(0, -0.1, 0.8);
+  look.apply(hand); look.tint(hand, 0x3e3c35);
+  g.add(m, hand);
+  return g;
+}
+/** Stand-in sensor mast: a post with a small dish and a lamp. */
+function sensorMast(look: ToonLook) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.7, 8));
+  post.position.y = 0.35;
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.12, 0.08, 14));
+  dish.position.set(0, 0.72, 0.04); dish.rotation.x = -1.1;
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
+  lamp.position.set(0, 0.9, 0);
+  for (const [m, c] of [[post, 0x3e3c35], [dish, 0xb7a77c], [lamp, 0xd18a2a]] as const) { look.apply(m); look.tint(m, c); g.add(m); }
+  return g;
 }
 
 /** Stand-in power pack from boxes, in the Rampart's khaki and olive (or a variant's paint), until a modelled one exists. */
