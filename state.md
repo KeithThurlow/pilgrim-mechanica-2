@@ -121,7 +121,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Convoy pass 3 merged (crane, drop-off, rear bay, turrets, octagon decks, 12 escorts, dash). Rough: heavy escorts pass 3-4 m from cars in hard turns; the drop lands in the escort lane; turrets not in the collision footprint.
 - Ground dents (GPU dent layer + fine detail patch replacing the sand-mark decals): an agent on a worktree branch.
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
-- Weapons: proposed (`docs/proposal-weapons.md`); starting with Claude's defaults (right button, salvo on release, cooldowns) unless Keith says otherwise.
+- Weapons: step 1 built on the weapons branch (salvo, painter, rail, mortar, autocannon, range lab). Step 2, explosives first, from Keith's roster (2026-10-25: left and right click fire each side, shoulder weapons on keys 1-4; RPG rockets with a faint targeting laser, missile pod swarm, big and line mortars): same agent.
+- Weapon models: the sister project's Minigun, HandCannon and MissilePod (L/M/H) plus drums and belts converted to GLB with a look pass; new classes (RPG, mortars, rail, autocannon, plasma, laser) built in code: an agent on a worktree branch.
 - Pilot on foot: proposed (`docs/proposal-pilot.md`), waiting for Keith.
 - Expedition loop (radar, way home, fuel, loot at risk): approved (`docs/proposal-expedition.md`); next, in the convoy lab.
 
