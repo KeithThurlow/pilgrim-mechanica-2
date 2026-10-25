@@ -101,7 +101,9 @@ Late-game **heli drops**: get dropped at a chosen point of interest, then it's u
 - Show a predicted time of return.
 - Still open, with Claude's defaults:
   - recovery is instant (fade, back aboard);
-  - swarms show as heat blobs.
+  - swarms show as heat blobs, decided by Keith: a rough estimate of danger, nothing exact. Also **unknown areas**:
+    patches the convoy radar says nothing about. They're drawn as static or haze, with no danger estimate, and only
+    going there tells you.
 
 ## Questions for Keith (original)
 

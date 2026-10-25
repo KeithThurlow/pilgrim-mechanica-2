@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Swarms on the convoy radar are heat blobs, a rough estimate of danger; some areas are unknown (no estimate at all) | Keith | Keith | `docs/proposal-expedition.md` |
 | 2026-10-25 | Out of fuel is mission failure (forced recovery, loot lost); quitting is a forced recovery; show a predicted return time; late-game heli drops to POIs, then make your own way back | Keith | Keith | `docs/proposal-expedition.md` |
 | 2026-10-25 | Expeditions: 10-15 minutes of value, never past 20; a big convoy radar in range (POIs, swarms) that zooms to a small mech radar out of range, with one arrow home; fuel and a return-time estimate; quitting recovers the mech but not the loot; a destroyed mech loses everything carried; progression upgrades radar, range, speed, gear | Keith | Keith | `docs/proposal-expedition.md` (details open). |
 | 2026-10-25 | Convoy: a mech launch area at the back as well as the front; defences on the convoy; shorter footbridges; less rectangular, more hexagonal platforms; many more vehicles alongside (only about 4 now) | Keith | Keith | Added to the crane pass. |
