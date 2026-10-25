@@ -96,7 +96,14 @@ salvage.onBanked = (s) => hud.banked(s);
 
 function addSite(p: PoiPlacement) {
   const site = buildSite(p, V);
-  const d = new PoiDraw(site, field);
+  // Ruts as lasting dents (a disc's radii: across and along its yaw), else decals.
+  const dents = lab.bf.marks.denting ? lab.bf.dents! : null;
+  const d = new PoiDraw(site, field, dents ? (r) => {
+    const [rx, , rz] = r.size, along = rz >= rx;
+    const w = Math.min(rx, rz), l = Math.max(rx, rz);
+    dents.persist(p.id, r.x, r.z, w, r.yaw + (along ? 0 : Math.PI / 2), l / w, Math.min(0.2, 0.05 + 0.04 * w));
+    return true;
+  } : undefined);
   app.scene.add(d.group);
   drawn.set(p.id, d);
   salvage.add(site);
@@ -110,6 +117,7 @@ function dropSite(id: string) {
   salvage.remove(id);
   drawn.get(id)?.dispose();
   drawn.delete(id);
+  lab.bf.dents?.forget(id);
 }
 function syncSites() {
   const p = player.sim.pos, R = V.drawRadius;

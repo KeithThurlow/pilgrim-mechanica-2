@@ -29,6 +29,7 @@ import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
+import { DENT_DEFAULTS, DENT_PARAMS } from "../../src/fx/dents";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
 import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
@@ -54,7 +55,7 @@ const { scene, camera, params } = app;
 const canvas = app.renderer.domElement;
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS,
   radius: 5, shadowBox: 60,
@@ -62,7 +63,7 @@ const V = {
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
-  ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
+  ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
 
@@ -77,6 +78,8 @@ scene.add(streamer.group);
 route.onChange = (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1);
 const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
+// Ruts and prints as dents on a fine patch (Keith 2026-10-25); markMode 0 brings back the decals.
+bf.useDents(app.renderer, streamer);
 scene.add(bf.group);
 
 // The convoy, its crane, and their stand-in bodies.
@@ -173,15 +176,15 @@ const panel = tweakPanel({
   ],
   topics: [
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
-    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Sand marks"] },
+    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents", "Sand marks"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch"] },
     { id: "deck", label: "Deck", groups: ["Deck"] },
-    { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Streaming"] },
+    { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Mech health", "Torso & guns", "Minigun", "Move"] },
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Sand marks", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
   ],

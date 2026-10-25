@@ -130,6 +130,9 @@ export class MechUnit implements Hittable {
    * Dash along (x, z) (world; any length): a front-loaded shove that skids the planted feet. Returns true if it went
    * (a charge was free). While it runs, onDash is called each frame with where the mech is and which way it goes.
    */
+  /** Each foot's skid point for the dash furrow (x, z, then 1 while skidding). */
+  private skidFrom = [new THREE.Vector3(), new THREE.Vector3()];
+
   tryDash(x: number, z: number): boolean {
     if (!this.alive || !this.dash.start(x, z)) return false;
     // The hydraulics bang: a burst of sand off both feet.
@@ -187,11 +190,15 @@ export class MechUnit implements Hittable {
     if (dash.active) {
       // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
       const sp = Math.hypot(dash.vx, dash.vz);
-      for (const f of sim.feet) {
-        if (f.swinging || sp < 2) continue;
+      sim.feet.forEach((f, i) => {
+        const from = this.skidFrom[i];
+        if (f.swinging || sp < 2) { from.z = 0; return; }
         this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, dash.vx, dash.vz, sp * dt, 1, 0);
-        if (Math.random() < dt * 20 && !this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.rut(f.pos.x, f.pos.z, Math.atan2(dash.dirX, dash.dirZ), 0.9, Math.max(0.6, sp * dt * 2));
-      }
+        // A furrow from where the foot was last frame (a skid that just started begins here).
+        if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
+        if (!this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
+        from.set(f.pos.x, f.pos.z, 1);
+      });
       this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     }
     const left = leftOf(upper.torsoYaw);
