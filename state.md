@@ -123,6 +123,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
 - Weapons: proposed (`docs/proposal-weapons.md`); starting with Claude's defaults (right button, salvo on release, cooldowns) unless Keith says otherwise.
 - Pilot on foot: proposed (`docs/proposal-pilot.md`), waiting for Keith.
+- Expedition loop (radar, way home, fuel, loot at risk): proposed (`docs/proposal-expedition.md`), waiting for Keith.
 
 ## Next candidates (ask Keith which)
 
@@ -146,6 +147,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-25 · Expedition loop proposed (Claude)
+- Keith's core loop: radar (big on the convoy, small out of range), one arrow home to the return point, fuel and a return estimate, loot at risk until banked, recovery loses loot, 10-15 minute expeditions. Plan in `docs/proposal-expedition.md`.
 
 ### 2026-10-25 · Craters: blasts dent walkable ground (Claude)
 - Keith: deformable ground from rockets, mortars and shells, walkable (unlike the Snowflow demo), with ground that resists (outposts, pads, the road). `src/world/craters.ts` (layer, hardness, fit, slump), `DuneField.dents` hook (`terrain.ts`), `TerrainStreamer.patchArea` (in-place vertex and water updates, `chunks.ts`), `Battlefield.dent` + `onGround`, shells and raider blow-ups dent, `DeathPhysics.groundChanged`, combat labs wire it with a "Craters" group under Dunes and `?craters=N`.
