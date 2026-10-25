@@ -30,7 +30,7 @@ export interface BayOptions {
   onChange: () => void;
 }
 
-const KIND_FOR: Record<SlotId, string> = { legs: "legs", hull: "hull", armL: "arm or Medium weapon", armR: "arm or Medium weapon", handL: "Light or Heavy weapon", handR: "Light or Heavy weapon", pack: "power pack", back: "back item" };
+const KIND_FOR: Record<SlotId, string> = { legs: "legs", hull: "hull", armL: "arm or Medium weapon", armR: "arm or Medium weapon", handL: "Light or Heavy weapon", handR: "Light or Heavy weapon", shoulderL: "shoulder weapon", shoulderR: "shoulder weapon", pack: "power pack", back: "back item or shoulder weapon" };
 
 export function itemName(it: Item) {
   if (it.kind === "protocol") return PROTOCOL_BY_ID[it.base]?.name ?? it.base;
@@ -257,6 +257,8 @@ export function bayScreen(o: BayOptions) {
   function kindMatches(s: SlotId, x: Item) {
     if (s === "armL" || s === "armR") return x.kind === "arm" || x.kind === "weapon";
     if (s === "handL" || s === "handR") return x.kind === "weapon";
+    if (s === "shoulderL" || s === "shoulderR") return x.kind === "shoulder";
+    if (s === "back") return x.kind === "back" || x.kind === "shoulder";
     return x.kind === s;
   }
 

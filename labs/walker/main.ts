@@ -22,7 +22,7 @@ import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import { WalkerBody } from "../../src/mech/walkerBody";
 import { LEG_TYPES } from "../../src/mech/legTypes";
-import { RampartBody } from "../../src/mech/rampart";
+import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
@@ -45,7 +45,7 @@ const V = {
   biomeOnly: ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome") ?? "desert"] ?? 0,
 };
 const DEFAULTS = { ...V };
-// Review flags: ?model=standin, ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
+// Review flags: ?model=standin, ?mech=<variant id> (public/models/mechs/<id>.glb), ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
 // ?zoom=metres (game camera distance).
 const straight = params.get("walk") === "straight";
 
@@ -60,7 +60,7 @@ const rampart = params.get("model") === "standin" ? null : await RampartBody.loa
 const standIn = rampart ? null : new WalkerBody();
 // The leg archetype's walk and feet become this lab's defaults (so sliders still save over them); the model's own
 // bone lengths are facts and always win.
-const legType = LEG_TYPES[rampart ? "rampart" : "standin"];
+const legType = LEG_TYPES[rampart ? mechLegType() : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);

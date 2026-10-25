@@ -14,10 +14,10 @@ import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../world/look";
 import { screenToGround } from "../world/raycast";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../mech/walkerTuning";
-import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../mech/upper";
+import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../mech/upper";
 import type { MoveCommand } from "../mech/walker";
 import { LEG_TYPES } from "../mech/legTypes";
-import { RampartBody } from "../mech/rampart";
+import { RampartBody, mechLegType } from "../mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../fx/minigun";
@@ -34,14 +34,17 @@ import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
 import { DeadDraw } from "../physics/deadDraw";
 import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from "./targeting";
+import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
+import { Arsenal } from "../weapons/arsenal";
+import { ArsenalDraw } from "../weapons/arsenalDraw";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...WEAPON_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -61,7 +64,7 @@ export interface CombatLabOptions<E extends object> {
   /** Called with the dune field before any ground is streamed (e.g. to add ground modifiers). */
   setup?: (field: DuneField, values: BaseValues & E) => void;
   /** The lab's own demo: what the mech does while the demo runs (null: the shared demo this frame). No demo dashes. */
-  demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: boolean } | null;
+  demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; keys?: readonly boolean[]; lock?: TargetCandidate | null } | null;
   /** After any slider changes (after the shared handling, e.g. the dunes rebuilt). */
   onChange?: (key: string) => void;
 }
@@ -91,6 +94,10 @@ export interface CombatLab<E extends object> {
   demoOn: () => boolean;
   /** Show the values again after the lab changed them (e.g. a loadout fitted). */
   refresh: () => void;
+  /** The player's weapons other than the miniguns (src/weapons): fitted through the loadout. */
+  arsenal: Arsenal;
+  /** Shake the camera (decays by itself). */
+  shake: (k: number) => void;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -129,20 +136,54 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(deadDraw.group);
 
   const body = await RampartBody.load(toon);
-  Object.assign(V, LEG_TYPES.rampart.values, body.legValues());
-  Object.assign(DEFAULTS, LEG_TYPES.rampart.values, body.legValues());
+  Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
+  Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
+  // The weapons that aren't miniguns: nothing until a loadout fits one (src/game/loadoutApply.ts).
+  const arsenal = new Arsenal(bf, player, V, toon, () => lab.targets());
+  player.weapons = arsenal;
+  const arsenalDraw = new ArsenalDraw(arsenal, field);
+  scene.add(arsenalDraw.group);
+  // Camera shake: rail shots and launches ask for it; every blast near the mech shakes by its size and distance.
+  let shakeK = 0;
+  const shake = (k: number) => { shakeK = Math.max(shakeK, k); };
+  arsenal.onShake = shake;
+  bf.onBlast = (at, radius) => {
+    bf.sfx.playSound("blast", at, Math.min(1.2, 0.5 + radius / 6), 0.85 + Math.random() * 0.2);
+    const d = Math.hypot(at.x - player.sim.pos.x, at.z - player.sim.pos.z);
+    if (d < V.blastShakeReach) shake(V.blastShake * (radius / 2.5) * (1 - d / V.blastShakeReach));
+  };
 
   const iso = new IsoCamera(camera, canvas, V);
   const keys = new Keys();
   let auto = !params.has("manual");
   let mouse: { x: number; y: number } | null = null;
-  let mouseDown = false;
+  let mouseDown = false, rightDown = false;
+  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); F fires both.
+  // Read both buttons from the `buttons` bitmask on every pointer event: a browser sends pointerdown/up only for the
+  // first button pressed and the last released, and a second button pressed while one is held arrives as a
+  // pointermove, so tracking `button` on down/up lost the second gun (Keith 2026-10-25: couldn't hold both).
+  // A button starts firing only when it goes down over the canvas (so dragging a slider onto the field doesn't fire);
+  // a release counts anywhere.
+  let lastButtons = 0;
+  const readButtons = (e: PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
+    const pressed = e.buttons & ~lastButtons;
+    lastButtons = e.buttons;
+    if (e.target === canvas) {
+      if (pressed & 1) { mouseDown = true; auto = false; }
+      if (pressed & 2) { rightDown = true; auto = false; }
+    }
+    if (!(e.buttons & 1)) mouseDown = false;
+    if (!(e.buttons & 2)) rightDown = false;
+  };
   canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; auto = false; } });
-  canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
-  addEventListener("pointerup", () => { mouseDown = false; });
+  addEventListener("pointerdown", readButtons);
+  addEventListener("pointermove", readButtons);
+  addEventListener("pointerup", readButtons);
+  addEventListener("blur", () => { mouseDown = false; rightDown = false; lastButtons = 0; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   // Space: dash the way WASD points (Keith 2026-10-24), on charges.
   let dashPressed = false, spaceDown = false;
@@ -169,6 +210,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     topics: [
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
+      WEAPON_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
@@ -188,6 +230,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   selector = new Selector(app, {
     items: [
       { topic: "legs", label: "Legs", objects: () => regions.legs },
+      { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
       ...(o.selectables ?? []),
     ],
@@ -245,11 +288,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     craters,
     demoOn: () => auto,
     refresh: () => panel.refresh(),
+    arsenal,
+    shake,
   };
 
   // For headless debugging and tests: the lab on the page (window.__lab).
   (globalThis as unknown as { __lab: unknown }).__lab = lab;
-  let lastDemo: { aim: Aim | null; trigger: boolean } = { aim: null, trigger: false };
+  let lastDemo: { aim: Aim | null; trigger: Trigger } = { aim: null, trigger: false };
   (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
 
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
@@ -275,11 +320,15 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
-    let trigger = false;
+    let trigger: Trigger = false;
     let cursor: Aim | null = null;
+    let shotAt: Aim | null = null;
+    // Shoulder weapon keys 1-4: hold to paint, release to fire.
+    let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
+    let demoLock: TargetCandidate | null = null;
     lock = null;
     const own = auto && o.demo ? o.demo(clock, dt) : null;
-    if (own) { ({ cmd, aim, trigger } = own); lastDemo = { aim, trigger }; cursor = aim; }
+    if (own) { ({ cmd, aim, trigger } = own); held = [0, 1, 2, 3].map((i) => !!own.keys?.[i]) as typeof held; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
     else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
     else {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
@@ -291,14 +340,22 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
         caster.setFromCamera(ndc, camera);
         lock = targeting.pick(lab.targets(), { rayO: caster.ray.origin, rayD: caster.ray.direction, from: player.sim.pos, cursor: aimPt, range: V.range }, V);
         if (lock) {
-          // Lead it: the guns trail their aim as they track, so aim where it will be by then.
+          // Lead it: the arms trail their aim as they track, so swing them to where it will be by then. The rounds
+          // fly from the muzzle straight at the target itself (shotAt), so they don't land ahead of it.
           const t = lock.target, L = V.lockLead;
+          shotAt = { x: t.x, y: t.y, z: t.z };
           aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
         }
       }
-      trigger = mouseDown || keys.has("KeyF");
+      const both = keys.has("KeyF");
+      trigger = [mouseDown || both, rightDown || both];
+      held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
+      if (held.some(Boolean)) auto = false;
     }
-    if (sel.active) trigger = false;
+    if (sel.active) { trigger = false; held = [false, false, false, false]; }
+    player.keys = held;
+    player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
+    player.lock = lock?.target ?? demoLock;
 
     if (dashPressed) {
       dashPressed = false;
@@ -309,7 +366,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     // The demo sidesteps now and then, to show the dash off.
     if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
     player.dashHold = spaceDown && !auto;
-    player.step(dt, cmd, aim, trigger);
+    player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
     craters.update(dt, groundChanged);
@@ -335,11 +392,21 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
     follow.lerp(new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z), Math.min(1, rawDt * 6));
     iso.update(follow, rawDt);
+    if (shakeK > 1e-3) {
+      camera.position.x += (Math.random() - 0.5) * shakeK;
+      camera.position.y += (Math.random() - 0.5) * shakeK * 0.6;
+      camera.position.z += (Math.random() - 0.5) * shakeK;
+      shakeK *= Math.exp(-rawDt * V.shakeDecay);
+    }
     toon.update(camera, canvas.clientHeight);
     streamer.update(player.sim.pos.x, player.sim.pos.z);
     const camDist = camera.position.distanceTo(follow);
     look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
     bf.update(dt, camera, look);
+    arsenalDraw.update();
+    app.hud.set("weapons", arsenal.controls().join(" · "));
+    const ds = bf.dentStats;
+    app.hud.set("dents", ds.dug ? `blast dents: ${bf.dentQueue.length} queued · last frame ${ds.frameMs.toFixed(1)} ms (${ds.frameDents} dug) · worst ${ds.worstMs.toFixed(1)} ms · one dent ${ds.lastMs.toFixed(1)} ms · ${ds.dug} dug, ${ds.merged} merged` : "");
 
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");

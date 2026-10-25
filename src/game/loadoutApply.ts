@@ -15,10 +15,12 @@ export function applyLoadout(unit: MechUnit, r: Resolved) {
   const [left, right] = unit.upper.guns;
   for (const [g, s] of [[left, r.guns.left], [right, r.guns.right]] as const) {
     g.enabled = !!s;
-    g.stats = s && !same(s, unit.v) ? s : null;
+    g.stats = s && (s.cls || !same(s, unit.v)) ? s : null;
     if (!s) { g.spin = 0; g.firing = false; }
   }
   unit.body.showParts?.({ gunLeft: !!r.guns.left, gunRight: !!r.guns.right, drums: r.parts.drums, pack: r.parts.pack });
+  // The new weapons (src/weapons): their stand-in models and sims, if the unit carries an arsenal.
+  unit.weapons?.configure?.(r);
   // Fitted at the bay: full drums, full hull, dash charges topped up to the new pack.
   unit.upper.resupply();
   if (unit.alive) unit.health = unit.maxHealth;

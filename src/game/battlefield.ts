@@ -1,6 +1,7 @@
 // The shared stage every combat lab plays on: the dune field, the dust, the sand marks, the gun effects and their
 // sound, steel wrecks, and everything that can be shot. One `fire` call resolves a round against all of it (the
 // nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
+import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
 import { WaterFx, WATER_FX_DEFAULTS, type WaterFxValues } from "../fx/water";
@@ -34,6 +35,8 @@ export interface Hittable {
   canPierce?(): boolean;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
+  /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
+  knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
 }
 
 export interface FireOptions {
@@ -212,6 +215,44 @@ export class Battlefield {
    * Dent the ground with a blast of this radius at (x, z): a real crater in the height function (sized by the crater
    * sliders, less on hard ground, none on protected ground), and the chunks follow. Returns whether it dented.
    */
+  /** Craters waiting to be dug (blasts queue them; update digs them within a time budget per frame). */
+  readonly dentQueue: { x: number; z: number; r: number }[] = [];
+  /** What digging costs: last frame's ms and dents, the worst frame's ms, the queue, merges so far. */
+  readonly dentStats = { frameMs: 0, frameDents: 0, worstMs: 0, lastMs: 0, merged: 0, dug: 0 };
+
+  /** Queue a crater; one close to a queued one (dentMerge × the bigger radius) joins it instead. */
+  queueDent(x: number, z: number, r: number) {
+    if (!this.craters) return;
+    const merge = (this.v as { dentMerge?: number }).dentMerge ?? 0.6;
+    for (const d of this.dentQueue) {
+      if (Math.hypot(d.x - x, d.z - z) < merge * Math.max(d.r, r)) {
+        const w = r / (r + d.r);
+        d.x += (x - d.x) * w; d.z += (z - d.z) * w; d.r = Math.max(d.r, r);
+        this.dentStats.merged++;
+        return;
+      }
+    }
+    this.dentQueue.push({ x, z, r });
+  }
+
+  /** Dig queued craters until this frame's budget (ms) is spent; at least one per frame. */
+  private digQueued() {
+    const budget = (this.v as { dentBudget?: number }).dentBudget ?? 6;
+    const t0 = performance.now();
+    let n = 0;
+    while (this.dentQueue.length) {
+      const d = this.dentQueue.shift()!;
+      const t1 = performance.now();
+      this.dent(d.x, d.z, d.r);
+      this.dentStats.lastMs = performance.now() - t1;
+      n++; this.dentStats.dug++;
+      if (performance.now() - t0 >= budget) break;
+    }
+    const ms = performance.now() - t0;
+    this.dentStats.frameMs = ms; this.dentStats.frameDents = n;
+    this.dentStats.worstMs = Math.max(this.dentStats.worstMs * 0.995, ms);
+  }
+
   dent(x: number, z: number, blastRadius: number): boolean {
     if (!this.craters) return false;
     const box = this.craters.blast(x, z, blastRadius);
@@ -219,11 +260,24 @@ export class Battlefield {
     return !!box;
   }
 
-  private burst(s: Shell) {
-    const p = s.to, k = Math.max(0.5, s.radius / 3);
+  private burst(s: Shell) { this.blast(s.team, s.to, s.radius, s.damage); }
+
+  /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
+  onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
+
+  /**
+   * A blast on the ground at p (its y is moved onto the new ground): the crater, dust and debris, the sound, and
+   * damage through splash() to everything of another team within radius (full at the centre, half at the edge).
+   * Shells burst through here; the player's rockets and mortar shells too (src/weapons).
+   */
+  blast(team: number, p: THREE.Vector3, radius: number, damage: number) {
+    const s = { team, radius, damage };
+    const k = Math.max(0.5, s.radius / 3);
+    this.onBlast?.(p, radius);
     // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
     const wet = this.inWater(p.x, p.z);
-    if (this.dent(p.x, p.z, s.radius)) p.y = this.field.height(p.x, p.z);
+    // The crater is queued (a 12-missile swarm would stall a frame digging them all at once); the effects play now.
+    this.queueDent(p.x, p.z, s.radius);
     if (wet) {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
@@ -260,17 +314,26 @@ export class Battlefield {
     return true;
   }
 
+  /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into marks, dents, gun fx, dust. */
+  costs: Costs | null = null;
+
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
+    const c = this.costs;
     this.sfx.update();
     this.marks.update(dt, this.sunDir);
+    c?.mark("sand marks");
     this.shells.update(dt, (s) => this.burst(s));
+    this.digQueued();
+    c?.mark("dents");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
+    c?.mark("gun fx");
     this.dust.update(dt);
     camera.updateMatrixWorld();
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
+    c?.mark("dust");
   }
 }
