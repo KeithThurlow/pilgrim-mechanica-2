@@ -9,8 +9,9 @@
 // Parking: in a parking bay, E settles the mech (kneels); E again stands it up.
 // Launch: stand on a launch pad beside the crane for craneLaunchDwell and the crane comes for the mech there, lifts
 // it, swings it out over that side, steadies it a few metres over the sand and lets go (Keith 2026-10-25: drop it
-// from a bit higher and let it fall): the mech falls keeping the convoy's velocity, legs braced for the ground, and
-// lands heavily (a crouch that springs back, onTouchdown for the dust and shake), then craneFollow seconds of forced
+// from a bit higher and let it fall): the walker's own air state takes over (Keith 2026-10-26: landing on its legs is
+// something every mech does): it flies keeping the convoy's velocity, legs reaching for the ground, and lands with a
+// squat by how hard it hit (onTouchdown for the crater and shake; the mech's own landing does the dust), then craneFollow seconds of forced
 // walking along the convoy's heading, then WASD again. Step off the pad before the
 // grip and it's off. The crane's motion is the countdown. After a launch the mech has to leave the range once before
 // the crane will pick it up again.
@@ -20,11 +21,7 @@ import type { DuneField } from "../world/terrain";
 import type { Platform } from "./platform";
 import type { Crane, CraneValues } from "./crane";
 import { DeckGround, PoseSnap, rideDeck, keepOnDeck, spotAt, type DeckValues, type Spot } from "./deck";
-import { hangPose, hangDrop, fallReach, kneelPose, type Kneel } from "./hold";
-
-const G = 9.81;
-/** Seconds of fall over which the legs brace for the ground. */
-const BRACE_TIME = 0.3;
+import { hangPose, hangDrop, kneelPose, type Kneel } from "./hold";
 
 export const CARRY_DEFAULTS = {
   craneRange: 21,
@@ -38,8 +35,6 @@ export const CARRY_DEFAULTS = {
   craneLaunchDwell: 0.4,
   craneDropHeight: 3,
   craneDropSteady: 0.35,
-  craneLandSink: 0.75,
-  craneLandKick: 0.6,
   craneLandShake: 0.5,
   craneHover: 0.8,
   craneSwingLean: 0.6,
@@ -62,8 +57,6 @@ export const CARRY_PARAMS: Param[] = [
   { key: "craneCarryTurn", label: "Carried turn (°/s)", min: 0, max: 120, step: 1, group: "Pick-up and launch", tip: "How fast a carried mech is turned to face along the platform" },
   { key: "craneDropHeight", label: "Drop height (m)", min: 0, max: 8, step: 0.1, group: "Drop-off", tip: "How far the mech's feet fall to the sand when the crane lets go on a launch" },
   { key: "craneDropSteady", label: "Let go within (m)", min: 0.05, max: 2, step: 0.05, group: "Drop-off", tip: "The crane lets go once the swing is smaller than this (bigger: quicker, less tidy)" },
-  { key: "craneLandSink", label: "Landing crouch (m)", min: 0, max: 1.5, step: 0.05, group: "Drop-off", tip: "How low the hips go on touchdown before springing back (scaled by how hard it landed)" },
-  { key: "craneLandKick", label: "Landing thud", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Share of the fall speed that hits the body's thud spring (squashes the hocks)" },
   { key: "craneLandShake", label: "Landing shake (m)", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Camera shake on touchdown (scaled by how hard it landed)" },
   { key: "craneSwingLean", label: "Body leans with swing", min: 0, max: 1, step: 0.05, group: "Crane swing", tip: "How much of the rope's angle the hanging mech's body takes (1 = hangs rigidly in line with the rope)" },
   { key: "deckParkTime", label: "Park settle (s)", min: 0.3, max: 5, step: 0.1, group: "Deck", tip: "How long the mech takes to kneel in a parking bay (and stand up again)" },
@@ -343,18 +336,13 @@ export class CraneCarry {
         break;
       }
       case "falling": {
-        out = null;
+        // The walker flies and lands itself (its air state); this waits for the feet to touch.
         stow();
         const f = this.fall;
-        f.t += dt;
-        f.vy -= G * dt;
-        f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
-        const brace = Math.min(1, f.t / BRACE_TIME);
-        const reach = fallReach(sim, brace);
-        // First contact: the ground under either foot (or the middle), whichever is highest.
-        const lx = Math.cos(f.heading) * sim.v.footSpread, lz = -Math.sin(f.heading) * sim.v.footSpread;
-        const ground = Math.max(this.field.height(f.x, f.z), this.field.height(f.x + lx, f.z + lz), this.field.height(f.x - lx, f.z - lz));
-        if (f.y - reach <= ground) { this.touchdown(sim); out = this.follow(sim); break; }
+        f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
+        if (sim.airborne) { f.vx = sim.airVel.x; f.vy = sim.airVel.y; f.vz = sim.airVel.z; f.t = sim.airT; }
+        else this.touchdown(sim);
+        out = this.follow(sim);
         break;
       }
       case "parked": {
@@ -381,14 +369,6 @@ export class CraneCarry {
     this.ground.onDeck = this.onDeck || this.state === "parked";
 
     for (const c of this.cranes) c.step(dt);
-
-    if (this.state === "falling") {
-      const f = this.fall;
-      hangPose(sim, {
-        x: f.x, y: f.y + v.craneGrip, z: f.z, grip: v.craneGrip, heading: f.heading,
-        floorY: this.field.height(f.x, f.z), leanX: 0, leanZ: 0, deck: null, brace: Math.min(1, f.t / BRACE_TIME),
-      });
-    }
 
     // Pose a held mech.
     if (this.attached) {
@@ -449,21 +429,17 @@ export class CraneCarry {
     f.vx = p.vel.x; f.vz = p.vel.z; f.vy = Math.min(0, this.crane.cradleVel.y);
     f.t = 0;
     f.heading = wrap(p.heading + this.relHeading);
+    // The hang pose is the take-off pose: the walker's air state flies it from here.
+    sim.launch(f.vx, f.vy, f.vz);
   }
 
-  /** Feet on the sand: back on its own legs at the convoy's speed, facing along it, landing heavily. */
+  /** Feet on the sand (the walker landed itself, squatting by how hard): craneFollow seconds along the convoy. */
   private touchdown(sim: WalkerSim) {
-    const p = this.platform, f = this.fall, v = this.v;
+    const v = this.v, l = sim.lastLanding;
     this.state = "landing"; this.phase = ""; this.timer = v.craneFollow;
-    const speed = -f.vy;
-    this.lastLanding = { speed, time: f.t };
-    sim.reset(f.x, f.z, p.heading);
-    sim.speed = p.speed;
-    sim.vel.set(Math.sin(p.heading) * p.speed, 0, Math.cos(p.heading) * p.speed);
-    // How hard, against a 3 m fall (about 7.7 m/s).
-    const k = Math.min(1.6, speed / 7.7);
-    sim.thud(v.craneLandSink * k, v.craneLandKick * speed);
-    this.onTouchdown?.(f.x, this.field.height(f.x, f.z), f.z, speed);
+    const speed = l?.impact ?? 0;
+    this.lastLanding = { speed, time: l?.airTime ?? this.fall.t };
+    this.onTouchdown?.(l?.x ?? sim.pos.x, l?.y ?? this.field.height(sim.pos.x, sim.pos.z), l?.z ?? sim.pos.z, speed);
   }
 
   /** The forced walk after a launch: along the convoy at its speed. */

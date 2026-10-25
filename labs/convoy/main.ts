@@ -147,21 +147,18 @@ loop.onHome = homeAboard;
   sim.onLiftOff = (f, k) => { if (!carry.ground.onDeck) lift?.(f, k); };
 }
 
-// A launch drop lands heavily: a burst of sand, deep prints and a scuffed crater, a bang, and a camera shake.
+// A launch drop lands heavily: the mech's own landing (src/game/mechUnit.ts) throws the sand, prints the feet and
+// bangs; the drop adds a burst between the feet, a scuffed crater and a camera shake. Any other hard landing (off a
+// dune crest) shakes the camera too.
 let shake = 0;
 carry.onTouchdown = (x, y, z, speed) => {
-  const k = Math.min(1.6, speed / 7.7), at = new THREE.Vector3(x, y, z);
+  const k = Math.min(1.6, speed / 7.7);
   const pv = carry.platform.vel;
   bf.dust.stomp(x, y, z, 2.4 * k, pv.x, pv.z);
-  for (const f of sim.feet) {
-    bf.dust.stomp(f.planted.x, f.planted.y, f.planted.z, 1.4 * k, pv.x, pv.z);
-    bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, 1.6 * k);
-  }
   // crater() lays one mark every craterEvery calls: call it that many times so the landing always leaves one.
   for (let i = 0; i < Math.max(1, Math.round(V.craterEvery)); i++) bf.marks.crater(x, z, 5 * k);
-  bf.sfx.play("brap", at, 1.6 * k, 0.4, false);
-  shake = Math.max(shake, V.craneLandShake * k);
 };
+player.onLanding = (l) => { shake = Math.max(shake, V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
 
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();
@@ -277,7 +274,7 @@ const panel = tweakPanel({
     { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },

@@ -148,7 +148,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Dash", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -206,6 +206,19 @@ scene.add(reticle);
 
 field.update();
 mech.reset(13, -40, 0.3);
+// ?drop=metres: start in the air that high over the sand, as if a crane had just let go (?drop=3,5 also moving at 5 m/s).
+const dropArg = params.get("drop")?.split(",").map(Number);
+function drop() {
+  if (!dropArg) return;
+  const [h, fwd = 0] = dropArg;
+  sim.pelvis.y += h;
+  for (const f of sim.feet) f.pos.y += h;
+  sim.launch(Math.sin(sim.heading) * fwd, 0, Math.cos(sim.heading) * fwd);
+}
+drop();
+// A landing shakes the camera by how hard it hit.
+let shake = 0;
+mech.onLanding = (l) => { shake = Math.max(shake, V.landShake * Math.min(1.6, l.impact / 7.7)); };
 follow.copy(sim.pelvis);
 // The hub's biome picker wins over a saved slider.
 if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }
@@ -270,6 +283,12 @@ function tick(rawDt: number) {
     controls.update();
   }
   lastFollow.copy(follow);
+  if (shake > 0.002) {
+    camera.position.x += (Math.random() * 2 - 1) * shake;
+    camera.position.y += (Math.random() * 2 - 1) * shake * 0.6;
+    camera.position.z += (Math.random() * 2 - 1) * shake;
+    shake *= Math.exp(-7 * rawDt);
+  } else shake = 0;
   toon.update(camera, canvas.clientHeight);
 
   streamer.update(sim.pos.x, sim.pos.z);
@@ -284,6 +303,8 @@ function tick(rawDt: number) {
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
     + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
+  const ll = sim.lastLanding;
+  app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 }

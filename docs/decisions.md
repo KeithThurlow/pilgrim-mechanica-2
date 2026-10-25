@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Every mech can land on its legs: one general air and landing system (crane drop, dune crests, the bound, blasts); the landing squats by how hard it hits | Keith | Keith | `src/mech/walker.ts`. |
+| 2026-10-26 | Landing values: soft under 3 m/s (a 0.12 m dip), then 0.14 m more squat per m/s up to 1.4 m; stagger 0.7 s from 10 m/s (about a 5 m drop on the flat); 40 damage per m/s over 11 m/s; the impact is the speed into the ground, so landing along a slope is gentle; take-off when the ground needs more than 1.2 g to follow, never under 5 m/s | Claude | open | Sliders in Air and Landing. |
 | 2026-10-26 | The mech's default walk is much faster, close to the old run: walk 6 m/s, Shift runs 8.5 (was 4 / 6.5); the gait refined for it | Keith | Keith (speeds Claude's) | Faster than a walk means quicker steps past a 5.2 m stride (Rampart), a lower run and a bouncing bob. |
 | 2026-10-26 | Pilot: hold F to hop out (field and convoy); on the convoy you're mostly on foot; enemies attack a parked mech and the pilot, who is very vulnerable; the bay screen becomes a walk-up terminal; parking (E) crouches faster | Keith | Keith | `docs/proposal-pilot.md` |
 | 2026-10-26 | F stops firing both guns (both mouse buttons do that now) and becomes hold to hop out or back in; calling the mech gets another key later | Claude | open | Follows from Keith's hold F. |
