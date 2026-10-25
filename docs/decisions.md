@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Keep heavy binaries (renders, reference images) out of git; game models stay in | Keith | Keith | `docs/mechs/**/*.png` ignored. |
 | 2026-10-25 | Models are built in Blender by an agent on Keith's PC from a prioritised asset list in this repo (`docs/asset-list.md`); the cloud side builds code stand-ins with the same sockets and wires the models in | Keith | Keith | Priorities (P0 explosives first) are Claude's. |
 | 2026-10-25 | Asset contract: GLB from Blender, +Z front, Y up, +X the mech's left, root at the mount, old-kit node and socket names, vertex colour for paint/AO/wear, `Paint_<section>` materials, tri budgets, check shots from the game camera | Claude | open | `docs/asset-list.md`. |
 | 2026-10-25 | Controls: left click fires the left arm or left hull weapon, right click the right side's; shoulder weapons on number keys 1-4 (replaces "right button = back weapon"); Space dash, E salvage | Keith | Keith | `src/game/combatLab.ts`, `src/weapons/arsenal.ts`. |

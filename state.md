@@ -234,7 +234,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ### 2026-10-24 · Seven Rampart variants; the mech kit and modelling agents in this repo (Claude, Keith's PC)
 - Keith: spin up agents with the old project's mech-modeling skill to model variants of the current mech, using the
   old catalogue's turret, stilt, railgun and other parts and the old `art-refs/`. Seven `mech-modeler` agents ran in
-  parallel, one variant each (see the Mech variants row); notes and renders per variant in `docs/mechs/<id>/`.
+  parallel, one variant each (see the Mech variants row); notes and renders per variant in `docs/mechs/<id>/`
+  (renders stay local, out of git: Keith 2026-10-25, keep heavy binaries out of git).
 - Ported from the old project: the Blender mech kit (`hskit`, `mil_kit`, `vkit`, `stock`, the Rampart v1/v2/v4 study,
   `export_game.py`, `shots.py`, `ref/`) to `tools/blender/`; the skill to `.claude/skills/mech-modeling/` (v0.8: this
   repo's pipeline, the game's part contract, headless in-game shots); a reusable `.claude/agents/mech-modeler.md`.
