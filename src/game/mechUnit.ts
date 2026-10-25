@@ -3,7 +3,7 @@
 // Ramparts for now, Keith 2026-10-24), so both walk, shoot, kick up dust and take hits the same way.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import { WalkerSim, leftOf, type MoveCommand } from "../mech/walker";
+import { WalkerSim, leftOf, type MoveCommand, type Landing } from "../mech/walker";
 import type { WalkerValues } from "../mech/walkerTuning";
 import { UpperSim, triggerOf, type UpperValues, type Aim, type Trigger } from "../mech/upper";
 import type { UpperSim as UpperSimT } from "../mech/upper";
@@ -88,6 +88,8 @@ export class MechUnit implements Hittable {
   damageScale = 1;
   /** Called on each footfall with where and how hard (stomps for infantry, later). */
   onStomp: ((x: number, z: number, strength: number) => void) | null = null;
+  /** After each landing's own dust, prints, sound and damage (labs shake the camera, the convoy lab digs a crater). */
+  onLanding: ((l: Landing) => void) | null = null;
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
@@ -136,6 +138,24 @@ export class MechUnit implements Hittable {
       bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       this.onStomp?.(f.planted.x, f.planted.z, k);
+    };
+    // A landing (a drop, a crest, a jump): both feet stomp at once, scaled by how hard it hit; hard ones hurt.
+    sim.onLand = (l) => {
+      const k = Math.min(2.2, 0.4 + l.impact / 6);
+      if (l.impact > 1.5) {
+        for (const f of sim.feet) {
+          if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
+          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+          dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
+        }
+        if (l.impact > v.landSoft) {
+          this.a.set(l.x, l.y, l.z);
+          bf.sfx.play("brap", this.a, Math.min(1.8, 0.5 + l.hard * 1.1), 0.4, false);
+        }
+      }
+      this.onStomp?.(l.x, l.z, k * 1.5);
+      if (l.damage > 0) this.damage(l.damage, this.a.set(l.x, l.y, l.z), this.b.set(0, 1, 0));
+      this.onLanding?.(l);
     };
     sim.onLiftOff = (f, k) => {
       if (k < 0.15) return;
