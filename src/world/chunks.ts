@@ -43,7 +43,7 @@ export class TerrainStreamer {
   private uSpecks = uniform(0.45);
   private uRipples = uniform(0.35);
   private uWind = uniform(new THREE.Vector2(1, 0));
-  readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0 };
+  readonly stats = { loaded: 0, built: 0, buildMs: 0, pending: 0, patched: 0 };
   private chunks = new Map<string, Chunk>();
   /**
    * A hole the chunks leave for the detail patch (src/world/detailPatch.ts): (x0, z0, x1, z1) in world metres, empty
@@ -52,8 +52,10 @@ export class TerrainStreamer {
   readonly hole = uniform(new THREE.Vector4(0, 0, 0, 0));
   /** The per-pixel sand shading (mottling, specks, ripples) as a factor, shared with the detail patch. */
   readonly shadeNode: THREE.Node<"float">;
-  /** Called with the box whenever ground is rebuilt (rebuildArea), or with null when everything is (rebuildAll). */
+  /** Called with the box whenever ground is rebuilt or patched (rebuildArea, patchArea), or null for rebuildAll. */
   readonly onRebuild: ((box: [number, number, number, number] | null) => void)[] = [];
+  private c3 = new THREE.Color();
+  private c4 = new THREE.Color();
   private dirty = new Set<string>();
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
@@ -177,6 +179,76 @@ export class TerrainStreamer {
     this.v.budgetMs = b;
   }
 
+  /** One ground vertex at (x, z): the sample into s, the normal into nn, the colour into tmp. */
+  private vertex(x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
+    this.field.sample(x, z, s);
+    this.field.normal(x, z, nn);
+    groundColour(this.field, x, z, s, tmp);
+  }
+
+  /**
+   * Update the loaded chunks' vertices inside a box in place (after the ground changed there, e.g. a crater): heights,
+   * normals, colours and the water sheet's depth. Much cheaper than rebuilding whole chunks; a chunk that now needs a
+   * water sheet it didn't have is queued for a rebuild instead. Returns the vertices touched.
+   */
+  patchArea(x0: number, z0: number, x1: number, z1: number): number {
+    const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
+    // Normals and the colour's wide normal read the ground 2 m round each vertex.
+    x0 -= 2.5; z0 -= 2.5; x1 += 2.5; z1 += 2.5;
+    for (const f of this.onRebuild) f([x0, z0, x1, z1]);
+    const a = Math.floor(x0 / size), b = Math.floor(x1 / size), c = Math.floor(z0 / size), d = Math.floor(z1 / size);
+    const s: GroundSample = { h: 0, crest: 0, flat: 0 }, nn = [0, 1, 0], tmp = this.c4;
+    const water = this.field.waterLevel;
+    let count = 0;
+    for (let cz = c; cz <= d; cz++) for (let cx = a; cx <= b; cx++) {
+      const key = cx + "," + cz, ch = this.chunks.get(key);
+      if (!ch || this.dirty.has(key)) continue;
+      const ox = cx * size, oz = cz * size;
+      const k0 = Math.max(0, Math.ceil((x0 - ox) / step)), k1 = Math.min(n, Math.floor((x1 - ox) / step));
+      const j0 = Math.max(0, Math.ceil((z0 - oz) / step)), j1 = Math.min(n, Math.floor((z1 - oz) / step));
+      if (k0 > k1 || j0 > j1) continue;
+      const g = ch.mesh.geometry;
+      const P = g.getAttribute("position") as THREE.BufferAttribute, Nm = g.getAttribute("normal") as THREE.BufferAttribute, Cl = g.getAttribute("color") as THREE.BufferAttribute;
+      const pos = P.array as Float32Array, nor = Nm.array as Float32Array, col = Cl.array as Float32Array;
+      const wg = ch.water?.geometry;
+      let needWater = false;
+      for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) {
+        const i = j * row + k;
+        this.vertex(ox + k * step, oz + j * step, s, nn, tmp);
+        pos[i * 3 + 1] = s.h;
+        nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
+        col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+        const ws = s.ws ?? 0;
+        if (water !== null && ws > 0) {
+          if (wg) this.waterVertex(wg, i, water, ws, s.h);
+          else if (s.h - water < 0.3) needWater = true;
+        }
+        count++;
+      }
+      P.needsUpdate = true; Nm.needsUpdate = true; Cl.needsUpdate = true;
+      g.computeBoundingSphere();
+      if (wg) for (const k of ["color", "depth", "fade"]) (wg.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
+      if (needWater) this.dirty.add(key);
+    }
+    this.stats.patched += count;
+    return count;
+  }
+
+  /** One water vertex: depth from the ground under it, the tint by depth and foam, faded where the shallows end. */
+  private waterVertex(g: THREE.BufferGeometry, i: number, water: number, ws: number, h: number) {
+    const col = (g.getAttribute("color") as THREE.BufferAttribute).array as Float32Array;
+    const dep = (g.getAttribute("depth") as THREE.BufferAttribute).array as Float32Array;
+    const fade = (g.getAttribute("fade") as THREE.BufferAttribute).array as Float32Array;
+    const t = this.c3;
+    const d = water - h;
+    dep[i] = Math.max(0, d);
+    t.copy(WATER_COLOURS.shallow).lerp(WATER_COLOURS.deep, smooth(0, 1.4, d));
+    t.lerp(WATER_COLOURS.foam, (1 - smooth(0, 0.06, d)) * 0.45);
+    col[i * 3] = t.r; col[i * 3 + 1] = t.g; col[i * 3 + 2] = t.b;
+    // Fade out where the shallows end (no water in desert troughs) and just above the shore (the foam line).
+    fade[i] = smooth(0.15, 0.6, ws) * (d > -0.05 ? 1 : 0);
+  }
+
   private build(cx: number, cz: number): Chunk {
     const n = Math.round(this.v.segments), size = this.v.chunkSize, step = size / n, row = n + 1;
     const count = row * row;
@@ -191,15 +263,12 @@ export class TerrainStreamer {
     const hs = new Float32Array(count);
     for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) {
       const x = ox + k * step, z = oz + j * step;
-      this.field.sample(x, z, s);
-      this.field.normal(x, z, nn);
+      this.vertex(x, z, s, nn, tmp);
       pos[i * 3] = k * step; pos[i * 3 + 1] = s.h; pos[i * 3 + 2] = j * step;
       nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
-
-      groundColour(this.field, x, z, s, tmp);
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
       const ws = s.ws ?? 0;
       if (water !== null && ws > 0 && s.h - water < 0.3) maxWs = Math.max(maxWs, ws);
-      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
       if (wsA) wsA[i] = ws;
       hs[i] = s.h;
     }
@@ -225,24 +294,17 @@ export class TerrainStreamer {
   private buildWater(ox: number, oz: number, n: number, step: number, water: number, wsA: Float32Array, hs: Float32Array) {
     const row = n + 1, count = row * row;
     const pos = new Float32Array(count * 3), col = new Float32Array(count * 3), dep = new Float32Array(count), fade = new Float32Array(count);
-    const tmp = new THREE.Color();
-    for (let i = 0; i < count; i++) {
-      const k = i % row, j = Math.floor(i / row);
-      pos[i * 3] = k * step; pos[i * 3 + 1] = water; pos[i * 3 + 2] = j * step;
-      const d = water - hs[i];
-      dep[i] = Math.max(0, d);
-      tmp.copy(WATER_COLOURS.shallow).lerp(WATER_COLOURS.deep, smooth(0, 1.4, d));
-      tmp.lerp(WATER_COLOURS.foam, (1 - smooth(0, 0.06, d)) * 0.45);
-      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
-      // Fade out where the shallows end (no water in desert troughs) and just above the shore (the foam line).
-      fade[i] = smooth(0.15, 0.6, wsA[i]) * (d > -0.05 ? 1 : 0);
-    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(count * 3).map((_, q) => (q % 3 === 1 ? 1 : 0)), 3));
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     g.setAttribute("depth", new THREE.BufferAttribute(dep, 1));
     g.setAttribute("fade", new THREE.BufferAttribute(fade, 1));
+    for (let i = 0; i < count; i++) {
+      const k = i % row, j = Math.floor(i / row);
+      pos[i * 3] = k * step; pos[i * 3 + 1] = water; pos[i * 3 + 2] = j * step;
+      this.waterVertex(g, i, water, wsA[i], hs[i]);
+    }
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(count * 3).map((_, q) => (q % 3 === 1 ? 1 : 0)), 3));
     g.setIndex(this.sharedIndex(n));
     g.computeBoundingSphere();
     const m = new THREE.Mesh(g, this.waterMaterial);

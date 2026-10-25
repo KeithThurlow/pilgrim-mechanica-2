@@ -26,6 +26,7 @@ const bf = {
   lob() { shots++; lobs++; return null; },
   gunFx: { shot() {} },
   canSee() { return true; },
+  dent() { return false; },
 } as unknown as Battlefield;
 const pelvis = new THREE.Vector3(0, field.height(0, 0) + 3, 0);
 const player = { sim: { pelvis, pos: pelvis.clone().setY(field.height(0, 0)), vel: new THREE.Vector3() }, alive: true } as unknown as MechUnit;

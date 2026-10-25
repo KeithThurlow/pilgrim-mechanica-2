@@ -6,7 +6,7 @@ import type { Param } from "../core/tweaks";
 
 export const UPPER_DEFAULTS = {
   torsoTurnRate: 150,
-  torsoLimit: 120,
+  torsoLimit: 180,
   podYawMax: 30,
   podPitchMax: 20,
   podTrack: 12,
@@ -32,7 +32,7 @@ export type UpperValues = typeof UPPER_DEFAULTS;
 
 export const UPPER_PARAMS: Param[] = [
   { key: "torsoTurnRate", label: "Torso turn rate (°/s)", min: 30, max: 600, step: 5, group: "Torso & guns" },
-  { key: "torsoLimit", label: "Torso turn limit (°)", min: 20, max: 180, step: 1, group: "Torso & guns", tip: "How far the torso can turn from the legs" },
+  { key: "torsoLimit", label: "Torso turn limit (°)", min: 20, max: 180, step: 1, group: "Torso & guns", tip: "How far the torso can turn from the legs; 180 turns freely the shortest way (Keith 2026-10-25: kite and shoot behind you)" },
   { key: "podYawMax", label: "Gun arc (°)", min: 0, max: 60, step: 1, group: "Torso & guns", tip: "Guns swing this far on their own before the torso has to turn" },
   { key: "podPitchMax", label: "Gun pitch limit (°)", min: 0, max: 45, step: 1, group: "Torso & guns" },
   { key: "podTrack", label: "Gun tracking", min: 1, max: 40, step: 0.5, group: "Torso & guns" },

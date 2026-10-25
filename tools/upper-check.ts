@@ -49,15 +49,34 @@ for (let i = 0; i < 120 * 36; i++) {
   const a = (i / (120 * 36)) * Math.PI * 4; // twice round in 36 s
   for (const s of sim.update(dt, 0, shoulder, { x: Math.sin(a) * 25, y: 0, z: Math.cos(a) * 25 }, true)) { void s; around++; }
 }
-const reachable = (v.torsoLimit + v.podYawMax) / 180; // share of the circle the guns can reach
+const reachable = Math.min(1, (v.torsoLimit + v.podYawMax) / 180); // share of the circle the guns can reach
 const fullRate = 2 * v.fireRate * 36;
-if (around < fullRate * reachable * 0.6) problems.push(`target circling the mech: only ${around} rounds (torso jammed?)`);
+if (around < Math.min(fullRate * reachable * 0.6, 2 * v.ammoPerGun * 0.95)) problems.push(`target circling the mech: only ${around} rounds (torso jammed?)`);
+// Free waist (Keith 2026-10-25: kite and shoot behind you): a target behind turns the torso the short way round and
+// the guns fire within the time the turn takes.
+let behindFired = -1;
+if (v.torsoLimit >= 180) {
+  for (const side of [1, -1]) {
+    sim.reset(0); sim.resupply();
+    const a = side * (170 * Math.PI) / 180, T = { x: Math.sin(a) * 25, y: 0, z: Math.cos(a) * 25 };
+    let t = 0, fired = false, wrongWay = false;
+    for (let i = 0; i < 120 * 3 && !fired; i++) {
+      const before = sim.torsoYaw;
+      for (const _ of sim.update(dt, 0, shoulder, T, true)) { void _; fired = true; }
+      if (i < 12 && Math.sign(sim.torsoYaw - before) === -side && Math.abs(sim.torsoYaw - before) > 1e-6) wrongWay = true;
+      t += dt;
+    }
+    if (!fired) problems.push(`a target 170° to the ${side > 0 ? "left" : "right"} behind was never shot within 3 s`);
+    if (wrongWay) problems.push(`the torso turned the long way round toward a target behind (${side > 0 ? "left" : "right"})`);
+    behindFired = Math.max(behindFired, t);
+  }
+}
 const gap = Math.abs((restart[1] ?? 99) - (restart[-1] ?? 99));
 if (restart[1] === undefined || restart[-1] === undefined) problems.push("a gun never came back on target after the aim jumped");
 else if (gap < 0.02) problems.push(`both guns came back on target together (${(gap * 1000).toFixed(0)} ms apart)`);
 if (counts[1] === 0 || counts[-1] === 0) problems.push("a gun never fired");
 if (counts[1] > v.ammoPerGun || counts[-1] > v.ammoPerGun) problems.push("a gun fired past an empty drum");
 if (maxYaw > (v.podYawMax * Math.PI) / 180 + 1e-6) problems.push("a gun swung past its arc");
-console.log(`circling: ${around} rounds · close target: L ${close[1]} R ${close[-1]} rounds · rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
+console.log(`target behind: fired after ${behindFired.toFixed(2)} s · circling: ${around} rounds · close target: L ${close[1]} R ${close[-1]} rounds · rounds L ${counts[1]} R ${counts[-1]} (drum ${v.ammoPerGun}) · back on target after the jump: L ${(restart[1] ?? NaN).toFixed(2)} s, R ${(restart[-1] ?? NaN).toFixed(2)} s (${(gap * 1000).toFixed(0)} ms apart)`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("upper check failed"); }
 console.log("upper check passed");

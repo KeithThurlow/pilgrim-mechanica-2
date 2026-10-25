@@ -224,10 +224,14 @@ export class DentLayer {
 
   /** How hard the ground is at (x, z): 0 soft .. 1 takes no dent. */
   hardness(x: number, z: number): number {
-    const f = this.field as unknown as { hardness?: (x: number, z: number) => number };
-    if (f.hardness) return f.hardness(x, z);
-    // TODO(craters): use the crater work's hardness map once it has landed; until then bare rock is hard.
-    return this.field.sample(x, z, this.s).rock ?? 0;
+    // The crater layer's hardness sliders when the ground has craters (src/world/craters.ts: rock, rocky sand, shallows
+    // sand), else bare rock alone is hard. Its protected zones (POI pads, the road) are left out on purpose: they
+    // refuse craters, but a foot or a wheel still marks the sand on them, and dents are looks only.
+    const cv = (this.field.dents as unknown as { v?: { hardRock?: number; hardRockySand?: number; hardShallows?: number } } | null)?.v;
+    const s = this.field.sample(x, z, this.s);
+    const wr = s.wr ?? 0, ws = s.ws ?? 0, rock = s.rock ?? 0;
+    const h = Math.max(wr * (cv?.hardRockySand ?? 0) + ws * (cv?.hardShallows ?? 0), rock * (cv?.hardRock ?? 1));
+    return Math.min(1, Math.max(0, h));
   }
 
   /**

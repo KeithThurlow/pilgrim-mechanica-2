@@ -69,6 +69,18 @@ export function bayScreen(o: BayOptions) {
     takeFrom(bagOf(it), it.id);
     toStash(fit(st.loadout, slot, it));
     hover = null;
+    // An arm on its own holds nothing (Keith 2026-10-25: swapping the minigun for an arm left an empty mount): put the
+    // best hand weapon from stash or cargo in that hand, or go to the hand slot so the next pick is obvious.
+    if ((slot === "armL" || slot === "armR") && it.kind === "arm") {
+      const hand: SlotId = slot === "armL" ? "handL" : "handR";
+      if (!st.loadout[hand]) {
+        const order = ["legendary", "epic", "rare", "uncommon", "common"];
+        const cands = [...st.cargo.items, ...st.stash.items].filter((c) => !fitProblem(st.loadout, hand, c))
+          .sort((p, q) => order.indexOf(p.rarity) - order.indexOf(q.rarity));
+        if (cands[0]) { takeFrom(bagOf(cands[0]), cands[0].id); toStash(fit(st.loadout, hand, cands[0])); }
+        else slot = hand;
+      }
+    }
     changed();
   }
 

@@ -10,6 +10,7 @@ import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
 import { rayGround } from "../world/raycast";
 import type { WreckStandIns } from "../world/wrecks";
+import type { CraterLayer } from "../world/craters";
 import { DustSim, type DustValues } from "../fx/dust";
 import { DustDraw } from "../fx/dustDraw";
 import { GroundMarks } from "../fx/groundMarks";
@@ -80,6 +81,10 @@ export class Battlefield {
   private waterDraw: WaterDraw | null = null;
   private wsamp = { h: 0, crest: 0, flat: 0 } as import("../world/terrain").GroundSample;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
+  /** Blast craters in the ground (null: blasts leave only decals). Set by the lab, with onGround. */
+  craters: CraterLayer | null = null;
+  /** Called with a box whose ground changed (rebuild the chunks and the physics floor there). */
+  onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
   private hit = new THREE.Vector3();
   private steelAt = new THREE.Vector3();
   private steelN = new THREE.Vector3();
@@ -230,9 +235,23 @@ export class Battlefield {
     return this.shells.lob(team, from, to, flight, arc, radius, damage);
   }
 
+  /**
+   * Dent the ground with a blast of this radius at (x, z): a real crater in the height function (sized by the crater
+   * sliders, less on hard ground, none on protected ground), and the chunks follow. Returns whether it dented.
+   */
+  dent(x: number, z: number, blastRadius: number): boolean {
+    if (!this.craters) return false;
+    const box = this.craters.blast(x, z, blastRadius);
+    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
+    return !!box;
+  }
+
   private burst(s: Shell) {
     const p = s.to, k = Math.max(0.5, s.radius / 3);
-    if (this.inWater(p.x, p.z)) {
+    // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
+    const wet = this.inWater(p.x, p.z);
+    if (this.dent(p.x, p.z, s.radius)) p.y = this.field.height(p.x, p.z);
+    if (wet) {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
       this.sfx.play("brap", p, 1.6, 0.5, false);
