@@ -129,6 +129,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Loadout and items proposed (Claude)
+- Keith: equip the walker from the convoy; legs, hull, arms or hull weapons, power pack and back mounts; rarity with Protocol sockets; enemy mechs wear real gear and leave hulks to pull parts from. Plan in `docs/proposal-loadout.md` (slots, items, lists not grids, a bay screen on the parked mech, a loadout lab first). Noted: the seven Rampart variants exist only on Keith's PC (not pushed). Waiting for Keith.
+
 ### 2026-10-25 · Biome picker on the lab hub (Claude)
 - Keith: biome launch choice as a drop-down on the hub. `index.html`: a Biome select (Desert, Rocky, Shallows, Biome map) on the walker, war band, bandits, robots, POI and terrain labs, remembered per lab, sets `?biome=` on the link; the convoy lab has none (it doesn't take biomes yet). The URL's biome now wins over a saved slider in every lab (`combatLab.ts`, walker and terrain labs). Checked: headless hub test (links follow the picker, kept after reload), typecheck.
 
