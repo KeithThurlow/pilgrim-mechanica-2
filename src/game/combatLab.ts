@@ -161,15 +161,29 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   let auto = !params.has("manual");
   let mouse: { x: number; y: number } | null = null;
   let mouseDown = false, rightDown = false;
-  canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; auto = false; } });
-  canvas.addEventListener("pointerdown", (e) => {
+  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); F fires both.
+  // Read both buttons from the `buttons` bitmask on every pointer event: a browser sends pointerdown/up only for the
+  // first button pressed and the last released, and a second button pressed while one is held arrives as a
+  // pointermove, so tracking `button` on down/up lost the second gun (Keith 2026-10-25: couldn't hold both).
+  // A button starts firing only when it goes down over the canvas (so dragging a slider onto the field doesn't fire);
+  // a release counts anywhere.
+  let lastButtons = 0;
+  const readButtons = (e: PointerEvent) => {
     if (e.pointerType !== "mouse") return;
-    if (e.button === 0) { mouseDown = true; auto = false; }
-    // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); F fires both.
-    if (e.button === 2) { rightDown = true; auto = false; }
-  });
-  addEventListener("pointerup", (e) => { if (e.button === 2) rightDown = false; else mouseDown = false; });
-  addEventListener("blur", () => { mouseDown = false; rightDown = false; });
+    const pressed = e.buttons & ~lastButtons;
+    lastButtons = e.buttons;
+    if (e.target === canvas) {
+      if (pressed & 1) { mouseDown = true; auto = false; }
+      if (pressed & 2) { rightDown = true; auto = false; }
+    }
+    if (!(e.buttons & 1)) mouseDown = false;
+    if (!(e.buttons & 2)) rightDown = false;
+  };
+  canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; auto = false; } });
+  addEventListener("pointerdown", readButtons);
+  addEventListener("pointermove", readButtons);
+  addEventListener("pointerup", readButtons);
+  addEventListener("blur", () => { mouseDown = false; rightDown = false; lastButtons = 0; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   // Space: dash the way WASD points (Keith 2026-10-24), on charges.
   let dashPressed = false, spaceDown = false;
@@ -308,6 +322,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let aim: Aim | null = null;
     let trigger: Trigger = false;
     let cursor: Aim | null = null;
+    let shotAt: Aim | null = null;
     // Shoulder weapon keys 1-4: hold to paint, release to fire.
     let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
     let demoLock: TargetCandidate | null = null;
@@ -325,8 +340,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
         caster.setFromCamera(ndc, camera);
         lock = targeting.pick(lab.targets(), { rayO: caster.ray.origin, rayD: caster.ray.direction, from: player.sim.pos, cursor: aimPt, range: V.range }, V);
         if (lock) {
-          // Lead it: the guns trail their aim as they track, so aim where it will be by then.
+          // Lead it: the arms trail their aim as they track, so swing them to where it will be by then. The rounds
+          // fly from the muzzle straight at the target itself (shotAt), so they don't land ahead of it.
           const t = lock.target, L = V.lockLead;
+          shotAt = { x: t.x, y: t.y, z: t.z };
           aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
         }
       }
@@ -349,7 +366,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     // The demo sidesteps now and then, to show the dash off.
     if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
     player.dashHold = spaceDown && !auto;
-    player.step(dt, cmd, aim, trigger);
+    player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     for (const f of frames) f(dt);
     craters.update(dt, groundChanged);

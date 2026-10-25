@@ -171,7 +171,8 @@ export class MechUnit implements Hittable {
   }
 
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
-  step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger) {
+  /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
+  step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
     this.hurt = Math.max(0, this.hurt - dt * 400);
     if (!this.alive) { this.deadFor += dt; return; }
@@ -223,13 +224,15 @@ export class MechUnit implements Hittable {
       const spread = ((own?.spread ?? v.spread) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
-      // The barrel's heading carries the guns' lag, but its pitch also carries the hull's lean and the muzzle sits
-      // below and ahead of the shoulder the guns aim from, so rounds went ~2 m low at 20 m (Keith: "very hard to hit").
-      // Keep the heading; pitch the round so it arrives at the aim's height at the aim's distance.
-      if (aim) {
-        const hx = this.dir.x, hz = this.dir.z, hl = Math.hypot(hx, hz);
-        const flat = Math.hypot(aim.x - this.muzzle.x, aim.z - this.muzzle.z);
-        if (hl > 1e-4 && flat > 1) this.dir.set((hx / hl) * flat, aim.y - this.muzzle.y, (hz / hl) * flat).normalize();
+      // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle
+      // straight to the aim, like the autocannon. Using the barrel's own heading carried the arm's swing lag (the
+      // outward arm turns slower) and the gap between the model's muzzle and the sim's shoulder, so on small targets
+      // the left gun's rounds landed off to the left (Keith 2026-10-25). Before that, the barrel's pitch put rounds
+      // ~2 m low at 20 m (Keith: "very hard to hit"). The barrel's heading stays the fallback with no aim.
+      const at = shotAt ?? aim;
+      if (at) {
+        const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
+        if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
       }
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();

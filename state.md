@@ -151,6 +151,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Both mouse buttons at once; minigun rounds on small targets (Claude, cloud)
+- Keith: couldn't hold left and right click together; the left minigun fired off to the left of small targets while the autocannon hit them. Mouse: `src/game/combatLab.ts` reads both buttons from `PointerEvent.buttons` on every pointer event (a browser sends pointerdown/up only for the first button down and the last up; a second button arrives as a pointermove), a press starts only over the canvas, a release counts anywhere. Minigun: `src/game/mechUnit.ts` sends each round from the real muzzle straight at the target (like the autocannon) instead of along the barrel's heading, which carried the outward arm's slower swing and the muzzle-to-shoulder gap; the arms still swing toward the led lock, the rounds go at the lock itself (`step(..., shotAt)`). Still gated by the fire cone. Keith wants the two miniguns' beating to stay organic (independent clocks, no forced detune).
+- Checked: typecheck of the changed files only (npm registry unreachable from the cloud box, so no `npm test` or shots); needs a play on Keith's PC.
+
 ### 2026-10-25 · Assets: W1 rocket launchers, hull and shoulder, and the rocket (desktop agent, Keith's PC)
 - From `docs/asset-list.md` (W1, P0): `public/models/weapons/rocket-launcher-hull.glb`, `rocket-launcher-shoulder.glb`, `rocket.glb` with sidecars, built by `tools/blender/weapons/rocket_launcher.py` (old repo's `wkit.py`, GLB straight from Blender). A fat single tube in the Rampart's khaki and olive: ribbed heat shield, flared back-blast vent behind a hinged `Lid`, sight box, `Laser` emitter, hazard-striped muzzle with the red warhead nose out of it and a red warning band. Wiring is for the cloud side. Checked: three.js GLTFLoader reads the node tree, sockets and vertex colours in the game frame (muzzle +Z, the hull tube outboard on -X); tris 4,064 / 3,622 / 208 within budget; shots on the Rampart from the 40 m and 12 m game cameras in `docs/asset-shots/W1/`.
 
