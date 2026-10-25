@@ -503,9 +503,8 @@ app.onTick((rawDt) => {
   costs.mark("light");
   bf.update(dt, camera, look);
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
-  loop.update(dt, { eHeld, qHeld, demo: auto });
+  loop.update(dt, { eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st) });
   app.hud.set("expedition", loop.line);
-  costs.mark("expedition");
   app.hud.set("costs", costs.end());
 
   const p = convoy.bay;

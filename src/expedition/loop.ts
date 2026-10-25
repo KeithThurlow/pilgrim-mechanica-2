@@ -46,7 +46,7 @@ export const LOOP_TOPICS = [
 ];
 
 
-export interface LoopInput { eHeld: boolean; qHeld: boolean; demo: boolean }
+export interface LoopInput { eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -133,7 +133,9 @@ export class ExpeditionLoop {
     const onSand = carry.state === "walking" || carry.state === "inRange";
     const holding = (inp.demo ? this.demoHold : inp.eHeld) && exp.state === "out" && player.alive && onSand;
     this.sites.update(dt, p.x, p.z, holding, this.camera);
+    inp.mark?.("POIs and salvage");
     this.swarms.update(dt, exp.state === "out" && player.alive && SAND.has(carry.state));
+    inp.mark?.("swarm camps");
 
     // Fuel: burns only out in the field.
     const dash = player.dash;
@@ -157,6 +159,7 @@ export class ExpeditionLoop {
     }
     const eta = this.home.reachable ? this.home.eta : Infinity;
     const warn = exp.state === "out" ? fuelWarning(v, fuel.left, eta) : 0;
+    inp.mark?.("way home");
     if (warn === 2 && this.warn < 2) this.sound.warn();
     this.warn = warn;
 
@@ -177,12 +180,14 @@ export class ExpeditionLoop {
       for (let s = -100; s <= v.convoyRadar * 1.6; s += 50) { this.route.ahead(head + s, out); w.route.push({ x: out.x, z: out.z }); }
     }
     this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
+    inp.mark?.("radar lists");
     const aboard = !SAND.has(carry.state);
     const zev = this.zoom.update(dt, linked(v, w, aboard));
     if (zev) this.sound.zoom(zev === "out");
     const range = this.zoom.range;
     const mode = range > Math.sqrt(v.mechRadar * v.convoyRadar) ? "convoy" : "mech";
     this.radar.draw(dt, radarPicture(v, w, mode), range, (v.camYaw * Math.PI) / 180, sim.heading, warn);
+    inp.mark?.("radar draw");
 
     // HUD.
     const s = this.sites.salvage;
@@ -195,6 +200,7 @@ export class ExpeditionLoop {
       exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
       canRecall: exp.state === "out" && player.alive, bankShow: v.bankShow,
     });
+    inp.mark?.("expedition hud");
   }
 
   /**
