@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Multiplayer later: 4-player co-op (Risk of Rain-like), one player hosting first; maybe a server with server-side items (PoE2-like) later; code keeps multiplayer-ready habits now (seeded sims, commands, events, stable ids, ownership) | Keith | Keith | `docs/multiplayer.md`, CLAUDE.md rule 12. Performance refined only when needed (Keith). |
 | 2026-10-26 | Weapons stay on left and right click; shoulder weapons on keys 1-3 as hold to aim, release to fire for now (quick cast may come later) | Keith | Keith | |
 | 2026-10-26 | Convoy canopies and village look on hold: focus on game loop work | Keith | Keith | |
 | 2026-10-26 | Tall robots: hitboxes over the whole body, the body takes the most damage and the feet less; the guns must reach up to the body close in | Keith | Keith | Convoy combat pass. |

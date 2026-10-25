@@ -38,6 +38,14 @@ desert look direction. What came from where: `docs/decisions.md`.
    `reports/inbox.md` on his PC (`reports/<id>.md` has the note, a screenshot, the URL and every tuning value). When
    you start, and when Keith says he's reported something, read the inbox, handle the open lines, tick them
    (`- [x]`) and answer each in `reports/replies.md` (`<id>: what you did`), which shows back in the box.
+12. **Stay ready for multiplayer** (Keith 2026-10-26: 4-player co-op later, one player hosting first; plan in
+   `docs/multiplayer.md`). Nothing is networked yet, but code must keep these habits:
+   - **Randomness:** seeded in anything that changes game state. `Math.random()` only in FX, sound and drawing.
+   - **Commands:** sims take commands (move, aim, fire, dash, salvage, hop out) and never read input themselves.
+   - **Events:** what happens (blasts, hits, deaths, pick-ups, banking) is plain-data events.
+   - **Ids:** stable ids for anything peers must agree on.
+   - **Ownership:** know who owns each piece of state: host (enemies, damage, loot, convoy, expedition), player (own
+     movement and aim) or cosmetic (FX, ragdolls). Say so in the file header when it isn't obvious.
 
 ## Stack
 

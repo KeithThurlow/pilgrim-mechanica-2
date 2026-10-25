@@ -166,6 +166,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Multiplayer direction and habits (Keith, Claude)
+- `docs/multiplayer.md`: stages (host over WebRTC, then an optional dedicated Node server, then server-side items), what already helps, questions for later, and the habits; CLAUDE.md rule 12. Known debt: `Math.random()` in game-state code in warband, swarmCamps, battlefield, mechUnit, arsenal.
+
 ### 2026-10-26 · Pilot answers, no ECS for now (Keith)
 - Keith's answers to the pilot proposal and the ECS question logged in `docs/proposal-pilot.md` and `docs/decisions.md`.
 
