@@ -1,4 +1,4 @@
-# Proposal: the expedition loop: radar, the way home, fuel, loot at risk (not built; waiting for Keith)
+# Proposal: the expedition loop: radar, the way home, fuel, loot at risk (approved 2026-10-25; not built yet)
 
 Keith 2026-10-25: the core loop.
 - You go out, recover things, get back to the convoy, upgrade, and it feels amazing. There's always pressure not to
@@ -55,8 +55,9 @@ time you're out, amber, with a lock icon once it's banked. Being picked up by th
   idling burns almost nothing. Shown as "Fuel 9:20".
 - **Warning:** when fuel time is no longer comfortably above return time, the HUD goes amber, then red, and the arrow
   pulses.
-- **Out of fuel:** limp mode. Half speed, no sprint, dash or boost, guns still work. You can still crawl home if
-  you're close. Otherwise call recovery and lose the loot.
+- **Out of fuel = mission failure (Keith 2026-10-25):** a forced recovery. The mech comes home and the at-risk loot
+  is lost. Quitting is the same forced recovery. The fuel bar and a predicted return time are there to make you head
+  back in time.
 - **Expedition length** comes from tuning, not rules: convoy speed, fuel per pack, and the convoy's range edge. I'd
   tune the starting gear so a straight run out and back takes about 12 minutes with a stop or two.
 
@@ -90,7 +91,19 @@ Each upgrade lets you go further or choose better, which is the point.
   - fuel never goes negative;
   - limp mode engages at zero.
 
-## Questions for Keith
+## Later (Keith 2026-10-25)
+
+Late-game **heli drops**: get dropped at a chosen point of interest, then it's up to you to get back to the convoy.
+
+## Answers (Keith 2026-10-25)
+
+- Out of fuel is mission failure, a forced recovery. Quitting is a forced recovery too.
+- Show a predicted time of return.
+- Still open, with Claude's defaults:
+  - recovery is instant (fade, back aboard);
+  - swarms show as heat blobs.
+
+## Questions for Keith (original)
 
 1. **Out of fuel:** limp home at half speed (my suggestion), or a hard stop that forces a recovery?
 2. **Recovery:** instant (the screen fades, you're back aboard), or a short wait for the helicopter, during which you

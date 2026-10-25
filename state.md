@@ -123,7 +123,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
 - Weapons: proposed (`docs/proposal-weapons.md`); starting with Claude's defaults (right button, salvo on release, cooldowns) unless Keith says otherwise.
 - Pilot on foot: proposed (`docs/proposal-pilot.md`), waiting for Keith.
-- Expedition loop (radar, way home, fuel, loot at risk): proposed (`docs/proposal-expedition.md`), waiting for Keith.
+- Expedition loop (radar, way home, fuel, loot at risk): approved (`docs/proposal-expedition.md`); starts when the convoy pass lands (same lab).
 
 ## Next candidates (ask Keith which)
 
