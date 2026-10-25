@@ -1,0 +1,174 @@
+{
+  "class": "RocketLauncher",
+  "size": "M",
+  "mount": "hull",
+  "note": "replaces an arm: root and Mount on the shoulder joint; right side (the game's -X outboard), mirror it for the left as the minigun pod is",
+  "units": "metres at game size",
+  "frame": "glTF: +Y up, +Z forward (muzzle), +X the mech's left; root at the mount point",
+  "bounds": {
+    "min": [
+      -1.242,
+      -0.777,
+      -0.929
+    ],
+    "max": [
+      0.0,
+      0.255,
+      2.02
+    ],
+    "size": [
+      1.242,
+      1.032,
+      2.949
+    ]
+  },
+  "tris": 4064,
+  "trisPerNode": {
+    "Body": 1266,
+    "Recoil": 2402,
+    "Lid": 84,
+    "Missile_0": 312
+  },
+  "nodes": {
+    "Body": {
+      "materials": [
+        "Paint_plating",
+        "Paint_secondary",
+        "Paint_dark",
+        "Paint_mechanical",
+        "Paint_trim"
+      ],
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "parent": "RocketLauncherHull"
+    },
+    "Recoil": {
+      "materials": [
+        "Paint_plating",
+        "Paint_secondary",
+        "Paint_dark",
+        "Paint_mechanical",
+        "Paint_trim",
+        "Paint_lighting",
+        "Paint_detail",
+        "Paint_visor"
+      ],
+      "pivot": [
+        -0.92,
+        -0.28,
+        0.0
+      ],
+      "parent": "RocketLauncherHull"
+    },
+    "Lid": {
+      "materials": [
+        "Paint_secondary",
+        "Paint_mechanical",
+        "Paint_trim"
+      ],
+      "pivot": [
+        -0.92,
+        0.055,
+        -0.9
+      ],
+      "parent": "Recoil"
+    },
+    "Missile_0": {
+      "materials": [
+        "Paint_mechanical",
+        "Paint_trim",
+        "Paint_detail"
+      ],
+      "pivot": [
+        -0.92,
+        -0.28,
+        1.06
+      ],
+      "parent": "Recoil"
+    }
+  },
+  "moving": [
+    {
+      "node": "Recoil",
+      "kind": "slide",
+      "axis": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "travel": 0.15,
+      "pivot": [
+        -0.92,
+        -0.28,
+        0.0
+      ],
+      "note": "the tube kicks back along -Z on firing and returns; carries Lid and Missile_0"
+    },
+    {
+      "node": "Lid",
+      "kind": "hinge",
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "angleDeg": 100.0,
+      "parent": "Recoil",
+      "pivot": [
+        -0.92,
+        0.055,
+        -0.9
+      ],
+      "note": "rear blast cover: rotate about local +X by angleDeg to flap it up and back on firing (closed = 0)"
+    },
+    {
+      "node": "Missile_0",
+      "kind": "slide",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "travel": 0.0,
+      "parent": "Recoil",
+      "pivot": [
+        -0.92,
+        -0.28,
+        1.06
+      ],
+      "note": "the loaded round, warhead out of the muzzle: hide it on firing (the game spawns rocket.glb at Muzzle_0) and show it again when reloaded"
+    }
+  ],
+  "sockets": {
+    "Mount": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "Muzzle_0": [
+      -0.92,
+      -0.28,
+      1.74
+    ],
+    "Laser": [
+      -0.92,
+      -0.58,
+      1.21
+    ]
+  },
+  "palette": {
+    "plating": "#b7a77c",
+    "secondary": "#6c7546",
+    "dark": "#34332e",
+    "mechanical": "#6e6d66",
+    "trim": "#e0ad2c",
+    "lighting": "#ff4a24",
+    "detail": "#cf4a26",
+    "visor": "#4fa4a8"
+  },
+  "colour": "COLOR_0 = section paint x wear x AO (sRGB, as rampart.glb); materials Paint_<section> with white base; Paint_lighting emissive",
+  "source": "tools/blender/weapons/rocket_launcher.py (kit: pilgrim-mechanica tools/blender/weapons/wkit.py)"
+}

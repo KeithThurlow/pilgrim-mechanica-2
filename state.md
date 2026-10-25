@@ -150,6 +150,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Assets: W1 rocket launchers, hull and shoulder, and the rocket (desktop agent, Keith's PC)
+- From `docs/asset-list.md` (W1, P0): `public/models/weapons/rocket-launcher-hull.glb`, `rocket-launcher-shoulder.glb`, `rocket.glb` with sidecars, built by `tools/blender/weapons/rocket_launcher.py` (old repo's `wkit.py`, GLB straight from Blender). A fat single tube in the Rampart's khaki and olive: ribbed heat shield, flared back-blast vent behind a hinged `Lid`, sight box, `Laser` emitter, hazard-striped muzzle with the red warhead nose out of it and a red warning band. Wiring is for the cloud side. Checked: three.js GLTFLoader reads the node tree, sockets and vertex colours in the game frame (muzzle +Z, the hull tube outboard on -X); tris 4,064 / 3,622 / 208 within budget; shots on the Rampart from the 40 m and 12 m game cameras in `docs/asset-shots/W1/`.
+
 ### 2026-10-25 · Asset list for the Blender agent (Keith, Claude)
 - Keith: spec an asset list here, prioritised, for an agent on his PC (it has Blender) to work through. `docs/asset-list.md`: how to take, build and tick an item; the contract (GLB, +Z front, sockets and moving-part names from the old kit, vertex colour, budgets, game-camera check shots); P0 explosives (RPG hull and shoulder, heavy mortar, line mortar, missile pod pass, debris), P1 hull guns, Rampart power pack and variants, convoy turrets, crawlers and bridges, POI wrecks and salvage, vehicles; P2 and P3 later.
 ### 2026-10-25 · Weapons step 2: Keith's controls, RPG rocket, missile pod, big and line mortars, targeting laser, queued craters (Claude)

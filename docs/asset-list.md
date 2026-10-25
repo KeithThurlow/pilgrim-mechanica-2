@@ -81,7 +81,7 @@ Status: `[ ]` open · `[~]` taken · `[x]` done.
 
 ## P0: explosives (weapons step 2 is building these now)
 
-### [ ] W1 · RPG rocket launcher: hull (M) and shoulder (M)
+### [x] W1 · RPG rocket launcher: hull (M) and shoulder (M) (desktop, 2026-10-25, `tools/blender/weapons/rocket_launcher.py`, hull 4,064 / shoulder 3,622 / rocket 208 tris)
 - **Files:** `public/models/weapons/rocket-launcher-hull.glb`, `rocket-launcher-shoulder.glb`.
 - **What:** a big single-tube (or twin-tube) launcher, like an RPG scaled to a mech.
   - It fires one rocket straight to a ground point and makes a big blast.
@@ -95,6 +95,15 @@ Status: `[ ]` open · `[~]` taken · `[x]` done.
   is the tell.
 - **Plus:** a projectile, `rocket.glb` (≤ 300 tris): a fat warhead, a body and fins; a `Glow_0` at the tail for the
   motor.
+
+> desktop: Built single-tube. Nodes are `Body`, plus `Recoil`, which carries `Lid` (the blast cover) and `Missile_0` (the
+> loaded round, warhead out of the muzzle; hide it on firing and spawn `rocket.glb` at `Muzzle_0`). The sidecar gives
+> the axes and angles in the game frame (`Lid` +100° about local +X). The hull one is built for the right side,
+> outboard -X; mirror it for the left as the game does the minigun pod. The shoulder one's `Recoil` origin is on its
+> trunnion axis, so it can pitch the tube too. Added a red-orange warning band behind the muzzle, because from behind
+> (the usual game view) the warhead nose is hidden. Paint section `detail` is the warhead's red here, and bolts use
+> `mechanical`. The script imports the old repo's `wkit.py` from the sibling folder (`PM1_BLENDER_TOOLS` overrides it).
+> Shots: `docs/asset-shots/W1/` (JPEG), from `rocket_launcher_shots.py`.
 
 ### [ ] W2 · Heavy mortar: shoulder (H)
 - **File:** `public/models/weapons/mortar-heavy.glb`.
