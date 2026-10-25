@@ -106,6 +106,7 @@ export class ConvoyRoute implements GroundModifier {
     if (this.v.routeHalfWidth + this.v.routeBlend !== this.reach) this.reindex();
     const key = this.planKey();
     if (key !== this.plan) {
+      this.fcKey = "";
       this.plan = key;
       this.truncate(this.s + KEEP);
     }
@@ -127,6 +128,56 @@ export class ConvoyRoute implements GroundModifier {
     out.z = this.zs[i] + (this.zs[i + 1] - this.zs[i]) * t;
     out.heading = wrap(this.hs[i] + wrap(this.hs[i + 1] - this.hs[i]) * t);
     return out;
+  }
+
+  /**
+   * Where the route will be at distance s, also past the laid road: the plan is carried on with the same steering
+   * (heading slider, wander, turn rate) as extend() will use, so it matches what gets laid unless a slider changes.
+   * For the expedition's return point (src/expedition/returnPoint.ts). Forecast kept in FORECAST_STEP points.
+   */
+  ahead(s: number, out: RoutePoint = { x: 0, z: 0, heading: 0 }): RoutePoint {
+    if (s <= this.end) return this.pointAt(s, out);
+    const n = this.xs.length, key = `${this.planKey()}|${this.v.convoySpeed}|${n}|${this.xs[n - 1]}|${this.zs[n - 1]}`;
+    const need = s - this.end;
+    if (key !== this.fcKey || need > (this.fx.length - 1) * ROUTE_STEP) this.forecast(key, Math.max(need * 1.5, 2000));
+    const f = need / ROUTE_STEP, i = Math.min(this.fx.length - 2, Math.floor(f)), t = f - i;
+    if (f >= this.fx.length - 1) {
+      const j = this.fx.length - 1, h = this.fh[j], d = (f - j) * ROUTE_STEP;
+      out.x = this.fx[j] + Math.sin(h) * d; out.z = this.fz[j] + Math.cos(h) * d; out.heading = h;
+      return out;
+    }
+    out.x = this.fx[i] + (this.fx[i + 1] - this.fx[i]) * t;
+    out.z = this.fz[i] + (this.fz[i + 1] - this.fz[i]) * t;
+    out.heading = wrap(this.fh[i] + wrap(this.fh[i + 1] - this.fh[i]) * t);
+    return out;
+  }
+
+  /** ahead() beside the route (like offsetAt). */
+  aheadOffset(s: number, side: number, out: RoutePoint = { x: 0, z: 0, heading: 0 }): RoutePoint {
+    this.ahead(s, out);
+    out.x += Math.cos(out.heading) * side;
+    out.z -= Math.sin(out.heading) * side;
+    return out;
+  }
+
+  private fx: number[] = [];
+  private fz: number[] = [];
+  private fh: number[] = [];
+  private fcKey = "";
+  /** Carry the plan on from the last laid point for `length` metres, the way extend() would. */
+  private forecast(key: string, length: number) {
+    const v = this.v, perM = (v.convoyTurn * D2R) / Math.max(0.5, v.convoySpeed), max = perM * ROUTE_STEP;
+    const n = this.xs.length;
+    let x = this.xs[n - 1], z = this.zs[n - 1], h = this.hs[n - 1], d = this.end;
+    this.fx = [x]; this.fz = [z]; this.fh = [h];
+    for (let k = 0; k < Math.ceil(length / ROUTE_STEP); k++) {
+      d += ROUTE_STEP;
+      const dh = Math.max(-max, Math.min(max, wrap(this.target(d) - h)));
+      const hm = h + dh / 2;
+      x += Math.sin(hm) * ROUTE_STEP; z += Math.cos(hm) * ROUTE_STEP; h = wrap(h + dh);
+      this.fx.push(x); this.fz.push(z); this.fh.push(h);
+    }
+    this.fcKey = key;
   }
 
   /** A point beside the route: side metres to the left (+) or right (-) of the route at distance s. */

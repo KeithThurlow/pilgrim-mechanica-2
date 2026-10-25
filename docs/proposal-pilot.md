@@ -1,4 +1,4 @@
-# Proposal: the pilot on foot (not built; waiting for Keith)
+# Proposal: the pilot on foot (approved by Keith 2026-10-26)
 
 Keith 2026-10-25:
 - Get out of the mech with F (or by holding F), both while exploring and at the convoy.
@@ -75,3 +75,16 @@ Keith 2026-10-25:
 - **Should enemies attack a parked mech?** I'd say yes, so leaving it is a risk.
 - **Should the bay screen move to a terminal you walk to on foot?** I'd say yes, once on-foot exists. B stays as a
   shortcut in the labs.
+
+## Answers (Keith 2026-10-26)
+
+- **Hold F** to hop out, both out in the field (at wrecks) and back at the convoy. Hold F again by your mech to get
+  back in (Claude's default; tell Keith).
+- **On the convoy you're mostly on foot:** park, hop out, walk the decks and bridges.
+- **Enemies attack a parked mech, and the pilot.** On foot you are very vulnerable.
+- **Parking is too slow:** speed up the crouch when E parks the mech in a bay.
+- **The bay screen becomes a terminal you walk up to** (B stays as a lab shortcut).
+
+Conflict to settle: F also fires both guns in the combat labs. Both mouse buttons can now be held at once (Keith's
+desktop change), so F leaves firing and becomes hop out and in (Claude's default). Calling the empty mech to you
+needs another key later (not asked yet).

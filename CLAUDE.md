@@ -79,7 +79,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   keys 1-3 hold to paint a shoulder weapon, release to fire.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
-  `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
+  `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
+  the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
+  (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers.
 
 ## Layout
 
@@ -112,6 +114,9 @@ src/combat/             warband (raider vehicles and bandit mechs), infantry (ba
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
+src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown
+                        areas); glue: loop, sites (POIs + salvage), swarmCamps (camps as the robot swarm); radarDraw, radarSound,
+                        expeditionHud
 src/weapons/            the new weapons, each with its own targeting: tuning (sliders), painter (strip, ring, laser) + painterDraw,
                         salvo (line rockets), rail, mortar, autocannon (pure sims), arsenal (a mech's weapons on the battlefield)
                         + arsenalDraw, models (each kind's model: the library's via modelSwap, boxes as the fallback),
