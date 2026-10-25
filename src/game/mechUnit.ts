@@ -18,6 +18,8 @@ export interface MechBody {
   barrel(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
   eject(side: 1 | -1, out?: THREE.Vector3): THREE.Vector3;
   paint(look: ToonLook, color: number | null): void;
+  /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
+  showParts?(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }): void;
 }
 import type { ToonLook } from "../look/toon";
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
@@ -188,8 +190,10 @@ export class MechUnit implements Hittable {
       this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     }
     const left = leftOf(upper.torsoYaw);
-    const spread = (v.spread * Math.PI) / 180;
     for (const s of fired) {
+      // A gun with its own item values (src/items) fires with those; else the shared sliders.
+      const own = upper.guns[s === 1 ? 0 : 1].stats;
+      const spread = ((own?.spread ?? v.spread) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
       // The barrel's heading carries the guns' lag, but its pitch also carries the hull's lean and the muzzle sits
@@ -203,12 +207,13 @@ export class MechUnit implements Hittable {
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
-      this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, v.range, v.roundDamage * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", pierce: v.roundPierce, pierceFalloff: v.roundPierceKeep, splash: v.roundSplash, splashShare: v.roundSplashShare }
+      this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", pierce: own?.pierce ?? v.roundPierce, pierceFalloff: v.roundPierceKeep, splash: v.roundSplash, splashShare: v.roundSplashShare }
         : { voice: "other", hitScale: 0.7 });
     }
     if (this.player && body.armed) {
-      this.bf.gunAudio.update(dt, trigger, upper.guns, [body.muzzle(1, new THREE.Vector3()), body.muzzle(-1, new THREE.Vector3())]);
+      const guns = upper.guns.filter((g) => g.enabled);
+      this.bf.gunAudio.update(dt, trigger, guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
   }
 

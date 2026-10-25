@@ -78,6 +78,8 @@ export class RampartBody {
   private hull = new THREE.Group();
   private torso: THREE.Object3D | null = null;
   private back: THREE.Object3D | null = null;
+  private drums: THREE.Object3D[] = [];
+  private pack: THREE.Object3D | null = null;
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   private rest: Record<string, THREE.Vector3> = {};
@@ -200,9 +202,18 @@ export class RampartBody {
         // The drums carry another brand's paint: tint them into the Rampart's olive.
         look.tint(part, 0x8b9160);
         back.add(part);
+        this.drums.push(part);
       });
     }
-    back.add(powerPack(look));
+    this.pack = powerPack(look);
+    back.add(this.pack);
+  }
+
+  /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
+  showParts(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }) {
+    for (const p of this.pods) p.yawPitch.visible = p.side === 1 ? parts.gunLeft : parts.gunRight;
+    for (const d of this.drums) d.visible = parts.drums;
+    if (this.pack) this.pack.visible = parts.pack;
   }
 
   /** Has guns (the battlefield's mech unit fires them). */

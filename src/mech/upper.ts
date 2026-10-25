@@ -79,6 +79,25 @@ export interface Gun {
   clock: number;
   /** Rounds left in this gun's drum. */
   ammo: number;
+  /** A gun is fitted on this side (a loadout can leave a side empty: it never spins or fires). */
+  enabled: boolean;
+  /** This gun's own values from its item (src/items); null runs on the shared sliders. */
+  stats: GunStats | null;
+}
+
+/** One gun's values when a loadout gives it its own (else the shared sliders). Damage, spread, range and pierce are
+ *  read by the mech unit when it fires; the rest here. */
+export interface GunStats {
+  fireRate: number;
+  spinUp: number;
+  ammo: number;
+  /** Arc (°) and tracking: podYawMax and podTrack for this gun. */
+  arc: number;
+  track: number;
+  damage: number;
+  spread: number;
+  range: number;
+  pierce: number;
 }
 
 export interface Aim {
@@ -86,7 +105,7 @@ export interface Aim {
   x: number; y: number; z: number;
 }
 
-const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0 });
+const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0, enabled: true, stats: null });
 
 export class UpperSim {
   /** Torso yaw in world space (radians, heading convention). */
@@ -104,7 +123,7 @@ export class UpperSim {
   reset(yaw: number) { this.torsoYaw = yaw; for (const g of this.guns) { g.spin = 0; g.clock = 0; } this.resupply(); }
 
   /** Fill both drums. */
-  resupply() { for (const g of this.guns) g.ammo = this.v.ammoPerGun; }
+  resupply() { for (const g of this.guns) g.ammo = g.stats?.ammo ?? this.v.ammoPerGun; }
 
   /**
    * legsHeading: where the legs face. shoulder: world position of the middle of the gun line. aim: target or null.
@@ -135,13 +154,15 @@ export class UpperSim {
     const step = v.torsoTurnRate * D2R * dt;
     this.torsoYaw = wrap(legsHeading + cur + clamp(rel - cur, -step, step));
 
-    const ymax = v.podYawMax * D2R, pmax = v.podPitchMax * D2R, cone = v.fireCone * D2R;
+    const pmax = v.podPitchMax * D2R, cone = v.fireCone * D2R;
     const lx = Math.cos(this.torsoYaw), lz = -Math.sin(this.torsoYaw); // torso's left
     const spinRate = (v.spinRpm / 60) * Math.PI * 2;
     const shots: (1 | -1)[] = [];
     this.onTarget = false;
     this.spin = 0;
     for (const g of this.guns) {
+      const own = g.stats;
+      const ymax = (own?.arc ?? v.podYawMax) * D2R, track = own?.track ?? v.podTrack;
       // Aim from this gun's own shoulder, so the two converge on the aim point.
       const gx = shoulder.x + lx * g.side * v.gunSpacing, gz = shoulder.z + lz * g.side * v.gunSpacing;
       const yawWant = aim ? wrap(Math.atan2(aim.x - gx, aim.z - gz) - this.torsoYaw) : 0;
@@ -151,8 +172,8 @@ export class UpperSim {
       // left, so for the left arm (+1) a rising yaw is outward, and for the right arm (-1) a falling one is.
       const yawTo = clamp(yawWant, -ymax, ymax);
       const outward = Math.sign(yawTo - g.yaw) === g.side;
-      const kYaw = 1 - Math.exp(-v.podTrack * (outward ? v.outwardTrack : 1) * dt);
-      const kPitch = 1 - Math.exp(-v.podTrack * dt);
+      const kYaw = 1 - Math.exp(-track * (outward ? v.outwardTrack : 1) * dt);
+      const kPitch = 1 - Math.exp(-track * dt);
       g.yaw += (yawTo - g.yaw) * kYaw;
       g.pitch += (clamp(pitchWant, -pmax, pmax) - g.pitch) * kPitch;
       g.kick += (0 - g.kick) * (1 - Math.exp(-v.recoilReturn * dt));
@@ -160,17 +181,17 @@ export class UpperSim {
       // waits for the torso). Pitch only needs the gun to have reached its limit: a target close under the guns
       // asks for more depression than they have, and they should still fire (bug 2026-10-24: they never did).
       const inArc = Math.abs(yawWant) <= ymax + cone;
-      g.onTarget = !!aim && inArc && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(clamp(pitchWant, -pmax, pmax) - g.pitch) <= cone * 2;
+      g.onTarget = g.enabled && !!aim && inArc && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(clamp(pitchWant, -pmax, pmax) - g.pitch) <= cone * 2;
       this.onTarget ||= g.onTarget;
 
-      g.spinUpTime = v.spinUp * (1 - g.side * v.spinSplit);
-      g.spin = trigger ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
+      g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit);
+      g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
       this.spin = Math.max(this.spin, g.spin);
 
       g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && g.ammo > 0;
       if (g.firing) {
-        g.clock += dt * v.fireRate * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
+        g.clock += dt * (own?.fireRate ?? v.fireRate) * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
         while (g.clock >= 1 && g.ammo > 0) {
           g.clock -= 1;
           g.ammo--;
