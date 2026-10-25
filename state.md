@@ -141,6 +141,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Free waist; fitting an arm fills its hand (Claude)
+- Keith: the 120° waist limit makes kiting impossible (walking away, the torso has to go the long way round). `torsoLimit` 120 → 180: the torso turns freely the shortest way to the aim (`src/mech/upper.ts`); upper-check now also checks a target 170° behind on either side is turned to the short way and shot (1.2 s at 150°/s torso turn).
+- Keith: swapping the minigun for an arm left an empty mount. The bay now puts the best hand weapon from stash or cargo into an arm's hand when you fit the arm, or selects the hand slot if there's none (`src/ui/bay.ts`). The only weapons are still the three minigun sizes; hand guns and arms still draw as the hull pod (the weapons plan brings rail cannon, rockets, mortar).
+- Checked: upper, loadout checks; typecheck. Dust: steps and hits make dust in the walker and loadout labs here (WebGPU and WebGL shots); bare rock and water make none by design, so a biome picker set to rocky, shallows or mixed would explain missing dust.
+
 ### 2026-10-25 · Boost and slide, better downhill (Claude)
 - Keith enjoys the dash's slide: a boost item to slide around on, better downhill than uphill. `src/mech/dash.ts`: after the shove the mech glides on (`dashCarry` 4 m/s against `slideFriction` 5 m/s²); gravity along the slope (`dashSlope` 1.5 × g) speeds a slide downhill and kills it uphill, capped at `slideMax`; with boost fuel (`boostFuel`, 0 by default) holding Space after the dash keeps thrusting toward `boostSpeed`, steered by WASD at `boostTurn`, fuel regenerating when not boosting. Damage cut only during the shove. New item: Booster pack (2.5 s of fuel) in `src/items/bases.ts`; resolve and the bay show boost fuel. Combat labs track Space held; HUD shows the fuel bar when there is fuel.
 - Checked: `tools/dash-check.ts` (on a 14° plane: dash up 8.7 m vs down 21 m; 2 s boost up 34 m vs down 100 m; flat dash 9 m plus its glide), loadout, walker checks.
