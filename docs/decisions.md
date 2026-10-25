@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Crane pick-up and drop-off quick (asking for it slower was a mistake); drop the mech from a little height so it falls; convoy a tiny bit slower; escorts at varied speeds are loved | Keith | Keith | |
+| 2026-10-25 | The pilot can get out of the mech (F, or hold F) in the field and at the convoy and walk the platforms and footbridges | Keith | Keith | `docs/proposal-pilot.md`; looks (canopies, village dressing) wait for Keith's references. |
 | 2026-10-25 | The waist turns freely the shortest way to the target (no 120° limit), so the mech can kite and shoot behind | Keith | Keith | `torsoLimit` 180; turn speed still `torsoTurnRate`. |
 | 2026-10-25 | Replace the sand-mark decals with a Snowflow-style dent layer: the true height field stays the walkable ground; a GPU dent texture around the player (footprints, ruts, furrows with berms) displaces a fine detail patch on top, per surface (sand, dirt, gravel, later snow) | Keith | Keith | Decals kept behind a slider for comparison until the dents are approved. |
 | 2026-10-25 | Lean into sliding: a boost item to slide around on; slides work better downhill than uphill | Keith | Keith | Booster pack item; values are Claude's (sliders). |

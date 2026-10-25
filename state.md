@@ -111,6 +111,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Convoy: faster crane, drop-off fall, slower convoy: an agent on a worktree branch.
+
 - Ground dents (GPU dent layer + fine detail patch replacing the sand-mark decals): an agent on a worktree branch.
 
 - Craters (walkable deformation with hardness, protected zones, slope and depth caps, slumping): an agent on a worktree branch.
@@ -140,6 +142,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-25 · Pilot on foot proposed; crane faster (in progress) (Claude)
+- Keith: get out of the mech with F (field and convoy), walk the decks and footbridges; crane faster, drop-off from a height with a fall, quicker pick-up, convoy slightly slower. Plan for the pilot in `docs/proposal-pilot.md` (waiting for Keith). Crane, drop and convoy speed handed to an agent.
 
 ### 2026-10-25 · Free waist; fitting an arm fills its hand (Claude)
 - Keith: the 120° waist limit makes kiting impossible (walking away, the torso has to go the long way round). `torsoLimit` 120 → 180: the torso turns freely the shortest way to the aim (`src/mech/upper.ts`); upper-check now also checks a target 170° behind on either side is turned to the short way and shot (1.2 s at 150°/s torso turn).
