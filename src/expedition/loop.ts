@@ -281,10 +281,11 @@ export class ExpeditionLoop {
     const marks: Mark[] = [];
     for (const q of threats.packs) {
       const d = Math.hypot(q.x - p.x, q.z - p.z);
-      if (q.state === "live" || d > v.plumeRange) continue;
-      const raid = q.kind === "raid";
-      marks.push({ id: q.id, x: q.x, y: field.height(q.x, q.z) + 3, z: q.z, text: raid ? "RAID" : q.state === "hunt" ? "DUST · COMING" : "DUST",
-        color: raid ? "#ff7a5a" : q.state === "hunt" ? "#ffb347" : "#e8d6b0", strength: raid ? 1 : 1 - d / (v.plumeRange * 1.2) });
+      if (d > v.plumeRange) continue;
+      // Live ones keep their mark until they're on screen (the mark hides itself then).
+      const raid = q.kind === "raid", coming = q.state !== "roam";
+      marks.push({ id: q.id, x: q.x, y: field.height(q.x, q.z) + 3, z: q.z, text: raid ? "RAID" : q.state === "live" ? "CONTACT" : coming ? "DUST · COMING" : "DUST",
+        color: raid ? "#ff7a5a" : coming ? "#ffb347" : "#e8d6b0", strength: raid || coming ? 1 : 1 - d / (v.plumeRange * 1.2) });
     }
     for (const b of this.blasts) marks.push({ id: b.id, x: b.x, y: field.height(b.x, b.z) + 3, z: b.z, text: "BLAST", color: "#ffd27a", strength: 1 - b.t / 6 });
     this.marks.update(this.camera, canvas, marks, p);
