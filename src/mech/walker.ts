@@ -134,8 +134,8 @@ export class WalkerSim {
   airborne = false;
   airVel = new Vector3();
   airT = 0;
-  /** Which foot reaches ahead in the air: 1 the left, -1 the right (a bounding gait swaps it each leap). */
-  airLead: 1 | -1 = 1;
+  /** Which foot reaches ahead in the air and how far, × airSplit: + the left, - the right (a bound swaps it each leap). */
+  airLead = 1;
   /** Seconds of stagger left after a hard landing: the stick does nothing. */
   stagger = 0;
   /** Sliding the legs can't step out of (after a landing): skids the planted feet, dies off at landFriction. */
@@ -452,7 +452,7 @@ export class WalkerSim {
     n.normalize();
     const impact = Math.max(0, -(a.x * n.x + a.y * n.y + a.z * n.z));
     // The foot that reached ahead starts its stance, the other is late in its stance.
-    this.phase = this.airLead === 1 ? 0 : 0.5;
+    this.phase = this.airLead >= 0 ? 0 : 0.5;
     // What's left runs on along the ground (a slope turns some of the fall into speed down it).
     const fw = forwardOf(this.heading, this.t.f);
     const tx = a.x + n.x * impact, ty = a.y + n.y * impact, tz = a.z + n.z * impact;

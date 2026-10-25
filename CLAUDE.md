@@ -64,7 +64,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
   `?surface=gravel|dirt|concrete` (dust as if the ground were that), `?warm=seconds` (run that much sim time before the
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
-  go, optionally moving).
+  go, optionally moving), `?bound` (the bound spike: hold Space; with `?walk=straight` the demo bounds).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under

@@ -132,6 +132,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- The bound (Keith 2026-10-26): proposal in `docs/proposal-bound.md`, waiting for Keith's answers; the spike is in the walker lab (`?bound`), to be replaced by `src/mech/bound.ts` once approved.
 - Convoy pass 3 merged (crane, drop-off, rear bay, turrets, octagon decks, 12 escorts, dash). Rough: heavy escorts pass 3-4 m from cars in hard turns; the drop lands in the escort lane; turrets not in the collision footprint.
 - Ground dents (GPU dent layer + fine detail patch replacing the sand-mark decals): an agent on a worktree branch.
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
@@ -162,6 +163,14 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-26 · The bound: proposal and a spike (Keith's playtest; agent on the bound worktree)
+- `docs/proposal-bound.md`: hold Space to bound (a two-footed leaping sprint that builds to 14 m/s early, 22-26 late),
+  handling like a vehicle (turning circle with speed², drift), crest jumps from the air system, the booster as thrust
+  and glide, fuel per metre about 1.6× the walk, item stats, risks, files, steps and six questions for Keith.
+- Spike, walker lab only: `labs/walker/boundSpike.ts` behind `?bound` (hold Space; a tap dashes). Headless 40 s on
+  the dunes: 16 m/s, 82% in the air, crest flights up to 1.7 s and 27 m, no feet under the ground, 2.4% reach misses
+  at steep landings. The walker's `airLead` now scales the air stride. Filmstrips on the flat and off a crest.
 
 ### 2026-10-26 · Air and landing for every mech (Keith; agent on the bound worktree)
 - `walker.ts`: one airborne state (`launch()`, `airborne`, `airVel`, `lastLanding`, `onLand`, `stagger`, `skid`,
