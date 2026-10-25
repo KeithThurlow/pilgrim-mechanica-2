@@ -2,17 +2,19 @@
 // it rolls each way at Common (`spread`, a share of the value; rarity widens it, src/items/rarity.ts). The Rampart
 // parts, the Medium minigun, the stand-in power pack and the ammo drums hold today's mech values exactly, so the
 // default loadout runs the mech as it was (tools/loadout-check.ts holds them to it).
-// Weapons start as minigun sizes on the existing gun sim (Light in a hand, Medium as a hull weapon, Heavy
-// two-handed); new guns with their own feel come later (proposal step 2).
+// The mounts (Keith 2026-10-26): each hull mount takes a hull weapon (Medium) or an arm, which holds a held weapon
+// (Light, or a Heavy two-hander across both arms) plus a shoulder weapon; a sensor, a pack (or a back weapon) and the
+// waist mounts left and right. The hull item says which mounts it offers (`Base.mounts`).
 import { WALKER_DEFAULTS } from "../mech/walkerTuning";
 import { LEG_TYPES } from "../mech/legTypes";
 import { UPPER_DEFAULTS } from "../mech/upper";
 import { DASH_DEFAULTS } from "../mech/dash";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import type { GunClass } from "../mech/upper";
-import type { ItemKind, Size } from "./item";
+import type { ItemKind, Size, SeekerMode } from "./item";
 
-/** Shoulder weapons (Keith 2026-10-25): on a shoulder mount or the back mount, fired with a number key. */
+/** Shoulder weapons (Keith 2026-10-25): on an arm's shoulder (keys 1 and 2) or on the pack mount as a back weapon
+ *  (key 3, in place of the pack). */
 export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar";
 
 export interface StatInfo {
@@ -58,7 +60,15 @@ export const STATS: Record<string, StatInfo> = {
   shellSpeed: { label: "Shell speed (m/s)", better: 1, decimals: 0 },
   splash: { label: "Splash (m)", better: 1, decimals: 1 },
   stripLength: { label: "Strip length (m)", better: 1, decimals: 0 },
+  radarRange: { label: "Mech radar (m)", better: 1, decimals: 0 },
+  salvage: { label: "Salvage speed +", better: 1, decimals: 2 },
+  arcBonus: { label: "Arc + (°)", better: 1, decimals: 0 },
 };
+
+/** A hull mount's side. Two today; a hull with more mounts adds a side here (and its slots in loadout.ts MOUNTS). */
+export type MountSide = "L" | "R";
+/** What a hull mount can take: a hull weapon, or an arm (with its held and shoulder weapons). */
+export type MountTake = "hullWeapon" | "arm";
 
 export interface StatRange { base: number; spread: number }
 
@@ -76,11 +86,12 @@ export interface Base {
   /** Share of loot rolls among bases of its kind. */
   drop: number;
   stats: Record<string, StatRange>;
-  /** Hulls: arm mounts (left and right), shoulder mounts (keys 1 and 2) and whether a power pack (with its back
-   *  mount, key 3) fits. */
-  mounts?: { arms: number; pack: boolean; shoulders?: number };
-  /** Power packs: back mounts under the pack. */
-  backMounts?: number;
+  /** Hulls: the mounts they offer (Keith 2026-10-26; the budget is per mount, so a hull with more simply carries
+   *  more): each hull mount by side and what it takes, the optional sensor mount, the pack mount (a power pack or a
+   *  back weapon, key 3), the waist mounts. */
+  mounts?: { hull: { side: MountSide; takes: MountTake[] }[]; sensor: boolean; pack: boolean; waist: MountSide[] };
+  /** Sensors: the seeker modes in the order a roll gets them (a Common has the first, each rarity one more). */
+  seekers?: SeekerMode[];
   /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Shoulder items: which shoulder weapon. */
   cls?: GunClass;
   shoulder?: ShoulderWeapon;
@@ -112,29 +123,49 @@ export const BASES: Base[] = [
   // Hulls: hull points, torso turn, mounts.
   {
     id: "hull-rampart", name: "Rampart hull", kind: "hull", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    mounts: { arms: 2, pack: true, shoulders: 2 }, stats: { hull: s(HULL_POINTS, 0.08), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
   },
   {
     id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    mounts: { arms: 2, pack: true, shoulders: 2 }, stats: { hull: s(2100, 0.08), torsoTurnRate: s(110, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(2100, 0.08), torsoTurnRate: s(110, 0.08) },
   },
   {
     id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1,
-    mounts: { arms: 2, pack: true, shoulders: 1 }, stats: { hull: s(1200, 0.08), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
+    // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon.
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(1200, 0.08), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
   },
-  // Arms: hold a hand weapon; their tracking and arc are the hand gun's.
+  // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
+  {
+    id: "sensor-mast", name: "Rampart mast", kind: "sensor", tags: ["sensor"], weight: 0.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(150, 0.08) },
+  },
+  {
+    id: "sensor-dish", name: "Survey dish", kind: "sensor", tags: ["sensor"], weight: 0.7, makers: ["Novus-Lux"], look: "rampart-salvager", drop: 0.8,
+    seekers: ["wreck", "scrap", "rare", "legendary"], stats: { radarRange: s(210, 0.08) },
+  },
+  {
+    id: "sensor-array", name: "Long array", kind: "sensor", tags: ["sensor"], weight: 1.1, makers: ["Suzaku", "Novus-Lux"], look: "rampart-railgun", drop: 0.5,
+    seekers: ["rare", "legendary", "wreck", "scrap"], stats: { radarRange: s(280, 0.08) },
+  },
+  // Arms: on a hull mount in place of a hull weapon; hold a held weapon (their tracking and arc are its) and carry
+  // a shoulder weapon on the same mount. Hands strip salvage faster (Keith: arms might make salvaging faster).
   {
     id: "arm-rampart", name: "Rampart arm", kind: "arm", tags: ["arm"], weight: 1.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { track: s(18, 0.1), arc: s(40, 0.1) },
+    stats: { track: s(18, 0.1), arc: s(40, 0.1), salvage: s(0.25, 0.2) },
   },
   {
     id: "arm-wildcat", name: "Wildcat arm", kind: "arm", tags: ["arm"], weight: 1.1, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0.7,
-    stats: { track: s(24, 0.1), arc: s(48, 0.1) },
+    stats: { track: s(24, 0.1), arc: s(48, 0.1), salvage: s(0.15, 0.2) },
   },
-  // Weapons: minigun sizes on the existing gun sim.
+  {
+    id: "arm-loader", name: "Loader arm", kind: "arm", tags: ["arm"], weight: 1.8, makers: ["Suzaku"], look: "rampart-salvager", drop: 0.7,
+    stats: { track: s(14, 0.1), arc: s(34, 0.1), salvage: s(0.5, 0.2) },
+  },
+  // Weapons: minigun sizes on the existing gun sim. Held weapons (Light) are smaller than hull weapons but swing
+  // quicker in the hand (handling: the arm's tracking ×) and wider (arc +).
   {
     id: "mg-light", name: "Light minigun", kind: "weapon", size: "L", tags: ["weapon", "ballistic", "minigun"], weight: 0.9, makers: ["Suzaku", "Novus-Lux"], look: "rampart-wildcat", drop: 1.5,
-    stats: { fireRate: s(20, 0.08), damage: s(6, 0.1), spread: s(4, 0.1), spinUp: s(0.5, 0.1), range: s(38, 0.06), pierce: s(1, 0.3) },
+    stats: { fireRate: s(20, 0.08), damage: s(6, 0.1), spread: s(4, 0.1), spinUp: s(0.5, 0.1), range: s(38, 0.06), pierce: s(1, 0.3), handling: s(1.25, 0.08), arcBonus: s(6, 0.2) },
   },
   {
     id: "mg-medium", name: "Minigun", kind: "weapon", size: "M", tags: ["weapon", "ballistic", "minigun"], weight: 1.8, makers: ["Stratford-Aegis", "Suzaku"], look: "rampart", drop: 1.5,
@@ -148,7 +179,7 @@ export const BASES: Base[] = [
   // come from the weapon sliders; the Light rail cannon from the Medium's by the Light-rail shares.
   {
     id: "rail-light", name: "Light rail cannon", kind: "weapon", size: "L", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 1.3, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 1,
-    stats: { damage: s(WD.railDamage * WD.railLightDamage, 0.1), charge: s(WD.railCharge * WD.railLightCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange * 0.85, 0.06) },
+    stats: { damage: s(WD.railDamage * WD.railLightDamage, 0.1), charge: s(WD.railCharge * WD.railLightCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange * 0.85, 0.06), handling: s(1.1, 0.08), arcBonus: s(4, 0.2) },
   },
   {
     id: "rail-medium", name: "Rail cannon", kind: "weapon", size: "M", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 2.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 1,
@@ -179,29 +210,41 @@ export const BASES: Base[] = [
     id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.8,
     stats: { shells: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
   },
-  // Power packs: dash charges and recharge for now (energy weapons later); the back mount sits under the pack.
+  // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later).
   {
     id: "pack-standin", name: "Stand-in power pack", kind: "pack", tags: ["power"], weight: 1.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    backMounts: 1, stats: { dashCharges: s(DASH_DEFAULTS.dashCharges, 0.2), dashRecharge: s(DASH_DEFAULTS.dashRecharge, 0.1) },
+    stats: { dashCharges: s(DASH_DEFAULTS.dashCharges, 0.2), dashRecharge: s(DASH_DEFAULTS.dashRecharge, 0.1) },
   },
   {
     id: "pack-capacitor", name: "Capacitor pack", kind: "pack", tags: ["power"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.8,
-    backMounts: 1, stats: { dashCharges: s(3, 0.15), dashRecharge: s(4, 0.1) },
+    stats: { dashCharges: s(3, 0.15), dashRecharge: s(4, 0.1) },
   },
   // A booster pack (Keith 2026-10-25: a boost item to slide around on): hold Space after a dash to keep thrusting.
   {
     id: "pack-booster", name: "Booster pack", kind: "pack", tags: ["power", "boost"], weight: 2.6, makers: ["Suzaku Dynamics"], look: "rampart-stilt", drop: 0.7,
-    backMounts: 1, stats: { dashCharges: s(2, 0.15), dashRecharge: s(3.5, 0.1), boostFuel: s(2.5, 0.15) },
+    stats: { dashCharges: s(2, 0.15), dashRecharge: s(3.5, 0.1), boostFuel: s(2.5, 0.15) },
   },
-  // Back mount: ammo drums (or a shoulder weapon, on key 3).
+  // Waist mounts, left and right (Keith 2026-10-26: ammo drums, cargo racks, small kit). A drum feeds its own side's
+  // gun (a two-hander takes the bigger of the two).
   {
-    id: "back-drums", name: "Ammo drums", kind: "back", tags: ["back", "ammo"], weight: 1.2, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    id: "waist-drums", name: "Ammo drum", kind: "waist", tags: ["waist", "ammo"], weight: 0.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
     stats: { ammoPerGun: s(U.ammoPerGun, 0.12) },
   },
   {
-    id: "back-fulldrums", name: "Full drums", kind: "back", tags: ["back", "ammo"], weight: 2, makers: ["Suzaku"], look: "rampart", drop: 0.7,
+    id: "waist-fulldrums", name: "Full drum", kind: "waist", tags: ["waist", "ammo"], weight: 1, makers: ["Suzaku"], look: "rampart", drop: 0.7,
     stats: { ammoPerGun: s(2000, 0.12) },
   },
+  {
+    id: "waist-rack", name: "Cargo rack", kind: "waist", tags: ["waist", "cargo"], weight: 0.8, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 0.8,
+    stats: { carryBonus: s(2.5, 0.15) },
+  },
+  {
+    id: "waist-kit", name: "Cutting kit", kind: "waist", tags: ["waist", "salvage"], weight: 0.5, makers: ["Suzaku"], look: "rampart-salvager", drop: 0.6,
+    stats: { salvage: s(0.3, 0.2) },
+  },
 ];
+
+/** Bases renamed since saves were written (src/ui/bay.ts loadBay migrates them). */
+export const RENAMED_BASES: Record<string, string> = { "back-drums": "waist-drums", "back-fulldrums": "waist-fulldrums" };
 
 export const BASE_BY_ID: Record<string, Base> = Object.fromEntries(BASES.map((b) => [b.id, b]));

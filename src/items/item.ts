@@ -3,9 +3,14 @@
 import type { Rarity } from "./rarity";
 
 /** What kind of thing it is; with the size, that decides which slots it fits (src/items/loadout.ts). */
-export type ItemKind = "legs" | "hull" | "arm" | "weapon" | "shoulder" | "pack" | "back" | "protocol";
-/** Weapon size: Light in a hand, Medium as a hull weapon on an arm mount, Heavy two-handed. */
+export type ItemKind = "legs" | "hull" | "sensor" | "arm" | "weapon" | "shoulder" | "pack" | "waist" | "protocol";
+/** Weapon size (Keith 2026-10-26): Medium is a hull weapon (a whole hull mount), Light a held weapon (in an arm's
+ *  hand), Heavy a two-handed held weapon (needs an arm on both mounts). */
 export type Size = "L" | "M" | "H";
+
+/** What a sensor's seekers can point at (Keith 2026-10-26: the nearest rare or legendary item, wrecks, scrap...). */
+export const SEEKER_MODES = ["scrap", "wreck", "rare", "legendary"] as const;
+export type SeekerMode = (typeof SEEKER_MODES)[number];
 
 export interface Item {
   /** Unique per item (base and seed). */
@@ -30,6 +35,8 @@ export interface Item {
   weight: number;
   /** The seed it was rolled from (0 for the fixed default parts). */
   seed: number;
+  /** Sensors: the seeker modes it carries (rarer sensors carry more). */
+  seekers?: SeekerMode[];
 }
 
 /**

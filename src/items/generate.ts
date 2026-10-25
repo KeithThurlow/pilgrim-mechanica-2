@@ -3,8 +3,8 @@
 import type { Param } from "../core/tweaks";
 import { BASES, BASE_BY_ID, STATS, type Base } from "./bases";
 import { PROTOCOLS, PROTOCOL_BY_ID, type Protocol } from "./protocols";
-import { RARITIES, RARITY, rollRange, type Rarity, type WidenTuning } from "./rarity";
-import type { Item, ItemKind } from "./item";
+import { RARITIES, RARITY, rollRange, tierOf, type Rarity, type WidenTuning } from "./rarity";
+import type { Item, ItemKind, SeekerMode } from "./item";
 
 export const LOOT_DEFAULTS = {
   rarityWiden: 0.5,
@@ -15,6 +15,7 @@ export const LOOT_DEFAULTS = {
   weightEpic: 6,
   weightLegendary: 2,
   protocolShare: 0.2,
+  sensorRangePerTier: 0.1,
 };
 export type LootValues = typeof LOOT_DEFAULTS;
 
@@ -27,6 +28,7 @@ export const LOOT_PARAMS: Param[] = [
   { key: "weightRare", label: "Rare weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightEpic", label: "Epic weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightLegendary", label: "Legendary weight", min: 0, max: 100, step: 1, group: G },
+  { key: "sensorRangePerTier", label: "Sensor range per rarity tier", min: 0, max: 0.5, step: 0.01, group: G, tip: "Each tier above Common reaches this share further on a sensor's radar range (rarer sensors also carry one more seeker mode per tier)" },
   { key: "protocolShare", label: "Protocols in random loot", min: 0, max: 1, step: 0.01, group: G, tip: "Share of random rolls that come up a Protocol instead of a part or weapon" },
 ];
 
@@ -64,13 +66,18 @@ function finish(stat: string, x: number) {
   return info?.whole ? Math.max(stat === "dashCharges" ? 1 : 0, Math.round(x)) : Math.max(0.01, x);
 }
 
+/** A sensor's seeker modes by rarity: the base's first, one more per tier above Common. */
+export const seekersFor = (b: Base, rarity: Rarity): SeekerMode[] | undefined => b.seekers?.slice(0, 1 + tierOf(rarity));
+
 /** An item of this base with its base values (no roll): the default parts. */
 export function makeItem(baseId: string, rarity: Rarity = "common", id = "default-" + baseId): Item {
   const b = BASE_BY_ID[baseId];
   if (!b) throw new Error(`no base ${baseId}`);
   const stats: Record<string, number> = {};
   for (const k in b.stats) stats[k] = b.stats[k].base;
-  return { id, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker: b.makers[0], look: b.look, weight: b.weight, seed: 0 };
+  const it: Item = { id, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker: b.makers[0], look: b.look, weight: b.weight, seed: 0 };
+  if (b.seekers) it.seekers = seekersFor(b, rarity);
+  return it;
 }
 
 export interface RollOptions {
@@ -90,8 +97,11 @@ export function rollItem(seed: number, v: LootValues, o: RollOptions = {}): Item
     const [lo, hi] = statRange(b, k, rarity, v);
     stats[k] = finish(k, lo + (hi - lo) * r());
   }
+  if (stats.radarRange !== undefined) stats.radarRange *= 1 + (v.sensorRangePerTier ?? 0) * tierOf(rarity);
   const maker = b.makers[Math.floor(r() * b.makers.length)];
-  return { id: `${b.id}#${(seed >>> 0).toString(36)}`, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker, look: b.look, weight: b.weight, seed: seed >>> 0 };
+  const it: Item = { id: `${b.id}#${(seed >>> 0).toString(36)}`, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker, look: b.look, weight: b.weight, seed: seed >>> 0 };
+  if (b.seekers) it.seekers = seekersFor(b, rarity);
+  return it;
 }
 
 /** A Protocol as an item (to keep in stash and socket at the bay). */
