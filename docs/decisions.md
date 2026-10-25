@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Tall robots: hitboxes over the whole body, the body takes the most damage and the feet less; the guns must reach up to the body close in | Keith | Keith | Convoy combat pass. |
+| 2026-10-26 | Expeditions need more enemies and excitement; the default walk much faster, near today's run; a bounding sprint on held Space that builds speed, jumps off dunes and glides, costing fuel, growing with gear (jumping into fortresses later) | Keith | Keith | Walk now; the bound proposed first (`docs/proposal-bound.md`). |
 | 2026-10-26 | Pilot: hold F to hop out (field and convoy); on the convoy you're mostly on foot; enemies attack a parked mech and the pilot, who is very vulnerable; the bay screen becomes a walk-up terminal; parking (E) crouches faster | Keith | Keith | `docs/proposal-pilot.md` |
 | 2026-10-26 | F stops firing both guns (both mouse buttons do that now) and becomes hold to hop out or back in; calling the mech gets another key later | Claude | open | Follows from Keith's hold F. |
 | 2026-10-26 | No ECS library now; a one-off stress lab to see where performance stands (not a repeated test); a shared register and spatial grid for what's near what, proposed first | Keith | Keith | `docs/proposal-register.md` (coming) |
