@@ -1,0 +1,11 @@
+{
+ "tris_total": 2940,
+ "hskit": {
+  "booleans": 31,
+  "exact_ok": 31,
+  "fallbacks": 0,
+  "skipped_cutters": 0,
+  "bevel_undone": 0,
+  "plate_refolds": 0
+ }
+}

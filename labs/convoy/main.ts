@@ -27,7 +27,7 @@ import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import type { MoveCommand } from "../../src/mech/walker";
 import { LEG_TYPES } from "../../src/mech/legTypes";
-import { RampartBody } from "../../src/mech/rampart";
+import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
@@ -110,8 +110,8 @@ scene.add(threatMark);
 
 // The player's Rampart.
 const body = await RampartBody.load(toon);
-Object.assign(V, LEG_TYPES.rampart.values, body.legValues());
-Object.assign(DEFAULTS, LEG_TYPES.rampart.values, body.legValues());
+Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
+Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
 scene.add(body.root);
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);

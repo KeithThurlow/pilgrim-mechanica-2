@@ -6,3 +6,5 @@ shots/
 .vite/
 .claude/worktrees/
 resources/
+tools/blender/.slots/
+__pycache__/

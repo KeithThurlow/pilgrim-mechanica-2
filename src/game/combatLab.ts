@@ -17,7 +17,7 @@ import { WALKER_DEFAULTS, WALKER_PARAMS } from "../mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../mech/upper";
 import type { MoveCommand } from "../mech/walker";
 import { LEG_TYPES } from "../mech/legTypes";
-import { RampartBody } from "../mech/rampart";
+import { RampartBody, mechLegType } from "../mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../fx/minigun";
@@ -136,8 +136,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(deadDraw.group);
 
   const body = await RampartBody.load(toon);
-  Object.assign(V, LEG_TYPES.rampart.values, body.legValues());
-  Object.assign(DEFAULTS, LEG_TYPES.rampart.values, body.legValues());
+  Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
+  Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
