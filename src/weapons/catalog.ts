@@ -64,8 +64,8 @@ const ROWS: Row[] = [
   // W1 is the desktop agent's (Blender GLBs, 2026-10-25): no stand-in; the left one is the right one mirrored.
   ["rocket-launcher-hull", "RocketLauncher", "Hull", "RPG launcher (hull)", "hull", true, { note: "desktop GLB (asset list W1)" }],
   ["rocket-launcher-shoulder", "RocketLauncher", "Shoulder", "RPG launcher (shoulder)", "shoulder", true, { note: "desktop GLB (asset list W1)" }],
-  ["mortar-heavy", "Mortar", "H", "Heavy mortar (shoulder)", "shoulder", true, { build: mortarHeavy }],
-  ["mortar-line", "LineMortar", "M", "Line mortar rack (shoulder)", "shoulder", true, { build: mortarLine }],
+  ["mortar-heavy", "Mortar", "H", "Heavy mortar (shoulder)", "shoulder", true, { build: mortarHeavy, fit: 0.85 }],
+  ["mortar-line", "LineMortar", "M", "Line mortar rack (shoulder)", "shoulder", true, { build: mortarLine, fit: 0.85 }],
   ["rail-cannon-hull", "RailCannon", "Hull", "Rail cannon (hull)", "hull", true, { build: railCannonHull }],
   ["rail-cannon-2h", "RailCannon", "2H", "Rail cannon (two-handed)", "two_handed", false, { build: railCannon2h }],
   ["autocannon-hull", "Autocannon", "Hull", "Autocannon (hull)", "hull", true, { build: autocannonHull }],

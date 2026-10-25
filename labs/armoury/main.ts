@@ -2,7 +2,7 @@
 // game camera (the view that matters), alone on a turntable, or all of them in a line-up. Paint, finish, laser and
 // fit are sliders. A Blender model dropped at public/models/weapons/<id>.glb shows here in place of its stand-in.
 // Flags: ?model=<id>, ?view=rampart|turntable|lineup, ?cam=game|close, ?zoom=metres, ?dt=0.033, ?t=seconds (start
-// the cycle there), ?still (no cycle), ?set=key:value.
+// the cycle there), ?still (no cycle), ?mech=<variant> (a Rampart variant), ?set=key:value.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -21,7 +21,7 @@ import { WalkerSim } from "../../src/mech/walker";
 import { WALKER_DEFAULTS } from "../../src/mech/walkerTuning";
 import { UpperSim, UPPER_DEFAULTS } from "../../src/mech/upper";
 import { LEG_TYPES } from "../../src/mech/legTypes";
-import { RampartBody } from "../../src/mech/rampart";
+import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { CATALOG, entry, preloadWeapons, createWeapon, sourceOf, trianglesOf, type WeaponModel } from "../../src/weapons/library";
 import { WeaponLook, WEAPON_LOOK_DEFAULTS, WEAPON_LOOK_PARAMS } from "../../src/weapons/weaponLook";
@@ -64,7 +64,7 @@ const look = new WeaponLook(V, toon);
 
 // The Rampart, standing, guns tracking an aim point.
 const rampart = await RampartBody.load(toon);
-Object.assign(V, LEG_TYPES.rampart.values, rampart.legValues());
+Object.assign(V, LEG_TYPES[mechLegType()].values, rampart.legValues());
 const sim = new WalkerSim(V, field), upper = new UpperSim(V);
 sim.reset(0, 0, 0);
 upper.reset(0);

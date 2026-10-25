@@ -70,7 +70,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
-  (start the firing cycle there), `?still` (no cycle).
+  (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
 - Weapons lab: `?left=`/`?right=minigun|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=`/`?k3=none|rpg|missiles|mortar|
   linemortar` (k3 also `drums`), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
