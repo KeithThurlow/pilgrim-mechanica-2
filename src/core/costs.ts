@@ -8,14 +8,17 @@ export class Costs {
   private t = 0;
   private shown = "";
   private windowStart = performance.now();
+  /** This frame's stages so far (ms), cleared by begin(): for a lab that keeps its own per-frame records (stress lab). */
+  readonly frame = new Map<string, number>();
 
   /** Start timing this frame's stages. */
-  begin() { this.t = performance.now(); }
+  begin() { this.t = performance.now(); this.frame.clear(); }
 
   /** The stage that just finished: everything since begin() or the last mark. */
   mark(stage: string) {
     const now = performance.now();
     this.sums.set(stage, (this.sums.get(stage) ?? 0) + (now - this.t));
+    this.frame.set(stage, (this.frame.get(stage) ?? 0) + (now - this.t));
     this.t = now;
   }
 

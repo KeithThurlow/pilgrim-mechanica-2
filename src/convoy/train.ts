@@ -45,6 +45,52 @@ export function landingXs(count: number, w: number): number[] {
   return [s, -s];
 }
 
+/** The cab across every car's front (furniture.ts): its roof top above the deck, its back face in from the nose. */
+export const CAB_ROOF = 2.6, CAB_BACK = 3.5;
+/** Half the cab's width on a car of width w (furniture.ts: min(w - 1, 6) wide). */
+export const cabHalf = (w: number) => Math.min(w - 1, 6) / 2;
+/** Stairs climb this much run per metre of rise (about 42°), this wide. */
+export const STAIR_RUN = 1.1, STAIR_W = 1;
+
+/** A footbridge landing on a car (local x, z), its top above the deck, and whether it sits on the cab roof. */
+export interface Landing { x: number; z: number; top: number; onCab: boolean; end: "nose" | "tail" }
+/** A stair (local): from the bottom (x0, z0) at y0 above the deck up to the top (x1, z1) at y1, w wide. */
+export interface Stair { x0: number; z0: number; y0: number; x1: number; z1: number; y1: number; w: number }
+
+/**
+ * A car's footbridge landings and the stairs up to them (pure; platformBody.ts draws them, walkways.ts walks them,
+ * deck.ts keeps the mech off them). A tail landing is a tower from the deck with a stair down its side; a nose landing
+ * sits on the cab roof, reached by a stair up the cab's back face (a step up from the roof onto the landing).
+ */
+export function landingLayout(spec: { length: number; width: number }, ends: { nose: boolean; tail: boolean }, bridgeCount: number, rise: number) {
+  const { length: L, width: W } = spec;
+  const landings: Landing[] = [], stairs: Stair[] = [];
+  const xs = landingXs(bridgeCount, W);
+  const tower = (x: number, z: number) => {
+    // Down the tower's side, toward the middle (or to the left with one landing).
+    const dir = x === 0 ? 1 : -Math.sign(x), run = rise * STAIR_RUN;
+    stairs.push({ x0: x + dir * (LANDING_HALF + run), z0: z, y0: 0, x1: x + dir * LANDING_HALF, z1: z, y1: rise, w: STAIR_W });
+  };
+  if (ends.tail) for (const x of xs) {
+    const z = -L / 2 + LANDING_IN;
+    landings.push({ x, z, top: rise, onCab: false, end: "tail" });
+    tower(x, z);
+  }
+  if (ends.nose) for (const x of xs) {
+    const z = L / 2 - LANDING_IN, onCab = Math.abs(x) < cabHalf(W) - 0.3;
+    landings.push({ x, z, top: rise, onCab, end: "nose" });
+    if (!onCab) { tower(x, z); continue; }
+    const zb = L / 2 - CAB_BACK;
+    stairs.push({ x0: x, z0: zb - CAB_ROOF * STAIR_RUN, y0: 0, x1: x, z1: zb, y1: CAB_ROOF, w: STAIR_W });
+  }
+  return { landings, stairs };
+}
+
+/** A stair's footprint as a local box (centre and half sizes), for keeping the mech off it. */
+export function stairBox(s: Stair) {
+  return { x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2, hx: Math.abs(s.x1 - s.x0) / 2 + (s.x0 === s.x1 ? s.w / 2 : 0), hz: Math.abs(s.z1 - s.z0) / 2 + (s.z0 === s.z1 ? s.w / 2 : 0) };
+}
+
 /**
  * Lay the train out: along-route offset from the head, side offset and the car each one follows (index, -1 for the
  * lead). Platforms are in layout order; the first is the lead.
