@@ -225,7 +225,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let e: TargetCandidate | null = null, bd = Infinity;
     for (const c of cands) { const d = Math.hypot(c.x - p.x, c.z - p.z); if (d < bd) { bd = d; e = c; } }
     if (!e) return { cmd, aim: null, trigger: false };
-    return { cmd, aim: { x: e.x, y: e.y, z: e.z }, trigger: bd < V.range + 5 };
+    return { cmd, aim: { x: e.x + (e.vx ?? 0) * V.lockLead, y: e.y, z: e.z + (e.vz ?? 0) * V.lockLead }, trigger: bd < V.range + 5 };
   }
   const targeting = new Targeting();
   const ndc = new THREE.Vector2(), caster = new THREE.Raycaster();
@@ -255,7 +255,11 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
         ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
         caster.setFromCamera(ndc, camera);
         lock = targeting.pick(lab.targets(), { rayO: caster.ray.origin, rayD: caster.ray.direction, from: player.sim.pos, cursor: aimPt, range: V.range }, V);
-        if (lock) aim = { x: lock.target.x, y: lock.target.y, z: lock.target.z };
+        if (lock) {
+          // Lead it: the guns trail their aim as they track, so aim where it will be by then.
+          const t = lock.target, L = V.lockLead;
+          aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
+        }
       }
       trigger = mouseDown || keys.has("KeyF");
     }

@@ -129,6 +129,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Soft lock leads moving targets (Claude)
+- Keith: the miniguns didn't seem to lead targets. Targets now carry their velocity (`TargetCandidate.vx/vz` from every combat lab) and the lock aims `lockLead` seconds ahead (0.12 s, about the guns' tracking lag: they trail their aim by ~1 / gun tracking); the demo leads too. Measured in the war band demo: rounds hitting vehicles 71% → 78%. Rounds are still instant hits along the barrel, so the lead covers the guns' lag, not flight time.
+
 ### 2026-10-25 · Loadout and items proposed (Claude)
 - Keith: equip the walker from the convoy; legs, hull, arms or hull weapons, power pack and back mounts; rarity with Protocol sockets; enemy mechs wear real gear and leave hulks to pull parts from. Plan in `docs/proposal-loadout.md` (slots, items, lists not grids, a bay screen on the parked mech, a loadout lab first). Noted: the seven Rampart variants exist only on Keith's PC (not pushed). Waiting for Keith.
 

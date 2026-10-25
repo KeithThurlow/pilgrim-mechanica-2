@@ -16,6 +16,7 @@ export const TARGET_DEFAULTS = {
   lockWidth: 2,
   lockCone: 6,
   lockSticky: 0.4,
+  lockLead: 0.12,
 };
 export type TargetValues = typeof TARGET_DEFAULTS;
 
@@ -24,11 +25,13 @@ export const TARGET_PARAMS: Param[] = [
   { key: "lockCursor", label: "Under cursor: reach past the body (m)", min: 0, max: 6, step: 0.1, group: "Targeting" },
   { key: "lockWidth", label: "Line of fire: width (m)", min: 0, max: 10, step: 0.1, group: "Targeting" },
   { key: "lockCone", label: "Line of fire: widening (deg)", min: 0, max: 30, step: 0.5, group: "Targeting" },
+  { key: "lockLead", label: "Lead a moving target (s)", min: 0, max: 0.6, step: 0.01, group: "Targeting", tip: "Aim this far ahead of a locked target's motion: the guns trail their aim a little as they track (about 1 / gun tracking), so leading by that much puts the rounds on it" },
   { key: "lockSticky", label: "Keep the last target (0-1)", min: 0, max: 1, step: 0.05, group: "Targeting" },
 ];
 
 /** One enemy the guns could take: its centre of mass, a body radius, and a key that stays the same while it lives. */
-export interface TargetCandidate { x: number; y: number; z: number; r: number; key: unknown }
+/** vx, vz: its ground velocity (m/s), when it moves, so the guns can lead it. */
+export interface TargetCandidate { x: number; y: number; z: number; r: number; key: unknown; vx?: number; vz?: number }
 
 export interface Vec3 { x: number; y: number; z: number }
 

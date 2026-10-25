@@ -41,8 +41,8 @@ lab.app.scene.add(wb.group);
 
 lab.targets = () => {
   const out: TargetCandidate[] = [];
-  for (const r of wb.raiders) if (r.alive) out.push({ x: r.sim.pos.x, y: r.centreY, z: r.sim.pos.z, r: r.shape.radius + 0.5, key: r });
-  for (const m of wb.mechs) if (m.alive) out.push({ x: m.sim.pelvis.x, y: m.sim.pelvis.y + 0.6, z: m.sim.pelvis.z, r: V.hitRadius, key: m });
+  for (const r of wb.raiders) if (r.alive) out.push({ x: r.sim.pos.x, y: r.centreY, z: r.sim.pos.z, r: r.shape.radius + 0.5, key: r, vx: r.sim.vel.x, vz: r.sim.vel.z });
+  for (const m of wb.mechs) if (m.alive) out.push({ x: m.sim.pelvis.x, y: m.sim.pelvis.y + 0.6, z: m.sim.pelvis.z, r: V.hitRadius, key: m, vx: m.sim.vel.x, vz: m.sim.vel.z });
   return out;
 };
 lab.onFrame((dt) => {

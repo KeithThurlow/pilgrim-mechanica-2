@@ -90,7 +90,7 @@ lab.targets = () => {
   const out: TargetCandidate[] = [];
   for (let i = 0; i < sw.hi; i++) {
     if (sw.state[i] >= DEAD - 1) continue; // skip down, dead, empty
-    out.push({ x: sw.px[i], y: sw.py[i] + V.banditHeight * 0.55, z: sw.pz[i], r: Math.max(0.6, V.banditRadius), key: i });
+    out.push({ x: sw.px[i], y: sw.py[i] + V.banditHeight * 0.55, z: sw.pz[i], r: Math.max(0.6, V.banditRadius), key: i, vx: sw.vx[i], vz: sw.vz[i] });
   }
   return out;
 };

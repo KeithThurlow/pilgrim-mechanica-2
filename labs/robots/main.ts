@@ -99,7 +99,7 @@ lab.targets = () => {
   const out: TargetCandidate[] = [];
   for (let i = 0; i < sw.hi; i++) {
     if (sw.state[i] >= DOWN) continue; // skip down, dead, empty
-    const c = { x: 0, y: 0, z: 0, r: 0, key: i as unknown };
+    const c = { x: 0, y: 0, z: 0, r: 0, key: i as unknown, vx: sw.vx[i], vz: sw.vz[i] };
     c.r = Math.max(0.6, robotCentre(sw, i, c)); // the hub, or a walker's chassis
     out.push(c);
   }
