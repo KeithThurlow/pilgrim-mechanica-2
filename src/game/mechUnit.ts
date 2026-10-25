@@ -3,7 +3,7 @@
 // Ramparts for now, Keith 2026-10-24), so both walk, shoot, kick up dust and take hits the same way.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import { WalkerSim, leftOf, type MoveCommand } from "../mech/walker";
+import { WalkerSim, leftOf, type MoveCommand, type Landing } from "../mech/walker";
 import type { WalkerValues } from "../mech/walkerTuning";
 import { UpperSim, triggerOf, type UpperValues, type Aim, type Trigger } from "../mech/upper";
 import type { UpperSim as UpperSimT } from "../mech/upper";
@@ -88,6 +88,8 @@ export class MechUnit implements Hittable {
   damageScale = 1;
   /** Called on each footfall with where and how hard (stomps for infantry, later). */
   onStomp: ((x: number, z: number, strength: number) => void) | null = null;
+  /** After each landing's own dust, prints, sound and damage (labs shake the camera, the convoy lab digs a crater). */
+  onLanding: ((l: Landing) => void) | null = null;
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
@@ -101,6 +103,9 @@ export class MechUnit implements Hittable {
   lock: TargetCandidate | null = null;
   /** Rail cannons, autocannons, the salvo and the mortar (null: miniguns only). */
   weapons: MechWeapons | null = null;
+  /** Kneeling for the pilot (src/pilot/mount.ts): hips this far down (m) and the nose this far down (radians). */
+  kneel = 0;
+  kneelPitch = 0;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -136,6 +141,24 @@ export class MechUnit implements Hittable {
       bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       this.onStomp?.(f.planted.x, f.planted.z, k);
+    };
+    // A landing (a drop, a crest, a jump): both feet stomp at once, scaled by how hard it hit; hard ones hurt.
+    sim.onLand = (l) => {
+      const k = Math.min(2.2, 0.4 + l.impact / 6);
+      if (l.impact > 1.5) {
+        for (const f of sim.feet) {
+          if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
+          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+          dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
+        }
+        if (l.impact > v.landSoft) {
+          this.a.set(l.x, l.y, l.z);
+          bf.sfx.play("brap", this.a, Math.min(1.8, 0.5 + l.hard * 1.1), 0.4, false);
+        }
+      }
+      this.onStomp?.(l.x, l.z, k * 1.5);
+      if (l.damage > 0) this.damage(l.damage, this.a.set(l.x, l.y, l.z), this.b.set(0, 1, 0));
+      this.onLanding?.(l);
     };
     sim.onLiftOff = (f, k) => {
       if (k < 0.15) return;
@@ -187,11 +210,11 @@ export class MechUnit implements Hittable {
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
       dash.update(dt / sub, this.dashHold, cmd.x, cmd.z, grade);
       sim.push.set(dash.vx, 0, dash.vz);
-      sim.crouch = dash.crouch;
+      sim.crouch = dash.crouch + this.kneel;
       // Lean into the dash: along the heading pitches the nose, across it rolls.
       const fwd = dash.dirX * Math.sin(sim.heading) + dash.dirZ * Math.cos(sim.heading);
       const side = dash.dirX * Math.cos(sim.heading) - dash.dirZ * Math.sin(sim.heading);
-      sim.leanPitch = dash.lean * fwd;
+      sim.leanPitch = dash.lean * fwd + this.kneelPitch;
       sim.leanRoll = -dash.lean * side;
       sim.update(dt / sub, cmd);
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);

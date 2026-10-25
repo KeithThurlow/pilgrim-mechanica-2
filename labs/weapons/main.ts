@@ -2,7 +2,7 @@
 // targeting. A line and a column of plywood cutouts, a row of steel posts (one sliding), trucks driving a slow loop to
 // lead, a dune across the range with cutouts behind it for the mortars. The picker fits items through the loadout (so
 // this is the mech the bay builds). Controls (Keith 2026-10-25): left click fires the left side's weapon, right click
-// the right side's (F both); shoulder weapons on keys 1-3: hold to paint, release to fire. The HUD shows which button
+// the right side's (both can be held); shoulder weapons on keys 1-3: hold to paint, release to fire. The HUD shows which button
 // or key fires what and its cooldown, damage per second on the range, what the last shot of each weapon did, and what
 // the blasts' craters cost.
 //

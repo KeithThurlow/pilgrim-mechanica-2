@@ -41,7 +41,9 @@ function run(gx: number, gz: number, over: Record<string, number> = {}) {
 
 const fmt = (r: ReturnType<typeof run>) => `speed ${r.speed.toFixed(2)} m/s · uphill thigh ${r.thigh.toFixed(0)}° off vertical · hips ${r.cogAhead >= 0 ? "+" : ""}${r.cogAhead.toFixed(2)} m ahead of the feet · overreach ${(r.overreach * 100).toFixed(1)}%`;
 const problems: string[] = [];
-const flat = run(0, 0), side = run(0.35, 0), sideOff = run(0.35, 0, { thighFold: 0, thighSplay: 0 });
+// The fold is measured at a slow walk (4 m/s): at the full walk (6 m/s since 2026-10-26) the long stride swings the
+// thigh off vertical by itself, which hides the fold in the average.
+const flat = run(0, 0), side = run(0.35, 0, { walkSpeed: 4 }), sideOff = run(0.35, 0, { walkSpeed: 4, thighFold: 0, thighSplay: 0 });
 const up = run(0, 0.3), down = run(0, -0.3), downOff = run(0, -0.3, { downhillPlant: 0, downhillSitBack: 0, downhillCrouch: 0, downhillLevel: 1 });
 console.log(`flat             ${fmt(flat)}`);
 console.log(`side slope 19°   ${fmt(side)}`);

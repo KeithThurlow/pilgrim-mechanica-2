@@ -284,7 +284,9 @@ function pickUp(w: World, label = "") {
   w.crane.place(); w.crane.calm();
   w.carry.putAboard(w.sim);
   const p = w.convoy.bay, half = p.spec.width / 2;
-  const route: [number, number][] = [[-5, 6], [5, 6], [5, -2], [-4, -2], [-4, 14], [-6, 8], [3, -2], [3, -14], [0, 2]];
+  // Back up the lane it came down before the last leg: straight from (3, -14) to (0, 2) runs into the round block on
+  // the centre line, and the walker has no path-finding (at 6 m/s it came to rest dead behind it, 2026-10-26).
+  const route: [number, number][] = [[-5, 6], [5, 6], [5, -2], [-4, -2], [-4, 14], [-6, 8], [3, -2], [3, -14], [3, -2], [0, 2]];
   let worstOut = 0, worstHips = 0, worstFoot = 0, nan = false, frames = 0, offDeckFeet = 0, minHips = Infinity, maxHips = -Infinity;
   const r0 = w.sim.stats.overreach;
   const watch = () => {
@@ -359,9 +361,9 @@ function pickUp(w: World, label = "") {
   if (w.carry.state !== "parked") fail(`not parked (state ${w.carry.state})`);
   if (Math.abs(d1.hips - (w.V.hipHeight - w.V.deckCrouch)) > 0.15) fail("didn't settle to the park crouch");
   if (drift > 0.05) fail(`a parked mech moved ${drift.toFixed(2)} m on the deck`);
-  if (!w.carry.label.includes("pilot can climb out")) fail("HUD doesn't say the pilot can climb out");
+  if (!w.carry.label.includes("hold F to climb out")) fail("HUD doesn't say the pilot can climb out");
   w.carry.togglePark(w.sim);
-  for (let i = 0; i < Math.round((w.V.deckParkTime + 0.3) / DT); i++) tick(w, still);
+  for (let i = 0; i < Math.round((w.V.deckRiseTime + 0.3) / DT); i++) tick(w, still);
   if (w.carry.state !== "aboard") fail(`didn't stand up (state ${w.carry.state})`);
   const before = onDeck(w).l;
   for (let i = 0; i < 360; i++) tick(w, { x: p.fwd.x, z: p.fwd.z, sprint: false });

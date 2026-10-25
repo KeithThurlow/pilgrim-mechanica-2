@@ -103,11 +103,11 @@ export const BASES: Base[] = [
   },
   {
     id: "legs-stilt", name: "Stilt legs", kind: "legs", tags: ["legs"], weight: 4.5, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 1,
-    stats: { walkSpeed: s(4.8, 0.06), sprintSpeed: s(7.8, 0.06), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), carry: s(8, 0.1) },
+    stats: { walkSpeed: s(7.2, 0.06), sprintSpeed: s(10, 0.06), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), carry: s(8, 0.1) },
   },
   {
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    stats: { walkSpeed: s(3.3, 0.06), sprintSpeed: s(5.2, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), carry: s(18, 0.1) },
+    stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), carry: s(18, 0.1) },
   },
   // Hulls: hull points, torso turn, mounts.
   {

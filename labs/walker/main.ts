@@ -32,6 +32,7 @@ import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
 import { DASH_PARAMS } from "../../src/mech/dash";
+import { BoundSpike, BOUND_SPIKE_DEFAULTS, BOUND_SPIKE_PARAMS } from "./boundSpike";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -42,6 +43,8 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS, radius: 4, shadowBox: 30,
   // Biomes: desert here unless ?biome=mix (the map) or ?biome=rocky|shallows (only that one).
   ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS,
+  // ?bound: the bound spike's values (docs/proposal-bound.md).
+  ...BOUND_SPIKE_DEFAULTS,
   biomeOnly: ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome") ?? "desert"] ?? 0,
 };
 const DEFAULTS = { ...V };
@@ -120,15 +123,24 @@ canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName ==
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs).
-let dashPressed = false, spaceDown = false;
+// ?bound (spike): a tap still dashes (on release, under boundTap s); holding Space longer bounds.
+const boundOn = params.has("bound");
+const BOUND_TAP = 0.2;
+const bound = boundOn ? new BoundSpike(V) : null;
+let dashPressed = false, spaceDown = false, spaceFor = 0;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   e.preventDefault();
-  dashPressed = true;
+  if (!boundOn) dashPressed = true;
   spaceDown = true;
+  spaceFor = 0;
   auto = false;
 });
-addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+addEventListener("keyup", (e) => {
+  if (e.code !== "Space") return;
+  if (boundOn && spaceFor < BOUND_TAP) dashPressed = true;
+  spaceDown = false;
+});
 addEventListener("blur", () => { spaceDown = false; });
 
 const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
@@ -137,7 +149,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -148,7 +160,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Dash", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Bound (spike)", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -206,6 +218,19 @@ scene.add(reticle);
 
 field.update();
 mech.reset(13, -40, 0.3);
+// ?drop=metres: start in the air that high over the sand, as if a crane had just let go (?drop=3,5 also moving at 5 m/s).
+const dropArg = params.get("drop")?.split(",").map(Number);
+function drop() {
+  if (!dropArg) return;
+  const [h, fwd = 0] = dropArg;
+  sim.pelvis.y += h;
+  for (const f of sim.feet) f.pos.y += h;
+  sim.launch(Math.sin(sim.heading) * fwd, 0, Math.cos(sim.heading) * fwd);
+}
+drop();
+// A landing shakes the camera by how hard it hit.
+let shake = 0;
+mech.onLanding = (l) => { shake = Math.max(shake, V.landShake * Math.min(1.6, l.impact / 7.7)); };
 follow.copy(sim.pelvis);
 // The hub's biome picker wins over a saved slider.
 if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }
@@ -220,7 +245,13 @@ const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], 
 
 // ?dt=seconds: every frame advances this much time, however long it took to draw (repeatable headless shots).
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
-app.onTick((rawDt) => {
+// ?warm=seconds: run that much sim time (in dt steps) before the first drawn frame, so slow headless shots start mid-run.
+let warm = Number(params.get("warm") ?? 0);
+app.onTick((frameDt) => {
+  if (warm > 0) { const step = fixedDt || 1 / 30; for (; warm > 0; warm -= step) tick(step); }
+  tick(frameDt);
+});
+function tick(rawDt: number) {
   const dt = (fixedDt || rawDt) * (slow ? 0.25 : 1);
   clock += dt;
 
@@ -246,7 +277,13 @@ app.onTick((rawDt) => {
     if (stick.lengthSq() > 0.01) mech.tryDash(stick.x, stick.z);
     else mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
   }
-  mech.dashHold = spaceDown && !auto;
+  mech.dashHold = spaceDown && !auto && !boundOn;
+  if (bound) {
+    // Spike: held Space (or the straight demo) bounds; the spike moves the body and the legs get no stick.
+    if (spaceDown) spaceFor += dt;
+    const hold = (spaceDown && spaceFor >= BOUND_TAP) || (auto && straight);
+    cmd = bound.update(dt, hold, cmd, sim);
+  }
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;
@@ -264,6 +301,12 @@ app.onTick((rawDt) => {
     controls.update();
   }
   lastFollow.copy(follow);
+  if (shake > 0.002) {
+    camera.position.x += (Math.random() * 2 - 1) * shake;
+    camera.position.y += (Math.random() * 2 - 1) * shake * 0.6;
+    camera.position.z += (Math.random() * 2 - 1) * shake;
+    shake *= Math.exp(-7 * rawDt);
+  } else shake = 0;
   toon.update(camera, canvas.clientHeight);
 
   streamer.update(sim.pos.x, sim.pos.z);
@@ -277,7 +320,10 @@ app.onTick((rawDt) => {
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
     + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+  if (bound) app.hud.set("bound", `bound (spike, hold Space): ${bound.active ? `${bound.speed.toFixed(1)} m/s, ${bound.leaps} leaps, drift ${Math.abs(((((bound.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180).toFixed(0)}°` : "off"}`);
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
+  const ll = sim.lastLanding;
+  app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
-});
+}

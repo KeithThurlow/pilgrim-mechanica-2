@@ -98,10 +98,14 @@ let wadeTick = 0;
 lab.onFrame((dt) => {
   groupClock += dt;
   if (sw.count < V.swarmSize && groupClock >= V.groupEvery) { groupClock = 0; spawnGroup(); }
-  const p = player.sim.pelvis;
+  // The swarm goes for the mech, or the pilot on foot when he's nearer to it (src/pilot/quarry.ts).
+  let cx = 0, cz = 0, n = 0;
+  for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DEAD - 1) { cx += sw.px[i]; cz += sw.pz[i]; n++; }
+  const prey = n ? lab.prey(cx / n, cz / n) : lab.prey(player.sim.pos.x, player.sim.pos.z);
+  const p = prey.at;
   for (let i = 0; i < rocketClock.length; i++) rocketClock[i] -= dt;
-  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 3 }, (fx, fy, fz, tx, ty, tz, i) => {
-    if (!player.alive) return;
+  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : 3 }, (fx, fy, fz, tx, ty, tz, i) => {
+    if (!prey.alive) return;
     from.set(fx, fy, fz);
     // Only with a clear line: no shooting through the dunes.
     if (!bf.canSee(from, p)) return;
@@ -110,7 +114,7 @@ lab.onFrame((dt) => {
       if (rocketClock[i] > 0) return;
       rocketClock[i] = V.rocketEvery * (0.8 + Math.random() * 0.4);
       const dist = Math.hypot(p.x - fx, p.z - fz), flight = dist / Math.max(1, V.rocketSpeed);
-      const v = player.sim.vel;
+      const v = prey.sim.vel;
       bf.lob(2, from, p.x + v.x * flight * V.rocketLead, p.z + v.z * flight * V.rocketLead, flight, V.rocketArc, V.rocketRadius, V.rocketDamage);
       return;
     }

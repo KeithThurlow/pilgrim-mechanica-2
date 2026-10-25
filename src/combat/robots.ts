@@ -278,8 +278,11 @@ const DEG = Math.PI / 180;
 const HASH_SIZE = 4096, HASH_MASK = HASH_SIZE - 1;
 const SLOTS_MAX = 64;
 
-/** The mech: aim point (x, y, z; y is where to shoot), its body radius, and optionally its velocity. */
-export interface RobotTarget { x: number; y: number; z: number; radius: number; vx?: number; vz?: number }
+/**
+ * The mech: aim point (x, y, z; y is where to shoot), its body radius, and optionally its velocity. latchLow/High
+ * override the latch heights (m above the ground) for a smaller target (the pilot on foot, src/pilot/quarry.ts).
+ */
+export interface RobotTarget { x: number; y: number; z: number; radius: number; vx?: number; vz?: number; latchLow?: number; latchHigh?: number }
 /** A round fired: muzzle, a point far along the shot, and the kind that fired it (SMALL, MID, BIG). */
 export type RobotShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, kind: number) => void;
 export type RobotBiteFn = (i: number, damage: number) => void;
@@ -382,7 +385,7 @@ export class RobotSwarm {
   private rs: number;
   private tPrevX = NaN; private tPrevZ = NaN;
   private tvx = 0; private tvz = 0;
-  private tx = 0; private tz = 0; private tr = 2;
+  private tx = 0; private tz = 0; private tr = 2; private tLow = -1; private tHigh = -1;
 
   constructor(public v: RobotValues, readonly ground: Ground, seed = 1) {
     this.rs = (seed >>> 0) || 1;
@@ -568,7 +571,8 @@ export class RobotSwarm {
     const v = this.v, a = k * 2.39996, f = (k * 0.6180339 + 0.31) % 1;
     const r = this.tr * v.robotLatchRing;
     out[0] = this.tx + Math.sin(a) * r;
-    out[1] = this.baseY + v.robotLatchLow + f * Math.max(0, v.robotLatchHigh - v.robotLatchLow);
+    const lo = this.tLow >= 0 ? this.tLow : v.robotLatchLow, hi = this.tHigh >= 0 ? this.tHigh : v.robotLatchHigh;
+    out[1] = this.baseY + lo + f * Math.max(0, hi - lo);
     out[2] = this.tz + Math.cos(a) * r;
   }
 
@@ -613,7 +617,7 @@ export class RobotSwarm {
       this.tvz += ((target.z - this.tPrevZ) / dt - this.tvz) * k;
     }
     this.tPrevX = target.x; this.tPrevZ = target.z;
-    this.tx = target.x; this.tz = target.z; this.tr = target.radius;
+    this.tx = target.x; this.tz = target.z; this.tr = target.radius; this.tLow = target.latchLow ?? -1; this.tHigh = target.latchHigh ?? -1;
     this.baseY = this.ground.height(target.x, target.z);
     const tSpeed = Math.hypot(this.tvx, this.tvz);
     this.buildHash();

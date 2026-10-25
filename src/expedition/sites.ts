@@ -84,10 +84,11 @@ export class FieldSites {
   }
 
   /** One frame: stream sites round the mech's hips and strip with E held. */
-  update(dt: number, x: number, z: number, holding: boolean, camera: THREE.Camera) {
+  update(dt: number, x: number, z: number, holding: boolean, camera: THREE.Camera, foot?: { reach: number; rate: number; noise: number }) {
     this.syncT -= dt;
     if (this.syncT <= 0) { this.syncT = 0.5; this.sync(x, z); }
-    this.salvage.update(dt, x, z, holding);
+    if (foot) this.salvage.update(dt, x, z, holding, foot.reach, foot.rate, foot.noise);
+    else this.salvage.update(dt, x, z, holding);
     this.fx.update(dt, camera, x, z);
   }
 

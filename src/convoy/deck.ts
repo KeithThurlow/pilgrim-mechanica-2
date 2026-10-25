@@ -12,7 +12,7 @@ import type { Param } from "../core/tweaks";
 import type { Ground, WalkerSim } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
 import type { Platform, PlatformSpec } from "./platform";
-import { landingXs, LANDING_IN, LANDING_HALF } from "./train";
+import { landingXs, landingLayout, stairBox, LANDING_IN, LANDING_HALF } from "./train";
 import { outside, keepInside } from "./outline";
 
 export const DECK_DEFAULTS = {
@@ -56,8 +56,18 @@ export function storesZ(spec: PlatformSpec) {
   return (spec.crane ?? 1) > 0 ? { stores: -L / 2 + 4, crates: -L / 2 + 3.7 } : { stores: L / 2 - CAB_DEPTH - 2.2, crates: L / 2 - CAB_DEPTH - 1.5 };
 }
 
+/**
+ * The bay terminal (Keith 2026-10-26: the bay screen becomes a terminal you walk up to): a console between the two
+ * parking bays' aft ends, just aft of the service tower, its screen facing aft. Local x, z.
+ */
+export function terminalSpot(p: Platform, v: DeckValues) {
+  return { x: 0, z: (v.deckParkZ - BAY_L / 2 + 0.9) * p.craneEnd, facing: -p.craneEnd };
+}
+/** The terminal's half size (m). */
+export const TERMINAL_HALF = 0.35;
+
 /** The bay platform's layout from its size, the crane's mount and the deck values (and the footbridges' landings). */
-export function deckLayout(p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
+export function deckLayout(p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number; bridgeRise?: number }) {
   const { length: L, width: W } = p.spec;
   const z = bayZ(p, v);
   const spots: Spot[] = [
@@ -80,7 +90,12 @@ export function deckLayout(p: Platform, v: DeckValues & { craneMount: number; br
   ];
   // Footbridge landing towers: on the tail when a car follows (the lead), on the nose when it follows one (the rear bay).
   const xs = landingXs(v.bridgeCount ?? 0, W);
-  if (p.follows < 0 || p.craneEnd > 0) for (const x of xs) blocks.push({ x, z: -L / 2 + LANDING_IN, hx: LANDING_HALF, hz: LANDING_HALF });
+  const tail = p.follows < 0 || p.craneEnd > 0;
+  if (tail) for (const x of xs) blocks.push({ x, z: -L / 2 + LANDING_IN, hx: LANDING_HALF, hz: LANDING_HALF });
+  // The stairs up to the landings (the pilot's way up; the mech walks round them) and the bay terminal.
+  for (const s of landingLayout(p.spec, { tail, nose: p.follows >= 0 }, v.bridgeCount ?? 0, v.bridgeRise ?? 3).stairs) blocks.push(stairBox(s));
+  const t = terminalSpot(p, v);
+  blocks.push({ x: t.x, z: t.z, hx: TERMINAL_HALF, hz: TERMINAL_HALF });
   return { spots, blocks, halfW: W / 2, halfL: L / 2 };
 }
 
@@ -194,7 +209,10 @@ export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneM
 export function walkToSpot(sim: WalkerSim, p: Platform, x: number, z: number, stop = 0.4): { x: number; z: number; sprint: boolean } {
   const w = p.toWorld(x, 0, z), dx = w.x - sim.pos.x, dz = w.z - sim.pos.z, d = Math.hypot(dx, dz);
   if (d < stop) return { x: 0, z: 0, sprint: false };
-  const mag = Math.max(0.25, Math.min(1, d / 3));
+  // Speed by distance in m/s, whatever the walk speed: 1 m/s near the spot, 4 m/s from 3 m out (faster, the committed
+  // turn circles a close spot instead of reaching it).
+  const ws = Math.max(1, sim.v.walkSpeed);
+  const mag = Math.min(1, Math.max(1, Math.min(4, (4 * d) / 3)) / ws);
   return { x: (dx / d) * mag, z: (dz / d) * mag, sprint: false };
 }
 
