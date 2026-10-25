@@ -2,8 +2,11 @@
 // when the player drags enemies home). Pure sim on the war band's car sim (src/vehicles/car.ts), no rendering.
 //
 // Each escort holds a station: a side of the train, a distance along it (spread over the train's length) and a
-// distance out from the route (escortOut, weaving escortWeave either way over escortWeavePeriod). It steers for a
-// point a little ahead of its station on the route and matches the convoy's speed, faster when it has fallen back.
+// distance out from the route (escortOut, weaving escortWeave either way over escortWeavePeriod). Most ride the
+// sides; with enough of them (Keith 2026-10-25: more trucks), two scout ahead of the lead and two trail behind the
+// tail, closer in. It steers for a point a little ahead of its station on the route and matches the convoy's speed,
+// faster when it has fallen back, each surging ahead and dropping back on its own slow rhythm (escortSurge) so they
+// roll at different speeds.
 // It keeps clear of the platforms (a margin round each footprint), of the other escorts, and of the mech (it aims for
 // a line grazing a clearance round it, and from inside turns out to the side its nose points, as the war band does),
 // and drives round dune faces too steep to climb.
@@ -15,12 +18,15 @@ import { CarSim, carValues, type CarKind } from "../vehicles/car";
 import type { Convoy, Platform } from "./platform";
 
 export const ESCORT_DEFAULTS = {
-  escortCount: 4,
+  escortCount: 12,
   escortOut: 26,
   escortBand: 7,
   escortWeave: 4,
   escortWeavePeriod: 22,
   escortCatchUp: 0.35,
+  escortSurge: 1.2,
+  escortScoutAhead: 26,
+  escortScoutOut: 13,
   escortTopSpeed: 12,
   escortPlatformClear: 4,
   escortMechClear: 10,
@@ -29,12 +35,15 @@ export const ESCORT_DEFAULTS = {
 export type EscortValues = typeof ESCORT_DEFAULTS;
 
 export const ESCORT_PARAMS: Param[] = [
-  { key: "escortCount", label: "Escorts", min: 0, max: 8, step: 1, group: "Escorts", tip: "Vehicles driving alongside the convoy, alternating sides" },
+  { key: "escortCount", label: "Escorts", min: 0, max: 16, step: 1, group: "Escorts", tip: "Vehicles driving alongside the convoy, alternating sides; from 8, two scout ahead, from 10 two trail behind" },
+  { key: "escortScoutAhead", label: "Scouts ahead / behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far ahead of the lead's nose (and behind the last car's tail) the scouts and trailers drive" },
+  { key: "escortScoutOut", label: "Scouts out (m)", min: 4, max: 30, step: 0.5, group: "Escorts", tip: "How far off the route the scouts and trailers drive" },
   { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station" },
   { key: "escortBand", label: "Station band (m)", min: 2, max: 20, step: 0.5, group: "Escorts", tip: "How far either side of its station line it counts as on station (the check)" },
   { key: "escortWeave", label: "Weave (m)", min: 0, max: 12, step: 0.1, group: "Escorts", tip: "Slow drift in and out of the station line" },
   { key: "escortWeavePeriod", label: "Weave period (s)", min: 4, max: 60, step: 0.5, group: "Escorts" },
   { key: "escortCatchUp", label: "Catch-up", min: 0, max: 1.5, step: 0.01, group: "Escort driving", tip: "Extra speed per metre behind (or less per metre ahead of) its station" },
+  { key: "escortSurge", label: "Surge (m/s)", min: 0, max: 4, step: 0.05, group: "Escort driving", tip: "Each escort drifts faster and slower than the convoy by up to this, on its own slow rhythm" },
   { key: "escortTopSpeed", label: "Top speed (m/s)", min: 4, max: 20, step: 0.1, group: "Escort driving" },
   { key: "escortPlatformClear", label: "Clear of platforms (m)", min: 1, max: 12, step: 0.1, group: "Escort driving", tip: "Margin kept round every platform's footprint" },
   { key: "escortMechClear", label: "Clear of the mech (m)", min: 4, max: 20, step: 0.5, group: "Escort driving", tip: "Never drives inside this distance of the mech: grazes round it, or turns out" },
@@ -48,8 +57,8 @@ const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 const wrap = (a: number) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
 /** How far ahead along the route an escort aims (m), plus a second per m/s. */
 const LOOK = 10;
-/** Kinds in turn (a light car and a heavier one). */
-const KINDS: CarKind[] = ["technical", "gunTruck"];
+/** Kinds in turn: mostly light cars and gun trucks, a few six-wheelers, a war rig and a tank. */
+const KINDS: CarKind[] = ["technical", "gunTruck", "sixWheeler", "technical", "gunTruck", "warRig", "technical", "tank", "sixWheeler", "gunTruck", "technical", "gunTruck", "warRig", "technical", "sixWheeler", "tank"];
 
 export class Escort {
   readonly sim: CarSim;
@@ -58,6 +67,8 @@ export class Escort {
   /** Station: side (+1 left of the route), along-route offset from the convoy's head. */
   side: 1 | -1;
   along = 0;
+  /** Distance out from the route its station line runs (m). */
+  stationOut = 26;
   /** Where along the route the escort is now (its projection), and its distance out from the route line (signed). */
   s = 0;
   out = 0;
@@ -66,12 +77,17 @@ export class Escort {
   moved = 0;
   /** Half its length (m), for keeping clear. */
   readonly half: number;
+  /** Its own surge rhythm (phase, and a rate share). */
+  readonly surgePhase: number;
+  readonly surgeRate: number;
   constructor(readonly kind: CarKind, readonly index: number, ground: DuneField) {
     const cv = carValues(kind);
     this.sim = new CarSim(cv, ground);
     this.half = cv.wheelbase / 2 + 1.2;
     this.side = index % 2 === 0 ? 1 : -1;
     this.phase = index * 1.9;
+    this.surgePhase = index * 2.7 + 0.5;
+    this.surgeRate = 0.6 + ((index * 0.37) % 1) * 0.8;
   }
 }
 
@@ -97,13 +113,26 @@ export class EscortGroup {
     return true;
   }
 
-  /** Spread the stations along the train: pairs either side, from beside the lead back toward the tail. */
+  /**
+   * Spread the stations: pairs either side from beside the lead back toward the tail; with 8 or more the last two
+   * scout ahead of the lead, with 10 or more two more trail the tail (one each side, closer in).
+   */
   private stations() {
-    const n = this.list.length, L = this.convoy.length, head = this.convoy.platforms[0].spec.length / 2;
-    const pairs = Math.ceil(n / 2);
+    const v = this.v, n = this.list.length, L = this.convoy.length, head = this.convoy.platforms[0].spec.length / 2;
+    const scouts = n >= 8 ? 2 : 0, trail = n >= 10 ? 2 : 0, sides = n - scouts - trail;
+    const pairs = Math.ceil(sides / 2);
     this.list.forEach((e, i) => {
-      const k = Math.floor(i / 2);
-      e.along = head - 6 - (pairs > 1 ? (k * (L - 20)) / (pairs - 1) : L * 0.3) - (i % 2) * 8;
+      if (i < sides) {
+        const k = Math.floor(i / 2);
+        e.along = head - 6 - (pairs > 1 ? (k * (L - 20)) / (pairs - 1) : L * 0.3) - (i % 2) * 8;
+        e.stationOut = v.escortOut;
+      } else if (i < sides + scouts) {
+        e.along = head + v.escortScoutAhead + (i - sides) * 9;
+        e.stationOut = v.escortScoutOut;
+      } else {
+        e.along = head - L - v.escortScoutAhead - (i - sides - scouts) * 9;
+        e.stationOut = v.escortScoutOut;
+      }
     });
   }
 
@@ -112,7 +141,7 @@ export class EscortGroup {
 
   private place(e: Escort) {
     const r = this.convoy.route;
-    const p = r.offsetAt(r.s + e.along, e.side * this.v.escortOut, this.pt);
+    const p = r.offsetAt(r.s + e.along, e.side * e.stationOut, this.pt);
     e.sim.reset(p.x, p.z, p.heading);
     e.sim.speed = this.convoy.route.v.convoySpeed;
     e.s = r.s + e.along;
@@ -147,15 +176,17 @@ export class EscortGroup {
 
   private drive(e: Escort, dt: number, mech: { x: number; z: number } | null) {
     const v = this.v, s = e.sim, r = this.convoy.route;
-    s.v.topSpeed = v.escortTopSpeed;
+    const top = Math.min(v.escortTopSpeed, carValues(e.kind).topSpeed);
+    s.v.topSpeed = top;
     this.project(e);
     const weave = v.escortWeave * Math.sin((2 * Math.PI * this.t) / Math.max(1, v.escortWeavePeriod) + e.phase);
     const station = r.s + e.along;
     const behind = station - e.s;
     const cv = this.convoy.route.v.convoySpeed;
-    let want = clamp(cv + behind * v.escortCatchUp, 0, v.escortTopSpeed);
+    const surge = v.escortSurge * Math.sin((2 * Math.PI * this.t * e.surgeRate) / 40 + e.surgePhase);
+    let want = clamp(cv + surge + behind * v.escortCatchUp, 0, top);
     const look = LOOK + Math.abs(s.speed);
-    const tgt = r.offsetAt(e.s + look, e.side * (v.escortOut + weave), this.pt);
+    const tgt = r.offsetAt(e.s + look, e.side * (e.stationOut + weave), this.pt);
     let tx = tgt.x, tz = tgt.z;
 
     // Keep clear of the platforms and the other escorts: push the aim point away.
@@ -194,7 +225,7 @@ export class EscortGroup {
         const sd = wrap(s.heading - toMech) >= 0 ? 1 : -1;
         const t = Math.max(0, (dist - 2) / (clear - 2));
         desired = toMech + sd * (Math.PI / 2 + (1 - t) * 0.7);
-        want = Math.max(cv * 0.5, Math.min(want, v.escortTopSpeed * (0.45 + 0.35 * t)));
+        want = Math.max(cv * 0.5, Math.min(want, top * (0.45 + 0.35 * t)));
       }
     }
 

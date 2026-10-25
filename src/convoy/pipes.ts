@@ -14,6 +14,7 @@
 // - pipes are drawn thicker than life (pipeScale) so they read from the game camera.
 // Frame: the platform's local frame (x left, y up, z forward), y = 0 on the ground plane.
 import type { Param } from "../core/tweaks";
+import { outside, sideSpan, type Outline } from "./outline";
 import type { Box } from "./furniture";
 
 export const PIPE_DEFAULTS = {
@@ -50,6 +51,8 @@ export interface PipeSite {
   walkable: boolean;
   /** Index in the convoy, mixed into the seed. */
   index: number;
+  /** The deck's outline when its corners are cut: edge runs keep to the straight sides, risers to inside it. */
+  outline?: Outline;
 }
 
 /** Pipe radii (m) before pipeScale. */
@@ -147,14 +150,29 @@ class Layer {
     this.set.runs++;
   }
 
+  /** The straight stretch of the long sides (z from, to), `end` m in from the ends or the corner cuts. */
+  private span(end: number): [number, number] {
+    const L = this.site.length;
+    if (!this.site.outline) return [-L / 2 + end, L / 2 - end];
+    const [a, b] = sideSpan(this.site.outline);
+    return [Math.max(-L / 2 + end, a + 0.3), Math.min(L / 2 - end, b - 0.3)];
+  }
+
+  /** A point (x, z) at least m in from the deck's edge. */
+  private onDeck(x: number, z: number, m: number) {
+    if (this.site.outline) return outside(this.site.outline, x, z) < -m;
+    return Math.abs(x) + m <= this.site.width / 2 && Math.abs(z) + m <= this.site.length / 2;
+  }
+
   /** Bundles along the outside of both chassis skirts, broken into lengths with gaps. */
   skirts() {
-    const { length: L, width: W, deck: D } = this.site;
+    const { width: W, deck: D } = this.site;
     const p = Math.min(0.95, 0.3 + 0.35 * this.v.pipeDensity);
+    const [zLo, zHi] = this.span(1.5);
     for (const sx of [1, -1]) {
-      let z = L / 2 - 1.5 - this.rand() * 2;
-      while (z > -L / 2 + 3) {
-        const run = 4 + this.rand() * 7, z1 = Math.max(-L / 2 + 1.5, z - run);
+      let z = zHi - this.rand() * 2;
+      while (z > zLo + 1.5) {
+        const run = 4 + this.rand() * 7, z1 = Math.max(zLo, z - run);
         if (this.rand() < p) {
           const sizes = this.sizes(3), off = (SIZES[sizes[0]] + OFF) * this.k;
           const x = sx * (W / 2 - 0.15 + off), y = D - 0.65;
@@ -170,12 +188,13 @@ class Layer {
 
   /** Bundles along the deck inside the rails, where they clear the furniture. */
   deckEdges() {
-    const { length: L, width: W, deck: D } = this.site;
+    const { width: W, deck: D } = this.site;
     const p = Math.min(0.9, 0.15 + 0.3 * this.v.pipeDensity);
+    const [zLo, zHi] = this.span(1);
     for (const sx of [1, -1]) {
-      let z = L / 2 - 4 - this.rand() * 2;
-      while (z > -L / 2 + 2) {
-        const run = 3 + this.rand() * 6, z1 = Math.max(-L / 2 + 1, z - run);
+      let z = zHi - 3 - this.rand() * 2;
+      while (z > zLo + 1) {
+        const run = 3 + this.rand() * 6, z1 = Math.max(zLo, z - run);
         if (this.rand() < p) {
           const sizes = this.sizes(2), h = this.half(sizes);
           const x = sx * (W / 2 - 0.35 - h), y = D + SIZES[sizes[0]] * this.k + 0.12;
@@ -205,7 +224,7 @@ class Layer {
         const u = (this.rand() * 2 - 1) * (wallHalf - h - 0.2);
         const base = add(add([m.x, 0, m.z], nrm, faceOff + off), along, u);
         // Only faces that look onto the deck (not out past the platform's edge).
-        if (Math.abs(base[0]) + h > this.site.width / 2 - 0.25 || Math.abs(base[2]) + h > this.site.length / 2 - 0.25) continue;
+        if (!this.onDeck(base[0], base[2], h + 0.25)) continue;
         const top = m.y + m.hy;
         const box = this.rand() < 0.5;
         const y0 = box ? D + 0.9 : D;
@@ -245,7 +264,7 @@ class Layer {
         const pb: V3 = alongX ? [B.x - sa * (B.hx + off), 0, B.z + (this.rand() - 0.5) * B.hz] : [B.x + (this.rand() - 0.5) * B.hx, 0, B.z - sa * (B.hz + off)];
         // B must lie beyond A's face the way the run leaves it (not stacked on it or overlapping it).
         if ((alongX ? pb[0] - pa[0] : pb[2] - pa[2]) * sa < 0.5) continue;
-        if ([pa, pb].some((q) => Math.abs(q[0]) + h > this.site.width / 2 - 0.3 || Math.abs(q[2]) + h > this.site.length / 2 - 0.3)) continue;
+        if ([pa, pb].some((q) => !this.onDeck(q[0], q[2], h + 0.3))) continue;
         const low = Math.min(A.y + A.hy, B.y + B.hy) - D;
         const over = this.rand() < 0.4;
         let pts: V3[];

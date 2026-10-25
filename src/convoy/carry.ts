@@ -1,14 +1,17 @@
 // Crane pick-up, life on the deck, and launch (pure, no rendering): the state machine around the mech and the crane.
 //
-// Pick-up is automatic (Keith 2026-10-24): once the mech has been inside craneRange of the crane for craneDwell, the
-// crane swings out, lowers its cradle and connects. Leave the range before the cradle grips and nothing happens.
+// Pick-up is automatic (Keith 2026-10-24): once the mech has been inside craneRange of a crane for craneDwell, the
+// crane swings out, lowers its cradle and connects. With two mech bays (front and rear, Keith 2026-10-25) the nearer
+// crane comes; the mech then lives on that bay's deck until it is launched again. Leave the range before the cradle grips and nothing happens.
 // Once gripped the mech hangs on the rope (the walker isn't stepped; its body hangs under the cradle, leaning with
 // the swing, feet dangling), is lifted over the rail, swung over the deck, held over the set-down pad until the swing
 // settles, and set down. Then control comes back (Keith 2026-10-24): the mech walks on the moving deck (deck.ts).
 // Parking: in a parking bay, E settles the mech (kneels); E again stands it up.
 // Launch: stand on a launch pad beside the crane for craneLaunchDwell and the crane comes for the mech there, lifts
-// it, swings it out over that side, steadies it, lowers it to the sand and lets go at the convoy's velocity:
-// craneFollow seconds of forced walking along the convoy's heading, then WASD again. Step off the pad before the
+// it, swings it out over that side, steadies it a few metres over the sand and lets go (Keith 2026-10-25: drop it
+// from a bit higher and let it fall): the mech falls keeping the convoy's velocity, legs braced for the ground, and
+// lands heavily (a crouch that springs back, onTouchdown for the dust and shake), then craneFollow seconds of forced
+// walking along the convoy's heading, then WASD again. Step off the pad before the
 // grip and it's off. The crane's motion is the countdown. After a launch the mech has to leave the range once before
 // the crane will pick it up again.
 import type { Param } from "../core/tweaks";
@@ -17,18 +20,27 @@ import type { DuneField } from "../world/terrain";
 import type { Platform } from "./platform";
 import type { Crane, CraneValues } from "./crane";
 import { DeckGround, PoseSnap, rideDeck, keepOnDeck, spotAt, type DeckValues, type Spot } from "./deck";
-import { hangPose, hangDrop, kneelPose, type Kneel } from "./hold";
+import { hangPose, hangDrop, fallReach, kneelPose, type Kneel } from "./hold";
+
+const G = 9.81;
+/** Seconds of fall over which the legs brace for the ground. */
+const BRACE_TIME = 0.3;
 
 export const CARRY_DEFAULTS = {
   craneRange: 21,
-  craneDwell: 1,
+  craneDwell: 0.4,
   craneGrip: 1.7,
   craneGripTol: 1.2,
   craneClear: 1.5,
   craneDeployReach: 21,
   craneFollow: 2,
   craneCarryTurn: 25,
-  craneLaunchDwell: 0.8,
+  craneLaunchDwell: 0.4,
+  craneDropHeight: 3,
+  craneDropSteady: 0.35,
+  craneLandSink: 0.75,
+  craneLandKick: 0.6,
+  craneLandShake: 0.5,
   craneHover: 0.8,
   craneSwingLean: 0.6,
   deckParkTime: 1.6,
@@ -48,13 +60,18 @@ export const CARRY_PARAMS: Param[] = [
   { key: "craneDeployReach", label: "Launch reach (m)", min: 8, max: 40, step: 0.5, group: "Pick-up and launch", tip: "How far out to the side the mech is set down on the sand" },
   { key: "craneFollow", label: "Forced follow (s)", min: 0, max: 6, step: 0.1, group: "Pick-up and launch", tip: "After release the mech walks with the convoy this long before WASD comes back" },
   { key: "craneCarryTurn", label: "Carried turn (°/s)", min: 0, max: 120, step: 1, group: "Pick-up and launch", tip: "How fast a carried mech is turned to face along the platform" },
+  { key: "craneDropHeight", label: "Drop height (m)", min: 0, max: 8, step: 0.1, group: "Drop-off", tip: "How far the mech's feet fall to the sand when the crane lets go on a launch" },
+  { key: "craneDropSteady", label: "Let go within (m)", min: 0.05, max: 2, step: 0.05, group: "Drop-off", tip: "The crane lets go once the swing is smaller than this (bigger: quicker, less tidy)" },
+  { key: "craneLandSink", label: "Landing crouch (m)", min: 0, max: 1.5, step: 0.05, group: "Drop-off", tip: "How low the hips go on touchdown before springing back (scaled by how hard it landed)" },
+  { key: "craneLandKick", label: "Landing thud", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Share of the fall speed that hits the body's thud spring (squashes the hocks)" },
+  { key: "craneLandShake", label: "Landing shake (m)", min: 0, max: 2, step: 0.05, group: "Drop-off", tip: "Camera shake on touchdown (scaled by how hard it landed)" },
   { key: "craneSwingLean", label: "Body leans with swing", min: 0, max: 1, step: 0.05, group: "Crane swing", tip: "How much of the rope's angle the hanging mech's body takes (1 = hangs rigidly in line with the rope)" },
   { key: "deckParkTime", label: "Park settle (s)", min: 0.3, max: 5, step: 0.1, group: "Deck", tip: "How long the mech takes to kneel in a parking bay (and stand up again)" },
   { key: "deckCrouch", label: "Park crouch (m)", min: 0, max: 1.6, step: 0.05, group: "Deck", tip: "How far the hips drop when parked" },
   { key: "deckParkPitch", label: "Park nose-down (°)", min: -10, max: 25, step: 0.5, group: "Deck", tip: "How far the hull tips forward when parked" },
 ];
 
-export type CarryState = "walking" | "inRange" | "pickup" | "lifting" | "aboard" | "parked" | "launching" | "deploying" | "landing";
+export type CarryState = "walking" | "inRange" | "pickup" | "lifting" | "aboard" | "parked" | "launching" | "deploying" | "falling" | "landing";
 type Phase = "reach" | "lower" | "lift" | "swing" | "hover" | "set" | "drop" | "settle" | "rise" | "";
 type Values = CarryValues & DeckValues & CraneValues;
 
@@ -89,9 +106,42 @@ export class CraneCarry {
   private kneel: Kneel = { x: 0, z: 0, relHeading: 0, k: 0, crouch: 0, pitch: 0, from: null };
   /** Where (deck-local) the launch was called. */
   private launchAt = { x: 0, z: 0 };
+  /** The falling mech (after a launch lets go): hips position and velocity, seconds falling. */
+  readonly fall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, t: 0, heading: 0 };
+  /** Last touchdown: how fast it hit (m/s down) and how long it fell; for the check and HUD. */
+  lastLanding = { speed: 0, time: 0 };
+  /** Called on touchdown with where (the hips' spot on the ground) and the fall speed (m/s): dust, marks, shake, sound. */
+  onTouchdown: ((x: number, y: number, z: number, speed: number) => void) | null = null;
 
-  constructor(public v: Values, readonly crane: Crane, readonly field: DuneField) {
-    this.ground = new DeckGround(field, crane.platform);
+  /** Every crane (one per mech bay), and the one in use: the nearest while walking, the one whose deck the mech is on. */
+  readonly cranes: Crane[];
+  crane: Crane;
+
+  constructor(public v: Values, cranes: Crane | Crane[], readonly field: DuneField) {
+    this.cranes = Array.isArray(cranes) ? cranes : [cranes];
+    this.crane = this.cranes[0];
+    this.ground = new DeckGround(field, this.crane.platform);
+  }
+
+  /** Switch to another crane (and its bay's deck). */
+  private use(c: Crane) {
+    if (c === this.crane) return;
+    this.crane = c;
+    this.ground.bay = c.platform;
+    this.snap.take(c.platform);
+  }
+
+  /** Distance from the nearest crane's mast, and that crane. */
+  nearest(sim: WalkerSim) {
+    let best = this.crane, bd = Infinity;
+    for (const c of this.cranes) { const d = Math.hypot(sim.pos.x - c.base.x, sim.pos.z - c.base.z); if (d < bd) { bd = d; best = c; } }
+    return { crane: best, d: bd };
+  }
+
+  /** A crane's stowed aim: over its own set-down pad. */
+  private stowCrane(c: Crane) {
+    const s = c.relLocal(0, this.v.craneSetDown * c.platform.craneEnd);
+    c.aim(s.slew, s.radius, null);
   }
 
   get platform(): Platform { return this.crane.platform; }
@@ -111,7 +161,8 @@ export class CraneCarry {
         return "aboard: walk to a parking bay (E parks) or a launch pad";
       case "parked": return this.phase === "rise" ? "standing up" : "parked, the pilot can climb out here (not built yet) · E to stand up";
       case "launching": return "on the launch pad: crane coming (step off to cancel)";
-      case "deploying": return { lift: "lifted off the deck", swing: "swinging out", hover: "steadying over the sand", drop: "lowering to the sand" }[this.phase as "lift"] ?? "launching";
+      case "deploying": return { lift: "lifted off the deck", swing: "swinging out", hover: "steadying over the sand" }[this.phase as "lift"] ?? "launching";
+      case "falling": return "dropped";
       case "landing": return "launched: keep pace";
     }
   }
@@ -119,9 +170,10 @@ export class CraneCarry {
   /** Distance (horizontal) from the crane's mast to the mech. */
   distance(sim: WalkerSim) { return Math.hypot(sim.pos.x - this.crane.base.x, sim.pos.z - this.crane.base.z); }
 
-  /** Start aboard (lab flag): the mech stands on the set-down pad. */
-  putAboard(sim: WalkerSim) {
-    const p = this.platform, w = p.toWorld(0, 0, this.v.craneSetDown);
+  /** Start aboard (lab flag): the mech stands on the set-down pad (of the given crane's bay, or the one in use). */
+  putAboard(sim: WalkerSim, crane: Crane = this.crane) {
+    this.use(crane);
+    const p = this.platform, w = p.toWorld(0, 0, this.v.craneSetDown * p.craneEnd);
     this.toDeck(sim, w.x, w.z, p.heading);
   }
 
@@ -131,6 +183,19 @@ export class CraneCarry {
     this.crane.snapTo(r.slew, r.radius, sim.pelvis.y + this.v.craneGrip);
     this.state = "lifting"; this.phase = "lift"; this.attached = true; this.pickups++;
     this.relHeading = wrap(sim.heading - this.platform.heading);
+  }
+
+  /** Lab start-up (?drop): the crane has just let go of the mech out over the sand on this side, feet craneDropHeight up. */
+  dropBeside(sim: WalkerSim, side: 1 | -1) {
+    const cr = this.crane, p = this.platform, v = this.v;
+    const w = p.toWorld(side * v.craneDeployReach, 0, cr.mount), g = this.field.height(w.x, w.z);
+    sim.reset(w.x, w.z, p.heading);
+    const y = g + hangDrop(sim) + v.craneGrip + v.craneDropHeight;
+    const r = cr.rel(w.x, w.z);
+    cr.snapTo(r.slew, r.radius, y);
+    this.state = "deploying"; this.phase = "hover"; this.attached = true; this.side = side; this.relHeading = 0;
+    hangPose(sim, { x: cr.cradle.x, y: cr.cradle.y, z: cr.cradle.z, grip: v.craneGrip, heading: p.heading, floorY: g, leanX: 0, leanZ: 0, deck: null });
+    this.drop(sim);
   }
 
   /** Launch from where the mech stands on the deck (a shortcut; normally walk onto a launch pad). */
@@ -173,22 +238,29 @@ export class CraneCarry {
    * with, or null when the walker is held (its pose has been written here; don't step it).
    */
   update(dt: number, sim: WalkerSim, cmd: MoveCommand): MoveCommand | null {
-    const v = this.v, cr = this.crane, p = this.platform;
+    const v = this.v;
     if (sim.ground !== this.ground) sim.ground = this.ground;
+    // Walking on the sand: the nearest crane is the one that will come.
+    if (this.state === "walking" || this.state === "inRange") {
+      const n = this.nearest(sim);
+      if (n.crane !== this.crane) { this.use(n.crane); if (this.state === "inRange") this.timer = 0; }
+      if (!this.armed && n.d > v.craneRange + 2) this.armed = true;
+    }
+    const cr = this.crane, p = this.platform;
+    for (const c of this.cranes) { c.steadying = false; if (c !== cr) this.stowCrane(c); }
     const hip = sim.v.hipHeight;
     const dist = this.distance(sim);
-    const setDown = cr.relLocal(0, v.craneSetDown);
-    const deckY = () => p.toWorld(0, p.deck, v.craneSetDown).y;
+    const setZ = v.craneSetDown * p.craneEnd;
+    const setDown = cr.relLocal(0, setZ);
+    const deckY = () => p.toWorld(0, p.deck, setZ).y;
     const liftY = () => Math.max(deckY(), p.y + p.deck) + RAIL + v.craneClear + hangDrop(sim) + v.craneGrip;
     const stow = () => cr.aim(setDown.slew, setDown.radius, null);
     let out: MoveCommand | null = cmd;
-    cr.steadying = false;
     this.spot = this.onDeck ? spotAt(sim, p, v) : null;
 
     switch (this.state) {
       case "walking":
         stow();
-        if (!this.armed && dist > v.craneRange + 2) this.armed = true;
         if (this.armed && dist < v.craneRange) { this.state = "inRange"; this.timer = 0; }
         break;
       case "inRange":
@@ -210,7 +282,8 @@ export class CraneCarry {
         out = null;
         if (this.phase === "lift") {
           cr.aim(cr.slew, cr.radius, liftY());
-          if (cr.settled(Math.PI, 0.15)) this.phase = "swing";
+          // Swing once nearly up (the rope keeps paying in on the way; craneClear keeps the feet over the rail).
+          if (cr.settled(Math.PI, 0.8)) this.phase = "swing";
         } else if (this.phase === "swing") {
           cr.aim(setDown.slew, setDown.radius, liftY());
           if (cr.settled(1.5 * D2R, 0.3)) this.phase = "hover";
@@ -251,23 +324,37 @@ export class CraneCarry {
       }
       case "deploying": {
         out = null;
-        const side = cr.relLocal(this.side * v.craneDeployReach, v.craneMount);
+        const side = cr.relLocal(this.side * v.craneDeployReach, cr.mount);
         const g = this.field.height(cr.cradle.x, cr.cradle.z);
         if (this.phase === "lift") {
           cr.aim(cr.slew, cr.radius, liftY());
-          if (cr.settled(Math.PI, 0.15)) this.phase = "swing";
+          // Swing once nearly up (the rope keeps paying in on the way; craneClear keeps the feet over the rail).
+          if (cr.settled(Math.PI, 0.8)) this.phase = "swing";
         } else if (this.phase === "swing") {
           cr.aim(side.slew, side.radius, liftY());
           if (cr.settled(1.5 * D2R, 0.3)) this.phase = "hover";
-        } else if (this.phase === "hover") {
-          cr.steadying = true;
-          cr.aim(side.slew, side.radius, g + hip + v.craneGrip + v.craneHover);
-          if (cr.settled(1.5 * D2R, 0.1) && cr.steady(0.15)) this.phase = "drop";
         } else {
+          // Steady with the feet craneDropHeight over the sand, then let go.
           cr.steadying = true;
-          cr.aim(side.slew, side.radius, g + hip + v.craneGrip - 0.2);
-          if (cr.cradle.y - v.craneGrip <= g + hip + 0.03) { this.release(sim); out = this.follow(sim); }
+          const want = g + hangDrop(sim) + v.craneGrip + v.craneDropHeight;
+          cr.aim(side.slew, side.radius, want);
+          if (cr.settled(3 * D2R, 0.25) && cr.steady(v.craneDropSteady)) this.drop(sim);
         }
+        break;
+      }
+      case "falling": {
+        out = null;
+        stow();
+        const f = this.fall;
+        f.t += dt;
+        f.vy -= G * dt;
+        f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+        const brace = Math.min(1, f.t / BRACE_TIME);
+        const reach = fallReach(sim, brace);
+        // First contact: the ground under either foot (or the middle), whichever is highest.
+        const lx = Math.cos(f.heading) * sim.v.footSpread, lz = -Math.sin(f.heading) * sim.v.footSpread;
+        const ground = Math.max(this.field.height(f.x, f.z), this.field.height(f.x + lx, f.z + lz), this.field.height(f.x - lx, f.z - lz));
+        if (f.y - reach <= ground) { this.touchdown(sim); out = this.follow(sim); break; }
         break;
       }
       case "parked": {
@@ -286,14 +373,22 @@ export class CraneCarry {
       case "landing":
         stow();
         this.timer -= dt;
-        if (dist > v.craneRange + 2) this.armed = true;
+        if (this.nearest(sim).d > v.craneRange + 2) this.armed = true;
         if (this.timer <= 0) this.state = "walking";
         else out = this.follow(sim);
         break;
     }
     this.ground.onDeck = this.onDeck || this.state === "parked";
 
-    cr.step(dt);
+    for (const c of this.cranes) c.step(dt);
+
+    if (this.state === "falling") {
+      const f = this.fall;
+      hangPose(sim, {
+        x: f.x, y: f.y + v.craneGrip, z: f.z, grip: v.craneGrip, heading: f.heading,
+        floorY: this.field.height(f.x, f.z), leanX: 0, leanZ: 0, deck: null, brace: Math.min(1, f.t / BRACE_TIME),
+      });
+    }
 
     // Pose a held mech.
     if (this.attached) {
@@ -317,6 +412,7 @@ export class CraneCarry {
     const gripY = sim.pelvis.y + v.craneGrip;
     const off = Math.hypot(cr.cradle.x - sim.pelvis.x, cr.cradle.z - sim.pelvis.z);
     if (this.phase === "reach") {
+      cr.steadying = true;
       cr.aim(r.slew, r.radius, gripY + 3);
       if (off < 1.2 && cr.settled(4 * D2R, 1)) this.phase = "lower";
       return false;
@@ -342,17 +438,32 @@ export class CraneCarry {
     this.snap.take(this.platform);
   }
 
-  /** Let go onto the sand at the convoy's speed, facing along it. */
-  private release(sim: WalkerSim) {
-    const p = this.platform;
+  /** Let go over the sand: the mech falls from the cradle with the convoy's velocity (and the cradle's sink rate). */
+  private drop(sim: WalkerSim) {
+    const p = this.platform, f = this.fall;
     this.attached = false;
-    this.state = "landing"; this.phase = ""; this.timer = this.v.craneFollow;
-    this.armed = false;
+    this.state = "falling"; this.phase = ""; this.armed = false;
     this.deploys++;
     this.ground.onDeck = false;
-    sim.reset(this.crane.cradle.x, this.crane.cradle.z, p.heading);
+    f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
+    f.vx = p.vel.x; f.vz = p.vel.z; f.vy = Math.min(0, this.crane.cradleVel.y);
+    f.t = 0;
+    f.heading = wrap(p.heading + this.relHeading);
+  }
+
+  /** Feet on the sand: back on its own legs at the convoy's speed, facing along it, landing heavily. */
+  private touchdown(sim: WalkerSim) {
+    const p = this.platform, f = this.fall, v = this.v;
+    this.state = "landing"; this.phase = ""; this.timer = v.craneFollow;
+    const speed = -f.vy;
+    this.lastLanding = { speed, time: f.t };
+    sim.reset(f.x, f.z, p.heading);
     sim.speed = p.speed;
     sim.vel.set(Math.sin(p.heading) * p.speed, 0, Math.cos(p.heading) * p.speed);
+    // How hard, against a 3 m fall (about 7.7 m/s).
+    const k = Math.min(1.6, speed / 7.7);
+    sim.thud(v.craneLandSink * k, v.craneLandKick * speed);
+    this.onTouchdown?.(f.x, this.field.height(f.x, f.z), f.z, speed);
   }
 
   /** The forced walk after a launch: along the convoy at its speed. */

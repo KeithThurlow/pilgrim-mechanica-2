@@ -8,7 +8,8 @@
 // between them high enough to walk under, crawler tracks on the big ones leaving ruts and dust, pipe runs, vehicles
 // tied down on the motor pool and escorts driving alongside.
 // Flags: ?manual (no demo), ?aboard (start on the deck), ?deploy (start on the deck and launch at once), ?park (start
-// parked), ?hang (start hanging from the crane over the sand), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
+// parked), ?hang (start hanging from the crane over the sand), ?drop (just let go over the sand, falling), ?threat (a
+// marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
@@ -48,6 +49,8 @@ import { ConvoyTrail, TRAIL_DEFAULTS, TRAIL_PARAMS } from "../../src/convoy/trai
 import { EscortGroup, ESCORT_DEFAULTS, ESCORT_PARAMS } from "../../src/convoy/escort";
 import { EscortBodies } from "../../src/convoy/escortBody";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
+import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
+import { DefenceBody } from "../../src/convoy/defenceBody";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -56,12 +59,12 @@ const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
-  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS,
+  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
   radius: 5, shadowBox: 60,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
@@ -79,15 +82,15 @@ const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
 scene.add(bf.group);
 
-// The convoy, its crane, and their stand-in bodies.
+// The convoy, its cranes (one per mech bay: the lead's and the rear one's), and their stand-in bodies.
 const convoy = new Convoy(route, V, field);
 convoy.reset(0, 0);
-const crane = new Crane(V, convoy.bay);
-const carry = new CraneCarry(V, crane, field);
-const bodies = convoy.platforms.map((p) => new PlatformBody(p, p === convoy.bay ? V : null, V, convoy.platforms));
+const cranes = convoy.bays.map((b) => new Crane(V, b));
+const carry = new CraneCarry(V, cranes, field);
+const bodies = convoy.platforms.map((p) => new PlatformBody(p, p.spec.kind === "bay" ? V : null, V, convoy.platforms));
 for (const b of bodies) { b.update(); scene.add(b.root); }
-const craneBody = new CraneBody(crane, bodies[convoy.platforms.indexOf(convoy.bay)]);
-scene.add(craneBody.group);
+const craneBodies = cranes.map((c) => new CraneBody(c, bodies[convoy.platforms.indexOf(c.platform)]));
+for (const c of craneBodies) scene.add(c.group);
 // Footbridges between the cars, escorts alongside, and the ruts and dust they all leave.
 const bridges = new BridgeBody();
 scene.add(bridges.group);
@@ -96,6 +99,14 @@ const escorts = new EscortGroup(V, convoy, field);
 const escortBodies = new EscortBodies(escorts);
 scene.add(escortBodies.group);
 const trail = new ConvoyTrail(V, bf, field);
+// Turrets on the cars (no enemies here: they sweep, or track the ?threat marker; the fire hook is left for combat).
+const defence = new Defence(V, convoy.platforms);
+const defenceBody = new DefenceBody(defence);
+scene.add(defenceBody.group);
+const threatOn = params.has("threat");
+const threatMark = new THREE.Mesh(new THREE.OctahedronGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xff4030, toneMapped: false }));
+threatMark.visible = threatOn;
+scene.add(threatMark);
 
 // The player's Rampart.
 const body = await RampartBody.load(toon);
@@ -112,6 +123,22 @@ const sim = player.sim;
   sim.onLiftOff = (f, k) => { if (!carry.ground.onDeck) lift?.(f, k); };
 }
 
+// A launch drop lands heavily: a burst of sand, deep prints and a scuffed crater, a bang, and a camera shake.
+let shake = 0;
+carry.onTouchdown = (x, y, z, speed) => {
+  const k = Math.min(1.6, speed / 7.7), at = new THREE.Vector3(x, y, z);
+  const pv = carry.platform.vel;
+  bf.dust.stomp(x, y, z, 2.4 * k, pv.x, pv.z);
+  for (const f of sim.feet) {
+    bf.dust.stomp(f.planted.x, f.planted.y, f.planted.z, 1.4 * k, pv.x, pv.z);
+    bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, 1.6 * k);
+  }
+  // crater() lays one mark every craterEvery calls: call it that many times so the landing always leaves one.
+  for (let i = 0; i < Math.max(1, Math.round(V.craterEvery)); i++) bf.marks.crater(x, z, 5 * k);
+  bf.sfx.play("brap", at, 1.6 * k, 0.4, false);
+  shake = Math.max(shake, V.craneLandShake * k);
+};
+
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();
 let auto = !params.has("manual");
@@ -122,6 +149,17 @@ canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerT
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 let deployAsked = false, parkAsked = false;
+// Space: dash the way WASD points (Keith 2026-10-25: the dash in every lab), on charges; hold for boost with fuel.
+let dashPressed = false, spaceDown = false;
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  e.preventDefault();
+  dashPressed = true;
+  spaceDown = true;
+  auto = false;
+});
+addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+addEventListener("blur", () => { spaceDown = false; });
 addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement || e.repeat) return;
   if (e.code === "KeyG") { deployAsked = true; auto = false; }
@@ -132,12 +170,12 @@ addEventListener("keydown", (e) => {
 function restart() {
   convoy.reset(0, 0);
   escorts.reset();
-  crane.place();
+  for (const c of cranes) c.place();
   streamer.rebuildAll();
   const p = convoy.bay, at = p.toWorld(32, 0, V.craneMount + 25);
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
   player.reset(at.x, at.z, p.heading);
-  crane.calm();
+  for (const c of cranes) c.calm();
   if (params.has("aboard") || params.has("deploy") || params.has("park")) carry.putAboard(sim);
   if (params.has("deploy")) carry.deploy(sim, 1);
   if (params.has("park")) {
@@ -146,6 +184,7 @@ function restart() {
     sim.reset(w.x, w.z, p.heading);
     carry.togglePark(sim);
   }
+  if (params.has("drop")) carry.dropBeside(sim, 1);
   if (params.has("hang")) {
     // Hanging from the crane out over the sand beside the bay, as if just picked up.
     const w = p.toWorld(16, 0, V.craneMount + 6);
@@ -176,10 +215,11 @@ const panel = tweakPanel({
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Sand marks"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
-    { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch"] },
+    { id: "defence", label: "Defences", groups: ["Defences"] },
+    { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
     { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Mech health", "Torso & guns", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -195,7 +235,8 @@ const panel = tweakPanel({
 const regions = body.regions();
 selector = new Selector(app, {
   items: [
-    { topic: "cranes", label: "Crane", objects: () => craneBody.meshes() },
+    { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
+    { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
     { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },
     { topic: "tracks", label: "Crawler tracks", objects: () => bodies.flatMap((b) => b.trackMeshes()) },
     { topic: "pipes", label: "Pipes", objects: () => bodies.flatMap((b) => b.pipeMeshes()) },
@@ -249,7 +290,7 @@ let clock = 0;
 // alternate), launched, walk off out of range, come back.
 const demo = { stage: "park" as "park" | "launch", wait: 0, awayFor: 0, leaving: false, side: 1 as 1 | -1 };
 function demoCmd(dt: number): MoveCommand {
-  const p = convoy.bay, still = { x: 0, z: 0, sprint: false };
+  const p = carry.platform, still = { x: 0, z: 0, sprint: false };
   const spots = deckLayout(p, V).spots;
   if (carry.state === "aboard" || carry.state === "parked" || carry.state === "launching") {
     if (carry.state === "parked") {
@@ -278,7 +319,7 @@ function demoCmd(dt: number): MoveCommand {
   if (carry.state === "lifting") return still;
   // Walk to a spot beside the crane, keeping up with the convoy.
   const l = p.toLocal(sim.pos.x, sim.pos.z), s = Math.sign(l.x) || 1;
-  const at = p.toWorld(s * 15, 0, V.craneMount + 4);
+  const at = p.toWorld(s * 15, 0, carry.crane.mount + 4 * p.craneEnd);
   const dx = at.x - sim.pos.x, dz = at.z - sim.pos.z, d = Math.hypot(dx, dz);
   if (d < 2) return { x: p.fwd.x * (p.speed / V.walkSpeed), z: p.fwd.z * (p.speed / V.walkSpeed), sprint: false };
   return { x: dx / d, z: dz / d, sprint: d > 12 };
@@ -322,9 +363,24 @@ app.onTick((rawDt) => {
     for (const e of escorts.list) trail.car(e, e.sim, e.moved, e.kind === "technical" ? 0.45 : 0.6);
   }
   trail.update(convoy.platforms);
+  // ?threat: a marker circling the train 45 m out, for the turrets to track.
+  if (threatOn) {
+    const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
+    threatMark.position.set(mid.x + Math.sin(a) * 60, mid.y + 6, mid.z + Math.cos(a) * 60);
+    defence.target([threatMark.position]);
+  } else defence.target([]);
+  defence.update(dt);
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);
   if (out) {
+    // Dash only while the mech walks free (on the sand or the deck), not hanging, parked, falling or in the forced follow.
+    const free = carry.state === "walking" || carry.state === "inRange" || carry.state === "pickup" || carry.state === "aboard" || carry.state === "launching";
+    if (dashPressed && free) {
+      // With no keys held, dash the way the legs face.
+      if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
+      else player.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
+    }
+    player.dashHold = spaceDown && !auto && free;
     player.step(dt, out, aim, trigger && carry.state === "walking");
     carry.keep(sim);
     if (!carry.ground.onDeck && V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
@@ -335,11 +391,13 @@ app.onTick((rawDt) => {
     body.update(sim, player.upper);
   }
 
+  dashPressed = false;
   for (const b of bodies) b.update();
-  craneBody.update();
+  for (const c of craneBodies) c.update();
   spans = bridgeSpans(convoy.platforms, V, spans);
   bridges.update(spans, dt);
   escortBodies.update();
+  defenceBody.update();
 
   reticle.visible = !!aim;
   if (aim) {
@@ -349,6 +407,12 @@ app.onTick((rawDt) => {
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   iso.update(follow, rawDt);
+  if (shake > 0.002) {
+    camera.position.x += (Math.random() * 2 - 1) * shake;
+    camera.position.y += (Math.random() * 2 - 1) * shake * 0.6;
+    camera.position.z += (Math.random() * 2 - 1) * shake;
+    shake *= Math.exp(-7 * rawDt);
+  } else shake = 0;
   toon.update(camera, canvas.clientHeight);
   streamer.update(follow.x, follow.z);
   const camDist = camera.position.distanceTo(follow);
@@ -358,5 +422,9 @@ app.onTick((rawDt) => {
   const p = convoy.bay;
   app.hud.set("convoy", `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
-  app.hud.set("crane", `crane: ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
+  const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
+    + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+  app.hud.set("dash", `dash ${dashDots} (Space)`);
+  const crane = carry.crane;
+  app.hud.set("crane", `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });
