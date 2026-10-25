@@ -68,8 +68,8 @@ export class SalvageSim {
   has(poi: string) { return this.sections.some((s) => s.poi === poi); }
 
   /** The nearest unfinished spot within reach of (x, z), else null. */
-  nearest(x: number, z: number): SpotState | null {
-    let best: SpotState | null = null, bd = this.v.salvageReach;
+  nearest(x: number, z: number, reach = this.v.salvageReach): SpotState | null {
+    let best: SpotState | null = null, bd = reach;
     for (const s of this.spots) {
       if (s.done) continue;
       const d = Math.hypot(s.x - x, s.z - z);
@@ -78,17 +78,20 @@ export class SalvageSim {
     return best;
   }
 
-  /** One step: the mech's hips at (x, z), E held or not. */
-  update(dt: number, x: number, z: number, holding: boolean) {
+  /**
+   * One step: the mech's hips (or the pilot on foot) at (x, z), E held or not. reach, rate and noise: the pilot's
+   * own (a shorter reach, slower, quieter); the mech's by default.
+   */
+  update(dt: number, x: number, z: number, holding: boolean, reach = this.v.salvageReach, rate = 1, noise = 1) {
     // Keep stripping the same spot while it stays in reach; else the nearest.
-    const keep = this.active && !this.active.done && Math.hypot(this.active.x - x, this.active.z - z) <= this.v.salvageReach ? this.active : null;
-    this.inReach = keep ?? this.nearest(x, z);
+    const keep = this.active && !this.active.done && Math.hypot(this.active.x - x, this.active.z - z) <= reach ? this.active : null;
+    this.inReach = keep ?? this.nearest(x, z, reach);
     this.active = holding ? this.inReach : null;
     const s = this.active;
     if (!s) { this.noiseT = 0; return; }
-    s.progress = Math.min(1, s.progress + (dt * this.v.stripSpeed) / s.time);
+    s.progress = Math.min(1, s.progress + (dt * this.v.stripSpeed * rate) / s.time);
     this.noiseT -= dt;
-    if (this.noiseT <= 0) { this.noiseT += this.v.noiseEvery; this.onNoise?.(s.x, s.z, this.v.noiseRadius); }
+    if (this.noiseT <= 0) { this.noiseT += this.v.noiseEvery; if (noise > 0) this.onNoise?.(s.x, s.z, this.v.noiseRadius * noise); }
     if (s.progress >= 1) {
       s.done = true;
       this.scrap += this.pay(s);

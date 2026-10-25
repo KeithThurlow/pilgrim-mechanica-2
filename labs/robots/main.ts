@@ -95,6 +95,7 @@ function spawnPack() {
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
 let packClock = Infinity, slot = 2; // the first pack comes at once
+let lastPrey = "mech";
 lab.targets = () => {
   const out: TargetCandidate[] = [];
   for (let i = 0; i < sw.hi; i++) {
@@ -114,10 +115,17 @@ let wadeTick = 0;
 lab.onFrame((dt) => {
   packClock += dt;
   if (sw.count < V.robotSwarmSize && packClock >= V.robotGroupEvery) { packClock = 0; spawnPack(); }
-  const p = player.sim.pelvis;
-  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 2, vx: player.sim.vel.x, vz: player.sim.vel.z },
+  // The swarm goes for the mech, or the pilot on foot when he's nearer to it (src/pilot/quarry.ts); a change of prey
+  // shakes the clingers off.
+  let cx = 0, cz = 0, n = 0;
+  for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DOWN) { cx += sw.px[i]; cz += sw.pz[i]; n++; }
+  const prey = n ? lab.prey(cx / n, cz / n) : lab.prey(player.sim.pos.x, player.sim.pos.z);
+  if (prey.kind !== lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
+  lastPrey = prey.kind;
+  const p = prey.at;
+  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.radius, vx: prey.sim.vel.x, vz: prey.sim.vel.z, latchLow: prey.latchLow, latchHigh: prey.latchHigh },
     (fx, fy, fz, tx, ty, tz, kind) => {
-      if (!player.alive) return;
+      if (!prey.alive) return;
       from.set(fx, fy, fz);
       if (!bf.canSee(from, p)) return;
       dir.set(tx - fx, ty - fy, tz - fz).normalize();
@@ -129,14 +137,14 @@ lab.onFrame((dt) => {
         drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
     },
     (i, damage) => {
-      if (!player.alive) return;
-      player.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up);
+      if (!prey.alive) return;
+      prey.unit.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up);
       tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z);
     },
     (_i, damage, x, y, z) => {
-      if (!player.alive) return;
+      if (!prey.alive) return;
       // A saw strike: the damage plus a heavier spray of sparks and a torn plate where the blade bites the hull.
-      player.damage(damage, bitePos.set(x, y, z), up);
+      prey.unit.damage(damage, bitePos.set(x, y, z), up);
       tear.bite(x, y, z, p.x, p.z);
       tear.bite(x, y, z, p.x, p.z);
     });

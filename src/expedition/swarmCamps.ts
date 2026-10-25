@@ -15,6 +15,7 @@ import { RobotTearFx, type RobotTearValues } from "../combat/robotTearFx";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
 import type { CampField, Camp } from "./camps";
+import type { Prey } from "../pilot/quarry";
 
 export const SWARM_CAMP_DEFAULTS = { campWake: 130, campGiveUp: 320, campSpawn: 650, campDrop: 950, campHear: 1 };
 export type SwarmCampValues = typeof SWARM_CAMP_DEFAULTS;
@@ -86,11 +87,15 @@ export class SwarmCamps {
     this.camps.reset();
   }
 
+  /** Who the swarm went for last frame (a change shakes the clingers off). */
+  private lastPrey: Prey["kind"] | null = null;
+
   /**
    * One frame. hunting: the mech is out in the field and alive (else every camp gives up). Streams camps, wakes and
-   * calms them, steps the swarm against the mech.
+   * calms them, steps the swarm against the mech, or against prey (src/pilot/quarry.ts: the pilot on foot when he's
+   * nearer). pilot: where the pilot is on foot and how much closer than the mech he has to be to wake a camp.
    */
-  update(dt: number, hunting: boolean) {
+  update(dt: number, hunting: boolean, prey?: Prey, pilot?: { x: number; z: number; notice: number } | null) {
     const p = this.player.sim.pelvis, v = this.v, sw = this.sw;
     // Stream camps in and out round the mech.
     this.near.length = 0;
@@ -114,7 +119,8 @@ export class SwarmCamps {
     // Wake (close, shot) and calm (the mech gone).
     for (const l of this.live.values()) {
       const hp = this.hp(l), d = this.dist(l, p.x, p.z);
-      if (hunting && !l.awake && (d < v.campWake || hp < l.hp - 1e-3)) l.awake = true;
+      const dp = pilot ? this.dist(l, pilot.x, pilot.z) : Infinity;
+      if (hunting && !l.awake && (d < v.campWake || dp < v.campWake * (pilot?.notice ?? 0) || hp < l.hp - 1e-3)) l.awake = true;
       l.hp = hp;
       if (l.awake && (!hunting || d > v.campGiveUp)) l.awake = false;
       for (const i of this.own(l)) {
@@ -125,30 +131,35 @@ export class SwarmCamps {
       }
     }
     if (!sw.hi) return;
-    const player = this.player, bf = this.bf;
-    sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 2, vx: player.sim.vel.x, vz: player.sim.vel.z },
+    const bf = this.bf;
+    // The mech, or the pilot on foot (a change of prey shakes the clingers off the old one).
+    const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
+    if (this.lastPrey && q.kind !== this.lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
+    this.lastPrey = q.kind;
+    const T = q.at;
+    sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.radius, vx: q.sim.vel.x, vz: q.sim.vel.z, latchLow: q.latchLow, latchHigh: q.latchHigh },
       (fx, fy, fz, tx, ty, tz, kind) => {
-        if (!player.alive) return;
+        if (!q.alive) return;
         const from = this.from.set(fx, fy, fz);
-        if (!bf.canSee(from, p)) return;
+        if (!bf.canSee(from, T)) return;
         this.dir.set(tx - fx, ty - fy, tz - fz).normalize();
         const drawn = kind !== SMALL || Math.random() < 0.5;
         if (drawn) this.slot = this.slot >= 19 ? 2 : this.slot + 1;
         const damage = kind === BIG ? v.robotBigShotDamage : kind === MID ? v.robotMidShotDamage : v.robotShotDamage;
         const look = kind === BIG ? { flash: 1.2, hit: 1 } : kind === MID ? { flash: 0.7, hit: 0.6 } : { flash: 0.35, hit: 0.3 };
-        bf.fire(this.slot, 3, from, this.dir, from.distanceTo(p) + 8, damage,
+        bf.fire(this.slot, 3, from, this.dir, from.distanceTo(T) + 8, damage,
           drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
       },
       (i, damage) => {
-        if (!player.alive) return;
-        player.damage(damage, this.bite.set(sw.px[i], sw.py[i], sw.pz[i]), this.up);
-        this.tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z);
+        if (!q.alive) return;
+        q.unit.damage(damage, this.bite.set(sw.px[i], sw.py[i], sw.pz[i]), this.up);
+        this.tear.bite(sw.px[i], sw.py[i], sw.pz[i], T.x, T.z);
       },
       (_i, damage, x, y, z) => {
-        if (!player.alive) return;
-        player.damage(damage, this.bite.set(x, y, z), this.up);
-        this.tear.bite(x, y, z, p.x, p.z);
-        this.tear.bite(x, y, z, p.x, p.z);
+        if (!q.alive) return;
+        q.unit.damage(damage, this.bite.set(x, y, z), this.up);
+        this.tear.bite(x, y, z, T.x, T.z);
+        this.tear.bite(x, y, z, T.x, T.z);
       });
     this.draw.update(dt);
     this.tear.update(dt);

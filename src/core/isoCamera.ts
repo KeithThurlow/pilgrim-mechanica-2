@@ -50,6 +50,11 @@ export class IsoCamera {
   /** Jump the zoom to a distance (m), e.g. for review shots. */
   setDistance(d: number) { this.dist = this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.v.camFarDist); }
 
+  /** Glide the zoom to a distance (m) (the pilot getting out zooms in, getting back in zooms out). */
+  zoomTo(d: number) { this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.v.camFarDist); }
+  /** Where the zoom is heading (m). */
+  get zoomTarget() { return this.distTarget; }
+
   /** Pitch for a distance: in close -> game view -> far out, blended in log space. */
   pitchAt(d: number) {
     const v = this.v, L = Math.log;

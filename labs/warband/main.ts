@@ -46,7 +46,10 @@ lab.targets = () => {
   return out;
 };
 lab.onFrame((dt) => {
-  wb.update(dt, player);
+  // The band goes for the mech, or the pilot on foot when he's nearer to it (src/pilot/quarry.ts).
+  let cx = 0, cz = 0, n = 0;
+  for (const r of wb.raiders) if (r.alive) { cx += r.sim.pos.x; cz += r.sim.pos.z; n++; }
+  wb.update(dt, n ? lab.prey(cx / n, cz / n) : player);
   const live = wb.raiders.filter((r) => r.alive).length;
   lab.hud("band", `band ${wb.waves} · raiders ${live} live, ${wb.raiders.length - live} wrecked · bandit mechs ${wb.mechs.filter((m) => m.alive).length}`);
 });

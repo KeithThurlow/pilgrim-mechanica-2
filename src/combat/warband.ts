@@ -12,6 +12,12 @@ import type { Battlefield, Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import type { DeathPhysics, Dead } from "../physics/deaths";
 
+/**
+ * What the band goes for: the player's mech, or the pilot on foot (src/pilot/quarry.ts Prey has this shape): alive,
+ * an aim point, a ground position and a velocity.
+ */
+export interface WarTarget { alive: boolean; sim: { pelvis: THREE.Vector3; pos: THREE.Vector3; vel: THREE.Vector3 } }
+
 export const WARBAND_DEFAULTS = {
   bandTechnicals: 5,
   bandTrucks: 2,
@@ -286,7 +292,7 @@ export class Warband {
 
   get liveCount() { return this.raiders.filter((r) => r.alive && r.mode !== "flee").length + this.mechs.filter((m) => m.alive).length; }
 
-  update(dt: number, player: MechUnit) {
+  update(dt: number, player: WarTarget) {
     const v = this.v;
     const target = player.sim.pelvis;
     // Next band when this one is beaten (or there isn't one yet).
@@ -330,7 +336,7 @@ export class Warband {
     this.raiders.splice(i, 1);
   }
 
-  private drive(r: Raider, dt: number, player: MechUnit) {
+  private drive(r: Raider, dt: number, player: WarTarget) {
     const v = this.v, s = r.sim, T = player.sim.pelvis;
     // Driving sliders apply live.
     if (r.kind === "technical" || r.kind === "gunTruck") {
@@ -526,7 +532,7 @@ export class Warband {
     return { rate: v.tankRate, damage: v.tankDamage, spread: v.tankSpread, flash: 2.6, hit: 1.6 };
   }
 
-  private gunner(r: Raider, dt: number, player: MechUnit) {
+  private gunner(r: Raider, dt: number, player: WarTarget) {
     const v = this.v, s = r.sim;
     if (r.mode === "flee" || !player.alive) return;
     const T = this.aim.copy(player.sim.pelvis);
@@ -572,7 +578,7 @@ export class Warband {
   }
 
   /** Bandit mech: hold off at range, strafe across the player's guns, keep its own guns on the player. */
-  private walkMech(m: MechUnit, dt: number, player: MechUnit) {
+  private walkMech(m: MechUnit, dt: number, player: WarTarget) {
     if (!m.alive) { m.step(dt, { x: 0, z: 0, sprint: false }, null, false); return; }
     const p = m.sim.pos, T = player.sim.pelvis;
     const dx = T.x - p.x, dz = T.z - p.z, dist = Math.hypot(dx, dz) || 1;

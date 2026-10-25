@@ -103,6 +103,9 @@ export class MechUnit implements Hittable {
   lock: TargetCandidate | null = null;
   /** Rail cannons, autocannons, the salvo and the mortar (null: miniguns only). */
   weapons: MechWeapons | null = null;
+  /** Kneeling for the pilot (src/pilot/mount.ts): hips this far down (m) and the nose this far down (radians). */
+  kneel = 0;
+  kneelPitch = 0;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -207,11 +210,11 @@ export class MechUnit implements Hittable {
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
       dash.update(dt / sub, this.dashHold, cmd.x, cmd.z, grade);
       sim.push.set(dash.vx, 0, dash.vz);
-      sim.crouch = dash.crouch;
+      sim.crouch = dash.crouch + this.kneel;
       // Lean into the dash: along the heading pitches the nose, across it rolls.
       const fwd = dash.dirX * Math.sin(sim.heading) + dash.dirZ * Math.cos(sim.heading);
       const side = dash.dirX * Math.cos(sim.heading) - dash.dirZ * Math.sin(sim.heading);
-      sim.leanPitch = dash.lean * fwd;
+      sim.leanPitch = dash.lean * fwd + this.kneelPitch;
       sim.leanRoll = -dash.lean * side;
       sim.update(dt / sub, cmd);
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);

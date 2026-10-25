@@ -1,5 +1,6 @@
 // The shell every combat lab shares: streamed dunes and desert light, the battlefield (dust, marks, gun effects,
 // sound), the player's Rampart on twin-stick controls (WASD legs, mouse aim, left button fires, R resupplies), the
+// pilot (hold F to hop out and back in; the enemies pick him through lab.foot.quarry when he's nearer), the
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
 import * as THREE from "three/webgpu";
@@ -38,14 +39,17 @@ import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning"
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
 import type { Costs } from "../core/costs";
+import { Walkable } from "../world/walkable";
+import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../pilot/onFoot";
+import type { Prey } from "../pilot/quarry";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...WEAPON_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...MARK_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -102,6 +106,10 @@ export interface CombatLab<E extends object> {
   /** Set by a lab to split the frame into stages (src/core/costs.ts): the shell marks its own; a lab's onFrame marks
    * what it adds. The averaged line shows in the HUD. */
   costs: Costs | null;
+  /** The pilot: hold F to hop out and back in (src/pilot/onFoot.ts). */
+  foot: OnFoot;
+  /** Who an enemy group whose middle is at (x, z) goes for: the mech, or the pilot on foot when he's nearer. */
+  prey: (x: number, z: number) => Prey;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -162,10 +170,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
   const iso = new IsoCamera(camera, canvas, V);
   const keys = new Keys();
-  let auto = !params.has("manual");
+  // The pilot: hold F to hop out (the mech kneels where it stands), walk the sand, hold F by the mech to get back in.
+  const walkable = new Walkable(field);
+  const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
+  let auto = !params.has("manual") && !params.has("onfoot");
   let mouse: { x: number; y: number } | null = null;
   let mouseDown = false, rightDown = false;
-  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); F fires both.
+  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25). F no longer fires both
+  // (both buttons can be held at once); it's hold to hop out of the mech and back in (Keith 2026-10-26).
   // Read both buttons from the `buttons` bitmask on every pointer event: a browser sends pointerdown/up only for the
   // first button pressed and the last released, and a second button pressed while one is held arrives as a
   // pointermove, so tracking `button` on down/up lost the second gun (Keith 2026-10-25: couldn't hold both).
@@ -217,6 +229,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       WEAPON_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
+      PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Sand marks", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Streaming"] },
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
@@ -233,6 +246,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const regions = body.regions();
   selector = new Selector(app, {
     items: [
+      { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
       { topic: "legs", label: "Legs", objects: () => regions.legs },
       { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
@@ -243,7 +257,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     onPick: (topic) => { picking = true; panel.focus(topic); picking = false; },
   });
   const sel = selector;
-  installReport(app, o.id.replace(/-lab$/, ""), V, () => ({ selected: sel.selection, topic: panel.focused, hull: Math.round(player.health), ...(o.report?.() ?? {}) }));
+  installReport(app, o.id.replace(/-lab$/, ""), V, () => ({ selected: sel.selection, topic: panel.focused, hull: Math.round(player.health), pilot: `${foot.mount.state}${foot.sim.alive ? "" : " (dead)"}`, ...(o.report?.() ?? {}) }));
   Object.assign(V, body.legValues());
   panel.refresh();
 
@@ -275,7 +289,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     }
     player.reset(0, 0, 0);
   }
-  const follow = player.sim.pelvis.clone();
+  // ?onfoot: start on foot beside the mech.
+  if (params.has("onfoot")) foot.startOut();
+  const follow = foot.focus(new THREE.Vector3()) ?? player.sim.pelvis.clone();
   iso.snap(follow);
   if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
   const stick = new THREE.Vector3(), aimPt = new THREE.Vector3();
@@ -295,6 +311,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     arsenal,
     shake,
     costs: null,
+    foot,
+    prey: (x, z) => foot.quarry.pick(x, z),
   };
 
   // For headless debugging and tests: the lab on the page (window.__lab).
@@ -317,6 +335,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   let lock: ReturnType<Targeting["pick"]> = null;
 
   const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
+  /** ?holdf=seconds: F held from the start (headless shots of getting out). */
+  const holdF = Number(params.get("holdf") ?? 0);
   app.onTick((rawDt) => {
     const dt = fixedDt || rawDt;
     const cst = lab.costs;
@@ -325,7 +345,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     clock += dt;
     keys.move(camera, stick);
     if (keys.has("KeyR") || (auto && player.upper.guns[0].ammo < 100)) player.upper.resupply();
-    if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
+    const fHeld = keys.has("KeyF") || clock < holdF;
+    if (stick.lengthSq() > 0 || fHeld) auto = false;
+    const driving = foot.driving;
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
     let trigger: Trigger = false;
@@ -338,7 +360,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const own = auto && o.demo ? o.demo(clock, dt) : null;
     if (own) { ({ cmd, aim, trigger } = own); held = [0, 1, 2, 3].map((i) => !!own.keys?.[i]) as typeof held; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
     else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
-    else {
+    else if (driving) {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
       if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) {
         cursor = aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
@@ -355,8 +377,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
           aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
         }
       }
-      const both = keys.has("KeyF");
-      trigger = [mouseDown || both, rightDown || both];
+      trigger = [mouseDown, rightDown];
       held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
       if (held.some(Boolean)) auto = false;
     }
@@ -365,7 +386,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
     player.lock = lock?.target ?? demoLock;
 
-    if (dashPressed) {
+    if (dashPressed && driving) {
       dashPressed = false;
       // With no keys held, dash the way the legs face.
       if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
@@ -373,10 +394,15 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     }
     // The demo sidesteps now and then, to show the dash off.
     if (auto && !o.demo && clock % 7 < dt && clock > 3) player.tryDash(Math.cos(player.sim.heading), -Math.sin(player.sim.heading));
-    player.dashHold = spaceDown && !auto;
+    dashPressed = false;
+    player.dashHold = spaceDown && !auto && driving;
     cst?.mark("input + lock");
     player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
+    // The pilot: hold F to get out (anywhere the mech stands, not mid-dash) and back in; WASD walks him on foot.
+    foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut: player.dash.active ? "mid-dash" : null });
+    // Lab only: a killed pilot is back in the mech after the rebuild time.
+    if (!foot.sim.alive && foot.deadFor > V.respawn) foot.reset();
     cst?.mark("mech + weapons");
     for (const f of frames) f(dt);
     cst?.mark("lab");
@@ -389,7 +415,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths draw");
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
-    reticle.visible = !!cursor;
+    reticle.visible = !!cursor && driving;
     if (cursor) {
       reticle.position.set(cursor.x, field.height(cursor.x, cursor.z) + 0.06, cursor.z);
       (reticle.material as THREE.MeshBasicMaterial).color.setHex(player.upper.onTarget && !lock ? 0xffb347 : 0x9a958c);
@@ -404,7 +430,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       lockMat.color.setHex(player.upper.onTarget ? 0xff6a3d : 0xb0a89a);
     }
 
-    follow.lerp(new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z), Math.min(1, rawDt * 6));
+    const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
+    follow.lerp(want, Math.min(1, rawDt * 6));
     iso.update(follow, rawDt);
     if (shakeK > 1e-3) {
       camera.position.x += (Math.random() - 0.5) * shakeK;
@@ -414,7 +441,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     }
     toon.update(camera, canvas.clientHeight);
     cst?.mark("camera");
-    streamer.update(player.sim.pos.x, player.sim.pos.z);
+    streamer.update(follow.x, follow.z);
     cst?.mark("terrain streaming");
     const camDist = camera.position.distanceTo(follow);
     look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
@@ -428,6 +455,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
+    app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : `, killed (back in the mech in ${Math.max(0, V.respawn - foot.deadFor).toFixed(1)} s)`} · health ${Math.round(foot.sim.health)}/${V.pilotHealth} · ${foot.toMech.toFixed(1)} m from the mech`);
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))

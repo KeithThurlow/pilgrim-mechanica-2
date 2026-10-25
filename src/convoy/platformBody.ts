@@ -7,7 +7,7 @@ import * as THREE from "three/webgpu";
 import type { Platform } from "./platform";
 import type { CraneValues } from "./crane";
 import { RAIL } from "./carry";
-import { deckLayout, bayZ, storesZ, BAY_W, BAY_L, type DeckValues } from "./deck";
+import { deckLayout, bayZ, storesZ, terminalSpot, BAY_W, BAY_L, type DeckValues } from "./deck";
 import { deckOutline, halfWidthAt, type Outline } from "./outline";
 import { Kit, kitMesh, KIT_MAT } from "./kit";
 import { PAL, KIND_PAINT, furniture, furnBox, type Box } from "./furniture";
@@ -15,7 +15,7 @@ import { trackPods, type TrackValues } from "./tracks";
 import { TrackBody } from "./trackBody";
 import { generatePipes, type PipeValues } from "./pipes";
 import { pipesGeometry, PIPE_MAT } from "./pipesDraw";
-import { landingXs, landingEnds, LANDING_IN, LANDING_HALF, type TrainValues } from "./train";
+import { landingEnds, landingLayout, stairBox, LANDING_HALF, CAB_ROOF, type TrainValues } from "./train";
 import { WHEEL_X_IN, WHEEL_Z } from "./trail";
 import { CarBody } from "../vehicles/carBody";
 import { CarSim, carValues } from "../vehicles/car";
@@ -25,6 +25,8 @@ const MAT = KIT_MAT;
 const MARK_MAT = MAT.clone();
 /** Footbridge landings, lit with the bridges. */
 export const LANDING_MAT = MAT.clone();
+/** The bay terminal's screen and lamp: lit, so it reads from the game camera. */
+export const TERMINAL_GLOW = new THREE.MeshBasicMaterial({ color: 0x7fe0d0, toneMapped: false, side: THREE.DoubleSide });
 /** Paint of the convoy's own vehicles (aboard and escorting): not the raiders' rust. */
 export const FRIENDLY = 0x5f7f78;
 
@@ -43,6 +45,8 @@ export class PlatformBody {
   private tracks: TrackBody | null = null;
   private cars: CarBody[] = [];
   private wheels: Wheel[] = [];
+  /** The bay terminal's lit screen and lamp. */
+  private screens: THREE.Mesh[] = [];
   private built = "";
   private m = new THREE.Matrix4();
   /** Pipe runs on this platform (for the HUD). */
@@ -91,7 +95,12 @@ export class PlatformBody {
     this.wheels = [];
     for (const c of this.cars) this.root.remove(c.root);
     this.cars = [];
+    for (const m of this.screens) { this.root.remove(m); m.geometry.dispose(); }
+    this.screens = [];
   }
+
+  /** The bay terminal (screen, lamp, console) for hold-V. */
+  terminalMeshes(): THREE.Object3D[] { return this.screens; }
 
   private build(ends: { nose: boolean; tail: boolean }) {
     this.clear();
@@ -205,29 +214,46 @@ export class PlatformBody {
       }
     }
 
-    // Footbridge landings: a tower with a stair on the tail, a landing on the nose (on the cab roof where it stands).
+    // Footbridge landings and the stairs up to them (train.ts landingLayout: the walkways the pilot uses are the same
+    // shapes): a tower with a stair down its side on the tail, a landing on the cab roof on the nose with a stair up
+    // the cab's back face.
     const lk = new Kit(), top = D + v.bridgeRise, keep: Box[] = [];
-    const tower = (x: number, z: number, from: number, stairDir: number) => {
-      const h = top - from;
+    const lay = landingLayout(p.spec, ends, v.bridgeCount, v.bridgeRise);
+    for (const l of lay.landings) {
+      const x = l.x, z = l.z, from = l.onCab ? D + CAB_ROOF - 0.1 : D, h = top - from;
       for (const sx of [1, -1]) for (const sz of [1, -1]) lk.box([0.14, h, 0.14], [x + sx * (LANDING_HALF - 0.1), from + h / 2, z + sz * (LANDING_HALF - 0.1)], PAL.steel);
       lk.box([LANDING_HALF * 2 + 0.2, 0.14, LANDING_HALF * 2 + 0.2], [x, top - 0.07, z], PAL.ochre);
+      // Rails on the two sides along the car (open ends: the bridge on one, the stair or the roof on the other).
       for (const sx of [1, -1]) lk.box([0.06, 0.06, LANDING_HALF * 2], [x + sx * LANDING_HALF, top + 1, z], PAL.hazard);
       for (const sx of [1, -1]) for (const sz of [1, -1]) lk.box([0.06, 1, 0.06], [x + sx * LANDING_HALF, top + 0.5, z + sz * (LANDING_HALF - 0.05)], PAL.steel);
-      if (h > 1) {
-        // A steep stair up the inboard face.
-        const run = 1.6, ang = Math.atan2(h, run);
-        lk.box([0.9, 0.12, Math.hypot(h, run)], [x, from + h / 2, z + stairDir * (LANDING_HALF + run / 2)], PAL.dark, [stairDir * ang, 0, 0]);
+      keep.push({ x, y: (from + top) / 2, z, hx: LANDING_HALF + 0.1, hy: h / 2 + 0.6, hz: LANDING_HALF + 0.1 });
+    }
+    for (const s of lay.stairs) {
+      // Treads on two stringers, a hand rail each side.
+      const dx = s.x1 - s.x0, dz = s.z1 - s.z0, run = Math.hypot(dx, dz), rise = s.y1 - s.y0, yaw = Math.atan2(dx, dz);
+      const n = Math.max(3, Math.round(rise / 0.25)), len = Math.hypot(run, rise);
+      const ax = Math.cos(yaw), az = -Math.sin(yaw);
+      const side = new THREE.Vector3(ax, 0, az), along = new THREE.Vector3(dx, rise, dz).normalize(), up = new THREE.Vector3().crossVectors(along, side);
+      for (let i = 1; i <= n; i++) {
+        const t = (i - 0.5) / n;
+        lk.box([s.w, 0.06, (run / n) * 1.15], [s.x0 + dx * t, D + s.y0 + rise * (i / n) - 0.03, s.z0 + dz * t], i % 2 ? PAL.dark : PAL.steel, [0, yaw, 0]);
       }
-      keep.push({ x, y: (from + top) / 2, z: z + (h > 1 ? stairDir * 0.8 : 0), hx: LANDING_HALF + 0.1, hy: (top - from) / 2 + 0.6, hz: LANDING_HALF + (h > 1 ? 0.9 : 0.1) });
-    };
-    const xs = landingXs(v.bridgeCount, W);
-    if (ends.tail) for (const x of xs) tower(x, -L / 2 + LANDING_IN, D, 1);
-    if (ends.nose) for (const x of xs) tower(x, L / 2 - LANDING_IN, Math.abs(x) < cab.size[0] / 2 - 0.3 ? D + cab.size[1] + 0.1 : D, -1);
+      for (const sd of [1, -1]) {
+        const ox = ax * sd * (s.w / 2), oz = az * sd * (s.w / 2);
+        lk.oriented([0.08, 0.22, len], [s.x0 + dx / 2 + ox, D + s.y0 + rise / 2 - 0.1, s.z0 + dz / 2 + oz], side, up, along, PAL.ochre);
+        lk.oriented([0.05, 0.05, len], [s.x0 + dx / 2 + ox, D + s.y0 + rise / 2 + 0.95, s.z0 + dz / 2 + oz], side, up, along, PAL.hazard);
+        for (const t of [0.02, 0.98]) lk.box([0.05, 1, 0.05], [s.x0 + dx * t + ox, D + s.y0 + rise * t + 0.5, s.z0 + dz * t + oz], PAL.steel);
+      }
+      const b = stairBox(s);
+      keep.push({ x: b.x, y: D + rise / 2, z: b.z, hx: b.hx + 0.1, hy: rise / 2 + 0.6, hz: b.hz + 0.1 });
+    }
     if (!lk.empty) this.landings = kitMesh(lk.build(), this.root, LANDING_MAT);
+    void cab;
 
     // The bay: markings and the crane foot.
     if (kind === "bay" && this.carry) {
-      const lay = deckLayout(p, { ...this.carry, bridgeCount: v.bridgeCount }), mk = new Kit();
+      const lay = deckLayout(p, { ...this.carry, bridgeCount: v.bridgeCount, bridgeRise: v.bridgeRise }), mk = new Kit();
+      { const t = terminalSpot(p, this.carry); keep.push({ x: t.x, y: D + 1, z: t.z, hx: 0.8, hy: 1.5, hz: 0.8 }); }
       for (const s of lay.spots) {
         if (s.kind === "park") {
           // Parking bay: dark pad, hazard outline, a chevron pointing forward (park facing the cab).
@@ -255,7 +281,22 @@ export class PlatformBody {
       for (const sx of [1, -1]) for (const sz of [1, -1]) mk.box([0.25, 4.6, 0.25], [sx * 0.6, D + 2.3, tz + sz * 1.7], PAL.steel);
       for (const y of [1.6, 3.2]) mk.box([1.6, 0.15, 3.8], [0, D + y, tz], PAL.ochre);
       mk.box([0.6, 0.6, 0.6], [0, D + 4.9, tz + 1.6], PAL.bone);
+      // The bay terminal: a console on a pedestal, its screen tipped back toward whoever walks up from aft, a lamp mast.
+      const t = terminalSpot(p, this.carry), f = t.facing;
+      mk.box([0.5, 1.05, 0.4], [t.x, D + 0.52, t.z], PAL.teal);
+      mk.box([0.8, 0.08, 0.6], [t.x, D + 1.08, t.z], PAL.dark);
+      mk.box([0.82, 0.55, 0.08], [t.x, D + 1.35, t.z - f * 0.05], PAL.dark, [-f * 0.5, 0, 0]);
+      mk.box([0.05, 1.4, 0.05], [t.x + 0.32, D + 1.8, t.z + f * 0.15], PAL.steel);
       this.marks = kitMesh(mk.build(), this.root, MARK_MAT);
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.4), TERMINAL_GLOW);
+      glow.position.set(t.x, D + 1.36, t.z + f * 0.0);
+      glow.rotation.set(-0.5, f > 0 ? 0 : Math.PI, 0, "YXZ");
+      glow.position.addScaledVector(new THREE.Vector3(0, Math.sin(0.5) * 0.05, Math.cos(0.5) * 0.05 * f), 1);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), TERMINAL_GLOW);
+      lamp.position.set(t.x + 0.32, D + 2.55, t.z + f * 0.15);
+      glow.name = lamp.name = "terminal";
+      this.root.add(glow, lamp);
+      this.screens.push(glow, lamp);
       // Crane foot: a mast on a ring.
       const mz = bz.crane;
       k.cyl(1.8, 0.5, [0, D + 0.25, mz], PAL.steel, [0, 0, 0], 16);

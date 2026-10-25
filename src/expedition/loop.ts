@@ -28,6 +28,7 @@ import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
 import { SwarmCamps, SWARM_CAMP_DEFAULTS, SWARM_CAMP_PARAMS } from "./swarmCamps";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
+import type { Prey } from "../pilot/quarry";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
@@ -46,7 +47,16 @@ export const LOOP_TOPICS = [
 ];
 
 
-export interface LoopInput { eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void }
+/**
+ * The pilot (src/pilot/onFoot.ts), when he's out of the mech: where he is, whether he's alive, who the swarm should go
+ * for (the prey picked for its middle), how much closer he wakes a camp, and his salvage reach, rate and noise.
+ */
+export interface LoopPilot {
+  onFoot: boolean; alive: boolean; x: number; z: number;
+  prey: (x: number, z: number) => Prey; notice: number;
+  reach: number; rate: number; noise: number;
+}
+export interface LoopInput { eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -129,12 +139,25 @@ export class ExpeditionLoop {
     if (!player.alive && (carry.state === "inRange" || carry.state === "pickup")) carry.state = "walking";
     if (!player.alive) carry.armed = false;
 
-    // Salvage: E while out, on the sand, alive.
+    // The pilot killed on foot out there: the expedition is over, the at-risk list lost (Keith 2026-10-26).
+    const pl = inp.pilot, foot = !!pl?.onFoot;
+    if (foot && !pl!.alive && exp.state === "out") exp.pilotKilled();
+    // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
     const onSand = carry.state === "walking" || carry.state === "inRange";
-    const holding = (inp.demo ? this.demoHold : inp.eHeld) && exp.state === "out" && player.alive && onSand;
-    this.sites.update(dt, p.x, p.z, holding, this.camera);
+    const holding = (inp.demo ? this.demoHold : inp.eHeld) && exp.state === "out" && player.alive && onSand && (!foot || pl!.alive);
+    if (foot) this.sites.update(dt, pl!.x, pl!.z, holding, this.camera, pl!);
+    else this.sites.update(dt, p.x, p.z, holding, this.camera);
     inp.mark?.("POIs and salvage");
-    this.swarms.update(dt, exp.state === "out" && player.alive && SAND.has(carry.state));
+    // The swarm goes for the mech, or the pilot when he's out and nearer (src/pilot/quarry.ts).
+    const sw = this.swarms.sw;
+    let mx = p.x, mz = p.z;
+    if (foot) {
+      let n = 0, sx = 0, sz = 0;
+      for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DOWN && !sw.frozen[i]) { sx += sw.px[i]; sz += sw.pz[i]; n++; }
+      if (n) { mx = sx / n; mz = sz / n; }
+    }
+    const hunting = exp.state === "out" && player.alive && SAND.has(carry.state) && (!foot || pl!.alive);
+    this.swarms.update(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     inp.mark?.("swarm camps");
 
     // Fuel: burns only out in the field.
@@ -193,8 +216,8 @@ export class ExpeditionLoop {
     const s = this.sites.salvage;
     let prompt = "";
     if (exp.state === "out" && onSand) {
-      if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (loud)`;
-      else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
+      if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
+      else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
     this.hud.update(dt, {
       exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
@@ -257,6 +280,6 @@ export class ExpeditionLoop {
   /** Debug line for the frame HUD. */
   get line() {
     const e = this.exp, sw = this.swarms;
-    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${Math.round(this.fuel.left)} s · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}`;
+    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${Math.round(this.fuel.left)} s · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
 }
