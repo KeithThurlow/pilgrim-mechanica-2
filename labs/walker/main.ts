@@ -125,7 +125,7 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName === "game" && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-// Space: dash the way WASD points (as in the combat labs); ?dash makes the demo dash every few seconds.
+// Space: dash the way WASD points (as in the combat labs); ?dash makes the demo dash every 3 s.
 let dashPressed = false;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -248,8 +248,8 @@ app.onTick((rawDt) => {
     if (stick.lengthSq() > 0.01) mech.tryDash(stick.x, stick.z);
     else mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
   }
-  // The demo sidesteps now and then (with ?dash, or ?walk=straight&dash for repeatable furrows).
-  if (auto && params.has("dash") && clock % 4 < dt && clock > 2) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
+  // The demo sidesteps now and then (with ?dash: every 3 s from 1.5 s; with ?walk=straight for repeatable furrows).
+  if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;

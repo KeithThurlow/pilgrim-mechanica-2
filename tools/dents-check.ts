@@ -52,6 +52,21 @@ const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; 
   ok(peak1 < peak0 * 0.97, `berm crest slumps (${(peak0 * 100).toFixed(1)} → ${(peak1 * 100).toFixed(1)} cm)`);
 }
 
+// 2b. A furrow laid in short pieces (a dash, frame by frame) is one smooth trough: no rim ribs across its floor.
+{
+  const g = new DentGrid(200, 20, rates(0.1, false));
+  g.step(0, []);
+  for (let k = 0; k < 12; k++) g.step(0, [brush(-6 + k * 0.6 + 0.3, 0, 0.45, Math.PI / 2, 1 + 0.6 / 0.9, 0.12)]);
+  let rib = 0, rim = 0;
+  for (let i = 0; i < 200; i++) {
+    const x = texelWorld(i, 200, 20, 0);
+    if (x < -5 || x > 0.5) continue;
+    rib = Math.max(rib, g.a[(100 * 200 + i) * 4 + 1]);
+  }
+  for (let i = 0; i < g.a.length; i += 4) rim = Math.max(rim, g.a[i + 1]);
+  ok(rib < rim * 0.1, `furrow floor has no ribs (berm on its middle line ${(rib * 100).toFixed(2)} cm, rims ${(rim * 100).toFixed(1)} cm)`);
+}
+
 // 3. It heals: with the slow decay on, a print is mostly gone after a few time constants.
 {
   const g = new DentGrid(160, 16, rates(0.1, true));

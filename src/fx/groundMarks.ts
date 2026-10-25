@@ -29,11 +29,12 @@ export class GroundMarks {
     const v = this.v, nr = this.ground.normal(x, z, this.nn), steep = 1 - nr[1], s = v.printSize;
     // The Rampart's foot: about 0.95 m across and 1.35 m long, pressed deeper on steep sand (it slides in).
     this.dents!.stamp(x, z, 0.45 * s, yaw, 1.42, v.dentPrint * Math.min(1.6, 0.7 + 0.3 * strength) * (1 + steep * 1.5));
-    if (v.slideOnSlope > 0 && steep > 0.08) {
+    // Real troughs read stronger than the decals' did, so only properly steep sand breaks loose (decals: 0.08).
+    if (v.slideOnSlope > 0 && steep > 0.14) {
       // Sand broken loose downhill: a long shallow trough with its sand piled at the bottom.
       const dx = nr[0], dz = nr[2], l = Math.hypot(dx, dz) || 1;
       const len = (1 + steep * 9) * v.slideOnSlope, r = 0.45 * s;
-      this.dents!.stamp(x + (dx / l) * len * 0.45, z + (dz / l) * len * 0.45, r, Math.atan2(dx, dz), Math.max(1, len / (2 * r)), v.dentPrint * 0.35 * (0.5 + steep), { berm: 1.3, comp: 0.2 });
+      this.dents!.stamp(x + (dx / l) * len * 0.45, z + (dz / l) * len * 0.45, r, Math.atan2(dx, dz), Math.max(1, len / (2 * r)), v.dentPrint * 0.2 * (0.5 + steep), { berm: 1.3, comp: 0.2 });
     }
   }
 

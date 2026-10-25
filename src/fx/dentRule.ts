@@ -130,10 +130,13 @@ export function splat(st: Float32Array | number[], o: number, b: Brush, px: numb
   if (d > REACH) return;
   const core = coreAt(d), ring = ringAt(d) * grain;
   const add = b.dep * core;
+  // The rim doesn't pile up inside a hollow that's already there (else a furrow laid in pieces gets ribs where each
+  // piece's round end meets the last one's trough).
+  const open = 1 - Math.min(1, st[o] / Math.max(1e-4, 0.5 * b.dep));
   if (b.mode > 0.5) st[o] += add;
   else st[o] = Math.max(st[o], add);
   // A foot pressed into an old berm pushes it away, then the new rim piles up round the hollow.
-  st[o + 1] = Math.max(st[o + 1] * (1 - core), b.berm * ring);
+  st[o + 1] = Math.max(st[o + 1] * (1 - core), b.berm * ring * open);
   st[o + 2] = Math.max(st[o + 2], b.comp * core);
   if (core > 0.05 || ring > 0.3) st[o + 3] = b.surf;
 }

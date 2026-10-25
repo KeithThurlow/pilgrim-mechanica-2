@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Ground dents built with Claude's values: dent window 100 m at 2048² (5 cm texels) on the camera focus, patch 25 cm with a 4 m edge blend; footprint 10 cm deep on sand, ruts 6 cm, dash furrows 12 cm, round dents 5 cm (every round, adding up); sand heals over ~1.5 min (half a print left after a minute), dirt 0.45× depth lasting ~7 min, gravel 0.3× ~5 min, snow 2.5× ~15 min; berms hold all the pushed-out sand on sand, less on dirt, gravel and snow; protected ground (pads, road) refuses craters but still takes prints | Claude | Claude | All sliders (Ground dents groups). |
 | 2026-10-25 | Convoy: a mech launch area at the back as well as the front; defences on the convoy; shorter footbridges; less rectangular, more hexagonal platforms; many more vehicles alongside (only about 4 now) | Keith | Keith | Added to the crane pass. |
 | 2026-10-25 | Blasts deform the ground for real (walkable, not visual only); protected areas (bandit outposts and the like) can't be dug so nobody blocks the way in or out | Keith | Keith | `src/world/craters.ts`. |
 | 2026-10-25 | Crater values: wall limit 30°, max depth 1.5 m, stacked depth saturating at 2.5 m, slump 180 s, 200 craters, hardness rock 0.95 / rocky sand 0.6 / shallows 0.15, protected margin 4 m; craters as a lattice layer added after the modifiers, chunks patched in place | Claude | open | All sliders (Dunes > Craters). |

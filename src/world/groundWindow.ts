@@ -68,6 +68,8 @@ export class GroundWindow {
 
   /** Move the window to centre on (x, z) and fill what came into view, within budgetMs (a jump fills over frames). */
   follow(x: number, z: number, budgetMs = 4) {
+    // The very first fill happens at once (a start-up hitch, like the chunks' fill), so the patch is there from frame one.
+    if (!this.valid) budgetMs = 1e9;
     const half = this.nc / 2;
     const gx = Math.round(x / this.step) - half, gz = Math.round(z / this.step) - half;
     if (!this.valid || Math.abs(gx - this.gx) >= this.nc || Math.abs(gz - this.gz) >= this.nc) {

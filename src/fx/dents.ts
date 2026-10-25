@@ -94,9 +94,10 @@ export interface StampOptions {
 interface Persistent { b: Brush; reach: number; done: boolean; key: string }
 
 export class DentLayer {
-  readonly res: number;
-  readonly size: number;
-  readonly texel: number;
+  /** Texels across, coverage (m) and texel size: from the sliders, the targets remade when they change. */
+  res = 0;
+  size = 0;
+  texel = 0;
   /** What the ground is at (x, z) for dents; null: rock or water, no dents. Labs can force one (?surface=). */
   surfaceAt: (x: number, z: number) => DentSurface | null;
   /** The texture the patch reads (its value swaps to the newest target each frame). */
@@ -106,7 +107,7 @@ export class DentLayer {
   readonly uSize: THREE.UniformNode<"float", number>;
   readonly uTexel: THREE.UniformNode<"float", number>;
   readonly stats = { brushes: 0, dropped: 0, passMs: 0 };
-  private targets: THREE.RenderTarget[];
+  private targets: THREE.RenderTarget[] = [];
   private write = 0;
   private quad: THREE.QuadMesh;
   private prevTex: THREE.TextureNode;
@@ -117,6 +118,8 @@ export class DentLayer {
   private persistent: Persistent[] = [];
   private uPrevCentre = uniform(new THREE.Vector2(1e6, 1e6));
   private uCount = uniform(0, "int");
+  private uRes = uniform(1024, "int");
+  private uResF = uniform(1024);
   private uDt = uniform(0);
   private uMaxDepth = uniform(0.6);
   private uMaxBerm = uniform(0.4);
@@ -130,27 +133,18 @@ export class DentLayer {
   private s: GroundSample = { h: 0, crest: 0, flat: 0 };
 
   constructor(private renderer: THREE.WebGPURenderer, readonly field: DuneField, public v: DentValues) {
-    this.res = Math.max(64, Math.round(v.dentRes));
-    this.size = v.dentCoverage;
-    this.texel = this.size / this.res;
-    this.uSize = uniform(this.size);
-    this.uTexel = uniform(this.texel);
+    this.uSize = uniform(100);
+    this.uTexel = uniform(0.05);
     this.surfaceAt = (x, z) => {
       const s = field.surfaceAt(x, z);
       return s === "concrete" ? null : s;
     };
-    const mk = () => {
-      const t = new THREE.RenderTarget(this.res, this.res, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false });
-      t.texture.wrapS = t.texture.wrapT = THREE.RepeatWrapping;
-      t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter;
-      return t;
-    };
-    this.targets = [mk(), mk()];
     this.brushData = new Float32Array(MAX_BRUSHES * BRUSH_ROWS * 4);
     this.brushTex = new THREE.DataTexture(this.brushData, MAX_BRUSHES, BRUSH_ROWS, THREE.RGBAFormat, THREE.FloatType);
     this.brushTex.minFilter = this.brushTex.magFilter = THREE.NearestFilter;
     this.brushTex.generateMipmaps = false;
     this.brushTex.needsUpdate = true;
+    this.resize();
     this.prevTex = texture(this.targets[1].texture);
     this.tex = texture(this.targets[0].texture);
     const mat = new THREE.NodeMaterial();
@@ -159,21 +153,42 @@ export class DentLayer {
     this.quad = new THREE.QuadMesh(mat);
   }
 
+  /** (Re)make the two targets for the sliders' resolution and coverage; everything starts clear. */
+  private resize() {
+    for (const t of this.targets) t.dispose();
+    this.res = Math.max(64, Math.round(this.v.dentRes));
+    this.size = Math.max(8, this.v.dentCoverage);
+    this.texel = this.size / this.res;
+    this.uSize.value = this.size; this.uTexel.value = this.texel;
+    this.uRes.value = this.res; this.uResF.value = this.res;
+    const mk = () => {
+      const t = new THREE.RenderTarget(this.res, this.res, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false });
+      t.texture.wrapS = t.texture.wrapT = THREE.RepeatWrapping;
+      t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter;
+      return t;
+    };
+    this.targets = [mk(), mk()];
+    this.write = 0;
+    if (this.tex) { this.tex.value = this.targets[0].texture; this.prevTex.value = this.targets[1].texture; }
+    this.cx = this.cz = this.pcx = this.pcz = 1e6;
+    for (const p of this.persistent) p.done = false;
+  }
+
   /** The pass, per texel: scroll, relax, splat, clamp (the same rules as dentRule.ts). */
   private passNode() {
-    const N = this.res, prev = this.prevTex, bt = this.brushTex;
+    const N = this.uRes, NF = this.uResF, prev = this.prevTex, bt = this.brushTex;
     const size = this.uSize, half = size.mul(0.5);
     return Fn(() => {
       const pix = screenCoordinate.xy.floor();
       const ix = int(pix.x), iy = int(pix.y);
-      const base = pix.add(0.5).div(N).mul(size);
+      const base = pix.add(0.5).div(NF).mul(size);
       const world = base.add(size.mul(round(this.uCentre.sub(base).div(size)))).toVar();
       const st = vec4(0, 0, 0, 0).toVar();
       const was = max(abs(world.x.sub(this.uPrevCentre.x)), abs(world.y.sub(this.uPrevCentre.y))).lessThanEqual(half);
       If(was, () => {
         const c = textureLoad(prev, ivec2(ix, iy));
-        const l = textureLoad(prev, ivec2(ix.add(N - 1).mod(N), iy)), r = textureLoad(prev, ivec2(ix.add(1).mod(N), iy));
-        const d = textureLoad(prev, ivec2(ix, iy.add(N - 1).mod(N))), u = textureLoad(prev, ivec2(ix, iy.add(1).mod(N)));
+        const l = textureLoad(prev, ivec2(ix.add(N).sub(1).mod(N), iy)), r = textureLoad(prev, ivec2(ix.add(1).mod(N), iy));
+        const d = textureLoad(prev, ivec2(ix, iy.add(N).sub(1).mod(N))), u = textureLoad(prev, ivec2(ix, iy.add(1).mod(N)));
         const id = round(c.w);
         const R = this.uRates;
         const rate = select(id.lessThan(0.5), R[0], select(id.lessThan(1.5), R[1], select(id.lessThan(2.5), R[2], select(id.lessThan(3.5), R[3], R[4]))));
@@ -205,8 +220,10 @@ export class DentLayer {
             const grain = float(1).add(this.uRough.mul(0.4).mul(mx_noise_float(vec3(world.mul(9.1), e.z.add(3.1)))));
             const ring = exp(q.mul(q).negate()).mul(grain);
             const add = b.z.mul(core);
+            // No rim piled inside a hollow already there (dentRule.splat).
+            const open = float(1).sub(min(1, st.x.div(max(1e-4, b.z.mul(0.5)))));
             const nd = select(e.w.greaterThan(0.5), st.x.add(add), max(st.x, add));
-            const nb = max(st.y.mul(float(1).sub(core)), b.w.mul(ring));
+            const nb = max(st.y.mul(float(1).sub(core)), b.w.mul(ring).mul(open));
             const nc = max(st.z, e.x.mul(core));
             const ns = select(core.greaterThan(0.05).or(ring.greaterThan(0.3)), e.y, st.w);
             st.assign(vec4(nd, nb, nc, ns));
@@ -277,7 +294,9 @@ export class DentLayer {
 
   /** Run the pass: follow the focus, relax, splat this frame's brushes. */
   update(dt: number, fx: number, fz: number) {
-    const v = this.v, t = this.texel, half = this.size / 2;
+    const v = this.v;
+    if (Math.round(v.dentRes) !== this.res || Math.max(8, v.dentCoverage) !== this.size) this.resize();
+    const t = this.texel, half = this.size / 2;
     this.pcx = this.cx; this.pcz = this.cz;
     this.cx = Math.round(fx / t) * t; this.cz = Math.round(fz / t) * t;
     // Persistent dents that reach texels new to the window this frame.
