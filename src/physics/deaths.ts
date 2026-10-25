@@ -72,9 +72,15 @@ export class DeathPhysics {
   }
 
   /** Keep the physics floor under the action: rebuilt when the focus moves a quarter of its size. */
+  /** The ground changed under the floor (a crater): rebuild it on a later follow(), at most every half second. */
+  groundChanged() { if (this.staleAt < 0) this.staleAt = performance.now(); }
+  private staleAt = -1;
+
   follow(x: number, z: number) {
     const size = this.v.floorSize;
-    if (this.floor && Math.hypot(x - this.floorAt.x, z - this.floorAt.z) < size / 4) return;
+    const stale = this.staleAt >= 0 && performance.now() - this.staleAt > 500;
+    if (stale) this.staleAt = -1;
+    if (!stale && this.floor && Math.hypot(x - this.floorAt.x, z - this.floorAt.z) < size / 4) return;
     if (this.floor) this.world.removeCollider(this.floor, false);
     // Heights on a grid every 1.5 m, centred on the collider: r along X, c along Z, stored r-major (checked against
     // the height function by tools/deaths-check.ts).
