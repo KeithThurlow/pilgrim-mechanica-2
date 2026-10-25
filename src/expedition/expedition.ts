@@ -5,6 +5,7 @@
 //   aboard --launch()--> out --pickedUp()--> aboard (the at-risk list banked)
 //   out --recall held / out of fuel--> recovering (fade; the at-risk list lost) --> aboard
 //   out --destroyed()--> lost (a wait, then the fade; everything carried lost) --> aboard
+//   out --pilotKilled()--> lost the same way (Keith 2026-10-26: the pilot dying on foot is the expedition over)
 //
 // The at-risk list is everything picked up since the launch (scrap and items). Only a pick-up by the crane banks it.
 // Fitted gear is never touched here: losing a run loses what was carried, not what the mech wears. Recovery is
@@ -36,7 +37,7 @@ export type Loot =
 export const ON_SAND = new Set(["walking", "inRange", "pickup", "falling", "landing"]);
 
 export type ExpeditionState = "aboard" | "out" | "recovering" | "lost";
-export type EndReason = "banked" | "recalled" | "fuel" | "destroyed";
+export type EndReason = "banked" | "recalled" | "fuel" | "destroyed" | "pilot";
 
 export interface RunResult {
   reason: EndReason;
@@ -67,7 +68,7 @@ export class Expedition {
   /** Expedition clock (s), for "banked n s ago". */
   clock = 0;
   /** Runs ended per reason. */
-  readonly counts: Record<EndReason, number> = { banked: 0, recalled: 0, fuel: 0, destroyed: 0 };
+  readonly counts: Record<EndReason, number> = { banked: 0, recalled: 0, fuel: 0, destroyed: 0, pilot: 0 };
   /** Fade over the screen 0..1 (recovering, lost). */
   fade = 0;
 
@@ -116,6 +117,19 @@ export class Expedition {
   destroyed() {
     if (this.state !== "out") return false;
     this.end("destroyed", this.scrapAtRisk, this.itemsAtRisk);
+    this.atRisk.length = 0;
+    this.state = "lost";
+    this.t = 0; this.teleported = false;
+    return true;
+  }
+
+  /**
+   * The pilot was killed on foot out there: the expedition is over, everything carried is lost (fitted gear and the
+   * bank kept, as for a destroyed mech); after lostWait, the fade home with the mech recovered.
+   */
+  pilotKilled() {
+    if (this.state !== "out") return false;
+    this.end("pilot", this.scrapAtRisk, this.itemsAtRisk);
     this.atRisk.length = 0;
     this.state = "lost";
     this.t = 0; this.teleported = false;

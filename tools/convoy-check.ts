@@ -359,7 +359,7 @@ function pickUp(w: World, label = "") {
   if (w.carry.state !== "parked") fail(`not parked (state ${w.carry.state})`);
   if (Math.abs(d1.hips - (w.V.hipHeight - w.V.deckCrouch)) > 0.15) fail("didn't settle to the park crouch");
   if (drift > 0.05) fail(`a parked mech moved ${drift.toFixed(2)} m on the deck`);
-  if (!w.carry.label.includes("pilot can climb out")) fail("HUD doesn't say the pilot can climb out");
+  if (!w.carry.label.includes("hold F to climb out")) fail("HUD doesn't say the pilot can climb out");
   w.carry.togglePark(w.sim);
   for (let i = 0; i < Math.round((w.V.deckRiseTime + 0.3) / DT); i++) tick(w, still);
   if (w.carry.state !== "aboard") fail(`didn't stand up (state ${w.carry.state})`);

@@ -4,6 +4,12 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Pilot values: hold F 0.6 s; field kneel 0.5 s (hips 1.1 m, 8° nose down), climb 1.1 s each way (Keith: quicker than 2 s), back in within 3 m, the mech stands up in 0.6 s; camera 15 m on foot; pilot 1.8 m, walk 1.6, run 4.5 m/s, 30 health, steps up 0.45 m, never down more than 0.6 m (the rails); stairs at about 42° (1.1 m run per metre), 0.6× along the slope | Claude | open | All sliders (Pilot topic). |
+| 2026-10-26 | At the convoy the pilot gets out only with the mech parked in a bay (holding F in a bay parks it first); anywhere on the sand in the field; the crane never picks up an empty mech | Claude | open | Keeps the deck clear of abandoned mechs and the crane off a mech nobody drives. |
+| 2026-10-26 | Enemies pick the pilot by distance: a group goes for him while he's within 1.6× the mech's distance of its middle (`pilotLure`); rounds resolve on whatever they hit, so a parked mech can soak shots meant for him; robots cling to him low and shake off when they switch | Claude | open | Least invasive: the enemy sims still take one target per update. |
+| 2026-10-26 | The bay terminal sits between the two parking bays' aft ends on each mech bay, E within 1.6 m; B stays a lab shortcut | Keith (terminal), Claude (place) | Keith | `deck.ts terminalSpot`. |
+| 2026-10-26 | Footbridge access: a stair down the side of each tail landing tower, a stair up the back of the cab to the nose landing on its roof | Claude | open | `train.ts landingLayout`; the mech walks round the stairs. |
+| 2026-10-26 | Salvage by hand on foot: 2.5 m reach, half speed, 0.35× the noise; no "small spot" kind yet | Claude | open | |
 | 2026-10-26 | Parking kneel 0.8 s (was 1.6), standing up 1.0 s on its own slider | Keith | Claude (values) | `deckParkTime`, `deckRiseTime`. |
 | 2026-10-26 | Pilot: hold F to hop out (field and convoy); on the convoy you're mostly on foot; enemies attack a parked mech and the pilot, who is very vulnerable; the bay screen becomes a walk-up terminal; parking (E) crouches faster | Keith | Keith | `docs/proposal-pilot.md` |
 | 2026-10-26 | F stops firing both guns (both mouse buttons do that now) and becomes hold to hop out or back in; calling the mech gets another key later | Claude | open | Follows from Keith's hold F. |

@@ -147,6 +147,8 @@ export class CraneCarry {
   }
 
   get platform(): Platform { return this.crane.platform; }
+  /** Parked and fully knelt in a bay (the pilot can climb out). */
+  get settled() { return this.state === "parked" && this.phase === "settle" && this.kneel.k >= 1; }
   /** The mech is walking on the deck (its own legs, riding the platform). */
   get onDeck() { return this.state === "aboard" || this.state === "launching"; }
 
@@ -161,7 +163,7 @@ export class CraneCarry {
         if (this.spot?.kind === "park") return "aboard, in a parking bay: E to park";
         if (this.spot?.kind === "launch") return "aboard, on the launch pad";
         return "aboard: walk to a parking bay (E parks) or a launch pad";
-      case "parked": return this.phase === "rise" ? "standing up" : "parked, the pilot can climb out here (not built yet) · E to stand up";
+      case "parked": return this.phase === "rise" ? "standing up" : "parked · hold F to climb out · E to stand up";
       case "launching": return "on the launch pad: crane coming (step off to cancel)";
       case "deploying": return { lift: "lifted off the deck", swing: "swinging out", hover: "steadying over the sand" }[this.phase as "lift"] ?? "launching";
       case "falling": return "dropped";

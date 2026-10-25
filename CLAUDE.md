@@ -75,13 +75,19 @@ desert look direction. What came from where: `docs/decisions.md`.
   linemortar` (k3 also `drums`), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
-- Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's, F both;
-  keys 1-3 hold to paint a shoulder weapon, release to fire.
+- Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's (both can
+  be held); keys 1-3 hold to paint a shoulder weapon, release to fire; hold F to hop out of the mech, hold F by it to get
+  back in (Keith 2026-10-26; F no longer fires).
+- Pilot (every combat lab and the convoy lab): `?onfoot` (start on foot beside the mech), `?holdf=seconds` (F held
+  from the start, for shots of getting out).
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
   the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
   (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers.
+  Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
+  the sand beside it instead), `?pilotat=N,x,z` (on car N at local x, z) or `?pilotat=bN,t` (on footbridge N, t of the
+  way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.
 
 ## Layout
 
@@ -92,7 +98,8 @@ index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
 src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze), wrecks (steel stand-ins),
-                        craters (blast dents in the ground: hardness, slump)
+                        craters (blast dents in the ground: hardness, slump), walkable (the ground plus registered surfaces
+                        with moving frames, for anyone on foot)
 src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
@@ -105,8 +112,8 @@ src/game/               battlefield (shared combat stage), mechUnit (a mech with
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
-                        furniture, escort (escort driving); drawing: platformBody, trackBody, pipesDraw, bridgeBody,
-                        craneBody, escortBody, kit
+                        furniture, escort (escort driving), walkways (decks, stairs, landings, footbridges as walkable
+                        surfaces); drawing: platformBody, trackBody, pipesDraw, bridgeBody, craneBody, escortBody, kit
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
@@ -114,6 +121,8 @@ src/combat/             warband (raider vehicles and bandit mechs), infantry (ba
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
+src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
+                        target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
 src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown
                         areas); glue: loop, sites (POIs + salvage), swarmCamps (camps as the robot swarm); radarDraw, radarSound,
                         expeditionHud
@@ -141,6 +150,8 @@ docs/                   design.md (the game), decisions.md (log)
   Judge looks and readability from that camera first; close views are for detail.
 - Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left click
   fires the left side's weapon and right click the right side's (Keith 2026-10-25), keys 1-4 the shoulder weapons.
+  Hold F to hop out (the mech kneels; at the convoy, parked in a bay) and hold F within 3 m of it to get back in
+  (Keith 2026-10-26); on foot WASD walks the pilot, Shift runs, E uses a bay terminal or strips salvage by hand.
 - Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;
   read proportions from the model's joint markers rather than hardcoding them.
 - Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the
