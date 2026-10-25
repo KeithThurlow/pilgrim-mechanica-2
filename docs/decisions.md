@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Mech parts (direction): 30k triangles per fully equipped mech; legs and hulls of several types; hulls carry a varying number of hull mounts; each hull mount takes either one big hull weapon (military) or an arm (holding a smaller held weapon with other benefits) plus a shoulder weapon (utility); an optional sensor mount; a pack mount high on the back; back/waist mounts left and right | Keith | Keith | Slots and budgets in `docs/asset-list.md`; loadout slots to follow. |
 | 2026-10-26 | Multiplayer later: 4-player co-op (Risk of Rain-like), one player hosting first; maybe a server with server-side items (PoE2-like) later; code keeps multiplayer-ready habits now (seeded sims, commands, events, stable ids, ownership) | Keith | Keith | `docs/multiplayer.md`, CLAUDE.md rule 12. Performance refined only when needed (Keith). |
 | 2026-10-26 | Weapons stay on left and right click; shoulder weapons on keys 1-3 as hold to aim, release to fire for now (quick cast may come later) | Keith | Keith | |
 | 2026-10-26 | Convoy canopies and village look on hold: focus on game loop work | Keith | Keith | |
