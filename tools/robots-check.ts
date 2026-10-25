@@ -2,9 +2,12 @@
 // mech over the tall dunes. Fails on NaN, robots off the ground (other than leaping, latched or flung), small ones
 // piled on each other, nobody latching or firing, no saw strikes, a slow update, small ones' legs out of reach,
 // walkers' planted feet off the sand or legs out of reach, walkers that never step or sag; then rays kill a small, a
-// medium and a big one (bigger ones taking far more, the big one's arm legs hittable), and a stomp knocks latched
+// medium and a big one (bigger ones taking far more, the big one's arm legs hittable; hits by part: the body full,
+// legs and feet a share, a medium one's legs and feet hittable too), and a stomp knocks latched
 // ones off. Run: npm test (or npx tsx tools/robots-check.ts).
-import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, CUT, DOWN, DEAD, BIG, MID, SMALL, isAirborne, robotCentre } from "../src/combat/robots";
+import * as THREE from "three/webgpu";
+import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, CUT, DOWN, DEAD, BIG, MID, SMALL, PART_LEG, PART_FOOT, isAirborne, robotCentre } from "../src/combat/robots";
+import { RobotTarget } from "../src/combat/robotTarget";
 import { S_THIGH, S_SHIN, WALK_LEGS, type V3 } from "../src/combat/robotLegs";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
@@ -182,6 +185,39 @@ function roundsToKill(kind: number): number {
   // The elbow stands above the chassis: the arms read as excavator booms.
   console.log(`      arm 0: hip ${(hip.y - sw.py[0]).toFixed(1)} m, elbow ${(knee.y - sw.py[0]).toFixed(1)} m, stick end ${(tip.y - foot.y).toFixed(1)} m over the bucket's foot`);
   if (knee.y < sw.hubY[0]) fail("a big one's elbow sits below its chassis");
+  // Hits by part (Keith 2026-10-26): the same round into the chassis, the stick and the bucket, through the
+  // battlefield's target; the body takes it all, the leg robotLegDamage of it, the foot robotFootDamage.
+  const tg = new RobotTarget(sw, 3), dmg = 10;
+  const shoot = (x: number, y: number, z: number) => {
+    const o = new THREE.Vector3(x + 20, y, z + 3), d = new THREE.Vector3(-20, 0, -3).normalize();
+    const before = sw.hp[0];
+    if (tg.hitRay(o, d, 100) < 0) return -1;
+    tg.damage(dmg, o, d);
+    return before - sw.hp[0];
+  };
+  const c = v3();
+  robotCentre(sw, 0, c);
+  const body = shoot(c.x, c.y, c.z), legHit = shoot(mx, my, mz), footHit = shoot(foot.x, by, foot.z);
+  console.log(`parts: 10 damage into the chassis takes ${body}, the stick ${legHit}, the bucket ${footHit} (hits ${tg.partHits.join("/")})`);
+  if (Math.abs(body - dmg) > 1e-3) fail("a chassis hit didn't take full damage");
+  if (Math.abs(legHit - dmg * ROBOT_DEFAULTS.robotLegDamage) > 1e-3) fail("a leg hit didn't take the leg share");
+  if (Math.abs(footHit - dmg * ROBOT_DEFAULTS.robotFootDamage) > 1e-3) fail("a foot hit didn't take the foot share");
+}
+// A medium one's legs stop rounds too (a leg share), and a ray low through a shin's end is its foot.
+{
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 1 }, field, 5);
+  sw.spawn(1, 30, 30, 0);
+  sw.update(dt, { x: 400, y: 0, z: 400, radius: 2 }, () => {});
+  sw.legPose(0, 0, hip, knee, tip, foot);
+  const mx = (hip.x + knee.x) / 2, my = (hip.y + knee.y) / 2, mz = (hip.z + knee.z) / 2;
+  const dx = mx - sw.px[0], dz = mz - sw.pz[0], l = Math.hypot(dx, dz) || 1;
+  // From outboard of that thigh, straight in toward the body.
+  const h = sw.hitRay(mx + (dx / l) * 15, my, mz + (dz / l) * 15, -dx / l, 0, -dz / l, 100);
+  const fx = knee.x + (tip.x - knee.x) * 0.9, fy = knee.y + (tip.y - knee.y) * 0.9, fz = knee.z + (tip.z - knee.z) * 0.9;
+  const hf = sw.hitRay(fx + (dx / l) * 15, fy, fz + (dz / l) * 15, -dx / l, 0, -dz / l, 100);
+  console.log(`medium legs: a ray at a thigh hits part ${h ? h.part : "none"}, low on its shin part ${hf ? hf.part : "none"} (0 body, 1 leg, 2 foot)`);
+  if (!h || h.part !== PART_LEG) fail("a ray at a medium one's thigh didn't hit its leg");
+  if (!hf || hf.part !== PART_FOOT) fail("a ray low on a medium one's shin didn't hit its foot");
 }
 const smallR = roundsToKill(SMALL), midR = roundsToKill(MID), bigR = roundsToKill(BIG);
 console.log(`kills: small one ${smallR} rounds, medium one ${midR}, big one ${bigR} (9 damage each)`);

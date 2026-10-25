@@ -2,8 +2,9 @@
 // there, and then actually we shoot enemies that are closest to the ray, unless where the cursor is there is actually
 // an enemy closer to the cursor"; guns go for centre mass, so height takes care of itself.
 //
-// 1. Under the cursor: an enemy whose centre of mass lies within its radius + `lockCursor` of the camera's cursor ray
-//    (so a tall walker's body counts even when the cursor is over its feet). Closest to that ray wins.
+// 1. Under the cursor: an enemy whose centre of mass lies within its radius + `lockCursor` of the camera's cursor ray,
+//    or a tall walker whose footprint (its planted feet, + `lockCursor`) holds the cursor's ground point: its body is
+//    the target either way, never its feet (Keith 2026-10-26). Closest to that ray wins.
 // 2. Otherwise along the line of fire: from the mech through the cursor's ground point, on out to gun range. An enemy
 //    within `lockWidth` + a widening cone (`lockCone`) of that line counts; closest to the line wins (a little bias to
 //    nearer ones).
@@ -31,7 +32,9 @@ export const TARGET_PARAMS: Param[] = [
 
 /** One enemy the guns could take: its centre of mass, a body radius, and a key that stays the same while it lives. */
 /** vx, vz: its ground velocity (m/s), when it moves, so the guns can lead it. */
-export interface TargetCandidate { x: number; y: number; z: number; r: number; key: unknown; vx?: number; vz?: number }
+/** foot: a tall walker's footprint (m, flat from under its body to its farthest planted foot): a cursor on the sand
+ *  inside it is on the walker, and the lock takes its body (Keith 2026-10-26: hard to target the tall walkers). */
+export interface TargetCandidate { x: number; y: number; z: number; r: number; key: unknown; vx?: number; vz?: number; foot?: number }
 
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -59,9 +62,15 @@ export class Targeting {
       if (t <= 0) continue;
       const dx = ox - q.rayD.x * t, dy = oy - q.rayD.y * t, dz = oz - q.rayD.z * t;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d > c.r + v.lockCursor) continue;
+      // A tall walker: the cursor anywhere on the sand among its feet counts too (a little behind a hit on a body).
+      let s = d <= c.r + v.lockCursor ? d / (c.r + v.lockCursor + 1e-3) : Infinity;
+      if (c.foot) {
+        const reach = c.foot + v.lockCursor, fd = Math.hypot(q.cursor.x - c.x, q.cursor.z - c.z);
+        if (fd <= reach) s = Math.min(s, 0.5 + 0.5 * (fd / reach));
+      }
+      if (s === Infinity) continue;
       if (Math.hypot(c.x - q.from.x, c.z - q.from.z) > q.range) continue;
-      const s = (d / (c.r + v.lockCursor + 1e-3)) * (c.key === this.last ? sticky : 1);
+      s *= c.key === this.last ? sticky : 1;
       if (s < bestS) { bestS = s; best = c; }
     }
     if (best) { this.last = best.key; return { target: best, how: "cursor" }; }

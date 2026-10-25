@@ -64,6 +64,13 @@ export class ExpeditionHud {
     document.body.appendChild(this.fadeEl);
   }
 
+  /** A big note top centre for a few seconds (a raid coming). */
+  note(text: string, color: string, secs = 4) {
+    this.noteEl.textContent = text;
+    this.noteEl.style.color = color;
+    this.noteT = secs;
+  }
+
   update(dt: number, f: HudFrame) {
     this.time += dt;
     const e = f.exp;

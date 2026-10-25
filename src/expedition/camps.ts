@@ -8,12 +8,12 @@ import { hash4, rng } from "../world/pois";
 
 export const CAMP_DEFAULTS = {
   campSeed: 7,
-  campCell: 650,
-  campChance: 0.5,
+  campCell: 520,
+  campChance: 0.6,
   campMin: 8,
   campMax: 36,
   campGuess: 0.4,
-  campClear: 350,
+  campClear: 260,
   fogCell: 1100,
   fogChance: 0.3,
   fogMin: 180,

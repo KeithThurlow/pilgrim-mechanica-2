@@ -9,6 +9,9 @@ export const UPPER_DEFAULTS = {
   torsoLimit: 180,
   podYawMax: 30,
   podPitchMax: 20,
+  podPitchUp: 50,
+  torsoLeanMax: 12,
+  torsoLeanRate: 40,
   podTrack: 12,
   spinUp: 0.8,
   spinDown: 1.4,
@@ -34,7 +37,10 @@ export const UPPER_PARAMS: Param[] = [
   { key: "torsoTurnRate", label: "Torso turn rate (°/s)", min: 30, max: 600, step: 5, group: "Torso & guns" },
   { key: "torsoLimit", label: "Torso turn limit (°)", min: 20, max: 180, step: 1, group: "Torso & guns", tip: "How far the torso can turn from the legs; 180 turns freely the shortest way (Keith 2026-10-25: kite and shoot behind you)" },
   { key: "podYawMax", label: "Gun arc (°)", min: 0, max: 60, step: 1, group: "Torso & guns", tip: "Guns swing this far on their own before the torso has to turn" },
-  { key: "podPitchMax", label: "Gun pitch limit (°)", min: 0, max: 45, step: 1, group: "Torso & guns" },
+  { key: "podPitchMax", label: "Gun pitch down (°)", min: 0, max: 45, step: 1, group: "Torso & guns", tip: "How far the guns dip; a target closer under them still gets fired on" },
+  { key: "podPitchUp", label: "Gun pitch up (°)", min: 0, max: 80, step: 1, group: "Torso & guns", tip: "How far the guns raise (Keith 2026-10-26: reach a tall walker's body from close in). Past this plus the torso's lean they can't bear and don't fire" },
+  { key: "torsoLeanMax", label: "Torso leans back up to (°)", min: 0, max: 30, step: 0.5, group: "Torso & guns", tip: "When the guns are at their raise limit the hull tilts back this much more" },
+  { key: "torsoLeanRate", label: "Torso lean speed (°/s)", min: 1, max: 200, step: 1, group: "Torso & guns" },
   { key: "podTrack", label: "Gun tracking", min: 1, max: 40, step: 0.5, group: "Torso & guns" },
   { key: "outwardTrack", label: "Outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Torso & guns", tip: "Share of the tracking speed an arm swings outward, away from the torso (inward is full speed; Keith 2026-10-24). When the aim sweeps sideways one arm swings in while the other swings out, so the guns turn at different speeds" },
   { key: "fireCone", label: "Fire cone (°)", min: 0.5, max: 30, step: 0.5, group: "Torso & guns", tip: "A gun fires only once it points this close to the aim" },
@@ -131,6 +137,8 @@ export class UpperSim {
   shake = 0;
   /** True while the aim point is inside the guns' reach (arc and turn limit). */
   onTarget = false;
+  /** The hull tilted back (radians, + back) to raise the guns past their own limit at a target high overhead. */
+  lean = 0;
 
   constructor(public v: UpperValues) {}
 
@@ -168,8 +176,16 @@ export class UpperSim {
     const step = v.torsoTurnRate * D2R * dt;
     this.torsoYaw = wrap(legsHeading + cur + clamp(rel - cur, -step, step));
 
-    const pmax = v.podPitchMax * D2R, cone = v.fireCone * D2R;
+    const pmax = v.podPitchMax * D2R, pup = v.podPitchUp * D2R, cone = v.fireCone * D2R;
     const lx = Math.cos(this.torsoYaw), lz = -Math.sin(this.torsoYaw); // torso's left
+    // Lean the hull back when the aim is higher than the guns raise (pitch is + down, so up is -pitch).
+    let leanWant = 0;
+    if (aim) {
+      const up = Math.atan2(aim.y - shoulder.y, Math.max(1, Math.hypot(aim.x - shoulder.x, aim.z - shoulder.z)));
+      leanWant = clamp(up - pup, 0, v.torsoLeanMax * D2R);
+    }
+    const leanStep = v.torsoLeanRate * D2R * dt;
+    this.lean += clamp(leanWant - this.lean, -leanStep, leanStep);
     const spinRate = (v.spinRpm / 60) * Math.PI * 2;
     const shots: (1 | -1)[] = [];
     this.onTarget = false;
@@ -181,7 +197,8 @@ export class UpperSim {
       const gx = shoulder.x + lx * g.side * v.gunSpacing, gz = shoulder.z + lz * g.side * v.gunSpacing;
       const yawWant = aim ? wrap(Math.atan2(aim.x - gx, aim.z - gz) - this.torsoYaw) : 0;
       const dist = aim ? Math.hypot(aim.x - gx, aim.z - gz) : 10;
-      const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) : 0;
+      // Relative to the hull, which is leaning back by `lean`.
+      const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) + this.lean : 0;
       // Each arm swings inward (toward the torso) at full speed and outward slower. Yaw grows toward the mech's
       // left, so for the left arm (+1) a rising yaw is outward, and for the right arm (-1) a falling one is.
       const yawTo = clamp(yawWant, -ymax, ymax);
@@ -189,13 +206,16 @@ export class UpperSim {
       const kYaw = 1 - Math.exp(-track * (outward ? v.outwardTrack : 1) * dt);
       const kPitch = 1 - Math.exp(-track * dt);
       g.yaw += (yawTo - g.yaw) * kYaw;
-      g.pitch += (clamp(pitchWant, -pmax, pmax) - g.pitch) * kPitch;
+      const pitchTo = clamp(pitchWant, -pup, pmax);
+      g.pitch += (pitchTo - g.pitch) * kPitch;
       g.kick += (0 - g.kick) * (1 - Math.exp(-v.recoilReturn * dt));
       // On target: the gun has swung as close as it can go (its clamped aim), and the aim is inside its arc (else it
-      // waits for the torso). Pitch only needs the gun to have reached its limit: a target close under the guns
-      // asks for more depression than they have, and they should still fire (bug 2026-10-24: they never did).
+      // waits for the torso). Pitch only needs the gun to have reached its limit below: a target close under the guns
+      // asks for more depression than they have, and they should still fire (bug 2026-10-24: they never did). Above,
+      // a target higher than the guns raise (plus the lean) is out of reach: they don't fire up at it.
       const inArc = Math.abs(yawWant) <= ymax + cone;
-      g.onTarget = g.enabled && !!aim && inArc && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(clamp(pitchWant, -pmax, pmax) - g.pitch) <= cone * 2;
+      const reachUp = pitchWant >= -pup - cone;
+      g.onTarget = g.enabled && !!aim && inArc && reachUp && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(pitchTo - g.pitch) <= cone * 2;
       this.onTarget ||= g.onTarget;
 
       // A rail cannon or rocket launcher only aims here: it charges and fires in src/weapons.

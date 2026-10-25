@@ -9,9 +9,9 @@ import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
-import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMALL, robotCentre } from "../../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMALL } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
-import { RobotTarget } from "../../src/combat/robotTarget";
+import { RobotTarget, robotCandidates } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
 import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
@@ -40,7 +40,7 @@ const lab = await combatLab({
   title: "Robot swarm",
   defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS },
   params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones"] }],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] }],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
@@ -95,16 +95,9 @@ function spawnPack() {
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
 let packClock = Infinity, slot = 2; // the first pack comes at once
-lab.targets = () => {
-  const out: TargetCandidate[] = [];
-  for (let i = 0; i < sw.hi; i++) {
-    if (sw.state[i] >= DOWN) continue; // skip down, dead, empty
-    const c = { x: 0, y: 0, z: 0, r: 0, key: i as unknown, vx: sw.vx[i], vz: sw.vz[i] };
-    c.r = Math.max(0.6, robotCentre(sw, i, c)); // the hub, or a walker's chassis
-    out.push(c);
-  }
-  return out;
-};
+// The hub, or a walker's chassis (a cursor among a walker's feet takes its body too).
+const cands: TargetCandidate[] = [];
+lab.targets = () => robotCandidates(sw, cands);
 const SHOT = {
   [SMALL]: { flash: 0.35, hit: 0.3 },
   [MID]: { flash: 0.7, hit: 0.6 },

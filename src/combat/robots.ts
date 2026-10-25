@@ -110,7 +110,10 @@ export const ROBOT_DEFAULTS = {
   robotBigStepAt: 0.22,
   robotBigStepLift: 2.4,
   robotBigLegHit: 0.45,
-  robotBigLegDamage: 0.5,
+  // Hits by part (Keith 2026-10-26: shoot up at the body for full damage; legs and feet take less).
+  robotLegDamage: 0.5,
+  robotFootDamage: 0.3,
+  robotMidLegHit: 0.2,
   robotBigArc: 12,
   robotBigBurst: 2,
   robotBigRoundInterval: 0.7,
@@ -139,7 +142,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
-const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack";
+const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
   { key: "robotSpeedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: G1 },
@@ -227,8 +230,10 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigStepTime", label: "Step time (s)", min: 0.15, max: 3, step: 0.05, group: G2, tip: "How long one arm takes to swing its bucket over" },
   { key: "robotBigStepAt", label: "Step when off by (× spread)", min: 0.05, max: 1, step: 0.01, group: G2, tip: "A bucket steps when it's this far (× the feet's spread) from where it wants to be" },
   { key: "robotBigStepLift", label: "Step lift (m)", min: 0, max: 6, step: 0.1, group: G2 },
-  { key: "robotBigLegHit", label: "Arm hit radius (m)", min: 0, max: 1.5, step: 0.01, group: G2, tip: "Rounds hit the arm legs (boom, stick, bucket) within this" },
-  { key: "robotBigLegDamage", label: "Arm hits count (×)", min: 0, max: 2, step: 0.05, group: G2, tip: "Damage share of a round into an arm leg rather than the chassis" },
+  { key: "robotLegDamage", label: "Leg hits count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Damage share of a round into a walker's leg (a big one's boom and stick, a medium one's thigh and shin) rather than its body" },
+  { key: "robotFootDamage", label: "Foot hits count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Damage share of a round into a foot (a big one's bucket, the low end of a medium one's leg)" },
+  { key: "robotBigLegHit", label: "Big: arm hit radius (m)", min: 0, max: 1.5, step: 0.01, group: GH, tip: "Rounds hit the arm legs (boom, stick, bucket) within this; the bucket 1.6× it" },
+  { key: "robotMidLegHit", label: "Medium: leg hit radius (m)", min: 0, max: 0.8, step: 0.01, group: GH, tip: "Rounds hit a medium one's legs within this (0: legs let rounds through)" },
   { key: "robotBigArc", label: "Fires within (°)", min: 1, max: 90, step: 1, group: G2, tip: "Only fires when turned this close to the mech" },
   { key: "robotBigBurst", label: "Charges per volley", min: 1, max: 10, step: 1, group: G2 },
   { key: "robotBigRoundInterval", label: "Time between charges (s)", min: 0.1, max: 3, step: 0.05, group: G2 },
@@ -262,6 +267,8 @@ export const RUN = 0, LEAP = 1, LATCHED = 2, FIRE = 3, FLUNG = 4, CUT = 5, DOWN 
 export const EMPTY = 255;
 /** Kinds: small scrappers, big excavators, medium cutters. */
 export const SMALL = 0, BIG = 1, MID = 2;
+/** Parts a round can hit (walkers): the body (chassis or hub), a leg, a foot. */
+export const PART_BODY = 0, PART_LEG = 1, PART_FOOT = 2;
 /** Medium and big walk on planted feet. */
 export const isWalker = (kind: number) => kind !== SMALL;
 /** Who shoves whom on the ground: heavier ranks push lighter ones aside. */
@@ -341,8 +348,9 @@ export class RobotSwarm {
   private sfx1 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfy1 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfz1 = new Float32Array(ROBOT_MAX * WALK_LEGS);
   /** A walker's foot coming down: robot, foot world position (dust, sound). */
   onFootfall: ((i: number, x: number, y: number, z: number) => void) | null = null;
-  /** Set by hitRay: the last hit was on a big one's arm leg (not its chassis). */
+  /** Set by hitRay: the last hit was on a walker's leg or foot (not its body), and which part (PART_*). */
   hitLeg = false;
+  hitPart = PART_BODY;
   /**
    * Frozen robots stand where they are and do nothing (not stepped, no attacks) until cleared: a camp asleep out in
    * the sand (the expedition lab). The dead still collapse.
@@ -401,10 +409,11 @@ export class RobotSwarm {
 
   private kindPlan: number[] = [];
   /** Kinds for a group of n: shares of big and medium ones spread evenly through it, the rest small. */
-  private planKinds(n: number): number[] {
+  private planKinds(n: number, shares?: { mid: number; big: number }): number[] {
     const v = this.v, plan = this.kindPlan;
     plan.length = n; plan.fill(SMALL);
-    const bigN = Math.min(n, Math.round(n * v.robotBigShare)), midN = Math.min(n - bigN, Math.round(n * v.robotMidShare));
+    const bigS = shares?.big ?? v.robotBigShare, midS = shares?.mid ?? v.robotMidShare;
+    const bigN = Math.min(n, Math.round(n * bigS)), midN = Math.min(n - bigN, Math.round(n * midS));
     const place = (count: number, kind: number, off: number) => {
       for (let j = 0; j < count; j++) {
         let k = Math.min(n - 1, Math.floor(((j + off) * n) / count));
@@ -416,9 +425,9 @@ export class RobotSwarm {
     return plan;
   }
 
-  /** n robots around (cx, cz) within radius; shares of them medium and big. Returns the slots used. */
-  spawn(n: number, cx: number, cz: number, radius: number): number[] {
-    const v = this.v, plan = this.planKinds(n), made: number[] = [];
+  /** n robots around (cx, cz) within radius; shares of them medium and big (the sliders', or these). Returns the slots used. */
+  spawn(n: number, cx: number, cz: number, radius: number, shares?: { mid: number; big: number }): number[] {
+    const v = this.v, plan = this.planKinds(n, shares), made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
       if (i < 0) return made;
@@ -1065,16 +1074,19 @@ export class RobotSwarm {
   }
 
   /**
-   * Nearest live robot hit by a ray, or null. Small ones: a squat ellipsoid round the hub (its size × hit scale).
-   * Medium: an ellipsoid round the chassis. Big: an ellipsoid round the high chassis, and thin capsules down the arm
-   * legs, boom, stick and bucket (hitLeg says which was hit).
+   * Nearest live robot hit by a ray, or null; the round stops on whichever part it meets first. Small ones: a squat
+   * ellipsoid round the hub (its size × hit scale). Medium: an ellipsoid round the chassis and thin capsules down each
+   * leg (thigh and shin; the shin's low quarter is its foot). Big: an ellipsoid round the high chassis, capsules down
+   * the arm legs (boom and stick) and a fatter one round each bucket (its foot). part says which (PART_*); leg is true
+   * for a leg or a foot.
    */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number; leg: boolean } | null {
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number; leg: boolean; part: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const k = this.v.robotHitScale;
-    let best = -1, bestT = maxDist, bestLeg = false;
+    let best = -1, bestT = maxDist, bestPart = PART_BODY;
+    const hip = this.hp3, knee = this.kn3, tip = this.tp3, foot = this.ft3, low = this.lw3;
     for (let i = 0; i < this.hi; i++) {
       const s = this.state[i];
       if (s >= DEAD) continue;
@@ -1087,28 +1099,42 @@ export class RobotSwarm {
         const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
         if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
         const t = rayEllipsoid(ox - this.px[i], oy - this.hubY[i] - S * 0.05, oz - this.pz[i], dx, dy, dz, S * 0.45 * k, S * BIG_BODY_H * 0.75 * k, S * 0.55 * k);
-        if (t >= 0 && t < bestT) { bestT = t; best = i; bestLeg = false; }
+        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
         const r = this.v.robotBigLegHit;
         if (r <= 0) continue;
-        const hip = this.hp3, knee = this.kn3, tip = this.tp3, foot = this.ft3;
         for (let g = 0; g < WALK_LEGS; g++) {
           this.legPose(i, g, hip, knee, tip, foot);
           let tl = raySegment(ox, oy, oz, dx, dy, dz, hip, knee, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestLeg = true; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
           tl = raySegment(ox, oy, oz, dx, dy, dz, knee, tip, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestLeg = true; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
           tl = raySegment(ox, oy, oz, dx, dy, dz, tip, foot, r * 1.6);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestLeg = true; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; }
         }
         continue;
       }
       if (kind === MID) {
-        const qx = ox - this.px[i], qy = oy - (this.hubY[i] + S * 0.05), qz = oz - this.pz[i];
-        const R = S * 0.6 * k;
-        const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
+        // Quick reject: a sphere round the body and its legs' reach.
+        const H = this.heightOf(i);
+        const sx = ox - this.px[i], sy = oy - (this.py[i] + H * 0.6), sz = oz - this.pz[i];
+        const R = Math.max(S * 0.6 * k, H * 1.2 + S * 0.9);
+        const b0 = sx * dx + sy * dy + sz * dz, c0 = sx * sx + sy * sy + sz * sz - R * R;
         if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
-        const t = rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.38 * k, S * MID_BODY_H * k, S * 0.5 * k);
-        if (t >= 0 && t < bestT) { bestT = t; best = i; bestLeg = false; }
+        const t = rayEllipsoid(ox - this.px[i], oy - (this.hubY[i] + S * 0.05), oz - this.pz[i], dx, dy, dz, S * 0.38 * k, S * MID_BODY_H * k, S * 0.5 * k);
+        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
+        const r = this.v.robotMidLegHit;
+        if (r <= 0 || s === DOWN) continue;
+        for (let g = 0; g < WALK_LEGS; g++) {
+          this.legPose(i, g, hip, knee, tip, foot);
+          let tl = raySegment(ox, oy, oz, dx, dy, dz, hip, knee, r);
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          // The shin; its low quarter is the foot.
+          low.x = knee.x + (tip.x - knee.x) * 0.75; low.y = knee.y + (tip.y - knee.y) * 0.75; low.z = knee.z + (tip.z - knee.z) * 0.75;
+          tl = raySegment(ox, oy, oz, dx, dy, dz, knee, low, r);
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          tl = raySegment(ox, oy, oz, dx, dy, dz, low, tip, r * 1.2);
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; }
+        }
         continue;
       }
       const cy = this.hubY[i], qx = ox - this.px[i], qy = oy - cy, qz = oz - this.pz[i];
@@ -1120,11 +1146,15 @@ export class RobotSwarm {
       const t = flat
         ? rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.45 * k, S * 0.22 * k, S * 0.45 * k)
         : rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.34 * k, S * 0.34 * k, S * 0.34 * k);
-      if (t >= 0 && t < bestT) { bestT = t; best = i; bestLeg = false; }
+      if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
     }
-    this.hitLeg = best >= 0 && bestLeg;
-    return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg };
+    this.hitPart = best >= 0 ? bestPart : PART_BODY;
+    this.hitLeg = best >= 0 && bestPart !== PART_BODY;
+    return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg, part: this.hitPart };
   }
+  /** Damage share of a round into a part (PART_*): legs and feet take less than the body (sliders). */
+  partShare(part: number) { return part === PART_LEG ? this.v.robotLegDamage : part === PART_FOOT ? this.v.robotFootDamage : 1; }
+  private lw3: V3 = { x: 0, y: 0, z: 0 };
   private hp3: V3 = { x: 0, y: 0, z: 0 }; private kn3: V3 = { x: 0, y: 0, z: 0 };
   private ft3: V3 = { x: 0, y: 0, z: 0 }; private tp3: V3 = { x: 0, y: 0, z: 0 };
 
@@ -1197,6 +1227,20 @@ export function robotCentre(sw: RobotSwarm, i: number, out: { x: number; y: numb
   out.x = sw.px[i]; out.y = sw.hubY[i]; out.z = sw.pz[i];
   const k = sw.kind[i];
   return k === BIG ? sw.size[i] * 0.5 : k === MID ? sw.size[i] * 0.4 : sw.size[i] * 0.35;
+}
+
+/**
+ * How far a walker's planted feet reach from under its body (m, flat): a cursor on the sand anywhere in here is on the
+ * robot, and the soft lock takes its body. Small ones: half their size.
+ */
+export function robotFootprint(sw: RobotSwarm, i: number): number {
+  if (sw.kind[i] === SMALL) return sw.size[i] * 0.5;
+  let r = 0;
+  for (let k = 0; k < WALK_LEGS; k++) {
+    const f = i * WALK_LEGS + k;
+    r = Math.max(r, Math.hypot(sw.footX[f] - sw.px[i], sw.footZ[f] - sw.pz[i]));
+  }
+  return r;
 }
 
 /** Ray (from q relative to the ellipsoid's centre, unit d) against an axis-aligned ellipsoid; distance or -1. */

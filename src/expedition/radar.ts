@@ -54,6 +54,9 @@ export interface RadarWorld {
   unknown: Unknown[];
   /** Live robots (only the mech radar shows them). */
   contacts: { id: number; x: number; z: number; kind: number }[];
+  /** Moving danger (roaming packs, raids, a blast just now): heat on both scopes, seen through unknown areas too
+   *  (the ground shakes; Keith 2026-10-26: show the danger on the radar as heat). */
+  heat?: { id: string; x: number; z: number; guess: number; awake: boolean }[];
 }
 
 export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean }
@@ -115,6 +118,20 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
   } else {
     for (const p of w.pois) if (near(p.x, p.z)) pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "poi", tier: p.tier, size: p.tier, stripped: p.stripped });
     for (const c of w.contacts) if (near(c.x, c.z)) pic.blips.push({ id: "r" + c.id, x: c.x - mx, z: c.z - mz, kind: "robot", tier: 0, size: c.kind === 1 ? 3 : c.kind === 2 ? 2 : 1 });
+  }
+  // Moving danger: sized to the scope (the blob sizes are for the convoy's); on the mech's scope, heat out to three
+  // times its range glows on the rim the way it lies, fainter with distance.
+  const sk = mode === "convoy" ? 1 : Math.max(0.1, (1.5 * range) / v.convoyRadar);
+  for (const b of w.heat ?? []) {
+    const r = (v.blobBase + v.blobGrow * Math.sqrt(Math.max(0, b.guess))) * sk;
+    let x = b.x - mx, z = b.z - mz, heat = Math.min(1, b.guess / Math.max(1, v.blobHot));
+    const d = Math.hypot(x, z);
+    if (mode === "mech" && d > range * 0.97) {
+      if (d > range * 3) continue;
+      heat *= 1 - (d - range) / (range * 2.4);
+      x *= (range * 0.97) / d; z *= (range * 0.97) / d;
+    } else if (!near(b.x, b.z, r)) continue;
+    pic.blobs.push({ id: b.id, x, z, r, heat, awake: b.awake });
   }
   return pic;
 }
