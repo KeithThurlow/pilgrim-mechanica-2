@@ -7,10 +7,16 @@
 // The convoy runs as a train (Keith 2026-10-24): platforms in a line with gaps the mech walks through, footbridges
 // between them high enough to walk under, crawler tracks on the big ones leaving ruts and dust, pipe runs, vehicles
 // tied down on the motor pool and escorts driving alongside.
+// The expedition loop (docs/proposal-expedition.md) runs on top: POIs and swarm camps out in the sand, E strips
+// salvage onto the at-risk list, the crane's pick-up banks it, hold Q (or running out of fuel) recovers the mech and
+// loses it, a destroyed mech loses it too; the radar (big in the convoy's range, the mech's own past it), the arrow
+// home to the return point, fuel and the home estimate (src/expedition/).
 // Flags: ?manual (no demo), ?aboard (start on the deck), ?deploy (start on the deck and launch at once), ?park (start
 // parked), ?hang (start hanging from the crane over the sand), ?drop (just let go over the sand, falling), ?threat (a
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
-// follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N).
+// follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
+// field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
+// (start out with little fuel left), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { createApp } from "../../src/core/app";
@@ -51,6 +57,10 @@ import { EscortBodies } from "../../src/convoy/escortBody";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
 import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
 import { DefenceBody } from "../../src/convoy/defenceBody";
+import { ExpeditionLoop, LOOP_DEFAULTS, LOOP_PARAMS, LOOP_TOPICS } from "../../src/expedition/loop";
+import { POI_PARAMS } from "../../src/world/pois";
+import { SITE_PARAMS } from "../../src/pois/kinds";
+import { CAMP_PARAMS } from "../../src/expedition/camps";
 import { Costs } from "../../src/core/costs";
 
 const app = await createApp(document.getElementById("view")!);
@@ -61,11 +71,12 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
+  ...LOOP_DEFAULTS,
   radius: 5, shadowBox: 60,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
@@ -117,6 +128,18 @@ scene.add(body.root);
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);
 const sim = player.sim;
+// The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player);
+/** Recovered or lost: back on the lead bay's set-down pad, repaired. */
+function homeAboard() {
+  carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
+  const p = convoy.bays[0];
+  player.reset(p.x, p.z, p.heading);
+  carry.putAboard(sim, cranes[0]);
+  for (const c of cranes) c.calm();
+  streamer.fill(sim.pos.x, sim.pos.z);
+}
+loop.onHome = homeAboard;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -150,6 +173,15 @@ canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerT
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 let deployAsked = false, parkAsked = false;
+// E held strips salvage out on the sand (E pressed still parks aboard); Q held calls a recovery.
+let eHeld = false, qHeld = false;
+addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code === "KeyE") { eHeld = true; auto = false; }
+  if (e.code === "KeyQ") { qHeld = true; auto = false; }
+});
+addEventListener("keyup", (e) => { if (e.code === "KeyE") eHeld = false; if (e.code === "KeyQ") qHeld = false; });
+addEventListener("blur", () => { eHeld = false; qHeld = false; });
 // Space: dash the way WASD points (Keith 2026-10-25: the dash in every lab), on charges; hold for boost with fuel.
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
@@ -169,6 +201,7 @@ addEventListener("keydown", (e) => {
 
 /** Start over: convoy at the origin, mech off to its left (or in the bay). */
 function restart() {
+  loop.restart(0, 0);
   convoy.reset(0, 0);
   escorts.reset();
   for (const c of cranes) c.place();
@@ -192,6 +225,29 @@ function restart() {
     player.reset(w.x, w.z, p.heading);
     carry.grab(sim);
   }
+  // Expedition starts: out in the field (?out, ?far), short of fuel, with scrap at risk.
+  if (params.has("out") || params.has("far") || params.has("lowfuel")) {
+    const side = params.has("far") ? 850 : 280, ahead = params.has("far") ? 120 : 60;
+    const w = p.toWorld(side, 0, ahead);
+    player.reset(w.x, w.z, p.heading + Math.PI / 2);
+    carry.armed = true;
+  }
+  // ?nearcamp: out on the sand just outside the wake range of the nearest swarm camp, facing it.
+  if (params.has("nearcamp")) {
+    const c = loop.camps.campsNear(p.x, p.z, 2500).filter((q) => !route.at(q.x, q.z, { w: 0, berm: 0, lift: 0, rough: 0 }))
+      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+    if (c) {
+      const d = Math.hypot(c.x - p.x, c.z - p.z) || 1, back = Number(params.get("nearcamp")) || V.campWake + 15;
+      const x = c.x - ((c.x - p.x) / d) * back, z = c.z - ((c.z - p.z) / d) * back;
+      player.reset(x, z, Math.atan2(c.x - x, c.z - z));
+      carry.armed = true;
+    }
+  }
+  loop.exp.launch();
+  if (["out", "far", "lowfuel", "nearcamp"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
+  if (params.has("lowfuel")) loop.fuel.left = Number(params.get("lowfuel")) || 150;
+  if (carry.state !== "walking") loop.exp.state = "aboard";
   streamer.fill(sim.pos.x, sim.pos.z);
 }
 
@@ -225,17 +281,24 @@ const panel = tweakPanel({
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
+    ...LOOP_TOPICS,
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => {
     if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); }
     // The road reindexes itself on its next step; the chunks need building again.
     if (roadKeys.has(k)) streamer.rebuildAll();
+    // POI placement and the dunes under it: placed again (pads rebuilt with the chunks); camps placed again.
+    if (shapeKeys.has(k) || POI_PARAMS.some((p) => p.key === k) || SITE_PARAMS.some((p) => p.key === k)) { loop.rebuild("sites"); streamer.rebuildAll(); }
+    if (CAMP_PARAMS.some((p) => p.key === k)) loop.rebuild("camps");
   },
 });
 const regions = body.regions();
 selector = new Selector(app, {
   items: [
+    { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
+    { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
+    { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
     { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },
@@ -252,7 +315,7 @@ selector = new Selector(app, {
   onPick: (topic) => { picking = true; panel.focus(topic); picking = false; },
 });
 const sel = selector;
-installReport(app, "convoy", V, () => ({ selected: sel.selection, topic: panel.focused, mech: carry.label, crane: carry.phase, convoyS: Math.round(route.s) }));
+installReport(app, "convoy", V, () => ({ selected: sel.selection, topic: panel.focused, mech: carry.label, crane: carry.phase, convoyS: Math.round(route.s), expedition: loop.exp.state, fuel: Math.round(loop.fuel.left), home: Math.round(loop.home.eta), atRisk: loop.exp.scrapAtRisk, banked: loop.exp.bank.scrap }));
 Object.assign(V, body.legValues());
 panel.refresh();
 
@@ -311,13 +374,20 @@ function demoCmd(dt: number): MoveCommand {
   }
   if (carry.state === "landing") { demo.leaving = true; demo.stage = "park"; demo.wait = 0; }
   if (carry.state === "walking" && demo.leaving) {
-    // Off to the side and ahead a little, until out of range for a few seconds.
+    // Out on an expedition: to the nearest POI ahead, strip a couple of spots, then home.
+    const f = loop.demoField();
+    if (f) return f;
+    if (carry.armed && loop.exp.state === "out") { demo.leaving = false; demo.side = -demo.side as 1 | -1; }
+    // Nothing to strip: off to the side and ahead a little, until out of range for a few seconds.
     if (carry.armed) demo.awayFor += dt;
     if (demo.awayFor > 5) { demo.awayFor = 0; demo.leaving = false; demo.side = -demo.side as 1 | -1; }
     const l = p.toLocal(sim.pos.x, sim.pos.z), s = Math.sign(l.x) || 1;
     return { x: p.left.x * s + p.fwd.x * 0.8, z: p.left.z * s + p.fwd.z * 0.8, sprint: true };
   }
   if (carry.state === "lifting") return still;
+  // Far out: for the return point first.
+  const home = loop.demoHome();
+  if (home) return home;
   // Walk to a spot beside the crane, keeping up with the convoy.
   const l = p.toLocal(sim.pos.x, sim.pos.z), s = Math.sign(l.x) || 1;
   const at = p.toWorld(s * 15, 0, carry.crane.mount + 4 * p.craneEnd);
@@ -339,7 +409,7 @@ app.onTick((rawDt) => {
   let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
   let aim: Aim | null = null;
   let trigger = false;
-  if (auto) cmd = demoCmd(dt);
+  if (auto) { cmd = demoCmd(dt); aim = loop.demoAim; trigger = loop.demoTrigger; }
   else {
     if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
     if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
@@ -376,7 +446,7 @@ app.onTick((rawDt) => {
     const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
     threatMark.position.set(mid.x + Math.sin(a) * 60, mid.y + 6, mid.z + Math.cos(a) * 60);
     defence.target([threatMark.position]);
-  } else defence.target([]);
+  } else defence.target(loop.turretThreats());
   defence.update(dt);
   costs.mark("turrets");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
@@ -432,6 +502,9 @@ app.onTick((rawDt) => {
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
   costs.mark("light");
   bf.update(dt, camera, look);
+  // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
+  loop.update(dt, { eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st) });
+  app.hud.set("expedition", loop.line);
   app.hud.set("costs", costs.end());
 
   const p = convoy.bay;

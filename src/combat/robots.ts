@@ -343,6 +343,11 @@ export class RobotSwarm {
   onFootfall: ((i: number, x: number, y: number, z: number) => void) | null = null;
   /** Set by hitRay: the last hit was on a big one's arm leg (not its chassis). */
   hitLeg = false;
+  /**
+   * Frozen robots stand where they are and do nothing (not stepped, no attacks) until cleared: a camp asleep out in
+   * the sand (the expedition lab). The dead still collapse.
+   */
+  readonly frozen = new Uint8Array(ROBOT_MAX);
   /** Live (not DEAD) robots. */
   count = 0;
   /** One past the highest slot ever used: loops stop here. */
@@ -411,12 +416,14 @@ export class RobotSwarm {
     return plan;
   }
 
-  /** n robots around (cx, cz) within radius; shares of them medium and big. */
-  spawn(n: number, cx: number, cz: number, radius: number): void {
-    const v = this.v, plan = this.planKinds(n);
+  /** n robots around (cx, cz) within radius; shares of them medium and big. Returns the slots used. */
+  spawn(n: number, cx: number, cz: number, radius: number): number[] {
+    const v = this.v, plan = this.planKinds(n), made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
-      if (i < 0) return;
+      if (i < 0) return made;
+      made.push(i);
+      this.frozen[i] = 0;
       const kind = plan[k], big = kind === BIG, mid = kind === MID;
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -453,6 +460,15 @@ export class RobotSwarm {
         this.hubY[i] = (this.py[i] + fy / WALK_LEGS) * 0.5 + H;
       } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
     }
+    return made;
+  }
+
+  /** Take a robot off the field at once (live or dead; its slot freed). */
+  remove(i: number): void {
+    if (i < 0 || i >= this.hi || this.state[i] === EMPTY) return;
+    if (this.state[i] < DEAD) { this.setState(i, DEAD); this.count--; }
+    this.state[i] = EMPTY;
+    this.frozen[i] = 0;
   }
   private v3a: V3 = { x: 0, y: 0, z: 0 };
 
@@ -604,6 +620,7 @@ export class RobotSwarm {
       const s = state[i];
       cx[i] = 0; cz[i] = 0;
       if (s === EMPTY) continue;
+      if (this.frozen[i] && s < DEAD) continue;
       stateTime[i] += dt;
       const kind = this.kind[i], big = kind === BIG, mid = kind === MID, walker = big || mid;
 
@@ -842,7 +859,7 @@ export class RobotSwarm {
     // Move, apply the hard gaps, keep clear of the mech, stand on the sand, trot.
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
-      if (!this.grounded(s)) continue;
+      if (!this.grounded(s) || this.frozen[i]) continue;
       const ox = px[i], oz = pz[i], oy = py[i];
       let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = keep + this.rad(i) * 0.5;

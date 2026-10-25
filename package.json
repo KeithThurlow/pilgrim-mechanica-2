@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "test": "tsx tools/walker-check.ts && tsx tools/upper-check.ts && tsx tools/slope-check.ts && tsx tools/terrain-check.ts && tsx tools/audio-check.ts && tsx tools/car-check.ts && tsx tools/infantry-check.ts && tsx tools/bandit-vat-check.ts && tsx tools/warband-check.ts && tsx tools/robots-check.ts && tsx tools/deaths-check.ts && tsx tools/targeting-check.ts && tsx tools/convoy-check.ts && tsx tools/dash-check.ts && tsx tools/shells-check.ts && tsx tools/biome-check.ts && tsx tools/poi-check.ts && tsx tools/water-check.ts && tsx tools/loadout-check.ts && tsx tools/crater-check.ts && tsx tools/weapons-check.ts && tsx tools/armoury-check.ts",
+    "test": "tsx tools/walker-check.ts && tsx tools/upper-check.ts && tsx tools/slope-check.ts && tsx tools/terrain-check.ts && tsx tools/audio-check.ts && tsx tools/car-check.ts && tsx tools/infantry-check.ts && tsx tools/bandit-vat-check.ts && tsx tools/warband-check.ts && tsx tools/robots-check.ts && tsx tools/deaths-check.ts && tsx tools/targeting-check.ts && tsx tools/convoy-check.ts && tsx tools/dash-check.ts && tsx tools/shells-check.ts && tsx tools/biome-check.ts && tsx tools/poi-check.ts && tsx tools/water-check.ts && tsx tools/loadout-check.ts && tsx tools/crater-check.ts && tsx tools/weapons-check.ts && tsx tools/armoury-check.ts && tsx tools/expedition-check.ts",
     "shots": "node tools/shots.mjs"
   },
   "dependencies": {
