@@ -78,11 +78,13 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
   the mech). Walker lab takes `?biome=` too.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
-  fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
+  fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
+  pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=`/`?k3=none|rpg|missiles|mortar|
-  linemortar` (k3 also `drums`), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar`
+  (a side given a shoulder weapon becomes an arm with a light gun), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
+  weapon in place of the pack), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
 - Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's (both can
@@ -96,7 +98,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
   the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
-  (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers.
+  (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
+  `?seek=scrap|wreck|rare|legendary`.
   Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
   the sand beside it instead), `?pilotat=N,x,z` (on car N at local x, z) or `?pilotat=bN,t` (on footbridge N, t of the
   way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.
