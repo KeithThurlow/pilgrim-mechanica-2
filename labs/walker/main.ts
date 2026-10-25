@@ -220,7 +220,13 @@ const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], 
 
 // ?dt=seconds: every frame advances this much time, however long it took to draw (repeatable headless shots).
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
-app.onTick((rawDt) => {
+// ?warm=seconds: run that much sim time (in dt steps) before the first drawn frame, so slow headless shots start mid-run.
+let warm = Number(params.get("warm") ?? 0);
+app.onTick((frameDt) => {
+  if (warm > 0) { const step = fixedDt || 1 / 30; for (; warm > 0; warm -= step) tick(step); }
+  tick(frameDt);
+});
+function tick(rawDt: number) {
   const dt = (fixedDt || rawDt) * (slow ? 0.25 : 1);
   clock += dt;
 
@@ -280,4 +286,4 @@ app.onTick((rawDt) => {
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
-});
+}

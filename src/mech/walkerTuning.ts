@@ -5,15 +5,17 @@ import type { Param } from "../core/tweaks";
 
 export const WALKER_DEFAULTS = {
   // Move
-  walkSpeed: 4,
-  sprintSpeed: 6.5,
-  accel: 3,
-  decel: 5,
+  // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
+  walkSpeed: 6,
+  sprintSpeed: 8.5,
+  accel: 4,
+  decel: 6,
   turnRate: 120,
   turnSlow: 0.6,
   // Gait
   strideBase: 2.6,
   stridePerSpeed: 0.45,
+  strideMax: 5.6,
   duty: 0.64,
   dutyFast: 0.54,
   stanceBack: 0.22,
@@ -35,6 +37,8 @@ export const WALKER_DEFAULTS = {
   toeOut: 6,
   kneeOut: 6,
   bob: 0.06,
+  runBounce: 1,
+  runCrouch: 0.18,
   impact: 2.2,
   weightShift: 0.08,
   crunchRoll: 4,
@@ -80,6 +84,7 @@ export const WALKER_PARAMS: Param[] = [
 
   { key: "strideBase", label: "Stride at rest (m)", min: 0.5, max: 6, step: 0.05, group: "Gait", tip: "Length of a full cycle (two steps) near zero speed" },
   { key: "stridePerSpeed", label: "Stride per m/s", min: 0, max: 1.5, step: 0.01, group: "Gait", tip: "Higher = longer, slower steps when fast" },
+  { key: "strideMax", label: "Longest stride (m)", min: 1, max: 9, step: 0.05, group: "Gait", tip: "A full cycle never gets longer than this: faster than that, the steps come quicker instead of reaching further (keeps the legs in reach at a run)" },
   { key: "duty", label: "Foot planted share", min: 0.5, max: 0.85, step: 0.01, group: "Gait", tip: "Share of the cycle each foot is down at a walk; above 0.5 one foot is always down" },
   { key: "dutyFast", label: "Planted share at sprint", min: 0.4, max: 0.85, step: 0.01, group: "Gait" },
   { key: "stanceBack", label: "Plant behind", min: -0.3, max: 0.5, step: 0.01, group: "Gait", tip: "Shifts where feet land: positive lands them nearer the hips, so the body leans over its feet while moving (Keith 2026-10-24)" },
@@ -101,6 +106,8 @@ export const WALKER_PARAMS: Param[] = [
   { key: "toeOut", label: "Toe out (°)", min: -10, max: 30, step: 1, group: "Body" },
   { key: "kneeOut", label: "Knees out (°)", min: -10, max: 30, step: 1, group: "Body" },
   { key: "bob", label: "Body bob (m)", min: 0, max: 0.3, step: 0.005, group: "Body" },
+  { key: "runBounce", label: "Run bounce", min: 0, max: 1, step: 0.01, group: "Body", tip: "Walking the hips ride highest over the planted foot (vaulting); running they sink onto it and spring off (bouncing). 1 = full bounce at sprint speed, blending in from walk speed" },
+  { key: "runCrouch", label: "Run crouch (m)", min: 0, max: 0.6, step: 0.01, group: "Body", tip: "The hips drop this much at sprint speed (from nothing at walk speed): a lower, driving run that keeps the long strides in reach" },
   { key: "impact", label: "Plant thud", min: 0, max: 8, step: 0.05, group: "Body", tip: "How hard the body drops onto each footfall" },
   { key: "weightShift", label: "Weight shift (m)", min: 0, max: 0.4, step: 0.005, group: "Body", tip: "The pelvis moves over the planted foot" },
   { key: "crunchRoll", label: "Hip roll (°)", min: 0, max: 15, step: 0.1, group: "Body", tip: "The pelvis rolls onto the loaded leg (AT-ST hips)" },

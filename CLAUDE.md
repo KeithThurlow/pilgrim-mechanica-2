@@ -62,7 +62,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
   `?manual` (no demo), `?zoom=metres` (game camera distance), `?aimat=x,z` (hold the aim on a point; steel wrecks
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
-  `?surface=gravel|dirt|concrete` (dust as if the ground were that).
+  `?surface=gravel|dirt|concrete` (dust as if the ground were that), `?warm=seconds` (run that much sim time before the
+  first drawn frame, for slow headless filmstrips).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
@@ -135,7 +136,7 @@ docs/                   design.md (the game), decisions.md (log)
 - Units: metres, seconds; degrees in tuning, radians in code. Y up. Heading 0 faces +Z; +X is the mech's left.
 - **The ground is a function.** `DuneField.height(x, z)` is pure and deterministic: chunks, feet, vehicles and AI all
   read the same function, so any chunk can be built in any order and nothing disagrees about where the ground is.
-- Mech scale: the Rampart is about 4.4 m to the hood, hips at 3.05 m; walk 4 m/s, sprint 6.5 m/s (from the old project).
+- Mech scale: the Rampart is about 4.4 m to the hood, hips at 3.05 m; walk 6 m/s, sprint (Shift) 8.5 m/s (Keith 2026-10-26; was the old project's 4 / 6.5).
 - Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom from 45° at 12 m
   out to 55° at 80 m.
   Judge looks and readability from that camera first; close views are for detail.

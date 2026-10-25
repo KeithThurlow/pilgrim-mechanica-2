@@ -194,7 +194,10 @@ export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneM
 export function walkToSpot(sim: WalkerSim, p: Platform, x: number, z: number, stop = 0.4): { x: number; z: number; sprint: boolean } {
   const w = p.toWorld(x, 0, z), dx = w.x - sim.pos.x, dz = w.z - sim.pos.z, d = Math.hypot(dx, dz);
   if (d < stop) return { x: 0, z: 0, sprint: false };
-  const mag = Math.max(0.25, Math.min(1, d / 3));
+  // Speed by distance in m/s, whatever the walk speed: 1 m/s near the spot, 4 m/s from 3 m out (faster, the committed
+  // turn circles a close spot instead of reaching it).
+  const ws = Math.max(1, sim.v.walkSpeed);
+  const mag = Math.min(1, Math.max(1, Math.min(4, (4 * d) / 3)) / ws);
   return { x: (dx / d) * mag, z: (dz / d) * mag, sprint: false };
 }
 

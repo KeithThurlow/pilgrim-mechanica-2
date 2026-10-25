@@ -284,7 +284,9 @@ function pickUp(w: World, label = "") {
   w.crane.place(); w.crane.calm();
   w.carry.putAboard(w.sim);
   const p = w.convoy.bay, half = p.spec.width / 2;
-  const route: [number, number][] = [[-5, 6], [5, 6], [5, -2], [-4, -2], [-4, 14], [-6, 8], [3, -2], [3, -14], [0, 2]];
+  // Back up the lane it came down before the last leg: straight from (3, -14) to (0, 2) runs into the round block on
+  // the centre line, and the walker has no path-finding (at 6 m/s it came to rest dead behind it, 2026-10-26).
+  const route: [number, number][] = [[-5, 6], [5, 6], [5, -2], [-4, -2], [-4, 14], [-6, 8], [3, -2], [3, -14], [3, -2], [0, 2]];
   let worstOut = 0, worstHips = 0, worstFoot = 0, nan = false, frames = 0, offDeckFeet = 0, minHips = Infinity, maxHips = -Infinity;
   const r0 = w.sim.stats.overreach;
   const watch = () => {

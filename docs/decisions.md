@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | The mech's default walk is much faster, close to the old run: walk 6 m/s, Shift runs 8.5 (was 4 / 6.5); the gait refined for it | Keith | Keith (speeds Claude's) | Faster than a walk means quicker steps past a 5.2 m stride (Rampart), a lower run and a bouncing bob. |
 | 2026-10-26 | Pilot: hold F to hop out (field and convoy); on the convoy you're mostly on foot; enemies attack a parked mech and the pilot, who is very vulnerable; the bay screen becomes a walk-up terminal; parking (E) crouches faster | Keith | Keith | `docs/proposal-pilot.md` |
 | 2026-10-26 | F stops firing both guns (both mouse buttons do that now) and becomes hold to hop out or back in; calling the mech gets another key later | Claude | open | Follows from Keith's hold F. |
 | 2026-10-26 | No ECS library now; a one-off stress lab to see where performance stands (not a repeated test); a shared register and spatial grid for what's near what, proposed first | Keith | Keith | `docs/proposal-register.md` (coming) |

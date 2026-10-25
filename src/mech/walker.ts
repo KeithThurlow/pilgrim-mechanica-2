@@ -193,7 +193,9 @@ export class WalkerSim {
   /** Solve the legs for the body and feet as they stand (after writing the pose from outside, e.g. a crane holding the mech). */
   solve() { this.pose(); }
 
-  stride() { return this.v.strideBase + this.v.stridePerSpeed * this.speed; }
+  stride() { return Math.min(this.v.strideMax, this.v.strideBase + this.v.stridePerSpeed * this.speed); }
+  /** 0 at walk speed and below, 1 at sprint speed: how much the gait is a run (bounce, crouch). */
+  runShare() { return smooth(this.v.walkSpeed, Math.max(this.v.walkSpeed + 0.1, this.v.sprintSpeed), this.speed); }
   /** Each foot's distance from the centre line: footSpread standing, coming in to walkSpread once moving. */
   spread() { return this.v.footSpread + (this.v.walkSpread - this.v.footSpread) * clamp(this.speed / 1.5, 0, 1); }
   duty() { return this.v.duty + (this.v.dutyFast - this.v.duty) * clamp(this.speed / Math.max(0.1, this.v.sprintSpeed), 0, 1); }
@@ -398,9 +400,11 @@ export class WalkerSim {
     const avg = (a.groundY + b.groundY) / 2, low = Math.min(a.groundY, b.groundY);
     const under = this.ground.height(this.pos.x, this.pos.z);
     const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
-    const bob = v.bob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * smooth(0.05, 1, this.speed);
+    // Walking the hips are highest over the planted foot (vaulting); running they sink onto it and spring off.
+    const run = this.runShare();
+    const bob = v.bob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * smooth(0.05, 1, this.speed) * (1 - 2 * v.runBounce * run);
     const down = smooth(0, 0.35, -this.grade);
-    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down - this.crouch, dt);
+    this.bodyY.step(ref + v.hipHeight - v.downhillCrouch * down - v.runCrouch * run - this.crouch, dt);
     this.impact.step(0, dt);
 
     // Weight onto the planted leg: shift over it, roll the pelvis down onto it.
