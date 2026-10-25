@@ -70,7 +70,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
   `?manual` (no demo), `?zoom=metres` (game camera distance), `?aimat=x,z` (hold the aim on a point; steel wrecks
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
-  `?surface=gravel|dirt|concrete` (dust as if the ground were that), `?warm=seconds` (run that much sim time before the
+  `?surface=gravel|dirt|concrete|snow` (dust and dents as if the ground were that), `?dash`, `?at=x,z`, `?warm=seconds` (run that much sim time before the
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
   go, optionally moving), `?bound` (the bound spike: hold Space; with `?walk=straight` the demo bounds).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
@@ -119,7 +119,8 @@ src/core/isoCamera.ts   the high isometric game camera
 src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuning, legTypes (leg archetypes), rampart (model rig), walkerBody (stand-in)
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
-src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings),
+src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule + groundMarks (every mark on the ground),
+                        sandMarks (old decals, behind markMode 0), minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
