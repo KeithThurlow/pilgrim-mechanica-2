@@ -108,8 +108,8 @@ export class DentLayer {
   readonly uTexel: THREE.UniformNode<"float", number>;
   readonly stats = { brushes: 0, dropped: 0, passMs: 0 };
   private targets: THREE.RenderTarget[] = [];
-  private write = 0;
   private quad: THREE.QuadMesh;
+  private copy: THREE.QuadMesh;
   private prevTex: THREE.TextureNode;
   private brushData: Float32Array;
   private brushTex: THREE.DataTexture;
@@ -144,32 +144,34 @@ export class DentLayer {
     this.brushTex.minFilter = this.brushTex.magFilter = THREE.NearestFilter;
     this.brushTex.generateMipmaps = false;
     this.brushTex.needsUpdate = true;
-    this.resize();
-    this.prevTex = texture(this.targets[1].texture);
-    this.tex = texture(this.targets[0].texture);
-    const mat = new THREE.NodeMaterial();
-    mat.fragmentNode = this.passNode();
-    mat.depthTest = false; mat.depthWrite = false;
-    this.quad = new THREE.QuadMesh(mat);
-  }
-
-  /** (Re)make the two targets for the sliders' resolution and coverage; everything starts clear. */
-  private resize() {
-    for (const t of this.targets) t.dispose();
-    this.res = Math.max(64, Math.round(this.v.dentRes));
-    this.size = Math.max(8, this.v.dentCoverage);
-    this.texel = this.size / this.res;
-    this.uSize.value = this.size; this.uTexel.value = this.texel;
-    this.uRes.value = this.res; this.uResF.value = this.res;
     const mk = () => {
-      const t = new THREE.RenderTarget(this.res, this.res, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false });
+      const t = new THREE.RenderTarget(64, 64, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false });
       t.texture.wrapS = t.texture.wrapT = THREE.RepeatWrapping;
       t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter;
       return t;
     };
     this.targets = [mk(), mk()];
-    this.write = 0;
-    if (this.tex) { this.tex.value = this.targets[0].texture; this.prevTex.value = this.targets[1].texture; }
+    this.resize();
+    this.prevTex = texture(this.targets[0].texture);
+    this.tex = texture(this.targets[0].texture);
+    const mat = new THREE.NodeMaterial();
+    mat.fragmentNode = this.passNode();
+    mat.depthTest = false; mat.depthWrite = false;
+    this.quad = new THREE.QuadMesh(mat);
+    const cm = new THREE.NodeMaterial();
+    cm.fragmentNode = textureLoad(texture(this.targets[1].texture), ivec2(screenCoordinate.xy.floor()));
+    cm.depthTest = false; cm.depthWrite = false;
+    this.copy = new THREE.QuadMesh(cm);
+  }
+
+  /** Size the two targets for the sliders' resolution and coverage; everything starts clear. */
+  private resize() {
+    this.res = Math.max(64, Math.round(this.v.dentRes));
+    this.size = Math.max(8, this.v.dentCoverage);
+    this.texel = this.size / this.res;
+    this.uSize.value = this.size; this.uTexel.value = this.texel;
+    this.uRes.value = this.res; this.uResF.value = this.res;
+    for (const t of this.targets) t.setSize(this.res, this.res);
     this.cx = this.cz = this.pcx = this.pcz = 1e6;
     for (const p of this.persistent) p.done = false;
   }
@@ -184,6 +186,9 @@ export class DentLayer {
       const base = pix.add(0.5).div(NF).mul(size);
       const world = base.add(size.mul(round(this.uCentre.sub(base).div(size)))).toVar();
       const st = vec4(0, 0, 0, 0).toVar();
+      // Rim wobble and berm grain: noise read once per texel, outside the brush loop (inside it, per brush, the shader
+      // was too big for WebGL 2 on a software GPU). Anchored to the world, so every dent still gets its own rim.
+      const wobN = mx_noise_float(vec3(world.mul(2.3), 0.7)).toVar(), grainN = mx_noise_float(vec3(world.mul(9.1), 3.1)).toVar();
       const was = max(abs(world.x.sub(this.uPrevCentre.x)), abs(world.y.sub(this.uPrevCentre.y))).lessThanEqual(half);
       If(was, () => {
         const c = textureLoad(prev, ivec2(ix, iy));
@@ -212,12 +217,12 @@ export class DentLayer {
         If(abs(p.x).lessThan(reach).and(abs(p.y).lessThan(reach)), () => {
           const along = p.x.mul(b.x).add(p.y.mul(b.y)), across = p.x.mul(b.y).sub(p.y.mul(b.x));
           const hl = a.z.mul(max(0, a.w.sub(1)));
-          const wob = float(1).add(this.uRough.mul(0.18).mul(mx_noise_float(vec3(world.mul(2.3), e.z))));
+          const wob = float(1).add(this.uRough.mul(0.18).mul(wobN));
           const dd = length(vec2(max(0, abs(along).sub(hl)), across)).div(a.z).div(wob);
           If(dd.lessThan(REACH), () => {
             const core = float(1).sub(smoothstep(CORE_IN, CORE_OUT, dd));
             const q = dd.sub(RING_AT).mul(RING_K);
-            const grain = float(1).add(this.uRough.mul(0.4).mul(mx_noise_float(vec3(world.mul(9.1), e.z.add(3.1)))));
+            const grain = float(1).add(this.uRough.mul(0.4).mul(grainN));
             const ring = exp(q.mul(q).negate()).mul(grain);
             const add = b.z.mul(core);
             // No rim piled inside a hollow already there (dentRule.splat).
@@ -336,15 +341,16 @@ export class DentLayer {
     this.uPrevCentre.value.set(this.pcx, this.pcz);
     this.uCentre.value.set(this.cx, this.cz);
 
+    // The state stays in targets[0] (the patch and the pass read it): the pass writes targets[1], a copy brings it
+    // back. Swapping which texture the nodes read instead left WebGL 2 reading the target it drew into (a feedback
+    // loop that lost the context).
     const t0 = performance.now();
-    const target = this.targets[this.write], src = this.targets[1 - this.write];
-    this.prevTex.value = src.texture;
     const r = this.renderer, was = r.getRenderTarget();
-    r.setRenderTarget(target);
+    r.setRenderTarget(this.targets[1]);
     this.quad.render(r);
+    r.setRenderTarget(this.targets[0]);
+    this.copy.render(r);
     r.setRenderTarget(was);
-    this.tex.value = target.texture;
-    this.write = 1 - this.write;
     this.stats.passMs = performance.now() - t0;
   }
 

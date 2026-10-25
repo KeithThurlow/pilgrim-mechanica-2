@@ -208,7 +208,9 @@ reticle.renderOrder = 10;
 scene.add(reticle);
 
 field.update();
-mech.reset(13, -40, 0.3);
+// ?at=x,z: start somewhere else (default 13, -40).
+const at = params.get("at")?.split(",").map(Number);
+mech.reset(at?.[0] ?? 13, at?.[1] ?? -40, 0.3);
 follow.copy(sim.pelvis);
 // The hub's biome picker wins over a saved slider.
 if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }

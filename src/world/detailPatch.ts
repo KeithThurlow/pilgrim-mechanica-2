@@ -93,7 +93,9 @@ export class DetailPatch {
 
   private material() {
     const w = this.win, S = w.sub, MF = w.mf, MC = w.mc, NF = w.nf, F = w.fine;
-    const fineT = this.fineTex, coarseT = this.coarseTex, colT = this.colourTex;
+    // One texture node each, every lookup a clone of it, so each texture is one sampler uniform (WebGL 2 allows only
+    // 16 in the vertex shader; a fresh node per lookup made a uniform per lookup there).
+    const fineT = texture(this.fineTex), coarseT = texture(this.coarseTex), colT = texture(this.colourTex);
     const dents = this.dents, dTex = dents.tex;
     const vN = varyingProperty("vec3", "vPatchN"), vCol = varyingProperty("vec3", "vPatchCol"), vW = varyingProperty("float", "vPatchW");
     // Wrapped grid index (offset half a cell so float rounding in the division can't land on the next cell).
@@ -112,8 +114,10 @@ export class DetailPatch {
       const li = positionLocal.x, lj = positionLocal.z;
       const gi = this.uFine0.x.add(li), gj = this.uFine0.y.add(lj);
       const h = fineAt(gi, gj);
-      // Fine slope by central differences, one-sided at the window's edge.
-      const il = max(li.sub(1), 0), ir = min(li.add(1), NF), jl = max(lj.sub(1), 0), jr = min(lj.add(1), NF);
+      // Slope by central differences about half a metre either side (the chunks' normals are spread over their 1 m
+      // grid), so sharp crests shade as softly as on the chunks instead of as a hard dashed line; one-sided at the edge.
+      const K = Math.max(1, Math.round(0.5 / F));
+      const il = max(li.sub(K), 0), ir = min(li.add(K), NF), jl = max(lj.sub(K), 0), jr = min(lj.add(K), NF);
       const hx = fineAt(this.uFine0.x.add(ir), gj).sub(fineAt(this.uFine0.x.add(il), gj)).div(ir.sub(il).mul(F));
       const hz = fineAt(gi, this.uFine0.y.add(jr)).sub(fineAt(gi, this.uFine0.y.add(jl))).div(jr.sub(jl).mul(F));
       // The chunks' triangle here: the coarse cell and where in it.

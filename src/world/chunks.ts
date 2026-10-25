@@ -76,9 +76,10 @@ export class TerrainStreamer {
     const shade = clamp(float(1).add(mott.mul(this.uGrain).mul(0.12)).add(ripple).sub(speck), 0.5, 1.3);
     this.shadeNode = shade;
     this.material.colorNode = vertexColor().mul(shade);
-    // Outside the patch's hole (a hair inside its edge, so no pixel cracks open along the seam).
+    // Outside the patch's hole. The chunks keep drawing half a metre into it: the patch's edge lies exactly on their
+    // triangles but with more vertices (T-junctions), so a shared edge would open pixel cracks; the overlap hides them.
     const hc = vec4(this.hole);
-    const mid = hc.xy.add(hc.zw).mul(0.5), halfW = hc.zw.sub(hc.xy).mul(0.5).sub(0.02);
+    const mid = hc.xy.add(hc.zw).mul(0.5), halfW = hc.zw.sub(hc.xy).mul(0.5).sub(0.5);
     const dd = abs(xz.sub(mid)).sub(halfW);
     this.material.maskNode = max(dd.x, dd.y).greaterThan(0).or(hc.z.lessThanEqual(hc.x));
     this.group.name = "terrain";
