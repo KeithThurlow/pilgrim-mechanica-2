@@ -146,4 +146,34 @@ export class Sfx {
 
   /** Call each frame (master level follows the slider). */
   update() { this.master.gain.value = this.v.masterVolume; }
+
+  private extra = new Map<string, { buffers: AudioBuffer[]; level: () => number; playing: AudioBufferSourceNode[] }>();
+  /** The sample rate sounds are generated at (for addSound's recipes). */
+  get rate() { return this.ctx.sampleRate; }
+
+  /** A sound another system brings (e.g. src/weapons/weaponSound.ts): generated variants and a level read on each play. */
+  addSound(name: string, data: Float32Array[], level: () => number) {
+    const buffers = data.map((d) => { const b = this.ctx.createBuffer(1, d.length, this.ctx.sampleRate); b.copyToChannel(d as Float32Array<ArrayBuffer>, 0); return b; });
+    this.extra.set(name, { buffers, level, playing: [] });
+  }
+
+  /** Play a sound added with addSound (a few voices at most; the oldest is cut). */
+  playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1) {
+    const e = this.extra.get(name);
+    if (!e || !this.running) return;
+    const pan = this.panFor(at);
+    if (pan === null) return;
+    if (e.playing.length >= PER_KIND) { try { e.playing.shift()!.stop(); } catch { /* already ended */ } }
+    const src = this.ctx.createBufferSource();
+    src.buffer = e.buffers[Math.floor(Math.random() * e.buffers.length)];
+    src.playbackRate.value = rate * (0.95 + Math.random() * 0.1);
+    const g = this.ctx.createGain();
+    g.gain.value = volume * e.level();
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = pan;
+    src.connect(g).connect(p).connect(this.master);
+    src.start();
+    e.playing.push(src);
+    src.onended = () => { const i = e.playing.indexOf(src); if (i >= 0) e.playing.splice(i, 1); };
+  }
 }
