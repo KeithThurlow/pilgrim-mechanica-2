@@ -86,6 +86,8 @@ export interface CombatLab<E extends object> {
   streamer: TerrainStreamer;
   /** Is the demo driving? */
   demoOn: () => boolean;
+  /** Show the values again after the lab changed them (e.g. a loadout fitted). */
+  refresh: () => void;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -210,6 +212,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     loadRampart: () => RampartBody.load(toon),
     streamer,
     demoOn: () => auto,
+    refresh: () => panel.refresh(),
   };
 
   // For headless debugging and tests: the lab on the page (window.__lab).

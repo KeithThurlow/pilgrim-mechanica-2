@@ -1,0 +1,49 @@
+/* The bay screen (src/ui/bay.ts), in the lab chrome's colours (src/core/lab.css). Sits left of the tuning panel. */
+.bay {
+  position: fixed; left: 10px; right: 340px; top: 10px; bottom: 84px; z-index: 4;
+  display: flex; flex-direction: column; background: rgba(24, 26, 30, 0.97); border: 1px solid var(--line); border-radius: 6px;
+  font-size: 13px;
+}
+.bay-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.bay-head strong { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+.bay-head .row { margin: 0; align-items: center; }
+.bay button.small { padding: 3px 7px; font-size: 11px; }
+.bay-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(170px, 0.8fr) minmax(220px, 1.3fr) minmax(220px, 1.1fr); }
+.bay-col { overflow: auto; padding: 6px 10px 10px; border-right: 1px solid var(--line); }
+.bay-col:last-child { border-right: none; }
+.bay h3 { margin: 8px 0 4px; color: #7fc0d0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+.bay h3.bad { color: var(--bad); }
+.bay .dim { color: var(--muted); }
+.bay .good { color: var(--ok); font-weight: 500; }
+.bay .bad { color: var(--bad); font-weight: 500; }
+.bay-note { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+.bay-sub { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; margin: 6px 0 2px; }
+.bay-slot { display: flex; flex-direction: column; padding: 5px 7px; margin: 2px 0; border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+.bay-slot:hover { border-color: var(--line); }
+.bay-slot.on { border-color: var(--accent); background: rgba(232, 137, 43, 0.08); }
+.bay-slotname { color: var(--muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+.bay-name { font-weight: 600; }
+.bay-card { border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; padding: 6px 8px; margin: 4px 0 8px; background: rgba(0, 0, 0, 0.18); }
+.bay-cardhead { display: flex; flex-direction: column; margin-bottom: 4px; }
+.bay-cardhead .dim { font-size: 12px; }
+.bay-stat { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 1px 0; }
+.bay-val { font: 12px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.bay-sockets { margin-top: 6px; }
+.bay-socket { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 3px 0; font-size: 12px; }
+.bay-proto { color: #e6c86a; font-weight: 600; }
+.bay select { max-width: 100%; background: #1f2226; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; font: 12px var(--sans); }
+.bay-list { display: flex; flex-direction: column; gap: 2px; }
+.bay-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; }
+.bay-item .dim { font-size: 11px; }
+.bay-item button { margin-left: auto; }
+.bay-item.fit { cursor: pointer; }
+.bay-item.fit:hover { border-color: var(--accent); background: rgba(232, 137, 43, 0.08); }
+.bay-item.nofit { opacity: 0.55; }
+.bay-item.refused { border-color: var(--bad); }
+.bay-deltas { min-height: 40px; }
+.bay-open-btn { position: fixed; left: 104px; bottom: 44px; z-index: 5; }
+@media (max-width: 899px) {
+  .bay { right: 10px; top: 50px; bottom: 84px; }
+  .bay-body { grid-template-columns: 1fr; overflow: auto; }
+  .bay-col { overflow: visible; border-right: none; border-bottom: 1px solid var(--line); }
+}
