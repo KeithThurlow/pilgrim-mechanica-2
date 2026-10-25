@@ -1,6 +1,7 @@
 // The shared stage every combat lab plays on: the dune field, the dust, the sand marks, the gun effects and their
 // sound, steel wrecks, and everything that can be shot. One `fire` call resolves a round against all of it (the
 // nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
+import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
 import { WaterFx, WATER_FX_DEFAULTS, type WaterFxValues } from "../fx/water";
@@ -313,18 +314,26 @@ export class Battlefield {
     return true;
   }
 
+  /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into marks, dents, gun fx, dust. */
+  costs: Costs | null = null;
+
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
+    const c = this.costs;
     this.sfx.update();
     this.marks.update(dt, this.sunDir);
+    c?.mark("sand marks");
     this.shells.update(dt, (s) => this.burst(s));
     this.digQueued();
+    c?.mark("dents");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
+    c?.mark("gun fx");
     this.dust.update(dt);
     camera.updateMatrixWorld();
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
+    c?.mark("dust");
   }
 }

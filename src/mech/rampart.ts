@@ -12,8 +12,25 @@ import type { UpperSim } from "./upper";
 import type { WalkerValues } from "./walkerTuning";
 import type { ToonLook } from "../look/toon";
 import { LEG_TYPES } from "./legTypes";
+import { MECH_VARIANTS, RAMPART_BACK } from "./variants";
 
 const loader = new GLTFLoader();
+
+/**
+ * A Rampart variant picked with `?mech=<id>` in any lab: loads public/models/mechs/<id>.glb (same parts and joint
+ * empties as rampart.glb, built by tools/blender/mechs/variants/<id>/). Null for the Rampart itself.
+ */
+export function mechVariant(): string | null {
+  if (typeof location === "undefined") return null;
+  const id = new URLSearchParams(location.search).get("mech");
+  return id && /^[a-z0-9-]+$/.test(id) ? id : null;
+}
+
+/** The leg type for the loaded mech: the variant's own entry in LEG_TYPES if it has one, else the Rampart's. */
+export function mechLegType(): string {
+  const id = mechVariant();
+  return id && LEG_TYPES[id] ? id : "rampart";
+}
 const X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(), M = new THREE.Matrix4();
 
 /** Rotation whose +Y runs from a to b and whose +X lies along `side` (made perpendicular). */
@@ -92,8 +109,9 @@ export class RampartBody {
 
   static async load(look: ToonLook, base = "/models/"): Promise<RampartBody> {
     const body = new RampartBody();
+    const id = mechVariant();
     const [mech, drumR, drumL] = await Promise.all(
-      ["rampart.glb", "ammo-drum-half.glb", "ammo-drum-half-left.glb"].map((f) =>
+      [id ? `mechs/${id}.glb` : "rampart.glb", "ammo-drum-half.glb", "ammo-drum-half-left.glb"].map((f) =>
         new Promise<{ scene: THREE.Object3D }>((res, rej) => loader.load(base + f, res, undefined, rej))),
     );
     body.build(mech.scene, drumR.scene, drumL.scene, look);
@@ -156,7 +174,7 @@ export class RampartBody {
       // Foot: split at the toe hinge into the heel block and the toes, so the toes bend at the ball of the foot.
       const foot = new THREE.Group();
       this.root.add(foot);
-      const hingeZ = LEG_TYPES.rampart.values.toeHinge ?? 0.14;
+      const hingeZ = LEG_TYPES[mechLegType()].values.toeHinge ?? 0.14;
       const [heelGeo, toeGeo] = splitAtZ(geo[`Part_Foot_${s}`], fp.z + hingeZ);
       mesh(heelGeo, `Foot_${s}`, foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
       const toe = new THREE.Group();
@@ -194,10 +212,11 @@ export class RampartBody {
       this.shoulderMounts.push({ side: sd, g: sm });
     }
 
-    // Back: a half-width ammo drum per gun, a power pack raised above them.
+    // Back: a half-width ammo drum per gun, a power pack raised above them (placed and painted per variant).
+    const variant = MECH_VARIANTS[mechVariant() ?? ""];
     const back = new THREE.Group();
     this.back = back;
-    back.position.set(0, 0.25, -1.12);
+    back.position.set(...(variant?.backAt ?? RAMPART_BACK));
     this.hull.add(back);
     for (const [drum, x] of [[drumR, -0.5], [drumL, 0.5]] as const) {
       drum.updateMatrixWorld(true);
@@ -207,13 +226,13 @@ export class RampartBody {
         const part = new THREE.Mesh(m.geometry.clone().applyMatrix4(m.matrixWorld));
         part.position.set(x, 0, 0);
         look.apply(part);
-        // The drums carry another brand's paint: tint them into the Rampart's olive.
-        look.tint(part, 0x8b9160);
+        // The drums carry another brand's paint: tint them into the Rampart's olive (or the variant's colour).
+        look.tint(part, variant?.drumTint ?? 0x8b9160);
         back.add(part);
         this.drums.push(part);
       });
     }
-    this.pack = powerPack(look);
+    this.pack = powerPack(look, variant?.packBody, variant?.packCells);
     back.add(this.pack);
     // A shoulder weapon on the back mount stands on top of the pack (key 3).
     this.backTop.position.set(0, 1.75, -0.1);
@@ -320,8 +339,8 @@ export class RampartBody {
   }
 }
 
-/** Stand-in power pack from boxes, in the Rampart's khaki and olive, until a modelled one exists. */
-function powerPack(look: ToonLook) {
+/** Stand-in power pack from boxes, in the Rampart's khaki and olive (or a variant's paint), until a modelled one exists. */
+function powerPack(look: ToonLook, khaki = 0xb7a77c, olive = 0x6c7546) {
   const g = new THREE.Group();
   g.position.set(0, 1.05, -0.25);
   const box = new THREE.BoxGeometry(1, 1, 1);
@@ -332,7 +351,7 @@ function powerPack(look: ToonLook) {
     look.tint(m, tint);
     g.add(m);
   };
-  const khaki = 0xb7a77c, olive = 0x6c7546, dark = 0x3e3c35;
+  const dark = 0x3e3c35;
   add(box, khaki, [1.55, 0.7, 0.75], [0, 0, 0]);
   add(box, dark, [1.35, 0.5, 0.12], [0, 0.02, -0.42]);
   for (let i = 0; i < 5; i++) add(box, dark, [0.05, 0.42, 0.12], [-0.5 + i * 0.25, 0.02, -0.5]);

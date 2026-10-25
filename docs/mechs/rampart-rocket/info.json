@@ -1,0 +1,207 @@
+{
+ "tris_total": 39920,
+ "tris_by_part": {
+  "Pelvis": 1802,
+  "Torso": 6264,
+  "Arm_L": 6584,
+  "Arm_R": 6580,
+  "Thigh_L": 3828,
+  "Shin_L": 1386,
+  "Meta_L": 2500,
+  "Foot_L": 1684,
+  "Thigh_R": 3680,
+  "Shin_R": 1386,
+  "Meta_R": 2542,
+  "Foot_R": 1684
+ },
+ "tris_by_layer": {
+  "Frame": 4266,
+  "Actuation": 10148,
+  "Mounting": 2056,
+  "Plates": 11058,
+  "Service": 4368,
+  "Power": 1056,
+  "Seals": 1832,
+  "Heat": 228,
+  "Sensors": 380,
+  "Weapon": 4528
+ },
+ "axis_aligned_plates": {
+  "Arm_L": {
+   "share": 0.131,
+   "skin_area_m2": 7.119,
+   "all_faces_share": 0.4,
+   "limit": 0.5,
+   "flag": false
+  },
+  "Arm_R": {
+   "share": 0.135,
+   "skin_area_m2": 7.109,
+   "all_faces_share": 0.399,
+   "limit": 0.5,
+   "flag": false
+  },
+  "Foot_L": {
+   "share": 0.147,
+   "skin_area_m2": 1.396,
+   "all_faces_share": 0.136,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Foot_R": {
+   "share": 0.147,
+   "skin_area_m2": 1.396,
+   "all_faces_share": 0.136,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Meta_L": {
+   "share": 0.039,
+   "skin_area_m2": 2.099,
+   "all_faces_share": 0.018,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Meta_R": {
+   "share": 0.039,
+   "skin_area_m2": 2.1,
+   "all_faces_share": 0.018,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Pelvis": {
+   "share": 0.162,
+   "skin_area_m2": 3.709,
+   "all_faces_share": 0.223,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Shin_L": {
+   "share": 0.0,
+   "skin_area_m2": 0.743,
+   "all_faces_share": 0.001,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Shin_R": {
+   "share": 0.0,
+   "skin_area_m2": 0.743,
+   "all_faces_share": 0.001,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Thigh_L": {
+   "share": 0.079,
+   "skin_area_m2": 4.23,
+   "all_faces_share": 0.297,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Thigh_R": {
+   "share": 0.079,
+   "skin_area_m2": 4.248,
+   "all_faces_share": 0.297,
+   "limit": 0.25,
+   "flag": false
+  },
+  "Torso": {
+   "share": 0.128,
+   "skin_area_m2": 8.237,
+   "all_faces_share": 0.558,
+   "limit": 0.25,
+   "flag": false
+  }
+ },
+ "legs": {
+  "_L": {
+   "rest": {
+    "hip_x": 0.78,
+    "knee_x": 1.12,
+    "hock_x": 1.18,
+    "ankle_x": 1.28,
+    "knee_out_of_line_m": 0.04
+   },
+   "stance": {
+    "hip_x": 0.935,
+    "knee_x": 1.215,
+    "hock_x": 1.219,
+    "ankle_x": 1.32,
+    "knee_out_of_line_m": 0.038
+   },
+   "solve": {
+    "residual_m": 0.0,
+    "deg": {
+     "Thigh_L": [
+      6.0,
+      7.09,
+      0.0
+     ],
+     "Shin_L": [
+      1.56,
+      0.0,
+      0.0
+     ],
+     "Meta_L": [
+      -10.96,
+      0.0,
+      0.0
+     ],
+     "Foot_L": [
+      3.33,
+      -2.2,
+      1.87
+     ]
+    }
+   }
+  },
+  "_R": {
+   "rest": {
+    "hip_x": -0.78,
+    "knee_x": -1.12,
+    "hock_x": -1.18,
+    "ankle_x": -1.28,
+    "knee_out_of_line_m": 0.04
+   },
+   "stance": {
+    "hip_x": -0.615,
+    "knee_x": -1.071,
+    "hock_x": -1.216,
+    "ankle_x": -1.38,
+    "knee_out_of_line_m": 0.03
+   },
+   "solve": {
+    "residual_m": 0.0,
+    "deg": {
+     "Thigh_R": [
+      -22.0,
+      11.89,
+      0.0
+     ],
+     "Shin_R": [
+      13.77,
+      0.0,
+      0.0
+     ],
+     "Meta_R": [
+      2.2,
+      0.0,
+      0.0
+     ],
+     "Foot_R": [
+      7.55,
+      -5.19,
+      -14.71
+     ]
+    }
+   }
+  }
+ },
+ "hskit": {
+  "booleans": 306,
+  "exact_ok": 291,
+  "fallbacks": 3,
+  "skipped_cutters": 0,
+  "bevel_undone": 0,
+  "plate_refolds": 0
+ }
+}

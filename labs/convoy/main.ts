@@ -27,7 +27,7 @@ import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
 import type { MoveCommand } from "../../src/mech/walker";
 import { LEG_TYPES } from "../../src/mech/legTypes";
-import { RampartBody } from "../../src/mech/rampart";
+import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
@@ -51,6 +51,7 @@ import { EscortBodies } from "../../src/convoy/escortBody";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
 import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
 import { DefenceBody } from "../../src/convoy/defenceBody";
+import { Costs } from "../../src/core/costs";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -110,8 +111,8 @@ scene.add(threatMark);
 
 // The player's Rampart.
 const body = await RampartBody.load(toon);
-Object.assign(V, LEG_TYPES.rampart.values, body.legValues());
-Object.assign(DEFAULTS, LEG_TYPES.rampart.values, body.legValues());
+Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
+Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
 scene.add(body.root);
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);
@@ -325,10 +326,13 @@ function demoCmd(dt: number): MoveCommand {
   return { x: dx / d, z: dz / d, sprint: d > 12 };
 }
 
+const costs = new Costs();
+bf.costs = costs;
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 app.onTick((rawDt) => {
   const dt = fixedDt || rawDt;
   clock += dt;
+  costs.begin();
   keys.move(camera, stick);
   if (keys.has("KeyR")) player.upper.resupply();
   if (stick.lengthSq() > 0) auto = false;
@@ -359,10 +363,14 @@ app.onTick((rawDt) => {
   for (let i = 0; i < sub; i++) {
     convoy.update(dt / sub);
     out = carry.update(dt / sub, sim, cmd);
+    costs.mark("convoy");
     escorts.update(dt / sub, mechOnSand);
+    costs.mark("escorts");
     for (const e of escorts.list) trail.car(e, e.sim, e.moved, e.kind === "technical" ? 0.45 : 0.6);
+    costs.mark("trail");
   }
   trail.update(convoy.platforms);
+  costs.mark("trail");
   // ?threat: a marker circling the train 45 m out, for the turrets to track.
   if (threatOn) {
     const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
@@ -370,6 +378,7 @@ app.onTick((rawDt) => {
     defence.target([threatMark.position]);
   } else defence.target([]);
   defence.update(dt);
+  costs.mark("turrets");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);
   if (out) {
@@ -392,12 +401,14 @@ app.onTick((rawDt) => {
   }
 
   dashPressed = false;
+  costs.mark("mech");
   for (const b of bodies) b.update();
   for (const c of craneBodies) c.update();
   spans = bridgeSpans(convoy.platforms, V, spans);
   bridges.update(spans, dt);
   escortBodies.update();
   defenceBody.update();
+  costs.mark("convoy bodies");
 
   reticle.visible = !!aim;
   if (aim) {
@@ -414,10 +425,14 @@ app.onTick((rawDt) => {
     shake *= Math.exp(-7 * rawDt);
   } else shake = 0;
   toon.update(camera, canvas.clientHeight);
+  costs.mark("camera");
   streamer.update(follow.x, follow.z);
+  costs.mark("ground");
   const camDist = camera.position.distanceTo(follow);
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+  costs.mark("light");
   bf.update(dt, camera, look);
+  app.hud.set("costs", costs.end());
 
   const p = convoy.bay;
   app.hud.set("convoy", `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
