@@ -31,6 +31,7 @@ import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
+import { DASH_PARAMS } from "../../src/mech/dash";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -118,6 +119,17 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName === "game" && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+// Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs).
+let dashPressed = false, spaceDown = false;
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  e.preventDefault();
+  dashPressed = true;
+  spaceDown = true;
+  auto = false;
+});
+addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+addEventListener("blur", () => { spaceDown = false; });
 
 const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
 let selector: Selector | null = null;
@@ -125,7 +137,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -136,7 +148,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Dash", "Gait", "Legs", "Feet", "Terrain", "Dust: sources", "Sand marks"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Sand marks"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -228,6 +240,13 @@ app.onTick((rawDt) => {
   // No firing while selecting (hold V).
   const trigger = !sel.active && (params.has("fire") || mouseDown || keys.has("KeyF") || (auto && !straight && clock % 6 > 3.2));
 
+  if (dashPressed) {
+    dashPressed = false;
+    // With no keys held, dash the way the legs face.
+    if (stick.lengthSq() > 0.01) mech.tryDash(stick.x, stick.z);
+    else mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
+  }
+  mech.dashHold = spaceDown && !auto;
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;
@@ -256,7 +275,9 @@ app.onTick((rawDt) => {
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
-  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""}`);
+  const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
+    + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);
   if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 });
