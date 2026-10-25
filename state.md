@@ -104,6 +104,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Loadout step 1 (items, rarity, fit rules, cargo, bay screen, `labs/loadout/`): an agent on a worktree branch.
+
 - Biomes: step 1 in. Shallows and desert borders read well; rocky ground still reads as grey plateaus (rock needs real geometry: boulders, broken edges, step 3). Next: step 2 water effects (wading), the rocky-to-shallows border (rock stepping into water), step 3 scatter.
 
 ## Next candidates (ask Keith which)
@@ -128,6 +130,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-25 · Weapons and targeting modes proposed; loadout step 1 started (Claude)
+- Keith: add weapon options; only the hull miniguns felt right in the old game; a line rocket launcher that works, with ground targeting; each weapon its own targeting. Plan in `docs/proposal-weapons.md` (five targeting modes with previews, right button for back weapons, first: line rocket salvo, mortar, rail cannon, autocannon; a weapons range lab). Loadout step 1 handed to an agent (items, rarity, fit rules, cargo, bay screen, loadout lab).
 
 ### 2026-10-25 · Soft lock leads moving targets (Claude)
 - Keith: the miniguns didn't seem to lead targets. Targets now carry their velocity (`TargetCandidate.vx/vz` from every combat lab) and the lock aims `lockLead` seconds ahead (0.12 s, about the guns' tracking lag: they trail their aim by ~1 / gun tracking); the demo leads too. Measured in the war band demo: rounds hitting vehicles 71% → 78%. Rounds are still instant hits along the barrel, so the lead covers the guns' lag, not flight time.
