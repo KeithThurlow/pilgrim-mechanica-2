@@ -11,7 +11,8 @@
 // - the radar: linked inside the range edge only, the zoom fires one event per crossing and lands on each range,
 //   unknown areas hide POIs and swarms from the convoy radar but not from the mech's own, mech radar only in range;
 // - and it measures a typical out-and-back (launch, walk to the nearest POIs ahead, strip a stop or two, follow the
-//   return point home) with the default tuning, reporting the time and the fuel, which must stay under 20 minutes.
+//   return point home) with the default tuning, reporting the time and the fuel, which must stay under 20 minutes;
+// - packs and raids: the first fight within 75 s of the drop, about one a minute or two after, none while aboard.
 // Run: npm test (or npx tsx tools/expedition-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
@@ -28,6 +29,7 @@ import { Fuel, FUEL_DEFAULTS, burnRate, fuelWarning } from "../src/expedition/fu
 import { returnPoint, craneTracks, clock, RETURN_DEFAULTS } from "../src/expedition/returnPoint";
 import { RadarZoom, RADAR_DEFAULTS, linked, radarPicture, type RadarWorld } from "../src/expedition/radar";
 import { CampField, CAMP_DEFAULTS } from "../src/expedition/camps";
+import { ThreatField, THREAT_DEFAULTS, type ThreatEvent } from "../src/expedition/threats";
 import { POI_DEFAULTS, PoiField } from "../src/world/pois";
 import { rawGround } from "../src/world/poiPads";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
@@ -339,6 +341,45 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
     if (r.total > 20 * 60) fail(`an out-and-back took ${(r.total / 60).toFixed(1)} min (over 20)`);
   }
   if (a.fuelLeft <= 0) fail("the typical out-and-back ran out of fuel");
+}
+
+// Packs and raids (Keith 2026-10-26: more excitement out there): a mech walking out from the drop and wandering, quiet
+// except when it fights; the first fight within about a minute of the drop and something coming for it every minute
+// or two after; nothing hunts while aboard. Engaged packs count as fought for a while and then gone.
+{
+  const runs: { first: number; gaps: number[]; events: number }[] = [];
+  for (let seed = 1; seed <= 6; seed++) {
+    const tf = new ThreatField({ ...THREAT_DEFAULTS }, seed);
+    let x = 0, z = 0, t = 0, first = -1, last = 0, heading = seed;
+    const gaps: number[] = [], fights = new Map<string, number>(), ev: ThreatEvent[] = [];
+    let events = 0;
+    for (; t < 600; t += 0.1) {
+      heading += Math.sin(t * 0.05 + seed) * 0.004;
+      x += Math.sin(heading) * 4 * 0.1; z += Math.cos(heading) * 4 * 0.1;
+      const loud = fights.size > 0;
+      for (const e of tf.update(0.1, { x, z, out: true, loud }, ev)) {
+        if (e.type !== "engage") continue;
+        events++;
+        if (first < 0) first = t;
+        gaps.push(t - last); last = t;
+        fights.set(e.pack.id, t);
+      }
+      // A fight lasts about 30 s, then the pack is dead.
+      for (const [id, t0] of fights) if (t - t0 > 30) { const p = tf.packs.find((q) => q.id === id); if (p) p.n = 0; fights.delete(id); }
+      for (const p of tf.packs) if (p.state === "live" && fights.has(p.id)) tf.setLive(p, x + 20, z, p.n);
+    }
+    runs.push({ first, gaps: gaps.slice(1), events });
+  }
+  const firsts = runs.map((r) => r.first), worstGap = Math.max(...runs.flatMap((r) => r.gaps));
+  const meanGap = runs.flatMap((r) => r.gaps).reduce((a, b) => a + b, 0) / Math.max(1, runs.flatMap((r) => r.gaps).length);
+  console.log(`threats: first fight at ${firsts.map((f) => f.toFixed(0) + " s").join(", ")} after the drop; ${runs.map((r) => r.events).join("/")} fights in 10 min; gaps mean ${meanGap.toFixed(0)} s, worst ${worstGap.toFixed(0)} s`);
+  if (firsts.some((f) => f < 0 || f > 75)) fail("no fight within 75 s of the drop");
+  if (meanGap > 120) fail(`fights only every ${meanGap.toFixed(0)} s on average (want a minute or two)`);
+  // Aboard: nothing hunts, no raids come.
+  const tf = new ThreatField({ ...THREAT_DEFAULTS }, 3);
+  let engagedAboard = 0;
+  for (let t = 0; t < 300; t += 0.1) for (const e of tf.update(0.1, { x: 0, z: 0, out: false, loud: true })) if (e.type !== "blast") engagedAboard++;
+  if (engagedAboard) fail(`${engagedAboard} packs or raids came for a mech aboard`);
 }
 
 if (problems.length) { console.log(`expedition check FAILED (${problems.length})`); throw new Error("expedition check failed"); }

@@ -1,6 +1,7 @@
-// Soft lock rules: the enemy under the cursor ray wins; else the one nearest the line of fire; never behind the
-// mech, never out of range, never something far off the line.
+// Soft lock rules: the enemy under the cursor ray wins (a tall walker also by the sand among its feet); else the one
+// nearest the line of fire; never behind, out of range or far off the line. And the guns reach a tall one's body.
 import { Targeting, TARGET_DEFAULTS, type TargetCandidate } from "../src/game/targeting";
+import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
 
 let fails = 0;
 const ok = (cond: boolean, what: string) => { if (!cond) { fails++; console.log("FAIL", what); } };
@@ -44,6 +45,32 @@ const c = (x: number, y: number, z: number, r: number, key: string): TargetCandi
   t.pick([c(0.5, 1, 30, 0.6, "a")], q(0, 30), sv);
   const l = t.pick([c(1.5, 1, 30, 0.6, "a"), c(1.2, 1, 30, 0.6, "b")], q(0, 50), sv);
   ok(l?.target.key === "a", "keeps the last target against a slightly better one");
+}
+{ // A tall walker's footprint: the cursor on the sand among its feet locks its body, not nothing (Keith 2026-10-26).
+  const t = new Targeting();
+  const big = { ...c(3, 10.5, 30, 2, "excavator"), foot: 8 };
+  const l = t.pick([big], q(9, 34), v);
+  ok(l?.target.key === "excavator" && l.target.y === 10.5, "cursor among a tall walker's feet locks its body");
+  // A small one right under the cursor among those feet still wins.
+  const l2 = t.pick([big, c(9, 0.5, 34, 0.5, "small")], q(9, 34), v);
+  ok(l2?.target.key === "small", "a small one under the cursor beats the big one whose feet it's among");
+}
+{ // Guns that reach up: a big one's chassis 10.5 m up, 7 m away, from the Rampart's shoulders about 4.2 m up. The
+  // guns raise (plus the torso's lean), come on target and fire; with the old 20° limit they couldn't.
+  const run = (vals: typeof UPPER_DEFAULTS) => {
+    const up = new UpperSim(vals);
+    up.reset(0);
+    let fired = 0, on = 0;
+    for (let i = 0; i < 240; i++) {
+      fired += up.update(1 / 120, 0, { x: 0, y: 4.2, z: 0 }, { x: 0.5, y: 10.5, z: 7 }, true).length;
+      if (up.onTarget) on++;
+    }
+    return { fired, on, lean: up.lean, pitch: Math.min(up.guns[0].pitch, up.guns[1].pitch) };
+  };
+  const now = run({ ...UPPER_DEFAULTS }), old = run({ ...UPPER_DEFAULTS, podPitchUp: 20, torsoLeanMax: 0 });
+  console.log(`reach up: chassis 7 m off, 6.3 m over the shoulders: ${now.fired} rounds, gun raised ${(-now.pitch * 180 / Math.PI).toFixed(0)}° + lean ${(now.lean * 180 / Math.PI).toFixed(0)}° (at 20° and no lean: ${old.fired} rounds)`);
+  ok(now.fired > 20, "a tall robot's chassis is reachable from 7 m");
+  ok(old.fired === 0, "a target past the raise limit isn't fired on");
 }
 console.log(fails ? `targeting-check: ${fails} failed` : "targeting-check: ok");
 if (fails) throw new Error("targeting check failed");

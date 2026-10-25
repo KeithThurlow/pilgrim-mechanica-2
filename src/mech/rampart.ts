@@ -287,7 +287,8 @@ export class RampartBody {
     this.pelvis.quaternion.copy(sim.pelvisQ);
 
     // Hull: on the waist, turned to the torso's aim, pitched with the body, rolled only as much as it isn't kept level.
-    t.e.set(sim.bodyPitch, upper.torsoYaw + upper.shake * Math.sin(performance.now() * 0.09), sim.bodyRoll * (1 - sim.v.shoulderLevel), "YXZ");
+    // Leaning back (upper.lean) when the guns need more raise than they have.
+    t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + upper.shake * Math.sin(performance.now() * 0.09), sim.bodyRoll * (1 - sim.v.shoulderLevel), "YXZ");
     this.hull.quaternion.setFromEuler(t.e);
     t.v.copy(this.rest.Waist).sub(new THREE.Vector3(0, this.rest.Thigh_L.y, 0)).applyQuaternion(sim.pelvisQ);
     this.hull.position.copy(sim.pelvis).add(t.v);

@@ -31,6 +31,13 @@ export class RadarSound {
     for (let k = 0; k < 2; k++) this.tone(t + k * 0.22, 0.16, 440, 430, 0.9, "square");
   }
 
+  /** A raid coming: three falling blips. */
+  alarm() {
+    if (this.ctx.state !== "running") return;
+    const t = this.ctx.currentTime;
+    for (let k = 0; k < 3; k++) this.tone(t + k * 0.18, 0.15, 720, 520, 0.9, "sawtooth");
+  }
+
   /** Banked: a bright double blip. */
   banked() {
     if (this.ctx.state !== "running") return;

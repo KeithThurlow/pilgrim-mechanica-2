@@ -2,7 +2,7 @@
 // targeting. A line and a column of plywood cutouts, a row of steel posts (one sliding), trucks driving a slow loop to
 // lead, a dune across the range with cutouts behind it for the mortars. The picker fits items through the loadout (so
 // this is the mech the bay builds). Controls (Keith 2026-10-25): left click fires the left side's weapon, right click
-// the right side's (F both); shoulder weapons on keys 1-3: hold to paint, release to fire. The HUD shows which button
+// the right side's (both can be held); shoulder weapons on keys 1-3: hold to paint, release to fire. The HUD shows which button
 // or key fires what and its cooldown, damage per second on the range, what the last shot of each weapon did, and what
 // the blasts' craters cost.
 //
@@ -22,17 +22,8 @@ import { DummiesDraw } from "../../src/game/dummiesDraw";
 import { RangeGround, RANGE_DEFAULTS, RANGE_PARAMS, rangeSpots } from "../../src/game/firingRange";
 import { RangeCars, RANGE_CAR_DEFAULTS, RANGE_CAR_PARAMS } from "../../src/game/rangeVehicles";
 import { addModifier } from "../../src/world/modifiers";
-import { defaultLoadout, fit, resolve, LOADOUT_DEFAULTS, type Loadout, type SlotId } from "../../src/items/loadout";
-import { makeItem } from "../../src/items/generate";
-
-const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightrail: "Light rail (hand)", autocannon: "Autocannon", rpg: "Rocket launcher" } as const;
-const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
-const BACK = { drums: "Ammo drums", ...SHOULDER } as const;
-type SidePick = keyof typeof SIDE;
-type ShoulderPick = keyof typeof SHOULDER;
-type BackPick = keyof typeof BACK;
-interface Pick { left: SidePick; right: SidePick; k1: ShoulderPick; k2: ShoulderPick; k3: BackPick }
-const ROWS = [["left", "LMB", SIDE], ["right", "RMB", SIDE], ["k1", "Key 1", SHOULDER], ["k2", "Key 2", SHOULDER], ["k3", "Key 3", BACK]] as const;
+import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
+import { ROWS, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 const KEY = "pm2:weapons-lab:pick2";
 
 let draw: DummiesDraw | null = null;
@@ -64,25 +55,8 @@ const params = app.params;
 // ---- The weapon picker: fits items through the loadout, so the mech is what the bay would build ----
 const pick: Pick = { left: "minigun", right: "rpg", k1: "missiles", k2: "mortar", k3: "linemortar" };
 try { Object.assign(pick, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch { /* no saved pick */ }
-for (const [row, , opts] of ROWS) { const q = params.get(row); if (q && q in opts) (pick as unknown as Record<string, string>)[row] = q; }
+pickFromParams(pick, params);
 
-function loadoutFor(p: Pick): Loadout {
-  const lo = defaultLoadout();
-  const put = (slot: SlotId, base: string) => fit(lo, slot, makeItem(base, "common", `range-${slot}-${base}`));
-  for (const [side, arm, hand] of [["left", "armL", "handL"], ["right", "armR", "handR"]] as const) {
-    const w = p[side];
-    if (w === "rail") put(arm, "rail-medium");
-    if (w === "autocannon") put(arm, "ac-medium");
-    if (w === "rpg") put(arm, "rpg-medium");
-    if (w === "lightrail") { put(arm, "arm-rampart"); put(hand, "rail-light"); }
-  }
-  const shoulderBase = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar" } as Record<string, string>;
-  if (shoulderBase[p.k1]) put("shoulderL", shoulderBase[p.k1]);
-  if (shoulderBase[p.k2]) put("shoulderR", shoulderBase[p.k2]);
-  if (shoulderBase[p.k3]) put("back", shoulderBase[p.k3]);
-  else if (p.k3 === "none") lo.back = null;
-  return lo;
-}
 function refit() {
   applyLoadout(player, resolve(loadoutFor(pick), V));
   lab.refresh();
