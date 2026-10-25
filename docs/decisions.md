@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Ground dents approved: delete the old sand-mark decals | Keith | Keith | |
+| 2026-10-26 | Direct-fire weapons hit generously in height: a shot is a vertical sheet along its line (hits what the line crosses from above, whatever the height), so precision is about the line and timing, not height you can't judge from the high camera; the rail gun fires a charged slug with a trail, not a held beam | Keith | Keith | Sheet sizes are sliders. |
 | 2026-10-26 | Sensors are the mech's heads: either a head at the front of the hull that turns to follow the aim, or a cluster of sensors up on top | Keith | Keith | `docs/asset-list.md` (sockets `Sensor_Front`, `Sensor_Top`). |
 | 2026-10-26 | Mount slots: legs, hull, sensor, mountL/R (hull weapon or arm), heldL/R and shoulderL/R only under an arm, pack, waistL/R; a hull item lists its hull mounts by side with what each takes (the Salvager's right takes only an arm) | Claude | open | `src/items/loadout.ts`, `bases.ts`. More mounts later: a side added to `MountSide` and `MOUNTS`. |
 | 2026-10-26 | Key 3 is the pack mount: a power pack, or a shoulder weapon as a back weapon in its place (the dash falls back to the bare mech's) | Claude | open | Keith: "the pack or back weapon on key 3"; the trade-off is Claude's reading. |
