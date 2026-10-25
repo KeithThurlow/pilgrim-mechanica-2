@@ -70,7 +70,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
-  (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
+  (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
 
 ## Layout

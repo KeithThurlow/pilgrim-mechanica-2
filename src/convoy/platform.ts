@@ -10,6 +10,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import type { ConvoyRoute, RoutePoint } from "./route";
 import { arrange, type TrainValues } from "./train";
+import { deckOutline, pushOutOf, type Outline } from "./outline";
 
 export const PLATFORM_DEFAULTS = {
   convoyDeckHeight: 3.2,
@@ -38,16 +39,23 @@ export interface PlatformSpec {
   length: number;
   width: number;
   tracked: boolean;
+  /** A pointed prow (the lead car's deck outline). */
+  prow?: boolean;
+  /** A mech bay's crane end: +1 forward (the lead), -1 aft (the rear bay). Mirrors the bay's deck layout along z. */
+  crane?: 1 | -1;
 }
 
-/** The convoy in train order: the tracked mech bay leads, the tracked workshop next, wheeled cars behind. */
+/**
+ * The convoy in train order: the tracked mech bay leads, the tracked workshop next, wheeled cars behind, and a second
+ * mech bay at the back with its crane aft (Keith 2026-10-25: a launching area at the front and one at the back).
+ */
 export const CONVOY_LAYOUT: PlatformSpec[] = [
-  { name: "Mech bay", kind: "bay", length: 40, width: 16, tracked: true },
+  { name: "Mech bay", kind: "bay", length: 40, width: 16, tracked: true, prow: true, crane: 1 },
   { name: "Workshop", kind: "workshop", length: 30, width: 14, tracked: true },
   { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false },
   { name: "Motor pool", kind: "motorpool", length: 26, width: 11, tracked: false },
   { name: "Fuel", kind: "fuel", length: 24, width: 10, tracked: false },
-  { name: "Housing", kind: "housing", length: 24, width: 10, tracked: false },
+  { name: "Rear mech bay", kind: "bay", length: 40, width: 16, tracked: true, crane: -1 },
 ];
 
 /** A damped spring toward a target, by frequency (Hz) and damping ratio. */
@@ -95,6 +103,7 @@ export class Platform {
 
   constructor(readonly spec: PlatformSpec, public v: PlatformValues & { trackOut?: number }, private field: DuneField) {
     const { length: L, width: W, tracked } = spec;
+    this.outline = deckOutline(spec);
     if (tracked) {
       for (const sx of [1, -1]) for (let i = 0; i < 6; i++) this.supports.push([sx * (W / 2 - 1.6), -0.44 * L + (0.88 * L * i) / 5]);
     } else {
@@ -171,6 +180,18 @@ export class Platform {
     return out;
   }
 
+  /** The deck's outline (corners cut, a prow on the lead). */
+  readonly outline: Outline;
+  private foot: Outline | null = null;
+  /** The footprint: the deck outline widened by the crawler tracks. */
+  get footprint(): Outline {
+    const extra = this.halfW - this.spec.width / 2;
+    if (!this.foot || Math.abs(this.foot.halfW - this.halfW) > 1e-6) this.foot = deckOutline(this.spec, extra);
+    return this.foot;
+  }
+  /** A mech bay's crane end (+1 forward, -1 aft): its layout along z is mirrored by this. */
+  get craneEnd() { return this.spec.crane ?? 1; }
+
   /** Half the overall width: the deck's, plus the crawler tracks where they stand out past its edges. */
   get halfW() { return this.spec.width / 2 + (this.spec.tracked ? Math.max(0, this.v.trackOut ?? 0) : 0); }
 
@@ -197,11 +218,10 @@ export class Platform {
    * Keep a body of radius r out of the platform's footprint: returns the pushed x/z, or null when it's clear.
    */
   pushOut(x: number, z: number, r: number): { x: number; z: number } | null {
-    const p = this.toLocal(x, z), hw = this.halfW + r, hl = this.spec.length / 2 + r;
-    if (Math.abs(p.x) >= hw || Math.abs(p.z) >= hl) return null;
-    // Out through the nearest side.
-    const ox = hw - Math.abs(p.x), oz = hl - Math.abs(p.z);
-    if (ox < oz) p.x = Math.sign(p.x || 1) * hw; else p.z = Math.sign(p.z || 1) * hl;
+    const l = this.toLocal(x, z);
+    // Out through the nearest edge of the footprint (corners cut).
+    const p = pushOutOf(this.footprint, l.x, l.z, r);
+    if (!p) return null;
     const s = Math.sin(this.heading), c = Math.cos(this.heading);
     return { x: this.x + c * p.x + s * p.z, z: this.z - s * p.x + c * p.z };
   }
@@ -223,6 +243,8 @@ export class Convoy {
     arrange(this.platforms, v);
   }
   get bay() { return this.platforms.find((p) => p.spec.kind === "bay") ?? this.platforms[0]; }
+  /** Every mech bay (the lead's first). */
+  get bays() { return this.platforms.filter((p) => p.spec.kind === "bay"); }
   /** Along-route distance from the lead's nose to the last car's tail (m). */
   get length() { return Math.max(...this.platforms.map((p) => p.spec.length / 2 - p.along)) + this.platforms[0].spec.length / 2; }
   /** Start over with the head at (x, z). */

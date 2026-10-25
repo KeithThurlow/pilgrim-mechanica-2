@@ -11,6 +11,8 @@ const t = { q: new Quaternion(), q2: new Quaternion(), r: new Quaternion(), m: n
 
 /** Feet below the hips while hanging (legs nearly straight). */
 export const hangDrop = (sim: WalkerSim) => sim.v.hipHeight * 1.04;
+/** Feet below the hips while falling, braced (0..1) for the landing: knees a touch bent, feet out wider and forward. */
+export const fallReach = (sim: WalkerSim, brace: number) => hangDrop(sim) * (1 - 0.05 * brace);
 
 /** The platform's tilt times a heading within it. */
 function deckQ(p: Platform, relHeading: number, pitch: number, out: Quaternion) {
@@ -38,11 +40,13 @@ export interface Hang {
   leanX: number; leanZ: number;
   /** Standing on this platform's deck once lowered onto it (feet flat, tilted with it). */
   deck: Platform | null;
+  /** Falling free and bracing for the ground (0 hanging limp .. 1 legs set wide, feet flat and reaching down). */
+  brace?: number;
 }
 
 /** Hang the mech from the cradle: the body swings about the grip, the legs hang, or stand once lowered to the floor. */
 export function hangPose(sim: WalkerSim, h: Hang) {
-  const v = sim.v, drop = hangDrop(sim);
+  const v = sim.v, brace = h.brace ?? 0, drop = fallReach(sim, brace);
   still(sim, h.x, h.z, h.heading);
   // Lean: the body's down axis turned toward the rope's direction.
   const sx = Math.sin(h.leanX), sz = Math.sin(h.leanZ);
@@ -58,9 +62,10 @@ export function hangPose(sim: WalkerSim, h: Hang) {
   sim.pelvis.copy(t.a.set(0, -h.grip, 0).applyQuaternion(t.r)).add(t.b.set(h.x, h.y, h.z));
   const lx = Math.cos(h.heading), lz = -Math.sin(h.heading), fx = Math.sin(h.heading), fz = Math.cos(h.heading);
   for (const f of sim.feet) {
-    const spread = standing ? v.footSpread : v.hipWidth * 0.9;
-    // Foot under the hip, offset from the grip, turned with the lean.
-    t.a.set(lx * f.side * spread + fx * 0.15, -h.grip - drop, lz * f.side * spread + fz * 0.15).applyQuaternion(t.r);
+    const hang = v.hipWidth * 0.9, spread = standing ? v.footSpread : hang + (v.footSpread * 1.15 - hang) * brace;
+    // Foot under the hip, offset from the grip, turned with the lean; bracing, one foot a little ahead of the other.
+    const ahead = 0.15 + brace * (0.2 + 0.25 * f.side);
+    t.a.set(lx * f.side * spread + fx * ahead, -h.grip - drop, lz * f.side * spread + fz * ahead).applyQuaternion(t.r);
     f.swinging = false; f.u = 0; f.stanceT = 0;
     f.pos.set(h.x + t.a.x, Math.max(h.floorY, h.y + t.a.y), h.z + t.a.z);
     f.planted.copy(f.pos);
@@ -69,7 +74,7 @@ export function hangPose(sim: WalkerSim, h: Hang) {
     if (standing && h.deck) f.up.set(h.deck.up.x, h.deck.up.y, h.deck.up.z); else if (standing) f.up.set(0, 1, 0); else f.up.copy(t.d).negate();
     f.plantedUp.copy(f.up);
     // Hanging: toes droop.
-    const droop = standing ? 0 : Math.min(1, (pelvisY - drop - h.floorY) / 0.6);
+    const droop = standing ? 0 : Math.min(1, (pelvisY - drop - h.floorY) / 0.6) * (1 - 0.8 * brace);
     f.pitch = 0.45 * droop;
     f.toe = 0.35 * droop;
     f.groundY = f.pos.y;

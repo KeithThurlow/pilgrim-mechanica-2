@@ -4,8 +4,9 @@
 // set-down pad standing; one that walks out of range before the cradle connects is not; walking on the deck while the
 // convoy rolls, turns and speeds up keeps it on the platform (never past the edge, planted feet on the deck plane, legs
 // in reach, no sliding when standing); parking settles it in a bay and holds it there, E stands it up; walking onto a
-// launch pad has the crane put it on the sand beside the convoy at the convoy's velocity (stepping off first
-// cancels); the swing is bounded and dies down. The train: each car rides on the route (its middle near its line's
+// launch pad has the crane drop it from a few metres onto the sand beside the convoy, falling at the convoy's
+// velocity and landing feet on the sand (stepping off first cancels); pick-up and launch each take under 15 s (Keith
+// 2026-10-25: quick); the swing is bounded and dies down. The train: each car rides on the route (its middle near its line's
 // path) and the gaps between cars stay open through turns, in one line and in two; footbridges stay high enough to walk
 // under and don't overstretch; a mech walks across the train through a gap without being thrown about; escorts never
 // drive into a platform or the mech and hold their station band most of the time; the pipes are the same every time
@@ -28,6 +29,8 @@ import { furniture, furnBox } from "../src/convoy/furniture";
 import { ConvoyTrail, TRAIL_DEFAULTS } from "../src/convoy/trail";
 import { EscortGroup, ESCORT_DEFAULTS, rectGap } from "../src/convoy/escort";
 import { CONVOY_LAYOUT } from "../src/convoy/platform";
+import { deckOutline, outside } from "../src/convoy/outline";
+import { Defence, DEFENCE_DEFAULTS } from "../src/convoy/defence";
 
 const DT = 1 / 120;
 const problems: string[] = [];
@@ -44,10 +47,11 @@ function world(over: Partial<typeof ROUTE_DEFAULTS & typeof TRAIN_DEFAULTS & typ
   field.modifier = route;
   const convoy = new Convoy(route, V, field);
   convoy.reset(13, -40);
-  const crane = new Crane(V, convoy.bay);
-  const carry = new CraneCarry(V, crane, field);
+  const cranes = convoy.bays.map((b) => new Crane(V, b));
+  const crane = cranes[0];
+  const carry = new CraneCarry(V, cranes, field);
   const sim = new WalkerSim(V, field);
-  return { V, field, route, convoy, crane, carry, sim };
+  return { V, field, route, convoy, crane, cranes, carry, sim };
 }
 type World = ReturnType<typeof world>;
 
@@ -164,8 +168,7 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
 /** Place the mech standing beside the bay platform: side metres left, ahead metres forward of the crane. */
 function place(w: World, side: number, ahead: number) {
   for (let i = 0; i < 120; i++) w.convoy.update(DT);
-  w.crane.place();
-  w.crane.calm();
+  for (const c of w.cranes) { c.place(); c.calm(); }
   const p = w.convoy.bay, at = p.toWorld(side, 0, w.V.craneMount + ahead);
   w.sim.reset(at.x, at.z, p.heading);
   w.carry.state = "walking"; w.carry.armed = true;
@@ -208,12 +211,49 @@ function pickUp(w: World, label = "") {
   const p = w.convoy.bay, d = onDeck(w);
   console.log(`  set down at (${d.l.x.toFixed(2)}, ${d.l.z.toFixed(2)}) local (pad at 0, ${w.V.craneSetDown}) · hips ${d.hips.toFixed(2)} m above the deck · swing at set-down ${w.crane.swingOffset.toFixed(2)} m`);
   if (!Number.isFinite(t)) fail(`mech in range not set on the deck (ended ${w.carry.state})`);
+  if (t > 15) fail(`pick-up took ${t.toFixed(1)} s (want under 15)`);
   if (Math.hypot(d.l.x, d.l.z - w.V.craneSetDown) > 0.5) fail(`set down ${Math.hypot(d.l.x, d.l.z - w.V.craneSetDown).toFixed(2)} m off the set-down pad`);
   if (Math.abs(d.hips - w.V.hipHeight) > 0.25) fail("not standing on the deck after set-down");
   if (w.crane.maxSwing < 0.05) fail("the load never swung (rope rigid?)");
   if (w.crane.maxSwing > 4) fail(`the load swung ${w.crane.maxSwing.toFixed(1)} m out`);
   if (w.sim.ground !== w.carry.ground || !w.carry.ground.onDeck) fail("walker not on the deck ground after set-down");
   void p;
+}
+
+// 3b. The rear mech bay (Keith 2026-10-25): a mech beside it is picked up by its own crane (the nearer one), set on
+// its set-down pad, and launched again from its launch pad.
+{
+  console.log("-- rear mech bay");
+  const w = world();
+  for (let i = 0; i < 240; i++) w.convoy.update(DT);
+  for (const c of w.cranes) { c.place(); c.calm(); }
+  const rear = w.convoy.bays[1], rc = w.cranes[1];
+  if (!rear || rear === w.convoy.bay) fail("no rear mech bay");
+  else {
+    const at = rear.toWorld(15, 0, rc.mount - 6);
+    w.sim.reset(at.x, at.z, rear.heading);
+    Object.assign(w.carry, { state: "walking", armed: true });
+    let t = 0;
+    for (; t < 60 && w.carry.state !== "aboard"; t += DT) {
+      const k = rear.speed / w.V.walkSpeed;
+      tick(w, ["walking", "inRange", "pickup"].includes(w.carry.state) ? { x: rear.fwd.x * k, z: rear.fwd.z * k, sprint: false } : still);
+    }
+    const l = rear.toLocal(w.sim.pos.x, w.sim.pos.z), setZ = w.V.craneSetDown * rear.craneEnd;
+    const off = Math.hypot(l.x, l.z - setZ);
+    console.log(`  picked up by the ${w.carry.crane.platform.spec.name} crane in ${t.toFixed(1)} s · set down ${off.toFixed(2)} m off its pad · front crane slew ${(w.cranes[0].slew / D2R).toFixed(0)}° (stowed)`);
+    if (w.carry.state !== "aboard") fail(`rear bay pick-up didn't finish (state ${w.carry.state})`);
+    if (w.carry.crane !== rc) fail("the front crane came for a mech beside the rear bay");
+    if (off > 0.5) fail(`set down ${off.toFixed(2)} m off the rear bay's pad`);
+    if (t > 15) fail(`rear pick-up took ${t.toFixed(1)} s`);
+    // Launch from its left pad.
+    const pad = deckLayout(rear, w.V).spots.find((s) => s.kind === "launch" && s.side === 1)!;
+    let u = 0;
+    for (; u < 60 && w.carry.state !== "landing"; u += DT) tick(w, w.carry.state === "aboard" ? walkToSpot(w.sim, rear, pad.x, pad.z, 0.5) : still);
+    const ll = rear.toLocal(w.sim.pos.x, w.sim.pos.z);
+    console.log(`  launched off the rear bay after ${u.toFixed(1)} s, landed ${ll.x.toFixed(1)} m beside it`);
+    if (w.carry.state !== "landing") fail(`rear launch didn't land (state ${w.carry.state})`);
+    else if (ll.x < rear.spec.width / 2 + 2) fail("rear launch landed on or against the platform");
+  }
 }
 
 // 4. Walking out of range before the cradle connects: no pick-up.
@@ -332,42 +372,75 @@ function pickUp(w: World, label = "") {
 
 // 7. Launch: walk onto a launch pad, the crane takes the mech out over that side and lets go on the sand at the
 // convoy's velocity; stepping off the pad first cancels.
-for (const speed of [4, 6]) {
+for (const speed of [ROUTE_DEFAULTS.convoySpeed, 4, 6]) {
   console.log(`-- launch at ${speed} m/s`);
   const w = world({ convoySpeed: speed });
   for (let i = 0; i < 240; i++) w.convoy.update(DT);
   w.crane.place(); w.crane.calm();
   w.carry.putAboard(w.sim);
-  const p = w.convoy.bay, side = speed === 4 ? 1 : -1;
+  const p = w.convoy.bay, side = speed === 6 ? -1 : 1;
   const pad = deckLayout(p, w.V).spots.find((s) => s.kind === "launch" && s.side === side)!;
-  let t = 0, peak = 0;
+  let t = 0, peak = 0, onPadAt = NaN, letGoAt = NaN, dropFeet = NaN, minFeet = Infinity, landed = 0;
   const seen: string[] = [];
   for (; t < 150 && w.carry.state !== "landing"; t += DT) {
     tick(w, w.carry.state === "aboard" ? walkToSpot(w.sim, p, pad.x, pad.z, 0.5) : still);
+    if (!Number.isFinite(onPadAt) && w.carry.spot?.kind === "launch") onPadAt = t;
     if (seen[seen.length - 1] !== w.carry.state) seen.push(w.carry.state);
     if (w.carry.attached) peak = Math.max(peak, w.crane.swingOffset);
+    if (w.carry.state === "falling") {
+      // Lowest foot over the sand while falling (never through it).
+      const lowest = Math.min(...w.sim.feet.map((f) => f.pos.y - w.field.height(f.pos.x, f.pos.z)));
+      if (!Number.isFinite(letGoAt)) { letGoAt = t; dropFeet = lowest; }
+      minFeet = Math.min(minFeet, lowest);
+      // Falling with the convoy, not left behind.
+      const dv = Math.hypot(w.carry.fall.vx - p.vel.x, w.carry.fall.vz - p.vel.z);
+      if (dv > 0.3) { fail(`falling ${dv.toFixed(2)} m/s off the convoy's velocity`); break; }
+    }
     if (!Number.isFinite(w.sim.pelvis.y + w.crane.cradle.x)) { fail("non-finite during launch"); break; }
   }
-  if (w.carry.state !== "landing") { fail(`launch didn't release (state ${w.carry.state}, phase ${w.carry.phase})`); continue; }
-  const g = w.field.height(w.sim.pos.x, w.sim.pos.z);
+  if (w.carry.state !== "landing") { fail(`launch didn't land (state ${w.carry.state}, phase ${w.carry.phase})`); continue; }
+  // The frame after touchdown: both feet planted on the sand.
+  let worstFoot = 0;
+  // Planted spots exactly on the sand. (The walker takes its first step in the touchdown frame, so the foot about to
+  // lift may already be rolling up off its heel: its sole within a heel roll of the sand, or swinging.)
+  let worstSole = 0;
+  for (const f of w.sim.feet) {
+    worstFoot = Math.max(worstFoot, Math.abs(f.planted.y - w.field.height(f.planted.x, f.planted.z)));
+    if (!f.swinging) worstSole = Math.max(worstSole, Math.abs(f.pos.y - w.field.height(f.pos.x, f.pos.z)));
+  }
+  if (worstSole > 0.15) fail(`a planted foot ${worstSole.toFixed(2)} m off the sand after touchdown`);
+  tick(w, still);
+  for (const f of w.sim.feet) if (!f.swinging) worstFoot = Math.max(worstFoot, Math.abs(f.planted.y - w.field.height(f.planted.x, f.planted.z)));
+  landed = w.carry.lastLanding.speed;
   const dv = Math.hypot(w.sim.vel.x - p.vel.x, w.sim.vel.z - p.vel.z);
   const l = p.toLocal(w.sim.pos.x, w.sim.pos.z);
-  console.log(`  ${seen.join(" > ")} · released after ${t.toFixed(1)} s at ${l.x.toFixed(1)} m beside the platform · hips ${(w.sim.pelvis.y - g).toFixed(2)} m over the sand · velocity off by ${dv.toFixed(2)} m/s · biggest swing ${peak.toFixed(2)} m`);
-  if (Math.abs(w.sim.pelvis.y - g - w.V.hipHeight) > 0.3) fail("not set down on the sand");
+  const launchTime = letGoAt - onPadAt;
+  console.log(`  ${seen.join(" > ")} · ${launchTime.toFixed(1)} s from the pad to letting go · fell ${dropFeet.toFixed(2)} m in ${w.carry.lastLanding.time.toFixed(2)} s, hit at ${landed.toFixed(1)} m/s, ${l.x.toFixed(1)} m beside the platform · planted feet off the sand after touchdown ${worstFoot.toFixed(3)} m (soles ${worstSole.toFixed(2)}) · velocity off by ${dv.toFixed(2)} m/s · biggest swing ${peak.toFixed(2)} m`);
+  if (!(launchTime < 15)) fail(`launch took ${launchTime.toFixed(1)} s from the pad (want under 15)`);
+  if (Math.abs(dropFeet - w.V.craneDropHeight) > 0.6) fail(`let go with the feet ${dropFeet.toFixed(2)} m over the sand (slider ${w.V.craneDropHeight})`);
+  if (minFeet < -0.05) fail(`feet ${(-minFeet).toFixed(2)} m into the sand while falling`);
+  if (worstFoot > 0.02) fail(`planted feet ${worstFoot.toFixed(3)} m off the sand after touchdown`);
   if (l.x * side < p.spec.width / 2 + 2) fail("set down on or against the platform, or on the wrong side");
-  if (dv > 0.3) fail(`released at ${dv.toFixed(2)} m/s off the convoy's velocity`);
+  if (dv > 0.3) fail(`landed at ${dv.toFixed(2)} m/s off the convoy's velocity`);
   if (w.carry.ground.onDeck) fail("still on the deck ground after launch");
   for (const q of w.convoy.platforms) if (q.pushOut(w.sim.pos.x, w.sim.pos.z, 1.5)) fail(`launched into the ${q.spec.name} platform`);
-  // Forced follow: keeps pace with the platform.
+  // Forced follow: keeps pace with the platform; the landing crouch springs back up.
   const start = { ...l };
-  let worst = 0;
-  for (let i = 0; i < Math.round(w.V.craneFollow / DT) - 1; i++) {
+  let worst = 0, lowHips = Infinity;
+  for (let i = 0; i < Math.round(w.V.craneFollow / DT) - 2; i++) {
     tick(w, { x: -1, z: 0, sprint: false }); // the stick is ignored until the follow ends
     const n = p.toLocal(w.sim.pos.x, w.sim.pos.z);
     worst = Math.max(worst, Math.hypot(n.x - start.x, n.z - start.z));
+    lowHips = Math.min(lowHips, w.sim.pelvis.y - w.field.height(w.sim.pos.x, w.sim.pos.z));
+    if (!Number.isFinite(w.sim.pelvis.x + w.sim.pelvis.y + w.sim.pelvis.z)) { fail("non-finite after touchdown"); break; }
   }
-  console.log(`  drifted ${worst.toFixed(2)} m from its spot beside the platform over the forced follow (${w.carry.state})`);
+  const g = w.field.height(w.sim.pos.x, w.sim.pos.z), hips = w.sim.pelvis.y - g;
+  const dv2 = Math.hypot(w.sim.vel.x - p.vel.x, w.sim.vel.z - p.vel.z);
+  console.log(`  landing crouch to ${lowHips.toFixed(2)} m, hips back to ${hips.toFixed(2)} m · drifted ${worst.toFixed(2)} m from its spot beside the platform over the forced follow · velocity off by ${dv2.toFixed(2)} m/s (${w.carry.state})`);
+  if (lowHips > w.V.hipHeight - 0.2) fail("no landing crouch");
+  if (Math.abs(hips - w.V.hipHeight) > 0.3) fail(`hips ${hips.toFixed(2)} m over the sand after the follow (not standing back up)`);
   if (worst > 2) fail(`fell ${worst.toFixed(1)} m behind or aside during the forced follow`);
+  if (dv2 > 0.3) fail(`${dv2.toFixed(2)} m/s off the convoy's velocity after the follow`);
   for (let i = 0; i < 60; i++) tick(w, still);
   if ((w.carry.state as string) !== "walking") fail(`control didn't come back (state ${w.carry.state})`);
   if (w.sim.stats.overreach > 60) fail(`legs overreached ${w.sim.stats.overreach} frames`);
@@ -536,7 +609,7 @@ for (const lanes of [1, 2]) {
     if (t < 60) { const q = w.convoy.bay.toWorld(16, 0, 0); mech.x = q.x; mech.z = q.z; }
     else if (Math.abs(t - 60) < DT / 2 || Math.abs(t - 120) < DT / 2) {
       const e = esc.list[t < 100 ? 0 : 1];
-      const q = w.route.offsetAt(e.s + 45, e.side * w.V.escortOut);
+      const q = w.route.offsetAt(e.s + 45, e.side * e.stationOut);
       mech.x = q.x; mech.z = q.z;
     }
     esc.update(DT, mech);
@@ -548,7 +621,7 @@ for (const lanes of [1, 2]) {
       for (const p of w.convoy.platforms) worstPlat = Math.min(worstPlat, rectGap(p, s.pos.x, s.pos.z, e.half * 0.6));
       worstMech = Math.min(worstMech, Math.hypot(s.pos.x - mech.x, s.pos.z - mech.z) - e.half * 0.6);
       samples++;
-      if (Math.abs(Math.abs(e.out) - w.V.escortOut) <= w.V.escortBand + w.V.escortWeave && Math.sign(e.out) === e.side) onStation++;
+      if (Math.abs(Math.abs(e.out) - e.stationOut) <= w.V.escortBand + w.V.escortWeave && Math.sign(e.out) === e.side) onStation++;
     }
   }
   const share = onStation / Math.max(1, samples);
@@ -564,11 +637,14 @@ for (const lanes of [1, 2]) {
 {
   console.log("-- pipes");
   const V = { ...PIPE_DEFAULTS };
-  let total = 0, inside = 0, off = 0, differ = 0;
+  let total = 0, inside = 0, off = 0, differ = 0, furnOff = 0;
   CONVOY_LAYOUT.forEach((spec, index) => {
     const D = spec.tracked ? PLATFORM_DEFAULTS.convoyBayDeck : PLATFORM_DEFAULTS.convoyDeckHeight;
     const { items } = furniture(spec, D);
-    const site = { length: spec.length, width: spec.width, deck: D, mounts: items.filter((f) => f.mount).map(furnBox), keepOut: items.filter((f) => !f.mount).map(furnBox), walkable: spec.kind === "bay", index };
+    const ol = deckOutline(spec);
+    const site = { length: spec.length, width: spec.width, deck: D, mounts: items.filter((f) => f.mount).map(furnBox), keepOut: items.filter((f) => !f.mount).map(furnBox), walkable: spec.kind === "bay", index, outline: ol };
+    // Furniture stands on the cut-cornered deck.
+    for (const f of items) { const b = furnBox(f); for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) if (outside(ol, b.x + sx * b.hx, b.z + sz * b.hz) > 0.05) furnOff++; }
     const a = generatePipes(site, V), b = generatePipes(site, V);
     if (JSON.stringify(a) !== JSON.stringify(b)) differ++;
     total += a.runs;
@@ -577,11 +653,12 @@ for (const lanes of [1, 2]) {
     for (const t of a.tubes) for (let k = 0; k <= 8; k++) {
       const f = k / 8, x = t.a[0] + (t.b[0] - t.a[0]) * f, y = t.a[1] + (t.b[1] - t.a[1]) * f, z = t.a[2] + (t.b[2] - t.a[2]) * f;
       for (const bx of boxes) if (Math.abs(x - bx.x) < bx.hx - 0.06 && Math.abs(y - bx.y) < bx.hy - 0.06 && Math.abs(z - bx.z) < bx.hz - 0.06) inside++;
-      if (Math.abs(x) > spec.width / 2 + 1 || Math.abs(z) > spec.length / 2 + 0.2 || y < 0.5) off++;
+      if (outside(ol, x, z) > (y < D ? 1 : 0.2) || y < 0.5) off++;
     }
   });
   const none = generatePipes({ length: 24, width: 10, deck: 3.2, mounts: [], keepOut: [], walkable: false, index: 0 }, { ...V, pipeDensity: 0 });
-  console.log(`  ${total} runs on ${CONVOY_LAYOUT.length} platforms · tube points inside furniture ${inside} · off the platform ${off} · differ between runs ${differ}`);
+  console.log(`  ${total} runs on ${CONVOY_LAYOUT.length} platforms · tube points inside furniture ${inside} · off the platform ${off} · differ between runs ${differ} · furniture corners off the deck outline ${furnOff}`);
+  if (furnOff) fail(`${furnOff} furniture corners stand off the deck outline`);
   if (differ) fail("pipes differ between two runs with the same seed");
   if (inside) fail(`${inside} pipe points inside furniture`);
   if (off) fail(`${off} pipe points off the platform`);
@@ -615,6 +692,54 @@ for (const lanes of [1, 2]) {
   if (ruts / secs > 40) fail(`ruts at ${(ruts / secs).toFixed(0)} a second (the mark pool is 900)`);
   if (dust / secs > 250) fail(`dust at ${(dust / secs).toFixed(0)} puffs a second`);
   if (dust < secs) fail("no dust from the convoy");
+}
+
+// 14. Defences: turrets at the cut corners (outside the walkable deck) and a heavy one on each mech bay; idle they sweep
+// about their rest bearing; given a threat they all come onto it at their turn rates, and the fire hook fires.
+{
+  console.log("-- defences");
+  const w = world();
+  const V = { ...DEFENCE_DEFAULTS };
+  const def = new Defence(V, w.convoy.platforms);
+  const twins = def.turrets.filter((t) => t.kind === "twin").length, heavies = def.turrets.length - twins;
+  let onDeck = 0;
+  for (const t of def.turrets) if (t.kind === "twin" && outside(t.platform.outline, t.x, t.z) < 0) onDeck++;
+  // Idle for 30 s while the convoy drives.
+  let worstIdle = 0, nan = false;
+  for (let i = 0; i < 120 * 30; i++) {
+    w.convoy.update(DT); def.target([]); def.update(DT);
+    for (const t of def.turrets) {
+      if (!Number.isFinite(t.yaw + t.pitch)) nan = true;
+      const d = Math.abs(Math.atan2(Math.sin(t.yaw - t.rest), Math.cos(t.yaw - t.rest)));
+      worstIdle = Math.max(worstIdle, d / D2R);
+    }
+  }
+  // A threat 60 m off the left of the middle car, then swung to the right: time for all to come on.
+  let shots = 0, tracking = 0;
+  def.onFire = () => { shots++; };
+  const onTarget = (side: number) => {
+    let t = 0;
+    for (; t < 10; t += DT) {
+      w.convoy.update(DT);
+      const mid = w.convoy.platforms[3], q = mid.toWorld(side * 60, 5, 0);
+      def.target([q]); def.update(DT);
+      // Every turret with it in range is on it (the far cars are out of range).
+      if (t > DT && def.turrets.every((u) => !u.target || def.error(u)! < 3 * D2R)) break;
+    }
+    tracking = Math.max(tracking, def.turrets.filter((u) => u.target).length);
+    return t;
+  };
+  const tl = onTarget(1), tr = onTarget(-1);
+  console.log(`  ${twins} twin turrets, ${heavies} heavy · twins standing on the walkable deck ${onDeck} · idle sweep up to ${worstIdle.toFixed(0)}° off rest (slider ${V.defenceScan}) · all on a threat in ${tl.toFixed(1)} s, swung to the other side in ${tr.toFixed(1)} s · ${tracking} in range · ${shots} shots through the hook`);
+  if (tracking < 6) fail(`only ${tracking} turrets took the threat`);
+  if (twins !== w.convoy.platforms.length * V.defenceCount) fail(`expected ${w.convoy.platforms.length * V.defenceCount} twin turrets, got ${twins}`);
+  if (heavies !== w.convoy.bays.length) fail(`expected a heavy turret on each of ${w.convoy.bays.length} mech bays, got ${heavies}`);
+  if (onDeck) fail(`${onDeck} turrets stand on the walkable deck`);
+  if (nan) fail("a turret went non-finite");
+  if (worstIdle > V.defenceScan + 5) fail(`idle turret swung ${worstIdle.toFixed(0)}° off its rest`);
+  if (tl >= 10 || tr >= 10) fail("turrets didn't all come onto the threat");
+  if (tr > 180 / V.defenceHeavyTurn + 1.5) fail(`swinging round took ${tr.toFixed(1)} s (turn rates say under ${(180 / V.defenceHeavyTurn + 1.5).toFixed(1)})`);
+  if (!shots) fail("the fire hook never fired");
 }
 
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("convoy check failed"); }

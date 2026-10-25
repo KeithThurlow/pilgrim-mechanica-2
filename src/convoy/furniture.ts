@@ -4,6 +4,7 @@
 // Frame: the platform's local frame (x left, y up, z forward), y = 0 on the ground plane, deck top at D.
 import type { CarKind } from "../vehicles/car";
 import type { PlatformSpec } from "./platform";
+import { storesZ } from "./deck";
 
 export const PAL = {
   steel: 0x8f8a7f,
@@ -75,9 +76,10 @@ export function furniture(spec: PlatformSpec, D: number): { items: Furn[]; cars:
   box([Math.min(W - 1, 6), 2.4, CAB_LEN], [0, D + 1.2, cabZ], paint, true);
 
   if (kind === "bay") {
-    // Tool hut and crates aft.
-    box([3, 2.6, 4], [-(W / 2 - 2.2), D + 1.3, -L / 2 + 4], PAL.teal, true);
-    for (let i = 0; i < 3; i++) box([1.2, 1.2, 1.2], [W / 2 - 1.8, D + 0.6 + (i === 2 ? 1.2 : 0), -L / 2 + 3 + (i % 2) * 1.4], PAL.ochre);
+    // Tool hut and crates aft (forward, behind the cab, on a rear bay with its crane aft).
+    const z = storesZ(spec);
+    box([3, 2.6, 4], [-(W / 2 - 2.2), D + 1.3, z.stores], PAL.teal, true);
+    for (let i = 0; i < 3; i++) box([1.2, 1.2, 1.2], [W / 2 - 1.8, D + 0.6 + (i === 2 ? 1.2 : 0), z.crates - 0.7 + (i % 2) * 1.4], PAL.ochre);
   } else if (kind === "housing") {
     // Containers stacked two high, a hut with a canopy.
     box([2.5, 2.6, 6], [W / 2 - 1.6, D + 1.3, 3], PAL.red, true);

@@ -6,12 +6,14 @@
 // planted feet and swing targets all move with the deck, then the walker takes its own step relative to it.
 // Ground: while the mech is aboard, the walker's ground is the deck plane (extended a little past the edges so
 // lookups just outside don't see a 3 m drop); otherwise it's the dunes.
-// Keeping on: the mech is a circle that can't leave the deck (rails) or pass through the deck furniture.
+// Keeping on: the mech is a circle that can't leave the deck (rails, along the cut-cornered outline) or pass through
+// the deck furniture. A rear mech bay (crane aft) has the same layout mirrored along its length, the cab still in front.
 import type { Param } from "../core/tweaks";
 import type { Ground, WalkerSim } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
-import type { Platform } from "./platform";
+import type { Platform, PlatformSpec } from "./platform";
 import { landingXs, LANDING_IN, LANDING_HALF } from "./train";
+import { outside, keepInside } from "./outline";
 
 export const DECK_DEFAULTS = {
   deckMechRadius: 1.5,
@@ -42,29 +44,43 @@ export const BAY_W = 5.4, BAY_L = 7;
 /** Cab depth at the front of the bay platform. */
 export const CAB_DEPTH = 3.6;
 
+/** Along-deck positions of a bay's crane, set-down pad, parking bays and aft stores, mirrored on a rear bay. */
+export function bayZ(p: Platform, v: DeckValues & { craneMount: number }) {
+  const e = p.craneEnd;
+  return { crane: v.craneMount * e, setDown: v.craneSetDown * e, park: v.deckParkZ * e, ...storesZ(p.spec) };
+}
+
+/** Along-deck spot of a bay's tool hut and crates: aft on the lead bay, just behind the cab on a rear bay. */
+export function storesZ(spec: PlatformSpec) {
+  const L = spec.length;
+  return (spec.crane ?? 1) > 0 ? { stores: -L / 2 + 4, crates: -L / 2 + 3.7 } : { stores: L / 2 - CAB_DEPTH - 2.2, crates: L / 2 - CAB_DEPTH - 1.5 };
+}
+
 /** The bay platform's layout from its size, the crane's mount and the deck values (and the footbridges' landings). */
 export function deckLayout(p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
   const { length: L, width: W } = p.spec;
+  const z = bayZ(p, v);
   const spots: Spot[] = [
-    { x: v.deckParkX, z: v.deckParkZ, kind: "park" },
-    { x: -v.deckParkX, z: v.deckParkZ, kind: "park" },
-    { x: v.deckLaunchX, z: v.craneMount, kind: "launch", side: 1 },
-    { x: -v.deckLaunchX, z: v.craneMount, kind: "launch", side: -1 },
-    { x: 0, z: v.craneSetDown, kind: "setdown" },
+    { x: v.deckParkX, z: z.park, kind: "park" },
+    { x: -v.deckParkX, z: z.park, kind: "park" },
+    { x: v.deckLaunchX, z: z.crane, kind: "launch", side: 1 },
+    { x: -v.deckLaunchX, z: z.crane, kind: "launch", side: -1 },
+    { x: 0, z: z.setDown, kind: "setdown" },
   ];
   const blocks: Block[] = [
     // Crane mast ring.
-    { x: 0, z: v.craneMount, hx: 0, hz: 0, r: 1.9 },
+    { x: 0, z: z.crane, hx: 0, hz: 0, r: 1.9 },
     // Cab across the front.
     { x: 0, z: L / 2 - CAB_DEPTH / 2, hx: W / 2, hz: CAB_DEPTH / 2 },
     // Service tower between the parking bays.
-    { x: 0, z: v.deckParkZ, hx: 0.8, hz: 1.9 },
-    // Tool hut and crates aft.
-    { x: -(W / 2 - 2.2), z: -L / 2 + 4, hx: 1.5, hz: 2 },
-    { x: W / 2 - 1.8, z: -L / 2 + 3.7, hx: 0.6, hz: 1.3 },
+    { x: 0, z: z.park, hx: 0.8, hz: 1.9 },
+    // Tool hut and crates (aft, or forward of the crane on a rear bay).
+    { x: -(W / 2 - 2.2), z: z.stores, hx: 1.5, hz: 2 },
+    { x: W / 2 - 1.8, z: z.crates, hx: 0.6, hz: 1.3 },
   ];
-  // Footbridge landing towers on the tail (the bay leads, so the next car's bridges land here).
-  for (const x of landingXs(v.bridgeCount ?? 0, W)) blocks.push({ x, z: -L / 2 + LANDING_IN, hx: LANDING_HALF, hz: LANDING_HALF });
+  // Footbridge landing towers: on the tail when a car follows (the lead), on the nose when it follows one (the rear bay).
+  const xs = landingXs(v.bridgeCount ?? 0, W);
+  if (p.follows < 0 || p.craneEnd > 0) for (const x of xs) blocks.push({ x, z: -L / 2 + LANDING_IN, hx: LANDING_HALF, hz: LANDING_HALF });
   return { spots, blocks, halfW: W / 2, halfL: L / 2 };
 }
 
@@ -73,12 +89,13 @@ export class DeckGround implements Ground {
   onDeck = false;
   /** Lookups this far past the deck edge still read the deck (m). */
   skirt = 3;
-  constructor(readonly field: DuneField, readonly bay: Platform) {}
+  /** The platform whose deck this is (the carry switches it to the bay of the crane in use). */
+  constructor(readonly field: DuneField, public bay: Platform) {}
 
-  /** Inside the deck's footprint (plus margin m)? */
+  /** Inside the deck's outline (plus margin m)? */
   over(x: number, z: number, margin = 0) {
     const p = this.bay, l = p.toLocal(x, z);
-    return Math.abs(l.x) < p.spec.width / 2 + margin && Math.abs(l.z) < p.spec.length / 2 + margin;
+    return outside(p.outline, l.x, l.z) < margin;
   }
 
   /** The deck plane's height at world (x, z). */
@@ -137,8 +154,7 @@ export function rideDeck(sim: WalkerSim, p: Platform, was: PoseSnap) {
 export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
   const lay = deckLayout(p, v), r = v.deckMechRadius;
   const l = p.toLocal(sim.pos.x, sim.pos.z);
-  let x = Math.max(-lay.halfW + r, Math.min(lay.halfW - r, l.x));
-  let z = Math.max(-lay.halfL + r, Math.min(lay.halfL - r, l.z));
+  let { x, z } = keepInside(p.outline, l.x, l.z, r);
   for (const b of lay.blocks) {
     if (b.r !== undefined) {
       const dx = x - b.x, dz = z - b.z, d = Math.hypot(dx, dz), m = b.r + r;
@@ -161,8 +177,8 @@ export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneM
   for (const f of sim.feet) {
     if (!f.swinging) continue;
     const q = p.toLocal(f.target.x, f.target.z);
-    const qx = Math.max(-lay.halfW + fm, Math.min(lay.halfW - fm, q.x)), qz = Math.max(-lay.halfL + fm, Math.min(lay.halfL - fm, q.z));
-    if (qx === q.x && qz === q.z) continue;
+    const { x: qx, z: qz } = keepInside(p.outline, q.x, q.z, fm);
+    if (Math.abs(qx - q.x) < 1e-9 && Math.abs(qz - q.z) < 1e-9) continue;
     f.target.x = p.x + c * qx + s * qz;
     f.target.z = p.z - s * qx + c * qz;
     const o = p.toWorld(0, p.deck, 0), u = p.up;

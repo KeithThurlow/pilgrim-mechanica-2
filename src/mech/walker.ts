@@ -180,6 +180,16 @@ export class WalkerSim {
     this.pose();
   }
 
+  /**
+   * A heavy landing (after a drop): the hips start sink metres low and spring back up on the body's height spring,
+   * and the plant-thud spring is hit downward at kick m/s on top (the hocks squash with it).
+   */
+  thud(sink: number, kick: number) {
+    this.bodyY.x -= sink; this.bodyY.v = 0;
+    this.impact.v -= kick;
+    this.pose();
+  }
+
   /** Solve the legs for the body and feet as they stand (after writing the pose from outside, e.g. a crane holding the mech). */
   solve() { this.pose(); }
 

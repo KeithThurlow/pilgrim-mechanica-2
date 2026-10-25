@@ -13,22 +13,22 @@ export const CRANE_DEFAULTS = {
   craneMount: 11,
   craneReach: 21.5,
   craneMinReach: 4,
-  craneSlew: 16,
-  craneSlewAccel: 5,
-  craneLuff: 6,
-  craneLuffAccel: 4,
-  craneHoist: 1.8,
-  craneHoistAccel: 1.2,
-  craneRopeDamping: 0.12,
-  craneSwing: 0.5,
-  craneSteady: 0.9,
+  craneSlew: 60,
+  craneSlewAccel: 40,
+  craneLuff: 30,
+  craneLuffAccel: 40,
+  craneHoist: 7,
+  craneHoistAccel: 8,
+  craneRopeDamping: 0.5,
+  craneSwing: 0.3,
+  craneSteady: 1.5,
 };
 export type CraneValues = typeof CRANE_DEFAULTS;
 
 export const CRANE_PARAMS: Param[] = [
   { key: "craneJib", label: "Jib length (m)", min: 10, max: 40, step: 0.5, group: "Crane" },
   { key: "craneMast", label: "Mast height (m)", min: 1, max: 12, step: 0.5, group: "Crane", tip: "Slewing pivot above the deck" },
-  { key: "craneMount", label: "Mount forward (m)", min: -18, max: 18, step: 0.5, group: "Crane", tip: "Where the crane stands along the mech-bay platform" },
+  { key: "craneMount", label: "Mount from middle (m)", min: -18, max: 18, step: 0.5, group: "Crane", tip: "Where the crane stands along a mech-bay platform: forward of the middle on the lead bay, aft of it on the rear bay" },
   { key: "craneReach", label: "Max reach (m)", min: 8, max: 40, step: 0.5, group: "Crane", tip: "Furthest working radius (capped just under the jib length)" },
   { key: "craneMinReach", label: "Min reach (m)", min: 2, max: 15, step: 0.5, group: "Crane" },
   { key: "craneSlew", label: "Slew (°/s)", min: 2, max: 90, step: 1, group: "Crane motion", tip: "Top speed turning on its mast" },
@@ -39,7 +39,7 @@ export const CRANE_PARAMS: Param[] = [
   { key: "craneHoistAccel", label: "Hoist accel (m/s²)", min: 0.2, max: 10, step: 0.1, group: "Crane motion" },
   { key: "craneRopeDamping", label: "Rope damping (1/s)", min: 0, max: 2, step: 0.01, group: "Crane swing", tip: "How quickly a swing dies down on its own" },
   { key: "craneSwing", label: "Swing strength", min: 0, max: 3, step: 0.05, group: "Crane swing", tip: "How much the jib's and the platform's moves push the load (0 = rigid rope)" },
-  { key: "craneSteady", label: "Steadying (1/s)", min: 0, max: 4, step: 0.05, group: "Crane swing", tip: "Extra damping while the crane lowers a load onto its spot (the operator steadying it)" },
+  { key: "craneSteady", label: "Steadying (1/s)", min: 0, max: 4, step: 0.05, group: "Crane swing", tip: "While the crane steadies a load over its spot (the operator and tag lines): how quickly it is pulled back under the tip (1/s), damped to critical" },
 ];
 
 const D2R = Math.PI / 180;
@@ -96,11 +96,15 @@ export class Crane {
   private fresh = true;
 
   constructor(public v: CraneValues, readonly platform: Platform) {
+    // Stowed pointing back over its own deck (aft on the lead bay, forward on the rear one).
+    if (platform.craneEnd < 0) this.aSlew.x = this.slewT = 0;
     this.aLuff.x = this.luffT = this.luffFor(18);
     this.place();
   }
 
   get radius() { return this.v.craneJib * Math.cos(this.luff); }
+  /** Where the mast stands along the platform (local z): craneMount toward the platform's crane end. */
+  get mount() { return this.v.craneMount * this.platform.craneEnd; }
   /** Furthest working radius. */
   get maxReach() { return Math.min(this.v.craneReach, this.v.craneJib * 0.97); }
 
@@ -119,7 +123,7 @@ export class Crane {
 
   /** Slew and radius to a point on the platform (local left, forward). */
   relLocal(lx: number, lz: number) {
-    const dz = lz - this.v.craneMount;
+    const dz = lz - this.mount;
     return { slew: Math.atan2(lx, dz), radius: Math.hypot(lx, dz) };
   }
 
@@ -157,9 +161,14 @@ export class Crane {
     if (Math.hypot(ax, az) > 40) { ax = 0; az = 0; }
     this.tipVel.x = vx; this.tipVel.z = vz; this.tipVel.ok = true;
     const L = Math.max(MIN_ROPE, this.hoist), s = this.swing;
-    const damp = v.craneRopeDamping + (this.steadying ? v.craneSteady : 0) + 2 * ropeRate / L;
-    s.vx += (-(G / L) * Math.sin(s.x) - damp * s.vx - v.craneSwing * ax * Math.cos(s.x) / L) * dt;
-    s.vz += (-(G / L) * Math.sin(s.z) - damp * s.vz - v.craneSwing * az * Math.cos(s.z) / L) * dt;
+    // Steadying (the operator and tag lines): an extra pull back under the tip (craneSteady is its natural rate, 1/s)
+    // and damping raised to critical for the stiffer swing, so a long rope settles in a couple of seconds instead of
+    // creeping in overdamped.
+    const k = G / L + (this.steadying ? v.craneSteady * v.craneSteady : 0);
+    const damp = (this.steadying ? Math.max(v.craneRopeDamping, 2 * Math.sqrt(k)) : v.craneRopeDamping) + 2 * ropeRate / L;
+    const extra = k - G / L;
+    s.vx += (-(G / L) * Math.sin(s.x) - extra * s.x - damp * s.vx - v.craneSwing * ax * Math.cos(s.x) / L) * dt;
+    s.vz += (-(G / L) * Math.sin(s.z) - extra * s.z - damp * s.vz - v.craneSwing * az * Math.cos(s.z) / L) * dt;
     s.x += s.vx * dt; s.z += s.vz * dt;
     for (const k of ["x", "z"] as const) {
       const vk = k === "x" ? "vx" : "vz";
@@ -196,7 +205,7 @@ export class Crane {
   /** Positions from the platform, the three axes and the swing. */
   place(cradle = true) {
     const p = this.platform, v = this.v;
-    p.toWorld(0, p.deck + v.craneMast, v.craneMount, this.base);
+    p.toWorld(0, p.deck + v.craneMast, this.mount, this.base);
     const a = p.heading + this.slew, r = this.radius;
     this.tip.x = this.base.x + Math.sin(a) * r;
     this.tip.y = this.base.y + v.craneJib * Math.sin(this.luff);

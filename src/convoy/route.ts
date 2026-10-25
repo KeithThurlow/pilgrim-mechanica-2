@@ -13,7 +13,7 @@ import type { Param } from "../core/tweaks";
 import type { GroundModifier, ModifierSample } from "../world/terrain";
 
 export const ROUTE_DEFAULTS = {
-  convoySpeed: 4,
+  convoySpeed: 3.3,
   convoyHeading: 0,
   convoyTurn: 2,
   convoyWander: 12,
