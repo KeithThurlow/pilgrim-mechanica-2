@@ -5,18 +5,18 @@
 // needs both arms), a power pack (needs the hull's pack mount) and the back mount under it.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import type { Param } from "../core/tweaks";
-import { BASE_BY_ID, STATS } from "./bases";
+import { BASE_BY_ID, STATS, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 import { itemWeight, type Item } from "./item";
 import { makeItem } from "./generate";
 import type { GunStats } from "../mech/upper";
 
-export const SLOTS = ["legs", "hull", "armL", "armR", "handL", "handR", "pack", "back"] as const;
+export const SLOTS = ["legs", "hull", "armL", "armR", "handL", "handR", "shoulderL", "shoulderR", "pack", "back"] as const;
 export type SlotId = (typeof SLOTS)[number];
 export type Loadout = Record<SlotId, Item | null>;
 
 export const SLOT_NAMES: Record<SlotId, string> = {
-  legs: "Legs", hull: "Hull", armL: "Left arm mount", armR: "Right arm mount", handL: "Left hand", handR: "Right hand", pack: "Power pack", back: "Back mount",
+  legs: "Legs", hull: "Hull", armL: "Left arm mount", armR: "Right arm mount", handL: "Left hand", handR: "Right hand", shoulderL: "Left shoulder (key 1)", shoulderR: "Right shoulder (key 2)", pack: "Power pack", back: "Back mount (key 3)",
 };
 
 export const LOADOUT_DEFAULTS = {
@@ -36,11 +36,11 @@ export function defaultLoadout(): Loadout {
   return {
     legs: makeItem("legs-rampart"), hull: makeItem("hull-rampart"),
     armL: makeItem("mg-medium", "common", "default-mg-medium-L"), armR: makeItem("mg-medium", "common", "default-mg-medium-R"),
-    handL: null, handR: null, pack: makeItem("pack-standin"), back: makeItem("back-drums"),
+    handL: null, handR: null, shoulderL: null, shoulderR: null, pack: makeItem("pack-standin"), back: makeItem("back-drums"),
   };
 }
 
-export const emptyLoadout = (): Loadout => ({ legs: null, hull: null, armL: null, armR: null, handL: null, handR: null, pack: null, back: null });
+export const emptyLoadout = (): Loadout => ({ legs: null, hull: null, armL: null, armR: null, handL: null, handR: null, shoulderL: null, shoulderR: null, pack: null, back: null });
 
 const isArm = (i: Item | null) => !!i && i.kind === "arm";
 const isTwoHander = (i: Item | null) => !!i && i.kind === "weapon" && i.size === "H";
@@ -62,9 +62,13 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
       if (item.size === "H") return isArm(lo.armL) && isArm(lo.armR) ? null : "a two-handed weapon needs an arm on both sides";
       return isArm(lo[slot === "handL" ? "armL" : "armR"]) ? null : "a hand weapon needs an arm on that side";
     }
+    case "shoulderL": case "shoulderR": {
+      if (item.kind !== "shoulder") return "only shoulder weapons go here";
+      return (hull?.mounts?.shoulders ?? 0) >= (slot === "shoulderL" ? 1 : 2) ? null : "the hull has no shoulder mount here";
+    }
     case "pack": return item.kind !== "pack" ? "only a power pack goes here" : hull?.mounts?.pack ? null : "the hull has no pack mount";
     case "back": {
-      if (item.kind !== "back") return "only back items go here";
+      if (item.kind !== "back" && item.kind !== "shoulder") return "only back items or shoulder weapons go here";
       const pack = lo.pack ? BASE_BY_ID[lo.pack.base] : null;
       return (pack?.backMounts ?? 0) > 0 ? null : "needs a power pack with a back mount";
     }
@@ -197,6 +201,9 @@ export interface Resolved {
   guns: { left: GunStats | null; right: GunStats | null };
   /** Parts to show on the model. */
   parts: { drums: boolean; pack: boolean };
+  /** Shoulder weapons (src/weapons), each on its key: shoulders 1 and 2, the back mount 3; their own rolled stats
+   *  (null: an unrolled base item, on the weapon sliders). */
+  shoulders: { key: 1 | 2 | 3; mount: "shoulderL" | "shoulderR" | "back"; weapon: ShoulderWeapon; own: Record<string, number> | null }[];
   /** Cargo the mech can carry (t): the legs' carry plus the hull's racks. */
   cargoCapacity: number;
   /** Everything fitted (t). */
@@ -210,21 +217,28 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const back = lo.back ? effectiveStats(lo.back) : null;
   const ammo = back?.ammoPerGun ?? bare.bareAmmo;
 
-  const gunFrom = (w: Record<string, number>, arc: number, track: number): GunStats => ({
-    fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce,
-  });
+  const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number): GunStats => {
+    const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
+    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce };
+    // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
+    // an unrolled base item runs on the weapon sliders (own: null).
+    const own = item.seed ? w : null, light = item.size === "L";
+    if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, cls, own, light };
+    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, cls, own, light };
+    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, cls, own, light };
+  };
   const side = (arm: SlotId, hand: SlotId): GunStats | null => {
     const mount = lo[arm];
-    if (mount?.kind === "weapon") { const w = effectiveStats(mount); return gunFrom(w, w.arc, w.track); }
+    if (mount?.kind === "weapon") { const w = effectiveStats(mount); return gunFrom(mount, w, w.arc, w.track); }
     const h = lo[hand];
-    if (isArm(mount) && h?.kind === "weapon" && h.size === "L") { const a = effectiveStats(mount!); return gunFrom(effectiveStats(h), a.arc, a.track); }
+    if (isArm(mount) && h?.kind === "weapon" && h.size === "L") { const a = effectiveStats(mount!); return gunFrom(h, effectiveStats(h), a.arc, a.track); }
     return null;
   };
   let left = side("armL", "handL"), right = side("armR", "handR");
   if (isTwoHander(lo.handR) && isArm(lo.armL) && isArm(lo.armR)) {
     // A two-hander fires from the right side, aimed by both arms: their mean arc, their mean tracking times its handling.
     const w = effectiveStats(lo.handR!), a = effectiveStats(lo.armL!), b = effectiveStats(lo.armR!);
-    right = gunFrom(w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1));
+    right = gunFrom(lo.handR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1));
     left = null;
   }
   const first = right ?? left;
@@ -247,7 +261,11 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   return {
     values,
     guns: { left, right },
-    parts: { drums: !!lo.back, pack: !!lo.pack },
+    parts: { drums: lo.back?.kind === "back", pack: !!lo.pack },
+    shoulders: ([["shoulderL", 1], ["shoulderR", 2], ["back", 3]] as const).flatMap(([slot, key]) => {
+      const it = lo[slot], w = it ? BASE_BY_ID[it.base]?.shoulder : undefined;
+      return it && w ? [{ key, mount: slot, weapon: w, own: it.seed ? effectiveStats(it) : null }] : [];
+    }),
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0),
     weight: SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0),
   };

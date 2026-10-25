@@ -1,0 +1,66 @@
+{
+  "class": "Rocket",
+  "size": "M",
+  "mount": "projectile",
+  "note": "root at the motor's tail on the axis; flies along +Z",
+  "units": "metres at game size",
+  "frame": "glTF: +Y up, +Z forward (muzzle), +X the mech's left; root at the mount point",
+  "bounds": {
+    "min": [
+      -0.166,
+      -0.166,
+      0.0
+    ],
+    "max": [
+      0.166,
+      0.166,
+      1.16
+    ],
+    "size": [
+      0.333,
+      0.333,
+      1.16
+    ]
+  },
+  "tris": 208,
+  "trisPerNode": {
+    "Body": 208
+  },
+  "nodes": {
+    "Body": {
+      "materials": [
+        "Paint_secondary",
+        "Paint_dark",
+        "Paint_mechanical",
+        "Paint_trim",
+        "Paint_detail"
+      ],
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "parent": "Rocket"
+    }
+  },
+  "moving": [],
+  "sockets": {
+    "Glow_0": [
+      0.0,
+      0.0,
+      -0.02
+    ]
+  },
+  "palette": {
+    "plating": "#b7a77c",
+    "secondary": "#6c7546",
+    "dark": "#34332e",
+    "mechanical": "#6e6d66",
+    "trim": "#e0ad2c",
+    "lighting": "#ff4a24",
+    "detail": "#cf4a26",
+    "visor": "#4fa4a8"
+  },
+  "colour": "COLOR_0 = section paint x wear x AO (sRGB, as rampart.glb); materials Paint_<section> with white base; Paint_lighting emissive",
+  "source": "tools/blender/weapons/rocket_launcher.py (kit: pilgrim-mechanica tools/blender/weapons/wkit.py)"
+}

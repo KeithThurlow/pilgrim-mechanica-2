@@ -3,7 +3,7 @@
 import type { Rarity } from "./rarity";
 
 /** What kind of thing it is; with the size, that decides which slots it fits (src/items/loadout.ts). */
-export type ItemKind = "legs" | "hull" | "arm" | "weapon" | "pack" | "back" | "protocol";
+export type ItemKind = "legs" | "hull" | "arm" | "weapon" | "shoulder" | "pack" | "back" | "protocol";
 /** Weapon size: Light in a hand, Medium as a hull weapon on an arm mount, Heavy two-handed. */
 export type Size = "L" | "M" | "H";
 

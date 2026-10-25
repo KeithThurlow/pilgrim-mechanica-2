@@ -26,7 +26,7 @@ import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { CATALOG, entry, preloadWeapons, createWeapon, sourceOf, trianglesOf, type WeaponModel } from "../../src/weapons/library";
 import { WeaponLook, WEAPON_LOOK_DEFAULTS, WEAPON_LOOK_PARAMS } from "../../src/weapons/weaponLook";
 import { LASER_DEFAULTS, LASER_PARAMS } from "../../src/weapons/laserSight";
-import { MOUNT_DEFAULTS, MOUNT_PARAMS, mountOnRampart, placeOnRampart, showStockGun } from "../../src/weapons/mounts";
+import { MOUNT_DEFAULTS, MOUNT_PARAMS, mountOnRampart, placeOnRampart } from "../../src/weapons/mounts";
 import { WeaponDemo } from "../../src/weapons/demo";
 import { SCHEMES } from "../../src/weapons/palette";
 
@@ -108,7 +108,7 @@ function clear() {
   for (const s of shown) s.w.dispose();
   shown = [];
   stands.clear();
-  for (const side of ["left", "right"] as const) showStockGun(rampart, side, true);
+  rampart.showPod(1, true); rampart.showPod(-1, true);
 }
 
 /** Size of a model's parts (for framing). */

@@ -68,7 +68,9 @@ console.log("stand-ins (tris): " + rows.join(", "));
 const loader = new GLTFLoader();
 const conv: string[] = [];
 for (const e of CATALOG.filter((c) => !c.build)) {
-  const path = `public/models/weapons/${e.id}.glb`;
+  let path = `public/models/weapons/${e.id}.glb`;
+  // A left id without its own file is the right one mirrored (the library does the same).
+  if (!existsSync(path) && e.side === "left" && e.mirror) path = `public/models/weapons/${e.mirror}.glb`;
   if (!existsSync(path)) { fail(`${e.id}: no GLB and no stand-in`); continue; }
   const buf = readFileSync(path);
   const gltf = await loader.parseAsync(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), "");

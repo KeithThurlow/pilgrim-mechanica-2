@@ -8,7 +8,7 @@
 // lab's 1 / 0.612. Stand-ins are built at Rampart scale. `weaponScale` in the armoury lab scales everything.
 import type { ModelDef, HeatRule } from "./parts";
 import { barrelHeat } from "./parts";
-import { rocketLauncherHull, rocketLauncherShoulder, rocketProjectile, missileProjectile } from "./build/rpg";
+import { missileProjectile } from "./build/projectiles";
 import { mortarHeavy, mortarLine, mortarShellProjectile } from "./build/mortar";
 import { railCannonHull, railCannon2h } from "./build/rail";
 import { autocannonHull, cannonHull } from "./build/guns";
@@ -61,8 +61,9 @@ const ROWS: Row[] = [
   ["ammo-belt-chute", "AmmoBelt", "Chute", "Belt chute", "belt", false, { brand: "Goliath Earthworks", note: KIT }],
   // Code stand-ins (src/weapons/build/) for docs/asset-list.md items, until the Blender models land at these paths.
   // W1-W3 (explosives first), W6-W8, then the energy guns (P3) and the projectiles.
-  ["rocket-launcher-hull", "RocketLauncher", "Hull", "RPG launcher (hull)", "hull", true, { build: rocketLauncherHull, fit: 1.15 }],
-  ["rocket-launcher-shoulder", "RocketLauncher", "Shoulder", "RPG launcher (shoulder)", "shoulder", true, { build: rocketLauncherShoulder, fit: 1.15 }],
+  // W1 is the desktop agent's (Blender GLBs, 2026-10-25): no stand-in; the left one is the right one mirrored.
+  ["rocket-launcher-hull", "RocketLauncher", "Hull", "RPG launcher (hull)", "hull", true, { note: "desktop GLB (asset list W1)" }],
+  ["rocket-launcher-shoulder", "RocketLauncher", "Shoulder", "RPG launcher (shoulder)", "shoulder", true, { note: "desktop GLB (asset list W1)" }],
   ["mortar-heavy", "Mortar", "H", "Heavy mortar (shoulder)", "shoulder", true, { build: mortarHeavy }],
   ["mortar-line", "LineMortar", "M", "Line mortar rack (shoulder)", "shoulder", true, { build: mortarLine }],
   ["rail-cannon-hull", "RailCannon", "Hull", "Rail cannon (hull)", "hull", true, { build: railCannonHull }],
@@ -71,7 +72,7 @@ const ROWS: Row[] = [
   ["cannon-hull", "Cannon", "Hull", "Cannon (hull)", "hull", true, { build: cannonHull }],
   ["plasma-cannon-hull", "PlasmaCannon", "Hull", "Plasma cannon (hull)", "hull", true, { build: plasmaCannonHull }],
   ["laser-projector-hull", "LaserProjector", "Hull", "Laser projector (hull)", "hull", true, { build: laserProjectorHull }],
-  ["rocket", "Projectile", "Rocket", "Rocket (projectile)", "projectile", false, { build: () => rocketProjectile() }],
+  ["rocket", "Projectile", "Rocket", "Rocket (projectile)", "projectile", false, { note: "desktop GLB (asset list W1)" }],
   ["missile", "Projectile", "Missile", "Missile (projectile)", "projectile", false, { build: () => missileProjectile() }],
   ["mortar-shell", "Projectile", "MortarShell", "Mortar shell (projectile)", "projectile", false, { build: () => mortarShellProjectile() }],
 ];
