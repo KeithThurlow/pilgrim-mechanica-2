@@ -28,9 +28,8 @@ import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
-import { screenToGround } from "../../src/world/raycast";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
-import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../../src/mech/upper";
+import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../../src/mech/upper";
 import type { MoveCommand } from "../../src/mech/walker";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody, mechLegType } from "../../src/mech/rampart";
@@ -62,11 +61,18 @@ import { POI_PARAMS } from "../../src/world/pois";
 import { SITE_PARAMS } from "../../src/pois/kinds";
 import { CAMP_PARAMS } from "../../src/expedition/camps";
 import { Costs } from "../../src/core/costs";
+import { TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate, type Lock } from "../../src/game/targeting";
+import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../../src/weapons/tuning";
+import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "../../src/game/playerAim";
+import { robotCandidates } from "../../src/combat/robotTarget";
+import { BIG, DOWN } from "../../src/combat/robots";
+import { WALK_LEGS } from "../../src/combat/robotLegs";
+import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { Walkable } from "../../src/world/walkable";
 import { ConvoyWalkways, WALKWAY_DEFAULTS, WALKWAY_PARAMS, platformFrame, deckPlane } from "../../src/convoy/walkways";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src/pilot/onFoot";
 import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
-import { defaultLoadout, resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
+import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag } from "../../src/items/cargo";
 import { applyLoadout } from "../../src/game/loadoutApply";
@@ -79,12 +85,12 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
-  ...LOOP_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS,
+  ...LOOP_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS,
   radius: 5, shadowBox: 60,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS,
+  ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
@@ -151,6 +157,12 @@ function homeAboard() {
   streamer.fill(sim.pos.x, sim.pos.z);
 }
 loop.onHome = homeAboard;
+// Targets for the soft lock and the weapons: every robot out there (asleep ones too: shooting one wakes its camp).
+const cands: TargetCandidate[] = [];
+const targets = () => robotCandidates(loop.swarms.sw, cands);
+// The player's weapons as in the combat labs (src/game/playerAim.ts): the arsenal, camera shake, blasts.
+const shaker = new CameraShake();
+const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, targets, shaker);
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -161,15 +173,15 @@ loop.onHome = homeAboard;
 // A launch drop lands heavily: the mech's own landing (src/game/mechUnit.ts) throws the sand, prints the feet and
 // bangs; the drop adds a burst between the feet, a scuffed crater and a camera shake. Any other hard landing (off a
 // dune crest) shakes the camera too.
-let shake = 0;
 carry.onTouchdown = (x, y, z, speed) => {
   const k = Math.min(1.6, speed / 7.7);
   const pv = carry.platform.vel;
   bf.dust.stomp(x, y, z, 2.4 * k, pv.x, pv.z);
   // crater() lays one mark every craterEvery calls: call it that many times so the landing always leaves one.
   for (let i = 0; i < Math.max(1, Math.round(V.craterEvery)); i++) bf.marks.crater(x, z, 5 * k);
+  shaker.add(V.craneLandShake * k);
 };
-player.onLanding = (l) => { shake = Math.max(shake, V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
+player.onLanding = (l) => { shaker.add(V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
 
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();
@@ -183,7 +195,12 @@ const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
 let armedWhenOut = true;
 // The bay screen (src/ui/bay.ts): opened at a bay terminal on foot (E), B anywhere as a lab shortcut.
 const BAY_KEY = "pm2:convoy-lab:bay";
-const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: defaultLoadout(), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
+// A fresh bay fits miniguns, the missile pod on 1 and the big mortar on 2 (2026-10-26: the new weapons out on
+// expeditions); ?left= ?right= ?k1= ?k2= ?k3= (as in the weapons lab) fit those instead.
+const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "mortar", k3: "drums" };
+const kitFlagged = pickFromParams(kit, params);
+const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
+if (kitFlagged) bayState.loadout = loadoutFor(kit);
 function refit() {
   const r = resolve(bayState.loadout, V);
   bayState.cargo.capacity = r.cargoCapacity;
@@ -194,12 +211,9 @@ refit();
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
 const terminals: ReturnType<typeof ways.terminals> = [];
 let auto = !params.has("manual") && !params.has("onfoot");
-let mouse: { x: number; y: number } | null = null;
-let mouseDown = false;
-canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; auto = false; } });
-canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
-addEventListener("pointerup", () => { mouseDown = false; });
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+// Left click fires the left side's weapon, right click the right side's (both can be held); keys 1-3 the shoulder
+// weapons; only while driving the mech (F is hold to hop out and back in, Keith 2026-10-26).
+const buttons = new MouseButtons(canvas, () => { auto = false; });
 let deployAsked = false, parkAsked = false;
 // E held strips salvage out on the sand (E pressed still parks aboard); Q held calls a recovery.
 let eHeld = false, qHeld = false;
@@ -331,7 +345,8 @@ const panel = tweakPanel({
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
     { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
+    WEAPON_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -365,6 +380,7 @@ selector = new Selector(app, {
     { topic: "escorts", label: "Escorts and vehicles aboard", objects: () => [...escortBodies.objects(), ...bodies.flatMap((b) => b.vehicleMeshes())] },
     { topic: "convoy", label: "Convoy platforms", objects: () => bodies.flatMap((b) => b.meshes()) },
     { topic: "legs", label: "Legs", objects: () => regions.legs },
+    { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
     { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
   ],
   ground: { topic: "road", label: "Road and dunes", field },
@@ -376,12 +392,7 @@ installReport(app, "convoy", V, () => ({ selected: sel.selection, topic: panel.f
 Object.assign(V, body.legValues());
 panel.refresh();
 
-const reticle = new THREE.Mesh(
-  new THREE.RingGeometry(0.55, 0.75, 32).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xffb347, depthTest: false, transparent: true, opacity: 0.9, toneMapped: false }),
-);
-reticle.renderOrder = 10;
-scene.add(reticle);
+const softAim = new SoftAim(scene, camera, canvas, field);
 
 field.update();
 restart();
@@ -404,7 +415,7 @@ function focus(out: THREE.Vector3) {
 const follow = focus(new THREE.Vector3());
 iso.snap(follow);
 if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
-const stick = new THREE.Vector3(), aimPt = new THREE.Vector3(), shoulder = new THREE.Vector3();
+const stick = new THREE.Vector3(), shoulder = new THREE.Vector3();
 let clock = 0;
 
 // Demo: walk in beside the bay, picked up, walk to a parking bay and park, stand, walk to a launch pad (sides
@@ -455,10 +466,32 @@ function demoCmd(dt: number): MoveCommand {
 
 const costs = new Costs();
 bf.costs = costs;
+// For shots: ?bigclose[=metres] puts an excavator that far ahead of the mech with the cursor held on one of its
+// buckets and both guns firing (the lock should take its chassis); ?raid sends a raid at once.
+const bigClose = params.has("bigclose");
+if (bigClose) {
+  const h = sim.heading, d = Number(params.get("bigclose")) || 8;
+  loop.swarms.addGroup("test:big", 1, sim.pos.x + Math.sin(h) * d, sim.pos.z + Math.cos(h) * d, { mid: 0, big: 1 });
+}
+if (params.has("raid")) loop.threats.raidNow = true;
+const footPt = new THREE.Vector3();
+function holdOnBucket() {
+  const sw = loop.swarms.sw;
+  for (let i = 0; i < sw.hi; i++) {
+    if (sw.kind[i] !== BIG || sw.state[i] >= DOWN) continue;
+    const r = canvas.getBoundingClientRect(), f = i * WALK_LEGS + 1;
+    footPt.set(sw.footX[f], sw.footY[f], sw.footZ[f]).project(camera);
+    buttons.mouse = { x: r.left + (footPt.x + 1) / 2 * r.width, y: r.top + (1 - footPt.y) / 2 * r.height };
+    buttons.left = buttons.right = true;
+    return;
+  }
+}
+
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
 app.onTick((rawDt) => {
+  if (bigClose) holdOnBucket();
   const dt = fixedDt || rawDt;
   clock += dt;
   costs.begin();
@@ -467,18 +500,28 @@ app.onTick((rawDt) => {
   const fHeld = keys.has("KeyF") || clock < holdF;
   if (stick.lengthSq() > 0 || fHeld) auto = false;
   let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
-  let aim: Aim | null = null;
-  let trigger = false;
-  // Out of the mech (getting out, on foot, getting in): WASD walks the pilot; the mech stands where it was left.
+  let aim: Aim | null = null, cursor: Aim | null = null, shotAt: Aim | null = null;
+  let trigger: Trigger = false;
+  let lock: Lock | null = null;
+  // Shoulder weapon keys 1-4: hold to paint, release to fire.
+  let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
+  // Out of the mech (getting out, on foot, getting in): WASD walks the pilot; the mech stands where it was left and
+  // its weapons don't fire.
   const driving = foot.driving;
-  if (auto) { cmd = demoCmd(dt); aim = loop.demoAim; trigger = loop.demoTrigger; }
+  if (auto) { cmd = demoCmd(dt); aim = cursor = loop.demoAim; trigger = loop.demoTrigger; }
   else if (driving) {
     if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
-    if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
-    // F no longer fires (both mouse buttons can be held; F is hold to hop out and back in).
-    trigger = mouseDown;
+    // Soft lock as in the combat labs: the enemy under the cursor (a tall walker by its body, or the sand among its
+    // feet), else the one nearest the line of fire; led by its motion, the rounds straight at it.
+    ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, targets(), sim.pos, V));
+    trigger = [buttons.left, buttons.right];
+    held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
   }
-  if (sel.active) trigger = false;
+  // Weapons work only out on the sand (not on the deck, hanging or parked).
+  if (sel.active || (carry.state !== "walking" && carry.state !== "inRange")) { trigger = false; held = [false, false, false, false]; }
+  player.keys = held;
+  player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
+  player.lock = lock?.target ?? null;
   if (deployAsked) {
     deployAsked = false;
     // Over the side the aim is on (left if no aim).
@@ -543,7 +586,7 @@ app.onTick((rawDt) => {
       else player.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
     }
     player.dashHold = spaceDown && !auto && free;
-    player.step(dt, out, aim, trigger && carry.state === "walking");
+    player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
     if (!carry.ground.onDeck && V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
   } else {
@@ -577,20 +620,11 @@ app.onTick((rawDt) => {
   defenceBody.update();
   costs.mark("convoy bodies");
 
-  reticle.visible = !!aim && driving;
-  if (aim) {
-    reticle.position.set(aim.x, field.height(aim.x, aim.z) + 0.06, aim.z);
-    (reticle.material as THREE.MeshBasicMaterial).color.setHex(player.upper.onTarget ? 0xffb347 : 0x9a958c);
-  }
+  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   iso.update(follow, rawDt);
-  if (shake > 0.002) {
-    camera.position.x += (Math.random() * 2 - 1) * shake;
-    camera.position.y += (Math.random() * 2 - 1) * shake * 0.6;
-    camera.position.z += (Math.random() * 2 - 1) * shake;
-    shake *= Math.exp(-7 * rawDt);
-  } else shake = 0;
+  shaker.apply(camera, rawDt, V.shakeDecay);
   toon.update(camera, canvas.clientHeight);
   costs.mark("camera");
   streamer.update(follow.x, follow.z);
@@ -599,9 +633,11 @@ app.onTick((rawDt) => {
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
   costs.mark("light");
   bf.update(dt, camera, look);
+  arsenalDraw.update();
+  app.hud.set("weapons", arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
   loop.update(dt, {
-    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st),
+    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st), canvas,
     pilot: foot.mount.onFoot ? {
       onFoot: true, alive: foot.sim.alive, x: fp.x, z: fp.z, prey: (x, z) => foot.quarry.pick(x, z), notice: V.pilotNotice,
       reach: V.pilotReach, rate: V.pilotStripRate, noise: V.pilotStripNoise,
@@ -616,7 +652,7 @@ app.onTick((rawDt) => {
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
-  app.hud.set("dash", `dash ${dashDots} (Space)`);
+  app.hud.set("dash", `dash ${dashDots} (Space) · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
   app.hud.set("crane", `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });

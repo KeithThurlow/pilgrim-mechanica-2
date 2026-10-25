@@ -29,7 +29,7 @@ export const SWARM_CAMP_PARAMS: Param[] = [
 ];
 
 /** A streamed camp: its robots' slots, each with the slot's spawn count then (a slot freed and reused is no longer its). */
-interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number }
+interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number; roam?: boolean }
 export interface SwarmBlob { id: string; x: number; z: number; guess: number; awake: boolean }
 
 export class SwarmCamps {
@@ -111,7 +111,8 @@ export class SwarmCamps {
       this.live.set(c.id, l);
     }
     for (const [id, l] of this.live) {
-      if (Math.hypot(l.camp.x - p.x, l.camp.z - p.z) <= v.campDrop) continue;
+      // Roaming packs and raids come and go through src/expedition/threats.ts.
+      if (l.roam || Math.hypot(l.camp.x - p.x, l.camp.z - p.z) <= v.campDrop) continue;
       this.left.set(id, this.alive(l));
       for (const i of this.own(l)) sw.remove(i);
       this.live.delete(id);
@@ -120,9 +121,13 @@ export class SwarmCamps {
     for (const l of this.live.values()) {
       const hp = this.hp(l), d = this.dist(l, p.x, p.z);
       const dp = pilot ? this.dist(l, pilot.x, pilot.z) : Infinity;
-      if (hunting && !l.awake && (d < v.campWake || dp < v.campWake * (pilot?.notice ?? 0) || hp < l.hp - 1e-3)) l.awake = true;
+      // Packs and raids came looking for the mech (or the pilot on foot): awake while either is within reach.
+      if (l.roam) l.awake = hunting && Math.min(d, dp) <= v.campGiveUp;
+      else {
+        if (hunting && !l.awake && (d < v.campWake || dp < v.campWake * (pilot?.notice ?? 0) || hp < l.hp - 1e-3)) l.awake = true;
+        if (l.awake && (!hunting || d > v.campGiveUp)) l.awake = false;
+      }
       l.hp = hp;
-      if (l.awake && (!hunting || d > v.campGiveUp)) l.awake = false;
       for (const i of this.own(l)) {
         if (l.awake) { sw.frozen[i] = 0; continue; }
         // Calming down: clingers shaken off first, then frozen where they land.
@@ -164,6 +169,43 @@ export class SwarmCamps {
     this.draw.update(dt);
     this.tear.update(dt);
   }
+
+  /**
+   * A roaming pack or a raid comes in as robots (src/expedition/threats.ts): n of them round (x, z), awake and
+   * hunting; shares of medium and big ones if given. They calm down like a camp when the mech goes aboard.
+   */
+  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }) {
+    if (this.live.has(id)) return;
+    const radius = 6 + Math.sqrt(n) * 2.5;
+    const slots = this.sw.spawn(n, x, z, radius, shares);
+    const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0 };
+    const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true };
+    l.hp = this.hp(l);
+    this.live.set(id, l);
+  }
+
+  /** A group on the field: robots alive and where they are (null once it's gone). */
+  group(id: string): { n: number; x: number; z: number; awake: boolean } | null {
+    const l = this.live.get(id);
+    if (!l) return null;
+    const n = this.alive(l), c = this.centre(l);
+    l.camp.x = c.x; l.camp.z = c.z;
+    if (n <= 0) { this.live.delete(id); return { n: 0, x: c.x, z: c.z, awake: false }; }
+    return { n, x: c.x, z: c.z, awake: l.awake };
+  }
+
+  /** Take a group off the field (the mech left it far behind); returns how many were still alive. */
+  dropGroup(id: string): number {
+    const l = this.live.get(id);
+    if (!l) return 0;
+    const n = this.alive(l);
+    for (const i of this.own(l)) this.sw.remove(i);
+    this.live.delete(id);
+    return n;
+  }
+
+  /** Any camp or group awake (hunting the mech) now? */
+  get anyAwake() { for (const l of this.live.values()) if (l.awake) return true; return false; }
 
   /** A dash: clingers thrown off, small ones in the way bowled over. */
   dashed(x: number, z: number, dx: number, dz: number, radius: number, damage: number) {

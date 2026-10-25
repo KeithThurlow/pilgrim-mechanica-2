@@ -13,7 +13,6 @@ import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks";
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../world/look";
-import { screenToGround } from "../world/raycast";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../mech/upper";
 import type { MoveCommand } from "../mech/walker";
@@ -34,10 +33,10 @@ import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
 import { DeadDraw } from "../physics/deadDraw";
-import { Targeting, TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate } from "./targeting";
+import { TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate, type Lock } from "./targeting";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
-import { Arsenal } from "../weapons/arsenal";
-import { ArsenalDraw } from "../weapons/arsenalDraw";
+import type { Arsenal } from "../weapons/arsenal";
+import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
 import type { Costs } from "../core/costs";
 import { Walkable } from "../world/walkable";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../pilot/onFoot";
@@ -153,20 +152,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
-  // The weapons that aren't miniguns: nothing until a loadout fits one (src/game/loadoutApply.ts).
-  const arsenal = new Arsenal(bf, player, V, toon, () => lab.targets());
-  player.weapons = arsenal;
-  const arsenalDraw = new ArsenalDraw(arsenal, field);
-  scene.add(arsenalDraw.group);
-  // Camera shake: rail shots and launches ask for it; every blast near the mech shakes by its size and distance.
-  let shakeK = 0;
-  const shake = (k: number) => { shakeK = Math.max(shakeK, k); };
-  arsenal.onShake = shake;
-  bf.onBlast = (at, radius) => {
-    bf.sfx.playSound("blast", at, Math.min(1.2, 0.5 + radius / 6), 0.85 + Math.random() * 0.2);
-    const d = Math.hypot(at.x - player.sim.pos.x, at.z - player.sim.pos.z);
-    if (d < V.blastShakeReach) shake(V.blastShake * (radius / 2.5) * (1 - d / V.blastShakeReach));
-  };
+  // The weapons that aren't miniguns (nothing until a loadout fits one), camera shake, blasts (src/game/playerAim.ts).
+  const shaker = new CameraShake();
+  const shake = shaker.add;
+  const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, () => lab.targets(), shaker);
 
   const iso = new IsoCamera(camera, canvas, V);
   const keys = new Keys();
@@ -174,33 +163,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const walkable = new Walkable(field);
   const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
   let auto = !params.has("manual") && !params.has("onfoot");
-  let mouse: { x: number; y: number } | null = null;
-  let mouseDown = false, rightDown = false;
-  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25). F no longer fires both
-  // (both buttons can be held at once); it's hold to hop out of the mech and back in (Keith 2026-10-26).
-  // Read both buttons from the `buttons` bitmask on every pointer event: a browser sends pointerdown/up only for the
-  // first button pressed and the last released, and a second button pressed while one is held arrives as a
-  // pointermove, so tracking `button` on down/up lost the second gun (Keith 2026-10-25: couldn't hold both).
-  // A button starts firing only when it goes down over the canvas (so dragging a slider onto the field doesn't fire);
-  // a release counts anywhere.
-  let lastButtons = 0;
-  const readButtons = (e: PointerEvent) => {
-    if (e.pointerType !== "mouse") return;
-    const pressed = e.buttons & ~lastButtons;
-    lastButtons = e.buttons;
-    if (e.target === canvas) {
-      if (pressed & 1) { mouseDown = true; auto = false; }
-      if (pressed & 2) { rightDown = true; auto = false; }
-    }
-    if (!(e.buttons & 1)) mouseDown = false;
-    if (!(e.buttons & 2)) rightDown = false;
-  };
-  canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; auto = false; } });
-  addEventListener("pointerdown", readButtons);
-  addEventListener("pointermove", readButtons);
-  addEventListener("pointerup", readButtons);
-  addEventListener("blur", () => { mouseDown = false; rightDown = false; lastButtons = 0; });
-  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); both can be held. F no
+  // longer fires both: it's hold to hop out of the mech and back in (Keith 2026-10-26).
+  const buttons = new MouseButtons(canvas, () => { auto = false; });
   // Space: dash the way WASD points (Keith 2026-10-24), on charges.
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
@@ -261,16 +226,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   Object.assign(V, body.legValues());
   panel.refresh();
 
-  const reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.55, 0.75, 32).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xffb347, depthTest: false, transparent: true, opacity: 0.9, toneMapped: false }),
-  );
-  reticle.renderOrder = 10;
-  scene.add(reticle);
-  const lockMat = new THREE.LineBasicMaterial({ color: 0xff6a3d, depthTest: false, transparent: true, toneMapped: false });
-  const lockMark = new THREE.LineSegments(lockBrackets(), lockMat);
-  lockMark.renderOrder = 11;
-  scene.add(lockMark);
+  const softAim = new SoftAim(scene, camera, canvas, field);
   const hurtEl = document.createElement("div");
   hurtEl.className = "hurt";
   document.body.appendChild(hurtEl);
@@ -294,7 +250,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const follow = foot.focus(new THREE.Vector3()) ?? player.sim.pelvis.clone();
   iso.snap(follow);
   if (params.has("zoom")) iso.setDistance(Number(params.get("zoom")));
-  const stick = new THREE.Vector3(), aimPt = new THREE.Vector3();
+  const stick = new THREE.Vector3();
   let clock = 0;
   const frames: ((dt: number) => void)[] = [];
 
@@ -330,9 +286,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (!e) return { cmd, aim: null, trigger: false };
     return { cmd, aim: { x: e.x + (e.vx ?? 0) * V.lockLead, y: e.y, z: e.z + (e.vz ?? 0) * V.lockLead }, trigger: bd < V.range + 5 };
   }
-  const targeting = new Targeting();
-  const ndc = new THREE.Vector2(), caster = new THREE.Raycaster();
-  let lock: ReturnType<Targeting["pick"]> = null;
+  let lock: Lock | null = null;
 
   const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
   /** ?holdf=seconds: F held from the start (headless shots of getting out). */
@@ -362,22 +316,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
     else if (driving) {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
-      if (mouse && screenToGround(mouse.x, mouse.y, canvas, camera, field, aimPt)) {
-        cursor = aim = { x: aimPt.x, y: aimPt.y + 1, z: aimPt.z };
-        // Soft lock: the guns take the enemy under the cursor ray, else the one nearest the line of fire.
-        const r = canvas.getBoundingClientRect();
-        ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
-        caster.setFromCamera(ndc, camera);
-        lock = targeting.pick(lab.targets(), { rayO: caster.ray.origin, rayD: caster.ray.direction, from: player.sim.pos, cursor: aimPt, range: V.range }, V);
-        if (lock) {
-          // Lead it: the arms trail their aim as they track, so swing them to where it will be by then. The rounds
-          // fly from the muzzle straight at the target itself (shotAt), so they don't land ahead of it.
-          const t = lock.target, L = V.lockLead;
-          shotAt = { x: t.x, y: t.y, z: t.z };
-          aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
-        }
-      }
-      trigger = [mouseDown, rightDown];
+      // Soft lock: the guns take the enemy under the cursor ray, else the one nearest the line of fire, led by its
+      // motion; the rounds fly straight at the target itself (shotAt).
+      ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, lab.targets(), player.sim.pos, V));
+      trigger = [buttons.left, buttons.right];
       held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
       if (held.some(Boolean)) auto = false;
     }
@@ -415,30 +357,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths draw");
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
-    reticle.visible = !!cursor && driving;
-    if (cursor) {
-      reticle.position.set(cursor.x, field.height(cursor.x, cursor.z) + 0.06, cursor.z);
-      (reticle.material as THREE.MeshBasicMaterial).color.setHex(player.upper.onTarget && !lock ? 0xffb347 : 0x9a958c);
-    }
-    // The lock: brackets round the target's centre of mass, facing the camera.
-    lockMark.visible = !!lock;
-    if (lock) {
-      const t = lock.target;
-      lockMark.position.set(t.x, t.y, t.z);
-      lockMark.quaternion.copy(camera.quaternion);
-      lockMark.scale.setScalar(Math.max(1, t.r * 1.3));
-      lockMat.color.setHex(player.upper.onTarget ? 0xff6a3d : 0xb0a89a);
-    }
+    // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
+    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
 
     const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
     follow.lerp(want, Math.min(1, rawDt * 6));
     iso.update(follow, rawDt);
-    if (shakeK > 1e-3) {
-      camera.position.x += (Math.random() - 0.5) * shakeK;
-      camera.position.y += (Math.random() - 0.5) * shakeK * 0.6;
-      camera.position.z += (Math.random() - 0.5) * shakeK;
-      shakeK *= Math.exp(-rawDt * V.shakeDecay);
-    }
+    shaker.apply(camera, rawDt, V.shakeDecay);
     toon.update(camera, canvas.clientHeight);
     cst?.mark("camera");
     streamer.update(follow.x, follow.z);
@@ -464,13 +389,4 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
-}
-
-/** Four corner brackets on a unit square (the lock mark). */
-function lockBrackets() {
-  const a = 1, b = 0.45, pts: number[] = [];
-  for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-    pts.push(sx * a, sy * a, 0, sx * (a - b), sy * a, 0, sx * a, sy * a, 0, sx * a, sy * (a - b), 0);
-  }
-  return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
 }

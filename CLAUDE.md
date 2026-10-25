@@ -100,6 +100,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
   the sand beside it instead), `?pilotat=N,x,z` (on car N at local x, z) or `?pilotat=bN,t` (on footbridge N, t of the
   way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.
+  Weapons as in the combat labs (only while driving the mech); a fresh convoy bay fits miniguns, missile pod and big mortar,
+  `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
+  cursor held on its bucket, both guns firing), `?raid` (a raid at once).
 
 ## Layout
 
@@ -119,7 +122,8 @@ src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
-                        loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
+                        playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
+                        labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
                         firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
@@ -131,12 +135,13 @@ src/combat/             warband (raider vehicles and bandit mechs), infantry (ba
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
                         robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
-                        generate (seeded loot), cargo (cargo and stash lists)
+                        generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
 src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
                         target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
 src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown
-                        areas); glue: loop, sites (POIs + salvage), swarmCamps (camps as the robot swarm); radarDraw, radarSound,
+                        areas), threats (roaming packs, raids, distant blasts); glue: loop, sites (POIs + salvage), swarmCamps (camps
+                        and packs as the robot swarm); radarDraw, radarSound, threatMarks (edge-of-screen marks),
                         expeditionHud
 src/weapons/            the new weapons, each with its own targeting: tuning (sliders), painter (strip, ring, laser) + painterDraw,
                         salvo (line rockets), rail, mortar, autocannon (pure sims), arsenal (a mech's weapons on the battlefield)

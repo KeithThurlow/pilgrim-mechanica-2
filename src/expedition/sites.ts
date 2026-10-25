@@ -15,7 +15,9 @@ import { SalvageSim, SALVAGE_DEFAULTS, type SpotState } from "../pois/salvage";
 import { SalvageDraw, SALVAGE_FX_DEFAULTS } from "../pois/salvageDraw";
 import type { Battlefield } from "../game/battlefield";
 
-export const SITES_DEFAULTS = { ...POI_DEFAULTS, ...SITE_DEFAULTS, ...SALVAGE_DEFAULTS, ...SALVAGE_FX_DEFAULTS, drawRadius: 700 };
+// Out on expeditions the POIs sit a little closer together than the POI lab's defaults (2026-10-26, after Keith's
+// playtest found the loop a bit slow): smaller cells, more of them filled.
+export const SITES_DEFAULTS = { ...POI_DEFAULTS, poiCell: 330, poiChance: 0.85, ...SITE_DEFAULTS, ...SALVAGE_DEFAULTS, ...SALVAGE_FX_DEFAULTS, drawRadius: 700 };
 export type SitesValues = typeof SITES_DEFAULTS;
 export const SITES_PARAMS: Param[] = [
   { key: "drawRadius", label: "Build POIs within (m)", min: 200, max: 3000, step: 50, group: "POI placement", tip: "Generated POIs this close to the mech are built and drawn (the radar sees further)" },
