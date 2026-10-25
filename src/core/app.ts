@@ -53,14 +53,17 @@ export async function createApp(container: HTMLElement): Promise<App> {
     last = now;
     const dt = Math.min(raw, 1 / 20);
     time += dt;
+    const t0 = performance.now();
     for (const t of ticks) t(dt, time);
+    const t1 = performance.now();
     renderer.render(scene, camera);
+    const t2 = performance.now();
     if (captures.length) {
       let url = "";
       try { url = renderer.domElement.toDataURL("image/png"); } catch { /* tainted or lost: send without */ }
       for (const c of captures.splice(0)) c(url);
     }
-    hud.frame(raw * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles);
+    hud.frame(raw * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles, t1 - t0, t2 - t1);
   });
 
   return {
