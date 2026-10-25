@@ -34,6 +34,8 @@ export interface Hittable {
   canPierce?(): boolean;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
+  /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
+  knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
 }
 
 export interface FireOptions {
@@ -219,8 +221,20 @@ export class Battlefield {
     return !!box;
   }
 
-  private burst(s: Shell) {
-    const p = s.to, k = Math.max(0.5, s.radius / 3);
+  private burst(s: Shell) { this.blast(s.team, s.to, s.radius, s.damage); }
+
+  /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
+  onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
+
+  /**
+   * A blast on the ground at p (its y is moved onto the new ground): the crater, dust and debris, the sound, and
+   * damage through splash() to everything of another team within radius (full at the centre, half at the edge).
+   * Shells burst through here; the player's rockets and mortar shells too (src/weapons).
+   */
+  blast(team: number, p: THREE.Vector3, radius: number, damage: number) {
+    const s = { team, radius, damage };
+    const k = Math.max(0.5, s.radius / 3);
+    this.onBlast?.(p, radius);
     // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
     const wet = this.inWater(p.x, p.z);
     if (this.dent(p.x, p.z, s.radius)) p.y = this.field.height(p.x, p.z);

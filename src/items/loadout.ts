@@ -197,6 +197,9 @@ export interface Resolved {
   guns: { left: GunStats | null; right: GunStats | null };
   /** Parts to show on the model. */
   parts: { drums: boolean; pack: boolean };
+  /** A back weapon on the back mount (fired with the right button, src/weapons): which, and its own rolled stats
+   *  (null: an unrolled base item, on the weapon sliders). */
+  back: { weapon: "salvo" | "mortar"; own: Record<string, number> | null } | null;
   /** Cargo the mech can carry (t): the legs' carry plus the hull's racks. */
   cargoCapacity: number;
   /** Everything fitted (t). */
@@ -209,22 +212,29 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const pack = lo.pack ? effectiveStats(lo.pack) : null;
   const back = lo.back ? effectiveStats(lo.back) : null;
   const ammo = back?.ammoPerGun ?? bare.bareAmmo;
+  const backBase = lo.back ? BASE_BY_ID[lo.back.base] : null;
 
-  const gunFrom = (w: Record<string, number>, arc: number, track: number): GunStats => ({
-    fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce,
-  });
+  const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number): GunStats => {
+    const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
+    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce };
+    // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
+    // an unrolled base item runs on the weapon sliders (own: null).
+    const own = item.seed ? w : null, light = item.size === "L";
+    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, cls, own, light };
+    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, cls, own, light };
+  };
   const side = (arm: SlotId, hand: SlotId): GunStats | null => {
     const mount = lo[arm];
-    if (mount?.kind === "weapon") { const w = effectiveStats(mount); return gunFrom(w, w.arc, w.track); }
+    if (mount?.kind === "weapon") { const w = effectiveStats(mount); return gunFrom(mount, w, w.arc, w.track); }
     const h = lo[hand];
-    if (isArm(mount) && h?.kind === "weapon" && h.size === "L") { const a = effectiveStats(mount!); return gunFrom(effectiveStats(h), a.arc, a.track); }
+    if (isArm(mount) && h?.kind === "weapon" && h.size === "L") { const a = effectiveStats(mount!); return gunFrom(h, effectiveStats(h), a.arc, a.track); }
     return null;
   };
   let left = side("armL", "handL"), right = side("armR", "handR");
   if (isTwoHander(lo.handR) && isArm(lo.armL) && isArm(lo.armR)) {
     // A two-hander fires from the right side, aimed by both arms: their mean arc, their mean tracking times its handling.
     const w = effectiveStats(lo.handR!), a = effectiveStats(lo.armL!), b = effectiveStats(lo.armR!);
-    right = gunFrom(w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1));
+    right = gunFrom(lo.handR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1));
     left = null;
   }
   const first = right ?? left;
@@ -247,7 +257,8 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   return {
     values,
     guns: { left, right },
-    parts: { drums: !!lo.back, pack: !!lo.pack },
+    parts: { drums: !!lo.back && !backBase?.backWeapon, pack: !!lo.pack },
+    back: backBase?.backWeapon ? { weapon: backBase.backWeapon, own: lo.back!.seed ? back : null } : null,
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0),
     weight: SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0),
   };

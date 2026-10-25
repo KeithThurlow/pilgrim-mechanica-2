@@ -69,6 +69,10 @@ desert look direction. What came from where: `docs/decisions.md`.
   the mech). Walker lab takes `?biome=` too.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
+- Weapons lab: `?guns=minigun|rail|rails|lightrails|autocannon`, `?back=drums|salvo|mortar`, `?aimhold=x,z` (hold the
+  right button aimed there), `?charge=x,z` (hold the left button aimed there), `?aim=x,z`, `?fireat=N` (let go after N
+  frames), `?lockcar` (guns on the first truck with the lock on it), `?start=x,z` (where the mech stands), plus the
+  combat-lab flags.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
@@ -90,7 +94,8 @@ src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, sandMarks (prints, craters, slides, ruts), minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
 src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
-                        loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies)
+                        loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
+                        firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
@@ -103,6 +108,9 @@ src/combat/             warband (raider vehicles and bandit mechs), infantry (ba
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
+src/weapons/            the new weapons, each with its own targeting: tuning (sliders), painter (strip, ring, laser) + painterDraw,
+                        salvo (line rockets), rail, mortar, autocannon (pure sims), arsenal (a mech's weapons on the battlefield)
+                        + arsenalDraw, models (stand-ins), weaponSound, ribbon (ground-hugging marks)
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots

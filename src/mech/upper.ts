@@ -98,7 +98,16 @@ export interface GunStats {
   spread: number;
   range: number;
   pierce: number;
+  /** What kind of gun (default minigun): a rail cannon charges on the trigger instead of spinning up and never fires
+   *  rounds here (src/weapons/arsenal.ts fires it); an autocannon fires on this clock but its rounds are shells. */
+  cls?: GunClass;
+  /** The weapon item's own rolled stats for src/weapons (null: an unrolled base item, which runs on the sliders). */
+  own?: Record<string, number> | null;
+  /** Light (a hand weapon) rather than Medium (on the hull). */
+  light?: boolean;
 }
+
+export type GunClass = "minigun" | "rail" | "autocannon";
 
 export interface Aim {
   /** Point on the ground to aim at, or null to face forward. */
@@ -184,6 +193,8 @@ export class UpperSim {
       g.onTarget = g.enabled && !!aim && inArc && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(clamp(pitchWant, -pmax, pmax) - g.pitch) <= cone * 2;
       this.onTarget ||= g.onTarget;
 
+      // A rail cannon only aims here: it charges and fires in src/weapons.
+      if (own?.cls === "rail") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit);
       g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);

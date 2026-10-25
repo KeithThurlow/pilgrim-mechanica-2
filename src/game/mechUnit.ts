@@ -20,8 +20,22 @@ export interface MechBody {
   paint(look: ToonLook, color: number | null): void;
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
   showParts?(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }): void;
+  /** Where other weapons' stand-ins hang (a gun side's pivot, or the back mount), and hiding a side's own pod. */
+  mount?(slot: "left" | "right" | "back"): THREE.Object3D;
+  showPod?(side: 1 | -1, on: boolean): void;
 }
 import type { ToonLook } from "../look/toon";
+import type { TargetCandidate } from "./targeting";
+
+/** The weapons that aren't miniguns (src/weapons/arsenal.ts): stepped with the mech, handed the gun clock's shots. */
+export interface MechWeapons {
+  /** After the legs and guns moved: charge, paint, fire, fly. */
+  step(dt: number, aim: Aim | null, trigger: boolean): void;
+  /** A gun of another class (autocannon) fired a round on its clock: the weapons fire it. */
+  shot(side: 1 | -1): void;
+  /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
+  configure?(r: import("../items/loadout").Resolved): void;
+}
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
@@ -80,6 +94,13 @@ export class MechUnit implements Hittable {
   private wakeAcc = 0;
   /** Space still held (boost while the dash's fuel lasts). Set by the lab before step. */
   dashHold = false;
+  /** The heavy button (right mouse) held: back weapons aim and paint, release fires. Set by the lab before step. */
+  heavy = false;
+  /** The ground point under the cursor (null: none), and the soft lock, for weapons that paint or lead. */
+  cursor: THREE.Vector3 | null = null;
+  lock: TargetCandidate | null = null;
+  /** Rail cannons, autocannons, the salvo and the mortar (null: miniguns only). */
+  weapons: MechWeapons | null = null;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -198,6 +219,7 @@ export class MechUnit implements Hittable {
     for (const s of fired) {
       // A gun with its own item values (src/items) fires with those; else the shared sliders.
       const own = upper.guns[s === 1 ? 0 : 1].stats;
+      if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
       const spread = ((own?.spread ?? v.spread) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
@@ -216,8 +238,9 @@ export class MechUnit implements Hittable {
         ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", pierce: own?.pierce ?? v.roundPierce, pierceFalloff: v.roundPierceKeep, splash: v.roundSplash, splashShare: v.roundSplashShare }
         : { voice: "other", hitScale: 0.7 });
     }
+    this.weapons?.step(dt, aim, trigger);
     if (this.player && body.armed) {
-      const guns = upper.guns.filter((g) => g.enabled);
+      const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
       this.bf.gunAudio.update(dt, trigger, guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
   }

@@ -8,6 +8,8 @@ import { WALKER_DEFAULTS } from "../mech/walkerTuning";
 import { LEG_TYPES } from "../mech/legTypes";
 import { UPPER_DEFAULTS } from "../mech/upper";
 import { DASH_DEFAULTS } from "../mech/dash";
+import { WEAPON_DEFAULTS } from "../weapons/tuning";
+import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size } from "./item";
 
 export interface StatInfo {
@@ -45,6 +47,14 @@ export const STATS: Record<string, StatInfo> = {
   dashRecharge: { label: "Dash recharge (s)", better: -1, decimals: 2 },
   boostFuel: { label: "Boost fuel (s)", better: 1, decimals: 1 },
   ammoPerGun: { label: "Rounds per gun", better: 1, decimals: 0, whole: true },
+  charge: { label: "Charge (s)", better: -1, decimals: 2 },
+  cooldown: { label: "Cooldown (s)", better: -1, decimals: 1 },
+  rockets: { label: "Rockets per salvo", better: 1, decimals: 0, whole: true },
+  shells: { label: "Shells per volley", better: 1, decimals: 0, whole: true },
+  blast: { label: "Blast radius (m)", better: 1, decimals: 1 },
+  shellSpeed: { label: "Shell speed (m/s)", better: 1, decimals: 0 },
+  splash: { label: "Splash (m)", better: 1, decimals: 1 },
+  stripLength: { label: "Strip length (m)", better: 1, decimals: 0 },
 };
 
 export interface StatRange { base: number; spread: number }
@@ -67,11 +77,15 @@ export interface Base {
   mounts?: { arms: number; pack: boolean };
   /** Power packs: back mounts under the pack. */
   backMounts?: number;
+  /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Back items: the back weapon, if any. */
+  cls?: GunClass;
+  backWeapon?: "salvo" | "mortar";
 }
 
 const R = LEG_TYPES.rampart.values;
 const W = { ...WALKER_DEFAULTS, ...R };
 const U = UPPER_DEFAULTS;
+const WD = WEAPON_DEFAULTS;
 const s = (base: number, spread: number): StatRange => ({ base, spread });
 
 // Today's mech values that live in src/game/mechUnit.ts (MECH_DEFAULTS; not imported, it pulls in the renderer).
@@ -126,6 +140,20 @@ export const BASES: Base[] = [
     id: "mg-heavy", name: "Heavy minigun", kind: "weapon", size: "H", tags: ["weapon", "ballistic", "minigun", "heavy"], weight: 3.2, makers: ["Suzaku"], look: "rampart-turret", drop: 1,
     stats: { fireRate: s(22, 0.08), damage: s(14, 0.1), spread: s(2.4, 0.1), spinUp: s(1.4, 0.1), range: s(55, 0.06), pierce: s(3, 0.2), handling: s(0.6, 0.1) },
   },
+  // New weapons (docs/proposal-weapons.md, Keith 2026-10-25), each with its own targeting (src/weapons). Base values
+  // come from the weapon sliders; the Light rail cannon from the Medium's by the Light-rail shares.
+  {
+    id: "rail-light", name: "Light rail cannon", kind: "weapon", size: "L", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 1.3, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 1,
+    stats: { damage: s(WD.railDamage * WD.railLightDamage, 0.1), charge: s(WD.railCharge * WD.railLightCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange * 0.85, 0.06) },
+  },
+  {
+    id: "rail-medium", name: "Rail cannon", kind: "weapon", size: "M", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 2.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 1,
+    stats: { damage: s(WD.railDamage, 0.1), charge: s(WD.railCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange, 0.06), arc: s(20, 0.08), track: s(8, 0.08) },
+  },
+  {
+    id: "ac-medium", name: "Autocannon", kind: "weapon", size: "M", cls: "autocannon", tags: ["weapon", "ballistic", "explosive", "autocannon"], weight: 2.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-turret", drop: 1,
+    stats: { fireRate: s(WD.acRate, 0.08), damage: s(WD.acDamage, 0.1), splash: s(WD.acSplash, 0.1), shellSpeed: s(WD.acSpeed, 0.08), range: s(WD.acRange, 0.06), spread: s(WD.acSpread, 0.12), spinUp: s(0.15, 0.1), arc: s(28, 0.08), track: s(10, 0.08) },
+  },
   // Power packs: dash charges and recharge for now (energy weapons later); the back mount sits under the pack.
   {
     id: "pack-standin", name: "Stand-in power pack", kind: "pack", tags: ["power"], weight: 1.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
@@ -140,10 +168,18 @@ export const BASES: Base[] = [
     id: "pack-booster", name: "Booster pack", kind: "pack", tags: ["power", "boost"], weight: 2.6, makers: ["Suzaku Dynamics"], look: "rampart-stilt", drop: 0.7,
     backMounts: 1, stats: { dashCharges: s(2, 0.15), dashRecharge: s(3.5, 0.1), boostFuel: s(2.5, 0.15) },
   },
-  // Back mount: ammo for now (a rocket pod or mortar later).
+  // Back mount: ammo drums, or a back weapon fired with the right button (the line rocket pod, the mortar).
   {
     id: "back-drums", name: "Ammo drums", kind: "back", tags: ["back", "ammo"], weight: 1.2, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
     stats: { ammoPerGun: s(U.ammoPerGun, 0.12) },
+  },
+  {
+    id: "back-salvo", name: "Line rocket pod", kind: "back", backWeapon: "salvo", tags: ["back", "rockets", "explosive"], weight: 2.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-rocket", drop: 1,
+    stats: { rockets: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
+  },
+  {
+    id: "back-mortar", name: "Mortar", kind: "back", backWeapon: "mortar", tags: ["back", "mortar", "explosive"], weight: 2.8, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
+    stats: { shells: s(WD.mortarShells, 0.25), damage: s(WD.mortarDamage, 0.1), cooldown: s(WD.mortarCooldown, 0.1), blast: s(WD.mortarBlast, 0.08) },
   },
   {
     id: "back-fulldrums", name: "Full drums", kind: "back", tags: ["back", "ammo"], weight: 2, makers: ["Suzaku"], look: "rampart", drop: 0.7,

@@ -216,6 +216,21 @@ export class RampartBody {
     if (this.pack) this.pack.visible = parts.pack;
   }
 
+  /**
+   * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
+   * along the barrel, origin on the shoulder) or the back mount (over the drums, +Z forward).
+   */
+  mount(slot: "left" | "right" | "back"): THREE.Object3D {
+    if (slot === "back") return this.back!;
+    return this.pods.find((p) => p.side === (slot === "left" ? 1 : -1))!.kick;
+  }
+
+  /** Show or hide a side's minigun pod itself (another weapon's stand-in takes its place on the same pivot). */
+  showPod(side: 1 | -1, on: boolean) {
+    const p = this.pods.find((q) => q.side === side)!;
+    for (const o of p.kick.children) if ((o as THREE.Mesh).isMesh || o === p.spin) o.visible = on;
+  }
+
   /** Has guns (the battlefield's mech unit fires them). */
   readonly armed = true;
   private paints: { mesh: THREE.Mesh; base: number }[] | null = null;
