@@ -81,7 +81,7 @@ Status: `[ ]` open · `[~]` taken · `[x]` done.
 
 ## P0: explosives (weapons step 2 is building these now)
 
-### [ ] W1 · RPG rocket launcher: hull (M) and shoulder (M)
+### [~] W1 · RPG rocket launcher: hull (M) and shoulder (M) (desktop, 2026-10-25)
 - **Files:** `public/models/weapons/rocket-launcher-hull.glb`, `rocket-launcher-shoulder.glb`.
 - **What:** a big single-tube (or twin-tube) launcher, like an RPG scaled to a mech.
   - It fires one rocket straight to a ground point and makes a big blast.
