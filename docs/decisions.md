@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Convoy: a mech launch area at the back as well as the front; defences on the convoy; shorter footbridges; less rectangular, more hexagonal platforms; many more vehicles alongside (only about 4 now) | Keith | Keith | Added to the crane pass. |
 | 2026-10-25 | Blasts deform the ground for real (walkable, not visual only); protected areas (bandit outposts and the like) can't be dug so nobody blocks the way in or out | Keith | Keith | `src/world/craters.ts`. |
 | 2026-10-25 | Crater values: wall limit 30°, max depth 1.5 m, stacked depth saturating at 2.5 m, slump 180 s, 200 craters, hardness rock 0.95 / rocky sand 0.6 / shallows 0.15, protected margin 4 m; craters as a lattice layer added after the modifiers, chunks patched in place | Claude | open | All sliders (Dunes > Craters). |
 | 2026-10-25 | Crane pick-up and drop-off quick (asking for it slower was a mistake); drop the mech from a little height so it falls; convoy a tiny bit slower; escorts at varied speeds are loved | Keith | Keith | |
