@@ -176,6 +176,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Mech part budgets (Keith)
+- `docs/asset-list.md`: Keith's part structure with budgets per mount (30k for a two-mount mech, three detail levels), mesh rules and mount socket names for the desktop agent.
+
 ### 2026-10-26 · Multiplayer direction and habits (Keith, Claude)
 - `docs/multiplayer.md`: stages (host over WebRTC, then an optional dedicated Node server, then server-side items), what already helps, questions for later, and the habits; CLAUDE.md rule 12. Known debt: `Math.random()` in game-state code in warband, swarmCamps, battlefield, mechUnit, arsenal.
 ### 2026-10-26 · The bound: proposal and a spike (Keith's playtest; agent on the bound worktree)

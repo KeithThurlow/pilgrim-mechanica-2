@@ -47,13 +47,39 @@ the queue between them.
   - plates and big readable shapes first, greebles second;
   - edges bevelled enough to catch the light;
   - crease and ink lines take the shaded colour of the face next to them, never black.
-- **Budgets:**
+- **Mech parts and their mounts** (Keith 2026-10-26):
+  - Each mount has a fixed budget, whatever hull it's on; a hull with more mounts simply carries more.
+  - A standard two-mount mech comes to **30k triangles fully equipped**, for either build.
+  - Each hull mount (left and right, chosen per side) takes **either** one big hull weapon (military) **or** an arm
+    that holds a smaller held weapon, plus a shoulder weapon (utility).
+
+  | Part | Full | Simpler | Simplest | Notes |
+  | --- | --- | --- | --- | --- |
+  | Legs (several types) | 8,500 | 3,000 | 1,000 | Thigh, shin, cannon, heel, toes per side, plus pelvis |
+  | Hull (several types) | 6,500 | 2,200 | 700 | Rides the waist; carries the mount sockets |
+  | Sensor mount (optional) | 1,000 | 300 | 100 | Head, mast or dish: radar range, item seekers |
+  | Hull mount, per side | 5,000 | 1,700 | 550 | Either a hull weapon (5k) or arm 1.5k + held weapon 1.5k + shoulder weapon 2k |
+  | Pack mount (high back) | 2,000 | 700 | 250 | Power or booster pack |
+  | Back/waist mount, per side | 1,000 | 350 | 120 | Drums, cargo racks, small kit |
+  | Two-mount mech, total | 30,000 | about 10,000 | about 3,500 | |
+
+- **Mesh rules for mech parts:**
+  - One or two meshes per part, plus only the moving pieces as their own nodes. That's 15–25 draw calls for a
+    whole mech.
+  - One material per part, with paint, AO and wear in the vertex colours. Keep the `Paint_<section>` names.
+  - Spend triangles on silhouette and bevels that catch light at 40 m; detail under 5 cm only shows at the
+    closest zoom.
+  - The simpler and simplest versions come from the same script with the same pivots, sockets and moving-part
+    names. Export them as `<file>-lod1.glb` and `<file>-lod2.glb`.
+  - Mount sockets on hulls: `HullMount_L/R`, `Sensor`, `Pack`, `Waist_L/R`. On arms and hull mounts: `Shoulder`
+    (where a shoulder weapon sits) and `Grip_R`/`Grip_L` on hands.
+
+- **Other budgets:**
 
   | Kind | Triangles |
   | --- | --- |
-  | Hull or shoulder weapon | up to 6k |
-  | Hand gun | up to 3k |
   | Projectile (rocket, missile, shell) | up to 300 |
+  | Pilot | 2–3k |
   | Vehicle | up to 12k |
   | Prop | up to 2k |
   | Big POI piece | up to 25k |
