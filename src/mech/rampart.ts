@@ -80,6 +80,9 @@ export class RampartBody {
   private back: THREE.Object3D | null = null;
   private drums: THREE.Object3D[] = [];
   private pack: THREE.Object3D | null = null;
+  /** Where shoulder weapons stand: on each shoulder (+1 left, -1 right) and on top of the back mount. */
+  private shoulderMounts: { side: 1 | -1; g: THREE.Group }[] = [];
+  private backTop = new THREE.Group();
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   private rest: Record<string, THREE.Vector3> = {};
@@ -184,6 +187,11 @@ export class RampartBody {
       const muzzle = new THREE.Object3D(); muzzle.position.copy(flip(r.PodMuzzle0_R)).sub(shoulder); kick.add(muzzle);
       const eject = new THREE.Object3D(); eject.position.copy(flip(r.PodEject_R)).sub(shoulder); kick.add(eject);
       this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd });
+      // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
+      const sm = new THREE.Group();
+      sm.position.copy(shoulder).sub(waistRest).add(new THREE.Vector3(Math.sign(shoulder.x || sd) * 0.1, 0.75, -0.35));
+      this.hull.add(sm);
+      this.shoulderMounts.push({ side: sd, g: sm });
     }
 
     // Back: a half-width ammo drum per gun, a power pack raised above them.
@@ -207,6 +215,9 @@ export class RampartBody {
     }
     this.pack = powerPack(look);
     back.add(this.pack);
+    // A shoulder weapon on the back mount stands on top of the pack (key 3).
+    this.backTop.position.set(0, 1.75, -0.1);
+    back.add(this.backTop);
   }
 
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
@@ -218,10 +229,11 @@ export class RampartBody {
 
   /**
    * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
-   * along the barrel, origin on the shoulder) or the back mount (over the drums, +Z forward).
+   * along the barrel, origin on the shoulder), a shoulder mount on the hull, or the top of the back mount (+Z forward).
    */
-  mount(slot: "left" | "right" | "back"): THREE.Object3D {
-    if (slot === "back") return this.back!;
+  mount(slot: "left" | "right" | "back" | "shoulderL" | "shoulderR"): THREE.Object3D {
+    if (slot === "back") return this.backTop;
+    if (slot === "shoulderL" || slot === "shoulderR") return this.shoulderMounts.find((m) => m.side === (slot === "shoulderL" ? 1 : -1))!.g;
     return this.pods.find((p) => p.side === (slot === "left" ? 1 : -1))!.kick;
   }
 

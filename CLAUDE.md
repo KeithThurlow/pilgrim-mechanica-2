@@ -69,10 +69,12 @@ desert look direction. What came from where: `docs/decisions.md`.
   the mech). Walker lab takes `?biome=` too.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first), `?fresh` (ignore the saved bay).
-- Weapons lab: `?guns=minigun|rail|rails|lightrails|autocannon`, `?back=drums|salvo|mortar`, `?aimhold=x,z` (hold the
-  right button aimed there), `?charge=x,z` (hold the left button aimed there), `?aim=x,z`, `?fireat=N` (let go after N
-  frames), `?lockcar` (guns on the first truck with the lock on it), `?start=x,z` (where the mech stands), plus the
-  combat-lab flags.
+- Weapons lab: `?left=`/`?right=minigun|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=`/`?k3=none|rpg|missiles|mortar|
+  linemortar` (k3 also `drums`), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
+  aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
+  it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
+- Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's, F both;
+  keys 1-3 hold to paint a shoulder weapon, release to fire.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere.
@@ -126,8 +128,8 @@ docs/                   design.md (the game), decisions.md (log)
 - Camera: the game is played from a high isometric view (Keith 2026-10-24): 50° down at 40 m, zoom from 45° at 12 m
   out to 55° at 80 m.
   Judge looks and readability from that camera first; close views are for detail.
-- Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left button
-  fires.
+- Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left click
+  fires the left side's weapon and right click the right side's (Keith 2026-10-25), keys 1-4 the shoulder weapons.
 - Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;
   read proportions from the model's joint markers rather than hardcoding them.
 - Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the

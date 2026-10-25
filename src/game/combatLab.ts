@@ -14,7 +14,7 @@ import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../world/look";
 import { screenToGround } from "../world/raycast";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../mech/walkerTuning";
-import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim } from "../mech/upper";
+import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../mech/upper";
 import type { MoveCommand } from "../mech/walker";
 import { LEG_TYPES } from "../mech/legTypes";
 import { RampartBody } from "../mech/rampart";
@@ -64,7 +64,7 @@ export interface CombatLabOptions<E extends object> {
   /** Called with the dune field before any ground is streamed (e.g. to add ground modifiers). */
   setup?: (field: DuneField, values: BaseValues & E) => void;
   /** The lab's own demo: what the mech does while the demo runs (null: the shared demo this frame). No demo dashes. */
-  demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: boolean; heavy?: boolean; lock?: TargetCandidate | null } | null;
+  demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; keys?: readonly boolean[]; lock?: TargetCandidate | null } | null;
   /** After any slider changes (after the shared handling, e.g. the dunes rebuilt). */
   onChange?: (key: string) => void;
 }
@@ -165,7 +165,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   canvas.addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "mouse") return;
     if (e.button === 0) { mouseDown = true; auto = false; }
-    // The right button aims and fires the back weapon (docs/proposal-weapons.md): hold to paint, release to fire.
+    // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); F fires both.
     if (e.button === 2) { rightDown = true; auto = false; }
   });
   addEventListener("pointerup", (e) => { if (e.button === 2) rightDown = false; else mouseDown = false; });
@@ -280,7 +280,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
   // For headless debugging and tests: the lab on the page (window.__lab).
   (globalThis as unknown as { __lab: unknown }).__lab = lab;
-  let lastDemo: { aim: Aim | null; trigger: boolean } = { aim: null, trigger: false };
+  let lastDemo: { aim: Aim | null; trigger: Trigger } = { aim: null, trigger: false };
   (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
 
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
@@ -306,13 +306,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
-    let trigger = false;
+    let trigger: Trigger = false;
     let cursor: Aim | null = null;
-    let heavy = false;
+    // Shoulder weapon keys 1-4: hold to paint, release to fire.
+    let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
     let demoLock: TargetCandidate | null = null;
     lock = null;
     const own = auto && o.demo ? o.demo(clock, dt) : null;
-    if (own) { ({ cmd, aim, trigger } = own); heavy = !!own.heavy; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
+    if (own) { ({ cmd, aim, trigger } = own); held = [0, 1, 2, 3].map((i) => !!own.keys?.[i]) as typeof held; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
     else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
     else {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
@@ -329,11 +330,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
           aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
         }
       }
-      trigger = mouseDown || keys.has("KeyF");
-      heavy = rightDown;
+      const both = keys.has("KeyF");
+      trigger = [mouseDown || both, rightDown || both];
+      held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
+      if (held.some(Boolean)) auto = false;
     }
-    if (sel.active) { trigger = false; heavy = false; }
-    player.heavy = heavy;
+    if (sel.active) { trigger = false; held = [false, false, false, false]; }
+    player.keys = held;
     player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
     player.lock = lock?.target ?? demoLock;
 
@@ -384,8 +387,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
     bf.update(dt, camera, look);
     arsenalDraw.update();
-    const wpn = arsenal.hudText();
-    app.hud.set("weapons", wpn ? `weapons: ${wpn}` : "");
+    app.hud.set("weapons", arsenal.controls().join(" · "));
+    const ds = bf.dentStats;
+    app.hud.set("dents", ds.dug ? `blast dents: ${bf.dentQueue.length} queued · last frame ${ds.frameMs.toFixed(1)} ms (${ds.frameDents} dug) · worst ${ds.worstMs.toFixed(1)} ms · one dent ${ds.lastMs.toFixed(1)} ms · ${ds.dug} dug, ${ds.merged} merged` : "");
 
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");

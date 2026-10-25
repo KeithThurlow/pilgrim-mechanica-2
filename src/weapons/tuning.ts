@@ -1,5 +1,6 @@
 // Every feel value of the new weapons (docs/proposal-weapons.md, Keith 2026-10-25): the painter (the laser and the
-// marks it paints), the line rocket salvo, the rail cannon, the mortar and the autocannon. A weapon item that was
+// marks it paints), the line mortar, the big mortar, the RPG rocket, the missile pod, the rail cannon, the autocannon,
+// the faint targeting laser and the blast queue (dents spread over frames). A weapon item that was
 // rolled carries its own damage, cooldown and counts (src/items/bases.ts); an unrolled one (the weapons lab's picker)
 // runs on these sliders.
 import type { Param } from "../core/tweaks";
@@ -11,7 +12,7 @@ export const WEAPON_DEFAULTS = {
   paintEdge: 0.35,
   beamWidth: 0.09,
   beamGlow: 1,
-  // Line rocket salvo
+  // Line mortar (step 1's line salvo: shells lobbed in order up a painted strip)
   salvoRockets: 10,
   salvoLength: 25,
   salvoWidth: 4,
@@ -19,9 +20,9 @@ export const WEAPON_DEFAULTS = {
   salvoMaxRange: 70,
   salvoRipple: 0.07,
   salvoLandGap: 0.06,
-  salvoSpeed: 38,
-  salvoRise: 6,
-  salvoArc: 5,
+  salvoSpeed: 34,
+  salvoRise: 12,
+  salvoArc: 9,
   salvoScatter: 0.6,
   salvoBlast: 2.6,
   salvoDamage: 140,
@@ -44,17 +45,17 @@ export const WEAPON_DEFAULTS = {
   railTrail: 1.6,
   railLightDamage: 0.55,
   railLightCharge: 0.7,
-  // Mortar
-  mortarShells: 3,
-  mortarRing: 4,
-  mortarBlast: 3.4,
-  mortarDamage: 160,
-  mortarFlight: 2.2,
-  mortarArc: 14,
+  // Big mortar (one huge shell over the hills)
+  mortarShells: 1,
+  mortarRing: 1.5,
+  mortarBlast: 7,
+  mortarDamage: 650,
+  mortarFlight: 3,
+  mortarArc: 22,
   mortarClear: 3,
   mortarGap: 0.28,
   mortarLead: 1,
-  mortarCooldown: 5,
+  mortarCooldown: 10,
   mortarMaxRange: 90,
   // Autocannon
   acRate: 3.2,
@@ -66,7 +67,34 @@ export const WEAPON_DEFAULTS = {
   acSpread: 0.6,
   acRange: 70,
   acLead: 1,
+  // RPG rocket (hull: its side's button; shoulder: a number key)
+  rpgSpeed: 55,
+  rpgDamage: 380,
+  rpgBlast: 4.5,
+  rpgCooldown: 2.2,
+  rpgShoulderCooldown: 4,
+  rpgRange: 70,
+  rpgSmoke: 1,
+  // Missile pod (shoulder)
+  swarmMissiles: 10,
+  swarmDamage: 90,
+  swarmBlast: 2.2,
+  swarmRadius: 8,
+  swarmCooldown: 8,
+  swarmRipple: 0.06,
+  swarmRise: 12,
+  swarmFan: 2.5,
+  swarmSpeed: 40,
+  swarmDrop: 10,
+  // Targeting laser (minigun, rocket launchers)
+  laserDay: 0.12,
+  laserNight: 0.75,
+  laserWidth: 0.035,
+  laserGlisten: 1,
+  laserRange: 60,
   // Blasts (every blast on the battlefield)
+  dentBudget: 6,
+  dentMerge: 0.6,
   blastShake: 0.35,
   blastShakeReach: 45,
   shakeDecay: 9,
@@ -79,7 +107,7 @@ export const WEAPON_DEFAULTS = {
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
-const P = "Painter", S = "Rocket salvo", SA = "Salvo assist", R = "Rail cannon", M = "Mortar", A = "Autocannon", B = "Blasts", SND = "Weapon sound";
+const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound";
 export const WEAPON_PARAMS: Param[] = [
   { key: "paintOpacity", label: "Paint strength", min: 0, max: 1, step: 0.01, group: P },
   { key: "paintPulse", label: "Pulse speed (/s)", min: 0, max: 10, step: 0.1, group: P },
@@ -87,19 +115,19 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "beamWidth", label: "Laser width (m)", min: 0.02, max: 0.5, step: 0.01, group: P },
   { key: "beamGlow", label: "Laser glow", min: 0, max: 3, step: 0.05, group: P },
 
-  { key: "salvoRockets", label: "Rockets per salvo", min: 2, max: 24, step: 1, group: S },
+  { key: "salvoRockets", label: "Shells per volley", min: 2, max: 24, step: 1, group: S },
   { key: "salvoLength", label: "Strip length (m)", min: 5, max: 60, step: 0.5, group: S, tip: "The strip is centred on the cursor along the aim line" },
   { key: "salvoWidth", label: "Strip width (m)", min: 1, max: 12, step: 0.1, group: S },
   { key: "salvoMinRange", label: "Nearest end (m)", min: 2, max: 30, step: 0.5, group: S, tip: "The strip's near end never comes closer to the mech than this" },
   { key: "salvoMaxRange", label: "Farthest end (m)", min: 20, max: 150, step: 1, group: S },
-  { key: "salvoRipple", label: "Ripple gap (s)", min: 0.01, max: 0.4, step: 0.005, group: S, tip: "Time between rockets leaving the pod" },
+  { key: "salvoRipple", label: "Ripple gap (s)", min: 0.01, max: 0.4, step: 0.005, group: S, tip: "Time between shells leaving the tubes" },
   { key: "salvoLandGap", label: "Landing gap (s)", min: 0, max: 0.4, step: 0.005, group: S, tip: "At least this long between impacts, so they walk up the strip in order" },
-  { key: "salvoSpeed", label: "Rocket speed (m/s)", min: 10, max: 120, step: 1, group: S },
+  { key: "salvoSpeed", label: "Shell speed (m/s)", min: 10, max: 120, step: 1, group: S },
   { key: "salvoRise", label: "Launch rise (m)", min: 0, max: 20, step: 0.5, group: S, tip: "How high they climb out of the pod before turning toward the strip" },
   { key: "salvoArc", label: "Arc over the line (m)", min: 0, max: 20, step: 0.5, group: S },
-  { key: "salvoScatter", label: "Scatter across the strip", min: 0, max: 1, step: 0.01, group: S, tip: "Share of the half-width each rocket lands off the centre line (seeded)" },
+  { key: "salvoScatter", label: "Scatter across the strip", min: 0, max: 1, step: 0.01, group: S, tip: "Share of the half-width each shell lands off the centre line (seeded)" },
   { key: "salvoBlast", label: "Blast radius (m)", min: 0.5, max: 8, step: 0.1, group: S },
-  { key: "salvoDamage", label: "Damage per rocket", min: 0, max: 1000, step: 5, group: S },
+  { key: "salvoDamage", label: "Damage per shell", min: 0, max: 1000, step: 5, group: S },
   { key: "salvoCooldown", label: "Cooldown (s)", min: 0.2, max: 30, step: 0.1, group: S },
   { key: "salvoSmoke", label: "Smoke trail", min: 0, max: 3, step: 0.05, group: S },
   { key: "salvoSnap", label: "Snap to a group (0-1)", min: 0, max: 1, step: 0.05, group: SA, tip: "If targets lie near the strip, turn and slide it this far toward the line through them" },
@@ -122,8 +150,8 @@ export const WEAPON_PARAMS: Param[] = [
 
   { key: "mortarShells", label: "Shells per volley", min: 1, max: 8, step: 1, group: M },
   { key: "mortarRing", label: "Ring radius (m)", min: 0.5, max: 12, step: 0.1, group: M, tip: "The shells land inside this ring round the aim point" },
-  { key: "mortarBlast", label: "Blast radius (m)", min: 0.5, max: 8, step: 0.1, group: M },
-  { key: "mortarDamage", label: "Damage per shell", min: 0, max: 1000, step: 5, group: M },
+  { key: "mortarBlast", label: "Blast radius (m)", min: 0.5, max: 15, step: 0.1, group: M },
+  { key: "mortarDamage", label: "Damage per shell", min: 0, max: 3000, step: 5, group: M },
   { key: "mortarFlight", label: "Flight time (s)", min: 0.5, max: 5, step: 0.05, group: M },
   { key: "mortarArc", label: "Arc height (m)", min: 2, max: 40, step: 0.5, group: M, tip: "Raised by itself where a dune is in the way" },
   { key: "mortarClear", label: "Clears the sand by (m)", min: 0, max: 10, step: 0.5, group: M },
@@ -142,6 +170,33 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "acRange", label: "Range (m)", min: 10, max: 150, step: 1, group: A },
   { key: "acLead", label: "Lead a locked target (0-1)", min: 0, max: 1.5, step: 0.05, group: A, tip: "1: aim exactly where the lock will be when the shell arrives" },
 
+  { key: "rpgSpeed", label: "Speed (m/s)", min: 10, max: 200, step: 1, group: RPG },
+  { key: "rpgDamage", label: "Damage", min: 0, max: 3000, step: 10, group: RPG },
+  { key: "rpgBlast", label: "Blast radius (m)", min: 0.5, max: 12, step: 0.1, group: RPG },
+  { key: "rpgCooldown", label: "Cooldown, hull (s)", min: 0.1, max: 15, step: 0.1, group: RPG },
+  { key: "rpgShoulderCooldown", label: "Cooldown, shoulder (s)", min: 0.1, max: 20, step: 0.1, group: RPG },
+  { key: "rpgRange", label: "Range (m)", min: 10, max: 200, step: 1, group: RPG, tip: "The cursor's point is pulled in to this far" },
+  { key: "rpgSmoke", label: "Smoke trail", min: 0, max: 3, step: 0.05, group: RPG },
+
+  { key: "swarmMissiles", label: "Missiles", min: 1, max: 24, step: 1, group: SW },
+  { key: "swarmDamage", label: "Damage per missile", min: 0, max: 1000, step: 5, group: SW },
+  { key: "swarmBlast", label: "Blast radius (m)", min: 0.5, max: 8, step: 0.1, group: SW },
+  { key: "swarmRadius", label: "Swarm reach (m)", min: 1, max: 30, step: 0.5, group: SW, tip: "Enemies this close to the aim point are shared out among the missiles; with none, they scatter over this area" },
+  { key: "swarmCooldown", label: "Cooldown (s)", min: 0.2, max: 30, step: 0.1, group: SW },
+  { key: "swarmRipple", label: "Ripple gap (s)", min: 0, max: 0.4, step: 0.005, group: SW },
+  { key: "swarmRise", label: "Climb over the shoulder (m)", min: 0, max: 40, step: 0.5, group: SW },
+  { key: "swarmFan", label: "Fan out (m)", min: 0, max: 10, step: 0.1, group: SW },
+  { key: "swarmSpeed", label: "Missile speed (m/s)", min: 5, max: 120, step: 1, group: SW },
+  { key: "swarmDrop", label: "Dive from (m)", min: 0, max: 40, step: 0.5, group: SW, tip: "How high above its target a missile turns into its dive" },
+
+  { key: "laserDay", label: "Strength by day", min: 0, max: 1, step: 0.01, group: L, tip: "A very faint line on the minigun and rocket launchers, quite faint by day" },
+  { key: "laserNight", label: "Strength at night", min: 0, max: 1, step: 0.01, group: L, tip: "Brighter as the sun goes down (read from the light's sun height)" },
+  { key: "laserWidth", label: "Width (m)", min: 0.005, max: 0.3, step: 0.005, group: L },
+  { key: "laserGlisten", label: "Glisten", min: 0, max: 3, step: 0.05, group: L, tip: "Small glints running along the line" },
+  { key: "laserRange", label: "Range (m)", min: 5, max: 150, step: 1, group: L },
+
+  { key: "dentBudget", label: "Dent time per frame (ms)", min: 0.5, max: 30, step: 0.5, group: B, tip: "Blasts queue their craters; each frame digs queued ones until this much time is spent (at least one). A 12-missile swarm spreads over a few frames instead of stalling one" },
+  { key: "dentMerge", label: "Merge dents closer than (× radius)", min: 0, max: 2, step: 0.05, group: B, tip: "A queued dent this close to another (as a share of the bigger radius) joins it: one dig instead of two" },
   { key: "blastShake", label: "Camera shake per blast", min: 0, max: 2, step: 0.01, group: B, tip: "For a 2.5 m blast next to the mech; bigger blasts shake more, far ones less" },
   { key: "blastShakeReach", label: "Shake reach (m)", min: 5, max: 150, step: 1, group: B, tip: "Blasts farther than this from the mech don't shake the camera" },
   { key: "shakeDecay", label: "Shake settles (/s)", min: 1, max: 30, step: 0.5, group: B },
@@ -153,4 +208,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, S, SA, R, M, A, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, M, S, SA, R, A, L, B, SND] };

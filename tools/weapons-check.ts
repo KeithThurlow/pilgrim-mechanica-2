@@ -1,6 +1,8 @@
 // The new weapons' rules (docs/proposal-weapons.md): a line rocket salvo's impacts cover its strip and land in order
 // up it, the snap turns the strip onto a line of targets, cooldowns hold; a rail beam hits every target on its line
-// and none off it, in order, losing damage per body, and stops at a dune; a rail released early fizzles; mortar shells
+// and none off it, in order, losing damage per body, and stops at a dune; a rail released early fizzles; an RPG rocket
+// lands where aimed or goes off early on a body, steel or a dune; a missile swarm makes 8-12 blasts all near its
+// target, shared among enemies in reach; the big mortar lands in its area; per-side triggers; mortar shells
 // land inside their ring and their arc clears a dune; autocannon lead hits a crossing target at constant speed (and
 // no lead misses it); the new bases fit where the size rules say and resolve to the right gun classes.
 // Run: npm test (or npx tsx tools/weapons-check.ts).
@@ -11,6 +13,8 @@ import { inStrip, stripLength } from "../src/weapons/painter";
 import { RailSim, railPath, railFire } from "../src/weapons/rail";
 import { mortarPoints, mortarAim, lobArc, MortarSim } from "../src/weapons/mortar";
 import { CannonShells, leadPoint } from "../src/weapons/autocannon";
+import { Rockets } from "../src/weapons/rocket";
+import { SwarmSim, swarmAims } from "../src/weapons/swarm";
 import { Shells } from "../src/game/shells";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
 import { rayCapsule } from "../src/game/mechUnit";
@@ -162,25 +166,32 @@ const dt = 1 / 120;
   must(!!fitProblem(lo, "armR", makeItem("rail-light")), "a Light rail cannon fit a hull mount");
   must(!!fitProblem(lo, "handR", makeItem("rail-light")), "a Light rail cannon fit a hand with no arm");
   must(!fitProblem(lo, "armL", makeItem("ac-medium")), "an autocannon doesn't fit a hull mount");
-  must(!fitProblem(lo, "back", makeItem("back-salvo")) && !fitProblem(lo, "back", makeItem("back-mortar")), "back weapons don't fit the back mount");
-  must(!!fitProblem(lo, "armL", makeItem("back-salvo")), "a rocket pod fit an arm mount");
+  must(!fitProblem(lo, "armL", makeItem("rpg-medium")), "a rocket launcher doesn't fit a hull mount");
+  for (const id of ["sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"]) {
+    must(!fitProblem(lo, "shoulderL", makeItem(id)) && !fitProblem(lo, "shoulderR", makeItem(id)) && !fitProblem(lo, "back", makeItem(id)), `${id} doesn't fit a shoulder or the back mount`);
+    must(!!fitProblem(lo, "armL", makeItem(id)) && !!fitProblem(lo, "handL", makeItem(id)), `${id} fit an arm or a hand`);
+  }
+  must(!!fitProblem(lo, "shoulderL", makeItem("back-drums")), "ammo drums fit a shoulder");
   const bare = defaultLoadout(); bare.pack = null; bare.back = null;
-  must(!!fitProblem(bare, "back", makeItem("back-salvo")), "a rocket pod fit without a power pack");
+  must(!!fitProblem(bare, "back", makeItem("sh-missiles")), "a missile pod fit the back mount without a power pack");
   fit(lo, "armR", makeItem("rail-medium"));
   fit(lo, "armL", makeItem("arm-rampart"));
   fit(lo, "handL", makeItem("rail-light"));
-  fit(lo, "back", makeItem("back-salvo"));
+  fit(lo, "shoulderL", makeItem("sh-missiles"));
+  fit(lo, "shoulderR", makeItem("sh-mortar"));
+  fit(lo, "back", makeItem("sh-linemortar"));
   const r = resolve(lo);
   must(r.guns.right?.cls === "rail" && !r.guns.right.light && r.guns.right.own === null, "hull rail cannon didn't resolve as a Medium rail on the sliders");
   must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "hand rail cannon didn't resolve as a Light rail");
-  must(r.back?.weapon === "salvo" && !r.parts.drums, "rocket pod didn't resolve as the back weapon (or drums still shown)");
+  must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "mortar"], [3, "linemortar"]]) && !r.parts.drums,
+    `shoulder weapons didn't resolve to keys 1-3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}) or drums still shown`);
   const rolled = rollItem(77, LOOT_DEFAULTS, { base: "ac-medium", rarity: "epic" });
   fit(lo, "armR", rolled);
   const r2 = resolve(lo);
   must(r2.guns.right?.cls === "autocannon" && r2.guns.right.own?.shellSpeed === rolled.stats.shellSpeed, "a rolled autocannon's own stats didn't come through");
   // The default mech still has no new weapons.
   const d = resolve(defaultLoadout());
-  must(!d.guns.left?.cls && !d.guns.right?.cls && d.back === null && d.parts.drums, "the default loadout changed");
+  must(!d.guns.left?.cls && !d.guns.right?.cls && d.shoulders.length === 0 && d.parts.drums, "the default loadout changed");
   // A rail-class gun only aims in the upper-body sim: it never spins or fires rounds.
   const up = new UpperSim({ ...UPPER_DEFAULTS });
   up.reset(0);
@@ -189,6 +200,64 @@ const dt = 1 / 120;
   let rounds = 0;
   for (let i = 0; i < 120 * 3; i++) for (const s of up.update(dt, 0, { x: 0, y: 4, z: 0 }, { x: 0, y: 0, z: 20 }, true)) if (s === -1) rounds++;
   must(rounds === 0 && up.guns[1].spin === 0, "a rail cannon fired minigun rounds");
+  // Per-side triggers: only the left gun's trigger held, only the left gun fires.
+  const up2 = new UpperSim({ ...UPPER_DEFAULTS });
+  up2.reset(0); up2.resupply();
+  const side: Record<number, number> = { 1: 0, [-1]: 0 };
+  for (let i = 0; i < 120 * 3; i++) for (const s of up2.update(dt, 0, { x: 0, y: 4, z: 0 }, { x: 0, y: 0, z: 20 }, [true, false])) side[s]++;
+  must(side[1] > 0 && side[-1] === 0, `left trigger fired L ${side[1]} R ${side[-1]}`);
+}
+
+// ---- RPG rocket: lands where aimed, or goes off early on a body, steel or a dune in the way ----
+{
+  const st = { damage: 1, blast: 4, speed: V.rpgSpeed, cooldown: 1 };
+  const run = (ground: { height(x: number, z: number): number }, targets: Hittable[], blocker: ((o: THREE.Vector3, d: THREE.Vector3, m: number) => number) | null) => {
+    const rk = new Rockets();
+    rk.fire(1, { x: 0, y: 4, z: 0 }, { x: 0, y: ground.height(0, 40), z: 40 }, st);
+    let end: { at: THREE.Vector3; why: string } | null = null;
+    for (let i = 0; i < 600 && !end; i++) rk.update(dt, ground, targets, blocker, (_r, at, why) => { end = { at: at.clone(), why }; });
+    return end as { at: THREE.Vector3; why: string } | null;
+  };
+  const clear = run(flat, [], null);
+  must(!!clear && clear.why === "target" && Math.hypot(clear.at.x, clear.at.z - 40) < 0.05, `a rocket didn't land on its point (${clear?.why} at ${clear?.at.toArray().map((n) => n.toFixed(2))})`);
+  const range = new DummyRange({ ...DUMMY_DEFAULTS }, [{ x: 0, z: 20 }]);
+  range.update(0, flat);
+  const body = run(flat, range.dummies, null);
+  must(!!body && body.why === "body" && body.at.z < 20 && body.at.z > 18, `a rocket didn't go off on a body in its way (${body?.why} at z ${body?.at.z.toFixed(2)})`);
+  const wall = run(flat, [], (o, d, max) => { const t = (25 - o.z) / (d.z || 1e-9); return t >= 0 && t <= max ? t : -1; });
+  must(!!wall && wall.why === "steel" && Math.abs(wall.at.z - 25) < 0.05, `a rocket didn't go off on steel in its way (${wall?.why} at z ${wall?.at.z.toFixed(2)})`);
+  const dune = run(ridge(20, 8), [], null);
+  must(!!dune && dune.why === "ground" && dune.at.z < 20, `a rocket went through a dune (${dune?.why} at z ${dune?.at.z.toFixed(2)})`);
+}
+
+// ---- Missile swarm: its count, every blast near the target point; shared among enemies in reach ----
+{
+  const st = { missiles: V.swarmMissiles, damage: 1, blast: 2, cooldown: 5, radius: V.swarmRadius };
+  for (const enemies of [[], [{ x: 32, z: 41, key: "a" }, { x: 27, z: 38, key: "b" }, { x: 60, z: 60, key: "far" }]]) {
+    const sw = new SwarmSim(V);
+    must(sw.fire(30, 40, st, enemies, flat), "a ready missile pod didn't fire");
+    must(!sw.fire(30, 40, st, enemies, flat), "a missile pod fired in its cooldown");
+    const hits: { x: number; z: number; key: unknown }[] = [];
+    for (let i = 0; i < 120 * 6; i++) sw.update(dt, flat, (_i, out) => { out.x = 0; out.y = 5; out.z = 0; }, () => null, (m) => hits.push({ x: m.pos.x, z: m.pos.z, key: m.key }));
+    must(hits.length >= 8 && hits.length <= 12, `${hits.length} missile blasts (want 8-12)`);
+    must(hits.every((h) => Math.hypot(h.x - 30, h.z - 40) <= st.radius + 0.01), "a missile came down outside the swarm's reach");
+    if (enemies.length) must(hits.every((h) => h.key === "a" || h.key === "b"), "a missile went for an enemy out of reach (or none)");
+  }
+  const aims = swarmAims(0, 0, 10, 8, [], 3);
+  must(new Set(aims.map((a) => `${a.x.toFixed(2)},${a.z.toFixed(2)}`)).size === 10, "with no enemies, the swarm didn't scatter");
+}
+
+// ---- Big mortar: one shell into its point (over a dune) ----
+{
+  const ms = new MortarSim(V), shells = new Shells(), dune = ridge(25, 9), from = new THREE.Vector3(0, 6, 0);
+  must(ms.fire(0, 50, { shells: V.mortarShells, damage: 1, cooldown: 8, blast: V.mortarBlast }), "big mortar didn't fire");
+  const landed: THREE.Vector3[] = [];
+  for (let i = 0; i < 120 * 6; i++) {
+    ms.update(dt, (x, z) => { const to = new THREE.Vector3(x, dune.height(x, z), z); shells.lob(1, from, to, V.mortarFlight, lobArc(dune, from, to, V.mortarArc, V.mortarClear), V.mortarBlast, 1); });
+    shells.update(dt, (s) => landed.push(s.pos.clone()));
+  }
+  must(landed.length === V.mortarShells, `${landed.length} big mortar shells landed (want ${V.mortarShells})`);
+  must(landed.every((p) => Math.hypot(p.x, p.z - 50) <= V.mortarRing + 1e-6), "a big mortar shell landed outside its area");
 }
 
 console.log(`weapons: salvo ${V.salvoRockets} rockets over ${V.salvoLength} m, rail ${V.railDamage} keeping ${V.railPierceKeep}/body, mortar ring ${V.mortarRing} m, autocannon ${V.acSpeed} m/s`);

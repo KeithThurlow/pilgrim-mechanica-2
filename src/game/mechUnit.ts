@@ -5,7 +5,7 @@ import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { WalkerSim, leftOf, type MoveCommand } from "../mech/walker";
 import type { WalkerValues } from "../mech/walkerTuning";
-import { UpperSim, type UpperValues, type Aim } from "../mech/upper";
+import { UpperSim, triggerOf, type UpperValues, type Aim, type Trigger } from "../mech/upper";
 import type { UpperSim as UpperSimT } from "../mech/upper";
 
 /** What a mech unit needs from its model: the Rampart, or the stand-in walker (no guns). */
@@ -21,7 +21,7 @@ export interface MechBody {
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
   showParts?(parts: { gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean }): void;
   /** Where other weapons' stand-ins hang (a gun side's pivot, or the back mount), and hiding a side's own pod. */
-  mount?(slot: "left" | "right" | "back"): THREE.Object3D;
+  mount?(slot: "left" | "right" | "back" | "shoulderL" | "shoulderR"): THREE.Object3D;
   showPod?(side: 1 | -1, on: boolean): void;
 }
 import type { ToonLook } from "../look/toon";
@@ -30,7 +30,7 @@ import type { TargetCandidate } from "./targeting";
 /** The weapons that aren't miniguns (src/weapons/arsenal.ts): stepped with the mech, handed the gun clock's shots. */
 export interface MechWeapons {
   /** After the legs and guns moved: charge, paint, fire, fly. */
-  step(dt: number, aim: Aim | null, trigger: boolean): void;
+  step(dt: number, aim: Aim | null, trigger: Trigger): void;
   /** A gun of another class (autocannon) fired a round on its clock: the weapons fire it. */
   shot(side: 1 | -1): void;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
@@ -94,8 +94,8 @@ export class MechUnit implements Hittable {
   private wakeAcc = 0;
   /** Space still held (boost while the dash's fuel lasts). Set by the lab before step. */
   dashHold = false;
-  /** The heavy button (right mouse) held: back weapons aim and paint, release fires. Set by the lab before step. */
-  heavy = false;
+  /** The shoulder weapon keys 1-4 held (hold to paint, release to fire). Set by the lab before step. */
+  keys: [boolean, boolean, boolean, boolean] = [false, false, false, false];
   /** The ground point under the cursor (null: none), and the soft lock, for weapons that paint or lead. */
   cursor: THREE.Vector3 | null = null;
   lock: TargetCandidate | null = null;
@@ -171,7 +171,7 @@ export class MechUnit implements Hittable {
   }
 
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
-  step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: boolean) {
+  step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger) {
     this.clock += dt;
     this.hurt = Math.max(0, this.hurt - dt * 400);
     if (!this.alive) { this.deadFor += dt; return; }
@@ -193,7 +193,7 @@ export class MechUnit implements Hittable {
       sim.leanPitch = dash.lean * fwd;
       sim.leanRoll = -dash.lean * side;
       sim.update(dt / sub, cmd);
-      for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, trigger && body.armed)) fired.push(s);
+      for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);
     }
     body.update(sim, upper);
     // Wading: the body pushes a wake (rings dropped as it moves, overlapping into a V).
@@ -241,7 +241,7 @@ export class MechUnit implements Hittable {
     this.weapons?.step(dt, aim, trigger);
     if (this.player && body.armed) {
       const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
-      this.bf.gunAudio.update(dt, trigger, guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
+      this.bf.gunAudio.update(dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
   }
 
