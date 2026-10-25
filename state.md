@@ -149,6 +149,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-25 · Asset list for the Blender agent (Keith, Claude)
+- Keith: spec an asset list here, prioritised, for an agent on his PC (it has Blender) to work through. `docs/asset-list.md`: how to take, build and tick an item; the contract (GLB, +Z front, sockets and moving-part names from the old kit, vertex colour, budgets, game-camera check shots); P0 explosives (RPG hull and shoulder, heavy mortar, line mortar, missile pod pass, debris), P1 hull guns, Rampart power pack and variants, convoy turrets, crawlers and bridges, POI wrecks and salvage, vehicles; P2 and P3 later.
+
 ### 2026-10-25 · Dash in every lab (Keith, Claude)
 - Keith: the combat labs' dash feels really good; put it in all the labs. Walker lab (`labs/walker/main.ts`): Space dashes the way WASD points (or the way the legs face), hold Space to boost with fuel, dash dots and boost bar on the HUD, Dash sliders under Legs. The combat labs (warband, bandits, robots, pois, loadout) already had it through `combatLab.ts`; the convoy lab gets it in the convoy agent's pass.
 - Checked: typecheck, dash, upper and walker checks; in the walker lab in a headless browser, Space spends a charge with no errors.
