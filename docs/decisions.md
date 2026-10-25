@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-25 | Replace the sand-mark decals with a Snowflow-style dent layer: the true height field stays the walkable ground; a GPU dent texture around the player (footprints, ruts, furrows with berms) displaces a fine detail patch on top, per surface (sand, dirt, gravel, later snow) | Keith | Keith | Decals kept behind a slider for comparison until the dents are approved. |
 | 2026-10-25 | Lean into sliding: a boost item to slide around on; slides work better downhill than uphill | Keith | Keith | Booster pack item; values are Claude's (sliders). |
 | 2026-10-25 | A snow biome: snowy, desolate, with rocks; things walking in snow sink into it (like the Snowflow demo) | Keith | Keith | Plan in `docs/research-snowflow.md` terms: snow ground plus the GPU dent window. |
 | 2026-10-25 | Deformed ground must be walkable ground (craters change where feet and wheels stand, unlike Snowflow's visual-only dents), within reason; some ground resists or refuses deformation (rock, bandit outposts, POI pads, the convoy road) so nobody blocks a way in or out | Keith | Keith | Crater layer being built: hardness map, depth and slope caps, slumping. |
