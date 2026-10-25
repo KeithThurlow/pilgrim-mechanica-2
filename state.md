@@ -137,7 +137,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
 - Weapons: steps 1 and 2 merged. Next: cannon, plasma cannon, laser beam, hand guns, drones; weapon models swapped in from `src/weapons/library.ts` (each `models.ts` function returns the library model, the boxes are the fallback).
 - Weapon models: library, converted old kit and stand-ins in (`src/weapons/library.ts`, armoury lab). Stand-ins left for W2-W3, W6-W8 and the energy guns until the desktop agent's models land; W1 is the desktop's GLBs.
-- Pilot on foot: proposed (`docs/proposal-pilot.md`), waiting for Keith.
+- Pilot on foot: approved with Keith's answers (`docs/proposal-pilot.md`); an agent is building steps 1-2 (out and in, walking sand, decks and bridges, the bay terminal) and faster parking.
 - Expedition loop step 1 merged (convoy lab; played only from shots so far). Next: progression on the convoy (radar range, packs, convoy speed), items dropping into the at-risk list, a recovery you can be killed during (heli), late-game heli drops.
 
 ## Next candidates (ask Keith which)
@@ -162,6 +162,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-26 · Pilot answers, no ECS for now (Keith)
+- Keith's answers to the pilot proposal and the ECS question logged in `docs/proposal-pilot.md` and `docs/decisions.md`.
 
 ### 2026-10-25 · Weapon model library, the old kit converted, code stand-ins, armoury lab (Claude)
 - Keith: take the sister project's weapons over and improve their look; build the classes that don't exist (explosives first). The old kit's 22 FBXs (all real files now) converted to `public/models/weapons/` with sidecars in this repo's frame (`tools/weapons-import.ts`; `tools/fbx-to-glb.ts` now keeps `Paint_<section>` slots as one primitive each). TypeScript port of the kit (`src/weapons/kit/`) and stand-ins (`src/weapons/build/`) for the asset list's W2-W3, W6-W8, the energy guns and the missile and mortar shell, named and socketed to the asset-list contract so Blender models replace them by path. Library (GLB at the item's path, else a mirrored right, else the stand-in; desktop GLBs carry paint in their vertex colours, divided back out with the sidecar palette so schemes still swap), model instance, look, laser, Rampart mounts, demo cycle; new lab `labs/armoury/` (on the Rampart from the game camera, turntable, line-up; Weapon paint, Laser, Fit, Viewer topics; hold V).
