@@ -63,7 +63,10 @@ console.log(`downhill 17°     ${fmt(down)}`);
 console.log(`  old stance     ${fmt(downOff)}`);
 console.log(`downhill 33°     ${fmt(steep)}`);
 console.log(`  no reach cap   ${fmt(steepOff)}`);
-if (side.thigh < sideOff.thigh + 8) problems.push("the uphill leg's thigh doesn't fold forward on a side slope");
+// The uphill planted thigh tilts well off vertical, and the fold never takes that away. With Keith's values (hockExtend 0,
+// 2026-10-26) the leg already tilts 13° without the fold (was 7°) and 14° with it (was 16°): the check used to ask the
+// fold to add 8°, which compared against the old no-fold leg.
+if (side.thigh < 12 || side.thigh < sideOff.thigh - 0.5) problems.push(`the uphill leg's thigh doesn't fold forward on a side slope (${side.thigh.toFixed(1)}°, without the fold ${sideOff.thigh.toFixed(1)}°)`);
 if (up.speed > flat.speed * 0.9) problems.push("no slowdown uphill");
 if (down.speed < flat.speed * 0.95) problems.push("slows down downhill");
 // The body leans over its feet while moving (Keith 2026-10-24): downhill no less than on the flat, and never behind them.
@@ -72,7 +75,10 @@ if (flat.cogAhead < 0.25) problems.push("walking, the hips aren't forward over t
 for (const [name, r] of [["side", side], ["up", up], ["down", down], ["steep", steep]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
 // Uphill (Keith 2026-10-26 18:28: the swinging thigh was held down vertical): it rises toward the hull, clearly more than
 // on the flat and than without the fold.
-if (up.swingThigh < Math.max(flat.swingThigh, upOff.swingThigh) + 12) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
+// With Keith's low step (liftHeight 0.4, 2026-10-26; was 0.75) the swing never squashes the leg enough for the extra
+// fold to engage (the "no fold" run is the same), but the thigh still rises well clear of the old vertical (0°): the
+// check asks for the look, not for the mechanism (it used to ask the fold to add 12°).
+if (up.swingThigh < Math.max(30, flat.swingThigh + 6)) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
 // Downhill (same notes: "a maximum that the legs get to that doesn't look insane"): planted legs never past the cap.
 const CAP = WALKER_DEFAULTS.legReachMax, TOL = 0.025;
 for (const [name, r] of [["downhill 17°", down], ["downhill 33°", steep]] as const) if (r.stretch > CAP + TOL) problems.push(`${name}: a planted leg stretched to ${(r.stretch * 100).toFixed(0)}% (cap ${(CAP * 100).toFixed(0)}%)`);

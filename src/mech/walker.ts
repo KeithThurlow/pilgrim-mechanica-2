@@ -719,6 +719,13 @@ export class WalkerSim {
       y = herm(Cy, 0, By, -2 * seg, t);
       s = Cs + (Bs - Cs) * smooth(0, 1, t);
     }
+    // Never out of the leg's reach (the follow-through behind and the reach ahead grow with the swing's time: at Keith's
+    // slower cadence they carried the foot past the leg's length, the dune sprint's reach misses).
+    {
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon), hs = f.side * v.hipWidth;
+      const ax = x, ay = y + v.ankleHeight, az = s - hs, d = Math.hypot(ax, ay, az);
+      if (d > R) { const k = R / d; x = ax * k; y = ay * k - v.ankleHeight; s = az * k + hs; }
+    }
     out.set(this.pos.x + fw.x * x + lf.x * s, hipY + y, this.pos.z + fw.z * x + lf.z * s);
     // Clear the ground under the foot and its toes.
     const env = Math.sin(Math.PI * u);
@@ -1678,6 +1685,44 @@ export class WalkerSim {
       f.pos.set(ex + (f.pos.x - ex) * w, ey + (f.pos.y - ey) * w, ez + (f.pos.z - ez) * w);
       if (w >= 1) f.entryU = -1;
     }
+    this.toesClear(f);
+  }
+
+  /**
+   * A swinging foot's toes never dig into the ground (Keith 2026-10-26: toes skimming the sand; leaving the push-off
+   * pitched toes-down, the toes uncurled and curled under faster than the foot rose, up to 0.37 m into flat sand):
+   * the pitch eases off so the ball of the foot clears, and the toes stay bent up as if still pushing.
+   */
+  private toesClear(f: Foot) {
+    const v = this.v, m = 0.02 + v.toeClear * Math.sin(Math.PI * clamp(f.u, 0, 1));
+    const h = v.toeHinge, L = Math.max(0.01, v.toeLength - v.toeHinge);
+    // On the plate's own frame (as pose() builds it): forward along its yaw over its up; pitch turns the toes down.
+    const up = f.up, fw = this.plateForward(up, f.yaw, this.t.f);
+    // Height over the ground of a point d along the plate pitched by a (from the plate centre, or from the ball).
+    const over = (ox: number, oy: number, oz: number, a: number, d: number, out: number[]) => {
+      const c = Math.cos(a), sn = Math.sin(a);
+      out[0] = ox + (fw.x * c - up.x * sn) * d; out[1] = oy + (fw.y * c - up.y * sn) * d; out[2] = oz + (fw.z * c - up.z * sn) * d;
+      return out[1] - this.ground.height(out[0], out[2]) - m;
+    };
+    const P = this.t.n, Q = [0, 0, 0];
+    // The ball of the foot: ease the toes-down pitch until it clears.
+    if (h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
+      let lo = Math.min(f.pitch, 0) - 0.8, hi = f.pitch;
+      if (over(f.pos.x, f.pos.y, f.pos.z, lo, h, P) >= 0) {
+        for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (over(f.pos.x, f.pos.y, f.pos.z, mid, h, P) >= 0) lo = mid; else hi = mid; }
+        f.pitch = lo;
+      }
+    }
+    over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P);
+    // The toe tips: bend the toes up until they clear.
+    const hx = P[0], hy = P[1], hz = P[2];
+    if (over(hx, hy, hz, f.pitch + f.toe, L, Q) < 0) {
+      let lo = Math.min(f.pitch + f.toe, 0) - 1.2, hi = f.pitch + f.toe;
+      if (over(hx, hy, hz, lo, L, Q) >= 0) {
+        for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (over(hx, hy, hz, mid, L, Q) >= 0) lo = mid; else hi = mid; }
+        f.toe = lo - f.pitch;
+      }
+    }
   }
 
   private body(dt: number, d: number) {
@@ -1926,20 +1971,27 @@ export class WalkerSim {
       }
       f.theta = theta;
 
-      // If the hip is still out of reach, swing the cannon toward the hip until it isn't.
+      // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
+      // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
+      // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
       const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
       const dirHip = toHip.clone().normalize();
+      const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
+      const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
+      const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
       P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
-      if (P.hock.distanceTo(P.hip) > reach) {
+      if (P.hock.distanceTo(P.hip) > lim) {
         let lo = 0, hi = 1;
         const dir = new Vector3();
         for (let i = 0; i < 10; i++) {
           const w = (lo + hi) / 2;
           dir.copy(dirRake).lerp(dirHip, w).normalize();
-          if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > reach) lo = w; else hi = w;
+          if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > lim) lo = w; else hi = w;
         }
         dir.copy(dirRake).lerp(dirHip, hi).normalize();
         P.hock.copy(P.ankle).addScaledVector(dir, v.cannon);
+        // The swing starts from the cannon as it really was.
+        f.theta = Math.atan2(-dir.dot(P.legFwd), dir.dot(planeUp));
         if (P.hock.distanceTo(P.hip) > reach + 0.01) {
           this.stats.overreach++;
           P.hock.sub(P.hip).setLength(reach).add(P.hip);

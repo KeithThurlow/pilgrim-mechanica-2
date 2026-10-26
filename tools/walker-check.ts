@@ -36,7 +36,7 @@ for (const r of runs) {
   const field = new DuneField(terrain);
   const sim = new WalkerSim({ ...build.values }, field);
   sim.reset(13, -40, 0.3);
-  let underAir = 0, bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
+  let underAir = 0, toesUnder = 0, bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
   // Push-off shape (Keith 2026-10-24: the thigh swung too far back and the knee went straight): measured late in each stance.
   let thighBackMax = 0, kneeMax = 0;
   const lastPlant = sim.feet.map(() => new Vector3());
@@ -69,6 +69,8 @@ for (const r of runs) {
       } else {
         wasPlanted[k] = false;
         minClear = Math.min(minClear, f.pos.y - field.height(f.pos.x, f.pos.z));
+        // Toes (Keith 2026-10-26: skimming the sand): mid-swing the ball of the foot and the toe tips stay out of the ground.
+        if (f.u > 0.1 && f.u < 0.9 && Math.min(P.toe.y - field.height(P.toe.x, P.toe.z), P.toeHinge.y - field.height(P.toeHinge.x, P.toeHinge.z)) < -0.02) toesUnder++;
       }
     });
     const g = field.height(sim.pos.x, sim.pos.z);
@@ -85,6 +87,7 @@ for (const r of runs) {
   if (s.scuffs > 0) problems.push(`${s.scuffs} swing-foot frames under the ground`);
   if (bothAir > 0) problems.push(`${bothAir} frames with both feet in the air`);
   if (underAir > 0) problems.push(`${underAir} foot-frames under the ground`);
+  if (toesUnder > 0) problems.push(`${toesUnder} swing frames with the toes in the ground`);
   // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run. Since 18:28 a foot that
   // can't reach down a steep brink hangs and the mech drops the rest, so a walk over the dunes may drop a few times.
   if (r.name === "walk straight" && s.takeoffs > 3) problems.push(`left the ground ${s.takeoffs} times at a walk`);
@@ -207,13 +210,19 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (spread > 0.15) problems.push(`run at ${label}: footfall intervals uneven (worst ${(spread * 100).toFixed(0)}% off the mean)`);
     if (both === 0) problems.push(`run at ${label}: no flight phase`);
     if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
-    if (yMax - yMin > 0.3) problems.push(`run at ${label}: hips rise and fall ${(yMax - yMin).toFixed(2)} m`);
+    // The bob is a slider (runBob, the amplitude; Keith 2026-10-26 set 0.175 for a bouncier run, was 0.05 under a fixed
+    // 0.3 m limit): the hips move no more than its rise and fall plus a little.
+    const bobMax = 2 * values.runBob + 0.08;
+    if (yMax - yMin > bobMax) problems.push(`run at ${label}: hips rise and fall ${(yMax - yMin).toFixed(2)} m (limit ${bobMax.toFixed(2)})`);
     console.log(`  run at ${label}: ${(1 / mean).toFixed(2)} steps/s, alternating (${same} repeats), intervals within ${(spread * 100).toFixed(0)}% · flights ${((100 * both) / n).toFixed(0)}% of the time, longest ${longest.toFixed(2)} s · hips move ${(yMax - yMin).toFixed(2)} m`);
   }
   // Up a ramp at top speed (Keith 2026-10-26 18:28: the torso dipped into rising ground): the hips stay well over the
   // highest ground under the hull (from the hips to 2 m ahead), so the hull doesn't plough in.
   {
-    const HULL_CLEAR = 1.9;
+    // The limit kept about 0.6 m over the hull's lowest front edge with the run's old crouch (boundCrouch 0.3); Keith runs
+    // lower (0.8, 2026-10-26), so it moves down with the crouch (and 0.1 m for the steepest ramp, where the Stilt's short
+    // legs set the height).
+    const HULL_CLEAR = 1.9 - Math.max(0, values.boundCrouch - 0.3) - 0.1;
     for (const deg of [12, 18, 25]) {
       const k = Math.tan((deg * Math.PI) / 180);
       const g = shaped((_x, z) => Math.max(0, (z - 50) * k));

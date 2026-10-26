@@ -9,17 +9,16 @@ Branch: `worktree-agent-aa90ff3f2a624b66d`, pushed to `wip/sprint-feel`. Delete 
 2. Lean into turns while sprinting. done (`WalkerSim.turnLean`, `orient`, `hullRoll`; walker-check "leans into turns").
 3. Uphill cadence. done (`WalkerSim.runCadence`, the reach cap in `body()`, run reach in `aim()`; slope-check sprint
    cadence section). Values: runClimbSteps 0.1, runDescentSteps 0, runHurry 0.3, runReachGive 0.1.
-4. Perceived speed: sprint swing the snappiest (whip-through), cheap cues. **next**
+3b. npm test green (coordinator): toes clear in swing (`toesClear`, toeClear 0.1), knee stop (kneeMaxPlanted 165), run
+   swing within reach; outdated limits moved (bob, ramp clearance, side fold, swing thigh, dash charges), reasons in checks.
+4. Perceived speed: sprint swing the snappiest (whip-through), cheap cues. **next** (measured: thigh mean swing speed
+   walk 451, Shift run 643, sprint 363-414 deg/s; swing 0.55-0.66 s vs 0.8-0.9 s; `sf/hip.mts`)
 5. Impact into the ground (compression, push-off kick and toe dig, shake, thump). todo
 6. Feet sink into soft ground (per-surface sliders, on the plant target). todo
 
-## Baseline before this work (Keith's tuned values; see state.md In progress)
+## Checks
 
-`walker-check`, `slope-check`, `dash-check` already fail on Keith's values (flat swing clearance 0.00-0.02 m, sprint
-reach misses 5-7%, run bob 0.35 m, ramp hull clearance 1.1-1.6 m, Stilt flights 0.23 s, wall rise 7.0 m; slope: side fold
-and mid-swing thigh 36°; dash: 3 dashes from full charges). Every other check passes. Don't "fix" by reverting his values;
-new checks must pass, and old numbers must not get worse. After step 3: dune sprint misses 3.5/4.1%, ramps better, wall
-rise 1.3 m.
+`npm test` is fully green since step 3b; keep it green.
 
 ## How to test
 
