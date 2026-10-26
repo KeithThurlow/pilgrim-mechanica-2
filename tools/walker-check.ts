@@ -10,7 +10,11 @@ import * as THREE from "three";
 import { MechUnit, MECH_DEFAULTS, type MechBody, type MechUnitValues } from "../src/game/mechUnit";
 import { UPPER_DEFAULTS } from "../src/mech/upper";
 import { DUST_DEFAULTS } from "../src/fx/dust";
-import type { Battlefield } from "../src/game/battlefield";
+import { Battlefield } from "../src/game/battlefield";
+import { sinkDepth, SINK_DEFAULTS, type SinkSurface } from "../src/mech/sink";
+import { BIOME_DEFAULTS } from "../src/world/biomes";
+import { ROCK_DEFAULTS } from "../src/world/rock";
+import { SHALLOWS_DEFAULTS } from "../src/world/shallows";
 
 interface Run { name: string; seconds: number; cmd: (t: number) => { x: number; z: number; sprint: boolean } }
 
@@ -353,7 +357,7 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
 
 // The mech unit with a stand-in battlefield and body (counts rounds fired, dust thrown, footfalls): for the sprint's
 // weapons, the ground impact and the sinking feet.
-function stubMech(field: { height(x: number, z: number): number; normal(x: number, z: number, o?: number[]): number[] }, over: Record<string, number> = {}) {
+function stubMech(field: DuneField, over: Record<string, number> = {}, surface: SinkSurface | null = null) {
   const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DUST_DEFAULTS, ...MECH_DEFAULTS, ...over } as unknown as MechUnitValues;
   const count = { rounds: 0, kicks: 0, kickK: 0, stomps: 0, prints: 0, digs: 0 };
   const noop = () => {};
@@ -363,6 +367,9 @@ function stubMech(field: { height(x: number, z: number): number; normal(x: numbe
     marks: { print: () => { count.prints++; }, furrow: noop, dig: () => { count.digs++; } },
     sfx: { play: noop, playSound: noop }, gunAudio: { update: noop },
     fire: () => { count.rounds++; },
+    // The real sink rule (Battlefield.sinkDepth) on this stand-in; surface: pretend the ground is that.
+    v: null as unknown, sinkSurface: surface ? () => surface : null,
+    sinkDepth(x: number, z: number) { return Battlefield.prototype.sinkDepth.call(this as unknown as Battlefield, x, z); },
   } as unknown as Battlefield;
   const at = (o: THREE.Vector3) => o.set(mech.sim.pelvis.x, mech.sim.pelvis.y + 1.5, mech.sim.pelvis.z);
   const body = {
@@ -370,6 +377,7 @@ function stubMech(field: { height(x: number, z: number): number; normal(x: numbe
     shoulderLine: (o = new THREE.Vector3()) => at(o), muzzle: (_s: number, o = new THREE.Vector3()) => at(o),
     barrel: (_s: number, o = new THREE.Vector3()) => o.set(0, 0, 1), eject: (_s: number, o = new THREE.Vector3()) => o,
   } as unknown as MechBody;
+  (bf as unknown as { v: unknown }).v = v;
   const mech: MechUnit = new MechUnit(bf, v, body, {} as never, 1, 0, false);
   return { mech, count, v };
 }
@@ -452,6 +460,55 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     console.log(`  ${leg} weaving on the ${ground}: lean up to ${maxRoll.toFixed(1)}° (cap ${cap}°) · feet skidding ${((100 * skid) / (frames * 2)).toFixed(0)}% of foot-frames · reach misses ${(over * 100).toFixed(2)}% (upright ${(still.over * 100).toFixed(2)}%) · feet under ${under}`);
   }
   if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; } else console.log(`ok   ${leg} leans into turns`);
+}
+
+// Feet sink into soft ground (Keith 2026-10-26 21:54: into sand and snow, on top of rock): the sink depth matches the
+// surface and is zero on rock; walking and sprinting with the mech unit, planted feet sit at that depth and no foot (or
+// its toes) goes deeper; on rock nothing is under the ground at all.
+{
+  console.log("-- feet sink");
+  const problems: string[] = [];
+  // The rule by surface, and on a rocky map: bare rock (concrete) never sinks, loose sand by the slider.
+  const want: Record<SinkSurface, number> = { sand: SINK_DEFAULTS.sinkSand, snow: SINK_DEFAULTS.sinkSnow, dirt: SINK_DEFAULTS.sinkDirt, gravel: SINK_DEFAULTS.sinkGravel, concrete: 0 };
+  for (const [s, d] of Object.entries(want) as [SinkSurface, number][]) if (Math.abs(sinkDepth(SINK_DEFAULTS, s) - d) > 1e-9) problems.push(`${s} sinks ${sinkDepth(SINK_DEFAULTS, s)} m (want ${d})`);
+  if (SINK_DEFAULTS.sinkRock !== 0) problems.push("rock sinks by default");
+  const rocky = new DuneField({ ...TERRAIN_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, biomeOnly: 1 });
+  const { mech: probe } = stubMech(rocky);
+  const bfp = (probe as unknown as { bf: Battlefield }).bf;
+  let rockPts = 0, rockSunk = 0, gravelPts = 0;
+  for (let x = -200; x <= 200; x += 7) for (let z = -200; z <= 200; z += 7) {
+    const s = rocky.surfaceAt(x, z);
+    if (s === "concrete") { rockPts++; if (bfp.sinkDepth(x, z) > 0) rockSunk++; }
+    if (s === "gravel") gravelPts++;
+  }
+  if (rockPts === 0) problems.push("the rocky map had no bare rock to stand on");
+  if (rockSunk > 0) problems.push(`${rockSunk} of ${rockPts} bare rock points sink`);
+  // Walking then sprinting on each surface (dunes), the planted feet at the sink depth, nothing deeper.
+  const field = new DuneField({ ...TERRAIN_DEFAULTS });
+  const rows: string[] = [];
+  for (const s of ["sand", "snow", "gravel", "concrete"] as SinkSurface[]) {
+    const { mech } = stubMech(field, {}, s);
+    mech.reset(13, -40, 0.3);
+    const d = want[s];
+    let deepest = 0, toes = 0, plantedErr = 0, n = 0;
+    for (let i = 0; i < 16 * 60; i++) {
+      mech.dashHold = i > 6 * 60;
+      mech.step(1 / 60, { x: 0.3, z: 1, sprint: false }, null, false);
+      for (const f of mech.sim.feet) {
+        const g = field.height(f.pos.x, f.pos.z);
+        deepest = Math.max(deepest, g - f.pos.y);
+        const P = f.pose;
+        if (Math.min(P.toe.y - field.height(P.toe.x, P.toe.z), P.toeHinge.y - field.height(P.toeHinge.x, P.toeHinge.z)) < -d - 0.03) toes++;
+        if (!f.swinging && !mech.sim.airborne && f.stanceT < 0.5) { plantedErr = Math.max(plantedErr, Math.abs(field.height(f.planted.x, f.planted.z) - f.planted.y - d)); n++; }
+      }
+    }
+    if (deepest > d + 0.02) problems.push(`${s}: a foot ${deepest.toFixed(3)} m into the ground (sink ${d})`);
+    if (toes) problems.push(`${s}: ${toes} toe-frames deeper than the sink`);
+    if (n === 0 || plantedErr > 0.005) problems.push(`${s}: planted feet off the sink depth by up to ${plantedErr.toFixed(3)} m`);
+    rows.push(`${s} ${d} m: planted at it within ${plantedErr.toFixed(3)} m, deepest foot ${deepest.toFixed(3)} m`);
+  }
+  console.log(`${problems.length ? "FAIL " : "ok   "}${rows.join(" · ")} · bare rock sinks at ${rockSunk}/${rockPts} points (${gravelPts} rocky sand)` + (problems.length ? "\n       " + problems.join("; ") : ""));
+  if (problems.length) failed = true;
 }
 
 if (failed) throw new Error("walker check failed");

@@ -14,7 +14,8 @@ Branch: `worktree-agent-aa90ff3f2a624b66d`, pushed to `wip/sprint-feel`. Delete 
 4. Perceived speed. done (`runSwing` warp, runWhip 0.5, runWhipAt 0.3; sprint thigh sweep ~2000 deg/s, fastest) (measured: thigh mean swing speed
    walk 451, Shift run 643, sprint 363-414 deg/s; swing 0.55-0.66 s vs 0.8-0.9 s; `sf/hip.mts`)
 5. Impact into the ground. done (`body()` plantY/plantPitch, MechUnit push-off burst + `GroundMarks.dig`, `onSprintStep` shake, `brap` thump; sliders runPlantDrop 0.12, runPlantPitch 3, runPushRise 0.05, sprintPushDust 0.8, sprintToeDig 1.2, sprintShake 0.05, sprintThump 0.35)
-6. Feet sink into soft ground (per-surface sliders, on the plant target). **next**
+6. Feet sink into soft ground. done (`src/mech/sink.ts`, `Battlefield.sinkDepth`/`sinkSurface`, `WalkerSim.sinkAt`; walker-check "feet sink").
+7. Rendered filmstrips for Keith (game cam: sprint turn, climb, impact). **next**
 
 ## Checks
 

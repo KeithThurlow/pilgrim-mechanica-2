@@ -103,6 +103,8 @@ const forcedSurface = params.get("surface");
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "snow") dents.surfaceAt = () => forcedSurface;
 if (forcedSurface === "concrete") dents.surfaceAt = () => null;
+// The feet sink as deep as that surface lets them (src/mech/sink.ts).
+if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete" || forcedSurface === "snow") bf.sinkSurface = () => forcedSurface;
 let clock = 0;
 
 // Cameras: the iso game camera, plus orbiting review views.
@@ -177,7 +179,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },

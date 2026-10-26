@@ -172,6 +172,13 @@ export class MechUnit implements Hittable {
     readonly player: boolean,
   ) {
     this.sim = new WalkerSim(v, bf.field);
+    // Planted feet sit into soft ground by its surface (src/mech/sink.ts).
+    // Only into the terrain itself: standing on something else (a convoy deck, src/convoy/deck.ts) it stays on top.
+    this.sim.sinkAt = (x, z) => {
+      const g = this.sim.ground;
+      if (g !== bf.field && Math.abs(g.height(x, z) - bf.field.height(x, z)) > 0.05) return 0;
+      return bf.sinkDepth(x, z);
+    };
     this.dash = new Dash(v);
     this.bound = new Bound(v);
     this.upper = new UpperSim(v);

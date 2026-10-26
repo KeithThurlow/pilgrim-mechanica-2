@@ -2,8 +2,11 @@
 // Starting values come from the old walker lab's Mechanical walk (build 65, Keith 2026-10-19), scaled to a mech
 // about 5 m to the top of the hull; the names are new and the old lab's 140 sliders are cut to what matters here.
 import type { Param } from "../core/tweaks";
+import { SINK_DEFAULTS, SINK_PARAMS } from "./sink";
 
 export const WALKER_DEFAULTS = {
+  // Feet sink into soft ground (src/mech/sink.ts).
+  ...SINK_DEFAULTS,
   // Move
   // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
   walkSpeed: 6,
@@ -198,6 +201,7 @@ export const WALKER_DEFAULTS = {
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
 export const WALKER_PARAMS: Param[] = [
+  ...SINK_PARAMS,
   { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
   { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
   { key: "accel", label: "Speed up (m/s²)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "Low = heavy, takes time to get going" },
