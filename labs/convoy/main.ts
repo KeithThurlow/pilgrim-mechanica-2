@@ -34,7 +34,6 @@ import type { MoveCommand } from "../../src/mech/walker";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
-import { MARK_DEFAULTS, MARK_PARAMS } from "../../src/fx/sandMarks";
 import { DENT_DEFAULTS, DENT_PARAMS } from "../../src/fx/dents";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
 import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
@@ -83,7 +82,7 @@ const { scene, camera, params } = app;
 const canvas = app.renderer.domElement;
 const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
-  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...MARK_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
+  ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
   ...LOOP_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS,
@@ -93,7 +92,7 @@ const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
-  ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
+  ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
 
@@ -108,7 +107,7 @@ scene.add(streamer.group);
 route.onChange = (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1);
 const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
-// Ruts and prints as dents on a fine patch (Keith 2026-10-25); markMode 0 brings back the decals.
+// Ruts and prints as dents on a fine patch (Keith 2026-10-25).
 bf.useDents(app.renderer, streamer);
 scene.add(bf.group);
 
@@ -180,8 +179,8 @@ carry.onTouchdown = (x, y, z, speed) => {
   const k = Math.min(1.6, speed / 7.7);
   const pv = carry.platform.vel;
   bf.dust.stomp(x, y, z, 2.4 * k, pv.x, pv.z);
-  // crater() lays one mark every craterEvery calls: call it that many times so the landing always leaves one.
-  for (let i = 0; i < Math.max(1, Math.round(V.craterEvery)); i++) bf.marks.crater(x, z, 5 * k);
+  // A big strike (k >= 2) always leaves a dent.
+  bf.marks.crater(x, z, Math.max(2, 5 * k));
   shaker.add(V.craneLandShake * k);
 };
 player.onLanding = (l) => { shaker.add(V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
@@ -348,7 +347,7 @@ const panel = tweakPanel({
     PILOT_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
-    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents", "Sand marks"] },
+    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
     { id: "defence", label: "Defences", groups: ["Defences"] },
@@ -358,7 +357,7 @@ const panel = tweakPanel({
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
     WEAPON_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sand marks", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     ...LOOP_TOPICS,

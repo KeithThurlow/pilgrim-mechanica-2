@@ -96,7 +96,7 @@ salvage.onBanked = (s) => hud.banked(s);
 
 function addSite(p: PoiPlacement) {
   const site = buildSite(p, V);
-  // Ruts as lasting dents (a disc's radii: across and along its yaw), else decals.
+  // Ruts as lasting dents (a disc's radii: across and along its yaw), else the site's own decals.
   const dents = lab.bf.marks.denting ? lab.bf.dents! : null;
   const d = new PoiDraw(site, field, dents ? (r) => {
     const [rx, , rz] = r.size, along = rz >= rx;

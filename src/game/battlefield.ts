@@ -1,4 +1,4 @@
-// The shared stage every combat lab plays on: the dune field, the dust, the sand marks, the gun effects and their
+// The shared stage every combat lab plays on: the dune field, the dust, the ground marks (dents), the gun effects and their
 // sound, steel wrecks, and everything that can be shot. One `fire` call resolves a round against all of it (the
 // nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
 import type { Costs } from "../core/costs";
@@ -15,7 +15,6 @@ import type { CraterLayer } from "../world/craters";
 import { DustSim, type DustValues } from "../fx/dust";
 import { DustDraw } from "../fx/dustDraw";
 import { GroundMarks } from "../fx/groundMarks";
-import type { MarkValues } from "../fx/sandMarks";
 import { DentLayer, DENT_DEFAULTS, type DentValues } from "../fx/dents";
 import { DetailPatch } from "../world/detailPatch";
 import type { TerrainStreamer } from "../world/chunks";
@@ -23,7 +22,7 @@ import { MinigunFx, type MinigunFxValues, type HitSurface } from "../fx/minigun"
 import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 
-export type BattlefieldValues = DustValues & MarkValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues>;
+export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues>;
 
 /** Anything a round can hit. */
 export interface Hittable {
@@ -67,7 +66,7 @@ export class Battlefield {
   readonly group = new THREE.Group();
   readonly dust: DustSim;
   readonly dustDraw: DustDraw;
-  /** Every mark on the ground (prints, ruts, furrows, strikes): dents when useDents was called, else decals. */
+  /** Every mark on the ground (prints, ruts, furrows, strikes): dents once useDents was called (none before). */
   readonly marks: GroundMarks;
   /** The dent layer and the fine ground patch that draws it (null until useDents). */
   dents: DentLayer | null = null;
@@ -84,7 +83,7 @@ export class Battlefield {
   private waterDraw: WaterDraw | null = null;
   private wsamp = { h: 0, crest: 0, flat: 0 } as import("../world/terrain").GroundSample;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
-  /** Blast craters in the ground (null: blasts leave only decals). Set by the lab, with onGround. */
+  /** Blast craters in the ground (null: blasts leave only fine dents). Set by the lab, with onGround. */
   craters: CraterLayer | null = null;
   /** Called with a box whose ground changed (rebuild the chunks and the physics floor there). */
   onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
@@ -116,7 +115,7 @@ export class Battlefield {
     const sv = v as BattlefieldValues & Record<string, unknown>;
     for (const [k, val] of Object.entries(SHELL_FX_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.shellsDraw = new ShellsDraw(this.shells, field, v as unknown as ShellFxValues);
-    this.group.add(this.marks.group, this.gunFx.group, this.dustDraw.group, this.shellsDraw.group);
+    this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group);
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
@@ -207,7 +206,7 @@ export class Battlefield {
 
   /**
    * Draw ground marks as dents (Keith 2026-10-25): a GPU dent layer around the camera focus and the fine patch of
-   * ground that shows them (the chunks leave it a hole). Needs the renderer, so headless stages skip it (decals).
+   * ground that shows them (the chunks leave it a hole). Needs the renderer, so headless stages skip it (no marks).
    */
   useDents(renderer: THREE.WebGPURenderer, streamer: TerrainStreamer) {
     const v = this.v as BattlefieldValues & DentValues;
@@ -341,20 +340,18 @@ export class Battlefield {
     return true;
   }
 
-  /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into marks, dents, gun fx, dust. */
+  /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into dents, gun fx, dust. */
   costs: Costs | null = null;
 
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
     const c = this.costs;
     this.sfx.update();
-    this.marks.update(dt, this.sunDir);
-    c?.mark("sand marks");
     if (this.dents && this.patch) {
       // The dents and the patch follow the camera focus (the sun's shadow box is centred on it).
-      const f = look.sun.target.position, on = this.marks.denting;
-      if (on) this.dents.update(dt, f.x, f.z);
-      this.patch.update(f.x, f.z, on);
+      const f = look.sun.target.position;
+      this.dents.update(dt, f.x, f.z);
+      this.patch.update(f.x, f.z, true);
     }
     c?.mark("ground dents");
     this.shells.update(dt, (s) => this.burst(s));
