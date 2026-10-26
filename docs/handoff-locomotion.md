@@ -37,7 +37,17 @@ sprint, dash tap mid-step, dash held into sprint, downhill off a face, uphill wa
 
 ## State
 
-- Step 0 committed. Next: step 1.
+- Step 0 committed.
+- Step 1 (run gait) built, WIP: `src/mech/walker.ts`: `runK` (run share, eases over `runBlend`), `running`,
+  `dutyNow`/`cpsNow` (planted share rate-limited at 0.5/s so feet never flip stance/swing), `runStart`/`runEnd`/
+  `runSteer` (the bound's speed build, grip, drift, walls, ported from `boundStep`), `tuckPose` (FK tuck from
+  `runThighUp`/`runShinBack`/`runHockFold`), `runSwing` (Hermite swing path in the body frame: follow-through back,
+  tuck, reach, paw back into the plant), `groundAhead` + `runClear`/`runLookAhead` and a feed-forward spring
+  (`Spring.stepFF`) for hull clearance, `runFromStance` (after a crest/fall landing stance, run on; `entryU` eases a
+  mid-swing foot onto the path). `boundGallop` 1 brings back the old gallop. Sliders in `walkerTuning.ts` (Sprint
+  group). `walker-check`: cadence (alternating, even, short flights, hips level) and ramp clearance checks; both fail
+  on the old gallop (repeats, 0.5 s flights, 0.7 m hip bounce, 0.74 m hull clearance on 25°) and pass now.
+- Next: step 4 slopes (legReachMax, swingThighFold sliders exist but are not wired yet), then step 2 dash, 3 dust.
 
 ## How to test
 
