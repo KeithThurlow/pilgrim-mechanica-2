@@ -202,6 +202,9 @@ export class Arsenal implements MechWeapons {
       glows.forEach((mat, gi) => { mat.opacity = s.kind === "rail" ? (glows.length > 1 ? 0.15 + 0.85 * coilGlow(s.rail.charge, gi, glows.length) : 0.25 + 0.75 * s.rail.charge) : 0.9; });
       if (s.model) s.model.recoil.position.z += (0 - s.model.recoil.position.z) * Math.min(1, dt * 8);
       s.cool = Math.max(0, s.cool - dt);
+      // An unrolled autocannon (the picker's) fires at the Shells/s slider, live; its gun clock reads the gun's stats,
+      // which carried the base's rate (Keith 2026-10-26: the slider did nothing). A rolled one keeps its own.
+      if (s.kind === "autocannon" && !s.own && g.stats) g.stats.fireRate = v.acRate;
       // Targeting laser on the minigun and the rocket launcher, along the gun.
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);

@@ -193,6 +193,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Autocannon Shells/s slider live (Claude, Keith's report)
+- Keith: Shells/s did nothing with the autocannon fitted. The picker fits unrolled items, which run on the weapon sliders, but the gun clock read the fire rate the item copied from the slider's default. The arsenal now sets an unrolled autocannon's rate from `acRate` every frame; rolled items keep their own. Other weapons' sliders already reach unrolled items (their sims read `own: null` as the sliders). `src/weapons/arsenal.ts`.
+- Checked: typecheck; all of `npm test`; in the weapons lab headless, the left gun's rate reads 1 and 10 with `?set=acRate:1` / `:10` (was the item's 3.2). Shells actually fired not counted (the held trigger didn't fire headless).
+
 ### 2026-10-26 · Minigun rounds stop in dunes (Claude, Keith's report)
 - Keith: minigun rounds seemed to go through terrain without end. Same cause as the rail: sand only cost where it rose over the 10 m sheet's top. Rounds now carry a line: the muzzle-to-aim ray, never lower than `roundLine` (0.5 m, new slider in Rounds) over the floor; sand above it costs penetration (1 m budget, sand 3 per m). Hits still by the sheet. The autocannon is untouched (its shells burst on the ground themselves). `src/game/sheetFire.ts`, `src/game/mechUnit.ts`.
 - Checked: typecheck; `weapons-check` (a 3 m dune between gun and aim stops a hull round, a 0.3 m ripple doesn't); all of `npm test` passes; build.
