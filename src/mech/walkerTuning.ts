@@ -150,6 +150,7 @@ export const WALKER_DEFAULTS = {
   legReachMax: 0.93,
   swingThighFold: 160,
   swingFoldFrom: 0.12,
+  uphillLead: 1,
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
@@ -287,4 +288,5 @@ export const WALKER_PARAMS: Param[] = [
   { key: "legReachMax", label: "Longest leg (share of straight)", min: 0.75, max: 1, step: 0.005, group: "Terrain", tip: "Hip to ankle never stretches past this share of the straight leg. Downhill a foot that can't reach the ground hangs there; with nothing under it the mech drops (Keith 2026-10-26: no yanking the legs to the ground)" },
   { key: "swingThighFold", label: "Swinging thigh lifts when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A swinging leg squashed more than usual (stepping uphill) raises its knee through the hip by this much per unit of compression past the threshold below, so the thigh rises toward the hull instead of hanging straight" },
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },
+  { key: "uphillLead", label: "Uphill the foot swings forward early", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "Uphill the swinging foot heads out ahead at once instead of rising straight up under the hips: the knee comes up toward the hull (the long thigh can only rise once the foot is ahead)" },
 ];

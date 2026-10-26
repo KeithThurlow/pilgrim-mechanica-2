@@ -47,7 +47,15 @@ sprint, dash tap mid-step, dash held into sprint, downhill off a face, uphill wa
   mid-swing foot onto the path). `boundGallop` 1 brings back the old gallop. Sliders in `walkerTuning.ts` (Sprint
   group). `walker-check`: cadence (alternating, even, short flights, hips level) and ramp clearance checks; both fail
   on the old gallop (repeats, 0.5 s flights, 0.7 m hip bounce, 0.74 m hull clearance on 25°) and pass now.
-- Next: step 4 slopes (legReachMax, swingThighFold sliders exist but are not wired yet), then step 2 dash, 3 dust.
+- Step 4 (slopes) built, WIP: uphill, `uphillLead` sends the swinging foot forward early (the long thigh can only rise
+  once the foot is ahead) and `swingThighFold` past `swingFoldFrom` squash raises the swinging thigh (`foldTheta`: knee
+  placed at the wanted angle, hock solved behind; the angle eased 1.5°/frame and the cannon 4°/frame so it never
+  jumps). Downhill, `legReachMax` (0.93): `aim()` marks a target out of reach `short` and lifts it to the lowest
+  reachable point; a short foot `hang`s instead of landing; with nothing planted the mech `launch`es and falls; in
+  `body()` the hips never ride above what planted legs reach (not in the run, where hull clearance wins). `slope-check`:
+  mid-swing thigh uphill 76° (0° before), planted legs within the cap on 17° and 33°, walking off 3 and 6 m faces drops
+  and walks on. Walker check allows up to 3 drops on a dune walk (was 1).
+- Next: step 2 dash, 3 dust, 5 labels, filmstrips.
 
 ## How to test
 

@@ -108,6 +108,11 @@ export class Foot {
   wasPlanted = false;
   /** The ground fell away out of this foot's reach: it hangs at full stretch instead of landing. */
   short = false;
+  /** Hanging at full reach over ground it can't reach (downhill); planted again once the ground is within reach. */
+  hang = false;
+  /** The thigh angle (forward of straight down) an uphill swing has raised to (swingThighFold). */
+  foldW = 0;
+  foldT = 0;
   /** A swing joined part way (out of a landing stance): from entryU the foot eases from entryRel (body-relative, like runA) onto its path. -1: none. */
   entryU = -1;
   entryRel = new Vector3();
@@ -262,7 +267,7 @@ export class WalkerSim {
       ft.swinging = false;
       ft.u = 0;
       ft.bState = 0;
-      ft.short = false; ft.wasPlanted = false; ft.slide.set(0, 0, 0);
+      ft.short = false; ft.hang = false; ft.wasPlanted = false; ft.slide.set(0, 0, 0);
       ft.planted.copy(this.pos).addScaledVector(l, ft.side * this.v.footSpread).addScaledVector(f, ft.side * 0.25);
       this.groundAt(ft.planted, ft.plantedUp);
       ft.plantedYaw = heading + ft.side * this.v.toeOut * D2R;
@@ -321,7 +326,7 @@ export class WalkerSim {
       this.airY = this.pelvis.y;
       this.squatState = null;
       this.stats.takeoffs++;
-      for (const f of this.feet) { f.airRel.subVectors(f.pos, this.pelvis); f.swinging = false; f.u = 0; f.stanceT = 0; }
+      for (const f of this.feet) { f.airRel.subVectors(f.pos, this.pelvis); f.swinging = false; f.u = 0; f.stanceT = 0; f.hang = false; f.short = false; }
     }
     this.airVel.set(vx, vy, vz);
     this.skid.set(0, 0, 0);
@@ -459,16 +464,33 @@ export class WalkerSim {
     for (const f of this.feet) {
       const p = (this.phase + f.offset) % 1;
       const swing = p >= d;
-      if (swing && !f.swinging) this.liftOff(f);
-      else if (!swing && f.swinging) this.land(f);
-      if (f.swinging) {
+      if (f.hang) {
+        // Hanging at full reach over ground that fell away: it plants once the ground comes within reach.
+        f.u = 1; f.stanceT = 0;
+        this.aim(f);
+        if (!f.short) { f.hang = false; this.land(f); }
+      } else if (swing && !f.swinging) this.liftOff(f);
+      else if (!swing && f.swinging) {
+        // The spot was locked late in the swing; if it was out of reach then, the foot hangs instead of landing.
+        if (f.short) { f.hang = true; f.u = 1; } else this.land(f);
+      }
+      if (f.swinging && !f.hang) {
         f.u = Math.max(f.u, clamp((p - d) / (1 - d), 0, 1));
         f.stanceT = 0;
         if (f.u < RE_AIM_UNTIL) this.aim(f);
-      } else {
+      } else if (!f.swinging) {
         f.stanceT = p / d;
       }
       this.moveFoot(f);
+    }
+    // Nothing holding it up (a foot hangs over a drop and the other has lifted): it falls, and lands as any fall does.
+    if (this.feet.every((f) => f.swinging) && this.feet.some((f) => f.hang)) {
+      this.body(dt, d);
+      this.pose();
+      this.launch(this.vel.x + this.skid.x, 0, this.vel.z + this.skid.z);
+      if (this.running) this.bLeap = true;
+      this.trackSlides(dt);
+      return;
     }
 
     this.body(dt, d);
@@ -1197,6 +1219,7 @@ export class WalkerSim {
   private beginSwing(f: Foot) {
     f.entryU = -1;
     f.short = false;
+    f.hang = false;
     f.swinging = true;
     f.u = 0;
     f.lift.copy(f.pos);
@@ -1240,6 +1263,16 @@ export class WalkerSim {
     f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * this.spread());
     this.groundAt(f.target, f.targetUp);
     f.targetYaw = h + f.side * v.toeOut * D2R;
+    // Downhill past the leg's reach (Keith 2026-10-26 18:28: no yanking the legs to the ground): the foot reaches as far
+    // as the longest leg goes, with the hips as low as the other planted leg lets them sink, and hangs there.
+    const R = v.legReachMax * (v.femur + v.shin + v.cannon);
+    let hipLow = this.bodyY.x;
+    for (const o of this.feet) if (o !== f && !o.swinging) hipLow = Math.min(hipLow, o.planted.y + v.hipHeight * 0.6);
+    const hx = this.pos.x + this.vel.x * remain + lf.x * f.side * v.hipWidth - f.target.x;
+    const hz = this.pos.z + this.vel.z * remain + lf.z * f.side * v.hipWidth - f.target.z;
+    const lowest = hipLow - Math.sqrt(Math.max(0, R * R - hx * hx - hz * hz)) - v.ankleHeight;
+    f.short = f.target.y < lowest - 0.05;
+    if (f.short) { f.target.y = lowest; f.targetUp.copy(UP); }
   }
 
   /** Put p on the ground and write the tilt-limited ground normal into up. */
@@ -1281,10 +1314,14 @@ export class WalkerSim {
 
     const u = f.u;
     const stompT = v.stompShare * v.stomp;
-    const hold = v.liftHold;
+    // Uphill the foot goes forward early instead of rising straight up under the hips first: with the long thigh over
+    // a short shin the knee can only come up toward the hull once the foot is out ahead (Keith 2026-10-26 18:28).
+    const upK = smooth(0, 0.3, this.grade) * v.uphillLead;
+    const hold = v.liftHold * (1 - upK);
     const travel = clamp((u - hold) / Math.max(0.05, 1 - hold - stompT), 0, 1);
-    const pw = 1 + 2 * v.liftBox;
-    const e = travel < 0.5 ? 0.5 * Math.pow(2 * travel, pw) : 1 - 0.5 * Math.pow(2 - 2 * travel, pw);
+    const pw = 1 + 2 * v.liftBox * (1 - upK);
+    let e = travel < 0.5 ? 0.5 * Math.pow(2 * travel, pw) : 1 - 0.5 * Math.pow(2 - 2 * travel, pw);
+    if (upK > 0) e = 1 - Math.pow(1 - e, 1 + 2 * upK);
 
     f.pos.lerpVectors(f.lift, f.target, e);
     const baseY = f.lift.y + (f.target.y - f.lift.y) * e;
@@ -1369,6 +1406,22 @@ export class WalkerSim {
     // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
     const back = v.downhillSitBack * down;
     const l = leftOf(this.heading, this.t.l);
+    // The hips never ride higher than the planted legs reach at their longest (legReachMax): down a slope the body comes
+    // down with the low foot instead of the leg stretching out to it.
+    {
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon);
+      let yMax = Infinity;
+      for (const f of this.feet) {
+        if (f.swinging) continue;
+        const hx = this.pos.x + l.x * (this.lat.x + f.side * v.hipWidth) - fw.x * back - f.pos.x;
+        const hz = this.pos.z + l.z * (this.lat.x + f.side * v.hipWidth) - fw.z * back - f.pos.z;
+        yMax = Math.min(yMax, f.pos.y + v.ankleHeight + Math.sqrt(Math.max(0.04, R * R - hx * hx - hz * hz)));
+      }
+      // Running, the hull's clearance over rising ground wins: the trailing leg may reach a little further for a moment.
+      const extra = this.impact.x + bob - this.squat;
+      const over = this.bodyY.x + extra - yMax;
+      if (over > 0) { this.bodyY.x -= over * (1 - rk); if (rk < 0.5) this.bodyY.v = Math.min(0, this.bodyY.v); }
+    }
     this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat, this.pos.z + l.z * this.lat.x - fw.z * back);
     this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
     this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
@@ -1389,6 +1442,33 @@ export class WalkerSim {
     const fwd = P.legFwd.dot(toHock), dn = -toHock.y;
     // The thigh is the hip-hock line turned forward by the knee angle, in the leg plane.
     return Math.atan2(fwd, dn) + Math.acos(cosA);
+  }
+
+  /**
+   * The cannon angle that puts the thigh at `want` forward of straight down with the foot where it is: the knee placed at
+   * that angle, the hock where shin and cannon meet behind the knee-ankle line. NaN if the leg can't make it.
+   */
+  private foldTheta(P: LegPose, planeUp: Vector3, want: number) {
+    const v = this.v, knee = this.t.a, d = this.t.b;
+    for (let w = want; w >= want; w -= 1) {
+      knee.copy(P.hip).addScaledVector(P.legFwd, v.femur * Math.sin(w)).addScaledVector(UP, -v.femur * Math.cos(w));
+      d.subVectors(P.ankle, knee);
+      const kd = d.length();
+      if (kd > v.shin + v.cannon - 0.01 || kd < Math.abs(v.cannon - v.shin) + 0.05) continue;
+      d.divideScalar(kd);
+      const a = (v.shin * v.shin - v.cannon * v.cannon + kd * kd) / (2 * kd), h = Math.sqrt(Math.max(0, v.shin * v.shin - a * a));
+      // Behind the knee-ankle line, in the leg plane.
+      const bx = -P.legFwd.x + d.x * P.legFwd.dot(d), by = -P.legFwd.y + d.y * P.legFwd.dot(d), bz = -P.legFwd.z + d.z * P.legFwd.dot(d);
+      const bl = Math.hypot(bx, by, bz) || 1;
+      const hx = knee.x + d.x * a + (bx / bl) * h - P.ankle.x, hy = knee.y + d.y * a + (by / bl) * h - P.ankle.y, hz = knee.z + d.z * a + (bz / bl) * h - P.ankle.z;
+      // The leg solve must land on the same knee: hip to hock within the thigh-and-shin's range, the knee ahead of that line.
+      const qx = P.ankle.x + hx - P.hip.x, qy = P.ankle.y + hy - P.hip.y, qz = P.ankle.z + hz - P.hip.z, qd = Math.hypot(qx, qy, qz);
+      if (qd < Math.abs(v.femur - v.shin) + 0.08 || qd > v.femur + v.shin - 0.01) continue;
+      const kx = knee.x - P.hip.x, ky = knee.y - P.hip.y, kz = knee.z - P.hip.z, kq = (kx * qx + ky * qy + kz * qz) / (qd * qd);
+      if ((kx - qx * kq) * P.legFwd.x + (ky - qy * kq) * P.legFwd.y + (kz - qz * kq) * P.legFwd.z < 0.02) continue;
+      return Math.atan2(-(hx * P.legFwd.x + hy * P.legFwd.y + hz * P.legFwd.z), hx * planeUp.x + hy * planeUp.y + hz * planeUp.z);
+    }
+    return NaN;
   }
 
   private plateForward(up: Vector3, yaw: number, out: Vector3) {
@@ -1464,6 +1544,33 @@ export class WalkerSim {
       // A planted leg that's compressed (the uphill leg on a side slope, the front leg climbing) folds at the hip:
       // pick the cannon angle that swings the thigh forward by thighFold per unit of compression, instead of letting
       // the short lower leg take it all while the long thigh hangs straight down (Keith 2026-10-24).
+      // A swinging leg squashed more than a flat step squashes it (stepping uphill) lifts its knee through the hip too
+      // (Keith 2026-10-26 18:28: uphill the thigh was held down vertical; it's fine for it to rise toward the hull).
+      // The run's swing has its own tuck, so this fades out as the run blends in.
+      const swingSquash = f.swinging && !this.airborne && f.bState === 0
+        ? Math.max(0, clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.7) - v.swingFoldFrom) * (1 - this.runK) : 0;
+      if (swingSquash > 0.005) {
+        // Swinging, the knee folds shut long before the thigh moves (long thigh, short shin), so aim the thigh itself:
+        // swingThighFold per unit of squash past the threshold, forward of straight down, over the whole cannon range;
+        // eased so the fold can't flip between two solutions.
+        // The thigh angle moves toward what's wanted at a capped rate and takes the nearest one the leg can make, so it
+        // never jumps between poses.
+        const want = Math.min(80 * D2R, v.swingThighFold * D2R * swingSquash);
+        const aimW = clamp(want, f.foldW - 1.5 * D2R, f.foldW + 1.5 * D2R);
+        let bestW = NaN, bestT = NaN;
+        for (let w = 0; w <= 80 * D2R; w += 2.5 * D2R) {
+          if (Number.isFinite(bestW) && Math.abs(w - aimW) >= Math.abs(bestW - aimW)) continue;
+          const t = this.foldTheta(P, planeUp, w);
+          if (Number.isFinite(t)) { bestW = w; bestT = t; }
+        }
+        if (Number.isFinite(bestT)) {
+          f.foldW = bestW;
+          // The cannon swings to it at a capped rate too: when the leg has to change pose, it does so over a few frames.
+          const tw = theta + (bestT - theta) * smooth(0, 0.08, swingSquash);
+          f.foldT += clamp(tw - f.foldT, -4 * D2R, 4 * D2R);
+          theta = f.foldT;
+        } else f.foldT = theta;
+      } else { f.foldW = Math.max(0, this.thighAngle(P, planeUp, theta) || 0); f.foldT = theta; }
       if (!f.swinging && !this.airborne && v.thighFold > 0) {
         if (squash > 0.01) {
           const base = this.thighAngle(P, planeUp, theta);

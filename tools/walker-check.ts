@@ -80,8 +80,9 @@ for (const r of runs) {
   if (s.scuffs > 0) problems.push(`${s.scuffs} swing-foot frames under the ground`);
   if (bothAir > 0) problems.push(`${bothAir} frames with both feet in the air`);
   if (underAir > 0) problems.push(`${underAir} foot-frames under the ground`);
-  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run.
-  if (r.name === "walk straight" && s.takeoffs > 1) problems.push(`left the ground ${s.takeoffs} times at a walk`);
+  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run. Since 18:28 a foot that
+  // can't reach down a steep brink hangs and the mech drops the rest, so a walk over the dunes may drop a few times.
+  if (r.name === "walk straight" && s.takeoffs > 3) problems.push(`left the ground ${s.takeoffs} times at a walk`);
   if (kneeBack > 0) problems.push(`${kneeBack} knee-backwards frames`);
   if (!dunes && kneeMax > 172) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°)`);
   if (slide > 0) problems.push(`planted feet slid ${slide} frames (max ${maxSlide.toFixed(3)} m)`);
