@@ -433,6 +433,7 @@ export class Battlefield {
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
     // Everything this frame has asked for its effects: roll the budget's pressure on (against the pool in use).
     this.fx.pool = gpuDust ? gd!.pool.N : DUST_MAX;
+    this.fx.perFrame = gpuDust ? this.v.fxGpuDustPerFrame : this.v.fxDustPerFrame;
     this.fx.frame(gpuDust ? gd!.pool.alive : this.dust.alive);
     if (gpuDust) this.dust.alive += gd!.pool.alive;
     c?.mark("dust");

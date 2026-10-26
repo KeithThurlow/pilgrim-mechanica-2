@@ -10,8 +10,9 @@
 //    kept ones are evenly spread, not clumped, and the same calls keep the same share every frame.
 // 4. Trim the extras: an effect's parts have ranks (0 the main flash and puff .. 1 the last extra: smoke). Under
 //    pressure the tail goes first.
-// 5. Pressure: the dust asked for last frame against fxDustPerFrame, and the live dust against the pool (fxLiveShare
-//    of it), so puffs aren't recycled young and trails don't blink out mid-fight.
+// 5. Pressure: the dust asked for last frame against fxDustPerFrame (fxGpuDustPerFrame while the GPU dust is in use:
+//    its pool is 8x the CPU's), and the live dust against the pool (fxLiveShare of it), so puffs aren't recycled young
+//    and trails don't blink out mid-fight.
 //
 // Cosmetic only (rule 12): nothing here touches game state; peers each run their own.
 import type { Param } from "../core/tweaks";
@@ -23,6 +24,7 @@ export const FX_BUDGET_DEFAULTS = {
   fxThinTo: 90,
   fxFarKeep: 0.3,
   fxDustPerFrame: 400,
+  fxGpuDustPerFrame: 1600,
   fxLiveShare: 0.85,
   fxTrimSpan: 1.5,
   fxMergeCell: 1.5,
@@ -42,7 +44,8 @@ export const FX_BUDGET_PARAMS: Param[] = [
   { key: "fxThinFrom", label: "Effects: thin from (m)", min: 0, max: 200, step: 1, group: G, tip: "From the camera's focus; nearer than this every request is kept" },
   { key: "fxThinTo", label: "Effects: thinnest at (m)", min: 1, max: 300, step: 1, group: G },
   { key: "fxFarKeep", label: "Effects: share kept far away", min: 0, max: 1, step: 0.01, group: G, tip: "Share of effect requests kept at the thinnest distance (with no pressure)" },
-  { key: "fxDustPerFrame", label: "Effects: dust puffs per frame", min: 20, max: 8000, step: 10, group: G, tip: "Above this the far effects thin harder and the extras get trimmed" },
+  { key: "fxDustPerFrame", label: "Effects: dust puffs per frame", min: 20, max: 8000, step: 10, group: G, tip: "Above this the far effects thin harder and the extras get trimmed (the CPU dust)" },
+  { key: "fxGpuDustPerFrame", label: "Effects: dust puffs per frame (GPU dust)", min: 20, max: 4000, step: 10, group: G, tip: "The same while the GPU dust is in use (its pool holds many more; the limit is the overdraw of big soft sprites at the far zoom)" },
   { key: "fxLiveShare", label: "Effects: live dust before trimming (share of pool)", min: 0.2, max: 1, step: 0.01, group: G, tip: "When the live puffs fill this share of the pool, the budget counts as full, so young puffs aren't recycled" },
   { key: "fxTrimSpan", label: "Effects: trim over (× budget)", min: 0.1, max: 6, step: 0.1, group: G, tip: "How far past the budget until every extra is trimmed (plume, spray, grit, smoke); the main puff always stays" },
   { key: "fxGpuBits", label: "GPU sparks, grit, casings (0 CPU / 1 GPU)", min: 0, max: 1, step: 1, group: G, tip: "Scale step 5: the bits fly on the GPU (src/fx/gpuBits.ts) in pools many times the CPU's. 0: the old CPU pools (600 sparks, 600 grit, 240 casings)" },
@@ -69,6 +72,8 @@ export class FxBudget {
   /** Dust puffs asked for this frame (counted by the dust pool), and the pool's size and live count. */
   spawned = 0;
   pool = 4096;
+  /** Dust puffs a frame before the budget counts as full (the battlefield sets it from the slider for the pool in use). */
+  perFrame = 400;
   /** Per frame (reset by frame()): requests seen, kept at full, thinned away, merged into others. */
   readonly stats = { asked: 0, full: 0, thinned: 0, merged: 0, spawned: 0, pressure: 0 };
   /** Last frame's stats (for the HUD and the stress lab). */
@@ -124,7 +129,7 @@ export class FxBudget {
   /** Once a frame, after every effect has been asked for: roll the counts into the pressure for the next frame. */
   frame(alive: number) {
     const v = this.v;
-    const ask = this.spawned / Math.max(1, v.fxDustPerFrame);
+    const ask = this.spawned / Math.max(1, this.perFrame);
     const live = alive / Math.max(1, this.pool * v.fxLiveShare);
     // Live dust past the share pushes harder (it means puffs are about to be recycled young).
     const p = Math.max(ask, live >= 1 ? 1 + (live - 1) * 4 : live);
