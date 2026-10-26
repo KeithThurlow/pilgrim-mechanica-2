@@ -86,7 +86,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
   go, optionally moving), `?bound` (the demo holds Space: it sprints; with `?walk=straight` in a line), `?dashat=seconds`
   (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?wall=degrees[,metres]` (a steep-faced block
-  30 m ahead of the straight demo).
+  30 m ahead of the straight demo), `?turnat=seconds` (with `?walk=straight`, the demo turns hard right then).
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.

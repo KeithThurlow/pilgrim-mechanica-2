@@ -50,6 +50,8 @@ const DEFAULTS = { ...V };
 // Review flags: ?model=standin, ?mech=<variant id> (public/models/mechs/<id>.glb), ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
 // ?zoom=metres (game camera distance).
 const straight = params.get("walk") === "straight";
+// ?turnat=seconds: with ?walk=straight, the demo turns hard right then (shots of the sprint leaning into a turn).
+const turnAt = Number(params.get("turnat") ?? 0);
 
 const toon = new ToonLook(V);
 const field = new DuneField(V);
@@ -286,7 +288,7 @@ function tick(rawDt: number) {
   if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
   let cmd: MoveCommand;
   if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
-  else if (auto) cmd = straight ? { x: Math.sin(0.3), z: Math.cos(0.3), sprint: params.has("sprint") } : wander(clock);
+  else if (auto) cmd = straight ? { x: Math.sin(turnAt && clock >= turnAt ? 0.3 - 1.6 : 0.3), z: Math.cos(turnAt && clock >= turnAt ? 0.3 - 1.6 : 0.3), sprint: params.has("sprint") } : wander(clock);
   else cmd = { x: 0, z: 0, sprint: false };
 
   let aim: Aim | null = null;
