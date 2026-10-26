@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Sprinting turns weapons off (after a short delay so a mid-fight sprint keeps firing a moment), the torso faces forward and leans forward; the mech leans into sprint turns, shoulders over the inside; uphill sprint cadence rises with the grade; the sprint should communicate force into the ground; feet sink a little into soft ground (sand, snow), sit on rock | Keith | Keith | Replaces the earlier guns-on-while-sprinting default. Agent on `wip/sprint-feel`. |
 | 2026-10-26 | An intermittent idle: now and then, standing still with a pilot in, the legs flex in place (a few slow steps, toes curling), from the look Keith found by accident at a planted share of 0.5 | Keith | Keith | Claude's takes (all sliders): first after 10 s, then about every 18 s ± 60%, 4 steps; only for the piloted mech, never enemies. |
 | 2026-10-26 | Keith's tuned walker, sprint, dash and dust values are the defaults | Keith | Keith | 37 values from his lab export; walker-check fails on them (see state.md In progress) until the limits or values are settled. |
 | 2026-10-26 | Scale proposal approved: build it and judge it in play (effects budget, GPU particles, shots as data with Protocols) | Keith | Keith | `docs/proposal-scale.md`; agent on `wip/scale`. |
