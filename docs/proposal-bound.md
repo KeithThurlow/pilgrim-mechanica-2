@@ -251,3 +251,19 @@ Headless, 40 s on the lab's dunes with the straight demo:
 5. **Top speeds.** 14 m/s early and 22–26 late: does that sound right, or should late gear be faster still?
 6. **Hard landings.** Is a stagger and damage from a big jump onto the flat right, or should the bound never hurt
    you, so only drops and blasts do?
+
+## Answers (Keith 2026-10-26)
+
+- **What it should feel like:** a sprint, not a rocket slide. Tap Space dashes in the WASD direction at once. Keep
+  holding and the mech carries on into a digitigrade sprint that keeps getting faster: a real running gait, not
+  boosted sliding. Today's held Space feels "boosted by rockets"; that isn't it.
+- **Jumps off dunes, yes, but not exaggerated.** Dashing at a steep wall today can fling the mech so high it dies
+  from its own landing. Keith loved finding it ("we have the right idea going on") but it's too much. Full landing
+  damage stays possible.
+- **Top speed:** 14 m/s early, 22–26 m/s late is about right.
+- **Hard landings hurt:** absolutely. Sprinting fast and jumping over things should carry some risk.
+- **Guns while bounding:** undecided. Being up in the air and firing down felt really cool. Claude's default: guns
+  fire while bounding (a slider for an accuracy penalty in the air), revisit after play.
+- **Shift's run:** no answer yet. Claude's default: keep it until the sprint is played.
+- **Booster pack:** follows from the first answer. The rocket slide on hold goes; the booster later adds thrust and
+  glide to the sprint.

@@ -4,6 +4,9 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | The sprint: tap Space dashes, keep holding to carry on into a digitigrade sprint that keeps getting faster (a running gait, not a rocket slide); jumps off dunes but not exaggerated (dashing into a wall must not fling the mech skyward); 14 m/s early, 22-26 late; hard landings hurt | Keith | Keith | `docs/proposal-bound.md` |
+| 2026-10-26 | Guns fire while sprinting and in the air (an air accuracy penalty as a slider); Shift's run kept until the sprint is played | Claude | open | Keith undecided on guns. |
+| 2026-10-26 | Performance pass: go | Keith | Keith | |
 | 2026-10-26 | Ground dents approved: delete the old sand-mark decals | Keith | Keith | |
 | 2026-10-26 | Direct-fire weapons hit generously in height: a shot is a vertical sheet along its line (hits what the line crosses from above, whatever the height), so precision is about the line and timing, not height you can't judge from the high camera; the rail gun fires a charged slug with a trail, not a held beam | Keith | Keith | Sheet sizes are sliders. |
 | 2026-10-26 | Sensors are the mech's heads: either a head at the front of the hull that turns to follow the aim, or a cluster of sensors up on top | Keith | Keith | `docs/asset-list.md` (sockets `Sensor_Front`, `Sensor_Top`). |
