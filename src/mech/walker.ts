@@ -13,13 +13,19 @@
 // flies ballistic, the legs tuck going up and reach for the ground coming down; the landing squats by how hard it hit,
 // staggers and hurts past thresholds, and skids the planted feet with any speed the legs can't run on with.
 // Sprint (Keith 2026-10-26: hold Space after the dash and the mech runs on, faster and faster; docs/proposal-bound.md):
-// with `bound` on, the walk gives way to a gallop. Each stride: a stance with the feet planted (the trailing foot down
-// first and up first, the leading one after), the body passing over them and dipping, the heels rolling and hocks
-// opening at the push-off; then a leap on the air state, legs drawn up and swinging through, the lead foot swapping each
-// leap. Speed builds toward the legs' top speed; the line of run turns only as fast as the feet grip (the turning circle
-// grows with speed squared) and the body can turn ahead of it into a drift that skids the feet. Crests throw the leaps
-// further by themselves. Walls: ground steeper than wallGrade takes the speed going into it away (sprint, dash, skid),
-// and nothing takes off upward faster than launchUpMax, so a wall can't fling the mech into the sky.
+// with `bound` on, the walk blends into a run (Keith 18:28: even left/right footfalls, not a skipping gallop): the gait
+// phase with the run's cadence and a planted share that leaves short flights, sprinter swings (follow-through, a tuck
+// with the thigh up and toes curled, a reach and a plant under the hips), the hock opening further at push-off and the
+// hull kept clear of the ground ahead. Speed builds toward the legs' top speed; the line of run turns only as fast as
+// the feet grip (the turning circle grows with speed squared) and the body can turn ahead of it into a drift that skids
+// the feet. Running off a crest flies on the gallop's air pose and lands on its staggered stance (the gallop: trailing
+// foot down first, the body dipping, then the run again; boundGallop brings back the whole gallop). Walls: ground
+// steeper than wallGrade takes the speed going into it away (sprint, dash, skid), and nothing takes off upward faster
+// than launchUpMax, so a wall can't fling the mech into the sky.
+// Dash (Keith 18:28): a push-off. The planted foot pushes, the hips open toward the dash, the other foot steps out and
+// slides, the push foot is drawn back beside it, then the gait picks up; held, the push-off flows into the run.
+// Slopes (Keith 18:28): uphill the swinging thigh rises toward the hull; downhill legs stop at legReachMax and a foot
+// that can't reach the ground hangs while the mech drops the rest.
 import { Vector3, Quaternion, Euler, Matrix4 } from "three";
 import type { WalkerValues } from "./walkerTuning";
 

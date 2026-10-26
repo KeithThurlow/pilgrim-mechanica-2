@@ -1,6 +1,6 @@
 // The sprint's input and kit (Keith 2026-10-26; docs/proposal-bound.md). Pure: no input reading, no drawing.
-// Space pressed dashes at once (src/mech/dash.ts); keep holding and, as the dash's shove ends, the mech carries straight
-// on into the sprint, which builds toward the legs' top speed while held (the gait itself is the walker's, `bound`).
+// Space pressed dashes at once (src/mech/dash.ts); keep holding (dashHoldRun) and the dash's push-off flows straight into
+// the sprint's run, which builds toward the legs' top speed while held (the gait itself is the walker's, `bound`).
 // Let go and it lands out of its stride and runs on, skidding off what the run can't hold. With no dash charge, holding
 // Space for boundTap starts the sprint from the walk.
 // The booster pack (simple version, Keith's answer: the rocket slide goes, the booster later adds thrust and glide):
