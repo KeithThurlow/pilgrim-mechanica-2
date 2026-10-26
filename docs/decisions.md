@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | A giant plough (bulldozer) leads the convoy and makes the road as it goes: dunes untouched ahead, flat behind, sand pushed aside into side walls sized by the material moved (lumpy, not an even extrusion), with plough effects | Keith | Keith | Deterministic from the convoy clock. |
 | 2026-10-26 | Sensor heads a third the size in each dimension, sitting a little lower by default | Keith | Keith | Sliders `headSize`, `headDrop`. |
 | 2026-10-26 | Performance must hold for 4 players, 3-6x today's effects per weapon, and Protocols that split shots, fire multiple shots, raise fire rate, widen areas, ricochet and chain | Keith | Keith | Scale proposal (`docs/proposal-scale.md`, coming): GPU particles, an effects budget, shots as data, a worst-case stress scenario. |
 | 2026-10-26 | Shared register approved; steps 1-2 now (register, swarms, targeting), rounds and blasts after the rail gun work lands | Keith | Keith | `docs/proposal-register.md` |
