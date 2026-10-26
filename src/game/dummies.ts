@@ -8,6 +8,7 @@ import type { Param } from "../core/tweaks";
 import type { Hittable } from "./battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { rayCapsule, capsuleNormal } from "./mechUnit";
+import { inBand, sheetCircle, type Sheet, type SheetHit } from "./sheet";
 
 export const DUMMY_DEFAULTS = {
   dummyCount: 7,
@@ -110,8 +111,17 @@ export class Dummy implements Hittable {
     }
   }
 
-  /** Light ones let a round carry on through. */
-  canPierce() { return this.light; }
+  /** Sheet hits (src/game/sheet.ts): its circle and height; cutouts are plywood (flesh-light), posts steel. */
+  sheet(s: Sheet, out: SheetHit<Hittable>[]) {
+    const c = sheetCircle(s, this.x, this.z, this.radius);
+    if (!c) return;
+    const x = s.ox + s.dx * c.along, z = s.oz + s.dz * c.along;
+    if (!inBand(s, c.along, x, z, this.y, this.y + this.height)) return;
+    // The capsule ends rounds test, so normalAt works after a sheet hit too.
+    this.a.set(this.x, this.y + this.radius, this.z);
+    this.b.set(this.x, this.y + this.height - this.radius * 0.5, this.z);
+    out.push({ target: this, key: 0, along: c.along, chord: c.chord, material: this.light ? "flesh" : "vehicle", x, y: this.y + this.height * 0.55, z });
+  }
 
   /** A rail beam throws a cutout back along it. */
   knock(_at: THREE.Vector3, dir: THREE.Vector3, speed: number) {

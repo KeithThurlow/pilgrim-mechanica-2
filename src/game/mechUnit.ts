@@ -62,7 +62,10 @@ export const MECH_DEFAULTS = {
   hull: 1500,
   roundDamage: 9,
   roundPierce: 2,
-  roundPierceKeep: 0.7,
+  roundPen: 1,
+  roundPenCurve: 1.75,
+  roundSheetHalf: 0.35,
+  roundSheetHeight: 10,
   roundSplash: 1.6,
   roundSplashShare: 0.5,
   hitRadius: 1.7,
@@ -75,8 +78,11 @@ export const MECH_PARAMS: Param[] = [
   ...HEAD_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 5000, step: 10, group: "Mech health" },
   { key: "roundDamage", label: "Minigun round damage", min: 0, max: 60, step: 0.5, group: "Mech health", tip: "What each of the player's rounds takes off whatever it hits" },
-  { key: "roundPierce", label: "Rounds pierce (light bodies)", min: 0, max: 6, step: 1, group: "Rounds", tip: "How many bandits or small robots one round carries on through" },
-  { key: "roundPierceKeep", label: "Damage kept per pierce", min: 0, max: 1, step: 0.05, group: "Rounds" },
+  { key: "roundPen", label: "Hull minigun penetration (m)", min: 0, max: 6, step: 0.05, group: "Rounds", tip: "Each round's penetration budget in metres of steel equivalent (src/game/sheet.ts): bodies and dune lips cost their chord × their density (Penetration group)" },
+  { key: "roundPierce", label: "Item pierce read as the hull's", min: 0.5, max: 6, step: 0.5, group: "Rounds", tip: "An item's pierce stat (until items carry penetration in metres) is read as penetration = hull minigun penetration × (pierce / this) ^ curve: a held light minigun (pierce 1) gets about 0.3 m" },
+  { key: "roundPenCurve", label: "Item pierce → penetration curve", min: 0.5, max: 3, step: 0.05, group: "Rounds" },
+  { key: "roundSheetHalf", label: "Round sheet half-width (m)", min: 0, max: 2, step: 0.05, group: "Rounds", tip: "Sheet hits: a round hits anything whose hit circle comes within this of its line on the ground" },
+  { key: "roundSheetHeight", label: "Round sheet height (m)", min: 1, max: 20, step: 0.5, group: "Rounds", tip: "The sheet reaches from under the ground up to this over its floor (the ground under the gun to the ground under the aim): enough for an excavator's chassis" },
   { key: "roundSplash", label: "Splash radius (m)", min: 0, max: 5, step: 0.1, group: "Rounds", tip: "Where a round ends (sand or body), swarm units this close take a share: rounds into the sand at their feet still count" },
   { key: "roundSplashShare", label: "Splash damage share", min: 0, max: 1.5, step: 0.05, group: "Rounds", tip: "Share of the round's damage at the centre of the splash (half that at its edge)" },
   { key: "hitRadius", label: "Hit size (m)", min: 0.5, max: 3, step: 0.05, group: "Mech health", tip: "Radius of the capsule rounds hit, from the feet up past the hull" },
@@ -86,6 +92,12 @@ export const MECH_PARAMS: Param[] = [
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
 const WRECK = 0x3b3531;
+
+/** A minigun round's penetration (m) from an item's pierce stat (MechUnit.roundPen). */
+export function roundPenFor(v: { roundPen: number; roundPierce: number; roundPenCurve: number }, pierce?: number): number {
+  if (pierce === undefined) return v.roundPen;
+  return v.roundPen * Math.pow(Math.max(0, pierce) / Math.max(0.1, v.roundPierce), v.roundPenCurve);
+}
 
 export class MechUnit implements Hittable {
   readonly sim: WalkerSim;
@@ -286,7 +298,7 @@ export class MechUnit implements Hittable {
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", pierce: own?.pierce ?? v.roundPierce, pierceFalloff: v.roundPierceKeep, splash: v.roundSplash, splashShare: v.roundSplashShare }
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare }
         : { voice: "other", hitScale: 0.7 });
     }
     this.weapons?.step(dt, aim, trigger);
@@ -295,6 +307,12 @@ export class MechUnit implements Hittable {
       this.bf.gunAudio.update(dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
   }
+
+  /**
+   * A minigun round's penetration budget (m): the hull minigun's slider, or an item's pierce stat read against it
+   * (penetration × (pierce / roundPierce) ^ roundPenCurve) until items carry penetration in metres.
+   */
+  roundPen(pierce?: number): number { return roundPenFor(this.v, pierce); }
 
   /** Rounds hit a capsule from the feet up past the hull. */
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number {

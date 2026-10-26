@@ -76,7 +76,10 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
-  the mech). Walker lab takes `?biome=` too.
+  the mech). Walker lab takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
+  centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
+  there, let go after N frames).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
@@ -123,9 +126,10 @@ src/mech/               walker (leg sim), upper (torso and guns sim), walkerTuni
 src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule + groundMarks (every mark on the ground),
-                        sandMarks (old decals, behind markMode 0), minigun (tracers, flash, hits, casings),
+                        minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
-src/game/               battlefield (shared combat stage), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
+src/game/               battlefield (shared combat stage), sheet + sheetFire (direct fire as a vertical sheet with a penetration
+                        budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
                         firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop)

@@ -22,6 +22,8 @@ export interface WeaponModel {
   meshes: THREE.Mesh[];
   /** The targeting laser's emitter, when the model has one (the beam starts here). */
   laserFrom?: THREE.Object3D | null;
+  /** Glow_n points along a library model (the rail's coils, breech to muzzle): the draw lights them in turn. */
+  glowPoints?: THREE.Object3D[];
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;

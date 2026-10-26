@@ -1,6 +1,9 @@
 // The new weapons' rules (docs/proposal-weapons.md): a line rocket salvo's impacts cover its strip and land in order
-// up it, the snap turns the strip onto a line of targets, cooldowns hold; a rail beam hits every target on its line
-// and none off it, in order, losing damage per body, and stops at a dune; a rail released early fizzles; an RPG rocket
+// up it, the snap turns the strip onto a line of targets, cooldowns hold; sheet hits and penetration (a rail slug hits
+// every cutout and every robot on its line, an excavator by its body and by a leg when the line misses the body, none
+// off it, in order, damage falling with the budget; minigun rounds reach a scrapper on a slope above and below; a light
+// minigun stops in the first bandit, the hull minigun passes a scrapper; the rail punches through a dune lip but not a
+// dune, and a crest under the sheet costs nothing); a rail released early fizzles, inside the grace window fires full; an RPG rocket
 // lands where aimed or goes off early on a body, steel or a dune; a missile swarm makes 8-12 blasts all near its
 // target, shared among enemies in reach; the big mortar lands in its area; per-side triggers; mortar shells
 // land inside their ring and their arc clears a dune; autocannon lead hits a crossing target at constant speed (and
@@ -10,14 +13,19 @@ import * as THREE from "three";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 import { planStrip, impactPoints, SalvoSim, stripGap, onStrip } from "../src/weapons/salvo";
 import { inStrip, stripLength } from "../src/weapons/painter";
-import { RailSim, railPath, railFire } from "../src/weapons/rail";
+import { RailSim, railSheet } from "../src/weapons/rail";
+import { makeSheet, resolveSheet, type SheetFire } from "../src/game/sheetFire";
+import { RobotSwarm, ROBOT_DEFAULTS } from "../src/combat/robots";
+import { RobotTarget } from "../src/combat/robotTarget";
+import { InfantrySwarm, INFANTRY_DEFAULTS } from "../src/combat/infantry";
+import { InfantryTarget } from "../src/combat/infantryTarget";
 import { mortarPoints, mortarAim, lobArc, MortarSim } from "../src/weapons/mortar";
 import { CannonShells, leadPoint } from "../src/weapons/autocannon";
 import { Rockets } from "../src/weapons/rocket";
 import { SwarmSim, swarmAims } from "../src/weapons/swarm";
 import { Shells } from "../src/game/shells";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
-import { rayCapsule } from "../src/game/mechUnit";
+import { rayCapsule, roundPenFor, MECH_DEFAULTS } from "../src/game/mechUnit";
 import type { Hittable } from "../src/game/battlefield";
 import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
@@ -74,38 +82,133 @@ const dt = 1 / 120;
   must(Math.abs((none.bz - none.az) / stripLength(none)) > 0.99, "snap 0 still turned the strip");
 }
 
-// ---- Rail: every target on its line, none off it; in order; falling damage; a dune stops it; charge and fizzle ----
+// ---- Sheet hits and penetration (Keith 2026-10-26): rail, minigun rounds, the SMG-class light gun, dunes ----
 {
-  const range = new DummyRange({ ...DUMMY_DEFAULTS }, [
-    { x: 0, z: 10, light: true }, { x: 0.3, z: 16, light: true }, { x: -0.3, z: 24 }, { x: 0, z: 40, light: true },
-    { x: 3, z: 14, light: true }, { x: -4, z: 30 }, { x: 0, z: -8, light: true },
-  ]);
-  range.update(0, flat);
-  const targets: Hittable[] = range.dummies;
-  const path = railPath(flat, { x: 0, z: 0 }, { x: 0, z: 1 }, 60, V);
-  const hits = railFire(path, targets, 1, 1000, V);
-  const hitSet = new Set(hits.map((h) => h.target));
-  const onLine = [0, 1, 2, 3].map((i) => range.dummies[i]), off = [4, 5, 6].map((i) => range.dummies[i]);
-  must(onLine.every((d) => hitSet.has(d)), `rail missed a target on its line (${hits.length} hits)`);
-  must(off.every((d) => !hitSet.has(d)), "rail hit a target off its line");
-  must(hits.length === 4, `rail hit ${hits.length} times for 4 bodies (one hit twice?)`);
-  must(hits.every((h, i) => i === 0 || (h.along > hits[i - 1].along && h.damage < hits[i - 1].damage)), "rail hits not in order or damage not falling");
-  must(Math.abs(hits[1].damage - 1000 * V.railPierceKeep) < 1e-6, "damage kept per body isn't the slider");
-  must(range.dummies[0].kvz > 0, "a cutout on the line wasn't thrown back");
-  // A dune: the beam stops short of it.
-  const dune = ridge(30, V.railClimb + 3);
-  const p2 = railPath(dune, { x: 0, z: 0 }, { x: 0, z: 1 }, 60, V);
-  must(p2[p2.length - 1].z < 30, `the beam ran through a dune (ended at ${p2[p2.length - 1].z.toFixed(1)} m)`);
-  // Charge: released early it fizzles (no cooldown); held, it fires full; the cooldown holds.
-  const rs = new RailSim(V), st = { damage: 1, charge: 1, cooldown: 1.2, range: 60 };
+  const team = 1;
+  const plane = (k: number) => ({ height: (_x: number, z: number) => k * z, normal: (_x: number, _z: number, out = [0, 1, 0]) => { const l = Math.hypot(k, 1); out[0] = 0; out[1] = 1 / l; out[2] = -k / l; return out; } });
+  const flatN = { ...flat, normal: (_x: number, _z: number, out = [0, 1, 0]) => { out[0] = 0; out[1] = 1; out[2] = 0; return out; } };
+  /** Fire a sheet from a muzzle 4.5 m over the ground at (0, 0) toward an aim, resolving it on the targets. */
+  const shoot = (ground: { height(x: number, z: number): number }, targets: Hittable[], aim: { x: number; y: number; z: number }, f: SheetFire, damage = 1000, aimAtBody = false) => {
+    const muzzle = new THREE.Vector3(0, ground.height(0, 0) + 4.5, 0);
+    const d = new THREE.Vector3(aim.x, (aimAtBody ? aim.y : ground.height(aim.x, aim.z)) - muzzle.y, aim.z).normalize();
+    const sheet = makeSheet(ground, muzzle, f.flat ? new THREE.Vector3(d.x, 0, d.z).normalize() : d, f.flat ? 60 : 60, f, V);
+    return resolveSheet(ground, targets, null, team, sheet, damage, f, d, V);
+  };
+  const railF = (aim: { x: number; y: number; z: number }) => railSheet(V, { damage: 1000, charge: 1, cooldown: 1, range: 60, pen: V.railPen }, aim);
+
+  // The rail through a line of cutouts and posts: every one on its line, none off it, in order, damage not rising.
+  {
+    const range = new DummyRange({ ...DUMMY_DEFAULTS }, [
+      { x: 0, z: 10, light: true }, { x: 0.3, z: 16, light: true }, { x: -0.3, z: 24 }, { x: 0, z: 40, light: true },
+      { x: 3, z: 14, light: true }, { x: -4, z: 30 }, { x: 0, z: -8, light: true },
+    ]);
+    range.update(0, flat);
+    const shot = shoot(flat, range.dummies, { x: 0, y: 0, z: 30 }, railF({ x: 0, y: 0, z: 30 }));
+    const hitSet = new Set(shot.result.steps.map((s) => s.hit.target));
+    const onLine = [0, 1, 2, 3].map((i) => range.dummies[i]), off = [4, 5, 6].map((i) => range.dummies[i]);
+    must(onLine.every((d) => hitSet.has(d)), `rail missed a cutout on its line (${shot.result.steps.length} hits)`);
+    must(off.every((d) => !hitSet.has(d)), "rail hit a cutout off its line");
+    must(shot.result.steps.length === 4, `rail hit ${shot.result.steps.length} times for 4 bodies`);
+    must(shot.result.steps.every((s, i) => i === 0 || (s.hit.along > shot.result.steps[i - 1].hit.along && s.share <= shot.result.steps[i - 1].share)), "rail hits not in order or damage rising");
+    must(shot.result.steps[0].share === 1 && shot.result.steps[3].share < 1, "the first body didn't take full damage, or the last took full");
+    must(range.dummies[0].kvz > 0, "a cutout on the line wasn't thrown back");
+  }
+
+  // The rail through a line of mixed robots: small scrappers, a cutter and an excavator (its body 10 m up) all hit,
+  // the excavator by its body; a line past its body but through its legs hits a leg.
+  {
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 3);
+    const put = (x: number, z: number, kind: "small" | "mid" | "big") => sw.spawn(1, x, z, 0, kind === "small" ? { mid: 0, big: 0 } : kind === "mid" ? { mid: 1, big: 0 } : { mid: 0, big: 1 })[0];
+    const ids = [put(0, 10, "small"), put(0, 14, "small"), put(0, 21, "mid"), put(0, 33, "big"), put(0, 45, "small"), put(0, 50, "small")];
+    const hitIdx = new Set<number>();
+    const dmg = sw.damage.bind(sw);
+    sw.damage = (i: number, a: number, dx: number, dz: number) => { hitIdx.add(i); return dmg(i, a, dx, dz); };
+    const rt = new RobotTarget(sw, 2);
+    const shot = shoot(flat, [rt], { x: 0, y: 0, z: 30 }, railF({ x: 0, y: 0, z: 30 }));
+    must(ids.every((i) => hitIdx.has(i)), `rail missed robots on its line: hit ${[...hitIdx].join(",")} of ${ids.join(",")} (budget left ${shot.result.left.toFixed(2)})`);
+    must(rt.partHits[0] === ids.length && rt.partHits[1] === 0, `robots on the line weren't all hit by the body (parts ${rt.partHits.join("/")})`);
+    const big = ids[3];
+    must(sw.hubY[big] > 8, `the excavator's body isn't high (${sw.hubY[big].toFixed(1)} m)`);
+    // Past the body but through the legs.
+    const sw2 = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 3);
+    sw2.spawn(1, 0, 30, 0, { mid: 0, big: 1 });
+    const rt2 = new RobotTarget(sw2, 2);
+    let legHit = false;
+    for (const x of [3.4, 4, 5, 6, -3.4, -4, -5, -6]) {
+      const muzzle = new THREE.Vector3(x, 4.5, 0), d = new THREE.Vector3(0, 0, 1);
+      const sheet = makeSheet(flat, muzzle, d, 60, railF({ x, y: 0, z: 30 }), V);
+      const s = resolveSheet(flat, [rt2], null, team, sheet, 1, railF({ x, y: 0, z: 30 }), d, V);
+      if (s.result.steps.length && rt2.partHits[0] === 0) legHit = true;
+    }
+    must(legHit && rt2.partHits[0] === 0, `a line past an excavator's body didn't hit a leg (parts ${rt2.partHits.join("/")})`);
+  }
+
+  // Minigun rounds aimed at the sand under a scrapper on a slope above and below the mech hit it (the sheet reaches).
+  for (const k of [0.35, -0.35]) {
+    const g = plane(k);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, g, 5);
+    const i = sw.spawn(1, 0, 25, 0, { mid: 0, big: 0 })[0];
+    const rt = new RobotTarget(sw, 2);
+    const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: g.height(0, 25), z: 25 } };
+    // Aimed at the sand at its feet, and at the sand 1.5 m behind it (where the high camera puts a cursor on its image).
+    for (const z of [25, 26.5]) {
+      const aim = { x: 0, y: g.height(0, z), z };
+      const shot = shoot(g, [rt], aim, { ...f, aim }, 0.01);
+      must(shot.result.steps.some((s) => s.hit.target === rt && s.hit.key >> 2 === i), `a minigun round aimed at the sand ${z - 25} m behind a scrapper ${k > 0 ? "above" : "below"} the mech missed it`);
+    }
+  }
+
+  // Penetration: the light (hand) minigun stops in the first bandit; the hull minigun passes a scrapper and stops in the
+  // second; the rail goes through a dune lip but not a whole dune.
+  {
+    const iv = { ...INFANTRY_DEFAULTS };
+    const bandits = new InfantrySwarm(iv, flatN, 2);
+    for (const z of [10, 12, 14]) bandits.spawn(1, 0, z, 0);
+    const it = new InfantryTarget(bandits, 2);
+    const light = roundPenFor(MECH_DEFAULTS, 1);
+    const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, pen: light, aim: { x: 0, y: 0, z: 20 } };
+    const s1 = shoot(flat, [it], { x: 0, y: 0, z: 20 }, f, 6);
+    must(s1.result.steps.length === 1 && s1.result.steps[0].stopped, `a light minigun round (${light.toFixed(2)} m) didn't stop in the first bandit (${s1.result.steps.length} hits)`);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 9);
+    for (const z of [10, 13, 16, 19]) sw.spawn(1, 0, z, 0, { mid: 0, big: 0 });
+    const rt = new RobotTarget(sw, 2);
+    const s2 = shoot(flat, [rt], { x: 0, y: 0, z: 25 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 25 } }, 9);
+    must(s2.result.steps.length >= 2 && s2.result.steps.length <= 3, `a hull minigun round went through ${s2.result.steps.length} scrappers (want 2-3)`);
+    // Dunes: a cutout at 50 m behind a ridge at 30 m. A lip poking ~1 m over the sheet's top: the rail punches
+    // through (a minigun round doesn't); a whole dune 30 m tall stops it.
+    const behind = () => { const r = new DummyRange({ ...DUMMY_DEFAULTS }, [{ x: 0, z: 50, light: true }]); return r; };
+    const lip = ridge(30, V.railSheetHeight + 1), dune = ridge(30, 30);
+    const r1 = behind(); r1.update(0, lip);
+    const sLip = shoot(lip, r1.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
+    must(sLip.result.steps.length === 1 && !sLip.result.inGround, `the rail didn't punch through a dune lip (ended at ${sLip.result.end.toFixed(1)} m)`);
+    const r2 = behind(); r2.update(0, lip);
+    const sLipM = shoot(lip, r2.dummies, { x: 0, y: 0, z: 50 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 50 } });
+    must(sLipM.result.inGround && sLipM.result.steps.length === 0, "a minigun round went through a dune lip");
+    const r3 = behind(); r3.update(0, dune);
+    const sDune = shoot(dune, r3.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
+    must(sDune.result.inGround && sDune.result.end < 32 && sDune.result.steps.length === 0, `the rail went through a whole dune (ended at ${sDune.result.end.toFixed(1)} m)`);
+    // A dune lower than the sheet's top doesn't stop it at all (firing over a crest).
+    const low = ridge(30, V.railSheetHeight - 2), r4 = behind(); r4.update(0, low);
+    const sLow = shoot(low, r4.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
+    must(sLow.result.steps.length === 1 && sLow.result.left === V.railPen - sLow.result.steps[0].hit.chord * V.penFlesh, "a crest under the sheet's top cost the rail something");
+  }
+
+  // Charge: released early it fizzles (no cooldown); within the grace window it fires full; partial fires partial.
+  const rs = new RailSim(V), st = { damage: 1, charge: 1, cooldown: 1.2, range: 60, pen: 10 };
   for (let i = 0; i < 12; i++) rs.update(dt, true, st);
   must(rs.update(dt, false, st) === null && rs.cooldown === 0, "a short tap fired (or cooled) the rail");
-  let fired: number | null = null;
   for (let i = 0; i < 130; i++) rs.update(dt, true, st);
-  fired = rs.update(dt, false, st);
-  must(fired === 1, `a full charge fired at ${fired}`);
+  const full = rs.update(dt, false, st);
+  must(full === 1, `a full charge fired at ${full}`);
   for (let i = 0; i < 130; i++) rs.update(dt, true, st);
   must(rs.update(dt, false, st) === null, "fired again inside its cooldown");
+  const rg = new RailSim(V);
+  for (let i = 0; i < Math.round(120 * (1 - V.railGrace * 0.5)); i++) rg.update(dt, true, st);
+  must(rg.update(dt, false, st) === 1, "a release inside the grace window didn't fire at full power");
+  const rp = new RailSim(V);
+  for (let i = 0; i < 60; i++) rp.update(dt, true, st);
+  const part = rp.update(dt, false, st);
+  must(part !== null && part > 0.4 && part < 0.6, `a half charge fired at ${part}`);
 }
 
 // ---- Mortar: shells in their ring; the arc clears a dune; lead on a walking target ----
@@ -266,6 +369,6 @@ const dt = 1 / 120;
   must(landed.every((p) => Math.hypot(p.x, p.z - 50) <= V.mortarRing + 1e-6), "a big mortar shell landed outside its area");
 }
 
-console.log(`weapons: salvo ${V.salvoRockets} rockets over ${V.salvoLength} m, rail ${V.railDamage} keeping ${V.railPierceKeep}/body, mortar ring ${V.mortarRing} m, autocannon ${V.acSpeed} m/s`);
+console.log(`weapons: salvo ${V.salvoRockets} rockets over ${V.salvoLength} m, rail ${V.railDamage} with ${V.railPen} m penetration, mortar ring ${V.mortarRing} m, autocannon ${V.acSpeed} m/s`);
 if (problems.length) { console.log("FAIL\n  " + problems.join("\n  ")); throw new Error("weapons check failed"); }
 console.log("weapons check passed");
