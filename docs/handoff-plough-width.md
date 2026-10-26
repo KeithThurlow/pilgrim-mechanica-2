@@ -21,12 +21,12 @@ escorts should meander over the rougher ground beside it.
 - All checks pass except robots/infantry timing under the box's load (pass alone; robots don't touch convoy or car).
 
 ## Left
-1. Shots (40 m game camera, `?watch=plough`) and a look.
+1. Keith's look. Shots taken 2026-10-26 (session scratchpad `pw/`: plough-40.png, plough-75.png, convoy-120.png): the blade about the bay's width, scouts ahead on the dunes, escorts out on the dunes either side of the bay. Headless frames took ~25 s each on the loaded box, so no filmstrip of the weaving.
 2. state.md Changes entry; remove the In progress line and this note on merge.
 
 ## Values
 See above. Escort stats over 6 seeds × 2 min (scratch `tools/escort-probe3.mts`): 0.05% of samples lean past 40°,
 4% of 10 s windows under half the convoy's pace, 99-100% off the road.
 
-## Scratch probes (untracked, delete)
+## Scratch probes (deleted; were untracked)
 `tools/escort-probe.mts`, `escort-probe2.mts`, `escort-probe3.mts`, `slope-probe.mts`, `berm-probe.mts`.
