@@ -1,8 +1,8 @@
 // Dev-server endpoint for the in-lab Report box (Keith 2026-10-24: report from inside the app straight to the
 // Claude Code session running on the PC). POST /__report writes the note, a screenshot and the full lab state to
 // reports/, and adds a line to reports/inbox.md; GET /__report returns reports/replies.md, so answers written there
-// show up in the box. Only runs under `npm run dev`; reports/ is committed so any agent can pick them up.
-import type { Plugin } from "vite";
+// show up in the box. Runs under `npm run dev` and `vite preview`; reports/ is committed so any agent can pick them up.
+import type { Connect, Plugin } from "vite";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,10 +12,10 @@ const fence = "```";
 
 export function reportPlugin(root: string): Plugin {
   const dir = join(root, "reports");
-  return {
-    name: "pm-report",
-    configureServer(server) {
-      server.middlewares.use("/__report", (req, res) => {
+  // The same endpoint on the preview server (`vite preview`, the built labs served to the LAN): it had none, and
+  // reports sent from there were lost (Keith 2026-10-26).
+  const mount = (m: { use: Connect.Server["use"] }) => {
+      m.use("/__report", (req, res) => {
         if (req.method === "GET") {
           const f = join(dir, "replies.md");
           res.setHeader("content-type", "text/plain; charset=utf-8");
@@ -59,6 +59,10 @@ export function reportPlugin(root: string): Plugin {
           }
         });
       });
-    },
+  };
+  return {
+    name: "pm-report",
+    configureServer(server) { mount(server.middlewares); },
+    configurePreviewServer(server) { mount(server.middlewares); },
   };
 }

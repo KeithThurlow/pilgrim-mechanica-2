@@ -215,6 +215,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Copy values works on the LAN; reports from the preview server (Claude, Keith's report)
+- Keith: Copy values opened a dialog, and the values pasted from it were cut in the middle. The clipboard API exists only on secure pages (https, localhost); on `http://192.168.x:4173` it fell back to `prompt()`, which Chrome elides in the middle. Now a hidden text box and the copy command there; the button flashes "Copied". `src/core/tweaks.ts` (`copyText`).
+- The Report button posted to `vite preview` (the built labs on the LAN), which had no endpoint: those reports were lost. `tools/report-plugin.ts` mounts it on the preview server too.
+- Checked: typecheck; build; headless on the LAN address (not a secure page): Copy values copies with no dialog; GET `/__report` answers on the preview server.
+
 ### 2026-10-26 · Space no longer scrolls the slider panel; sliders don't swallow game keys (Claude, Keith's report)
 - Keith: tuning the legs, Space scrolled the panel to the bottom. With focus left on a slider the browser's Space default scrolled the panel (or pressed a button); the panel now blocks that default (not in text fields) and the game still gets the key. Also the game's keys skipped any focused `<input>`, so after touching a slider Space and WASD went nowhere: now only text fields keep keys, and a slider keeps only the arrows (they step it). One `typing(e)` in `src/core/input.ts` used by Keys, the Space handlers (walker, convoy, combat labs) and the hold-V selector. `src/core/tweaks.ts`, `src/core/input.ts`, `src/core/select.ts`.
 - Checked: typecheck; all of `npm test`; build; headless walker lab: a Space keydown and keyup through the panel have their default blocked and still reach the window.
