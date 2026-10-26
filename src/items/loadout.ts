@@ -2,7 +2,8 @@
 // the walker, upper-body, mech, dash and radar values the mech runs with (applied by src/game/loadoutApply.ts).
 //
 // Slots (Keith 2026-10-26, his part structure; docs/asset-list.md "Mech parts and their mounts"):
-// - legs, hull, and an optional sensor (radar range and seekers);
+// - legs, hull, and an optional sensor (radar range and seekers): a head at the front (it follows the aim) or a
+//   cluster on top, and the hull says which of those sockets it has;
 // - each hull mount (left and right, chosen per side) holds EITHER a hull weapon (a Medium gun, the whole mount) OR an
 //   arm; an arm's side then has a held weapon (Light; a Heavy two-hander needs arms on both mounts and sits in heldR)
 //   and a shoulder weapon (keys 1 and 2). Those two slots exist only while that side has an arm;
@@ -12,7 +13,7 @@
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import type { Param } from "../core/tweaks";
-import { BASE_BY_ID, STATS, type MountSide, type ShoulderWeapon } from "./bases";
+import { BASE_BY_ID, STATS, SENSOR_SOCKET, type MountSide, type SensorStyle, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 import { itemWeight, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
@@ -56,11 +57,11 @@ export const LOADOUT_PARAMS: Param[] = [
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 400, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
 ];
 
-/** Today's mech: Rampart legs and hull, the Rampart mast, a Medium minigun on each hull mount, the stand-in power
+/** Today's mech: Rampart legs and hull, the Rampart visor head (Keith 2026-10-26: hulls have heads), a Medium minigun on each hull mount, the stand-in power
  *  pack, an ammo drum on each waist mount (the half drum per gun the model always had). */
 export function defaultLoadout(): Loadout {
   return {
-    legs: makeItem("legs-rampart"), hull: makeItem("hull-rampart"), sensor: makeItem("sensor-mast"),
+    legs: makeItem("legs-rampart"), hull: makeItem("hull-rampart"), sensor: makeItem("sensor-visor"),
     mountL: makeItem("mg-medium", "common", "default-mg-medium-L"), heldL: null, shoulderL: null,
     mountR: makeItem("mg-medium", "common", "default-mg-medium-R"), heldR: null, shoulderR: null,
     pack: makeItem("pack-standin"),
@@ -89,7 +90,14 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   switch (slot) {
     case "legs": return item.kind === "legs" ? null : "only legs go here";
     case "hull": return item.kind === "hull" ? null : "only a hull goes here";
-    case "sensor": return item.kind !== "sensor" ? "only a sensor goes here" : hull?.mounts?.sensor ? null : "the hull has no sensor mount";
+    case "sensor": {
+      if (item.kind !== "sensor") return "only a sensor goes here";
+      const has = hull?.mounts?.sensor ?? [];
+      if (!has.length) return "the hull has no sensor mount";
+      const style = sensorStyleOf(item);
+      if (has.includes(SENSOR_SOCKET[style])) return null;
+      return style === "head" ? "a head needs a front sensor socket: this hull has only a top one" : "a cluster needs a top sensor socket: this hull has only a front one";
+    }
     case "mountL": case "mountR": {
       const arm = item.kind === "arm", gun = isHullWeapon(item);
       if (!arm && !gun) return item.kind === "weapon" ? (item.size === "H" ? "a two-handed weapon: fit an arm on both mounts, then hold it" : "a held weapon: fit an arm here, then hold it") : "a hull weapon or an arm";
@@ -119,6 +127,9 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
     }
   }
 }
+
+/** A sensor item's style (an unknown base counts as a cluster, the old default). */
+export const sensorStyleOf = (item: Item): SensorStyle => BASE_BY_ID[item.base]?.sensor?.style ?? "cluster";
 
 /** Slots this item could go in as the loadout stands. */
 export const slotsFor = (lo: Loadout, item: Item) => SLOTS.filter((s) => !fitProblem(lo, s, item));
@@ -256,6 +267,8 @@ export interface ResolvedValues {
   mechRadar: number;
   /** Salvage speed from the gear (arms, held weapons, a cutting kit): multiplies the strip speed (src/pois/salvage.ts). */
   gearSalvage: number;
+  /** A head's aim help: degrees added to the soft lock's line-of-fire cone (src/game/targeting.ts); 0 without one. */
+  sensorLock: number;
 }
 
 /** A model socket a part hangs on (docs/asset-list.md: HullMount_L/R, Sensor, Pack, Waist_L/R, Shoulder, Grip). */
@@ -266,8 +279,9 @@ export interface Resolved {
   /** Left (the mech's +X side, upper gun 0) and right (gun 1); null: no gun on that side. */
   guns: { left: GunStats | null; right: GunStats | null };
   /** Parts to show on the model: each side's mount ("gun": a hull weapon, "arm", or null), drums per waist side, the
-   *  pack (a power pack, not a back weapon), the sensor. `drums` is either side (older bodies). */
-  parts: { drums: boolean; drumsL: boolean; drumsR: boolean; pack: boolean; sensor: boolean; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null };
+   *  pack (a power pack, not a back weapon), the sensor (and which: its base id, for the model, and its style).
+   *  `drums` is either side (older bodies). */
+  parts: { drums: boolean; drumsL: boolean; drumsR: boolean; pack: boolean; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null };
   /** Shoulder weapons on their keys: the arms' shoulders 1 and 2, the back weapon on the pack mount 3 (mount "back"
    *  is the model's top of the back); their own rolled stats (null: an unrolled base item, on the weapon sliders). */
   shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; own: Record<string, number> | null }[];
@@ -286,6 +300,8 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const sensor = lo.sensor ? effectiveStats(lo.sensor) : null;
   const eff = (s: SlotId) => (lo[s] ? effectiveStats(lo[s]!) : null);
   const ammoOf = (s: MountSide) => eff(MOUNTS[s].waist)?.ammoPerGun ?? bare.bareAmmo;
+  // A head's tracking help: every gun's tracking times this.
+  const trackK = 1 + (sensor?.trackAssist ?? 0);
 
   const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number, ammo: number): GunStats => {
     const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
@@ -301,11 +317,11 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   // times the weapon's handling).
   const side = (s: MountSide): GunStats | null => {
     const m = MOUNTS[s], mount = lo[m.mount];
-    if (isHullWeapon(mount)) { const w = effectiveStats(mount!); return gunFrom(mount!, w, w.arc, w.track, ammoOf(s)); }
+    if (isHullWeapon(mount)) { const w = effectiveStats(mount!); return gunFrom(mount!, w, w.arc, w.track * trackK, ammoOf(s)); }
     const h = lo[m.held];
     if (isArm(mount) && h?.kind === "weapon" && h.size === "L") {
       const a = effectiveStats(mount!), w = effectiveStats(h);
-      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1), ammoOf(s));
+      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, ammoOf(s));
     }
     return null;
   };
@@ -314,7 +330,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // A two-hander fires from the right side, aimed by both arms: their mean arc, their mean tracking times its
     // handling; fed by the bigger of the two waist drums.
     const w = effectiveStats(lo.heldR!), a = effectiveStats(lo.mountL!), b = effectiveStats(lo.mountR!);
-    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1), Math.max(ammoOf("L"), ammoOf("R")));
+    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, Math.max(ammoOf("L"), ammoOf("R")));
     left = null;
   }
   const first = right ?? left;
@@ -331,6 +347,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     roundDamage: first?.damage ?? D.damage, roundPierce: first?.pierce ?? D.pierce, podYawMax: first?.arc ?? D.arc, podTrack: first?.track ?? D.track,
     mechRadar: sensor?.radarRange ?? bare.bareRadar,
     gearSalvage: salvage,
+    sensorLock: sensor?.lockAssist ?? 0,
   };
   // Protocols that change the whole mech (Coolant loop's hull, Extended feed's walk).
   for (const s of SLOTS) for (const pi of lo[s]?.socketed ?? []) for (const m of PROTOCOL_BY_ID[pi.base]?.mods ?? []) {
@@ -346,7 +363,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   return {
     values,
     guns: { left, right },
-    parts: { drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), pack: !!pack, sensor: !!lo.sensor, mountL: mountPart("L"), mountR: mountPart("R") },
+    parts: { drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), pack: !!pack, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R") },
     shoulders: ([["shoulderL", 1, "shoulderL"], ["shoulderR", 2, "shoulderR"], ["pack", 3, "back"]] as const).flatMap(([slot, key, mount]) => {
       const it = lo[slot], w = it?.kind === "shoulder" ? BASE_BY_ID[it.base]?.shoulder : undefined;
       return it && w ? [{ key, mount, weapon: w, own: it.seed ? effectiveStats(it) : null }] : [];
@@ -375,7 +392,7 @@ export function summary(r: Resolved): SummaryLine[] {
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
     line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
-    line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
+    line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
   ];
   for (const [name, g] of [["L", r.guns.left], ["R", r.guns.right]] as const) {
     out.push(

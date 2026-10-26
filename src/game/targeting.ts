@@ -18,6 +18,8 @@ export const TARGET_DEFAULTS = {
   lockCone: 6,
   lockSticky: 0.4,
   lockLead: 0.12,
+  /** Not a slider: degrees a fitted sensor head adds to `lockCone` (src/items/loadout.ts resolve, sensorLock). */
+  sensorLock: 0,
 };
 export type TargetValues = typeof TARGET_DEFAULTS;
 
@@ -79,7 +81,7 @@ export class Targeting {
     const ul = Math.hypot(ux, uz);
     if (ul < 1e-3) { this.last = null; return null; }
     ux /= ul; uz /= ul;
-    const tanCone = Math.tan((v.lockCone * Math.PI) / 180);
+    const tanCone = Math.tan(((v.lockCone + (v.sensorLock ?? 0)) * Math.PI) / 180);
     for (const c of cands) {
       const ox = c.x - q.from.x, oz = c.z - q.from.z;
       const t = ox * ux + oz * uz;

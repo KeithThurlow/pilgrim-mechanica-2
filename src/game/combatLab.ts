@@ -193,7 +193,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
       WEAPON_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
@@ -218,6 +218,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { topic: "legs", label: "Legs", objects: () => regions.legs },
       { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
+      { topic: "mech", label: "Sensor head", objects: () => regions.sensor },
       ...(o.selectables ?? []),
     ],
     ground: { topic: "dunes", label: "Dunes", field },

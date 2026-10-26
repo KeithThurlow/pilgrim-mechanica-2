@@ -63,6 +63,8 @@ export const STATS: Record<string, StatInfo> = {
   radarRange: { label: "Mech radar (m)", better: 1, decimals: 0 },
   salvage: { label: "Salvage speed +", better: 1, decimals: 2 },
   arcBonus: { label: "Arc + (°)", better: 1, decimals: 0 },
+  lockAssist: { label: "Lock cone + (°)", better: 1, decimals: 1 },
+  trackAssist: { label: "Gun tracking +", better: 1, decimals: 2 },
 };
 
 /** A hull mount's side. Two today; a hull with more mounts adds a side here (and its slots in loadout.ts MOUNTS). */
@@ -71,6 +73,13 @@ export type MountSide = "L" | "R";
 export type MountTake = "hullWeapon" | "arm";
 
 export interface StatRange { base: number; spread: number }
+
+/** A sensor's style (Keith 2026-10-26): a head at the front of the hull that turns to follow the aim (socket
+ *  `Sensor_Front`), or a cluster of sensors up on top (socket `Sensor_Top`). */
+export type SensorStyle = "head" | "cluster";
+/** The sensor sockets a hull offers: the front (a head) and/or the top (a cluster). */
+export type SensorSocket = "front" | "top";
+export const SENSOR_SOCKET: Record<SensorStyle, SensorSocket> = { head: "front", cluster: "top" };
 
 export interface Base {
   id: string;
@@ -88,10 +97,13 @@ export interface Base {
   stats: Record<string, StatRange>;
   /** Hulls: the mounts they offer (Keith 2026-10-26; the budget is per mount, so a hull with more simply carries
    *  more): each hull mount by side and what it takes, the optional sensor mount, the pack mount (a power pack or a
-   *  back weapon, key 3), the waist mounts. */
-  mounts?: { hull: { side: MountSide; takes: MountTake[] }[]; sensor: boolean; pack: boolean; waist: MountSide[] };
+   *  back weapon, key 3), the waist mounts. `sensor`: the sensor sockets it has (front for a head, top for a cluster;
+   *  empty: no sensor mount). */
+  mounts?: { hull: { side: MountSide; takes: MountTake[] }[]; sensor: SensorSocket[]; pack: boolean; waist: MountSide[] };
   /** Sensors: the seeker modes in the order a roll gets them (a Common has the first, each rarity one more). */
   seekers?: SeekerMode[];
+  /** Sensors: head or cluster, and how fast a cluster's `Sweep` node turns (°/s; 0 or none: still). */
+  sensor?: { style: SensorStyle; sweep?: number };
   /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Shoulder items: which shoulder weapon. */
   cls?: GunClass;
   shoulder?: ShoulderWeapon;
@@ -123,29 +135,42 @@ export const BASES: Base[] = [
   // Hulls: hull points, torso turn, mounts.
   {
     id: "hull-rampart", name: "Rampart hull", kind: "hull", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
   },
   {
     id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(2100, 0.08), torsoTurnRate: s(110, 0.08) },
+    // Armoured all over the front: sensors only up on top.
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2100, 0.08), torsoTurnRate: s(110, 0.08) },
   },
   {
     id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1,
-    // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon.
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: true, pack: true, waist: ["L", "R"] }, stats: { hull: s(1200, 0.08), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
+    // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon; a head at the
+    // front to see what it strips, no top mount (the crane rail runs over it).
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(1200, 0.08), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
   },
   // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
+  // Two styles (Keith 2026-10-26): heads at the front follow the aim and help it a little (a wider soft-lock cone, a
+  // touch more gun tracking) on a shorter radar; clusters on top reach further on the radar and don't help the aim
+  // (Claude's call, small on purpose). The Rampart's default is the visor head at today's radar range.
   {
-    id: "sensor-mast", name: "Rampart mast", kind: "sensor", tags: ["sensor"], weight: 0.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(150, 0.08) },
+    id: "sensor-visor", name: "Rampart visor head", kind: "sensor", tags: ["sensor", "head"], weight: 0.5, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    sensor: { style: "head" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(150, 0.08), lockAssist: s(2, 0.25) },
   },
   {
-    id: "sensor-dish", name: "Survey dish", kind: "sensor", tags: ["sensor"], weight: 0.7, makers: ["Novus-Lux"], look: "rampart-salvager", drop: 0.8,
-    seekers: ["wreck", "scrap", "rare", "legendary"], stats: { radarRange: s(210, 0.08) },
+    id: "sensor-optic", name: "Twin-optic head", kind: "sensor", tags: ["sensor", "head"], weight: 0.6, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0.8,
+    sensor: { style: "head" }, seekers: ["rare", "scrap", "wreck", "legendary"], stats: { radarRange: s(120, 0.08), lockAssist: s(4, 0.25), trackAssist: s(0.12, 0.25) },
   },
   {
-    id: "sensor-array", name: "Long array", kind: "sensor", tags: ["sensor"], weight: 1.1, makers: ["Suzaku", "Novus-Lux"], look: "rampart-railgun", drop: 0.5,
-    seekers: ["rare", "legendary", "wreck", "scrap"], stats: { radarRange: s(280, 0.08) },
+    id: "sensor-mast", name: "Rampart mast", kind: "sensor", tags: ["sensor", "cluster"], weight: 0.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    sensor: { style: "cluster" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(180, 0.08) },
+  },
+  {
+    id: "sensor-dish", name: "Survey dish", kind: "sensor", tags: ["sensor", "cluster"], weight: 0.7, makers: ["Novus-Lux"], look: "rampart-salvager", drop: 0.8,
+    sensor: { style: "cluster", sweep: 40 }, seekers: ["wreck", "scrap", "rare", "legendary"], stats: { radarRange: s(210, 0.08) },
+  },
+  {
+    id: "sensor-array", name: "Long array", kind: "sensor", tags: ["sensor", "cluster"], weight: 1.1, makers: ["Suzaku", "Novus-Lux"], look: "rampart-railgun", drop: 0.5,
+    sensor: { style: "cluster" }, seekers: ["rare", "legendary", "wreck", "scrap"], stats: { radarRange: s(280, 0.08) },
   },
   // Arms: on a hull mount in place of a hull weapon; hold a held weapon (their tracking and arc are its) and carry
   // a shoulder weapon on the same mount. Hands strip salvage faster (Keith: arms might make salvaging faster).

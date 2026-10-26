@@ -66,7 +66,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
   (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing).
-- Walker lab: `?cam=game|close|side|back|feet`, `?model=standin` (box walker), `?flat` (no dunes),
+- Walker lab: `?cam=game|close|side|back|feet|head` (head: face to face with the hull), `?sensor=<sensor base id>|none` (the sensor on the hull; default the visor head), `?model=standin` (box walker), `?flat` (no dunes),
   `?walk=straight` (constant heading for filmstrips), `?sprint` (with `walk=straight`), `?fire` (hold the trigger),
   `?manual` (no demo), `?zoom=metres` (game camera distance), `?aimat=x,z` (hold the aim on a point; steel wrecks
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
