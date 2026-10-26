@@ -193,6 +193,23 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Torso turns the shortest way across the back (Claude, Keith's report)
+- Keith: changing target a few degrees swung the torso the long way round. With the free waist (limit 180) the torso still moved in its angle from the legs without wrapping, so 170° left to 170° right went 340° round the front. Now a 180 limit turns by the shortest wrapped angle, through the back too; below 180 the limit still keeps it off the back. `src/mech/upper.ts`.
+- Checked: `upper-check` gains a case (settled 170° to one side, the aim 20° on past dead behind, three leg headings, both sides: under 0.25 s, never through the front; the old code fails it at 2 s round the front); all of `npm test` passes; build.
+
+### 2026-10-26 · Rail through dunes: sand measured along the slug's line, hits still by the sheet (Claude, Keith's report)
+- Keith: the rail went much further through dunes than expected; penetration had to drop to 0.5 before it showed. Sand cost only where the ground rose over the sheet's top (10 m over the floor, tall for excavators), so only crests over 10 m counted. Now a sheet can carry its shot's own line (`Sheet.line`, `SheetFire.line`): hits still come from the sheet, sand costs where it rises over the line. The rail's line is its slug height over the floor (slider "Slug height", was looks only). Minigun and autocannon unchanged (no line: the top). `src/game/sheet.ts`, `sheetFire.ts`, `src/weapons/rail.ts`, `tuning.ts`.
+- Checked: typecheck; `weapons-check` rewritten for the rule (a lip just over the slug line costs and is punched through, a dune as tall as the sheet and a 30 m dune stop it, a crest under the line is free); all of `npm test` passes; build. Not looked at in a shot (the aim line's stop point moves with it).
+
+### 2026-10-26 · Weapon picker: the left rail cannon came out a light rail (Claude, Keith's report)
+- A side with a shoulder pick is an arm, which holds only the light rail, so with the weapons lab's default missiles on key 1 the left rail cannon was fitted as the light rail while the picker still lit "Rail cannon"; the right side (key 2 empty) switched fine. Now the latest choice wins: a hull weapon clears that side's shoulder key, a shoulder weapon turns that side's hull weapon into its held version, and saved or URL picks are cleaned the same way, so the picker shows what's fitted. `src/items/weaponPick.ts` (`choose`, `cleanPick`), `labs/weapons/main.ts`.
+- Checked: typecheck; `loadout-check` (both sides: rail with a shoulder pick, shoulder after rail, light rail keeps the shoulder, saved picks); a headless click-through of the picker (left rail cannon clears key 1; missiles back on key 1 shows the light rail).
+
+### 2026-10-26 · Repo fixes: ignore node_modules in any form, a weapon look type error (Claude, Keith's PC)
+- `b938e09` committed `node_modules` as a symlink to a cloud session's `/home/claude/vendor` (`.gitignore` had `node_modules/`, which only matches folders); on Windows pulling it blocked. Another agent untracked it (`14f4205`); `.gitignore` now says `node_modules` so a link can't get in again.
+- `src/weapons/weaponLook.ts`: `emissiveNode` cast like the `roughnessNode` line above it (the toon node material's types lack it); the typecheck failed on main since the weapon model library merge.
+- Checked: typecheck and build on Keith's PC.
+
 ### 2026-10-26 · Explosives hurt robots: blasts by part, bursts on contact (Claude, agent; Keith's report)
 - Keith (convoy lab): missiles didn't hurt the big robots. Causes: `RobotTarget.splash` skipped big robots entirely and measured medium ones to the chassis; missiles and mortar shells came down on the sand under a tall robot (the chassis 10 m up) and never burst on bodies; missiles keyed on robot 0 never tracked (key 0 falsy); autocannon splash skipped the whole swarm a shell struck.
 - Fix: blasts measured to each robot's nearest part with part shares (`robotMidBlast` 1, `robotBigBlast` 0.5, Robots: hit parts); `src/game/splash.ts` (`splashBlast`, `firstBody`) for `Battlefield.blast` and autocannon bursts (sparing only the robot struck); missiles, line mortar and big mortar shells burst on the first body in their path; missiles follow the lock's body, the RPG and big mortar aim at the lock's body when the cursor or ring is on it; air bursts dig no crater (`blastGroundReach`). Files: `robotTarget.ts`, `robots.ts`, `battlefield.ts` (`blast`, `lob` y, shell contact), `shells.ts`, `swarm.ts`, `salvo.ts`, `rocket.ts`, `mortar.ts`, `arsenal.ts`, `tuning.ts`.

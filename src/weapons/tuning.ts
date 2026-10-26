@@ -154,7 +154,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "railPen", label: "Penetration (m)", min: 0, max: 40, step: 0.5, group: R, tip: "The slug's penetration budget in metres of steel equivalent: each body costs its chord × its density, sand above the sheet its length × the sand's (Penetration group)" },
   { key: "railSheetHalf", label: "Sheet half-width (m)", min: 0, max: 3, step: 0.05, group: R, tip: "It hits anything whose hit circle comes within this of its line on the ground" },
   { key: "railSheetHeight", label: "Sheet height (m)", min: 1, max: 25, step: 0.5, group: R, tip: "From under the ground up to this over the floor (the mech's feet to the ground under the aim): an excavator's chassis is about 9-11 m up" },
-  { key: "railSlugHeight", label: "Slug drawn at (m over the aim)", min: 0, max: 5, step: 0.05, group: R, tip: "Looks only: the streak flies from the muzzle toward this height over the ground at the aim" },
+  { key: "railSlugHeight", label: "Slug height (m over the floor)", min: 0, max: 5, step: 0.05, group: R, tip: "The slug flies this high over the line from the mech's feet to the ground at the aim: sand above it costs penetration (Sand, Penetration group), and the streak is drawn toward this height at the aim" },
   { key: "railKnock", label: "Knockback (m/s)", min: 0, max: 30, step: 0.5, group: R, tip: "Light bodies (bandits, cutouts) are thrown this hard along the line" },
   { key: "railCooldown", label: "Cooldown (s)", min: 0, max: 10, step: 0.05, group: R },
   { key: "railKick", label: "Gun kick (m)", min: 0, max: 1, step: 0.01, group: R },

@@ -107,7 +107,7 @@ export class WeaponLook {
     const hot = mix(vec3(0.6, 0.04, 0.0), vec3(1.0, 0.42, 0.08), smoothstep(0.2, 0.7, h)).add(vec3(0.4, 0.35, 0.2).mul(smoothstep(0.75, 1.0, h)));
     const facing = normalView.dot(positionView.normalize().negate()).abs();
     const rimK = float(1).sub(facing).pow(3).mul(this.rim);
-    m.emissiveNode = materialEmissive
+    (m as THREE.MeshStandardNodeMaterial).emissiveNode = materialEmissive
       .add(base.mul(lampMask).mul(this.lampGain).mul(paint.lamp))
       .add(hot.mul(smoothstep(0.02, 0.4, h)).mul(this.heatGain).mul(max(h, 0.2)))
       .add(vec3(1.0, 0.92, 0.78).mul(rimK));

@@ -23,7 +23,7 @@ import {
   type Loadout,
 } from "../src/items/loadout";
 import { readBay, bayToJson } from "../src/items/bayState";
-import { loadoutFor } from "../src/items/weaponPick";
+import { choose, cleanPick, loadoutFor, type Pick } from "../src/items/weaponPick";
 import { newBag, addTo, bagWeight, moveItem, loseCargo, hasRoom } from "../src/items/cargo";
 import { RADAR_DEFAULTS, radarPicture, RadarZoom, type RadarWorld } from "../src/expedition/radar";
 import { Seeker, SEEKER_DEFAULTS, seekNearest } from "../src/expedition/seekers";
@@ -142,6 +142,22 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   const mr = resolve(mirror);
   must(problems(mirror).length === 0 && mr.guns.left?.cls === "rpg" && mirror.mountR?.kind === "arm" && mirror.heldR?.base === "mg-light" && mr.shoulders[0]?.key === 2,
     `the quick pick's mixed build (hull rocket left, arm + light minigun + missiles right) came out wrong: ${problems(mirror).join("; ")}`);
+  // The picker shows what's fitted (Keith 2026-10-26: the left rail cannon came out a light rail under missiles on key
+  // 1, still lit as the rail cannon), on both sides: the latest choice wins.
+  const RAIL: Record<string, string> = { rail: "rail-medium", lightrail: "rail-light" };
+  for (const [side, key, mount, held] of [["left", "k1", "mountL", "heldL"], ["right", "k2", "mountR", "heldR"]] as const) {
+    const pk = { left: "minigun", right: "minigun", k1: "missiles", k2: "missiles", k3: "pack" } as Pick;
+    choose(pk, side, "rail");
+    const a = loadoutFor(pk);
+    must(pk[side] === "rail" && pk[key] === "none" && a[mount]?.base === RAIL.rail, `picking the ${side} rail cannon with a shoulder weapon on ${key} didn't fit the rail cannon`);
+    choose(pk, key, "missiles");
+    const b = loadoutFor(pk);
+    must(pk[side] === "lightrail" && b[mount]?.kind === "arm" && b[held]?.base === RAIL.lightrail, `a shoulder weapon on ${key} didn't turn the ${side} rail cannon into the light rail it fits`);
+    choose(pk, side, "lightrail");
+    must(pk[key] === "missiles" && loadoutFor(pk)[held]?.base === RAIL.lightrail, `the ${side} light rail dropped the shoulder weapon on ${key}`);
+    const saved = cleanPick({ left: "rail", right: "rail", k1: "missiles", k2: "missiles", k3: "pack" });
+    must(saved[side] === "lightrail", `a saved ${side} rail cannon under a shoulder weapon still shows as the rail cannon`);
+  }
   // Cascade the other way: a hull weapon back on the left bounces the arm, the held weapon and the shoulder weapon.
   const off2 = fit(lo, "mountL", med);
   must(["a1", "l1", "s1"].every((id) => off2.some((i) => i.id === id)) && !lo.heldL && !lo.shoulderL, "a hull weapon in place of an arm didn't bounce the arm, held and shoulder weapons");

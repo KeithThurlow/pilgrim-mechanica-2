@@ -26,7 +26,7 @@ import { RangeGround, RANGE_DEFAULTS, RANGE_PARAMS, rangeSpots } from "../../src
 import { RangeCars, RANGE_CAR_DEFAULTS, RANGE_CAR_PARAMS } from "../../src/game/rangeVehicles";
 import { addModifier } from "../../src/world/modifiers";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
-import { ROWS, cleanPick, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
+import { ROWS, choose, cleanPick, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 const KEY = "pm2:weapons-lab:pick3";
 
 let draw: DummiesDraw | null = null;
@@ -60,7 +60,7 @@ const params = app.params;
 // holding a light minigun; the right keeps the hull rocket launcher; the big mortar is the back weapon on key 3.
 const pick: Pick = { left: "minigun", right: "rpg", k1: "missiles", k2: "none", k3: "mortar" };
 try { Object.assign(pick, JSON.parse(localStorage.getItem(KEY) || "{}")); cleanPick(pick); } catch { /* no saved pick */ }
-pickFromParams(pick, params);
+if (pickFromParams(pick, params)) cleanPick(pick);
 
 function refit() {
   applyLoadout(player, resolve(loadoutFor(pick), V));
@@ -89,7 +89,7 @@ for (const [row, label, opts] of ROWS) {
   for (const [id, name] of Object.entries(opts)) {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = name;
-    b.addEventListener("click", () => { (pick as unknown as Record<string, string>)[row] = id; refit(); });
+    b.addEventListener("click", () => { choose(pick, row, id); refit(); });
     r.appendChild(b);
     buttons.push({ row, id, el: b });
   }

@@ -174,7 +174,10 @@ export class UpperSim {
       rel = (gapOther + 0.35 < gapCur ? -side : side) * lim;
     }
     const step = v.torsoTurnRate * D2R * dt;
-    this.torsoYaw = wrap(legsHeading + cur + clamp(rel - cur, -step, step));
+    // A free waist (limit 180) turns the shortest way, across the back too: from 170° left to 170° right is 20°, not
+    // 340° round the front (Keith 2026-10-26: a target a few degrees on swung the torso the long way round).
+    if (lim >= Math.PI - 1e-6) this.torsoYaw = wrap(this.torsoYaw + clamp(wrap(want - this.torsoYaw), -step, step));
+    else this.torsoYaw = wrap(legsHeading + cur + clamp(rel - cur, -step, step));
 
     const pmax = v.podPitchMax * D2R, pup = v.podPitchUp * D2R, cone = v.fireCone * D2R;
     const lx = Math.cos(this.torsoYaw), lz = -Math.sin(this.torsoYaw); // torso's left

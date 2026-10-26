@@ -192,23 +192,26 @@ const dt = 1 / 120;
     const rt = new RobotTarget(sw, 2);
     const s2 = shoot(flat, [rt], { x: 0, y: 0, z: 25 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 25 } }, 9);
     must(s2.result.steps.length >= 2 && s2.result.steps.length <= 3, `a hull minigun round went through ${s2.result.steps.length} scrappers (want 2-3)`);
-    // Dunes: a cutout at 50 m behind a ridge at 30 m. A lip poking ~1 m over the sheet's top: the rail punches
-    // through (a minigun round doesn't); a whole dune 30 m tall stops it.
+    // Dunes: a cutout at 50 m behind a ridge at 30 m. Sand costs penetration where it rises over the slug's line (its
+    // slug height over the floor), not the tall sheet's top (Keith 2026-10-26: through dunes it went much further than
+    // expected). A lip just over the slug line: the rail punches through (a minigun round doesn't); a dune as tall as
+    // the sheet, or a whole 30 m dune, stops it; a crest under the slug line costs nothing.
     const behind = () => { const r = new DummyRange({ ...DUMMY_DEFAULTS }, [{ x: 0, z: 50, light: true }]); return r; };
-    const lip = ridge(30, V.railSheetHeight + 1), dune = ridge(30, 30);
+    const lip = ridge(30, V.railSlugHeight + 0.2), tall = ridge(30, V.railSheetHeight + 1), dune = ridge(30, 30);
     const r1 = behind(); r1.update(0, lip);
     const sLip = shoot(lip, r1.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
-    must(sLip.result.steps.length === 1 && !sLip.result.inGround, `the rail didn't punch through a dune lip (ended at ${sLip.result.end.toFixed(1)} m)`);
-    const r2 = behind(); r2.update(0, lip);
-    const sLipM = shoot(lip, r2.dummies, { x: 0, y: 0, z: 50 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 50 } });
+    must(sLip.result.steps.length === 1 && !sLip.result.inGround && sLip.result.left < V.railPen - sLip.result.steps[0].hit.chord * V.penFlesh, `the rail didn't punch through a dune lip, paying for it (ended at ${sLip.result.end.toFixed(1)} m)`);
+    const r2 = behind(); r2.update(0, ridge(30, MECH_DEFAULTS.roundSheetHeight + 1));
+    const sLipM = shoot(ridge(30, MECH_DEFAULTS.roundSheetHeight + 1), r2.dummies, { x: 0, y: 0, z: 50 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 50 } });
     must(sLipM.result.inGround && sLipM.result.steps.length === 0, "a minigun round went through a dune lip");
-    const r3 = behind(); r3.update(0, dune);
-    const sDune = shoot(dune, r3.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
-    must(sDune.result.inGround && sDune.result.end < 32 && sDune.result.steps.length === 0, `the rail went through a whole dune (ended at ${sDune.result.end.toFixed(1)} m)`);
-    // A dune lower than the sheet's top doesn't stop it at all (firing over a crest).
-    const low = ridge(30, V.railSheetHeight - 2), r4 = behind(); r4.update(0, low);
+    for (const [name, g] of [["as tall as the sheet", tall], ["30 m tall", dune]] as const) {
+      const r3 = behind(); r3.update(0, g);
+      const sD = shoot(g, r3.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
+      must(sD.result.inGround && sD.result.end < 32 && sD.result.steps.length === 0, `the rail went through a dune ${name} (ended at ${sD.result.end.toFixed(1)} m)`);
+    }
+    const low = ridge(30, V.railSlugHeight - 0.3), r4 = behind(); r4.update(0, low);
     const sLow = shoot(low, r4.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
-    must(sLow.result.steps.length === 1 && sLow.result.left === V.railPen - sLow.result.steps[0].hit.chord * V.penFlesh, "a crest under the sheet's top cost the rail something");
+    must(sLow.result.steps.length === 1 && sLow.result.left === V.railPen - sLow.result.steps[0].hit.chord * V.penFlesh, "a crest under the slug's line cost the rail something");
   }
 
   // Charge: released early it fizzles (no cooldown); within the grace window it fires full; partial fires partial.

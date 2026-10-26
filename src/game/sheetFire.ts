@@ -19,6 +19,8 @@ export interface SheetFire {
   pen: number;
   /** The aim point (cursor or lock): the sheet's floor runs from the ground under the muzzle to the ground here. */
   aim?: { x: number; y: number; z: number } | null;
+  /** The shot's own height over the floor (m): ground above it costs penetration. Else the sheet's top. */
+  line?: number;
   /** Fly flat to range (the rail) rather than come down on the sand past the aim (rounds). */
   flat?: boolean;
   /** Throw light bodies along the line at this speed (m/s; the rail). */
@@ -59,6 +61,7 @@ export function makeSheet(field: Ground, muzzle: THREE.Vector3, d: THREE.Vector3
   return {
     ox: muzzle.x, oz: muzzle.z, dx, dz, from: 0, len: land, half: f.half, under: v.sheetUnder,
     top: (t) => g0 + slope * t + f.height,
+    line: f.line === undefined ? undefined : (t) => g0 + slope * t + f.line!,
     ground: (x, z) => field.height(x, z),
   };
 }
