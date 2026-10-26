@@ -7,6 +7,7 @@ import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { DuneField } from "../src/world/terrain";
+import { Bound, BOUND_DEFAULTS } from "../src/mech/bound";
 import { TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 const problems: string[] = [];
@@ -107,6 +108,71 @@ for (const H of [2, 8]) for (const deg of [40, 50, 60]) for (const before of [0.
   if (worst >= v.landHard) problems.push(`dashing into a wall (${what}) landed at ${worst.toFixed(1)} m/s`);
 }
 const wallRises = [`worst ${wallWorst.toFixed(1)} m (${wallWorstAt})`];
+
+// The dash as a push-off (Keith 2026-10-26 18:28: "some weird splits"): from every point in the step cycle and in every
+// direction, the feet never end up further apart than SPREAD, and once the slide has stopped the mech is back in its gait
+// with its feet under it within RECOVER seconds. On the flat, walking and standing.
+const SPREAD = v.dashSpreadMax + 0.15, RECOVER = 0.6;
+const flatG = { height: () => 0, normal: (_x: number, _z: number, o: number[] = [0, 0, 0]) => { o[0] = 0; o[1] = 1; o[2] = 0; return o; } };
+let spreadWorst = 0, spreadAt = "", recoverWorst = 0, dashes = 0;
+for (const walking of [true, false]) for (let ph = 0; ph < 8; ph++) for (const [ddx, ddz, name] of [[0, 1, "ahead"], [1, 0, "left"], [-1, 0, "right"], [0, -1, "back"], [0.7, 0.7, "diagonal"]] as const) {
+  const s4 = new WalkerSim(v, flatG);
+  s4.reset(0, 0, 0);
+  const d4 = new Dash({ ...DASH_DEFAULTS });
+  const cmd = { x: 0, z: walking ? 1 : 0, sprint: false };
+  // Walk (or stand) into the cycle, a different share of a step each time.
+  for (let i = 0; i < 240 + ph * 9; i++) s4.update(dt, cmd);
+  d4.start(ddx, ddz);
+  let t = 0, glideEnd = -1, back = -1, worst = 0;
+  while (t < 4) {
+    d4.update(dt, 0);
+    s4.push.set(d4.vx, 0, d4.vz); s4.crouch = d4.crouch;
+    s4.update(dt, cmd);
+    t += dt;
+    const [a, b] = s4.feet;
+    if (s4.dashing) worst = Math.max(worst, Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z));
+    if (glideEnd < 0 && !d4.active) glideEnd = t;
+    if (glideEnd >= 0 && back < 0 && !s4.dashing) back = t - glideEnd;
+    if (!Number.isFinite(s4.pelvis.y + a.pose.knee.x + b.pose.knee.x)) { problems.push(`NaN in a dash ${name}`); break; }
+  }
+  dashes++;
+  const what = `${walking ? "walking" : "standing"}, ${ph}/8 into the step, dash ${name}`;
+  if (worst > spreadWorst) { spreadWorst = worst; spreadAt = what; }
+  recoverWorst = Math.max(recoverWorst, back < 0 ? 99 : back);
+  if (worst > SPREAD) problems.push(`${what}: feet ${worst.toFixed(2)} m apart (limit ${SPREAD.toFixed(2)})`);
+  if (back < 0 || back > RECOVER) problems.push(`${what}: not back in its gait ${RECOVER} s after the slide (${back < 0 ? "never" : back.toFixed(2) + " s"})`);
+}
+console.log(`dash from ${dashes} points in the step and directions: feet at most ${spreadWorst.toFixed(2)} m apart (${spreadAt}) · back in its gait at most ${recoverWorst.toFixed(2)} s after the slide`);
+
+// Held through the dash (Keith: "if it's a long press... this actually becoming a run rather than a sliding dash"): the
+// push-off flows into the run within half a second, no faster than dashIntoRun, and the run's footfalls alternate.
+{
+  const s5 = new WalkerSim(v, flatG);
+  s5.reset(0, 0, 0);
+  const d5 = new Dash({ ...DASH_DEFAULTS });
+  const b5 = new Bound({ ...BOUND_DEFAULTS });
+  for (let i = 0; i < 240; i++) s5.update(dt, { x: 0, z: 1, sprint: false });
+  d5.start(0, 1);
+  let t = 0, runAt = -1, fastest = 0, worst = 0;
+  const falls: number[] = [];
+  s5.onFootfall = (f) => { if (runAt >= 0) falls.push(f.side); };
+  while (t < 3) {
+    b5.update(dt, true, s5, d5);
+    d5.update(dt, 0);
+    s5.push.set(d5.vx, 0, d5.vz); s5.crouch = d5.crouch;
+    s5.update(dt, { x: 0, z: 1, sprint: false });
+    t += dt;
+    if (runAt < 0 && s5.running) { runAt = t; fastest = s5.boundSpeed; }
+    if (s5.dashing) worst = Math.max(worst, Math.hypot(s5.feet[0].pos.x - s5.feet[1].pos.x, s5.feet[0].pos.z - s5.feet[1].pos.z));
+  }
+  let repeats = 0;
+  for (let i = 1; i < falls.length; i++) if (falls[i] === falls[i - 1]) repeats++;
+  if (runAt < 0 || runAt > 0.5) problems.push(`held dash: the run started ${runAt < 0 ? "never" : `after ${runAt.toFixed(2)} s`}`);
+  if (fastest > v.dashIntoRun + 0.5) problems.push(`held dash: the run started at ${fastest.toFixed(1)} m/s (most ${v.dashIntoRun})`);
+  if (repeats > 1) problems.push(`held dash: ${repeats} footfalls by the same foot twice running`);
+  if (worst > SPREAD) problems.push(`held dash: feet ${worst.toFixed(2)} m apart`);
+  console.log(`held dash: running after ${runAt.toFixed(2)} s at ${fastest.toFixed(1)} m/s · ${falls.length} footfalls in the next ${(3 - runAt).toFixed(1)} s, ${repeats} repeats · feet at most ${worst.toFixed(2)} m apart`);
+}
 
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);

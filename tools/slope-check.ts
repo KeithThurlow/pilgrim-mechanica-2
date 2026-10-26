@@ -17,7 +17,9 @@ function run(gx: number, gz: number, over: Record<string, number> = {}) {
   const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...over }, plane(gx, gz));
   sim.reset(0, 0, 0);
   const dt = 1 / 120;
-  let n = 0, thighUp = 0, speed = 0, cogAhead = 0, misses = 0;
+  let n = 0, thighUp = 0, speed = 0, cogAhead = 0, misses = 0, stretch = 0;
+  // The thigh mid-swing (forward of straight down), averaged over the swings.
+  const L = sim.v.femur + sim.v.shin + sim.v.cannon, swingMax = [0, 0], swingN = [0, 0], swings: number[] = [];
   for (let i = 0; i < 120 * 20; i++) {
     sim.update(dt, { x: 0, z: 1, sprint: false });
     if (i < 120 * 5) continue;
@@ -35,28 +37,67 @@ function run(gx: number, gz: number, over: Record<string, number> = {}) {
     const mid = (sim.feet[0].pose.ankle.z + sim.feet[1].pose.ankle.z) / 2;
     cogAhead += sim.pelvis.z - mid;
     for (const f of sim.feet) if (!Number.isFinite(f.pose.knee.x)) misses++;
+    sim.feet.forEach((f, k) => {
+      const P = f.pose;
+      // Mid-swing, as the foot passes under the body: where the thigh hung straight down before (Keith 2026-10-26 18:28).
+      if (f.swinging) { if (f.u > 0.3 && f.u < 0.7) { swingMax[k] += (Math.atan2(P.knee.z - P.hip.z, P.hip.y - P.knee.y) * 180) / Math.PI; swingN[k]++; } }
+      else { if (swingN[k] > 0) swings.push(swingMax[k] / swingN[k]); swingMax[k] = 0; swingN[k] = 0; if (!sim.airborne) stretch = Math.max(stretch, P.hip.distanceTo(P.ankle) / L); }
+    });
   }
-  return { speed: speed / n, thigh: thighUp / n * 2, cogAhead: cogAhead / n, overreach: sim.stats.overreach / Math.max(1, sim.stats.frames), misses };
+  const swingThigh = swings.reduce((a, b) => a + b, 0) / Math.max(1, swings.length);
+  return { speed: speed / n, thigh: thighUp / n * 2, cogAhead: cogAhead / n, overreach: sim.stats.overreach / Math.max(1, sim.stats.frames), misses, swingThigh, stretch };
 }
 
-const fmt = (r: ReturnType<typeof run>) => `speed ${r.speed.toFixed(2)} m/s · uphill thigh ${r.thigh.toFixed(0)}° off vertical · hips ${r.cogAhead >= 0 ? "+" : ""}${r.cogAhead.toFixed(2)} m ahead of the feet · overreach ${(r.overreach * 100).toFixed(1)}%`;
+const fmt = (r: ReturnType<typeof run>) => `speed ${r.speed.toFixed(2)} m/s · uphill thigh ${r.thigh.toFixed(0)}° off vertical · hips ${r.cogAhead >= 0 ? "+" : ""}${r.cogAhead.toFixed(2)} m ahead of the feet · overreach ${(r.overreach * 100).toFixed(1)}% · thigh mid-swing ${r.swingThigh.toFixed(0)}° · longest planted leg ${(r.stretch * 100).toFixed(0)}%`;
 const problems: string[] = [];
 // The fold is measured at a slow walk (4 m/s): at the full walk (6 m/s since 2026-10-26) the long stride swings the
 // thigh off vertical by itself, which hides the fold in the average.
 const flat = run(0, 0), side = run(0.35, 0, { walkSpeed: 4 }), sideOff = run(0.35, 0, { walkSpeed: 4, thighFold: 0, thighSplay: 0 });
-const up = run(0, 0.3), down = run(0, -0.3), downOff = run(0, -0.3, { downhillPlant: 0, downhillSitBack: 0, downhillCrouch: 0, downhillLevel: 1 });
+const up = run(0, 0.3), upOff = run(0, 0.3, { swingThighFold: 0, uphillLead: 0 }), down = run(0, -0.3), steep = run(0, -0.65), steepOff = run(0, -0.65, { legReachMax: 1 }), downOff = run(0, -0.3, { downhillPlant: 0, downhillSitBack: 0, downhillCrouch: 0, downhillLevel: 1 });
 console.log(`flat             ${fmt(flat)}`);
 console.log(`side slope 19°   ${fmt(side)}`);
 console.log(`  without fold   ${fmt(sideOff)}`);
 console.log(`uphill 17°       ${fmt(up)}`);
+console.log(`  no swing fold  ${fmt(upOff)}`);
 console.log(`downhill 17°     ${fmt(down)}`);
 console.log(`  old stance     ${fmt(downOff)}`);
+console.log(`downhill 33°     ${fmt(steep)}`);
+console.log(`  no reach cap   ${fmt(steepOff)}`);
 if (side.thigh < sideOff.thigh + 8) problems.push("the uphill leg's thigh doesn't fold forward on a side slope");
 if (up.speed > flat.speed * 0.9) problems.push("no slowdown uphill");
 if (down.speed < flat.speed * 0.95) problems.push("slows down downhill");
 // The body leans over its feet while moving (Keith 2026-10-24): downhill no less than on the flat, and never behind them.
 if (down.cogAhead < Math.min(0.1, flat.cogAhead - 0.15)) problems.push("downhill the hips sit back behind the feet");
 if (flat.cogAhead < 0.25) problems.push("walking, the hips aren't forward over the feet");
-for (const [name, r] of [["side", side], ["up", up], ["down", down]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
+for (const [name, r] of [["side", side], ["up", up], ["down", down], ["steep", steep]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
+// Uphill (Keith 2026-10-26 18:28: the swinging thigh was held down vertical): it rises toward the hull, clearly more than
+// on the flat and than without the fold.
+if (up.swingThigh < Math.max(flat.swingThigh, upOff.swingThigh) + 12) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
+// Downhill (same notes: "a maximum that the legs get to that doesn't look insane"): planted legs never past the cap.
+const CAP = WALKER_DEFAULTS.legReachMax, TOL = 0.025;
+for (const [name, r] of [["downhill 17°", down], ["downhill 33°", steep]] as const) if (r.stretch > CAP + TOL) problems.push(`${name}: a planted leg stretched to ${(r.stretch * 100).toFixed(0)}% (cap ${(CAP * 100).toFixed(0)}%)`);
+// Walking off a steep face (60°, 3 and 6 m down): the legs stop at the cap, the mech drops off the edge, lands, walks on.
+for (const H of [3, 6]) {
+  const k = Math.tan((60 * Math.PI) / 180), h = (_x: number, z: number) => -Math.min(H, Math.max(0, (z - 12) * k));
+  const g = { height: h, normal: (x: number, z: number, o: number[] = [0, 0, 0]) => { const e = 0.05, dz = (h(x, z + e) - h(x, z - e)) / (2 * e), l = Math.hypot(dz, 1); o[0] = 0; o[1] = 1 / l; o[2] = -dz / l; return o; } };
+  const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values }, g);
+  sim.reset(0, 0, 0);
+  const L = sim.v.femur + sim.v.shin + sim.v.cannon;
+  let worst = 0, under = 0, below = false;
+  for (let i = 0; i < 120 * 8; i++) {
+    sim.update(1 / 120, { x: 0, z: 1, sprint: false });
+    for (const f of sim.feet) {
+      if (f.pos.y < h(f.pos.x, f.pos.z) - 0.05) under++;
+      if (!f.swinging && !sim.airborne) worst = Math.max(worst, f.pose.hip.distanceTo(f.pose.ankle) / L);
+    }
+    if (!sim.airborne && sim.pos.z > 12 + H / k + 3 && sim.feet.every((f) => f.pos.y < -H + 1)) below = true;
+  }
+  const what = `walking off a ${H} m face`;
+  if (worst > CAP + TOL) problems.push(`${what}: a planted leg stretched to ${(worst * 100).toFixed(0)}%`);
+  if (sim.stats.takeoffs < 1) problems.push(`${what}: never dropped`);
+  if (!below) problems.push(`${what}: didn't land and walk on below`);
+  if (under) problems.push(`${what}: ${under} foot-frames under the ground`);
+  console.log(`${what}: longest planted leg ${(worst * 100).toFixed(0)}% · dropped ${sim.stats.takeoffs}× · landed at ${sim.lastLanding ? sim.lastLanding.impact.toFixed(1) + " m/s" : "never"} · walked on below: ${below}`);
+}
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("slope check failed"); }
 console.log("slope check passed");

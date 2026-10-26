@@ -80,8 +80,9 @@ for (const r of runs) {
   if (s.scuffs > 0) problems.push(`${s.scuffs} swing-foot frames under the ground`);
   if (bothAir > 0) problems.push(`${bothAir} frames with both feet in the air`);
   if (underAir > 0) problems.push(`${underAir} foot-frames under the ground`);
-  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run.
-  if (r.name === "walk straight" && s.takeoffs > 1) problems.push(`left the ground ${s.takeoffs} times at a walk`);
+  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run. Since 18:28 a foot that
+  // can't reach down a steep brink hangs and the mech drops the rest, so a walk over the dunes may drop a few times.
+  if (r.name === "walk straight" && s.takeoffs > 3) problems.push(`left the ground ${s.takeoffs} times at a walk`);
   if (kneeBack > 0) problems.push(`${kneeBack} knee-backwards frames`);
   if (!dunes && kneeMax > 172) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°)`);
   if (slide > 0) problems.push(`planted feet slid ${slide} frames (max ${maxSlide.toFixed(3)} m)`);
@@ -169,8 +170,62 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (under) problems.push(`${under} foot-frames under the sand sprinting`);
     if (nan) problems.push(`${nan} non-finite frames sprinting`);
     if (over > 0.03) problems.push(`legs out of reach ${(over * 100).toFixed(1)}% of leg-frames sprinting`);
-    if (s.leaps < 50) problems.push(`only ${s.leaps} strides in a minute`);
-    console.log(`  dunes 60 s: ${s.leaps} strides · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
+    if (s.steps < 120) problems.push(`only ${s.steps} footfalls in a minute`);
+    console.log(`  dunes 60 s: ${s.steps} footfalls · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
+  }
+  // The run's cadence (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the same
+  // time", not bang-bang, hop, bang-bang): on the flat at 10 m/s and at top speed, footfalls alternate left/right at
+  // even intervals, the flights between them are short, and the hull rides level.
+  for (const speed of [10, top]) {
+    const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+    const sim = new WalkerSim({ ...values, boundTop: speed, boundBuild: 3 }, flat);
+    sim.reset(0, 0, 0);
+    const falls: { side: number; t: number }[] = [];
+    let t = 0, both = 0, flight = 0, longest = 0, yMin = Infinity, yMax = -Infinity, n = 0;
+    sim.onFootfall = (f) => { if (t > 6) falls.push({ side: f.side, t }); };
+    for (let i = 0; i < 12 * 120; i++, t += sdt) {
+      sim.bound = true;
+      sim.update(sdt, { x: 0, z: 1, sprint: true });
+      if (t < 6) continue;
+      n++;
+      const air = sim.feet.every((f) => f.swinging) || sim.airborne;
+      if (air) { both++; flight += sdt; longest = Math.max(longest, flight); } else flight = 0;
+      yMin = Math.min(yMin, sim.pelvis.y); yMax = Math.max(yMax, sim.pelvis.y);
+    }
+    let same = 0;
+    const gaps: number[] = [];
+    for (let i = 1; i < falls.length; i++) { if (falls[i].side === falls[i - 1].side) same++; gaps.push(falls[i].t - falls[i - 1].t); }
+    const mean = gaps.reduce((a, b) => a + b, 0) / Math.max(1, gaps.length);
+    const spread = Math.max(...gaps.map((g) => Math.abs(g - mean))) / Math.max(1e-6, mean);
+    const label = `${speed} m/s`;
+    if (same > 0) problems.push(`run at ${label}: ${same} footfalls by the same foot twice running`);
+    if (spread > 0.15) problems.push(`run at ${label}: footfall intervals uneven (worst ${(spread * 100).toFixed(0)}% off the mean)`);
+    if (both === 0) problems.push(`run at ${label}: no flight phase`);
+    if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
+    if (yMax - yMin > 0.3) problems.push(`run at ${label}: hips rise and fall ${(yMax - yMin).toFixed(2)} m`);
+    console.log(`  run at ${label}: ${(1 / mean).toFixed(2)} steps/s, alternating (${same} repeats), intervals within ${(spread * 100).toFixed(0)}% · flights ${((100 * both) / n).toFixed(0)}% of the time, longest ${longest.toFixed(2)} s · hips move ${(yMax - yMin).toFixed(2)} m`);
+  }
+  // Up a ramp at top speed (Keith 2026-10-26 18:28: the torso dipped into rising ground): the hips stay well over the
+  // highest ground under the hull (from the hips to 2 m ahead), so the hull doesn't plough in.
+  {
+    const HULL_CLEAR = 1.9;
+    for (const deg of [12, 18, 25]) {
+      const k = Math.tan((deg * Math.PI) / 180);
+      const g = shaped((_x, z) => Math.max(0, (z - 50) * k));
+      const sim = new WalkerSim({ ...values, boundBuild: 3 }, g);
+      sim.reset(0, 0, 0);
+      let low = Infinity;
+      for (let i = 0; i < 9 * 120; i++) {
+        sim.bound = true;
+        sim.update(sdt, { x: 0, z: 1, sprint: true });
+        if (sim.pos.z < 40 || sim.airborne) continue;
+        let ahead = -Infinity;
+        for (let a = 0; a <= 2; a += 0.25) ahead = Math.max(ahead, g.height(0, sim.pos.z + a));
+        low = Math.min(low, sim.pelvis.y - ahead);
+      }
+      if (low < HULL_CLEAR) problems.push(`sprinting up a ${deg}° ramp the hips came within ${low.toFixed(2)} m of the ground under the hull (limit ${HULL_CLEAR})`);
+      console.log(`  up a ${deg}° ramp: hips at least ${low.toFixed(2)} m over the ground under the hull`);
+    }
   }
   // Speed builds from the run toward the legs' top speed while held, on the flat.
   {

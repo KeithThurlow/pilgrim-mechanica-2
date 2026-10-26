@@ -223,6 +223,8 @@ export class MechUnit implements Hittable {
    */
   /** Each foot's skid point for the dash furrow (x, z, then 1 while skidding). */
   private skidFrom = [new THREE.Vector3(), new THREE.Vector3()];
+  /** Each foot's slide dust carry-over (fractional puffs). */
+  private slideAcc = [0, 0];
 
   tryDash(x: number, z: number): boolean {
     if (!this.alive || !this.dash.start(x, z)) return false;
@@ -284,23 +286,20 @@ export class MechUnit implements Hittable {
         if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
       }
     }
-    // A drift in the sprint skids the planted feet sideways, like the dash's shove.
-    const slipping = sim.footSlip > 1.5;
-    if (dash.active || slipping) {
-      // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
-      const kx = dash.active ? dash.vx : sim.vel.x, kz = dash.active ? dash.vz : sim.vel.z;
-      const sp = dash.active ? Math.hypot(dash.vx, dash.vz) : sim.footSlip;
-      sim.feet.forEach((f, i) => {
-        const from = this.skidFrom[i];
-        if (f.swinging || sp < 2) { from.z = 0; return; }
-        this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, kx, kz, sp * dt, 1, 0);
-        // A furrow from where the foot was last frame (a skid that just started begins here).
-        if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
-        if (!this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
-        from.set(f.pos.x, f.pos.z, 1);
-      });
-      if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
-    }
+    // Any skidding foot (the dash's slide, a drift in the sprint, a landing skid, sliding down a face) carves the ground:
+    // sand thrown along it by the slide's speed and the surface, and a furrow in the dents (Keith 2026-10-26 18:28).
+    sim.feet.forEach((f, i) => {
+      const from = this.skidFrom[i], sp = Math.hypot(f.slide.x, f.slide.z);
+      if (f.swinging || sp < v.slideMin) { from.z = 0; this.slideAcc[i] = 0; return; }
+      if (bf.inWater(f.pos.x, f.pos.z)) { if (Math.random() < dt * 20) bf.water!.splash(f.pos.x, f.pos.z, 0.6, f.slide.x / sp, f.slide.z / sp, 0.6); from.z = 0; return; }
+      this.slideAcc[i] = bf.dust.slide(f.pos.x, f.pos.y, f.pos.z, f.slide.x, f.slide.z, dt, this.slideAcc[i]);
+      // A furrow from where the foot was last frame (a skid that just started begins here).
+      if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
+      bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
+      from.set(f.pos.x, f.pos.z, 1);
+    });
+    // Whatever is in the dash's way gets shoved (the lab decides what that is).
+    if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     // Sprinting through a crowd shoves it aside like a dash.
     if (!dash.active && sim.bounding && sim.speed > 6) this.onDash?.(sim.pos.x, sim.pos.z, Math.sin(sim.course), Math.cos(sim.course));
     const left = leftOf(upper.torsoYaw);
@@ -309,7 +308,7 @@ export class MechUnit implements Hittable {
       const own = upper.guns[s === 1 ? 0 : 1].stats;
       if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
       // Off the ground (a leap, a jump), the guns spray wider.
-      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airSpread : 0)) * Math.PI) / 180;
+      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airGunSpread : 0)) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
       // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle
