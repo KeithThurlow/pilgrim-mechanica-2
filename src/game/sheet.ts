@@ -7,7 +7,7 @@
 //
 // Penetration (Keith 2026-10-26): every shot carries a budget in metres of "steel equivalent". A body costs the chord
 // the line cuts through its footprint circle times its material's density; the ground costs the length along the line
-// where it rises above the sheet's top, times the sand's density. Walking the hits in order along the line, each cost
+// where it rises above the shot's own flight line (the sheet's top when it has none), times the sand's density. Walking the hits in order along the line, each cost
 // is taken off the budget; the shot stops inside whatever it can't pay for. Damage keeps a share by the budget left.
 //
 // Pure: no drawing. The battlefield gathers the hits (src/game/battlefield.ts: sheetHits, penetrate) and draws them.
@@ -39,7 +39,7 @@ export const PEN_PARAMS: Param[] = [
   { key: "penExcavator", label: "Excavators, body and legs (per m)", min: 0, max: 6, step: 0.05, group: G },
   { key: "penVehicle", label: "Vehicles, mechs, steel posts (per m)", min: 0, max: 10, step: 0.05, group: G },
   { key: "penSteel", label: "Wrecks and steel (per m)", min: 0, max: 20, step: 0.1, group: G },
-  { key: "penSand", label: "Sand above the sheet (per m)", min: 0, max: 20, step: 0.1, group: G, tip: "Ground that rises above the sheet's top costs this per metre along the line: a rail punches through a dune lip, not a dune" },
+  { key: "penSand", label: "Sand above the sheet (per m)", min: 0, max: 20, step: 0.1, group: G, tip: "Ground that rises above the shot's flight line (the rail's slug height) costs this per metre along the line: a rail punches through a dune lip, not a dune" },
   { key: "penCurve", label: "Damage kept by budget left (curve)", min: 0, max: 3, step: 0.05, group: G, tip: "A body takes damage × (budget left as the shot reaches it / full budget) ^ this. 0: full damage to everything it reaches; 1: in proportion" },
   { key: "sheetUnder", label: "Sheet reaches under the ground (m)", min: 0, max: 3, step: 0.05, group: G, tip: "The band's bottom: this far under the ground along the line (things lying low, in hollows)" },
   { key: "sheetStep", label: "Ground sampled every (m)", min: 0.2, max: 2, step: 0.05, group: G, tip: "How finely the line samples the ground for the sheet's top and the shot's landing" },
@@ -69,6 +69,9 @@ export interface Sheet {
   under: number;
   /** The sheet's top at a distance along (world y). */
   top(along: number): number;
+  /** The height the shot itself flies at (world y): ground above it costs penetration. The sheet's top when absent (a
+   *  tall sheet that reaches up for excavators would otherwise let the slug through everything but dune crests). */
+  line?(along: number): number;
   /** The ground's height (world y). */
   ground(x: number, z: number): number;
 }
@@ -129,14 +132,14 @@ export function sheetSegment(s: Sheet, ax: number, ay: number, az: number, bx: n
 /** A stretch of the line where the ground rises above the sheet's top: [a, b] m along. */
 export interface GroundRise { a: number; b: number }
 
-/** Every stretch of [from, to] where the ground is above the top, sampled every `step` m. */
+/** Every stretch of [from, to] where the ground is above the shot's line (else the top), sampled every `step` m. */
 export function groundRises(s: Sheet, to: number, step: number, out: GroundRise[] = []): GroundRise[] {
   out.length = 0;
   let open = -1;
   const n = Math.max(1, Math.ceil((to - s.from) / step));
   for (let i = 0; i <= n; i++) {
     const t = Math.min(to, s.from + i * step);
-    const over = s.ground(s.ox + s.dx * t, s.oz + s.dz * t) > s.top(t);
+    const over = s.ground(s.ox + s.dx * t, s.oz + s.dz * t) > (s.line ? s.line(t) : s.top(t));
     if (over && open < 0) open = t;
     else if (!over && open >= 0) { out.push({ a: open, b: t }); open = -1; }
   }
