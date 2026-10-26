@@ -61,6 +61,9 @@ export interface GroundSample {
   ws?: number;
   /** 0..1 how much bare rock shows (rocky shelves, outcrops). */
   rock?: number;
+  /** The slow swell and the small bumps at this point (parts of a road floor; src/convoy/wake.ts). */
+  swell?: number;
+  bumps?: number;
 }
 
 /**
@@ -151,7 +154,11 @@ export class DuneField {
 
   height(x: number, z: number): number { return this.sample(x, z).h; }
 
-  sample(x: number, z: number, out: GroundSample = { h: 0, crest: 0, flat: 0 }): GroundSample {
+  /**
+   * The ground at (x, z). raw: the ground before the modifier and the dents (the dunes as they were before the
+   * convoy's plough cut them; what the plough's wake measures).
+   */
+  sample(x: number, z: number, out: GroundSample = { h: 0, crest: 0, flat: 0 }, raw = false): GroundSample {
     const v = this.v, n = this.n;
     // Biome weights: inside a region exactly one biome, so only its own ground is worked out.
     const bw = this.biomes ? this.biomes.weights(x, z, this.bw) : null;
@@ -166,7 +173,7 @@ export class DuneField {
     }
     const swell = v.swell * n.fbm(x / v.swellScale + 101, z / v.swellScale - 57, 3);
     const bumps = v.bumps * n.fbm(x / 7 + 13, z / 7 + 3, 2);
-    out.wr = wr; out.ws = ws; out.rock = 0;
+    out.wr = wr; out.ws = ws; out.rock = 0; out.swell = swell; out.bumps = bumps;
 
     if (!bw || (wr === 0 && ws === 0)) {
       out.h = swell + dune + bumps;
@@ -203,6 +210,7 @@ export class DuneField {
       out.flat = lerp(flat, 1, Math.max(wrL, ws));
       out.rock = rockShow;
     }
+    if (raw) return out;
     const m = this.mod;
     if (this.modifier && this.modifier.at(x, z, m)) {
       // Blend toward a smooth floor that rides the swell, plus berms at the edges.

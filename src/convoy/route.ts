@@ -6,11 +6,16 @@
 // the heading replans only the part well ahead of the head, so the ground under the convoy never jumps.
 //
 // The road: as a GroundModifier on the DuneField, the dunes blend down to a smooth floor (the swell plus routeLift)
-// within routeHalfWidth of the polyline, through a smoothstep over routeBlend, with low berms pushed up at the edges.
-// Still a pure function of position given the stored polyline. Segments sit in grid buckets so a height lookup only
-// tests the few segments near it.
+// within routeHalfWidth of the polyline, through a smoothstep over routeBlend. The road is the plough's (Keith
+// 2026-10-26): it exists only behind the blade, which runs a fixed distance ahead of the convoy's head, so its place
+// is a pure function of the convoy clock (s); ahead of it the dunes are untouched. The blade is a V, so the cut edge
+// trails toward the tips (bladeSweep), and the dune comes down to the floor over bladeRamp behind it. The sand cut
+// goes into berms beside the road (wake.ts), sized by the material moved. Far behind, the road stays as it was.
+// Still a pure function of position given the stored polyline and s. Segments sit in grid buckets so a height lookup
+// only tests the few segments near it. As the blade advances, onChange gets small boxes of ground to patch.
 import type { Param } from "../core/tweaks";
 import type { GroundModifier, ModifierSample } from "../world/terrain";
+import { Wake, WAKE_DEFAULTS, WAKE_PARAMS, sweepTan, type WakeGround, type Berm } from "./wake";
 
 export const ROUTE_DEFAULTS = {
   convoySpeed: 3.3,
@@ -20,10 +25,10 @@ export const ROUTE_DEFAULTS = {
   convoyWanderLength: 600,
   routeHalfWidth: 30,
   routeBlend: 15,
-  routeBerm: 1,
   routeAhead: 150,
   routeLift: 3,
   routeRough: 0.3,
+  ...WAKE_DEFAULTS,
 };
 export type RouteValues = typeof ROUTE_DEFAULTS;
 
@@ -33,12 +38,12 @@ export const ROUTE_PARAMS: Param[] = [
   { key: "convoyTurn", label: "Turn rate (°/s)", min: 0.2, max: 10, step: 0.1, group: "Convoy route", tip: "How fast the convoy can swing onto a new heading" },
   { key: "convoyWander", label: "Wander (°)", min: 0, max: 45, step: 1, group: "Convoy route", tip: "Slow drift either side of the heading" },
   { key: "convoyWanderLength", label: "Wander length (m)", min: 100, max: 3000, step: 10, group: "Convoy route", tip: "Distance of one slow wander swing" },
-  { key: "routeHalfWidth", label: "Road half-width (m)", min: 5, max: 60, step: 1, group: "Road", onRelease: true },
+  { key: "routeHalfWidth", label: "Road and blade half-width (m)", min: 5, max: 60, step: 1, group: "Road", tip: "Half the plough blade's width: the road floor it leaves", onRelease: true },
   { key: "routeBlend", label: "Edge blend (m)", min: 2, max: 40, step: 0.5, group: "Road", tip: "Width of the slope from the road floor back up to the dunes", onRelease: true },
-  { key: "routeBerm", label: "Berm height (m)", min: 0, max: 4, step: 0.05, group: "Road", tip: "Low ridges of shoved sand at the road's edges", onRelease: true },
   { key: "routeLift", label: "Floor height (m)", min: -4, max: 10, step: 0.1, group: "Road", tip: "Road floor above the slow swell (dunes are cut down to it, troughs filled up)", onRelease: true },
   { key: "routeRough", label: "Floor roughness", min: 0, max: 1, step: 0.01, group: "Road", tip: "Share of the small bumps left on the road floor", onRelease: true },
-  { key: "routeAhead", label: "Flattened ahead (m)", min: 40, max: 400, step: 10, group: "Road", tip: "How far ahead of the convoy the road is laid" },
+  { key: "routeAhead", label: "Planned ahead (m)", min: 40, max: 400, step: 10, group: "Road", tip: "How far ahead of the convoy the route is planned (at least past the plough's blade; the road itself starts at the blade)" },
+  ...WAKE_PARAMS,
 ];
 
 const D2R = Math.PI / 180;
@@ -50,8 +55,10 @@ const CELL = 32;
 const BEHIND = 400;
 /** The plan nearer than this ahead of the head is kept when the heading changes. */
 const KEEP = 40;
-/** Flush changed ground to the chunks every this many new points. */
-const FLUSH = 4;
+/** Patch boxes are cut this wide across the road (m), so a diagonal road doesn't make one huge box. */
+const PATCH_PIECE = 16;
+/** The plough's length from its tail to the blade's middle (m); plough.ts drives and draws it to this. */
+export const PLOUGH_REACH = 22;
 
 const wrap = (a: number) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
 const smooth = (x: number) => { const t = x < 0 ? 0 : x > 1 ? 1 : x; return t * t * (3 - 2 * t); };
@@ -70,12 +77,30 @@ export class ConvoyRoute implements GroundModifier {
   /** Reach the grid was built for (half-width + blend). */
   private reach = 0;
   private plan = "";
-  private sinceFlush = 0;
-  private dirty: number[] | null = null;
-  /** Called with a box (x0, z0, x1, z1) whose ground changed (rebuild those chunks). */
+  /** Called with a box (x0, z0, x1, z1) whose ground changed as the blade advanced (patch those chunks). */
   onChange: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
+  /** The sand the plough moves (berms beside the road). */
+  readonly wake: Wake;
+  /** Distance from the head (the lead car's middle) to the blade, less ploughGap: the lead's half-length plus the plough. */
+  bladeOffset = 20 + PLOUGH_REACH;
+  /** The blade's distance when the ground was last patched. */
+  private patchedTo = 0;
+  private wakeKey = "";
+  private bm: Berm = { h: 0, w: 0, c: 0 };
 
-  constructor(public v: RouteValues, x = 0, z = 0) { this.reset(x, z); }
+  constructor(public v: RouteValues, x = 0, z = 0) {
+    this.wake = new Wake(this, v);
+    this.reset(x, z);
+  }
+
+  /** The original ground the plough cuts (set by the Convoy, or whoever puts the route in a field). */
+  set ground(g: WakeGround | null) { if (this.wake.ground !== g) { this.wake.ground = g; this.wake.clear(); } }
+  get ground() { return this.wake.ground; }
+
+  /** Distance along the route of the blade's middle: the convoy clock plus a fixed lead, so every peer agrees. */
+  get blade() { return this.s + this.bladeOffset + this.v.ploughGap; }
+  /** How far the blade's tips trail its middle (m). */
+  get tipLag() { return this.v.routeHalfWidth * sweepTan(this.v); }
 
   get count() { return this.xs.length; }
   /** Distance along the route of the last planned point. */
@@ -85,33 +110,136 @@ export class ConvoyRoute implements GroundModifier {
   reset(x: number, z: number) {
     this.xs = []; this.zs = []; this.hs = [];
     this.grid.clear();
-    this.reach = this.v.routeHalfWidth + this.v.routeBlend;
+    this.reach = this.reachFor();
     const h = this.v.convoyHeading * D2R;
     const n = Math.round(BEHIND / ROUTE_STEP);
     this.s0 = -n * ROUTE_STEP;
     this.s = 0;
+    this.wake.reset(this.s0);
+    this.wakeKey = this.wakeKeyNow();
     for (let i = 0; i <= n; i++) {
       const back = (n - i) * ROUTE_STEP;
       this.push(x - Math.sin(h) * back, z - Math.cos(h) * back, h);
     }
     this.plan = this.planKey();
     this.extend();
-    this.dirty = null;
-    this.sinceFlush = 0;
+    this.patchedTo = this.blade;
+  }
+
+  /**
+   * Jump the convoy clock to s (the route laid up to it the way driving there lays it): for starting a lab at a
+   * given place. The ground behind the new blade is the road at once; whoever holds chunks rebuilds them.
+   */
+  jump(s: number) {
+    this.s = s;
+    this.extend();
+    this.patchedTo = this.blade;
   }
 
   /** Move the head along at convoySpeed, replan if the steering changed, and lay road ahead. */
   update(dt: number) {
     // Road shape sliders change every bucket's reach: re-index (the lab rebuilds the chunks on release).
-    if (this.v.routeHalfWidth + this.v.routeBlend !== this.reach) this.reindex();
+    if (this.reachFor() !== this.reach) this.reindex();
+    const wk = this.wakeKeyNow();
+    if (wk !== this.wakeKey) { this.wakeKey = wk; this.wake.clear(); }
     const key = this.planKey();
     if (key !== this.plan) {
       this.fcKey = "";
       this.plan = key;
-      this.truncate(this.s + KEEP);
+      // Never replan under the blade or the stretch the berms behind it read.
+      this.truncate(this.s + Math.max(KEEP, this.keepAhead()));
     }
     this.s += this.v.convoySpeed * dt;
     this.extend();
+    this.patch();
+  }
+
+  /** Planned route kept ahead of the head: past the blade and the stations its berms smear over. */
+  private keepAhead() { return this.bladeOffset + this.v.ploughGap + this.v.bermCarry + 3 * ROUTE_STEP; }
+
+  private reachFor() { return this.v.routeHalfWidth + Math.max(this.v.routeBlend, this.wake.reach() - this.v.routeHalfWidth); }
+
+  private wakeKeyNow() {
+    const v = this.v;
+    return `${v.routeHalfWidth}|${v.routeBlend}|${v.routeLift}|${v.routeRough}|${v.bermSpread}|${v.bermOut}|${v.bermCurve}|${v.bermLumps}|${v.bermCarry}`;
+  }
+
+  /**
+   * As the blade advances, the ground changes from the cut edge back over the berms' growth: once it has gone
+   * ploughPatchEvery metres, hand out that strip in pieces PATCH_PIECE wide across the road (each piece's box covers
+   * the cut edge's lag at its distance out).
+   */
+  private patch() {
+    const v = this.v, b = this.blade;
+    if (b - this.patchedTo < Math.max(0.5, v.ploughPatchEvery)) return;
+    if (b - this.patchedTo > 200) { this.patchedTo = b; return; }
+    const from = this.patchedTo;
+    this.patchedTo = b;
+    if (!this.onChange) return;
+    const R = this.reach, tan = sweepTan(v), hw = v.routeHalfWidth, back = Math.max(v.bladeRamp, v.bermGrow) + 1;
+    const p = { x: 0, z: 0, heading: 0 };
+    for (let d0 = -R; d0 < R; d0 += PATCH_PIECE) {
+      const d1 = Math.min(R, d0 + PATCH_PIECE);
+      const near = d0 <= 0 && d1 >= 0 ? 0 : Math.min(Math.abs(d0), Math.abs(d1)), far = Math.max(Math.abs(d0), Math.abs(d1));
+      const sa = from - Math.min(far, hw) * tan - back, sb = b - Math.min(near, hw) * tan + 1;
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (let s = sa; ; s = Math.min(sb, s + 4)) {
+        for (const d of [d0, d1]) {
+          this.offsetAt(s, d, p);
+          x0 = Math.min(x0, p.x); z0 = Math.min(z0, p.z); x1 = Math.max(x1, p.x); z1 = Math.max(z1, p.z);
+        }
+        if (s >= sb) break;
+      }
+      this.onChange(x0, z0, x1, z1);
+    }
+  }
+
+  /**
+   * The road corridor at (x, z) whether or not the blade has got there yet (0..1, 1 on the floor): for keeping things
+   * off the road to be (POIs, camps).
+   */
+  corridor(x: number, z: number): number {
+    const n = this.nearest(x, z, this.v.routeHalfWidth + this.v.routeBlend);
+    if (!n) return 0;
+    return 1 - smooth((n.d - this.v.routeHalfWidth) / Math.max(0.01, this.v.routeBlend));
+  }
+
+  private near = { d: 0, s: 0, side: 1 };
+  /** Nearest point of the route within R of (x, z): distance, distance along the route, side (+1 left). */
+  private nearest(x: number, z: number, R: number) {
+    const list = this.grid.get(cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
+    if (!list) return null;
+    let best = R * R, bi = -1, bt = 0, bdx = 0, bdz = 0;
+    for (let k = 0; k < list.length; k++) {
+      const i = list[k];
+      const ax = this.xs[i], az = this.zs[i], bx = this.xs[i + 1], bz = this.zs[i + 1];
+      const ex = bx - ax, ez = bz - az, px = x - ax, pz = z - az;
+      let t = (px * ex + pz * ez) / (ex * ex + ez * ez);
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - ex * t, dz = pz - ez * t, d2 = dx * dx + dz * dz;
+      if (d2 < best) { best = d2; bi = i; bt = t; bdx = dx; bdz = dz; }
+    }
+    if (bi < 0) return null;
+    const n = this.near, ex = this.xs[bi + 1] - this.xs[bi], ez = this.zs[bi + 1] - this.zs[bi];
+    n.d = Math.sqrt(best);
+    // Distance along: not the nearest point's (it jumps across the inside of a bend and sticks at a vertex on the
+    // outside, which would tear the berms), but between the lines square to the route through each vertex, which
+    // adjacent segments share, so it runs on smoothly out to the side.
+    let i = bi, t = bt;
+    for (let it = 0; it < 4; it++) {
+      const sa = (x - this.xs[i]) * Math.sin(this.hs[i]) + (z - this.zs[i]) * Math.cos(this.hs[i]);
+      const sb = (x - this.xs[i + 1]) * Math.sin(this.hs[i + 1]) + (z - this.zs[i + 1]) * Math.cos(this.hs[i + 1]);
+      if (sa < 0 && i > 0) { i--; continue; }
+      if (sb > 0 && i < this.xs.length - 2) { i++; continue; }
+      // Past where the square lines cross (far inside a tight bend): keep the nearest point's.
+      if (sa - sb > ROUTE_STEP * 0.1) { const q = sa / (sa - sb); t = q < 0 ? 0 : q > 1 ? 1 : q; }
+      else i = bi;
+      break;
+    }
+    n.s = this.s0 + (i + t) * ROUTE_STEP;
+    // Left of the segment (heading 0 faces +Z, left is +X): (ez, -ex).
+    n.side = bdx * ez - bdz * ex >= 0 ? 1 : -1;
+    return n;
   }
 
   /** Point and heading on the route at distance s (extrapolated straight past the ends). */
@@ -188,29 +316,27 @@ export class ConvoyRoute implements GroundModifier {
     return out;
   }
 
-  /** The road as a ground modifier: weight toward the floor and the berm at (x, z). */
+  /**
+   * The road as a ground modifier at (x, z): behind the blade, the weight toward the floor (the cut edge easing in
+   * over bladeRamp behind the V) and the berm of the sand moved (growing in over bermGrow behind the tips).
+   */
   at(x: number, z: number, out: ModifierSample): boolean {
-    const list = this.grid.get(cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
-    if (!list) return false;
-    const v = this.v, R = this.reach;
-    let best = R * R;
-    for (let k = 0; k < list.length; k++) {
-      const i = list[k];
-      const ax = this.xs[i], az = this.zs[i], bx = this.xs[i + 1], bz = this.zs[i + 1];
-      const ex = bx - ax, ez = bz - az, px = x - ax, pz = z - az;
-      let t = (px * ex + pz * ez) / (ex * ex + ez * ez);
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const dx = px - ex * t, dz = pz - ez * t, d2 = dx * dx + dz * dz;
-      if (d2 < best) best = d2;
-    }
-    if (best >= R * R) return false;
-    const d = Math.sqrt(best);
+    const n = this.nearest(x, z, this.reach);
+    if (!n) return false;
+    const v = this.v, d = n.d, hw = v.routeHalfWidth, lag = Math.min(d, hw) * sweepTan(v);
+    const behind = this.blade - lag - n.s;
+    if (behind <= 0) return false;
     // t: 0 at the road's edge, 1 where the dunes are back to themselves.
-    const t = (d - v.routeHalfWidth) / Math.max(0.01, v.routeBlend);
-    out.w = 1 - smooth(t);
-    // Berm: a smooth bump straddling the edge, out on the blend.
-    const b = (t - 0.15) / 0.45;
-    out.berm = Math.abs(b) < 1 ? v.routeBerm * (1 - b * b) * (1 - b * b) : 0;
+    const t = (d - hw) / Math.max(0.01, v.routeBlend);
+    const w = (1 - smooth(t)) * smooth(behind / Math.max(0.01, v.bladeRamp));
+    let berm = 0;
+    if (d > hw) {
+      const grow = smooth((this.blade - this.tipLag - n.s) / Math.max(0.01, v.bermGrow));
+      if (grow > 0) berm = Wake.profile(this.wake.berm(n.s, n.side, this.bm), d) * grow;
+    }
+    if (w <= 0 && berm <= 0) return false;
+    out.w = w;
+    out.berm = berm;
     out.lift = v.routeLift;
     out.rough = v.routeRough;
     return true;
@@ -231,7 +357,9 @@ export class ConvoyRoute implements GroundModifier {
     const v = this.v;
     // Turn rate per metre at the current speed (the slider is per second).
     const perM = (v.convoyTurn * D2R) / Math.max(0.5, v.convoySpeed);
-    while (this.end < this.s + v.routeAhead) {
+    // Always planned past the blade and what its berms read, so the cut never rides on an extrapolated end.
+    const ahead = Math.max(v.routeAhead, this.keepAhead() + 2 * ROUTE_STEP);
+    while (this.end < this.s + ahead) {
       const i = this.xs.length - 1, d = this.end + ROUTE_STEP;
       const h0 = this.hs[i], max = perM * ROUTE_STEP;
       const dh = Math.max(-max, Math.min(max, wrap(this.target(d) - h0)));
@@ -239,38 +367,22 @@ export class ConvoyRoute implements GroundModifier {
       const hm = h0 + dh / 2, h1 = wrap(h0 + dh);
       this.push(this.xs[i] + Math.sin(hm) * ROUTE_STEP, this.zs[i] + Math.cos(hm) * ROUTE_STEP, h1);
     }
-    if (this.dirty && this.sinceFlush >= FLUSH) this.flush();
   }
 
   /** Drop the plan beyond distance s (keeping at least the point before it). */
   private truncate(s: number) {
     const keep = Math.max(2, Math.floor((s - this.s0) / ROUTE_STEP) + 1);
     if (keep >= this.xs.length) return;
-    for (let i = this.xs.length - 2; i >= keep - 1; i--) { this.unindex(i); this.markDirty(i); }
+    for (let i = this.xs.length - 2; i >= keep - 1; i--) this.unindex(i);
     this.xs.length = keep; this.zs.length = keep; this.hs.length = keep;
-    this.flush();
+    // Stations past the kept stretch read the old plan: work them out again.
+    this.wake.forget(this.s0 + (keep - 2) * ROUTE_STEP);
   }
 
   private push(x: number, z: number, h: number) {
     this.xs.push(x); this.zs.push(z); this.hs.push(h);
     const i = this.xs.length - 2;
-    if (i >= 0) { this.index(i); this.markDirty(i); this.sinceFlush++; }
-  }
-
-  private markDirty(i: number) {
-    const R = this.reach;
-    const x0 = Math.min(this.xs[i], this.xs[i + 1]) - R, x1 = Math.max(this.xs[i], this.xs[i + 1]) + R;
-    const z0 = Math.min(this.zs[i], this.zs[i + 1]) - R, z1 = Math.max(this.zs[i], this.zs[i + 1]) + R;
-    const d = this.dirty;
-    if (!d) this.dirty = [x0, z0, x1, z1];
-    else { d[0] = Math.min(d[0], x0); d[1] = Math.min(d[1], z0); d[2] = Math.max(d[2], x1); d[3] = Math.max(d[3], z1); }
-  }
-
-  private flush() {
-    const d = this.dirty;
-    this.dirty = null;
-    this.sinceFlush = 0;
-    if (d) this.onChange?.(d[0], d[1], d[2], d[3]);
+    if (i >= 0) this.index(i);
   }
 
   /** Cells a segment's reach overlaps. */
@@ -297,7 +409,7 @@ export class ConvoyRoute implements GroundModifier {
 
   private reindex() {
     this.grid.clear();
-    this.reach = this.v.routeHalfWidth + this.v.routeBlend;
+    this.reach = this.reachFor();
     for (let i = 0; i < this.xs.length - 1; i++) this.index(i);
   }
 }

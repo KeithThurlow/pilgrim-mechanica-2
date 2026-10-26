@@ -17,6 +17,8 @@
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
 // (start out with little fuel left), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it).
+// The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
+// ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { createApp } from "../../src/core/app";
@@ -56,6 +58,10 @@ import { EscortBodies } from "../../src/convoy/escortBody";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
 import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
 import { DefenceBody } from "../../src/convoy/defenceBody";
+import { PloughBody } from "../../src/convoy/ploughBody";
+import { PloughFx, PLOUGH_FX_DEFAULTS, PLOUGH_FX_PARAMS } from "../../src/convoy/ploughFx";
+import { PLOUGH_BASE_LENGTH, BLADE_AHEAD } from "../../src/convoy/plough";
+import { WAKE_PARAMS } from "../../src/convoy/wake";
 import { ExpeditionLoop, LOOP_DEFAULTS, LOOP_PARAMS, LOOP_TOPICS } from "../../src/expedition/loop";
 import { POI_PARAMS } from "../../src/world/pois";
 import { SITE_PARAMS } from "../../src/pois/kinds";
@@ -85,13 +91,13 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
-  ...LOOP_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS,
   radius: 5, shadowBox: 60,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS,
-  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
@@ -104,7 +110,20 @@ const route = new ConvoyRoute(V, 0, 0);
 field.modifier = route;
 const streamer = new TerrainStreamer(field, V);
 scene.add(streamer.group);
-route.onChange = (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1);
+// As the plough's blade advances, the ground behind it changes in small boxes: patched in place a few per frame
+// under a time budget (the craters' way), nearest first is not needed as they come in order behind the blade.
+const patchQueue: [number, number, number, number][] = [];
+route.onChange = (x0, z0, x1, z1) => { patchQueue.push([x0, z0, x1, z1]); };
+let patchMs = 0, patchVerts = 0;
+function patchSome(budgetMs: number) {
+  const t0 = performance.now();
+  patchVerts = 0;
+  while (patchQueue.length && (patchVerts === 0 || performance.now() - t0 < budgetMs)) {
+    const b = patchQueue.shift()!;
+    patchVerts += streamer.patchArea(b[0], b[1], b[2], b[3]);
+  }
+  patchMs = performance.now() - t0;
+}
 const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
 // Ruts and prints as dents on a fine patch (Keith 2026-10-25).
@@ -132,6 +151,10 @@ const trail = new ConvoyTrail(V, bf, field);
 const defence = new Defence(V, convoy.platforms);
 const defenceBody = new DefenceBody(defence);
 scene.add(defenceBody.group);
+// The plough at the front and the sand it throws.
+const ploughBody = new PloughBody(convoy.plough);
+scene.add(ploughBody.root);
+const ploughFx = new PloughFx(V, convoy.plough, bf, field);
 const threatOn = params.has("threat");
 const threatMark = new THREE.Mesh(new THREE.OctahedronGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xff4030, toneMapped: false }));
 threatMark.visible = threatOn;
@@ -254,6 +277,20 @@ addEventListener("keydown", (e) => {
 function restart() {
   loop.restart(0, 0);
   convoy.reset(0, 0);
+  patchQueue.length = 0;
+  // ?crest[=metres]: the convoy clock moved on until the blade is that far short of a big dune crest.
+  if (params.has("crest")) {
+    const short = Number(params.get("crest")) || 18;
+    let best = -1, at = 0;
+    for (let tries = 0; tries < 30 && best < 260; tries++) {
+      for (let s = route.blade + 20; s < route.end - V.bermCarry - 10; s += 2) {
+        const c = route.wake.cutAt(s);
+        if (c > best) { best = c; at = s; }
+      }
+      if (best < 260) convoy.jump(route.s + 100);
+    }
+    convoy.jump(route.s + (at - short - route.blade));
+  }
   escorts.reset();
   for (const c of cranes) c.place();
   streamer.rebuildAll();
@@ -285,7 +322,7 @@ function restart() {
   }
   // ?nearcamp: out on the sand just outside the wake range of the nearest swarm camp, facing it.
   if (params.has("nearcamp")) {
-    const c = loop.camps.campsNear(p.x, p.z, 2500).filter((q) => !route.at(q.x, q.z, { w: 0, berm: 0, lift: 0, rough: 0 }))
+    const c = loop.camps.campsNear(p.x, p.z, 2500).filter((q) => route.corridor(q.x, q.z) <= 0)
       .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
     if (c) {
       const d = Math.hypot(c.x - p.x, c.z - p.z) || 1, back = Number(params.get("nearcamp")) || V.campWake + 15;
@@ -326,7 +363,7 @@ function restart() {
   if (params.has("bay")) bay.open();
 }
 
-const roadKeys = new Set(["routeHalfWidth", "routeBlend", "routeBerm", "routeLift", "routeRough"]);
+const roadKeys = new Set(["routeHalfWidth", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
 const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
 let selector: Selector | null = null;
 let picking = false;
@@ -353,6 +390,7 @@ const panel = tweakPanel({
     { id: "defence", label: "Defences", groups: ["Defences"] },
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
     { id: "deck", label: "Deck", groups: ["Deck"] },
+    { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     WEAPON_TOPIC,
@@ -364,9 +402,9 @@ const panel = tweakPanel({
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => {
-    if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); }
-    // The road reindexes itself on its next step; the chunks need building again.
-    if (roadKeys.has(k)) streamer.rebuildAll();
+    if (shapeKeys.has(k)) { field.update(); route.wake.clear(); streamer.rebuildAll(); }
+    // The road reindexes itself (and works its berms out again) on its next step; the chunks need building again.
+    if (roadKeys.has(k)) { route.wake.clear(); streamer.rebuildAll(); }
     // POI placement and the dunes under it: placed again (pads rebuilt with the chunks); camps placed again.
     if (shapeKeys.has(k) || POI_PARAMS.some((p) => p.key === k) || SITE_PARAMS.some((p) => p.key === k)) { loop.rebuild("sites"); streamer.rebuildAll(); }
     if (CAMP_PARAMS.some((p) => p.key === k)) loop.rebuild("camps");
@@ -388,6 +426,7 @@ selector = new Selector(app, {
     { topic: "convoy", label: "Footbridges", objects: () => [...bridges.objects(), ...bodies.flatMap((b) => b.landingMeshes())] },
     { topic: "escorts", label: "Escorts and vehicles aboard", objects: () => [...escortBodies.objects(), ...bodies.flatMap((b) => b.vehicleMeshes())] },
     { topic: "convoy", label: "Convoy platforms", objects: () => bodies.flatMap((b) => b.meshes()) },
+    { topic: "plough", label: "Plough", objects: () => ploughBody.meshes() },
     { topic: "legs", label: "Legs", objects: () => regions.legs },
     { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
     { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
@@ -409,6 +448,10 @@ restart();
 /** What the camera follows: the mech, or (?watch=) a car, the gap ahead of a car, or an escort. */
 const watch = params.get("watch");
 function focus(out: THREE.Vector3) {
+  if (watch === "plough") {
+    const w = convoy.plough.toWorld(0, 0, PLOUGH_BASE_LENGTH / 2 + BLADE_AHEAD);
+    return out.set(w.x, field.height(w.x, w.z), w.z);
+  }
   const m = watch?.match(/^(gap|e)?(\d+)$/);
   if (m) {
     const i = Number(m[2]);
@@ -598,7 +641,11 @@ app.onTick((rawDt) => {
     player.dashHold = spaceDown && !auto && free;
     player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
-    if (!carry.ground.onDeck && V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
+    if (!carry.ground.onDeck && V.convoyPush > 0.5) {
+      for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
+      const o = convoy.plough.pushOut(sim.pos.x, sim.pos.z, 2);
+      if (o) { sim.pos.x = o.x; sim.pos.z = o.z; }
+    }
   } else {
     // Held by the crane or parked: the guns still track the aim, the body is posed from the hold.
     body.shoulderLine(shoulder);
@@ -628,7 +675,12 @@ app.onTick((rawDt) => {
   bridges.update(spans, dt);
   escortBodies.update();
   defenceBody.update();
+  ploughBody.update();
+  ploughFx.update(dt);
   costs.mark("convoy bodies");
+  // The ground behind the plough's blade, patched in place under a small budget.
+  patchSome(1.5);
+  costs.mark("plough patch");
 
   softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
 
@@ -658,6 +710,8 @@ app.onTick((rawDt) => {
 
   const p = convoy.bay;
   app.hud.set("convoy", `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
+  const pl = convoy.plough;
+  app.hud.set("plough", `plough: cut ${pl.cut.toFixed(0)} m² at the blade · moving ${pl.rate.left.toFixed(0)} / ${pl.rate.right.toFixed(0)} m³/s left / right (load ${(ploughFx.load[0] * 100).toFixed(0)}% / ${(ploughFx.load[1] * 100).toFixed(0)}%) · patched ${patchVerts} vertices in ${patchMs.toFixed(2)} ms, ${patchQueue.length} boxes waiting · wake stations ${route.wake.computed}`);
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
