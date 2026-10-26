@@ -9,16 +9,16 @@
 import type { Param } from "../core/tweaks";
 
 export const DASH_DEFAULTS = {
-  dashDistance: 9,
-  dashTime: 0.45,
-  dashPushShare: 0.15,
+  dashDistance: 14,
+  dashTime: 1.05,
+  dashPushShare: 0.44,
   dashCharges: 2,
   dashRecharge: 3,
   dashGap: 0.25,
-  dashCrouch: 0.35,
-  dashLean: 19,
+  dashCrouch: 1.2,
+  dashLean: 25,
   dashShoveRadius: 4,
-  dashShove: 10,
+  dashShove: 5,
   dashShoveDamage: 6,
   dashDamageCut: 0.5,
   dashSlope: 1.5,

@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Keith's tuned walker, sprint, dash and dust values are the defaults | Keith | Keith | 37 values from his lab export; walker-check fails on them (see state.md In progress) until the limits or values are settled. |
 | 2026-10-26 | Scale proposal approved: build it and judge it in play (effects budget, GPU particles, shots as data with Protocols) | Keith | Keith | `docs/proposal-scale.md`; agent on `wip/scale`. |
 | 2026-10-26 | The plough cuts a road only as wide as the main convoy; escorts meander over the rough terrain beside it | Keith | Keith | Agent on `wip/plough-width`. |
 | 2026-10-26 | The plough cuts a road only as wide as the main convoy platforms, not a lane for the escorts too; the escorts meander over the rougher ground beside it | Keith | Keith | `routeHalfWidth` 30 → 11 (22 m floor; the widest car with its tracks is 19 m). |

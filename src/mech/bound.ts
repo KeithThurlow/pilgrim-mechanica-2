@@ -16,12 +16,12 @@ import type { Dash } from "./dash";
 export const BOUND_DEFAULTS = {
   boundTap: 0.2,
   dashHoldRun: 0.15,
-  boostTop: 3,
-  boostGlide: 0.3,
+  boostTop: 8,
+  boostGlide: 0,
   boostBurn: 0.25,
   boundGuns: 1,
   airGunSpread: 3,
-  boundDust: 1.9,
+  boundDust: 0.5,
 };
 export type BoundValues = typeof BOUND_DEFAULTS;
 
