@@ -22,7 +22,7 @@ export const WAKE_DEFAULTS = {
   bladeRamp: 4,
   bermGrow: 8,
   bermSpread: 2.2,
-  bermOut: 8,
+  bermOut: 2,
   bermCurve: 0.6,
   bermLumps: 0.35,
   bermCarry: 6,

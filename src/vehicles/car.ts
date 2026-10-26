@@ -327,6 +327,17 @@ export class CarSim {
     return this.slope;
   }
 
+  /** Height of the plane fitted through the ground under the wheels (groundSlope), at the body's middle. */
+  private planeUnder() {
+    const [sf, sl] = this.groundSlope(), n = this.wheels.length;
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    let cx = 0, cz = 0, ch = 0;
+    for (let i = 0; i < n; i++) { cx += this.spotX[i]; cz += this.spotZ[i]; ch += this.groundH[i]; }
+    cx /= n; cz /= n; ch /= n;
+    const dx = this.pos.x - cx, dz = this.pos.z - cz;
+    return ch + sf * (dx * fx + dz * fz) + sl * (dx * fz - dz * fx);
+  }
+
   private updateQuat() {
     this.t.e.set(-this.pitch, this.heading, this.roll, "YXZ");
     this.quat.setFromEuler(this.t.e);
@@ -464,7 +475,12 @@ export class CarSim {
     this.vy += (fy - g) * dt;
     // Stick: an arcade pull toward the ground whenever the body rides above its rest height (cresting, a slip face
     // falling away), fading out higher up, so trucks hug the dunes and only real ramps throw them.
-    const gap = this.pos.y - (this.ground.height(this.pos.x, this.pos.z) + v.rideHeight);
+    // Measured from the plane through the ground under the wheels (at the body's middle), not from the ground right
+    // under the middle: in a hollow (the foot of a dune, a trough) that is lower than the wheels' and pulling the body
+    // down to it bottomed the wheels and stalled trucks on the next gentle climb (2026-10-26, escorts driving the
+    // dunes beside the convoy). A plain mean of the wheels would do the same to a six-wheeler on a slope (its wheels
+    // sit mostly behind its middle).
+    const gap = this.pos.y - (this.planeUnder() + v.rideHeight);
     if (gap > 0 && this.vy < 6) this.vy -= v.stick * GRAV * smooth(0, 0.4, gap) * (1 - smooth(v.stickRange * 0.6, v.stickRange, gap)) * dt;
     this.pitchRate += (tp / Ip) * dt;
     this.rollRate += (tr / Ir) * dt;
@@ -515,7 +531,10 @@ export class CarSim {
         // steep face never throws the body into the air); the bump's size still costs speed, but only while the
         // ground under the wheel rises (a long truck resting bottomed in a hollow isn't held there).
         const dv = Math.min(0, groundRate) - cornerRate;
-        const loss = Math.min(Math.abs(this.speed), Math.max(0, Math.min(groundRate, groundRate - cornerRate)) * v.bumpLoss);
+        // Crawling (under about 2 m/s) a bottomed wheel costs little: a long truck easing out of a hollow onto a
+        // climb rides on its stops without stalling (the climb itself is still limited by maxClimb's dig and bog).
+        const crawl = 0.15 + 0.85 * smooth(0.8, 2.5, Math.abs(this.speed));
+        const loss = Math.min(Math.abs(this.speed), Math.max(0, Math.min(groundRate, groundRate - cornerRate)) * v.bumpLoss * crawl);
         this.speed -= Math.sign(this.speed) * loss;
         if (dv > 0) {
           this.vy += mid ? (dv * 2) / 3 : dv / 3;

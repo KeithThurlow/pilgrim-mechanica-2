@@ -277,7 +277,7 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
   console.log("-- platforms, 5 minutes");
   const w = world();
   const frames = 300 * 120;
-  let worstGap = 0, nan = false;
+  let worstGap = 0, nan = false, worstOnRoad = 1;
   for (let i = 0; i < frames; i++) {
     const t = i * DT;
     if (Math.abs(t - 60) < DT / 2) w.V.convoyHeading = 75;
@@ -292,8 +292,18 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
       for (const [lx, lz] of p.supports) { const q = p.toWorld(lx, 0, lz); mean += w.field.height(q.x, q.z); }
       mean /= p.supports.length;
       worstGap = Math.max(worstGap, Math.abs(p.y - mean));
+      // The road is only the train's width (Keith 2026-10-26): every car's footprint (tracks included) on its floor.
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0]]) {
+        const q = p.toWorld(sx * p.halfW, 0, sz * p.spec.length / 2);
+        worstOnRoad = Math.min(worstOnRoad, w.route.corridor(q.x, q.z));
+      }
     }
   }
+  // The road against the train: its width no more than a few metres past the widest car's footprint.
+  const widest = Math.max(...w.convoy.platforms.map((p: Platform) => 2 * p.halfW));
+  console.log(`  road ${(2 * w.V.routeHalfWidth).toFixed(0)} m wide (widest car with its tracks ${widest.toFixed(0)} m) · least road under a car's corner ${(worstOnRoad * 100).toFixed(0)}% (1 = on the floor)`);
+  if (2 * w.V.routeHalfWidth > widest + 6) fail(`the road (${2 * w.V.routeHalfWidth} m) is much wider than the train (${widest.toFixed(0)} m)`);
+  if (worstOnRoad < 0.85) fail(`a car's corner rode ${(worstOnRoad * 100).toFixed(0)}% on the road: off its edge`);
   const tilt = Math.max(...w.convoy.platforms.map((p: Platform) => p.maxTilt));
   const upright = Math.min(...w.convoy.platforms.map((p: Platform) => p.up.y));
   console.log(`  travelled ${w.convoy.bay.travelled.toFixed(0)} m · worst tilt ${tilt.toFixed(1)}° · worst ride gap ${worstGap.toFixed(2)} m · road ${w.route.count} points`);
@@ -737,6 +747,11 @@ for (const lanes of [1, 2]) {
   esc.reset();
   const frames = 180 * 120;
   let onStation = 0, samples = 0, worstPlat = Infinity, worstPlough = Infinity, worstMech = Infinity, nan = false, flipped = 0;
+  // Off the road (Keith 2026-10-26: the road is only the train's width; escorts meander over the dunes beside it),
+  // never stuck (along-route progress over 10 s windows against the convoy's), never tipping.
+  let offRoad = 0, worstRoll = 0, worstPitch = 0, worstPace = Infinity, paceWho = "", worstUp = 1;
+  const WIN = 10 * 120, lastS = esc.list.map((e) => e.s);
+  let convoyS = w.route.s;
   const mech = { x: 0, z: 0 };
   const up = new THREE.Vector3();
   for (let i = 0; i < frames; i++) {
@@ -753,11 +768,24 @@ for (const lanes of [1, 2]) {
       mech.x = q.x; mech.z = q.z;
     }
     esc.update(DT, mech);
+    if (i > 0 && i % WIN === 0) {
+      const conv = w.route.s - convoyS;
+      esc.list.forEach((e, k) => {
+        const pace = (e.s - lastS[k]) / Math.max(1e-6, conv);
+        if (pace < worstPace) { worstPace = pace; paceWho = `${k} (${e.kind}) at ${(i * DT).toFixed(0)} s`; }
+        lastS[k] = e.s;
+      });
+      convoyS = w.route.s;
+    }
     if (i % 12 !== 0) continue;
     for (const e of esc.list) {
       const s = e.sim;
       if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) nan = true;
-      if (up.set(0, 1, 0).applyQuaternion(s.quat).y < 0.5) flipped++;
+      const uy = up.set(0, 1, 0).applyQuaternion(s.quat).y;
+      worstUp = Math.min(worstUp, uy);
+      if (uy < 0.5) flipped++;
+      worstRoll = Math.max(worstRoll, Math.abs(s.roll)); worstPitch = Math.max(worstPitch, Math.abs(s.pitch));
+      if (Math.abs(e.out) > w.V.routeHalfWidth + 2) offRoad++;
       for (const p of w.convoy.platforms) worstPlat = Math.min(worstPlat, rectGap(p, s.pos.x, s.pos.z, e.half * 0.6));
       worstPlough = Math.min(worstPlough, rectGap(w.convoy.plough, s.pos.x, s.pos.z, e.half * 0.6));
       worstMech = Math.min(worstMech, Math.hypot(s.pos.x - mech.x, s.pos.z - mech.z) - e.half * 0.6);
@@ -765,8 +793,12 @@ for (const lanes of [1, 2]) {
       if (Math.abs(Math.abs(e.out) - e.stationOut) <= w.V.escortBand + w.V.escortWeave && Math.sign(e.out) === e.side) onStation++;
     }
   }
-  const share = onStation / Math.max(1, samples);
-  console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · to the plough ${worstPlough.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
+  const share = onStation / Math.max(1, samples), off = offRoad / Math.max(1, samples);
+  console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · off the road ${(off * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · to the plough ${worstPlough.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
+  console.log(`  slowest 10 s: ${(worstPace * 100).toFixed(0)}% of the convoy's progress (escort ${paceWho}) · worst roll ${(worstRoll / D2R).toFixed(0)}° · pitch ${(worstPitch / D2R).toFixed(0)}° · lowest up ${worstUp.toFixed(2)}`);
+  if (off < 0.8) fail(`escorts off the road only ${(off * 100).toFixed(0)}% of the time (they should ride the dunes beside it)`);
+  if (worstPace < 0.5) fail(`escort ${paceWho} made only ${(worstPace * 100).toFixed(0)}% of the convoy's progress in 10 s: stuck`);
+  if (worstRoll > 40 * D2R) fail(`an escort rolled ${(worstRoll / D2R).toFixed(0)}°`);
   if (nan) fail("an escort went non-finite");
   if (worstPlat < 1) fail(`an escort came within ${worstPlat.toFixed(2)} m of a platform`);
   if (worstPlough < 1) fail(`an escort came within ${worstPlough.toFixed(2)} m of the plough`);
