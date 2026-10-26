@@ -18,8 +18,22 @@ import { planStrip, impactPoints, SalvoSim, stripGap, onStrip } from "../src/wea
 import { inStrip, stripLength } from "../src/weapons/painter";
 import { RailSim, railSheet } from "../src/weapons/rail";
 import { makeSheet, resolveSheet, type SheetFire } from "../src/game/sheetFire";
-import { RobotSwarm, ROBOT_DEFAULTS } from "../src/combat/robots";
-import { RobotTarget, robotCandidates } from "../src/combat/robotTarget";
+import { RobotSwarm, ROBOT_DEFAULTS, robotCentre, robotFootprint, DOWN, SMALL } from "../src/combat/robots";
+import { RobotTarget } from "../src/combat/robotTarget";
+import type { TargetCandidate } from "../src/game/targeting";
+
+/** Every live robot as a lock candidate (the old list the register replaced; the check's table still drives it). */
+function robotCandidates(sw: RobotSwarm, out: TargetCandidate[] = []): TargetCandidate[] {
+  out.length = 0;
+  for (let i = 0; i < sw.hi; i++) {
+    if (sw.state[i] >= DOWN) continue;
+    const c: TargetCandidate = { x: 0, y: 0, z: 0, r: 0, key: i * 1024 + (sw.gen[i] % 1024), vx: sw.vx[i], vz: sw.vz[i] };
+    c.r = Math.max(0.6, robotCentre(sw, i, c));
+    if (sw.kind[i] !== SMALL) c.foot = robotFootprint(sw, i);
+    out.push(c);
+  }
+  return out;
+}
 import { splashBlast, firstBody } from "../src/game/splash";
 import { InfantrySwarm, INFANTRY_DEFAULTS } from "../src/combat/infantry";
 import { InfantryTarget } from "../src/combat/infantryTarget";

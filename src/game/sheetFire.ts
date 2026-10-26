@@ -6,6 +6,7 @@ import * as THREE from "three/webgpu";
 import type { Hittable } from "./battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { groundRises, penetrate, type GroundRise, type PenMaterial, type PenResult, type PenValues, type Sheet, type SheetHit } from "./sheet";
+import { FLAG, MEASURE, RayHits, type Filter, type Register } from "./register";
 
 interface Ground { height(x: number, z: number): number }
 /** Steel that isn't a target (wreck stand-ins): costs budget and stops rounds. */
@@ -65,15 +66,29 @@ export function makeSheet(field: Ground, muzzle: THREE.Vector3, d: THREE.Vector3
 const fanO = new THREE.Vector3(), fanD = new THREE.Vector3(), fanF = new THREE.Vector3(), fanB = new THREE.Vector3(), fanN = new THREE.Vector3();
 const steelAt = new THREE.Vector3(), steelN = new THREE.Vector3();
 
+const crossHits = new RayHits(), crossed = new Set<unknown>();
+const crossFilter: Filter = { all: FLAG.Hittable };
+
 /**
- * Every body of another team in the sheet, in no order: targets with a sheet of their own push theirs; the rest are
- * found by a fan of rays through the band (3 across × 5 up), each kept going past what it meets. Steel too.
+ * Every body of another team in the sheet, in no order: targets with a sheet of their own push theirs (the swarms
+ * cull theirs with the register); the rest are found by a fan of rays through the band (3 across × 5 up), each kept
+ * going past what it meets. Steel too. With the register, an object it holds (a raider, a mech, a dummy) gets its fan
+ * only when the sheet's line comes within its hit reach (+ the register's slack): one flat query instead of 15 rays
+ * per object.
  */
-export function sheetHits(targets: readonly Hittable[], team: number, s: Sheet, steel: Steel | null, out: SheetHit<Hittable>[] = []): SheetHit<Hittable>[] {
+export function sheetHits(targets: readonly Hittable[], team: number, s: Sheet, steel: Steel | null, out: SheetHit<Hittable>[] = [], reg: Register | null = null): SheetHit<Hittable>[] {
   out.length = 0;
+  const cull = !!reg && reg.stamp > 0;
+  if (cull) {
+    crossed.clear();
+    crossFilter.notTeam = team;
+    reg!.ray(s.ox + s.dx * s.from, s.oz + s.dz * s.from, s.dx, s.dz, Math.max(0, s.len - s.from), s.half + reg!.slack, crossFilter, crossHits, MEASURE.Reach);
+    for (let k = 0; k < crossHits.n; k++) { const ref = reg!.ref[crossHits.e[k]]; if (ref) crossed.add(ref); }
+  }
   for (const t of targets) {
     if (!t.alive || t.team === team) continue;
     if (t.sheet) { t.sheet(s, out); continue; }
+    if (cull && !crossed.has(t) && reg!.published(t)) continue;
     rayFan(s, t, null, out);
   }
   if (steel) rayFan(s, null, steel, out);
@@ -136,8 +151,8 @@ const buf: SheetHit<Hittable>[] = [];
  * body × its share) and throw light ones if asked. `apply` false only predicts (the rail's aim line); `skip` leaves
  * out bodies already passed (a shell's earlier steps).
  */
-export function resolveSheet(field: Ground, targets: readonly Hittable[], steel: Steel | null, team: number, s: Sheet, damage: number, f: SheetFire, dir: THREE.Vector3, v: PenValues, apply = true, skip?: (h: SheetHit<Hittable>) => boolean): SheetShot {
-  const hits = sheetHits(targets, team, s, steel, buf);
+export function resolveSheet(field: Ground, targets: readonly Hittable[], steel: Steel | null, team: number, s: Sheet, damage: number, f: SheetFire, dir: THREE.Vector3, v: PenValues, apply = true, skip?: (h: SheetHit<Hittable>) => boolean, reg: Register | null = null): SheetShot {
+  const hits = sheetHits(targets, team, s, steel, buf, reg);
   groundRises(s, s.len, v.sheetStep, rises);
   const result = penetrate(skip ? hits.filter((h) => !skip(h)) : hits.slice(), rises, f.pen, s.len, v);
   let dealt = 0;

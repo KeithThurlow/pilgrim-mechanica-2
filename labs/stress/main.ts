@@ -13,6 +13,7 @@ import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import { Costs } from "../../src/core/costs";
 import type { TargetCandidate } from "../../src/game/targeting";
+import { viewOf } from "../../src/game/register";
 import type { MoveCommand } from "../../src/mech/walker";
 import type { Aim, Trigger } from "../../src/mech/upper";
 import { ROBOT_DEFAULTS, ROBOT_PARAMS } from "../../src/combat/robots";
@@ -83,6 +84,10 @@ const lab = await combatLab({
   demo: (t) => demo(t),
 });
 const { V, bf, player, app } = lab;
+// Every live enemy is in the battlefield's register (each owner publishes once a tick); time its rebuild and queries.
+// (Set before the awaits below: the demo runs on ticks from here on.)
+const reg = bf.register;
+reg.timing = true;
 if (params.has("settle")) V.stressSettle = Number(params.get("settle"));
 if (params.has("hold")) V.stressHold = Number(params.get("hold"));
 
@@ -99,24 +104,14 @@ await band.load(4);
 // The mech's dash and stomps reach both swarms, as in their labs.
 player.onStomp = (x, z, k) => { robots!.sw.stomp(x, z, V.stressRobotStomp * Math.min(1.5, k)); bandits!.sw.stomp(x, z, V.stressBanditStomp * Math.min(1.5, k)); };
 
-// Every live enemy the guns could take, built fresh on each call as the other labs do (its time is measured too).
-let targetsMs = 0;
-lab.targets = () => {
-  const t0 = performance.now();
-  const out: TargetCandidate[] = [];
-  robots!.candidates(out); bandits!.candidates(out); band!.candidates(out);
-  targetsMs += performance.now() - t0;
-  return out;
-};
-
 /** The demo: slow loops, both miniguns on the nearest enemy. */
 function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; lock?: TargetCandidate | null } {
   const a = t * 0.12, p = player.sim.pos;
   const cmd = { x: Math.sin(a), z: Math.cos(a), sprint: false };
-  let e: TargetCandidate | null = null, bd = Infinity;
-  for (const c of lab.targets()) { const d = Math.hypot(c.x - p.x, c.z - p.z); if (d < bd) { bd = d; e = c; } }
-  if (!e) return { cmd, aim: null, trigger: false };
-  return { cmd, aim: { x: e.x + (e.vx ?? 0) * V.lockLead, y: e.y, z: e.z + (e.vz ?? 0) * V.lockLead }, trigger: bd < V.range + 5, lock: e };
+  const n = reg.nearest(p.x, p.z, Infinity, lab.enemies);
+  if (n < 0) return { cmd, aim: null, trigger: false };
+  const e = viewOf(reg, n), bd = Math.hypot(e.x - p.x, e.z - p.z);
+  return { cmd, aim: { x: e.x + e.vx * V.lockLead, y: e.y, z: e.z + e.vz * V.lockLead }, trigger: bd < V.range + 5, lock: e };
 }
 
 // ---- The barrage: a missile swarm's blasts over ~0.6 s round the nearest enemy 15 m+ out, then a big mortar's ----
@@ -126,9 +121,10 @@ let barrageClock = 0, clock = 0;
 const blastAt = new THREE.Vector3();
 function barrage() {
   const p = player.sim.pos;
-  let e: TargetCandidate | null = null, bd = Infinity;
-  for (const c of lab.targets()) { const d = Math.hypot(c.x - p.x, c.z - p.z); if (d > 15 && d < bd) { bd = d; e = c; } }
-  if (!e) return;
+  let best = -1, bd = Infinity;
+  reg.each(lab.enemies, (k) => { const d = Math.hypot(reg.x[k] - p.x, reg.z[k] - p.z); if (d > 15 && d < bd) { bd = d; best = k; } });
+  if (best < 0) return;
+  const e = viewOf(reg, best);
   for (let i = 0; i < V.stressMissiles; i++) {
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * V.swarmRadius;
     queue.push({ at: clock + 0.4 + i * V.swarmRipple, x: e.x + Math.sin(a) * r, z: e.z + Math.cos(a) * r, r: V.swarmBlast, dmg: V.swarmDamage });
@@ -177,9 +173,14 @@ app.onTick((rawDt) => {
   ms.set("tick (all sim)", last.tick);
   ms.set("render (submit)", last.render);
   ms.set("gpu/wait", Math.max(0, last.frame - last.tick - last.render));
-  ms.set("  inside the above: target lists", targetsMs);
-  targetsMs = 0;
+  // The register: its rebuild is the shell's "register" stage; its queries (soft lock, demo, weapons) run inside
+  // other stages and are added up here.
+  ms.set("  inside the above: register rebuild", reg.rebuildMs);
+  ms.set("  inside the above: register queries", reg.queryMs);
+  const queries = reg.queries;
+  reg.queryMs = 0; reg.queries = 0;
   const counts = {
+    "register entries": reg.count, "register queries": queries,
     robots: robots!.sw.count, bandits: bandits!.sw.count, vehicles: band!.vehicles, "bandit mechs": band!.mechs,
     bodies: lab.deaths.dead.length, "dust particles": bf.dust.alive, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
   };

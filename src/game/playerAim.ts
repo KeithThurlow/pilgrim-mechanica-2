@@ -2,8 +2,8 @@
 // combatLab.ts, the convoy lab), so they can't drift apart (Keith 2026-10-26: the convoy lab had none of the combat
 // labs' targeting):
 // - MouseButtons: the cursor and both buttons (left click fires the left side, right click the right; Keith 2026-10-25);
-// - SoftAim: the soft lock under the cursor (src/game/targeting.ts) with the lead, the reticle on the sand and the
-//   orange brackets on the lock;
+// - SoftAim: the soft lock under the cursor (src/game/targeting.ts, over the battlefield's register) with the lead,
+//   the reticle on the sand and the orange brackets on the lock;
 // - CameraShake: kicks that decay by themselves (shakeDecay);
 // - fitArsenal: the weapons other than the miniguns (src/weapons) on the mech, drawn, with blasts shaking the camera
 //   by size and distance.
@@ -17,6 +17,7 @@ import type { ToonLook } from "../look/toon";
 import type { Battlefield } from "./battlefield";
 import type { MechUnit } from "./mechUnit";
 import { Targeting, type TargetCandidate, type TargetValues, type Lock } from "./targeting";
+import { EntryList, type Filter, type Register } from "./register";
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
 import type { WeaponValues } from "../weapons/tuning";
@@ -94,7 +95,7 @@ export class SoftAim {
    * footprint), else the one nearest the line of fire from `from`. A lock is led by its motion (the arms trail their
    * aim as they track, so swing them to where it will be by then); the rounds fly straight at the lock itself.
    */
-  pick(mouse: { x: number; y: number } | null, targets: readonly TargetCandidate[], from: THREE.Vector3, v: TargetValues & { range: number }): AimPick {
+  pick(mouse: { x: number; y: number } | null, reg: Register, enemies: Filter, from: THREE.Vector3, v: TargetValues & { range: number }): AimPick {
     const out: AimPick = { cursor: null, aim: null, shotAt: null, lock: null };
     if (!mouse || !screenToGround(mouse.x, mouse.y, this.canvas, this.camera, this.field, this.ground)) return out;
     const g = this.ground;
@@ -103,7 +104,7 @@ export class SoftAim {
     this.ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
     this.caster.setFromCamera(this.ndc, this.camera);
     const ray = this.caster.ray;
-    out.lock = this.targeting.pick(targets, { rayO: ray.origin, rayD: ray.direction, from, cursor: g, range: v.range }, v);
+    out.lock = this.targeting.pick(reg, enemies, { rayO: ray.origin, rayD: ray.direction, from, cursor: g, range: v.range }, v);
     if (out.lock) {
       const t = out.lock.target, L = v.lockLead;
       out.shotAt = { x: t.x, y: t.y, z: t.z };
@@ -147,8 +148,12 @@ export class CameraShake {
  * shots and launches shake the camera, and every blast near the mech shakes it by its size and distance.
  */
 export function fitArsenal(bf: Battlefield, player: MechUnit, v: MechUnit["v"] & WeaponValues, toon: ToonLook, scene: THREE.Scene,
-  targets: () => TargetCandidate[], shake: CameraShake) {
-  const arsenal = new Arsenal(bf, player, v, toon, targets);
+  enemies: Filter, shake: CameraShake) {
+  // The weapons' view of the register: one list per tick (the line mortar's snap, the missile picks), and a lookup by
+  // id for each missile's target (no list rebuilt per missile).
+  const list = new EntryList(bf.register, enemies);
+  const arsenal = new Arsenal(bf, player, v, toon, () => list.get());
+  arsenal.findTarget = (key) => list.find(key);
   player.weapons = arsenal;
   const draw = new ArsenalDraw(arsenal, bf.field);
   scene.add(draw.group);

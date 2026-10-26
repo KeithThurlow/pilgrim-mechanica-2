@@ -7,7 +7,8 @@
 // ?fresh ignores the saved bay.
 import "../../src/core/lab.css";
 import { combatLab } from "../../src/game/combatLab";
-import type { TargetCandidate } from "../../src/game/targeting";
+import { KIND, FLAG } from "../../src/game/register";
+import { listOwner } from "../../src/game/registerOwners";
 import { applyLoadout } from "../../src/game/loadoutApply";
 import { DummyRange, DUMMY_DEFAULTS, DUMMY_PARAMS } from "../../src/game/dummies";
 import { DummiesDraw } from "../../src/game/dummiesDraw";
@@ -103,11 +104,9 @@ const syncTargets = () => {
 };
 syncTargets();
 
-lab.targets = () => {
-  const out: TargetCandidate[] = [];
-  for (const d of rng.dummies) if (d.alive) out.push({ x: d.x, y: d.y + V.dummyHeight * 0.6, z: d.z, r: V.dummyRadius + 0.4, key: d });
-  return out;
-};
+// Into the register for the soft lock and the weapons.
+lab.bf.register.add(listOwner("dummies", () => rng.dummies, (reg, d, k, s) =>
+  reg.put(k, s, KIND.Prop, d.team, FLAG.Hittable | (d.light ? FLAG.Light : 0), d.x, d.y + d.height * 0.6, d.z, d.radius + 0.4)));
 
 lab.onFrame((dt) => {
   if (registered.length !== rng.dummies.length || registered.some((d, i) => d !== rng.dummies[i])) syncTargets();

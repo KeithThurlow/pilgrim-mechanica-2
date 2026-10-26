@@ -61,10 +61,10 @@ import { POI_PARAMS } from "../../src/world/pois";
 import { SITE_PARAMS } from "../../src/pois/kinds";
 import { CAMP_PARAMS } from "../../src/expedition/camps";
 import { Costs } from "../../src/core/costs";
-import { TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate, type Lock } from "../../src/game/targeting";
+import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type Lock } from "../../src/game/targeting";
+import { mechOwner } from "../../src/game/registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../../src/weapons/tuning";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "../../src/game/playerAim";
-import { robotCandidates } from "../../src/combat/robotTarget";
 import { BIG, DOWN } from "../../src/combat/robots";
 import { WALK_LEGS } from "../../src/combat/robotLegs";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
@@ -160,11 +160,13 @@ function homeAboard() {
 }
 loop.onHome = homeAboard;
 // Targets for the soft lock and the weapons: every robot out there (asleep ones too: shooting one wakes its camp).
-const cands: TargetCandidate[] = [];
-const targets = () => robotCandidates(loop.swarms.sw, cands);
+// They're in the battlefield's register (src/game/register.ts) with the player's mech, rebuilt once a tick.
+bf.register.add(mechOwner("player", () => [player]));
+bf.register.add(loop.swarms.target);
+const enemies = enemiesOf(player.team);
 // The player's weapons as in the combat labs (src/game/playerAim.ts): the arsenal, camera shake, blasts.
 const shaker = new CameraShake();
-const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, targets, shaker);
+const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -505,6 +507,8 @@ app.onTick((rawDt) => {
   const dt = fixedDt || rawDt;
   clock += dt;
   costs.begin();
+  bf.register.rebuild();
+  costs.mark("register");
   keys.move(camera, stick);
   if (keys.has("KeyR")) player.upper.resupply();
   const fHeld = keys.has("KeyF") || clock < holdF;
@@ -523,7 +527,7 @@ app.onTick((rawDt) => {
     if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
     // Soft lock as in the combat labs: the enemy under the cursor (a tall walker by its body, or the sand among its
     // feet), else the one nearest the line of fire; led by its motion, the rounds straight at it.
-    ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, targets(), sim.pos, V));
+    ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, bf.register, enemies, sim.pos, V));
     trigger = [buttons.left, buttons.right];
     held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
   }

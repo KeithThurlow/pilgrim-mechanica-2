@@ -6,6 +6,7 @@
 // Structure of arrays, INFANTRY_MAX slots; dead slots are reused once their body has sunk (or oldest body first).
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { KIND, FLAG, type Register } from "../game/register";
 
 export const INFANTRY_DEFAULTS = {
   runSpeed: 4.5,
@@ -135,6 +136,9 @@ export class InfantrySwarm {
   readonly look = new Uint8Array(INFANTRY_MAX); readonly seed = new Float32Array(INFANTRY_MAX);
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(INFANTRY_MAX);
+  /** Serial per bandit, handed out at spawn and never reused (the register's ids, rule 12). */
+  readonly uid = new Uint32Array(INFANTRY_MAX);
+  private nextUid = 1;
   /** Live (not DEAD) bandits. */
   count = 0;
   /** One past the highest slot ever used: loops stop here. */
@@ -196,6 +200,7 @@ export class InfantrySwarm {
       this.slope[i] = 0; this.fallYaw[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
+      this.uid[i] = this.nextUid++;
       this.count++;
     }
   }
@@ -408,15 +413,17 @@ export class InfantrySwarm {
     onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, i);
   }
 
-  /** Nearest standing bandit hit by a ray (vertical cylinder of radius × height), or null. */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number } | null {
+  /** Nearest standing bandit hit by a ray (vertical cylinder of radius × height), or null. only: test just these (the
+   *  register's candidates), else every one. */
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const r = this.v.banditRadius, r2 = r * r, H = this.v.banditHeight;
     const a = dx * dx + dz * dz;
     let best = -1, bestT = maxDist;
-    for (let i = 0; i < this.hi; i++) {
+    for (let j = 0, n = only ? only.length : this.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       const s = this.state[i];
       if (s === DOWN || s >= DEAD) continue;
       const qx = ox - this.px[i], qz = oz - this.pz[i];
@@ -456,6 +463,16 @@ export class InfantrySwarm {
     this.count--;
     if (this.evN < EVENTS_MAX) { this.evX[this.evN] = this.px[i]; this.evZ[this.evN] = this.pz[i]; this.evN++; }
     this.onDeath?.(i, nx, nz, s);
+  }
+
+  /** Into the register (src/game/register.ts): every standing bandit at its centre of mass, light (rounds carry on). */
+  publish(reg: Register, team: number, ref: unknown = null): void {
+    const y = this.v.banditHeight * 0.55, r = Math.max(0.6, this.v.banditRadius);
+    const flags = FLAG.Hittable | FLAG.Detectable | FLAG.Light;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DOWN) continue; // down, dead, empty (rounds pass over the downed too)
+      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
+    }
   }
 
   /** Damage a live bandit; returns true if this killed it. Death throws the body along (dirX, dirZ). */

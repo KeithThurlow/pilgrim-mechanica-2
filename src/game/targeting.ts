@@ -9,7 +9,9 @@
 //    within `lockWidth` + a widening cone (`lockCone`) of that line counts; closest to the line wins (a little bias to
 //    nearer ones).
 // The last target is kept while it still qualifies unless another is clearly better (`lockSticky`).
+// The candidates come from the register (src/game/register.ts; docs/proposal-register.md step 2): no lab writes a list.
 import type { Param } from "../core/tweaks";
+import { FLAG, MEASURE, RayHits, viewOf, type Filter, type Register } from "./register";
 
 export const TARGET_DEFAULTS = {
   autoLock: 1,
@@ -32,10 +34,10 @@ export const TARGET_PARAMS: Param[] = [
   { key: "lockSticky", label: "Keep the last target (0-1)", min: 0, max: 1, step: 0.05, group: "Targeting" },
 ];
 
-/** One enemy the guns could take: its centre of mass, a body radius, and a key that stays the same while it lives. */
-/** vx, vz: its ground velocity (m/s), when it moves, so the guns can lead it. */
-/** foot: a tall walker's footprint (m, flat from under its body to its farthest planted foot): a cursor on the sand
- *  inside it is on the walker, and the lock takes its body (Keith 2026-10-26: hard to target the tall walkers). */
+/** One enemy the guns could take: its centre of mass, a body radius, and a key that stays the same while it lives
+ *  (the register's id). vx, vz: its ground velocity (m/s), so the guns can lead it. foot: a tall walker's footprint (m,
+ *  flat from under its body to its farthest planted foot): a cursor on the sand inside it is on the walker, and the
+ *  lock takes its body (Keith 2026-10-26: hard to target the tall walkers). Made from a register entry (viewOf). */
 export interface TargetCandidate { x: number; y: number; z: number; r: number; key: unknown; vx?: number; vz?: number; foot?: number }
 
 export interface Vec3 { x: number; y: number; z: number }
@@ -50,49 +52,76 @@ export interface LockQuery {
 
 export interface Lock { target: TargetCandidate; how: "cursor" | "line" }
 
-export class Targeting {
-  last: unknown = null;
+/** Who the player's guns may take: anything hittable not on the player's team and not knocked down (a register filter). */
+export const enemiesOf = (team: number): Filter => ({ all: FLAG.Hittable, none: FLAG.Down, notTeam: team });
 
-  pick(cands: readonly TargetCandidate[], q: LockQuery, v: TargetValues): Lock | null {
+/**
+ * The soft lock over the register: the grid hands back the few things near the cursor ray's shadow on the ground,
+ * round the cursor (footprints) and in the line of fire; the rules above run on those only.
+ */
+export class Targeting {
+  /** The last target's id (sticky). */
+  last: unknown = null;
+  private cand: number[] = [];
+  private feet: number[] = [];
+  private hits = new RayHits();
+
+  pick(reg: Register, f: Filter, q: LockQuery, v: TargetValues): Lock | null {
     if (!v.autoLock) { this.last = null; return null; }
     const sticky = 1 - v.lockSticky * 0.6;
-    // 1. Under the cursor.
-    let best: TargetCandidate | null = null, bestS = Infinity;
-    for (const c of cands) {
-      const ox = c.x - q.rayO.x, oy = c.y - q.rayO.y, oz = c.z - q.rayO.z;
+    // 1. Under the cursor: things near the cursor ray (by its shadow on the ground, out a little past the cursor where
+    // the ray is already under the sand), and walkers whose footprint holds the cursor.
+    let best = -1, bestS = Infinity;
+    const hx = q.rayD.x, hz = q.rayD.z, hl = Math.hypot(hx, hz);
+    const cand = this.cand, feet = this.feet;
+    cand.length = 0;
+    if (hl > 1e-4) {
+      // A body within r + lockCursor of the 3D ray is within that of its shadow; past the cursor the ray sinks
+      // `slope` m per m, so a body above the sand can only be near it for 2 * reach / slope more.
+      const toCursor = ((q.cursor.x - q.rayO.x) * hx + (q.cursor.z - q.rayO.z) * hz) / hl;
+      const slope = Math.max(0.2, -q.rayD.y / hl), reach = reg.maxR + v.lockCursor;
+      reg.ray(q.rayO.x, q.rayO.z, hx, hz, Math.max(0, toCursor) + (2 * reach) / slope + 2, v.lockCursor, f, this.hits);
+      for (let k = 0; k < this.hits.n; k++) cand.push(this.hits.e[k]);
+    } else reg.near(q.cursor.x, q.cursor.z, v.lockCursor + reg.maxR, f, cand);
+    reg.near(q.cursor.x, q.cursor.z, v.lockCursor, f, feet, MEASURE.Foot);
+    const n = cand.length + feet.length;
+    for (let k = 0; k < n; k++) {
+      const e = k < cand.length ? cand[k] : feet[k - cand.length];
+      const cx = reg.x[e], cy = reg.y[e], cz = reg.z[e], r = reg.r[e], foot = reg.foot[e];
+      const ox = cx - q.rayO.x, oy = cy - q.rayO.y, oz = cz - q.rayO.z;
       const t = ox * q.rayD.x + oy * q.rayD.y + oz * q.rayD.z;
       if (t <= 0) continue;
       const dx = ox - q.rayD.x * t, dy = oy - q.rayD.y * t, dz = oz - q.rayD.z * t;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       // A tall walker: the cursor anywhere on the sand among its feet counts too (a little behind a hit on a body).
-      let s = d <= c.r + v.lockCursor ? d / (c.r + v.lockCursor + 1e-3) : Infinity;
-      if (c.foot) {
-        const reach = c.foot + v.lockCursor, fd = Math.hypot(q.cursor.x - c.x, q.cursor.z - c.z);
-        if (fd <= reach) s = Math.min(s, 0.5 + 0.5 * (fd / reach));
+      let s = d <= r + v.lockCursor ? d / (r + v.lockCursor + 1e-3) : Infinity;
+      if (foot > 0) {
+        const reachF = foot + v.lockCursor, fd = Math.hypot(q.cursor.x - cx, q.cursor.z - cz);
+        if (fd <= reachF) s = Math.min(s, 0.5 + 0.5 * (fd / reachF));
       }
       if (s === Infinity) continue;
-      if (Math.hypot(c.x - q.from.x, c.z - q.from.z) > q.range) continue;
-      s *= c.key === this.last ? sticky : 1;
-      if (s < bestS) { bestS = s; best = c; }
+      if (Math.hypot(cx - q.from.x, cz - q.from.z) > q.range) continue;
+      s *= reg.id[e] === this.last ? sticky : 1;
+      if (s < bestS || (s === bestS && reg.id[e] < reg.id[best])) { bestS = s; best = e; }
     }
-    if (best) { this.last = best.key; return { target: best, how: "cursor" }; }
+    if (best >= 0) { this.last = reg.id[best]; return { target: viewOf(reg, best), how: "cursor" }; }
     // 2. Along the line of fire (flat).
     let ux = q.cursor.x - q.from.x, uz = q.cursor.z - q.from.z;
     const ul = Math.hypot(ux, uz);
     if (ul < 1e-3) { this.last = null; return null; }
     ux /= ul; uz /= ul;
-    const tanCone = Math.tan(((v.lockCone + (v.sensorLock ?? 0)) * Math.PI) / 180);
-    for (const c of cands) {
-      const ox = c.x - q.from.x, oz = c.z - q.from.z;
+    // A fitted sensor head widens the cone (sensorLock).
+    const cone = ((v.lockCone + (v.sensorLock ?? 0)) * Math.PI) / 180, tanCone = Math.tan(cone);
+    reg.cone(q.from.x, q.from.z, ux, uz, q.range, v.lockWidth, cone, f, cand);
+    for (const e of cand) {
+      const ox = reg.x[e] - q.from.x, oz = reg.z[e] - q.from.z;
       const t = ox * ux + oz * uz;
-      if (t <= 0 || t > q.range) continue;
       const d = Math.abs(ox * uz - oz * ux);
-      const allow = c.r + v.lockWidth + t * tanCone;
-      if (d > allow) continue;
-      const s = (d / allow + t / q.range * 0.15) * (c.key === this.last ? sticky : 1);
-      if (s < bestS) { bestS = s; best = c; }
+      const allow = reg.r[e] + v.lockWidth + t * tanCone;
+      const s = (d / allow + (t / q.range) * 0.15) * (reg.id[e] === this.last ? sticky : 1);
+      if (s < bestS || (s === bestS && reg.id[e] < reg.id[best])) { bestS = s; best = e; }
     }
-    this.last = best ? best.key : null;
-    return best ? { target: best, how: "line" } : null;
+    this.last = best >= 0 ? reg.id[best] : null;
+    return best >= 0 ? { target: viewOf(reg, best), how: "line" } : null;
   }
 }

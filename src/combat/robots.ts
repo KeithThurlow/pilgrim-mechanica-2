@@ -12,6 +12,7 @@
 // Structure of arrays, ROBOT_MAX slots; dead slots are reused once their wreck has sunk (or oldest wreck first).
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { KIND, FLAG, type Register } from "../game/register";
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
   type V3, type WalkSpec,
@@ -342,6 +343,9 @@ export class RobotSwarm {
   readonly seed = new Float32Array(ROBOT_MAX);
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(ROBOT_MAX);
+  /** Serial per robot, handed out at spawn and never reused (the register's ids, rule 12). */
+  readonly uid = new Uint32Array(ROBOT_MAX);
+  private nextUid = 1;
   /**
    * World height of the body's centre (the hub for small ones, the chassis for medium and big); px, pz are under it.
    * py is the sand under the robot when it stands, the hub itself while leaping or latched.
@@ -461,6 +465,7 @@ export class RobotSwarm {
       this.gripK[i] = 1 + (this.rand() * 2 - 1) * v.robotGrip;
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
       this.gen[i]++;
+      this.uid[i] = this.nextUid++;
       this.count++;
       if (big || mid) {
         // Feet planted where they want to be, the body at its height above them.
@@ -478,6 +483,26 @@ export class RobotSwarm {
       } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
     }
     return made;
+  }
+
+  /**
+   * Into the register (src/game/register.ts): every robot not dead, at its body's centre (robotCentre), its body
+   * radius, a walker's footprint, its ground velocity, and its hit reach (a walker's legs and arms: the same sphere
+   * hitRay and the sheet reject with); small ones light (rounds carry on), frozen ones asleep, downed ones down (still
+   * hittable, not locked).
+   */
+  publish(reg: Register, team: number, ref: unknown = null): void {
+    const base = FLAG.Hittable | FLAG.Detectable, hk = this.v.robotHitScale;
+    for (let i = 0; i < this.hi; i++) {
+      const st = this.state[i];
+      if (st >= DEAD) continue; // dead, empty
+      const k = this.kind[i], s = this.size[i];
+      const r = Math.max(0.6, k === BIG ? s * 0.5 : k === MID ? s * 0.4 : s * 0.35);
+      const reach = k === SMALL ? s * Math.max(1, 0.5 * hk) : Math.max(s * 0.6 * hk, this.heightOf(i) * 1.3 + s);
+      const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0) | (st === DOWN ? FLAG.Down : 0);
+      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r,
+        k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i], reach, ref);
+    }
   }
 
   /** Take a robot off the field at once (live or dead; its slot freed). */
@@ -1087,16 +1112,17 @@ export class RobotSwarm {
    * ellipsoid round the hub (its size × hit scale). Medium: an ellipsoid round the chassis and thin capsules down each
    * leg (thigh and shin; the shin's low quarter is its foot). Big: an ellipsoid round the high chassis, capsules down
    * the arm legs (boom and stick) and a fatter one round each bucket (its foot). part says which (PART_*); leg is true
-   * for a leg or a foot.
+   * for a leg or a foot. only: test just these robots (the register's candidates), else every one.
    */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number; leg: boolean; part: number } | null {
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number; leg: boolean; part: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const k = this.v.robotHitScale;
     let best = -1, bestT = maxDist, bestPart = PART_BODY;
     const hip = this.hp3, knee = this.kn3, tip = this.tp3, foot = this.ft3, low = this.lw3;
-    for (let i = 0; i < this.hi; i++) {
+    for (let j = 0, n = only ? only.length : this.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       const s = this.state[i];
       if (s >= DEAD) continue;
       const S = this.size[i], kind = this.kind[i];

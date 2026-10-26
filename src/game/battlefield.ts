@@ -4,6 +4,7 @@
 import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
+import { Register } from "./register";
 import { WaterFx, WATER_FX_DEFAULTS, type WaterFxValues } from "../fx/water";
 import { WaterDraw } from "../fx/waterDraw";
 import { ShellsDraw, SHELL_FX_DEFAULTS, type ShellFxValues } from "../fx/shellsDraw";
@@ -100,6 +101,9 @@ export class Battlefield {
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
   readonly targets: Hittable[] = [];
+  /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts): owners add themselves;
+   *  the lab rebuilds it once a tick, before the soft lock. */
+  readonly register = new Register();
   /** Slow telegraphed shells (lob) and their landing marks. */
   readonly shells = new Shells();
   readonly shellsDraw: ShellsDraw;
@@ -221,7 +225,7 @@ export class Battlefield {
 
   /** Resolve a sheet against every target and the steel wrecks, applying damage (or only predicting, apply false). */
   resolveSheet(team: number, s: Sheet, damage: number, f: SheetFire, dir: THREE.Vector3, apply = true, skip?: (h: SheetHit<Hittable>) => boolean): SheetShot {
-    return resolveSheet(this.field, this.targets, this.wrecks, team, s, damage, f, dir, this.v as BattlefieldValues & PenValues, apply, skip);
+    return resolveSheet(this.field, this.targets, this.wrecks, team, s, damage, f, dir, this.v as BattlefieldValues & PenValues, apply, skip, this.register);
   }
 
   /** fire() for a sheet round: resolve it, then draw the tracer to where it ended and sparks where it went through. */
