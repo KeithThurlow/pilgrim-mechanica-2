@@ -31,6 +31,21 @@ export type RocketEnd = "target" | "body" | "steel" | "ground";
 /** Other things that stop a rocket (steel wrecks): distance along the ray, or -1. */
 export type Blocker = (o: THREE.Vector3, d: THREE.Vector3, maxDist: number) => number;
 
+/**
+ * Where a rocket from `from` goes: the ground under the cursor, out to range; but with a soft lock whose footprint the
+ * cursor is on (a robot, a bandit), its body's centre (2026-10-26: a rocket at the sand under a 10 m excavator flew
+ * under its chassis and burst out of reach).
+ */
+export function rocketAim(from: Vec3, cur: Vec3, lock: { x: number; y: number; z: number; r: number; foot?: number } | null, range: number, ground: Ground): Vec3 {
+  if (lock && Math.hypot(cur.x - lock.x, cur.z - lock.z) <= Math.max(lock.r, lock.foot ?? 0) + 0.5) {
+    const dx = lock.x - from.x, dz = lock.z - from.z;
+    if (Math.hypot(dx, dz) <= range) return { x: lock.x, y: lock.y, z: lock.z };
+  }
+  const dx = cur.x - from.x, dz = cur.z - from.z, d = Math.hypot(dx, dz), k = d > range ? range / d : 1;
+  const x = from.x + dx * k, z = from.z + dz * k;
+  return { x, y: ground.height(x, z), z };
+}
+
 export class Rockets {
   readonly list: Rocket[] = [];
   private at = new THREE.Vector3();

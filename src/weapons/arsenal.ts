@@ -20,9 +20,10 @@ import { newPaint, clearPaint, type Paint, type Strip, type Vec3 } from "./paint
 import { SalvoSim, planStrip, type SalvoStats } from "./salvo";
 import { RailSim, railSheet, coilGlow, type RailStats } from "./rail";
 import type { Sheet } from "../game/sheet";
-import { MortarSim, mortarAim, lobArc, lobPoint, type MortarStats } from "./mortar";
+import { MortarSim, mortarAim, mortarHeight, lobArc, lobPoint, type MortarStats } from "./mortar";
 import { CannonShells, leadPoint, type CannonStats, type Shell } from "./autocannon";
-import { Rockets, type RocketStats } from "./rocket";
+import { Rockets, rocketAim, type RocketStats } from "./rocket";
+import { splashBlast, firstBody } from "../game/splash";
 import { SwarmSim, type SwarmStats } from "./swarm";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
 import { addWeaponSounds } from "./weaponSound";
@@ -290,7 +291,7 @@ export class Arsenal implements MechWeapons {
       } else if (sh.weapon === "mortar") {
         if (sh.mortar.fire(sh.at.x, sh.at.z, this.mortarStats(sh.own))) this.onFire?.("mortar");
       } else if (sh.weapon === "missiles") {
-        const picks = this.candidates().map((c) => ({ x: c.x, z: c.z, key: c.key }));
+        const picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         if (sh.swarm.fire(sh.at.x, sh.at.z, this.swarmStats(sh.own), picks, bf.field)) this.onFire?.("missiles");
       } else if (sh.cool <= 0 && cur) {
         const st = this.rpgStats(sh.own, true);
@@ -314,31 +315,32 @@ export class Arsenal implements MechWeapons {
       bf.sfx.playSound("mortar", this.tmp.set(r.p0.x, r.p0.y, r.p0.z), 0.7, 1.2 + Math.random() * 0.2);
       bf.dust.smoke(r.p0.x, r.p0.y, r.p0.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.35, 0.9, 0.7, 0.4);
       if (sh.model) sh.model.recoil.position.y = -0.08;
-    });
+    }, this.bodyHit);
     for (const r of sh.line.rockets) if (r.live && r.launched) this.trail(r.prev, r.pos, 0.12 * v.salvoSmoke, 1);
     const mst = this.mortarStats(sh.own);
     sh.mortar.update(dt, (x, z) => {
       const from = this.shoulderMuzzle(sh, 0, new THREE.Vector3());
-      const to = { x, y: bf.field.height(x, z), z };
+      const up = mortarHeight(x, z, u.lock, v);
+      const to = { x, y: up ?? bf.field.height(x, z), z };
       const arc = lobArc(bf.field, from, to, v.mortarArc, v.mortarClear);
-      bf.lob(u.team, from, x, z, v.mortarFlight, arc, mst.blast, mst.damage);
+      bf.lob(u.team, from, x, z, v.mortarFlight, arc, mst.blast, mst.damage, up);
       bf.sfx.playSound("mortar", from, 1.2, 0.75);
       for (let k = 0; k < 8; k++) bf.dust.smoke(from.x, from.y + 0.3, from.z, (Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 1.5, 0.5, 1.6, 0.75, 0.6);
       this.onShake?.(0.18);
       if (sh.model) sh.model.recoil.position.y = -0.3;
     });
     const track = (key: unknown) => {
-      const t = key as { alive?: boolean } | null;
-      if (!t || t.alive === false) return null;
+      // Robot keys are numbers (0 is one); objects carry alive.
+      if (key === null || key === undefined || (typeof key === "object" && (key as { alive?: boolean }).alive === false)) return null;
       const c = this.candidates().find((x) => x.key === key);
-      return c ? { x: c.x, z: c.z } : null;
+      return c ? { x: c.x, y: c.y, z: c.z } : null;
     };
     sh.swarm.update(dt, bf.field, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, track, (m) => {
       this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage);
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
       if (sh.model) sh.model.recoil.position.z = -0.05;
-    });
+    }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
     if (sh.model) { sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 6); sh.model.recoil.position.z += (0 - sh.model.recoil.position.z) * Math.min(1, dt * 8); }
     const ready = sh.weapon === "linemortar" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0;
@@ -375,12 +377,21 @@ export class Arsenal implements MechWeapons {
 
   // ---- Effects ----
 
-  /** Where a rocket from `from` aimed at the cursor goes: the ground under the cursor, pulled in to range. */
+  /**
+   * Where a rocket from `from` aimed at the cursor goes: the ground under the cursor, pulled in to range; or the body
+   * of the lock the cursor is on (src/weapons/rocket.ts rocketAim).
+   */
   private rpgPoint(from: THREE.Vector3, cur: THREE.Vector3): THREE.Vector3 {
-    const dx = cur.x - from.x, dz = cur.z - from.z, d = Math.hypot(dx, dz), k = d > this.v.rpgRange ? this.v.rpgRange / d : 1;
-    const x = from.x + dx * k, z = from.z + dz * k;
-    return new THREE.Vector3(x, this.bf.field.height(x, z), z);
+    const p = rocketAim(from, cur, this.unit.lock, this.v.rpgRange, this.bf.field);
+    return new THREE.Vector3(p.x, p.y, p.z);
   }
+
+  /** The fraction of the way from a to b where a projectile meets a body of another team (-1: none). */
+  private ha = new THREE.Vector3(); private hb = new THREE.Vector3();
+  private bodyHit = (a: Vec3, b: Vec3) => {
+    const h = firstBody(this.bf.targets, this.unit.team, this.ha.set(a.x, a.y, a.z), this.hb.set(b.x, b.y, b.z));
+    return h ? h.f : -1;
+  };
 
   private fireRocket(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats) {
     const bf = this.bf;
@@ -554,7 +565,7 @@ export class Arsenal implements MechWeapons {
     const bf = this.bf, v = this.v;
     const d = this.dir.copy(vel).normalize();
     if (t) { if (!swept) t.damage(damage, at, d); bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 8, 7); }
-    if (splash > 0) for (const o of bf.targets) if (o !== t && o.alive && o.team !== team && o.splash) o.splash(at, splash, damage * v.acSplashShare, d);
+    if (splash > 0) splashBlast(bf.targets, team, at, splash, damage * v.acSplashShare, d, t);
     if (!t && bf.inWater(at.x, at.z)) bf.water?.splash(at.x, at.z, 1, d.x, d.z, 1.2);
     else { bf.dust.hit(at.x, at.y, at.z, d.x, d.z, 1.8); if (!t) bf.marks.crater(at.x, at.z, 1.3); }
     for (let k = 0; k < 4; k++) bf.dust.smoke(at.x, at.y + 0.3, at.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.3, 0.8, 0.7, 0.75);

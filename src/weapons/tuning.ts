@@ -106,6 +106,7 @@ export const WEAPON_DEFAULTS = {
   // Blasts (every blast on the battlefield)
   dentBudget: 6,
   dentMerge: 0.6,
+  blastGroundReach: 0.5,
   blastShake: 0.35,
   blastShakeReach: 45,
   shakeDecay: 9,
@@ -219,6 +220,7 @@ export const WEAPON_PARAMS: Param[] = [
 
   { key: "dentBudget", label: "Dent time per frame (ms)", min: 0.5, max: 30, step: 0.5, group: B, tip: "Blasts queue their craters; each frame digs queued ones until this much time is spent (at least one). A 12-missile swarm spreads over a few frames instead of stalling one" },
   { key: "dentMerge", label: "Merge dents closer than (× radius)", min: 0, max: 2, step: 0.05, group: B, tip: "A queued dent this close to another (as a share of the bigger radius) joins it: one dig instead of two" },
+  { key: "blastGroundReach", label: "Digs when within (× radius) of the ground", min: 0, max: 2, step: 0.05, group: B, tip: "A blast higher than this over the sand (a rocket or missile on a tall robot's chassis) bursts in the air: no crater, no ground mark" },
   { key: "blastShake", label: "Camera shake per blast", min: 0, max: 2, step: 0.01, group: B, tip: "For a 2.5 m blast next to the mech; bigger blasts shake more, far ones less" },
   { key: "blastShakeReach", label: "Shake reach (m)", min: 5, max: 150, step: 1, group: B, tip: "Blasts farther than this from the mech don't shake the camera" },
   { key: "shakeDecay", label: "Shake settles (/s)", min: 1, max: 30, step: 0.5, group: B },

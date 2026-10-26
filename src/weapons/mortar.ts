@@ -28,6 +28,17 @@ export function mortarAim(from: { x: number; z: number }, cursor: { x: number; z
   return { x, z };
 }
 
+/**
+ * How high a shell coming down at (x, z) should land: on the body of the lock when (x, z) is under it (its centre,
+ * 2026-10-26: a shell aimed at the sand under a 10 m excavator's chassis came down past it, out of reach), else on
+ * the sand (undefined).
+ */
+export function mortarHeight(x: number, z: number, lock: { x: number; y: number; z: number; r: number; vx?: number; vz?: number } | null, v: WeaponValues): number | undefined {
+  if (!lock) return undefined;
+  const lx = lock.x + (lock.vx ?? 0) * v.mortarFlight * v.mortarLead, lz = lock.z + (lock.vz ?? 0) * v.mortarFlight * v.mortarLead;
+  return Math.hypot(x - lx, z - lz) <= lock.r + v.mortarRing ? lock.y : undefined;
+}
+
 /** Where each shell lands: spread inside the ring (a sunflower, turned by the seed), never outside it. */
 export function mortarPoints(cx: number, cz: number, n: number, ring: number, seed: number): { x: number; z: number }[] {
   const out: { x: number; z: number }[] = [];

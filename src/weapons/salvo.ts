@@ -145,9 +145,10 @@ export class SalvoSim {
 
   /**
    * Advance. `launch(i, out)` fills the tube rocket i leaves from; onLaunch and onLand are called as they leave and
-   * as each lands (in order along the strip).
+   * as each lands (in order along the strip). `hit(a, b)`: the fraction of a step's way from a to b where it meets a
+   * body (-1: none), tested on the way down; a shell that meets one goes off there, early (2026-10-26).
    */
-  update(dt: number, launch: (i: number, out: Vec3) => void, onLand: (r: Rocket) => void, onLaunch?: (r: Rocket) => void) {
+  update(dt: number, launch: (i: number, out: Vec3) => void, onLand: (r: Rocket) => void, onLaunch?: (r: Rocket) => void, hit?: (a: Vec3, b: Vec3) => number) {
     const v = this.v;
     this.clock += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
@@ -177,6 +178,12 @@ export class SalvoSim {
       r.prev.x = r.pos.x; r.prev.y = r.pos.y; r.prev.z = r.pos.z;
       // Ease in: slow off the rail, fast at the end.
       bezier(r, s * s * (1.6 - 0.6 * s), r.pos);
+      const f = hit && r.pos.y < r.prev.y ? hit(r.prev, r.pos) : -1;
+      if (f >= 0) {
+        r.live = false;
+        r.pos = { x: r.prev.x + (r.pos.x - r.prev.x) * f, y: r.prev.y + (r.pos.y - r.prev.y) * f, z: r.prev.z + (r.pos.z - r.prev.z) * f };
+        onLand(r); continue;
+      }
       if (s >= 1) { r.live = false; r.pos = { ...r.p3 }; onLand(r); }
     }
   }

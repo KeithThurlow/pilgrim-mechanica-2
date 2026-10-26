@@ -2,9 +2,11 @@
 // hit test (hubs, medium and big chassis, walkers' legs and feet), the nearest part hit stops the round (steel: rounds
 // spark off it there) and its robot takes the damage scaled by the part (Keith 2026-10-26: the body full, legs a
 // share, feet less; robotLegDamage, robotFootDamage). Small ones are light (rounds carry on through, splash hurts them
-// fully); medium and big ones stop rounds; medium ones take a share of splash, big ones none.
+// fully); medium and big ones stop rounds; medium ones take a share of a round's splash, big ones none. Explosives'
+// blasts (2026-10-26) are measured to each robot's nearest part and count that part's share, times robotMidBlast or
+// robotBigBlast, so a blast on an excavator's bucket or chassis hurts it. Host-owned damage.
 import * as THREE from "three/webgpu";
-import type { Hittable } from "../game/battlefield";
+import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import type { TargetCandidate } from "../game/targeting";
 import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, robotCentre, robotFootprint, type RobotSwarm } from "./robots";
@@ -13,6 +15,8 @@ import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type S
 
 export class RobotTarget implements Hittable {
   readonly surface: HitSurface = "metal";
+  /** One adapter for the whole swarm: an autocannon shell's splash spares only the robot it struck. */
+  readonly spares = true;
   alive = true;
   kills = 0;
   /** Rounds that landed on each part since construction (body, leg, foot), for HUDs and checks. */
@@ -99,24 +103,72 @@ export class RobotTarget implements Hittable {
   }
 
   /**
-   * Robots whose body is within radius of the point: small ones take it all, medium ones a share (robotMidSplash,
-   * measured to the chassis' edge), big ones shrug it off.
+   * Splash at a point. Each robot is measured to its nearest part, not its centre (2026-10-26: an excavator's chassis
+   * is 10 m up, so a blast at its feet measured to the chassis never reached it): the body (its hit ellipsoid as a
+   * squat cylinder), and a walker's leg bones and feet (their hit capsules). Each part in reach counts its share
+   * (body full, legs robotLegDamage, feet robotFootDamage) times the falloff (full at the part, half at the edge); the
+   * robot takes the best of them. Small ones take it all; medium and big ones their share by what it is: a round's
+   * splash (robotMidSplash; big ones none) or an explosive's blast (o.blast: robotMidBlast, robotBigBlast). o.spare
+   * spares the robot the last direct hit struck (it took the shell already).
    */
-  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
-    const sw = this.swarm, midK = sw.v.robotMidSplash;
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts) {
+    const sw = this.swarm, v = sw.v, blast = !!o?.blast, spare = o?.spare ? this.last : -1;
+    const midK = blast ? v.robotMidBlast : v.robotMidSplash, bigK = blast ? v.robotBigBlast : 0;
     let n = 0;
     for (let i = 0; i < sw.hi; i++) {
-      if (sw.state[i] >= DOWN) continue;
-      const kind = sw.kind[i];
-      if (kind !== SMALL && (kind !== MID || midK <= 0)) continue;
-      const dx = sw.px[i] - at.x, dy = sw.hubY[i] - at.y, dz = sw.pz[i] - at.z;
-      const d = Math.max(0, Math.sqrt(dx * dx + dy * dy + dz * dz) - (kind === MID ? sw.size[i] * 0.4 : 0));
-      if (d > radius) continue;
-      const k = kind === MID ? midK : 1;
-      if (sw.damage(i, damage * k * (1 - (0.5 * d) / radius), dir.x, dir.z)) this.kills++;
+      if (sw.state[i] >= DEAD || i === spare) continue;
+      const kind = sw.kind[i], kk = kind === SMALL ? 1 : kind === MID ? midK : bigK;
+      if (kk <= 0) continue;
+      const best = this.splashShare(i, at.x, at.y, at.z, radius);
+      if (best <= 0) continue;
+      // Blasts throw wrecks away from the blast; rounds along their flight.
+      const dx = blast ? sw.px[i] - at.x : dir.x, dz = blast ? sw.pz[i] - at.z : dir.z;
+      if (sw.damage(i, damage * kk * best, dx, dz)) this.kills++;
       n++;
     }
     return n;
+  }
+
+  /**
+   * Robot i's best part share of a splash at (x, y, z) of this radius: part share × falloff (1 at the part, 0.5 at the
+   * edge), 0 out of reach.
+   */
+  splashShare(i: number, x: number, y: number, z: number, radius: number): number {
+    const sw = this.swarm, v = sw.v, k = v.robotHitScale, S = sw.size[i], kind = sw.kind[i], st = sw.state[i];
+    const fall = (d: number, share: number) => (d > radius ? 0 : share * (1 - (0.5 * d) / radius));
+    // The body: its hit ellipsoid's horizontal and vertical radii, as a squat cylinder.
+    let r: number, hh: number, cy: number;
+    if (kind === SMALL) {
+      const flatPose = st === RUN || st === FIRE || st === DOWN;
+      r = S * (flatPose ? 0.45 : 0.34) * k; hh = S * (flatPose ? 0.22 : 0.34) * k; cy = sw.hubY[i];
+    } else {
+      const big = kind === BIG;
+      r = S * (big ? 0.5 : 0.44) * k; hh = S * (big ? BIG_BODY_H * 0.75 : MID_BODY_H) * k; cy = sw.hubY[i] + S * 0.05;
+    }
+    const flatD = Math.hypot(sw.px[i] - x, sw.pz[i] - z);
+    const dh = Math.max(0, flatD - r), dv = Math.max(0, Math.abs(y - cy) - hh);
+    let best = fall(Math.hypot(dh, dv), 1);
+    if (kind === SMALL || (kind === MID && st === DOWN) || best >= 1) return best;
+    // Quick reject: past the legs' whole reach.
+    if (flatD > radius + sw.heightOf(i) * 1.3 + S) return best;
+    // The legs and feet: distance to each bone less its hit radius.
+    const big = kind === BIG, lr = Math.max(0.05, big ? v.robotBigLegHit : v.robotMidLegHit);
+    const legK = v.robotLegDamage, footK = v.robotFootDamage;
+    const hip = this.hp, knee = this.kn, tip = this.tp, foot = this.ft, low = this.lw;
+    const bone = (a: V3, e: V3, rr: number, share: number) => {
+      if (share <= best) return;
+      best = Math.max(best, fall(Math.max(0, segDist(x, y, z, a, e) - rr), share));
+    };
+    for (let g = 0; g < WALK_LEGS; g++) {
+      sw.legPose(i, g, hip, knee, tip, foot);
+      bone(hip, knee, lr, legK);
+      if (big) { bone(knee, tip, lr, legK); bone(tip, foot, lr * 1.6, footK); }
+      else {
+        low.x = knee.x + (tip.x - knee.x) * 0.75; low.y = knee.y + (tip.y - knee.y) * 0.75; low.z = knee.z + (tip.z - knee.z) * 0.75;
+        bone(knee, low, lr, legK); bone(low, tip, lr * 1.2, footK);
+      }
+    }
+    return best;
   }
 
   /** The round's damage, scaled by the part it struck (body full, legs and feet a share). */
@@ -141,4 +193,12 @@ export function robotCandidates(sw: RobotSwarm, out: TargetCandidate[] = [], ski
     out.push(c);
   }
   return out;
+}
+
+/** Distance from a point to the segment a-b. */
+function segDist(x: number, y: number, z: number, a: V3, b: V3): number {
+  const vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z, wx = x - a.x, wy = y - a.y, wz = z - a.z;
+  const L = vx * vx + vy * vy + vz * vz;
+  const t = L > 1e-9 ? Math.max(0, Math.min(1, (wx * vx + wy * vy + wz * vz) / L)) : 0;
+  return Math.hypot(wx - vx * t, wy - vy * t, wz - vz * t);
 }

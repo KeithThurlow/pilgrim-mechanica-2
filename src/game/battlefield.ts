@@ -23,6 +23,7 @@ import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
+import { splashBlast, firstBody } from "./splash";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -35,8 +36,13 @@ export interface Hittable {
   /** Distance along the ray (unit dir) to this thing, or -1 if missed within maxDist. */
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number;
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3): void;
-  /** Swarms: damage everything of theirs within radius of a point (a round's splash); returns how many were hit. */
-  splash?(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3): number;
+  /**
+   * Swarms: damage everything of theirs within radius of a point (a round's splash, or with o.blast an explosive's
+   * blast, measured to each unit's nearest part); returns how many were hit.
+   */
+  splash?(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts): number;
+  /** One adapter for many units (a swarm): splash can spare the unit just struck directly (SplashOpts.spare). */
+  spares?: boolean;
   /**
    * Sheet hits (src/game/sheet.ts): push every unit (and the part the line crosses) in the sheet. Targets without one
    * are tested by a fan of rays through the band (Battlefield.sheetHits).
@@ -50,6 +56,14 @@ export interface Hittable {
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
   knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
+}
+
+/** How a splash lands (src/game/splash.ts). */
+export interface SplashOpts {
+  /** An explosive's blast (rocket, missile, shell), not a round's splash: armoured units take it by their blast share. */
+  blast?: boolean;
+  /** Spare the unit the adapter's last direct hit struck (it already took the round). */
+  spare?: boolean;
 }
 
 export interface FireOptions {
@@ -255,9 +269,10 @@ export class Battlefield {
   /**
    * Lob a telegraphed shell from `from` to land on the ground at (x, z) after `flight` seconds, bursting with `radius`
    * and `damage` (falling off to half at the edge) on everything of another team. The landing ring shows at once.
+   * y: land up there instead (a tall body's centre: the ring stays on the sand under it).
    */
-  lob(team: number, from: THREE.Vector3, x: number, z: number, flight: number, arc: number, radius: number, damage: number): Shell {
-    const to = this.hit.set(x, this.field.height(x, z), z);
+  lob(team: number, from: THREE.Vector3, x: number, z: number, flight: number, arc: number, radius: number, damage: number, y?: number): Shell {
+    const to = this.hit.set(x, y ?? this.field.height(x, z), z);
     this.sfx.play("brap", from, 1.3, 0.45, false);
     return this.shells.lob(team, from, to, flight, arc, radius, damage);
   }
@@ -311,7 +326,10 @@ export class Battlefield {
     return !!box;
   }
 
-  private burst(s: Shell) { this.blast(s.team, s.to, s.radius, s.damage); }
+  /** A shell bursts where it is: its landing point, or a body it came down on (shellHit). */
+  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage); }
+  /** Shells go off on the first body of another team in their path (a tall robot's chassis or legs). */
+  private shellHit = (s: Shell, a: THREE.Vector3, b: THREE.Vector3) => { const h = firstBody(this.targets, s.team, a, b); return h ? h.f : -1; };
 
   /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
   onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
@@ -326,15 +344,16 @@ export class Battlefield {
     const k = Math.max(0.5, s.radius / 3);
     this.onBlast?.(p, radius);
     // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
-    const wet = this.inWater(p.x, p.z);
+    // An air burst (on a tall robot's chassis or legs) doesn't dig or mark the ground (blastGroundReach × radius up).
+    const low = p.y - this.field.height(p.x, p.z) < s.radius * ((this.v as { blastGroundReach?: number }).blastGroundReach ?? 0.5);
+    const wet = low && this.inWater(p.x, p.z);
     // The crater is queued (a 12-missile swarm would stall a frame digging them all at once); the effects play now.
-    this.queueDent(p.x, p.z, s.radius);
+    if (low) this.queueDent(p.x, p.z, s.radius);
     if (wet) {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
       this.sfx.play("brap", p, 1.6, 0.5, false);
-      const down0 = this.back.set(0, -1, 0);
-      for (const t of this.targets) if (t.alive && t.team !== s.team && t.splash) t.splash(p, s.radius, s.damage, down0);
+      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0));
       return;
     }
     for (let i = 0; i < 18 * k; i++) {
@@ -345,11 +364,9 @@ export class Battlefield {
       const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 9;
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
-    this.dust.stomp(p.x, p.y, p.z, 1.6 * k);
-    this.marks.blast(p.x, p.z, s.radius);
+    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
     this.sfx.play("brap", p, 1.8, 0.4, false);
-    const down = this.back.set(0, -1, 0);
-    for (const t of this.targets) if (t.alive && t.team !== s.team && t.splash) t.splash(p, s.radius, s.damage, down);
+    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0));
   }
 
   /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
@@ -379,7 +396,7 @@ export class Battlefield {
       this.patch.update(f.x, f.z, true);
     }
     c?.mark("ground dents");
-    this.shells.update(dt, (s) => this.burst(s));
+    this.shells.update(dt, (s) => this.burst(s), this.shellHit);
     this.digQueued();
     c?.mark("dents");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);

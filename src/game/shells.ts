@@ -35,14 +35,23 @@ export class Shells {
     return s;
   }
 
-  /** Move every shell; calls onLand for each that arrived this step. */
-  update(dt: number, onLand: (s: Shell) => void) {
+  private prev = new THREE.Vector3();
+
+  /**
+   * Move every shell; calls onLand for each that arrived this step, its pos where it bursts. hit(shell, a, b): the
+   * fraction of this step's way from a to b where it meets a body (-1: none); a shell that does bursts there, early
+   * (2026-10-26: a shell coming down on a tall robot goes off on its chassis or legs, not under it).
+   */
+  update(dt: number, onLand: (s: Shell) => void, hit?: (s: Shell, a: THREE.Vector3, b: THREE.Vector3) => number) {
     for (const s of this.list) {
       if (!s.live) continue;
       s.t += dt;
+      this.prev.copy(s.pos);
       const u = Math.min(1, s.t / s.flight);
       s.pos.lerpVectors(s.from, s.to, u);
       s.pos.y += 4 * s.arc * u * (1 - u);
+      const f = hit ? hit(s, this.prev, s.pos) : -1;
+      if (f >= 0) { s.pos.lerpVectors(this.prev, s.pos, f); s.live = false; onLand(s); continue; }
       if (u >= 1) { s.live = false; onLand(s); }
     }
   }
