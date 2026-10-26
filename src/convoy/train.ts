@@ -23,7 +23,7 @@ export type TrainValues = typeof TRAIN_DEFAULTS;
 
 export const TRAIN_PARAMS: Param[] = [
   { key: "trainGap", label: "Gap between cars (m)", min: 6, max: 40, step: 0.5, group: "Train", tip: "Clear sand between one platform's tail and the next one's nose: room for the mech to walk through" },
-  { key: "trainLanes", label: "Lines", min: 1, max: 2, step: 1, group: "Train", tip: "1: one long train. 2: the cars after the lead split into two shorter lines side by side" },
+  { key: "trainLanes", label: "Lines", min: 1, max: 2, step: 1, group: "Train", tip: "1: one long train. 2: the cars after the lead split into two shorter lines side by side (the plough cuts the road wider by the lines' spread)" },
   { key: "trainLaneSide", label: "Lines apart (m)", min: 6, max: 20, step: 0.5, group: "Train", tip: "With two lines, each runs this far either side of the route" },
   { key: "bridgeCount", label: "Footbridges per gap", min: 0, max: 2, step: 1, group: "Footbridges", tip: "Gangways between neighbouring cars, for people to cross (0 none, 1 centre, 2 both sides)" },
   { key: "bridgeRise", label: "Bridge above deck (m)", min: 1.5, max: 6, step: 0.1, group: "Footbridges", tip: "Landing height above the decks: high enough for the mech to walk under (its hood is about 4.4 m)" },

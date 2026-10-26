@@ -2,22 +2,23 @@
 // when the player drags enemies home). Pure sim on the war band's car sim (src/vehicles/car.ts), no rendering.
 //
 // Each escort holds a station: a side of the train, a distance along it (spread over the train's length) and a
-// distance out from the route (escortOut, weaving escortWeave either way over escortWeavePeriod). Most ride the
-// sides; with enough of them (Keith 2026-10-25: more trucks), two scout ahead of the lead and two trail behind the
-// tail, closer in. It steers for a point a little ahead of its station on the route and matches the convoy's speed,
+// distance out from the route (escortOut, each its own share of escortSpread in or out, weaving escortWeave either way
+// on its own period around escortWeavePeriod). The plough cuts a road only as wide as the train (Keith 2026-10-26:
+// "it's actually really nice having those vehicles kind of meander over rougher terrain"), so the stations lie out on
+// the dunes past the berms and the escorts ride over them. Most ride the sides; with enough of them (Keith
+// 2026-10-25: more trucks), two scout ahead of the plough's blade, out to the sides, and two trail behind the tail. It steers for a point a little ahead of its station on the route and matches the convoy's speed,
 // faster when it has fallen back, each surging ahead and dropping back on its own slow rhythm (escortSurge) so they
 // roll at different speeds.
-// It keeps clear of the platforms and the plough at the front (a margin round each footprint; the scouts flank the
-// plough's base, behind its blade's wings, on the fresh road), of the other escorts, and of the mech (it aims for
+// It keeps clear of the platforms and the plough at the front (a margin round each footprint), of the other escorts, and of the mech (it aims for
 // a line grazing a clearance round it, and from inside turns out to the side its nose points, as the war band does),
 // and drives round dune faces too steep to climb.
 // TODO(defend): `mode` is the hook for the combat role: "defend" will break station toward threats near the convoy.
 // Nothing reads it yet and nobody shoots.
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
-import { CarSim, carValues, type CarKind } from "../vehicles/car";
+import { CarSim, carValues, type CarKind, type CarValues } from "../vehicles/car";
 import type { Convoy } from "./platform";
-import { PLOUGH_BASE_HALF } from "./plough";
+import { roadHalf } from "./wake";
 
 /** Something escorts keep clear of: a platform, or the plough (its whole V). */
 export interface Obstacle {
@@ -31,26 +32,31 @@ export interface Obstacle {
 
 export const ESCORT_DEFAULTS = {
   escortCount: 12,
-  escortOut: 26,
+  escortOut: 25,
+  escortSpread: 5,
   escortBand: 7,
-  escortWeave: 4,
-  escortWeavePeriod: 22,
+  escortWeave: 6,
+  escortWeavePeriod: 26,
   escortCatchUp: 0.35,
   escortSurge: 1.2,
   escortScoutAhead: 26,
-  escortScoutOut: 13,
+  escortScoutLead: 30,
+  escortScoutOut: 24,
   escortTopSpeed: 12,
   escortPlatformClear: 4,
   escortMechClear: 10,
   escortSteep: 26,
+  escortRoll: 18,
 };
 export type EscortValues = typeof ESCORT_DEFAULTS;
 
 export const ESCORT_PARAMS: Param[] = [
   { key: "escortCount", label: "Escorts", min: 0, max: 16, step: 1, group: "Escorts", tip: "Vehicles driving alongside the convoy, alternating sides; from 8, two scout ahead, from 10 two trail behind" },
-  { key: "escortScoutAhead", label: "Trailers behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far behind the last car's tail the trailers drive (the scouts flank the plough at the front)" },
-  { key: "escortScoutOut", label: "Scouts out (m)", min: 4, max: 30, step: 0.5, group: "Escorts", tip: "How far off the route the scouts and trailers drive" },
-  { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station" },
+  { key: "escortScoutLead", label: "Scouts ahead of the blade (m)", min: 0, max: 80, step: 1, group: "Escorts", tip: "How far ahead of the plough's blade the two scouts drive, out to the sides on the untouched dunes" },
+  { key: "escortScoutAhead", label: "Trailers behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far behind the last car's tail the trailers drive" },
+  { key: "escortScoutOut", label: "Scouts out (m)", min: 4, max: 40, step: 0.5, group: "Escorts", tip: "How far off the route the scouts and trailers drive (at least 8 m past the road's edge: on the dunes)" },
+  { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station (the road's edge is routeHalfWidth out, its berms a little past it; past the train with two lines)" },
+  { key: "escortSpread", label: "Station spread (m)", min: 0, max: 15, step: 0.5, group: "Escorts", tip: "Each escort's station line sits its own share of this in or out, so they don't ride in a row" },
   { key: "escortBand", label: "Station band (m)", min: 2, max: 20, step: 0.5, group: "Escorts", tip: "How far either side of its station line it counts as on station (the check)" },
   { key: "escortWeave", label: "Weave (m)", min: 0, max: 12, step: 0.1, group: "Escorts", tip: "Slow drift in and out of the station line" },
   { key: "escortWeavePeriod", label: "Weave period (s)", min: 4, max: 60, step: 0.5, group: "Escorts" },
@@ -59,7 +65,8 @@ export const ESCORT_PARAMS: Param[] = [
   { key: "escortTopSpeed", label: "Top speed (m/s)", min: 4, max: 20, step: 0.1, group: "Escort driving" },
   { key: "escortPlatformClear", label: "Clear of platforms (m)", min: 1, max: 12, step: 0.1, group: "Escort driving", tip: "Margin kept round every platform's footprint" },
   { key: "escortMechClear", label: "Clear of the mech (m)", min: 4, max: 20, step: 0.5, group: "Escort driving", tip: "Never drives inside this distance of the mech: grazes round it, or turns out" },
-  { key: "escortSteep", label: "Avoid slopes over (°)", min: 10, max: 45, step: 0.5, group: "Escort driving", tip: "Steers round dune faces steeper than this" },
+  { key: "escortSteep", label: "Avoid climbs over (°)", min: 10, max: 45, step: 0.5, group: "Escort driving", tip: "Picks lines round dune faces steeper than this to climb (descents it takes up to this plus 12°, straight down)" },
+  { key: "escortRoll", label: "Avoid side slopes over (°)", min: 5, max: 40, step: 0.5, group: "Escort driving", tip: "Picks lines that don't cross a face sideways steeper than this (what rolls a truck)" },
 ];
 
 export type EscortMode = "escort" | "defend";
@@ -87,19 +94,41 @@ export class Escort {
   phase: number;
   /** Distance moved in the last step (for dust). */
   moved = 0;
+  /** The line it picked over the dunes: an offset from the heading it wants (rad), re-picked every PLAN_EVERY s. */
+  planOff = 0;
+  planT = 0;
+  /** How rough the picked line is (0 easy .. 1 at its climbing limit), for easing off. */
+  planCost = 0;
+  /** Stuck: seconds without moving while it wants to, and seconds left backing out. */
+  stuckT = 0;
+  backT = 0;
+  backSteer = 0;
+  /** The lane it rides now (distance out from the route line, m), re-picked every LANE_EVERY s. */
+  lane = 26;
+  laneT = 0;
+  /** Going round something on this side (+1 left) for commitT more seconds. */
+  commitSide = 0;
+  commitT = 0;
   /** Half its length (m), for keeping clear. */
   readonly half: number;
   /** Its own surge rhythm (phase, and a rate share). */
   readonly surgePhase: number;
   readonly surgeRate: number;
+  /** Its own share of the station spread (-1..1) and of the weave period. */
+  readonly spread: number;
+  readonly weaveRate: number;
   constructor(readonly kind: CarKind, readonly index: number, ground: DuneField) {
-    const cv = carValues(kind);
+    const cv = duneKit(carValues(kind));
     this.sim = new CarSim(cv, ground);
     this.half = cv.wheelbase / 2 + 1.2;
     this.side = index % 2 === 0 ? 1 : -1;
     this.phase = index * 1.9;
     this.surgePhase = index * 2.7 + 0.5;
     this.surgeRate = 0.6 + ((index * 0.37) % 1) * 0.8;
+    this.spread = ((index * 0.618) % 1) * 2 - 1;
+    this.weaveRate = 0.7 + ((index * 0.43 + 0.2) % 1) * 0.6;
+    this.planT = (index % 12) / 60;
+    this.laneT = (index % 12) / 24;
   }
 }
 
@@ -131,22 +160,22 @@ export class EscortGroup {
    */
   private stations() {
     const v = this.v, n = this.list.length, L = this.convoy.length, head = this.convoy.platforms[0].spec.length / 2;
-    // Scouts flank the plough: beside its base, behind the blade's wings, a side each (out on the untouched dunes
-    // ahead of the blade they'd bog down and be run over).
-    const flank = head + this.convoy.route.v.ploughGap + 2;
+    // Scouts ahead of the plough's blade, a side each, out past where the blade reaches (on the untouched dunes).
+    const r = this.convoy.route, lead = r.blade - r.s + v.escortScoutLead;
+    const scoutOut = Math.max(v.escortScoutOut, roadHalf(r.v) + 8);
     const scouts = n >= 8 ? 2 : 0, trail = n >= 10 ? 2 : 0, sides = n - scouts - trail;
     const pairs = Math.ceil(sides / 2);
     this.list.forEach((e, i) => {
       if (i < sides) {
         const k = Math.floor(i / 2);
         e.along = head - 6 - (pairs > 1 ? (k * (L - 20)) / (pairs - 1) : L * 0.3) - (i % 2) * 8;
-        e.stationOut = v.escortOut;
+        e.stationOut = v.escortOut + e.spread * v.escortSpread;
       } else if (i < sides + scouts) {
-        e.along = flank;
-        e.stationOut = Math.max(v.escortScoutOut, PLOUGH_BASE_HALF + 9);
+        e.along = lead;
+        e.stationOut = scoutOut;
       } else {
         e.along = head - L - v.escortScoutAhead - (i - sides - scouts) * 9;
-        e.stationOut = v.escortScoutOut;
+        e.stationOut = scoutOut;
       }
     });
   }
@@ -156,8 +185,15 @@ export class EscortGroup {
 
   private place(e: Escort) {
     const r = this.convoy.route;
-    const p = r.offsetAt(r.s + e.along, e.side * e.stationOut, this.pt);
-    e.sim.reset(p.x, p.z, p.heading);
+    // On the dunes: the gentlest spot near its station (not wedged on a slip face).
+    let bx = 0, bz = 0, bh = 0, best = Infinity;
+    for (let da = -12; da <= 12; da += 3) for (let dout = -6; dout <= 6; dout += 2) {
+      const p = r.offsetAt(r.s + e.along + da, e.side * (e.stationOut + dout), this.pt);
+      const sc = this.steepAt(p.x, p.z, e.half) + (Math.abs(da) + Math.abs(dout)) * 0.004;
+      if (sc < best) { best = sc; bx = p.x; bz = p.z; bh = p.heading; }
+    }
+    e.sim.reset(bx, bz, bh);
+    e.lane = e.stationOut;
     e.sim.speed = this.convoy.route.v.convoySpeed;
     e.s = r.s + e.along;
   }
@@ -194,14 +230,17 @@ export class EscortGroup {
     const top = Math.min(v.escortTopSpeed, carValues(e.kind).topSpeed);
     s.v.topSpeed = top;
     this.project(e);
-    const weave = v.escortWeave * Math.sin((2 * Math.PI * this.t) / Math.max(1, v.escortWeavePeriod) + e.phase);
+    const weave = v.escortWeave * Math.sin((2 * Math.PI * this.t * e.weaveRate) / Math.max(1, v.escortWeavePeriod) + e.phase);
     const station = r.s + e.along;
     const behind = station - e.s;
     const cv = this.convoy.route.v.convoySpeed;
     const surge = v.escortSurge * Math.sin((2 * Math.PI * this.t * e.surgeRate) / 40 + e.surgePhase);
     let want = clamp(cv + surge + behind * v.escortCatchUp, 0, top);
     const look = LOOK + Math.abs(s.speed);
-    const tgt = r.offsetAt(e.s + look, e.side * (e.stationOut + weave), this.pt);
+    // The lane it rides: picked over the dunes ahead, near its station line (plus the weave).
+    e.laneT -= dt;
+    if (e.laneT <= 0) { e.laneT = LANE_EVERY; this.pickLane(e, e.stationOut + weave); }
+    const tgt = r.offsetAt(e.s + look, e.side * e.lane, this.pt);
     let tx = tgt.x, tz = tgt.z;
 
     // Keep clear of the platforms and the other escorts: push the aim point away.
@@ -232,7 +271,15 @@ export class EscortGroup {
     }
     tx += ax; tz += az;
     let desired = Math.atan2(tx - s.pos.x, tz - s.pos.z);
-    desired = this.aroundSteep(s.pos.x, s.pos.z, desired);
+    e.planT -= dt;
+    e.commitT -= dt;
+    if (e.planT <= 0) { e.planT = PLAN_EVERY; this.plan(e, desired); }
+    desired += e.planOff;
+    // Ease off over rough ground (the picked line, or the ground under it now, near its climbing limit): crawl
+    // across a steep face rather than flying over it.
+    const soft = v.escortSteep * D2R, now = clamp((this.steepAt(s.pos.x, s.pos.z, e.half * 0.7) - soft * 0.7) / (soft * 0.6), 0, 1);
+    const rough = Math.max(e.planCost, now);
+    want = Math.min(want * (1 - 0.3 * rough), top - (top - Math.min(top, cv + 1.5)) * rough);
 
     // Never into the mech: graze round its clearance from out there; from inside, out along the side the nose points.
     if (mech) {
@@ -241,7 +288,13 @@ export class EscortGroup {
       if (dist >= clear && dist < clear + 25) {
         const graze = Math.asin(Math.min(1, clear / dist));
         const off = wrap(desired - toMech);
-        if (Math.abs(off) < graze) desired = toMech + (off >= 0 ? 1 : -1) * graze;
+        if (Math.abs(off) < graze) {
+          // Round it on the outside (away from the road and the train), not in toward the cars.
+          const lp = r.pointAt(e.s, this.pt), lx = Math.cos(lp.heading), lz = -Math.sin(lp.heading);
+          const outward = (h: number) => e.side * (Math.sin(h) * lx + Math.cos(h) * lz);
+          const a = toMech + graze, b = toMech - graze;
+          desired = outward(a) >= outward(b) ? a : b;
+        }
       }
       if (dist < clear) {
         const sd = wrap(s.heading - toMech) >= 0 ? 1 : -1;
@@ -251,10 +304,33 @@ export class EscortGroup {
       }
     }
 
+    // Hard rule last (over the mech's): never into a platform or the plough; inside the clearance, turn away.
+    for (const p of this.obstacles()) {
+      const d = rectGap(p, s.pos.x, s.pos.z, e.half * 0.6);
+      if (d >= v.escortPlatformClear || (p === this.convoy.plough && this.convoy.plough.ahead(s.pos.x, s.pos.z))) continue;
+      const l = p.toLocal(s.pos.x, s.pos.z), sx = Math.sign(l.x) || e.side;
+      const away = Math.atan2(p.left.x * sx, p.left.z * sx), fwd = Math.atan2(-p.left.z, p.left.x);
+      // Out to the side, still rolling forward with the train.
+      const outHd = fwd + wrap(away - fwd) * 0.6;
+      const k = 1 - Math.max(0, d) / v.escortPlatformClear;
+      desired = desired + wrap(outHd - desired) * Math.min(1, 0.4 + k);
+    }
     const err = wrap(desired - s.heading);
-    const steer = clamp(err * 1.8, -1, 1);
+    let steer = clamp(err * 1.8, -1, 1);
     want *= 1 - 0.45 * Math.min(1, Math.abs(err) / 1.2);
-    const throttle = clamp((want - s.speed) * 0.5, -1, 1);
+    let throttle = clamp((want - s.speed) * 0.5, -1, 1);
+    // Stuck (nosed into a face it can't climb, or wedged): back out with the wheel the other way, then try again.
+    if (e.backT > 0) {
+      e.backT -= dt;
+      throttle = -0.8; steer = e.backSteer;
+    } else if (want > 1 && Math.abs(s.speed) < 0.6) {
+      e.stuckT += dt;
+      if (e.stuckT > STUCK_AFTER) {
+        e.stuckT = 0; e.backT = BACK_FOR; e.backSteer = -Math.sign(err || e.side); e.planT = 0;
+        // Then go round on the other side from the one that got it stuck.
+        e.commitSide = -Math.sign(e.planOff || err || 1); e.commitT = COMMIT_FOR;
+      }
+    } else e.stuckT = Math.max(0, e.stuckT - dt);
     const bx = s.pos.x, bz = s.pos.z;
     s.update(dt, throttle, steer);
     e.moved = Math.hypot(s.pos.x - bx, s.pos.z - bz);
@@ -270,17 +346,133 @@ export class EscortGroup {
     return o;
   }
 
-  /** If the way ahead climbs a face steeper than escortSteep, take the nearest heading either side that doesn't. */
-  private aroundSteep(x: number, z: number, heading: number) {
-    const g = this.field, look = 7, limit = Math.tan(this.v.escortSteep * D2R);
-    const climb = (h: number) => (g.height(x + Math.sin(h) * look, z + Math.cos(h) * look) - g.height(x, z)) / look;
-    if (climb(heading) < limit) return heading;
-    for (const off of [0.35, 0.7, 1.05, 1.4, 1.75]) {
-      for (const sgn of [1, -1]) if (climb(heading + sgn * off) < limit) return heading + sgn * off;
+  /** Steepest ground (rad) under a vehicle of half-length r at (x, z): its middle and four points round it. */
+  private steepAt(x: number, z: number, r: number) {
+    let worst = 0;
+    for (const [ox, oz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) worst = Math.max(worst, this.slopeAt(x + ox, z + oz));
+    return worst;
+  }
+
+  private gr = { x: 0, z: 0 };
+  /** Ground rise per metre along +x and +z at (x, z). */
+  private gradAt(x: number, z: number) {
+    const g = this.field, h0 = g.height(x, z);
+    this.gr.x = (g.height(x + 1.2, z) - h0) / 1.2; this.gr.z = (g.height(x, z + 1.2) - h0) / 1.2;
+    return this.gr;
+  }
+
+  private slopeAt(x: number, z: number) {
+    const g = this.field, h0 = g.height(x, z);
+    return Math.atan(Math.hypot(g.height(x + 1.2, z) - h0, g.height(x, z + 1.2) - h0) / 1.2);
+  }
+
+  /**
+   * Pick the lane to ride over the stretch ahead: lanes out from the road (never on it, alongside the train) to well
+   * past the station line, each scored by the slope along the route and across it at points ahead (the same limits
+   * as the line picker below), how far off its station line it is and how far from the lane it rides now. The
+   * escorts weave from lane to lane as the dunes come: through the gaps between crests, along a berm's top.
+   */
+  private pickLane(e: Escort, want: number) {
+    const v = this.v, r = this.convoy.route, cv = e.sim.v, soft = v.escortSteep * D2R;
+    const hard = Math.max(soft + 4 * D2R, Math.min(cv.maxClimb - 4, v.escortSteep + 10) * D2R);
+    const inner = Math.max(roadHalf(r.v) + 5, this.trainHalf + v.escortPlatformClear + e.half);
+    const lo = Math.max(inner, want - LANE_SPAN), hi = Math.max(lo + LANE_STEP, want + LANE_SPAN);
+    const ahead = clamp(10 + Math.abs(e.sim.speed) * 3, 14, 36);
+    let best = Infinity, bestO = e.lane;
+    for (let o = lo; o <= hi + 1e-6; o += LANE_STEP) {
+      let cost = Math.abs(o - want) * 0.08 + Math.abs(o - e.lane) * 0.05;
+      for (let j = 1; j <= 5; j++) {
+        const a = (ahead * j) / 5, p = r.offsetAt(e.s + a, e.side * o, this.pt);
+        const q = this.faceAt(p.x, p.z, Math.sin(p.heading), Math.cos(p.heading), soft, hard);
+        if (q > 0) cost += (j <= 2 ? 1.5 : 1) * (q < 1 ? q * q * 3 : 6 + (q - 1) * 12);
+      }
+      if (cost < best) { best = cost; bestO = o; }
     }
-    return heading;
+    e.lane = bestO;
+  }
+
+  /**
+   * How hard the ground at (x, z) is to drive heading (hx, hz): 0 easy, 1 at the limit, more past it. The slope along
+   * the way and across it: climbs up to the climbing limit (soft..hard), side slopes (what rolls a truck) kept
+   * gentle, descents allowed a little steeper (straight down a slip face is how dune drivers take one).
+   */
+  private faceAt(x: number, z: number, hx: number, hz: number, soft: number, hard: number) {
+    const v = this.v, g = this.gradAt(x, z), climb = Math.atan(g.x * hx + g.z * hz), side = Math.atan(Math.abs(g.x * hz - g.z * hx));
+    return Math.max(
+      ramp(climb, soft, hard),
+      // Sideways weighs most and straight down least, so with nothing easy left it takes a face straight down.
+      1.5 * ramp(side, v.escortRoll * D2R, (v.escortRoll + 12) * D2R),
+      0.7 * ramp(-climb, (v.escortSteep + 6) * D2R, (v.escortSteep + 18) * D2R),
+    );
+  }
+
+  /** Half the train's widest footprint (m). */
+  private get trainHalf() { let w = 0; for (const p of this.convoy.platforms) w = Math.max(w, p.halfW); return w; }
+
+  /**
+   * Pick a line over the dunes: fan out headings either side of the one it wants and score a short drive along each
+   * by how steep the ground is under it (any way: climbs, descents and side slopes alike, so it neither bogs, noses
+   * down a slip face nor rolls across one), how far it strays from the heading it wants and from its last pick, and
+   * whether it runs onto the road (allowed, but the dunes are preferred) or near a platform (never).
+   */
+  private plan(e: Escort, desired: number) {
+    const v = this.v, s = e.sim, cv = s.v;
+    const soft = v.escortSteep * D2R, hard = Math.max(soft + 4 * D2R, Math.min(cv.maxClimb - 4, v.escortSteep + 10) * D2R);
+    const reach = clamp(12 + Math.abs(s.speed) * 2.5, 16, 30), r = this.convoy.route, along = r.pointAt(e.s, this.pt).heading;
+    let best = Infinity, bestOff = 0, bestRough = 0;
+    for (let k = 0; k < PLAN_FAN.length; k++) {
+      const off = PLAN_FAN[k], h = desired + off, sx = Math.sin(h), cz = Math.cos(h);
+      // Never turned back against the convoy (that only ends in circling a dune).
+      if (Math.abs(wrap(h - along)) > MAX_OFF_ROUTE) continue;
+      let cost = Math.abs(off) * 1.2 + Math.abs(off - e.planOff) * 1.0, rough = 0;
+      // Going round something: keep going round it on the side picked (no dithering at a long face).
+      if (e.commitT > 0 && off * e.commitSide < 0) cost += 2;
+      for (let j = 1; j <= PLAN_STEPS; j++) {
+        const d = (reach * j) / PLAN_STEPS, x = s.pos.x + sx * d, z = s.pos.z + cz * d;
+        const near = j <= 2 ? 1.5 : 1;
+        const q = this.faceAt(x, z, sx, cz, soft, hard);
+        if (q > 0) {
+          rough = Math.max(rough, Math.min(1, q));
+          cost += near * (q < 1 ? q * q * 3 : 6 + (q - 1) * 12);
+        }
+        // The road and its cut edge: fine to cross, but the dunes beside it are where escorts ride.
+        if (r.corridor(x, z) > 0.5) cost += 0.6;
+        for (const p of this.convoy.platforms) if (rectGap(p, x, z, e.half * 0.6) < v.escortPlatformClear + 3) cost += 8 * near;
+        if (rectGap(this.convoy.plough, x, z, e.half * 0.6) < v.escortPlatformClear) cost += 8 * near;
+      }
+      if (cost < best) { best = cost; bestOff = off; bestRough = rough; }
+    }
+    // A big turn off its heading to get round something: commit to that side for a while.
+    if (Math.abs(bestOff) >= 0.6 && e.commitT <= 0) { e.commitSide = Math.sign(bestOff); e.commitT = COMMIT_FOR; }
+    e.planOff = bestOff;
+    e.planCost = bestRough;
   }
 }
+
+/**
+ * The convoy's own vehicles are kitted for the dunes they ride beside the road (Keith 2026-10-26): sand tyres and
+ * long-travel suspension on the war band's kinds. Not sliders: the kinds' own values are the war band's sliders.
+ */
+export function duneKit(cv: CarValues): CarValues {
+  return { ...cv, maxClimb: cv.maxClimb + 6, climb: cv.climb * 0.75, bumpLoss: cv.bumpLoss * 0.5, travel: cv.travel + 0.15, droop: cv.droop + 0.2 };
+}
+
+/** 0 below a, rising to 1 at b, and on past it (how far over the limit). */
+const ramp = (x: number, a: number, b: number) => (x <= a ? 0 : (x - a) / (b - a));
+
+/** Headings tried either side of the one wanted (rad), and the points scored along each line. */
+const PLAN_FAN = [0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.75, -0.75, 1.05, -1.05, 1.4, -1.4];
+const PLAN_STEPS = 6;
+/** Seconds it keeps going round on the side it picked. */
+const COMMIT_FOR = 4;
+/** Seconds between picks (staggered across the escorts). */
+const PLAN_EVERY = 0.2;
+/** Lanes: re-picked every LANE_EVERY s, LANE_STEP apart, up to LANE_SPAN either side of the station line. */
+const LANE_EVERY = 0.5, LANE_STEP = 2.5, LANE_SPAN = 12;
+/** Stuck after this long not moving while it wants to; then backs out for BACK_FOR. */
+const STUCK_AFTER = 1.5, BACK_FOR = 1.6;
+/** Most a picked line turns off the route's heading (rad). */
+const MAX_OFF_ROUTE = 1.6;
 
 /** Distance from (x, z) to a platform's (or the plough's) footprint (0 inside), less r. */
 export function rectGap(p: Obstacle, x: number, z: number, r = 0) {
