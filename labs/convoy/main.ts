@@ -366,7 +366,7 @@ function restart() {
   if (params.has("bay")) bay.open();
 }
 
-const roadKeys = new Set(["routeHalfWidth", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
+const roadKeys = new Set(["routeHalfWidth", "trainLanes", "trainLaneSide", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
 const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
 let selector: Selector | null = null;
 let picking = false;

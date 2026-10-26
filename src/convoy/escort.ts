@@ -18,6 +18,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { CarSim, carValues, type CarKind, type CarValues } from "../vehicles/car";
 import type { Convoy } from "./platform";
+import { roadHalf } from "./wake";
 
 /** Something escorts keep clear of: a platform, or the plough (its whole V). */
 export interface Obstacle {
@@ -54,7 +55,7 @@ export const ESCORT_PARAMS: Param[] = [
   { key: "escortScoutLead", label: "Scouts ahead of the blade (m)", min: 0, max: 80, step: 1, group: "Escorts", tip: "How far ahead of the plough's blade the two scouts drive, out to the sides on the untouched dunes" },
   { key: "escortScoutAhead", label: "Trailers behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far behind the last car's tail the trailers drive" },
   { key: "escortScoutOut", label: "Scouts out (m)", min: 4, max: 40, step: 0.5, group: "Escorts", tip: "How far off the route the scouts and trailers drive (at least 8 m past the road's edge: on the dunes)" },
-  { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station (the road's edge is routeHalfWidth out, its berms a little past it)" },
+  { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station (the road's edge is routeHalfWidth out, its berms a little past it; past the train with two lines)" },
   { key: "escortSpread", label: "Station spread (m)", min: 0, max: 15, step: 0.5, group: "Escorts", tip: "Each escort's station line sits its own share of this in or out, so they don't ride in a row" },
   { key: "escortBand", label: "Station band (m)", min: 2, max: 20, step: 0.5, group: "Escorts", tip: "How far either side of its station line it counts as on station (the check)" },
   { key: "escortWeave", label: "Weave (m)", min: 0, max: 12, step: 0.1, group: "Escorts", tip: "Slow drift in and out of the station line" },
@@ -161,7 +162,7 @@ export class EscortGroup {
     const v = this.v, n = this.list.length, L = this.convoy.length, head = this.convoy.platforms[0].spec.length / 2;
     // Scouts ahead of the plough's blade, a side each, out past where the blade reaches (on the untouched dunes).
     const r = this.convoy.route, lead = r.blade - r.s + v.escortScoutLead;
-    const scoutOut = Math.max(v.escortScoutOut, r.v.routeHalfWidth + 8);
+    const scoutOut = Math.max(v.escortScoutOut, roadHalf(r.v) + 8);
     const scouts = n >= 8 ? 2 : 0, trail = n >= 10 ? 2 : 0, sides = n - scouts - trail;
     const pairs = Math.ceil(sides / 2);
     this.list.forEach((e, i) => {
@@ -374,7 +375,7 @@ export class EscortGroup {
   private pickLane(e: Escort, want: number) {
     const v = this.v, r = this.convoy.route, cv = e.sim.v, soft = v.escortSteep * D2R;
     const hard = Math.max(soft + 4 * D2R, Math.min(cv.maxClimb - 4, v.escortSteep + 10) * D2R);
-    const inner = Math.max(r.v.routeHalfWidth + 5, this.trainHalf + v.escortPlatformClear + e.half);
+    const inner = Math.max(roadHalf(r.v) + 5, this.trainHalf + v.escortPlatformClear + e.half);
     const lo = Math.max(inner, want - LANE_SPAN), hi = Math.max(lo + LANE_STEP, want + LANE_SPAN);
     const ahead = clamp(10 + Math.abs(e.sim.speed) * 3, 14, 36);
     let best = Infinity, bestO = e.lane;

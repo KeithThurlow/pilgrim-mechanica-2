@@ -475,12 +475,11 @@ export class CarSim {
     this.vy += (fy - g) * dt;
     // Stick: an arcade pull toward the ground whenever the body rides above its rest height (cresting, a slip face
     // falling away), fading out higher up, so trucks hug the dunes and only real ramps throw them.
-    // Measured from the plane through the ground under the wheels (at the body's middle), not from the ground right
-    // under the middle: in a hollow (the foot of a dune, a trough) that is lower than the wheels' and pulling the body
-    // down to it bottomed the wheels and stalled trucks on the next gentle climb (2026-10-26, escorts driving the
-    // dunes beside the convoy). A plain mean of the wheels would do the same to a six-wheeler on a slope (its wheels
-    // sit mostly behind its middle).
-    const gap = this.pos.y - (this.planeUnder() + v.rideHeight);
+    // Measured from the ground under the middle, or the plane through the ground under the wheels where that is
+    // higher: in a hollow (the foot of a dune, a trough) the middle's ground is lower than the wheels', and pulling the
+    // body down to it bottomed the wheels and stalled trucks on the next gentle climb (2026-10-26, escorts driving the
+    // dunes beside the convoy). Over a crest, as before.
+    const gap = this.pos.y - (Math.max(this.ground.height(this.pos.x, this.pos.z), this.planeUnder()) + v.rideHeight);
     if (gap > 0 && this.vy < 6) this.vy -= v.stick * GRAV * smooth(0, 0.4, gap) * (1 - smooth(v.stickRange * 0.6, v.stickRange, gap)) * dt;
     this.pitchRate += (tp / Ip) * dt;
     this.rollRate += (tr / Ir) * dt;
