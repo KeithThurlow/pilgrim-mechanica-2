@@ -11,6 +11,8 @@ import type { DuneField } from "../world/terrain";
 import type { ConvoyRoute, RoutePoint } from "./route";
 import { arrange, type TrainValues } from "./train";
 import { deckOutline, pushOutOf, type Outline } from "./outline";
+import { Plough } from "./plough";
+import { PLOUGH_REACH } from "./route";
 
 export const PLATFORM_DEFAULTS = {
   convoyDeckHeight: 3.2,
@@ -238,9 +240,15 @@ const SPREAD_RATE = 1.5;
 /** The whole convoy: the route and its platforms, laid out as a train. */
 export class Convoy {
   readonly platforms: Platform[];
+  /** The plough at the very front, cutting the road (Keith 2026-10-26). */
+  readonly plough: Plough;
   constructor(readonly route: ConvoyRoute, readonly v: PlatformValues & TrainValues, field: DuneField, readonly layout: PlatformSpec[] = CONVOY_LAYOUT) {
     this.platforms = layout.map((s) => new Platform(s, v, field));
     arrange(this.platforms, v);
+    // The road is cut from this ground, a plough's length plus ploughGap ahead of the lead's nose.
+    route.ground = field;
+    route.bladeOffset = (layout[0]?.length ?? 0) / 2 + PLOUGH_REACH;
+    this.plough = new Plough(route, field);
   }
   get bay() { return this.platforms.find((p) => p.spec.kind === "bay") ?? this.platforms[0]; }
   /** Every mech bay (the lead's first). */
@@ -253,12 +261,27 @@ export class Convoy {
     for (const p of this.platforms) p.spread = 0;
     arrange(this.platforms, this.v);
     for (const p of this.platforms) { p.reset(); p.update(0, this.route); }
+    this.plough.reset();
+    this.plough.update(0);
+  }
+  /**
+   * Jump the convoy clock to distance s along the route (as if it had driven there): the train and the plough placed
+   * there, settled. Everything is a function of the clock, so this is where driving would have put them.
+   */
+  jump(s: number) {
+    this.route.jump(s);
+    for (const p of this.platforms) p.spread = 0;
+    arrange(this.platforms, this.v);
+    for (const p of this.platforms) { p.reset(); p.update(0, this.route); }
+    this.plough.reset();
+    this.plough.update(0);
   }
   update(dt: number) {
     this.route.update(dt);
     // Sliders apply live: the gaps and lines are laid out again every step.
     arrange(this.platforms, this.v);
     for (const p of this.platforms) p.update(dt, this.route);
+    this.plough.update(dt);
     // In a turn the inside corners of neighbouring cars close up: each car drops back (or closes up again) toward
     // the spacing that keeps trainGap clear at the nearest corners, at no more than SPREAD_RATE m/s.
     for (const p of this.platforms) {

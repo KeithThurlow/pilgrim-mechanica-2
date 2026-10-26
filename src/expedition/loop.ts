@@ -4,7 +4,7 @@
 // mech does, the return point and the fuel warning, the radar scope and the HUD, the fade and the trip home.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import type { DuneField, ModifierSample } from "../world/terrain";
+import type { DuneField } from "../world/terrain";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
 import type { ConvoyRoute } from "../convoy/route";
@@ -90,7 +90,6 @@ export class ExpeditionLoop {
   private slowT = 0;
   private homeT = 0;
   private charges = 0;
-  private sample: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
   private turretPts: THREE.Vector3[] = [];
   /** Demo: the POI it's heading for and what it's doing. */
   private demoGoal: { x: number; z: number; id: string } | null = null;
@@ -108,7 +107,8 @@ export class ExpeditionLoop {
     field: DuneField, bf: Battlefield, scene: THREE.Scene, private camera: THREE.Camera,
     private route: ConvoyRoute, private convoy: Convoy, private carry: CraneCarry, private player: MechUnit,
   ) {
-    const blocked = (x: number, z: number) => route.at(x, z, this.sample) && this.sample.w > 0.02;
+    // The road's corridor, cut or still to be cut by the plough (nothing is placed where the road will run).
+    const blocked = (x: number, z: number) => route.corridor(x, z) > 0.02;
     this.exp = new Expedition(v);
     this.fuel = new Fuel(v);
     this.sites = new FieldSites(v, field, bf, scene, blocked);

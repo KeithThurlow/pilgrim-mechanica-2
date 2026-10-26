@@ -114,7 +114,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, plus the combat-lab flags.
   Results go to the screen, the console and `window.__stress`.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
-  (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead;
+  (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?crest[=m]` (the plough's blade that far short of the biggest cut ahead), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead; `plough` the plough;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
   the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
   (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
@@ -152,7 +152,8 @@ src/game/               battlefield (shared combat stage), sheet + sheetFire (di
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
-                        furniture, escort (escort driving), walkways (decks, stairs, landings, footbridges as walkable
+                        furniture, escort (escort driving), plough (the bulldozer that cuts the road) + wake (berms from the sand moved)
+                        + ploughFx, walkways (decks, stairs, landings, footbridges as walkable
                         surfaces); drawing: platformBody, trackBody, pipesDraw, bridgeBody, craneBody, escortBody, kit
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,

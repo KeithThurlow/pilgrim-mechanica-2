@@ -111,6 +111,8 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
     pois.extra.push(pois.placeAt("hand:0", "debrisField", 120, 40, 0.3, 7));
     pads.reindex();
     const route = new ConvoyRoute(v, 0, 0);
+    // The road exists behind the plough's blade: move the convoy clock on so it runs past the test points.
+    route.jump(200);
     addModifier(field, route);
     addModifier(field, pads);
     const craters = new CraterLayer(v, field);

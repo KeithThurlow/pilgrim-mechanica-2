@@ -7,7 +7,8 @@
 // tail, closer in. It steers for a point a little ahead of its station on the route and matches the convoy's speed,
 // faster when it has fallen back, each surging ahead and dropping back on its own slow rhythm (escortSurge) so they
 // roll at different speeds.
-// It keeps clear of the platforms (a margin round each footprint), of the other escorts, and of the mech (it aims for
+// It keeps clear of the platforms and the plough at the front (a margin round each footprint; the scouts flank the
+// plough's base, behind its blade's wings, on the fresh road), of the other escorts, and of the mech (it aims for
 // a line grazing a clearance round it, and from inside turns out to the side its nose points, as the war band does),
 // and drives round dune faces too steep to climb.
 // TODO(defend): `mode` is the hook for the combat role: "defend" will break station toward threats near the convoy.
@@ -15,7 +16,18 @@
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { CarSim, carValues, type CarKind } from "../vehicles/car";
-import type { Convoy, Platform } from "./platform";
+import type { Convoy } from "./platform";
+import { PLOUGH_BASE_HALF } from "./plough";
+
+/** Something escorts keep clear of: a platform, or the plough (its whole V). */
+export interface Obstacle {
+  toLocal(x: number, z: number): { x: number; z: number };
+  readonly halfW: number;
+  readonly spec: { length: number };
+  readonly left: { x: number; z: number };
+  /** Its own clear distance when it isn't a box (the plough's base and blade). */
+  gapAt?(x: number, z: number): number;
+}
 
 export const ESCORT_DEFAULTS = {
   escortCount: 12,
@@ -36,7 +48,7 @@ export type EscortValues = typeof ESCORT_DEFAULTS;
 
 export const ESCORT_PARAMS: Param[] = [
   { key: "escortCount", label: "Escorts", min: 0, max: 16, step: 1, group: "Escorts", tip: "Vehicles driving alongside the convoy, alternating sides; from 8, two scout ahead, from 10 two trail behind" },
-  { key: "escortScoutAhead", label: "Scouts ahead / behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far ahead of the lead's nose (and behind the last car's tail) the scouts and trailers drive" },
+  { key: "escortScoutAhead", label: "Trailers behind (m)", min: 10, max: 60, step: 1, group: "Escorts", tip: "How far behind the last car's tail the trailers drive (the scouts flank the plough at the front)" },
   { key: "escortScoutOut", label: "Scouts out (m)", min: 4, max: 30, step: 0.5, group: "Escorts", tip: "How far off the route the scouts and trailers drive" },
   { key: "escortOut", label: "Station out (m)", min: 12, max: 60, step: 0.5, group: "Escorts", tip: "How far from the route's centre line an escort holds station" },
   { key: "escortBand", label: "Station band (m)", min: 2, max: 20, step: 0.5, group: "Escorts", tip: "How far either side of its station line it counts as on station (the check)" },
@@ -119,6 +131,9 @@ export class EscortGroup {
    */
   private stations() {
     const v = this.v, n = this.list.length, L = this.convoy.length, head = this.convoy.platforms[0].spec.length / 2;
+    // Scouts flank the plough: beside its base, behind the blade's wings, a side each (out on the untouched dunes
+    // ahead of the blade they'd bog down and be run over).
+    const flank = head + this.convoy.route.v.ploughGap + 2;
     const scouts = n >= 8 ? 2 : 0, trail = n >= 10 ? 2 : 0, sides = n - scouts - trail;
     const pairs = Math.ceil(sides / 2);
     this.list.forEach((e, i) => {
@@ -127,8 +142,8 @@ export class EscortGroup {
         e.along = head - 6 - (pairs > 1 ? (k * (L - 20)) / (pairs - 1) : L * 0.3) - (i % 2) * 8;
         e.stationOut = v.escortOut;
       } else if (i < sides + scouts) {
-        e.along = head + v.escortScoutAhead + (i - sides) * 9;
-        e.stationOut = v.escortScoutOut;
+        e.along = flank;
+        e.stationOut = Math.max(v.escortScoutOut, PLOUGH_BASE_HALF + 9);
       } else {
         e.along = head - L - v.escortScoutAhead - (i - sides - scouts) * 9;
         e.stationOut = v.escortScoutOut;
@@ -191,14 +206,21 @@ export class EscortGroup {
 
     // Keep clear of the platforms and the other escorts: push the aim point away.
     let ax = 0, az = 0;
-    for (const p of this.convoy.platforms) {
+    for (const p of this.obstacles()) {
       const d = rectGap(p, s.pos.x, s.pos.z, e.half * 0.6);
       const m = v.escortPlatformClear + 3;
       if (d < m) {
         // Away from the platform, outward from the train (its side of the route).
         const l = p.toLocal(s.pos.x, s.pos.z);
-        const sx = Math.sign(l.x) || e.side;
         const k = (m - d) / m;
+        if (p === this.convoy.plough && this.convoy.plough.ahead(s.pos.x, s.pos.z)) {
+          // Ahead of the plough (a scout it's catching): get out in front of the blade, never slow down for it.
+          const f = this.convoy.plough.fwd;
+          ax += f.x * k * 14; az += f.z * k * 14;
+          want = Math.max(want, Math.min(top, cv * 1.3 + 2));
+          continue;
+        }
+        const sx = Math.sign(l.x) || e.side;
         ax += (p.left.x * sx) * k * 14; az += (p.left.z * sx) * k * 14;
         if (d < v.escortPlatformClear) want = Math.min(want, cv);
       }
@@ -238,6 +260,16 @@ export class EscortGroup {
     e.moved = Math.hypot(s.pos.x - bx, s.pos.z - bz);
   }
 
+  private obs: Obstacle[] = [];
+  /** The platforms and the plough. */
+  obstacles(): Obstacle[] {
+    const o = this.obs;
+    o.length = 0;
+    for (const p of this.convoy.platforms) o.push(p);
+    o.push(this.convoy.plough);
+    return o;
+  }
+
   /** If the way ahead climbs a face steeper than escortSteep, take the nearest heading either side that doesn't. */
   private aroundSteep(x: number, z: number, heading: number) {
     const g = this.field, look = 7, limit = Math.tan(this.v.escortSteep * D2R);
@@ -250,8 +282,9 @@ export class EscortGroup {
   }
 }
 
-/** Distance from (x, z) to a platform's footprint (0 inside), less r. */
-export function rectGap(p: Platform, x: number, z: number, r = 0) {
+/** Distance from (x, z) to a platform's (or the plough's) footprint (0 inside), less r. */
+export function rectGap(p: Obstacle, x: number, z: number, r = 0) {
+  if (p.gapAt) return p.gapAt(x, z) - r;
   const l = p.toLocal(x, z);
   const dx = Math.max(0, Math.abs(l.x) - p.halfW), dz = Math.max(0, Math.abs(l.z) - p.spec.length / 2);
   return Math.hypot(dx, dz) - r;

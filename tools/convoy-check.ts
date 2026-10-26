@@ -10,13 +10,14 @@
 // path) and the gaps between cars stay open through turns, in one line and in two; footbridges stay high enough to walk
 // under and don't overstretch; a mech walks across the train through a gap without being thrown about; escorts never
 // drive into a platform or the mech and hold their station band most of the time; the pipes are the same every time
-// and stay out of the furniture; the tracks and wheels leave ruts and dust at a sane rate.
+// and stay out of the furniture; the tracks and wheels leave ruts and dust at a sane rate. The plough (1b): the road only
+// behind its blade, berms that hold the sand it cut, the same ground from the same clock, no cliffs, a mech walks over.
 // Run: npm test (or npx tsx tools/convoy-check.ts).
 import * as THREE from "three";
 import { WalkerSim, type MoveCommand } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
-import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import { DuneField, TERRAIN_DEFAULTS, type GroundSample } from "../src/world/terrain";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS, type Platform } from "../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS } from "../src/convoy/crane";
@@ -99,7 +100,10 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
 
   // Across the road: fine steps from the centre out past the blend; no jumps, no slopes steeper than the dunes have.
   let maxStep = 0, maxEdgeSlope = 0, maxFloorSlope = 0, maxDuneSlope = 0;
-  const reach = V.routeHalfWidth + V.routeBlend;
+  // Out past the berms the plough's wake throws up.
+  const reach = route.wake.reach() + 5;
+  // The floor is flat only behind the blade's cut edge (ahead of it the dunes are untouched).
+  const cutBehind = route.blade - route.tipLag - V.bladeRamp;
   for (let s = -200; s < route.s + 100; s += 9.7) for (const dir of [1, -1]) {
     let prev = NaN;
     for (let d = 0; d <= reach + 10; d += 0.1) {
@@ -108,7 +112,7 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
       prev = h;
       if (Math.abs(d % 1) < 0.05) {
         const sl = slope(field, p.x, p.z);
-        if (d < V.routeHalfWidth - 6) maxFloorSlope = Math.max(maxFloorSlope, sl);
+        if (d < V.routeHalfWidth - 6) { if (s < cutBehind) maxFloorSlope = Math.max(maxFloorSlope, sl); }
         else maxEdgeSlope = Math.max(maxEdgeSlope, sl);
         maxDuneSlope = Math.max(maxDuneSlope, slope(plain, p.x, p.z));
       }
@@ -120,7 +124,8 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
   // A jump: a step between samples 0.1 m apart bigger than the steepest dune slope allows.
   const allowed = 0.1 * Math.tan(maxDuneSlope * D2R) + 0.02;
   if (maxStep > allowed) fail(`road height jumps ${maxStep.toFixed(2)} m between samples 0.1 m apart (dunes allow ${allowed.toFixed(2)})`);
-  if (maxEdgeSlope > maxDuneSlope) fail(`road edges reach ${maxEdgeSlope.toFixed(0)}°, steeper than the dunes' ${maxDuneSlope.toFixed(0)}°`);
+  // The plough's berms can sit on a cut face a few degrees steeper than any dune here; the terrain's own limit (75°, terrain-check) still holds.
+  if (maxEdgeSlope > Math.max(maxDuneSlope, 75)) fail(`road edges reach ${maxEdgeSlope.toFixed(0)}°, steeper than the dunes' ${maxDuneSlope.toFixed(0)}° and the terrain limit`);
   if (maxFloorSlope > 12) fail(`road floor tilts up to ${maxFloorSlope.toFixed(1)}°`);
 
   // Cost: height lookups with the road on.
@@ -132,6 +137,139 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
   const t2 = performance.now();
   console.log(`  height() on the road ${((t1 - t0) / 200).toFixed(2)} µs vs plain ${((t2 - t1) / 200).toFixed(2)} µs`);
   void acc;
+}
+
+// 1b. The plough (Keith 2026-10-26): the road exists only behind its blade (a pure function of the convoy clock);
+// ahead of it the dunes are untouched, behind it the road floor. The sand cut goes into berms beside the road: their
+// cross-section matches the sand moved (roughly: lumps and the smear along the route), bigger where more was cut,
+// never cliffs, and a mech walks off the road over the biggest one.
+{
+  console.log("-- plough and wake");
+  const w = world();
+  // 40 s of driving, swinging onto a new heading halfway (a replan must not move the road behind the blade).
+  for (let i = 0; i < 120 * 40; i++) { if (i === 120 * 20) w.V.convoyHeading = 35; w.convoy.update(DT); }
+  const { route, field, V } = w;
+  const plain = new DuneField({ ...V });
+  const hw = V.routeHalfWidth, tan = route.tipLag / hw, side = V.routeHalfWidth + V.routeBlend;
+  const gs: GroundSample = { h: 0, crest: 0, flat: 0 };
+  // Ahead of the cut edge: exactly the untouched dunes. Behind it, on the floor: the road surface.
+  let aheadOff = 0, aheadN = 0, floorOff = 0, floorN = 0;
+  for (let s = route.blade - 120; s < route.blade + 60; s += 1.3) for (let d = -side; d <= side; d += 1.7) {
+    const p = route.offsetAt(s, d), lag = Math.min(Math.abs(d), hw) * tan;
+    if (s > route.blade - lag + 1.5) { aheadOff = Math.max(aheadOff, Math.abs(field.height(p.x, p.z) - plain.height(p.x, p.z))); aheadN++; }
+    else if (s < route.blade - route.tipLag - V.bladeRamp - 0.5 && Math.abs(d) < hw - 0.5) {
+      plain.sample(p.x, p.z, gs, true);
+      const floor = (gs.swell ?? 0) + V.routeLift + (gs.bumps ?? 0) * V.routeRough;
+      floorOff = Math.max(floorOff, Math.abs(field.height(p.x, p.z) - floor)); floorN++;
+    }
+  }
+  console.log(`  blade ${(route.blade - route.s).toFixed(0)} m ahead of the head, tips trail ${route.tipLag.toFixed(1)} m · ahead of the blade off the plain dunes by ${aheadOff.toFixed(6)} m (${aheadN} samples) · behind it off the road floor by ${floorOff.toFixed(6)} m (${floorN})`);
+  if (aheadOff > 1e-9) fail(`ground ahead of the plough's blade differs from the untouched dunes by ${aheadOff.toFixed(3)} m`);
+  if (floorOff > 1e-6) fail(`road behind the blade is off its floor by ${floorOff.toFixed(3)} m`);
+  if (aheadN < 100 || floorN < 100) fail("too few samples ahead of or behind the blade");
+
+  // Berm cross-sections from the height function's own berm term, against the sand the wake says it moved; the
+  // wake's measure of the cut against the cut read off the heights.
+  const smp = { w: 0, berm: 0, lift: 0, rough: 0 };
+  const bermArea = (s: number) => {
+    let a = 0;
+    for (const dir of [1, -1]) for (let d = hw; d <= route.wake.reach() + 2; d += 0.25) {
+      const p = route.offsetAt(s, dir * d);
+      if (route.at(p.x, p.z, smp)) a += smp.berm * 0.25;
+    }
+    return a;
+  };
+  const cutFromHeights = (s: number) => {
+    let a = 0;
+    for (const dir of [1, -1]) for (let d = 0.5; d < side; d += 1) {
+      const p = route.offsetAt(s, dir * d);
+      const berm = route.at(p.x, p.z, smp) ? smp.berm : 0;
+      a += plain.height(p.x, p.z) - (field.height(p.x, p.z) - berm);
+    }
+    return a;
+  };
+  const end = route.blade - route.tipLag - V.bermGrow - V.bermCarry - 4;
+  const stations: { s: number; cut: number; moved: number; berm: number }[] = [];
+  let measureOff = 0;
+  for (let s = -380; s < end; s += 2) {
+    const [L, R] = route.wake.netAt(s);
+    const st = { s, cut: Math.max(0, L) + Math.max(0, R), moved: route.wake.moved(s), berm: bermArea(s) };
+    stations.push(st);
+    if (stations.length % 9 === 0) measureOff = Math.max(measureOff, Math.abs(cutFromHeights(s) - (L + R)) / Math.max(20, Math.abs(L + R)));
+  }
+  // Windows of 40 m: berm volume against the sand moved.
+  let worstWin = 0, totMoved = 0, totBerm = 0;
+  for (let i = 0; i + 20 <= stations.length; i += 20) {
+    let m = 0, b = 0;
+    for (let j = i; j < i + 20; j++) { m += stations[j].moved; b += stations[j].berm; }
+    totMoved += m; totBerm += b;
+    if (m > 400) worstWin = Math.max(worstWin, Math.abs(b - m) / m);
+  }
+  // Bigger berms where more is cut: correlation across stations.
+  const n = stations.length, mc = stations.reduce((a, q) => a + q.cut, 0) / n, mb = stations.reduce((a, q) => a + q.berm, 0) / n;
+  let cov = 0, vc = 0, vb = 0;
+  for (const q of stations) { cov += (q.cut - mc) * (q.berm - mb); vc += (q.cut - mc) ** 2; vb += (q.berm - mb) ** 2; }
+  const corr = cov / Math.sqrt(vc * vb || 1);
+  const big = stations.reduce((a, q) => (q.berm > a.berm ? q : a), stations[0]);
+  console.log(`  ${n} stations · berms ${totBerm.toFixed(0)} m³ vs sand moved ${totMoved.toFixed(0)} m³ (worst 40 m window off by ${(worstWin * 100).toFixed(0)}%) · the wake's cut vs the heights' off by ${(measureOff * 100).toFixed(1)}% · berm vs cut correlation ${corr.toFixed(2)} · biggest berm section ${big.berm.toFixed(0)} m² at ${big.s} m (cut there ${big.cut.toFixed(0)} m²)`);
+  if (Math.abs(totBerm - totMoved) / totMoved > 0.08) fail(`berm volume ${totBerm.toFixed(0)} m³ is not the sand moved (${totMoved.toFixed(0)} m³)`);
+  if (worstWin > 0.3) fail(`a 40 m stretch of berm is off the sand moved by ${(worstWin * 100).toFixed(0)}%`);
+  if (measureOff > 0.03) fail(`the wake's cut differs from the cut read off the heights by ${(measureOff * 100).toFixed(1)}%`);
+  if (corr < 0.6) fail(`berms don't follow the cut (correlation ${corr.toFixed(2)})`);
+  if (big.berm < 60) fail(`the biggest berm is only ${big.berm.toFixed(0)} m² across: no walls where crests were cut`);
+
+  // The same clock gives the same ground: a second convoy jumped straight to this clock (laying the route without
+  // driving), its ground asked in another order.
+  // (The steering changes at the same clock: drive to the swing, take it, then jump the rest.)
+  const twin = world();
+  for (let i = 0; i <= 120 * 20; i++) { if (i === 120 * 20) twin.V.convoyHeading = 35; twin.convoy.update(DT); }
+  twin.convoy.jump(route.s);
+  let differ = 0, asked = 0;
+  for (let s = route.blade + 40; s > -300; s -= 3.1) for (let d = -side - 30; d <= side + 30; d += 4.3) {
+    const p = route.offsetAt(s, d);
+    if (twin.field.height(p.x, p.z) !== field.height(p.x, p.z)) differ++;
+    asked++;
+  }
+  console.log(`  same clock, jumped instead of driven: ${differ} of ${asked} heights differ`);
+  if (differ) fail(`the same convoy clock gave different ground (${differ} of ${asked} samples)`);
+
+  // No cliffs at the berms: slopes across them (the dunes' own included) within the terrain's limit (terrain-check),
+  // unless the dune under them was already that steep (a berm dumped on a slip face may add a degree or two there).
+  let worstSlope = 0, plainThere = 0, worstAdded = 0, worstBermSlope = 0;
+  for (let s = -380; s < end; s += 3.7) for (const dir of [1, -1]) for (let d = hw; d < route.wake.reach() + 3; d += 0.7) {
+    const p = route.offsetAt(s, dir * d);
+    const sl = slope(field, p.x, p.z), ps = slope(plain, p.x, p.z);
+    if (sl > worstSlope) { worstSlope = sl; plainThere = ps; }
+    if (sl > 75) worstAdded = Math.max(worstAdded, sl - ps);
+    // The berm alone: its rise over a metre.
+    const q = route.offsetAt(s, dir * (d + 1));
+    const b0 = route.at(p.x, p.z, smp) ? smp.berm : 0, b1 = route.at(q.x, q.z, smp) ? smp.berm : 0;
+    worstBermSlope = Math.max(worstBermSlope, Math.atan(Math.abs(b1 - b0)) / D2R);
+  }
+  console.log(`  steepest ground across the berms ${worstSlope.toFixed(0)}° (the dunes there ${plainThere.toFixed(0)}°; terrain limit 75°) · steepest berm face alone ${worstBermSlope.toFixed(0)}°`);
+  if (worstAdded > 3) fail(`the berms make cliffs past 75° (${worstAdded.toFixed(0)}° steeper than the dunes there)`);
+  if (worstBermSlope > 45) fail(`a berm face alone is ${worstBermSlope.toFixed(0)}°`);
+
+  // A mech walks off the road over the biggest berm (well behind the convoy) and out the far side.
+  const [bl] = [route.wake.berm(big.s, 1, { h: 0, w: 0, c: 0 })];
+  const br = route.wake.berm(big.s, -1, { h: 0, w: 0, c: 0 });
+  const out = bl.h * bl.w >= br.h * br.w ? 1 : -1, b = out > 0 ? bl : br;
+  const start = route.offsetAt(big.s, out * (hw - 12));
+  const sim = new WalkerSim(w.V, field);
+  const dir = { x: Math.cos(start.heading) * out, z: -Math.sin(start.heading) * out };
+  sim.reset(start.x, start.z, Math.atan2(dir.x, dir.z));
+  const goal = b.c + b.w + 6;
+  let reached = -1, under = 0, overreach = 0;
+  for (let i = 0; i < 120 * 30 && reached < 0; i++) {
+    sim.update(DT, { x: dir.x, z: dir.z, sprint: false });
+    for (const f of sim.feet) if (f.pos.y < field.height(f.pos.x, f.pos.z) - 0.05) under++;
+    overreach = sim.stats.overreach;
+    const along = (sim.pos.x - start.x) * dir.x + (sim.pos.z - start.z) * dir.z;
+    if (hw - 12 + along > goal) reached = i * DT;
+  }
+  console.log(`  mech over a ${b.h.toFixed(1)} m berm (${(2 * b.w).toFixed(0)} m wide): ${reached >= 0 ? `out past it in ${reached.toFixed(1)} s` : "stuck"} · feet under the sand ${under} frames · overreach ${overreach}`);
+  if (reached < 0) fail(`a mech couldn't walk off the road over a ${b.h.toFixed(1)} m berm`);
+  if (under > 0) fail(`feet went through the berm ${under} times`);
 }
 
 // 2. Five minutes of driving with heading changes and a speed change: platforms on the ground and upright.
@@ -598,7 +736,7 @@ for (const lanes of [1, 2]) {
   const esc = new EscortGroup(w.V, w.convoy, w.field);
   esc.reset();
   const frames = 180 * 120;
-  let onStation = 0, samples = 0, worstPlat = Infinity, worstMech = Infinity, nan = false, flipped = 0;
+  let onStation = 0, samples = 0, worstPlat = Infinity, worstPlough = Infinity, worstMech = Infinity, nan = false, flipped = 0;
   const mech = { x: 0, z: 0 };
   const up = new THREE.Vector3();
   for (let i = 0; i < frames; i++) {
@@ -621,15 +759,17 @@ for (const lanes of [1, 2]) {
       if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) nan = true;
       if (up.set(0, 1, 0).applyQuaternion(s.quat).y < 0.5) flipped++;
       for (const p of w.convoy.platforms) worstPlat = Math.min(worstPlat, rectGap(p, s.pos.x, s.pos.z, e.half * 0.6));
+      worstPlough = Math.min(worstPlough, rectGap(w.convoy.plough, s.pos.x, s.pos.z, e.half * 0.6));
       worstMech = Math.min(worstMech, Math.hypot(s.pos.x - mech.x, s.pos.z - mech.z) - e.half * 0.6);
       samples++;
       if (Math.abs(Math.abs(e.out) - e.stationOut) <= w.V.escortBand + w.V.escortWeave && Math.sign(e.out) === e.side) onStation++;
     }
   }
   const share = onStation / Math.max(1, samples);
-  console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
+  console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · to the plough ${worstPlough.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
   if (nan) fail("an escort went non-finite");
   if (worstPlat < 1) fail(`an escort came within ${worstPlat.toFixed(2)} m of a platform`);
+  if (worstPlough < 1) fail(`an escort came within ${worstPlough.toFixed(2)} m of the plough`);
   if (worstMech < 3) fail(`an escort drove within ${worstMech.toFixed(2)} m of the mech`);
   if (share < 0.8) fail(`escorts on station only ${(share * 100).toFixed(0)}% of the time`);
   if (flipped) fail("an escort tipped over");

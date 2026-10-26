@@ -245,6 +245,20 @@ Status: `[ ]` open · `[~]` taken · `[x]` done.
   - Bridges: a walkway with rails, hinged at both ends (`Hinge_A`, `Hinge_B`).
 - **Hold back:** platform canopies and village dressing until Keith sends references.
 
+### [ ] C3 · Convoy plough
+- **File:** `public/models/convoy/plough.glb`.
+- **What:** the giant bulldozer at the very front of the convoy (Keith 2026-10-26) that cuts the road. Today it's a
+  code stand-in (`src/convoy/ploughBody.ts`): a tracked base 17 m long and 15 m wide, a cab up front, engine deck and
+  stacks, push arms, and a V blade 4.2 m tall whose wings reach the road's edges (60 m across by default, the tips
+  trailing 13 m behind the point).
+- **Nodes:** `Body` (the base, origin on the ground under the base's middle, +Z forward); `Blade_L` and `Blade_R` as
+  separate wings with their pivot at the V's point (5 m ahead of the base's front), so the game can stretch them along
+  their length to the road's width and sweep; `Track_L`, `Track_R` with UVs that scroll along the belt (or
+  `Tread_n`); `Stack_n` sockets at the exhaust tops; `Spill_L`, `Spill_R` sockets at the blade's ends (sand pours
+  there).
+- **Look:** a mining machine, not a tank: heavy plates, worn hazard paint on the blade's top edge, sand-scoured lower
+  half. It must read from the 40 m camera as the head of the convoy.
+
 ### [ ] P1 · POI wrecks and salvage
 - **Files:** `public/models/pois/*`.
 - **What:** the expedition loop (being built now) sends you out to POIs. Today they're boxes, rocks, I-beams and a
