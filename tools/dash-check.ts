@@ -51,9 +51,19 @@ for (const [dx, dz, walking] of dirs) {
 }
 // Charges: spend them all, the next is refused, then they come back.
 for (let i = 0; i < 120 * 10; i++) step({ x: 0, z: 0, sprint: false });
-let went = 0;
-for (let k = 0; k < 4; k++) { if (dash.start(1, 0)) went++; while (dash.active || dash.since < dv.dashGap) step({ x: 0, z: 0, sprint: false }); }
-if (went !== dv.dashCharges) problems.push(`${went} dashes went from full charges (expected ${dv.dashCharges})`);
+// Each attempt waits for the last dash to end; since Keith's longer dash (1.05 s and its glide, 2026-10-26) a charge can
+// recharge during the sequence, so the expectation counts the recharges that fit between the first dash and each attempt
+// (the check used to assume none would).
+let went = 0, expected = 0, t0 = -1, clockT = 0;
+for (let k = 0; k < 4; k++) {
+  const ok = dash.start(1, 0);
+  if (t0 < 0) t0 = clockT;
+  // Charges available at this attempt: the full set, plus one per recharge since the first dash, less the ones spent.
+  if (went < dv.dashCharges + Math.floor((clockT - t0) / dv.dashRecharge + 1e-6)) expected++;
+  if (ok) went++;
+  while (dash.active || dash.since < dv.dashGap) { step({ x: 0, z: 0, sprint: false }); clockT += dt; }
+}
+if (went !== expected || went < dv.dashCharges) problems.push(`${went} dashes went from full charges (expected ${expected}: ${dv.dashCharges} charges and the recharges in between)`);
 for (let i = 0; i < 120 * (dv.dashRecharge * dv.dashCharges + 0.5); i++) step({ x: 0, z: 0, sprint: false });
 if (dash.charges !== dv.dashCharges) problems.push(`charges came back to ${dash.charges} of ${dv.dashCharges}`);
 

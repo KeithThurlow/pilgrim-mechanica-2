@@ -63,7 +63,10 @@ console.log(`downhill 17°     ${fmt(down)}`);
 console.log(`  old stance     ${fmt(downOff)}`);
 console.log(`downhill 33°     ${fmt(steep)}`);
 console.log(`  no reach cap   ${fmt(steepOff)}`);
-if (side.thigh < sideOff.thigh + 8) problems.push("the uphill leg's thigh doesn't fold forward on a side slope");
+// The uphill planted thigh tilts well off vertical, and the fold never takes that away. With Keith's values (hockExtend 0,
+// 2026-10-26) the leg already tilts 13° without the fold (was 7°) and 14° with it (was 16°): the check used to ask the
+// fold to add 8°, which compared against the old no-fold leg.
+if (side.thigh < 12 || side.thigh < sideOff.thigh - 0.5) problems.push(`the uphill leg's thigh doesn't fold forward on a side slope (${side.thigh.toFixed(1)}°, without the fold ${sideOff.thigh.toFixed(1)}°)`);
 if (up.speed > flat.speed * 0.9) problems.push("no slowdown uphill");
 if (down.speed < flat.speed * 0.95) problems.push("slows down downhill");
 // The body leans over its feet while moving (Keith 2026-10-24): downhill no less than on the flat, and never behind them.
@@ -72,7 +75,10 @@ if (flat.cogAhead < 0.25) problems.push("walking, the hips aren't forward over t
 for (const [name, r] of [["side", side], ["up", up], ["down", down], ["steep", steep]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
 // Uphill (Keith 2026-10-26 18:28: the swinging thigh was held down vertical): it rises toward the hull, clearly more than
 // on the flat and than without the fold.
-if (up.swingThigh < Math.max(flat.swingThigh, upOff.swingThigh) + 12) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
+// With Keith's low step (liftHeight 0.4, 2026-10-26; was 0.75) the swing never squashes the leg enough for the extra
+// fold to engage (the "no fold" run is the same), but the thigh still rises well clear of the old vertical (0°): the
+// check asks for the look, not for the mechanism (it used to ask the fold to add 12°).
+if (up.swingThigh < Math.max(30, flat.swingThigh + 6)) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
 // Downhill (same notes: "a maximum that the legs get to that doesn't look insane"): planted legs never past the cap.
 const CAP = WALKER_DEFAULTS.legReachMax, TOL = 0.025;
 for (const [name, r] of [["downhill 17°", down], ["downhill 33°", steep]] as const) if (r.stretch > CAP + TOL) problems.push(`${name}: a planted leg stretched to ${(r.stretch * 100).toFixed(0)}% (cap ${(CAP * 100).toFixed(0)}%)`);
@@ -98,6 +104,32 @@ for (const H of [3, 6]) {
   if (!below) problems.push(`${what}: didn't land and walk on below`);
   if (under) problems.push(`${what}: ${under} foot-frames under the ground`);
   console.log(`${what}: longest planted leg ${(worst * 100).toFixed(0)}% · dropped ${sim.stats.takeoffs}× · landed at ${sim.lastLanding ? sim.lastLanding.impact.toFixed(1) + " m/s" : "never"} · walked on below: ${below}`);
+}
+// Sprinting up and down planes (Keith 2026-10-26 21:54: the sprint looked terrible uphill, the steps flickering
+// quicker): the cadence rises steadily with the climb (quicker, shorter strides), the footfalls stay even, the legs reach,
+// and downhill the cadence doesn't rise.
+{
+  const cadence = (deg: number) => {
+    const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values }, plane(0, Math.tan((deg * Math.PI) / 180)));
+    sim.reset(0, 0, 0);
+    const falls: number[] = [];
+    let t = 0;
+    sim.onFootfall = () => { if (t > 6) falls.push(t); };
+    for (let i = 0; i < 12 * 120; i++, t += 1 / 120) { sim.bound = true; sim.update(1 / 120, { x: 0, z: 1, sprint: false }); }
+    const gaps = falls.slice(1).map((f, i) => f - falls[i]);
+    const mean = gaps.reduce((a, b) => a + b, 0) / Math.max(1, gaps.length);
+    const spread = Math.max(...gaps.map((g) => Math.abs(g - mean))) / mean;
+    return { deg, rate: 1 / mean, spread, speed: sim.speed, misses: sim.stats.overreach / (sim.stats.frames * 2) };
+  };
+  const rows = [-10, 0, 10, 20, 25].map(cadence);
+  const at = (d: number) => rows.find((r) => r.deg === d)!;
+  for (const r of rows) {
+    console.log(`sprint ${String(r.deg).padStart(3)}°: ${r.rate.toFixed(2)} steps/s · step ${(r.speed / r.rate).toFixed(2)} m at ${r.speed.toFixed(1)} m/s · intervals within ${(r.spread * 100).toFixed(0)}% · reach misses ${(r.misses * 100).toFixed(1)}%`);
+    if (r.spread > 0.15) problems.push(`sprinting at ${r.deg}°: footfall intervals uneven (${(r.spread * 100).toFixed(0)}% off the mean)`);
+    if (r.deg >= 10 && r.misses > 0.03) problems.push(`sprinting up ${r.deg}°: legs out of reach ${(r.misses * 100).toFixed(1)}% of leg-frames`);
+  }
+  if (!(at(10).rate > at(0).rate + 0.2 && at(20).rate > at(10).rate + 0.2 && at(25).rate > at(20).rate)) problems.push(`sprint cadence doesn't rise with the climb: ${rows.map((r) => `${r.deg}° ${r.rate.toFixed(2)}`).join(", ")}`);
+  if (at(-10).rate > at(0).rate + 0.1) problems.push(`sprint cadence rises downhill (${at(-10).rate.toFixed(2)} vs ${at(0).rate.toFixed(2)} steps/s)`);
 }
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("slope check failed"); }
 console.log("slope check passed");

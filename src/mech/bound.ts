@@ -6,8 +6,11 @@
 // The booster pack (simple version, Keith's answer: the rocket slide goes, the booster later adds thrust and glide):
 // while its tank lasts, the sprint's top speed is boostTop higher and leaps fall boostGlide slower; it burns boostBurn
 // tank-seconds a second while sprinting and refills when not.
-// Guns may fire while sprinting, in the air too, with extra spread there (Claude's default until Keith has played it;
-// boundGuns 0 switches them off while sprinting).
+// Weapons while sprinting (Keith 2026-10-26 21:54: "once you're sprinting, you can't use your weapons, and the mech
+// inherently starts looking forward and leaning forward... give a bit of a timer for the turn forward, the player might
+// be mid fight"): for sprintGunsAfter seconds into the sprint they still fire (with extra spread in the air), then the
+// weapons are off: `gunsOff`, a state the mech unit reads (src/game/mechUnit.ts) to hold the triggers, cancel paints and
+// charges, and turn the torso and head to the line of travel with the hull leaning forward. Let go and they're back.
 // Ownership: the player's own movement (a command), like the walk and the dash.
 import type { Param } from "../core/tweaks";
 import type { WalkerSim } from "./walker";
@@ -19,7 +22,9 @@ export const BOUND_DEFAULTS = {
   boostTop: 8,
   boostGlide: 0,
   boostBurn: 0.25,
-  boundGuns: 1,
+  sprintGunsAfter: 0.6,
+  sprintFaceDrift: 0.5,
+  sprintHullLean: 8,
   airGunSpread: 3,
   boundDust: 0.5,
 };
@@ -32,7 +37,9 @@ export const BOUND_PARAMS: Param[] = [
   { key: "boostTop", label: "Booster: top speed + (m/s)", min: 0, max: 12, step: 0.5, group: G, tip: "With a booster pack fitted (a booster tank above 0, Dash group), while its tank lasts" },
   { key: "boostGlide", label: "Booster: glide (share of gravity)", min: 0, max: 0.9, step: 0.01, group: G, tip: "Falling out of a leap this much slower: more hang time off crests" },
   { key: "boostBurn", label: "Booster: tank burn sprinting (s/s)", min: 0, max: 2, step: 0.01, group: G },
-  { key: "boundGuns", label: "Guns fire while sprinting (1 on, 0 off)", min: 0, max: 1, step: 1, group: G, tip: "Keith hasn't decided: on by default, revisit after play" },
+  { key: "sprintGunsAfter", label: "Weapons off after sprinting for (s)", min: 0, max: 3, step: 0.05, group: G, tip: "Keith 2026-10-26 21:54: sprinting the weapons go off and the torso turns to face the way it runs; for this long into the sprint they still fire, so a mid-fight sprint keeps shooting a moment. Let go of Space and they're back, the torso turning to the aim at its normal rate" },
+  { key: "sprintFaceDrift", label: "Weapons off: torso follows the drift (share)", min: 0, max: 1, step: 0.01, group: G, tip: "The torso faces the line of travel (0) or turns that share of the way with the legs into a drift (1: straight ahead of the legs)" },
+  { key: "sprintHullLean", label: "Weapons off: hull leans forward (°)", min: 0, max: 25, step: 0.5, group: G, tip: "On top of the body's own lean, at the legs' top speed (from nothing at the walk)" },
   { key: "airGunSpread", label: "Extra spread in the air (°)", min: 0, max: 15, step: 0.1, group: G, tip: "Firing while the mech is off the ground (a leap, a jump)" },
   { key: "boundDust", label: "Sprint: footfall and toe kick dust ×", min: 0, max: 3, step: 0.05, group: G, tip: "On top of Running dust × (Dust: sources), for each sprint step's footfall and toe kick. Landings off jumps throw their own burst" },
 ];
@@ -42,6 +49,10 @@ export class Bound {
   on = false;
   /** Seconds Space has been held. */
   heldFor = 0;
+  /** Seconds sprinting (0 when not). */
+  onFor = 0;
+  /** Sprinting long enough that the weapons are off (sprintGunsAfter): the torso faces the travel line. */
+  get gunsOff() { return this.on && this.onFor >= this.v.sprintGunsAfter; }
 
   constructor(public v: BoundValues) {}
 
@@ -54,6 +65,7 @@ export class Bound {
     const want = held && this.heldFor >= (dash.shoving ? v.dashHoldRun : v.boundTap);
     if (want && !this.on) dash.cut();
     this.on = want;
+    this.onFor = want ? this.onFor + dt : 0;
     const booster = dash.v.boostFuel > 0 && dash.fuel > 0.02;
     dash.boosting = this.on && booster;
     if (dash.boosting) dash.fuel = Math.max(0, dash.fuel - v.boostBurn * dt);

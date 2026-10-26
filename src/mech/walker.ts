@@ -194,6 +194,15 @@ export class WalkerSim {
   course = 0;
   /** Planted feet skidding sideways in a drift (m/s), for skid dust and furrows. */
   footSlip = 0;
+  /**
+   * Leaning into the turn while sprinting (Keith 2026-10-26 21:54: "the mech to lean as it turns... all the way over, so
+   * the shoulders come over"): the whole body rolls (+ left side up, radians, eased) by the lateral acceleration, the
+   * line of run's turn rate × the speed, capped at turnRollMax; the hull takes all of it (it isn't kept level).
+   */
+  turnRoll = 0;
+  /** The line of run's turn rate (rad/s, + to the left), smoothed, and the course it was at last step. */
+  courseRate = 0;
+  private lastCourse = NaN;
   /** In the sprint's gait: the run, a landing stance, or one of its leaps. */
   get bounding() { return this.running || this.bStance !== null || (this.airborne && this.bLeap); }
   /** The sprint's run gait is on (steering like a vehicle); runK is how far the gait has blended from the walk (0..1). */
@@ -202,6 +211,10 @@ export class WalkerSim {
   /** The gait's planted share and cycles per second now (the planted share eases, so steps never jump). */
   dutyNow = 0.6;
   cpsNow = 0;
+  /** The over-stretch hurry on the cadence (1: none), eased while running. */
+  private hurry = 1;
+  /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
+  private reachCap = NaN;
   /** The idle flex: steps left in it (0: not flexing), and how far its gait has blended in (0..1). */
   idleLeft = 0;
   idleK = 0;
@@ -280,13 +293,16 @@ export class WalkerSim {
 
   /** Body pitch (nose down +) and roll (left side up +), radians: for an upper body riding on the hips. */
   get bodyPitch() { return this.pitch.x; }
-  get bodyRoll() { return this.roll.x; }
+  get bodyRoll() { return this.roll.x + this.turnRoll; }
+  /** The hull's roll: what of the hip roll it doesn't level out, plus all of the lean into a turn. */
+  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll; }
 
   reset(x: number, z: number, heading: number) {
     this.airborne = false; this.airVel.set(0, 0, 0); this.squatState = null; this.stagger = 0; this.skid.set(0, 0, 0);
     this.idleLeft = 0; this.idleK = 0; this.stillT = 0; this.idleNext = NaN;
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
-    this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.slip.set(0, 0, 0);
+    this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
+    this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -323,7 +339,10 @@ export class WalkerSim {
     turn(this.vel); turn(this.airVel); turn(this.skid);
     this.airY += dy;
     this.heading = wrap(this.heading + dyaw);
+    this.course = wrap(this.course + dyaw);
+    if (Number.isFinite(this.lastCourse)) this.lastCourse = wrap(this.lastCourse + dyaw);
     this.bodyY.x += dy;
+    this.reachCap += dy; this.prevYT += dy;
     const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
     this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
     for (const f of this.feet) {
@@ -395,6 +414,7 @@ export class WalkerSim {
     this.footSlip = 0;
     this.slip.set(0, 0, 0);
     this.tuckPose();
+    this.turnLean(dt);
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
     const gallop = v.boundGallop >= 0.5;
@@ -485,8 +505,7 @@ export class WalkerSim {
     const S = this.stride(), rk = this.runK;
     let dWant = this.duty(), cps = this.speed / S;
     if (rk > 0) {
-      const cpsR = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
-      const dR = clamp((v.boundStanceLen * cpsR) / Math.max(1, this.speed), 0.2, 0.5);
+      const { cps: cpsR, duty: dR } = this.runCadence();
       dWant += (dR - dWant) * rk;
       cps += (cpsR - cps) * rk;
     }
@@ -500,8 +519,11 @@ export class WalkerSim {
     // Standing: step a foot back under the body if it's out of place, once any landing squat is over (both feet stay
     // planted through the squat).
     else if (this.speed < 0.08) { cps = 0; if (!this.squatState) this.settle(d); }
-    // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching.
-    cps *= 1 + 1.5 * smooth(0.9, 1, this.stretch());
+    // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching. Running,
+    // eased (it used to flick the cadence between one and two and a half times as the legs stretched, Keith 21:54).
+    const hurry = 1 + 1.5 * smooth(0.9, 1, this.stretch());
+    this.hurry = rk > 0 ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
+    cps *= 1 + (this.hurry - 1) * (rk > 0 ? v.runHurry : 1);
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
@@ -540,6 +562,22 @@ export class WalkerSim {
     this.body(dt, d);
     this.pose();
     this.trackSlides(dt);
+  }
+
+  /**
+   * The run's cadence (cycles/s) and planted share now. Steps/s rise with speed (runSteps to runStepsTop) and with the
+   * climb along the line of run (runClimbSteps per degree; downhill runDescentSteps fewer), so a climb takes quicker,
+   * shorter strides (Keith 2026-10-26 21:54); the ground per stance shrinks with the stride, so the planted share is the
+   * flat's.
+   */
+  runCadence() {
+    const v = this.v;
+    const base = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
+    const deg = Math.atan(this.grade) / D2R;
+    const steps = Math.max(1, 2 * base + v.runClimbSteps * clamp(deg, 0, 35) - v.runDescentSteps * clamp(-deg, 0, 35));
+    const cps = steps / 2;
+    const stance = v.boundStanceLen * Math.min(1, base / cps);
+    return { cps, duty: clamp((stance * cps) / Math.max(1, this.speed), 0.2, 0.5) };
   }
 
   /** 0 at the run's speed, 1 at the legs' top speed (by ground speed). */
@@ -681,6 +719,13 @@ export class WalkerSim {
       y = herm(Cy, 0, By, -2 * seg, t);
       s = Cs + (Bs - Cs) * smooth(0, 1, t);
     }
+    // Never out of the leg's reach (the follow-through behind and the reach ahead grow with the swing's time: at Keith's
+    // slower cadence they carried the foot past the leg's length, the dune sprint's reach misses).
+    {
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon), hs = f.side * v.hipWidth;
+      const ax = x, ay = y + v.ankleHeight, az = s - hs, d = Math.hypot(ax, ay, az);
+      if (d > R) { const k = R / d; x = ax * k; y = ay * k - v.ankleHeight; s = az * k + hs; }
+    }
     out.set(this.pos.x + fw.x * x + lf.x * s, hipY + y, this.pos.z + fw.z * x + lf.z * s);
     // Clear the ground under the foot and its toes.
     const env = Math.sin(Math.PI * u);
@@ -794,8 +839,7 @@ export class WalkerSim {
     this.impact.step(0, dt);
     this.bodyY.x = this.airY; this.bodyY.v = a.y;
     this.pelvis.set(this.pos.x, this.airY, this.pos.z);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading);
     if (touch) this.touchDown();
   }
 
@@ -822,7 +866,7 @@ export class WalkerSim {
     if (this.bound && this.stagger <= 0 && impact <= v.boundAbsorb) { this.boundLand(impact, gx, gz, wasLeap); return; }
     // A real landing: the run starts over from what's left once the squat is done.
     this.running = false;
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
     for (const f of this.feet) {
       f.planted.copy(f.pos);
       this.groundAt(f.planted, f.plantedUp);
@@ -1137,8 +1181,7 @@ export class WalkerSim {
     const slope = Math.atan(grade);
     this.pitch.step(-slope * (slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch) + this.boundLeanNow() + this.leanPitch, dt);
     this.pelvis.set(this.pos.x, y, this.pos.z);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading);
 
     // Feet: the first one down lifts first (at Tc), the other lands late (at lag) and pushes off last (at T).
     this.airExt = 0;
@@ -1338,7 +1381,7 @@ export class WalkerSim {
       P.entryRel.copy(P.runA);
       this.aim(P);
     }
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
   }
 
   /**
@@ -1370,7 +1413,7 @@ export class WalkerSim {
       this.aim(first);
     }
     this.running = true;
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
   }
 
   /** Let go mid-stance: plant what's in the air, hand the speed to the run (up to the run's), skid the rest. */
@@ -1393,6 +1436,41 @@ export class WalkerSim {
     this.bodyY.x = this.pelvis.y - this.impact.x; this.bodyY.v = 0;
     this.boundSpeed = 0;
     this.running = false;
+  }
+
+  /**
+   * The body's orientation from its pitch and roll springs: the pelvis turned to `pelvisYaw`, the hull to the heading
+   * and kept level by shoulderLevel; both rolled into a sprint's turn (turnRoll), and the hips moved a share of the way
+   * toward the inside of it (turnLeanShift), as if the body leaned over its feet.
+   */
+  private orient(pelvisYaw: number) {
+    const v = this.v, tr = this.turnRoll;
+    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, pelvisYaw, this.roll.x + tr, "YXZ"));
+    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
+    if (tr !== 0) {
+      // Rolled about the outside hip, so the outside leg reaches no further than upright and the inside one folds.
+      const H = v.hipHeight * v.turnLeanShift, l = leftOf(this.heading, this.t.l);
+      this.pelvis.addScaledVector(l, -Math.sin(tr) * H);
+      this.pelvis.y -= H * (1 - Math.cos(tr)) + v.hipWidth * Math.abs(Math.sin(tr));
+    }
+  }
+
+  /**
+   * The lean into a sprint's turn (Keith 2026-10-26 21:54): the true lean for the lateral acceleration (speed × the line
+   * of run's turn rate) × turnRoll, capped at turnRollMax, eased in and out at turnRollEase. Nothing outside the sprint.
+   */
+  private turnLean(dt: number) {
+    const v = this.v;
+    const sprinting = this.bound && (this.running || this.bStance !== null || (this.airborne && this.bLeap));
+    const dc = Number.isFinite(this.lastCourse) ? wrap(this.course - this.lastCourse) : 0;
+    this.lastCourse = this.course;
+    // A jump in the line (the start of a run off a dash) isn't a turn.
+    if (sprinting && Math.abs(dc) < 0.15) this.courseRate += (dc / dt - this.courseRate) * Math.min(1, dt * 12);
+    else this.courseRate *= Math.max(0, 1 - dt * 12);
+    const max = v.turnRollMax * D2R;
+    const want = sprinting ? -clamp(Math.atan((this.boundSpeed * this.courseRate) / G) * v.turnRoll, -max, max) : 0;
+    this.turnRoll += (want - this.turnRoll) * Math.min(1, dt * v.turnRollEase);
+    this.turnRoll = clamp(this.turnRoll, -max, max);
   }
 
   /** How close the most stretched planted leg is to full reach (1 = straight). */
@@ -1506,6 +1584,9 @@ export class WalkerSim {
     const R = v.legReachMax * (v.femur + v.shin + v.cannon);
     let hipLow = this.bodyY.x;
     for (const o of this.feet) if (o !== f && !o.swinging) hipLow = Math.min(hipLow, o.planted.y + v.hipHeight * 0.6);
+    // Running, the hips come down to their running height over the landing spot (the reach cap in body()): a run down a
+    // slope lands its feet instead of hanging them in the flight and dropping (Keith 21:54: the run hopped downhill).
+    if (this.runK > 0.5) hipLow = Math.min(hipLow, f.target.y + this.boundStand());
     const hx = this.pos.x + this.vel.x * remain + lf.x * f.side * v.hipWidth - f.target.x;
     const hz = this.pos.z + this.vel.z * remain + lf.z * f.side * v.hipWidth - f.target.z;
     const lowest = hipLow - Math.sqrt(Math.max(0, R * R - hx * hx - hz * hz)) - v.ankleHeight;
@@ -1604,6 +1685,44 @@ export class WalkerSim {
       f.pos.set(ex + (f.pos.x - ex) * w, ey + (f.pos.y - ey) * w, ez + (f.pos.z - ez) * w);
       if (w >= 1) f.entryU = -1;
     }
+    this.toesClear(f);
+  }
+
+  /**
+   * A swinging foot's toes never dig into the ground (Keith 2026-10-26: toes skimming the sand; leaving the push-off
+   * pitched toes-down, the toes uncurled and curled under faster than the foot rose, up to 0.37 m into flat sand):
+   * the pitch eases off so the ball of the foot clears, and the toes stay bent up as if still pushing.
+   */
+  private toesClear(f: Foot) {
+    const v = this.v, m = 0.02 + v.toeClear * Math.sin(Math.PI * clamp(f.u, 0, 1));
+    const h = v.toeHinge, L = Math.max(0.01, v.toeLength - v.toeHinge);
+    // On the plate's own frame (as pose() builds it): forward along its yaw over its up; pitch turns the toes down.
+    const up = f.up, fw = this.plateForward(up, f.yaw, this.t.f);
+    // Height over the ground of a point d along the plate pitched by a (from the plate centre, or from the ball).
+    const over = (ox: number, oy: number, oz: number, a: number, d: number, out: number[]) => {
+      const c = Math.cos(a), sn = Math.sin(a);
+      out[0] = ox + (fw.x * c - up.x * sn) * d; out[1] = oy + (fw.y * c - up.y * sn) * d; out[2] = oz + (fw.z * c - up.z * sn) * d;
+      return out[1] - this.ground.height(out[0], out[2]) - m;
+    };
+    const P = this.t.n, Q = [0, 0, 0];
+    // The ball of the foot: ease the toes-down pitch until it clears.
+    if (h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
+      let lo = Math.min(f.pitch, 0) - 0.8, hi = f.pitch;
+      if (over(f.pos.x, f.pos.y, f.pos.z, lo, h, P) >= 0) {
+        for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (over(f.pos.x, f.pos.y, f.pos.z, mid, h, P) >= 0) lo = mid; else hi = mid; }
+        f.pitch = lo;
+      }
+    }
+    over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P);
+    // The toe tips: bend the toes up until they clear.
+    const hx = P[0], hy = P[1], hz = P[2];
+    if (over(hx, hy, hz, f.pitch + f.toe, L, Q) < 0) {
+      let lo = Math.min(f.pitch + f.toe, 0) - 1.2, hi = f.pitch + f.toe;
+      if (over(hx, hy, hz, lo, L, Q) >= 0) {
+        for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (over(hx, hy, hz, mid, L, Q) >= 0) lo = mid; else hi = mid; }
+        f.toe = lo - f.pitch;
+      }
+    }
   }
 
   private body(dt: number, d: number) {
@@ -1625,6 +1744,22 @@ export class WalkerSim {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).
       const clear = this.groundAhead(Math.max(1.5, this.speed * v.runLookAhead)) + v.runClear;
       yT += Math.max(0, clear - yT) * rk;
+      // ...but never higher than the feet reach (Keith 21:54: up a climb the clearance held the hips past the legs'
+      // reach, a step behind and below, and the over-stretched legs flicked the cadence): each planted foot and each
+      // swinging foot's landing spot caps the hips at its leg's longest (legReachMax) plus runReachGive. Only the feet
+      // that carry the body count (landing spots, the first half of a stance: a foot trailing to its push-off may stretch
+      // out), and the cap is eased over a stride, so it doesn't bob the hips.
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon), l = leftOf(this.heading, this.t.l);
+      let yMax = Infinity;
+      for (const f of this.feet) {
+        if (!f.swinging && f.stanceT > 0.5) continue;
+        // A landing spot against where the hips will be when it lands.
+        const p = f.swinging ? f.target : f.pos, ahead = f.swinging ? ((1 - f.u) * (1 - this.dutyNow)) / Math.max(MIN_CYCLE, this.cpsNow) : 0;
+        const hx = this.pos.x + this.vel.x * ahead + l.x * f.side * v.hipWidth - p.x, hz = this.pos.z + this.vel.z * ahead + l.z * f.side * v.hipWidth - p.z;
+        yMax = Math.min(yMax, p.y + v.ankleHeight + Math.sqrt(Math.max(0.04, R * R - hx * hx - hz * hz)));
+      }
+      if (Number.isFinite(yMax)) this.reachCap = Number.isFinite(this.reachCap) ? this.reachCap + (yMax - this.reachCap) * Math.min(1, dt * 4) : yMax;
+      if (yT > this.reachCap + v.runReachGive) yT += (this.reachCap + v.runReachGive - yT) * rk;
     }
     // Following the ground's own rise (feed-forward) so a fast run up a slope doesn't lag under it.
     const yv = Number.isFinite(this.prevYT) ? clamp((yT - this.prevYT) / dt, -12, 12) : 0;
@@ -1670,8 +1805,7 @@ export class WalkerSim {
     const dm = this.dashMove;
     const open = dm ? clamp(wrap(dm.yaw - this.heading), -60 * D2R, 60 * D2R) * v.dashHipOpen * (1 - smooth(0.3, 0.7, dm.t)) : 0;
     this.hipOpen += (open - this.hipOpen) * Math.min(1, dt * 14);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading + this.hipOpen, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading + this.hipOpen);
     if (!dm) for (const f of this.feet) f.kneeYaw += (0 - f.kneeYaw) * Math.min(1, dt * 10);
   }
 
@@ -1837,20 +1971,27 @@ export class WalkerSim {
       }
       f.theta = theta;
 
-      // If the hip is still out of reach, swing the cannon toward the hip until it isn't.
+      // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
+      // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
+      // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
       const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
       const dirHip = toHip.clone().normalize();
+      const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
+      const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
+      const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
       P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
-      if (P.hock.distanceTo(P.hip) > reach) {
+      if (P.hock.distanceTo(P.hip) > lim) {
         let lo = 0, hi = 1;
         const dir = new Vector3();
         for (let i = 0; i < 10; i++) {
           const w = (lo + hi) / 2;
           dir.copy(dirRake).lerp(dirHip, w).normalize();
-          if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > reach) lo = w; else hi = w;
+          if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > lim) lo = w; else hi = w;
         }
         dir.copy(dirRake).lerp(dirHip, hi).normalize();
         P.hock.copy(P.ankle).addScaledVector(dir, v.cannon);
+        // The swing starts from the cannon as it really was.
+        f.theta = Math.atan2(-dir.dot(P.legFwd), dir.dot(planeUp));
         if (P.hock.distanceTo(P.hip) > reach + 0.01) {
           this.stats.overreach++;
           P.hock.sub(P.hip).setLength(reach).add(P.hip);
