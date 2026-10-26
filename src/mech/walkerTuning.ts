@@ -150,6 +150,11 @@ export const WALKER_DEFAULTS = {
   runRollStart: 0.12,
   runLookAhead: 0.53,
   runClear: 3,
+  // Climbing at a run (Keith 2026-10-26 21:54): quicker, shorter strides uphill.
+  runClimbSteps: 0.1,
+  runDescentSteps: 0,
+  runHurry: 0.3,
+  runReachGive: 0.1,
   // Slopes (Keith 2026-10-26 18:28): uphill the swinging thigh may rise toward the hull; downhill the legs stop at a
   // natural reach and the mech drops or slides the rest instead of yanking its legs to the ground.
   legReachMax: 0.93,
@@ -320,6 +325,10 @@ export const WALKER_PARAMS: Param[] = [
   { key: "runRollStart", label: "Run: heel starts lifting at", min: 0.1, max: 0.95, step: 0.01, group: "Sprint" },
   { key: "runLookAhead", label: "Run: hull looks ahead (s)", min: 0, max: 0.6, step: 0.01, group: "Sprint", tip: "The hips keep the clearance below over the highest ground this far ahead in travel (at least 1.5 m), so the hull doesn't dip into rising ground: the legs take it" },
   { key: "runClear", label: "Run: hips over the ground ahead (m)", min: 1, max: 3.5, step: 0.01, group: "Sprint" },
+  { key: "runClimbSteps", label: "Run: more steps/s per degree uphill", min: 0, max: 0.3, step: 0.005, group: "Sprint", tip: "Climbing, the steps come quicker and shorter (the speed still falls by Slow uphill): 0.1 is 2 more steps a second up a 20° climb" },
+  { key: "runDescentSteps", label: "Run: fewer steps/s per degree downhill", min: 0, max: 0.2, step: 0.005, group: "Sprint", tip: "0 keeps the cadence downhill; more eases it into longer strides" },
+  { key: "runHurry", label: "Run: hurry when a leg is stretched", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "Share of the walk's hurry (steps quicken when a planted leg nears full stretch) the run keeps, eased. 1 flicked the cadence on climbs" },
+  { key: "runReachGive", label: "Run: hips over the feet's reach (m)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hull's clearance over rising ground never lifts the hips more than this past where the planted feet and the landing spots reach (legs at their longest): climbs keep the legs on the ground" },
   { key: "legReachMax", label: "Longest leg (share of straight)", min: 0.75, max: 1, step: 0.005, group: "Terrain", tip: "Hip to ankle never stretches past this share of the straight leg. Downhill a foot that can't reach the ground hangs there; with nothing under it the mech drops (Keith 2026-10-26: no yanking the legs to the ground)" },
   { key: "swingThighFold", label: "Swinging thigh lifts when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A swinging leg squashed more than usual (stepping uphill) raises its knee through the hip by this much per unit of compression past the threshold below, so the thigh rises toward the hull instead of hanging straight" },
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },

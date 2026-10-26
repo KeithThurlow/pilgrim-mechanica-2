@@ -211,6 +211,10 @@ export class WalkerSim {
   /** The gait's planted share and cycles per second now (the planted share eases, so steps never jump). */
   dutyNow = 0.6;
   cpsNow = 0;
+  /** The over-stretch hurry on the cadence (1: none), eased while running. */
+  private hurry = 1;
+  /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
+  private reachCap = NaN;
   /** The idle flex: steps left in it (0: not flexing), and how far its gait has blended in (0..1). */
   idleLeft = 0;
   idleK = 0;
@@ -298,7 +302,7 @@ export class WalkerSim {
     this.idleLeft = 0; this.idleK = 0; this.stillT = 0; this.idleNext = NaN;
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
-    this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.slip.set(0, 0, 0);
+    this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -338,6 +342,7 @@ export class WalkerSim {
     this.course = wrap(this.course + dyaw);
     if (Number.isFinite(this.lastCourse)) this.lastCourse = wrap(this.lastCourse + dyaw);
     this.bodyY.x += dy;
+    this.reachCap += dy; this.prevYT += dy;
     const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
     this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
     for (const f of this.feet) {
@@ -500,8 +505,7 @@ export class WalkerSim {
     const S = this.stride(), rk = this.runK;
     let dWant = this.duty(), cps = this.speed / S;
     if (rk > 0) {
-      const cpsR = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
-      const dR = clamp((v.boundStanceLen * cpsR) / Math.max(1, this.speed), 0.2, 0.5);
+      const { cps: cpsR, duty: dR } = this.runCadence();
       dWant += (dR - dWant) * rk;
       cps += (cpsR - cps) * rk;
     }
@@ -515,8 +519,11 @@ export class WalkerSim {
     // Standing: step a foot back under the body if it's out of place, once any landing squat is over (both feet stay
     // planted through the squat).
     else if (this.speed < 0.08) { cps = 0; if (!this.squatState) this.settle(d); }
-    // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching.
-    cps *= 1 + 1.5 * smooth(0.9, 1, this.stretch());
+    // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching. Running,
+    // eased (it used to flick the cadence between one and two and a half times as the legs stretched, Keith 21:54).
+    const hurry = 1 + 1.5 * smooth(0.9, 1, this.stretch());
+    this.hurry = rk > 0 ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
+    cps *= 1 + (this.hurry - 1) * (rk > 0 ? v.runHurry : 1);
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
@@ -555,6 +562,22 @@ export class WalkerSim {
     this.body(dt, d);
     this.pose();
     this.trackSlides(dt);
+  }
+
+  /**
+   * The run's cadence (cycles/s) and planted share now. Steps/s rise with speed (runSteps to runStepsTop) and with the
+   * climb along the line of run (runClimbSteps per degree; downhill runDescentSteps fewer), so a climb takes quicker,
+   * shorter strides (Keith 2026-10-26 21:54); the ground per stance shrinks with the stride, so the planted share is the
+   * flat's.
+   */
+  runCadence() {
+    const v = this.v;
+    const base = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
+    const deg = Math.atan(this.grade) / D2R;
+    const steps = Math.max(1, 2 * base + v.runClimbSteps * clamp(deg, 0, 35) - v.runDescentSteps * clamp(-deg, 0, 35));
+    const cps = steps / 2;
+    const stance = v.boundStanceLen * Math.min(1, base / cps);
+    return { cps, duty: clamp((stance * cps) / Math.max(1, this.speed), 0.2, 0.5) };
   }
 
   /** 0 at the run's speed, 1 at the legs' top speed (by ground speed). */
@@ -836,7 +859,7 @@ export class WalkerSim {
     if (this.bound && this.stagger <= 0 && impact <= v.boundAbsorb) { this.boundLand(impact, gx, gz, wasLeap); return; }
     // A real landing: the run starts over from what's left once the squat is done.
     this.running = false;
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
     for (const f of this.feet) {
       f.planted.copy(f.pos);
       this.groundAt(f.planted, f.plantedUp);
@@ -1351,7 +1374,7 @@ export class WalkerSim {
       P.entryRel.copy(P.runA);
       this.aim(P);
     }
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
   }
 
   /**
@@ -1383,7 +1406,7 @@ export class WalkerSim {
       this.aim(first);
     }
     this.running = true;
-    this.prevYT = NaN;
+    this.prevYT = NaN; this.reachCap = NaN;
   }
 
   /** Let go mid-stance: plant what's in the air, hand the speed to the run (up to the run's), skid the rest. */
@@ -1554,6 +1577,9 @@ export class WalkerSim {
     const R = v.legReachMax * (v.femur + v.shin + v.cannon);
     let hipLow = this.bodyY.x;
     for (const o of this.feet) if (o !== f && !o.swinging) hipLow = Math.min(hipLow, o.planted.y + v.hipHeight * 0.6);
+    // Running, the hips come down to their running height over the landing spot (the reach cap in body()): a run down a
+    // slope lands its feet instead of hanging them in the flight and dropping (Keith 21:54: the run hopped downhill).
+    if (this.runK > 0.5) hipLow = Math.min(hipLow, f.target.y + this.boundStand());
     const hx = this.pos.x + this.vel.x * remain + lf.x * f.side * v.hipWidth - f.target.x;
     const hz = this.pos.z + this.vel.z * remain + lf.z * f.side * v.hipWidth - f.target.z;
     const lowest = hipLow - Math.sqrt(Math.max(0, R * R - hx * hx - hz * hz)) - v.ankleHeight;
@@ -1673,6 +1699,22 @@ export class WalkerSim {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).
       const clear = this.groundAhead(Math.max(1.5, this.speed * v.runLookAhead)) + v.runClear;
       yT += Math.max(0, clear - yT) * rk;
+      // ...but never higher than the feet reach (Keith 21:54: up a climb the clearance held the hips past the legs'
+      // reach, a step behind and below, and the over-stretched legs flicked the cadence): each planted foot and each
+      // swinging foot's landing spot caps the hips at its leg's longest (legReachMax) plus runReachGive. Only the feet
+      // that carry the body count (landing spots, the first half of a stance: a foot trailing to its push-off may stretch
+      // out), and the cap is eased over a stride, so it doesn't bob the hips.
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon), l = leftOf(this.heading, this.t.l);
+      let yMax = Infinity;
+      for (const f of this.feet) {
+        if (!f.swinging && f.stanceT > 0.5) continue;
+        // A landing spot against where the hips will be when it lands.
+        const p = f.swinging ? f.target : f.pos, ahead = f.swinging ? ((1 - f.u) * (1 - this.dutyNow)) / Math.max(MIN_CYCLE, this.cpsNow) : 0;
+        const hx = this.pos.x + this.vel.x * ahead + l.x * f.side * v.hipWidth - p.x, hz = this.pos.z + this.vel.z * ahead + l.z * f.side * v.hipWidth - p.z;
+        yMax = Math.min(yMax, p.y + v.ankleHeight + Math.sqrt(Math.max(0.04, R * R - hx * hx - hz * hz)));
+      }
+      if (Number.isFinite(yMax)) this.reachCap = Number.isFinite(this.reachCap) ? this.reachCap + (yMax - this.reachCap) * Math.min(1, dt * 4) : yMax;
+      if (yT > this.reachCap + v.runReachGive) yT += (this.reachCap + v.runReachGive - yT) * rk;
     }
     // Following the ground's own rise (feed-forward) so a fast run up a slope doesn't lag under it.
     const yv = Number.isFinite(this.prevYT) ? clamp((yT - this.prevYT) / dt, -12, 12) : 0;
