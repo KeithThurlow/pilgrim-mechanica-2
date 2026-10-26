@@ -148,6 +148,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Performance (agent, since 2026-10-26): handoff in `docs/handoff-performance.md` (patch-spacing verdict and fix 6 left).
 - Performance pass 1 done (fixes 1-5 of `docs/perf-2026-10-26.md`); Keith to rerun the stress lab on his PC. Next: the scale proposal (`docs/proposal-scale.md`, waiting for Keith): effects budget, shots as data, GPU particles, far LOD and shadow distance for units.
 - Convoy combat merged (targeting, guns up to 50° plus hull lean, part hitboxes, roaming packs and raids); pacing judged from shots only.
 - The bound (Keith 2026-10-26): proposal in `docs/proposal-bound.md`, waiting for Keith's answers; the spike is in the walker lab (`?bound`), to be replaced by `src/mech/bound.ts` once approved.
