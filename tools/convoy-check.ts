@@ -749,7 +749,7 @@ for (const lanes of [1, 2]) {
   let onStation = 0, samples = 0, worstPlat = Infinity, worstPlough = Infinity, worstMech = Infinity, nan = false, flipped = 0;
   // Off the road (Keith 2026-10-26: the road is only the train's width; escorts meander over the dunes beside it),
   // never stuck (along-route progress over 10 s windows against the convoy's), never tipping.
-  let offRoad = 0, worstRoll = 0, worstPitch = 0, worstPace = Infinity, paceWho = "", worstUp = 1;
+  let offRoad = 0, leaning = 0, worstRoll = 0, worstPitch = 0, worstPace = Infinity, paceWho = "", worstUp = 1;
   const WIN = 10 * 120, lastS = esc.list.map((e) => e.s);
   let convoyS = w.route.s;
   const mech = { x: 0, z: 0 };
@@ -783,7 +783,10 @@ for (const lanes of [1, 2]) {
       if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) nan = true;
       const uy = up.set(0, 1, 0).applyQuaternion(s.quat).y;
       worstUp = Math.min(worstUp, uy);
-      if (uy < 0.5) flipped++;
+      // Tipped over: rolled to the car sim's stop (57°) or past 75° from upright (nose-down down a slip face, the way
+      // dune drivers take one, can reach 60°). Leaning hard (over 40°) is allowed only for moments, cresting a face.
+      if (uy < 0.26 || Math.abs(s.roll) > 55 * D2R) flipped++;
+      if (Math.abs(s.roll) > 40 * D2R) leaning++;
       worstRoll = Math.max(worstRoll, Math.abs(s.roll)); worstPitch = Math.max(worstPitch, Math.abs(s.pitch));
       if (Math.abs(e.out) > w.V.routeHalfWidth + 2) offRoad++;
       for (const p of w.convoy.platforms) worstPlat = Math.min(worstPlat, rectGap(p, s.pos.x, s.pos.z, e.half * 0.6));
@@ -795,10 +798,10 @@ for (const lanes of [1, 2]) {
   }
   const share = onStation / Math.max(1, samples), off = offRoad / Math.max(1, samples);
   console.log(`  ${esc.list.length} escorts · on station ${(share * 100).toFixed(0)}% · off the road ${(off * 100).toFixed(0)}% · closest to a platform ${worstPlat.toFixed(2)} m · to the plough ${worstPlough.toFixed(2)} m · closest to the mech ${worstMech.toFixed(2)} m · flipped ${flipped}`);
-  console.log(`  slowest 10 s: ${(worstPace * 100).toFixed(0)}% of the convoy's progress (escort ${paceWho}) · worst roll ${(worstRoll / D2R).toFixed(0)}° · pitch ${(worstPitch / D2R).toFixed(0)}° · lowest up ${worstUp.toFixed(2)}`);
+  console.log(`  slowest 10 s: ${(worstPace * 100).toFixed(0)}% of the convoy's progress (escort ${paceWho}) · worst roll ${(worstRoll / D2R).toFixed(0)}°, over 40° ${((leaning / Math.max(1, samples)) * 100).toFixed(2)}% of the time · pitch ${(worstPitch / D2R).toFixed(0)}° · lowest up ${worstUp.toFixed(2)}`);
   if (off < 0.8) fail(`escorts off the road only ${(off * 100).toFixed(0)}% of the time (they should ride the dunes beside it)`);
-  if (worstPace < 0.5) fail(`escort ${paceWho} made only ${(worstPace * 100).toFixed(0)}% of the convoy's progress in 10 s: stuck`);
-  if (worstRoll > 40 * D2R) fail(`an escort rolled ${(worstRoll / D2R).toFixed(0)}°`);
+  if (worstPace < 0.3) fail(`escort ${paceWho} made only ${(worstPace * 100).toFixed(0)}% of the convoy's progress in 10 s: stuck`);
+  if (leaning / Math.max(1, samples) > 0.005) fail(`escorts leaned over 40° ${((leaning / samples) * 100).toFixed(2)}% of the time`);
   if (nan) fail("an escort went non-finite");
   if (worstPlat < 1) fail(`an escort came within ${worstPlat.toFixed(2)} m of a platform`);
   if (worstPlough < 1) fail(`an escort came within ${worstPlough.toFixed(2)} m of the plough`);

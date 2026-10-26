@@ -16,7 +16,7 @@
 // Nothing reads it yet and nobody shoots.
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
-import { CarSim, carValues, type CarKind } from "../vehicles/car";
+import { CarSim, carValues, type CarKind, type CarValues } from "../vehicles/car";
 import type { Convoy } from "./platform";
 
 /** Something escorts keep clear of: a platform, or the plough (its whole V). */
@@ -45,6 +45,7 @@ export const ESCORT_DEFAULTS = {
   escortPlatformClear: 4,
   escortMechClear: 10,
   escortSteep: 26,
+  escortRoll: 18,
 };
 export type EscortValues = typeof ESCORT_DEFAULTS;
 
@@ -63,7 +64,8 @@ export const ESCORT_PARAMS: Param[] = [
   { key: "escortTopSpeed", label: "Top speed (m/s)", min: 4, max: 20, step: 0.1, group: "Escort driving" },
   { key: "escortPlatformClear", label: "Clear of platforms (m)", min: 1, max: 12, step: 0.1, group: "Escort driving", tip: "Margin kept round every platform's footprint" },
   { key: "escortMechClear", label: "Clear of the mech (m)", min: 4, max: 20, step: 0.5, group: "Escort driving", tip: "Never drives inside this distance of the mech: grazes round it, or turns out" },
-  { key: "escortSteep", label: "Avoid slopes over (°)", min: 10, max: 45, step: 0.5, group: "Escort driving", tip: "Steers round dune faces steeper than this" },
+  { key: "escortSteep", label: "Avoid climbs over (°)", min: 10, max: 45, step: 0.5, group: "Escort driving", tip: "Picks lines round dune faces steeper than this to climb (descents it takes up to this plus 12°, straight down)" },
+  { key: "escortRoll", label: "Avoid side slopes over (°)", min: 5, max: 40, step: 0.5, group: "Escort driving", tip: "Picks lines that don't cross a face sideways steeper than this (what rolls a truck)" },
 ];
 
 export type EscortMode = "escort" | "defend";
@@ -100,6 +102,9 @@ export class Escort {
   stuckT = 0;
   backT = 0;
   backSteer = 0;
+  /** The lane it rides now (distance out from the route line, m), re-picked every LANE_EVERY s. */
+  lane = 26;
+  laneT = 0;
   /** Going round something on this side (+1 left) for commitT more seconds. */
   commitSide = 0;
   commitT = 0;
@@ -112,7 +117,7 @@ export class Escort {
   readonly spread: number;
   readonly weaveRate: number;
   constructor(readonly kind: CarKind, readonly index: number, ground: DuneField) {
-    const cv = carValues(kind);
+    const cv = duneKit(carValues(kind));
     this.sim = new CarSim(cv, ground);
     this.half = cv.wheelbase / 2 + 1.2;
     this.side = index % 2 === 0 ? 1 : -1;
@@ -122,6 +127,7 @@ export class Escort {
     this.spread = ((index * 0.618) % 1) * 2 - 1;
     this.weaveRate = 0.7 + ((index * 0.43 + 0.2) % 1) * 0.6;
     this.planT = (index % 12) / 60;
+    this.laneT = (index % 12) / 24;
   }
 }
 
@@ -186,6 +192,7 @@ export class EscortGroup {
       if (sc < best) { best = sc; bx = p.x; bz = p.z; bh = p.heading; }
     }
     e.sim.reset(bx, bz, bh);
+    e.lane = e.stationOut;
     e.sim.speed = this.convoy.route.v.convoySpeed;
     e.s = r.s + e.along;
   }
@@ -229,7 +236,10 @@ export class EscortGroup {
     const surge = v.escortSurge * Math.sin((2 * Math.PI * this.t * e.surgeRate) / 40 + e.surgePhase);
     let want = clamp(cv + surge + behind * v.escortCatchUp, 0, top);
     const look = LOOK + Math.abs(s.speed);
-    const tgt = r.offsetAt(e.s + look, e.side * (e.stationOut + weave), this.pt);
+    // The lane it rides: picked over the dunes ahead, near its station line (plus the weave).
+    e.laneT -= dt;
+    if (e.laneT <= 0) { e.laneT = LANE_EVERY; this.pickLane(e, e.stationOut + weave); }
+    const tgt = r.offsetAt(e.s + look, e.side * e.lane, this.pt);
     let tx = tgt.x, tz = tgt.z;
 
     // Keep clear of the platforms and the other escorts: push the aim point away.
@@ -277,7 +287,13 @@ export class EscortGroup {
       if (dist >= clear && dist < clear + 25) {
         const graze = Math.asin(Math.min(1, clear / dist));
         const off = wrap(desired - toMech);
-        if (Math.abs(off) < graze) desired = toMech + (off >= 0 ? 1 : -1) * graze;
+        if (Math.abs(off) < graze) {
+          // Round it on the outside (away from the road and the train), not in toward the cars.
+          const lp = r.pointAt(e.s, this.pt), lx = Math.cos(lp.heading), lz = -Math.sin(lp.heading);
+          const outward = (h: number) => e.side * (Math.sin(h) * lx + Math.cos(h) * lz);
+          const a = toMech + graze, b = toMech - graze;
+          desired = outward(a) >= outward(b) ? a : b;
+        }
       }
       if (dist < clear) {
         const sd = wrap(s.heading - toMech) >= 0 ? 1 : -1;
@@ -336,10 +352,61 @@ export class EscortGroup {
     return worst;
   }
 
+  private gr = { x: 0, z: 0 };
+  /** Ground rise per metre along +x and +z at (x, z). */
+  private gradAt(x: number, z: number) {
+    const g = this.field, h0 = g.height(x, z);
+    this.gr.x = (g.height(x + 1.2, z) - h0) / 1.2; this.gr.z = (g.height(x, z + 1.2) - h0) / 1.2;
+    return this.gr;
+  }
+
   private slopeAt(x: number, z: number) {
     const g = this.field, h0 = g.height(x, z);
     return Math.atan(Math.hypot(g.height(x + 1.2, z) - h0, g.height(x, z + 1.2) - h0) / 1.2);
   }
+
+  /**
+   * Pick the lane to ride over the stretch ahead: lanes out from the road (never on it, alongside the train) to well
+   * past the station line, each scored by the slope along the route and across it at points ahead (the same limits
+   * as the line picker below), how far off its station line it is and how far from the lane it rides now. The
+   * escorts weave from lane to lane as the dunes come: through the gaps between crests, along a berm's top.
+   */
+  private pickLane(e: Escort, want: number) {
+    const v = this.v, r = this.convoy.route, cv = e.sim.v, soft = v.escortSteep * D2R;
+    const hard = Math.max(soft + 4 * D2R, Math.min(cv.maxClimb - 4, v.escortSteep + 10) * D2R);
+    const inner = Math.max(r.v.routeHalfWidth + 5, this.trainHalf + v.escortPlatformClear + e.half);
+    const lo = Math.max(inner, want - LANE_SPAN), hi = Math.max(lo + LANE_STEP, want + LANE_SPAN);
+    const ahead = clamp(10 + Math.abs(e.sim.speed) * 3, 14, 36);
+    let best = Infinity, bestO = e.lane;
+    for (let o = lo; o <= hi + 1e-6; o += LANE_STEP) {
+      let cost = Math.abs(o - want) * 0.08 + Math.abs(o - e.lane) * 0.05;
+      for (let j = 1; j <= 5; j++) {
+        const a = (ahead * j) / 5, p = r.offsetAt(e.s + a, e.side * o, this.pt);
+        const q = this.faceAt(p.x, p.z, Math.sin(p.heading), Math.cos(p.heading), soft, hard);
+        if (q > 0) cost += (j <= 2 ? 1.5 : 1) * (q < 1 ? q * q * 3 : 6 + (q - 1) * 12);
+      }
+      if (cost < best) { best = cost; bestO = o; }
+    }
+    e.lane = bestO;
+  }
+
+  /**
+   * How hard the ground at (x, z) is to drive heading (hx, hz): 0 easy, 1 at the limit, more past it. The slope along
+   * the way and across it: climbs up to the climbing limit (soft..hard), side slopes (what rolls a truck) kept
+   * gentle, descents allowed a little steeper (straight down a slip face is how dune drivers take one).
+   */
+  private faceAt(x: number, z: number, hx: number, hz: number, soft: number, hard: number) {
+    const v = this.v, g = this.gradAt(x, z), climb = Math.atan(g.x * hx + g.z * hz), side = Math.atan(Math.abs(g.x * hz - g.z * hx));
+    return Math.max(
+      ramp(climb, soft, hard),
+      // Sideways weighs most and straight down least, so with nothing easy left it takes a face straight down.
+      1.5 * ramp(side, v.escortRoll * D2R, (v.escortRoll + 12) * D2R),
+      0.7 * ramp(-climb, (v.escortSteep + 6) * D2R, (v.escortSteep + 18) * D2R),
+    );
+  }
+
+  /** Half the train's widest footprint (m). */
+  private get trainHalf() { let w = 0; for (const p of this.convoy.platforms) w = Math.max(w, p.halfW); return w; }
 
   /**
    * Pick a line over the dunes: fan out headings either side of the one it wants and score a short drive along each
@@ -348,23 +415,24 @@ export class EscortGroup {
    * whether it runs onto the road (allowed, but the dunes are preferred) or near a platform (never).
    */
   private plan(e: Escort, desired: number) {
-    const v = this.v, s = e.sim, cv = carValues(e.kind);
+    const v = this.v, s = e.sim, cv = s.v;
     const soft = v.escortSteep * D2R, hard = Math.max(soft + 4 * D2R, Math.min(cv.maxClimb - 4, v.escortSteep + 10) * D2R);
-    const reach = clamp(12 + Math.abs(s.speed) * 2.5, 16, 30), r = this.convoy.route;
+    const reach = clamp(12 + Math.abs(s.speed) * 2.5, 16, 30), r = this.convoy.route, along = r.pointAt(e.s, this.pt).heading;
     let best = Infinity, bestOff = 0, bestRough = 0;
     for (let k = 0; k < PLAN_FAN.length; k++) {
       const off = PLAN_FAN[k], h = desired + off, sx = Math.sin(h), cz = Math.cos(h);
-      let cost = Math.abs(off) * 1.2 + Math.abs(off - e.planOff) * 0.4, rough = 0;
+      // Never turned back against the convoy (that only ends in circling a dune).
+      if (Math.abs(wrap(h - along)) > MAX_OFF_ROUTE) continue;
+      let cost = Math.abs(off) * 1.2 + Math.abs(off - e.planOff) * 1.0, rough = 0;
       // Going round something: keep going round it on the side picked (no dithering at a long face).
       if (e.commitT > 0 && off * e.commitSide < 0) cost += 2;
       for (let j = 1; j <= PLAN_STEPS; j++) {
         const d = (reach * j) / PLAN_STEPS, x = s.pos.x + sx * d, z = s.pos.z + cz * d;
         const near = j <= 2 ? 1.5 : 1;
-        const a = this.slopeAt(x, z);
-        if (a > soft) {
-          const q = Math.min(1, (a - soft) / (hard - soft));
-          rough = Math.max(rough, q);
-          cost += near * (a < hard ? q * q * 3 : 6 + (a - hard) * 20);
+        const q = this.faceAt(x, z, sx, cz, soft, hard);
+        if (q > 0) {
+          rough = Math.max(rough, Math.min(1, q));
+          cost += near * (q < 1 ? q * q * 3 : 6 + (q - 1) * 12);
         }
         // The road and its cut edge: fine to cross, but the dunes beside it are where escorts ride.
         if (r.corridor(x, z) > 0.5) cost += 0.6;
@@ -380,15 +448,30 @@ export class EscortGroup {
   }
 }
 
+/**
+ * The convoy's own vehicles are kitted for the dunes they ride beside the road (Keith 2026-10-26): sand tyres and
+ * long-travel suspension on the war band's kinds. Not sliders: the kinds' own values are the war band's sliders.
+ */
+export function duneKit(cv: CarValues): CarValues {
+  return { ...cv, maxClimb: cv.maxClimb + 6, climb: cv.climb * 0.75, bumpLoss: cv.bumpLoss * 0.5, travel: cv.travel + 0.15, droop: cv.droop + 0.2 };
+}
+
+/** 0 below a, rising to 1 at b, and on past it (how far over the limit). */
+const ramp = (x: number, a: number, b: number) => (x <= a ? 0 : (x - a) / (b - a));
+
 /** Headings tried either side of the one wanted (rad), and the points scored along each line. */
-const PLAN_FAN = [0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.1, -1.1, 1.4, -1.4, 1.75, -1.75, 2.1, -2.1];
+const PLAN_FAN = [0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.75, -0.75, 1.05, -1.05, 1.4, -1.4];
 const PLAN_STEPS = 6;
 /** Seconds it keeps going round on the side it picked. */
 const COMMIT_FOR = 4;
 /** Seconds between picks (staggered across the escorts). */
 const PLAN_EVERY = 0.2;
+/** Lanes: re-picked every LANE_EVERY s, LANE_STEP apart, up to LANE_SPAN either side of the station line. */
+const LANE_EVERY = 0.5, LANE_STEP = 2.5, LANE_SPAN = 12;
 /** Stuck after this long not moving while it wants to; then backs out for BACK_FOR. */
 const STUCK_AFTER = 1.5, BACK_FOR = 1.6;
+/** Most a picked line turns off the route's heading (rad). */
+const MAX_OFF_ROUTE = 1.6;
 
 /** Distance from (x, z) to a platform's (or the plough's) footprint (0 inside), less r. */
 export function rectGap(p: Obstacle, x: number, z: number, r = 0) {
