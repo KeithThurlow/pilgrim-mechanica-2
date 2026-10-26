@@ -34,7 +34,9 @@ import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
 import { DeadDraw } from "../physics/deadDraw";
-import { TARGET_DEFAULTS, TARGET_PARAMS, type TargetCandidate, type Lock } from "./targeting";
+import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type TargetCandidate, type Lock } from "./targeting";
+import type { Filter } from "./register";
+import { mechOwner } from "./registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
 import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
@@ -81,8 +83,9 @@ export interface CombatLab<E extends object> {
   bf: Battlefield;
   toon: ToonLook;
   player: MechUnit;
-  /** Set by the lab: every live enemy the guns could take (centre of mass, radius, a stable key). */
-  targets: () => TargetCandidate[];
+  /** Who the player's guns take: a register filter (hittable, not the player's team). A lab adds its enemies as owners
+   *  of bf.register (src/game/register.ts); the shell rebuilds it once a tick, before the soft lock. */
+  enemies: Filter;
   /** The lab's per-frame work, after the player has moved and before the effects draw. */
   onFrame: (fn: (dt: number) => void) => void;
   /** Extra HUD line. */
@@ -155,10 +158,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
+  // The register: the player's mech first (owner 1), then whatever the lab adds.
+  bf.register.add(mechOwner("player", () => [player]));
+  const enemies = enemiesOf(player.team);
   // The weapons that aren't miniguns (nothing until a loadout fits one), camera shake, blasts (src/game/playerAim.ts).
   const shaker = new CameraShake();
   const shake = shaker.add;
-  const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, () => lab.targets(), shaker);
+  const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 
   const iso = new IsoCamera(camera, canvas, V);
   const keys = new Keys();
@@ -259,7 +265,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
   const lab: CombatLab<E> = {
     app, V, field, bf, toon, player, deaths,
-    targets: () => [],
+    enemies,
     onFrame: (fn) => frames.push(fn),
     hud: (k, t) => app.hud.set(k, t),
     loadRampart: () => RampartBody.load(toon),
@@ -280,14 +286,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
 
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
-  function demo(t: number, cands: TargetCandidate[]): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
+  function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
     const a = t * 0.12;
     const cmd = { x: Math.sin(a), z: Math.cos(a), sprint: false };
-    const p = player.sim.pos;
-    let e: TargetCandidate | null = null, bd = Infinity;
-    for (const c of cands) { const d = Math.hypot(c.x - p.x, c.z - p.z); if (d < bd) { bd = d; e = c; } }
-    if (!e) return { cmd, aim: null, trigger: false };
-    return { cmd, aim: { x: e.x + (e.vx ?? 0) * V.lockLead, y: e.y, z: e.z + (e.vz ?? 0) * V.lockLead }, trigger: bd < V.range + 5 };
+    const p = player.sim.pos, reg = bf.register;
+    const e = reg.nearest(p.x, p.z, Infinity, enemies);
+    if (e < 0) return { cmd, aim: null, trigger: false };
+    const bd = Math.hypot(reg.x[e] - p.x, reg.z[e] - p.z);
+    return { cmd, aim: { x: reg.x[e] + reg.vx[e] * V.lockLead, y: reg.y[e], z: reg.z[e] + reg.vz[e] * V.lockLead }, trigger: bd < V.range + 5 };
   }
   let lock: Lock | null = null;
 
@@ -300,6 +306,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.begin();
     bf.costs = cst;
     clock += dt;
+    // Everything that can be hit, where it ended last frame (what's drawn): once a tick, before the soft lock.
+    bf.register.rebuild();
+    cst?.mark("register");
     keys.move(camera, stick);
     if (keys.has("KeyR") || (auto && player.upper.guns[0].ammo < 100)) player.upper.resupply();
     const fHeld = keys.has("KeyF") || clock < holdF;
@@ -316,12 +325,12 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     lock = null;
     const own = auto && o.demo ? o.demo(clock, dt) : null;
     if (own) { ({ cmd, aim, trigger } = own); held = [0, 1, 2, 3].map((i) => !!own.keys?.[i]) as typeof held; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
-    else if (auto) { ({ cmd, aim, trigger } = demo(clock, lab.targets())); lastDemo = { aim, trigger }; cursor = aim; }
+    else if (auto) { ({ cmd, aim, trigger } = demo(clock)); lastDemo = { aim, trigger }; cursor = aim; }
     else if (driving) {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
       // Soft lock: the guns take the enemy under the cursor ray, else the one nearest the line of fire, led by its
       // motion; the rounds fly straight at the target itself (shotAt).
-      ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, lab.targets(), player.sim.pos, V));
+      ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, bf.register, enemies, player.sim.pos, V));
       trigger = [buttons.left, buttons.right];
       held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
       if (held.some(Boolean)) auto = false;

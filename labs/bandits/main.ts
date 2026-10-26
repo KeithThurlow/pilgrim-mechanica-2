@@ -6,7 +6,6 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
-import type { TargetCandidate } from "../../src/game/targeting";
 import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, DEAD, INFANTRY_MAX } from "../../src/combat/infantry";
 import { InfantryDraw, BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS, CLOTH } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -86,14 +85,8 @@ function spawnGroup() {
 const rocketClock = new Float32Array(INFANTRY_MAX);
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 let groupClock = Infinity, slot = 2; // the first group comes at once
-lab.targets = () => {
-  const out: TargetCandidate[] = [];
-  for (let i = 0; i < sw.hi; i++) {
-    if (sw.state[i] >= DEAD - 1) continue; // skip down, dead, empty
-    out.push({ x: sw.px[i], y: sw.py[i] + V.banditHeight * 0.55, z: sw.pz[i], r: Math.max(0.6, V.banditRadius), key: i, vx: sw.vx[i], vz: sw.vz[i] });
-  }
-  return out;
-};
+// Into the register for the soft lock and the weapons: every standing bandit.
+bf.register.add({ name: "bandits", publish: (r) => sw.publish(r, 2) });
 let wadeTick = 0;
 lab.onFrame((dt) => {
   groupClock += dt;

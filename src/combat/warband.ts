@@ -10,6 +10,8 @@ import { CarBody } from "../vehicles/carBody";
 import { rayCapsule, capsuleNormal, type MechUnit } from "../game/mechUnit";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
+import { KIND, FLAG, ObjectSerials, type Register } from "../game/register";
+import { putMech } from "../game/registerOwners";
 import type { DeathPhysics, Dead } from "../physics/deaths";
 
 /**
@@ -285,6 +287,21 @@ export class Warband {
       this.group.add(m.body.root);
     }
     this.waves++;
+  }
+
+  private serials = new ObjectSerials();
+  /** Into the register (src/game/register.ts): live raiders (vehicles) and bandit mechs, each a new id per life. */
+  publish(reg: Register): void {
+    const flags = FLAG.Hittable | FLAG.Detectable;
+    for (let k = 0; k < this.raiders.length; k++) {
+      const r = this.raiders[k];
+      if (!r.alive) continue;
+      reg.put(k, this.serials.serial(r, reg), KIND.Vehicle, r.team, flags, r.sim.pos.x, r.centreY, r.sim.pos.z, r.shape.radius + 0.5, 0, r.sim.vel.x, r.sim.vel.z);
+    }
+    for (let k = 0; k < this.mechs.length; k++) {
+      const m = this.mechs[k];
+      if (m.alive) putMech(reg, m, k, this.serials.serial(m, reg));
+    }
   }
 
   // Muzzle-flash slots 2..19 (0-1: the player, 20-23: bandit mechs).

@@ -1,6 +1,46 @@
 # Proposal: one register and spatial grid for "what's near here?"
 
-Status: **proposed, waiting for Keith** (2026-10-26). Nothing here is built.
+Status: **approved by Keith 2026-10-26; steps 1 and 2 built** (2026-10-26). Step 3 is planned below ("Step 3 in
+detail"); it waits on nothing now that the rail gun's sheet hits are on main.
+
+## As built (steps 1-2)
+
+What changed from the sketch below while building it:
+
+- `src/game/register.ts` (pure). Columns: `x y z` (centre of mass), `r` (body radius), **`foot`** (a walker's footprint,
+  0 if none: the soft lock's "cursor among its feet"), **`vx vz`** (ground velocity, for leads), `kind team flags owner
+  index id`. `KIND`, `FLAG` and `kindBit` are plain objects (no `const enum`: the build is `isolatedModules`).
+- **Ids** (rule 12): `owner number * 2^32 + serial`. The owner number is the order owners were added (`add()` returns
+  it; the host adds them in a fixed order); the serial is the owner's own, handed out at spawn and never reused
+  (`RobotSwarm.uid`, `InfantrySwarm.uid`; `ObjectSerials` for object owners: a new serial per life, so a respawned
+  dummy or a reused bandit mech is a new id). `find(id)` gives this tick's entry or -1.
+- `Filter` also has `none` (flags it must not have), e.g. `{ all: Hittable, none: Asleep }`.
+- Queries: `near(x, z, R, f, out, useFoot?)`, `nearest(x, z, maxR, f)` (centre distance, searches outward doubling),
+  `ray(ox, oz, dx, dz, len, width, f, hits)` (**flat**, swept `width` each side; `RayHits` in order along the line with
+  `t0`, `t1` and `chord(k)`: the line query step 3 needs), `cone(x, z, dx, dz, range, width, halfAngle, f, out)`
+  (centre ahead within `r + width + t tan(halfAngle)`), `each(f, fn)`. The 3D tests (a camera ray, a round's height)
+  stay with the caller on the candidates the flat queries hand back.
+- The grid walks a line or cone one column of cells at a time along its major axis (each cell once), and falls back
+  to a straight scan when the shape covers more cells than there are entries (the radar's big disc).
+- Owners: `RobotSwarm.publish(reg, team)`, `InfantrySwarm.publish(reg, team)`, `Warband.publish(reg)` (raiders as
+  vehicles, bandit mechs as mechs), `src/game/registerOwners.ts` for object lists (`listOwner`, `mechOwner`: the
+  player's mech, the range's dummies and trucks). `MechUnit` and `Dummy` didn't get a `publish()` of their own (other
+  agents' files); the helpers do it from outside.
+- `Battlefield.register` holds it; the combat-lab shell and the convoy lab rebuild it at the top of each frame (before
+  the soft lock: positions as last drawn), as a "register" cost stage. Not inside the 120 Hz sub-steps.
+- Step 2: `Targeting.pick(reg, filter, query, values)`; `SoftAim.pick(mouse, reg, filter, from, values)`;
+  `CombatLab.targets` is gone, `CombatLab.enemies` (a filter: `enemiesOf(player.team)`) replaces it; every lab
+  (robots, bandits, war band, weapons, loadout, stress, convoy) adds owners instead of writing a list. The arsenal
+  still takes a `candidates()` list (now `EntryList`: built once per rebuild, however often it's asked) and gets
+  `findTarget(key)` (an id lookup), so a missile tracking its target no longer rebuilds the list each frame.
+  `planStrip` and `swarmAims` keep their list for now (one list a tick is cheap; moving them to `near` is a small
+  follow-up in the weapons files).
+- Left for later: `robotCandidates` in `src/combat/robotTarget.ts` is unused now (that file was the rail gun agent's
+  while this was built); delete it with step 3, when that adapter shrinks anyway.
+
+Measured (`tools/targeting-check.ts`, node on the agent box, 2,039 entries: 1,020 robots and 1,020 bandits): rebuild
+0.24 ms, `near` r = 3 m 3 µs, a 200 m `ray` through the swarm 8 µs (25 crossed). The stress lab shows the rebuild as
+its own stage and the queries as "inside the above: register queries" (with counts of entries and queries).
 
 Keith 2026-10-26, on whether to move to an ECS: no ECS library now. Swarms, particles and projectiles are already flat
 typed arrays drawn instanced. The weakness is that every system answers "what's near here?" on its own. Keith: "that
@@ -162,6 +202,38 @@ Each step ships on its own and leaves every lab working. Old paths are deleted i
    say it's cheap enough. The war band's O(n²) avoidance moves to `near` here too.
 
 Water wakes and `canSee` are ground queries, not neighbour queries; they stay as they are.
+
+### Step 3 in detail: rounds and blasts on the line query
+
+Keith 2026-10-26: direct fire is a vertical sheet along its line, and penetration is measured as distance through
+bodies and terrain (`src/game/sheet.ts`, `src/game/sheetFire.ts`, `Battlefield.fire`'s `sheet` option). The swarms
+already answer per unit; vehicles, mechs, the pilot and wrecks are tested with a fan of 15 rays through the sheet's
+height. The register's `ray` is that sheet seen from above:
+
+1. **Candidates in order.** `Battlefield.fire` asks `reg.ray(muzzle.x, muzzle.z, d.x, d.z, flatRange, sheetHalfWidth,
+   { all: Hittable, notTeam: team }, hits)`: every body whose footprint the line crosses, sorted by where the line
+   enters it, with the chord through it (`t1 - t0`). The sheet's height is not in the flat query: a body is in the
+   sheet if its height band overlaps the sheet's at `t0..t1`; add a `top` column (or `y` and a half-height) to the
+   register when the sheet needs it, rather than testing per owner.
+2. **Penetration as distance.** Walk the hits in order with the round's remaining penetration: each body costs its
+   chord × its material's density (light bandits and small robots little, steel walkers and vehicles a lot); terrain
+   between hits costs from the ground march `sheet.ts` already does over the same t range. Stop when it runs out; the
+   last body takes the round's remainder. No ray fan: one flat query replaces the 15 rays for vehicles, mechs, the
+   pilot and wrecks.
+3. **Exact tests stay with owners, on candidates only.** Where shape matters (a walker's legs vs its body, a hull's
+   capsule), the owner gets `hitRay(index, o, d, maxDist)` / `hitSheet(index, ...)` for that one entry; damage is
+   `owner.damage(index, amount, at, dir)`. `RobotTarget` and `InfantryTarget` shrink to these per-index tests (their
+   whole-swarm loops go); `robotCandidates` is deleted.
+4. **Splash and blasts.** `Battlefield.blast` and round splash use `near(x, z, radius, ...)` and call the owner's
+   `splash(index, ...)` per entry (`RobotTarget.splash`'s and `InfantryTarget.splash`'s loops over every unit go).
+5. **Rockets, autocannon shells, the rail slug.** Each step's segment is a short `ray` (the swept width = the shell's
+   radius) instead of `hitRay` on every Hittable.
+6. Owners not yet in the register for rounds: wrecks (steel stand-ins: kind Prop, static, published once per rebuild
+   like the dummies) and the pilot on foot (kind Unit, team 1). Both are needed before `bf.targets` can go.
+
+Checks for step 3 (in `weapons-check` / `targeting-check`): the line query against brute force with chords (already
+in `targeting-check`), a sheet through a crowd stopping where its penetration runs out, the same hits as the ray fan
+on vehicles and mechs.
 
 ## How it would grow into an ECS, if the numbers ever ask
 

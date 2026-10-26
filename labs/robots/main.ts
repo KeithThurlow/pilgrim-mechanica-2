@@ -8,10 +8,9 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
-import type { TargetCandidate } from "../../src/game/targeting";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMALL } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
-import { RobotTarget, robotCandidates } from "../../src/combat/robotTarget";
+import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
 import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
@@ -95,9 +94,9 @@ function spawnPack() {
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
 let packClock = Infinity, slot = 2; // the first pack comes at once
-// The hub, or a walker's chassis (a cursor among a walker's feet takes its body too).
-const cands: TargetCandidate[] = [];
-lab.targets = () => robotCandidates(sw, cands);
+// Into the register for the soft lock and the weapons: the hub, or a walker's chassis (a cursor among a walker's feet
+// takes its body too).
+bf.register.add({ name: "robots", publish: (r) => sw.publish(r, 3) });
 let lastPrey = "mech";
 const SHOT = {
   [SMALL]: { flash: 0.35, hit: 0.3 },

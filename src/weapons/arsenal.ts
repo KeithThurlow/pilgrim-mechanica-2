@@ -94,10 +94,13 @@ export class Arsenal implements MechWeapons {
   private tmp2 = new THREE.Vector3();
   private dir = new THREE.Vector3();
   private prevTrig: [boolean, boolean] = [false, false];
+  /** Where a target is now, by its key (a missile's), or null once it's gone: the register's lookup by id. */
+  findTarget!: (key: unknown) => { x: number; z: number } | null;
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues, private look: ToonLook,
     /** Targets the snap, the swarm and the leads can see (the lab's candidates). */
     public candidates: () => TargetCandidate[] = () => []) {
+    if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
     const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser() });
     this.sides = [side(), side()];
     addWeaponSounds(bf.sfx, v);
@@ -317,12 +320,7 @@ export class Arsenal implements MechWeapons {
       this.onShake?.(0.18);
       if (sh.model) sh.model.recoil.position.y = -0.3;
     });
-    const track = (key: unknown) => {
-      const t = key as { alive?: boolean } | null;
-      if (!t || t.alive === false) return null;
-      const c = this.candidates().find((x) => x.key === key);
-      return c ? { x: c.x, z: c.z } : null;
-    };
+    const track = (key: unknown) => this.findTarget(key);
     sh.swarm.update(dt, bf.field, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, track, (m) => {
       this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage);
     }, (m) => {

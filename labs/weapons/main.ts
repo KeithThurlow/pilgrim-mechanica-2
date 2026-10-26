@@ -14,6 +14,8 @@
 import "../../src/core/lab.css";
 import { combatLab } from "../../src/game/combatLab";
 import type { TargetCandidate } from "../../src/game/targeting";
+import { KIND, FLAG } from "../../src/game/register";
+import { listOwner } from "../../src/game/registerOwners";
 import type { Hittable } from "../../src/game/battlefield";
 import type { MoveCommand } from "../../src/mech/walker";
 import type { Aim, Trigger } from "../../src/mech/upper";
@@ -116,12 +118,11 @@ function sync() {
 function rebuildRange() { rng.layout = rangeSpots(V); rng.build(); dd.rebuild(); sync(); }
 sync();
 
-lab.targets = () => {
-  const out: TargetCandidate[] = [];
-  for (const d of rng.dummies) if (d.alive) out.push({ x: d.x, y: d.y + d.height * 0.6, z: d.z, r: d.radius + 0.4, key: d });
-  for (const c of cs.cars) if (c.alive) out.push({ x: c.sim.pos.x, y: c.centreY, z: c.sim.pos.z, r: 2, key: c, vx: c.sim.vel.x, vz: c.sim.vel.z });
-  return out;
-};
+// Into the register for the soft lock and the weapons: the cutouts and posts, and the trucks.
+bf.register.add(listOwner("dummies", () => rng.dummies, (reg, d, k, s) =>
+  reg.put(k, s, KIND.Prop, d.team, FLAG.Hittable | (d.light ? FLAG.Light : 0), d.x, d.y + d.height * 0.6, d.z, d.radius + 0.4)));
+bf.register.add(listOwner("trucks", () => cs.cars, (reg, c, k, s) =>
+  reg.put(k, s, KIND.Vehicle, c.team, FLAG.Hittable | FLAG.Detectable, c.sim.pos.x, c.centreY, c.sim.pos.z, 2, 0, c.sim.vel.x, c.sim.vel.z)));
 
 // ---- Per-shot readouts: damage landing after a weapon fires is that shot's (while the miniguns aren't firing) ----
 const WINDOW: Record<string, number> = { rail: 0.3, autocannon: 1.5, rpg: 3, missiles: 5, mortar: 6, linemortar: 5 };

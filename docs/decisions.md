@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | The shared register and spatial grid: build it (steps 1-2 now, rounds and blasts next) | Claude | Keith | `docs/proposal-register.md` |
+| 2026-10-26 | Register ids are owner number (the order owners are added) × 2^32 + the owner's own serial, never reused; objects get a new serial per life; queries are flat (2D) with the 3D test left to the caller; rebuilt once a frame before the soft lock, not in the 120 Hz sub-steps | Claude | open | `src/game/register.ts` |
 | 2026-10-26 | The sprint: tap Space dashes, keep holding to carry on into a digitigrade sprint that keeps getting faster (a running gait, not a rocket slide); jumps off dunes but not exaggerated (dashing into a wall must not fling the mech skyward); 14 m/s early, 22-26 late; hard landings hurt | Keith | Keith | `docs/proposal-bound.md` |
 | 2026-10-26 | Guns fire while sprinting and in the air (an air accuracy penalty as a slider); Shift's run kept until the sprint is played | Claude | open | Keith undecided on guns. |
 | 2026-10-26 | Performance pass: go | Keith | Keith | |

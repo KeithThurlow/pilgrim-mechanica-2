@@ -12,6 +12,7 @@
 // Structure of arrays, ROBOT_MAX slots; dead slots are reused once their wreck has sunk (or oldest wreck first).
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { KIND, FLAG, type Register } from "../game/register";
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
   type V3, type WalkSpec,
@@ -337,6 +338,9 @@ export class RobotSwarm {
   readonly seed = new Float32Array(ROBOT_MAX);
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(ROBOT_MAX);
+  /** Serial per robot, handed out at spawn and never reused (the register's ids, rule 12). */
+  readonly uid = new Uint32Array(ROBOT_MAX);
+  private nextUid = 1;
   /**
    * World height of the body's centre (the hub for small ones, the chassis for medium and big); px, pz are under it.
    * py is the sand under the robot when it stands, the hub itself while leaping or latched.
@@ -456,6 +460,7 @@ export class RobotSwarm {
       this.gripK[i] = 1 + (this.rand() * 2 - 1) * v.robotGrip;
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
       this.gen[i]++;
+      this.uid[i] = this.nextUid++;
       this.count++;
       if (big || mid) {
         // Feet planted where they want to be, the body at its height above them.
@@ -473,6 +478,22 @@ export class RobotSwarm {
       } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
     }
     return made;
+  }
+
+  /**
+   * Into the register (src/game/register.ts): every robot not down, at its body's centre (robotCentre), its body
+   * radius, a walker's footprint, its ground velocity; small ones light (rounds carry on), frozen ones asleep.
+   */
+  publish(reg: Register, team: number): void {
+    const base = FLAG.Hittable | FLAG.Detectable;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DOWN) continue; // down, dead, empty
+      const k = this.kind[i], s = this.size[i];
+      const r = Math.max(0.6, k === BIG ? s * 0.5 : k === MID ? s * 0.4 : s * 0.35);
+      const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0);
+      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r,
+        k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i]);
+    }
   }
 
   /** Take a robot off the field at once (live or dead; its slot freed). */

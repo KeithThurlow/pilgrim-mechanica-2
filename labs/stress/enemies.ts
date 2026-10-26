@@ -1,16 +1,16 @@
 // The stress lab's enemies: the robot swarm, the bandit swarm and a war band on one battlefield, wired the way their
 // own labs wire them (rounds through bf.fire, deaths to the ragdoll physics, footfall dust, lobbed charges and
-// rockets), each topped up to a count every frame. Trimmed: no wading, no per-lab readouts.
+// rockets), each topped up to a count every frame, each publishing into the battlefield's register (the soft lock,
+// the demo and the barrage find targets there). Trimmed: no wading, no per-lab readouts.
 import * as THREE from "three/webgpu";
 import type { CombatLab } from "../../src/game/combatLab";
-import type { TargetCandidate } from "../../src/game/targeting";
 import { MechUnit } from "../../src/game/mechUnit";
-import { RobotSwarm, DOWN as R_DOWN, BIG, MID, SMALL, robotCentre, type RobotValues } from "../../src/combat/robots";
+import { RobotSwarm, BIG, MID, SMALL, type RobotValues } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, type RobotTearValues } from "../../src/combat/robotTearFx";
 import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
-import { InfantrySwarm, DEAD as B_DEAD, INFANTRY_MAX, type InfantryValues } from "../../src/combat/infantry";
+import { InfantrySwarm, INFANTRY_MAX, type InfantryValues } from "../../src/combat/infantry";
 import { InfantryDraw, CLOTH, type BanditLookValues } from "../../src/combat/infantryDraw";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -47,6 +47,7 @@ export class StressRobots {
     lab.app.scene.add(this.draw.group);
     this.target = new RobotTarget(sw, 3);
     bf.targets.push(this.target);
+    bf.register.add({ name: "robots", publish: (r) => sw.publish(r, 3) });
     sw.hideDead = true;
     const RAG = [[0x9a9c9e, 0x4a4d51], [YELLOW, YELLOW_DIRTY], [YELLOW, GREY]];
     sw.onDeath = (i, nx, nz, speed) => {
@@ -68,16 +69,6 @@ export class StressRobots {
     if (want <= 0) return;
     const k = Math.min(want, 60), p = ring(this.lab, this.lab.V.stressSpawnFrom);
     sw.spawn(k, p.x, p.z, 5 + Math.sqrt(k));
-  }
-
-  candidates(out: TargetCandidate[]) {
-    const sw = this.sw;
-    for (let i = 0; i < sw.hi; i++) {
-      if (sw.state[i] >= R_DOWN) continue;
-      const c = { x: 0, y: 0, z: 0, r: 0, key: i as unknown, vx: sw.vx[i], vz: sw.vz[i] };
-      c.r = Math.max(0.6, robotCentre(sw, i, c));
-      out.push(c);
-    }
   }
 
   update(dt: number, mark: Mark) {
@@ -116,6 +107,7 @@ export class StressBandits {
     const sw = this.sw = new InfantrySwarm(V, field);
     this.target = new InfantryTarget(sw, 2);
     bf.targets.push(this.target);
+    bf.register.add({ name: "bandits", publish: (r) => sw.publish(r, 2) });
     sw.hideDead = true;
     sw.onDeath = (i, nx, nz, speed) => {
       lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
@@ -134,14 +126,6 @@ export class StressBandits {
     if (want <= 0) return;
     const k = Math.min(want, 60), p = ring(this.lab, this.lab.V.stressSpawnFrom);
     sw.spawn(k, p.x, p.z, 4 + Math.sqrt(k));
-  }
-
-  candidates(out: TargetCandidate[]) {
-    const sw = this.sw, V = this.lab.V;
-    for (let i = 0; i < sw.hi; i++) {
-      if (sw.state[i] >= B_DEAD - 1) continue;
-      out.push({ x: sw.px[i], y: sw.py[i] + V.banditHeight * 0.55, z: sw.pz[i], r: Math.max(0.6, V.banditRadius), key: i, vx: sw.vx[i], vz: sw.vz[i] });
-    }
   }
 
   update(dt: number, mark: Mark) {
@@ -189,6 +173,7 @@ export class StressWarband {
     }
     const wb: Warband = new Warband(bf, V, () => this.spare.find((m) => !wb.mechs.includes(m)) ?? null, this.lab.deaths);
     this.wb = wb;
+    bf.register.add({ name: "warband", publish: (r) => wb.publish(r) });
     // No band of its own until topUp asks for one.
     (V as WarbandValues).bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTanks = 0; V.bandMechs = 0;
     this.lab.app.scene.add(wb.group);
@@ -210,12 +195,6 @@ export class StressWarband {
     V.bandTechnicals = nv - trucks - six - rigs - tanks; V.bandMechs = nm;
     this.wb.spawn(this.lab.player.sim.pelvis);
     V.bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTanks = 0; V.bandMechs = 0;
-  }
-
-  candidates(out: TargetCandidate[]) {
-    const V = this.lab.V;
-    for (const r of this.wb.raiders) if (r.alive) out.push({ x: r.sim.pos.x, y: r.centreY, z: r.sim.pos.z, r: r.shape.radius + 0.5, key: r, vx: r.sim.vel.x, vz: r.sim.vel.z });
-    for (const m of this.wb.mechs) if (m.alive) out.push({ x: m.sim.pelvis.x, y: m.sim.pelvis.y + 0.6, z: m.sim.pelvis.z, r: V.hitRadius, key: m, vx: m.sim.vel.x, vz: m.sim.vel.z });
   }
 
   update(dt: number, mark: Mark) {
