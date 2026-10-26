@@ -66,7 +66,21 @@ sprint, dash tap mid-step, dash held into sprint, downhill off a face, uphill wa
   dash cuts it into the run. `dash-check`: 80 dashes (walking/standing, 8 step phases, 5 directions) keep the feet
   within 2.6 m (old code: 3.0) and are back in gait right after the slide; held dash runs after 0.15 s at 11 m/s with
   alternating footfalls.
-- Next: step 3 slide dust, 5 labels, filmstrips (batch 1 running: side10 side14 rampside upside downside).
+- Step 3 (slide dust) built: `Foot.slide` (planted spot's speed per frame, `trackSlides`; `carry()` moves
+  `prevPlanted` so deck riding isn't a skid), `DustSim.slide` (sliders `slideDust`, `slideClump`, `slideThrow`,
+  `slideMin`), `mechUnit` throws it and furrows the dents per skidding foot.
+- Step 5 (labels) done: footfall vs toe kick, `sprintKick` and `boundDust` say they multiply both.
+- Docs: decisions logged, `docs/proposal-bound.md` "Revised after Keith's playtest", state.md Walker entry and Changes.
+- Filmstrips: scratch `loco/strips.sh` (`ONLY="..."`); batch 1 (run 10/14, ramp, uphill, downhill, side cam) built
+  before the dash code; batch 2 (game cam, dash tap/hold) to run after.
+
+## Known rough edges
+
+- `walker.ts` is ~1800 lines: the run, the dash and the slope rules are candidates for their own files.
+- Uphill swing fold: when no thigh angle near the wanted one is reachable, the cannon eases 4°/frame to the nearest; the
+  knee sits at full fold for part of the swing.
+- A walk over the dunes may now drop off a steep brink a couple of times a minute (the reach cap), by design.
+- Sideways dash: feet sit fore and aft across the dash direction (a skater's stance), not judged in the lab render yet.
 
 ## How to test
 
