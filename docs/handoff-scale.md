@@ -13,7 +13,25 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
    worst case now passes them as `o.proto` instead of its stand-ins. Not yet on items (Protocol items with shot
    fields: next).
 5. **GPU particles**, one look at a time (sparks and grit, tracers and casings, then dust), each behind a GPU/CPU
-   slider. Not started.
+   slider. **Written, being verified** (see below).
+
+## Step 5: GPU particles (written; verifying)
+
+- `src/fx/gpuPool.ts`: a ring of N particles, 4 vec4 storage buffers (P, V, A, B), one TSL compute pass a frame. New
+  particles come as rows of a float **spawn texture** (4 rows × maxSpawn), read with `textureLoad` at `k = (i - head)
+  mod N`. Feasibility tested on both backends here (scratchpad `scale/gputest/`): a storage buffer read at another index
+  fails on WebGL 2 ("Not enough space in bound transform feedback buffers"); the texture works on both. Live count is a
+  CPU estimate (per-slot expiry), no readback.
+- `src/fx/gpuGround.ts`: height/normal from `DetailPatch.gpuGround` (the chunks' 1 m grid as a texture round the focus).
+- `src/fx/gpuBits.ts`: sparks (streak along velocity), grit (tumble), casings (bounce, land flat); instanced meshes
+  placed in the vertex shader. Casing tonks: landing time worked out on the CPU when thrown (MinigunFx.landings).
+- `src/fx/gpuTracers.ts`: 1024 tracers flown by the vertex shader from (from, to, time left); MinigunFx still times
+  arrivals on the CPU (impacts). `ROUNDS_IN_FLIGHT` 1024 (CPU path draws the first 160).
+- `src/fx/gpuDust.ts`: the dust sim ported (clump, cloud, spray); `DustSim.emit` forwards there when `fxGpuDust`;
+  `DustDraw.attachGpu` draws it with the same shader (refactored into `puffMaterial`) and shadows draped on the ground.
+- Sliders (Performance): `fxGpuBits`, `fxGpuTracers`, `fxGpuDust` (default 1), `fxGpuDustPool` (32768, on reload).
+- Scripts: `scale/gpucheck.mjs <url> frames` reads the pools back (live, height over the true ground); `smoke2.mjs`
+  (console errors too). Shots: `shotg.mjs` stops the loop before the screenshot (the box renders 6-10 s a frame).
 
 ## Step 1: the effects budget (done)
 

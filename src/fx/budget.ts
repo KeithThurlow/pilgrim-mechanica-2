@@ -28,6 +28,10 @@ export const FX_BUDGET_DEFAULTS = {
   fxMergeCell: 1.5,
   fxMergeSize: 0.25,
   fxMergeCount: 0.5,
+  fxGpuBits: 1,
+  fxGpuTracers: 1,
+  fxGpuDust: 1,
+  fxGpuDustPool: 32768,
 };
 export type FxBudgetValues = typeof FX_BUDGET_DEFAULTS;
 
@@ -41,6 +45,10 @@ export const FX_BUDGET_PARAMS: Param[] = [
   { key: "fxDustPerFrame", label: "Effects: dust puffs per frame", min: 20, max: 8000, step: 10, group: G, tip: "Above this the far effects thin harder and the extras get trimmed" },
   { key: "fxLiveShare", label: "Effects: live dust before trimming (share of pool)", min: 0.2, max: 1, step: 0.01, group: G, tip: "When the live puffs fill this share of the pool, the budget counts as full, so young puffs aren't recycled" },
   { key: "fxTrimSpan", label: "Effects: trim over (× budget)", min: 0.1, max: 6, step: 0.1, group: G, tip: "How far past the budget until every extra is trimmed (plume, spray, grit, smoke); the main puff always stays" },
+  { key: "fxGpuBits", label: "GPU sparks, grit, casings (0 CPU / 1 GPU)", min: 0, max: 1, step: 1, group: G, tip: "Scale step 5: the bits fly on the GPU (src/fx/gpuBits.ts) in pools many times the CPU's. 0: the old CPU pools (600 sparks, 600 grit, 240 casings)" },
+  { key: "fxGpuTracers", label: "GPU tracers (0 CPU / 1 GPU)", min: 0, max: 1, step: 1, group: G, tip: "Tracers flown by the vertex shader (src/fx/gpuTracers.ts), 1024 at once. 0: a mesh per tracer moved on the CPU, 160 at most" },
+  { key: "fxGpuDust", label: "GPU dust (0 CPU / 1 GPU)", min: 0, max: 1, step: 1, group: G, tip: "The dust and smoke stepped and drawn on the GPU (src/fx/gpuDust.ts), unsorted, in a pool many times the CPU's 4,096. 0: the CPU dust (sorted, its own dune-shade march)" },
+  { key: "fxGpuDustPool", label: "GPU dust pool (puffs; on reload)", min: 4096, max: 262144, step: 4096, group: G, tip: "How many puffs the GPU dust holds (the CPU's holds 4,096). Read when the lab starts" },
   { key: "fxMergeCell", label: "Merge hits within (m)", min: 0, max: 6, step: 0.1, group: GE, tip: "Hits in the same cell in the same frame become one bigger effect (not yours). 0: no merging" },
   { key: "fxMergeSize", label: "Merged hit: size × count ^", min: 0, max: 1, step: 0.01, group: GE, tip: "A merge of n hits is this much bigger: n ^ this" },
   { key: "fxMergeCount", label: "Merged hit: puffs × count ^", min: 0, max: 1, step: 0.01, group: GE, tip: "And throws this many more puffs, sparks and grit: n ^ this" },

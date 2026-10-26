@@ -111,6 +111,8 @@ export interface GunStats {
   own?: Record<string, number> | null;
   /** Light (a hand weapon) rather than Medium (on the hull). */
   light?: boolean;
+  /** Its socketed Protocols' behaviour on every round (src/game/shots.ts). */
+  proto?: import("../game/shots").ShotProtocols;
 }
 
 export type GunClass = "minigun" | "rail" | "autocannon" | "rpg";

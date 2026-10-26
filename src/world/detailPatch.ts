@@ -30,6 +30,14 @@ export class DetailPatch {
   private uDark = uniform(0.2);
   private pending: ([number, number, number, number] | null)[] = [];
   readonly stats = { vertices: 0, triangles: 0, texBytes: 0, uploadsThisFrame: 0 };
+  /**
+   * The ground under the window for GPU effects (src/fx/gpuGround.ts): the chunks' own grid (height, normal) as a
+   * texture, the window's first coarse index, the coarse step (m), cells across, and whether it's filled (1) yet.
+   */
+  readonly gpuGround = {
+    tex: texture(new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType)),
+    origin: uniform(new THREE.Vector2()), step: uniform(1), cells: uniform(4), ready: uniform(0),
+  };
 
   constructor(readonly field: DuneField, readonly streamer: TerrainStreamer, readonly dents: DentLayer, public v: DentValues) {
     this.group.name = "detail patch";
@@ -60,6 +68,9 @@ export class DetailPatch {
     this.colourTex = tex(w.colour, w.mc, THREE.RGBAFormat);
     this.stats.texBytes = w.fineH.byteLength + w.coarse.byteLength + w.colour.byteLength;
     this.uploaded = -1;
+    this.gpuGround.tex.value = this.coarseTex;
+    this.gpuGround.step.value = w.step;
+    this.gpuGround.cells.value = w.nc;
 
     // A grid of (nf + 1)² vertices whose positions are just their grid indices; the shader places them.
     const n = w.nf, row = n + 1;
@@ -178,7 +189,7 @@ export class DetailPatch {
     this.uEdge.value = v.patchEdge;
     this.uScale.value = v.dentScale;
     this.uDark.value = v.dentDark;
-    if (!on) { mesh.visible = false; this.streamer.hole.value.set(0, 0, 0, 0); return; }
+    if (!on) { mesh.visible = false; this.streamer.hole.value.set(0, 0, 0, 0); this.gpuGround.ready.value = 0; return; }
     // The chunk grid, the area or the spacing changed: start over.
     const fresh = this.makeWindowIfChanged();
     if (fresh) { this.win = fresh; this.build(); }
@@ -194,6 +205,8 @@ export class DetailPatch {
     }
     this.uFine0.value.set(w.gx * w.sub, w.gz * w.sub);
     this.uCoarse0.value.set(w.gx, w.gz);
+    this.gpuGround.origin.value.set(w.gx, w.gz);
+    this.gpuGround.ready.value = w.ready ? 1 : 0;
     mesh.visible = w.ready;
     if (w.ready) { const [x0, z0, x1, z1] = w.bounds(); this.streamer.hole.value.set(x0, z0, x1, z1); }
     else this.streamer.hole.value.set(0, 0, 0, 0);

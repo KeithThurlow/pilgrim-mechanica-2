@@ -7,6 +7,8 @@ import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
 import type { Param } from "../core/tweaks";
 import { FX_BUDGET_DEFAULTS, FX_BUDGET_PARAMS, FxBudget, RANK } from "./budget";
+import type { GpuBits } from "./gpuBits";
+import type { GpuTracers } from "./gpuTracers";
 
 export const MINIGUN_FX_DEFAULTS = {
   tracerSpeed: 220,
@@ -45,8 +47,11 @@ export const MINIGUN_FX_PARAMS: Param[] = [
 export type HitSurface = "sand" | "metal" | "flesh";
 
 const TRACERS = 160, FLASHES = 24, SPARKS = 600, GRIT = 600, CASINGS = 240;
+/** Rounds in flight at once (each times its impact): the GPU tracers draw them all; the CPU path has a Mesh for the
+ *  first TRACERS only. */
+export const ROUNDS_IN_FLIGHT = 1024;
 
-interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3; scale: number; own: boolean }
+interface Tracer { mesh: THREE.Mesh | null; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3; scale: number; own: boolean }
 /** Impacts landing this frame, merged by cell and surface (src/fx/budget.ts). */
 interface Merged { at: THREE.Vector3; dir: THREE.Vector3; normal: THREE.Vector3; surface: HitSurface; scale: number; n: number }
 const SURF: Record<HitSurface, number> = { sand: 0, metal: 1, flesh: 2 };
@@ -86,16 +91,31 @@ export class MinigunFx {
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
+  /**
+   * The GPU versions (scale step 5; set by the battlefield once it has the renderer): sparks, grit and casings, and
+   * the tracers. fxGpuBits / fxGpuTracers pick them over the CPU pools above.
+   */
+  gpuBits: GpuBits | null = null;
+  gpuTracers: GpuTracers | null = null;
+  private clock = 0;
+  private tracerNext = 0;
+  /** GPU casings: when each lands (for its tonk), worked out when it's thrown. */
+  private landings: { t: number; at: THREE.Vector3 }[] = [];
+  private get gpuB() { return this.gpuBits !== null && this.v.fxGpuBits > 0.5; }
+  private get gpuT() { return this.gpuTracers !== null && this.v.fxGpuTracers > 0.5; }
 
   constructor(private ground: Ground, public v: MinigunFxValues) {
     this.budget = new FxBudget(v);
     const tracerGeo = new THREE.BoxGeometry(0.07, 0.07, 1).translate(0, 0, -0.5);
     const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, toneMapped: false });
-    for (let i = 0; i < TRACERS; i++) {
-      const mesh = new THREE.Mesh(tracerGeo, tracerMat);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      this.group.add(mesh);
+    for (let i = 0; i < ROUNDS_IN_FLIGHT; i++) {
+      let mesh: THREE.Mesh | null = null;
+      if (i < TRACERS) {
+        mesh = new THREE.Mesh(tracerGeo, tracerMat);
+        mesh.visible = false;
+        mesh.frustumCulled = false;
+        this.group.add(mesh);
+      }
       this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0), scale: 1, own: false });
     }
     this.grit = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshStandardMaterial({ color: 0x9a7a50, roughness: 1 }), GRIT);
@@ -143,19 +163,42 @@ export class MinigunFx {
       if (f.light) { f.light.position.copy(muzzle).addScaledVector(dir, 0.4); f.light.intensity = this.v.flashLight; }
     }
 
-    // Every round flies (it times the hit); only every Nth shows as a tracer.
-    const t = this.tracers.find((x) => !x.live) ?? this.tracers[this.round % TRACERS];
+    // Every round flies (it times the hit); only every Nth shows as a tracer. The next free slot from a ring pointer
+    // (a slot still flying is never taken: its impact would be lost), the oldest when all are flying.
+    let ti = this.tracerNext;
+    for (let n = 0; n < ROUNDS_IN_FLIGHT && this.tracers[ti].live; n++) ti = (ti + 1) % ROUNDS_IN_FLIGHT;
+    this.tracerNext = (ti + 1) % ROUNDS_IN_FLIGHT;
+    const t = this.tracers[ti];
     t.from.copy(muzzle); t.to.copy(hit); t.dist = muzzle.distanceTo(hit); t.t = 0; t.live = true;
     t.surface = surface; t.normal.copy(normal ?? UP); t.scale = hitScale; t.own = own;
     // Far tracers that aren't yours thin with the budget (the round still flies and hits).
-    t.mesh.visible = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0 && (own || this.budget.admit(hit.x, hit.z));
+    const shown = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0 && (own || this.budget.admit(hit.x, hit.z));
+    if (this.gpuT) { this.gpuTracers!.set(ti, muzzle, hit, this.clock, shown); if (t.mesh) t.mesh.visible = false; }
+    else if (t.mesh) t.mesh.visible = shown;
 
     if (!eject || !outboard) return;
+    const vel = this.s.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));
+    if (this.gpuB) {
+      const g0 = this.ground.height(eject.x, eject.z) + 0.03;
+      this.gpuBits!.casings.emit(eject.x, eject.y, eject.z, vel.x, vel.y, vel.z, 7, 1, 8 + Math.random() * 18, g0);
+      // When it first lands (its tonk): falling from the port to the ground under it.
+      const drop = Math.max(0, eject.y - g0), tl = (vel.y + Math.sqrt(vel.y * vel.y + 2 * 9.8 * drop)) / 9.8;
+      this.landings.push({ t: this.clock + tl, at: new THREE.Vector3(eject.x + vel.x * tl, g0, eject.z + vel.z * tl) });
+      return;
+    }
     const c = this.casingBits[this.casingI++ % CASINGS];
     c.pos.copy(eject);
-    c.vel.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));
+    c.vel.copy(vel);
     c.age = 0; c.life = 7; c.rest = false; c.landed = false;
     c.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
+  }
+
+  /** One spark (the GPU pool or the CPU one). */
+  private spark(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number) {
+    if (this.gpuB) { this.gpuBits!.sparks.emit(x, y, z, vx, vy, vz, life, 1, 0, y - 5); return; }
+    const s = this.sparkBits[this.sparkI++ % SPARKS];
+    s.pos.set(x, y, z); s.vel.set(vx, vy, vz);
+    s.age = 0; s.life = life; s.rest = false;
   }
 
   /**
@@ -215,12 +258,17 @@ export class MinigunFx {
     // The dust itself (the low layer torn up and pushed downrange, and the dust thrown up) is the shared dust system.
     this.onSandHit?.(at, along, k, n);
     // Grit: sand thrown up in an arc, mostly on downrange.
+    const gpu = this.gpuB;
     for (let i = 0; i < Math.round(v.sandGrit * Math.min(1, k / Math.max(1e-3, v.hitDust)) * n * this.budget.part(RANK.grit)); i++) {
+      const f = (Math.random() * 1.6 - 0.4) * 3;
+      const vx = along.x * f + (Math.random() - 0.5) * 2.5, vy = along.y * f + 2.5 + Math.random() * 4 * k, vz = along.z * f + (Math.random() - 0.5) * 2.5;
+      const life = 0.5 + Math.random() * 0.4;
+      if (gpu) { this.gpuBits!.grit.emit(at.x, at.y + 0.05, at.z, vx, vy, vz, life, 1, 6 + Math.random() * 12, at.y); continue; }
       const g = this.gritBits[this.gritI++ % GRIT];
       g.pos.copy(at).setY(at.y + 0.05);
-      g.vel.copy(along).multiplyScalar((Math.random() * 1.6 - 0.4) * 3).add(new THREE.Vector3((Math.random() - 0.5) * 2.5, 2.5 + Math.random() * 4 * k, (Math.random() - 0.5) * 2.5));
+      g.vel.set(vx, vy, vz);
       g.spin.set((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20);
-      g.age = 0; g.life = 0.5 + Math.random() * 0.4; g.rest = false; g.landed = false;
+      g.age = 0; g.life = life; g.rest = false; g.landed = false;
     }
   }
 
@@ -230,15 +278,14 @@ export class MinigunFx {
     const n = Math.round(v.metalSparks * Math.min(2, k) * mul);
     // Reflect the round off the face for the ricochet cone; the rest spray back off the face.
     const refl = dir.clone().addScaledVector(normal, -2 * dir.dot(normal)).normalize();
+    const sv = this.sv;
     for (let i = 0; i < n; i++) {
-      const s = this.sparkBits[this.sparkI++ % SPARKS];
       const ahead = i < n * 0.7;
       const base = ahead ? refl : normal;
       const cone = ahead ? 0.5 : 1.1;
-      s.pos.copy(at).addScaledVector(normal, 0.05);
-      s.vel.set(base.x + (Math.random() - 0.5) * cone, base.y + (Math.random() - 0.3) * cone, base.z + (Math.random() - 0.5) * cone).normalize()
+      sv.set(base.x + (Math.random() - 0.5) * cone, base.y + (Math.random() - 0.3) * cone, base.z + (Math.random() - 0.5) * cone).normalize()
         .multiplyScalar(v.metalSparkSpeed * (ahead ? 0.6 + Math.random() * 0.6 : 0.3 + Math.random() * 0.4));
-      s.age = 0; s.life = 0.18 + Math.random() * 0.3; s.rest = false;
+      this.spark(at.x + normal.x * 0.05, at.y + normal.y * 0.05, at.z + normal.z * 0.05, sv.x, sv.y, sv.z, 0.18 + Math.random() * 0.3);
     }
     // Smoke off the steel goes to the soft dust (the battlefield), not solid balls (they read as rocks, Keith's shot).
     if (v.metalSmoke > 0) this.onSteelSmoke?.(at, normal, v.metalSmoke, k);
@@ -252,16 +299,24 @@ export class MinigunFx {
     const b = this.budget;
     if (!b.admit(at.x, at.z)) return;
     count = Math.round(count * b.part(RANK.spray));
+    const sv = this.sv;
     for (let i = 0; i < count; i++) {
-      const s = this.sparkBits[this.sparkI++ % SPARKS];
-      s.pos.copy(at).addScaledVector(normal, 0.03);
-      s.vel.set(normal.x + (Math.random() - 0.5) * 1.6, normal.y + (Math.random() - 0.2) * 1.4, normal.z + (Math.random() - 0.5) * 1.6).normalize()
+      sv.set(normal.x + (Math.random() - 0.5) * 1.6, normal.y + (Math.random() - 0.2) * 1.4, normal.z + (Math.random() - 0.5) * 1.6).normalize()
         .multiplyScalar(speed * (0.4 + Math.random() * 0.8));
-      s.age = 0; s.life = 0.12 + Math.random() * 0.25; s.rest = false;
+      this.spark(at.x + normal.x * 0.03, at.y + normal.y * 0.03, at.z + normal.z * 0.03, sv.x, sv.y, sv.z, 0.12 + Math.random() * 0.25);
     }
   }
+  private sv = new THREE.Vector3();
 
   update(dt: number) {
+    this.clock += dt;
+    for (let i = this.landings.length - 1; i >= 0; i--) {
+      const l = this.landings[i];
+      if (l.t > this.clock) continue;
+      this.onCasingLand?.(l.at);
+      this.landings.splice(i, 1);
+    }
+    const gpuT = this.gpuT;
     for (const f of this.flashes) {
       f.t -= dt;
       if (f.t <= 0) { f.mesh.visible = false; if (f.light) f.light.intensity = 0; }
@@ -271,12 +326,16 @@ export class MinigunFx {
       t.t += dt * this.v.tracerSpeed;
       const head = Math.min(t.t, t.dist), tail = Math.max(0, head - this.v.tracerLength);
       const dir = this.s.subVectors(t.to, t.from).normalize();
-      t.mesh.position.copy(t.from).addScaledVector(dir, head);
-      t.mesh.lookAt(t.mesh.position.clone().add(dir));
-      t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
-      if (t.t >= t.dist) { t.live = false; t.mesh.visible = false; this.land(t.to, dir, t.surface, t.normal, t.scale, t.own); }
+      if (t.mesh && !gpuT) {
+        t.mesh.position.copy(t.from).addScaledVector(dir, head);
+        t.mesh.lookAt(t.mesh.position.clone().add(dir));
+        t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
+      }
+      if (t.t >= t.dist) { t.live = false; if (t.mesh) t.mesh.visible = false; this.land(t.to, dir, t.surface, t.normal, t.scale, t.own); }
     }
     this.flushMerged();
+    this.gpuTracers?.update(this.clock, this.v.tracerSpeed, this.v.tracerLength);
+    if (this.gpuBits) this.gpuBits.sparks.uSize.value = this.v.sparkSize;
     this.stepBits(this.sparkBits, this.sparks, dt, false, false, this.v.sparkSize);
     this.stepBits(this.gritBits, this.grit, dt, false, true);
     this.stepBits(this.casingBits, this.casings, dt, true);

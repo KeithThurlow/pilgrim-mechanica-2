@@ -12,6 +12,7 @@ import { Register, KIND, FLAG } from "../src/game/register";
 import { listOwner } from "../src/game/registerOwners";
 import { PEN_DEFAULTS } from "../src/game/sheet";
 import type { Hittable } from "../src/game/battlefield";
+import { shotProtocolsOf } from "../src/items/protocols";
 
 const problems: string[] = [];
 const flat = { height: () => 0, normal: (_x: number, _z: number, out: number[] = [0, 1, 0]) => { out[0] = 0; out[1] = 1; out[2] = 0; return out; } };
@@ -121,6 +122,13 @@ const dealt = (s: Shots) => s.events.filter((e) => e.kind === "hit").reduce((a, 
   if (balls[0].hits !== 1 || balls[1].hits !== 1) problems.push(`sheet with 2 m penetration: hits ${balls[0].hits}/${balls[1].hits} (want 1/1)`);
   const total = balls.reduce((a, b) => a + b.taken, 0);
   if (Math.abs(total - dealt(s)) > 1e-6) problems.push(`sheet: damage applied ${total.toFixed(2)} but the events say ${dealt(s).toFixed(2)}`);
+}
+
+// ---- Protocol items put their behaviour on the rounds ----
+{
+  const p = shotProtocolsOf([{ base: "splitter" }, { base: "ricochet" }, { base: "choke" }, { base: "splitter" }, { base: "arcLink" }]);
+  if (p?.split !== 9 || p.ricochet !== 1 || p.chain !== 2 || p.rate !== undefined) problems.push(`socketed Protocols gave ${JSON.stringify(p)} (want split 9, ricochet 1, chain 2)`);
+  if (shotProtocolsOf([{ base: "choke" }]) !== undefined) problems.push("a stat-only Protocol changed the rounds");
 }
 
 console.log(`shots: ${problems.length ? problems.length + " problems" : "split, rate, seed, ricochet, chain and sheet as expected"}`);

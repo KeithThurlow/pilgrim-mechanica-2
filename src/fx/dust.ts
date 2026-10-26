@@ -12,6 +12,7 @@
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { RANK, type FxBudget } from "./budget";
+import type { GpuDust } from "./gpuDust";
 
 export const DUST_DEFAULTS = {
   dustWindAngle: 70,
@@ -177,14 +178,23 @@ export class DustSim {
 
   /** The effects budget (src/fx/budget.ts): every source asks it first (null: everything as asked). */
   budget: FxBudget | null = null;
+  /** The GPU dust (scale step 5, src/fx/gpuDust.ts): while the fxGpuDust slider is on, every puff goes there. */
+  gpu: GpuDust | null = null;
+  get gpuOn() { return this.gpu !== null && ((this.v as { fxGpuDust?: number }).fxGpuDust ?? 0) > 0.5; }
 
   /** What the floor is read from: the true ground, or a cheap one for looks (src/world/chunkGround.ts). */
   constructor(public v: DustValues, public ground: Ground) {}
 
   emit(kind: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, dens: number) {
+    if (this.budget) this.budget.spawned++;
+    if (this.gpuOn) {
+      // The ground where it's made: a little under it (the sources put puffs 0.1-0.3 m up); only used off the patch.
+      this.gpu!.emit(kind, x, y, z, vx, vy, vz, size, life, dens, Math.random(), this.curTint,
+        this.curDrag || (kind === CLOUD ? this.v.cloudDrag : this.v.clumpDrag), y - 0.3);
+      return;
+    }
     const i = this.next;
     this.next = (this.next + 1) % DUST_MAX;
-    if (this.budget) this.budget.spawned++;
     this.px[i] = x; this.py[i] = y; this.pz[i] = z;
     this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
     this.age[i] = 0; this.life[i] = life; this.size0[i] = size; this.dens[i] = dens;

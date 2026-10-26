@@ -159,6 +159,13 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
   bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
+  // ?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2 puts these Protocols on every round of yours (src/game/shots.ts),
+  // over whatever the fitted guns carry: for seeing them without socketing items.
+  if (params.get("proto")) {
+    const proto = Object.fromEntries(params.get("proto")!.split(",").map((kv) => kv.split(":")).map(([k, x]) => [k, Number(x)]));
+    const fire = bf.fire.bind(bf);
+    bf.fire = (slot, team, muzzle, d, range, damage, fo = {}) => fire(slot, team, muzzle, d, range, damage, fo.voice === "player" ? { ...fo, proto } : fo);
+  }
   // The register: the player's mech first (owner 1), then whatever the lab adds.
   bf.register.add(mechOwner("player", () => [player]));
   const enemies = enemiesOf(player.team);

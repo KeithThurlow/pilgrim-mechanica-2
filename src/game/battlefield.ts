@@ -22,7 +22,10 @@ import { DetailPatch } from "../world/detailPatch";
 import type { TerrainStreamer } from "../world/chunks";
 import { ChunkGround } from "../world/chunkGround";
 import type { Ground } from "../mech/walker";
-import { MinigunFx, type MinigunFxValues, type HitSurface } from "../fx/minigun";
+import { MinigunFx, ROUNDS_IN_FLIGHT, type MinigunFxValues, type HitSurface } from "../fx/minigun";
+import { GpuBits } from "../fx/gpuBits";
+import { GpuTracers } from "../fx/gpuTracers";
+import { GpuDust } from "../fx/gpuDust";
 import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
@@ -106,6 +109,10 @@ export class Battlefield {
   readonly marks: GroundMarks;
   /** The dent layer and the fine ground patch that draws it (null until useDents). */
   dents: DentLayer | null = null;
+  /** The renderer (from useDents): GPU effects step with it (scale step 5). */
+  private renderer: THREE.WebGPURenderer | null = null;
+  /** The GPU dust (from useDents; fxGpuDust picks it over the CPU dust). */
+  gpuDust: GpuDust | null = null;
   patch: DetailPatch | null = null;
   /**
    * A cheap ground for looks (the streamed chunks' own triangles, src/world/chunkGround.ts): dust and small robots'
@@ -247,6 +254,15 @@ export class Battlefield {
     this.lookGround = new ChunkGround(streamer, this.field);
     this.dust.ground = this.lookGround;
     this.dustDraw.ground = this.lookGround;
+    // Scale step 5: sparks, grit, casings and tracers on the GPU (fxGpuBits, fxGpuTracers pick them over the CPU's).
+    this.renderer = renderer;
+    const bits = new GpuBits(this.patch.gpuGround), tracers = new GpuTracers(ROUNDS_IN_FLIGHT);
+    this.gunFx.gpuBits = bits; this.gunFx.gpuTracers = tracers;
+    this.gunFx.group.add(bits.group, tracers.mesh);
+    const gd = new GpuDust(Math.max(1024, Math.round((v as { fxGpuDustPool?: number }).fxGpuDustPool ?? 32768)), 4096, this.patch.gpuGround);
+    this.gpuDust = gd;
+    this.dust.gpu = gd;
+    this.dustDraw.attachGpu(gd, this.patch.gpuGround);
     return this.dents;
   }
 
@@ -401,12 +417,24 @@ export class Battlefield {
     c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
+    const gb = this.gunFx.gpuBits, gt = this.gunFx.gpuTracers;
+    if (gb && this.renderer) {
+      const on = this.v.fxGpuBits > 0.5;
+      gb.group.visible = on;
+      if (on) gb.update(this.renderer, dt);
+    }
+    if (gt) gt.mesh.visible = this.v.fxGpuTracers > 0.5;
     c?.mark("gun fx");
     this.dust.update(dt);
+    const gd = this.gpuDust, gpuDust = !!gd && !!this.renderer && this.dust.gpuOn;
+    if (gpuDust) gd!.update(this.renderer!, dt, this.v);
+    this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
-    // Everything this frame has asked for its effects: roll the budget's pressure on.
-    this.fx.frame(this.dust.alive);
+    // Everything this frame has asked for its effects: roll the budget's pressure on (against the pool in use).
+    this.fx.pool = gpuDust ? gd!.pool.N : DUST_MAX;
+    this.fx.frame(gpuDust ? gd!.pool.alive : this.dust.alive);
+    if (gpuDust) this.dust.alive += gd!.pool.alive;
     c?.mark("dust");
   }
 }
