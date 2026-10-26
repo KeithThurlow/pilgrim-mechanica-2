@@ -51,6 +51,10 @@ export const DUST_DEFAULTS = {
   windIn: 1.2,
   wheelDust: 0.9,
   wheelClump: 0.5,
+  slideDust: 1.2,
+  slideClump: 2.2,
+  slideThrow: 0.6,
+  slideMin: 1.5,
   stepPush: 0.7,
   gravelDust: 0.25,
   gravelClump: 0.35,
@@ -87,15 +91,15 @@ export const DUST_PARAMS: Param[] = [
   { key: "clumpLife", label: "Clump life (s)", min: 0.2, max: 4, step: 0.05, group: "Dust" },
   { key: "clumpDensity", label: "Clump thickness", min: 0, max: 1, step: 0.01, group: "Dust" },
   { key: "clumpDrag", label: "Clump drag", min: 0.2, max: 10, step: 0.1, group: "Dust" },
-  { key: "stompCloud", label: "Stomp: cloud puffs", min: 0, max: 20, step: 1, group: "Dust: sources" },
-  { key: "stompClump", label: "Stomp: clumps", min: 0, max: 20, step: 1, group: "Dust: sources" },
+  { key: "stompCloud", label: "Footfall: cloud puffs (as a foot lands)", min: 0, max: 20, step: 1, group: "Dust: sources", tip: "Only the puffs as a foot comes down. At 0 the steps still raise dust (Keith 2026-10-26 likes it that way): each foot's toe kick as it leaves the ground (Toe kick sliders) and the footfall's clumps below" },
+  { key: "stompClump", label: "Footfall: clumps (as a foot lands)", min: 0, max: 20, step: 1, group: "Dust: sources", tip: "Sand shoved out round the foot as it lands" },
   { key: "stompSize", label: "Stomp: puff size (m)", min: 0.1, max: 3, step: 0.05, group: "Dust: sources" },
   { key: "stompSpeed", label: "Stomp: spread speed", min: 0, max: 8, step: 0.1, group: "Dust: sources" },
-  { key: "kickCloud", label: "Toe kick: cloud puffs", min: 0, max: 20, step: 1, group: "Dust: sources", tip: "Sand flicked back as a foot leaves the ground" },
-  { key: "kickClump", label: "Toe kick: clumps", min: 0, max: 20, step: 1, group: "Dust: sources" },
+  { key: "kickCloud", label: "Toe kick: cloud puffs (as a foot lifts)", min: 0, max: 20, step: 1, group: "Dust: sources", tip: "Sand flicked back as a foot leaves the ground: most of a step's dust when the footfall's puffs are 0" },
+  { key: "kickClump", label: "Toe kick: clumps (as a foot lifts)", min: 0, max: 20, step: 1, group: "Dust: sources" },
   { key: "kickSize", label: "Toe kick: puff size (m)", min: 0.1, max: 3, step: 0.05, group: "Dust: sources" },
   { key: "kickSpeed", label: "Toe kick: speed", min: 0, max: 10, step: 0.1, group: "Dust: sources" },
-  { key: "sprintKick", label: "Sprint: more dust ×", min: 1, max: 4, step: 0.05, group: "Dust: sources" },
+  { key: "sprintKick", label: "Running: footfall and toe kick dust ×", min: 1, max: 4, step: 0.05, group: "Dust: sources", tip: "Multiplies both the footfall and the toe kick dust when moving faster than the walk (the Shift run and the sprint). The sprint multiplies again by its own dust × (Sprint kit)" },
   { key: "hitCloud", label: "Round hit: cloud puffs", min: 0, max: 10, step: 1, group: "Dust: sources" },
   { key: "hitClump", label: "Round hit: clumps", min: 0, max: 12, step: 1, group: "Dust: sources", tip: "The low layer torn up and pushed downrange" },
   { key: "hitSize", label: "Round hit: puff size (m)", min: 0.05, max: 2, step: 0.01, group: "Dust: sources" },
@@ -114,6 +118,10 @@ export const DUST_PARAMS: Param[] = [
   { key: "stepPush", label: "Step pushes dust along", min: 0, max: 2, step: 0.01, group: "Dust: sources", tip: "Share of the mech's speed the stomp's sand carries forward" },
   { key: "wheelDust", label: "Wheels: dust per metre", min: 0, max: 4, step: 0.05, group: "Dust: sources", tip: "Cloud puffs a rolling wheel throws up per metre, more when it slides" },
   { key: "wheelClump", label: "Wheels: clumps per metre", min: 0, max: 4, step: 0.05, group: "Dust: sources" },
+  { key: "slideDust", label: "Skidding foot: dust per metre", min: 0, max: 6, step: 0.05, group: "Dust: sources", tip: "A foot sliding over the ground (a dash's slide, a drift, a landing skid, sliding down a face) throws cloud along its carve; more the faster it slides, by what the ground is (Dust: surfaces)" },
+  { key: "slideClump", label: "Skidding foot: clumps per metre", min: 0, max: 8, step: 0.05, group: "Dust: sources", tip: "Sand or gravel shoved ahead of the sliding foot and flung aside" },
+  { key: "slideThrow", label: "Skidding foot: thrown along (× slide speed)", min: 0, max: 1.5, step: 0.01, group: "Dust: sources" },
+  { key: "slideMin", label: "Skidding foot: from (m/s)", min: 0.2, max: 6, step: 0.1, group: "Dust: sources", tip: "Slower than this a foot only creeps: no dust or furrow" },
   { key: "windIn", label: "Wind takes over after (s)", min: 0, max: 5, step: 0.05, group: "Dust", tip: "Dust first keeps the push of whatever threw it, then the wind takes it" },
   { key: "gravelDust", label: "Gravel: dust ×", min: 0, max: 1.5, step: 0.01, group: "Dust: surfaces" },
   { key: "gravelClump", label: "Gravel: chips ×", min: 0, max: 1.5, step: 0.01, group: "Dust: surfaces" },
@@ -312,6 +320,35 @@ export class DustSim {
         const s = sp * back;
         this.emit(CLUMP, x, y + 0.15, z, bx * s + -bz * side * 2, 1 + Math.random() * 2.5 * (0.4 + slip), bz * s + bx * side * 2,
           0.18 + Math.random() * 0.2, v.clumpLife * (0.6 + Math.random() * 0.5), v.clumpDensity);
+      }
+    }
+    this.curTint = 0;
+    return acc;
+  }
+
+  /**
+   * A foot skidding over the ground this step (Keith 2026-10-26 18:28: "when the foot's sliding along the ground, carving
+   * up sand or dirt or whatever it is, we want to kick up dust or gravel"): sand shoved ahead of the foot and flung aside
+   * low, and a trail of cloud, in proportion to the distance and more the faster it slides. acc: the caller's per-foot
+   * carry-over (fractional puffs), returned updated.
+   */
+  slide(x: number, y: number, z: number, vx: number, vz: number, dt: number, acc: number): number {
+    const v = this.v, sp = Math.hypot(vx, vz);
+    if (sp < v.slideMin) return 0;
+    const [dm, cm] = this.ground_(x, z);
+    const dx = vx / sp, dz = vz / sp, k = Math.min(2.5, sp / 8);
+    acc += sp * dt * k * (v.slideDust * dm + v.slideClump * cm);
+    const cloudShare = v.slideDust * dm / Math.max(1e-6, v.slideDust * dm + v.slideClump * cm);
+    while (acc >= 1) {
+      acc -= 1;
+      const side = Math.random() - 0.5, thr = v.slideThrow * sp;
+      if (Math.random() < cloudShare) {
+        this.emit(CLOUD, x + dx * 0.3, y + 0.25, z + dz * 0.3, dx * thr * 0.5 - dz * side * 1.5, 0.5 + Math.random() * 0.8, dz * thr * 0.5 + dx * side * 1.5,
+          0.5 + Math.random() * 0.5, v.cloudLife * (0.6 + Math.random() * 0.6), v.cloudDensity * 0.9);
+      } else {
+        const s = thr * (0.6 + Math.random() * 0.6);
+        this.emit(CLUMP, x + dx * 0.4, y + 0.1, z + dz * 0.4, dx * s - dz * side * 3, 1 + Math.random() * 2, dz * s + dx * side * 3,
+          0.15 + Math.random() * 0.2, v.clumpLife * (0.6 + Math.random() * 0.5), v.clumpDensity);
       }
     }
     this.curTint = 0;

@@ -34,7 +34,7 @@ export const BOUND_PARAMS: Param[] = [
   { key: "boostBurn", label: "Booster: tank burn sprinting (s/s)", min: 0, max: 2, step: 0.01, group: G },
   { key: "boundGuns", label: "Guns fire while sprinting (1 on, 0 off)", min: 0, max: 1, step: 1, group: G, tip: "Keith hasn't decided: on by default, revisit after play" },
   { key: "airGunSpread", label: "Extra spread in the air (°)", min: 0, max: 15, step: 0.1, group: G, tip: "Firing while the mech is off the ground (a leap, a jump)" },
-  { key: "boundDust", label: "Dust per sprint footfall ×", min: 0, max: 2, step: 0.05, group: G, tip: "Strides come quickly: each one throws less than a walking stomp; real landings throw the full burst" },
+  { key: "boundDust", label: "Sprint: footfall and toe kick dust ×", min: 0, max: 3, step: 0.05, group: G, tip: "On top of Running dust × (Dust: sources), for each sprint step's footfall and toe kick. Landings off jumps throw their own burst" },
 ];
 
 export class Bound {

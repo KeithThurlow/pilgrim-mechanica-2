@@ -341,7 +341,7 @@ function tick(rawDt: number) {
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   const driftDeg = Math.abs(((((sim.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180);
-  app.hud.set("bound", `sprint (hold Space): ${mech.bound.on ? `${sim.speed.toFixed(1)} of ${(sim.boundTopNow || V.boundTop).toFixed(1)} m/s · ${sim.stats.leaps} strides${driftDeg > 3 ? ` · drift ${driftDeg.toFixed(0)}°` : ""}${sim.footSlip > 1.5 ? " · skidding" : ""}` : "off"}`);
+  app.hud.set("bound", `sprint (hold Space): ${mech.bound.on ? `${sim.speed.toFixed(1)} of ${(sim.boundTopNow || V.boundTop).toFixed(1)} m/s · ${sim.stats.steps} steps${driftDeg > 3 ? ` · drift ${driftDeg.toFixed(0)}°` : ""}` : "off"}${sim.dashing ? " · dash push-off" : ""}${sim.feet.some((f) => Math.hypot(f.slide.x, f.slide.z) > V.slideMin) ? " · skidding" : ""}`);
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${mech.bound.on ? "sprint" : cmd.sprint ? "run" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   const ll = sim.lastLanding;
   app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
