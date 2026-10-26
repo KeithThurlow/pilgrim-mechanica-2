@@ -150,6 +150,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 - Ground dents merged (old decals kept behind `markMode` 0 until Keith approves). Next: a performance pass once Keith says go (dust ground lookups, the patch's 295k triangles and its shadows, a coarse shadow copy of the terrain if worth it).
 - Convoy combat merged (targeting, guns up to 50° plus hull lean, part hitboxes, roaming packs and raids); pacing judged from shots only.
+- Sprint handoff (agent stopped for the usage limit): `docs/handoff-sprint.md` (done, values, what's left, how to test).
 - The sprint (Keith 2026-10-26, `docs/proposal-bound.md`): built in every lab with the mech, judged from filmstrips only. Next: Keith plays it (feel of the gallop, 14 m/s, the crest risk, guns while sprinting); a `boundTop` stat on leg items (only the leg types carry it now); landing poses on steep faces; chasers that can keep up.
 - Convoy pass 3 merged (crane, drop-off, rear bay, turrets, octagon decks, 12 escorts, dash). Rough: heavy escorts pass 3-4 m from cars in hard turns; the drop lands in the escort lane; turrets not in the collision footprint.
 - Biomes: step 1 and water effects in. Rocky ground still reads as grey plateaus (needs boulders and broken edges, step 3); the rocky-to-shallows border blends to plain sand.
