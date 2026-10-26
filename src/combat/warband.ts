@@ -296,7 +296,9 @@ export class Warband {
     for (let k = 0; k < this.raiders.length; k++) {
       const r = this.raiders[k];
       if (!r.alive) continue;
-      reg.put(k, this.serials.serial(r, reg), KIND.Vehicle, r.team, flags, r.sim.pos.x, r.centreY, r.sim.pos.z, r.shape.radius + 0.5, 0, r.sim.vel.x, r.sim.vel.z);
+      // Hit reach: the capsule along its length (hitRay), tagged with the raider so hit tests can skip it when far off.
+      reg.put(k, this.serials.serial(r, reg), KIND.Vehicle, r.team, flags, r.sim.pos.x, r.centreY, r.sim.pos.z, r.shape.radius + 0.5, 0, r.sim.vel.x, r.sim.vel.z,
+        r.shape.half + r.shape.radius, r);
     }
     for (let k = 0; k < this.mechs.length; k++) {
       const m = this.mechs[k];

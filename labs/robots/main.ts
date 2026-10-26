@@ -131,7 +131,7 @@ const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE
 let packClock = Infinity, slot = 2; // the first pack comes at once
 // Into the register for the soft lock and the weapons: the hub, or a walker's chassis (a cursor among a walker's feet
 // takes its body too).
-bf.register.add({ name: "robots", publish: (r) => sw.publish(r, 3) });
+bf.register.add(target);
 let lastPrey = "mech";
 const SHOT = {
   [SMALL]: { flash: 0.35, hit: 0.3 },

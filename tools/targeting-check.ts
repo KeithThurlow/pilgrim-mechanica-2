@@ -4,12 +4,19 @@
 // force on random scenes; the soft lock over the register picks what the old list scan picked; ids stay put while
 // robots and bandits move, and a slot reused after a death gets a new id.
 import { Targeting, TARGET_DEFAULTS, enemiesOf, type TargetCandidate, type LockQuery, type TargetValues } from "../src/game/targeting";
-import { Register, RayHits, KIND, FLAG, kindBit, type Filter } from "../src/game/register";
+import { Register, RayHits, KIND, FLAG, MEASURE, kindBit, type Filter } from "../src/game/register";
 import { listOwner } from "../src/game/registerOwners";
 import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
 import { RobotSwarm, ROBOT_DEFAULTS, DOWN as R_DOWN } from "../src/combat/robots";
 import { InfantrySwarm, INFANTRY_DEFAULTS } from "../src/combat/infantry";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import * as THREE from "three/webgpu";
+import { RobotTarget } from "../src/combat/robotTarget";
+import { InfantryTarget } from "../src/combat/infantryTarget";
+import { sheetHits } from "../src/game/sheetFire";
+import { rayCapsule } from "../src/game/mechUnit";
+import type { Hittable } from "../src/game/battlefield";
+import type { SheetHit } from "../src/game/sheet";
 
 let fails = 0;
 const ok = (cond: boolean, what: string) => { if (!cond) { fails++; console.log("FAIL", what); } };
@@ -114,7 +121,7 @@ const c = (x: number, y: number, z: number, r: number, key: string): TargetCandi
 }
 
 // ---- The register against brute force ----
-interface Thing { x: number; y: number; z: number; r: number; foot: number; kind: number; team: number; flags: number; alive: boolean }
+interface Thing { x: number; y: number; z: number; r: number; foot: number; reach: number; kind: number; team: number; flags: number; alive: boolean }
 function randomScene(n: number, spread: number): Thing[] {
   const out: Thing[] = [];
   for (let i = 0; i < n; i++) {
@@ -123,7 +130,7 @@ function randomScene(n: number, spread: number): Thing[] {
     const cx = rnd() < 0.3 ? Math.round((rnd() - 0.5) * spread / 4) * 4 : (rnd() - 0.5) * spread;
     const cz = rnd() < 0.3 ? Math.round((rnd() - 0.5) * spread / 4) * 4 : (rnd() - 0.5) * spread;
     out.push({
-      x: cx, y: 0.3 + rnd() * (walker ? 11 : 2), z: cz, r: big ? 2 + rnd() * 3 : 0.3 + rnd() * 1.6, foot: walker ? 3 + rnd() * 6 : 0,
+      x: cx, y: 0.3 + rnd() * (walker ? 11 : 2), z: cz, r: big ? 2 + rnd() * 3 : 0.3 + rnd() * 1.6, foot: walker ? 3 + rnd() * 6 : 0, reach: rnd() < 0.1 ? 4 + rnd() * 10 : 0,
       kind: Math.floor(rnd() * 4), team: 1 + Math.floor(rnd() * 3), flags: (rnd() < 0.9 ? FLAG.Hittable : 0) | (rnd() < 0.5 ? FLAG.Light : 0) | (rnd() < 0.2 ? FLAG.Asleep : 0),
       alive: true,
     });
@@ -141,7 +148,7 @@ const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, 
     const n = s < 5 ? s * 3 : 50 + Math.floor(rnd() * 2500), spread = 20 + rnd() * 400;
     const things = randomScene(n, spread);
     const reg = new Register(4, s % 2 ? 16 : 4096); // small capacity: grows
-    reg.add(listOwner("things", () => things, (r, t, k, ser) => r.put(k, ser, t.kind, t.team, t.flags, t.x, t.y, t.z, t.r, t.foot)));
+    reg.add(listOwner("things", () => things, (r, t, k, ser) => r.put(k, ser, t.kind, t.team, t.flags, t.x, t.y, t.z, t.r, t.foot, 0, 0, t.reach)));
     reg.rebuild();
     scenes++;
     ok(reg.count === n, "every thing published");
@@ -150,20 +157,20 @@ const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, 
       const f = filters[k % filters.length];
       const x = (rnd() - 0.5) * spread * 1.2, z = (rnd() - 0.5) * spread * 1.2;
       // near (body, then footprint)
-      const R = rnd() < 0.1 ? 0 : rnd() * (rnd() < 0.2 ? 200 : 12), useFoot = k % 3 === 0;
+      const R = rnd() < 0.1 ? 0 : rnd() * (rnd() < 0.2 ? 200 : 12), measure = k % 3, useFoot = measure === MEASURE.Foot;
       let t0 = performance.now();
-      reg.near(x, z, R, f, out, useFoot);
+      reg.near(x, z, R, f, out, measure);
       const got = out.map((e) => reg.index[e]).sort((a, b) => a - b);
       gridMs += performance.now() - t0; t0 = performance.now();
       const want: number[] = [];
       things.forEach((t, i) => {
         if (!passes(t, f)) return;
-        const reach = useFoot ? t.foot : t.r;
+        const reach = useFoot ? t.foot : measure === MEASURE.Reach ? Math.max(t.r, t.reach) : t.r;
         if (useFoot && reach <= 0) return;
         if (Math.hypot(t.x - x, t.z - z) <= R + reach) want.push(i);
       });
       bruteMs += performance.now() - t0;
-      if (!same(got, want)) { bad++; if (bad < 4) console.log(`near mismatch n=${n} R=${R.toFixed(1)} foot=${useFoot}: got ${got.length} want ${want.length}`); }
+      if (!same(got, want)) { bad++; if (bad < 4) console.log(`near mismatch n=${n} R=${R.toFixed(1)} measure=${measure}: got ${got.length} want ${want.length}`); }
       // nearest
       const maxR = rnd() < 0.3 ? Infinity : rnd() * 60;
       const e = reg.nearest(x, z, maxR, f);
@@ -173,11 +180,12 @@ const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, 
       // ray: a flat line, swept by a width, in order, with chords
       const a = rnd() * Math.PI * 2, len = rnd() * (rnd() < 0.2 ? 400 : 80), w = rnd() < 0.3 ? 0 : rnd() * 3;
       const dx = Math.sin(a), dz = Math.cos(a);
-      reg.ray(x, z, dx * 3, dz * 3, len, w, f, hits);
+      const rm = k % 2 ? MEASURE.Reach : MEASURE.Body;
+      reg.ray(x, z, dx * 3, dz * 3, len, w, f, hits, rm);
       const rw: { i: number; a: number; b: number }[] = [];
       things.forEach((t, i) => {
         if (!passes(t, f)) return;
-        const px = t.x - x, pz = t.z - z, tt = px * dx + pz * dz, d = px * dz - pz * dx, RR = t.r + w;
+        const px = t.x - x, pz = t.z - z, tt = px * dx + pz * dz, d = px * dz - pz * dx, RR = (rm === MEASURE.Reach ? Math.max(t.r, t.reach) : t.r) + w;
         if (d * d > RR * RR) return;
         const ch = Math.sqrt(RR * RR - d * d), lo = Math.max(0, tt - ch), hi = Math.min(len, tt + ch);
         if (lo <= hi) rw.push({ i, a: lo, b: hi });
@@ -336,6 +344,120 @@ function bruteLock(cands: readonly TargetCandidate[], qq: LockQuery, vv: TargetV
   for (let k = 0; k < N; k++) reg.ray(0, 0, 1, 1, 200, 0.5, ENEMY, hits);
   const rayUs = ((performance.now() - t0) * 1000) / N;
   console.log(`register cost, ${reg.count} entries: rebuild ${rebuildUs.toFixed(0)} µs · near r=3 ${nearUs.toFixed(1)} µs · ray 200 m through the swarm ${rayUs.toFixed(1)} µs (${hits.n} crossed)`);
+}
+
+// ---- Step 3: hit tests culled by the register give what a full scan gives ----
+// Twin swarms (same seed, same spawns, same steps): A's adapters are register owners (culled), B's aren't (every unit).
+// After the rebuild both step on 1/15 s (two frames' worth), so the culled tests must cover what moved since.
+{
+  const field = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+  const mk = () => {
+    const robots = new RobotSwarm({ ...ROBOT_DEFAULTS }, field, 9), bandits = new InfantrySwarm({ ...INFANTRY_DEFAULTS }, field, 4);
+    robots.spawn(260, 20, 10, 25, { mid: 0.2, big: 0.05 }); robots.spawn(150, -30, 40, 18);
+    bandits.spawn(250, 10, -30, 22);
+    return { robots, bandits, rt: new RobotTarget(robots, 3), it: new InfantryTarget(bandits, 2) };
+  };
+  const A = mk(), B = mk();
+  const tgt = { x: 0, y: 0, z: 0, radius: 2 };
+  const step = (w: ReturnType<typeof mk>, n: number) => { for (let s = 0; s < n; s++) { w.robots.update(1 / 120, { ...tgt, vx: 0, vz: 0 }, () => {}); w.bandits.update(1 / 120, tgt, () => {}); } };
+  step(A, 240); step(B, 240);
+  const reg = new Register();
+  reg.add(A.rt); reg.add(A.it);
+  reg.rebuild();
+  step(A, 8); step(B, 8);
+  let rays = 0, rayBad = 0, sheets = 0, sheetBad = 0, culled = 0, full = 0;
+  const o = new THREE.Vector3(), d = new THREE.Vector3();
+  for (let k = 0; k < 400; k++) {
+    // Rounds: from round the field, at the crowd, some steep (mortar-like), some flat and long.
+    o.set((rnd() - 0.5) * 120, 0.5 + rnd() * (k % 5 === 0 ? 30 : 4), (rnd() - 0.5) * 120);
+    const aim = { x: (rnd() - 0.5) * 80, y: rnd() * 3, z: (rnd() - 0.5) * 80 };
+    d.set(aim.x - o.x, aim.y - o.y, aim.z - o.z).normalize();
+    const maxD = 20 + rnd() * 120;
+    for (const [a, b] of [[A.rt, B.rt], [A.it, B.it]] as const) {
+      const da = a.hitRay(o, d, maxD), db = b.hitRay(o, d, maxD);
+      rays++;
+      if (Math.abs(da - db) > 1e-6) { rayBad++; if (rayBad < 4) console.log(`culled round differs: ${da} vs ${db}`); }
+    }
+    // Sheets along the same line.
+    const fl = Math.hypot(d.x, d.z) || 1;
+    const s = { ox: o.x, oz: o.z, dx: d.x / fl, dz: d.z / fl, from: rnd() * 5, len: maxD, half: 0.2 + rnd() * 0.6, under: 0.6, top: () => 10, ground: () => 0 };
+    for (const [a, b] of [[A.rt, B.rt], [A.it, B.it]] as const) {
+      const ha: SheetHit<Hittable>[] = [], hb: SheetHit<Hittable>[] = [];
+      a.sheet(s, ha); b.sheet(s, hb);
+      const key = (h: SheetHit<Hittable>) => `${h.key}:${h.along.toFixed(4)}:${h.chord.toFixed(4)}`;
+      const ka = ha.map(key).sort().join(","), kb = hb.map(key).sort().join(",");
+      sheets++;
+      if (ka !== kb) { sheetBad++; if (sheetBad < 4) console.log(`culled sheet differs: ${ha.length} vs ${hb.length} hits`); }
+    }
+    culled += (A.rt.cull.idx.length + A.it.cull.idx.length); full += A.robots.hi + A.bandits.hi;
+  }
+  console.log(`step 3: ${rays} rounds and ${sheets} sheets through twin swarms, culled by the register vs every unit: ${rayBad + sheetBad} differ · ${(culled / 400).toFixed(0)} units tested per shot instead of ${(full / 400).toFixed(0)}`);
+  ok(rayBad === 0, "culled rounds hit what a full scan hits");
+  ok(sheetBad === 0, "culled sheets hit what a full scan hits");
+  // Splash (blasts): same damage to the same units.
+  const at = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0);
+  for (let k = 0; k < 40; k++) {
+    at.set((rnd() - 0.5) * 70, 0.3, (rnd() - 0.5) * 70);
+    const r = 1 + rnd() * 9;
+    A.rt.splash(at, r, 30, down); B.rt.splash(at, r, 30, down); A.it.splash(at, r, 30, down); B.it.splash(at, r, 30, down);
+  }
+  let hpBad = 0;
+  for (let i = 0; i < A.robots.hi; i++) if (A.robots.hp[i] !== B.robots.hp[i] || A.robots.state[i] !== B.robots.state[i]) hpBad++;
+  for (let i = 0; i < A.bandits.hi; i++) if (A.bandits.hp[i] !== B.bandits.hp[i] || A.bandits.state[i] !== B.bandits.state[i]) hpBad++;
+  console.log(`step 3: 40 blasts culled vs full: ${hpBad} units differ (kills ${A.rt.kills + A.it.kills} vs ${B.rt.kills + B.it.kills})`);
+  ok(hpBad === 0 && A.rt.kills + A.it.kills > 0 && A.rt.kills === B.rt.kills && A.it.kills === B.it.kills, "culled splash damages what a full scan damages");
+
+  // Objects: a sheet's ray fan only for objects the line comes near (capsules along random headings).
+  class Box implements Hittable {
+    team = 2; alive = true; surface = "metal" as const; heading = rnd() * Math.PI * 2; half = 1 + rnd() * 4; rad = 0.6 + rnd();
+    private a = new THREE.Vector3(); private b = new THREE.Vector3();
+    constructor(public x: number, public z: number) {}
+    hitRay(o2: THREE.Vector3, d2: THREE.Vector3, maxDist: number) {
+      const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+      this.a.set(this.x - fx * this.half, 1, this.z - fz * this.half); this.b.set(this.x + fx * this.half, 1, this.z + fz * this.half);
+      return rayCapsule(o2, d2, this.a, this.b, this.rad, maxDist);
+    }
+    damage() {}
+  }
+  const boxes = Array.from({ length: 60 }, () => new Box((rnd() - 0.5) * 100, (rnd() - 0.5) * 100));
+  const oreg = new Register();
+  oreg.add(listOwner("boxes", () => boxes, (r, b, kk, s) => r.put(kk, s, KIND.Vehicle, b.team, FLAG.Hittable, b.x, 1, b.z, b.rad, 0, 0, 0, b.half + b.rad)));
+  oreg.rebuild();
+  let objBad = 0;
+  for (let k = 0; k < 200; k++) {
+    const a = rnd() * Math.PI * 2, s = { ox: (rnd() - 0.5) * 100, oz: (rnd() - 0.5) * 100, dx: Math.sin(a), dz: Math.cos(a), from: 0, len: 10 + rnd() * 80, half: 0.2 + rnd() * 0.5, under: 0.6, top: () => 6, ground: () => 0 };
+    const withReg = sheetHits(boxes, 1, s, null, [], oreg).map((h) => `${boxes.indexOf(h.target as Box)}:${h.along.toFixed(3)}`).sort().join();
+    const without = sheetHits(boxes, 1, s, null, []).map((h) => `${boxes.indexOf(h.target as Box)}:${h.along.toFixed(3)}`).sort().join();
+    if (withReg !== without) objBad++;
+  }
+  console.log(`step 3: 200 sheets over 60 capsule objects, fanned only near the line vs every one: ${objBad} differ`);
+  ok(objBad === 0, "objects skipped by the register are ones the sheet misses");
+
+  // What it saves at the stress counts: a minigun sheet through 1,000 robots and 1,000 bandits.
+  const C = mk();
+  C.robots.spawn(600, 60, 60, 60); C.bandits.spawn(750, -60, -60, 60);
+  const creg = new Register();
+  creg.add(C.rt); creg.add(C.it);
+  creg.rebuild();
+  const D = { rt: new RobotTarget(C.robots, 3), it: new InfantryTarget(C.bandits, 2) };
+  const sh = { ox: 0, oz: 0, dx: Math.SQRT1_2, dz: Math.SQRT1_2, from: 0, len: 80, half: 0.35, under: 0.6, top: () => 10, ground: () => 0 };
+  // Median of 7 runs of 150 (the box is shared; single runs spike).
+  const time = (f: () => void) => {
+    for (let k = 0; k < 150; k++) f();
+    const ts: number[] = [];
+    for (let r = 0; r < 7; r++) { const t0 = performance.now(); for (let k = 0; k < 150; k++) f(); ts.push(((performance.now() - t0) * 1000) / 150); }
+    return ts.sort((a, b) => a - b)[3].toFixed(1);
+  };
+  const buf: SheetHit<Hittable>[] = [];
+  const pair = (s: typeof sh, ro: THREE.Vector3, rd: THREE.Vector3) => [
+    time(() => { buf.length = 0; C.rt.sheet(s, buf); C.it.sheet(s, buf); }), time(() => { buf.length = 0; D.rt.sheet(s, buf); D.it.sheet(s, buf); }),
+    time(() => { C.rt.hitRay(ro, rd, 80); C.it.hitRay(ro, rd, 80); }), time(() => { D.rt.hitRay(ro, rd, 80); D.it.hitRay(ro, rd, 80); }),
+  ];
+  // Through the robot crowd (round 60, 60), and off to the side of both crowds.
+  const through = pair(sh, o.set(0, 1.5, 0), d.set(1, 0, 1).normalize());
+  const side = { ...sh, ox: 100, oz: -130, dx: 1, dz: 0 };
+  const away = pair(side, new THREE.Vector3(100, 1.5, -130), new THREE.Vector3(1, 0, 0));
+  console.log(`step 3 cost, ${C.robots.count} robots + ${C.bandits.count} bandits (µs, culled vs every unit): through the crowd a sheet ${through[0]} vs ${through[1]}, a round ${through[2]} vs ${through[3]} · beside it a sheet ${away[0]} vs ${away[1]}, a round ${away[2]} vs ${away[3]}`);
 }
 
 console.log(fails ? `targeting-check: ${fails} failed` : "targeting-check: ok");

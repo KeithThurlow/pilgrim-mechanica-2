@@ -211,7 +211,7 @@ export class Battlefield {
 
   /** Resolve a sheet against every target and the steel wrecks, applying damage (or only predicting, apply false). */
   resolveSheet(team: number, s: Sheet, damage: number, f: SheetFire, dir: THREE.Vector3, apply = true, skip?: (h: SheetHit<Hittable>) => boolean): SheetShot {
-    return resolveSheet(this.field, this.targets, this.wrecks, team, s, damage, f, dir, this.v as BattlefieldValues & PenValues, apply, skip);
+    return resolveSheet(this.field, this.targets, this.wrecks, team, s, damage, f, dir, this.v as BattlefieldValues & PenValues, apply, skip, this.register);
   }
 
   /** fire() for a sheet round: resolve it, then draw the tracer to where it ended and sparks where it went through. */

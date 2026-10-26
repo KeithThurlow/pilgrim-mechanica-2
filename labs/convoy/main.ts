@@ -162,7 +162,7 @@ loop.onHome = homeAboard;
 // Targets for the soft lock and the weapons: every robot out there (asleep ones too: shooting one wakes its camp).
 // They're in the battlefield's register (src/game/register.ts) with the player's mech, rebuilt once a tick.
 bf.register.add(mechOwner("player", () => [player]));
-bf.register.add({ name: "robots", publish: (r) => loop.swarms.sw.publish(r, 3) });
+bf.register.add(loop.swarms.target);
 const enemies = enemiesOf(player.team);
 // The player's weapons as in the combat labs (src/game/playerAim.ts): the arsenal, camera shake, blasts.
 const shaker = new CameraShake();

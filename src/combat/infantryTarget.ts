@@ -1,21 +1,30 @@
 // The bandit swarm as one target for the battlefield: rounds test every bandit's capsule through the swarm's spatial
-// hit test, and the nearest one hit takes the damage.
+// hit test, and the nearest one hit takes the damage. Also the swarm's owner in the register (src/game/register.ts):
+// once added (bf.register.add(target)) every hit test here tests only the bandits the grid hands back.
 import * as THREE from "three/webgpu";
 import type { Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { DOWN, type InfantrySwarm } from "./infantry";
 import { inBand, sheetCircle, type Sheet, type SheetHit } from "../game/sheet";
+import { SwarmCull, type Owner, type Register } from "../game/register";
 
-export class InfantryTarget implements Hittable {
+export class InfantryTarget implements Hittable, Owner {
+  readonly name = "bandits";
   readonly surface: HitSurface = "flesh";
   alive = true;
   kills = 0;
   private last = -1;
+  /** The register's candidates for each hit test (null until added to a register: every bandit is tested). */
+  readonly cull = new SwarmCull();
 
   constructor(private swarm: InfantrySwarm, readonly team: number) {}
 
+  publish(reg: Register) { this.swarm.publish(reg, this.team); }
+  attach(reg: Register, owner: number) { this.cull.attach(reg, owner); }
+
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number) {
-    const h = this.swarm.hitRay(o.x, o.y, o.z, d.x, d.y, d.z, maxDist);
+    const only = this.cull.segment(o.x, o.z, d.x, d.y, d.z, maxDist);
+    const h = only && only.length === 0 ? null : this.swarm.hitRay(o.x, o.y, o.z, d.x, d.y, d.z, maxDist, only);
     this.last = h ? h.index : -1;
     return h ? h.dist : -1;
   }
@@ -26,7 +35,9 @@ export class InfantryTarget implements Hittable {
   /** Sheet hits (src/game/sheet.ts): every standing bandit whose circle the line crosses and who stands in the band. */
   sheet(s: Sheet, out: SheetHit<Hittable>[]) {
     const sw = this.swarm, r = sw.v.banditRadius, H = sw.v.banditHeight;
-    for (let i = 0; i < sw.hi; i++) {
+    const only = this.cull.line(s.ox, s.oz, s.dx, s.dz, s.from, s.len, s.half);
+    for (let j = 0, n = only ? only.length : sw.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       if (sw.state[i] >= DOWN) continue;
       const c = sheetCircle(s, sw.px[i], sw.pz[i], r);
       if (!c) continue;
@@ -40,7 +51,9 @@ export class InfantryTarget implements Hittable {
   splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
     const sw = this.swarm, H = sw.v.banditHeight, r2 = radius * radius;
     let n = 0;
-    for (let i = 0; i < sw.hi; i++) {
+    const only = this.cull.round(at.x, at.z, radius);
+    for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
+      const i = only ? only[j] : j;
       if (sw.state[i] >= DOWN) continue;
       const dx = sw.px[i] - at.x, dz = sw.pz[i] - at.z;
       const dy = Math.max(sw.py[i] - at.y, 0, at.y - (sw.py[i] + H));

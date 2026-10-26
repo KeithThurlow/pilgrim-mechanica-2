@@ -86,7 +86,7 @@ const rocketClock = new Float32Array(INFANTRY_MAX);
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 let groupClock = Infinity, slot = 2; // the first group comes at once
 // Into the register for the soft lock and the weapons: every standing bandit.
-bf.register.add({ name: "bandits", publish: (r) => sw.publish(r, 2) });
+bf.register.add(target);
 let wadeTick = 0;
 lab.onFrame((dt) => {
   groupClock += dt;

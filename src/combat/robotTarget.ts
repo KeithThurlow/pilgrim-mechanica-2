@@ -3,15 +3,18 @@
 // spark off it there) and its robot takes the damage scaled by the part (Keith 2026-10-26: the body full, legs a
 // share, feet less; robotLegDamage, robotFootDamage). Small ones are light (rounds carry on through, splash hurts them
 // fully); medium and big ones stop rounds; medium ones take a share of splash, big ones none.
+// It is also the swarm's owner in the register (src/game/register.ts): once added (bf.register.add(target)) every hit
+// test here (rounds, sheets, splash) tests only the robots the register's grid hands back, not the whole swarm.
 import * as THREE from "three/webgpu";
 import type { Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import type { TargetCandidate } from "../game/targeting";
-import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, robotCentre, robotFootprint, type RobotSwarm } from "./robots";
+import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, type RobotSwarm } from "./robots";
 import { BIG_BODY_H, MID_BODY_H, WALK_LEGS, type V3 } from "./robotLegs";
 import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
+import { SwarmCull, type Owner, type Register } from "../game/register";
 
-export class RobotTarget implements Hittable {
+export class RobotTarget implements Hittable, Owner {
+  readonly name = "robots";
   readonly surface: HitSurface = "metal";
   alive = true;
   kills = 0;
@@ -19,11 +22,17 @@ export class RobotTarget implements Hittable {
   readonly partHits = [0, 0, 0];
   private last = -1;
   private lastPart = PART_BODY;
+  /** The register's candidates for each hit test (null until added to a register: every robot is tested). */
+  readonly cull = new SwarmCull();
 
   constructor(private swarm: RobotSwarm, readonly team: number) {}
 
+  publish(reg: Register) { this.swarm.publish(reg, this.team); }
+  attach(reg: Register, owner: number) { this.cull.attach(reg, owner); }
+
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number) {
-    const h = this.swarm.hitRay(o.x, o.y, o.z, d.x, d.y, d.z, maxDist);
+    const only = this.cull.segment(o.x, o.z, d.x, d.y, d.z, maxDist);
+    const h = only && only.length === 0 ? null : this.swarm.hitRay(o.x, o.y, o.z, d.x, d.y, d.z, maxDist, only);
     this.last = h ? h.index : -1;
     this.lastPart = h ? h.part : PART_BODY;
     return h ? h.dist : -1;
@@ -43,7 +52,9 @@ export class RobotTarget implements Hittable {
    */
   sheet(s: Sheet, out: SheetHit<Hittable>[]) {
     const sw = this.swarm, k = sw.v.robotHitScale;
-    for (let i = 0; i < sw.hi; i++) {
+    const only = this.cull.line(s.ox, s.oz, s.dx, s.dz, s.from, s.len, s.half);
+    for (let j = 0, n = only ? only.length : sw.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       const st = sw.state[i];
       if (st >= DEAD) continue;
       const S = sw.size[i], kind = sw.kind[i];
@@ -105,7 +116,9 @@ export class RobotTarget implements Hittable {
   splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
     const sw = this.swarm, midK = sw.v.robotMidSplash;
     let n = 0;
-    for (let i = 0; i < sw.hi; i++) {
+    const only = this.cull.round(at.x, at.z, radius);
+    for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
+      const i = only ? only[j] : j;
       if (sw.state[i] >= DOWN) continue;
       const kind = sw.kind[i];
       if (kind !== SMALL && (kind !== MID || midK <= 0)) continue;
@@ -125,20 +138,4 @@ export class RobotTarget implements Hittable {
     this.partHits[this.lastPart]++;
     if (this.swarm.damage(this.last, amount * this.swarm.partShare(this.lastPart), dir.x, dir.z)) this.kills++;
   }
-}
-
-/**
- * Every live robot as a soft-lock candidate: its body's centre (the hub, or a walker's chassis), body radius, ground
- * velocity, and for walkers the footprint of its planted feet (a cursor on the sand under a tall one locks its body).
- */
-export function robotCandidates(sw: RobotSwarm, out: TargetCandidate[] = [], skip?: (i: number) => boolean): TargetCandidate[] {
-  out.length = 0;
-  for (let i = 0; i < sw.hi; i++) {
-    if (sw.state[i] >= DOWN || skip?.(i)) continue; // skip down, dead, empty
-    const c: TargetCandidate = { x: 0, y: 0, z: 0, r: 0, key: i * 1024 + (sw.gen[i] % 1024), vx: sw.vx[i], vz: sw.vz[i] };
-    c.r = Math.max(0.6, robotCentre(sw, i, c));
-    if (sw.kind[i] !== SMALL) c.foot = robotFootprint(sw, i);
-    out.push(c);
-  }
-  return out;
 }

@@ -11,7 +11,7 @@
 // The last target is kept while it still qualifies unless another is clearly better (`lockSticky`).
 // The candidates come from the register (src/game/register.ts; docs/proposal-register.md step 2): no lab writes a list.
 import type { Param } from "../core/tweaks";
-import { FLAG, RayHits, viewOf, type Filter, type Register } from "./register";
+import { FLAG, MEASURE, RayHits, viewOf, type Filter, type Register } from "./register";
 
 export const TARGET_DEFAULTS = {
   autoLock: 1,
@@ -52,8 +52,8 @@ export interface LockQuery {
 
 export interface Lock { target: TargetCandidate; how: "cursor" | "line" }
 
-/** Who the player's guns may take: anything hittable not on the player's team (a register filter). */
-export const enemiesOf = (team: number): Filter => ({ all: FLAG.Hittable, notTeam: team });
+/** Who the player's guns may take: anything hittable not on the player's team and not knocked down (a register filter). */
+export const enemiesOf = (team: number): Filter => ({ all: FLAG.Hittable, none: FLAG.Down, notTeam: team });
 
 /**
  * The soft lock over the register: the grid hands back the few things near the cursor ray's shadow on the ground,
@@ -83,7 +83,7 @@ export class Targeting {
       reg.ray(q.rayO.x, q.rayO.z, hx, hz, Math.max(0, toCursor) + (2 * reach) / slope + 2, v.lockCursor, f, this.hits);
       for (let k = 0; k < this.hits.n; k++) cand.push(this.hits.e[k]);
     } else reg.near(q.cursor.x, q.cursor.z, v.lockCursor + reg.maxR, f, cand);
-    reg.near(q.cursor.x, q.cursor.z, v.lockCursor, f, feet, true);
+    reg.near(q.cursor.x, q.cursor.z, v.lockCursor, f, feet, MEASURE.Foot);
     const n = cand.length + feet.length;
     for (let k = 0; k < n; k++) {
       const e = k < cand.length ? cand[k] : feet[k - cand.length];

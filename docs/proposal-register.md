@@ -1,7 +1,7 @@
 # Proposal: one register and spatial grid for "what's near here?"
 
-Status: **approved by Keith 2026-10-26; steps 1 and 2 built** (2026-10-26). Step 3 is planned below ("Step 3 in
-detail"); it waits on nothing now that the rail gun's sheet hits are on main.
+Status: **approved by Keith 2026-10-26; steps 1, 2 and 3 built** (2026-10-26). Step 3 was built differently from
+its plan: see "Step 3 as built". Steps 4-6 not started.
 
 ## As built (steps 1-2)
 
@@ -15,7 +15,7 @@ What changed from the sketch below while building it:
   (`RobotSwarm.uid`, `InfantrySwarm.uid`; `ObjectSerials` for object owners: a new serial per life, so a respawned
   dummy or a reused bandit mech is a new id). `find(id)` gives this tick's entry or -1.
 - `Filter` also has `none` (flags it must not have), e.g. `{ all: Hittable, none: Asleep }`.
-- Queries: `near(x, z, R, f, out, useFoot?)`, `nearest(x, z, maxR, f)` (centre distance, searches outward doubling),
+- Queries (each measures entries by body, footprint or hit reach: `MEASURE`, added in step 3): `near(x, z, R, f, out, measure?)`, `nearest(x, z, maxR, f)` (centre distance, searches outward doubling),
   `ray(ox, oz, dx, dz, len, width, f, hits)` (**flat**, swept `width` each side; `RayHits` in order along the line with
   `t0`, `t1` and `chord(k)`: the line query step 3 needs), `cone(x, z, dx, dz, range, width, halfAngle, f, out)`
   (centre ahead within `r + width + t tan(halfAngle)`), `each(f, fn)`. The 3D tests (a camera ray, a round's height)
@@ -35,8 +35,7 @@ What changed from the sketch below while building it:
   `findTarget(key)` (an id lookup), so a missile tracking its target no longer rebuilds the list each frame.
   `planStrip` and `swarmAims` keep their list for now (one list a tick is cheap; moving them to `near` is a small
   follow-up in the weapons files).
-- Left for later: `robotCandidates` in `src/combat/robotTarget.ts` is unused now (that file was the rail gun agent's
-  while this was built); delete it with step 3, when that adapter shrinks anyway.
+- `robotCandidates` (`src/combat/robotTarget.ts`) was left unused in step 2 and deleted in step 3.
 
 Measured (`tools/targeting-check.ts`, node on the agent box, 2,039 entries: 1,020 robots and 1,020 bandits): rebuild
 0.24 ms, `near` r = 3 m 3 µs, a 200 m `ray` through the swarm 8 µs (25 crossed). The stress lab shows the rebuild as
@@ -203,7 +202,42 @@ Each step ships on its own and leaves every lab working. Old paths are deleted i
 
 Water wakes and `canSee` are ground queries, not neighbour queries; they stay as they are.
 
-### Step 3 in detail: rounds and blasts on the line query
+### Step 3 as built (2026-10-26): every hit test culled by the grid
+
+The plan below (kept for the record) moved the exact tests to per-index owner calls from `Battlefield`. Built instead,
+because it needed no change at any caller (fire, the sheet, rockets, autocannon shells, the rail, splash, blasts all go
+through the `Hittable` adapters) and left the rail gun agent's sheet and penetration code as it was:
+
+- **The swarm adapters cull themselves.** `RobotTarget` and `InfantryTarget` are register owners (`bf.register.add(
+  target)`; labs do this instead of a `publish` wrapper). Once added, their `hitRay`, `sheet` and `splash` ask the
+  register (`SwarmCull` in `register.ts`: `segment`, `line`, `round`) for their own units whose **hit reach** the shot
+  could touch, widened by `reg.slack` (2 m: they moved since the rebuild), and test only those
+  (`RobotSwarm.hitRay` / `InfantrySwarm.hitRay` take an `only` list). Not added (headless checks): every unit, as before.
+- **Hit reach** is a third size per entry (`MEASURE.Reach`): robots publish the sphere their own tests reject with (a
+  walker's legs and arms: height × 1.3 + size), raiders their capsule's half-length + radius, mechs their capsule,
+  range trucks the longest truck. Entries reaching past 8 m (excavators, war rigs) sit on the big list.
+- Robots that are **down** are published too (still hittable), flagged `FLAG.Down`; the soft lock's `enemiesOf` leaves
+  them out, so the lock is unchanged.
+- **Objects in the sheet's ray fan** (raiders, mechs, dummies, trucks): `sheetHits` asks the register once for what
+  the sheet's line comes within reach of; an object the register holds (`reg.published(obj)`, entries tagged with
+  their object by `ref`) but the line doesn't reach is skipped before its 15 rays.
+- `robotCandidates` is deleted.
+- Penetration is untouched: `sheet.ts` already walks the hits in order with chords; the swarms' own sheet tests give
+  the exact chord through each body, which the register's circle chord would only approximate.
+
+Measured (`targeting-check`, node, 1,010 robots + 1,000 bandits, medians on a shared box): a minigun sheet or an enemy
+round that passes **beside** the crowds costs 4 µs culled against 10-33 µs testing every unit; one **through** the
+robot crowd costs about the same either way (50-90 µs; the exact leg tests on the walkers it actually crosses
+dominate). On twin swarms moved after the rebuild, 800 culled rounds and 800 culled sheets hit exactly what full scans
+hit, 40 blasts damage exactly the same units, 200 sheets over 60 capsule objects find the same hits with and without
+the cull.
+
+Still open from the plan: `bf.targets` stays (wrecks and the pilot on foot aren't published; `Battlefield.fire`'s
+enemy-round loop still calls every target's `hitRay`, which for the swarms is now culled and for objects is one
+capsule each); through-the-crowd shots could get cheaper only by cheaper exact tests on walkers (a body-only first
+pass), not by the grid. Steps 4-6 as planned.
+
+### Step 3 as first planned: rounds and blasts on the line query
 
 Keith 2026-10-26: direct fire is a vertical sheet along its line, and penetration is measured as distance through
 bodies and terrain (`src/game/sheet.ts`, `src/game/sheetFire.ts`, `Battlefield.fire`'s `sheet` option). The swarms

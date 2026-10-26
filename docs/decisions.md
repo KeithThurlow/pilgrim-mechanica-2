@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Register step 3 built as culling inside the swarm adapters (their hitRay, sheet and splash test only the grid's candidates, 2 m slack for movement since the rebuild) rather than per-index owner calls from the battlefield: no caller changes, the sheet and penetration code untouched | Claude | open | `docs/proposal-register.md` ("Step 3 as built") |
 | 2026-10-26 | Register ids are owner number (the order owners are added) × 2^32 + the owner's own serial, never reused; objects get a new serial per life; queries are flat (2D) with the 3D test left to the caller; rebuilt once a frame before the soft lock, not in the 120 Hz sub-steps | Claude | open | `src/game/register.ts` |
 | 2026-10-26 | Performance must hold for 4 players, 3-6x today's effects per weapon, and Protocols that split shots, fire multiple shots, raise fire rate, widen areas, ricochet and chain | Keith | Keith | Scale proposal (`docs/proposal-scale.md`, coming): GPU particles, an effects budget, shots as data, a worst-case stress scenario. |
 | 2026-10-26 | Shared register approved; steps 1-2 now (register, swarms, targeting), rounds and blasts after the rail gun work lands | Keith | Keith | `docs/proposal-register.md` |

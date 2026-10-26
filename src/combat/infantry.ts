@@ -413,15 +413,17 @@ export class InfantrySwarm {
     onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, i);
   }
 
-  /** Nearest standing bandit hit by a ray (vertical cylinder of radius × height), or null. */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number } | null {
+  /** Nearest standing bandit hit by a ray (vertical cylinder of radius × height), or null. only: test just these (the
+   *  register's candidates), else every one. */
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const r = this.v.banditRadius, r2 = r * r, H = this.v.banditHeight;
     const a = dx * dx + dz * dz;
     let best = -1, bestT = maxDist;
-    for (let i = 0; i < this.hi; i++) {
+    for (let j = 0, n = only ? only.length : this.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       const s = this.state[i];
       if (s === DOWN || s >= DEAD) continue;
       const qx = ox - this.px[i], qz = oz - this.pz[i];
@@ -464,12 +466,12 @@ export class InfantrySwarm {
   }
 
   /** Into the register (src/game/register.ts): every standing bandit at its centre of mass, light (rounds carry on). */
-  publish(reg: Register, team: number): void {
+  publish(reg: Register, team: number, ref: unknown = null): void {
     const y = this.v.banditHeight * 0.55, r = Math.max(0.6, this.v.banditRadius);
     const flags = FLAG.Hittable | FLAG.Detectable | FLAG.Light;
     for (let i = 0; i < this.hi; i++) {
-      if (this.state[i] >= DOWN) continue; // down, dead, empty
-      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i]);
+      if (this.state[i] >= DOWN) continue; // down, dead, empty (rounds pass over the downed too)
+      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
     }
   }
 

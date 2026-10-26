@@ -47,7 +47,7 @@ export class StressRobots {
     lab.app.scene.add(this.draw.group);
     this.target = new RobotTarget(sw, 3);
     bf.targets.push(this.target);
-    bf.register.add({ name: "robots", publish: (r) => sw.publish(r, 3) });
+    bf.register.add(this.target);
     sw.hideDead = true;
     const RAG = [[0x9a9c9e, 0x4a4d51], [YELLOW, YELLOW_DIRTY], [YELLOW, GREY]];
     sw.onDeath = (i, nx, nz, speed) => {
@@ -107,7 +107,7 @@ export class StressBandits {
     const sw = this.sw = new InfantrySwarm(V, field);
     this.target = new InfantryTarget(sw, 2);
     bf.targets.push(this.target);
-    bf.register.add({ name: "bandits", publish: (r) => sw.publish(r, 2) });
+    bf.register.add(this.target);
     sw.hideDead = true;
     sw.onDeath = (i, nx, nz, speed) => {
       lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],

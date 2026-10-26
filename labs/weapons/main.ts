@@ -122,7 +122,7 @@ sync();
 bf.register.add(listOwner("dummies", () => rng.dummies, (reg, d, k, s) =>
   reg.put(k, s, KIND.Prop, d.team, FLAG.Hittable | (d.light ? FLAG.Light : 0), d.x, d.y + d.height * 0.6, d.z, d.radius + 0.4)));
 bf.register.add(listOwner("trucks", () => cs.cars, (reg, c, k, s) =>
-  reg.put(k, s, KIND.Vehicle, c.team, FLAG.Hittable | FLAG.Detectable, c.sim.pos.x, c.centreY, c.sim.pos.z, 2, 0, c.sim.vel.x, c.sim.vel.z)));
+  reg.put(k, s, KIND.Vehicle, c.team, FLAG.Hittable | FLAG.Detectable, c.sim.pos.x, c.centreY, c.sim.pos.z, 2, 0, c.sim.vel.x, c.sim.vel.z, 3.4 + 1.4))); // reach: the longest truck's capsule
 
 // ---- Per-shot readouts: damage landing after a weapon fires is that shot's (while the miniguns aren't firing) ----
 const WINDOW: Record<string, number> = { rail: 0.3, autocannon: 1.5, rpg: 3, missiles: 5, mortar: 6, linemortar: 5 };

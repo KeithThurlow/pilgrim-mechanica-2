@@ -481,18 +481,22 @@ export class RobotSwarm {
   }
 
   /**
-   * Into the register (src/game/register.ts): every robot not down, at its body's centre (robotCentre), its body
-   * radius, a walker's footprint, its ground velocity; small ones light (rounds carry on), frozen ones asleep.
+   * Into the register (src/game/register.ts): every robot not dead, at its body's centre (robotCentre), its body
+   * radius, a walker's footprint, its ground velocity, and its hit reach (a walker's legs and arms: the same sphere
+   * hitRay and the sheet reject with); small ones light (rounds carry on), frozen ones asleep, downed ones down (still
+   * hittable, not locked).
    */
-  publish(reg: Register, team: number): void {
-    const base = FLAG.Hittable | FLAG.Detectable;
+  publish(reg: Register, team: number, ref: unknown = null): void {
+    const base = FLAG.Hittable | FLAG.Detectable, hk = this.v.robotHitScale;
     for (let i = 0; i < this.hi; i++) {
-      if (this.state[i] >= DOWN) continue; // down, dead, empty
+      const st = this.state[i];
+      if (st >= DEAD) continue; // dead, empty
       const k = this.kind[i], s = this.size[i];
       const r = Math.max(0.6, k === BIG ? s * 0.5 : k === MID ? s * 0.4 : s * 0.35);
-      const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0);
+      const reach = k === SMALL ? s * Math.max(1, 0.5 * hk) : Math.max(s * 0.6 * hk, this.heightOf(i) * 1.3 + s);
+      const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0) | (st === DOWN ? FLAG.Down : 0);
       reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r,
-        k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i]);
+        k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i], reach, ref);
     }
   }
 
@@ -1103,16 +1107,17 @@ export class RobotSwarm {
    * ellipsoid round the hub (its size × hit scale). Medium: an ellipsoid round the chassis and thin capsules down each
    * leg (thigh and shin; the shin's low quarter is its foot). Big: an ellipsoid round the high chassis, capsules down
    * the arm legs (boom and stick) and a fatter one round each bucket (its foot). part says which (PART_*); leg is true
-   * for a leg or a foot.
+   * for a leg or a foot. only: test just these robots (the register's candidates), else every one.
    */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): { index: number; dist: number; leg: boolean; part: number } | null {
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number; leg: boolean; part: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const k = this.v.robotHitScale;
     let best = -1, bestT = maxDist, bestPart = PART_BODY;
     const hip = this.hp3, knee = this.kn3, tip = this.tp3, foot = this.ft3, low = this.lw3;
-    for (let i = 0; i < this.hi; i++) {
+    for (let j = 0, n = only ? only.length : this.hi; j < n; j++) {
+      const i = only ? only[j] : j;
       const s = this.state[i];
       if (s >= DEAD) continue;
       const S = this.size[i], kind = this.kind[i];
