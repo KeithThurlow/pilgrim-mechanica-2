@@ -1,10 +1,13 @@
 // Draws an arsenal (src/weapons/arsenal.ts): its paints (each shoulder weapon's strip or ring, each rail cannon's
 // charge beam, a fired line mortar's strip), the rockets and missiles in flight (a dark body and a hot flare; their
-// smoke is the dust system's), shells (hot slugs stretched along their flight), each rail beam (a blinding beam that
-// fades fast, then a glowing trail) and the faint targeting lasers with small glints running along them.
+// smoke is the dust system's), shells (hot slugs stretched along their flight), the rail cannon (while charging: its
+// coils lighting in turn with arcs crawling between them, a thin aim line on the sand and a charge meter round the
+// reticle; on release: a hard bright streak for a frame or two, a muzzle flash, then an ionised trail that drifts into
+// wisps and fades) and the faint targeting lasers with small glints running along them.
 import * as THREE from "three/webgpu";
 import type { Arsenal } from "./arsenal";
 import { RAIL_GLOW } from "./arsenal";
+import { coilGlow } from "./rail";
 import type { Paint, Vec3 } from "./painter";
 import { ProjectileMeshes } from "./projectileDraw";
 import { PainterDraw } from "./painterDraw";
@@ -12,7 +15,7 @@ import { Ribbon, glowMaterial } from "./ribbon";
 
 interface Ground { height(x: number, z: number): number }
 
-const MAX_ROCKETS = 64, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6;
+const MAX_ROCKETS = 64, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
 const LASER = 0xff3a2a;
 
 export class ArsenalDraw {
@@ -21,7 +24,13 @@ export class ArsenalDraw {
   private rockets: THREE.InstancedMesh;
   private flares: THREE.InstancedMesh;
   private slugs: THREE.InstancedMesh;
-  private beams: { flat: Ribbon; up: Ribbon; trail: Ribbon; lead: THREE.Mesh }[] = [];
+  private beams: { streak: THREE.Mesh; core: THREE.Mesh; flash: THREE.Mesh; trailA: Ribbon; trailB: Ribbon; wisp: Ribbon }[] = [];
+  /** The rail's charge: coil glows, arcs between lit coils, the aim line on the sand and the meter at the reticle. */
+  private coils: THREE.InstancedMesh;
+  private arcs: THREE.InstancedMesh;
+  private aimLines: Ribbon[] = [];
+  private meters: { back: Ribbon; fill: Ribbon }[] = [];
+  private pts: { x: number; y: number; z: number }[] = [];
   private lasers: { line: THREE.Mesh; glint: THREE.Mesh }[] = [];
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -40,12 +49,24 @@ export class ArsenalDraw {
     for (const o of [this.rockets, this.flares, this.slugs]) { o.frustumCulled = false; o.count = 0; this.group.add(o); }
     this.rockets.castShadow = true;
     this.group.add(this.proj.group);
+    const unitBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5);
     for (let i = 0; i < MAX_BEAMS; i++) {
-      const flat = new Ribbon(64, RAIL_GLOW, true), up = new Ribbon(64, RAIL_GLOW, true), trail = new Ribbon(64, RAIL_GLOW, true);
-      const lead = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), glowMaterial(0xe8fbff, true));
-      lead.frustumCulled = false;
-      this.group.add(flat.mesh, up.mesh, trail.mesh, lead);
-      this.beams.push({ flat, up, trail, lead });
+      const streak = new THREE.Mesh(unitBox, glowMaterial(RAIL_GLOW, true)), core = new THREE.Mesh(unitBox, glowMaterial(0xffffff, true));
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), glowMaterial(0xe8fbff, true));
+      const trailA = new Ribbon(64, 0xa8ecff, true), trailB = new Ribbon(64, 0xa8ecff, true), wisp = new Ribbon(64, 0xcfe9f2, false);
+      for (const o of [streak, core, flash]) { o.frustumCulled = false; o.renderOrder = 5; }
+      this.group.add(streak, core, flash, trailA.mesh, trailB.mesh, wisp.mesh);
+      this.beams.push({ streak, core, flash, trailA, trailB, wisp });
+    }
+    this.coils = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 10, 8), glowMaterial(RAIL_GLOW, true), MAX_COILS);
+    this.arcs = new THREE.InstancedMesh(unitBox, glowMaterial(0xdff8ff, true), MAX_ARCS);
+    for (const o of [this.coils, this.arcs]) { o.frustumCulled = false; o.count = 0; o.renderOrder = 5; this.group.add(o); }
+    for (let i = 0; i < 2; i++) {
+      const line = new Ribbon(64, RAIL_GLOW, true);
+      const back = new Ribbon(40, 0x2a3a40, false), fill = new Ribbon(40, RAIL_GLOW, true);
+      back.mat.opacity = 0.45;
+      this.group.add(line.mesh, back.mesh, fill.mesh);
+      this.aimLines.push(line); this.meters.push({ back, fill });
     }
     for (let i = 0; i < MAX_LASERS; i++) {
       const line = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), glowMaterial(LASER, true));
@@ -111,28 +132,110 @@ export class ArsenalDraw {
     this.slugs.count = ns;
     this.rockets.instanceMatrix.needsUpdate = this.flares.instanceMatrix.needsUpdate = this.slugs.instanceMatrix.needsUpdate = true;
 
-    // Rail beams: the beam itself for a blink, the trail fading after it.
+    // Rail charging: the coils light in turn from the breech, arcs crawl between the lit ones, a thin line on the sand
+    // to where the slug would stop, and a meter filling round the reticle.
+    let nc = 0, na = 0;
+    a.sides.forEach((s, i) => {
+      const line = this.aimLines[i], meter = this.meters[i];
+      line.mesh.visible = meter.back.mesh.visible = meter.fill.mesh.visible = false;
+      if (s.kind !== "rail") return;
+      const c = s.rail.holding ? s.rail.charge : 0;
+      const gp = s.model?.glowPoints ?? [];
+      const lit: THREE.Vector3[] = [];
+      gp.forEach((g, gi) => {
+        const k = coilGlow(c, gi, gp.length);
+        if (k <= 0.02 || nc >= MAX_COILS) return;
+        const p = g.getWorldPosition(new THREE.Vector3());
+        const r = (0.18 + 0.22 * k) * (0.85 + 0.3 * Math.random());
+        this.m.compose(p, this.q.identity(), this.s.set(r, r, r));
+        this.coils.setMatrixAt(nc++, this.m);
+        if (k > 0.5) lit.push(p);
+      });
+      // Arcs: short jagged sparks between neighbouring lit coils, flickering.
+      if (v.railCoilArcs > 0) for (let k = 0; k + 1 < lit.length && na < MAX_ARCS; k++) {
+        if (Math.random() > 0.55 * v.railCoilArcs) continue;
+        const p0 = lit[k], p1 = lit[k + 1];
+        const mid = this.p.lerpVectors(p0, p1, 0.3 + Math.random() * 0.4).add(this.d.set((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.25));
+        for (const [from, to] of [[p0, mid.clone()], [mid.clone(), p1]] as const) {
+          if (na >= MAX_ARCS) break;
+          this.d.subVectors(to, from);
+          const len = this.d.length();
+          if (len < 1e-3) continue;
+          this.q.setFromUnitVectors(Z, this.d.divideScalar(len));
+          this.m.compose(from, this.q, this.s.set(0.03, 0.03, len));
+          this.arcs.setMatrixAt(na++, this.m);
+        }
+      }
+      if (s.aimLine.length >= 2) {
+        line.set(s.aimLine, v.beamWidth * 1.1, "ground", this.ground, 0.07);
+        line.mat.opacity = 0.35 + 0.55 * c;
+        line.mat.color.setHex(c >= v.railMinCharge ? RAIL_GLOW : 0x6c8890);
+      }
+      if (s.meterAt && s.rail.holding) {
+        // A ring round the reticle: dim behind, filling clockwise from the top of the screen; full flashes white.
+        const R = 1.9, m = s.meterAt, pts = this.pts;
+        const ring = (frac: number) => {
+          pts.length = 0;
+          const n = Math.max(2, Math.round(36 * frac));
+          for (let k = 0; k <= n; k++) { const ang = (k / 36) * Math.PI * 2; pts.push({ x: m.x + Math.sin(ang) * R, y: 0, z: m.z + Math.cos(ang) * R }); }
+          return pts;
+        };
+        meter.back.set(ring(1), 0.22, "ground", this.ground, 0.09);
+        meter.back.mesh.visible = true;
+        if (c > 0.01) {
+          meter.fill.set(ring(c), 0.3, "ground", this.ground, 0.1);
+          meter.fill.mat.opacity = 0.95;
+          meter.fill.mat.color.setHex(c >= 1 ? 0xffffff : c >= v.railMinCharge ? RAIL_GLOW : 0x6c8890);
+        }
+      }
+    });
+    this.coils.count = nc; this.arcs.count = na;
+    this.coils.instanceMatrix.needsUpdate = this.arcs.instanceMatrix.needsUpdate = true;
+
+    // Rail slugs: a hard bright streak for a frame or two and a flash at the muzzle, then the ionised trail fading,
+    // drifting and curling into wisps.
     const shots = a.railShots.slice(-MAX_BEAMS);
     this.beams.forEach((b, i) => {
       const shot = shots[i];
-      for (const o of [b.flat.mesh, b.up.mesh, b.trail.mesh, b.lead]) o.visible = false;
+      for (const o of [b.streak, b.core, b.flash, b.trailA.mesh, b.trailB.mesh, b.wisp.mesh]) o.visible = false;
       if (!shot || shot.path.length < 2) return;
-      const flash = Math.max(0, 1 - shot.age / 0.22), fade = Math.max(0, 1 - shot.age / Math.max(0.05, v.railTrail));
-      if (flash > 0) {
-        const w = (0.5 + 0.9 * shot.power) * (0.5 + flash);
-        b.flat.set(shot.path, w, "flat", null); b.up.set(shot.path, w, "up", null);
-        b.flat.mat.opacity = b.up.mat.opacity = Math.min(1, flash * 1.2);
-        b.flat.mat.color.setHex(flash > 0.6 ? 0xe8fbff : RAIL_GLOW); b.up.mat.color.copy(b.flat.mat.color);
-        const f = shot.from, p0 = shot.path[0];
-        this.p.set(f.x, f.y, f.z); this.d.set(p0.x - f.x, p0.y - f.y, p0.z - f.z);
+      const f = shot.from, to = shot.to;
+      const streak = Math.max(0, 1 - shot.age / Math.max(0.01, v.railStreak));
+      if (streak > 0) {
+        this.p.set(f.x, f.y, f.z); this.d.set(to.x - f.x, to.y - f.y, to.z - f.z);
         const len = this.d.length();
-        b.lead.position.copy(this.p); b.lead.quaternion.setFromUnitVectors(Z, this.d.normalize()); b.lead.scale.set(w * 0.6, w * 0.6, len);
-        (b.lead.material as THREE.MeshBasicMaterial).opacity = flash;
-        b.lead.visible = true;
+        this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
+        const w = 0.35 + 0.45 * shot.power;
+        b.streak.position.copy(this.p); b.streak.quaternion.copy(this.q); b.streak.scale.set(w, w, len);
+        b.core.position.copy(this.p); b.core.quaternion.copy(this.q); b.core.scale.set(w * 0.35, w * 0.35, len);
+        (b.streak.material as THREE.MeshBasicMaterial).opacity = streak;
+        (b.core.material as THREE.MeshBasicMaterial).opacity = Math.min(1, streak * 1.5);
+        b.streak.visible = b.core.visible = true;
       }
-      if (fade > 0) {
-        b.trail.set(shot.path, 0.25 + 0.35 * shot.power, "flat", null);
-        b.trail.mat.opacity = fade * fade * 0.85;
+      const flash = Math.max(0, 1 - shot.age / 0.12);
+      if (flash > 0 && v.railBlast > 0) {
+        const r = (1.2 + 1.6 * shot.power) * v.railBlast * (0.6 + 0.4 * flash);
+        b.flash.position.set(f.x + shot.dir.x * r * 0.4, f.y, f.z + shot.dir.z * r * 0.4); b.flash.scale.setScalar(r);
+        (b.flash.material as THREE.MeshBasicMaterial).opacity = flash;
+        b.flash.visible = true;
+      }
+      const T = Math.max(0.05, v.railTrail), fade = Math.max(0, 1 - shot.age / T);
+      if (fade <= 0) return;
+      // The trail: the path drifting up and sideways as it ages, wobbling along its length (seeded per shot).
+      const age = shot.age, pts = this.pts;
+      const drift = v.railWisp * age;
+      const curl = (k: number, ph: number) => Math.sin(k * 0.45 + shot.seed + ph + age * 2.2) * drift * 0.6 + Math.sin(k * 1.3 + shot.seed * 2 + ph) * drift * 0.25;
+      pts.length = 0;
+      shot.path.forEach((p, k) => pts.push({ x: p.x + curl(k, 0) * -shot.dir.z, y: p.y + drift * 0.35 + curl(k, 1.7) * 0.4, z: p.z + curl(k, 0) * shot.dir.x }));
+      const tw = 0.2 + 0.25 * shot.power + drift * 0.5;
+      b.trailA.set(pts, tw, "flat", null); b.trailB.set(pts, tw, "up", null);
+      b.trailA.mat.opacity = b.trailB.mat.opacity = fade * fade * 0.7;
+      // Wisps: a wider, paler, ragged ribbon that lingers (normal blending: it reads as vapour, not light).
+      pts.length = 0;
+      shot.path.forEach((p, k) => pts.push({ x: p.x + curl(k, 3.1) * -shot.dir.z * 1.6, y: p.y + drift * 0.6 + curl(k, 4.2) * 0.7, z: p.z + curl(k, 3.1) * shot.dir.x * 1.6 }));
+      if (v.railWisp > 0) {
+        b.wisp.set(pts, (0.4 + drift * 1.4) * (0.7 + 0.3 * shot.power), "flat", null);
+        b.wisp.mat.opacity = Math.min(1, age * 6) * fade * 0.35;
       }
     });
 

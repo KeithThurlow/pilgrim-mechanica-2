@@ -65,6 +65,7 @@ export function libraryModel(kind: ModelKind, toon: ToonLook, side: "left" | "ri
     out.muzzles.splice(0, out.muzzles.length, ...w.muzzles);
     out.meshes.splice(0, out.meshes.length, ...w.meshes);
     out.laserFrom = w.sockets.Laser ?? null;
+    out.glowPoints = w.glows;
     animate(w);
   };
 

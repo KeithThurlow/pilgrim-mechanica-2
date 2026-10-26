@@ -4,6 +4,7 @@
 // rolled carries its own damage, cooldown and counts (src/items/bases.ts); an unrolled one (the weapons lab's picker)
 // runs on these sliders.
 import type { Param } from "../core/tweaks";
+import { PEN_DEFAULTS, PEN_PARAMS } from "../game/sheet";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -31,20 +32,27 @@ export const WEAPON_DEFAULTS = {
   salvoSnapReach: 5,
   salvoSmoke: 0.6,
   // Rail cannon
-  railCharge: 1,
+  railCharge: 0.7,
   railMinCharge: 0.3,
+  railGrace: 0.15,
   railDamage: 900,
   railRange: 90,
-  railHeight: 1.3,
-  railClimb: 5,
-  railPierceKeep: 0.85,
+  railPen: 10,
+  railSheetHalf: 0.6,
+  railSheetHeight: 10,
+  railSlugHeight: 1.6,
   railKnock: 9,
   railCooldown: 1.2,
-  railKick: 0.35,
-  railShake: 0.5,
-  railTrail: 1.6,
+  railKick: 0.45,
+  railShake: 0.6,
+  railStreak: 0.06,
+  railTrail: 0.8,
+  railWisp: 1,
+  railBlast: 1,
+  railCoilArcs: 1,
   railLightDamage: 0.55,
   railLightCharge: 0.7,
+  railLightPen: 0.6,
   // Big mortar (one huge shell over the hills)
   mortarShells: 1,
   mortarRing: 1.5,
@@ -67,6 +75,9 @@ export const WEAPON_DEFAULTS = {
   acSpread: 0.6,
   acRange: 70,
   acLead: 1,
+  acPen: 1.5,
+  acSheetHalf: 0.4,
+  acSheetUp: 4,
   // RPG rocket (hull: its side's button; shoulder: a number key)
   rpgSpeed: 55,
   rpgDamage: 380,
@@ -104,6 +115,7 @@ export const WEAPON_DEFAULTS = {
   blastLevel: 0.6,
   mortarLevel: 0.5,
   cannonLevel: 0.45,
+  ...PEN_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
@@ -134,19 +146,26 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "salvoSnapReach", label: "Snap reach (m)", min: 0, max: 20, step: 0.5, group: SA, tip: "Targets this far outside the strip still count toward the snap" },
 
   { key: "railCharge", label: "Charge time (s)", min: 0.1, max: 4, step: 0.05, group: R },
-  { key: "railMinCharge", label: "Fires from charge", min: 0, max: 1, step: 0.01, group: R, tip: "Released below this share of a full charge, it fizzles (no shot, no cooldown)" },
+  { key: "railMinCharge", label: "Fires from charge", min: 0, max: 1, step: 0.01, group: R, tip: "Released below this share of a full charge, it fizzles (no shot, no cooldown); above it, it fires at that power" },
+  { key: "railGrace", label: "Grace before full", min: 0, max: 0.5, step: 0.01, group: R, tip: "Released within this share of a full charge, it fires at full power" },
   { key: "railDamage", label: "Damage (full charge)", min: 0, max: 5000, step: 10, group: R },
   { key: "railRange", label: "Range (m)", min: 10, max: 200, step: 1, group: R },
-  { key: "railHeight", label: "Beam height over the sand (m)", min: 0.3, max: 4, step: 0.05, group: R, tip: "The beam hugs the ground at this height, so it runs through a whole line of bandits" },
-  { key: "railClimb", label: "Blocked by a rise of (m)", min: 1, max: 20, step: 0.5, group: R, tip: "Sand this much higher than the mech's feet stops the beam (a dune crest)" },
-  { key: "railPierceKeep", label: "Damage kept per body", min: 0, max: 1, step: 0.01, group: R },
-  { key: "railKnock", label: "Knockback (m/s)", min: 0, max: 30, step: 0.5, group: R, tip: "Light bodies (bandits, cutouts) are thrown this hard along the beam" },
+  { key: "railPen", label: "Penetration (m)", min: 0, max: 40, step: 0.5, group: R, tip: "The slug's penetration budget in metres of steel equivalent: each body costs its chord × its density, sand above the sheet its length × the sand's (Penetration group)" },
+  { key: "railSheetHalf", label: "Sheet half-width (m)", min: 0, max: 3, step: 0.05, group: R, tip: "It hits anything whose hit circle comes within this of its line on the ground" },
+  { key: "railSheetHeight", label: "Sheet height (m)", min: 1, max: 25, step: 0.5, group: R, tip: "From under the ground up to this over the floor (the mech's feet to the ground under the aim): an excavator's chassis is about 9-11 m up" },
+  { key: "railSlugHeight", label: "Slug drawn at (m over the aim)", min: 0, max: 5, step: 0.05, group: R, tip: "Looks only: the streak flies from the muzzle toward this height over the ground at the aim" },
+  { key: "railKnock", label: "Knockback (m/s)", min: 0, max: 30, step: 0.5, group: R, tip: "Light bodies (bandits, cutouts) are thrown this hard along the line" },
   { key: "railCooldown", label: "Cooldown (s)", min: 0, max: 10, step: 0.05, group: R },
   { key: "railKick", label: "Gun kick (m)", min: 0, max: 1, step: 0.01, group: R },
   { key: "railShake", label: "Camera shake", min: 0, max: 2, step: 0.01, group: R },
-  { key: "railTrail", label: "Trail fades over (s)", min: 0.1, max: 6, step: 0.05, group: R },
+  { key: "railStreak", label: "Streak lasts (s)", min: 0.01, max: 0.3, step: 0.005, group: R, tip: "The hard bright line of the slug's path, a frame or two" },
+  { key: "railTrail", label: "Ionised trail fades over (s)", min: 0.1, max: 4, step: 0.05, group: R },
+  { key: "railWisp", label: "Trail wisps", min: 0, max: 3, step: 0.05, group: R, tip: "How far the trail drifts and curls as it fades" },
+  { key: "railBlast", label: "Muzzle blast size", min: 0, max: 3, step: 0.05, group: R },
+  { key: "railCoilArcs", label: "Arcs along the rails", min: 0, max: 3, step: 0.05, group: R, tip: "Sparks crawling between the lit coils while it charges" },
   { key: "railLightDamage", label: "Light rail: damage share", min: 0.1, max: 1, step: 0.01, group: R, tip: "A Light (hand) rail cannon on these sliders hits for this share" },
   { key: "railLightCharge", label: "Light rail: charge share", min: 0.1, max: 1.5, step: 0.01, group: R },
+  { key: "railLightPen", label: "Light rail: penetration share", min: 0.1, max: 1.5, step: 0.01, group: R },
 
   { key: "mortarShells", label: "Shells per volley", min: 1, max: 8, step: 1, group: M },
   { key: "mortarRing", label: "Ring radius (m)", min: 0.5, max: 12, step: 0.1, group: M, tip: "The shells land inside this ring round the aim point" },
@@ -169,6 +188,9 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "acSpread", label: "Spread (°)", min: 0, max: 6, step: 0.05, group: A },
   { key: "acRange", label: "Range (m)", min: 10, max: 150, step: 1, group: A },
   { key: "acLead", label: "Lead a locked target (0-1)", min: 0, max: 1.5, step: 0.05, group: A, tip: "1: aim exactly where the lock will be when the shell arrives" },
+  { key: "acPen", label: "Penetration (m)", min: 0, max: 10, step: 0.05, group: A, tip: "A shell's penetration budget: it bursts in the body it can't pay to pass (Penetration group)" },
+  { key: "acSheetHalf", label: "Sheet half-width (m)", min: 0, max: 2, step: 0.05, group: A, tip: "A shell hits anything whose hit circle comes within this of its path on the ground" },
+  { key: "acSheetUp", label: "Sheet reaches over the shell (m)", min: 0, max: 15, step: 0.25, group: A, tip: "The band runs from under the ground up to this over the shell: so it hits what it flies over" },
 
   { key: "rpgSpeed", label: "Speed (m/s)", min: 10, max: 200, step: 1, group: RPG },
   { key: "rpgDamage", label: "Damage", min: 0, max: 3000, step: 10, group: RPG },
@@ -205,7 +227,8 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "blastLevel", label: "Big blasts", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "mortarLevel", label: "Mortar thunk", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "cannonLevel", label: "Autocannon", min: 0, max: 1.5, step: 0.01, group: SND },
+  ...PEN_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, M, S, SA, R, A, L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, M, S, SA, R, A, "Penetration", L, B, SND] };

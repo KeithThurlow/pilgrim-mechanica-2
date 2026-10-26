@@ -4,6 +4,7 @@ import * as THREE from "three/webgpu";
 import type { Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { DOWN, type InfantrySwarm } from "./infantry";
+import { inBand, sheetCircle, type Sheet, type SheetHit } from "../game/sheet";
 
 export class InfantryTarget implements Hittable {
   readonly surface: HitSurface = "flesh";
@@ -19,8 +20,21 @@ export class InfantryTarget implements Hittable {
     return h ? h.dist : -1;
   }
 
-  /** Bandits are light: a round carries on through one. */
-  canPierce() { return true; }
+  /** A sheet hit's key: the bandit's index. */
+  pick(key: number) { this.last = key; }
+
+  /** Sheet hits (src/game/sheet.ts): every standing bandit whose circle the line crosses and who stands in the band. */
+  sheet(s: Sheet, out: SheetHit<Hittable>[]) {
+    const sw = this.swarm, r = sw.v.banditRadius, H = sw.v.banditHeight;
+    for (let i = 0; i < sw.hi; i++) {
+      if (sw.state[i] >= DOWN) continue;
+      const c = sheetCircle(s, sw.px[i], sw.pz[i], r);
+      if (!c) continue;
+      const x = s.ox + s.dx * c.along, z = s.oz + s.dz * c.along;
+      if (!inBand(s, c.along, x, z, sw.py[i], sw.py[i] + H)) continue;
+      out.push({ target: this, key: i, along: c.along, chord: c.chord, material: "flesh", x, y: sw.py[i] + H * 0.6, z });
+    }
+  }
 
   /** Every standing bandit whose body (a vertical line from feet to head) is within radius of the point. */
   splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
