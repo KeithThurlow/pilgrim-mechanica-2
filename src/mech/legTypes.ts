@@ -36,7 +36,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       // straight (Keith 2026-10-24: the thigh swung too far back). Walk check: thigh back and knee at push-off.
       strideBase: 2.3, stridePerSpeed: 0.4, strideMax: 5.2,
       // The sprint (Keith 2026-10-26): 14 m/s on the starting legs.
-      boundTop: 14, boundBuild: 0.3, boundGrip: 0.7,
+      boundTop: 16, boundBuild: 0.3, boundGrip: 0.7,
     },
   },
   // Rampart variants (src/mech/variants.ts) whose legs differ from the Rampart's; values from their modelling agents.

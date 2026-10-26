@@ -172,6 +172,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- **On Keith's clean-start sprint values (2026-10-27), two checks fail:** `walker-check` (sprint legs out of reach 4.6%; no flight phase at 10 m/s, likely the 4 m stance length) and `slope-check` (out of reach 5.1% sprinting up 10°). Waiting for Keith: move the limits or fix the reach with his values kept; don't revert them.
 - Sprint feel (agent, `wip/sprint-feel`, handoff `docs/handoff-sprint-feel.md`): weapons off and torso forward when sprinting, lean into turns, uphill cadence, impact, feet sinking into soft ground.
 - **`walker-check` fails on Keith's tuned defaults (2026-10-26), waiting for Keith:** on flat ground the swinging foot clears the sand by 0.00-0.02 m (liftHeight 0.4); legs out of reach 5-7% of sprint frames (Rampart, Stilt); the run's hips bob 0.35 m; sprinting up 12-25° ramps the hips come within 1.1-1.6 m of the ground under the hull (limit 1.9; boundCrouch 0.8); Stilt flights at 18 m/s up to 0.23 s. Also failing on those values (they never ran while walker-check stopped `npm test`): `slope-check` (the uphill thigh doesn't fold forward on a side slope; mid-swing it rises only to 36°) and `dash-check` (3 dashes from full charges, expected 2). Some limits may be taste (bob, crouch) and want moving to Keith's values; reach and clearance are must-nevers. Don't "fix" by reverting his values.
 - **Sprint feel (agent, `wip/sprint-feel`, since 2026-10-26 22:00; handoff `docs/handoff-sprint-feel.md`):** Keith's 21:54 notes, six steps: weapons off sprinting (done), lean into turns (done), uphill cadence (done), snappier swing and speed cues, impact into the ground, feet sinking into soft ground.
@@ -216,6 +217,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-27 · Keith's sprint and landing values from a clean start as the defaults (Keith, Claude)
+- Keith's earlier exports carried values saved in his browser from old sessions (the panel restores them), which "were really messing it up"; these come from a fresh origin. Ten values: landFriction 3, boundTop 16 (Rampart preset), boundHop 6, boundStanceLen 4, boundCrouch 1, boundSquat 0.41, boundLean 0, turnRollEase 1, runStepsTop 3, runThud 0.11. `src/mech/walkerTuning.ts`, `legTypes.ts`.
+- Checked: typecheck; every check except `walker-check` (legs out of reach 4.6% of sprint frames; no flight phase running at 10 m/s) and `slope-check` (sprinting up 10°: legs out of reach 5.1%), see In progress.
 
 ### 2026-10-26 · Sensor head out of the torso (Keith, Claude)
 - Keith: the small head now sits inside the torso; up a little and forward. `headDrop` 0.35 → 0.12 m, new `headForward` 0.25 m (Sensor head sliders). Checked: typecheck; not looked at (slow box).

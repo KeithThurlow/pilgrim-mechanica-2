@@ -96,7 +96,7 @@ export const WALKER_DEFAULTS = {
   landStagger: 0.2,
   landHurt: 11,
   landDamage: 40,
-  landFriction: 4,
+  landFriction: 3,
   landShake: 0.5,
   // Walls (Keith 2026-10-26: a dash at a steep wall flung the mech into the sky): faces steeper than wallGrade take
   // speed into them away, fully at wallStop; nothing takes off upward faster than launchUpMax.
@@ -108,17 +108,17 @@ export const WALKER_DEFAULTS = {
   // run with a flight phase, handling like a vehicle; docs/proposal-bound.md). Top speed and build come from the legs.
   boundTop: 14,
   boundBuild: 0.3,
-  boundHop: 2.4,
-  boundStanceLen: 2.95,
+  boundHop: 6,
+  boundStanceLen: 4,
   boundStagger: 0.3,
   boundReach: 0.6,
   boundSplit: 1.6,
   boundSwing: 14.5,
   boundLeadLift: 0.24,
   boundTuck: 0.8,
-  boundCrouch: 0.8,
-  boundSquat: 0.24,
-  boundLean: 35,
+  boundCrouch: 1,
+  boundSquat: 0.41,
+  boundLean: 0,
   boundGrip: 0.7,
   boundYaw: 0.6,
   boundDriftMax: 68,
@@ -127,18 +127,18 @@ export const WALKER_DEFAULTS = {
   // Leaning into turns while sprinting (Keith 2026-10-26 21:54: "the shoulders of the mech come over").
   turnRoll: 1,
   turnRollMax: 30,
-  turnRollEase: 6,
+  turnRollEase: 1,
   turnLeanShift: 0.25,
   // The sprint's ground gait (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the
   // same time", left, right, left, right, not paired stomps with a hop). The gallop above stays as the way into and out
   // of the air: a crest jump's or a fall's landing stance, then the run.
   boundGallop: 0,
   runSteps: 1.8,
-  runStepsTop: 2.55,
+  runStepsTop: 3,
   runPlant: 0.5,
   runBlend: 0.6,
   runBob: 0.175,
-  runThud: 0.35,
+  runThud: 0.11,
   runThighUp: 50,
   runShinBack: 100,
   runHockFold: 45,
