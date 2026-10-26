@@ -693,9 +693,18 @@ export class WalkerSim {
    * foot's place to out and the pitch, toe and cannon angle the swing wants.
    */
   private runSwing(f: Foot, out: Vector3) {
-    const v = this.v, u = f.u, d = this.dutyNow;
+    const v = this.v, d = this.dutyNow;
     const Tsw = (1 - d) / Math.max(MIN_CYCLE, this.cpsNow);
-    const remain = (1 - u) * Tsw;
+    const remain = (1 - f.u) * Tsw;
+    // The whip (Keith 2026-10-26 21:54: the sprint's swing looked slower than the walk's): the foot hangs behind after
+    // the push-off, whips up toward the tuck, (1 + 2 x runWhip)^2 faster at its fastest, and eases into the reach; its
+    // speed at lift-off and at the plant is unchanged, so the plant still matches the ground.
+    // The fastest point is at runWhipAt of the swing (the thigh passing under the hips on its way up to the tuck).
+    const wh = clamp(v.runWhip, 0, 0.95), c = clamp(v.runWhipAt, 0.1, 0.9);
+    // Twice over: up to (1 + 2 x runWhip)^2 at the fastest, still never backwards.
+    const W1 = (x: number) => x + wh * (Math.sin(4 * Math.PI * x) / (4 * Math.PI) - Math.sin(2 * Math.PI * x) / (2 * Math.PI));
+    const W = (x: number) => W1(W1(x));
+    const u = f.u < c ? 2 * c * W(f.u / (2 * c)) : c + 2 * (1 - c) * (W(0.5 + (f.u - c) / (2 * (1 - c))) - 0.5);
     const fw = forwardOf(this.heading, this.t.f), lf = leftOf(this.heading, this.t.l);
     const hipY = this.bodyY.x;
     const A = f.runA, tk = this.tuck;

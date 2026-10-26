@@ -11,9 +11,9 @@ Branch: `worktree-agent-aa90ff3f2a624b66d`, pushed to `wip/sprint-feel`. Delete 
    cadence section). Values: runClimbSteps 0.1, runDescentSteps 0, runHurry 0.3, runReachGive 0.1.
 3b. npm test green (coordinator): toes clear in swing (`toesClear`, toeClear 0.1), knee stop (kneeMaxPlanted 165), run
    swing within reach; outdated limits moved (bob, ramp clearance, side fold, swing thigh, dash charges), reasons in checks.
-4. Perceived speed: sprint swing the snappiest (whip-through), cheap cues. **next** (measured: thigh mean swing speed
+4. Perceived speed. done (`runSwing` warp, runWhip 0.5, runWhipAt 0.3; sprint thigh sweep ~2000 deg/s, fastest) (measured: thigh mean swing speed
    walk 451, Shift run 643, sprint 363-414 deg/s; swing 0.55-0.66 s vs 0.8-0.9 s; `sf/hip.mts`)
-5. Impact into the ground (compression, push-off kick and toe dig, shake, thump). todo
+5. Impact into the ground (compression, push-off kick and toe dig, shake, thump). **next**
 6. Feet sink into soft ground (per-surface sliders, on the plant target). todo
 
 ## Checks
