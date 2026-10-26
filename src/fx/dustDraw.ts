@@ -65,6 +65,7 @@ export class DustDraw {
   private uShadowSize = uniform(1.1);
   /** The GPU dust's sprites and shadows (attachGpu), and whether they're the ones in use. */
   private gpuSprite: THREE.Sprite | null = null;
+  private gpuLow: THREE.Sprite | null = null;
   private gpuShadows: THREE.InstancedMesh | null = null;
   gpuOn = false;
   private m = new THREE.Matrix4();
@@ -170,11 +171,14 @@ export class DustDraw {
     const size2 = select(live, vec2(along, radius.mul(2)), vec2(0, 0));
     const rot = select(isSpray, atan(sv.y, sv.x), aa.w.mul(6.283));
     const data = vec4(alpha, aa.w, aa.z, ba.x);
-    const sprite = new THREE.Sprite(this.puffMaterial(data, pa.xyz, size2, rot, float(1)));
-    sprite.count = N;
-    sprite.frustumCulled = false;
-    sprite.renderOrder = 2;
-    sprite.visible = false;
+    // Unsorted, so in two passes: the low, dense clumps and spray first, the cloud over them (as the sort would have
+    // it nearly always: the cloud rises and spreads above what's on the sand).
+    const isCloud = aa.z.sub(CLOUD).abs().lessThan(0.5);
+    const low = new THREE.Sprite(this.puffMaterial(data, pa.xyz, select(isCloud, vec2(0, 0), size2), rot, float(1)));
+    const sprite = new THREE.Sprite(this.puffMaterial(data, pa.xyz, select(isCloud, size2, vec2(0, 0)), rot, float(1)));
+    for (const s of [low, sprite]) { s.count = N; s.frustumCulled = false; s.visible = false; }
+    low.renderOrder = 2;
+    sprite.renderOrder = 2.5;
 
     // Its shadow: down the sun's ray to the ground (twice, to land on the dune), a disc draped on the ground there.
     const vA = varyingProperty("float", "vDustShadowA");
@@ -197,8 +201,8 @@ export class DustDraw {
     shadows.frustumCulled = false;
     shadows.renderOrder = 1;
     shadows.visible = false;
-    this.gpuSprite = sprite; this.gpuShadows = shadows;
-    this.group.add(shadows, sprite);
+    this.gpuSprite = sprite; this.gpuLow = low; this.gpuShadows = shadows;
+    this.group.add(shadows, low, sprite);
   }
 
   /** Once the renderer has made the sun's shadow map: shade each puff pixel by it (soft, four taps). */
@@ -243,7 +247,9 @@ export class DustDraw {
     this.uSunView.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
     this.uSunWorld.value.copy(sunDir);
     this.uShadowSize.value = v.shadowSize;
-    if (this.gpuSprite) { this.gpuSprite.visible = this.gpuOn; this.gpuShadows!.visible = this.gpuOn; }
+    if (this.gpuSprite) {
+      this.gpuSprite.visible = this.gpuLow!.visible = this.gpuShadows!.visible = this.gpuOn;
+    }
 
     // Live puffs in view, sorted far to near. Puffs outside the view (plus a margin for their shadows on the sand) are
     // left out: the convoy's dust far behind the camera used to be sorted, shaded and sun-marched every frame.

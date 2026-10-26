@@ -13,6 +13,8 @@ export class GpuTracers {
   private from: THREE.InstancedBufferAttribute;
   private to: THREE.InstancedBufferAttribute;
   private dirty0 = Infinity; private dirty1 = -1;
+  /** Highest slot ever written (only those are drawn). */
+  private top = 0;
 
   constructor(readonly N: number) {
     this.from = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
@@ -37,6 +39,7 @@ export class GpuTracers {
     })();
     this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 1).translate(0, 0, -0.5), mat, N);
     this.mesh.frustumCulled = false;
+    this.mesh.count = 1;
   }
 
   /** Slot i flies from a to b, leaving now (s on the uNow clock), shown or not. */
@@ -45,6 +48,7 @@ export class GpuTracers {
     F[o] = a.x; F[o + 1] = a.y; F[o + 2] = a.z; F[o + 3] = now;
     T[o] = b.x; T[o + 1] = b.y; T[o + 2] = b.z; T[o + 3] = shown ? 1 : 0;
     this.dirty0 = Math.min(this.dirty0, i); this.dirty1 = Math.max(this.dirty1, i);
+    if (i + 1 > this.top) { this.top = i + 1; this.mesh.count = this.top; }
   }
 
   /** Once a frame: the clock and look, and upload the slots written since. */

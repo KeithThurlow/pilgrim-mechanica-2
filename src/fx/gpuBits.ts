@@ -97,7 +97,7 @@ export class GpuBitPool {
     return this.pool.emit(x, y, z, 0, vx, vy, vz, life, ax, ay, az, spin, size, 0, ground, Math.random() * 6.283, life);
   }
 
-  update(renderer: THREE.WebGPURenderer, dt: number) { this.pool.update(renderer, dt); }
+  update(renderer: THREE.WebGPURenderer, dt: number) { this.pool.update(renderer, dt); this.mesh.count = Math.max(1, this.pool.used); }
 }
 
 /** The three pools MinigunFx throws: sparks off steel, sand grit, the player's brass. */

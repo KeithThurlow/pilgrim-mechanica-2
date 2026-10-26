@@ -40,7 +40,8 @@ export class GpuDust {
   readonly uWindIn = uniform(1.2);
 
   constructor(N: number, maxSpawn: number, readonly ground: GpuGroundSource) {
-    this.pool = new GpuPool(N, maxSpawn, (s) => this.step(s));
+    // Descending: drawn newest first, oldest (risen, spread) last.
+    this.pool = new GpuPool(N, maxSpawn, (s) => this.step(s), true);
   }
 
   private step(s: PoolStep) {

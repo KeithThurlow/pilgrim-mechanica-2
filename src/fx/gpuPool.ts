@@ -33,6 +33,8 @@ export class GpuPool {
   /** Rows written this frame (not yet stepped in). */
   count = 0;
   head = 0;
+  /** Slots ever filled (the ring's high-water mark): what's worth drawing until the ring has gone round once. */
+  used = 0;
   /** Asks this frame the spawn rows couldn't hold (dropped). */
   dropped = 0;
   /** When each slot's particle dies (s on the pool's clock): the CPU's estimate of what's alive. */
@@ -40,7 +42,11 @@ export class GpuPool {
   private clock = 0;
   alive = 0;
 
-  constructor(readonly N: number, readonly maxSpawn: number, step: (s: PoolStep) => void) {
+  /**
+   * descending: the ring fills from the top slot down, so drawing in slot order goes newest first, oldest last (for
+   * unsorted soft dust, nearer to the back-to-front order than the other way: old puffs have risen and spread).
+   */
+  constructor(readonly N: number, readonly maxSpawn: number, step: (s: PoolStep) => void, readonly descending = false) {
     this.P = instancedArray(N, "vec4"); this.V = instancedArray(N, "vec4");
     this.A = instancedArray(N, "vec4"); this.B = instancedArray(N, "vec4");
     this.expire = new Float32Array(N);
@@ -54,7 +60,8 @@ export class GpuPool {
     const { P, V, A, B, uHead, uCount } = this;
     this.compute = Fn(() => {
       const i = instanceIndex;
-      const k = i.add(uint(N)).sub(uHead).mod(uint(N));
+      // Which of this frame's new rows lands in slot i (ascending: head + k; descending: head - 1 - k).
+      const k = descending ? uHead.add(uint(2 * N - 1)).sub(i).mod(uint(N)) : i.add(uint(N)).sub(uHead).mod(uint(N));
       const p = P.element(i), v = V.element(i), a = A.element(i), b = B.element(i);
       If(k.lessThan(uCount), () => {
         const ki = int(k);
@@ -77,9 +84,12 @@ export class GpuPool {
     d[W + o] = vx; d[W + o + 1] = vy; d[W + o + 2] = vz; d[W + o + 3] = vw;
     d[2 * W + o] = ax; d[2 * W + o + 1] = ay; d[2 * W + o + 2] = az; d[2 * W + o + 3] = aw;
     d[3 * W + o] = bx; d[3 * W + o + 1] = by; d[3 * W + o + 2] = bz; d[3 * W + o + 3] = bw;
-    this.expire[(this.head + k) % this.N] = this.clock + life;
+    this.expire[this.slot(k)] = this.clock + life;
     return true;
   }
+
+  /** The slot this frame's k-th new particle takes. */
+  private slot(k: number) { return this.descending ? (((this.head - 1 - k) % this.N) + this.N) % this.N : (this.head + k) % this.N; }
 
   /** Step every particle (and take in this frame's new ones). */
   update(renderer: THREE.WebGPURenderer, dt: number) {
@@ -90,7 +100,14 @@ export class GpuPool {
     this.uCount.value = this.count;
     if (this.count) this.spawnTex.needsUpdate = true;
     renderer.compute(this.compute);
-    this.head = (this.head + this.count) % this.N;
+    if (this.descending) {
+      this.used = this.N;
+      this.head = (((this.head - this.count) % this.N) + this.N) % this.N;
+    } else {
+      if (this.head + this.count >= this.N) this.used = this.N;
+      else this.used = Math.max(this.used, this.head + this.count);
+      this.head = (this.head + this.count) % this.N;
+    }
     this.count = 0;
     this.dropped = 0;
     // The live estimate (cheap: one compare a slot).
