@@ -316,7 +316,8 @@ export class WalkerSim {
     const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
     this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
     for (const f of this.feet) {
-      move(f.planted); move(f.lift); move(f.target); move(f.pos);
+      // (prevPlanted too, so riding a deck never reads as a foot skidding.)
+      move(f.planted); move(f.lift); move(f.target); move(f.pos); move(f.prevPlanted);
       turn(f.plantedUp); turn(f.liftUp); turn(f.targetUp); turn(f.up);
       f.plantedYaw += dyaw; f.liftYaw += dyaw; f.targetYaw += dyaw; f.yaw += dyaw;
       f.groundY += dy;
