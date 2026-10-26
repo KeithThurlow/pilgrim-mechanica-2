@@ -19,8 +19,8 @@ export const BOUND_DEFAULTS = {
   boostGlide: 0.3,
   boostBurn: 0.25,
   boundGuns: 1,
-  airSpread: 3,
-  boundDust: 0.55,
+  airGunSpread: 3,
+  boundDust: 1.9,
 };
 export type BoundValues = typeof BOUND_DEFAULTS;
 
@@ -31,7 +31,7 @@ export const BOUND_PARAMS: Param[] = [
   { key: "boostGlide", label: "Booster: glide (share of gravity)", min: 0, max: 0.9, step: 0.01, group: G, tip: "Falling out of a leap this much slower: more hang time off crests" },
   { key: "boostBurn", label: "Booster: tank burn sprinting (s/s)", min: 0, max: 2, step: 0.01, group: G },
   { key: "boundGuns", label: "Guns fire while sprinting (1 on, 0 off)", min: 0, max: 1, step: 1, group: G, tip: "Keith hasn't decided: on by default, revisit after play" },
-  { key: "airSpread", label: "Extra spread in the air (°)", min: 0, max: 15, step: 0.1, group: G, tip: "Firing while the mech is off the ground (a leap, a jump)" },
+  { key: "airGunSpread", label: "Extra spread in the air (°)", min: 0, max: 15, step: 0.1, group: G, tip: "Firing while the mech is off the ground (a leap, a jump)" },
   { key: "boundDust", label: "Dust per sprint footfall ×", min: 0, max: 2, step: 0.05, group: G, tip: "Strides come quickly: each one throws less than a walking stomp; real landings throw the full burst" },
 ];
 

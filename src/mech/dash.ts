@@ -15,7 +15,7 @@ export const DASH_DEFAULTS = {
   dashRecharge: 3,
   dashGap: 0.25,
   dashCrouch: 0.35,
-  dashLean: 9,
+  dashLean: 19,
   dashShoveRadius: 4,
   dashShove: 10,
   dashShoveDamage: 6,

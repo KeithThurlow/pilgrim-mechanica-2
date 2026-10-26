@@ -190,6 +190,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Shared register and spatial grid: proposed (`docs/proposal-register.md`), waiting for Keith (2026-10-26). Perf fixes ranked in `docs/perf-2026-10-26.md`: pass 1 done (fixes 1-5); Keith to run the stress lab on his PC for real numbers.
 - Pilot on foot: steps 1-2 built (out and in, walking sand, decks and bridges, the bay terminal, enemies picking the pilot, the expedition rule). Next: calling the empty mech (a new key), a sidearm, small salvage spots only the pilot reaches, climb clips.
 - Expedition loop step 1 merged (convoy lab; played only from shots so far). Next: progression on the convoy (radar range, packs, convoy speed), items dropping into the at-risk list, a recovery you can be killed during (heli), late-game heli drops.
+- Locomotion after Keith's 18:28 playtest (Claude agent, since 2026-10-26, branch `wip/locomotion`): his tuned values as defaults (done), then a ground sprint gait, the dash as a push-off, slide dust, walking on slopes, dust labels. Files: `src/mech/walker.ts`, `walkerTuning.ts`, `bound.ts`, `dash.ts`, `src/game/mechUnit.ts`, `src/fx/dust.ts`. Handoff: `docs/handoff-locomotion.md`.
 
 ## Next candidates (ask Keith which)
 
@@ -211,6 +212,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-26 · Keith's tuned values as defaults; the air spread name clash (Claude)
+- From Keith's pasted values (18:28 playtest): `boundDust` 1.9, `dashLean` 19, `stompCloud` 0, `stompClump` 1, `stompSize` 0.8; the rest already matched (model-read leg lengths skipped; `boostFuel` stays 0, his was a booster test). `airSpread` was two sliders (the walker's feet apart in the air, and the sprint kit's gun spread): every lab read the gun's 3 as 3× stance in the air. The gun's is now `airGunSpread`. `src/mech/bound.ts`, `dash.ts`, `src/fx/dust.ts`, `src/game/mechUnit.ts`.
+- Checked: typecheck; every `tools/*-check.ts`.
 
 ### 2026-10-26 · Autocannon Shells/s slider live (Claude, Keith's report)
 - Keith: Shells/s did nothing with the autocannon fitted. The picker fits unrolled items, which run on the weapon sliders, but the gun clock read the fire rate the item copied from the slider's default. The arsenal now sets an unrolled autocannon's rate from `acRate` every frame; rolled items keep their own. Other weapons' sliders already reach unrolled items (their sims read `own: null` as the sliders). `src/weapons/arsenal.ts`.

@@ -309,7 +309,7 @@ export class MechUnit implements Hittable {
       const own = upper.guns[s === 1 ? 0 : 1].stats;
       if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
       // Off the ground (a leap, a jump), the guns spray wider.
-      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airSpread : 0)) * Math.PI) / 180;
+      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airGunSpread : 0)) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
       // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle
