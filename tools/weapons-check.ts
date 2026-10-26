@@ -184,7 +184,7 @@ const dt = 1 / 120;
     for (const z of [10, 12, 14]) bandits.spawn(1, 0, z, 0);
     const it = new InfantryTarget(bandits, 2);
     const light = roundPenFor(MECH_DEFAULTS, 1);
-    const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, pen: light, aim: { x: 0, y: 0, z: 20 } };
+    const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, line: MECH_DEFAULTS.roundLine, pen: light, aim: { x: 0, y: 0, z: 20 } };
     const s1 = shoot(flat, [it], { x: 0, y: 0, z: 20 }, f, 6);
     must(s1.result.steps.length === 1 && s1.result.steps[0].stopped, `a light minigun round (${light.toFixed(2)} m) didn't stop in the first bandit (${s1.result.steps.length} hits)`);
     const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 9);
@@ -201,9 +201,15 @@ const dt = 1 / 120;
     const r1 = behind(); r1.update(0, lip);
     const sLip = shoot(lip, r1.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));
     must(sLip.result.steps.length === 1 && !sLip.result.inGround && sLip.result.left < V.railPen - sLip.result.steps[0].hit.chord * V.penFlesh, `the rail didn't punch through a dune lip, paying for it (ended at ${sLip.result.end.toFixed(1)} m)`);
-    const r2 = behind(); r2.update(0, ridge(30, MECH_DEFAULTS.roundSheetHeight + 1));
-    const sLipM = shoot(ridge(30, MECH_DEFAULTS.roundSheetHeight + 1), r2.dummies, { x: 0, y: 0, z: 50 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 50 } });
-    must(sLipM.result.inGround && sLipM.result.steps.length === 0, "a minigun round went through a dune lip");
+    // Minigun rounds the same way (Keith 2026-10-26: they went through any dune): a 3 m dune between the gun and the
+    // aim stops a hull round (it flies the muzzle-to-aim ray, 1.8 m up there); a 0.3 m ripple under its line is free.
+    const mid = ridge(30, 3), ripple = ridge(30, 0.3), fM = { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 50 } };
+    const r2 = behind(); r2.update(0, mid);
+    const sLipM = shoot(mid, r2.dummies, { x: 0, y: 0, z: 50 }, fM);
+    must(sLipM.result.inGround && sLipM.result.steps.length === 0 && sLipM.result.end < 32, `a minigun round went through a 3 m dune (ended at ${sLipM.result.end.toFixed(1)} m)`);
+    const r2b = behind(); r2b.update(0, ripple);
+    const sRip = shoot(ripple, r2b.dummies, { x: 0, y: 0, z: 50 }, fM);
+    must(sRip.result.steps.length === 1 && !sRip.result.inGround, "a ripple under a minigun round's line stopped it");
     for (const [name, g] of [["as tall as the sheet", tall], ["30 m tall", dune]] as const) {
       const r3 = behind(); r3.update(0, g);
       const sD = shoot(g, r3.dummies, { x: 0, y: 0, z: 50 }, railF({ x: 0, y: 0, z: 50 }));

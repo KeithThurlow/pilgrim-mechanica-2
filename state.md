@@ -193,6 +193,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Minigun rounds stop in dunes (Claude, Keith's report)
+- Keith: minigun rounds seemed to go through terrain without end. Same cause as the rail: sand only cost where it rose over the 10 m sheet's top. Rounds now carry a line: the muzzle-to-aim ray, never lower than `roundLine` (0.5 m, new slider in Rounds) over the floor; sand above it costs penetration (1 m budget, sand 3 per m). Hits still by the sheet. The autocannon is untouched (its shells burst on the ground themselves). `src/game/sheetFire.ts`, `src/game/mechUnit.ts`.
+- Checked: typecheck; `weapons-check` (a 3 m dune between gun and aim stops a hull round, a 0.3 m ripple doesn't); all of `npm test` passes; build.
+
 ### 2026-10-26 · Torso turns the shortest way across the back (Claude, Keith's report)
 - Keith: changing target a few degrees swung the torso the long way round. With the free waist (limit 180) the torso still moved in its angle from the legs without wrapping, so 170° left to 170° right went 340° round the front. Now a 180 limit turns by the shortest wrapped angle, through the back too; below 180 the limit still keeps it off the back. `src/mech/upper.ts`.
 - Checked: `upper-check` gains a case (settled 170° to one side, the aim 20° on past dead behind, three leg headings, both sides: under 0.25 s, never through the front; the old code fails it at 2 s round the front); all of `npm test` passes; build.

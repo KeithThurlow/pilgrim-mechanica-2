@@ -66,6 +66,7 @@ export const MECH_DEFAULTS = {
   roundPenCurve: 1.75,
   roundSheetHalf: 0.35,
   roundSheetHeight: 10,
+  roundLine: 0.5,
   roundSplash: 1.6,
   roundSplashShare: 0.5,
   hitRadius: 1.7,
@@ -83,6 +84,7 @@ export const MECH_PARAMS: Param[] = [
   { key: "roundPenCurve", label: "Item pierce → penetration curve", min: 0.5, max: 3, step: 0.05, group: "Rounds" },
   { key: "roundSheetHalf", label: "Round sheet half-width (m)", min: 0, max: 2, step: 0.05, group: "Rounds", tip: "Sheet hits: a round hits anything whose hit circle comes within this of its line on the ground" },
   { key: "roundSheetHeight", label: "Round sheet height (m)", min: 1, max: 20, step: 0.5, group: "Rounds", tip: "The sheet reaches from under the ground up to this over its floor (the ground under the gun to the ground under the aim): enough for an excavator's chassis" },
+  { key: "roundLine", label: "Round line over the floor (m)", min: 0, max: 5, step: 0.05, group: "Rounds", tip: "Sand costs a round's penetration where it rises over the round's path: the ray from the muzzle to the aim, never lower than this over the floor (Keith 2026-10-26: rounds went through dunes; the tall sheet's top used to be the line)" },
   { key: "roundSplash", label: "Splash radius (m)", min: 0, max: 5, step: 0.1, group: "Rounds", tip: "Where a round ends (sand or body), swarm units this close take a share: rounds into the sand at their feet still count" },
   { key: "roundSplashShare", label: "Splash damage share", min: 0, max: 1.5, step: 0.05, group: "Rounds", tip: "Share of the round's damage at the centre of the splash (half that at its edge)" },
   { key: "hitRadius", label: "Hit size (m)", min: 0.5, max: 3, step: 0.05, group: "Mech health", tip: "Radius of the capsule rounds hit, from the feet up past the hull" },
@@ -298,7 +300,7 @@ export class MechUnit implements Hittable {
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare }
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare }
         : { voice: "other", hitScale: 0.7 });
     }
     this.weapons?.step(dt, aim, trigger);
