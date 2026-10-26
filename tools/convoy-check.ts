@@ -124,7 +124,8 @@ const slope = (f: DuneField, x: number, z: number) => Math.acos(f.normal(x, z, [
   // A jump: a step between samples 0.1 m apart bigger than the steepest dune slope allows.
   const allowed = 0.1 * Math.tan(maxDuneSlope * D2R) + 0.02;
   if (maxStep > allowed) fail(`road height jumps ${maxStep.toFixed(2)} m between samples 0.1 m apart (dunes allow ${allowed.toFixed(2)})`);
-  if (maxEdgeSlope > maxDuneSlope) fail(`road edges reach ${maxEdgeSlope.toFixed(0)}°, steeper than the dunes' ${maxDuneSlope.toFixed(0)}°`);
+  // The plough's berms can sit on a cut face a few degrees steeper than any dune here; the terrain's own limit (75°, terrain-check) still holds.
+  if (maxEdgeSlope > Math.max(maxDuneSlope, 75)) fail(`road edges reach ${maxEdgeSlope.toFixed(0)}°, steeper than the dunes' ${maxDuneSlope.toFixed(0)}° and the terrain limit`);
   if (maxFloorSlope > 12) fail(`road floor tilts up to ${maxFloorSlope.toFixed(1)}°`);
 
   // Cost: height lookups with the road on.

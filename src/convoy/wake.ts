@@ -10,7 +10,7 @@
 // little way before it spills), clamped at zero, a share moved to the outside of a curve (the blade throws it that
 // way), and varied with seeded noise along the length (lumps). Each side's area A becomes one berm with a smooth
 // (1 - u^2)^2 profile of half-width W and height H: area = 16/15 H W, W = bermSpread * H, so the area is conserved
-// and the steepest face is about 1.54 H / W (31 degrees at the default spread). It sits bermOut beyond the road edge.
+// and the steepest face is about 1.54 H / W (35 degrees at the default spread). It sits bermOut beyond the road edge.
 // Stations are worked out lazily and cached; the cache is forgotten past a replan and on slider changes.
 import type { Param } from "../core/tweaks";
 import { Noise2 } from "../world/noise";
@@ -21,11 +21,11 @@ export const WAKE_DEFAULTS = {
   bladeSweep: 24,
   bladeRamp: 4,
   bermGrow: 8,
-  bermSpread: 2.6,
+  bermSpread: 2.2,
   bermOut: 8,
   bermCurve: 0.6,
   bermLumps: 0.35,
-  bermCarry: 12,
+  bermCarry: 6,
   ploughPatchEvery: 3,
 };
 export type WakeValues = typeof WAKE_DEFAULTS;
@@ -35,7 +35,7 @@ export const WAKE_PARAMS: Param[] = [
   { key: "bladeSweep", label: "Blade sweep (°)", min: 0, max: 45, step: 0.5, group: "Plough", tip: "The V of the blade: its wing tips trail the middle by half-width × tan(sweep)", onRelease: true },
   { key: "bladeRamp", label: "Cut edge (m)", min: 1, max: 12, step: 0.1, group: "Plough", tip: "Length behind the blade over which the dune comes down to the road floor (the face the blade leaves)", onRelease: true },
   { key: "ploughPatchEvery", label: "Ground patched every (m)", min: 1, max: 12, step: 0.5, group: "Plough", tip: "The chunks behind the blade are patched in a strip this long at a time (more = fewer, bigger patches)" },
-  { key: "bermSpread", label: "Berm spread (width ÷ height)", min: 1.6, max: 8, step: 0.05, group: "Wake", tip: "Wider, lower berms or narrow steep walls for the same sand. The steepest face is about 1.54 ÷ this (31° at 2.6)", onRelease: true },
+  { key: "bermSpread", label: "Berm spread (width ÷ height)", min: 1.6, max: 8, step: 0.05, group: "Wake", tip: "Wider, lower berms or narrow steep walls for the same sand. The steepest face is about 1.54 ÷ this (35° at 2.2, about sand's angle of repose)", onRelease: true },
   { key: "bermOut", label: "Berm out from the road (m)", min: 0, max: 20, step: 0.5, group: "Wake", tip: "Gap from the road's edge to the berm's inner foot", onRelease: true },
   { key: "bermCurve", label: "Outside of curves", min: 0, max: 1, step: 0.01, group: "Wake", tip: "Share of the inside berm thrown to the outside in a full turn (the blade throws it outward)", onRelease: true },
   { key: "bermLumps", label: "Lumpiness", min: 0, max: 1, step: 0.01, group: "Wake", tip: "Seeded variation along the berms: height, width and how far out", onRelease: true },
