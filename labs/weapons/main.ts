@@ -126,7 +126,7 @@ bf.register.add(listOwner("trucks", () => cs.cars, (reg, c, k, s) =>
 
 // ---- Per-shot readouts: damage landing after a weapon fires is that shot's (while the miniguns aren't firing) ----
 const WINDOW: Record<string, number> = { rail: 0.3, autocannon: 1.5, rpg: 3, missiles: 5, mortar: 6, linemortar: 5 };
-const NAME: Record<string, string> = { rail: "rail beam", autocannon: "autocannon shell", rpg: "rocket", missiles: "missile swarm", mortar: "big mortar", linemortar: "line mortar" };
+const NAME: Record<string, string> = { rail: "rail slug", autocannon: "autocannon shell", rpg: "rocket", missiles: "missile swarm", mortar: "big mortar", linemortar: "line mortar" };
 let clock = 0;
 let shot: { kind: string; t: number; dealt: number; hits: number } | null = null;
 const lastOf: Record<string, { dealt: number; hits: number }> = {};

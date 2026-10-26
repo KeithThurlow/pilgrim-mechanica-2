@@ -79,7 +79,7 @@ export class PilotUnit implements Hittable {
     return 1;
   }
 
-  canPierce() { return true; }
+  readonly material = "flesh" as const;
 }
 
 /** Picks the mech or the pilot for each enemy group. */

@@ -14,6 +14,11 @@ import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
 import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
+import type { MoveCommand } from "../../src/mech/walker";
+import type { Aim, Trigger } from "../../src/mech/upper";
+import { applyLoadout } from "../../src/game/loadoutApply";
+import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
+import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -33,11 +38,18 @@ const WAVE_PARAMS: Param[] = [
 ];
 
 let swarm: RobotSwarm | null = null;
+// Shot flags (2026-10-26): ?left= ?right= ?k1-3= fit weapons as in the weapons lab; ?robotline puts a frozen line of
+// mixed robots ahead of the mech (scrappers, cutters, an excavator) and stops the packs; ?lmb=x,z holds the left
+// button aimed there, ?fireat=N lets go after N frames.
+const params0 = new URLSearchParams(location.search);
+type DemoOut = { cmd: MoveCommand; aim: Aim | null; trigger: Trigger };
+let script: ((t: number, dt: number) => DemoOut) | null = null;
 let draw: RobotsDraw | null = null;
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS },
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS },
+  demo: (t, dt) => script?.(t, dt) ?? null,
   params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
   topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] }],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
@@ -58,6 +70,29 @@ player.onDash = (x, z, dx, dz) => {
   }
 };
 swarm = sw;
+{
+  const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
+  if (pickFromParams(pick, params0)) { applyLoadout(player, resolve(loadoutFor(pick), V)); lab.refresh(); }
+}
+const robotLine = params0.has("robotline");
+if (robotLine) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos;
+  // ?robotline=m: the line starts m to the side (the gun's muzzle is off the mech's centre) and meets the centre line
+  // at ?lmb's distance, so a shot aimed there runs down it.
+  const off = Number(params0.get("robotline")) || 0, meet = Number((params0.get("lmb") ?? "").split(",")[1]) || 52;
+  const put = (dz: number, dx: number, mid: number, big: number) => { for (const i of sw.spawn(1, p.x + dx + off * (1 - dz / meet), p.z + dz, 0, { mid, big })) sw.frozen[i] = 1; };
+  put(12, 0.4, 0, 0); put(16, -0.3, 0, 0); put(21, 0, 1, 0); put(26, 0.5, 0, 0); put(34, 0, 0, 1); put(44, -0.4, 1, 0); put(50, 0.3, 0, 0);
+  // Some off the line, to show what the sheet leaves alone.
+  put(18, 5, 0, 0); put(30, -7, 1, 0);
+}
+{
+  const xy = (s: string | null) => { if (!s) return null; const [x, z] = s.split(",").map(Number); return Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null; };
+  const lmb = xy(params0.get("lmb"));
+  const fireAt = params0.has("fireat") ? Number(params0.get("fireat")) : Infinity;
+  let frame = 0;
+  if (lmb) script = () => { frame++; return { cmd: { x: 0, z: 0, sprint: false }, aim: { x: lmb.x, y: field.height(lmb.x, lmb.z) + 1.2, z: lmb.z }, trigger: [frame < fireAt, false] }; };
+}
 draw = new RobotsDraw(sw);
 lab.app.scene.add(draw.group);
 const target = new RobotTarget(sw, 3);
@@ -152,5 +187,7 @@ lab.onFrame((dt) => {
   }
   draw!.update(dt);
   tear.update(dt);
-  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · destroyed ${target.kills}`);
+  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+  const rl = lab.arsenal.last;
+  if (rl.railHits !== undefined) lab.hud("rail", `last rail slug: ${rl.railHits} bodies, ${Math.round(rl.rail ?? 0)} damage${rl.railGround ? " · stopped in a dune" : ""}`);
 });

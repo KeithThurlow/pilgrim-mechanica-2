@@ -19,7 +19,6 @@ import {
 } from "./dentRule";
 
 export const DENT_DEFAULTS = {
-  markMode: 1,
   dentCoverage: 100,
   dentRes: 2048,
   patchSpacing: 0.25,
@@ -38,6 +37,9 @@ export const DENT_DEFAULTS = {
   dentRough: 0.6,
   dentMaxDepth: 0.6,
   dentRelaxStep: 0.3,
+  printSize: 1,
+  craterSize: 0.35,
+  slideOnSlope: 1,
   dentSandDepth: 1, dentSandBerm: 1, dentSandSoften: 6, dentSandSlump: 0.5, dentSandLife: 90,
   dentDirtDepth: 0.45, dentDirtBerm: 0.5, dentDirtSoften: 1.5, dentDirtSlump: 0.1, dentDirtLife: 400,
   dentGravelDepth: 0.3, dentGravelBerm: 0.6, dentGravelSoften: 2, dentGravelSlump: 0.1, dentGravelLife: 300,
@@ -54,7 +56,6 @@ const surfaceParams = (name: string, key: string): Param[] => [
   { key: `dent${key}Life`, label: `${name}: heals over (s)`, min: 0, max: 2000, step: 5, group: GS, tip: "Time constant of the slow healing; 0 never heals" },
 ];
 export const DENT_PARAMS: Param[] = [
-  { key: "markMode", label: "Ground marks (0 decals, 1 dents)", min: 0, max: 1, step: 1, group: G, tip: "Dents: real displacement with berms on a fine patch around you. Decals: the old flat marks, to compare" },
   { key: "dentCoverage", label: "Dent area (m)", min: 32, max: 200, step: 4, group: G, onRelease: true, tip: "Width of the square around the camera focus that carries dents (and the fine patch)" },
   { key: "dentRes", label: "Dent texels across", min: 512, max: 4096, step: 512, group: G, onRelease: true, tip: "Resolution of the dent texture: area / texels = detail (2048 over 100 m: 5 cm)" },
   { key: "patchSpacing", label: "Patch spacing (m)", min: 0.125, max: 1, step: 0.125, group: G, onRelease: true, tip: "Vertex spacing of the fine ground patch (rounded to divide the chunk grid)" },
@@ -67,6 +68,9 @@ export const DENT_PARAMS: Param[] = [
   { key: "dentFurrow", label: "Dash furrow depth (m)", min: 0, max: 0.5, step: 0.005, group: G },
   { key: "dentRound", label: "Round dent depth (m)", min: 0, max: 0.3, step: 0.005, group: G, tip: "Each round into the sand; they add up into a churned patch under a burst" },
   { key: "dentRoundEvery", label: "Round dent every Nth", min: 1, max: 10, step: 1, group: G },
+  { key: "printSize", label: "Footprint size ×", min: 0.3, max: 2, step: 0.01, group: G },
+  { key: "craterSize", label: "Round dent size (m)", min: 0.1, max: 2, step: 0.01, group: G },
+  { key: "slideOnSlope", label: "Slides on steep sand", min: 0, max: 3, step: 0.05, group: G, tip: "On steep dune faces a step breaks sand loose downhill: a longer trough the steeper it is" },
   { key: "dentBlast", label: "Blast dent depth (m)", min: 0, max: 1, step: 0.01, group: G, tip: "Shells and vehicle blasts (the fine rim; real craters belong in the true ground)" },
   { key: "dentComp", label: "Packing", min: 0, max: 1, step: 0.01, group: G, tip: "How packed a print or rut floor gets (it reads darker)" },
   { key: "dentDark", label: "Packed ground darker", min: 0, max: 1, step: 0.01, group: G },

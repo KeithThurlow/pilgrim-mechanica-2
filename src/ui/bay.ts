@@ -31,7 +31,7 @@ export interface BayOptions {
 type MountChoice = "hullWeapon" | "arm";
 
 const KIND_FOR: Record<SlotId, string> = {
-  legs: "legs", hull: "hull", sensor: "a sensor (radar range, seekers)",
+  legs: "legs", hull: "hull", sensor: "a sensor: a head at the front (follows the aim) or a cluster on top (radar range, seekers)",
   mountL: "a hull weapon or an arm", mountR: "a hull weapon or an arm",
   heldL: "a held weapon (Light; a Heavy two-hander takes both arms)", heldR: "a held weapon (Light; a Heavy two-hander takes both arms)",
   shoulderL: "a shoulder weapon", shoulderR: "a shoulder weapon",

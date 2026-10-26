@@ -1,6 +1,6 @@
 // What the convoy leaves behind on the sand (Keith 2026-10-24): ruts behind every track and wheel line, and dust
 // kicked up where tracks and wheels leave the sand, drifting off on the wind. Uses the shared dust (DustSim.wheel,
-// which scales by the ground under it: sand, gravel, dirt, concrete) and sand marks (SandMarks.rut).
+// which scales by the ground under it: sand, gravel, dirt, concrete) and ground dents (GroundMarks.rut).
 // Cost: one accumulator per platform for the ruts (a rut per line every convoyRutEvery metres) and one per dust
 // source (fractional puffs carried over), so nothing is laid per frame per wheel. The escorts use car().
 import type { Param } from "../core/tweaks";
@@ -19,14 +19,14 @@ export const TRAIL_DEFAULTS = {
 export type TrailValues = typeof TRAIL_DEFAULTS;
 
 export const TRAIL_PARAMS: Param[] = [
-  { key: "convoyRutEvery", label: "Rut every (m)", min: 0.8, max: 8, step: 0.1, group: "Convoy trail", tip: "A rut mark per track or wheel line this often (more = cheaper, gappier). They fade with the sand marks (Marks last)" },
+  { key: "convoyRutEvery", label: "Rut every (m)", min: 0.8, max: 8, step: 0.1, group: "Convoy trail", tip: "A rut mark per track or wheel line this often (more = cheaper, gappier). They heal with the dents (Ground dents: surfaces)" },
   { key: "convoyTrackDust", label: "Track dust ×", min: 0, max: 8, step: 0.05, group: "Convoy trail", tip: "Dust thrown up where each track leaves the sand, times a wheel's" },
   { key: "convoyWheelDust", label: "Platform wheel dust ×", min: 0, max: 4, step: 0.05, group: "Convoy trail" },
   { key: "convoyTrackSlip", label: "Track churn", min: 0, max: 1, step: 0.01, group: "Convoy trail", tip: "How much the tracks churn the sand (more clumps and dust, like a sliding wheel)" },
   { key: "escortDust", label: "Escort dust ×", min: 0, max: 4, step: 0.05, group: "Convoy trail" },
 ];
 
-/** What the trail draws with: the dust sim and the sand marks (a Battlefield has both). */
+/** What the trail draws with: the dust sim and the ground marks (a Battlefield has both). */
 export interface TrailFx {
   dust: {
     wheel(x: number, y: number, z: number, vx: number, vz: number, metres: number, slip: number, acc: number): number;

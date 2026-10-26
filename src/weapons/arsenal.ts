@@ -4,7 +4,7 @@
 // 1-3 (key 4 is kept for drones): hold the key to paint, release to fire. It fills the painters, runs the sims in
 // this folder and turns what they do into blasts, damage, dust, sound and shake. Drawing: src/weapons/arsenalDraw.ts.
 //
-// Gun sides: rail cannon (hold to charge, release fires), autocannon (shells on the gun's clock, leading the lock), RPG
+// Gun sides: rail cannon (hold to charge, release fires one slug through a penetrating sheet), autocannon (shells on the gun's clock, leading the lock), RPG
 // rocket (fires at the ground under the cursor while held, on its cooldown). Miniguns and rocket launchers carry a
 // faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar.
 import * as THREE from "three/webgpu";
@@ -18,9 +18,10 @@ import type { TargetCandidate } from "../game/targeting";
 import type { WeaponValues } from "./tuning";
 import { newPaint, clearPaint, type Paint, type Strip, type Vec3 } from "./painter";
 import { SalvoSim, planStrip, type SalvoStats } from "./salvo";
-import { RailSim, railPath, railFire, type RailStats } from "./rail";
+import { RailSim, railSheet, coilGlow, type RailStats } from "./rail";
+import type { Sheet } from "../game/sheet";
 import { MortarSim, mortarAim, lobArc, lobPoint, type MortarStats } from "./mortar";
-import { CannonShells, leadPoint, type CannonStats } from "./autocannon";
+import { CannonShells, leadPoint, type CannonStats, type Shell } from "./autocannon";
 import { Rockets, type RocketStats } from "./rocket";
 import { SwarmSim, type SwarmStats } from "./swarm";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
@@ -32,8 +33,11 @@ type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | null;
 /** The rail cannon's energy colour (its charge preview, coils and beam). */
 export const RAIL_GLOW = 0x7fe0ff;
 
-/** One fired rail beam, for drawing: its path and how long ago. */
-export interface RailShot { path: Vec3[]; from: Vec3; age: number; power: number }
+/**
+ * One fired rail slug, for drawing: its straight path from the muzzle to where it stopped (points every 2 m), the
+ * bodies it went through, how long ago and at what power, and a seed for its trail's wisps.
+ */
+export interface RailShot { path: Vec3[]; from: Vec3; to: Vec3; hits: Vec3[]; age: number; power: number; seed: number; dir: Vec3 }
 
 /** A faint targeting laser (miniguns, rocket launchers): from, to, strength 0..1. */
 export interface Laser { on: boolean; from: THREE.Vector3; to: THREE.Vector3; k: number }
@@ -49,6 +53,10 @@ interface Side {
   model: WeaponModel | null;
   whined: boolean;
   laser: Laser;
+  /** Rail: the thin aim line on the sand while charging (ground points out to where the slug would stop). */
+  aimLine: Vec3[];
+  /** Rail: the reticle the charge meter rings (the lock or the cursor). */
+  meterAt: Vec3 | null;
 }
 
 /** A shoulder weapon on its key. */
@@ -101,7 +109,7 @@ export class Arsenal implements MechWeapons {
     /** Targets the snap, the swarm and the leads can see (the lab's candidates). */
     public candidates: () => TargetCandidate[] = () => []) {
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser() });
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null });
     this.sides = [side(), side()];
     addWeaponSounds(bf.sfx, v);
   }
@@ -139,10 +147,12 @@ export class Arsenal implements MechWeapons {
 
   railStats(s: Side): RailStats {
     const v = this.v, o = s.own;
-    if (o) return { damage: o.damage, charge: o.charge, cooldown: o.cooldown, range: o.range };
+    if (o) return { damage: o.damage, charge: o.charge, cooldown: o.cooldown, range: o.range, pen: o.pen ?? this.railPen(s) };
     const lk = s.light ? v.railLightDamage : 1, lc = s.light ? v.railLightCharge : 1;
-    return { damage: v.railDamage * lk, charge: v.railCharge * lc, cooldown: v.railCooldown, range: v.railRange * (s.light ? 0.85 : 1) };
+    return { damage: v.railDamage * lk, charge: v.railCharge * lc, cooldown: v.railCooldown, range: v.railRange * (s.light ? 0.85 : 1), pen: this.railPen(s) };
   }
+  /** Penetration (m): the slider, the Light rail's share of it (items carry none of their own yet). */
+  private railPen(s: Side) { return this.v.railPen * (s.light ? this.v.railLightPen : 1); }
   lineStats(o: Record<string, number> | null): SalvoStats {
     const v = this.v;
     return o ? { rockets: o.shells, damage: o.damage, cooldown: o.cooldown, length: o.stripLength, blast: o.blast }
@@ -185,7 +195,10 @@ export class Arsenal implements MechWeapons {
       const held = alive && triggerOf(trigger, i) && g.enabled;
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
-      for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.25 + 0.75 * s.rail.charge : 0.9;
+      // The rail's coils light in turn from the breech as it charges (the box stand-in's rings; the library model's
+      // lamps follow the charge as a whole, and the draw lights its Glow_n points in turn).
+      const glows = s.model?.glow ?? [];
+      glows.forEach((mat, gi) => { mat.opacity = s.kind === "rail" ? (glows.length > 1 ? 0.15 + 0.85 * coilGlow(s.rail.charge, gi, glows.length) : 0.25 + 0.75 * s.rail.charge) : 0.9; });
       if (s.model) s.model.recoil.position.z += (0 - s.model.recoil.position.z) * Math.min(1, dt * 8);
       s.cool = Math.max(0, s.cool - dt);
       // Targeting laser on the minigun and the rocket launcher, along the gun.
@@ -208,28 +221,25 @@ export class Arsenal implements MechWeapons {
       if (!held) s.whined = false;
       const fired = s.rail.update(dt, held, st);
       const muzzle = this.muzzleOf(s, side, this.tmp);
-      const dir = u.body.barrel(side, this.dir);
-      const flat = Math.hypot(dir.x, dir.z) || 1;
-      // The preview: a thin beam along the gun out to range, thickening as it charges.
-      const p = s.paint;
+      const { d, aim } = this.railAim(side, muzzle);
+      // The preview: a thin precise line on the sand out to where the slug would stop, and a charge meter at the
+      // reticle (src/weapons/arsenalDraw.ts). No beam: nothing leaves the gun until the release.
+      clearPaint(s.paint);
       if (s.rail.holding) {
-        p.on = true; p.held += dt; p.charge = s.rail.charge; p.ready = s.rail.charge >= v.railMinCharge;
-        p.tint = p.ready ? RAIL_GLOW : null;
-        p.beamScale = 0.35 + 1.3 * s.rail.charge * s.rail.charge;
-        const path = railPath(bf.field, muzzle, { x: dir.x / flat, z: dir.z / flat }, st.range, v);
-        p.beamFrom = { x: muzzle.x, y: muzzle.y, z: muzzle.z };
-        const end = path[path.length - 1] ?? { x: muzzle.x + dir.x / flat * 4, y: muzzle.y, z: muzzle.z + dir.z / flat * 4 };
-        p.beamTo = { ...end };
-        p.strip = null; p.ring = null; p.arc.length = 0;
-      } else clearPaint(p);
-      if (fired !== null) this.fireRail(s, side, muzzle, dir, st, fired);
+        const f = railSheet(v, st, aim);
+        const sheet = bf.makeSheet(muzzle, d, st.range, f);
+        const end = bf.resolveSheet(u.team, sheet, 0, f, d, false).result.end;
+        this.lineOnSand(sheet, end, s.aimLine);
+        s.meterAt = aim ? { x: aim.x, y: aim.y, z: aim.z } : null;
+      } else { s.aimLine.length = 0; s.meterAt = null; }
+      if (fired !== null) this.fireRail(s, side, muzzle, d, aim, st, fired);
     });
 
     // Shoulders: hold the key to paint, release to fire.
     for (const sh of this.shoulders) this.stepShoulder(sh, dt, alive && u.keys[sh.key - 1] && !!u.cursor, laserK);
 
     // Everything in flight.
-    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel));
+    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept), this.shellSweep);
     const steel = bf.wrecks ? (o: THREE.Vector3, d: THREE.Vector3, max: number) => (bf.wrecks!.hit(o, d, max, this.tmp2, this.dir) ? o.distanceTo(this.tmp2) : -1) : null;
     this.rockets.update(dt, bf.field, bf.targets, steel, (r, at, _why, t) => {
       if (t) t.damage(r.damage * 0.5, at, r.dir);
@@ -353,7 +363,7 @@ export class Arsenal implements MechWeapons {
     const spread = (st.spread * Math.PI) / 180;
     const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
-    this.shells.fire(u.team, m, d, st);
+    this.shells.fire(u.team, m, d, st, this.v.acPen);
     this.onFire?.("autocannon");
     this.bf.sfx.playSound("cannon", m, 1);
     this.bf.dust.smoke(m.x, m.y, m.z, d.x * 3, d.y * 3 + 0.5, d.z * 3, 0.3, 0.6, 0.6, 0.4);
@@ -404,35 +414,144 @@ export class Arsenal implements MechWeapons {
     l.k = k;
   }
 
-  private fireRail(s: Side, side: 1 | -1, muzzle: THREE.Vector3, dir: THREE.Vector3, st: RailStats, charge: number) {
-    const bf = this.bf, u = this.unit, v = this.v;
-    const flat = Math.hypot(dir.x, dir.z) || 1;
-    const path = railPath(bf.field, muzzle, { x: dir.x / flat, z: dir.z / flat }, st.range, v);
-    this.onFire?.("rail");
-    const hits = railFire(path, bf.targets, u.team, st.damage * charge, v);
-    this.last.rail = hits.reduce((a, h) => a + h.damage, 0);
-    this.railShots.push({ path, from: { x: muzzle.x, y: muzzle.y, z: muzzle.z }, age: 0, power: charge });
-    // Sparks where it went through, dust kicked up all along its line, a flash at the end.
-    for (const h of hits) bf.gunFx.sparksAt(h.at, this.tmp2.copy(dir).negate(), 10, 9);
-    for (let k = 0; k < path.length; k += 2) {
-      const p = path[k];
-      if (bf.inWater(p.x, p.z)) { bf.water?.splash(p.x, p.z, 0.5, dir.x, dir.z, 0.8); continue; }
-      bf.dust.kick(p.x, p.y - v.railHeight, p.z, dir.x / flat, dir.z / flat, 0.6 + charge * 0.6);
-    }
-    const end = path[path.length - 1];
-    if (end) { bf.dust.hit(end.x, end.y - v.railHeight, end.z, dir.x / flat, dir.z / flat, 2.5); bf.marks.crater(end.x, end.z, 1.5); }
-    bf.sfx.playSound("rail", muzzle, 0.6 + 0.4 * charge, 1.1 - 0.15 * charge);
-    u.upper.guns[side === 1 ? 0 : 1].kick = v.railKick;
-    u.upper.shake = Math.min(0.06, u.upper.shake + 0.04 * charge);
-    if (s.model) s.model.recoil.position.z = -v.railKick * 1.5;
-    this.onShake?.(v.railShake * charge);
+  /**
+   * Where a rail on this side aims: at the lock (its centre) or the cursor, straight from the muzzle in plan (a slug
+   * goes where you line it up, not where a lagging arm points); the barrel's heading with neither.
+   */
+  private railAim(side: 1 | -1, muzzle: THREE.Vector3): { d: THREE.Vector3; aim: Vec3 | null } {
+    const u = this.unit;
+    const aim: Vec3 | null = u.lock ? { x: u.lock.x, y: u.lock.y, z: u.lock.z } : u.cursor ? { x: u.cursor.x, y: u.cursor.y, z: u.cursor.z } : null;
+    const d = this.dir;
+    if (aim && Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z) > 2) d.set(aim.x - muzzle.x, 0, aim.z - muzzle.z).normalize();
+    else { u.body.barrel(side, d); d.y = 0; d.normalize(); }
+    return { d, aim };
   }
 
-  /** An autocannon shell bursts: the target it struck takes the shell, everything near takes a share. */
-  private cannonBurst(team: number, at: THREE.Vector3, t: Hittable | null, damage: number, splash: number, vel: THREE.Vector3) {
+  /** Points on the sand every 1.5 m along a sheet's line out to `end` (m along): the rail's aim line. */
+  private lineOnSand(s: Sheet, end: number, out: Vec3[]) {
+    out.length = 0;
+    const n = Math.max(1, Math.min(63, Math.ceil(end / 1.5)));
+    for (let i = 0; i <= n; i++) {
+      const t = (end * i) / n, x = s.ox + s.dx * t, z = s.oz + s.dz * t;
+      out.push({ x, y: this.bf.field.height(x, z), z });
+    }
+  }
+
+  /**
+   * Release: one slug, near instant, through a penetrating sheet (src/game/sheet.ts): every body on its line takes
+   * damage by the budget left until the budget runs out (in a body or a dune). Then the show: a hard streak and a
+   * lingering ionised trail (the draw), a big muzzle blast and kick, sparks and debris flung along the path at every
+   * body, a strike where it ends (a puff and dent in sand, sparks on steel), the crack and thump.
+   */
+  private fireRail(s: Side, side: 1 | -1, muzzle: THREE.Vector3, d: THREE.Vector3, aim: Vec3 | null, st: RailStats, power: number) {
+    const bf = this.bf, u = this.unit, v = this.v, field = bf.field;
+    const dir = d.clone();
+    const f = railSheet(v, st, aim);
+    const sheet = bf.makeSheet(muzzle, dir, st.range, f);
+    this.onFire?.("rail");
+    const shot = bf.resolveSheet(u.team, sheet, st.damage * power, f, dir);
+    this.last.rail = shot.dealt;
+    this.last.railHits = shot.result.steps.length;
+    this.last.railGround = shot.result.inGround ? 1 : 0;
+    // The slug's straight path: from the muzzle toward the slug height over the ground at the aim, out to where it
+    // stopped (into the ground when a dune stopped it).
+    const L = shot.result.end;
+    const aimFlat = aim ? Math.max(2, Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z)) : 30;
+    const aimY = aim ? field.height(aim.x, aim.z) + v.railSlugHeight : field.height(muzzle.x + dir.x * 30, muzzle.z + dir.z * 30) + v.railSlugHeight;
+    const rise = (aimY - muzzle.y) / aimFlat;
+    const yAt = (t: number) => {
+      const x = muzzle.x + dir.x * t, z = muzzle.z + dir.z * t;
+      return Math.max(field.height(x, z) + 0.25, muzzle.y + rise * t);
+    };
+    const path: Vec3[] = [];
+    const n = Math.max(1, Math.min(60, Math.ceil(L / 2)));
+    for (let i = 0; i <= n; i++) {
+      const t = (L * i) / n;
+      path.push({ x: muzzle.x + dir.x * t, y: yAt(t), z: muzzle.z + dir.z * t });
+    }
+    path[0] = { x: muzzle.x, y: muzzle.y, z: muzzle.z };
+    const to = path[path.length - 1];
+    if (shot.result.inGround) to.y = field.height(to.x, to.z);
+    const hits: Vec3[] = [];
+    // Every body it went through: sparks and debris flung along the path (steel), a burst of cloth and dust (flesh).
+    for (const step of shot.result.steps) {
+      const h = step.hit;
+      const at = new THREE.Vector3(h.x, yAt(h.along) * 0.5 + h.y * 0.5, h.z);
+      hits.push({ x: at.x, y: at.y, z: at.z });
+      const surface = h.target ? h.target.surface : "metal";
+      if (surface === "flesh") { bf.gunFx.onFleshHit?.(at, dir); bf.gunFx.onFleshHit?.(at, dir); }
+      else { bf.gunFx.sparksAt(at, dir, 16, 14); bf.gunFx.sparksAt(at, this.tmp2.copy(dir).negate(), 6, 6); }
+      bf.dust.smoke(at.x, at.y, at.z, dir.x * 4, 0.6, dir.z * 4, 0.35, 0.9, 0.6, 0.8);
+    }
+    for (const x of shot.exits) bf.gunFx.sparksAt(x, dir, 8, 12);
+    // The shock wave under the slug lifts sand where it flies low.
+    for (let k = 2; k < path.length; k += 2) {
+      const p = path[k], g = field.height(p.x, p.z);
+      if (p.y - g > 3) continue;
+      if (bf.inWater(p.x, p.z)) { bf.water?.splash(p.x, p.z, 0.4, dir.x, dir.z, 0.6); continue; }
+      bf.dust.kick(p.x, g, p.z, dir.x, dir.z, (0.5 + power * 0.5) * (1 - (p.y - g) / 3));
+    }
+    // The strike where it ends: sparks on steel, a puff and dent in the sand.
+    const last = shot.result.steps[shot.result.steps.length - 1];
+    const endV = new THREE.Vector3(to.x, to.y, to.z);
+    if (last?.stopped && (last.hit.target ? last.hit.target.surface : "metal") === "metal") bf.gunFx.sparksAt(endV, this.tmp2.copy(dir).negate(), 26, 16);
+    else if (bf.inWater(to.x, to.z)) bf.water?.splash(to.x, to.z, 1.2, dir.x, dir.z, 1.4);
+    else if (!last?.stopped) {
+      const g = field.height(to.x, to.z);
+      bf.dust.hit(to.x, g, to.z, dir.x, dir.z, 2.5 + power);
+      bf.marks.crater(to.x, to.z, 2 + power);
+    }
+    // The muzzle: a big blast of smoke and sand, sparks off the rails, the kick and shake.
+    const b = v.railBlast * (0.6 + 0.4 * power);
+    if (b > 0) {
+      for (let k = 0; k < 8; k++) {
+        const sp = 2 + Math.random() * 6;
+        bf.dust.smoke(muzzle.x + dir.x * 0.6, muzzle.y, muzzle.z + dir.z * 0.6, dir.x * sp + (Math.random() - 0.5) * 3, 0.4 + Math.random() * 1.5, dir.z * sp + (Math.random() - 0.5) * 3, 0.45 * b, 0.9 + Math.random() * 0.6, 0.55, 0.3);
+      }
+      bf.gunFx.sparksAt(muzzle, dir, Math.round(12 * b), 12);
+      const g = field.height(muzzle.x, muzzle.z);
+      if (muzzle.y - g < 6) bf.dust.stomp(muzzle.x + dir.x * 2, g, muzzle.z + dir.z * 2, 1.4 * b);
+    }
+    this.railShots.push({ path, from: { x: muzzle.x, y: muzzle.y, z: muzzle.z }, to, hits, age: 0, power, seed: Math.random() * 100, dir: { x: dir.x, y: 0, z: dir.z } });
+    bf.sfx.playSound("rail", muzzle, 0.7 + 0.3 * power, 1.05 - 0.1 * power);
+    u.upper.guns[side === 1 ? 0 : 1].kick = v.railKick;
+    u.upper.shake = Math.min(0.08, u.upper.shake + 0.05 * power);
+    if (s.model) s.model.recoil.position.z = -v.railKick * 1.5;
+    this.onShake?.(v.railShake * power);
+  }
+
+  /**
+   * One step of a shell's flight as a sheet (src/game/sheet.ts): its path in plan, the band from under the ground to
+   * acSheetUp over the shell. Bodies it can pay to pass take damage by the budget left (sparks out the far side); the
+   * one it can't stops it (damaged here; the burst follows).
+   */
+  private shellSweep = (s: Shell, a: THREE.Vector3, b: THREE.Vector3): { at: THREE.Vector3; t: Hittable | null } | null => {
+    const bf = this.bf, v = this.v;
+    const fl = Math.hypot(b.x - a.x, b.z - a.z);
+    if (fl < 1e-4) return null;
+    const ay = a.y, by = b.y;
+    const sheet: Sheet = {
+      ox: a.x, oz: a.z, dx: (b.x - a.x) / fl, dz: (b.z - a.z) / fl, from: 0, len: fl, half: v.acSheetHalf, under: v.sheetUnder,
+      top: (t) => ay + ((by - ay) * t) / fl + v.acSheetUp, ground: (x, z) => bf.field.height(x, z),
+    };
+    const d = this.tmp2.set(b.x - a.x, b.y - a.y, b.z - a.z).normalize();
+    // The damage this shell still carries, by the budget it has left (the walk's share is relative to what it's given).
+    const k = s.pen0 > 0 ? Math.pow(Math.max(0, s.pen / s.pen0), v.penCurve) : 1;
+    const shot = bf.resolveSheet(s.team, sheet, s.damage * k, { half: v.acSheetHalf, height: v.acSheetUp, pen: Math.max(1e-3, s.pen) }, d, true,
+      (h) => s.passed.some((p) => p.t === h.target && p.key === h.key));
+    if (!shot.result.steps.length) return null;
+    for (const st of shot.result.steps) s.passed.push({ t: st.hit.target, key: st.hit.key });
+    for (const x of shot.exits) bf.gunFx.sparksAt(x, d, 4, 7);
+    s.pen = shot.result.left;
+    const last = shot.result.steps[shot.result.steps.length - 1];
+    return last.stopped ? { at: shot.end, t: last.hit.target ?? null } : null;
+  };
+
+  /** An autocannon shell bursts: the target it struck takes the shell (unless a sweep already hit it), everything near takes a share. */
+  private cannonBurst(team: number, at: THREE.Vector3, t: Hittable | null, damage: number, splash: number, vel: THREE.Vector3, swept = false) {
     const bf = this.bf, v = this.v;
     const d = this.dir.copy(vel).normalize();
-    if (t) { t.damage(damage, at, d); bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 8, 7); }
+    if (t) { if (!swept) t.damage(damage, at, d); bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 8, 7); }
     if (splash > 0) for (const o of bf.targets) if (o !== t && o.alive && o.team !== team && o.splash) o.splash(at, splash, damage * v.acSplashShare, d);
     if (!t && bf.inWater(at.x, at.z)) bf.water?.splash(at.x, at.z, 1, d.x, d.z, 1.2);
     else { bf.dust.hit(at.x, at.y, at.z, d.x, d.z, 1.8); if (!t) bf.marks.crater(at.x, at.z, 1.3); }
