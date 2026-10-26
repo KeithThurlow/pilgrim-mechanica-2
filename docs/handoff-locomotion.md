@@ -71,8 +71,11 @@ sprint, dash tap mid-step, dash held into sprint, downhill off a face, uphill wa
   `slideMin`), `mechUnit` throws it and furrows the dents per skidding foot.
 - Step 5 (labels) done: footfall vs toe kick, `sprintKick` and `boundDust` say they multiply both.
 - Docs: decisions logged, `docs/proposal-bound.md` "Revised after Keith's playtest", state.md Walker entry and Changes.
-- Filmstrips: scratch `loco/strips.sh` (`ONLY="..."`); batch 1 (run 10/14, ramp, uphill, downhill, side cam) built
-  before the dash code; batch 2 (game cam, dash tap/hold) to run after.
+- Merged to main up to e05de81 (coordinator). Filmstrips all done and looked at (session scratchpad `loco/`):
+  side10, side14, game14, ramp-side, ramp-game, up-side, down-side2, dash-tap, dash-tap-game, dash-hold,
+  dash-hold-game; stick-figure strips (`stick.mts`) for the run, ramp, uphill, downhill, crest, dash. Nothing needed
+  fixing from them. Left to tune by play: `dashPushTime` (the push-off shows for only a couple of frames), the
+  sideways dash's fore-and-aft stance (not filmed in the lab render).
 
 ## Known rough edges
 
