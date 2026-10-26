@@ -361,6 +361,7 @@ const panel = tweakPanel({
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sand marks", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
+    { id: "perf", label: "Performance", groups: ["Performance"] },
     ...LOOP_TOPICS,
   ],
   onFocus: () => { if (!picking) selector?.clear(); },

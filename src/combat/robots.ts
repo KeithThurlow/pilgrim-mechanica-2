@@ -387,6 +387,12 @@ export class RobotSwarm {
   private tvx = 0; private tvz = 0;
   private tx = 0; private tz = 0; private tr = 2; private tLow = -1; private tHigh = -1;
 
+  /**
+   * A cheap ground for looks (src/world/chunkGround.ts), read by small robots' drawn legs instead of the true ground
+   * (perf pass 1). Null: the true ground.
+   */
+  lookGround: Ground | null = null;
+
   constructor(public v: RobotValues, readonly ground: Ground, seed = 1) {
     this.rs = (seed >>> 0) || 1;
   }
@@ -490,9 +496,9 @@ export class RobotSwarm {
    */
   smallLegPose(i: number, hips: Float32Array | number[], feet: Float32Array | number[]) {
     const v = this.v, S = this.size[i], x = this.px[i], y = this.py[i], z = this.pz[i];
-    const e = S * 0.4;
-    const gx = (this.ground.height(x + e, z) - this.ground.height(x - e, z)) / (2 * e);
-    const gz = (this.ground.height(x, z + e) - this.ground.height(x, z - e)) / (2 * e);
+    const e = S * 0.4, g = this.lookGround ?? this.ground;
+    const gx = (g.height(x + e, z) - g.height(x - e, z)) / (2 * e);
+    const gz = (g.height(x, z + e) - g.height(x, z - e)) / (2 * e);
     const sp = Math.hypot(this.vx[i], this.vz[i]);
     const move = this.state[i] === DOWN ? 0 : Math.min(1, sp / 3);
     const mx = sp > 1e-3 ? (this.vx[i] / sp) * move : 0, mz = sp > 1e-3 ? (this.vz[i] / sp) * move : 0;

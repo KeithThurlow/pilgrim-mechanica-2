@@ -52,6 +52,7 @@ export class SwarmCamps {
     private blocked: (x: number, z: number) => boolean,
   ) {
     this.sw = new RobotSwarm(v, field, 11);
+    this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw);
     scene.add(this.draw.group);
     this.target = new RobotTarget(this.sw, 3);

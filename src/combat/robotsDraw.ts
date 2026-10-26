@@ -33,17 +33,33 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, sh
   return m;
 }
 
-/** An instanced mesh with a running count for this frame. */
+/**
+ * A paint colour as linear RGB, worked out once per hex (perf pass 1: Color.setHex converts sRGB to linear with three
+ * pow calls, and ran for every part of every robot every frame, 2.5 ms in the stress lab).
+ */
+const LINEAR = new Map<number, THREE.Color>();
+function lin(hex: number): THREE.Color {
+  let c = LINEAR.get(hex);
+  if (!c) { c = new THREE.Color(hex); LINEAR.set(hex, c); }
+  return c;
+}
+
+/** An instanced mesh with a running count for this frame. Colours are written (and uploaded) only where they changed. */
 class Pool {
   n = 0;
+  private colourChanged = false;
   constructor(readonly mesh: THREE.InstancedMesh, readonly cap: number) {}
   put(m: THREE.Matrix4, c: THREE.Color) {
     if (this.n >= this.cap) return;
-    this.mesh.setMatrixAt(this.n, m); this.mesh.setColorAt(this.n, c); this.n++;
+    this.mesh.setMatrixAt(this.n, m);
+    const a = this.mesh.instanceColor!.array as Float32Array, o = this.n * 3;
+    if (a[o] !== c.r || a[o + 1] !== c.g || a[o + 2] !== c.b) { a[o] = c.r; a[o + 1] = c.g; a[o + 2] = c.b; this.colourChanged = true; }
+    this.n++;
   }
   finish() {
     this.mesh.count = this.n; this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    if (this.mesh.instanceColor && this.colourChanged) this.mesh.instanceColor.needsUpdate = true;
+    this.colourChanged = false;
     this.n = 0;
   }
 }
@@ -59,7 +75,7 @@ export class RobotsDraw {
   private q = new THREE.Quaternion(); private qa = new THREE.Quaternion(); private qb = new THREE.Quaternion();
   private p = new THREE.Vector3(); private s = new THREE.Vector3();
   private m = new THREE.Matrix4(); private ml = new THREE.Matrix4(); private m2 = new THREE.Matrix4(); private mb = new THREE.Matrix4();
-  private c = new THREE.Color(); private white = new THREE.Color(1, 1, 1);
+  private c = new THREE.Color(); private beacon = new THREE.Color(); private white = new THREE.Color(1, 1, 1);
   private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3(); private tip = new THREE.Vector3();
   private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3(); private head = new THREE.Vector3();
   private va = new THREE.Vector3(); private vb = new THREE.Vector3(); private d1 = new THREE.Vector3(); private d2 = new THREE.Vector3();
@@ -174,9 +190,9 @@ export class RobotsDraw {
       // Knees up (off the hub's top side) and out along the leg's spoke.
       this.local(this.bend, null, sa * 0.6, 1, ca * 0.6);
       solveKnee(this.hip, this.foot, L1, L2, this.bend.x, this.bend.y, this.bend.z, this.knee);
-      c.setHex(LEG_SMALL); if (dead) c.multiplyScalar(0.5);
+      c.copy(lin(LEG_SMALL)); if (dead) c.multiplyScalar(0.5);
       this.pipe(this.hip, this.knee, S * 0.075, c);
-      c.setHex(DARK); if (dead) c.multiplyScalar(0.5);
+      c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.5);
       this.pipe(this.knee, this.foot, S * 0.055, c);
     }
   }
@@ -224,11 +240,11 @@ export class RobotsDraw {
       hip.set(this.h3.x, this.h3.y, this.h3.z); knee.set(this.k3.x, this.k3.y, this.k3.z); foot.set(this.t3.x, this.t3.y, this.t3.z);
       const a = h + MID_SPEC.angles[k];
       this.sp.set(Math.sin(a), 0, Math.cos(a)); this.tg.set(Math.cos(a), 0, -Math.sin(a));
-      c.setHex(YELLOW); if (dead) c.multiplyScalar(0.45);
+      c.copy(lin(YELLOW)); if (dead) c.multiplyScalar(0.45);
       this.beam(this.beams, hip, knee, S * 0.07, S * 0.09, this.tg, c);
-      c.setHex(GREY); if (dead) c.multiplyScalar(0.45);
+      c.copy(lin(GREY)); if (dead) c.multiplyScalar(0.45);
       this.beam(this.beams, knee, foot, S * 0.05, S * 0.065, this.tg, c);
-      c.setHex(DARK); if (dead) c.multiplyScalar(0.5);
+      c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.5);
       this.knuckle(knee, S * 0.09, c);
       // Thigh ram: from the chassis above the hip to the thigh's top side.
       this.d1.subVectors(knee, hip).normalize();
@@ -263,8 +279,8 @@ export class RobotsDraw {
     this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (flash ? ALARM : LAMP));
     this.lamp(m, 0, -BIG_BODY_H * 0.3, 0.83, 0.07, 0.07, 0.02, off || (flash ? ALARM : 0x301008));
     const beat = (Math.sin(this.time * 5 + sw.seed[i] * 20) + 1) * 0.5;
-    this.c.setHex(AMBER).multiplyScalar(0.35 + 0.65 * beat);
-    this.lamp(m, 0.2, BIG_BODY_H * 0.3 + 0.33, 0.24, 0.045, 0.05, 0.045, off || this.c.getHex());
+    this.beacon.copy(lin(AMBER)).multiplyScalar(0.35 + 0.65 * beat);
+    this.lamp(m, 0.2, BIG_BODY_H * 0.3 + 0.33, 0.24, 0.045, 0.05, 0.045, off || this.beacon);
     // Arm legs.
     const { hip, knee, tip, foot, d1, d2, n1, n2, sp, tg, va, vb } = this;
     const L1 = BIG_SPEC.L1 * H, L2 = BIG_SPEC.L2 * H, bucketH = BIG_SPEC.toe * H;
@@ -280,12 +296,12 @@ export class RobotsDraw {
       n2.crossVectors(tg, d2).normalize(); if (n2.dot(sp) < 0) n2.negate();
       const dim = dead ? 0.45 : 1;
       // Boom: from the hip up to the elbow, deep in its own plane. Stick: from its head (past the elbow) to the bucket.
-      c.setHex(YELLOW).multiplyScalar(dim);
+      c.copy(lin(YELLOW)).multiplyScalar(dim);
       this.beam(this.beams, hip, knee, S * 0.085, S * 0.13, tg, c);
       this.head.copy(knee).addScaledVector(d2, -0.09 * H);
-      c.setHex(YELLOW_DIRTY).multiplyScalar(dim);
+      c.copy(lin(YELLOW_DIRTY)).multiplyScalar(dim);
       this.beam(this.beams, this.head, tip, S * 0.065, S * 0.095, tg, c);
-      c.setHex(DARK).multiplyScalar(dim);
+      c.copy(lin(DARK)).multiplyScalar(dim);
       this.knuckle(knee, S * 0.11, c);
       this.knuckle(tip, S * 0.07, c);
       // Rams: boom lift under the boom from the chassis; stick ram on top of the boom to the stick's head; bucket ram
@@ -301,7 +317,7 @@ export class RobotsDraw {
       this.ram(va, vb, S * 0.03, dead);
       // A hose along the boom's top.
       va.copy(hip).addScaledVector(n1, S * 0.075); vb.copy(knee).addScaledVector(n1, S * 0.06);
-      c.setHex(BLACK); this.pipe(va, vb, S * 0.018, c);
+      c.copy(lin(BLACK)); this.pipe(va, vb, S * 0.018, c);
       // Bucket: hangs from the stick's end, teeth down in the sand, curling as the leg swings over.
       const f = i * WALK_LEGS + k, t = sw.stepT[f];
       const curl = t >= 0 ? Math.sin(Math.PI * t) * 0.9 : 0;
@@ -331,18 +347,18 @@ export class RobotsDraw {
   private ram(a: THREE.Vector3, b: THREE.Vector3, r: number, dead: boolean) {
     const { c, tmp2 } = this;
     tmp2.copy(a).lerp(b, 0.6);
-    c.setHex(RAM); if (dead) c.multiplyScalar(0.5);
+    c.copy(lin(RAM)); if (dead) c.multiplyScalar(0.5);
     this.pipe(a, tmp2, r * 2, c);
     tmp2.copy(a).lerp(b, 0.45);
-    c.setHex(CHROME); if (dead) c.multiplyScalar(0.5);
+    c.copy(lin(CHROME)); if (dead) c.multiplyScalar(0.5);
     this.pipe(tmp2, b, r, c);
   }
 
   /** A lamp in a body's frame m (local metres × the body's scale): an unlit box of colour hex. */
-  private lamp(m: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, hex: number) {
+  private lamp(m: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, hex: number | THREE.Color) {
     this.ml.compose(this.tmp.set(x, y, z), this.qa.identity(), this.s.set(w, h, d));
     this.mb.multiplyMatrices(m, this.ml);
-    this.lamps.put(this.mb, this.c.setHex(hex));
+    this.lamps.put(this.mb, typeof hex === "number" ? lin(hex) : hex);
   }
 
   /** The up-facing normal of a segment direction d within its leg's plane (the plane holding d and world up). */

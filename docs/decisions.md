@@ -4,6 +4,9 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Performance pass 1 values: dust re-reads the ground after 1.5 m or 30 frames, dune shade every 8 frames; the cheap chunk ground for anything that only draws (dust, small robots' legs), the true ground for feet, rounds, physics and AI; dune shadows from a coarse shadow-only terrain copy (4 m, sunk 0.3 m) with the drawn ground only catching; at most 6 new ragdolls a frame | Claude | open | All sliders (Performance). `docs/perf-2026-10-26.md` Pass 1. |
+| 2026-10-26 | Co-op scale target: 4 players, 3-6x today's effects per weapon, Protocols that split, multiply, speed up, widen, ricochet and chain: about 20-50x today's shots and particles in a big fight | Keith | Keith | Proposal `docs/proposal-scale.md`; the worst case in the stress lab (`?worst`). |
+| 2026-10-26 | The shared register is approved | Keith | Keith | `docs/proposal-register.md`. |
 | 2026-10-26 | The sprint: tap Space dashes, keep holding to carry on into a digitigrade sprint that keeps getting faster (a running gait, not a rocket slide); jumps off dunes but not exaggerated (dashing into a wall must not fling the mech skyward); 14 m/s early, 22-26 late; hard landings hurt | Keith | Keith | `docs/proposal-bound.md` |
 | 2026-10-26 | Guns fire while sprinting and in the air (an air accuracy penalty as a slider); Shift's run kept until the sprint is played | Claude | open | Keith undecided on guns. |
 | 2026-10-26 | Performance pass: go | Keith | Keith | |

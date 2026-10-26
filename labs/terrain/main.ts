@@ -52,6 +52,7 @@ const panel = tweakPanel({
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "drive", label: "Marker", groups: ["Drive"] },
     { id: "light", label: "Light", groups: ["Look"] },
+    { id: "perf", label: "Performance", groups: ["Performance"] },
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },

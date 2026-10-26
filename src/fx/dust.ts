@@ -69,6 +69,9 @@ export const DUST_DEFAULTS = {
   shadowStrength: 0.45,
   shadowSize: 1.1,
   dustCullMargin: 15,
+  dustGroundRefresh: 1.5,
+  dustGroundEvery: 30,
+  dustSunEvery: 8,
 };
 export type DustValues = typeof DUST_DEFAULTS;
 
@@ -129,6 +132,9 @@ export const DUST_PARAMS: Param[] = [
   { key: "softDistance", label: "Soft into the ground (m)", min: 0.05, max: 4, step: 0.05, group: "Dust: look", tip: "Puffs fade where they meet the sand and the mech instead of cutting a hard line" },
   { key: "shadowStrength", label: "Shadow on the sand", min: 0, max: 1, step: 0.01, group: "Dust: look" },
   { key: "shadowSize", label: "Shadow size ×", min: 0.3, max: 2.5, step: 0.05, group: "Dust: look" },
+  { key: "dustGroundRefresh", label: "Dust: re-read the ground after (m)", min: 0.1, max: 8, step: 0.1, group: "Performance", tip: "Each puff keeps the ground under it and under its shadow (height and slope) and reads it again only after drifting this far (perf pass 1: the ground lookups were 60% of the stress frame). Lower is exacter, higher cheaper" },
+  { key: "dustGroundEvery", label: "Dust: re-read the ground every (frames)", min: 1, max: 240, step: 1, group: "Performance", tip: "And at least this often, in turn, so craters dug under hanging dust are picked up" },
+  { key: "dustSunEvery", label: "Dust: dune shade every (frames)", min: 1, max: 60, step: 1, group: "Performance", tip: "Each puff marches toward the sun over the dunes (is it behind one?) once every this many frames, in turn" },
 ];
 
 export const DUST_MAX = 4096;
@@ -150,6 +156,16 @@ export class DustSim {
   readonly tint = new Float32Array(DUST_MAX); readonly drag = new Float32Array(DUST_MAX);
   /** Current drawn radius and opacity (written by update for the drawer). */
   readonly radius = new Float32Array(DUST_MAX); readonly alpha = new Float32Array(DUST_MAX);
+  /**
+   * The ground under each puff, kept from where it was last read (perf pass 1): the point (gx, gz), its height and
+   * slope, so the floor is a plane until the puff drifts dustGroundRefresh metres. gx is NaN for a fresh puff.
+   * Also counts how many reads (for the perf notes).
+   */
+  private gx = new Float32Array(DUST_MAX).fill(NaN); private gz = new Float32Array(DUST_MAX);
+  private gy = new Float32Array(DUST_MAX); private gdx = new Float32Array(DUST_MAX); private gdz = new Float32Array(DUST_MAX);
+  private frame = 0;
+  private nn = [0, 1, 0];
+  groundReads = 0;
   /** What the ground is at a point. Everything is sand until the terrain has other surfaces. */
   surfaceAt: (x: number, z: number) => Surface = () => "sand";
   private next = 0;
@@ -158,7 +174,8 @@ export class DustSim {
   alive = 0;
   private t = 0;
 
-  constructor(public v: DustValues, private ground: Ground) {}
+  /** What the floor is read from: the true ground, or a cheap one for looks (src/world/chunkGround.ts). */
+  constructor(public v: DustValues, public ground: Ground) {}
 
   emit(kind: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, dens: number) {
     const i = this.next;
@@ -166,6 +183,7 @@ export class DustSim {
     this.px[i] = x; this.py[i] = y; this.pz[i] = z;
     this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
     this.age[i] = 0; this.life[i] = life; this.size0[i] = size; this.dens[i] = dens;
+    this.gx[i] = NaN;
     this.kind[i] = kind; this.seed[i] = Math.random();
     this.tint[i] = this.curTint;
     this.drag[i] = this.curDrag || (kind === CLOUD ? this.v.cloudDrag : this.v.clumpDrag);
@@ -303,6 +321,7 @@ export class DustSim {
   update(dt: number) {
     const v = this.v;
     this.t += dt;
+    this.frame++;
     const wa = (v.dustWindAngle * Math.PI) / 180, wx = Math.sin(wa) * v.windSpeed, wz = Math.cos(wa) * v.windSpeed;
     let alive = 0;
     for (let i = 0; i < DUST_MAX; i++) {
@@ -339,9 +358,24 @@ export class DustSim {
         this.alpha[i] = this.dens[i] * Math.min(1, u * 20) * (1 - u * u);
       }
       this.px[i] += this.vx[i] * dt; this.py[i] += this.vy[i] * dt; this.pz[i] += this.vz[i] * dt;
-      const g = this.ground.height(this.px[i], this.pz[i]) + this.radius[i] * 0.25;
+      const g = this.floorAt(i) + this.radius[i] * 0.25;
       if (this.py[i] < g) { this.py[i] = g; if (this.vy[i] < 0) this.vy[i] = 0; }
     }
     this.alive = alive;
+  }
+
+  /** The ground under puff i: the kept plane, read again when it has drifted off it or its turn comes round. */
+  floorAt(i: number): number {
+    const x = this.px[i], z = this.pz[i], dx = x - this.gx[i], dz = z - this.gz[i];
+    const R = this.v.dustGroundRefresh ?? 1.5, every = Math.max(1, Math.round(this.v.dustGroundEvery ?? 30));
+    if (!(dx * dx + dz * dz <= R * R) || (i + this.frame) % every === 0) {
+      this.gx[i] = x; this.gz[i] = z;
+      this.gy[i] = this.ground.height(x, z);
+      const n = this.ground.normal(x, z, this.nn), ny = Math.max(0.2, n[1]);
+      this.gdx[i] = -n[0] / ny; this.gdz[i] = -n[2] / ny;
+      this.groundReads++;
+      return this.gy[i];
+    }
+    return this.gy[i] + this.gdx[i] * dx + this.gdz[i] * dz;
   }
 }

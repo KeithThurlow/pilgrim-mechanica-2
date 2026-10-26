@@ -16,6 +16,9 @@ export const STREAM_DEFAULTS = {
   sandGrain: 0.5,
   sandSpecks: 0.45,
   sandRipples: 0.25,
+  shadowTerrain: 1,
+  shadowSpacing: 4,
+  shadowSink: 0.3,
 };
 export type StreamValues = typeof STREAM_DEFAULTS;
 
@@ -28,9 +31,15 @@ export const STREAM_PARAMS: Param[] = [
   { key: "sandGrain", label: "Sand grain", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Soft mottling across the sand" },
   { key: "sandSpecks", label: "Specks", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Tiny dark grains and pebbles, as in Keith's reference video" },
   { key: "sandRipples", label: "Wind ripples", min: 0, max: 1, step: 0.01, group: "Sand surface", tip: "Fine ripples across the wind" },
+  { key: "shadowTerrain", label: "Dune shadows from a coarse copy (0/1)", min: 0, max: 1, step: 1, group: "Performance", tip: "1: a coarse copy of the ground, never drawn, casts the dune shadows, and the drawn ground (chunks and the fine dent patch) only catches them (perf pass 1: the patch alone put 295k triangles in the shadow pass). 0: the drawn ground casts, as before" },
+  { key: "shadowSpacing", label: "Shadow ground spacing (m)", min: 1, max: 16, step: 1, group: "Performance", onRelease: true, tip: "Vertex spacing of the coarse shadow copy (rounded to divide the chunk grid). Dune shadows are metres across; craters want 2-4 m" },
+  { key: "shadowSink", label: "Shadow ground sunk (m)", min: 0, max: 2, step: 0.05, group: "Performance", tip: "The coarse copy sits this much lower, so where it would poke through the drawn ground (in hollows) it can't shade it with acne" },
 ];
 
-interface Chunk { mesh: THREE.Mesh; water: THREE.Mesh | null; cx: number; cz: number }
+/** Objects on this layer are drawn only into the sun's shadow map (the camera doesn't see it; src/world/look.ts lets the shadow camera). */
+export const SHADOW_ONLY_LAYER = 3;
+
+interface Chunk { mesh: THREE.Mesh; water: THREE.Mesh | null; shadow: THREE.Mesh | null; cx: number; cz: number }
 
 export class TerrainStreamer {
   readonly group = new THREE.Group();
@@ -59,6 +68,22 @@ export class TerrainStreamer {
   private dirty = new Set<string>();
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
+  private shadowIndex: THREE.BufferAttribute | null = null;
+  private shadowIndexN = -1;
+  private shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+  private shadowKey = "";
+  /** Triangles in the coarse shadow copy and in the drawn chunks (for the perf notes). */
+  readonly shadowStats = { proxyTris: 0, chunkTris: 0 };
+  /** Bumped whenever a chunk is built, rebuilt or dropped (src/world/chunkGround.ts re-reads its cached chunk then). */
+  version = 0;
+
+  /** A loaded chunk's vertex positions and normals (local to its corner), or null when it isn't loaded. */
+  chunkData(cx: number, cz: number): { pos: Float32Array; nor: Float32Array } | null {
+    const c = this.chunks.get(cx + "," + cz);
+    if (!c) return null;
+    const g = c.mesh.geometry;
+    return { pos: g.getAttribute("position").array as Float32Array, nor: g.getAttribute("normal").array as Float32Array };
+  }
 
   constructor(private field: DuneField, public v: StreamValues) {
     // Sand surface in the shader, per pixel (the vertex colours carry only the broad dune shading): soft mottling,
@@ -128,6 +153,16 @@ export class TerrainStreamer {
     this.uWind.value.set(wx, wz);
     const size = this.v.chunkSize, r = this.v.radius;
     const ccx = Math.floor(fx / size), ccz = Math.floor(fz / size);
+    // The coarse shadow copy: switched on or off, or a new spacing (rebuilt for every loaded chunk then).
+    const sk = `${this.shadowOn}|${this.shadowStride()}`;
+    if (sk !== this.shadowKey) {
+      this.shadowKey = sk;
+      for (const c of this.chunks.values()) this.makeShadow(c);
+    }
+    if (this.shadowOn) {
+      const sink = this.v.shadowSink ?? 0.3;
+      for (const c of this.chunks.values()) if (c.shadow) c.shadow.position.y = -sink, c.shadow.updateMatrix();
+    }
 
     for (const [k, c] of this.chunks) {
       if (Math.hypot(c.cx - ccx, c.cz - ccz) > r + 1.5) { this.dispose(c); this.chunks.delete(k); }
@@ -228,6 +263,7 @@ export class TerrainStreamer {
       }
       P.needsUpdate = true; Nm.needsUpdate = true; Cl.needsUpdate = true;
       g.computeBoundingSphere();
+      if (ch.shadow) this.makeShadow(ch);
       if (wg) for (const k of ["color", "depth", "fade"]) (wg.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
       if (needWater) this.dirty.add(key);
     }
@@ -280,6 +316,7 @@ export class TerrainStreamer {
     g.setIndex(this.sharedIndex(n));
     g.computeBoundingSphere();
     const mesh = new THREE.Mesh(g, this.material);
+    this.version++;
     mesh.position.set(ox, 0, oz);
     mesh.receiveShadow = true;
     // Dunes cast shadows too (Keith 2026-10-24: a low sun should throw dune shadows), inside the sun's shadow box.
@@ -288,7 +325,9 @@ export class TerrainStreamer {
     mesh.updateMatrix();
     this.group.add(mesh);
     const waterMesh = water !== null && maxWs > 0 && wsA ? this.buildWater(ox, oz, n, step, water, wsA, hs) : null;
-    return { mesh, water: waterMesh, cx, cz };
+    const c: Chunk = { mesh, water: waterMesh, shadow: null, cx, cz };
+    this.makeShadow(c);
+    return c;
   }
 
   /** A water sheet over the chunk at the water level: depth from the ground under each vertex, faded by the shallows' weight. */
@@ -317,6 +356,71 @@ export class TerrainStreamer {
     return m;
   }
 
+  private get shadowOn() { return (this.v.shadowTerrain ?? 0) > 0.5; }
+
+  /** Every how many chunk vertices the shadow copy takes one: the spacing slider, rounded to divide the grid. */
+  private shadowStride() {
+    const n = Math.round(this.v.segments), step = this.v.chunkSize / n;
+    let k = Math.max(1, Math.min(n, Math.round((this.v.shadowSpacing ?? 4) / step)));
+    while (n % k) k--;
+    return k;
+  }
+
+  /**
+   * The chunk's coarse shadow copy (perf pass 1): every stride-th vertex of its grid, on SHADOW_ONLY_LAYER, so only the
+   * sun's shadow map draws it; the chunk itself then only catches shadows. With the copy off, the chunk casts again.
+   */
+  private makeShadow(c: Chunk) {
+    const on = this.shadowOn;
+    c.mesh.castShadow = !on;
+    if (!on) {
+      if (c.shadow) { this.group.remove(c.shadow); c.shadow.geometry.setIndex(null); c.shadow.geometry.dispose(); c.shadow = null; }
+      return;
+    }
+    const n = Math.round(this.v.segments), k = this.shadowStride(), m = n / k, row = n + 1, mr = m + 1;
+    const src = c.mesh.geometry.getAttribute("position").array as Float32Array;
+    let g = c.shadow?.geometry;
+    let pos = g?.getAttribute("position")?.array as Float32Array | undefined;
+    if (!g || !pos || pos.length !== mr * mr * 3) {
+      if (c.shadow) { this.group.remove(c.shadow); c.shadow.geometry.setIndex(null); c.shadow.geometry.dispose(); }
+      g = new THREE.BufferGeometry();
+      pos = new Float32Array(mr * mr * 3);
+      g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(mr * mr * 3).map((_, q) => (q % 3 === 1 ? 1 : 0)), 3));
+      g.setIndex(this.coarseIndex(m));
+      const s = new THREE.Mesh(g, this.shadowMat);
+      s.layers.set(SHADOW_ONLY_LAYER);
+      s.castShadow = true; s.receiveShadow = false;
+      s.position.set(c.mesh.position.x, -(this.v.shadowSink ?? 0.3), c.mesh.position.z);
+      s.matrixAutoUpdate = false; s.updateMatrix();
+      s.name = "terrain shadow copy";
+      this.group.add(s);
+      c.shadow = s;
+    }
+    for (let j = 0, i = 0; j <= m; j++) for (let q = 0; q <= m; q++, i++) {
+      const v = (j * k) * row + q * k;
+      pos[i * 3] = src[v * 3]; pos[i * 3 + 1] = src[v * 3 + 1]; pos[i * 3 + 2] = src[v * 3 + 2];
+    }
+    (g.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    g.computeBoundingSphere();
+    this.shadowStats.proxyTris = m * m * 2;
+    this.shadowStats.chunkTris = n * n * 2;
+  }
+
+  private coarseIndex(m: number) {
+    if (this.shadowIndex && this.shadowIndexN === m) return this.shadowIndex;
+    const row = m + 1, idx = new Uint16Array(m * m * 6);
+    let p = 0;
+    for (let j = 0; j < m; j++) for (let k = 0; k < m; k++) {
+      const a = j * row + k, b = a + 1, c = a + row, d = c + 1;
+      idx[p++] = a; idx[p++] = c; idx[p++] = b;
+      idx[p++] = b; idx[p++] = c; idx[p++] = d;
+    }
+    this.shadowIndex = new THREE.BufferAttribute(idx, 1);
+    this.shadowIndexN = m;
+    return this.shadowIndex;
+  }
+
   private sharedIndex(n: number) {
     if (this.index && this.indexSegments === n) return this.index;
     const row = n + 1, idx = new (row * row > 65535 ? Uint32Array : Uint16Array)(n * n * 6);
@@ -332,6 +436,8 @@ export class TerrainStreamer {
   }
 
   private dispose(c: Chunk) {
+    this.version++;
+    if (c.shadow) { this.group.remove(c.shadow); c.shadow.geometry.setIndex(null); c.shadow.geometry.dispose(); c.shadow = null; }
     if (c.water) { this.group.remove(c.water); c.water.geometry.setIndex(null); c.water.geometry.dispose(); }
     this.group.remove(c.mesh);
     // The index is shared, so only drop the per-chunk attributes.

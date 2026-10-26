@@ -22,6 +22,7 @@ import { BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS } from "../../src/combat/infan
 import { WARBAND_DEFAULTS, WARBAND_PARAMS } from "../../src/combat/warband";
 import { StressRobots, StressBandits, StressWarband } from "./enemies";
 import { StressRun } from "./run";
+import { WorstCase, WORST_DEFAULTS, WORST_PARAMS } from "./worst";
 
 const STRESS_DEFAULTS = {
   stressRobots: 1000,
@@ -65,10 +66,10 @@ let robots: StressRobots | null = null, bandits: StressBandits | null = null, ba
 const lab = await combatLab({
   id: "stress-lab",
   title: "Stress",
-  defaults: { ...STRESS_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS },
-  params: [...STRESS_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS],
+  defaults: { ...STRESS_DEFAULTS, ...WORST_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS },
+  params: [...STRESS_PARAMS, ...WORST_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS],
   topics: [
-    { id: "stress", label: "Stress", groups: [G, GB, GR] },
+    { id: "stress", label: "Stress", groups: [G, GB, GR, "Stress worst case"] },
     { id: "robots", label: "Robots", groups: ["Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones"] },
     { id: "bandits", label: "Bandits", groups: ["Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] },
     { id: "raiders", label: "Raiders", groups: ["Raider driving", "Raider guns", "Raider health", "Raider wrecks"] },
@@ -83,6 +84,7 @@ const lab = await combatLab({
   demo: (t) => demo(t),
 });
 const { V, bf, player, app } = lab;
+if (params.has("worst")) V.stressWorst = 1;
 if (params.has("settle")) V.stressSettle = Number(params.get("settle"));
 if (params.has("hold")) V.stressHold = Number(params.get("hold"));
 
@@ -96,6 +98,9 @@ bandits = new StressBandits(lab);
 await bandits.load();
 band = new StressWarband(lab);
 await band.load(4);
+// The worst case (Keith 2026-10-26, co-op scale): three AI allies and max-Protocol stand-ins (labs/stress/worst.ts).
+const worst = new WorstCase(lab as never);
+await worst.load();
 // The mech's dash and stomps reach both swarms, as in their labs.
 player.onStomp = (x, z, k) => { robots!.sw.stomp(x, z, V.stressRobotStomp * Math.min(1.5, k)); bandits!.sw.stomp(x, z, V.stressBanditStomp * Math.min(1.5, k)); };
 
@@ -145,15 +150,17 @@ lab.onFrame((dt) => {
   bandits!.topUp(V.stressBandits * k);
   band!.topUp(V.stressVehicles * k, V.stressMechs * k, dt);
   mark("spawning");
+  worst.update(dt, clock);
+  mark("allies + protocols");
   robots!.update(dt, mark);
   bandits!.update(dt, mark);
   band!.update(dt, mark);
-  if (V.stressBarrageEvery > 0 && (barrageClock += dt) >= V.stressBarrageEvery) { barrageClock = 0; barrage(); }
+  if (V.stressBarrageEvery > 0 && (barrageClock += dt) >= V.stressBarrageEvery) { barrageClock = 0; for (let k = 0; k <= (worst.on ? Math.round(V.stressAllies) : 0); k++) barrage(); } // one per player in the worst case
   for (let i = queue.length - 1; i >= 0; i--) {
     const b = queue[i];
     if (b.at > clock) continue;
     queue.splice(i, 1);
-    bf.blast(1, blastAt.set(b.x, lab.field.height(b.x, b.z), b.z), b.r, b.dmg);
+    bf.blast(1, blastAt.set(b.x, lab.field.height(b.x, b.z), b.z), b.r * (worst.on ? V.stressArea : 1), b.dmg);
   }
   mark("barrage blasts");
   if (V.stressGod && player.alive) player.health = player.maxHealth;
@@ -179,15 +186,17 @@ app.onTick((rawDt) => {
   ms.set("gpu/wait", Math.max(0, last.frame - last.tick - last.render));
   ms.set("  inside the above: target lists", targetsMs);
   targetsMs = 0;
+  const wc = worst.take();
   const counts = {
     robots: robots!.sw.count, bandits: bandits!.sw.count, vehicles: band!.vehicles, "bandit mechs": band!.mechs,
-    bodies: lab.deaths.dead.length, "dust particles": bf.dust.alive, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
+    bodies: lab.deaths.dead.length, "dust particles": bf.dust.alive,
+    "team gun shots": wc.shots, "of which allies": wc.allyShots, "team rounds": wc.rounds, ricochets: wc.ricochets, "chain hops": wc.chains, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
   };
   if (run.frame(dt, { ms, counts })) {
     out.textContent = run.table;
     out.style.display = "block";
     console.log("stress run\n" + run.table);
   }
-  lab.hud("stress", `robots ${counts.robots} · bandits ${counts.bandits} · vehicles ${counts.vehicles} · bandit mechs ${counts["bandit mechs"]} · bodies ${counts.bodies}${run.phase ? ` · ${run.phase}` : ""}`);
+  lab.hud("stress", `robots ${counts.robots} · bandits ${counts.bandits} · vehicles ${counts.vehicles} · bandit mechs ${counts["bandit mechs"]} · bodies ${counts.bodies}${worst.on ? ` · worst case: ${worst.count.shots} shots (allies ${worst.count.allyShots}) → rounds ${worst.count.rounds} + ricochets ${worst.count.ricochets} + chain hops ${worst.count.chains} this frame` : ""}${run.phase ? ` · ${run.phase}` : ""}`);
 });
 if (params.has("run")) startRun();

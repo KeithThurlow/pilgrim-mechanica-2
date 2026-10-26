@@ -175,6 +175,7 @@ const panel = tweakPanel({
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
+    { id: "perf", label: "Performance", groups: ["Performance"] },
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => { if (shapeKeys.has(k)) { field.update(); streamer.rebuildAll(); } },

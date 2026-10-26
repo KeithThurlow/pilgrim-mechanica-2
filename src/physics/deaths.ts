@@ -18,6 +18,7 @@ export const DEATH_DEFAULTS = {
   maxRagdolls: 30,
   bodyStays: 14,
   floorSize: 120,
+  ragdollsPerFrame: 6,
 };
 export type DeathValues = typeof DEATH_DEFAULTS;
 
@@ -30,6 +31,7 @@ export const DEATH_PARAMS: Param[] = [
   { key: "maxRagdolls", label: "Moving bodies at once", min: 1, max: 200, step: 1, group: "Death physics", tip: "Past this the oldest freeze (the cost of the physics)" },
   { key: "bodyStays", label: "Bodies stay (s)", min: 2, max: 120, step: 1, group: "Death physics", tip: "Then they sink into the sand and are cleared" },
   { key: "floorSize", label: "Physics floor (m)", min: 40, max: 300, step: 10, group: "Death physics", tip: "Size of the patch of dunes the physics knows, centred on the camera" },
+  { key: "ragdollsPerFrame", label: "New ragdolls per frame", min: 1, max: 60, step: 1, group: "Performance", tip: "Deaths past this in one frame wait their turn, flying on as they were thrown, and get their physics a frame or two later (perf pass 1: a barrage killing dozens at once made the physics spike to hundreds of ms). The cap on moving bodies is under Death physics" },
 ];
 
 /** A box part in a body's own frame (origin at its feet, facing +Z), optionally turned (a quaternion x y z w). */
@@ -51,7 +53,12 @@ export interface Dead {
   /** Extra sink below the sand at the end of its life (metres). */
   sink: number;
   done: boolean;
+  /** Waiting for its physics (too many died this frame): flying on as thrown, ballistic, until its turn. */
+  pending?: Pending | null;
 }
+
+/** A ragdoll's bodies not yet made: its parts' starting velocities and spins, in the order of parts. */
+interface Pending { joints: JointSpec[]; lin: { x: number; y: number; z: number }[]; ang: { x: number; y: number; z: number }[]; floor: number }
 
 let ready: Promise<void> | null = null;
 /** Load the physics engine (WebAssembly) once. */
@@ -63,6 +70,9 @@ export class DeathPhysics {
   private floor: RAPIER.Collider | null = null;
   private floorAt = new Vector3(1e9, 0, 1e9);
   private acc = 0;
+  /** Ragdolls made since the last step, and those waiting their turn (oldest first). */
+  private madeThisFrame = 0;
+  private waiting: Dead[] = [];
   private q = new Quaternion();
   private v3 = new Vector3();
 
@@ -102,43 +112,78 @@ export class DeathPhysics {
    */
   ragdoll(parts: PartSpec[], joints: JointSpec[], x: number, y: number, z: number, yaw: number,
     vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number): Dead {
-    const v = this.v, w = this.world;
+    const v = this.v;
     const base = this.q.setFromAxisAngle(UP, yaw);
-    const bodies: RAPIER.RigidBody[] = [];
     const push = strength * v.deathPush;
-    const turned = new Quaternion();
-    for (const p of parts) {
+    const d: Dead = {
+      parts, bodies: [], joints: [], pos: parts.map(() => new Vector3()), quat: parts.map(() => new Quaternion()),
+      age: 0, live: true, kind: "ragdoll", sink: 0, done: false,
+    };
+    const pend: Pending = { joints, lin: [], ang: [], floor: y };
+    parts.forEach((p, k) => {
       const at = this.v3.set(p.at[0], p.at[1], p.at[2]).applyQuaternion(base);
       // Upper parts get more of the push, so a body folds over instead of sliding.
       const tall = 0.4 + Math.min(1, p.at[1] / 1.6);
-      turned.copy(base);
-      if (p.rot) turned.multiply(new Quaternion(p.rot[0], p.rot[1], p.rot[2], p.rot[3]));
+      d.pos[k].set(x + at.x, y + at.y, z + at.z);
+      d.quat[k].copy(base);
+      if (p.rot) d.quat[k].multiply(new Quaternion(p.rot[0], p.rot[1], p.rot[2], p.rot[3]));
+      pend.lin.push({ x: vel.x + dirX * push * tall, y: vel.y + push * v.deathLift * tall, z: vel.z + dirZ * push * tall });
+      pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 });
+    });
+    d.pending = pend;
+    this.dead.push(d);
+    // Made now while this frame's allowance lasts, else queued (perf pass 1).
+    if (this.madeThisFrame < Math.max(1, v.ragdollsPerFrame ?? 6) && this.waiting.length === 0) this.make(d);
+    else this.waiting.push(d);
+    return d;
+  }
+
+  /** Give a waiting ragdoll its bodies and joints, where it has flown to, moving as it moves now. */
+  private make(d: Dead) {
+    const pend = d.pending;
+    if (!pend) return;
+    d.pending = null;
+    this.madeThisFrame++;
+    if (!d.live || d.done) return;
+    const v = this.v, w = this.world, parts = d.parts;
+    const bodies: RAPIER.RigidBody[] = [];
+    parts.forEach((p, k) => {
+      const P = d.pos[k], Q = d.quat[k];
       const desc = RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(x + at.x, y + at.y, z + at.z)
-        .setRotation({ x: turned.x, y: turned.y, z: turned.z, w: turned.w })
-        .setLinvel(vel.x + dirX * push * tall, vel.y + push * v.deathLift * tall, vel.z + dirZ * push * tall)
-        .setAngvel({ x: (Math.random() - 0.5) * v.deathSpin * 4, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 })
+        .setTranslation(P.x, P.y, P.z)
+        .setRotation({ x: Q.x, y: Q.y, z: Q.z, w: Q.w })
+        .setLinvel(pend.lin[k].x, pend.lin[k].y, pend.lin[k].z)
+        .setAngvel(pend.ang[k])
         .setLinearDamping(0.1).setAngularDamping(v.jointDamping * 0.15);
       const b = w.createRigidBody(desc);
       w.createCollider(RAPIER.ColliderDesc.cuboid(p.half[0], p.half[1], p.half[2]).setDensity(p.mass ?? 600).setFriction(0.8).setCollisionGroups(BODY), b);
       bodies.push(b);
-    }
-    const made: RAPIER.ImpulseJoint[] = [];
-    for (const j of joints) {
+    });
+    for (const j of pend.joints) {
       const A = parts[j.a], B = parts[j.b];
       // Anchors in each part's own frame (undo a turned part's rotation). Hinges assume unturned parts.
       const a1 = anchor(j.at, A), a2 = anchor(j.at, B);
       const data = j.hinge ? RAPIER.JointData.revolute(a1, a2, { x: j.hinge[0], y: j.hinge[1], z: j.hinge[2] }) : RAPIER.JointData.spherical(a1, a2);
       if (j.hinge && j.limits) { data.limitsEnabled = true; data.limits = j.limits; }
-      made.push(w.createImpulseJoint(data, bodies[j.a], bodies[j.b], true));
+      d.joints.push(w.createImpulseJoint(data, bodies[j.a], bodies[j.b], true));
     }
-    const d: Dead = {
-      parts, bodies, joints: made, pos: parts.map(() => new Vector3()), quat: parts.map(() => new Quaternion()),
-      age: 0, live: true, kind: "ragdoll", sink: 0, done: false,
-    };
+    d.bodies = bodies;
     this.read(d);
-    this.dead.push(d);
-    return d;
+  }
+
+  /** A waiting ragdoll flies on as one piece (no spin), falling but not below where it died. */
+  private drift(d: Dead, dt: number) {
+    const pend = d.pending!;
+    let low = Infinity;
+    for (let k = 0; k < d.pos.length; k++) {
+      const l = pend.lin[k];
+      l.y -= 9.81 * dt;
+      d.pos[k].x += l.x * dt; d.pos[k].y += l.y * dt; d.pos[k].z += l.z * dt;
+      low = Math.min(low, d.pos[k].y);
+    }
+    const under = this.ground.height(d.pos[0].x, d.pos[0].z);
+    const floor = Math.min(pend.floor, under);
+    if (low < floor) for (let k = 0; k < d.pos.length; k++) { d.pos[k].y += floor - low; pend.lin[k].y = Math.max(0, pend.lin[k].y); }
   }
 
   /** A vehicle wreck: one rigid body (a chassis box and a cab box), thrown by a blast. */
@@ -175,6 +220,8 @@ export class DeathPhysics {
   /** Take a body out of the world, keeping its last pose. */
   private freeze(d: Dead) {
     if (!d.live) return;
+    // Never made: it keeps the pose it flew to.
+    if (d.pending) { d.pending = null; const i = this.waiting.indexOf(d); if (i >= 0) this.waiting.splice(i, 1); }
     this.read(d);
     for (const j of d.joints) this.world.removeImpulseJoint(j, false);
     for (const b of d.bodies) this.world.removeRigidBody(b);
@@ -184,6 +231,12 @@ export class DeathPhysics {
 
   step(dt: number) {
     const v = this.v;
+    // This frame's new ragdolls: the waiting ones first, oldest first, up to the allowance; the rest fly on.
+    // (Those made since the last step count against it; the count starts again after this step.)
+    const cap = Math.max(1, v.ragdollsPerFrame ?? 6);
+    while (this.waiting.length && this.madeThisFrame < cap) this.make(this.waiting.shift()!);
+    this.madeThisFrame = 0;
+    for (const d of this.waiting) this.drift(d, dt);
     // Freeze the oldest past the cap, and any that have moved long enough.
     const live = this.dead.filter((d) => d.live);
     for (let i = 0; i < live.length - v.maxRagdolls; i++) this.freeze(live[i]);
@@ -197,7 +250,7 @@ export class DeathPhysics {
     }
     for (const d of this.dead) {
       d.age += dt;
-      if (d.live) this.read(d);
+      if (d.live && !d.pending) this.read(d);
       // At the end, sink into the sand, then clear.
       const end = v.bodyStays;
       if (d.age > end) d.sink = Math.min(1.5, (d.age - end) * 0.4);

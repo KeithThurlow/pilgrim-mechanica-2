@@ -59,8 +59,20 @@ export class DustDraw {
   private p = new THREE.Vector3();
   private n = new THREE.Vector3();
   private nn = [0, 1, 0];
+  /**
+   * Under each puff's shadow, the ground kept from where it was last read (perf pass 1): the point, its height and
+   * slope, and its normal; read again after drifting dustGroundRefresh metres or on its turn. lastAge spots a slot
+   * reused by a fresh puff (its age went down).
+   */
+  private sx = new Float32Array(DUST_MAX).fill(NaN); private sz = new Float32Array(DUST_MAX); private sy = new Float32Array(DUST_MAX);
+  private sdx = new Float32Array(DUST_MAX); private sdz = new Float32Array(DUST_MAX);
+  private snx = new Float32Array(DUST_MAX); private sny = new Float32Array(DUST_MAX).fill(1); private snz = new Float32Array(DUST_MAX);
+  private lastAge = new Float32Array(DUST_MAX).fill(1e9);
+  /** Ground reads this frame (shadows, sun marches), for the perf notes. */
+  groundReads = 0;
 
-  constructor(private sim: DustSim, private ground: Ground) {
+  /** ground: what the shadows and the sun march read (the true ground, or a cheap one for looks). */
+  constructor(private sim: DustSim, public ground: Ground) {
     for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha, this.sunAttr]) a.setUsage(THREE.DynamicDrawUsage);
 
     const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, surface darkness
@@ -181,6 +193,9 @@ export class DustDraw {
     this.frame++;
     let ns = 0;
     const sy = Math.max(0.15, sunDir.y);
+    const sunEvery = Math.max(1, Math.round(v.dustSunEvery ?? 8)), every = Math.max(1, Math.round(v.dustGroundEvery ?? 30));
+    const R2 = (v.dustGroundRefresh ?? 1.5) ** 2;
+    this.groundReads = 0;
     for (let j = 0; j < n; j++) {
       const i = ord[j];
       P[j * 3] = sim.px[i]; P[j * 3 + 1] = sim.py[i]; P[j * 3 + 2] = sim.pz[i];
@@ -194,22 +209,36 @@ export class DustDraw {
         R[j] = sim.seed[i] * 6.283;
         S[j * 2] = S[j * 2 + 1] = sim.radius[i] * 2;
       }
-      // Hill shadow on the puff: every 4th frame per puff, march toward the sun over the dunes.
-      if ((i + this.frame) % 4 === 0) {
+      const fresh = sim.age[i] < this.lastAge[i];
+      this.lastAge[i] = sim.age[i];
+      // Hill shadow on the puff: on its turn (every dustSunEvery frames) march toward the sun over the dunes.
+      if (fresh || (i + this.frame) % sunEvery === 0) {
         const target = sunReach(this.ground, sim.px[i], sim.py[i] + sim.radius[i] * 0.3, sim.pz[i], sunDir);
-        this.sunVis[i] += (target - this.sunVis[i]) * (sim.age[i] < 0.1 ? 1 : 0.5);
+        this.sunVis[i] += (target - this.sunVis[i]) * (fresh || sim.age[i] < 0.1 ? 1 : 0.5);
+        this.groundReads += 25;
       }
       SV[j] = this.sunVis[i];
       D[j * 4] = Math.min(1, sim.alpha[i]); D[j * 4 + 1] = sim.seed[i]; D[j * 4 + 2] = sim.kind[i]; D[j * 4 + 3] = sim.tint[i];
-      // Shadow: down the sun's ray from the puff to the sand (two steps to land on the dune), facing the slope.
+      // Shadow: down the sun's ray from the puff to the sand (two steps to land on the dune), facing the slope. The
+      // ground under the puff is the sim's kept plane; under the shadow, this one's.
       const k = sim.kind[i] === CLOUD ? 1 : sim.kind[i] === SPRAY ? 0.3 : 0.6;
-      let h = sim.py[i] - this.ground.height(sim.px[i], sim.pz[i]);
+      let h = sim.py[i] - sim.floorAt(i);
       let x = sim.px[i] - (sunDir.x / sy) * h, z = sim.pz[i] - (sunDir.z / sy) * h;
-      h = sim.py[i] - this.ground.height(x, z);
+      {
+        const dx = x - this.sx[i], dz = z - this.sz[i];
+        if (fresh || !(dx * dx + dz * dz <= R2) || (i + this.frame) % every === 0) {
+          this.sx[i] = x; this.sz[i] = z;
+          this.sy[i] = this.ground.height(x, z);
+          const nr = this.ground.normal(x, z, this.nn), ny = Math.max(0.2, nr[1]);
+          this.snx[i] = nr[0]; this.sny[i] = nr[1]; this.snz[i] = nr[2];
+          this.sdx[i] = -nr[0] / ny; this.sdz[i] = -nr[2] / ny;
+          this.groundReads += 2;
+        }
+      }
+      h = sim.py[i] - (this.sy[i] + this.sdx[i] * (x - this.sx[i]) + this.sdz[i] * (z - this.sz[i]));
       x = sim.px[i] - (sunDir.x / sy) * h; z = sim.pz[i] - (sunDir.z / sy) * h;
-      const gy = this.ground.height(x, z);
-      const nr = this.ground.normal(x, z, this.nn);
-      this.n.set(nr[0], nr[1], nr[2]);
+      const gy = this.sy[i] + this.sdx[i] * (x - this.sx[i]) + this.sdz[i] * (z - this.sz[i]);
+      this.n.set(this.snx[i], this.sny[i], this.snz[i]);
       this.q.setFromUnitVectors(UP, this.n);
       const d = sim.radius[i] * 2 * v.shadowSize * (1 + Math.min(1, h / 6) * 0.4); // higher puffs cast softer, wider shadows
       this.m.compose(this.p.set(x, gy + 0.03, z), this.q, this.s.set(d, 1, d));
