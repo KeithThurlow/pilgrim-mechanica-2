@@ -35,7 +35,11 @@ export interface Ground {
 }
 
 /** Desired move direction in world x/z; length 0..1 is the stick amount. */
-export interface MoveCommand { x: number; z: number; sprint: boolean }
+export interface MoveCommand {
+  x: number; z: number; sprint: boolean;
+  /** A pilot sits in it: standing still a while, the legs flex now and then (the idle). */
+  idle?: boolean;
+}
 
 export interface LegPose {
   hip: Vector3; knee: Vector3; hock: Vector3; ankle: Vector3; foot: Vector3;
@@ -198,6 +202,12 @@ export class WalkerSim {
   /** The gait's planted share and cycles per second now (the planted share eases, so steps never jump). */
   dutyNow = 0.6;
   cpsNow = 0;
+  /** The idle flex: steps left in it (0: not flexing), and how far its gait has blended in (0..1). */
+  idleLeft = 0;
+  idleK = 0;
+  private stillT = 0;
+  private idleNext = NaN;
+  private idleSeed = 0x2f6b1d3;
   /** Drift slip of the planted feet this frame (world m/s). */
   private slip = new Vector3();
   /** The run's tucked swing pose, relative to the hip (along, up), and its cannon angle. */
@@ -274,6 +284,7 @@ export class WalkerSim {
 
   reset(x: number, z: number, heading: number) {
     this.airborne = false; this.airVel.set(0, 0, 0); this.squatState = null; this.stagger = 0; this.skid.set(0, 0, 0);
+    this.idleLeft = 0; this.idleK = 0; this.stillT = 0; this.idleNext = NaN;
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.slip.set(0, 0, 0);
     this.pos.set(x, 0, z);
@@ -466,6 +477,8 @@ export class WalkerSim {
     if (this.leaves()) { this.stats.airFrames++; this.fly(dt, cmd); this.pose(); this.trackSlides(dt); return; }
     if (this.dashMove) { this.dashFeet(dt); this.body(dt, this.dutyNow); this.pose(); this.trackSlides(dt); return; }
 
+    this.idleTick(dt, cmd);
+
     // Gait phase. The run (sprinting) and the walk share it: the run's cadence rises with speed and its planted share
     // is the ground per stance over the stride, so the flights grow with speed; the planted share eases toward what's
     // wanted (never jumping a foot from stance to swing and back).
@@ -477,10 +490,13 @@ export class WalkerSim {
       dWant += (dR - dWant) * rk;
       cps += (cpsR - cps) * rk;
     }
+    // The idle flex steps with no overlap of planted feet, so each step hands on to the other leg until it's done.
+    if (this.idleLeft > 0) dWant = 0.5;
     this.dutyNow += clamp(dWant - this.dutyNow, -0.5 * dt, 0.5 * dt);
     const d = this.dutyNow;
     const anySwing = this.feet[0].swinging || this.feet[1].swinging;
-    if (anySwing) cps = Math.max(cps, MIN_CYCLE);
+    if (anySwing) cps = Math.max(cps, this.idleLeft > 0 ? v.idleRate : MIN_CYCLE);
+    else if (this.idleLeft > 0) cps = v.idleRate;
     // Standing: step a foot back under the body if it's out of place, once any landing squat is over (both feet stay
     // planted through the squat).
     else if (this.speed < 0.08) { cps = 0; if (!this.squatState) this.settle(d); }
@@ -1387,6 +1403,39 @@ export class WalkerSim {
     return m;
   }
 
+  /**
+   * The idle flex (Keith 2026-10-26): with a pilot in (cmd.idle) and standing still a while, start a few slow steps on
+   * the spot; any move, the sprint or a landing squat stops it and restarts the wait. Waits are seeded (rule 12).
+   */
+  private idleTick(dt: number, cmd: MoveCommand) {
+    const v = this.v;
+    const moving = cmd.x * cmd.x + cmd.z * cmd.z > 1e-4 || cmd.sprint || this.speed >= 0.08 || this.runK > 0;
+    if (Number.isNaN(this.idleNext)) this.idleNext = this.idleWait(v.idleAfter);
+    if (!cmd.idle || moving || this.squatState) { this.idleLeft = 0; this.stillT = 0; this.idleNext = this.idleWait(v.idleAfter); }
+    else if (this.idleLeft <= 0 && !this.feet[0].swinging && !this.feet[1].swinging) {
+      this.stillT += dt;
+      if (this.stillT >= this.idleNext) {
+        this.idleLeft = Math.max(1, Math.round(v.idleSteps));
+        this.stillT = 0;
+        this.idleNext = this.idleWait(v.idleEvery);
+        // Either foot first: its swing starts now.
+        const f = this.feet[this.idleRand() < 0.5 ? 0 : 1];
+        this.phase = (this.dutyNow - f.offset + 1.0001) % 1;
+      }
+    }
+    this.idleK += clamp((this.idleLeft > 0 ? 1 : 0) - this.idleK, -4 * dt, 4 * dt);
+  }
+
+  private idleWait(t: number) { return t * (1 + this.v.idleJitter * (2 * this.idleRand() - 1)); }
+
+  /** Seeded 0..1 (mulberry32), for the idle's waits. */
+  private idleRand() {
+    let t = (this.idleSeed = (this.idleSeed + 0x6d2b79f5) | 0);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
   /** Standing still with a foot out of place (after a turn or a stop): step it back under the body. */
   private settle(d: number) {
     const l = leftOf(this.heading, this.t.l);
@@ -1400,6 +1449,7 @@ export class WalkerSim {
   }
 
   private liftOff(f: Foot) {
+    if (this.idleLeft > 0) this.idleLeft--;
     this.beginSwing(f);
     this.onLiftOff?.(f, clamp(this.speed / Math.max(0.1, this.v.walkSpeed), 0, 2));
   }
@@ -1483,7 +1533,10 @@ export class WalkerSim {
       // stay flat on the ground and push (Keith 2026-10-24: push off from the toes).
       // Running, the heel rolls earlier and further: the toes push longer.
       const rk = this.runK;
-      const roll = (v.rollOff + (v.runRollOff - v.rollOff) * rk) * D2R * smooth(v.rollStart + (v.runRollStart - v.rollStart) * rk, 1, f.stanceT);
+      // The idle flex blends in its own heel lift (idleK).
+      const ik = this.idleK;
+      const rollDeg = v.rollOff + (v.runRollOff - v.rollOff) * rk, rollAt = v.rollStart + (v.runRollStart - v.rollStart) * rk;
+      const roll = (rollDeg + (v.idleRoll - rollDeg) * ik) * D2R * smooth(rollAt + (v.idleRollStart - rollAt) * ik, 1, f.stanceT);
       f.up.copy(f.plantedUp);
       f.yaw = f.plantedYaw;
       f.pitch = roll;
@@ -1501,13 +1554,15 @@ export class WalkerSim {
     }
 
     const u = f.u;
-    const stompT = v.stompShare * v.stomp;
+    // The idle flex (idleK): no stomp and no hold, its own lift, clearance, ease and curls.
+    const ik = this.idleK, mixI = (a: number, b: number) => a + (b - a) * ik;
+    const stompT = v.stompShare * v.stomp * (1 - ik);
     // Uphill the foot goes forward early instead of rising straight up under the hips first: with the long thigh over
     // a short shin the knee can only come up toward the hull once the foot is out ahead (Keith 2026-10-26 18:28).
     const upK = smooth(0, 0.3, this.grade) * v.uphillLead;
-    const hold = v.liftHold * (1 - upK);
+    const hold = v.liftHold * (1 - upK) * (1 - ik);
     const travel = clamp((u - hold) / Math.max(0.05, 1 - hold - stompT), 0, 1);
-    const pw = 1 + 2 * v.liftBox * (1 - upK);
+    const pw = 1 + 2 * mixI(v.liftBox, v.idleEase) * (1 - upK);
     let e = travel < 0.5 ? 0.5 * Math.pow(2 * travel, pw) : 1 - 0.5 * Math.pow(2 - 2 * travel, pw);
     if (upK > 0) e = 1 - Math.pow(1 - e, 1 + 2 * upK);
 
@@ -1517,21 +1572,21 @@ export class WalkerSim {
     const up = smooth(0, Math.max(0.08, hold + 0.12), u);
     const down = stompT > 0 ? 1 - Math.pow(clamp((u - (1 - stompT)) / stompT, 0, 1), 2) : 1 - smooth(0.7, 1, u);
     const liftK = Math.min(up, down);
-    let y = baseY + v.liftHeight * liftK;
+    let y = baseY + mixI(v.liftHeight, v.idleLift) * liftK;
     // Clear the ground under the foot (stepping up a dune face).
     const g = this.ground.height(f.pos.x, f.pos.z);
     const gToe = this.ground.height(f.pos.x + Math.sin(f.yaw) * v.toeLength, f.pos.z + Math.cos(f.yaw) * v.toeLength);
-    y = Math.max(y, Math.max(g, gToe) + v.footClear * liftK);
+    y = Math.max(y, Math.max(g, gToe) + mixI(v.footClear, v.idleClear) * liftK);
     f.pos.y = y;
     if (y < g - 0.02) this.stats.scuffs++;
 
     f.up.copy(f.liftUp).lerp(f.targetUp, e).normalize();
     f.yaw = f.liftYaw + wrap(f.targetYaw - f.liftYaw) * e;
     const swingEnv = Math.sin(Math.PI * Math.min(1, u / Math.max(0.3, 1 - stompT))) * (1 - smooth(1 - stompT, 1, u));
-    f.pitch = f.liftPitch * (1 - smooth(0, 0.45, u)) + v.swingCurl * D2R * swingEnv;
+    f.pitch = f.liftPitch * (1 - smooth(0, 0.45, u)) + mixI(v.swingCurl, v.idleCurl) * D2R * swingEnv;
     // Toes: still bent up from the push-off as the foot leaves, curling under as the leg is pulled through, then
     // opening flat before the stomp.
-    f.toe = f.liftToe * (1 - smooth(0, 0.3, u)) + v.toeCurl * D2R * swingEnv;
+    f.toe = f.liftToe * (1 - smooth(0, 0.3, u)) + mixI(v.toeCurl, v.idleToes) * D2R * swingEnv;
     f.groundY = baseY;
     // The run's swing, blended in by the run share.
     if (this.runK > 0) {

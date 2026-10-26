@@ -92,6 +92,7 @@ scene.add(bf.group);
 // Ground marks as dents on a fine patch (Keith 2026-10-25).
 const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
+mech.piloted = true;
 const { sim, upper } = mech;
 // For headless probes (page.evaluate): the mech and its model.
 (window as unknown as { __walker: unknown }).__walker = { mech, rampart };
@@ -176,7 +177,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },

@@ -163,6 +163,20 @@ export const WALKER_DEFAULTS = {
   dashKneeOut: 50,
   dashSpreadMax: 2.6,
   dashIntoRun: 11,
+  // Idle flex (Keith 2026-10-26: found by accident with the planted share at 0.5; "not a bad intermittent one"): now
+  // and then, standing with a pilot in, a few slow steps on the spot, the feet barely lifting and the toes curling.
+  idleAfter: 10,
+  idleEvery: 18,
+  idleJitter: 0.6,
+  idleSteps: 4,
+  idleRate: 0.55,
+  idleLift: 0.4,
+  idleClear: 0.09,
+  idleEase: 0.97,
+  idleRoll: 3,
+  idleRollStart: 0.2,
+  idleCurl: 30,
+  idleToes: 40,
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
@@ -309,5 +323,17 @@ export const WALKER_PARAMS: Param[] = [
   { key: "dashKneeOut", label: "Lead knee drives toward the dash (°)", min: 0, max: 60, step: 1, group: "Dash" },
   { key: "dashSpreadMax", label: "Feet never further apart than (m)", min: 1, max: 4, step: 0.05, group: "Dash", tip: "No splits: a foot further than this from the other is drawn in" },
   { key: "dashIntoRun", label: "Held into the sprint at up to (m/s)", min: 6, max: 20, step: 0.5, group: "Dash", tip: "Hold Space through the dash: the push-off becomes the first stride of the run, starting at most this fast" },
+  { key: "idleAfter", label: "First flex after standing (s)", min: 1, max: 60, step: 0.5, group: "Idle", tip: "Standing still with a pilot in, the legs flex in place now and then (Keith 2026-10-26). 60 is about never" },
+  { key: "idleEvery", label: "Then about every (s)", min: 2, max: 120, step: 1, group: "Idle" },
+  { key: "idleJitter", label: "Randomness of the wait", min: 0, max: 1, step: 0.05, group: "Idle", tip: "Each wait is the time above ± this share of it" },
+  { key: "idleSteps", label: "Steps per flex", min: 1, max: 12, step: 1, group: "Idle" },
+  { key: "idleRate", label: "Flex pace (cycles/s)", min: 0.1, max: 2, step: 0.05, group: "Idle" },
+  { key: "idleLift", label: "Lift (m)", min: 0, max: 1, step: 0.01, group: "Idle" },
+  { key: "idleClear", label: "Ground clearance (m)", min: 0, max: 0.5, step: 0.01, group: "Idle" },
+  { key: "idleEase", label: "Hydraulic ease", min: 0, max: 1, step: 0.01, group: "Idle" },
+  { key: "idleRoll", label: "Heel lift (°)", min: 0, max: 60, step: 1, group: "Idle" },
+  { key: "idleRollStart", label: "Heel starts lifting at", min: 0, max: 1, step: 0.01, group: "Idle" },
+  { key: "idleCurl", label: "Foot tips down (°)", min: 0, max: 70, step: 1, group: "Idle" },
+  { key: "idleToes", label: "Toes curl (°)", min: 0, max: 90, step: 1, group: "Idle", tip: "The toe scrunch: curled under through each step, flat again as it lands" },
   { key: "uphillLead", label: "Uphill the foot swings forward early", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "Uphill the swinging foot heads out ahead at once instead of rising straight up under the hips: the knee comes up toward the hull (the long thigh can only rise once the foot is ahead)" },
 ];

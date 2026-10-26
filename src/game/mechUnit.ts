@@ -142,6 +142,8 @@ export class MechUnit implements Hittable {
   /** Kneeling for the pilot (src/pilot/mount.ts): hips this far down (m) and the nose this far down (radians). */
   kneel = 0;
   kneelPitch = 0;
+  /** A player sits in it (the lab sets it): standing a while, its legs flex now and then. Enemies stay still. */
+  piloted = false;
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -249,6 +251,8 @@ export class MechUnit implements Hittable {
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
+    // A pilot in: the legs may flex now and then while it stands (the walker's idle).
+    if (this.piloted && !cmd.idle) cmd = { ...cmd, idle: true };
     this.hurt = Math.max(0, this.hurt - dt * 400);
     if (!this.alive) { this.deadFor += dt; return; }
     const { sim, upper, body, v } = this;
