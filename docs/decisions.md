@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Scale proposal approved: build it and judge it in play (effects budget, GPU particles, shots as data with Protocols) | Keith | Keith | `docs/proposal-scale.md`; agent on `wip/scale`. |
+| 2026-10-26 | The plough cuts a road only as wide as the main convoy; escorts meander over the rough terrain beside it | Keith | Keith | Agent on `wip/plough-width`. |
 | 2026-10-26 | Locomotion from play: the current sprint's skipping bound becomes the falling and landing entry; the ground sprint is an even alternating run with sprinter mechanics (hock opens, toes kick, thigh tucks high, toes curl back); no torso dipping into rising ground; the dash pushes off the planted leg with hips opening toward the direction, slides and recovers (tap) or flows into the sprint (hold), no splits; skidding feet throw dust; uphill lets the thigh rise toward horizontal; downhill caps leg stretch and lets the mech drop or slide; Keith's tuned values become the defaults | Keith | Keith | Locomotion pass (agent, `wip/locomotion`). |
 | 2026-10-26 | Agents push every commit to a `wip/<topic>` branch on GitHub (no force, never main) | Keith | Keith | CLAUDE.md rule 13. |
 | 2026-10-26 | Agents work as if they can be cut off at any moment: commit at every working step, keep a handoff note current, resume from it | Keith | Keith | CLAUDE.md rule 13. |
