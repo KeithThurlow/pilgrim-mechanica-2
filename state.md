@@ -148,6 +148,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Agents running (2026-10-26): rail gun + sheet hits + penetration + decal removal; sensor heads; the sprint; performance pass 1 + the scale proposal; the shared register steps 1-2.
 - Ground dents merged (old decals kept behind `markMode` 0 until Keith approves). Next: a performance pass once Keith says go (dust ground lookups, the patch's 295k triangles and its shadows, a coarse shadow copy of the terrain if worth it).
 - Convoy combat merged (targeting, guns up to 50° plus hull lean, part hitboxes, roaming packs and raids); pacing judged from shots only.
 - The bound (Keith 2026-10-26): proposal in `docs/proposal-bound.md`, waiting for Keith's answers; the spike is in the walker lab (`?bound`), to be replaced by `src/mech/bound.ts` once approved.
