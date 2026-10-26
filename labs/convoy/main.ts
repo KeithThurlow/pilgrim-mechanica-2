@@ -25,7 +25,7 @@ import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
 import { Selector } from "../../src/core/select";
 import { tweakPanel, type Param } from "../../src/core/tweaks";
-import { Keys } from "../../src/core/input";
+import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
@@ -262,7 +262,7 @@ addEventListener("blur", () => { eHeld = false; qHeld = false; });
 // the sprint out on the sand (Keith 2026-10-26).
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code !== "Space" || e.repeat || typing(e)) return;
   e.preventDefault();
   dashPressed = true;
   spaceDown = true;

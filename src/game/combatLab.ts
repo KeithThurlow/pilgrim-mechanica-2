@@ -8,7 +8,7 @@ import { createApp, type App } from "../core/app";
 import { installReport } from "../core/report";
 import { Selector } from "../core/select";
 import { tweakPanel, type Param } from "../core/tweaks";
-import { Keys } from "../core/input";
+import { Keys, typing } from "../core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks";
@@ -177,7 +177,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // Space: dash the way WASD points (Keith 2026-10-24), on charges; keep holding to carry on into the sprint (Keith 2026-10-26).
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
-    if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.code !== "Space" || e.repeat || typing(e)) return;
     e.preventDefault();
     dashPressed = true;
     spaceDown = true;

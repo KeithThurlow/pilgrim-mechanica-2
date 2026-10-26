@@ -71,6 +71,14 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
 
   const root = document.createElement("aside");
   root.className = "panel";
+  // Space is the dash and sprint: with focus left on a slider or button it scrolled the panel to the bottom (or
+  // pressed the button) (Keith 2026-10-26). Block only the browser's default; the game still sees the key.
+  const noSpace = (e: KeyboardEvent) => {
+    const t = e.target as HTMLInputElement | null;
+    if (e.code === "Space" && !(t?.tagName === "TEXTAREA" || (t?.tagName === "INPUT" && t.type === "text"))) e.preventDefault();
+  };
+  root.addEventListener("keydown", noSpace);
+  root.addEventListener("keyup", noSpace);
   const head = document.createElement("div");
   head.className = "panel-head";
   const title = document.createElement("strong");

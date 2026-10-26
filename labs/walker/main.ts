@@ -8,7 +8,7 @@ import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
 import { Selector } from "../../src/core/select";
 import { tweakPanel } from "../../src/core/tweaks";
-import { Keys } from "../../src/core/input";
+import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { BIOME_DEFAULTS, BIOME_PARAMS } from "../../src/world/biomes";
@@ -150,7 +150,7 @@ const boundDemo = params.has("bound");
 const dashAt = Number(params.get("dashat") ?? 0);
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code !== "Space" || e.repeat || typing(e)) return;
   e.preventDefault();
   dashPressed = true;
   spaceDown = true;
