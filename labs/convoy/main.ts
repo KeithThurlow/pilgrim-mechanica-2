@@ -235,7 +235,8 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => { if (e.code === "KeyE") eHeld = false; if (e.code === "KeyQ") qHeld = false; });
 addEventListener("blur", () => { eHeld = false; qHeld = false; });
-// Space: dash the way WASD points (Keith 2026-10-25: the dash in every lab), on charges; hold for boost with fuel.
+// Space: dash the way WASD points (Keith 2026-10-25: the dash in every lab), on charges; keep holding to carry on into
+// the sprint out on the sand (Keith 2026-10-26).
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -356,9 +357,9 @@ const panel = tweakPanel({
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
     { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     WEAPON_TOPIC,
-    { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -560,6 +561,7 @@ app.onTick((rawDt) => {
   else if (carry.state === "parked") blockOut = carry.phase === "rise" ? "the mech is standing up" : null;
   else if (!onSandNow) blockOut = carry.state === "landing" ? "keep pace first" : "the crane has the mech";
   else if (player.dash.active) blockOut = "mid-dash";
+  else if (player.bound.on) blockOut = "mid-sprint";
 
   // Convoy, crane and carry at 120 Hz; the walker steps once for the frame (it substeps itself) unless held.
   const sub = Math.max(1, Math.ceil(dt * 120));
@@ -599,7 +601,8 @@ app.onTick((rawDt) => {
       if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
       else player.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
     }
-    player.dashHold = spaceDown && !auto && free;
+    // The sprint only on the sand: the decks and the crane's states keep the mech at a walk.
+    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange");
     player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
     if (!carry.ground.onDeck && V.convoyPush > 0.5) for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
@@ -637,7 +640,8 @@ app.onTick((rawDt) => {
   softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
-  iso.update(follow, rawDt);
+  // Out on the sand the camera leads the mech at speed (the sprint).
+  iso.update(follow, rawDt, driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
   shaker.apply(camera, rawDt, V.shakeDecay);
   toon.update(camera, canvas.clientHeight);
   costs.mark("camera");
@@ -665,8 +669,8 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
-    + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
-  app.hud.set("dash", `dash ${dashDots} (Space) · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
+    + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
+  app.hud.set("dash", `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
   app.hud.set("crane", `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });

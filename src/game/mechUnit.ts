@@ -52,6 +52,7 @@ export interface MechWeapons {
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
+import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
 import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable } from "./battlefield";
@@ -59,6 +60,7 @@ import type { Battlefield, Hittable } from "./battlefield";
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
   ...HEAD_DEFAULTS,
+  ...BOUND_DEFAULTS,
   hull: 1500,
   roundDamage: 9,
   roundPierce: 2,
@@ -77,6 +79,7 @@ export type MechValues = typeof MECH_DEFAULTS;
 export const MECH_PARAMS: Param[] = [
   ...DASH_PARAMS,
   ...HEAD_PARAMS,
+  ...BOUND_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 5000, step: 10, group: "Mech health" },
   { key: "roundDamage", label: "Minigun round damage", min: 0, max: 60, step: 0.5, group: "Mech health", tip: "What each of the player's rounds takes off whatever it hits" },
   { key: "roundPen", label: "Hull minigun penetration (m)", min: 0, max: 6, step: 0.05, group: "Rounds", tip: "Each round's penetration budget in metres of steel equivalent (src/game/sheet.ts): bodies and dune lips cost their chord × their density (Penetration group)" },
@@ -124,8 +127,10 @@ export class MechUnit implements Hittable {
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
+  /** The sprint (Keith 2026-10-26): Space held past the dash. */
+  readonly bound: Bound;
   private wakeAcc = 0;
-  /** Space still held (boost while the dash's fuel lasts). Set by the lab before step. */
+  /** Space still held: the dash carries on into the sprint. Set by the lab before step (only while driving). */
   dashHold = false;
   /** The shoulder weapon keys 1-4 held (hold to paint, release to fire). Set by the lab before step. */
   keys: [boolean, boolean, boolean, boolean] = [false, false, false, false];
@@ -159,6 +164,7 @@ export class MechUnit implements Hittable {
   ) {
     this.sim = new WalkerSim(v, bf.field);
     this.dash = new Dash(v);
+    this.bound = new Bound(v);
     this.upper = new UpperSim(v);
     this.health = v.hull;
     const sim = this.sim, dust = bf.dust;
@@ -170,12 +176,22 @@ export class MechUnit implements Hittable {
         return;
       }
       bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
-      dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
+      // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
+      dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       this.onStomp?.(f.planted.x, f.planted.z, k);
     };
     // A landing (a drop, a crest, a jump): both feet stomp at once, scaled by how hard it hit; hard ones hurt.
     sim.onLand = (l) => {
       const k = Math.min(2.2, 0.4 + l.impact / 6);
+      // A sprint stride's landing already stomped foot by foot: here only the extra burst, the sound and the shake.
+      if (l.bound) {
+        for (const f of sim.feet) if (!bf.inWater(f.pos.x, f.pos.z)) dust.stomp(f.pos.x, f.pos.y, f.pos.z, k * 0.8, sim.vel.x, sim.vel.z);
+        this.a.set(l.x, l.y, l.z);
+        bf.sfx.play("brap", this.a, Math.min(1.8, 0.5 + l.hard * 1.1), 0.4, false);
+        this.onStomp?.(l.x, l.z, k * 1.5);
+        this.onLanding?.(l);
+        return;
+      }
       if (l.impact > 1.5) {
         for (const f of sim.feet) {
           if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
@@ -195,7 +211,7 @@ export class MechUnit implements Hittable {
       if (k < 0.15) return;
       if (bf.inWater(f.pos.x, f.pos.z)) { bf.water!.splash(f.pos.x, f.pos.z, 0.25 * k, -Math.sin(sim.heading) * 0.5, -Math.cos(sim.heading) * 0.5, 0.6); return; }
       const hd = sim.heading;
-      dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1));
+      dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1));
       this.stepTimes.push(this.clock);
       while (this.stepTimes.length && this.clock - this.stepTimes[0] > 3) this.stepTimes.shift();
     };
@@ -238,11 +254,15 @@ export class MechUnit implements Hittable {
     const fired: (1 | -1)[] = [];
     const sub = Math.max(1, Math.ceil(dt * 120));
     const dash = this.dash;
+    // Guns while sprinting: on by default (Keith undecided), boundGuns 0 switches them off.
+    if (this.bound.on && !v.boundGuns) trigger = false;
     for (let i = 0; i < sub; i++) {
+      // Space held past the dash: the sprint (the walker runs its gait).
+      this.bound.update(dt / sub, this.dashHold, sim, dash);
       // The slope along the slide: + uphill. Read a couple of metres either side of the body.
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
-      dash.update(dt / sub, this.dashHold, cmd.x, cmd.z, grade);
+      dash.update(dt / sub, grade);
       sim.push.set(dash.vx, 0, dash.vz);
       sim.crouch = dash.crouch + this.kneel;
       // Lean into the dash: along the heading pitches the nose, across it rolls.
@@ -264,26 +284,32 @@ export class MechUnit implements Hittable {
         if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
       }
     }
-    if (dash.active) {
+    // A drift in the sprint skids the planted feet sideways, like the dash's shove.
+    const slipping = sim.footSlip > 1.5;
+    if (dash.active || slipping) {
       // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
-      const sp = Math.hypot(dash.vx, dash.vz);
+      const kx = dash.active ? dash.vx : sim.vel.x, kz = dash.active ? dash.vz : sim.vel.z;
+      const sp = dash.active ? Math.hypot(dash.vx, dash.vz) : sim.footSlip;
       sim.feet.forEach((f, i) => {
         const from = this.skidFrom[i];
         if (f.swinging || sp < 2) { from.z = 0; return; }
-        this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, dash.vx, dash.vz, sp * dt, 1, 0);
+        this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, kx, kz, sp * dt, 1, 0);
         // A furrow from where the foot was last frame (a skid that just started begins here).
         if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
         if (!this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
         from.set(f.pos.x, f.pos.z, 1);
       });
-      this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
+      if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     }
+    // Sprinting through a crowd shoves it aside like a dash.
+    if (!dash.active && sim.bounding && sim.speed > 6) this.onDash?.(sim.pos.x, sim.pos.z, Math.sin(sim.course), Math.cos(sim.course));
     const left = leftOf(upper.torsoYaw);
     for (const s of fired) {
       // A gun with its own item values (src/items) fires with those; else the shared sliders.
       const own = upper.guns[s === 1 ? 0 : 1].stats;
       if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
-      const spread = ((own?.spread ?? v.spread) * Math.PI) / 180;
+      // Off the ground (a leap, a jump), the guns spray wider.
+      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airSpread : 0)) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
       // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle

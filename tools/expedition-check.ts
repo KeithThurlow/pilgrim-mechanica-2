@@ -4,7 +4,7 @@
 //   or the bank, and bring the mech home after the fade;
 // - the return point is reachable in the estimated time on flat ground: a point walking straight at it at walk pace,
 //   from ahead, beside and behind the convoy, arrives inside the crane's pick-up range of the crane it was told;
-// - fuel never goes negative (random burns, dashes, boosts), and burns as the rates say;
+// - fuel never goes negative (random burns, dashes, sprints), and burns as the rates say;
 // - out of fuel triggers a forced recovery;
 // - the whole loop with the real walker and crane: launched by the crane, out, home to the return point, gripped:
 //   banked once, only on the grip, inside the estimate;
@@ -104,7 +104,7 @@ for (const how of ["recalled", "fuel", "destroyed"] as const) {
     const r = rnd();
     if (r < 0.05) f.dash();
     else if (r < 0.06) f.spend(rnd() * 500);
-    else f.burn(rnd() * 3, { speed: rnd() * 14, walkSpeed: V.walkSpeed, sprintSpeed: V.sprintSpeed, boosting: rnd() < 0.2, stripping: rnd() < 0.2 });
+    else f.burn(rnd() * 3, { speed: rnd() * 22, walkSpeed: V.walkSpeed, sprintSpeed: V.sprintSpeed, bounding: rnd() < 0.2, stripping: rnd() < 0.2 });
     minLeft = Math.min(minLeft, f.left);
     if (f.left < 0 || !Number.isFinite(f.left)) { fail(`fuel went to ${f.left}`); break; }
   }
@@ -113,7 +113,11 @@ for (const how of ["recalled", "fuel", "destroyed"] as const) {
   if (Math.abs(b(V.walkSpeed) - 1) > 1e-9) fail(`walking burns ${b(V.walkSpeed)} (want 1)`);
   if (Math.abs(b(0) - V.fuelIdle) > 1e-9) fail(`standing burns ${b(0)}`);
   if (Math.abs(b(V.sprintSpeed) - V.fuelSprint) > 1e-9) fail(`sprinting burns ${b(V.sprintSpeed)}`);
-  if (!(b(V.walkSpeed, { boosting: true }) > b(V.sprintSpeed))) fail("boosting burns no more than sprinting");
+  // The sprint (Space held) burns per metre: more fuel per metre than walking, less time (Keith 2026-10-26: fuel use
+  // goes up, but that can feel good).
+  const per = (s: number) => b(s, { bounding: true }) / s;
+  if (Math.abs(per(14) - V.fuelBound) > 1e-9) fail(`sprinting at 14 m/s burns ${per(14).toFixed(3)} s a metre (want ${V.fuelBound})`);
+  if (!(per(14) > 1 / V.walkSpeed)) fail("the sprint is cheaper per metre than walking");
   // Fuel per metre: sprinting must cost more than walking (else nobody walks).
   if (!(b(V.sprintSpeed) / V.sprintSpeed > 1 / V.walkSpeed)) fail("sprinting is cheaper per metre than walking");
   // Warnings: comfortable well above, amber near, red under.

@@ -33,7 +33,7 @@ import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
 import { DASH_PARAMS } from "../../src/mech/dash";
 import { HEAD_PARAMS } from "../../src/mech/head";
-import { BoundSpike, BOUND_SPIKE_DEFAULTS, BOUND_SPIKE_PARAMS } from "./boundSpike";
+import { BOUND_PARAMS } from "../../src/mech/bound";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -44,8 +44,6 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS, radius: 4, shadowBox: 30,
   // Biomes: desert here unless ?biome=mix (the map) or ?biome=rocky|shallows (only that one).
   ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS,
-  // ?bound: the bound spike's values (docs/proposal-bound.md).
-  ...BOUND_SPIKE_DEFAULTS,
   biomeOnly: ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome") ?? "desert"] ?? 0,
 };
 const DEFAULTS = { ...V };
@@ -56,6 +54,18 @@ const straight = params.get("walk") === "straight";
 const toon = new ToonLook(V);
 const field = new DuneField(V);
 if (params.has("flat")) { field.v = { ...V, height: 0, swell: 0, bumps: 0 }; field.update(); }
+// ?wall=degrees[,metres]: a steep-faced block (default 55°, 8 m high, 25 m deep) across the straight demo's path, 30 m
+// ahead of the start, to see a dash or the sprint meet a wall (Keith 2026-10-26: no more flinging into the sky).
+const wallArg = params.get("wall")?.split(",").map(Number);
+if (wallArg) {
+  const k = Math.tan(((wallArg[0] || 55) * Math.PI) / 180), H = wallArg[1] || 8, far = 30 + H / k + 25;
+  const sample = field.sample.bind(field);
+  field.sample = (x, z, out) => {
+    const s = sample(x, z, out), d = (x - 13) * Math.sin(0.3) + (z + 40) * Math.cos(0.3);
+    s.h += Math.max(0, Math.min(H, (d - 30) * k, (far - d) * k));
+    return s;
+  };
+}
 const streamer = new TerrainStreamer(field, V);
 scene.add(streamer.group);
 const look = new DesertLook(scene, app.renderer, V);
@@ -134,25 +144,19 @@ canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") {
 canvas.addEventListener("pointerdown", (e) => { if (e.button === 0 && camName === "game" && e.pointerType === "mouse") { mouseDown = true; auto = false; } });
 addEventListener("pointerup", () => { mouseDown = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-// Space: dash the way WASD points, on charges; hold it with a booster pack to keep sliding (as in the combat labs); ?dash makes the demo dash every 3 s.
-// ?bound (spike): a tap still dashes (on release, under boundTap s); holding Space longer bounds.
-const boundOn = params.has("bound");
-const BOUND_TAP = 0.2;
-const bound = boundOn ? new BoundSpike(V) : null;
-let dashPressed = false, spaceDown = false, spaceFor = 0;
+// Space: dash the way WASD points, on charges; keep holding and the mech carries on into the sprint (Keith 2026-10-26,
+// as in the combat and convoy labs); ?dash makes the demo dash every 3 s; ?bound makes the demo hold Space (sprint).
+const boundDemo = params.has("bound");
+const dashAt = Number(params.get("dashat") ?? 0);
+let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   e.preventDefault();
-  if (!boundOn) dashPressed = true;
+  dashPressed = true;
   spaceDown = true;
-  spaceFor = 0;
   auto = false;
 });
-addEventListener("keyup", (e) => {
-  if (e.code !== "Space") return;
-  if (boundOn && spaceFor < BOUND_TAP) dashPressed = true;
-  spaceDown = false;
-});
+addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
 addEventListener("blur", () => { spaceDown = false; });
 
 const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
@@ -161,7 +165,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...HEAD_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...BOUND_PARAMS, ...DASH_PARAMS, ...UPPER_PARAMS, ...HEAD_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -172,7 +176,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Bound (spike)", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -292,15 +296,12 @@ function tick(rawDt: number) {
     if (stick.lengthSq() > 0.01) mech.tryDash(stick.x, stick.z);
     else mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
   }
-  mech.dashHold = spaceDown && !auto && !boundOn;
-  if (bound) {
-    // Spike: held Space (or the straight demo) bounds; the spike moves the body and the legs get no stick.
-    if (spaceDown) spaceFor += dt;
-    const hold = (spaceDown && spaceFor >= BOUND_TAP) || (auto && straight);
-    cmd = bound.update(dt, hold, cmd, sim);
-  }
+  // Held Space carries the dash on into the sprint (?bound: the demo holds it; with ?dashat, from the dash on).
+  mech.dashHold = (spaceDown && !auto) || (auto && boundDemo && clock >= dashAt);
   // The demo sidesteps now and then (with ?dash: every 3 s from 1.5 s; with ?walk=straight for repeatable furrows).
   if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
+  // ?dashat=seconds: the demo dashes straight ahead once, then (with ?bound) holds Space on into the sprint.
+  if (auto && dashAt > 0 && clock >= dashAt && clock - dt < dashAt) mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;
@@ -310,7 +311,8 @@ function tick(rawDt: number) {
   }
 
   follow.lerp(new THREE.Vector3(sim.pelvis.x, sim.pelvis.y - 1.2, sim.pelvis.z), Math.min(1, rawDt * 6));
-  if (camName === "game") iso.update(follow, rawDt);
+  // The game camera leads a fast mech and pulls out a little.
+  if (camName === "game") iso.update(follow, rawDt, { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z });
   else {
     const delta = follow.clone().sub(lastFollow);
     camera.position.add(delta);
@@ -336,9 +338,10 @@ function tick(rawDt: number) {
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
-    + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
-  if (bound) app.hud.set("bound", `bound (spike, hold Space): ${bound.active ? `${bound.speed.toFixed(1)} m/s, ${bound.leaps} leaps, drift ${Math.abs(((((bound.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180).toFixed(0)}°` : "off"}`);
-  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${cmd.sprint ? "sprint" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
+    + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
+  const driftDeg = Math.abs(((((sim.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180);
+  app.hud.set("bound", `sprint (hold Space): ${mech.bound.on ? `${sim.speed.toFixed(1)} of ${(sim.boundTopNow || V.boundTop).toFixed(1)} m/s · ${sim.stats.leaps} strides${driftDeg > 3 ? ` · drift ${driftDeg.toFixed(0)}°` : ""}${sim.footSlip > 1.5 ? " · skidding" : ""}` : "off"}`);
+  app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${mech.bound.on ? "sprint" : cmd.sprint ? "run" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   const ll = sim.lastLanding;
   app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
   app.hud.set("feet", `L ${a.swinging ? "swing" : "planted"} · R ${b.swinging ? "swing" : "planted"} · reach misses ${(misses * 100).toFixed(2)}% · dust ${dust.alive}`);

@@ -82,6 +82,8 @@ export class ExpeditionLoop {
   private plumeT = 0;
   private blastSeq = 0;
   readonly home: ReturnPoint = { x: 0, z: 0, walk: 0, eta: 0, crane: 0, reachable: false };
+  /** The same, sprinting all the way. */
+  readonly homeSprint: ReturnPoint = { x: 0, z: 0, walk: 0, eta: 0, crane: 0, reachable: false };
   warn: 0 | 1 | 2 = 0;
   private tracks: CraneTrack[] = [];
   private world: RadarWorld = { mech: { x: 0, z: 0 }, convoy: [], route: [], home: null, pois: [], blobs: [], unknown: [], contacts: [] };
@@ -102,7 +104,7 @@ export class ExpeditionLoop {
   onHome: (() => void) | null = null;
 
   constructor(
-    readonly v: LoopValues & { walkSpeed: number; sprintSpeed: number; craneRange: number; craneMount: number; convoySpeed: number; camYaw: number; dashShoveRadius: number; dashShoveDamage: number },
+    readonly v: LoopValues & { walkSpeed: number; sprintSpeed: number; boundTop: number; craneRange: number; craneMount: number; convoySpeed: number; camYaw: number; dashShoveRadius: number; dashShoveDamage: number },
     field: DuneField, bf: Battlefield, scene: THREE.Scene, private camera: THREE.Camera,
     private route: ConvoyRoute, private convoy: Convoy, private carry: CraneCarry, private player: MechUnit,
   ) {
@@ -189,7 +191,7 @@ export class ExpeditionLoop {
     this.charges = dash.charges;
     if (exp.state === "out" && player.alive) {
       const speed = Math.hypot(sim.vel.x, sim.vel.z) + (dash.phase === "glide" ? 0 : Math.hypot(dash.vx, dash.vz));
-      fuel.burn(dt, { speed, walkSpeed: v.walkSpeed, sprintSpeed: v.sprintSpeed, boosting: dash.phase === "boost", stripping: !!this.sites.salvage.active });
+      fuel.burn(dt, { speed, walkSpeed: v.walkSpeed, sprintSpeed: v.sprintSpeed, bounding: player.bound.on, stripping: !!this.sites.salvage.active });
     } else if (exp.state === "aboard" && !SAND.has(carry.state)) fuel.refill();
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
@@ -202,6 +204,8 @@ export class ExpeditionLoop {
       this.homeT = 0.1;
       craneTracks(this.convoy.bays, v.craneMount, this.tracks);
       returnPoint(v, this.route, this.tracks, p.x, p.z, v.walkSpeed, v.convoySpeed, v.craneRange, this.home);
+      // Sprinting home instead (Keith 2026-10-26): at about the legs' top speed, for the fuel per metre.
+      returnPoint(v, this.route, this.tracks, p.x, p.z, v.boundTop * 0.9, v.convoySpeed, v.craneRange, this.homeSprint);
     }
     const eta = this.home.reachable ? this.home.eta : Infinity;
     const warn = exp.state === "out" ? fuelWarning(v, fuel.left, eta) : 0;
@@ -252,6 +256,8 @@ export class ExpeditionLoop {
     }
     this.hud.update(dt, {
       exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
+      sprint: exp.state === "out" && this.homeSprint.reachable
+        ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
@@ -267,7 +273,7 @@ export class ExpeditionLoop {
     // Packs and raids home on whoever is out there: the mech, or the pilot on foot (quiet, unless stripping by hand).
     const p = pilot ?? sim.pelvis;
     const loud = !!this.sites.salvage.active || (!pilot && (player.upper.guns.some((g) => g.firing || g.spin > 0.3)
-      || sim.speed > v.walkSpeed + 0.5 || player.dash.active));
+      || sim.speed > v.walkSpeed + 0.5 || player.dash.active || player.bound.on));
     if (swarms.anyAwake) threats.engaged = true;
     for (const e of threats.update(dt, { x: p.x, z: p.z, out: hunting, loud }, this.events)) {
       if (e.type === "engage") {

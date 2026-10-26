@@ -56,39 +56,63 @@ if (went !== dv.dashCharges) problems.push(`${went} dashes went from full charge
 for (let i = 0; i < 120 * (dv.dashRecharge * dv.dashCharges + 0.5); i++) step({ x: 0, z: 0, sprint: false });
 if (dash.charges !== dv.dashCharges) problems.push(`charges came back to ${dash.charges} of ${dv.dashCharges}`);
 
-// Slope (Keith 2026-10-25: slides work better downhill): on a tilted plane a dash goes further down than up, and a
-// boost held for 2 s carries on gliding downhill well past where it stops going up.
-function onSlope(dirZ: number, boost: boolean) {
+// Slope (Keith 2026-10-25: slides work better downhill): on a tilted plane a dash goes further down than up.
+function onSlope(dirZ: number) {
   const g = 0.25; // rises along +z
   const plane = { height: (_x: number, z: number) => g * z, normal: (_x: number, _z: number, o: number[] = [0, 0, 0]) => { const l = Math.hypot(g, 1); o[0] = 0; o[1] = 1 / l; o[2] = -g / l; return o; } };
   const s2 = new WalkerSim(v, plane);
   s2.reset(0, 0, 0);
-  const d2 = new Dash({ ...DASH_DEFAULTS, boostFuel: boost ? 2 : 0 });
-  d2.fuel = d2.v.boostFuel;
+  const d2 = new Dash({ ...DASH_DEFAULTS });
   for (let i = 0; i < 60; i++) s2.update(dt, { x: 0, z: 0, sprint: false });
   const z0 = s2.pos.z;
   d2.start(0, dirZ);
   let t = 0;
   while ((d2.active || t < 0.1) && t < 20) {
-    const grade = dirZ * g * Math.sign(d2.dirZ || dirZ);
-    d2.update(dt, boost && t < 2, 0, dirZ, d2.dirZ > 0 ? g : -g);
-    void grade;
+    d2.update(dt, d2.dirZ > 0 ? g : -g);
     s2.push.set(d2.vx, 0, d2.vz); s2.crouch = d2.crouch;
     s2.update(dt, { x: 0, z: 0, sprint: false });
     t += dt;
   }
   return Math.abs(s2.pos.z - z0);
 }
-const up = onSlope(1, false), down = onSlope(-1, false), upB = onSlope(1, true), downB = onSlope(-1, true);
+const up = onSlope(1), down = onSlope(-1);
 if (!(down > up * 1.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
-if (!(downB > upB * 1.3)) problems.push(`downhill boost ${downB.toFixed(1)} m not clearly longer than uphill ${upB.toFixed(1)} m`);
-if (!(upB > up)) problems.push(`a boost (${upB.toFixed(1)} m) went no further than a dash (${up.toFixed(1)} m)`);
+
+// Walls (Keith 2026-10-26: dashing at a steep wall flung the mech so high it died landing): running at a 40-60° face
+// 2 or 8 m high and dashing at its foot (the shove's peak hits the face), the hips never rise more than WALL_RISE over
+// standing above the ground under them, and nothing lands hard. Before the fix the worst case rose 354 m.
+const WALL_RISE = 2.5;
+let wallWorst = 0, wallWorstAt = "";
+for (const H of [2, 8]) for (const deg of [40, 50, 60]) for (const before of [0.5, 2]) {
+  const k = Math.tan((deg * Math.PI) / 180);
+  const h = (_x: number, z: number) => Math.min(H, Math.max(0, (z - 30) * k));
+  const wall = { height: h, normal: (x: number, z: number, o: number[] = [0, 0, 0]) => { const e = 0.05, dz = (h(x, z + e) - h(x, z - e)) / (2 * e), l = Math.hypot(dz, 1); o[0] = 0; o[1] = 1 / l; o[2] = -dz / l; return o; } };
+  const s3 = new WalkerSim(v, wall);
+  s3.reset(0, 0, 0);
+  const d3 = new Dash({ ...DASH_DEFAULTS });
+  let rise = 0, worst = 0, went = false;
+  s3.onLand = (l) => { worst = Math.max(worst, l.impact); };
+  for (let i = 0; i < 120 * 8; i++) {
+    if (!went && s3.pos.z > 30 - before) went = d3.start(0, 1);
+    const gz = (h(0, s3.pos.z + 2) - h(0, s3.pos.z - 2)) / 4;
+    d3.update(dt, gz);
+    s3.push.set(d3.vx, 0, d3.vz); s3.crouch = d3.crouch;
+    s3.update(dt, { x: 0, z: 1, sprint: true });
+    rise = Math.max(rise, s3.pelvis.y - h(0, s3.pos.z) - v.hipHeight);
+    if (!Number.isFinite(s3.pelvis.y)) { problems.push(`NaN dashing into a ${deg}° wall`); break; }
+  }
+  const what = `${H} m at ${deg}°, dash ${before} m out`;
+  if (rise > wallWorst) { wallWorst = rise; wallWorstAt = what; }
+  if (rise > WALL_RISE) problems.push(`dashing into a wall (${what}) rose ${rise.toFixed(1)} m over standing (limit ${WALL_RISE})`);
+  if (worst >= v.landHard) problems.push(`dashing into a wall (${what}) landed at ${worst.toFixed(1)} m/s`);
+}
+const wallRises = [`worst ${wallWorst.toFixed(1)} m (${wallWorstAt})`];
 
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);
 if (misses > 0.15) problems.push(`legs out of reach ${(misses * 100).toFixed(1)}% of frames`);
-console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · 2 s boost: up ${upB.toFixed(1)} m, down ${downB.toFixed(1)} m`);
+console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · into walls, hips over standing at most: ${wallRises.join(", ")}`);
 console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m (of ${dv.dashDistance}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${went}/${dv.dashCharges}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("dash check failed"); }
 console.log("dash check passed");

@@ -1,7 +1,9 @@
 // Fuel (pure, docs/proposal-expedition.md): it lives in the power pack and is counted in seconds of walking, so the
 // HUD's "Fuel 9:20" reads against "Home 3:40" directly. Walking at walk speed burns 1 s per s; slower burns down to
 // fuelIdle standing still (almost nothing); faster climbs to fuelSprint at sprint speed; a dash costs fuelDash at
-// once; boosting burns fuelBoost per s on top; stripping salvage (the cutters) fuelStrip per s. It never goes below
+// once; the sprint (Space held, Keith 2026-10-26) burns fuelBound seconds per metre run, in place of the walking curve
+// (so time against fuel is the choice: about 1.6x the fuel per metre for 2.3x the speed); stripping salvage (the
+// cutters) fuelStrip per s on top. It never goes below
 // zero; at zero the expedition forces a recovery (Keith 2026-10-25: out of fuel is mission failure).
 import type { Param } from "../core/tweaks";
 
@@ -10,7 +12,7 @@ export const FUEL_DEFAULTS = {
   fuelIdle: 0.08,
   fuelSprint: 2.5,
   fuelDash: 4,
-  fuelBoost: 5,
+  fuelBound: 0.27,
   fuelStrip: 0.5,
   warnRatio: 1.3,
   warnPad: 60,
@@ -24,7 +26,7 @@ export const FUEL_PARAMS: Param[] = [
   { key: "fuelIdle", label: "Standing burn (× walking)", min: 0, max: 1, step: 0.01, group: G, tip: "Burn standing still: almost nothing" },
   { key: "fuelSprint", label: "Sprint burn (× walking)", min: 1, max: 6, step: 0.05, group: G, tip: "Burn at sprint speed (in between it climbs from walking's 1)" },
   { key: "fuelDash", label: "Dash cost (s of walking)", min: 0, max: 20, step: 0.5, group: G },
-  { key: "fuelBoost", label: "Boost burn (× walking)", min: 0, max: 20, step: 0.1, group: G, tip: "Extra burn per second while boosting" },
+  { key: "fuelBound", label: "Sprint burn (s per metre)", min: 0.05, max: 1.5, step: 0.01, group: G, tip: "Walking costs 1/walk speed (0.17 s a metre at 6 m/s); the sprint costs this per metre whatever its speed, so 14 m/s at 0.27 burns 3.8 s of walking a second" },
   { key: "fuelStrip", label: "Stripping burn (× walking)", min: 0, max: 3, step: 0.05, group: G, tip: "Extra burn per second while cutting salvage" },
   { key: "warnRatio", label: "Comfortable at (× home time)", min: 1, max: 3, step: 0.05, group: G, tip: "Fuel under home time × this, plus the pad below, turns the HUD amber" },
   { key: "warnPad", label: "Comfortable pad (s)", min: 0, max: 300, step: 5, group: G },
@@ -44,7 +46,8 @@ export interface Burn {
   speed: number;
   walkSpeed: number;
   sprintSpeed: number;
-  boosting?: boolean;
+  /** Sprinting (burns per metre instead of by the walking curve). */
+  bounding?: boolean;
   stripping?: boolean;
 }
 
@@ -52,7 +55,7 @@ export interface Burn {
 export function burnRate(v: FuelValues, b: Burn): number {
   const s = Math.max(0, b.speed), w = Math.max(0.1, b.walkSpeed), sp = Math.max(w + 0.1, b.sprintSpeed);
   let r = s <= w ? v.fuelIdle + (1 - v.fuelIdle) * (s / w) : 1 + (v.fuelSprint - 1) * Math.min(1.5, (s - w) / (sp - w));
-  if (b.boosting) r += v.fuelBoost;
+  if (b.bounding) r = Math.max(r, v.fuelBound * s);
   if (b.stripping) r += v.fuelStrip;
   return r;
 }
