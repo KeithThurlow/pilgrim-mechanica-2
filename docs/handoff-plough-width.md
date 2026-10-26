@@ -3,26 +3,30 @@
 Keith: the plough should cut a road only as wide as the main convoy platforms, not a lane for the escorts too; the
 escorts should meander over the rougher ground beside it.
 
-## Done
-- Road and blade: `routeHalfWidth` 30 → 11 (22 m road; the widest car with its tracks is 19 m), `routeBlend` 15 → 8,
-  `bermOut` 8 → 2 (`src/convoy/route.ts`, `wake.ts`). The blade model already sizes itself from the half-width.
-- Escorts (`src/convoy/escort.ts`): stations out on the dunes (`escortOut` 25, new `escortSpread` 5 per-escort in/out,
-  `escortWeave` 6 on a per-escort period); scouts ahead of the blade and out to the sides (new `escortScoutLead` 30,
-  `escortScoutOut` 24); a local planner (`plan()`): a fan of headings scored by the slope under a short drive along
-  each, road and platform costs, commit to a side when going round; stuck → back out and go round the other side;
-  ease off over rough ground; hard platform rule applied after the mech's.
-- Car sim (`src/vehicles/car.ts`): the stick-to-ground pull measured from the plane through the wheels' ground at
-  the body's middle (was the ground right under the middle: stalled trucks in hollows); bumpLoss scaled down when
-  crawling (under ~2 m/s).
-- `tools/convoy-check.ts`: road width against the train; car corners on the road; escorts off the road share,
-  slowest 10 s pace, worst roll.
+## Done (all on `wip/plough-width`)
+- Road and blade: `routeHalfWidth` 30 → 11 (22 m road; the widest car with its tracks is 19 m), `routeBlend` 15 → 12
+  (8 left a wall the mech couldn't climb where a crest was cut), `bermOut` 8 → 2 (`src/convoy/route.ts`, `wake.ts`).
+  `roadHalf(v)` in `wake.ts`: the half-width widened by `trainLaneSide` with two lines; route, wake, plough and
+  escorts use it; the lab rebuilds the road when the lines change. The blade model sizes itself from it.
+- Crane launch drops the mech 13 m out (`craneDeployReach` 21 → 13, `carry.ts`): 21 landed on the berm face.
+- Escorts (`src/convoy/escort.ts`): stations 25 m out (`escortOut`), `escortSpread` 5, `escortWeave` 6 on a
+  per-escort period; scouts 30 m ahead of the blade (`escortScoutLead`), 24 m out (`escortScoutOut`). Lane picker
+  (`pickLane`, every 0.5 s) + line fan (`plan`, every 0.2 s, never > 1.6 rad off the route heading), both scored by
+  `faceAt` (climb, side slope `escortRoll` 18, descent); stuck → back out, commit to the other side; ease off over
+  rough ground; hard platform rule after the mech's; mech grazed on the outside. `duneKit` on the escorts' car values.
+- Car sim (`src/vehicles/car.ts`): stick measured from max(ground under middle, wheel plane at middle); bumpLoss
+  scaled down under ~2 m/s.
+- `tools/convoy-check.ts`: road width vs train, car corners on the road; escorts off-road share, slowest 10 s pace
+  (fail < 30%), leaning > 40° (fail > 0.5% of samples), tipped (roll at the sim's stop or > 75° off upright).
+- All checks pass except robots/infantry timing under the box's load (pass alone; robots don't touch convoy or car).
 
-## Half done / left (in order)
-1. Escorts still: an occasional big roll (~50°) and one stuck spell in convoy-check section 11. Tune the planner.
-2. Two-line trains (`trainLanes` 2) ride off the narrow road: make the road half-width grow with the lanes.
-3. Mech-over-berm check fails (the berm now sits on the cut face); launch landing on the berm off by 0.8 m/s.
-4. Road continuity check marginal (0.243 vs 0.24).
-5. Shots, state.md, decisions.md.
+## Left
+1. Shots (40 m game camera, `?watch=plough`) and a look.
+2. state.md Changes entry; remove the In progress line and this note on merge.
 
-## Scratch probes (delete before merge)
-`tools/escort-probe.mts`, `tools/escort-probe2.mts`, `tools/slope-probe.mts`.
+## Values
+See above. Escort stats over 6 seeds × 2 min (scratch `tools/escort-probe3.mts`): 0.05% of samples lean past 40°,
+4% of 10 s windows under half the convoy's pace, 99-100% off the road.
+
+## Scratch probes (untracked, delete)
+`tools/escort-probe.mts`, `escort-probe2.mts`, `escort-probe3.mts`, `slope-probe.mts`, `berm-probe.mts`.
