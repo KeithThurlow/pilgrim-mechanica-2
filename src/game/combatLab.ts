@@ -169,7 +169,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); both can be held. F no
   // longer fires both: it's hold to hop out of the mech and back in (Keith 2026-10-26).
   const buttons = new MouseButtons(canvas, () => { auto = false; });
-  // Space: dash the way WASD points (Keith 2026-10-24), on charges.
+  // Space: dash the way WASD points (Keith 2026-10-24), on charges; keep holding to carry on into the sprint (Keith 2026-10-26).
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
     if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -193,9 +193,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Mech health", "Torso & guns", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Minigun", "Move"] },
       WEAPON_TOPIC,
-      { id: "legs", label: "Legs", groups: ["Move", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+      { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sand marks", "Sound"] },
@@ -345,7 +345,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
     // The pilot: hold F to get out (anywhere the mech stands, not mid-dash) and back in; WASD walks him on foot.
-    foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut: player.dash.active ? "mid-dash" : null });
+    foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut: player.dash.active ? "mid-dash" : player.bound.on ? "mid-sprint" : null });
     // Lab only: a killed pilot is back in the mech after the rebuild time.
     if (!foot.sim.alive && foot.deadFor > V.respawn) foot.reset();
     cst?.mark("mech + weapons");
@@ -365,7 +365,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
     const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
     follow.lerp(want, Math.min(1, rawDt * 6));
-    iso.update(follow, rawDt);
+    // The camera leads the mech at speed (not the pilot on foot).
+    const ps = player.sim;
+    iso.update(follow, rawDt, foot.driving ? { x: ps.vel.x + ps.skid.x, z: ps.vel.z + ps.skid.z } : undefined);
     shaker.apply(camera, rawDt, V.shakeDecay);
     toon.update(camera, canvas.clientHeight);
     cst?.mark("camera");
@@ -387,9 +389,10 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
-      + (V.boostFuel > 0 ? ` boost ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")} (hold Space)` : "");
+      + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
     if (cst) app.hud.set("costs", cst.end());
-    app.hud.set("guns", `dash ${dashDots} (Space) · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
+    const sprint = player.bound.on ? ` · sprint ${player.sim.speed.toFixed(1)} m/s` : " · hold Space to sprint";
+    app.hud.set("guns", `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
 }

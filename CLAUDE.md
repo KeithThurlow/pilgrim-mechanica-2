@@ -72,7 +72,11 @@ desert look direction. What came from where: `docs/decisions.md`.
   near the start at 22,-28 / 6,-26 / 15,-18), `?dt=0.033` (fixed time per frame, for headless shots and filmstrips),
   `?surface=gravel|dirt|concrete|snow` (dust and dents as if the ground were that), `?dash`, `?at=x,z`, `?warm=seconds` (run that much sim time before the
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
-  go, optionally moving), `?bound` (the bound spike: hold Space; with `?walk=straight` the demo bounds).
+  go, optionally moving), `?bound` (the demo holds Space: it sprints; with `?walk=straight` in a line), `?dashat=seconds`
+  (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?wall=degrees[,metres]` (a steep-faced block
+  30 m ahead of the straight demo).
+- Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
+  faster up to the legs' top speed; let go and it runs on, skidding off the extra speed.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under

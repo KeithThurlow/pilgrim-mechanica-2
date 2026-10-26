@@ -135,5 +135,151 @@ for (const build of builds) {
   }
   if (!(lows[0] + 0.1 < lows[1] && lows[1] + 0.1 < lows[2])) { console.log(`FAIL squat doesn't deepen with the drop: ${lows.map((x) => x.toFixed(2)).join(", ")}`); failed = true; }
 }
+// Sprint (Keith 2026-10-26: hold Space and the mech runs on, faster and faster, jumping off dunes but not
+// exaggeratedly; hard landings hurt). Rampart (14 m/s) and Stilt (18 m/s) legs.
+const shaped = (h: (x: number, z: number) => number) => ({
+  height: h,
+  normal: (x: number, z: number, o: number[] = [0, 0, 0]) => {
+    const e = 0.05, dx = (h(x + e, z) - h(x - e, z)) / (2 * e), dz = (h(x, z + e) - h(x, z - e)) / (2 * e), l = Math.hypot(dx, 1, dz);
+    o[0] = -dx / l; o[1] = 1 / l; o[2] = -dz / l; return o;
+  },
+});
+for (const leg of ["rampart", "rampart-stilt"] as const) {
+  const values = { ...WALKER_DEFAULTS, ...LEG_TYPES[leg].values };
+  const top = values.boundTop;
+  console.log(`-- ${leg} sprint (top ${top} m/s)`);
+  const problems: string[] = [];
+  const sdt = 1 / 120;
+  // A minute on the dunes, straight then weaving: no feet under the sand, nothing non-finite, legs in reach.
+  {
+    const field = new DuneField({ ...TERRAIN_DEFAULTS });
+    const sim = new WalkerSim({ ...values }, field);
+    sim.reset(13, -40, 0.3);
+    let under = 0, nan = 0, air = 0, hurt = 0, worst = 0, flight = 0, longest = 0;
+    sim.onLand = (l) => { worst = Math.max(worst, l.impact); hurt += l.damage; };
+    for (let i = 0; i < 60 * 120; i++) {
+      const t = i * sdt, a = 0.3 + (t > 30 ? 0.9 * Math.sin(t * 0.35) : 0);
+      sim.bound = true;
+      sim.update(sdt, { x: Math.sin(a), z: Math.cos(a), sprint: true });
+      for (const f of sim.feet) if (f.pos.y < field.height(f.pos.x, f.pos.z) - 0.05) under++;
+      if (!Number.isFinite(sim.pelvis.x + sim.pelvis.y + sim.feet[0].pose.knee.y + sim.feet[1].pose.hock.y + sim.feet[0].pos.y)) nan++;
+      if (sim.airborne) { air++; flight += sdt; longest = Math.max(longest, flight); } else flight = 0;
+    }
+    const s = sim.stats, over = s.overreach / (s.frames * 2);
+    if (under) problems.push(`${under} foot-frames under the sand sprinting`);
+    if (nan) problems.push(`${nan} non-finite frames sprinting`);
+    if (over > 0.03) problems.push(`legs out of reach ${(over * 100).toFixed(1)}% of leg-frames sprinting`);
+    if (s.leaps < 50) problems.push(`only ${s.leaps} strides in a minute`);
+    console.log(`  dunes 60 s: ${s.leaps} strides · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
+  }
+  // Speed builds from the run toward the legs' top speed while held, on the flat.
+  {
+    const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+    const sim = new WalkerSim({ ...values }, flat);
+    sim.reset(0, 0, 0);
+    for (let i = 0; i < 120; i++) sim.update(sdt, { x: 0, z: 1, sprint: true });
+    const at: number[] = [];
+    for (let i = 1; i <= 15 * 120; i++) {
+      sim.bound = true;
+      sim.update(sdt, { x: 0, z: 1, sprint: true });
+      if (i === 120 || i === 3 * 120 || i === 6 * 120 || i === 15 * 120) at.push(sim.boundSpeed);
+    }
+    if (!(at[0] < at[1] && at[1] < at[2] && at[2] <= at[3] + 0.05)) problems.push(`speed doesn't build: ${at.map((x) => x.toFixed(1)).join(", ")}`);
+    if (!(at[0] < top * 0.85)) problems.push(`at top speed too soon (${at[0].toFixed(1)} after 1 s)`);
+    if (Math.abs(at[3] - top) > top * 0.05) problems.push(`settles at ${at[3].toFixed(1)} m/s, not the legs' ${top}`);
+    console.log(`  speed held 1/3/6/15 s: ${at.map((x) => x.toFixed(1)).join(", ")} m/s`);
+  }
+  // The turning circle grows with speed (like a vehicle).
+  {
+    const radius = (speed: number) => {
+      const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+      const sim = new WalkerSim({ ...values, boundTop: speed }, flat);
+      sim.reset(0, 0, 0);
+      sim.bound = true;
+      for (let i = 0; i < 12 * 120; i++) sim.update(sdt, { x: 0, z: 1, sprint: true });
+      const c0 = sim.course;
+      let turned = 0, prev = c0;
+      for (let i = 0; i < 2 * 120; i++) {
+        sim.update(sdt, { x: Math.sin(sim.heading + 1.4), z: Math.cos(sim.heading + 1.4), sprint: true });
+        let d = sim.course - prev; d = Math.atan2(Math.sin(d), Math.cos(d)); turned += d; prev = sim.course;
+      }
+      return (sim.boundSpeed * 2) / Math.max(1e-3, Math.abs(turned));
+    };
+    const r10 = radius(10), r16 = radius(16);
+    if (!(r16 > r10 * 1.8)) problems.push(`turning circle at 16 m/s (${r16.toFixed(0)} m) not much wider than at 10 (${r10.toFixed(0)} m)`);
+    console.log(`  turning radius: ${r10.toFixed(0)} m at 10 m/s, ${r16.toFixed(0)} m at 16 m/s`);
+  }
+  // Walls: sprinting at top speed into a 40-60° face (2 or 8 m high), the hips never rise more than 2.5 m over
+  // standing above the ground under them (Keith 2026-10-26: no fling into the sky).
+  {
+    let worst = 0, at = "";
+    for (const H of [2, 8]) for (const deg of [40, 50, 60]) {
+      const k = Math.tan((deg * Math.PI) / 180);
+      const g = shaped((_x, z) => Math.min(H, Math.max(0, (z - 40) * k)));
+      const sim = new WalkerSim({ ...values }, g);
+      sim.reset(0, 0, 0);
+      sim.boundSpeed = top;
+      for (let i = 0; i < 8 * 120; i++) {
+        sim.bound = true;
+        sim.update(sdt, { x: 0, z: 1, sprint: true });
+        const rise = sim.pelvis.y - g.height(0, sim.pos.z) - values.hipHeight;
+        if (rise > worst) { worst = rise; at = `${H} m at ${deg}°`; }
+        if (!Number.isFinite(sim.pelvis.y)) { problems.push(`NaN sprinting into a wall`); break; }
+      }
+    }
+    if (worst > 2.5) problems.push(`sprinting into a wall rose ${worst.toFixed(1)} m over standing (${at})`);
+    console.log(`  into 40-60° walls: hips at most ${worst.toFixed(1)} m over standing (${at})`);
+  }
+  // A dune: a long 18° windward climb to 8 m over a brink rounded across about 4 m, and a 32° slip face. At top speed
+  // the mech flies off it a good way (best of a few stride timings); walking over it, it stays on the ground.
+  {
+    const up = Math.tan((18 * Math.PI) / 180), down = Math.tan((32 * Math.PI) / 180), zc = 20 + 8 / up, K = 2.5;
+    const smin = (a: number, b: number) => { const h = Math.max(K - Math.abs(a - b), 0) / K; return Math.min(a, b) - (h * h * K) / 4; };
+    const g = shaped((_x, z) => Math.max(0, smin(Math.max(0, (z - 20) * up), 8 - (z - zc) * down)));
+    const run = (sprint: boolean, z0: number) => {
+      const sim = new WalkerSim({ ...values }, g);
+      sim.reset(0, z0, 0);
+      let longest = 0, dist = 0, t = 0, zt = 0, worst = 0;
+      sim.onLand = (l) => { worst = Math.max(worst, l.impact); };
+      for (let i = 0; i < 10 * 120; i++) {
+        sim.bound = sprint;
+        // Held at top speed into the climb (the uphill would otherwise slow it).
+        if (sprint && !sim.airborne) sim.boundSpeed = Math.max(sim.boundSpeed, top);
+        const was = sim.airborne;
+        sim.update(sdt, { x: 0, z: 1, sprint: false });
+        if (sim.airborne && !was) { t = 0; zt = sim.pos.z; }
+        if (sim.airborne) { t += sdt; if (t > longest) { longest = t; dist = sim.pos.z - zt; } }
+      }
+      return { longest, dist, worst };
+    };
+    let fast = { longest: 0, dist: 0, worst: 0 }, slow = 0;
+    for (const z0 of [-12, -9, -6, -3, 0]) {
+      const f = run(true, z0);
+      if (f.dist > fast.dist) fast = f;
+      slow = Math.max(slow, run(false, z0).longest);
+    }
+    if (fast.longest < 0.9 || fast.dist < 12) problems.push(`top speed off the crest flew only ${fast.longest.toFixed(2)} s, ${fast.dist.toFixed(1)} m`);
+    if (slow > 0.3) problems.push(`walking over the crest flew ${slow.toFixed(2)} s`);
+    console.log(`  off a dune crest: at ${top} m/s up to ${fast.longest.toFixed(2)} s, ${fast.dist.toFixed(1)} m (landing ${fast.worst.toFixed(1)} m/s) · walking ${slow.toFixed(2)} s`);
+  }
+  // Landing damage scales with the drop: none until landHurt, then more the higher.
+  {
+    const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+    const dmg: number[] = [];
+    for (const h of [3, 6.5, 9, 12]) {
+      const sim = new WalkerSim({ ...values }, flat);
+      sim.reset(0, 0, 0);
+      for (let i = 0; i < 60; i++) sim.update(sdt, { x: 0, z: 0, sprint: false });
+      sim.pelvis.y += h; for (const f of sim.feet) f.pos.y += h;
+      sim.launch(0, 0, 0);
+      for (let i = 0; i < 4 * 120 && !sim.lastLanding; i++) sim.update(sdt, { x: 0, z: 0, sprint: false });
+      dmg.push(sim.lastLanding?.damage ?? -1);
+    }
+    if (!(dmg[0] === 0 && dmg[1] > 0 && dmg[2] > dmg[1] && dmg[3] > dmg[2])) problems.push(`landing damage doesn't scale with the drop: ${dmg.map((x) => x.toFixed(0)).join(", ")}`);
+    console.log(`  landing damage from 3 / 6.5 / 9 / 12 m: ${dmg.map((x) => x.toFixed(0)).join(", ")}`);
+  }
+  if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; }
+}
+
 if (failed) throw new Error("walker check failed");
 console.log("walker check passed");

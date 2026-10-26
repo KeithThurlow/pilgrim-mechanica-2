@@ -1,4 +1,4 @@
-# Proposal: the bound, a sprint you hold that turns the mech into a vehicle (not built; a spike is in the walker lab)
+# Proposal: the bound, a sprint you hold that turns the mech into a vehicle (built 2026-10-26: see "As built" at the end)
 
 Keith, playtest 2026-10-26:
 - The default speed should be quite a bit faster, closer to the running speed. **Done:** walk 6 m/s, Shift runs 8.5.
@@ -267,3 +267,39 @@ Headless, 40 s on the lab's dunes with the straight demo:
 - **Shift's run:** no answer yet. Claude's default: keep it until the sprint is played.
 - **Booster pack:** follows from the first answer. The rocket slide on hold goes; the booster later adds thrust and
   glide to the sprint.
+
+## As built (2026-10-26)
+
+What differs from the proposal above, after Keith's answers:
+
+- **Input.** Space dashes at once (no tap/hold wait). Keep holding and the sprint starts as the dash's shove ends,
+  carrying its speed (at least the run's 8.5 m/s). With no dash charge, holding `boundTap` (0.2 s) starts it from the
+  walk. Let go and the mech lands out of its stride and runs on, skidding off what the run can't hold (`landFriction`).
+  The rocket boost on hold is gone; so is the slide as the default hold (the dash's own glide-out stays).
+- **Gait** (`walker.ts`, `bound`): a gallop rather than a pure two-foot hop. Each stride: a stance where the first foot
+  down is the first up and the other lands a moment later and pushes off last (`boundStagger`), planted feet locked,
+  heels rolling and hocks opening by stance progress (the walk's push-off), the body dipping to soak up the landing and
+  spring into the push-off (`boundSquat`); then a leap on the air state, the trailing leg staying out behind and drawn up
+  as it swings through (`boundSwing`, `boundTuck`), the lead foot reaching (`boundReach`, `boundSplit`) and swapping
+  each leap. The run's first push-off comes out of a short stance on the feet as they are. Landings under
+  `boundAbsorb` (7 m/s) are just the next stride; harder ones are the normal squat, stagger and damage.
+- **Speed and handling.** As proposed: `boundBuild` share of the gap per second (about 6 s from the run to near 14 m/s),
+  uphill slows the top. Turning: the line of run follows the body at grip × g / speed on average over a stride; the
+  body may turn `boundYaw` faster, and the gap (up to `boundDriftMax`, 30°) is a drift that scrubs speed and skids the
+  planted feet sideways (dust and furrows). In the air a quarter of that steering.
+- **Walls (the fling).** Keith found that a dash at a steep wall could throw the mech so high its landing killed it: the
+  air system took off with the dash's 60 m/s shove times the slope behind (a dash at the foot of an 8 m 60° face rose
+  354 m headless). Now ground steeper than `wallGrade` (0.9, 42°) takes the speed going into it away (all of it from
+  `wallStop`, 1.6, 58°) for the sprint, the dash's shove, skids and the walk; a shove up a slope is laid onto it; a body
+  rising into a face in the air loses the speed into it, and lands if its hips reach the ground; nothing takes off upward
+  faster than `launchUpMax` (6 m/s). Crest jumps still come from speed and the ground falling away.
+- **Booster (simple version).** While its tank lasts: top speed + `boostTop` (3 m/s) and a `boostGlide` (0.3) off
+  leaps; it burns `boostBurn` (0.25) tank-seconds a second sprinting and refills when not.
+- **Guns** fire while sprinting; `airSpread` (+3°) in the air; `boundGuns` 0 turns them off while sprinting.
+- **Fuel** `fuelBound` 0.27 s per metre. The HUD keeps "Home" at walk pace and adds "sprint home m:ss, burns m:ss".
+- **Camera** leads `camLead` (0.6 s) of travel above `camLeadFrom` (7 m/s), at most 14 m, and pulls out `camSpeedZoom`
+  (1.2 m per m/s over that).
+- **Items.** Top speeds live on the leg types (Rampart 14, Stilt 18, Siege 12, with grip, hop and landing limits); the
+  leg items don't carry a sprint stat yet (the loadout was another agent's at the time).
+- **Not done yet:** landing poses aimed at steep faces, dust and dents tuned only from filmstrips, chasers that keep up,
+  fortress jumps and landing on enemies.

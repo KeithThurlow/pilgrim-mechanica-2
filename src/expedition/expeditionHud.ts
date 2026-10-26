@@ -16,6 +16,8 @@ export interface HudFrame {
   fuelShare: number;
   /** Home estimate (s), Infinity if unreachable; null aboard. */
   eta: number | null;
+  /** Sprinting home instead: the estimate and the fuel it would burn (s of walking); null when not out or unreachable. */
+  sprint?: { eta: number; fuel: number } | null;
   warn: 0 | 1 | 2;
   /** The salvage prompt (or ""). */
   prompt: string;
@@ -88,6 +90,8 @@ export class ExpeditionHud {
     if (e.state === "out") {
       const home = f.eta === null ? "--:--" : clock(f.eta);
       lines.push(`<div style="font-size:17px;color:${warnCol};opacity:${blink}">Home ${home} · Fuel ${clock(f.fuelLeft)}</div>`);
+      // The warnings stay on the walk; the sprint is the faster, thirstier way back.
+      if (f.sprint) lines.push(`<div style="font-size:11px;color:${f.sprint.fuel > f.fuelLeft ? COL.red : COL.dim}">sprint home ${clock(f.sprint.eta)}, burns ${clock(f.sprint.fuel)}</div>`);
       if (f.warn === 2) lines.push(`<div style="color:${COL.red};font-size:11px;letter-spacing:0.08em">HEAD BACK NOW</div>`);
       else if (f.warn === 1) lines.push(`<div style="color:${COL.amber};font-size:11px;letter-spacing:0.08em">FUEL GETTING SHORT</div>`);
     } else lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
