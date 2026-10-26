@@ -30,6 +30,13 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
 - `src/fx/gpuDust.ts`: the dust sim ported (clump, cloud, spray); `DustSim.emit` forwards there when `fxGpuDust`;
   `DustDraw.attachGpu` draws it with the same shader (refactored into `puffMaterial`) and shadows draped on the ground.
 - Sliders (Performance): `fxGpuBits`, `fxGpuTracers`, `fxGpuDust` (default 1), `fxGpuDustPool` (32768, on reload).
+- Verified so far: WebGL readback in the robots lab (dust live 177 vs the CPU estimate 172, none under the ground;
+  casings resting at +0.03 m; sparks flying); walker lab game-camera dust before / CPU / GPU (scratchpad
+  `scale/shots/w3-three.png`): GPU matches once drawn oldest-last in two passes (clumps, then cloud); unsorted
+  newest-last showed dark mottling (new clumps over old cloud). GPU tracers draw in the lab (`shots/tracertest.png`).
+  WebGPU: the feasibility test and a robots-lab load had no errors; a WebGPU readback timed out on this box (too slow).
+- Open: in the robots lab firing shot (`shots/r-gpu.png` vs `r-cpu.png`) the GPU frame shows less dust haze round the
+  mech's left gun; not yet pinned down (random run-to-run, or puffs missing there).
 - Scripts: `scale/gpucheck.mjs <url> frames` reads the pools back (live, height over the true ground); `smoke2.mjs`
   (console errors too). Shots: `shotg.mjs` stops the loop before the screenshot (the box renders 6-10 s a frame).
 
