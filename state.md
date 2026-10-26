@@ -193,6 +193,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Torso turns the shortest way across the back (Claude, Keith's report)
+- Keith: changing target a few degrees swung the torso the long way round. With the free waist (limit 180) the torso still moved in its angle from the legs without wrapping, so 170° left to 170° right went 340° round the front. Now a 180 limit turns by the shortest wrapped angle, through the back too; below 180 the limit still keeps it off the back. `src/mech/upper.ts`.
+- Checked: `upper-check` gains a case (settled 170° to one side, the aim 20° on past dead behind, three leg headings, both sides: under 0.25 s, never through the front; the old code fails it at 2 s round the front); all of `npm test` passes; build.
+
 ### 2026-10-26 · Rail through dunes: sand measured along the slug's line, hits still by the sheet (Claude, Keith's report)
 - Keith: the rail went much further through dunes than expected; penetration had to drop to 0.5 before it showed. Sand cost only where the ground rose over the sheet's top (10 m over the floor, tall for excavators), so only crests over 10 m counted. Now a sheet can carry its shot's own line (`Sheet.line`, `SheetFire.line`): hits still come from the sheet, sand costs where it rises over the line. The rail's line is its slug height over the floor (slider "Slug height", was looks only). Minigun and autocannon unchanged (no line: the top). `src/game/sheet.ts`, `sheetFire.ts`, `src/weapons/rail.ts`, `tuning.ts`.
 - Checked: typecheck; `weapons-check` rewritten for the rule (a lip just over the slug line costs and is punched through, a dune as tall as the sheet and a 30 m dune stop it, a crest under the line is free); all of `npm test` passes; build. Not looked at in a shot (the aim line's stop point moves with it).

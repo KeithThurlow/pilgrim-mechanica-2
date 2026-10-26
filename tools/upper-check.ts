@@ -70,6 +70,22 @@ if (v.torsoLimit >= 180) {
     if (wrongWay) problems.push(`the torso turned the long way round toward a target behind (${side > 0 ? "left" : "right"})`);
     behindFired = Math.max(behindFired, t);
   }
+  // Across the back (Keith 2026-10-26): settled on a target 170° to one side, the aim moves 20° on, past dead behind;
+  // the torso takes the 20° through the back, not 340° round the front, whichever way the legs face.
+  for (const legs of [0, 1.3, -2.4]) for (const side of [1, -1]) {
+    const at = (deg: number) => { const a = legs + (side * deg * Math.PI) / 180; return { x: Math.sin(a) * 25, y: 0, z: Math.cos(a) * 25 }; };
+    sim.reset(legs);
+    for (let i = 0; i < 120 * 3; i++) sim.update(dt, legs, shoulder, at(170), false);
+    const T = at(190), want = Math.atan2(T.x - shoulder.x, T.z - shoulder.z);
+    let t = 0, front = false;
+    while (t < 2 && Math.abs(Math.atan2(Math.sin(want - sim.torsoYaw), Math.cos(want - sim.torsoYaw))) > 0.01) {
+      sim.update(dt, legs, shoulder, T, false); t += dt;
+      const rel = Math.atan2(Math.sin(sim.torsoYaw - legs), Math.cos(sim.torsoYaw - legs));
+      if (Math.abs(rel) < Math.PI / 2) front = true;
+    }
+    const most = (20 / v.torsoTurnRate) * 1.5 + 0.05;
+    if (front || t > most) problems.push(`legs at ${legs}: a target moving 20° across the back (${side > 0 ? "left" : "right"}) took ${t.toFixed(2)} s${front ? " round the front" : ""} (want under ${most.toFixed(2)} s)`);
+  }
 }
 const gap = Math.abs((restart[1] ?? 99) - (restart[-1] ?? 99));
 if (restart[1] === undefined || restart[-1] === undefined) problems.push("a gun never came back on target after the aim jumped");
