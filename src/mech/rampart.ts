@@ -14,13 +14,25 @@ import type { ToonLook } from "../look/toon";
 import { LEG_TYPES } from "./legTypes";
 import { MECH_VARIANTS, RAMPART_BACK } from "./variants";
 import type { BodyParts, MountSocket } from "../game/mechUnit";
+import type { Aim } from "./upper";
+import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
+import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
+import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 
 /**
  * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
  * side's gun pivot to a hand below and outboard of the shoulder (the held weapon rides there, smaller than a hull
- * weapon); the sensor mast stands on the hull; the waist mounts are where the half drums hang.
+ * weapon); a sensor head sits on the front of the hull (`Sensor_Front`), a cluster on top (`Sensor_Top`); the waist
+ * mounts are where the half drums hang. The Rampart's own hull mesh has a cab window in its nose: that's the
+ * cockpit, part of the one hull mesh, so it stays; a fitted head sits on the nose below it.
  */
-export const MOUNT_STANDIN = { armDrop: 0.75, armOut: 0.3, armFwd: 0.35, heldScale: 0.72, sensorAt: [0, 1.25, -0.2] as [number, number, number] };
+export const MOUNT_STANDIN = {
+  armDrop: 0.75, armOut: 0.3, armFwd: 0.35, heldScale: 0.72,
+  sensorTop: [0, 1.62, -0.55] as [number, number, number],
+  sensorFront: [0, 0.78, 1.0] as [number, number, number],
+};
+/** The sensor a body shows before any loadout is applied (the default loadout's). */
+const DEFAULT_SENSOR = { id: "sensor-visor", style: "head" as SensorStyle };
 
 const loader = new GLTFLoader();
 
@@ -114,8 +126,20 @@ export class RampartBody {
   /** Where shoulder weapons stand: on each shoulder (+1 left, -1 right) and on top of the back mount. */
   private shoulderMounts: { side: 1 | -1; g: THREE.Group }[] = [];
   private backTop = new THREE.Group();
-  /** Sensor mast stand-in (the Sensor socket) and the waist sockets (where the drums hang). */
-  private sensor = new THREE.Group();
+  /** The sensor sockets (a head at the front, a cluster on top), the fitted sensor's model and its head motion
+   *  (cosmetic, src/mech/head.ts); and the waist sockets (where the drums hang). */
+  private sensorFront = new THREE.Group();
+  private sensorTop = new THREE.Group();
+  private sensorModel: SensorModel | null = null;
+  private sensorId: string | null = null;
+  private sensorStyle: SensorStyle = "cluster";
+  private look: ToonLook | null = null;
+  readonly head = new HeadDriver();
+  private torsoYaw = 0;
+  /** The aim's bearing last frame and how fast it turns (smoothed), for the head to look ahead along a sweep. */
+  private aimBearing: number | null = null;
+  private aimRate = 0;
+  private lastPaint: { look: ToonLook; color: number | null } | null = null;
   private waists: { side: 1 | -1; g: THREE.Group }[] = [];
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
@@ -265,10 +289,65 @@ export class RampartBody {
     // A shoulder weapon on the back mount stands on top of the pack (key 3).
     this.backTop.position.set(0, 1.75, -0.1);
     back.add(this.backTop);
-    // The sensor mast (stand-in) on top of the hull.
-    this.sensor.position.set(...MOUNT_STANDIN.sensorAt);
-    this.sensor.add(sensorMast(look));
-    this.hull.add(this.sensor);
+    // The sensor sockets: a head on the nose, a cluster on top; the default loadout's sensor until one is fitted.
+    this.look = look;
+    this.sensorFront.name = "Sensor_Front";
+    this.sensorTop.name = "Sensor_Top";
+    this.sensorFront.position.set(...MOUNT_STANDIN.sensorFront);
+    this.sensorTop.position.set(...MOUNT_STANDIN.sensorTop);
+    this.hull.add(this.sensorFront, this.sensorTop);
+    this.setSensor(DEFAULT_SENSOR.id, DEFAULT_SENSOR.style);
+  }
+
+  /** Fit a sensor's model by base id (null: none): the code stand-in at once, its GLB in its place if one loads. */
+  setSensor(id: string | null, style?: SensorStyle) {
+    if (id === this.sensorId) return;
+    this.sensorId = id;
+    this.sensorStyle = style ?? (id ? BASE_BY_ID[id]?.sensor?.style : undefined) ?? "cluster";
+    this.put(id ? standInSensor(id, this.look!, this.sensorStyle) : null);
+    if (!id) return;
+    void sensorGlb(id).then((scene) => { if (scene && this.sensorId === id) this.put(fromGlb(scene, this.look!)); });
+  }
+
+  private put(m: SensorModel | null) {
+    this.sensorModel?.root.removeFromParent();
+    this.sensorModel = m;
+    this.head.reset();
+    if (m) (this.sensorStyle === "head" ? this.sensorFront : this.sensorTop).add(m.root);
+    // New meshes take the mech's current paint.
+    this.paints = null;
+    if (this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
+  }
+
+  /**
+   * Turn the fitted head toward the aim (or scan with none) and sweep a cluster: cosmetic, called each frame after
+   * update(). v: the head sliders (src/mech/head.ts).
+   */
+  aimSensor(dt: number, aim: Aim | null, v: HeadValues = HEAD_DEFAULTS) {
+    const m = this.sensorModel;
+    if (!m) return;
+    const sweep = this.sensorId ? BASE_BY_ID[this.sensorId]?.sensor?.sweep ?? 0 : 0;
+    let local: { x: number; y: number; z: number } | null = null, behind = 0;
+    if (aim && m.head) {
+      const sock = this.sensorStyle === "head" ? this.sensorFront : this.sensorTop;
+      sock.updateWorldMatrix(true, false);
+      const p = this.tmp.v.set(aim.x, aim.y, aim.z);
+      sock.worldToLocal(p);
+      local = { x: p.x, y: p.y, z: p.z };
+      // How far the torso still has to turn toward the aim, so the head can look ahead of it.
+      const hp = sock.getWorldPosition(this.tmp.left);
+      const want = Math.atan2(aim.x - hp.x, aim.z - hp.z);
+      behind = Math.atan2(Math.sin(want - this.torsoYaw), Math.cos(want - this.torsoYaw));
+      if (this.aimBearing !== null && dt > 0) {
+        const d = want - this.aimBearing, rate = Math.atan2(Math.sin(d), Math.cos(d)) / dt;
+        this.aimRate += (rate - this.aimRate) * Math.min(1, dt * 8);
+      }
+      this.aimBearing = want;
+    } else { this.aimBearing = null; this.aimRate = 0; }
+    this.head.step(dt, { aim: local, torsoBehind: behind, aimRate: this.aimRate }, v, sweep);
+    if (m.head) m.head.rotation.y = this.head.yaw;
+    if (m.pitch) m.pitch.rotation.x = -this.head.pitch;
+    if (m.sweep) m.sweep.rotation.y = this.head.sweep;
   }
 
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
@@ -288,7 +367,9 @@ export class RampartBody {
     if (this.pack) this.pack.visible = parts.pack;
     // A back weapon stands on the pack, or lower where the pack would be.
     this.backTop.position.y = parts.pack ? 1.75 : 0.95;
-    this.sensor.visible = parts.sensor ?? true;
+    // The fitted sensor (a body told only on/off keeps its model and hides it).
+    if (parts.sensorId !== undefined) this.setSensor(parts.sensor === false ? null : parts.sensorId, parts.sensorStyle ?? undefined);
+    this.sensorFront.visible = this.sensorTop.visible = parts.sensor ?? true;
   }
 
   /**
@@ -298,7 +379,9 @@ export class RampartBody {
   mount(slot: MountSocket): THREE.Object3D {
     switch (slot) {
       case "back": case "Pack": return this.backTop;
-      case "Sensor": return this.sensor;
+      case "Sensor_Front": return this.sensorFront;
+      case "Sensor_Top": return this.sensorTop;
+      case "Sensor": return this.sensorStyle === "head" ? this.sensorFront : this.sensorTop;
       case "Waist_L": case "Waist_R": return this.waists.find((w) => w.side === (slot === "Waist_L" ? 1 : -1))!.g;
       case "shoulderL": case "shoulderR": case "Shoulder_L": case "Shoulder_R":
         return this.shoulderMounts.find((m) => m.side === (slot === "shoulderL" || slot === "Shoulder_L" ? 1 : -1))!.g;
@@ -324,11 +407,13 @@ export class RampartBody {
    * The colour multiplies the model's vertex colours, so the panel shading stays.
    */
   paint(look: ToonLook, color: number | null) {
+    this.lastPaint = { look, color };
     if (!this.paints) {
       this.paints = [];
       this.root.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.isMesh && !m.userData.ink) this.paints!.push({ mesh: m, base: (m.material as THREE.MeshStandardMaterial).color.getHex() });
+        // Lenses and lamps keep their glow.
+        if (m.isMesh && !m.userData.ink && !m.userData.glow) this.paints!.push({ mesh: m, base: (m.material as THREE.MeshStandardMaterial).color.getHex() });
       });
     }
     for (const { mesh, base } of this.paints) look.tint(mesh, color === null ? base : color);
@@ -336,6 +421,7 @@ export class RampartBody {
 
   update(sim: WalkerSim, upper: UpperSim) {
     const t = this.tmp;
+    this.torsoYaw = upper.torsoYaw;
     const left = t.left.set(1, 0, 0).applyQuaternion(sim.pelvisQ);
     this.pelvis.position.copy(sim.pelvis);
     this.pelvis.quaternion.copy(sim.pelvisQ);
@@ -376,7 +462,7 @@ export class RampartBody {
   regions() {
     const legs = this.legs.flatMap((L) => [L.thigh.pivot, L.shin.pivot, L.cannon.pivot, L.foot]);
     const gun = (side: 1 | -1) => [this.pods.find((p) => p.side === side)!.yawPitch];
-    return { legs, hull: [this.pelvis, this.torso!], gunLeft: gun(1), gunRight: gun(-1), back: [this.back!] };
+    return { legs, hull: [this.pelvis, this.torso!], gunLeft: gun(1), gunRight: gun(-1), back: [this.back!], sensor: [this.sensorFront, this.sensorTop] };
   }
 
   /** World position of a gun's muzzle (side +1 left, -1 right). */
@@ -419,19 +505,6 @@ function armFore(look: ToonLook) {
   g.add(m, hand);
   return g;
 }
-/** Stand-in sensor mast: a post with a small dish and a lamp. */
-function sensorMast(look: ToonLook) {
-  const g = new THREE.Group();
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.7, 8));
-  post.position.y = 0.35;
-  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.12, 0.08, 14));
-  dish.position.set(0, 0.72, 0.04); dish.rotation.x = -1.1;
-  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
-  lamp.position.set(0, 0.9, 0);
-  for (const [m, c] of [[post, 0x3e3c35], [dish, 0xb7a77c], [lamp, 0xd18a2a]] as const) { look.apply(m); look.tint(m, c); g.add(m); }
-  return g;
-}
-
 /** Stand-in power pack from boxes, in the Rampart's khaki and olive (or a variant's paint), until a modelled one exists. */
 function powerPack(look: ToonLook, khaki = 0xb7a77c, olive = 0x6c7546) {
   const g = new THREE.Group();

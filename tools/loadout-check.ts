@@ -1,7 +1,8 @@
 // Headless loadout check (src/items): the mount rules (Keith 2026-10-26: each hull mount a hull weapon or an arm with a
 // held weapon and a shoulder weapon; a two-hander needs both arms; the hull says which mounts it offers), the cascades
 // both ways, a mixed build, waist drums feeding their own side, a back weapon in place of the pack, the sensor's radar
-// range reaching the expedition radar and its seekers, migrating a save from before the mounts without losing items,
+// range reaching the expedition radar and its seekers, sensor styles (a head needs a front socket, a cluster a top one;
+// a head's aim help reaches the lock cone and the guns' tracking), migrating a save from before the mounts without losing items,
 // sockets by rarity and Protocols only by tags, stats that add up and are the same for the same seed, rarity widening
 // rolls both ways, the cargo weight limit, losing cargo leaving what's fitted, every base drawn by a known model look,
 // the per-gun hooks in the upper-body sim, and the default loadout giving exactly today's mech values (so nothing
@@ -27,6 +28,7 @@ import { newBag, addTo, bagWeight, moveItem, loseCargo, hasRoom } from "../src/i
 import { RADAR_DEFAULTS, radarPicture, RadarZoom, type RadarWorld } from "../src/expedition/radar";
 import { Seeker, SEEKER_DEFAULTS, seekNearest } from "../src/expedition/seekers";
 import { SALVAGE_DEFAULTS, SalvageSim } from "../src/pois/salvage";
+import { HeadDriver, HEAD_DEFAULTS } from "../src/mech/head";
 
 const fails: string[] = [];
 const must = (ok: boolean, what: string) => { if (!ok) fails.push(what); };
@@ -43,6 +45,8 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DASH_DEFAULTS,
     hull: MECH_DEFAULTS.hull, roundDamage: MECH_DEFAULTS.roundDamage, roundPierce: MECH_DEFAULTS.roundPierce,
     mechRadar: RADAR_DEFAULTS.mechRadar, gearSalvage: 1,
+    // The default visor head's small lock help (Keith 2026-10-26: hulls have heads; the one value that's new).
+    sensorLock: makeItem("sensor-visor").stats.lockAssist,
   } as Record<string, number>;
   for (const [k, val] of Object.entries(r.values)) must(today[k] === val, `default loadout ${k} = ${val}, today ${today[k]}`);
   for (const [name, g] of [["left", r.guns.left], ["right", r.guns.right]] as const) {
@@ -52,7 +56,55 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     for (const [k, val] of Object.entries(want)) must((g as unknown as Record<string, number>)[k] === val, `default ${name} gun ${k} = ${(g as unknown as Record<string, number>)[k]}, today ${val}`);
   }
   must(r.parts.drumsL && r.parts.drumsR && r.parts.pack && r.parts.sensor && r.parts.mountL === "gun" && r.parts.mountR === "gun", `default parts wrong: ${JSON.stringify(r.parts)}`);
-  must(r.seekers.join() === "scrap", `the default mast's seekers are ${r.seekers.join()}, want scrap`);
+  must(r.seekers.join() === "scrap", `the default head's seekers are ${r.seekers.join()}, want scrap`);
+  must(r.parts.sensorId === "sensor-visor" && r.parts.sensorStyle === "head", `the default sensor isn't the visor head: ${r.parts.sensorId} ${r.parts.sensorStyle}`);
+}
+
+// ---- Sensor styles: a head on a front socket, a cluster on a top socket ----
+{
+  const head = mk("sensor-visor"), optic = mk("sensor-optic"), mast = mk("sensor-mast"), dish = mk("sensor-dish");
+  for (const b of BASES.filter((x) => x.kind === "sensor")) must(!!b.sensor?.style, `${b.id}: a sensor with no style`);
+  for (const b of BASES.filter((x) => x.kind === "hull")) must(!!b.mounts && Array.isArray(b.mounts.sensor), `${b.id}: no sensor sockets listed`);
+  must(BASES.some((b) => b.kind === "sensor" && b.sensor?.style === "head") && BASES.some((b) => b.kind === "sensor" && b.sensor?.style === "cluster"), "no head or no cluster among the sensors");
+  const on = (hullBase: string) => { const lo = defaultLoadout(); lo.sensor = null; lo.hull = mk(hullBase); return lo; };
+  // Rampart: front and top; Siege: top only; Salvager: front only.
+  must(!fitProblem(on("hull-rampart"), "sensor", head) && !fitProblem(on("hull-rampart"), "sensor", mast), "the Rampart hull (front and top) refused a head or a cluster");
+  must(!fitProblem(on("hull-salvager"), "sensor", head) && !fitProblem(on("hull-salvager"), "sensor", optic), "a head refused on a hull with a front socket");
+  must(!!fitProblem(on("hull-siege"), "sensor", head), "a head fitted on a top-only hull");
+  must(!fitProblem(on("hull-siege"), "sensor", dish), "a cluster refused on a hull with a top socket");
+  must(!!fitProblem(on("hull-salvager"), "sensor", mast), "a cluster fitted on a front-only hull");
+  // Swapping to a top-only hull bounces a fitted head to the stash, not lost.
+  const lo = defaultLoadout();
+  const off = fit(lo, "hull", mk("hull-siege"));
+  must(!lo.sensor && off.some((i) => i.base === "sensor-visor"), "a head stayed on (or was lost) after swapping to a top-only hull");
+  must(problems(lo).length === 0, `the Siege swap left problems: ${problems(lo).join("; ")}`);
+  // A head's aim help: the lock cone and the guns' tracking; a cluster gives none.
+  const a = defaultLoadout(); fit(a, "sensor", optic);
+  const ra = resolve(a), r0 = resolve(defaultLoadout());
+  must(ra.values.sensorLock === optic.stats.lockAssist && close(ra.guns.right!.track, r0.guns.right!.track * (1 + optic.stats.trackAssist)), "a head's lock and tracking help didn't reach the values");
+  const c = defaultLoadout(); fit(c, "sensor", mast);
+  const rc = resolve(c);
+  must(rc.values.sensorLock === 0 && rc.guns.right!.track === r0.guns.right!.track && rc.parts.sensorStyle === "cluster", "a cluster helped the aim");
+  must(rc.values.mechRadar > r0.values.mechRadar, "the mast doesn't reach further than the default head");
+}
+
+// ---- The head's motion (cosmetic, src/mech/head.ts): turns toward the aim, never past its limits, scans with none ----
+{
+  const v = { ...HEAD_DEFAULTS }, R = Math.PI / 180, h = new HeadDriver();
+  let maxYaw = 0, maxRate = 0, prev = 0;
+  for (let i = 0; i < 120; i++) { h.step(1 / 60, { aim: { x: 10, y: -3, z: 6 }, torsoBehind: 0 }, v); maxRate = Math.max(maxRate, Math.abs(h.yaw - prev) * 60); prev = h.yaw; }
+  must(Math.abs(h.yaw - Math.atan2(10, 6)) < 0.03, `the head didn't settle on an aim to its left (${(h.yaw / R).toFixed(1)}°)`);
+  must(h.pitch < 0 && h.pitch >= -v.headPitchDown * R - 1e-6, "the head didn't look down at a point below it");
+  must(maxRate <= v.headTurnRate * R * 1.01, `the head turned faster than its rate (${(maxRate / R).toFixed(0)}°/s)`);
+  for (let i = 0; i < 240; i++) { h.step(1 / 60, { aim: { x: -5, y: 8, z: -9 }, torsoBehind: 0 }, v); maxYaw = Math.max(maxYaw, Math.abs(h.yaw)); }
+  must(maxYaw <= v.headYawMax * R + 1e-6 && h.pitch <= v.headPitchUp * R + 1e-6, "the head went past its yaw or pitch limit for an aim behind it");
+  // Leading: with the torso still turning toward an aim, the head looks further round than the aim itself.
+  const lead = new HeadDriver();
+  for (let i = 0; i < 120; i++) lead.step(1 / 60, { aim: { x: 2, y: 0, z: 10 }, torsoBehind: 0.6 }, v);
+  must(lead.yaw > Math.atan2(2, 10) + 0.05, "the head doesn't lead a turning torso");
+  let scanMax = 0;
+  for (let i = 0; i < 60 * 20; i++) { h.step(1 / 60, { aim: null, torsoBehind: 0 }, v); if (i > 60 * 4) scanMax = Math.max(scanMax, Math.abs(h.yaw)); }
+  must(scanMax > v.headScanWidth * R * 0.6 && scanMax <= v.headScanWidth * R * 1.15, `the idle scan doesn't sweep its width (${(scanMax / R).toFixed(1)}°)`);
 }
 
 // ---- Mount rules and cascades ----

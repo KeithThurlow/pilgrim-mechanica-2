@@ -33,6 +33,7 @@ import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
 import { DASH_PARAMS } from "../../src/mech/dash";
+import { HEAD_PARAMS } from "../../src/mech/head";
 import { BoundSpike, BOUND_SPIKE_DEFAULTS, BOUND_SPIKE_PARAMS } from "./boundSpike";
 
 const app = await createApp(document.getElementById("view")!);
@@ -68,6 +69,8 @@ const legType = LEG_TYPES[rampart ? mechLegType() : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
+// ?sensor=<base id>|none: the sensor on the hull (default the Rampart visor head; e.g. sensor-dish for a cluster).
+{ const id = params.get("sensor"); if (rampart && id) rampart.setSensor(id === "none" ? null : id); }
 // Steel to shoot at near the start: rounds spark off these and tear up the sand everywhere else.
 const wrecks = new WreckStandIns(field, [
   { x: 22, z: -28, yaw: 0.6, kind: "hulk" },
@@ -81,6 +84,8 @@ scene.add(bf.group);
 const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
 const { sim, upper } = mech;
+// For headless probes (page.evaluate): the mech and its model.
+(window as unknown as { __walker: unknown }).__walker = { mech, rampart };
 const dust = bf.dust;
 // ?surface=gravel|dirt|concrete|snow: pretend the ground is that, to tune the other surfaces before the terrain has
 // them (snow: deep dents, dust as sand until snow has its own).
@@ -103,6 +108,8 @@ const CAMS: Record<string, [pitch: number, dist: number, yawFromHeading: number]
   side: [6, 13, Math.PI / 2],
   back: [22, 15, Math.PI + 0.6],
   feet: [4, 7, 2.6],
+  // Face to face with the hull, a little high: the sensor head.
+  head: [20, 11, 0.3],
 };
 let camName = params.get("cam") ?? "game";
 function setCam(name: string) {
@@ -155,7 +162,7 @@ let picking = false; // a scene pick opens the topic itself; a topic button forg
 const panel = tweakPanel({
   id: "walker-lab",
   title: rampart ? "Rampart walker" : "Walker lab",
-  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
+  params: [...WALKER_PARAMS, ...(boundOn ? BOUND_SPIKE_PARAMS : []), ...DASH_PARAMS, ...UPPER_PARAMS, ...HEAD_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...MARK_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...TERRAIN_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -168,7 +175,7 @@ const panel = tweakPanel({
   topics: [
     { id: "legs", label: "Legs", groups: ["Move", "Bound (spike)", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents", "Sand marks"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents", "Sand marks"] },
-    { id: "hull", label: "Hull", groups: ["Body", "Torso & guns"] },
+    { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
     { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Sand marks", "Minigun FX", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
@@ -189,6 +196,7 @@ selector = new Selector(app, {
     ...(r.gunLeft ? [{ topic: "guns", label: "Left minigun", objects: () => r.gunLeft! }] : []),
     ...(r.gunRight ? [{ topic: "guns", label: "Right minigun", objects: () => r.gunRight! }] : []),
     ...(r.back ? [{ topic: "guns", label: "Ammo drums", objects: () => r.back! }] : []),
+    ...(r.sensor ? [{ topic: "hull", label: "Sensor head", objects: () => r.sensor! }] : []),
     { topic: "hits", label: "Steel wreck (hits)", objects: () => wrecks.meshes },
   ],
   ground: { topic: "dunes", label: "Dunes", field },

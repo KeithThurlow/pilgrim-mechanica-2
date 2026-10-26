@@ -57,7 +57,7 @@ the queue between them.
   | --- | --- | --- | --- | --- |
   | Legs (several types) | 8,500 | 3,000 | 1,000 | Thigh, shin, cannon, heel, toes per side, plus pelvis |
   | Hull (several types) | 6,500 | 2,200 | 700 | Rides the waist; carries the mount sockets |
-  | Sensor mount (optional) | 1,000 | 300 | 100 | Radar range, item seekers. Two styles: a **head** at the front of the hull that turns to follow the aim (moving nodes `Head` yaw, `HeadPitch` pitch), or a **cluster** of sensors up on top (masts, dishes; may have a slow `Sweep`) |
+  | Sensor mount (optional) | 1,000 | 300 | 100 | Radar range, item seekers. Two styles: a **head** at the front of the hull that turns to follow the aim (moving nodes `Head` yaw, `HeadPitch` pitch), or a **cluster** of sensors up on top (masts, dishes; may have a slow `Sweep`). Export to `public/models/sensors/<item base id>.glb` (`sensor-visor`, `sensor-optic`, `sensor-mast`, `sensor-dish`, `sensor-array`), origin on the socket, +Z forward; it replaces the code stand-in with no code change |
   | Hull mount, per side | 5,000 | 1,700 | 550 | Either a hull weapon (5k) or arm 1.5k + held weapon 1.5k + shoulder weapon 2k |
   | Pack mount (high back) | 2,000 | 700 | 250 | Power or booster pack |
   | Back/waist mount, per side | 1,000 | 350 | 120 | Drums, cargo racks, small kit |

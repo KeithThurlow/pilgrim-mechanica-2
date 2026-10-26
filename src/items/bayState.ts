@@ -73,7 +73,7 @@ export function readBay(raw: unknown): BayState | null {
       if (!lo.pack) lo.pack = back;
       else { stash.items.push(back); notes.push(`${itemName(back)} was on the back mount; the pack mount takes a pack or a back weapon, so it went to the stash.`); }
     }
-    // The old default mech had no sensor; today's carries the Rampart mast.
+    // The old default mech had no sensor; today's carries the Rampart visor head.
     lo.sensor = defaultLoadout().sensor;
   } else for (const s of SLOTS) lo[s] = fix(saved[s]);
   const def = defaultLoadout();
