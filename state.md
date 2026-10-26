@@ -193,6 +193,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Repo fixes: ignore node_modules in any form, a weapon look type error (Claude, Keith's PC)
+- `b938e09` committed `node_modules` as a symlink to a cloud session's `/home/claude/vendor` (`.gitignore` had `node_modules/`, which only matches folders); on Windows pulling it blocked. Another agent untracked it (`14f4205`); `.gitignore` now says `node_modules` so a link can't get in again.
+- `src/weapons/weaponLook.ts`: `emissiveNode` cast like the `roughnessNode` line above it (the toon node material's types lack it); the typecheck failed on main since the weapon model library merge.
+- Checked: typecheck and build on Keith's PC.
+
 ### 2026-10-26 · Explosives hurt robots: blasts by part, bursts on contact (Claude, agent; Keith's report)
 - Keith (convoy lab): missiles didn't hurt the big robots. Causes: `RobotTarget.splash` skipped big robots entirely and measured medium ones to the chassis; missiles and mortar shells came down on the sand under a tall robot (the chassis 10 m up) and never burst on bodies; missiles keyed on robot 0 never tracked (key 0 falsy); autocannon splash skipped the whole swarm a shell struck.
 - Fix: blasts measured to each robot's nearest part with part shares (`robotMidBlast` 1, `robotBigBlast` 0.5, Robots: hit parts); `src/game/splash.ts` (`splashBlast`, `firstBody`) for `Battlefield.blast` and autocannon bursts (sparing only the robot struck); missiles, line mortar and big mortar shells burst on the first body in their path; missiles follow the lock's body, the RPG and big mortar aim at the lock's body when the cursor or ring is on it; air bursts dig no crater (`blastGroundReach`). Files: `robotTarget.ts`, `robots.ts`, `battlefield.ts` (`blast`, `lob` y, shell contact), `shells.ts`, `swarm.ts`, `salvo.ts`, `rocket.ts`, `mortar.ts`, `arsenal.ts`, `tuning.ts`.
