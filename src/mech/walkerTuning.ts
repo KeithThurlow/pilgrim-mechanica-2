@@ -151,6 +151,18 @@ export const WALKER_DEFAULTS = {
   swingThighFold: 160,
   swingFoldFrom: 0.12,
   uphillLead: 1,
+  // The dash as a push-off (Keith 2026-10-26 18:28: "quickly push off one of the legs and launch... your hips open up
+  // towards the direction you want to go, and the other leg's knee pushes out towards that direction", then a slide and
+  // a step or two to regain footing; no splits).
+  dashPushTime: 0.08,
+  dashLeadTime: 0.14,
+  dashLeadReach: 0.6,
+  dashLeadLift: 0.35,
+  dashRecover: 0.3,
+  dashHipOpen: 0.6,
+  dashKneeOut: 25,
+  dashSpreadMax: 2.6,
+  dashIntoRun: 11,
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
@@ -288,5 +300,14 @@ export const WALKER_PARAMS: Param[] = [
   { key: "legReachMax", label: "Longest leg (share of straight)", min: 0.75, max: 1, step: 0.005, group: "Terrain", tip: "Hip to ankle never stretches past this share of the straight leg. Downhill a foot that can't reach the ground hangs there; with nothing under it the mech drops (Keith 2026-10-26: no yanking the legs to the ground)" },
   { key: "swingThighFold", label: "Swinging thigh lifts when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A swinging leg squashed more than usual (stepping uphill) raises its knee through the hip by this much per unit of compression past the threshold below, so the thigh rises toward the hull instead of hanging straight" },
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },
+  { key: "dashPushTime", label: "Push-off foot holds for (s)", min: 0, max: 0.3, step: 0.005, group: "Dash", tip: "The foot the dash pushes off (the planted one, or the nearest to planting) stays put this long, or until its leg is at full stretch, then lets go and comes back under" },
+  { key: "dashLeadTime", label: "Lead foot reaches its slide in (s)", min: 0.04, max: 0.4, step: 0.01, group: "Dash", tip: "The other foot steps out toward the dash and lands to slide on" },
+  { key: "dashLeadReach", label: "Lead foot lands out toward the dash (m)", min: 0, max: 2, step: 0.01, group: "Dash" },
+  { key: "dashLeadLift", label: "Lead foot lifts (m)", min: 0, max: 1, step: 0.01, group: "Dash" },
+  { key: "dashRecover", label: "Push-off foot back under in (s)", min: 0.08, max: 1, step: 0.01, group: "Dash", tip: "After letting go, the push-off foot is drawn back beside the lead foot and slides with it" },
+  { key: "dashHipOpen", label: "Hips open toward the dash", min: 0, max: 1, step: 0.01, group: "Dash", tip: "Share of the angle between the legs' heading and the dash (up to 60°) the hips turn" },
+  { key: "dashKneeOut", label: "Lead knee drives toward the dash (°)", min: 0, max: 60, step: 1, group: "Dash" },
+  { key: "dashSpreadMax", label: "Feet never further apart than (m)", min: 1, max: 4, step: 0.05, group: "Dash", tip: "No splits: a foot further than this from the other is drawn in" },
+  { key: "dashIntoRun", label: "Held into the sprint at up to (m/s)", min: 6, max: 20, step: 0.5, group: "Dash", tip: "Hold Space through the dash: the push-off becomes the first stride of the run, starting at most this fast" },
   { key: "uphillLead", label: "Uphill the foot swings forward early", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "Uphill the swinging foot heads out ahead at once instead of rising straight up under the hips: the knee comes up toward the hull (the long thigh can only rise once the foot is ahead)" },
 ];

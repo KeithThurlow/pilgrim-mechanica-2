@@ -55,7 +55,18 @@ sprint, dash tap mid-step, dash held into sprint, downhill off a face, uphill wa
   `body()` the hips never ride above what planted legs reach (not in the run, where hull clearance wins). `slope-check`:
   mid-swing thigh uphill 76° (0° before), planted legs within the cap on 17° and 33°, walking off 3 and 6 m faces drops
   and walks on. Walker check allows up to 3 drops on a dune walk (was 1).
-- Next: step 2 dash, 3 dust, 5 labels, filmstrips.
+- Step 2 (dash) built, WIP: `src/mech/walker.ts` `dashMove` starts when `push` passes 2 m/s (`dashBegin`: push foot P =
+  the planted one, the one further back along the dash if both, the lower if neither; lead L = the other), `dashFeet`
+  (P held `dashPushTime` or until full stretch / spread, then drawn back beside L over `dashRecover`; L steps out
+  `dashLeadReach` toward the dash over `dashLeadTime` and slides; the two sit apart across the dash direction, keeping
+  their order (`sg`) so they never cross; spread capped at `dashSpreadMax`, legs at `legReachMax`), `hipOpen` (pelvis
+  turns toward the dash, `dashHipOpen`), `kneeYaw` (lead knee, `dashKneeOut`), `dashEnd` (foot behind steps first),
+  `runFromDash` (held: run at up to `dashIntoRun`, course within drift of the heading). `src/mech/dash.ts`:
+  `dashPushShare` ramps the shove in (same distance), `cut()`. `src/mech/bound.ts`: `dashHoldRun` (0.15 s) held into a
+  dash cuts it into the run. `dash-check`: 80 dashes (walking/standing, 8 step phases, 5 directions) keep the feet
+  within 2.6 m (old code: 3.0) and are back in gait right after the slide; held dash runs after 0.15 s at 11 m/s with
+  alternating footfalls.
+- Next: step 3 slide dust, 5 labels, filmstrips (batch 1 running: side10 side14 rampside upside downside).
 
 ## How to test
 

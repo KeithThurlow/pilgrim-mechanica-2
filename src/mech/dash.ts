@@ -11,6 +11,7 @@ import type { Param } from "../core/tweaks";
 export const DASH_DEFAULTS = {
   dashDistance: 9,
   dashTime: 0.45,
+  dashPushShare: 0.15,
   dashCharges: 2,
   dashRecharge: 3,
   dashGap: 0.25,
@@ -33,6 +34,7 @@ const G = "Dash";
 export const DASH_PARAMS: Param[] = [
   { key: "dashDistance", label: "Distance (m)", min: 2, max: 25, step: 0.5, group: G },
   { key: "dashTime", label: "Time (s)", min: 0.15, max: 1.2, step: 0.01, group: G, tip: "The shove is front-loaded: most of the distance in the first half, then it skids to a stop" },
+  { key: "dashPushShare", label: "Push builds over (share of the time)", min: 0, max: 0.5, step: 0.01, group: G, tip: "The leg's push-off: the shove builds up over this first share before it skids out (0 = full speed at once). The distance stays the same" },
   { key: "dashCharges", label: "Charges", min: 1, max: 5, step: 1, group: G },
   { key: "dashRecharge", label: "Recharge per charge (s)", min: 0.2, max: 15, step: 0.1, group: G },
   { key: "dashGap", label: "Least time between dashes (s)", min: 0, max: 2, step: 0.05, group: G },
@@ -49,6 +51,19 @@ export const DASH_PARAMS: Param[] = [
   { key: "boostRegen", label: "Booster refill per second", min: 0, max: 3, step: 0.05, group: G, tip: "While not sprinting" },
   { key: "dashDamageCut", label: "Damage taken while dashing ×", min: 0, max: 1, step: 0.05, group: G },
 ];
+
+/** The shove's speed shape over its time (0..1): rising over the push share a, then (1 - u)^2. */
+function shape(u: number, a: number) {
+  const r = a > 1e-4 ? Math.min(1, u / a) : 1;
+  return (1 - u) * (1 - u) * r * r * (3 - 2 * r);
+}
+const areas = new Map<number, number>();
+/** Its area over 0..1 (so any push share covers the same distance). */
+function shapeArea(a: number) {
+  let s = areas.get(a);
+  if (s === undefined) { s = 0; for (let i = 0; i < 200; i++) s += shape((i + 0.5) / 200, a) / 200; areas.set(a, s); }
+  return s;
+}
 
 export class Dash {
   charges: number;
@@ -95,6 +110,8 @@ export class Dash {
 
   /** End the glide now (the sprint takes over the speed). */
   stop() { if (this.phase === "glide") { this.phase = "none"; this.speed = 0; } }
+  /** End the shove or the glide now: held into the sprint, the push-off is the run's first stride. */
+  cut() { this.phase = "none"; this.t = -1; this.speed = 0; this.vx = this.vz = this.crouch = this.lean = 0; }
 
   /** grade: the ground's rise per metre along the dash's direction (+ uphill). */
   update(dt: number, grade = 0) {
@@ -114,8 +131,10 @@ export class Dash {
       this.t += dt;
       const T = Math.max(0.05, v.dashTime);
       const u = this.t / T;
-      // Speed (1 - u)^2 covers dashDistance over T when its peak is 3D/T; the slope adds or takes its share.
-      const s0 = (3 * v.dashDistance / T) * (1 - u) * (1 - u);
+      // Speed (1 - u)^2 covers dashDistance over T when its peak is 3D/T; the push-off builds it up over dashPushShare
+      // first (the integral keeps the distance); the slope adds or takes its share.
+      const a = Math.max(0, v.dashPushShare);
+      const s0 = (v.dashDistance / T) * shape(u, a) / shapeArea(a);
       // The slope's share builds up as a signed extra speed: uphill it eats into the shove, downhill it adds.
       this.speed -= g * dt;
       const s = Math.max(0, s0 + this.speed);
