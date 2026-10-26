@@ -122,6 +122,11 @@ export const WALKER_DEFAULTS = {
   boundDriftMax: 68,
   boundSkid: 0.5,
   boundAbsorb: 7,
+  // Leaning into turns while sprinting (Keith 2026-10-26 21:54: "the shoulders of the mech come over").
+  turnRoll: 1,
+  turnRollMax: 30,
+  turnRollEase: 6,
+  turnLeanShift: 0.25,
   // The sprint's ground gait (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the
   // same time", left, right, left, right, not paired stomps with a hop). The gallop above stays as the way into and out
   // of the air: a crest jump's or a fall's landing stance, then the run.
@@ -291,6 +296,10 @@ export const WALKER_PARAMS: Param[] = [
   { key: "boundDriftMax", label: "Most drift (°)", min: 0, max: 80, step: 1, group: "Sprint" },
   { key: "boundSkid", label: "Drift scrubs speed (share/s)", min: 0, max: 3, step: 0.05, group: "Sprint", tip: "At 90° of drift; the feet skid sideways in a hard turn" },
   { key: "boundAbsorb", label: "Runs on from landings under (m/s)", min: 2, max: 20, step: 0.1, group: "Sprint", tip: "A landing softer than this is just the next stride; harder ones squat (and past the hard landing, stagger and hurt) before it runs on" },
+  { key: "turnRoll", label: "Lean into turns (share of the true lean)", min: 0, max: 2, step: 0.05, group: "Sprint", tip: "Sprinting, the whole mech rolls into a turn by the sideways pull: the true lean for speed × the run's turn rate (1), more or less. The hull takes all of it, so the shoulders come over the inside (Keith 2026-10-26 21:54)" },
+  { key: "turnRollMax", label: "Most lean into a turn (°)", min: 0, max: 45, step: 0.5, group: "Sprint" },
+  { key: "turnRollEase", label: "Lean into turns: easing (1/s)", min: 0.5, max: 30, step: 0.5, group: "Sprint", tip: "How quickly the lean follows the turn, in and out" },
+  { key: "turnLeanShift", label: "Lean into turns: hips over the inside (share)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hips move toward the inside of the turn as if the body leaned over its feet (1: pivoting on the ground), so the outside leg reaches out and the inside leg folds short" },
   { key: "boundGallop", label: "Gait: 0 run, 1 the old gallop", min: 0, max: 1, step: 1, group: "Sprint", tip: "Run: left, right, left, right with short flights (Keith 2026-10-26 18:28). The gallop's two-footed leaps now only come after a crest jump or a fall: the landing stance, then the run" },
   { key: "runSteps", label: "Run: steps per second at the run", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence as the sprint starts (at the Shift run's speed); stride is speed ÷ cadence" },
   { key: "runStepsTop", label: "Run: steps per second at top speed", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence and stride both rise with speed. The planted share is ground per stance ÷ stride, so the flights grow with speed" },

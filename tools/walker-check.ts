@@ -399,5 +399,48 @@ function stubMech(field: { height(x: number, z: number): number; normal(x: numbe
   if (problems.length) failed = true;
 }
 
+// Leaning into turns sprinting (Keith 2026-10-26 21:54): hard weaves at top speed on the flat and on the dunes. The
+// lean reaches well into its cap and never past it; the feet stay out of the ground and the legs in reach; the feet
+// skid in the drift. Reach is judged against the same weave without the lean (Keith's long sprint strides miss a
+// little by themselves, see the sprint section): the lean must not add misses.
+for (const leg of ["rampart", "rampart-stilt"] as const) {
+  const values = { ...WALKER_DEFAULTS, ...LEG_TYPES[leg].values };
+  const problems: string[] = [];
+  const cap = values.turnRollMax;
+  for (const ground of ["flat", "dunes"] as const) {
+    const weave = (over: Record<string, number>) => {
+      const field = new DuneField(ground === "flat" ? { ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 } : { ...TERRAIN_DEFAULTS });
+      const sim = new WalkerSim({ ...values, boundBuild: 3, ...over }, field);
+      sim.reset(13, -40, 0.3);
+      let maxRoll = 0, under = 0, skid = 0, nan = 0, frames = 0;
+      const sdt = 1 / 120;
+      for (let i = 0; i < 30 * 120; i++) {
+        const t = i * sdt, a = 0.3 + (t > 4 ? 1.3 * Math.sign(Math.sin(t * 0.9)) : 0);
+        sim.bound = true;
+        sim.update(sdt, { x: Math.sin(a), z: Math.cos(a), sprint: true });
+        if (t < 4) continue;
+        frames++;
+        maxRoll = Math.max(maxRoll, (Math.abs(sim.turnRoll) * 180) / Math.PI);
+        for (const f of sim.feet) {
+          if (f.pos.y < field.height(f.pos.x, f.pos.z) - 0.05) under++;
+          if (!f.swinging && Math.hypot(f.slide.x, f.slide.z) > 0.5) skid++;
+        }
+        if (!Number.isFinite(sim.pelvis.x + sim.pelvis.y + sim.feet[0].pose.knee.y + sim.feet[1].pose.knee.y)) nan++;
+      }
+      return { maxRoll, under, skid, nan, frames, over: sim.stats.overreach / (sim.stats.frames * 2) };
+    };
+    const r = weave({}), still = weave({ turnRoll: 0 });
+    const { maxRoll, under, skid, nan, frames, over } = r;
+    if (maxRoll > cap + 0.01) problems.push(`${ground}: leaned ${maxRoll.toFixed(1)}° (cap ${cap}°)`);
+    if (maxRoll < cap * 0.6) problems.push(`${ground}: leaned only ${maxRoll.toFixed(1)}° in hard turns (cap ${cap}°)`);
+    if (under) problems.push(`${ground}: ${under} foot-frames under the ground`);
+    if (nan) problems.push(`${ground}: ${nan} non-finite frames`);
+    if (skid === 0) problems.push(`${ground}: the feet never skid in the drift`);
+    if (over > still.over + 0.005) problems.push(`${ground}: leaning, legs out of reach ${(over * 100).toFixed(1)}% of leg-frames (upright ${(still.over * 100).toFixed(1)}%)`);
+    console.log(`  ${leg} weaving on the ${ground}: lean up to ${maxRoll.toFixed(1)}° (cap ${cap}°) · feet skidding ${((100 * skid) / (frames * 2)).toFixed(0)}% of foot-frames · reach misses ${(over * 100).toFixed(2)}% (upright ${(still.over * 100).toFixed(2)}%) · feet under ${under}`);
+  }
+  if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; } else console.log(`ok   ${leg} leans into turns`);
+}
+
 if (failed) throw new Error("walker check failed");
 console.log("walker check passed");

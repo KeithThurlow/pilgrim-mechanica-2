@@ -194,6 +194,15 @@ export class WalkerSim {
   course = 0;
   /** Planted feet skidding sideways in a drift (m/s), for skid dust and furrows. */
   footSlip = 0;
+  /**
+   * Leaning into the turn while sprinting (Keith 2026-10-26 21:54: "the mech to lean as it turns... all the way over, so
+   * the shoulders come over"): the whole body rolls (+ left side up, radians, eased) by the lateral acceleration, the
+   * line of run's turn rate × the speed, capped at turnRollMax; the hull takes all of it (it isn't kept level).
+   */
+  turnRoll = 0;
+  /** The line of run's turn rate (rad/s, + to the left), smoothed, and the course it was at last step. */
+  courseRate = 0;
+  private lastCourse = NaN;
   /** In the sprint's gait: the run, a landing stance, or one of its leaps. */
   get bounding() { return this.running || this.bStance !== null || (this.airborne && this.bLeap); }
   /** The sprint's run gait is on (steering like a vehicle); runK is how far the gait has blended from the walk (0..1). */
@@ -280,12 +289,15 @@ export class WalkerSim {
 
   /** Body pitch (nose down +) and roll (left side up +), radians: for an upper body riding on the hips. */
   get bodyPitch() { return this.pitch.x; }
-  get bodyRoll() { return this.roll.x; }
+  get bodyRoll() { return this.roll.x + this.turnRoll; }
+  /** The hull's roll: what of the hip roll it doesn't level out, plus all of the lean into a turn. */
+  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll; }
 
   reset(x: number, z: number, heading: number) {
     this.airborne = false; this.airVel.set(0, 0, 0); this.squatState = null; this.stagger = 0; this.skid.set(0, 0, 0);
     this.idleLeft = 0; this.idleK = 0; this.stillT = 0; this.idleNext = NaN;
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
+    this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.slip.set(0, 0, 0);
     this.pos.set(x, 0, z);
     this.heading = heading;
@@ -323,6 +335,8 @@ export class WalkerSim {
     turn(this.vel); turn(this.airVel); turn(this.skid);
     this.airY += dy;
     this.heading = wrap(this.heading + dyaw);
+    this.course = wrap(this.course + dyaw);
+    if (Number.isFinite(this.lastCourse)) this.lastCourse = wrap(this.lastCourse + dyaw);
     this.bodyY.x += dy;
     const q = CARRY_Q.setFromAxisAngle(UP, dyaw);
     this.pelvisQ.premultiply(q); this.hullQ.premultiply(q);
@@ -395,6 +409,7 @@ export class WalkerSim {
     this.footSlip = 0;
     this.slip.set(0, 0, 0);
     this.tuckPose();
+    this.turnLean(dt);
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
     const gallop = v.boundGallop >= 0.5;
@@ -794,8 +809,7 @@ export class WalkerSim {
     this.impact.step(0, dt);
     this.bodyY.x = this.airY; this.bodyY.v = a.y;
     this.pelvis.set(this.pos.x, this.airY, this.pos.z);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading);
     if (touch) this.touchDown();
   }
 
@@ -1137,8 +1151,7 @@ export class WalkerSim {
     const slope = Math.atan(grade);
     this.pitch.step(-slope * (slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch) + this.boundLeanNow() + this.leanPitch, dt);
     this.pelvis.set(this.pos.x, y, this.pos.z);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading);
 
     // Feet: the first one down lifts first (at Tc), the other lands late (at lag) and pushes off last (at T).
     this.airExt = 0;
@@ -1393,6 +1406,41 @@ export class WalkerSim {
     this.bodyY.x = this.pelvis.y - this.impact.x; this.bodyY.v = 0;
     this.boundSpeed = 0;
     this.running = false;
+  }
+
+  /**
+   * The body's orientation from its pitch and roll springs: the pelvis turned to `pelvisYaw`, the hull to the heading
+   * and kept level by shoulderLevel; both rolled into a sprint's turn (turnRoll), and the hips moved a share of the way
+   * toward the inside of it (turnLeanShift), as if the body leaned over its feet.
+   */
+  private orient(pelvisYaw: number) {
+    const v = this.v, tr = this.turnRoll;
+    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, pelvisYaw, this.roll.x + tr, "YXZ"));
+    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
+    if (tr !== 0) {
+      // Rolled about the outside hip, so the outside leg reaches no further than upright and the inside one folds.
+      const H = v.hipHeight * v.turnLeanShift, l = leftOf(this.heading, this.t.l);
+      this.pelvis.addScaledVector(l, -Math.sin(tr) * H);
+      this.pelvis.y -= H * (1 - Math.cos(tr)) + v.hipWidth * Math.abs(Math.sin(tr));
+    }
+  }
+
+  /**
+   * The lean into a sprint's turn (Keith 2026-10-26 21:54): the true lean for the lateral acceleration (speed × the line
+   * of run's turn rate) × turnRoll, capped at turnRollMax, eased in and out at turnRollEase. Nothing outside the sprint.
+   */
+  private turnLean(dt: number) {
+    const v = this.v;
+    const sprinting = this.bound && (this.running || this.bStance !== null || (this.airborne && this.bLeap));
+    const dc = Number.isFinite(this.lastCourse) ? wrap(this.course - this.lastCourse) : 0;
+    this.lastCourse = this.course;
+    // A jump in the line (the start of a run off a dash) isn't a turn.
+    if (sprinting && Math.abs(dc) < 0.15) this.courseRate += (dc / dt - this.courseRate) * Math.min(1, dt * 12);
+    else this.courseRate *= Math.max(0, 1 - dt * 12);
+    const max = v.turnRollMax * D2R;
+    const want = sprinting ? -clamp(Math.atan((this.boundSpeed * this.courseRate) / G) * v.turnRoll, -max, max) : 0;
+    this.turnRoll += (want - this.turnRoll) * Math.min(1, dt * v.turnRollEase);
+    this.turnRoll = clamp(this.turnRoll, -max, max);
   }
 
   /** How close the most stretched planted leg is to full reach (1 = straight). */
@@ -1670,8 +1718,7 @@ export class WalkerSim {
     const dm = this.dashMove;
     const open = dm ? clamp(wrap(dm.yaw - this.heading), -60 * D2R, 60 * D2R) * v.dashHipOpen * (1 - smooth(0.3, 0.7, dm.t)) : 0;
     this.hipOpen += (open - this.hipOpen) * Math.min(1, dt * 14);
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading + this.hipOpen, this.roll.x, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel), "YXZ"));
+    this.orient(this.heading + this.hipOpen);
     if (!dm) for (const f of this.feet) f.kneeYaw += (0 - f.kneeYaw) * Math.min(1, dt * 10);
   }
 

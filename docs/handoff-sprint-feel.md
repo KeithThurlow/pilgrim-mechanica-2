@@ -4,9 +4,9 @@ Branch: `worktree-agent-aa90ff3f2a624b66d`, pushed to `wip/sprint-feel`. Delete 
 
 ## The six items, in order (each its own commit)
 
-1. Weapons off while sprinting, torso faces the travel line, hull leans forward; HUD shows SPRINT. **in progress**
-2. Lean into turns while sprinting (roll by lateral acceleration, drift, inside leg short). todo
-3. Uphill cadence (strides/s per degree of grade, stride shortens). todo
+1. Weapons off while sprinting, torso faces the travel line, hull leans forward; HUD shows SPRINT. done (`Bound.gunsOff`, `MechUnit.gunsOff`, `UpperSim.leanFwd`; walker-check "sprint weapons")
+2. Lean into turns while sprinting. done (`WalkerSim.turnLean`, `orient`, `hullRoll`; walker-check "leans into turns")
+3. Uphill cadence (strides/s per degree of grade, stride shortens). **next**
 4. Perceived speed: sprint swing the snappiest (whip-through), cheap cues. todo
 5. Impact into the ground (compression, push-off kick and toe dig, shake, thump). todo
 6. Feet sink into soft ground (per-surface sliders, on the plant target). todo
