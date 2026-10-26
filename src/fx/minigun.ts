@@ -128,18 +128,20 @@ export class MinigunFx {
   /**
    * One round from a muzzle to where it strikes (already spread). surface and normal: what it struck there.
    * eject: casing port; outboard: unit direction. own: the local player's own round (its hit is never merged,
-   * thinned or trimmed).
+   * thinned or trimmed). gun -1: no muzzle flash (a split round or a ricochet riding along with another).
    */
   shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1, own = false) {
     this.round++;
-    const f = this.flashes[Math.max(0, Math.min(FLASHES - 1, gun))];
-    f.t = 0.045;
-    f.mesh.visible = this.v.flashSize > 0;
-    f.mesh.position.copy(muzzle);
-    f.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-    f.mesh.rotateZ(Math.random() * Math.PI);
-    f.mesh.scale.setScalar(this.v.flashSize * flashScale * (0.7 + Math.random() * 0.6));
-    if (f.light) { f.light.position.copy(muzzle).addScaledVector(dir, 0.4); f.light.intensity = this.v.flashLight; }
+    if (gun >= 0) {
+      const f = this.flashes[Math.min(FLASHES - 1, gun)];
+      f.t = 0.045;
+      f.mesh.visible = this.v.flashSize > 0;
+      f.mesh.position.copy(muzzle);
+      f.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      f.mesh.rotateZ(Math.random() * Math.PI);
+      f.mesh.scale.setScalar(this.v.flashSize * flashScale * (0.7 + Math.random() * 0.6));
+      if (f.light) { f.light.position.copy(muzzle).addScaledVector(dir, 0.4); f.light.intensity = this.v.flashLight; }
+    }
 
     // Every round flies (it times the hit); only every Nth shows as a tracer.
     const t = this.tracers.find((x) => !x.live) ?? this.tracers[this.round % TRACERS];

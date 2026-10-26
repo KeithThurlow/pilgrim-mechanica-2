@@ -192,13 +192,13 @@ app.onTick((rawDt) => {
     robots: robots!.sw.count, bandits: bandits!.sw.count, vehicles: band!.vehicles, "bandit mechs": band!.mechs,
     bodies: lab.deaths.dead.length, "dust particles": bf.dust.alive,
     "dust puffs asked": bf.fx.last.spawned, "effects asked": bf.fx.last.asked, "effects thinned": bf.fx.last.thinned, "hits merged": bf.fx.last.merged, "budget pressure ×100": bf.fx.last.pressure * 100,
-    "team gun shots": wc.shots, "of which allies": wc.allyShots, "team rounds": wc.rounds, ricochets: wc.ricochets, "chain hops": wc.chains, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
+    "team gun shots": wc.shots, "of which allies": wc.allyShots, "rounds resolved (all teams)": wc.rounds, ricochets: wc.ricochets, "chain hops": wc.chains, "shot commands (all teams)": bf.shots.last.cmds, "shot hits": bf.shots.last.hits, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
   };
   if (run.frame(dt, { ms, counts })) {
     out.textContent = run.table;
     out.style.display = "block";
     console.log("stress run\n" + run.table);
   }
-  lab.hud("stress", `robots ${counts.robots} · bandits ${counts.bandits} · vehicles ${counts.vehicles} · bandit mechs ${counts["bandit mechs"]} · bodies ${counts.bodies}${worst.on ? ` · worst case: ${worst.count.shots} shots (allies ${worst.count.allyShots}) → rounds ${worst.count.rounds} + ricochets ${worst.count.ricochets} + chain hops ${worst.count.chains} this frame` : ""}${run.phase ? ` · ${run.phase}` : ""}`);
+  lab.hud("stress", `robots ${counts.robots} · bandits ${counts.bandits} · vehicles ${counts.vehicles} · bandit mechs ${counts["bandit mechs"]} · bodies ${counts.bodies}${worst.on ? ` · worst case: ${worst.count.shots} shots (allies ${worst.count.allyShots}) → all teams: rounds ${worst.count.rounds} + ricochets ${worst.count.ricochets} + chain hops ${worst.count.chains} this frame` : ""}${run.phase ? ` · ${run.phase}` : ""}`);
 });
 if (params.has("run")) startRun();

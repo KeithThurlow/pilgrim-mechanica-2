@@ -1,6 +1,7 @@
 // The shared stage every combat lab plays on: the dune field, the dust, the ground marks (dents), the gun effects and their
-// sound, steel wrecks, and everything that can be shot. One `fire` call resolves a round against all of it (the
-// nearest of: a unit of another team, a steel wreck, the sand) and draws, sounds and applies it.
+// sound, steel wrecks, and everything that can be shot. A `fire` call is a shot command (src/game/shots.ts: shots as
+// data, with its Protocols as fields); the shots resolve once a frame in update (the nearest of: a unit of another
+// team, a steel wreck, the sand), apply their damage, and their draws go to the gun effects and the sound.
 import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
@@ -10,7 +11,6 @@ import { WaterDraw } from "../fx/waterDraw";
 import { ShellsDraw, SHELL_FX_DEFAULTS, type ShellFxValues } from "../fx/shellsDraw";
 import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
-import { rayGround } from "../world/raycast";
 import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
 import { DustSim, DUST_MAX, type DustValues } from "../fx/dust";
@@ -28,6 +28,7 @@ import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
 import { splashBlast, firstBody } from "./splash";
+import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -89,6 +90,12 @@ export interface FireOptions {
   /** Splash at the impact (sand or body): radius (m) and the share of the round's damage to each swarm unit in it. */
   splash?: number;
   splashShare?: number;
+  /** The round's Protocols (src/game/shots.ts): split, fire rate, area, ricochet, chain. */
+  proto?: ShotProtocols;
+  /** The gun's time between rounds (s): a fire-rate Protocol's copies spread over it. */
+  interval?: number;
+  /** Seeds the shot's random choices (else the battlefield's own sequence). */
+  seed?: number;
 }
 
 export class Battlefield {
@@ -114,6 +121,8 @@ export class Battlefield {
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
   readonly targets: Hittable[] = [];
+  /** Every round in flight this frame, as data (src/game/shots.ts); resolved in update. */
+  readonly shots: Shots;
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts): owners add themselves;
    *  the lab rebuilds it once a tick, before the soft lock. */
   readonly register = new Register();
@@ -130,20 +139,19 @@ export class Battlefield {
   /** Called with a box whose ground changed (rebuild the chunks and the physics floor there). */
   onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
   private hit = new THREE.Vector3();
-  private steelAt = new THREE.Vector3();
-  private steelN = new THREE.Vector3();
   private back = new THREE.Vector3();
-  private pt = new THREE.Vector3();
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     // Labs that don't list the dent or penetration sliders still get their defaults.
     const dv = v as BattlefieldValues & Record<string, unknown>;
     for (const [k, val] of Object.entries(DENT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(PEN_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    for (const [k, val] of Object.entries(SHOT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     this.lookGround = field;
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -188,51 +196,31 @@ export class Battlefield {
   }
 
   /**
-   * One round from a muzzle along d (unit, spread already applied), out to range: hits the nearest unit of another
-   * team, a steel wreck or the sand; draws its tracer (flash slot `slot`), plays it, and applies damage.
-   * Returns what it hit (null: the sand or nothing).
+   * One round from a muzzle along d (unit, spread already applied), out to range: a shot command (src/game/shots.ts),
+   * resolved with the rest in update(): it hits the nearest unit of another team, a steel wreck or the sand (direct
+   * fire with o.sheet as a sheet with a penetration budget), applies its damage and splash, then draws its tracer
+   * (flash slot `slot`) and plays it. Its Protocols (o.proto) split it, repeat it, widen its splash, bounce it and
+   * chain it. Returns the shot's id.
    */
-  fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): Hittable | null {
-    const hit = this.hit;
-    let reach = range;
-    if (rayGround(muzzle, d, this.field, range, hit)) reach = muzzle.distanceTo(hit);
-    else hit.copy(muzzle).addScaledVector(d, range);
-    let surface: HitSurface = "sand";
-    let normal: THREE.Vector3 | undefined;
-    if (this.wrecks?.hit(muzzle, d, reach, this.steelAt, this.steelN)) {
-      reach = muzzle.distanceTo(this.steelAt);
-      hit.copy(this.steelAt); surface = "metal"; normal = this.steelN;
+  fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): number {
+    return this.shots.fire(
+      { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed },
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" });
+  }
+
+  /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
+  private resolveShots(dt: number) {
+    this.shots.step(dt);
+    for (const dr of this.shots.draws) {
+      const L = dr.look;
+      for (const x of dr.exits) this.gunFx.sparksAt(x, dr.dir, 3, 6);
+      // Only a command's first round flashes, throws brass and sounds; split rounds and children ride along quietly.
+      this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
+        dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own);
+      if (!dr.first) continue;
+      if (L.voice === "player") this.gunAudio.shot(dr.from);
+      else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);
     }
-    if (o.sheet) return this.fireSheet(slot, team, muzzle, d, range, damage, o, o.sheet);
-    // The round: the nearest unit of another team its ray meets.
-    let struck: Hittable | null = null;
-    let near: Hittable | null = null, nearD = reach;
-    for (const t of this.targets) {
-      if (!t.alive || t.team === team) continue;
-      const dist = t.hitRay(muzzle, d, nearD);
-      if (dist >= 0 && dist < nearD) { nearD = dist; near = t; }
-    }
-    if (near) {
-      // Re-run the winner's ray so its own "last hit" is this one (each adapter remembers only its own nearest).
-      near.hitRay(muzzle, d, nearD + 1e-3);
-      this.pt.copy(muzzle).addScaledVector(d, nearD);
-      near.damage(damage, this.pt, d);
-      struck = near;
-      reach = nearD;
-      hit.copy(this.pt);
-    }
-    if (struck) {
-      surface = struck.surface;
-      normal = struck.normalAt ? struck.normalAt(hit, this.back) : this.back.copy(d).negate();
-    }
-    // Splash: everything of theirs near where the round ends (the sand at their feet, or the body it stopped in).
-    if (o.splash && o.splashShare) {
-      for (const t of this.targets) if (t.alive && t.team !== team && t.splash) t.splash(hit, o.splash, damage * o.splashShare, d);
-    }
-    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1, o.hitScale ?? 1, o.voice === "player");
-    if (o.voice === "player") this.gunAudio.shot(muzzle);
-    else if (o.voice !== "none") this.sfx.play("spit", muzzle, 0.55, 0.7 + Math.random() * 0.15, true);
-    return struck;
   }
 
   /** A direct-fire sheet from a muzzle (src/game/sheetFire.ts). */
@@ -243,25 +231,6 @@ export class Battlefield {
   /** Resolve a sheet against every target and the steel wrecks, applying damage (or only predicting, apply false). */
   resolveSheet(team: number, s: Sheet, damage: number, f: SheetFire, dir: THREE.Vector3, apply = true, skip?: (h: SheetHit<Hittable>) => boolean): SheetShot {
     return resolveSheet(this.field, this.targets, this.wrecks, team, s, damage, f, dir, this.v as BattlefieldValues & PenValues, apply, skip, this.register);
-  }
-
-  /** fire() for a sheet round: resolve it, then draw the tracer to where it ended and sparks where it went through. */
-  private fireSheet(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions, f: SheetFire): Hittable | null {
-    const sheet = this.makeSheet(muzzle, d, range, f);
-    const shot = this.resolveSheet(team, sheet, damage, f, d);
-    for (const x of shot.exits) this.gunFx.sparksAt(x, d, 3, 6);
-    const last = shot.result.steps[shot.result.steps.length - 1];
-    const struck = last?.stopped ? last.hit.target : null;
-    const hit = this.hit.copy(shot.end);
-    const normal = struck?.normalAt ? struck.normalAt(hit, this.back) : this.back.copy(d).negate();
-    if (o.splash && o.splashShare) {
-      for (const t of this.targets) if (t.alive && t.team !== team && t.splash) t.splash(hit, o.splash, damage * o.splashShare, d);
-    }
-    const dir = this.pt.copy(hit).sub(muzzle).normalize();
-    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, dir, hit, o.eject ?? null, o.outboard ?? null, shot.surface, normal, o.flashScale ?? 1, o.hitScale ?? 1, o.voice === "player");
-    if (o.voice === "player") this.gunAudio.shot(muzzle);
-    else if (o.voice !== "none") this.sfx.play("spit", muzzle, 0.55, 0.7 + Math.random() * 0.15, true);
-    return struck;
   }
 
   /**
@@ -428,6 +397,8 @@ export class Battlefield {
     c?.mark("dents");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
+    this.resolveShots(dt);
+    c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
     c?.mark("gun fx");

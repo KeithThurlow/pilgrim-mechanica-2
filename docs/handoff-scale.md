@@ -7,9 +7,11 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
 
 1. **Effects budget gate** (`src/fx/budget.ts`): merge, thin, trim, local player full. **Built** (step 1).
 2. The register: already built by another agent (in main).
-3. **Shots as data** (`src/game/shots.ts`): one projectile system, Protocols as fields, hits as events. Not started.
-4. **Real Protocol behaviours** on it (split, fire rate, area, ricochet, chain), replacing `labs/stress/worst.ts`'s
-   stand-ins. Not started.
+3. **Shots as data** (`src/game/shots.ts`): one projectile system, Protocols as fields, hits as events. **Built**
+   (step 3): every `Battlefield.fire` is a shot command; rows resolve in `bf.update` (`resolveShots`).
+4. **Real Protocol behaviours** on it (split, fire rate, area, ricochet, chain): **built in the shot system**; the
+   worst case now passes them as `o.proto` instead of its stand-ins. Not yet on items (Protocol items with shot
+   fields: next).
 5. **GPU particles**, one look at a time (sparks and grit, tracers and casings, then dust), each behind a GPU/CPU
    slider. Not started.
 
@@ -29,6 +31,21 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
   with `voice: "player"` are the local player's own.
 - Labs set `bf.fx.own` to the player's mech position (combat lab shell, walker, convoy).
 - Check: `tools/fxbudget-check.ts` (in `npm test`).
+
+## Step 3: shots as data (done)
+
+- `src/game/shots.ts`: `Shots.fire(cmd, look)` (split and rate expand into rows, seeded), `step(dt)` resolves due rows
+  (sheet via `resolveSheet` with the register; plain rays culled via `reg.ray` like `sheetHits`), writes `events`
+  (hit, splash, ricochet, chain, miss) and `draws` (cosmetic). Ricochet: mirror off the normal, seeded scatter, never
+  down; chain: nearest register entry not yet hit by the family, starting outside the struck body. Generations capped
+  by `protoMaxGen`. Sliders `SHOT_PARAMS` (group **Protocols**, added to the weapons topic in the combat labs and the
+  convoy lab; `shotsPerFrame` in Performance).
+- `Battlefield.fire` returns the shot id now (nobody used the old return); `FireOptions` gained `proto`, `interval`,
+  `seed`. `fireSheet` is gone (the shot system does it). `MinigunFx.shot(gun = -1)`: no flash (split rounds and
+  children are quiet; only a command's first round flashes, ejects and sounds).
+- Check: `tools/shots-check.ts`.
+- Known: events name targets by index in `bf.targets` + part key (host-local), not register id; mechUnit's spread still
+  uses Math.random before the command.
 
 ## Measuring
 

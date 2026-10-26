@@ -37,6 +37,7 @@ import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type TargetCandidate, type L
 import type { Filter } from "./register";
 import { mechOwner } from "./registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
+import { SHOT_DEFAULTS, SHOT_PARAMS } from "./shots";
 import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
 import type { Costs } from "../core/costs";
@@ -47,10 +48,10 @@ import type { Prey } from "../pilot/quarry";
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -200,7 +201,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     topics: [
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
-      WEAPON_TOPIC,
+      { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
       { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
