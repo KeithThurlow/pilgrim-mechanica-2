@@ -216,6 +216,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Sensor head out of the torso (Keith, Claude)
+- Keith: the small head now sits inside the torso; up a little and forward. `headDrop` 0.35 → 0.12 m, new `headForward` 0.25 m (Sensor head sliders). Checked: typecheck; not looked at (slow box).
+
 ### 2026-10-26 · Idle flex: the legs flex in place now and then with a pilot in (Keith, Claude)
 - Keith found it by accident: with the planted share at 0.5 the settle steps never end (no moment with both feet down), so the mech kept stepping in place, feet barely lifting, toes curling; "not a bad intermittent one". Now a state of its own: standing still with a pilot in (`MoveCommand.idle`, set by `MechUnit.piloted`; the labs set it from the pilot's mount, the walker lab always), after `idleAfter` (10 s) and then about every `idleEvery` (18 s, ± `idleJitter`, seeded), `idleSteps` (4) slow steps on the spot at `idleRate` (0.55/s) with no overlap of planted feet, blending in Keith's accidental values (lift 0.4, clearance 0.09, ease 0.97, heel lift 3° from 0.2, no stomp or hold, foot tips 30°, toes 40°). Any move, the sprint or a landing stops it. New slider group "Idle" in the Legs topic. `src/mech/walker.ts` (`idleTick`), `walkerTuning.ts`, `src/game/mechUnit.ts`, the walker, convoy and combat labs.
 - Checked: typecheck; new `tools/idle-check.ts` (no pilot: never; pilot: 3 flexes in 90 s of 4 steps each, no drift, no foot under the sand, no reach misses, ends planted; a move stops it at once), first in `npm test`; the walker lab headless with `?set=idleAfter:1,idleJitter:0,idleSteps:40`: flexing, feet alternating, a foot up with its toes curled. Other checks as before (see In progress).
