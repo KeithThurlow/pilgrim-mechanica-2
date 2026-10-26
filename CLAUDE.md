@@ -111,7 +111,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   back in (Keith 2026-10-26; F no longer fires).
 - Pilot (every combat lab and the convoy lab): `?onfoot` (start on foot beside the mech), `?holdf=seconds` (F held
   from the start, for shots of getting out).
-- Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, plus the combat-lab flags.
+- Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, `?worst` (the co-op worst
+  case: three AI allies, max-Protocol stand-ins, effects ×4), plus the combat-lab flags.
   Results go to the screen, the console and `window.__stress`.
 - Convoy lab: `?manual`, `?aboard` (start on the deck), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?crest[=m]` (the plough's blade that far short of the biggest cut ahead), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead; `plough` the plough;
@@ -134,7 +135,8 @@ reports/                Keith's in-lab reports and your replies (in git, so any 
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
-src/world/              noise, terrain (the dune height function), chunks (streaming), look (light, haze), wrecks (steel stand-ins),
+src/world/              noise, terrain (the dune height function), chunks (streaming, the shadow-only terrain copy), chunkGround
+                        (a cheap ground for looks off the chunks' triangles), look (light, haze), wrecks (steel stand-ins),
                         craters (blast dents in the ground: hardness, slump), walkable (the ground plus registered surfaces
                         with moving frames, for anyone on foot)
 src/core/isoCamera.ts   the high isometric game camera

@@ -58,6 +58,7 @@ const lab = await combatLab({
 });
 const { V, bf, player, field } = lab;
 const sw = new RobotSwarm(V, field);
+sw.lookGround = bf.lookGround;
 // A dash throws clingers off and bowls over small ones in the way.
 player.onDash = (x, z, dx, dz) => {
   const r2 = V.dashShoveRadius * V.dashShoveRadius;

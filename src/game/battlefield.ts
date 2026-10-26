@@ -19,6 +19,8 @@ import { GroundMarks } from "../fx/groundMarks";
 import { DentLayer, DENT_DEFAULTS, type DentValues } from "../fx/dents";
 import { DetailPatch } from "../world/detailPatch";
 import type { TerrainStreamer } from "../world/chunks";
+import { ChunkGround } from "../world/chunkGround";
+import type { Ground } from "../mech/walker";
 import { MinigunFx, type MinigunFxValues, type HitSurface } from "../fx/minigun";
 import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
@@ -97,6 +99,11 @@ export class Battlefield {
   /** The dent layer and the fine ground patch that draws it (null until useDents). */
   dents: DentLayer | null = null;
   patch: DetailPatch | null = null;
+  /**
+   * A cheap ground for looks (the streamed chunks' own triangles, src/world/chunkGround.ts): dust and small robots'
+   * legs read it. The true field until useDents gives it the streamer.
+   */
+  lookGround: Ground;
   readonly gunFx: MinigunFx;
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
@@ -127,6 +134,7 @@ export class Battlefield {
     const dv = v as BattlefieldValues & Record<string, unknown>;
     for (const [k, val] of Object.entries(DENT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(PEN_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    this.lookGround = field;
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
@@ -257,6 +265,10 @@ export class Battlefield {
     this.patch = new DetailPatch(this.field, streamer, this.dents, v);
     this.marks.dents = this.dents;
     this.group.add(this.patch.group);
+    // Perf pass 1: what only draws reads the chunks' triangles instead of the full height function.
+    this.lookGround = new ChunkGround(streamer, this.field);
+    this.dust.ground = this.lookGround;
+    this.dustDraw.ground = this.lookGround;
     return this.dents;
   }
 

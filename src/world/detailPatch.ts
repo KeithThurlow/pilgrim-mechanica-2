@@ -172,6 +172,9 @@ export class DetailPatch {
   /** Follow the focus: refill what came into view, upload, place the chunks' hole. */
   update(fx: number, fz: number, on: boolean) {
     const v = this.v, mesh = this.mesh!;
+    // With the coarse shadow copy of the ground on (src/world/chunks.ts), the patch only catches shadows: its dents are
+    // centimetres deep, below what the shadow map can show, and it was 295k triangles in the shadow pass.
+    mesh.castShadow = !((this.streamer.v.shadowTerrain ?? 0) > 0.5);
     this.uEdge.value = v.patchEdge;
     this.uScale.value = v.dentScale;
     this.uDark.value = v.dentDark;

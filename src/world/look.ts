@@ -4,6 +4,7 @@
 // follows the focus, so shadows stay sharp wherever the convoy has rolled to.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
+import { SHADOW_ONLY_LAYER } from "./chunks";
 
 export const LOOK_DEFAULTS = {
   sunAzimuth: 215,
@@ -78,6 +79,8 @@ export class DesertLook {
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.sun.shadow.radius = 2;
+    // The shadow map also draws what only casts (the terrain's coarse shadow copy); the camera never sees that layer.
+    this.sun.shadow.camera.layers.enable(SHADOW_ONLY_LAYER);
     scene.add(this.sun, this.sun.target);
   }
 

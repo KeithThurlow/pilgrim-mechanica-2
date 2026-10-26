@@ -208,6 +208,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
       { id: "camera", label: "Camera", groups: ["Camera"] },
+      { id: "perf", label: "Performance", groups: ["Performance"] },
     ],
     onFocus: () => { if (!picking) selector?.clear(); },
     onChange: (k) => {

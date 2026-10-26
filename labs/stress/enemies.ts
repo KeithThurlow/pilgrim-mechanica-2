@@ -43,6 +43,7 @@ export class StressRobots {
   constructor(private lab: CombatLab<V>) {
     const { V, bf, field, player } = lab;
     const sw = this.sw = new RobotSwarm(V, field);
+    sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(sw);
     lab.app.scene.add(this.draw.group);
     this.target = new RobotTarget(sw, 3);
