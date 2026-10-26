@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Agents push every commit to a `wip/<topic>` branch on GitHub (no force, never main) | Keith | Keith | CLAUDE.md rule 13. |
 | 2026-10-26 | Agents work as if they can be cut off at any moment: commit at every working step, keep a handoff note current, resume from it | Keith | Keith | CLAUDE.md rule 13. |
 | 2026-10-26 | Penetration through the ground is measured along the shot's line (the rail's slug height over the floor); the sheet still decides what's hit | Keith (report, and "penetration as a ray, hitbox as a sheet") | Keith's idea, built by Claude | Was: sand above the 10 m sheet's top only, so the rail passed nearly every dune. |
 | 2026-10-26 | Weapon picker: the latest choice wins over the mount rule (a hull weapon clears that side's shoulder key; a shoulder weapon turns the side's hull weapon into its held version) | Keith (report: left rail cannon became the light rail) | Claude | Was: the shoulder pick silently won and the picker showed the wrong weapon. |

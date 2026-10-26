@@ -49,7 +49,9 @@ desert look direction. What came from where: `docs/decisions.md`.
 13. **Assume you can be cut off at any moment** (Keith 2026-10-26: agents hit usage limits mid-work and can't see them
    coming). Work so a cutoff loses little:
    - **Commit at every working step** on your branch, not only at the end. WIP commits are fine; say "WIP" in the
-     message.
+     message. **Then push it to a work-in-progress branch** on GitHub: `git push origin HEAD:refs/heads/wip/<topic>`
+     (Keith 2026-10-26: "we've actually lost quite a bit of work in the past to this"). Never force-push, and never
+     push to `main`; the coordinator merges.
    - **Keep a handoff note current** as you go, in `docs/handoff-<topic>.md`: what's done, what's half done (files and
      functions), what's left in order, values chosen, known bugs, how to test. Commit it with the work and point to
      it from state.md's In progress. Delete it when the work merges.
