@@ -113,6 +113,9 @@ export const ROBOT_DEFAULTS = {
   // Hits by part (Keith 2026-10-26: shoot up at the body for full damage; legs and feet take less).
   robotLegDamage: 0.5,
   robotFootDamage: 0.3,
+  // Blasts (rockets, missiles, mortar and autocannon shells; 2026-10-26): measured to the nearest part, by its share.
+  robotMidBlast: 1,
+  robotBigBlast: 0.5,
   robotMidLegHit: 0.2,
   robotBigArc: 12,
   robotBigBurst: 2,
@@ -213,7 +216,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotMidCutReach", label: "Saw reaches (m)", min: 0, max: 5, step: 0.05, group: GM, tip: "The saw hits if its edge ends the lunge within this of the mech's side" },
   { key: "robotMidCutDamage", label: "Saw damage", min: 0, max: 60, step: 0.5, group: GM },
   { key: "robotMidCutRecover", label: "Saw recovery (s)", min: 0, max: 4, step: 0.05, group: GM },
-  { key: "robotMidSplash", label: "Splash taken (×)", min: 0, max: 1, step: 0.01, group: GM, tip: "Share of a round's splash a medium one takes (small ones take it all, big ones none)" },
+  { key: "robotMidSplash", label: "Splash taken (×)", min: 0, max: 1, step: 0.01, group: GM, tip: "Share of a round's splash (minigun rounds) a medium one takes (small ones take it all, big ones none); blasts use the hit-part sliders" },
   { key: "robotBigShare", label: "Big ones (share)", min: 0, max: 0.5, step: 0.005, group: G2, tip: "About one in a pack of 30 at 0.035" },
   { key: "robotBigSize", label: "Chassis size (m)", min: 1, max: 10, step: 0.05, group: G2 },
   { key: "robotBigHeight", label: "Chassis height (m)", min: 4, max: 20, step: 0.1, group: G2, tip: "How high the excavator carries its chassis; the arm legs scale with it" },
@@ -233,6 +236,8 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotLegDamage", label: "Leg hits count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Damage share of a round into a walker's leg (a big one's boom and stick, a medium one's thigh and shin) rather than its body" },
   { key: "robotFootDamage", label: "Foot hits count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Damage share of a round into a foot (a big one's bucket, the low end of a medium one's leg)" },
   { key: "robotBigLegHit", label: "Big: arm hit radius (m)", min: 0, max: 1.5, step: 0.01, group: GH, tip: "Rounds hit the arm legs (boom, stick, bucket) within this; the bucket 1.6× it" },
+  { key: "robotMidBlast", label: "Medium: blasts count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Share of an explosive's blast (rocket, missile, mortar or autocannon shell) a medium one takes, measured to its nearest part (body full, legs and feet their share)" },
+  { key: "robotBigBlast", label: "Big: blasts count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Share of an explosive's blast a big one takes, measured to its nearest part: a blast at its feet hurts its buckets and arms, one up at the chassis the body (rounds' splash still doesn't hurt big ones)" },
   { key: "robotMidLegHit", label: "Medium: leg hit radius (m)", min: 0, max: 0.8, step: 0.01, group: GH, tip: "Rounds hit a medium one's legs within this (0: legs let rounds through)" },
   { key: "robotBigArc", label: "Fires within (°)", min: 1, max: 90, step: 1, group: G2, tip: "Only fires when turned this close to the mech" },
   { key: "robotBigBurst", label: "Charges per volley", min: 1, max: 10, step: 1, group: G2 },

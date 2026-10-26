@@ -7,7 +7,10 @@
 // lands where aimed or goes off early on a body, steel or a dune; a missile swarm makes 8-12 blasts all near its
 // target, shared among enemies in reach; the big mortar lands in its area; per-side triggers; mortar shells
 // land inside their ring and their arc clears a dune; autocannon lead hits a crossing target at constant speed (and
-// no lead misses it); the new bases fit where the size rules say and resolve to the right gun classes.
+// no lead misses it); the new bases fit where the size rules say and resolve to the right gun classes; every explosive
+// (RPG, missiles, big and line mortar, autocannon) kills or badly hurts a scrapper, cutter and excavator from 25 m
+// (blasts measured to the nearest part, direct hits on any part detonate), a missile swarm into a group with an
+// excavator hurts it, and a mortar shell at an excavator's feet hurts its legs.
 // Run: npm test (or npx tsx tools/weapons-check.ts).
 import * as THREE from "three";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
@@ -16,12 +19,13 @@ import { inStrip, stripLength } from "../src/weapons/painter";
 import { RailSim, railSheet } from "../src/weapons/rail";
 import { makeSheet, resolveSheet, type SheetFire } from "../src/game/sheetFire";
 import { RobotSwarm, ROBOT_DEFAULTS } from "../src/combat/robots";
-import { RobotTarget } from "../src/combat/robotTarget";
+import { RobotTarget, robotCandidates } from "../src/combat/robotTarget";
+import { splashBlast, firstBody } from "../src/game/splash";
 import { InfantrySwarm, INFANTRY_DEFAULTS } from "../src/combat/infantry";
 import { InfantryTarget } from "../src/combat/infantryTarget";
-import { mortarPoints, mortarAim, lobArc, MortarSim } from "../src/weapons/mortar";
+import { mortarPoints, mortarAim, mortarHeight, lobArc, MortarSim } from "../src/weapons/mortar";
 import { CannonShells, leadPoint } from "../src/weapons/autocannon";
-import { Rockets } from "../src/weapons/rocket";
+import { Rockets, rocketAim } from "../src/weapons/rocket";
 import { SwarmSim, swarmAims } from "../src/weapons/swarm";
 import { Shells } from "../src/game/shells";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
@@ -367,6 +371,153 @@ const dt = 1 / 120;
   }
   must(landed.length === V.mortarShells, `${landed.length} big mortar shells landed (want ${V.mortarShells})`);
   must(landed.every((p) => Math.hypot(p.x, p.z - 50) <= V.mortarRing + 1e-6), "a big mortar shell landed outside its area");
+}
+
+// ---- Explosives against robots (Keith 2026-10-26: missiles didn't hurt the big ones): each explosive fired from 25 m
+// at a lone scrapper, cutter and excavator, wired as the arsenal and battlefield wire them (rockets aim at the lock's
+// body, the struck robot takes half and the blast; missiles, line mortar and big mortar shells burst on the first body
+// in their path or on the sand; every blast through splashBlast, measured to each robot's nearest part; autocannon
+// shells hit by ray, splash sparing the one struck). The convoy lab's swarm camps are this same RobotSwarm, RobotTarget
+// and robotCandidates, so the table covers them too. ----
+{
+  const team = 1, down = new THREE.Vector3(0, -1, 0);
+  const flatN = { ...flat, normal: (_x: number, _z: number, out = [0, 1, 0]) => { out[0] = 0; out[1] = 1; out[2] = 0; return out; } };
+  type Kind = "small" | "mid" | "big";
+  const shares = (k: Kind) => (k === "small" ? { mid: 0, big: 0 } : k === "mid" ? { mid: 1, big: 0 } : { mid: 0, big: 1 });
+  const maxHp = (k: Kind) => (k === "small" ? ROBOT_DEFAULTS.robotHp : k === "mid" ? ROBOT_DEFAULTS.robotMidHp : ROBOT_DEFAULTS.robotBigHp);
+  /** A stage: robots placed (frozen: no update), their target adapter and soft-lock candidates. */
+  const stage = (place: { kind: Kind; x: number; z: number }[]) => {
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 7);
+    const ids = place.map((p) => sw.spawn(1, p.x, p.z, 0, shares(p.kind))[0]);
+    const rt = new RobotTarget(sw, 3);
+    const cands = () => robotCandidates(sw);
+    const lost = (j: number) => 1 - Math.max(0, sw.hp[ids[j]]) / maxHp(place[j].kind);
+    return { sw, ids, rt, cands, lost, targets: [rt] as Hittable[] };
+  };
+  const hitFrac = (targets: Hittable[]) => (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => {
+    const h = firstBody(targets, team, new THREE.Vector3(a.x, a.y, a.z), new THREE.Vector3(b.x, b.y, b.z));
+    return h ? h.f : -1;
+  };
+  const shoulder = new THREE.Vector3(0, 5.2, 0);
+  type St = ReturnType<typeof stage>;
+  const fireRpg = (s: St, shots: number) => {
+    const st = { damage: V.rpgDamage, blast: V.rpgBlast, speed: V.rpgSpeed, cooldown: 0 };
+    for (let n = 0; n < shots; n++) {
+      const rk = new Rockets(), c = s.cands()[0];
+      if (!c) return;
+      rk.fire(team, shoulder, rocketAim(shoulder, { x: c.x, y: 0, z: c.z }, c, V.rpgRange, flat), st);
+      for (let i = 0; i < 240; i++) rk.update(dt, flat, s.targets, null, (r, at, _why, t) => {
+        if (t) t.damage(r.damage * 0.5, at, r.dir);
+        splashBlast(s.targets, team, at, r.blast, r.damage, down);
+      });
+    }
+  };
+  const fireMissiles = (s: St, volleys: number, at = s.cands()[0]) => {
+    if (!at) return;
+    const st = { missiles: V.swarmMissiles, damage: V.swarmDamage, blast: V.swarmBlast, cooldown: 0, radius: V.swarmRadius };
+    for (let n = 0; n < volleys; n++) {
+      const sim = new SwarmSim(V), picks = s.cands().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
+      sim.fire(at.x, at.z, st, picks, flat);
+      const track = (key: unknown) => { const c = s.cands().find((x) => x.key === key); return c ? { x: c.x, y: c.y, z: c.z } : null; };
+      for (let i = 0; i < 120 * 6; i++) sim.update(dt, flat, (_i, out) => { out.x = shoulder.x; out.y = shoulder.y; out.z = shoulder.z; }, track,
+        (m) => splashBlast(s.targets, team, new THREE.Vector3(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, down), undefined, hitFrac(s.targets));
+    }
+  };
+  const fireMortar = (s: St, volleys: number, to?: { x: number; z: number }) => {
+    const shells = new Shells(), hit = hitFrac(s.targets);
+    for (let n = 0; n < volleys; n++) {
+      const ms = new MortarSim(V), lock = s.cands()[0] ?? null, c = to ?? lock;
+      if (!c) return;
+      ms.fire(c.x, c.z, { shells: V.mortarShells, damage: V.mortarDamage, cooldown: 0, blast: V.mortarBlast });
+      for (let i = 0; i < 120 * 6; i++) {
+        ms.update(dt, (x, z) => { const p = new THREE.Vector3(x, mortarHeight(x, z, lock, V) ?? 0, z); shells.lob(team, shoulder, p, V.mortarFlight, lobArc(flat, shoulder, p, V.mortarArc, V.mortarClear), V.mortarBlast, V.mortarDamage); });
+        shells.update(dt, (sh) => splashBlast(s.targets, team, sh.pos, sh.radius, sh.damage, down), (_sh, a, b) => hit(a, b));
+      }
+    }
+  };
+  const fireLine = (s: St, volleys: number) => {
+    const st = { rockets: V.salvoRockets, damage: V.salvoDamage, cooldown: 0, length: V.salvoLength, blast: V.salvoBlast };
+    for (let n = 0; n < volleys; n++) {
+      const c = s.cands()[0], sim = new SalvoSim(V);
+      if (!c) return;
+      sim.fire(planStrip(shoulder, { x: c.x, z: c.z }, st.length, V, s.cands()), st, flat);
+      for (let i = 0; i < 120 * 8; i++) sim.update(dt, (_i, out) => { out.x = shoulder.x; out.y = shoulder.y; out.z = shoulder.z; },
+        (r) => splashBlast(s.targets, team, new THREE.Vector3(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, down), undefined, hitFrac(s.targets));
+    }
+  };
+  const fireCannon = (s: St, shots: number) => {
+    const sh = new CannonShells(), st = { damage: V.acDamage, speed: V.acSpeed, splash: V.acSplash, range: V.acRange, spread: 0 };
+    const m = new THREE.Vector3(1.2, 3.6, 0);
+    for (let n = 0; n < shots; n++) {
+      const c = s.cands()[0];
+      if (!c) return;
+      const lp = leadPoint(m, c, { x: 0, y: 0, z: 0 }, st.speed, V.acGravity);
+      sh.fire(team, m, new THREE.Vector3(lp.x - m.x, lp.y - m.y, lp.z - m.z).normalize(), st);
+      for (let i = 0; i < 120; i++) sh.update(dt, V.acGravity, flat, s.targets, (shell, at, t) => {
+        const d = shell.vel.clone().normalize();
+        if (t) t.damage(shell.damage, at, d);
+        splashBlast(s.targets, team, at, shell.splash, shell.damage * V.acSplashShare, d, t);
+      });
+    }
+  };
+  // Shots per weapon, and the least share of a robot's health they must take (1: kill).
+  const weapons: { name: string; shots: number; fire: (s: St, n: number) => void; want: Record<Kind, number> }[] = [
+    { name: "RPG rocket", shots: 2, fire: fireRpg, want: { small: 1, mid: 1, big: 1 } },
+    { name: "missile pod", shots: 1, fire: fireMissiles, want: { small: 1, mid: 1, big: 0.6 } },
+    { name: "big mortar", shots: 2, fire: fireMortar, want: { small: 1, mid: 1, big: 0.5 } },
+    { name: "line mortar", shots: 1, fire: fireLine, want: { small: 1, mid: 1, big: 0.25 } },
+    { name: "autocannon", shots: 12, fire: fireCannon, want: { small: 1, mid: 1, big: 0.5 } },
+  ];
+  const rows: string[] = [];
+  for (const w of weapons) {
+    const cells: string[] = [];
+    for (const kind of ["small", "mid", "big"] as Kind[]) {
+      const one = stage([{ kind, x: 0, z: 25 }]);
+      w.fire(one, 1);
+      const s = stage([{ kind, x: 0, z: 25 }]);
+      w.fire(s, w.shots);
+      const got = s.lost(0);
+      cells.push(`${kind} ${(one.lost(0) * 100).toFixed(0).padStart(3)}% / ${(got * 100).toFixed(0).padStart(3)}%`);
+      must(got >= w.want[kind] - 1e-6, `${w.name} x${w.shots} from 25 m took ${(got * 100).toFixed(0)}% of a ${kind} robot's health (want ${(w.want[kind] * 100).toFixed(0)}%)`);
+    }
+    rows.push(`${w.name.padEnd(12)} x${String(w.shots).padEnd(3)} ${cells.join("  ")}`);
+  }
+  // A missile swarm into a group round an excavator: the excavator takes real damage, the small ones die.
+  {
+    const s = stage([{ kind: "big", x: 0, z: 25 }, { kind: "mid", x: 4, z: 27 }, { kind: "mid", x: -4, z: 23 },
+      { kind: "small", x: 2, z: 21 }, { kind: "small", x: -2, z: 28 }, { kind: "small", x: 5, z: 24 }, { kind: "small", x: -5, z: 26 }]);
+    fireMissiles(s, 1, s.cands()[0]);
+    const lost = s.ids.map((_, j) => s.lost(j));
+    must(lost[0] >= 0.15, `a missile swarm into a group took ${(lost[0] * 100).toFixed(0)}% of the excavator's health (want 15%)`);
+    // The excavator's sprawling arms take some missiles meant for the small ones behind them.
+    must(lost.slice(1, 3).every((l) => l >= 1), `a missile swarm into a group left a cutter standing (${lost.slice(1, 3).map((l) => (l * 100).toFixed(0)).join("/")}%)`);
+    must(lost.slice(3).filter((l) => l >= 1).length >= 3, `a missile swarm into a group left small ones standing (${lost.slice(3).map((l) => (l * 100).toFixed(0)).join("/")}%)`);
+    rows.push(`missile pod into a group: excavator ${(lost[0] * 100).toFixed(0)}%, cutters ${lost.slice(1, 3).map((l) => (l * 100).toFixed(0)).join("/")}%, scrappers ${lost.slice(3).map((l) => (l * 100).toFixed(0)).join("/")}%`);
+  }
+  // A big mortar shell at an excavator's feet (a bucket on the sand, away from the body): its legs and feet take it.
+  {
+    const s = stage([{ kind: "big", x: 0, z: 25 }]);
+    const i = s.ids[0], f = i * 4;
+    const foot = { x: s.sw.footX[f], z: s.sw.footZ[f] };
+    const off = Math.hypot(foot.x, foot.z - 25);
+    fireMortar(s, 1, foot);
+    const got = s.lost(0);
+    must(off > 3, `the excavator's foot is under its body (${off.toFixed(1)} m out)`);
+    must(got >= 0.1, `a big mortar shell at an excavator's foot (${off.toFixed(1)} m from its centre) took ${(got * 100).toFixed(0)}% (want 10%)`);
+    // The share by part: on the bucket, a foot's share of the blast, not the body's.
+    const sh = s.rt.splashShare(i, foot.x, 0, foot.z, V.mortarBlast);
+    must(Math.abs(sh - ROBOT_DEFAULTS.robotFootDamage) < 0.25 && sh < 1, `a blast on an excavator's bucket counted ${sh.toFixed(2)} (want about the foot share ${ROBOT_DEFAULTS.robotFootDamage})`);
+    const up = s.rt.splashShare(i, 0, s.sw.hubY[i], 25, V.mortarBlast);
+    must(up === 1, `a blast on an excavator's chassis counted ${up.toFixed(2)} (want 1)`);
+    rows.push(`big mortar at an excavator's foot (${off.toFixed(1)} m out): ${(got * 100).toFixed(0)}% (part share there ${sh.toFixed(2)})`);
+  }
+  // Rounds' splash (minigun) still doesn't touch big ones.
+  {
+    const s = stage([{ kind: "big", x: 0, z: 25 }]);
+    s.rt.splash(new THREE.Vector3(0, s.sw.hubY[s.ids[0]], 25), 3, 100, down);
+    must(s.lost(0) === 0, "a round's splash hurt an excavator");
+  }
+  console.log("explosives vs robots from 25 m (health taken: one shot or volley / the shots listed):\n  " + rows.join("\n  "));
 }
 
 console.log(`weapons: salvo ${V.salvoRockets} rockets over ${V.salvoLength} m, rail ${V.railDamage} with ${V.railPen} m penetration, mortar ring ${V.mortarRing} m, autocannon ${V.acSpeed} m/s`);
