@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-26 | Weapon picker: the latest choice wins over the mount rule (a hull weapon clears that side's shoulder key; a shoulder weapon turns the side's hull weapon into its held version) | Keith (report: left rail cannon became the light rail) | Claude | Was: the shoulder pick silently won and the picker showed the wrong weapon. |
 | 2026-10-26 | A giant plough (bulldozer) leads the convoy and makes the road as it goes: dunes untouched ahead, flat behind, sand pushed aside into side walls sized by the material moved (lumpy, not an even extrusion), with plough effects | Keith | Keith | Deterministic from the convoy clock. |
 | 2026-10-26 | Explosives' blasts measure to a robot's nearest part (body, leg, foot) with the part's share; big robots take blasts at 0.5, medium at 1 (a round's splash still skips big ones) | Claude | Claude | Keith's report: missiles didn't hurt big robots. `robotBigBlast`, `robotMidBlast`. |
 | 2026-10-26 | Missiles, line mortar and big mortar shells burst on the first body in their path; missiles come down on the tracked enemy's body, the RPG and big mortar aim at the locked body when the cursor or ring is on it | Claude | Claude | So a tall excavator's chassis takes them instead of the sand under it. |

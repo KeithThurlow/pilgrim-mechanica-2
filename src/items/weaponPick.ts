@@ -36,10 +36,27 @@ export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
 export function cleanPick(pick: Pick): Pick {
   const p = pick as unknown as Record<string, string>;
   for (const [row, , opts] of ROWS) { if (OLD[p[row]]) p[row] = OLD[p[row]]; if (!(p[row] in opts)) p[row] = Object.keys(opts)[0]; }
+  for (const [side, key] of SIDE_KEY) if (HULL_BASE[pick[side]] && pick[key] !== "none") pick[side] = HELD_PICK[pick[side]];
   return pick;
 }
 
+/** Set one row, the latest choice winning over the mount rule: a hull weapon on a side clears that side's shoulder
+ *  key (no arm to carry it); a shoulder weapon turns that side's hull weapon into its held version. So the picker
+ *  always shows what's fitted (a rail cannon with a shoulder pick used to come out a light rail, still lit as the
+ *  rail cannon). */
+export function choose(pick: Pick, row: keyof Pick, id: string): Pick {
+  (pick as unknown as Record<string, string>)[row] = id;
+  for (const [side, key] of SIDE_KEY) {
+    if (row === side && HULL_BASE[pick[side]]) pick[key] = "none";
+    if (row === key && id !== "none" && HULL_BASE[pick[side]]) pick[side] = HELD_PICK[pick[side]];
+  }
+  return pick;
+}
+
+const SIDE_KEY = [["left", "k1"], ["right", "k2"]] as const;
 const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium" };
+/** A hull weapon's held version on an arm (the autocannon and rocket launcher have none yet: a light minigun). */
+const HELD_PICK: Record<SidePick, SidePick> = { minigun: "lightmg", lightmg: "lightmg", rail: "lightrail", lightrail: "lightrail", autocannon: "lightmg", rpg: "lightmg" };
 const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light" };
 const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar" };
 

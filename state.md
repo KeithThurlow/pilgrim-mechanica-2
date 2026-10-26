@@ -193,6 +193,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Weapon picker: the left rail cannon came out a light rail (Claude, Keith's report)
+- A side with a shoulder pick is an arm, which holds only the light rail, so with the weapons lab's default missiles on key 1 the left rail cannon was fitted as the light rail while the picker still lit "Rail cannon"; the right side (key 2 empty) switched fine. Now the latest choice wins: a hull weapon clears that side's shoulder key, a shoulder weapon turns that side's hull weapon into its held version, and saved or URL picks are cleaned the same way, so the picker shows what's fitted. `src/items/weaponPick.ts` (`choose`, `cleanPick`), `labs/weapons/main.ts`.
+- Checked: typecheck; `loadout-check` (both sides: rail with a shoulder pick, shoulder after rail, light rail keeps the shoulder, saved picks); a headless click-through of the picker (left rail cannon clears key 1; missiles back on key 1 shows the light rail).
+
 ### 2026-10-26 · Repo fixes: ignore node_modules in any form, a weapon look type error (Claude, Keith's PC)
 - `b938e09` committed `node_modules` as a symlink to a cloud session's `/home/claude/vendor` (`.gitignore` had `node_modules/`, which only matches folders); on Windows pulling it blocked. Another agent untracked it (`14f4205`); `.gitignore` now says `node_modules` so a link can't get in again.
 - `src/weapons/weaponLook.ts`: `emissiveNode` cast like the `roughnessNode` line above it (the toon node material's types lack it); the typecheck failed on main since the weapon model library merge.
