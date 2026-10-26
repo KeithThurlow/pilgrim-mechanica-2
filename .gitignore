@@ -9,3 +9,4 @@ resources/
 tools/blender/.slots/
 __pycache__/
 docs/mechs/**/*.png
+node_modules
