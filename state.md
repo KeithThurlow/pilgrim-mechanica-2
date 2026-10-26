@@ -173,7 +173,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## In progress
 
 - Scale build (agent, `wip/scale`, handoff `docs/handoff-scale.md`): effects budget, GPU particles, shots as data with Protocols.
-- Locomotion pass merged 2026-10-26 (all five steps built and checked); the agent is finishing filmstrips (handoff `docs/handoff-locomotion.md`). Not yet looked at from the game camera.
+- Locomotion pass merged 2026-10-26: Keith to play it. Rough: the dash push-off shows ~2 frames (`dashPushTime`); a sideways dash ends in a fore-and-aft skater stance; on steep climbs the uphill fold sits at full knee fold for part of the swing; dust judged from strips only. Next refactor: split the run, dash and slope rules out of `walker.ts` (~1800 lines). Filmstrips in the session scratchpad `loco/`.
 - The plough merged 2026-10-26 (`src/convoy/plough.ts`, `wake.ts`, `ploughFx.ts`, `ploughBody.ts`). Berms read only as soft bulges from the game camera (about 5-6 m high, 25 m wide: the road floor fills troughs with most of the cut). For real walls Keith can choose: steeper faces (`bermSpread`), less fill (`routeLift`), or count only the cut. Patching can take ~7 ms for one box on a slow machine; split boxes if it shows. Road far behind stays flat. Test: convoy lab `?watch=plough`, `?crest[=m]`.
 - Ground dents merged (old decals kept behind `markMode` 0 until Keith approves). Next: a performance pass once Keith says go (dust ground lookups, the patch's 295k triangles and its shadows, a coarse shadow copy of the terrain if worth it).
 - Ground dents are the only ground marks (decals deleted 2026-10-26). Next: a performance pass once Keith says go (dust ground lookups, the patch's 295k triangles and its shadows, a coarse shadow copy of the terrain if worth it).
@@ -192,7 +192,6 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Shared register and spatial grid: proposed (`docs/proposal-register.md`), waiting for Keith (2026-10-26). Perf fixes ranked in `docs/perf-2026-10-26.md`: pass 1 done (fixes 1-5); Keith to run the stress lab on his PC for real numbers.
 - Pilot on foot: steps 1-2 built (out and in, walking sand, decks and bridges, the bay terminal, enemies picking the pilot, the expedition rule). Next: calling the empty mech (a new key), a sidearm, small salvage spots only the pilot reaches, climb clips.
 - Expedition loop step 1 merged (convoy lab; played only from shots so far). Next: progression on the convoy (radar range, packs, convoy speed), items dropping into the at-risk list, a recovery you can be killed during (heli), late-game heli drops.
-- Locomotion after Keith's 18:28 playtest (Claude agent, since 2026-10-26, branch `wip/locomotion`): his tuned values as defaults (done), then a ground sprint gait, the dash as a push-off, slide dust, walking on slopes, dust labels. Files: `src/mech/walker.ts`, `walkerTuning.ts`, `bound.ts`, `dash.ts`, `src/game/mechUnit.ts`, `src/fx/dust.ts`. Handoff: `docs/handoff-locomotion.md`.
 
 ## Next candidates (ask Keith which)
 
