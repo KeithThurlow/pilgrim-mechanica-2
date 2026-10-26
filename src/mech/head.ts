@@ -24,6 +24,8 @@ export const HEAD_DEFAULTS = {
   headScanPeriod: 7,
   headScanAfter: 1.2,
   clusterSweep: 1,
+  headSize: 0.33,
+  headDrop: 0.35,
 };
 export type HeadValues = typeof HEAD_DEFAULTS;
 
@@ -41,6 +43,8 @@ export const HEAD_PARAMS: Param[] = [
   { key: "headScanWidth", label: "Idle scan width either side (°)", min: 0, max: 90, step: 1, group: G },
   { key: "headScanPeriod", label: "Idle scan period (s)", min: 1, max: 30, step: 0.5, group: G },
   { key: "headScanAfter", label: "Scan after no aim for (s)", min: 0, max: 10, step: 0.1, group: G },
+  { key: "headSize", label: "Head size ×", min: 0.1, max: 1.5, step: 0.01, group: G, tip: "Scale of a fitted head on its socket (Keith 2026-10-26: a third of the first stand-in in each dimension)" },
+  { key: "headDrop", label: "Head lower by (m)", min: -0.5, max: 1.2, step: 0.01, group: G, tip: "How far below the front socket the head sits (Keith 2026-10-26: a little lower)" },
   { key: "clusterSweep", label: "Cluster sweep speed ×", min: 0, max: 4, step: 0.05, group: G, tip: "Times each cluster item's own sweep (a survey dish turns; a mast or an array stays still)" },
 ];
 

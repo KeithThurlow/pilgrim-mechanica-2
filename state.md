@@ -193,6 +193,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-26 · Sensor head a third the size, lower (Keith, Claude)
+- Keith: the head reads like a giant head; a third the size in each dimension, sat a little lower. `src/mech/head.ts` new sliders `headSize` (0.33) and `headDrop` (0.35 m) in Sensor head; `rampart.ts` applies them to a fitted head. Checked: typecheck; not looked at (the box was too loaded for shots).
+
 ### 2026-10-26 · Sensor heads: a head at the front that follows the aim, or a cluster on top (Claude, agent; Keith's ask)
 - Sensor style on the bases (head / cluster), sensor sockets on the hulls (front / top), the fit rule matching them; two heads (Rampart visor, now the default; Twin-optic) beside the mast, dish and array. Heads: small aim help (lock cone +, gun tracking +), shorter radar; clusters: longer radar.
 - `src/mech/head.ts` (cosmetic driver, sliders "Sensor head"), `src/mech/sensorModels.ts` (GLB at `public/models/sensors/<id>.glb`, else stand-ins), Rampart sockets `Sensor_Front`/`Sensor_Top` and `aimSensor`, MechUnit calls it; targeting adds `sensorLock` to the cone. Walker lab `?sensor=<id>|none`, `?cam=head`, and `window.__walker` (the mech and model) for headless probes.
