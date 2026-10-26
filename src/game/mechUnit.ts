@@ -97,6 +97,8 @@ export const MECH_PARAMS: Param[] = [
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
 const WRECK = 0x3b3531;
+const D2R = Math.PI / 180;
+const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
 /** A minigun round's penetration (m) from an item's pierce stat (MechUnit.roundPen). */
 export function roundPenFor(v: { roundPen: number; roundPierce: number; roundPenCurve: number }, pierce?: number): number {
@@ -144,6 +146,9 @@ export class MechUnit implements Hittable {
   kneelPitch = 0;
   /** A player sits in it (the lab sets it): standing a while, its legs flex now and then. Enemies stay still. */
   piloted = false;
+  /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
+  gunsOff = false;
+  private fwdAim = { x: 0, y: 0, z: 0 };
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -260,11 +265,15 @@ export class MechUnit implements Hittable {
     const fired: (1 | -1)[] = [];
     const sub = Math.max(1, Math.ceil(dt * 120));
     const dash = this.dash;
-    // Guns while sprinting: on by default (Keith undecided), boundGuns 0 switches them off.
-    if (this.bound.on && !v.boundGuns) trigger = false;
+    // Sprinting a while (sprintGunsAfter), the weapons are off (src/mech/bound.ts): no trigger, and the torso, guns and
+    // head face the line of travel (turned that share into a drift) with the hull leaning forward by speed.
+    const want = { trigger, aim };
     for (let i = 0; i < sub; i++) {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);
+      this.gunsOff = this.bound.gunsOff && this.alive;
+      if (this.gunsOff) { trigger = false; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
+      upper.leanFwd = this.gunsOff ? v.sprintHullLean * D2R * clamp((sim.speed - v.walkSpeed) / Math.max(0.5, (sim.boundTopNow || v.boundTop) - v.walkSpeed), 0, 1) : 0;
       // The slope along the slide: + uphill. Read a couple of metres either side of the body.
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
@@ -332,11 +341,21 @@ export class MechUnit implements Hittable {
         ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare }
         : { voice: "other", hitScale: 0.7 });
     }
+    // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);
     if (this.player && body.armed) {
       const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
       this.bf.gunAudio.update(dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
+  }
+
+  /** Where the torso looks with the weapons off: far along the line of travel (turned sprintFaceDrift into a drift), level with the shoulders. */
+  private travelAim(): Aim {
+    const sim = this.sim, d = Math.atan2(Math.sin(sim.heading - sim.course), Math.cos(sim.heading - sim.course));
+    const yaw = (sim.running || sim.bounding ? sim.course : sim.heading) + d * this.v.sprintFaceDrift;
+    const a = this.fwdAim;
+    a.x = this.shoulder.x + Math.sin(yaw) * 40; a.z = this.shoulder.z + Math.cos(yaw) * 40; a.y = this.shoulder.y;
+    return a;
   }
 
   /**

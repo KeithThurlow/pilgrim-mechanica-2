@@ -6,6 +6,11 @@ import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import * as THREE from "three";
+import { MechUnit, MECH_DEFAULTS, type MechBody, type MechUnitValues } from "../src/game/mechUnit";
+import { UPPER_DEFAULTS } from "../src/mech/upper";
+import { DUST_DEFAULTS } from "../src/fx/dust";
+import type { Battlefield } from "../src/game/battlefield";
 
 interface Run { name: string; seconds: number; cmd: (t: number) => { x: number; z: number; sprint: boolean } }
 
@@ -334,6 +339,64 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     console.log(`  landing damage from 3 / 6.5 / 9 / 12 m: ${dmg.map((x) => x.toFixed(0)).join(", ")}`);
   }
   if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; }
+}
+
+// The mech unit with a stand-in battlefield and body (counts rounds fired, dust thrown, footfalls): for the sprint's
+// weapons, the ground impact and the sinking feet.
+function stubMech(field: { height(x: number, z: number): number; normal(x: number, z: number, o?: number[]): number[] }, over: Record<string, number> = {}) {
+  const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DUST_DEFAULTS, ...MECH_DEFAULTS, ...over } as unknown as MechUnitValues;
+  const count = { rounds: 0, kicks: 0, kickK: 0, stomps: 0, prints: 0, digs: 0 };
+  const noop = () => {};
+  const bf = {
+    field, inWater: () => false, water: null,
+    dust: { stomp: () => { count.stomps++; }, kick: (_x: number, _y: number, _z: number, _dx: number, _dz: number, k: number) => { count.kicks++; count.kickK += k; }, slide: () => 0, smoke: noop },
+    marks: { print: () => { count.prints++; }, furrow: noop, dig: () => { count.digs++; } },
+    sfx: { play: noop, playSound: noop }, gunAudio: { update: noop },
+    fire: () => { count.rounds++; },
+  } as unknown as Battlefield;
+  const at = (o: THREE.Vector3) => o.set(mech.sim.pelvis.x, mech.sim.pelvis.y + 1.5, mech.sim.pelvis.z);
+  const body = {
+    root: new THREE.Object3D(), armed: true, update: noop, paint: noop,
+    shoulderLine: (o = new THREE.Vector3()) => at(o), muzzle: (_s: number, o = new THREE.Vector3()) => at(o),
+    barrel: (_s: number, o = new THREE.Vector3()) => o.set(0, 0, 1), eject: (_s: number, o = new THREE.Vector3()) => o,
+  } as unknown as MechBody;
+  const mech: MechUnit = new MechUnit(bf, v, body, {} as never, 1, 0, false);
+  return { mech, count, v };
+}
+
+// Weapons while sprinting (Keith 2026-10-26 21:54): for sprintGunsAfter into the sprint the guns still fire, then
+// nothing fires and the torso turns to the line of travel; let go and they fire again.
+{
+  console.log("-- sprint weapons");
+  const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+  const { mech, count, v } = stubMech(flat);
+  mech.reset(0, 0, 0);
+  const problems: string[] = [];
+  const aimSide = () => ({ x: mech.sim.pos.x + 20, y: 1, z: mech.sim.pos.z + 5 });
+  const run = (sec: number, space: boolean) => {
+    const n0 = count.rounds;
+    for (let i = 0; i < sec * 60; i++) { mech.dashHold = space; mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true); }
+    return count.rounds - n0;
+  };
+  run(2, false);
+  const early = run(v.sprintGunsAfter + v.boundTap - 0.05, true);
+  let late = 0, offSince = -1, worstFace = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    const n0 = count.rounds;
+    mech.dashHold = true;
+    mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true);
+    if (mech.gunsOff) { late += count.rounds - n0; if (offSince < 0) offSince = i / 60; }
+    const off = Math.atan2(Math.sin(mech.upper.torsoYaw - mech.sim.course), Math.cos(mech.upper.torsoYaw - mech.sim.course));
+    if (i > 2.5 * 60) worstFace = Math.max(worstFace, (Math.abs(off) * 180) / Math.PI);
+  }
+  const after = run(2, false);
+  if (early === 0) problems.push("no rounds in the first moment of the sprint (sprintGunsAfter)");
+  if (offSince < 0) problems.push("the weapons never went off sprinting");
+  if (late > 0) problems.push(`${late} rounds fired with the weapons off`);
+  if (worstFace > 5) problems.push(`weapons off, the torso is ${worstFace.toFixed(0)}° off the line of travel`);
+  if (after === 0) problems.push("let go of the sprint, the guns didn't fire again");
+  console.log(`${problems.length ? "FAIL " : "ok   "}rounds: ${early} in the first ${(v.sprintGunsAfter + v.boundTap).toFixed(2)} s, ${late} with the weapons off · torso within ${worstFace.toFixed(1)}° of the travel line · ${after} after letting go` + (problems.length ? "\n       " + problems.join("; ") : ""));
+  if (problems.length) failed = true;
 }
 
 if (failed) throw new Error("walker check failed");

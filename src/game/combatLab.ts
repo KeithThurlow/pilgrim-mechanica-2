@@ -372,7 +372,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
-    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
+    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
 
     const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
     follow.lerp(want, Math.min(1, rawDt * 6));

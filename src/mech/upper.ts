@@ -139,6 +139,8 @@ export class UpperSim {
   onTarget = false;
   /** The hull tilted back (radians, + back) to raise the guns past their own limit at a target high overhead. */
   lean = 0;
+  /** Set from outside: lean the hull forward this much (radians; the sprint with the weapons off), eased at the lean rate. */
+  leanFwd = 0;
 
   constructor(public v: UpperValues) {}
 
@@ -187,6 +189,7 @@ export class UpperSim {
       const up = Math.atan2(aim.y - shoulder.y, Math.max(1, Math.hypot(aim.x - shoulder.x, aim.z - shoulder.z)));
       leanWant = clamp(up - pup, 0, v.torsoLeanMax * D2R);
     }
+    leanWant -= this.leanFwd;
     const leanStep = v.torsoLeanRate * D2R * dt;
     this.lean += clamp(leanWant - this.lean, -leanStep, leanStep);
     const spinRate = (v.spinRpm / 60) * Math.PI * 2;

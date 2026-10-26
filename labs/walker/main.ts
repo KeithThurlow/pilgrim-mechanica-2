@@ -309,7 +309,7 @@ function tick(rawDt: number) {
   reticle.visible = !!aim && !!rampart;
   if (aim) {
     reticle.position.set(aim.x, aim.y + 0.06, aim.z);
-    (reticle.material as THREE.MeshBasicMaterial).color.setHex(upper.onTarget ? 0xffb347 : 0x9a958c);
+    (reticle.material as THREE.MeshBasicMaterial).color.setHex(upper.onTarget && !mech.gunsOff ? 0xffb347 : 0x9a958c);
   }
 
   follow.lerp(new THREE.Vector3(sim.pelvis.x, sim.pelvis.y - 1.2, sim.pelvis.z), Math.min(1, rawDt * 6));
@@ -351,5 +351,5 @@ function tick(rawDt: number) {
   app.hud.set("dents", pt && dw
     ? `dents ${dents.res}² over ${dents.size} m · ${dents.stats.brushes} brushes · patch ${pt.vertices} verts ${(pt.triangles / 1000).toFixed(0)}k tris @ ${dw.fine} m · refill ${dw.stats.ms.toFixed(2)} ms (${dw.stats.fineSamples}+${dw.stats.coarseSamples})${dw.ready ? "" : " · filling"}`
     : "dents: none");
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
+  if (rampart) app.hud.set("guns", `${mech.gunsOff ? `<b style="color:#ffb347">SPRINT</b> weapons off · ` : ""}torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 }

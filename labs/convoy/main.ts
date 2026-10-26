@@ -691,7 +691,7 @@ app.onTick((rawDt) => {
   patchSome(1.5);
   costs.mark("plough patch");
 
-  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
+  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   // Out on the sand the camera leads the mech at speed (the sprint).
