@@ -11,6 +11,7 @@
 // full amount, gravel little dust and some chips, dirt a few darker clods, concrete nothing.
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { RANK, type FxBudget } from "./budget";
 
 export const DUST_DEFAULTS = {
   dustWindAngle: 70,
@@ -174,12 +175,16 @@ export class DustSim {
   alive = 0;
   private t = 0;
 
+  /** The effects budget (src/fx/budget.ts): every source asks it first (null: everything as asked). */
+  budget: FxBudget | null = null;
+
   /** What the floor is read from: the true ground, or a cheap one for looks (src/world/chunkGround.ts). */
   constructor(public v: DustValues, public ground: Ground) {}
 
   emit(kind: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, dens: number) {
     const i = this.next;
     this.next = (this.next + 1) % DUST_MAX;
+    if (this.budget) this.budget.spawned++;
     this.px[i] = x; this.py[i] = y; this.pz[i] = z;
     this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
     this.age[i] = 0; this.life[i] = life; this.size0[i] = size; this.dens[i] = dens;
@@ -191,6 +196,8 @@ export class DustSim {
 
   /** A puff of a given darkness (0 sand .. 1 dark), e.g. smoke off steel or a burning wreck. */
   smoke(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, dens: number, dark: number) {
+    const b = this.budget;
+    if (b && (!b.admit(x, z) || Math.random() >= b.part(RANK.smoke))) return;
     this.curTint = dark;
     this.emit(CLOUD, x, y, z, vx, vy, vz, size, life, dens);
     this.curTint = 0;
@@ -210,6 +217,7 @@ export class DustSim {
 
   /** A foot landing: sand shoved out round it and pushed on the way the mech moves (vx, vz), a low ring of cloud. */
   stomp(x: number, y: number, z: number, strength: number, mvx = 0, mvz = 0) {
+    if (this.budget && !this.budget.admit(x, z)) return;
     const v = this.v;
     const [dm, cm] = this.ground_(x, z);
     const nCloud = this.count(v.stompCloud * strength * dm), nClump = this.count(v.stompClump * strength * cm);
@@ -230,9 +238,11 @@ export class DustSim {
 
   /** A foot leaving the sand: flicked back (dx, dz: unit, the way the sand goes) and up. */
   kick(x: number, y: number, z: number, dx: number, dz: number, strength: number) {
+    const b = this.budget;
+    if (b && !b.admit(x, z)) return;
     const v = this.v;
     const [dm, cm] = this.ground_(x, z);
-    const nCloud = this.count(v.kickCloud * strength * dm), nClump = this.count(v.kickClump * strength * cm);
+    const nCloud = this.count(v.kickCloud * strength * dm * (b ? b.part(RANK.cloud) : 1)), nClump = this.count(v.kickClump * strength * cm);
     for (let i = 0; i < nClump; i++) {
       const sp = (Math.random() - 0.5) * 0.7, s = v.kickSpeed * strength * (0.6 + Math.random() * 0.7);
       const ex = dx + -dz * sp, ez = dz + dx * sp;
@@ -251,10 +261,14 @@ export class DustSim {
    * A round into the sand (dx, dz: its flat travel): thick packets of sand churned up and shoved downrange low, a
    * plume thrown up and forward that strings out into a column as its puffs slow, and a little low cloud.
    */
-  hit(x: number, y: number, z: number, dx: number, dz: number, k: number) {
+  hit(x: number, y: number, z: number, dx: number, dz: number, k: number, n = 1) {
     const v = this.v;
+    // n: hits merged into this one (src/fx/budget.ts) multiply the counts. A request the budget thins away is gone.
+    const b = this.budget;
+    if (b && !b.admit(x, z)) return;
+    const pl = n * (b ? b.part(RANK.plume) : 1), spr = n * (b ? b.part(RANK.spray) : 1), cl = n * (b ? b.part(RANK.cloud) : 1);
     const [dm, cm] = this.ground_(x, z);
-    for (let i = 0; i < this.count(v.hitClump * cm); i++) {
+    for (let i = 0; i < this.count(v.hitClump * cm * n); i++) {
       const sp = (Math.random() - 0.5) * 0.6, s = v.hitCarry * (0.5 + Math.random() * 0.7);
       const ex = dx + -dz * sp, ez = dz + dx * sp;
       this.emit(CLUMP, x, y + 0.08, z, ex * s, 0.3 + Math.random() * 1.2, ez * s, v.hitSize * k * (0.5 + Math.random() * 0.6),
@@ -262,9 +276,9 @@ export class DustSim {
     }
     // Plume: up and leaning downrange; faster puffs go further before the drag stops them, so they line up.
     this.curDrag = v.plumeDrag;
-    const n = this.count(v.plumePuffs * dm);
-    for (let i = 0; i < n; i++) {
-      const f = (i + Math.random()) / Math.max(1, n);
+    const np = this.count(v.plumePuffs * dm * pl);
+    for (let i = 0; i < np; i++) {
+      const f = (i + Math.random()) / Math.max(1, np);
       const sx = (Math.random() - 0.5) * 2 * v.plumeSpread, sz = (Math.random() - 0.5) * 2 * v.plumeSpread;
       let jx = dx * v.plumeLean + sx, jy = 1, jz = dz * v.plumeLean + sz;
       const l = Math.hypot(jx, jy, jz); jx /= l; jy /= l; jz /= l;
@@ -275,7 +289,7 @@ export class DustSim {
     this.curDrag = 0;
     // Spray: the punch of the strike, fast grains flung up and on, streaking, falling back almost at once.
     this.curDrag = 0.6;
-    for (let i = 0; i < this.count(v.sprayCount * Math.max(dm, cm)); i++) {
+    for (let i = 0; i < this.count(v.sprayCount * Math.max(dm, cm) * spr); i++) {
       const sx = (Math.random() - 0.5) * 1.2, sz = (Math.random() - 0.5) * 1.2;
       let jx = dx * v.sprayLean + sx, jy = 0.8 + Math.random() * 0.9, jz = dz * v.sprayLean + sz;
       const l = Math.hypot(jx, jy, jz); jx /= l; jy /= l; jz /= l;
@@ -283,7 +297,7 @@ export class DustSim {
       this.emit(SPRAY, x, y + 0.1, z, jx * s, jy * s, jz * s, v.spraySize * (0.7 + Math.random() * 0.6) * Math.sqrt(k), 0.3 + Math.random() * 0.35, 0.95);
     }
     this.curDrag = 0;
-    for (let i = 0; i < this.count(v.hitCloud * dm); i++) {
+    for (let i = 0; i < this.count(v.hitCloud * dm * cl); i++) {
       this.emit(CLOUD, x + dx * 0.4, y + 0.2, z + dz * 0.4, dx * v.hitCarry * 0.5 + (Math.random() - 0.5), 0.4 + Math.random() * 0.6,
         dz * v.hitCarry * 0.5 + (Math.random() - 0.5), v.hitSize * k * (0.8 + Math.random() * 0.6), v.cloudLife * (0.5 + Math.random() * 0.5), v.cloudDensity * 0.8);
     }
@@ -302,6 +316,7 @@ export class DustSim {
     const sp = Math.hypot(vx, vz) || 1;
     while (acc >= 1) {
       acc -= 1;
+      if (this.budget && !this.budget.admit(x, z)) continue;
       const cloud = Math.random() < v.wheelDust * dm / Math.max(1e-6, v.wheelDust * dm + v.wheelClump * cm);
       const back = 0.25 + Math.random() * 0.35, side = (Math.random() - 0.5) * 1.2;
       const bx = -vx / sp, bz = -vz / sp;

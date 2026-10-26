@@ -172,6 +172,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Scale build (agent, `wip/scale`, handoff `docs/handoff-scale.md`; Keith approved `docs/proposal-scale.md` 2026-10-26): effects budget (step 1, built), then shots as data with real Protocols, then GPU particles. Touches `src/fx/` (dust gating, minigun merging), `src/game/battlefield.ts`, the stress lab.
 - Locomotion pass from Keith's playtest (agent, `wip/locomotion`, handoff `docs/handoff-locomotion.md`): his values as defaults, a real ground sprint, the dash as a push-off, slide dust, slopes.
 - The plough merged 2026-10-26 (`src/convoy/plough.ts`, `wake.ts`, `ploughFx.ts`, `ploughBody.ts`). Berms read only as soft bulges from the game camera (about 5-6 m high, 25 m wide: the road floor fills troughs with most of the cut). For real walls Keith can choose: steeper faces (`bermSpread`), less fill (`routeLift`), or count only the cut. Patching can take ~7 ms for one box on a slow machine; split boxes if it shows. Road far behind stays flat. Test: convoy lab `?watch=plough`, `?crest[=m]`.
 - Ground dents merged (old decals kept behind `markMode` 0 until Keith approves). Next: a performance pass once Keith says go (dust ground lookups, the patch's 295k triangles and its shadows, a coarse shadow copy of the terrain if worth it).

@@ -13,7 +13,8 @@ import type { DesertLook } from "../world/look";
 import { rayGround } from "../world/raycast";
 import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
-import { DustSim, type DustValues } from "../fx/dust";
+import { DustSim, DUST_MAX, type DustValues } from "../fx/dust";
+import type { FxBudget } from "../fx/budget";
 import { DustDraw } from "../fx/dustDraw";
 import { GroundMarks } from "../fx/groundMarks";
 import { DentLayer, DENT_DEFAULTS, type DentValues } from "../fx/dents";
@@ -105,6 +106,11 @@ export class Battlefield {
    */
   lookGround: Ground;
   readonly gunFx: MinigunFx;
+  /**
+   * The effects budget (src/fx/budget.ts): every hit and dust source asks it first. Set fx.own to the local player's
+   * mech (or pilot) position so its effects pass at full.
+   */
+  readonly fx: FxBudget;
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
   readonly targets: Hittable[] = [];
@@ -138,6 +144,9 @@ export class Battlefield {
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
+    this.fx = this.gunFx.budget;
+    this.fx.pool = DUST_MAX;
+    this.dust.budget = this.fx;
     // Biomes: rock and water throw no dust, rocky sand less (the ground knows what it's made of).
     if (field.biomes) this.dust.surfaceAt = (x, z) => field.surfaceAt(x, z);
     if (field.waterLevel !== null) {
@@ -156,10 +165,10 @@ export class Battlefield {
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
-    this.gunFx.onSandHit = (at, d, k) => {
+    this.gunFx.onSandHit = (at, d, k, n) => {
       // Into water: a spray of drops and rings instead of dust and a crater.
       if (this.inWater(at.x, at.z)) { this.water!.splash(at.x, at.z, 0.35 + k * 0.5, d.x * 0.4, d.z * 0.4, 1.4); return; }
-      this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k);
+      this.dust.hit(at.x, at.y, at.z, d.x, d.z, k, n); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k);
     };
     this.gunFx.onHit = (at, surface) => this.gunAudio.hit(at, surface);
     this.gunFx.onSteelSmoke = (at, n, puffs, k) => {
@@ -220,7 +229,7 @@ export class Battlefield {
     if (o.splash && o.splashShare) {
       for (const t of this.targets) if (t.alive && t.team !== team && t.splash) t.splash(hit, o.splash, damage * o.splashShare, d);
     }
-    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1, o.hitScale ?? 1);
+    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, d, hit, o.eject ?? null, o.outboard ?? null, surface, normal, o.flashScale ?? 1, o.hitScale ?? 1, o.voice === "player");
     if (o.voice === "player") this.gunAudio.shot(muzzle);
     else if (o.voice !== "none") this.sfx.play("spit", muzzle, 0.55, 0.7 + Math.random() * 0.15, true);
     return struck;
@@ -249,7 +258,7 @@ export class Battlefield {
       for (const t of this.targets) if (t.alive && t.team !== team && t.splash) t.splash(hit, o.splash, damage * o.splashShare, d);
     }
     const dir = this.pt.copy(hit).sub(muzzle).normalize();
-    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, dir, hit, o.eject ?? null, o.outboard ?? null, shot.surface, normal, o.flashScale ?? 1, o.hitScale ?? 1);
+    if (o.tracer !== false) this.gunFx.shot(slot, muzzle, dir, hit, o.eject ?? null, o.outboard ?? null, shot.surface, normal, o.flashScale ?? 1, o.hitScale ?? 1, o.voice === "player");
     if (o.voice === "player") this.gunAudio.shot(muzzle);
     else if (o.voice !== "none") this.sfx.play("spit", muzzle, 0.55, 0.7 + Math.random() * 0.15, true);
     return struck;
@@ -403,6 +412,8 @@ export class Battlefield {
 
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
+    // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
+    this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
     const c = this.costs;
     this.sfx.update();
     if (this.dents && this.patch) {
@@ -423,6 +434,8 @@ export class Battlefield {
     this.dust.update(dt);
     camera.updateMatrixWorld();
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
+    // Everything this frame has asked for its effects: roll the budget's pressure on.
+    this.fx.frame(this.dust.alive);
     c?.mark("dust");
   }
 }

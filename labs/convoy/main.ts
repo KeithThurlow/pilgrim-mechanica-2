@@ -167,6 +167,7 @@ Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
 scene.add(body.root);
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);
+bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player);
@@ -398,7 +399,7 @@ const panel = tweakPanel({
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     WEAPON_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },

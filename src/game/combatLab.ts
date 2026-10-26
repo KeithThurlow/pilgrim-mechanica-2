@@ -157,6 +157,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
+  bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
   // The register: the player's mech first (owner 1), then whatever the lab adds.
   bf.register.add(mechOwner("player", () => [player]));
   const enemies = enemiesOf(player.team);
@@ -203,7 +204,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
-      { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
+      { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -401,6 +402,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
     if (cst) app.hud.set("costs", cst.end());
+    const fl = bf.fx.last;
+    app.hud.set("fx", bf.fx.on ? `effects budget: ${fl.asked} asked · ${fl.full} yours at full · ${fl.thinned} thinned · ${fl.merged} hits merged · ${fl.spawned} dust puffs · pressure ${fl.pressure.toFixed(2)}` : "effects budget off");
     const sprint = player.bound.on ? ` · sprint ${player.sim.speed.toFixed(1)} m/s` : " · hold Space to sprint";
     app.hud.set("guns", `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });

@@ -191,6 +191,7 @@ app.onTick((rawDt) => {
     "register entries": reg.count, "register queries": queries,
     robots: robots!.sw.count, bandits: bandits!.sw.count, vehicles: band!.vehicles, "bandit mechs": band!.mechs,
     bodies: lab.deaths.dead.length, "dust particles": bf.dust.alive,
+    "dust puffs asked": bf.fx.last.spawned, "effects asked": bf.fx.last.asked, "effects thinned": bf.fx.last.thinned, "hits merged": bf.fx.last.merged, "budget pressure ×100": bf.fx.last.pressure * 100,
     "team gun shots": wc.shots, "of which allies": wc.allyShots, "team rounds": wc.rounds, ricochets: wc.ricochets, "chain hops": wc.chains, "draw calls": last.calls, "triangles (k)": last.tris / 1000,
   };
   if (run.frame(dt, { ms, counts })) {
