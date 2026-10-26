@@ -84,6 +84,10 @@ const lab = await combatLab({
   demo: (t) => demo(t),
 });
 const { V, bf, player, app } = lab;
+// Every live enemy is in the battlefield's register (each owner publishes once a tick); time its rebuild and queries.
+// (Set before the awaits below: the demo runs on ticks from here on.)
+const reg = bf.register;
+reg.timing = true;
 if (params.has("settle")) V.stressSettle = Number(params.get("settle"));
 if (params.has("hold")) V.stressHold = Number(params.get("hold"));
 
@@ -99,10 +103,6 @@ band = new StressWarband(lab);
 await band.load(4);
 // The mech's dash and stomps reach both swarms, as in their labs.
 player.onStomp = (x, z, k) => { robots!.sw.stomp(x, z, V.stressRobotStomp * Math.min(1.5, k)); bandits!.sw.stomp(x, z, V.stressBanditStomp * Math.min(1.5, k)); };
-
-// Every live enemy is in the battlefield's register (each owner publishes once a tick); time its rebuild and queries.
-const reg = bf.register;
-reg.timing = true;
 
 /** The demo: slow loops, both miniguns on the nearest enemy. */
 function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; lock?: TargetCandidate | null } {
