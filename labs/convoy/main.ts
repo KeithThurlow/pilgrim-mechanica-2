@@ -209,6 +209,8 @@ carry.onTouchdown = (x, y, z, speed) => {
   shaker.add(V.craneLandShake * k);
 };
 player.onLanding = (l) => { shaker.add(V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
+// Each sprinting footfall: a small shake (sprintShake).
+player.onSprintStep = (k) => shaker.add(V.sprintShake * Math.min(1.5, k));
 
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();

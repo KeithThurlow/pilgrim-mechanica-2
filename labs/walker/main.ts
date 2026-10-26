@@ -252,6 +252,8 @@ drop();
 // A landing shakes the camera by how hard it hit.
 let shake = 0;
 mech.onLanding = (l) => { shake = Math.max(shake, V.landShake * Math.min(1.6, l.impact / 7.7)); };
+// Each sprinting footfall: a small shake (sprintShake).
+mech.onSprintStep = (k) => { shake = Math.max(shake, V.sprintShake * Math.min(1.5, k)); };
 follow.copy(sim.pelvis);
 // The hub's biome picker wins over a saved slider.
 if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }

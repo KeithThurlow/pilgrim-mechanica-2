@@ -163,6 +163,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // The weapons that aren't miniguns (nothing until a loadout fits one), camera shake, blasts (src/game/playerAim.ts).
   const shaker = new CameraShake();
   const shake = shaker.add;
+  // Each sprinting footfall: a small shake (sprintShake).
+  player.onSprintStep = (k) => shake(V.sprintShake * Math.min(1.5, k));
   const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 
   const iso = new IsoCamera(camera, canvas, V);

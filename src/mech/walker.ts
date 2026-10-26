@@ -211,6 +211,8 @@ export class WalkerSim {
   /** The gait's planted share and cycles per second now (the planted share eases, so steps never jump). */
   dutyNow = 0.6;
   cpsNow = 0;
+  /** The run's plant compression: the hull's extra nose-down pitch now (radians), from body(). */
+  private plantPitch = 0;
   /** The over-stretch hurry on the cadence (1: none), eased while running. */
   private hurry = 1;
   /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
@@ -415,6 +417,7 @@ export class WalkerSim {
     this.slip.set(0, 0, 0);
     this.tuckPose();
     this.turnLean(dt);
+    this.plantPitch = 0;
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
     const gallop = v.boundGallop >= 0.5;
@@ -1454,8 +1457,9 @@ export class WalkerSim {
    */
   private orient(pelvisYaw: number) {
     const v = this.v, tr = this.turnRoll;
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, pelvisYaw, this.roll.x + tr, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
+    const pitch = this.pitch.x + this.plantPitch;
+    this.pelvisQ.setFromEuler(this.t.e.set(pitch, pelvisYaw, this.roll.x + tr, "YXZ"));
+    this.hullQ.setFromEuler(this.t.e.set(pitch, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
     if (tr !== 0) {
       // Rolled about the outside hip, so the outside leg reaches no further than upright and the inside one folds.
       const H = v.hipHeight * v.turnLeanShift, l = leftOf(this.heading, this.t.l);
@@ -1809,7 +1813,19 @@ export class WalkerSim {
       const over = this.bodyY.x + extra - yMax;
       if (over > 0) { this.bodyY.x -= over * (1 - rk); if (rk < 0.5) this.bodyY.v = Math.min(0, this.bodyY.v); }
     }
-    this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat, this.pos.z + l.z * this.lat.x - fw.z * back);
+    // Running, each plant compresses the body (Keith 2026-10-26 21:54: "communication of energy being pushed into the
+    // ground"): a quick hip drop and the nose pitching down over the first half of the stance, then the hips rising a little
+    // as the leg extends through the push-off.
+    let comp = 0, ext = 0;
+    if (rk > 0) for (const f of this.feet) {
+      if (f.swinging) continue;
+      const st = f.stanceT;
+      comp = Math.max(comp, st < 0.5 ? Math.sin((Math.PI * st) / 0.5) : 0);
+      ext = Math.max(ext, st >= 0.5 ? Math.sin((Math.PI * (st - 0.5)) / 0.5) : 0);
+    }
+    const plantY = (v.runPushRise * ext - v.runPlantDrop * comp) * rk;
+    this.plantPitch = v.runPlantPitch * D2R * comp * rk;
+    this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat + plantY, this.pos.z + l.z * this.lat.x - fw.z * back);
     // The dash opens the hips toward where it's going (the hull above keeps facing the heading).
     const dm = this.dashMove;
     const open = dm ? clamp(wrap(dm.yaw - this.heading), -60 * D2R, 60 * D2R) * v.dashHipOpen * (1 - smooth(0.3, 0.7, dm.t)) : 0;

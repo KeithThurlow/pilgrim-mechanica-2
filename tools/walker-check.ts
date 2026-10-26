@@ -211,8 +211,8 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (both === 0) problems.push(`run at ${label}: no flight phase`);
     if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
     // The bob is a slider (runBob, the amplitude; Keith 2026-10-26 set 0.175 for a bouncier run, was 0.05 under a fixed
-    // 0.3 m limit): the hips move no more than its rise and fall plus a little.
-    const bobMax = 2 * values.runBob + 0.08;
+    // 0.3 m limit), plus the plant's drop and the push-off's rise (runPlantDrop, runPushRise): no more than those plus a little.
+    const bobMax = 2 * values.runBob + values.runPlantDrop + values.runPushRise + 0.08;
     if (yMax - yMin > bobMax) problems.push(`run at ${label}: hips rise and fall ${(yMax - yMin).toFixed(2)} m (limit ${bobMax.toFixed(2)})`);
     console.log(`  run at ${label}: ${(1 / mean).toFixed(2)} steps/s, alternating (${same} repeats), intervals within ${(spread * 100).toFixed(0)}% · flights ${((100 * both) / n).toFixed(0)}% of the time, longest ${longest.toFixed(2)} s · hips move ${(yMax - yMin).toFixed(2)} m`);
   }
@@ -222,7 +222,8 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     // The limit kept about 0.6 m over the hull's lowest front edge with the run's old crouch (boundCrouch 0.3); Keith runs
     // lower (0.8, 2026-10-26), so it moves down with the crouch (and 0.1 m for the steepest ramp, where the Stilt's short
     // legs set the height).
-    const HULL_CLEAR = 1.9 - Math.max(0, values.boundCrouch - 0.3) - 0.1;
+    // Each plant's compression (runPlantDrop) dips the hips on purpose: it comes off the margin too.
+    const HULL_CLEAR = 1.9 - Math.max(0, values.boundCrouch - 0.3) - 0.1 - values.runPlantDrop;
     for (const deg of [12, 18, 25]) {
       const k = Math.tan((deg * Math.PI) / 180);
       const g = shaped((_x, z) => Math.max(0, (z - 50) * k));
@@ -404,6 +405,8 @@ function stubMech(field: { height(x: number, z: number): number; normal(x: numbe
   if (late > 0) problems.push(`${late} rounds fired with the weapons off`);
   if (worstFace > 5) problems.push(`weapons off, the torso is ${worstFace.toFixed(0)}° off the line of travel`);
   if (after === 0) problems.push("let go of the sprint, the guns didn't fire again");
+  // The sprint's push-offs (Keith 21:54): each throws sand back off the toes and digs them in.
+  if (count.digs < 5) problems.push(`the sprint's push-offs dug in only ${count.digs} times`);
   console.log(`${problems.length ? "FAIL " : "ok   "}rounds: ${early} in the first ${(v.sprintGunsAfter + v.boundTap).toFixed(2)} s, ${late} with the weapons off · torso within ${worstFace.toFixed(1)}° of the travel line · ${after} after letting go` + (problems.length ? "\n       " + problems.join("; ") : ""));
   if (problems.length) failed = true;
 }
