@@ -46,6 +46,16 @@ desert look direction. What came from where: `docs/decisions.md`.
    - **Ids:** stable ids for anything peers must agree on.
    - **Ownership:** know who owns each piece of state: host (enemies, damage, loot, convoy, expedition), player (own
      movement and aim) or cosmetic (FX, ragdolls). Say so in the file header when it isn't obvious.
+13. **Assume you can be cut off at any moment** (Keith 2026-10-26: agents hit usage limits mid-work and can't see them
+   coming). Work so a cutoff loses little:
+   - **Commit at every working step** on your branch, not only at the end. WIP commits are fine; say "WIP" in the
+     message.
+   - **Keep a handoff note current** as you go, in `docs/handoff-<topic>.md`: what's done, what's half done (files and
+     functions), what's left in order, values chosen, known bugs, how to test. Commit it with the work and point to
+     it from state.md's In progress. Delete it when the work merges.
+   - **When resumed after a cutoff,** read your handoff note and `git log` first, then carry on.
+   - **The coordinator** merges finished pieces promptly rather than holding them, and backs up agent branches when
+     Keith allows it.
 
 ## Stack
 
