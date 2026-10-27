@@ -93,6 +93,8 @@ export class Foot {
   splay = 0;
   /** Stance progress 0..1 (0 while swinging). */
   stanceT = 0;
+  /** Running, the gait phase at which this foot left early at full stretch (-1: it leaves at the planted share). */
+  earlyP = -1;
   planted = new Vector3(); plantedUp = new Vector3(0, 1, 0); plantedYaw = 0;
   lift = new Vector3(); liftYaw = 0; liftPitch = 0; liftUp = new Vector3(0, 1, 0);
   target = new Vector3(); targetUp = new Vector3(0, 1, 0); targetYaw = 0;
@@ -536,9 +538,15 @@ export class WalkerSim {
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
+    // Running, a trailing leg at full stretch leaves the ground there (the toes' last push) instead of staying planted
+    // with the leg pulled past its length (Keith 2026-10-27: his 4 m stance at the sprint's speeds stretched the cannon
+    // up to half a metre at every push-off); it lands at the same beat as it would have.
+    const fullLeg = v.femur + v.shin + v.cannon - 0.03 - 2 * this.speed * dt;
     for (const f of this.feet) {
       const p = (this.phase + f.offset) % 1;
-      const swing = p >= d;
+      if (f.earlyP >= 0 && (p < f.earlyP || p >= d)) f.earlyP = -1;
+      if (!f.swinging && !f.hang && rk > 0.5 && f.stanceT > 0.5 && p < d && f.pose.hip.distanceTo(f.pose.ankle) > fullLeg) f.earlyP = p;
+      const swing = p >= d || f.earlyP >= 0;
       if (f.hang) {
         // Hanging at full reach over ground that fell away: it plants once the ground comes within reach.
         f.u = 1; f.stanceT = 0;
@@ -550,7 +558,8 @@ export class WalkerSim {
         if (f.short) { f.hang = true; f.u = 1; } else this.land(f);
       }
       if (f.swinging && !f.hang) {
-        f.u = Math.max(f.u, clamp((p - d) / (1 - d), 0, 1));
+        const s0 = f.earlyP >= 0 ? f.earlyP : d;
+        f.u = Math.max(f.u, clamp((p - s0) / (1 - s0), 0, 1));
         f.stanceT = 0;
         if (f.u < RE_AIM_UNTIL) this.aim(f);
       } else if (!f.swinging) {

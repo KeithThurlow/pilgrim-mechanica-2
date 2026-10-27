@@ -23,11 +23,17 @@ Only two things differ for the walk (hips, body pitch and roll, swing heights al
   (the hips dropped only 0.063 before).
 - walker-check knee limit: `kneeMaxWalk + 0.5` (was 172; reason in the check).
 
+- Sprint reach misses (5.0% / 5.2%) and no flight at 10 m/s: one real fault. Keith's `boundStanceLen` 4 carries a planted
+  foot further back than the leg reaches (the cannon was stretched 0.25 m median, up to 1 m, at every push-off; flat too).
+  Fix (`update()`, `Foot.earlyP`): running, a planted leg at full stretch leaves there and lands on the same beat. Misses
+  0.44% / 2.16%, flights at 10 m/s 19% / 27%; at top speed flights grow 24% -> 49% (longest 0.17 s, limit 0.22).
+- slope-check passes with these. deaths-check fails about 1 run in 4 on Math.random spins (robot ragdoll part under the
+  sand); not walker code, same files as main; left alone.
+
 ## Left, in order
 
-1. npm test fully green on Keith's 5088dda values: sprint reach misses 5.0% / 5.2%, no flight at 10 m/s, slope-check.
-2. Sprint-feel polish: push-off sand, per-footfall shake, thump (judge in strips).
-3. Rendered strips of walk / Shift run / sprint; state.md, decisions.md.
+1. Sprint-feel polish: push-off sand, per-footfall shake, thump (judge in strips).
+2. Rendered strips of walk / Shift run / sprint; state.md, decisions.md.
 
 ## How to test
 
