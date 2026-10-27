@@ -219,6 +219,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Stress worst case: the allied Ramparts drawn and firing as players (Claude, Keith's report)
+- Keith (worst-case run): the other Ramparts killed things but weren't on screen, and only his effects showed. Their bodies were never added to the scene, and they were built as non-player mechs (plain rays, no sheet, splash or brass, hits at 0.7 and thinned by the budget as not "yours"). Now in the scene and `MechUnit(..., player: true)`: they fire as co-op players and their effects count as "yours" (the pessimistic case). Keith's first worst-case numbers (25/50/100/150%: 11.7 / 17.7 / 28.8 / 45.7 ms; craters 4.2 avg / 27 spikes at 100%, 14.6 / 38 at 150%) undercount: rerun. `labs/stress/worst.ts`.
+- Checked: typecheck and build.
+
 ### 2026-10-27 · Report button above every lab's own boxes (Claude, Keith's report)
 - Keith couldn't press Report in the stress lab: its results box (bottom left, z-index 5) covered the button and box (also 5). They're at 8 now, in every lab. `src/core/lab.css`.
 - Checked: build.
