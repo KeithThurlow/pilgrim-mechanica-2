@@ -27,8 +27,13 @@ desert look direction. What came from where: `docs/decisions.md`.
    draws it), so systems can be tested headless and their looks swapped freely.
 6. **Headless checks for anything with rules**: `npm test` runs `tools/*-check.ts`. Add a check when a system has
    things that must never happen (feet through the ground, legs out of reach, terrain cliffs).
-7. **Look at your work.** After visual changes, `npm run build && npm run shots` and look at the PNGs in `shots/`
-   before calling it done. Labs take URL flags for repeatable shots (below).
+7. **Check your work cheaply** (Keith 2026-10-27: usage was being eaten by rendered strips nobody looked at).
+   - **Numbers first:** joint angles at key phases, swing height, hip bob, cadence, hit counts, costs. These come from
+     the headless checks or a small node probe.
+   - **Stick figures** only when you need to see a shape.
+   - **Rendered screenshots** only for purely visual changes (models, dust, lighting, layout), one or two at most, from
+     the game camera. **No rendered filmstrips or side-by-side strips.**
+   - **For Keith:** end with the lab URL and flags to try it himself, not images.
 8. **Log decisions** in `docs/decisions.md` (dated, who raised it, who decided). Mark only Keith's calls as his.
 9. **Propose before big builds.** For a new system, outline files, data and key values first and wait for Keith.
 10. **Every change updates `state.md` in the same commit** (Keith 2026-10-24): the system's entry if it changed, a
@@ -58,6 +63,15 @@ desert look direction. What came from where: `docs/decisions.md`.
    - **When resumed after a cutoff,** read your handoff note and `git log` first, then carry on.
    - **The coordinator** merges finished pieces promptly rather than holding them, and backs up agent branches when
      Keith allows it.
+14. **Spend usage carefully** (Keith 2026-10-27).
+   - **Run checks with intent:** the checks that touch what you changed while working, and the full `npm test` once
+     before handing back.
+   - **Keep tool output short:** read only the lines you need; don't page through big logs or whole files you won't
+     edit.
+   - **Don't wait on slow jobs:** no long renders or sleep loops.
+   - **Short reports:** what changed, values, check results, the URL to try, rough edges. No narration.
+   - **The coordinator:** starts a fresh agent from a handoff note rather than resuming one with a huge context, keeps
+     briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight.
 
 ## Stack
 
