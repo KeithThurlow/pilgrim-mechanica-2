@@ -70,6 +70,9 @@ desert look direction. What came from where: `docs/decisions.md`.
      edit.
    - **Don't wait on slow jobs:** no long renders or sleep loops.
    - **Short reports:** what changed, values, check results, the URL to try, rough edges. No narration.
+   - **Builds over self-review:** Keith's review in game is what counts. Finish, merge and hand over a build he can
+     play, rather than spending usage judging feel or looks yourself. When Keith is away, prefer work that doesn't
+     need his eyes: performance, checks, fixes with clear numbers, refactors, proposals.
    - **The coordinator:** starts a fresh agent from a handoff note rather than resuming one with a huge context, keeps
      briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight.
 

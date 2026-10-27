@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-27 | Builds over self-review: get a build done for Keith to review in game; while he's away, work on what doesn't need his review | Keith | Keith | CLAUDE.md rule 14. |
 | 2026-10-27 | Save usage: no rendered filmstrips or side-by-side strips; agents check with numbers and stick figures, give Keith a lab URL to try; checks run with intent; short outputs and reports; fresh agents from handoffs instead of resuming huge contexts | Keith | Keith | CLAUDE.md rules 7 and 14. |
 | 2026-10-27 | Locomotion from comparing main and the branch: main's sprint shape is better; keep the branch's step impulse, thump and sand sink (about 0.35); the knee follow-through must be slower and believable in the sprint, walk and run; in the walk and run the cannon, ankle and toes must propel as in the sprint, not act as one rigid foot; fewer sprint sliders, each with a visible effect and a wide enough range | Keith | Keith | Walk-fix agent (`wip/walk-fix`). |
 | 2026-10-27 | No fuel, and no munitions as a resource, for now (minigun reloads stay; every weapon has upsides and penalties in combat) | Keith | Keith | Replaces the expedition's fuel and its out-of-fuel recovery. |
