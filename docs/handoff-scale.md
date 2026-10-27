@@ -72,6 +72,12 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
 - Known: events name targets by index in `bf.targets` + part key (host-local), not register id; mechUnit's spread still
   uses Math.random before the command.
 
+## Merges
+
+- 2026-10-27: main merged in (locomotion, narrower plough, sprint feel 1-3). Conflicts only in topic lists, the walker
+  lab's player setup, package.json's test list, decisions and state. Dust emit API untouched (slide dust goes through
+  `stomp`). All checks pass after it.
+
 ## Measuring
 
 Scratch scripts (session scratchpad `scale/`): `build.mjs` (esbuild bundle of the labs into `scale/site`),
