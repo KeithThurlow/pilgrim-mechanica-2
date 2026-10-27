@@ -23,7 +23,7 @@ function rates(texel: number, heal: boolean): RelaxRates[] {
   return [relaxRates(f("Sand"), texel), relaxRates(f("Dirt"), texel), relaxRates(f("Gravel"), texel), relaxRates(f("Snow"), texel), SET_RATES];
 }
 const brush = (x: number, z: number, r: number, yaw: number, elong: number, dep: number, share = 1, mode = 0): Brush => ({
-  x, z, r, elong, sy: Math.sin(yaw), cy: Math.cos(yaw), dep, berm: dep * share * bermRatio(elong), comp: 0.6, surf: SURFACE_IDS.sand, seed: 0, mode,
+  x, z, r, elong, sy: Math.sin(yaw), cy: Math.cos(yaw), dep, berm: dep * share * bermRatio(elong), comp: 0.6, surf: SURFACE_IDS.sand, open: 0, mode,
 });
 const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; };
 

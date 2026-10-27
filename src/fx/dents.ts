@@ -15,7 +15,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "../world/terrain";
 import {
   SURFACE_IDS, SURFACE_COUNT, SET_RATES, relaxRates, bermRatio, packBrush, BRUSH_ROWS, MAX_DIF, BERM_DECAY, COMP_DECAY,
-  CORE_IN, CORE_OUT, RING_AT, RING_K, REACH, type Brush, type DentSurface, type SurfaceFeel, type RelaxRates,
+  CORE_IN, CORE_OUT, RING_AT, RING_K, REACH, OPEN_SHALLOW, OPEN_HEAP, type Brush, type DentSurface, type SurfaceFeel, type RelaxRates,
 } from "./dentRule";
 
 export const DENT_DEFAULTS = {
@@ -31,6 +31,8 @@ export const DENT_DEFAULTS = {
   dentFurrow: 0.12,
   dentRound: 0.05,
   dentRoundEvery: 1,
+  dentRoundOpen: 0.85,
+  dentRoundLength: 1.8,
   dentBlast: 0.14,
   dentComp: 0.6,
   dentDark: 0.22,
@@ -66,6 +68,8 @@ export const DENT_PARAMS: Param[] = [
   { key: "dentRut", label: "Rut depth (m)", min: 0, max: 0.4, step: 0.005, group: G },
   { key: "dentRutWidth", label: "Rut width ×", min: 0.3, max: 3, step: 0.05, group: G },
   { key: "dentFurrow", label: "Dash furrow depth (m)", min: 0, max: 0.5, step: 0.005, group: G },
+  { key: "dentRoundOpen", label: "Round dent: open toward the shooter", min: 0, max: 1, step: 0.05, group: G, tip: "A U or V instead of a crater (Keith 2026-10-27): the side the round came in from is shallower with no rim, the sand heaped on the far end. 0: a round crater" },
+  { key: "dentRoundLength", label: "Round dent: length along the shot", min: 1, max: 4, step: 0.05, group: G, tip: "Length / width of a round's dent, along the line it came in on" },
   { key: "dentRound", label: "Round dent depth (m)", min: 0, max: 0.3, step: 0.005, group: G, tip: "Each round into the sand; they add up into a churned patch under a burst" },
   { key: "dentRoundEvery", label: "Round dent every Nth", min: 1, max: 10, step: 1, group: G },
   { key: "printSize", label: "Footprint size ×", min: 0.3, max: 2, step: 0.01, group: G },
@@ -93,6 +97,8 @@ export interface StampOptions {
   mode?: "press" | "add";
   /** Force a surface (else surfaceAt). */
   surface?: DentSurface;
+  /** 0..1: a U open toward the back (against the yaw), for a round's strike (dentRule Brush.open). */
+  open?: number;
 }
 
 interface Persistent { b: Brush; reach: number; done: boolean; key: string }
@@ -224,10 +230,13 @@ export class DentLayer {
           const wob = float(1).add(this.uRough.mul(0.18).mul(wobN));
           const dd = length(vec2(max(0, abs(along).sub(hl)), across)).div(a.z).div(wob);
           If(dd.lessThan(REACH), () => {
-            const core = float(1).sub(smoothstep(CORE_IN, CORE_OUT, dd));
             const q = dd.sub(RING_AT).mul(RING_K);
             const grain = float(1).add(this.uRough.mul(0.4).mul(grainN));
-            const ring = exp(q.mul(q).negate()).mul(grain);
+            // A round's U (e.z open): shallower and rimless toward where it came from, heaped on the far end.
+            const al = along.div(a.z.mul(max(a.w, 1)));
+            const back = smoothstep(0.05, 0.85, al.negate()).mul(e.z), front = smoothstep(0.1, 0.9, al).mul(e.z);
+            const core = float(1).sub(smoothstep(CORE_IN, CORE_OUT, dd)).mul(float(1).sub(back.mul(OPEN_SHALLOW)));
+            const ring = exp(q.mul(q).negate()).mul(grain).mul(float(1).sub(back)).mul(front.mul(OPEN_HEAP).add(1));
             const add = b.z.mul(core);
             // No rim piled inside a hollow already there (dentRule.splat).
             const open = float(1).sub(min(1, st.x.div(max(1e-4, b.z.mul(0.5)))));
@@ -274,7 +283,7 @@ export class DentLayer {
     const e = Math.max(1, elong);
     this.brushes.push({
       x, z, r: radius, elong: e, sy: Math.sin(yaw), cy: Math.cos(yaw), dep: d, berm: d * (o.berm ?? 1) * f.berm * bermRatio(e),
-      comp: o.comp ?? this.v.dentComp, surf: SURFACE_IDS[surf], seed: (x * 0.37 + z * 0.71) % 100, mode: o.mode === "add" ? 1 : 0,
+      comp: o.comp ?? this.v.dentComp, surf: SURFACE_IDS[surf], open: o.open ?? 0, mode: o.mode === "add" ? 1 : 0,
     });
   }
 
@@ -284,7 +293,7 @@ export class DentLayer {
    */
   persist(key: string, x: number, z: number, radius: number, yaw: number, elong: number, depth: number, berm = 1) {
     const e = Math.max(1, elong);
-    const b: Brush = { x, z, r: radius, elong: e, sy: Math.sin(yaw), cy: Math.cos(yaw), dep: depth, berm: depth * berm * bermRatio(e), comp: 0.4, surf: SURFACE_IDS.set, seed: (x * 0.37 + z * 0.71) % 100, mode: 0 };
+    const b: Brush = { x, z, r: radius, elong: e, sy: Math.sin(yaw), cy: Math.cos(yaw), dep: depth, berm: depth * berm * bermRatio(e), comp: 0.4, surf: SURFACE_IDS.set, open: 0, mode: 0 };
     this.persistent.push({ b, reach: radius * e * REACH, done: false, key });
   }
 

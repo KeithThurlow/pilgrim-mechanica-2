@@ -159,7 +159,7 @@ export class Battlefield {
     this.gunFx.onSandHit = (at, d, k) => {
       // Into water: a spray of drops and rings instead of dust and a crater.
       if (this.inWater(at.x, at.z)) { this.water!.splash(at.x, at.z, 0.35 + k * 0.5, d.x * 0.4, d.z * 0.4, 1.4); return; }
-      this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k);
+      this.dust.hit(at.x, at.y, at.z, d.x, d.z, k); if (k >= this.v.hitDust * 0.6) this.marks.crater(at.x, at.z, k, d.x, d.z);
     };
     this.gunFx.onHit = (at, surface) => this.gunAudio.hit(at, surface);
     this.gunFx.onSteelSmoke = (at, n, puffs, k) => {

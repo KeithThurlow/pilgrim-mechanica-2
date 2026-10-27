@@ -106,17 +106,23 @@ export interface Brush {
   sy: number; cy: number;
   /** Depression at the middle (m) and berm height at the ring (m). */
   dep: number; berm: number;
-  /** Compression added (0..1), surface id, seed, mode (0 press: deepens only to its own depth; 1 add: churns deeper). */
-  comp: number; surf: number; seed: number; mode: number;
+  /** Compression added (0..1), surface id, open, mode (0 press: deepens only to its own depth; 1 add: churns deeper).
+   *  open (0..1): a U open toward where it came from (a round, Keith 2026-10-27): the hollow shallows and the rim fades on
+   *  the back half (against the yaw), the rim heaps up on the far end; 0 is the plain round dent. */
+  comp: number; surf: number; open: number; mode: number;
 }
 
 /** Floats per brush in the brush texture: three rows of four. */
+/** An open brush (a round's U): how much shallower its back end gets, and how much more rim on its far end. */
+export const OPEN_SHALLOW = 0.65, OPEN_HEAP = 0.6;
+const smoothstep01 = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
 export const BRUSH_ROWS = 3;
 export function packBrush(b: Brush, data: Float32Array, i: number, width: number) {
   const s = width * 4, a = i * 4;
   data[a] = b.x; data[a + 1] = b.z; data[a + 2] = b.r; data[a + 3] = b.elong;
   data[s + a] = b.sy; data[s + a + 1] = b.cy; data[s + a + 2] = b.dep; data[s + a + 3] = b.berm;
-  data[2 * s + a] = b.comp; data[2 * s + a + 1] = b.surf; data[2 * s + a + 2] = b.seed; data[2 * s + a + 3] = b.mode;
+  data[2 * s + a] = b.comp; data[2 * s + a + 1] = b.surf; data[2 * s + a + 2] = b.open; data[2 * s + a + 3] = b.mode;
 }
 
 /**
@@ -128,7 +134,14 @@ export function splat(st: Float32Array | number[], o: number, b: Brush, px: numb
   if (Math.abs(px) > reach || Math.abs(pz) > reach) return;
   const d = brushDist(px, pz, b.sy, b.cy, b.r, b.elong) / wob;
   if (d > REACH) return;
-  const core = coreAt(d), ring = ringAt(d) * grain;
+  let core = coreAt(d), ring = ringAt(d) * grain;
+  if (b.open > 0) {
+    // Along the yaw, -1 at the back end to +1 at the far end.
+    const al = (px * b.sy + pz * b.cy) / (b.r * Math.max(1, b.elong));
+    const back = smoothstep01(0.05, 0.85, -al) * b.open, front = smoothstep01(0.1, 0.9, al) * b.open;
+    core *= 1 - OPEN_SHALLOW * back;
+    ring *= (1 - back) * (1 + OPEN_HEAP * front);
+  }
   const add = b.dep * core;
   // The rim doesn't pile up inside a hollow that's already there (else a furrow laid in pieces gets ribs where each
   // piece's round end meets the last one's trough).

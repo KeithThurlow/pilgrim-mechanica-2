@@ -49,14 +49,17 @@ export class GroundMarks {
     this.dents!.stamp((x0 + x1) / 2, (z0 + z1) / 2, r, Math.atan2(dx, dz), 1 + len / (2 * r), this.v.dentFurrow, { berm: 1.2, comp: 0.7 });
   }
 
-  /** A round (k about 1) or a blast (k several) into the sand. */
-  crater(x: number, z: number, k: number) {
+  /** A round (k about 1) or a blast (k several) into the sand. (dx, dz): the round's flight, for a U open toward the
+   *  shooter (Keith 2026-10-27); without it, or for a blast, a round crater. */
+  crater(x: number, z: number, k: number, dx = 0, dz = 0) {
     if (!this.denting) return;
     const v = this.v, d = this.dents!;
     const big = k >= 2;
     if (!big && !d.roundDue()) return;
     const r = v.craterSize * (0.7 + Math.random() * 0.6) * Math.sqrt(Math.max(0.2, k));
-    d.stamp(x, z, r, Math.random() * Math.PI * 2, 1, (big ? v.dentBlast : v.dentRound) * Math.sqrt(Math.max(0.2, k)), { mode: "add", comp: 0.25 });
+    const aimed = !big && dx * dx + dz * dz > 1e-6;
+    const yaw = aimed ? Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.2 : Math.random() * Math.PI * 2;
+    d.stamp(x, z, r, yaw, aimed ? v.dentRoundLength : 1, (big ? v.dentBlast : v.dentRound) * Math.sqrt(Math.max(0.2, k)), { mode: "add", comp: 0.25, open: aimed ? v.dentRoundOpen : 0 });
   }
 
   /**
