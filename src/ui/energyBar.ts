@@ -30,7 +30,7 @@ export class EnergyBar {
     while (this.bars.length < dash.bars.length) {
       const box = document.createElement("div"), fill = document.createElement("div");
       Object.assign(box.style, {
-        width: "14px", height: "48px", background: BACK, border: "1px solid rgba(255, 220, 160, 0.35)",
+        width: "14px", height: "96px", background: BACK, border: "1px solid rgba(255, 220, 160, 0.35)",
         borderRadius: "3px", position: "relative", overflow: "hidden",
       } as Partial<CSSStyleDeclaration>);
       Object.assign(fill.style, { position: "absolute", left: "0", right: "0", bottom: "0" } as Partial<CSSStyleDeclaration>);

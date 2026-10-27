@@ -235,19 +235,20 @@ export const BASES: Base[] = [
     id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.8,
     stats: { shells: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
   },
-  // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later).
+  // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later). Charges are
+  // energy bars (Keith 2026-10-27: 4 by default, recharge 30% faster; every pack scaled the same).
   {
     id: "pack-standin", name: "Stand-in power pack", kind: "pack", tags: ["power"], weight: 1.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
     stats: { dashCharges: s(DASH_DEFAULTS.dashCharges, 0.2), dashRecharge: s(DASH_DEFAULTS.dashRecharge, 0.1) },
   },
   {
     id: "pack-capacitor", name: "Capacitor pack", kind: "pack", tags: ["power"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.8,
-    stats: { dashCharges: s(3, 0.15), dashRecharge: s(4, 0.1) },
+    stats: { dashCharges: s(6, 0.15), dashRecharge: s(3.1, 0.1) },
   },
   // A booster pack (Keith 2026-10-25: a boost item to slide around on): hold Space after a dash to keep thrusting.
   {
     id: "pack-booster", name: "Booster pack", kind: "pack", tags: ["power", "boost"], weight: 2.6, makers: ["Suzaku Dynamics"], look: "rampart-stilt", drop: 0.7,
-    stats: { dashCharges: s(2, 0.15), dashRecharge: s(3.5, 0.1), boostFuel: s(2.5, 0.15) },
+    stats: { dashCharges: s(4, 0.15), dashRecharge: s(2.7, 0.1), boostFuel: s(2.5, 0.15) },
   },
   // Waist mounts, left and right (Keith 2026-10-26: ammo drums, cargo racks, small kit). A drum feeds its own side's
   // gun (a two-hander takes the bigger of the two).

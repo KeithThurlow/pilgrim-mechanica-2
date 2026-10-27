@@ -17,8 +17,8 @@ export const DASH_DEFAULTS = {
   dashDistance: 14,
   dashTime: 1.05,
   dashPushShare: 0.44,
-  dashCharges: 2,
-  dashRecharge: 3,
+  dashCharges: 4,
+  dashRecharge: 2.3,
   dashGap: 0.25,
   dashRegenDelay: 0.8,
   sprintDrain: 0.25,
@@ -41,7 +41,7 @@ export type DashValues = typeof DASH_DEFAULTS;
 // (Keith 2026-10-27, src/mech/dashSteps.ts): off the panel; it still times the damage cut and the crowd shove.
 const G = "Dash";
 export const DASH_PARAMS: Param[] = [
-  { key: "dashCharges", label: "Energy bars (charges)", min: 1, max: 5, step: 1, group: G, tip: "A dash empties a full bar; the sprint drains the rest" },
+  { key: "dashCharges", label: "Energy bars (charges)", min: 1, max: 8, step: 1, group: G, tip: "A dash empties a full bar; the sprint drains the rest" },
   { key: "dashRecharge", label: "Refill per bar (s)", min: 0.2, max: 15, step: 0.1, group: G },
   { key: "dashRegenDelay", label: "Refill waits after use (s)", min: 0, max: 5, step: 0.05, group: G, tip: "Nothing refills while sprinting" },
   { key: "sprintDrain", label: "Sprint drains (bars/s)", min: 0, max: 2, step: 0.01, group: G, tip: "The sprint only comes out of a held dash, so it needs two bars: one for the dash, then this" },

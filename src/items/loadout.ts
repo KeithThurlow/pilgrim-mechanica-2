@@ -45,14 +45,14 @@ export function sideOf(slot: SlotId): MountSide | null {
 
 export const LOADOUT_DEFAULTS = {
   bareAmmo: 300,
-  bareDashCharges: 1,
-  bareDashRecharge: 6,
+  bareDashCharges: 2,
+  bareDashRecharge: 4.6,
   bareRadar: 90,
 };
 export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
   { key: "bareAmmo", label: "Rounds per gun without a drum", min: 0, max: 2000, step: 10, group: "Bare mech", tip: "What a gun's own feed holds when its side's waist mount has no ammo drum" },
-  { key: "bareDashCharges", label: "Dash charges without a pack", min: 1, max: 5, step: 1, group: "Bare mech" },
+  { key: "bareDashCharges", label: "Dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 400, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
 ];
