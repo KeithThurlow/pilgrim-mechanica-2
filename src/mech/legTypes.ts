@@ -34,7 +34,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       toeHinge: 0.14, toeLength: 0.85, toeCurl: 40,
       // A shorter stride than the stand-in's: with its short shin, a long stance trails the foot until the leg runs
       // straight (Keith 2026-10-24: the thigh swung too far back). Walk check: thigh back and knee at push-off.
-      strideBase: 2.3, stridePerSpeed: 0.4, strideMax: 5.2,
+      strideBase: 2.3, stridePerSpeed: 1.5, strideMax: 7.05, // Keith 2026-10-27: longer strides at speed
       // The sprint (Keith 2026-10-26): 14 m/s on the starting legs.
       boundTop: 16, boundBuild: 0.3, boundGrip: 0.7,
     },

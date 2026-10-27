@@ -124,14 +124,14 @@ export const WALKER_DEFAULTS = {
   boundLean: 0,
   boundGrip: 0.7,
   boundYaw: 0.6,
-  boundDriftMax: 68,
+  boundDriftMax: 22,
   boundSkid: 0.5,
   boundAbsorb: 7,
   // Leaning into turns while sprinting (Keith 2026-10-26 21:54: "the shoulders of the mech come over").
   turnRoll: 1,
   turnRollMax: 30,
   turnRollEase: 1,
-  turnLeanShift: 0.25,
+  turnLeanShift: 0.5,
   // The sprint's ground gait (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the
   // same time", left, right, left, right, not paired stomps with a hop). The gallop above stays as the way into and out
   // of the air: a crest jump's or a fall's landing stance, then the run.
@@ -154,9 +154,9 @@ export const WALKER_DEFAULTS = {
   runRollOff: 85,
   runRollStart: 0.12,
   runLookAhead: 0.53,
-  runClear: 3,
+  runClear: 2.8,
   // Climbing at a run (Keith 2026-10-26 21:54): quicker, shorter strides uphill.
-  runClimbSteps: 0.1,
+  runClimbSteps: 0.04,
   runPlantDrop: 0.12,
   runPlantPitch: 3,
   runPushRise: 0.05,

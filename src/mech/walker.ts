@@ -533,8 +533,10 @@ export class WalkerSim {
     // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching. Running,
     // eased (it used to flick the cadence between one and two and a half times as the legs stretched, Keith 21:54).
     const hurry = 1 + 1.5 * smooth(0.9, 1, this.stretch());
-    this.hurry = rk > 0 ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
-    cps *= 1 + (this.hurry - 1) * (rk > 0 ? v.runHurry : 1);
+    // Only while the run is on: blending back to the walk after letting go, a trailing leg steps in full at once (Keith
+    // 2026-10-27: eased, it trailed out of reach and the hips dropped into the splits).
+    this.hurry = this.running ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
+    cps *= 1 + (this.hurry - 1) * (this.running ? v.runHurry : 1);
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
@@ -630,6 +632,21 @@ export class WalkerSim {
     this.skid.set(vx - this.vel.x, 0, vz - this.vel.z);
     this.boundSpeed = 0;
     this.running = false;
+    // The footing too (Keith 2026-10-27: the splits on letting go). The run plants under the hips, the walk a little
+    // ahead and for a whole stance of d × stride; held that long, a foot the run planted trails out of reach and the
+    // hips drop to the ground after it. Put the phase where the rearmost planted foot already is along the walk's stance.
+    let rear: Foot | null = null, rx = Infinity;
+    for (const f of this.feet) {
+      if (f.swinging || f.hang) continue;
+      const x = (f.planted.x - this.pos.x) * fw.x + (f.planted.z - this.pos.z) * fw.z;
+      if (x < rx) { rx = x; rear = f; }
+    }
+    if (rear) {
+      const d = this.dutyNow, L = d * this.stride();
+      const ahead = L * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
+      const st = clamp((ahead - rx) / Math.max(0.1, L), 0, 0.98);
+      this.phase = (((st * d - rear.offset) % 1) + 1) % 1;
+    }
   }
 
   /**

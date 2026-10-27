@@ -10,7 +10,7 @@ import type { Param } from "../core/tweaks";
 export type SinkSurface = "sand" | "gravel" | "dirt" | "concrete" | "snow";
 
 export const SINK_DEFAULTS = {
-  sinkSand: 0.35,
+  sinkSand: 0.175,
   sinkSnow: 0.22,
   sinkDirt: 0.04,
   sinkGravel: 0.025,
