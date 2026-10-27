@@ -110,7 +110,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?dashdir=left|right|diag|fwd|back|backdiag` (the demo dash's way off the legs' heading: side step, burst or cutback; with `?dash` or `?dashat`), `?wall=degrees[,metres]` (a steep-faced block
   30 m ahead of the straight demo), `?turnat=seconds` (with `?walk=straight`, the demo turns hard right then).
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
-  faster up to the legs' top speed; let go and it runs on, skidding off the extra speed.
+  faster up to the legs' top speed; let go and it runs on, skidding off the extra speed. Energy bars at the left edge
+  (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no weapons while sprinting.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
