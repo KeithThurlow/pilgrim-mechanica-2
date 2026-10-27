@@ -50,6 +50,8 @@ const DEFAULTS = { ...V };
 // Review flags: ?model=standin, ?mech=<variant id> (public/models/mechs/<id>.glb), ?flat, ?walk=straight, ?sprint, ?fire (hold the trigger), ?cam=game|close|side|back|feet,
 // ?zoom=metres (game camera distance).
 const straight = params.get("walk") === "straight";
+// ?turnat=seconds: with ?walk=straight, the demo turns hard right then (shots of the sprint leaning into a turn).
+const turnAt = Number(params.get("turnat") ?? 0);
 
 const toon = new ToonLook(V);
 const field = new DuneField(V);
@@ -92,6 +94,7 @@ scene.add(bf.group);
 // Ground marks as dents on a fine patch (Keith 2026-10-25).
 const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
+bf.fx.own = mech.sim.pos; // the effects budget keeps the local player's at full
 mech.piloted = true;
 const { sim, upper } = mech;
 // For headless probes (page.evaluate): the mech and its model.
@@ -103,6 +106,8 @@ const forcedSurface = params.get("surface");
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete") dust.surfaceAt = () => forcedSurface;
 if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "snow") dents.surfaceAt = () => forcedSurface;
 if (forcedSurface === "concrete") dents.surfaceAt = () => null;
+// The feet sink as deep as that surface lets them (src/mech/sink.ts).
+if (forcedSurface === "gravel" || forcedSurface === "dirt" || forcedSurface === "concrete" || forcedSurface === "snow") bf.sinkSurface = () => forcedSurface;
 let clock = 0;
 
 // Cameras: the iso game camera, plus orbiting review views.
@@ -177,11 +182,11 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
-    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Sound"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Effects", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -252,6 +257,8 @@ drop();
 // A landing shakes the camera by how hard it hit.
 let shake = 0;
 mech.onLanding = (l) => { shake = Math.max(shake, V.landShake * Math.min(1.6, l.impact / 7.7)); };
+// Each sprinting footfall: a small shake (sprintShake).
+mech.onSprintStep = (k) => { shake = Math.max(shake, V.sprintShake * Math.min(1.5, k)); };
 follow.copy(sim.pelvis);
 // The hub's biome picker wins over a saved slider.
 if (params.has("biome")) { V.biomeOnly = ({ mix: -1, desert: 0, rocky: 1, shallows: 2 } as Record<string, number>)[params.get("biome")!] ?? 0; field.update(); }
@@ -282,7 +289,7 @@ function tick(rawDt: number) {
   if (stick.lengthSq() > 0 || keys.has("KeyF")) auto = false;
   let cmd: MoveCommand;
   if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
-  else if (auto) cmd = straight ? { x: Math.sin(0.3), z: Math.cos(0.3), sprint: params.has("sprint") } : wander(clock);
+  else if (auto) cmd = straight ? { x: Math.sin(turnAt && clock >= turnAt ? 0.3 - 1.6 : 0.3), z: Math.cos(turnAt && clock >= turnAt ? 0.3 - 1.6 : 0.3), sprint: params.has("sprint") } : wander(clock);
   else cmd = { x: 0, z: 0, sprint: false };
 
   let aim: Aim | null = null;

@@ -31,6 +31,16 @@ export class GroundMarks {
     }
   }
 
+  /**
+   * A sprinting foot's toes digging in at the push-off (Keith 2026-10-26 21:54): a short deep scoop at the toes, longer
+   * along yaw, its sand thrown up behind; strength around 1.
+   */
+  dig(x: number, z: number, yaw: number, strength: number) {
+    if (!this.denting || strength <= 0) return;
+    const s = this.v.printSize;
+    this.dents!.stamp(x, z, 0.3 * s, yaw, 1.6, this.v.dentPrint * Math.min(2.5, strength), { berm: 1.3, comp: 0.3, mode: "add" });
+  }
+
   /** A wheel or track rut: a trough `width` m wide, `length` m long along yaw. */
   rut(x: number, z: number, yaw: number, width: number, length: number) {
     if (!this.denting) return;

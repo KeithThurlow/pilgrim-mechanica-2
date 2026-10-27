@@ -5,14 +5,21 @@
 // Puffs also receive the sun's shadows (Keith 2026-10-24: dust in shade was as bright as dust in the sun): each
 // pixel looks up the sun's shadow map where it sits on its sprite, four taps for a soft edge. They don't shadow
 // each other.
+// The GPU dust (scale step 5, src/fx/gpuDust.ts) is drawn here too, with the same shader and uniforms (attachGpu): its
+// sprites and shadows read the particle buffers directly, unsorted, with no CPU work a frame.
 import * as THREE from "three/webgpu";
 import {
   instancedBufferAttribute, uv, vec3, float, uniform, mx_fractal_noise_float, mx_noise_float, smoothstep, mix, time,
   linearDepth, viewportLinearDepth, cameraNear, cameraFar, max, clamp, texture, vec2, vec4, abs,
+  Fn, min, select, atan, cameraViewMatrix, positionLocal, varyingProperty,
 } from "three/tsl";
 import { DustSim, DUST_MAX, CLOUD, SPRAY, type DustValues } from "./dust";
 import type { Ground } from "../mech/walker";
 import { sunReach } from "../world/raycast";
+import { puffLook, type GpuDust } from "./gpuDust";
+import { groundAt, type GpuGroundSource } from "./gpuGround";
+
+type Parts = { col: THREE.Node<"vec3">; p: THREE.Node<"vec2">; centre: THREE.Node<"vec3">; size: THREE.Node<"float">; sunVis: THREE.Node<"float"> };
 
 export class DustDraw {
   readonly group = new THREE.Group();
@@ -49,10 +56,18 @@ export class DustDraw {
   private uCamUp = uniform(new THREE.Vector3(0, 1, 0));
   private uTap = uniform(0.002);
   private uBias = uniform(-0.002);
-  private mat: THREE.SpriteNodeMaterial;
   private shadowWired = false;
-  /** Pieces of the puff shader kept to rebuild its colour once the sun's shadow map exists. */
-  private parts!: { col: THREE.Node<"vec3">; p: THREE.Node<"vec2">; seed: THREE.Node<"float">; centre: THREE.Node<"vec3">; size: THREE.Node<"float">; sunVis: THREE.Node<"float"> };
+  /** Each puff material (the CPU's, the GPU's) and the pieces of its shader kept to rebuild its colour once the sun's
+   *  shadow map exists. */
+  private mats: { mat: THREE.SpriteNodeMaterial; parts: Parts }[] = [];
+  /** The sun's direction (world, toward it) for the GPU shadows. */
+  private uSunWorld = uniform(new THREE.Vector3(0, 1, 0));
+  private uShadowSize = uniform(1.1);
+  /** The GPU dust's sprites and shadows (attachGpu), and whether they're the ones in use. */
+  private gpuSprite: THREE.Sprite | null = null;
+  private gpuLow: THREE.Sprite | null = null;
+  private gpuShadows: THREE.InstancedMesh | null = null;
+  gpuOn = false;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private s = new THREE.Vector3();
@@ -76,6 +91,37 @@ export class DustDraw {
     for (const a of [this.posAttr, this.sizeAttr, this.rotAttr, this.dataAttr, this.shadowAlpha, this.sunAttr]) a.setUsage(THREE.DynamicDrawUsage);
 
     const data = instancedBufferAttribute<"vec4">(this.dataAttr); // alpha, seed, kind, surface darkness
+    const centre = instancedBufferAttribute<"vec3">(this.posAttr), size2 = instancedBufferAttribute<"vec2">(this.sizeAttr);
+    const sunVis = instancedBufferAttribute<"float">(this.sunAttr);
+    this.sprite = new THREE.Sprite(this.puffMaterial(data, centre, size2, instancedBufferAttribute<"float">(this.rotAttr), sunVis));
+    this.sprite.count = 0;
+    this.sprite.frustumCulled = false;
+    this.sprite.renderOrder = 2;
+
+    // Shadows: soft dark discs on the sand. Same colour for all, so their order doesn't matter.
+    const sa = instancedBufferAttribute<"float">(this.shadowAlpha);
+    this.shadows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.shadowMaterial(sa), DUST_MAX);
+    this.shadows.count = 0;
+    this.shadows.frustumCulled = false;
+    this.shadows.renderOrder = 1;
+    this.group.add(this.shadows, this.sprite);
+  }
+
+  /** The soft dark disc a puff lays on the sand, `sa` its strength. */
+  private shadowMaterial(sa: THREE.Node<"float">) {
+    const sp = uv().mul(2).sub(1);
+    const sr = sp.length().add(mx_noise_float(vec3(sp.mul(2.2), sa.mul(13))).mul(0.18));
+    const smat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    smat.colorNode = uniform(lin(0x5e4126));
+    smat.opacityNode = float(1).sub(smoothstep(0.15, 1.0, sr)).mul(sa).mul(this.uShadow);
+    return smat;
+  }
+
+  /**
+   * The puff shader (CPU and GPU dust alike): data is (alpha, seed, kind, surface darkness); centre, size (x, y),
+   * rotation and sun visibility (1 lit .. 0 behind a dune) per puff.
+   */
+  private puffMaterial(data: THREE.Node<"vec4">, centre: THREE.Node<"vec3">, size2: THREE.Node<"vec2">, rotation: THREE.Node<"float">, sunVis: THREE.Node<"float">) {
     const p = uv().mul(2).sub(1);
     const r = p.length();
     const seed = data.y;
@@ -98,34 +144,65 @@ export class DustDraw {
     const col = mix(this.uLit, this.uShade, shadeMix).mul(this.uBright).mul(clumpDark).mul(float(1).sub(data.w.mul(0.55)));
 
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false });
-    this.mat = mat;
-    const centre = instancedBufferAttribute<"vec3">(this.posAttr), size2 = instancedBufferAttribute<"vec2">(this.sizeAttr);
-    const size = size2.y;
-    const sunVis = instancedBufferAttribute<"float">(this.sunAttr);
-    this.parts = { col, p, seed, centre, size, sunVis };
+    void seed;
+    this.mats.push({ mat, parts: { col, p, centre, size: size2.y, sunVis } });
     mat.positionNode = centre;
     mat.scaleNode = size2;
-    mat.rotationNode = instancedBufferAttribute<"float">(this.rotAttr);
+    mat.rotationNode = rotation;
     // Behind a dune (the CPU march) the puff takes the shaded colour; the shadow map adds the mech's and the rest.
     mat.colorNode = mix(mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow), col, sunVis);
     mat.opacityNode = shape.mul(grain).mul(thick).mul(soft);
-    this.sprite = new THREE.Sprite(mat);
-    this.sprite.count = 0;
-    this.sprite.frustumCulled = false;
-    this.sprite.renderOrder = 2;
+    return mat;
+  }
 
-    // Shadows: soft dark discs on the sand. Same colour for all, so their order doesn't matter.
-    const sa = instancedBufferAttribute<"float">(this.shadowAlpha);
-    const sp = uv().mul(2).sub(1);
-    const sr = sp.length().add(mx_noise_float(vec3(sp.mul(2.2), sa.mul(13))).mul(0.18));
-    const smat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    smat.colorNode = uniform(lin(0x5e4126));
-    smat.opacityNode = float(1).sub(smoothstep(0.15, 1.0, sr)).mul(sa).mul(this.uShadow);
-    this.shadows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), smat, DUST_MAX);
-    this.shadows.count = 0;
-    this.shadows.frustumCulled = false;
-    this.shadows.renderOrder = 1;
-    this.group.add(this.shadows, this.sprite);
+  /**
+   * Draw the GPU dust (src/fx/gpuDust.ts) too: sprites and shadows straight off its buffers, with this shader and these
+   * uniforms. Shown instead of nothing new from the CPU while gpuOn.
+   */
+  attachGpu(gpu: GpuDust, G: GpuGroundSource) {
+    const N = gpu.pool.N;
+    const pa = gpu.pool.P.toAttribute(), va = gpu.pool.V.toAttribute(), aa = gpu.pool.A.toAttribute(), ba = gpu.pool.B.toAttribute();
+    const look = puffLook(pa.w, va.w, aa.x, aa.y, aa.z, gpu.uGrow);
+    const radius = look.radius, alpha = min(1, look.alpha);
+    const isSpray = aa.z.sub(SPRAY).abs().lessThan(0.5), live = alpha.greaterThan(0.002);
+    // A spray streak lies along its motion on screen, longer the faster it goes.
+    const sv = cameraViewMatrix.mul(vec4(va.xyz, 0));
+    const along = select(isSpray, radius.mul(2).add(vec2(sv.x, sv.y).length().mul(0.05)), radius.mul(2));
+    const size2 = select(live, vec2(along, radius.mul(2)), vec2(0, 0));
+    const rot = select(isSpray, atan(sv.y, sv.x), aa.w.mul(6.283));
+    const data = vec4(alpha, aa.w, aa.z, ba.x);
+    // Unsorted, so in two passes: the low, dense clumps and spray first, the cloud over them (as the sort would have
+    // it nearly always: the cloud rises and spreads above what's on the sand).
+    const isCloud = aa.z.sub(CLOUD).abs().lessThan(0.5);
+    const low = new THREE.Sprite(this.puffMaterial(data, pa.xyz, select(isCloud, vec2(0, 0), size2), rot, float(1)));
+    const sprite = new THREE.Sprite(this.puffMaterial(data, pa.xyz, select(isCloud, size2, vec2(0, 0)), rot, float(1)));
+    for (const s of [low, sprite]) { s.count = N; s.frustumCulled = false; s.visible = false; }
+    low.renderOrder = 2;
+    sprite.renderOrder = 2.5;
+
+    // Its shadow: down the sun's ray to the ground (twice, to land on the dune), a disc draped on the ground there.
+    const vA = varyingProperty("float", "vDustShadowA");
+    const smat = this.shadowMaterial(vA);
+    smat.positionNode = Fn(() => {
+      const sun = this.uSunWorld, sy = max(sun.y, 0.15);
+      const g0 = groundAt(G, pa.x, pa.z, ba.z).x;
+      const h0 = pa.y.sub(g0);
+      const x0 = pa.x.sub(sun.x.div(sy).mul(h0)), z0 = pa.z.sub(sun.z.div(sy).mul(h0));
+      const h = pa.y.sub(groundAt(G, x0, z0, ba.z).x);
+      const x = pa.x.sub(sun.x.div(sy).mul(h)), z = pa.z.sub(sun.z.div(sy).mul(h));
+      const hk = min(1, max(h, 0).div(6));
+      const k = select(aa.z.sub(CLOUD).abs().lessThan(0.5), float(1), select(isSpray, float(0.3), float(0.6)));
+      vA.assign(alpha.mul(k).div(hk.mul(0.5).add(1)));
+      const d = select(live, radius.mul(2).mul(this.uShadowSize).mul(hk.mul(0.4).add(1)), float(0));
+      const cx = x.add(positionLocal.x.mul(d)), cz = z.add(positionLocal.z.mul(d));
+      return vec3(cx, groundAt(G, cx, cz, ba.z).x.add(0.03), cz);
+    })();
+    const shadows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), smat, N);
+    shadows.frustumCulled = false;
+    shadows.renderOrder = 1;
+    shadows.visible = false;
+    this.gpuSprite = sprite; this.gpuLow = low; this.gpuShadows = shadows;
+    this.group.add(shadows, low, sprite);
   }
 
   /** Once the renderer has made the sun's shadow map: shade each puff pixel by it (soft, four taps). */
@@ -133,21 +210,23 @@ export class DustDraw {
     const depthTex = light.shadow.map?.depthTexture;
     if (!depthTex) return;
     this.shadowWired = true;
-    const { col, p, seed, centre, size, sunVis } = this.parts;
-    // Where to look up the shadow: across the puff sideways and up (never down into the sand under it, which
-    // striped the dust with the sand's own shadow), so a puff half in shade is shaded across it.
-    void seed;
-    const world = centre.add(this.uCamRight.mul(p.x.mul(size).mul(0.5))).add(vec3(0, size.mul(0.15).add(p.y.max(0).mul(size).mul(0.4)), 0));
-    const sc = uniform(light.shadow.matrix).mul(vec4(world, 1));
-    const xyz = sc.xyz.div(sc.w);
-    const suv = vec2(xyz.x, xyz.y.oneMinus()), z = xyz.z.add(this.uBias);
-    const t = this.uTap;
-    const tap = (dx: number, dy: number) => texture(depthTex, suv.add(vec2(t.mul(dx), t.mul(dy)))).compare(z);
-    const vis = tap(1, 0.4).add(tap(-1, -0.4)).add(tap(0.4, -1)).add(tap(-0.4, 1)).mul(0.25);
-    // In shade the puff loses its sunlit side: toward the shaded brown, darker.
-    const shaded = mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow);
-    this.mat.colorNode = mix(shaded, col, vis.min(sunVis));
-    this.mat.needsUpdate = true;
+    const shadowMatrix = uniform(light.shadow.matrix);
+    for (const { mat, parts } of this.mats) {
+      const { col, p, centre, size, sunVis } = parts;
+      // Where to look up the shadow: across the puff sideways and up (never down into the sand under it, which
+      // striped the dust with the sand's own shadow), so a puff half in shade is shaded across it.
+      const world = centre.add(this.uCamRight.mul(p.x.mul(size).mul(0.5))).add(vec3(0, size.mul(0.15).add(p.y.max(0).mul(size).mul(0.4)), 0));
+      const sc = shadowMatrix.mul(vec4(world, 1));
+      const xyz = sc.xyz.div(sc.w);
+      const suv = vec2(xyz.x, xyz.y.oneMinus()), z = xyz.z.add(this.uBias);
+      const t = this.uTap;
+      const tap = (dx: number, dy: number) => texture(depthTex, suv.add(vec2(t.mul(dx), t.mul(dy)))).compare(z);
+      const vis = tap(1, 0.4).add(tap(-1, -0.4)).add(tap(0.4, -1)).add(tap(-0.4, 1)).mul(0.25);
+      // In shade the puff loses its sunlit side: toward the shaded brown, darker.
+      const shaded = mix(col, this.uShadowCol.mul(this.uBright), this.uInShadow);
+      mat.colorNode = mix(shaded, col, vis.min(sunVis));
+      mat.needsUpdate = true;
+    }
   }
 
   /** sunDir: unit vector from the ground toward the sun. sun: the light whose shadows the dust receives. */
@@ -166,6 +245,11 @@ export class DustDraw {
     this.uBright.value = v.dustBright; this.uShadeAmt.value = v.dustShade; this.uFray.value = v.edgeFray;
     this.uGrain.value = v.grain; this.uSoft.value = v.softDistance; this.uShadow.value = v.shadowStrength; this.uBillow.value = v.billow;
     this.uSunView.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
+    this.uSunWorld.value.copy(sunDir);
+    this.uShadowSize.value = v.shadowSize;
+    if (this.gpuSprite) {
+      this.gpuSprite.visible = this.gpuLow!.visible = this.gpuShadows!.visible = this.gpuOn;
+    }
 
     // Live puffs in view, sorted far to near. Puffs outside the view (plus a margin for their shadows on the sand) are
     // left out: the convoy's dust far behind the camera used to be sorted, shaded and sun-marched every frame.

@@ -2,8 +2,11 @@
 // Starting values come from the old walker lab's Mechanical walk (build 65, Keith 2026-10-19), scaled to a mech
 // about 5 m to the top of the hull; the names are new and the old lab's 140 sliders are cut to what matters here.
 import type { Param } from "../core/tweaks";
+import { SINK_DEFAULTS, SINK_PARAMS } from "./sink";
 
 export const WALKER_DEFAULTS = {
+  // Feet sink into soft ground (src/mech/sink.ts).
+  ...SINK_DEFAULTS,
   // Move
   // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
   walkSpeed: 6,
@@ -21,12 +24,12 @@ export const WALKER_DEFAULTS = {
   stanceBack: 0.3,
   moveLean: 4,
   liftHeight: 0.4,
-  liftHold: 0.14,
-  liftBox: 0.8,
+  liftHold: 0,
+  liftBox: 0,
   stomp: 1,
   stompShare: 0.35,
-  rollOff: 48,
-  rollStart: 0.6,
+  rollOff: 70,
+  rollStart: 0.4,
   swingCurl: 30,
   footClear: 0.3,
   // Body
@@ -60,8 +63,8 @@ export const WALKER_DEFAULTS = {
   shin: 1.5,
   cannon: 0.95,
   cannonRake: 28,
-  swingTuck: 0,
-  hockExtend: 0,
+  swingTuck: 45,
+  hockExtend: 0.8,
   hockCompress: 3,
   hockMinSlow: 18,
   hockMinFast: 3,
@@ -154,6 +157,9 @@ export const WALKER_DEFAULTS = {
   runClear: 3,
   // Climbing at a run (Keith 2026-10-26 21:54): quicker, shorter strides uphill.
   runClimbSteps: 0.1,
+  runPlantDrop: 0.12,
+  runPlantPitch: 3,
+  runPushRise: 0.05,
   runDescentSteps: 0,
   runHurry: 0.3,
   runReachGive: 0.1,
@@ -192,7 +198,12 @@ export const WALKER_DEFAULTS = {
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
+// Not on the panel (Keith 2026-10-27: too many sprint sliders, most did nothing): the old gallop's (boundGallop,
+// boundStagger, boundReach, boundSplit, boundSwing, boundLeadLift, boundTuck, boundSquat, boundHop; with the run gait
+// they only shape a moment of landing stance) and the run's internal fixes (runHurry, runReachGive, runLookAhead,
+// runDescentSteps). Their values stay above and still take ?set=.
 export const WALKER_PARAMS: Param[] = [
+  ...SINK_PARAMS,
   { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
   { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
   { key: "accel", label: "Speed up (m/s²)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "Low = heavy, takes time to get going" },
@@ -289,16 +300,8 @@ export const WALKER_PARAMS: Param[] = [
 
   { key: "boundTop", label: "Top speed (m/s)", min: 8, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 14, Stilt 18, Siege 12; late legs 22-26" },
   { key: "boundBuild", label: "Speed build (share/s)", min: 0.05, max: 3, step: 0.01, group: "Sprint", tip: "Each second held closes this share of the gap from the run to top speed" },
-  { key: "boundHop", label: "Push-off (m/s up)", min: 0.5, max: 6, step: 0.1, group: "Sprint", tip: "Upward speed of each push-off: 2.4 is about 0.5 s in the air and 0.3 m up on the flat" },
-  { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 4, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },
-  { key: "boundStagger", label: "Feet staggered (share)", min: 0, max: 0.8, step: 0.01, group: "Sprint", tip: "The trailing foot lands and pushes off this share of a stance before the leading one: a gallop. 0 = both together (a hop)" },
-  { key: "boundReach", label: "Feet land ahead (m)", min: -1, max: 2, step: 0.01, group: "Sprint", tip: "Where the feet reach for the ground ahead of the hips, between the two" },
-  { key: "boundSplit", label: "Lead foot ahead (m)", min: 0, max: 3, step: 0.01, group: "Sprint", tip: "The leading foot reaches this much further than the trailing one; the lead swaps each leap" },
-  { key: "boundSwing", label: "Leg swing through (1/s)", min: 1, max: 30, step: 0.5, group: "Sprint", tip: "How quickly a leg comes forward to its landing place in a leap: low keeps the trailing leg out behind longer after the push-off" },
-  { key: "boundLeadLift", label: "Lead foot held higher (m)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "Falling: raise it so the other foot lands first, lower it (0) to land on the reaching foot" },
-  { key: "boundTuck", label: "Leg drawn up swinging (m)", min: 0, max: 2, step: 0.01, group: "Sprint", tip: "A leg swinging forward in the air draws its foot up this much" },
-  { key: "boundCrouch", label: "Run low (m)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hips run this much lower at top speed" },
-  { key: "boundSquat", label: "Give in each stance (m)", min: 0, max: 0.8, step: 0.01, group: "Sprint", tip: "Extra dip at mid-stance on top of soaking up the landing" },
+  { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 6, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },
+  { key: "boundCrouch", label: "Run low (m)", min: 0, max: 2, step: 0.01, group: "Sprint", tip: "The hips run this much lower at top speed" },
   { key: "boundLean", label: "Lean at top speed (°)", min: 0, max: 35, step: 0.5, group: "Sprint" },
   { key: "boundGrip", label: "Grip (× gravity)", min: 0.1, max: 2, step: 0.05, group: "Sprint", tip: "Sideways pull the feet can make: the turn rate is grip × g / speed, so the turning circle grows with speed squared (0.7: 15 m at 10 m/s, 29 at 14, 58 at 20)" },
   { key: "boundYaw", label: "Body turns ahead of the run", min: 0, max: 2, step: 0.05, group: "Sprint", tip: "The body may turn this much faster than the run's line: the gap is the drift" },
@@ -309,7 +312,6 @@ export const WALKER_PARAMS: Param[] = [
   { key: "turnRollMax", label: "Most lean into a turn (°)", min: 0, max: 45, step: 0.5, group: "Sprint" },
   { key: "turnRollEase", label: "Lean into turns: easing (1/s)", min: 0.5, max: 30, step: 0.5, group: "Sprint", tip: "How quickly the lean follows the turn, in and out" },
   { key: "turnLeanShift", label: "Lean into turns: hips over the inside (share)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hips move toward the inside of the turn as if the body leaned over its feet (1: pivoting on the ground), so the outside leg reaches out and the inside leg folds short" },
-  { key: "boundGallop", label: "Gait: 0 run, 1 the old gallop", min: 0, max: 1, step: 1, group: "Sprint", tip: "Run: left, right, left, right with short flights (Keith 2026-10-26 18:28). The gallop's two-footed leaps now only come after a crest jump or a fall: the landing stance, then the run" },
   { key: "runSteps", label: "Run: steps per second at the run", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence as the sprint starts (at the Shift run's speed); stride is speed ÷ cadence" },
   { key: "runStepsTop", label: "Run: steps per second at top speed", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence and stride both rise with speed. The planted share is ground per stance ÷ stride, so the flights grow with speed" },
   { key: "runPlant", label: "Run: feet land ahead of the hips (m)", min: -0.5, max: 2, step: 0.01, group: "Sprint", tip: "Sprinters plant under the hips: a long reach out front brakes" },
@@ -327,12 +329,11 @@ export const WALKER_PARAMS: Param[] = [
   { key: "runHockExtend", label: "Run: hock opens at push-off", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The sprint's version of Hock opens at push-off (Legs): 1 lines the cannon up with the shin" },
   { key: "runRollOff", label: "Run: heel lift at push-off (°)", min: 0, max: 85, step: 1, group: "Sprint", tip: "The toes stay down and push as the heel rolls up" },
   { key: "runRollStart", label: "Run: heel starts lifting at", min: 0.1, max: 0.95, step: 0.01, group: "Sprint" },
-  { key: "runLookAhead", label: "Run: hull looks ahead (s)", min: 0, max: 0.6, step: 0.01, group: "Sprint", tip: "The hips keep the clearance below over the highest ground this far ahead in travel (at least 1.5 m), so the hull doesn't dip into rising ground: the legs take it" },
   { key: "runClear", label: "Run: hips over the ground ahead (m)", min: 1, max: 3.5, step: 0.01, group: "Sprint" },
+  { key: "runPlantDrop", label: "Run: hips drop at each plant (m)", min: 0, max: 0.8, step: 0.005, group: "Sprint", tip: "Each running footfall compresses the body over the first half of the stance: force going into the ground (Keith 2026-10-26 21:54)" },
+  { key: "runPlantPitch", label: "Run: nose dips at each plant (°)", min: 0, max: 25, step: 0.1, group: "Sprint" },
+  { key: "runPushRise", label: "Run: hips rise through the push-off (m)", min: 0, max: 0.5, step: 0.005, group: "Sprint", tip: "The second half of the stance: the leg extends and throws the body on" },
   { key: "runClimbSteps", label: "Run: more steps/s per degree uphill", min: 0, max: 0.3, step: 0.005, group: "Sprint", tip: "Climbing, the steps come quicker and shorter (the speed still falls by Slow uphill): 0.1 is 2 more steps a second up a 20° climb" },
-  { key: "runDescentSteps", label: "Run: fewer steps/s per degree downhill", min: 0, max: 0.2, step: 0.005, group: "Sprint", tip: "0 keeps the cadence downhill; more eases it into longer strides" },
-  { key: "runHurry", label: "Run: hurry when a leg is stretched", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "Share of the walk's hurry (steps quicken when a planted leg nears full stretch) the run keeps, eased. 1 flicked the cadence on climbs" },
-  { key: "runReachGive", label: "Run: hips over the feet's reach (m)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hull's clearance over rising ground never lifts the hips more than this past where the planted feet and the landing spots reach (legs at their longest): climbs keep the legs on the ground" },
   { key: "legReachMax", label: "Longest leg (share of straight)", min: 0.75, max: 1, step: 0.005, group: "Terrain", tip: "Hip to ankle never stretches past this share of the straight leg. Downhill a foot that can't reach the ground hangs there; with nothing under it the mech drops (Keith 2026-10-26: no yanking the legs to the ground)" },
   { key: "swingThighFold", label: "Swinging thigh lifts when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A swinging leg squashed more than usual (stepping uphill) raises its knee through the hip by this much per unit of compression past the threshold below, so the thigh rises toward the hull instead of hanging straight" },
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },

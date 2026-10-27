@@ -27,8 +27,13 @@ desert look direction. What came from where: `docs/decisions.md`.
    draws it), so systems can be tested headless and their looks swapped freely.
 6. **Headless checks for anything with rules**: `npm test` runs `tools/*-check.ts`. Add a check when a system has
    things that must never happen (feet through the ground, legs out of reach, terrain cliffs).
-7. **Look at your work.** After visual changes, `npm run build && npm run shots` and look at the PNGs in `shots/`
-   before calling it done. Labs take URL flags for repeatable shots (below).
+7. **Check your work cheaply** (Keith 2026-10-27: usage was being eaten by rendered strips nobody looked at).
+   - **Numbers first:** joint angles at key phases, swing height, hip bob, cadence, hit counts, costs. These come from
+     the headless checks or a small node probe.
+   - **Stick figures** only when you need to see a shape.
+   - **Rendered screenshots** only for purely visual changes (models, dust, lighting, layout), one or two at most, from
+     the game camera. **No rendered filmstrips or side-by-side strips.**
+   - **For Keith:** end with the lab URL and flags to try it himself, not images.
 8. **Log decisions** in `docs/decisions.md` (dated, who raised it, who decided). Mark only Keith's calls as his.
 9. **Propose before big builds.** For a new system, outline files, data and key values first and wait for Keith.
 10. **Every change updates `state.md` in the same commit** (Keith 2026-10-24): the system's entry if it changed, a
@@ -58,6 +63,23 @@ desert look direction. What came from where: `docs/decisions.md`.
    - **When resumed after a cutoff,** read your handoff note and `git log` first, then carry on.
    - **The coordinator** merges finished pieces promptly rather than holding them, and backs up agent branches when
      Keith allows it.
+14. **Spend usage carefully** (Keith 2026-10-27).
+   - **Run checks with intent:** the checks that touch what you changed while working, and the full `npm test` once
+     before handing back.
+   - **Keep tool output short:** read only the lines you need; don't page through big logs or whole files you won't
+     edit.
+   - **Don't wait on slow jobs:** no long renders or sleep loops.
+   - **Short reports:** what changed, values, check results, the URL to try, rough edges. No narration.
+   - **Builds over self-review:** Keith's review in game is what counts. Finish, merge and hand over a build he can
+     play, rather than spending usage judging feel or looks yourself. When Keith is away, prefer work that doesn't
+     need his eyes: performance, checks, fixes with clear numbers, refactors, proposals.
+   - **The coordinator:**
+     - starts a fresh agent from a handoff note rather than resuming one with a huge context. About 300k tokens is a
+       soft guide, not a rule: agents can't see their own context size, so the coordinator (who sees each agent's
+       usage) decides when to ask for a handoff, by the size and how the work is going;
+     - keeps briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight;
+     - picks the model (Keith 2026-10-27): Opus specs the work and takes anything with a visual intent (looks, feel,
+       animation, models); Sonnet implements code from a clear spec.
 
 ## Stack
 
@@ -86,13 +108,14 @@ desert look direction. What came from where: `docs/decisions.md`.
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
   go, optionally moving), `?bound` (the demo holds Space: it sprints; with `?walk=straight` in a line), `?dashat=seconds`
   (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?wall=degrees[,metres]` (a steep-faced block
-  30 m ahead of the straight demo).
+  30 m ahead of the straight demo), `?turnat=seconds` (with `?walk=straight`, the demo turns hard right then).
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
-  the mech). Walker lab takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (these Protocols on every round of yours). Walker lab
+  takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).

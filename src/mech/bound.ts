@@ -26,6 +26,10 @@ export const BOUND_DEFAULTS = {
   sprintFaceDrift: 0.5,
   sprintHullLean: 8,
   airGunSpread: 3,
+  sprintPushDust: 0.8,
+  sprintToeDig: 1.2,
+  sprintShake: 0.05,
+  sprintThump: 0.35,
   boundDust: 0.5,
 };
 export type BoundValues = typeof BOUND_DEFAULTS;
@@ -41,6 +45,10 @@ export const BOUND_PARAMS: Param[] = [
   { key: "sprintFaceDrift", label: "Weapons off: torso follows the drift (share)", min: 0, max: 1, step: 0.01, group: G, tip: "The torso faces the line of travel (0) or turns that share of the way with the legs into a drift (1: straight ahead of the legs)" },
   { key: "sprintHullLean", label: "Weapons off: hull leans forward (°)", min: 0, max: 25, step: 0.5, group: G, tip: "On top of the body's own lean, at the legs' top speed (from nothing at the walk)" },
   { key: "airGunSpread", label: "Extra spread in the air (°)", min: 0, max: 15, step: 0.1, group: G, tip: "Firing while the mech is off the ground (a leap, a jump)" },
+  { key: "sprintPushDust", label: "Sprint: push-off sand burst ×", min: 0, max: 4, step: 0.05, group: G, tip: "At each push-off, as the toes leave, a burst of sand thrown back from them (on top of the toe kick): the leg throwing the mech forward (Keith 2026-10-26 21:54)" },
+  { key: "sprintToeDig", label: "Sprint: toes dig in at push-off ×", min: 0, max: 3, step: 0.05, group: G, tip: "A short deep scoop at the toes, in the ground dents (× the footprint depth)" },
+  { key: "sprintShake", label: "Sprint: camera shake per footfall (m)", min: 0, max: 0.5, step: 0.005, group: G, tip: "Labs that shake the camera; subtle by default" },
+  { key: "sprintThump", label: "Sprint: footfall thump volume", min: 0, max: 2, step: 0.05, group: G, tip: "A low thud on each sprinting footfall (the landing's sound, quieter; the walk has no footfall sound yet)" },
   { key: "boundDust", label: "Sprint: footfall and toe kick dust ×", min: 0, max: 3, step: 0.05, group: G, tip: "On top of Running dust × (Dust: sources), for each sprint step's footfall and toe kick. Landings off jumps throw their own burst" },
 ];
 

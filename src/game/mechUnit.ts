@@ -126,6 +126,8 @@ export class MechUnit implements Hittable {
   onStomp: ((x: number, z: number, strength: number) => void) | null = null;
   /** After each landing's own dust, prints, sound and damage (labs shake the camera, the convoy lab digs a crater). */
   onLanding: ((l: Landing) => void) | null = null;
+  /** Each sprinting footfall with its strength (labs shake the camera by sprintShake). */
+  onSprintStep: ((k: number) => void) | null = null;
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
@@ -170,6 +172,13 @@ export class MechUnit implements Hittable {
     readonly player: boolean,
   ) {
     this.sim = new WalkerSim(v, bf.field);
+    // Planted feet sit into soft ground by its surface (src/mech/sink.ts).
+    // Only into the terrain itself: standing on something else (a convoy deck, src/convoy/deck.ts) it stays on top.
+    this.sim.sinkAt = (x, z) => {
+      const g = this.sim.ground;
+      if (g !== bf.field && Math.abs(g.height(x, z) - bf.field.height(x, z)) > 0.05) return 0;
+      return bf.sinkDepth(x, z);
+    };
     this.dash = new Dash(v);
     this.bound = new Bound(v);
     this.upper = new UpperSim(v);
@@ -185,6 +194,11 @@ export class MechUnit implements Hittable {
       bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
       // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
+      // Sprinting, each footfall lands with weight: a thump and (in labs that shake) a small shake.
+      if (sim.running && sim.runK > 0.5) {
+        if (v.sprintThump > 0) bf.sfx.play("brap", f.planted, v.sprintThump * Math.min(1.5, k), 0.32 + 0.04 * Math.random(), true);
+        this.onSprintStep?.(k);
+      }
       this.onStomp?.(f.planted.x, f.planted.z, k);
     };
     // A landing (a drop, a crest, a jump): both feet stomp at once, scaled by how hard it hit; hard ones hurt.
@@ -219,6 +233,12 @@ export class MechUnit implements Hittable {
       if (bf.inWater(f.pos.x, f.pos.z)) { bf.water!.splash(f.pos.x, f.pos.z, 0.25 * k, -Math.sin(sim.heading) * 0.5, -Math.cos(sim.heading) * 0.5, 0.6); return; }
       const hd = sim.heading;
       dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1));
+      // Sprinting, the push-off throws the mech on: sand burst back off the toes, and the toes dig in (Keith 21:54).
+      if (sim.running && sim.runK > 0.5) {
+        const t = f.pose.toe;
+        if (v.sprintPushDust > 0) dust.kick(t.x, t.y, t.z, -Math.sin(sim.course), -Math.cos(sim.course), Math.min(2, k) * v.sprintPushDust);
+        bf.marks.dig(t.x, t.z, sim.course, k * v.sprintToeDig);
+      }
       this.stepTimes.push(this.clock);
       while (this.stepTimes.length && this.clock - this.stepTimes[0] > 3) this.stepTimes.shift();
     };
@@ -338,7 +358,7 @@ export class MechUnit implements Hittable {
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare }
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto: own?.proto }
         : { voice: "other", hitScale: 0.7 });
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
