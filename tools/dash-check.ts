@@ -24,8 +24,9 @@ sim.reset(5, 5, 0);
 const dt = 1 / 120;
 let worstFoot = 0, nan = 0, frames = 0;
 const covered: number[] = [];
-// Least ground a dash covers the way it was sent: the steps and the short sprint after them.
-const DASH_MIN = 6;
+// Ground a dash covers the way it was sent, the steps and the short sprint after them (Keith 2026-10-27: "a burst of
+// speed for a distance of like 25-30m"): about dashRun, within this share.
+const DASH_RUN_OFF = 0.25;
 
 function step(cmd: { x: number; z: number; sprint: boolean }) {
   dash.update(dt);
@@ -52,7 +53,7 @@ for (const [dx, dz, walking] of dirs) {
   while (dash.active) step({ x: 0, z: 0, sprint: false });
   const along = ((sim.pos.x - x0) * dx + (sim.pos.z - z0) * dz) / l;
   covered.push(along);
-  if (along < DASH_MIN) problems.push(`a dash covered ${along.toFixed(1)} m the way it was sent (least ${DASH_MIN})`);
+  if (Math.abs(along - v.dashRun) > v.dashRun * DASH_RUN_OFF) problems.push(`a dash covered ${along.toFixed(1)} m the way it was sent (about ${v.dashRun})`);
 }
 // Charges: spend them all, the next is refused, then they come back.
 for (let i = 0; i < 120 * 10; i++) step({ x: 0, z: 0, sprint: false });
@@ -234,6 +235,6 @@ if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);
 if (misses > 0.15) problems.push(`legs out of reach ${(misses * 100).toFixed(1)}% of frames`);
 console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · into walls, hips over standing at most: ${wallRises.join(", ")}`);
-console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (least ${DASH_MIN}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${went}/${dv.dashCharges}`);
+console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (about ${v.dashRun}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${went}/${dv.dashCharges}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("dash check failed"); }
 console.log("dash check passed");

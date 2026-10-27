@@ -30,23 +30,16 @@ export const DASH_DEFAULTS = {
 };
 export type DashValues = typeof DASH_DEFAULTS;
 
+// The shove's shape (distance, time, crouch, lean, glide) no longer moves the mech since the dash became footwork
+// (Keith 2026-10-27, src/mech/dashSteps.ts): off the panel; it still times the damage cut and the crowd shove.
 const G = "Dash";
 export const DASH_PARAMS: Param[] = [
-  { key: "dashDistance", label: "Distance (m)", min: 2, max: 25, step: 0.5, group: G },
-  { key: "dashTime", label: "Time (s)", min: 0.15, max: 1.2, step: 0.01, group: G, tip: "The shove is front-loaded: most of the distance in the first half, then it skids to a stop" },
-  { key: "dashPushShare", label: "Push builds over (share of the time)", min: 0, max: 0.5, step: 0.01, group: G, tip: "The leg's push-off: the shove builds up over this first share before it skids out (0 = full speed at once). The distance stays the same" },
   { key: "dashCharges", label: "Charges", min: 1, max: 5, step: 1, group: G },
   { key: "dashRecharge", label: "Recharge per charge (s)", min: 0.2, max: 15, step: 0.1, group: G },
   { key: "dashGap", label: "Least time between dashes (s)", min: 0, max: 2, step: 0.05, group: G },
-  { key: "dashCrouch", label: "Crouch into it (m)", min: 0, max: 1.2, step: 0.01, group: G },
-  { key: "dashLean", label: "Lean into it (°)", min: 0, max: 25, step: 0.5, group: G },
   { key: "dashShoveRadius", label: "Shoves small things within (m)", min: 0, max: 10, step: 0.1, group: G, tip: "Bandits and small robots in the way are knocked aside; clingers are shaken off" },
   { key: "dashShove", label: "Shove speed (m/s)", min: 0, max: 30, step: 0.5, group: G },
   { key: "dashShoveDamage", label: "Shove damage", min: 0, max: 50, step: 0.5, group: G },
-  { key: "dashSlope", label: "Slope pull on a slide (× gravity)", min: 0, max: 2, step: 0.05, group: G, tip: "Downhill a dash or its glide speeds up, uphill it dies: the share of gravity along the slope" },
-  { key: "dashCarry", label: "Speed carried into the slide (m/s)", min: 0, max: 12, step: 0.1, group: G, tip: "What's left of the shove when it ends: the mech glides on from there, further downhill, hardly at all uphill" },
-  { key: "slideMax", label: "Top slide speed (m/s)", min: 4, max: 40, step: 0.5, group: G, tip: "A slide down a steep face can't build past this" },
-  { key: "slideFriction", label: "Slide friction (m/s²)", min: 0.5, max: 30, step: 0.5, group: G, tip: "How fast the glide stops on the flat once the shove is over" },
   { key: "boostFuel", label: "Booster tank (s)", min: 0, max: 10, step: 0.1, group: G, tip: "0 without a booster pack. With one, the sprint burns it for more top speed and a glide off jumps (Sprint kit)" },
   { key: "boostRegen", label: "Booster refill per second", min: 0, max: 3, step: 0.05, group: G, tip: "While not sprinting" },
   { key: "dashDamageCut", label: "Damage taken while dashing ×", min: 0, max: 1, step: 0.05, group: G },

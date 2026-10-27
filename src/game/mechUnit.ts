@@ -256,7 +256,8 @@ export class MechUnit implements Hittable {
   private slideAcc = [0, 0];
 
   tryDash(x: number, z: number): boolean {
-    if (!this.alive || !this.dash.start(x, z)) return false;
+    if (!this.alive || !this.sim.canDash || !this.dash.start(x, z)) return false;
+    this.sim.dash(this.dash.dirX, this.dash.dirZ);
     // The hydraulics bang: a burst of sand off both feet.
     for (const f of this.sim.feet) this.bf.dust.stomp(f.pos.x, f.pos.y, f.pos.z, 1.3, -this.dash.dirX * 4, -this.dash.dirZ * 4);
     this.bf.sfx.play("brap", this.sim.pelvis, 0.9, 0.35, false);
@@ -300,8 +301,9 @@ export class MechUnit implements Hittable {
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
       dash.update(dt / sub, grade);
-      // The shove gives the dash's way; the walker's steps (src/mech/dashSteps.ts) move the body, crouch and lean it.
-      sim.push.set(dash.vx, 0, dash.vz);
+      // The walker's steps (src/mech/dashSteps.ts) move the body, crouch and lean it; the shove (dash.ts) only times the
+      // damage cut and the crowd shove now.
+      sim.push.set(0, 0, 0);
       sim.crouch = this.kneel;
       sim.leanPitch = this.kneelPitch;
       sim.leanRoll = 0;
