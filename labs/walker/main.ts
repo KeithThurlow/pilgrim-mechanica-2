@@ -92,6 +92,7 @@ scene.add(bf.group);
 // Ground marks as dents on a fine patch (Keith 2026-10-25).
 const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
+bf.fx.own = mech.sim.pos; // the effects budget keeps the local player's at full
 mech.piloted = true;
 const { sim, upper } = mech;
 // For headless probes (page.evaluate): the mech and its model.
@@ -181,7 +182,7 @@ const panel = tweakPanel({
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
-    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Sound"] },
+    { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Effects", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },

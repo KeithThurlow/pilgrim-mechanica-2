@@ -1,17 +1,17 @@
 // The stress lab's worst case (Keith 2026-10-26: 4-player co-op, each weapon with 3-6x today's effects, Protocols that
 // split, multiply, speed up, widen, ricochet and chain; "the performance thresholds scale significantly from here").
 // For measuring only, not a design: three more Ramparts on the player's team, AI-driven (slow loops round the player,
-// both miniguns on the nearest enemy, always firing), and every team-1 round passed through max-Protocol stand-ins:
-//   split x3 (two more rounds fanned out), fire rate x2 (each round again), area x1.5 (splash on every round, blasts
-//   wider), ricochet (one bounce off what it hit), chain (three hops to the nearest enemies from what it hit).
-// The stand-ins wrap this lab's own Battlefield.fire; nothing outside the lab changes. Effects are multiplied by
-// scaling the effect-count sliders (dust sources, sparks, grit, smoke) by stressFx.
+// both miniguns on the nearest enemy, always firing), and every team-1 round carrying the max Protocols as fields on
+// the shot (src/game/shots.ts, scale step 3; was stand-ins calling fire again): split x3 (fanned), fire rate x2 (a copy
+// half a gun interval later), area x1.5 (splash on every round, blasts wider), ricochet (one bounce off what it hit),
+// chain (three hops to the nearest enemies from what it hit). Effects are multiplied by scaling the effect-count
+// sliders (dust sources, sparks, grit, smoke) by stressFx.
 // URL: ?worst (on from the start), plus the usual ?run, ?norender, ?dt=0.033.
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import type { CombatLab } from "../../src/game/combatLab";
 import { EntryList, type EntryView } from "../../src/game/register";
-import type { Battlefield, FireOptions, Hittable } from "../../src/game/battlefield";
+import type { Battlefield, FireOptions } from "../../src/game/battlefield";
 import { MechUnit } from "../../src/game/mechUnit";
 
 export const WORST_DEFAULTS = {
@@ -48,22 +48,23 @@ export class WorstCase {
   private acc = { shots: 0, allyShots: 0, rounds: 0, ricochets: 0, chains: 0 };
   /** The last frame's counts (set by take()). */
   count = { shots: 0, allyShots: 0, rounds: 0, ricochets: 0, chains: 0 };
-  /** Once a frame, after the whole tick: this frame's counts. */
-  take() { this.count = this.acc; this.acc = { shots: 0, allyShots: 0, rounds: 0, ricochets: 0, chains: 0 }; return this.count; }
+  /** Once a frame, after the whole tick: this frame's counts (rounds, ricochets and chain hops from the shot system:
+   *  every team's, as resolved this frame). */
+  take() {
+    const st = this.lab.bf.shots.last;
+    this.acc.rounds = st.rounds; this.acc.ricochets = st.ricochets; this.acc.chains = st.chains;
+    this.count = this.acc; this.acc = { shots: 0, allyShots: 0, rounds: 0, ricochets: 0, chains: 0 }; return this.count;
+  }
   private base: Record<string, number> = {};
   private fxOn = 1;
   private orig: Battlefield["fire"];
   private enemyList: EntryList | null = null;
   private frame = 0;
-  private hitAt: THREE.Vector3;
-  private o = new THREE.Vector3(); private d = new THREE.Vector3(); private t = new THREE.Vector3();
-  private slot = 2;
+  private t = new THREE.Vector3();
 
   constructor(private lab: Lab) {
     const bf = lab.bf;
     this.orig = bf.fire.bind(bf);
-    // The round's end point: Battlefield keeps it in a private vector between calls (read just after each fire).
-    this.hitAt = (bf as unknown as { hit: THREE.Vector3 }).hit;
     for (const k of FX_KEYS) if (k in lab.V) this.base[k] = lab.V[k];
     bf.fire = (slot, team, muzzle, dir, range, damage, o = {}) => this.fire(slot, team, muzzle, dir, range, damage, o);
   }
@@ -118,63 +119,20 @@ export class WorstCase {
     });
   }
 
-  /** Every round: through the Protocol stand-ins for team 1 when on, else straight through. */
-  private fire(slot: number, team: number, muzzle: THREE.Vector3, dir: THREE.Vector3, range: number, damage: number, o: FireOptions): Hittable | null {
+  /**
+   * Every team-1 round, when on: the max Protocols as fields on the shot (src/game/shots.ts resolves them: split,
+   * fire rate, area, ricochet, chain). Was a stand-in that called fire again for each (scale step 3).
+   */
+  private fire(slot: number, team: number, muzzle: THREE.Vector3, dir: THREE.Vector3, range: number, damage: number, o: FireOptions): number {
     if (!this.on || team !== 1) return this.orig(slot, team, muzzle, dir, range, damage, o);
     const V = this.lab.V;
     this.acc.shots++;
     if (slot >= 30) this.acc.allyShots++; // the allies' flash slots
-    const area = V.stressArea, opts: FireOptions = { ...o, splash: (o.splash || 0.6) * area, splashShare: o.splashShare || 0.4 };
-    const split = Math.max(1, Math.round(V.stressSplit)), rate = Math.max(1, Math.round(V.stressRate));
-    let first: Hittable | null = null;
-    for (let r = 0; r < rate; r++) for (let s = 0; s < split; s++) {
-      // Fan the split rounds across the aim (6 degrees apart); a second shot of the rate a little off the first.
-      const yaw = (s - (split - 1) / 2) * 0.105 + (r > 0 ? (Math.random() - 0.5) * 0.05 : 0);
-      const d = this.d.copy(dir).applyAxisAngle(UP, yaw);
-      const struck = this.round(slot, team, muzzle, d, range, damage, r === 0 && s === 0 ? opts : { ...opts, eject: undefined, voice: "none" });
-      if (r === 0 && s === 0) first = struck;
-    }
-    return first;
+    return this.orig(slot, team, muzzle, dir, range, damage, {
+      ...o,
+      splash: o.splash, splashShare: o.splashShare,
+      proto: { split: V.stressSplit, rate: V.stressRate, area: V.stressArea, ricochet: V.stressRicochet, chain: V.stressChain },
+    });
   }
-
-  /** One round, then its ricochets and chain hops from where it ended. */
-  private round(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions): Hittable | null {
-    const V = this.lab.V;
-    this.acc.rounds++;
-    const struck = this.orig(slot, team, muzzle, d, range, damage, o);
-    const o2: FireOptions = { ...o, eject: undefined, voice: "none", flashScale: 0 };
-    // Ricochet: off the ground (or the body) up and on, at half damage.
-    let from = this.o.copy(this.hitAt), dd = this.t.copy(d);
-    for (let k = 0; k < Math.round(V.stressRicochet); k++) {
-      dd.y = Math.abs(dd.y) * 0.6 + 0.05; dd.applyAxisAngle(UP, (Math.random() - 0.5) * 0.8).normalize();
-      from.addScaledVector(dd, 0.3);
-      this.acc.ricochets++;
-      this.orig(this.nextSlot(), team, from, dd, 25, damage * 0.5, o2);
-      from = this.o.copy(this.hitAt);
-    }
-    // Chain: from a struck enemy to the nearest others not yet hit, within 12 m.
-    if (struck && V.stressChain > 0) {
-      let px = this.hitAt.x, py = this.hitAt.y, pz = this.hitAt.z;
-      const used = new Set<unknown>();
-      for (let k = 0; k < Math.round(V.stressChain); k++) {
-        let best: EntryView | null = null, bd = 144;
-        for (const c of this.targets()) {
-          if (used.has(c.key)) continue;
-          const q = (c.x - px) ** 2 + (c.z - pz) ** 2;
-          if (q > 0.5 && q < bd) { bd = q; best = c; }
-        }
-        if (!best) break;
-        used.add(best.key);
-        const fromC = this.o.set(px, py, pz), dc = this.t.set(best.x - px, best.y - py, best.z - pz).normalize();
-        this.acc.chains++;
-        this.orig(this.nextSlot(), team, fromC, dc, Math.sqrt(bd) + 2, damage * 0.6, o2);
-        px = best.x; py = best.y; pz = best.z;
-      }
-    }
-    return struck;
-  }
-
-  private nextSlot() { this.slot = this.slot >= 19 ? 2 : this.slot + 1; return this.slot; }
 }
 
-const UP = new THREE.Vector3(0, 1, 0);

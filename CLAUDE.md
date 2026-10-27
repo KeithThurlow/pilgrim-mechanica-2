@@ -74,8 +74,9 @@ desert look direction. What came from where: `docs/decisions.md`.
      play, rather than spending usage judging feel or looks yourself. When Keith is away, prefer work that doesn't
      need his eyes: performance, checks, fixes with clear numbers, refactors, proposals.
    - **The coordinator:**
-     - starts a fresh agent from a handoff note rather than resuming one with a huge context; about 300k tokens is
-       the soft limit, past which the agent writes its handoff and a new one takes over;
+     - starts a fresh agent from a handoff note rather than resuming one with a huge context. About 300k tokens is a
+       soft guide, not a rule: agents can't see their own context size, so the coordinator (who sees each agent's
+       usage) decides when to ask for a handoff, by the size and how the work is going;
      - keeps briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight;
      - picks the model (Keith 2026-10-27): Opus specs the work and takes anything with a visual intent (looks, feel,
        animation, models); Sonnet implements code from a clear spec.
@@ -113,7 +114,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
-  the mech). Walker lab takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (these Protocols on every round of yours). Walker lab
+  takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
