@@ -219,6 +219,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Keith's minigun dent values as the defaults (Keith)
+- `dentHitDepth` 0.06, `dentHitSize` 0.15, `dentHitOpen` 1, `dentHitLength` 4 (slider max now 6), `dentHitAngle` 1. Every lab with dents (walker, convoy, combat labs; the battlefield fills in the defaults elsewhere). Keith: use this dent for other small-calibre weapons (SMGs) too. `src/fx/dents.ts`.
+- Checked: typecheck and build.
+
 ### 2026-10-27 · Minigun dents on their own: size, depth, entry angle; shells and blasts back as they were (Keith, Claude)
 - Keith: the dent depth slider did nothing, size 0.1 and length 2.0 looked best, the shape should follow the entry angle, and explosives mustn't change. Rounds had gone through `crater()` with k = Hit size × scale past its blast line of 2, so they took the blast depth and size; now the minigun's sand hits call `GroundMarks.roundHit` with their own sliders: `dentHitDepth` 0.2, `dentHitSize` 0.15 (Keith's 0.1 on the old slider, which was × √k ≈ 1.45), `dentHitOpen` 0.85, `dentHitLength` 2, `dentHitAngle` 0.7 (steep rounds shorter, rounder, less open; `MinigunFx.onSandHit` passes how steeply the round came down). `crater()` is exactly as before 5f9fd1b: round, for shells and blasts. The shared sliders say what they're for ("Small shell dent depth", "Shell and blast dent size"); `dentRoundOpen` / `dentRoundLength` are gone. `src/fx/groundMarks.ts`, `dents.ts`, `minigun.ts`, `src/game/battlefield.ts`.
 - Idea for later (Keith): blasts a little directional too.

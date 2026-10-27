@@ -62,7 +62,7 @@ export class GroundMarks {
   /**
    * A minigun round into the sand (Keith 2026-10-27): a U open toward the shooter, along its flight (dx, dz), longer
    * and more open the lower it skims in (down: 0 level .. 1 straight down). k: the hit's strength (Hit size × scale).
-   * Only the minigun's sand hits come here; shells and blasts keep crater().
+   * The minigun's sand hits come here, and other small-calibre weapons (SMGs) should too; shells and blasts keep crater().
    */
   roundHit(x: number, z: number, k: number, dx: number, dz: number, down: number) {
     if (!this.denting || !this.dents!.roundDue()) return;

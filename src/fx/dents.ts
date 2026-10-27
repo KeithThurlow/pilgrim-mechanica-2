@@ -31,12 +31,13 @@ export const DENT_DEFAULTS = {
   dentFurrow: 0.12,
   dentRound: 0.05,
   dentRoundEvery: 1,
-  // Minigun hits (Keith 2026-10-27): their own dent, a U open toward the shooter, apart from the shells' and blasts'.
-  dentHitDepth: 0.2,
+  // Minigun hits (Keith 2026-10-27, his tuned values): their own dent, a U open toward the shooter, apart from the
+  // shells' and blasts'. Meant for every small-calibre weapon (SMGs and the like) as they come.
+  dentHitDepth: 0.06,
   dentHitSize: 0.15,
-  dentHitOpen: 0.85,
-  dentHitLength: 2,
-  dentHitAngle: 0.7,
+  dentHitOpen: 1,
+  dentHitLength: 4,
+  dentHitAngle: 1,
   dentBlast: 0.14,
   dentComp: 0.6,
   dentDark: 0.22,
@@ -75,7 +76,7 @@ export const DENT_PARAMS: Param[] = [
   { key: "dentHitDepth", label: "Minigun dent depth (m)", min: 0, max: 0.6, step: 0.005, group: G, tip: "Each minigun round into the sand (scaled by the hit's strength); they add up into a churned patch under a burst" },
   { key: "dentHitSize", label: "Minigun dent size (m)", min: 0.05, max: 1, step: 0.01, group: G },
   { key: "dentHitOpen", label: "Minigun dent: open toward the shooter", min: 0, max: 1, step: 0.05, group: G, tip: "A U or V instead of a crater (Keith 2026-10-27): the side the round came in from is shallower with no rim, the sand heaped on the far end. 0: a round crater" },
-  { key: "dentHitLength", label: "Minigun dent: length along the shot", min: 1, max: 4, step: 0.05, group: G, tip: "Length / width of a round's dent along the line it came in on, for a round skimming in low" },
+  { key: "dentHitLength", label: "Minigun dent: length along the shot", min: 1, max: 6, step: 0.05, group: G, tip: "Length / width of a round's dent along the line it came in on, for a round skimming in low" },
   { key: "dentHitAngle", label: "Minigun dent: entry angle matters", min: 0, max: 1, step: 0.05, group: G, tip: "A round coming in steep makes a shorter, rounder, more closed dent; skimming in low, the full length and opening. 0: every round the same" },
   { key: "dentRound", label: "Small shell dent depth (m)", min: 0, max: 0.3, step: 0.005, group: G, tip: "Small shells into the sand (an autocannon's miss)" },
   { key: "dentRoundEvery", label: "Minigun and small shell dent every Nth", min: 1, max: 10, step: 1, group: G },

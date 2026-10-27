@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-27 | Minigun dents: Keith's values (depth 0.06, size 0.15, fully open, 4 long, full entry-angle effect) are the defaults everywhere; the same dent for other small-calibre weapons (SMGs) | Keith | Keith | Shells and blasts keep their round crater. |
 | 2026-10-27 | A minigun round's dent is a U open toward the shooter, not a crater | Keith | Keith | Claude's takes (sliders): 0.85 open, 1.8 long; the back half 65% shallower and rimless, the far rim 60% higher. |
 | 2026-10-27 | No fuel, and no munitions as a resource, for now (minigun reloads stay; every weapon has upsides and penalties in combat) | Keith | Keith | Replaces the expedition's fuel and its out-of-fuel recovery. |
 | 2026-10-27 | An energy bar: the sprint becomes cruise mode and drains it; every dash or dodge costs it; it refills when you're not cruising; so cruising into a fight leaves you unable to dodge | Keith | Keith | `docs/proposal-expedition.md`. |
