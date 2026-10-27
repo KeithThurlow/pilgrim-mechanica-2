@@ -261,6 +261,8 @@ export class WalkerSim {
   private dashDipNow = 0;
   /** Let go after a dash: seconds the run carries on along it (dashBurst). */
   burstLeft = 0;
+  /** The dash's boost: the run kicks up to this speed (m/s) at dashBoostAccel, then it's spent (0). */
+  private boostTo = 0;
   /** In the dash's push-off and slide. */
   get dashing() { return this.dashMove !== null; }
   /** Hips turned toward the dash (radians, eased). */
@@ -322,9 +324,9 @@ export class WalkerSim {
 
   /** Body pitch (nose down +) and roll (left side up +), radians: for an upper body riding on the hips. */
   get bodyPitch() { return this.pitch.x; }
-  get bodyRoll() { return this.roll.x + this.turnRoll; }
-  /** The hull's roll: what of the hip roll it doesn't level out, plus all of the lean into a turn. */
-  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll; }
+  get bodyRoll() { return this.roll.x + this.turnRoll + this.dashRoll; }
+  /** The hull's roll: what of the hip roll it doesn't level out, plus all of the lean into a turn or a dash (Keith 2026-10-27: the shoulders lean too). */
+  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll + this.dashRoll; }
 
   reset(x: number, z: number, heading: number) {
     this.airborne = false; this.airVel.set(0, 0, 0); this.squatState = null; this.stagger = 0; this.skid.set(0, 0, 0);
@@ -332,7 +334,7 @@ export class WalkerSim {
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
-    this.pushLatch = false; this.pushQuiet = 0; this.burstLeft = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
+    this.pushLatch = false; this.pushQuiet = 0; this.burstLeft = 0; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -400,7 +402,7 @@ export class WalkerSim {
    * a crane letting go, a jump, a blast. The walker lands by itself.
    */
   launch(vx: number, vy: number, vz: number) {
-    this.dashMove = null; this.burstLeft = 0;
+    this.dashMove = null; this.burstLeft = 0; this.boostTo = 0;
     this.hipOpen = 0;
     for (const f of this.feet) f.kneeYaw = 0;
     if (!this.airborne) {
@@ -701,11 +703,22 @@ export class WalkerSim {
     const prev = this.boundSpeed;
     this.grade += (this.gradeAlong(Math.sin(this.course), Math.cos(this.course), 2) - this.grade) * Math.min(1, dt * 4);
     const top = this.boundTop(this.grade);
-    // A dash's short sprint after letting go rolls its speed off (dashRolloff) toward the walk's; the sprint builds.
-    if (!this.bound && this.burstLeft > 0) {
+    // A dash's boost kicks the run up to its peak; then a short sprint after letting go rolls its speed off (dashRolloff)
+    // toward the walk's, and the sprint builds (or eases down to its top).
+    if (this.boostTo > this.boundSpeed) {
+      this.boundSpeed = Math.min(this.boostTo, this.boundSpeed + v.dashBoostAccel * dt);
+      if (this.burstLeft > 0) this.burstLeft += dt;
+      if (this.boundSpeed >= this.boostTo) this.boostTo = 0;
+    } else if (!this.bound && this.burstLeft > 0) {
       const floor = Math.min(1, Math.hypot(cmd.x, cmd.z)) * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
       this.boundSpeed = Math.max(Math.min(this.boundSpeed, floor), this.boundSpeed - v.dashRolloff * dt);
     } else this.boundSpeed += (top - this.boundSpeed) * Math.min(1, v.boundBuild * dt);
+    // Faster than the legs' top (a dash's boost) up a slope: gravity takes it off (Keith 2026-10-26: no flinging off ramps).
+    if ((this.boundSpeed > top || this.boostTo > 0) && this.grade > 0) {
+      const g = G * Math.sin(Math.atan(this.grade)) * dt;
+      if (this.boundSpeed > top) this.boundSpeed = Math.max(top, this.boundSpeed - g);
+      if (this.boostTo > 0) this.boostTo = this.grade > 0.4 ? 0 : Math.max(0, this.boostTo - g); // no boost up a steep face
+    }
     const grip = (v.boundGrip * G) / Math.max(1, this.boundSpeed);
     const rc = Math.min(v.turnRate * D2R, grip), rh = Math.min(v.turnRate * D2R, grip * (1 + v.boundYaw));
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
@@ -1552,6 +1565,8 @@ export class WalkerSim {
     }
     this.burstLeft = this.bound ? 0 : v.dashBurst;
     this.boundSpeed = clamp(s, Math.min(s, v.walkSpeed), Math.max(v.sprintSpeed, v.dashIntoRun));
+    // The boost: up to the peak from this footfall (the burst's time starts once it's there).
+    this.boostTo = Math.min(v.dashSpeedOut, Math.max(v.sprintSpeed, v.dashIntoRun));
     this.course = wrap(this.heading + clamp(wrap(dm.yaw - this.heading), -v.boundDriftMax * D2R, v.boundDriftMax * D2R));
     this.skid.set(0, 0, 0);
     this.running = true;
@@ -1984,7 +1999,7 @@ export class WalkerSim {
       - v.runBob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * rk;
     const down = smooth(0, 0.35, -this.grade);
     const sprintCrouch = v.boundCrouch * (0.4 + 0.6 * this.speedShare());
-    if (!this.dashMove) { const e = Math.max(0, 1 - dt * 8); this.dashRoll *= e; this.dashPitch *= e; this.dashDipNow *= e; }
+    if (!this.dashMove) { const e = Math.max(0, 1 - dt * 3); this.dashRoll *= e; this.dashPitch *= e; this.dashDipNow *= e; }
     let yT = ref + v.hipHeight - v.downhillCrouch * down - (v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
     if (rk > 0) {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).

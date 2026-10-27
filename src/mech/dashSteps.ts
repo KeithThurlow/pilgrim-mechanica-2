@@ -58,10 +58,12 @@ export function dashTurn(h: number, yaw: number, side: number) {
 
 /**
  * Speed along the dash (m/s): what it carried along it, the load biting a little off it, then building over the push to
- * dashKick by the inside plant and dashSpeedOut by the through-step (never below what it carried).
+ * dashKick by the inside plant and dashStepsTop by the through-step (never below what it carried). The boost to
+ * dashSpeedOut comes on at the through-step, in the run (Keith 2026-10-27: 25-30 m/s; faster than this the feet can't
+ * stay under the body through the steps).
  */
 export function dashAlong(t: number, carried: number, B: DashBeats, v: WalkerValues) {
-  const out = Math.max(carried, v.dashSpeedOut), kick = Math.max(carried, Math.min(out, v.dashKick));
+  const out = Math.max(carried, Math.min(v.dashSpeedOut, v.dashStepsTop)), kick = Math.max(carried, Math.min(out, v.dashKick));
   if (t < B.load) return carried * (1 - 0.25 * smooth(0, B.load, t));
   const c = carried * 0.75;
   if (t < B.step) return c + (kick - c) * smooth(B.load, B.step, t);
@@ -78,7 +80,7 @@ export function dashDip(t: number, B: DashBeats, v: WalkerValues) {
 }
 /** How far into its lean the body is (0..1): in over the load and push, held through the step, out after the through-step. */
 export function dashLeanK(t: number, B: DashBeats) {
-  return smooth(0, B.step, t) * (1 - smooth(B.lift, B.through + 0.15, t));
+  return smooth(0, B.step, t) * (1 - smooth(B.through, B.through + 0.35, t));
 }
 /** How far onto its edge the pushing foot rolls (0..1): over the push, then off it as the heel lifts toward the lift. */
 export function dashEdgeK(t: number, B: DashBeats) {
