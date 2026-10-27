@@ -1,40 +1,28 @@
-# Handoff: walk fix (Keith 2026-10-27: "the walk cycle and run cycle are looking pretty bad on the latest on main")
+# Handoff: walk fix (Keith 2026-10-27: walk and run look bad; then his main-vs-branch notes)
 
-Branch pushed to `wip/walk-fix`; starts from `wip/sprint-feel` (fc9356e, see `docs/handoff-sprint-feel.md`) with main merged.
-Delete this file (and the sprint-feel one) when the work merges.
+Branch `wip/walk-fix` (on top of `wip/sprint-feel`, main merged after the scale build). Delete this file and
+`docs/handoff-sprint-feel.md` when it merges. Done; waiting for Keith to judge the feel in the lab.
 
-## What broke the walk and the Shift run
+## Done
 
-Compared on flat ground (scratchpad `wf/gait.mts`, `wf/stick2.mts`) at 22c4407 (Keith's values), main and this branch.
-Only two things differ for the walk (hips, body pitch and roll, swing heights all identical):
+- **Walk and Shift run use the cannon and toes like the sprint** (`walkerTuning.ts` defaults): `hockExtend` 0.8, `rollOff` 70,
+  `rollStart` 0.4, `swingTuck` 45, `liftHold` 0, `liftBox` 0. Push-off cannon -26° -> +21°, heel 70°; thigh swing speed
+  walk 1830 -> 535°/s, Shift run 2650 -> 950°/s (main vs branch, `wf/table.mts`).
+- Main's swing toe clamp (8aaa2bb) flattened the walking foot: walking it now only bends the toes up to the ground
+  (`moveFoot` -> `toesClear(f, env, sprintK > 0, sprintK)`); the sprint keeps the full clamp.
+- **Sprint back to main's shape**: the whip (19303de) removed. Keith's 4 m stance stretched the trailing cannon up to
+  0.5 m: `toeDrag()` drags a planted toe on at full stretch (run and the landing stance). Reach misses 0.5% / 1.5%.
+- Sink: sand 0.35 m (`sink.ts`); walking, the hips sink with the feet (`body()` `under`).
+- Sliders: see decisions.md 2026-10-27 (15 removed or off the panel, 6 ranges widened).
+- Checks: walker-check flight only where the planted share < 0.48; slope-check hips over planted spots; deaths-check
+  seeded. All `tools/*-check.ts` pass.
 
-1. **`toesClear` in the swing (8aaa2bb)**: eased the foot's toes-down pitch and bent the toes up by 0.1 m clearance. The
-   foot plate went flat and the toes pointed up through the swing (toe curl max 40° -> 12°): a shuffle.
-2. **Knee stop `kneeMaxPlanted` 165° (8aaa2bb)**: the push-off knee 175° -> 165°, hock 118° -> 112°.
+## Not done (sprint-feel polish)
 
-## Fix (done)
+- Push-off sand (`sprintPushDust` 0.8), shake (`sprintShake` 0.05, ~1/10 of a 3 m landing), thump (`sprintThump` 0.35,
+  about half a soft landing) left at the previous agent's values: Keith judges in play.
 
-- Swing toes, walking (`moveFoot` -> `toesClear(f, env, sprintK > 0, sprintK)`): the pitch is left alone; where the
-  curled toes would be in the sand the foot rises `toeLift` (0.3, new slider, Feet) of the way over them and the toes
-  bend up for the rest so the tips just touch. The sprint (`sprintK` 1) keeps the old clamp exactly.
-- Knee stop split: `kneeMaxWalk` (177°, new slider, Legs) for the walk and Shift run, `kneeMaxPlanted` (165°) for the
-  sprint, blended by `sprintK` (`bound ? 1 : runK`).
-- Sink: `body()`'s `under` also sinks (walking only), so on sand the whole walk sits 0.09 m lower with the same leg shape
-  (the hips dropped only 0.063 before).
-- walker-check knee limit: `kneeMaxWalk + 0.5` (was 172; reason in the check).
+## Try
 
-- Sprint reach misses (5.0% / 5.2%) and no flight at 10 m/s: one real fault. Keith's `boundStanceLen` 4 carries a planted
-  foot further back than the leg reaches (the cannon was stretched 0.25 m median, up to 1 m, at every push-off; flat too).
-  Fix (`update()`, `Foot.earlyP`): running, a planted leg at full stretch leaves there and lands on the same beat. Misses
-  0.44% / 2.16%, flights at 10 m/s 19% / 27%; at top speed flights grow 24% -> 49% (longest 0.17 s, limit 0.22).
-- slope-check passes with these. deaths-check fails about 1 run in 4 on Math.random spins (robot ragdoll part under the
-  sand); not walker code, same files as main; left alone.
-
-## Left, in order
-
-1. Sprint-feel polish: push-off sand, per-footfall shake, thump (judge in strips).
-2. Rendered strips of walk / Shift run / sprint; state.md, decisions.md.
-
-## How to test
-
-`npx tsc --noEmit -p . --preserveSymlinks`; `npx tsx tools/walker-check.ts`. Walk numbers: scratchpad `wf/cmp.sh walk shift`.
+Walker lab: `?walk=straight&flat&cam=side` (walk), add `&sprint` (Shift run), `&bound` (sprint);
+`?set=sinkSand:0` (no sink).

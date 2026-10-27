@@ -111,3 +111,16 @@ Late-game **heli drops**: get dropped at a chosen point of interest, then it's u
 2. **Recovery:** instant (the screen fades, you're back aboard), or a short wait for the helicopter, during which you
    can still be killed? I'd start instant.
 3. **Swarms on the convoy radar:** heat blobs without exact numbers, so there's still uncertainty?
+
+## Change (Keith 2026-10-27): energy instead of fuel
+
+- Fuel is dropped, and munitions as a resource too, for now; minigun reloads and per-weapon penalties and upsides in
+  combat stay. Running out of fuel no longer ends an expedition; holding Q to recover stays.
+- **An energy bar:**
+  - The sprint becomes **cruise mode**, for crossing to the area you want to salvage and moving on, and it drains
+    energy.
+  - Every dash or dodge costs energy too.
+  - Energy comes back when you're not cruising.
+  - The trade: cruise all the way into a fight and you arrive unable to dodge. Better to stop short and let it refill.
+  - Mobility matters most for lightly armoured mechs.
+- The home estimate stays (walk and cruise times), without fuel.

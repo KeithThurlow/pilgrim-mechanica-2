@@ -14,7 +14,7 @@
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, STATS, SENSOR_SOCKET, type MountSide, type SensorStyle, type ShoulderWeapon } from "./bases";
-import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
+import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf } from "./protocols";
 import { itemWeight, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
 import type { GunStats } from "../mech/upper";
@@ -305,7 +305,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
 
   const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number, ammo: number): GunStats => {
     const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
-    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce };
+    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, proto: shotProtocolsOf(item.socketed) };
     // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
     // an unrolled base item runs on the weapon sliders (own: null).
     const own = item.seed ? w : null, light = item.size === "L";

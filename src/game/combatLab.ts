@@ -37,6 +37,7 @@ import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type TargetCandidate, type L
 import type { Filter } from "./register";
 import { mechOwner } from "./registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
+import { SHOT_DEFAULTS, SHOT_PARAMS } from "./shots";
 import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
 import type { Costs } from "../core/costs";
@@ -47,10 +48,10 @@ import type { Prey } from "../pilot/quarry";
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -157,6 +158,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   scene.add(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
+  bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
+  // ?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2 puts these Protocols on every round of yours (src/game/shots.ts),
+  // over whatever the fitted guns carry: for seeing them without socketing items.
+  if (params.get("proto")) {
+    const proto = Object.fromEntries(params.get("proto")!.split(",").map((kv) => kv.split(":")).map(([k, x]) => [k, Number(x)]));
+    const fire = bf.fire.bind(bf);
+    bf.fire = (slot, team, muzzle, d, range, damage, fo = {}) => fire(slot, team, muzzle, d, range, damage, fo.voice === "player" ? { ...fo, proto } : fo);
+  }
   // The register: the player's mech first (owner 1), then whatever the lab adds.
   bf.register.add(mechOwner("player", () => [player]));
   const enemies = enemiesOf(player.team);
@@ -201,11 +210,11 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     topics: [
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
-      WEAPON_TOPIC,
+      { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
       { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
-      { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
+      { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
       { id: "light", label: "Light", groups: ["Look", "Cel look"] },
@@ -404,6 +413,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
     if (cst) app.hud.set("costs", cst.end());
+    const fl = bf.fx.last;
+    app.hud.set("fx", bf.fx.on ? `effects budget: ${fl.asked} asked · ${fl.full} yours at full · ${fl.thinned} thinned · ${fl.merged} hits merged · ${fl.spawned} dust puffs · pressure ${fl.pressure.toFixed(2)}` : "effects budget off");
     const sprint = player.bound.on ? ` · sprint ${player.sim.speed.toFixed(1)} m/s` : " · hold Space to sprint";
     app.hud.set("guns", `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
