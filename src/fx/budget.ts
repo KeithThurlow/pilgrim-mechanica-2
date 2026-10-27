@@ -3,6 +3,8 @@
 //
 // 1. The local player's own effects always pass at full: their own rounds' impacts, and anything within fxNear metres
 //    of their mech (its footfalls, hits round it). Co-op: each peer is the local player for its own effects.
+//    Co-op allies' effects come next (Keith 2026-10-27: "prioritise my effects over my coop allies, but seeing their
+//    effects would be cool"): never thinned below fxAllyKeep, gentler under pressure, but trimmed like anyone's.
 // 2. Merge: impacts in the same fxMergeCell cell in the same frame become one bigger effect (MinigunFx gathers them;
 //    the count goes into its size and puff counts: n^fxMergeSize and n^fxMergeCount).
 // 3. Thin: past fxThinFrom metres from the camera focus, a share of requests is kept that falls with distance (to
@@ -23,6 +25,7 @@ export const FX_BUDGET_DEFAULTS = {
   fxThinFrom: 30,
   fxThinTo: 90,
   fxFarKeep: 0.3,
+  fxAllyKeep: 0.7,
   fxDustPerFrame: 400,
   fxGpuDustPerFrame: 1600,
   fxLiveShare: 0.85,
@@ -43,6 +46,7 @@ export const FX_BUDGET_PARAMS: Param[] = [
   { key: "fxNear", label: "Effects: full within (m) of your mech", min: 0, max: 60, step: 1, group: G, tip: "Anything this close to your mech (footfalls, hits round it) is never thinned or trimmed; your own rounds' hits never are, at any range" },
   { key: "fxThinFrom", label: "Effects: thin from (m)", min: 0, max: 200, step: 1, group: G, tip: "From the camera's focus; nearer than this every request is kept" },
   { key: "fxThinTo", label: "Effects: thinnest at (m)", min: 1, max: 300, step: 1, group: G },
+  { key: "fxAllyKeep", label: "Effects: allies' share kept", min: 0, max: 1, step: 0.01, group: G, tip: "Co-op allies' hits: at least this share is shown however far away, and pressure thins them half as hard as others'. Yours always come first" },
   { key: "fxFarKeep", label: "Effects: share kept far away", min: 0, max: 1, step: 0.01, group: G, tip: "Share of effect requests kept at the thinnest distance (with no pressure)" },
   { key: "fxDustPerFrame", label: "Effects: dust puffs per frame", min: 20, max: 8000, step: 10, group: G, tip: "Above this the far effects thin harder and the extras get trimmed (the CPU dust)" },
   { key: "fxGpuDustPerFrame", label: "Effects: dust puffs per frame (GPU dust)", min: 20, max: 4000, step: 10, group: G, tip: "The same while the GPU dust is in use (its pool holds many more; the limit is the overdraw of big soft sprites at the far zoom)" },
@@ -89,10 +93,11 @@ export class FxBudget {
   get on() { return this.v.fxBudget > 0.5; }
 
   /**
-   * One effect request at (x, z): false if it's thinned away. own: the local player's own (always kept). After a
+   * One effect request at (x, z): false if it's thinned away. own: the local player's own (always kept); ally: a
+   * co-op ally's (kept before others'). After a
    * true, part(rank) scales each of its parts.
    */
-  admit(x: number, z: number, own = false): boolean {
+  admit(x: number, z: number, own = false, ally = false): boolean {
     // Inside an effect already admitted (an impact's dust and smoke): its own verdict stands.
     if (this.hold > 0) return true;
     const v = this.v;
@@ -108,8 +113,10 @@ export class FxBudget {
       const u = Math.min(1, (d - v.fxThinFrom) / Math.max(1, v.fxThinTo - v.fxThinFrom));
       keep = 1 + (v.fxFarKeep - 1) * u;
     }
-    // Over budget, everything not local thins in proportion (the far more so).
-    if (this.pressure > 1) keep /= this.pressure;
+    // An ally's: never thinned below fxAllyKeep by distance.
+    if (ally) keep = Math.max(keep, v.fxAllyKeep);
+    // Over budget, everything not local thins in proportion (the far more so); an ally's half as hard.
+    if (this.pressure > 1) keep /= ally ? Math.sqrt(this.pressure) : this.pressure;
     if (keep >= 1) return true;
     this.seq = (this.seq + PHI) % 1;
     if (this.seq < keep) return true;

@@ -146,6 +146,8 @@ export class MechUnit implements Hittable {
   /** Kneeling for the pilot (src/pilot/mount.ts): hips this far down (m) and the nose this far down (radians). */
   kneel = 0;
   kneelPitch = 0;
+  /** A co-op ally's mech (player: true but not the local one): its effects give way to the local player's. */
+  ally = false;
   /** A player sits in it (the lab sets it): standing a while, its legs flex now and then. Enemies stay still. */
   piloted = false;
   /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
@@ -358,7 +360,7 @@ export class MechUnit implements Hittable {
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto: own?.proto }
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto: own?.proto }
         : { voice: "other", hitScale: 0.7 });
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).

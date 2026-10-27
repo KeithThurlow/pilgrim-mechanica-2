@@ -82,6 +82,8 @@ export interface FireOptions {
   flashScale?: number;
   /** The player's guns use the full minigun voice; other guns a quieter gated crack; "none" is silent. */
   voice?: "player" | "other" | "none";
+  /** A co-op ally's round: the player's voice and brass, but its effects give way to the local player's. */
+  ally?: boolean;
   /** Draw the tracer (default) or resolve the round without one (for crowds of small arms). */
   tracer?: boolean;
   /** Size of the impact effects (1 the minigun; small arms about 0.35: few small sparks, little dust, no crater). */
@@ -213,7 +215,7 @@ export class Battlefield {
   fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): number {
     return this.shots.fire(
       { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed },
-      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" });
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally });
   }
 
   /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
@@ -224,7 +226,7 @@ export class Battlefield {
       for (const x of dr.exits) this.gunFx.sparksAt(x, dr.dir, 3, 6);
       // Only a command's first round flashes, throws brass and sounds; split rounds and children ride along quietly.
       this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
-        dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own);
+        dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own, !!L.ally);
       if (!dr.first) continue;
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);

@@ -219,8 +219,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Effects budget: co-op allies' effects shown, after yours (Keith, Claude)
+- Keith: "prioritise my effects over my coop allies, but seeing their effects would be cool". A middle tier in `FxBudget.admit(x, z, own, ally)`: an ally's hits are never thinned below `fxAllyKeep` (0.7, new slider) by distance, pressure thins them by its square root (others by all of it), and their extras still trim under pressure; yours always pass whole. Carried from `MechUnit.ally` (the stress lab's three allies) through `FireOptions.ally`, the shot's look, the tracer, merging and the impact. The allies keep the player's voice, brass, sheet hits and splash. `src/fx/budget.ts`, `src/fx/minigun.ts`, `src/game/shots.ts`, `battlefield.ts`, `mechUnit.ts`, `labs/stress/worst.ts`.
+- Checked: typecheck; build; `fxbudget-check` gains the ally rule (under pressure an ally's far hits kept between others' and yours, smoke still trimmed); `shots-check`, `weapons-check`.
+
 ### 2026-10-27 · Stress worst case: the allied Ramparts drawn and firing as players (Claude, Keith's report)
-- Keith (worst-case run): the other Ramparts killed things but weren't on screen, and only his effects showed. Their bodies were never added to the scene, and they were built as non-player mechs (plain rays, no sheet, splash or brass, hits at 0.7 and thinned by the budget as not "yours"). Now in the scene and `MechUnit(..., player: true)`: they fire as co-op players and their effects count as "yours" (the pessimistic case). Keith's first worst-case numbers (25/50/100/150%: 11.7 / 17.7 / 28.8 / 45.7 ms; craters 4.2 avg / 27 spikes at 100%, 14.6 / 38 at 150%) undercount: rerun. `labs/stress/worst.ts`.
+- Keith (worst-case run): the other Ramparts killed things but weren't on screen, and only his effects showed. Their bodies were never added to the scene, and they were built as non-player mechs (plain rays, no sheet, splash or brass, hits at 0.7 and thinned by the budget as not "yours"). Now in the scene and `MechUnit(..., player: true)`: they fire as co-op players (their effects: the ally tier, next entry). Keith's first worst-case numbers (25/50/100/150%: 11.7 / 17.7 / 28.8 / 45.7 ms; craters 4.2 avg / 27 spikes at 100%, 14.6 / 38 at 150%) undercount: rerun. `labs/stress/worst.ts`.
 - Checked: typecheck and build.
 
 ### 2026-10-27 · Report button above every lab's own boxes (Claude, Keith's report)

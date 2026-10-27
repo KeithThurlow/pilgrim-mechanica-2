@@ -32,6 +32,12 @@ if (farP > v.fxFarKeep / 2) problems.push(`under pressure ${b.pressure.toFixed(2
 if (share(5, 5) !== 1) problems.push("under pressure a request near your mech was thinned");
 let ownKept = 0; for (let i = 0; i < 500; i++) if (b.admit(300, 300, true)) ownKept++;
 if (ownKept !== 500) problems.push(`your own effects far away: ${ownKept}/500 kept`);
+// Co-op allies (Keith 2026-10-27): yours first, then theirs, then everyone else's; their extras still trim.
+let allyKept = 0; for (let i = 0; i < 2000; i++) if (b.admit(300, 300, false, true)) allyKept++;
+const allyP = allyKept / 2000;
+if (!(allyP > farP && allyP < 1)) problems.push(`under pressure an ally's far hits kept ${allyP.toFixed(3)} (want between others' ${farP.toFixed(3)} and yours 1)`);
+b.admit(300, 300, false, true);
+if (b.part(RANK.smoke) >= 1) problems.push("an ally's smoke wasn't trimmed under pressure");
 b.admit(300, 300, true);
 if (b.part(RANK.smoke) !== 1) problems.push("your own effect's smoke was trimmed");
 b.admit(40, 0); // near the focus, not local: trimmed

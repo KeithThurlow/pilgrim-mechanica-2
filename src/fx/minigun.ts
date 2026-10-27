@@ -51,9 +51,9 @@ const TRACERS = 160, FLASHES = 24, SPARKS = 600, GRIT = 600, CASINGS = 240;
  *  first TRACERS only. */
 export const ROUNDS_IN_FLIGHT = 1024;
 
-interface Tracer { mesh: THREE.Mesh | null; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3; scale: number; own: boolean }
+interface Tracer { mesh: THREE.Mesh | null; from: THREE.Vector3; to: THREE.Vector3; dist: number; t: number; live: boolean; surface: HitSurface; normal: THREE.Vector3; scale: number; own: boolean; ally: boolean }
 /** Impacts landing this frame, merged by cell and surface (src/fx/budget.ts). */
-interface Merged { at: THREE.Vector3; dir: THREE.Vector3; normal: THREE.Vector3; surface: HitSurface; scale: number; n: number }
+interface Merged { at: THREE.Vector3; dir: THREE.Vector3; normal: THREE.Vector3; surface: HitSurface; scale: number; n: number; ally: boolean }
 const SURF: Record<HitSurface, number> = { sand: 0, metal: 1, flesh: 2 };
 interface Bit { pos: THREE.Vector3; vel: THREE.Vector3; age: number; life: number; spin: THREE.Vector3; rot: THREE.Euler; rest: boolean; landed: boolean }
 
@@ -117,7 +117,7 @@ export class MinigunFx {
         mesh.frustumCulled = false;
         this.group.add(mesh);
       }
-      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0), scale: 1, own: false });
+      this.tracers.push({ mesh, from: new THREE.Vector3(), to: new THREE.Vector3(), dist: 0, t: 0, live: false, surface: "sand", normal: new THREE.Vector3(0, 1, 0), scale: 1, own: false, ally: false });
     }
     this.grit = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshStandardMaterial({ color: 0x9a7a50, roughness: 1 }), GRIT);
     this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.04, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: 0xffd27a, toneMapped: false }), SPARKS);
@@ -151,7 +151,7 @@ export class MinigunFx {
    * eject: casing port; outboard: unit direction. own: the local player's own round (its hit is never merged,
    * thinned or trimmed). gun -1: no muzzle flash (a split round or a ricochet riding along with another).
    */
-  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1, own = false) {
+  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1, own = false, ally = false) {
     this.round++;
     if (gun >= 0) {
       const f = this.flashes[Math.min(FLASHES - 1, gun)];
@@ -171,9 +171,9 @@ export class MinigunFx {
     this.tracerNext = (ti + 1) % ROUNDS_IN_FLIGHT;
     const t = this.tracers[ti];
     t.from.copy(muzzle); t.to.copy(hit); t.dist = muzzle.distanceTo(hit); t.t = 0; t.live = true;
-    t.surface = surface; t.normal.copy(normal ?? UP); t.scale = hitScale; t.own = own;
+    t.surface = surface; t.normal.copy(normal ?? UP); t.scale = hitScale; t.own = own; t.ally = ally;
     // Far tracers that aren't yours thin with the budget (the round still flies and hits).
-    const shown = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0 && (own || this.budget.admit(hit.x, hit.z));
+    const shown = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0 && (own || this.budget.admit(hit.x, hit.z, false, ally));
     if (this.gpuT) { this.gpuTracers!.set(ti, muzzle, hit, this.clock, shown); if (t.mesh) t.mesh.visible = false; }
     else if (t.mesh) t.mesh.visible = shown;
 
@@ -206,18 +206,18 @@ export class MinigunFx {
    * A round arrives: the local player's own go straight to impact(); the rest gather by cell and surface for this
    * frame (flushMerged) when merging is on.
    */
-  private land(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3, scale: number, own: boolean) {
+  private land(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3, scale: number, own: boolean, ally = false) {
     const b = this.budget, cell = this.v.fxMergeCell;
-    if (own || !b.on || cell <= 0) { this.impact(at, dir, surface, normal, scale, 1, own); return; }
+    if (own || !b.on || cell <= 0) { this.impact(at, dir, surface, normal, scale, 1, own, 1, ally); return; }
     const key = ((Math.floor(at.x / cell) + 32768) * 65536 + (Math.floor(at.z / cell) + 32768)) * 4 + SURF[surface];
     const m = this.merged.get(key);
     if (m) {
-      m.n++; m.scale = Math.max(m.scale, scale); m.dir.add(dir);
+      m.n++; m.scale = Math.max(m.scale, scale); m.dir.add(dir); m.ally ||= ally;
       b.stats.merged++;
       return;
     }
-    const e = this.mergePool.pop() ?? { at: new THREE.Vector3(), dir: new THREE.Vector3(), normal: new THREE.Vector3(), surface, scale, n: 1 };
-    e.at.copy(at); e.dir.copy(dir); e.normal.copy(normal); e.surface = surface; e.scale = scale; e.n = 1;
+    const e = this.mergePool.pop() ?? { at: new THREE.Vector3(), dir: new THREE.Vector3(), normal: new THREE.Vector3(), surface, scale, n: 1, ally };
+    e.at.copy(at); e.dir.copy(dir); e.normal.copy(normal); e.surface = surface; e.scale = scale; e.n = 1; e.ally = ally;
     this.merged.set(key, e);
   }
 
@@ -227,17 +227,17 @@ export class MinigunFx {
     const v = this.v;
     for (const m of this.merged.values()) {
       m.dir.normalize();
-      this.impact(m.at, m.dir, m.surface, m.normal, m.scale * Math.pow(m.n, v.fxMergeSize), Math.pow(m.n, v.fxMergeCount), false, m.n);
+      this.impact(m.at, m.dir, m.surface, m.normal, m.scale * Math.pow(m.n, v.fxMergeSize), Math.pow(m.n, v.fxMergeCount), false, m.n, m.ally);
       this.mergePool.push(m);
     }
     this.merged.clear();
   }
 
   /** n: puff-count multiplier (a merge); hits: how many rounds this stands for (the counters). */
-  private impact(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3, scale = 1, n = 1, own = false, hits = 1) {
+  private impact(at: THREE.Vector3, dir: THREE.Vector3, surface: HitSurface, normal: THREE.Vector3, scale = 1, n = 1, own = false, hits = 1, ally = false) {
     this.hits[surface] += hits;
     const b = this.budget;
-    if (!b.admit(at.x, at.z, own)) return;
+    if (!b.admit(at.x, at.z, own, ally)) return;
     this.onHit?.(at, surface);
     const k = this.v.hitDust * scale;
     if (k <= 0) return;
@@ -333,7 +333,7 @@ export class MinigunFx {
         t.mesh.lookAt(t.mesh.position.clone().add(dir));
         t.mesh.scale.set(1, 1, Math.max(0.01, head - tail));
       }
-      if (t.t >= t.dist) { t.live = false; if (t.mesh) t.mesh.visible = false; this.land(t.to, dir, t.surface, t.normal, t.scale, t.own); }
+      if (t.t >= t.dist) { t.live = false; if (t.mesh) t.mesh.visible = false; this.land(t.to, dir, t.surface, t.normal, t.scale, t.own, t.ally); }
     }
     this.flushMerged();
     this.gpuTracers?.update(this.clock, this.v.tracerSpeed, this.v.tracerLength);

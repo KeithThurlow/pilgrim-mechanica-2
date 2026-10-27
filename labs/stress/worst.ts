@@ -78,9 +78,10 @@ export class WorstCase {
       const b = await this.lab.loadRampart();
       // Each ally stands in for a co-op player (Keith 2026-10-27: they killed things but weren't drawn, and only his own
       // effects showed): in the scene, and firing as a player does (sheet hits, penetration, splash, brass, the full
-      // voice; their hits count as "yours" in the effects budget, so they show at full: the pessimistic case).
+      // voice), its effects marked as an ally's: shown, but after the local player's (FxBudget.admit).
       this.lab.app.scene.add(b.root);
       const m = new MechUnit(bf, V as never, b, toon, 1, 30 + i * 2, true);
+      m.ally = true;
       m.paint = 0x4a78c4; b.paint(toon, 0x4a78c4);
       m.reset(8 * Math.sin(i * 2.1), 8 * Math.cos(i * 2.1), 0);
       this.allies.push(m);

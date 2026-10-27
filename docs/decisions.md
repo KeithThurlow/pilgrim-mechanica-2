@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-27 | Effects priority: yours, then co-op allies', then everyone else's | Keith | Keith | Claude's takes (slider): allies' far hits never below 70% kept, pressure thins them half as hard (square root), their extras still trimmed. |
 | 2026-10-27 | Minigun dents: Keith's values (depth 0.06, size 0.15, fully open, 4 long, full entry-angle effect) are the defaults everywhere; the same dent for other small-calibre weapons (SMGs) | Keith | Keith | Shells and blasts keep their round crater. |
 | 2026-10-27 | A minigun round's dent is a U open toward the shooter, not a crater | Keith | Keith | Claude's takes (sliders): 0.85 open, 1.8 long; the back half 65% shallower and rimless, the far rim 60% higher. |
 | 2026-10-27 | Walk and Shift run use the cannon and toes like the sprint: the hock opens and the heel lifts 70° from 40% of the stance, the cannon folds back 45° in the swing, the foot travels evenly (no hold, no hydraulic ease), so the knee comes forward at about 540°/s (was 1830) | Keith (main vs branch) | Claude | `hockExtend` 0.8, `rollOff` 70, `rollStart` 0.4, `swingTuck` 45, `liftHold` 0, `liftBox` 0. Main's 8aaa2bb toe clamp no longer flattens the walking foot (it only bends the toes). |

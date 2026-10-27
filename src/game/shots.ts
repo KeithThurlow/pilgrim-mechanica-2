@@ -104,6 +104,8 @@ export interface ShotLook {
   tracer?: boolean;
   /** The local player's own (its effects are never merged, thinned or trimmed). */
   own?: boolean;
+  /** A co-op ally's (Keith 2026-10-27): shown before others' but after yours (FxBudget.admit). */
+  ally?: boolean;
 }
 
 /** What happened (plain data, host-made; what the host would send). */
