@@ -29,7 +29,7 @@ export const CARRY_DEFAULTS = {
   craneGrip: 1.7,
   craneGripTol: 1.2,
   craneClear: 1.5,
-  craneDeployReach: 21,
+  craneDeployReach: 13,
   craneFollow: 2,
   craneCarryTurn: 25,
   craneLaunchDwell: 0.4,

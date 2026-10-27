@@ -71,6 +71,14 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
 
   const root = document.createElement("aside");
   root.className = "panel";
+  // Space is the dash and sprint: with focus left on a slider or button it scrolled the panel to the bottom (or
+  // pressed the button) (Keith 2026-10-26). Block only the browser's default; the game still sees the key.
+  const noSpace = (e: KeyboardEvent) => {
+    const t = e.target as HTMLInputElement | null;
+    if (e.code === "Space" && !(t?.tagName === "TEXTAREA" || (t?.tagName === "INPUT" && t.type === "text"))) e.preventDefault();
+  };
+  root.addEventListener("keydown", noSpace);
+  root.addEventListener("keyup", noSpace);
   const head = document.createElement("div");
   head.className = "panel-head";
   const title = document.createElement("strong");
@@ -169,6 +177,7 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
     return t ? o.params.filter((p) => t.groups.includes(p.group)) : [];
   };
 
+  let copyBtn: HTMLButtonElement;
   const tools = document.createElement("div");
   tools.className = "row";
   tools.append(
@@ -178,9 +187,9 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
       save();
       for (const p of ps) o.onChange?.(p.key as keyof V & string);
     }),
-    button("Copy values", async () => {
+    copyBtn = button("Copy values", async () => {
       const text = JSON.stringify(Object.fromEntries(shownParams().map((p) => [p.key, o.values[p.key]])), null, 1);
-      try { await navigator.clipboard.writeText(text); } catch { prompt("Values", text); }
+      if (await copyText(text)) flash(copyBtn, "Copied"); else prompt("Values", text);
     }),
   );
   body.appendChild(tools);
@@ -214,6 +223,34 @@ export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
 
 const isToggle = (p: Param) => p.min === 0 && p.max === 1 && p.step === 1;
 const decimals = (step: number) => (step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step))));
+
+/**
+ * Text onto the clipboard. The clipboard API exists only on secure pages (https, localhost); the lab served on the LAN
+ * (http://192.168...) has none, and the prompt it fell back to elides long text in the middle (Keith 2026-10-26: the
+ * copied values came out cut). So a hidden text box and the old copy command first there.
+ */
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/** Show a word on a button for a moment. */
+function flash(b: HTMLButtonElement, word: string) {
+  const was = b.textContent;
+  b.textContent = word;
+  setTimeout(() => { b.textContent = was; }, 900);
+}
 
 function button(label: string, onClick: () => void) {
   const b = document.createElement("button");

@@ -6,6 +6,7 @@ import * as THREE from "three/webgpu";
 import type { App } from "./app";
 import type { Ground } from "../mech/walker";
 import { screenToGround } from "../world/raycast";
+import { typing } from "./input";
 
 export interface Selectable {
   /** The panel topic this opens. */
@@ -48,7 +49,6 @@ export class Selector {
     this.banner.textContent = "Selecting: click something to tune it";
     this.banner.hidden = true;
     document.body.append(this.tag, this.banner);
-    const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     addEventListener("keydown", (e) => { if (e.code === key && !typing(e) && !this.active) this.setActive(true); });
     addEventListener("keyup", (e) => { if (e.code === key) this.setActive(false); });
     addEventListener("blur", () => this.setActive(false));

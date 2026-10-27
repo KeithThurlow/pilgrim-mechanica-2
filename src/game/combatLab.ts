@@ -8,7 +8,7 @@ import { createApp, type App } from "../core/app";
 import { installReport } from "../core/report";
 import { Selector } from "../core/select";
 import { tweakPanel, type Param } from "../core/tweaks";
-import { Keys } from "../core/input";
+import { Keys, typing } from "../core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks";
@@ -186,7 +186,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // Space: dash the way WASD points (Keith 2026-10-24), on charges; keep holding to carry on into the sprint (Keith 2026-10-26).
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
-    if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.code !== "Space" || e.repeat || typing(e)) return;
     e.preventDefault();
     dashPressed = true;
     spaceDown = true;
@@ -209,7 +209,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
-      { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+      { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
@@ -324,6 +324,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     const fHeld = keys.has("KeyF") || clock < holdF;
     if (stick.lengthSq() > 0 || fHeld) auto = false;
     const driving = foot.driving;
+    player.piloted = driving;
     let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
     let aim: Aim | null = null;
     let trigger: Trigger = false;
@@ -380,7 +381,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
-    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
+    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
 
     const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
     follow.lerp(want, Math.min(1, rawDt * 6));

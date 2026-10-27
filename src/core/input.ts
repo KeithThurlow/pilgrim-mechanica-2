@@ -1,10 +1,19 @@
 // Input helpers: WASD / arrows relative to the camera, and click or tap on the ground (a click that isn't a drag).
 import * as THREE from "three/webgpu";
 
+/** Keys a focused field keeps for itself: everything in a text box; the arrows on a slider (they step its value). Other
+ *  keys on a slider still drive the mech (Keith 2026-10-26: after touching a slider, Space and WASD went nowhere). */
+export function typing(e: KeyboardEvent): boolean {
+  const t = e.target;
+  if (t instanceof HTMLTextAreaElement) return true;
+  if (!(t instanceof HTMLInputElement)) return false;
+  return t.type === "range" ? e.code.startsWith("Arrow") : t.type !== "checkbox" && t.type !== "button";
+}
+
 export class Keys {
   private down = new Set<string>();
   constructor() {
-    addEventListener("keydown", (e) => { if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) this.down.add(e.code); });
+    addEventListener("keydown", (e) => { if (!typing(e)) this.down.add(e.code); });
     addEventListener("keyup", (e) => this.down.delete(e.code));
     addEventListener("blur", () => this.down.clear());
   }

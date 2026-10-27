@@ -194,6 +194,8 @@ export class Arsenal implements MechWeapons {
       const side: 1 | -1 = i === 0 ? 1 : -1;
       const g = u.upper.guns[i];
       const held = alive && triggerOf(trigger, i) && g.enabled;
+      // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired.
+      if (u.gunsOff && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
       // The rail's coils light in turn from the breech as it charges (the box stand-in's rings; the library model's
@@ -240,7 +242,8 @@ export class Arsenal implements MechWeapons {
     });
 
     // Shoulders: hold the key to paint, release to fire.
-    for (const sh of this.shoulders) this.stepShoulder(sh, dt, alive && u.keys[sh.key - 1] && !!u.cursor, laserK);
+    // Sprinting with the weapons off, a painted shot is dropped, not fired (stepShoulder).
+    for (const sh of this.shoulders) this.stepShoulder(sh, dt, alive && !u.gunsOff && u.keys[sh.key - 1] && !!u.cursor, laserK);
 
     // Everything in flight.
     this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept), this.shellSweep);
@@ -290,7 +293,7 @@ export class Arsenal implements MechWeapons {
         p.ring = { x: to.x, z: to.z, r: st.blast }; p.ready = sh.cool <= 0;
         p.beamTo = { x: to.x, y: to.y, z: to.z };
       }
-    } else if (sh.held && u.alive) {
+    } else if (sh.held && u.alive && !u.gunsOff) {
       // Released: fire at what was painted (if ready).
       if (sh.weapon === "linemortar" && sh.strip) {
         if (sh.line.fire(sh.strip, this.lineStats(sh.own), bf.field, sh.line.fired + 1)) { this.onFire?.("linemortar"); sh.fired.strip = { ...sh.strip }; sh.fired.held = 0; }
@@ -591,6 +594,12 @@ export class Arsenal implements MechWeapons {
 
   /** The controls and their state, for the HUD: which button or key fires what, and cooldowns. */
   controls(): string[] {
+    // Sprinting with the weapons off (src/mech/bound.ts): SPRINT, then the controls dimmed.
+    if (this.unit.gunsOff) return [`<b style="color:#ffb347">SPRINT</b> <span style="opacity:.4">weapons off · ${this.controlList().join(" · ")}</span>`];
+    return this.controlList();
+  }
+
+  private controlList(): string[] {
     const out: string[] = [];
     const u = this.unit;
     this.sides.forEach((s, i) => {

@@ -6,6 +6,11 @@ import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import * as THREE from "three";
+import { MechUnit, MECH_DEFAULTS, type MechBody, type MechUnitValues } from "../src/game/mechUnit";
+import { UPPER_DEFAULTS } from "../src/mech/upper";
+import { DUST_DEFAULTS } from "../src/fx/dust";
+import type { Battlefield } from "../src/game/battlefield";
 
 interface Run { name: string; seconds: number; cmd: (t: number) => { x: number; z: number; sprint: boolean } }
 
@@ -31,7 +36,7 @@ for (const r of runs) {
   const field = new DuneField(terrain);
   const sim = new WalkerSim({ ...build.values }, field);
   sim.reset(13, -40, 0.3);
-  let underAir = 0, bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
+  let underAir = 0, toesUnder = 0, bothAir = 0, kneeBack = 0, slide = 0, maxSlide = 0, minClear = Infinity, maxHipToGround = 0, minHipToGround = Infinity;
   // Push-off shape (Keith 2026-10-24: the thigh swung too far back and the knee went straight): measured late in each stance.
   let thighBackMax = 0, kneeMax = 0;
   const lastPlant = sim.feet.map(() => new Vector3());
@@ -64,6 +69,8 @@ for (const r of runs) {
       } else {
         wasPlanted[k] = false;
         minClear = Math.min(minClear, f.pos.y - field.height(f.pos.x, f.pos.z));
+        // Toes (Keith 2026-10-26: skimming the sand): mid-swing the ball of the foot and the toe tips stay out of the ground.
+        if (f.u > 0.1 && f.u < 0.9 && Math.min(P.toe.y - field.height(P.toe.x, P.toe.z), P.toeHinge.y - field.height(P.toeHinge.x, P.toeHinge.z)) < -0.02) toesUnder++;
       }
     });
     const g = field.height(sim.pos.x, sim.pos.z);
@@ -80,8 +87,10 @@ for (const r of runs) {
   if (s.scuffs > 0) problems.push(`${s.scuffs} swing-foot frames under the ground`);
   if (bothAir > 0) problems.push(`${bothAir} frames with both feet in the air`);
   if (underAir > 0) problems.push(`${underAir} foot-frames under the ground`);
-  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run.
-  if (r.name === "walk straight" && s.takeoffs > 1) problems.push(`left the ground ${s.takeoffs} times at a walk`);
+  if (toesUnder > 0) problems.push(`${toesUnder} swing frames with the toes in the ground`);
+  // Leaving the ground off a crest (Keith 2026-10-26): rare at a walk, small hops at a run. Since 18:28 a foot that
+  // can't reach down a steep brink hangs and the mech drops the rest, so a walk over the dunes may drop a few times.
+  if (r.name === "walk straight" && s.takeoffs > 3) problems.push(`left the ground ${s.takeoffs} times at a walk`);
   if (kneeBack > 0) problems.push(`${kneeBack} knee-backwards frames`);
   if (!dunes && kneeMax > 172) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°)`);
   if (slide > 0) problems.push(`planted feet slid ${slide} frames (max ${maxSlide.toFixed(3)} m)`);
@@ -169,8 +178,68 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (under) problems.push(`${under} foot-frames under the sand sprinting`);
     if (nan) problems.push(`${nan} non-finite frames sprinting`);
     if (over > 0.03) problems.push(`legs out of reach ${(over * 100).toFixed(1)}% of leg-frames sprinting`);
-    if (s.leaps < 50) problems.push(`only ${s.leaps} strides in a minute`);
-    console.log(`  dunes 60 s: ${s.leaps} strides · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
+    if (s.steps < 120) problems.push(`only ${s.steps} footfalls in a minute`);
+    console.log(`  dunes 60 s: ${s.steps} footfalls · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
+  }
+  // The run's cadence (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the same
+  // time", not bang-bang, hop, bang-bang): on the flat at 10 m/s and at top speed, footfalls alternate left/right at
+  // even intervals, the flights between them are short, and the hull rides level.
+  for (const speed of [10, top]) {
+    const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+    const sim = new WalkerSim({ ...values, boundTop: speed, boundBuild: 3 }, flat);
+    sim.reset(0, 0, 0);
+    const falls: { side: number; t: number }[] = [];
+    let t = 0, both = 0, flight = 0, longest = 0, yMin = Infinity, yMax = -Infinity, n = 0;
+    sim.onFootfall = (f) => { if (t > 6) falls.push({ side: f.side, t }); };
+    for (let i = 0; i < 12 * 120; i++, t += sdt) {
+      sim.bound = true;
+      sim.update(sdt, { x: 0, z: 1, sprint: true });
+      if (t < 6) continue;
+      n++;
+      const air = sim.feet.every((f) => f.swinging) || sim.airborne;
+      if (air) { both++; flight += sdt; longest = Math.max(longest, flight); } else flight = 0;
+      yMin = Math.min(yMin, sim.pelvis.y); yMax = Math.max(yMax, sim.pelvis.y);
+    }
+    let same = 0;
+    const gaps: number[] = [];
+    for (let i = 1; i < falls.length; i++) { if (falls[i].side === falls[i - 1].side) same++; gaps.push(falls[i].t - falls[i - 1].t); }
+    const mean = gaps.reduce((a, b) => a + b, 0) / Math.max(1, gaps.length);
+    const spread = Math.max(...gaps.map((g) => Math.abs(g - mean))) / Math.max(1e-6, mean);
+    const label = `${speed} m/s`;
+    if (same > 0) problems.push(`run at ${label}: ${same} footfalls by the same foot twice running`);
+    if (spread > 0.15) problems.push(`run at ${label}: footfall intervals uneven (worst ${(spread * 100).toFixed(0)}% off the mean)`);
+    if (both === 0) problems.push(`run at ${label}: no flight phase`);
+    if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
+    // The bob is a slider (runBob, the amplitude; Keith 2026-10-26 set 0.175 for a bouncier run, was 0.05 under a fixed
+    // 0.3 m limit): the hips move no more than its rise and fall plus a little.
+    const bobMax = 2 * values.runBob + 0.08;
+    if (yMax - yMin > bobMax) problems.push(`run at ${label}: hips rise and fall ${(yMax - yMin).toFixed(2)} m (limit ${bobMax.toFixed(2)})`);
+    console.log(`  run at ${label}: ${(1 / mean).toFixed(2)} steps/s, alternating (${same} repeats), intervals within ${(spread * 100).toFixed(0)}% · flights ${((100 * both) / n).toFixed(0)}% of the time, longest ${longest.toFixed(2)} s · hips move ${(yMax - yMin).toFixed(2)} m`);
+  }
+  // Up a ramp at top speed (Keith 2026-10-26 18:28: the torso dipped into rising ground): the hips stay well over the
+  // highest ground under the hull (from the hips to 2 m ahead), so the hull doesn't plough in.
+  {
+    // The limit kept about 0.6 m over the hull's lowest front edge with the run's old crouch (boundCrouch 0.3); Keith runs
+    // lower (0.8, 2026-10-26), so it moves down with the crouch (and 0.1 m for the steepest ramp, where the Stilt's short
+    // legs set the height).
+    const HULL_CLEAR = 1.9 - Math.max(0, values.boundCrouch - 0.3) - 0.1;
+    for (const deg of [12, 18, 25]) {
+      const k = Math.tan((deg * Math.PI) / 180);
+      const g = shaped((_x, z) => Math.max(0, (z - 50) * k));
+      const sim = new WalkerSim({ ...values, boundBuild: 3 }, g);
+      sim.reset(0, 0, 0);
+      let low = Infinity;
+      for (let i = 0; i < 9 * 120; i++) {
+        sim.bound = true;
+        sim.update(sdt, { x: 0, z: 1, sprint: true });
+        if (sim.pos.z < 40 || sim.airborne) continue;
+        let ahead = -Infinity;
+        for (let a = 0; a <= 2; a += 0.25) ahead = Math.max(ahead, g.height(0, sim.pos.z + a));
+        low = Math.min(low, sim.pelvis.y - ahead);
+      }
+      if (low < HULL_CLEAR) problems.push(`sprinting up a ${deg}° ramp the hips came within ${low.toFixed(2)} m of the ground under the hull (limit ${HULL_CLEAR})`);
+      console.log(`  up a ${deg}° ramp: hips at least ${low.toFixed(2)} m over the ground under the hull`);
+    }
   }
   // Speed builds from the run toward the legs' top speed while held, on the flat.
   {
@@ -279,6 +348,107 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     console.log(`  landing damage from 3 / 6.5 / 9 / 12 m: ${dmg.map((x) => x.toFixed(0)).join(", ")}`);
   }
   if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; }
+}
+
+// The mech unit with a stand-in battlefield and body (counts rounds fired, dust thrown, footfalls): for the sprint's
+// weapons, the ground impact and the sinking feet.
+function stubMech(field: { height(x: number, z: number): number; normal(x: number, z: number, o?: number[]): number[] }, over: Record<string, number> = {}) {
+  const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DUST_DEFAULTS, ...MECH_DEFAULTS, ...over } as unknown as MechUnitValues;
+  const count = { rounds: 0, kicks: 0, kickK: 0, stomps: 0, prints: 0, digs: 0 };
+  const noop = () => {};
+  const bf = {
+    field, inWater: () => false, water: null,
+    dust: { stomp: () => { count.stomps++; }, kick: (_x: number, _y: number, _z: number, _dx: number, _dz: number, k: number) => { count.kicks++; count.kickK += k; }, slide: () => 0, smoke: noop },
+    marks: { print: () => { count.prints++; }, furrow: noop, dig: () => { count.digs++; } },
+    sfx: { play: noop, playSound: noop }, gunAudio: { update: noop },
+    fire: () => { count.rounds++; },
+  } as unknown as Battlefield;
+  const at = (o: THREE.Vector3) => o.set(mech.sim.pelvis.x, mech.sim.pelvis.y + 1.5, mech.sim.pelvis.z);
+  const body = {
+    root: new THREE.Object3D(), armed: true, update: noop, paint: noop,
+    shoulderLine: (o = new THREE.Vector3()) => at(o), muzzle: (_s: number, o = new THREE.Vector3()) => at(o),
+    barrel: (_s: number, o = new THREE.Vector3()) => o.set(0, 0, 1), eject: (_s: number, o = new THREE.Vector3()) => o,
+  } as unknown as MechBody;
+  const mech: MechUnit = new MechUnit(bf, v, body, {} as never, 1, 0, false);
+  return { mech, count, v };
+}
+
+// Weapons while sprinting (Keith 2026-10-26 21:54): for sprintGunsAfter into the sprint the guns still fire, then
+// nothing fires and the torso turns to the line of travel; let go and they fire again.
+{
+  console.log("-- sprint weapons");
+  const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+  const { mech, count, v } = stubMech(flat);
+  mech.reset(0, 0, 0);
+  const problems: string[] = [];
+  const aimSide = () => ({ x: mech.sim.pos.x + 20, y: 1, z: mech.sim.pos.z + 5 });
+  const run = (sec: number, space: boolean) => {
+    const n0 = count.rounds;
+    for (let i = 0; i < sec * 60; i++) { mech.dashHold = space; mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true); }
+    return count.rounds - n0;
+  };
+  run(2, false);
+  const early = run(v.sprintGunsAfter + v.boundTap - 0.05, true);
+  let late = 0, offSince = -1, worstFace = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    const n0 = count.rounds;
+    mech.dashHold = true;
+    mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true);
+    if (mech.gunsOff) { late += count.rounds - n0; if (offSince < 0) offSince = i / 60; }
+    const off = Math.atan2(Math.sin(mech.upper.torsoYaw - mech.sim.course), Math.cos(mech.upper.torsoYaw - mech.sim.course));
+    if (i > 2.5 * 60) worstFace = Math.max(worstFace, (Math.abs(off) * 180) / Math.PI);
+  }
+  const after = run(2, false);
+  if (early === 0) problems.push("no rounds in the first moment of the sprint (sprintGunsAfter)");
+  if (offSince < 0) problems.push("the weapons never went off sprinting");
+  if (late > 0) problems.push(`${late} rounds fired with the weapons off`);
+  if (worstFace > 5) problems.push(`weapons off, the torso is ${worstFace.toFixed(0)}° off the line of travel`);
+  if (after === 0) problems.push("let go of the sprint, the guns didn't fire again");
+  console.log(`${problems.length ? "FAIL " : "ok   "}rounds: ${early} in the first ${(v.sprintGunsAfter + v.boundTap).toFixed(2)} s, ${late} with the weapons off · torso within ${worstFace.toFixed(1)}° of the travel line · ${after} after letting go` + (problems.length ? "\n       " + problems.join("; ") : ""));
+  if (problems.length) failed = true;
+}
+
+// Leaning into turns sprinting (Keith 2026-10-26 21:54): hard weaves at top speed on the flat and on the dunes. The
+// lean reaches well into its cap and never past it; the feet stay out of the ground and the legs in reach; the feet
+// skid in the drift. Reach is judged against the same weave without the lean (Keith's long sprint strides miss a
+// little by themselves, see the sprint section): the lean must not add misses.
+for (const leg of ["rampart", "rampart-stilt"] as const) {
+  const values = { ...WALKER_DEFAULTS, ...LEG_TYPES[leg].values };
+  const problems: string[] = [];
+  const cap = values.turnRollMax;
+  for (const ground of ["flat", "dunes"] as const) {
+    const weave = (over: Record<string, number>) => {
+      const field = new DuneField(ground === "flat" ? { ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 } : { ...TERRAIN_DEFAULTS });
+      const sim = new WalkerSim({ ...values, boundBuild: 3, ...over }, field);
+      sim.reset(13, -40, 0.3);
+      let maxRoll = 0, under = 0, skid = 0, nan = 0, frames = 0;
+      const sdt = 1 / 120;
+      for (let i = 0; i < 30 * 120; i++) {
+        const t = i * sdt, a = 0.3 + (t > 4 ? 1.3 * Math.sign(Math.sin(t * 0.9)) : 0);
+        sim.bound = true;
+        sim.update(sdt, { x: Math.sin(a), z: Math.cos(a), sprint: true });
+        if (t < 4) continue;
+        frames++;
+        maxRoll = Math.max(maxRoll, (Math.abs(sim.turnRoll) * 180) / Math.PI);
+        for (const f of sim.feet) {
+          if (f.pos.y < field.height(f.pos.x, f.pos.z) - 0.05) under++;
+          if (!f.swinging && Math.hypot(f.slide.x, f.slide.z) > 0.5) skid++;
+        }
+        if (!Number.isFinite(sim.pelvis.x + sim.pelvis.y + sim.feet[0].pose.knee.y + sim.feet[1].pose.knee.y)) nan++;
+      }
+      return { maxRoll, under, skid, nan, frames, over: sim.stats.overreach / (sim.stats.frames * 2) };
+    };
+    const r = weave({}), still = weave({ turnRoll: 0 });
+    const { maxRoll, under, skid, nan, frames, over } = r;
+    if (maxRoll > cap + 0.01) problems.push(`${ground}: leaned ${maxRoll.toFixed(1)}° (cap ${cap}°)`);
+    if (maxRoll < cap * 0.6) problems.push(`${ground}: leaned only ${maxRoll.toFixed(1)}° in hard turns (cap ${cap}°)`);
+    if (under) problems.push(`${ground}: ${under} foot-frames under the ground`);
+    if (nan) problems.push(`${ground}: ${nan} non-finite frames`);
+    if (skid === 0) problems.push(`${ground}: the feet never skid in the drift`);
+    if (over > still.over + 0.005) problems.push(`${ground}: leaning, legs out of reach ${(over * 100).toFixed(1)}% of leg-frames (upright ${(still.over * 100).toFixed(1)}%)`);
+    console.log(`  ${leg} weaving on the ${ground}: lean up to ${maxRoll.toFixed(1)}° (cap ${cap}°) · feet skidding ${((100 * skid) / (frames * 2)).toFixed(0)}% of foot-frames · reach misses ${(over * 100).toFixed(2)}% (upright ${(still.over * 100).toFixed(2)}%) · feet under ${under}`);
+  }
+  if (problems.length) { console.log("FAIL " + problems.join("; ")); failed = true; } else console.log(`ok   ${leg} leans into turns`);
 }
 
 if (failed) throw new Error("walker check failed");

@@ -8,7 +8,7 @@
 // The base rides the flat road behind the blade: the ground under its track corners fits a plane, as the platforms do.
 import type { DuneField } from "../world/terrain";
 import { PLOUGH_REACH, type ConvoyRoute, type RoutePoint } from "./route";
-import { sweepTan } from "./wake";
+import { sweepTan, roadHalf } from "./wake";
 
 /** The base: tracked hull length and half-width (m); the blade's V point is BLADE_AHEAD ahead of the base's front. */
 export const PLOUGH_BASE_LENGTH = 17;
@@ -48,7 +48,7 @@ export class Plough {
   update(dt: number) {
     const r = this.route;
     this.bladeS = r.blade;
-    this.halfBlade = r.v.routeHalfWidth;
+    this.halfBlade = roadHalf(r.v);
     this.tipLag = this.halfBlade * sweepTan(r.v);
     // The base's middle and its heading along the chord of its length (as a platform rides its bogies).
     const mid = this.bladeS - BLADE_AHEAD - PLOUGH_BASE_LENGTH / 2, bg = PLOUGH_BASE_LENGTH * 0.4;

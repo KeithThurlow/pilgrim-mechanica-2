@@ -15,7 +15,7 @@
 // only tests the few segments near it. As the blade advances, onChange gets small boxes of ground to patch.
 import type { Param } from "../core/tweaks";
 import type { GroundModifier, ModifierSample } from "../world/terrain";
-import { Wake, WAKE_DEFAULTS, WAKE_PARAMS, sweepTan, type WakeGround, type Berm } from "./wake";
+import { Wake, WAKE_DEFAULTS, WAKE_PARAMS, sweepTan, roadHalf, type WakeGround, type Berm } from "./wake";
 
 export const ROUTE_DEFAULTS = {
   convoySpeed: 3.3,
@@ -23,8 +23,8 @@ export const ROUTE_DEFAULTS = {
   convoyTurn: 2,
   convoyWander: 12,
   convoyWanderLength: 600,
-  routeHalfWidth: 30,
-  routeBlend: 15,
+  routeHalfWidth: 11,
+  routeBlend: 12,
   routeAhead: 150,
   routeLift: 3,
   routeRough: 0.3,
@@ -100,7 +100,7 @@ export class ConvoyRoute implements GroundModifier {
   /** Distance along the route of the blade's middle: the convoy clock plus a fixed lead, so every peer agrees. */
   get blade() { return this.s + this.bladeOffset + this.v.ploughGap; }
   /** How far the blade's tips trail its middle (m). */
-  get tipLag() { return this.v.routeHalfWidth * sweepTan(this.v); }
+  get tipLag() { return roadHalf(this.v) * sweepTan(this.v); }
 
   get count() { return this.xs.length; }
   /** Distance along the route of the last planned point. */
@@ -157,11 +157,11 @@ export class ConvoyRoute implements GroundModifier {
   /** Planned route kept ahead of the head: past the blade and the stations its berms smear over. */
   private keepAhead() { return this.bladeOffset + this.v.ploughGap + this.v.bermCarry + 3 * ROUTE_STEP; }
 
-  private reachFor() { return this.v.routeHalfWidth + Math.max(this.v.routeBlend, this.wake.reach() - this.v.routeHalfWidth); }
+  private reachFor() { return roadHalf(this.v) + Math.max(this.v.routeBlend, this.wake.reach() - roadHalf(this.v)); }
 
   private wakeKeyNow() {
     const v = this.v;
-    return `${v.routeHalfWidth}|${v.routeBlend}|${v.routeLift}|${v.routeRough}|${v.bermSpread}|${v.bermOut}|${v.bermCurve}|${v.bermLumps}|${v.bermCarry}`;
+    return `${roadHalf(v)}|${v.routeBlend}|${v.routeLift}|${v.routeRough}|${v.bermSpread}|${v.bermOut}|${v.bermCurve}|${v.bermLumps}|${v.bermCarry}`;
   }
 
   /**
@@ -176,7 +176,7 @@ export class ConvoyRoute implements GroundModifier {
     const from = this.patchedTo;
     this.patchedTo = b;
     if (!this.onChange) return;
-    const R = this.reach, tan = sweepTan(v), hw = v.routeHalfWidth, back = Math.max(v.bladeRamp, v.bermGrow) + 1;
+    const R = this.reach, tan = sweepTan(v), hw = roadHalf(v), back = Math.max(v.bladeRamp, v.bermGrow) + 1;
     const p = { x: 0, z: 0, heading: 0 };
     for (let d0 = -R; d0 < R; d0 += PATCH_PIECE) {
       const d1 = Math.min(R, d0 + PATCH_PIECE);
@@ -199,9 +199,9 @@ export class ConvoyRoute implements GroundModifier {
    * off the road to be (POIs, camps).
    */
   corridor(x: number, z: number): number {
-    const n = this.nearest(x, z, this.v.routeHalfWidth + this.v.routeBlend);
+    const n = this.nearest(x, z, roadHalf(this.v) + this.v.routeBlend);
     if (!n) return 0;
-    return 1 - smooth((n.d - this.v.routeHalfWidth) / Math.max(0.01, this.v.routeBlend));
+    return 1 - smooth((n.d - roadHalf(this.v)) / Math.max(0.01, this.v.routeBlend));
   }
 
   private near = { d: 0, s: 0, side: 1 };
@@ -323,7 +323,7 @@ export class ConvoyRoute implements GroundModifier {
   at(x: number, z: number, out: ModifierSample): boolean {
     const n = this.nearest(x, z, this.reach);
     if (!n) return false;
-    const v = this.v, d = n.d, hw = v.routeHalfWidth, lag = Math.min(d, hw) * sweepTan(v);
+    const v = this.v, d = n.d, hw = roadHalf(v), lag = Math.min(d, hw) * sweepTan(v);
     const behind = this.blade - lag - n.s;
     if (behind <= 0) return false;
     // t: 0 at the road's edge, 1 where the dunes are back to themselves.

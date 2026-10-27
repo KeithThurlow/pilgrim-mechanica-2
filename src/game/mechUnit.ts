@@ -97,6 +97,8 @@ export const MECH_PARAMS: Param[] = [
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
 const WRECK = 0x3b3531;
+const D2R = Math.PI / 180;
+const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
 /** A minigun round's penetration (m) from an item's pierce stat (MechUnit.roundPen). */
 export function roundPenFor(v: { roundPen: number; roundPierce: number; roundPenCurve: number }, pierce?: number): number {
@@ -142,6 +144,11 @@ export class MechUnit implements Hittable {
   /** Kneeling for the pilot (src/pilot/mount.ts): hips this far down (m) and the nose this far down (radians). */
   kneel = 0;
   kneelPitch = 0;
+  /** A player sits in it (the lab sets it): standing a while, its legs flex now and then. Enemies stay still. */
+  piloted = false;
+  /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
+  gunsOff = false;
+  private fwdAim = { x: 0, y: 0, z: 0 };
   stepTimes: number[] = [];
   private clock = 0;
   private shoulder = new THREE.Vector3();
@@ -223,6 +230,8 @@ export class MechUnit implements Hittable {
    */
   /** Each foot's skid point for the dash furrow (x, z, then 1 while skidding). */
   private skidFrom = [new THREE.Vector3(), new THREE.Vector3()];
+  /** Each foot's slide dust carry-over (fractional puffs). */
+  private slideAcc = [0, 0];
 
   tryDash(x: number, z: number): boolean {
     if (!this.alive || !this.dash.start(x, z)) return false;
@@ -247,6 +256,8 @@ export class MechUnit implements Hittable {
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
+    // A pilot in: the legs may flex now and then while it stands (the walker's idle).
+    if (this.piloted && !cmd.idle) cmd = { ...cmd, idle: true };
     this.hurt = Math.max(0, this.hurt - dt * 400);
     if (!this.alive) { this.deadFor += dt; return; }
     const { sim, upper, body, v } = this;
@@ -254,11 +265,15 @@ export class MechUnit implements Hittable {
     const fired: (1 | -1)[] = [];
     const sub = Math.max(1, Math.ceil(dt * 120));
     const dash = this.dash;
-    // Guns while sprinting: on by default (Keith undecided), boundGuns 0 switches them off.
-    if (this.bound.on && !v.boundGuns) trigger = false;
+    // Sprinting a while (sprintGunsAfter), the weapons are off (src/mech/bound.ts): no trigger, and the torso, guns and
+    // head face the line of travel (turned that share into a drift) with the hull leaning forward by speed.
+    const want = { trigger, aim };
     for (let i = 0; i < sub; i++) {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);
+      this.gunsOff = this.bound.gunsOff && this.alive;
+      if (this.gunsOff) { trigger = false; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
+      upper.leanFwd = this.gunsOff ? v.sprintHullLean * D2R * clamp((sim.speed - v.walkSpeed) / Math.max(0.5, (sim.boundTopNow || v.boundTop) - v.walkSpeed), 0, 1) : 0;
       // The slope along the slide: + uphill. Read a couple of metres either side of the body.
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
@@ -284,23 +299,20 @@ export class MechUnit implements Hittable {
         if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
       }
     }
-    // A drift in the sprint skids the planted feet sideways, like the dash's shove.
-    const slipping = sim.footSlip > 1.5;
-    if (dash.active || slipping) {
-      // Skidding feet throw sand and carve furrows; whatever is in the way gets shoved (the lab decides what that is).
-      const kx = dash.active ? dash.vx : sim.vel.x, kz = dash.active ? dash.vz : sim.vel.z;
-      const sp = dash.active ? Math.hypot(dash.vx, dash.vz) : sim.footSlip;
-      sim.feet.forEach((f, i) => {
-        const from = this.skidFrom[i];
-        if (f.swinging || sp < 2) { from.z = 0; return; }
-        this.bf.dust.wheel(f.pos.x, f.pos.y, f.pos.z, kx, kz, sp * dt, 1, 0);
-        // A furrow from where the foot was last frame (a skid that just started begins here).
-        if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
-        if (!this.bf.inWater(f.pos.x, f.pos.z)) this.bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
-        from.set(f.pos.x, f.pos.z, 1);
-      });
-      if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
-    }
+    // Any skidding foot (the dash's slide, a drift in the sprint, a landing skid, sliding down a face) carves the ground:
+    // sand thrown along it by the slide's speed and the surface, and a furrow in the dents (Keith 2026-10-26 18:28).
+    sim.feet.forEach((f, i) => {
+      const from = this.skidFrom[i], sp = Math.hypot(f.slide.x, f.slide.z);
+      if (f.swinging || sp < v.slideMin) { from.z = 0; this.slideAcc[i] = 0; return; }
+      if (bf.inWater(f.pos.x, f.pos.z)) { if (Math.random() < dt * 20) bf.water!.splash(f.pos.x, f.pos.z, 0.6, f.slide.x / sp, f.slide.z / sp, 0.6); from.z = 0; return; }
+      this.slideAcc[i] = bf.dust.slide(f.pos.x, f.pos.y, f.pos.z, f.slide.x, f.slide.z, dt, this.slideAcc[i]);
+      // A furrow from where the foot was last frame (a skid that just started begins here).
+      if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
+      bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
+      from.set(f.pos.x, f.pos.z, 1);
+    });
+    // Whatever is in the dash's way gets shoved (the lab decides what that is).
+    if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     // Sprinting through a crowd shoves it aside like a dash.
     if (!dash.active && sim.bounding && sim.speed > 6) this.onDash?.(sim.pos.x, sim.pos.z, Math.sin(sim.course), Math.cos(sim.course));
     const left = leftOf(upper.torsoYaw);
@@ -309,7 +321,7 @@ export class MechUnit implements Hittable {
       const own = upper.guns[s === 1 ? 0 : 1].stats;
       if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
       // Off the ground (a leap, a jump), the guns spray wider.
-      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airSpread : 0)) * Math.PI) / 180;
+      const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airGunSpread : 0)) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
       // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle
@@ -329,11 +341,21 @@ export class MechUnit implements Hittable {
         ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto: own?.proto }
         : { voice: "other", hitScale: 0.7 });
     }
+    // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);
     if (this.player && body.armed) {
       const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
       this.bf.gunAudio.update(dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
+  }
+
+  /** Where the torso looks with the weapons off: far along the line of travel (turned sprintFaceDrift into a drift), level with the shoulders. */
+  private travelAim(): Aim {
+    const sim = this.sim, d = Math.atan2(Math.sin(sim.heading - sim.course), Math.cos(sim.heading - sim.course));
+    const yaw = (sim.running || sim.bounding ? sim.course : sim.heading) + d * this.v.sprintFaceDrift;
+    const a = this.fwdAim;
+    a.x = this.shoulder.x + Math.sin(yaw) * 40; a.z = this.shoulder.z + Math.cos(yaw) * 40; a.y = this.shoulder.y;
+    return a;
   }
 
   /**

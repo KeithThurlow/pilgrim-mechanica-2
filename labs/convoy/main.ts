@@ -25,7 +25,7 @@ import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
 import { Selector } from "../../src/core/select";
 import { tweakPanel, type Param } from "../../src/core/tweaks";
-import { Keys } from "../../src/core/input";
+import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
@@ -264,7 +264,7 @@ addEventListener("blur", () => { eHeld = false; qHeld = false; });
 // the sprint out on the sand (Keith 2026-10-26).
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code !== "Space" || e.repeat || typing(e)) return;
   e.preventDefault();
   dashPressed = true;
   spaceDown = true;
@@ -368,7 +368,7 @@ function restart() {
   if (params.has("bay")) bay.open();
 }
 
-const roadKeys = new Set(["routeHalfWidth", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
+const roadKeys = new Set(["routeHalfWidth", "trainLanes", "trainLaneSide", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
 const shapeKeys = new Set([...TERRAIN_PARAMS.map((p) => p.key), "chunkSize", "segments"]);
 let selector: Selector | null = null;
 let picking = false;
@@ -399,7 +399,7 @@ const panel = tweakPanel({
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -569,6 +569,7 @@ app.onTick((rawDt) => {
   // Out of the mech (getting out, on foot, getting in): WASD walks the pilot; the mech stands where it was left and
   // its weapons don't fire.
   const driving = foot.driving;
+  player.piloted = driving;
   if (auto) { cmd = demoCmd(dt); aim = cursor = loop.demoAim; trigger = loop.demoTrigger; }
   else if (driving) {
     if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
@@ -692,7 +693,7 @@ app.onTick((rawDt) => {
   patchSome(1.5);
   costs.mark("plough patch");
 
-  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget);
+  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   // Out on the sand the camera leads the mech at speed (the sprint).

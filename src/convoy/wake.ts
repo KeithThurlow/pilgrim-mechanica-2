@@ -22,7 +22,7 @@ export const WAKE_DEFAULTS = {
   bladeRamp: 4,
   bermGrow: 8,
   bermSpread: 2.2,
-  bermOut: 8,
+  bermOut: 2,
   bermCurve: 0.6,
   bermLumps: 0.35,
   bermCarry: 6,
@@ -65,7 +65,14 @@ export interface WakeRoute {
 /** The original ground (DuneField.sample with raw = true). */
 export interface WakeGround { sample(x: number, z: number, out: GroundSample, raw: boolean): GroundSample; v: { seed: number } }
 /** Road values the wake needs. */
-export interface WakeRoad { routeHalfWidth: number; routeBlend: number; routeLift: number; routeRough: number }
+export interface WakeRoad { routeHalfWidth: number; routeBlend: number; routeLift: number; routeRough: number; trainLanes?: number; trainLaneSide?: number }
+
+/**
+ * Half the road's width (m): the blade's half-width, routeHalfWidth (Keith 2026-10-26: about the main convoy's
+ * width), widened by the lines' spread when the train runs in two lines side by side, so both stay on the road.
+ */
+export const roadHalf = (v: { routeHalfWidth: number; trainLanes?: number; trainLaneSide?: number }) =>
+  v.routeHalfWidth + (Math.round(v.trainLanes ?? 1) >= 2 ? v.trainLaneSide ?? 0 : 0);
 
 /** One side's berm at a station: height, half-width, distance of its crest from the route line. */
 export interface Berm { h: number; w: number; c: number }
@@ -103,7 +110,7 @@ export class Wake {
   reset(s0: number) { this.k0 = Math.floor(s0 / STATION) - 2; this.clear(); }
 
   /** Biggest distance off the route line any berm reaches (m). */
-  reach() { return this.v.routeHalfWidth + this.v.bermOut * (1 + 0.5 * this.v.bermLumps) + 2 * BERM_W_MAX + 1; }
+  reach() { return roadHalf(this.v) + this.v.bermOut * (1 + 0.5 * this.v.bermLumps) + 2 * BERM_W_MAX + 1; }
 
   private carryStations() { return Math.max(0, Math.round(this.v.bermCarry / STATION)); }
 
@@ -116,7 +123,7 @@ export class Wake {
     const g = this.ground;
     let L = 0, R = 0;
     if (g) {
-      const v = this.v, hw = v.routeHalfWidth, bl = Math.max(0.01, v.routeBlend), s = k * STATION;
+      const v = this.v, hw = roadHalf(v), bl = Math.max(0.01, v.routeBlend), s = k * STATION;
       for (let d = DX / 2; d < hw + bl; d += DX) {
         const w = d <= hw ? 1 : 1 - smooth((d - hw) / bl);
         for (const side of [1, -1]) {
@@ -221,7 +228,7 @@ export class Wake {
       if (w > BERM_W_MAX) w = BERM_W_MAX;
       if (w < 0.5) w = 0.5;
       h = (A * 15) / (16 * w);
-      const c = v.routeHalfWidth + v.bermOut * (1 + 0.5 * lump * n3) + w;
+      const c = roadHalf(v) + v.bermOut * (1 + 0.5 * lump * n3) + w;
       const o = i * 6 + (side > 0 ? 0 : 3);
       F[o] = h; F[o + 1] = w; F[o + 2] = c;
     }

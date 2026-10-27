@@ -8,7 +8,7 @@ import { createApp } from "../../src/core/app";
 import { installReport } from "../../src/core/report";
 import { Selector } from "../../src/core/select";
 import { tweakPanel } from "../../src/core/tweaks";
-import { Keys } from "../../src/core/input";
+import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { BIOME_DEFAULTS, BIOME_PARAMS } from "../../src/world/biomes";
@@ -93,6 +93,7 @@ scene.add(bf.group);
 const dents = bf.useDents(app.renderer, streamer);
 const mech = new MechUnit(bf, V, rampart ?? standIn!, toon, 1, 0, true);
 bf.fx.own = mech.sim.pos; // the effects budget keeps the local player's at full
+mech.piloted = true;
 const { sim, upper } = mech;
 // For headless probes (page.evaluate): the mech and its model.
 (window as unknown as { __walker: unknown }).__walker = { mech, rampart };
@@ -151,7 +152,7 @@ const boundDemo = params.has("bound");
 const dashAt = Number(params.get("dashat") ?? 0);
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code !== "Space" || e.repeat || typing(e)) return;
   e.preventDefault();
   dashPressed = true;
   spaceDown = true;
@@ -177,7 +178,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
@@ -309,7 +310,7 @@ function tick(rawDt: number) {
   reticle.visible = !!aim && !!rampart;
   if (aim) {
     reticle.position.set(aim.x, aim.y + 0.06, aim.z);
-    (reticle.material as THREE.MeshBasicMaterial).color.setHex(upper.onTarget ? 0xffb347 : 0x9a958c);
+    (reticle.material as THREE.MeshBasicMaterial).color.setHex(upper.onTarget && !mech.gunsOff ? 0xffb347 : 0x9a958c);
   }
 
   follow.lerp(new THREE.Vector3(sim.pelvis.x, sim.pelvis.y - 1.2, sim.pelvis.z), Math.min(1, rawDt * 6));
@@ -342,7 +343,7 @@ function tick(rawDt: number) {
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   const driftDeg = Math.abs(((((sim.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180);
-  app.hud.set("bound", `sprint (hold Space): ${mech.bound.on ? `${sim.speed.toFixed(1)} of ${(sim.boundTopNow || V.boundTop).toFixed(1)} m/s · ${sim.stats.leaps} strides${driftDeg > 3 ? ` · drift ${driftDeg.toFixed(0)}°` : ""}${sim.footSlip > 1.5 ? " · skidding" : ""}` : "off"}`);
+  app.hud.set("bound", `sprint (hold Space): ${mech.bound.on ? `${sim.speed.toFixed(1)} of ${(sim.boundTopNow || V.boundTop).toFixed(1)} m/s · ${sim.stats.steps} steps${driftDeg > 3 ? ` · drift ${driftDeg.toFixed(0)}°` : ""}` : "off"}${sim.dashing ? " · dash push-off" : ""}${sim.feet.some((f) => Math.hypot(f.slide.x, f.slide.z) > V.slideMin) ? " · skidding" : ""}`);
   app.hud.set("walk", `${sim.speed.toFixed(1)} m/s · ${(mech.stepTimes.length / 3).toFixed(1)} steps/s · ${mech.bound.on ? "sprint" : cmd.sprint ? "run" : "walk"}${auto ? " (demo)" : ""} · dash ${dashDots} (Space)`);
   const ll = sim.lastLanding;
   app.hud.set("air", `${sim.airborne ? `in the air ${sim.airT.toFixed(2)} s, ${(sim.pelvis.y - field.height(sim.pos.x, sim.pos.z)).toFixed(1)} m hips` : sim.stagger > 0 ? `staggered ${sim.stagger.toFixed(1)} s` : "on the ground"} · left the ground ${sim.stats.takeoffs}×${ll ? ` · last landing ${ll.impact.toFixed(1)} m/s, squat ${ll.depth.toFixed(2)} m${ll.damage > 0 ? `, ${ll.damage.toFixed(0)} damage` : ""}` : ""}`);
@@ -351,5 +352,5 @@ function tick(rawDt: number) {
   app.hud.set("dents", pt && dw
     ? `dents ${dents.res}² over ${dents.size} m · ${dents.stats.brushes} brushes · patch ${pt.vertices} verts ${(pt.triangles / 1000).toFixed(0)}k tris @ ${dw.fine} m · refill ${dw.stats.ms.toFixed(2)} ms (${dw.stats.fineSamples}+${dw.stats.coarseSamples})${dw.ready ? "" : " · filling"}`
     : "dents: none");
-  if (rampart) app.hud.set("guns", `torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
+  if (rampart) app.hud.set("guns", `${mech.gunsOff ? `<b style="color:#ffb347">SPRINT</b> weapons off · ` : ""}torso ${torsoRel.toFixed(0)}° from legs · spin L ${(upper.guns[0].spin * 100).toFixed(0)}% R ${(upper.guns[1].spin * 100).toFixed(0)}% · ammo L ${upper.guns[0].ammo} R ${upper.guns[1].ammo} · hits sand ${bf.gunFx.hits.sand} steel ${bf.gunFx.hits.metal}${bf.sfx.running ? "" : " · click for sound"}`);
 }

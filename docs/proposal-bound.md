@@ -303,3 +303,21 @@ What differs from the proposal above, after Keith's answers:
   leg items don't carry a sprint stat yet (the loadout was another agent's at the time).
 - **Not done yet:** landing poses aimed at steep faces, dust and dents tuned only from filmstrips, chasers that keep up,
   fortress jumps and landing on enemies.
+
+## Revised after Keith's playtest (2026-10-26 18:28)
+
+Keith: the gallop reads as skipping ("bang, bang, and it jumps up in the air"); it works well as a falling and landing
+animation, but the sprint on the ground should be a real run with the foot cadence even. So:
+
+- **The ground gait is a run** (`walker.ts`: `runK`, `runSwing`, `tuckPose`): left, right, left, right on the walk's
+  gait phase, with its own cadence (3 steps/s at the run, 3.6 at top) and a planted share of 2.1 m of ground per stance
+  over the stride, so short flights appear and grow with speed. Sprinter mechanics: the hock opens further at push-off
+  (`runHockExtend`), the heel rolls earlier and further, the foot follows through behind, swings up into a tuck (thigh
+  50° up, shin folded back, hock folded, foot hanging toes-down, toes curled), reaches and sweeps back into a plant under
+  the hips. The hull keeps `runClear` over the highest ground ahead (`runLookAhead`), with a feed-forward on the hips'
+  height so a ramp doesn't lag under it.
+- **The gallop is the way into and out of the air:** running off a crest flies on the gallop's air pose and lands on its
+  staggered stance; that stance hands over to the run (`runFromStance`). `boundGallop` 1 brings the whole gallop back.
+- **Speed, handling, fuel, guns and the booster are as built** (top 14 m/s, grip, drift, walls).
+- **The dash pushes off a foot** and a held Space flows from the push-off into the run (`dashHoldRun`, `dashIntoRun`);
+  see `docs/decisions.md`.
