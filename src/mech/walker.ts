@@ -1753,14 +1753,6 @@ export class WalkerSim {
       return out[1] - this.ground.height(out[0], out[2]) - m;
     };
     const P = this.t.n, Q = [0, 0, 0];
-    // Walking, the foot first rises (a share, toeLift) by as much as its curled toes would be in the ground.
-    const lift = pitchToo ? 0 : v.toeLift * (1 - clearK);
-    if (lift > 0) {
-      const ball = over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P);
-      const tip = over(P[0], P[1], P[2], f.pitch + f.toe, L, Q);
-      const short = -Math.min(ball, tip, 0);
-      f.pos.y += short * lift;
-    }
     // The ball of the foot: ease the toes-down pitch until it clears.
     if (pitchToo && h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
       let lo = Math.min(f.pitch, 0) - 0.8, hi = f.pitch;
@@ -2042,12 +2034,11 @@ export class WalkerSim {
       f.theta = theta;
 
       // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
-      // of a straight knee (kneeMaxPlanted sprinting, kneeMaxWalk walking): at the end of a push-off the hock opens just
-      // enough instead (Keith 2026-10-24 didn't want the knee going straight; with the hock not opening by itself,
-      // hockExtend 0, it did). The walk's stop sits past Keith's tuned push-off (Keith 2026-10-27: 165° spoilt the walk).
+      // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
+      // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
       const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
       const dirHip = toHip.clone().normalize();
-      const kneeCap = clamp(v.kneeMaxWalk + (v.kneeMaxPlanted - v.kneeMaxWalk) * this.sprintK, 90, 180) * D2R;
+      const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
       const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
       const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
       P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);

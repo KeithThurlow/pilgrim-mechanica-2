@@ -33,8 +33,11 @@ function run(gx: number, gz: number, over: Record<string, number> = {}) {
       // Tilt from straight down in any direction (forward fold or the knee turned out).
       thighUp += (Math.acos(-th.y / th.length()) * 180) / Math.PI / 2;
     }
-    // Centre of the hips ahead of the middle of the feet along the walk.
-    const mid = (sim.feet[0].pose.ankle.z + sim.feet[1].pose.ankle.z) / 2;
+    // Centre of the hips ahead of the middle of the feet along the walk: where each foot stands (its planted spot) or,
+    // swinging, its plate. Was the ankles, but since the walk rolls its heel up and folds the cannon like the sprint
+    // (Keith 2026-10-27) the ankles ride forward over the toes at push-off and back in the swing without the body moving.
+    const at = (f: (typeof sim.feet)[number]) => (f.swinging ? f.pos.z : f.planted.z);
+    const mid = (at(sim.feet[0]) + at(sim.feet[1])) / 2;
     cogAhead += sim.pelvis.z - mid;
     for (const f of sim.feet) if (!Number.isFinite(f.pose.knee.x)) misses++;
     sim.feet.forEach((f, k) => {

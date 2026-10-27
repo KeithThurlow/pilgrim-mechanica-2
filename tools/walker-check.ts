@@ -96,11 +96,7 @@ for (const r of runs) {
   // can't reach down a steep brink hangs and the mech drops the rest, so a walk over the dunes may drop a few times.
   if (r.name === "walk straight" && s.takeoffs > 3) problems.push(`left the ground ${s.takeoffs} times at a walk`);
   if (kneeBack > 0) problems.push(`${kneeBack} knee-backwards frames`);
-  // A locked-straight knee at push-off (Keith 2026-10-24) is the fault. The limit was 172°, but Keith's own tuning
-  // (hockExtend 0, 2026-10-26) pushes off at 175° and that walk is the look he wants (2026-10-27: the 165° stop spoilt
-  // it), so the limit is the walk's knee stop (kneeMaxWalk) itself.
-  const kneeLimit = Math.min(179, build.values.kneeMaxWalk + 0.5);
-  if (!dunes && kneeMax > kneeLimit) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°, limit ${kneeLimit.toFixed(0)}°)`);
+  if (!dunes && kneeMax > 172) problems.push(`knee nearly straight at push-off (${kneeMax.toFixed(0)}°)`);
   if (slide > 0) problems.push(`planted feet slid ${slide} frames (max ${maxSlide.toFixed(3)} m)`);
   if (r.name !== "start and stop" && s.steps < r.seconds * 1.2) problems.push(`only ${s.steps} steps`);
   const line = `${r.name.padEnd(16)} steps ${String(s.steps).padStart(4)} · reach misses ${(over * 100).toFixed(2)}% · ` +
