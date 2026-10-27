@@ -10,7 +10,7 @@ import type { Param } from "../core/tweaks";
 export type SinkSurface = "sand" | "gravel" | "dirt" | "concrete" | "snow";
 
 export const SINK_DEFAULTS = {
-  sinkSand: 0.09,
+  sinkSand: 0.35,
   sinkSnow: 0.22,
   sinkDirt: 0.04,
   sinkGravel: 0.025,
@@ -20,7 +20,7 @@ export type SinkValues = typeof SINK_DEFAULTS;
 
 const G = "Feet sink";
 export const SINK_PARAMS: Param[] = [
-  { key: "sinkSand", label: "Into sand (m)", min: 0, max: 0.4, step: 0.005, group: G, tip: "A planted foot sits this far into loose sand (less on harder ground: rocky sand, the road, POI pads). Keith 2026-10-26: push into soft things, stand on rock" },
+  { key: "sinkSand", label: "Into sand (m)", min: 0, max: 0.6, step: 0.005, group: G, tip: "A planted foot sits this far into loose sand (less on harder ground: rocky sand, the road, POI pads). Keith 2026-10-26: push into soft things, stand on rock; 2026-10-27: about 0.3-0.4 looked really good" },
   { key: "sinkSnow", label: "Into snow (m)", min: 0, max: 0.6, step: 0.005, group: G, tip: "No snow in the terrain yet: the walker lab's ?surface=snow" },
   { key: "sinkDirt", label: "Into dirt (m)", min: 0, max: 0.3, step: 0.005, group: G },
   { key: "sinkGravel", label: "Into gravel (m)", min: 0, max: 0.3, step: 0.005, group: G },

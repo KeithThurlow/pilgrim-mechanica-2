@@ -216,7 +216,11 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     const label = `${speed} m/s`;
     if (same > 0) problems.push(`run at ${label}: ${same} footfalls by the same foot twice running`);
     if (spread > 0.15) problems.push(`run at ${label}: footfall intervals uneven (worst ${(spread * 100).toFixed(0)}% off the mean)`);
-    if (both === 0) problems.push(`run at ${label}: no flight phase`);
+    // Flights need a planted share under half. Keith's 4 m stance (boundStanceLen, 2026-10-27, the slider's top) keeps a
+    // foot down half the cycle up to about 13 m/s: a grounded run there is his tuning, not a fault. Checked where the
+    // cadence leaves room for one.
+    const { duty } = sim.runCadence();
+    if (both === 0 && duty < 0.48) problems.push(`run at ${label}: no flight phase (planted share ${duty.toFixed(2)})`);
     if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
     // The bob is a slider (runBob, the amplitude; Keith 2026-10-26 set 0.175 for a bouncier run, was 0.05 under a fixed
     // 0.3 m limit), plus the plant's drop and the push-off's rise (runPlantDrop, runPushRise): no more than those plus a little.

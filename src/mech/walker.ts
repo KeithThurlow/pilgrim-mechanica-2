@@ -93,8 +93,6 @@ export class Foot {
   splay = 0;
   /** Stance progress 0..1 (0 while swinging). */
   stanceT = 0;
-  /** Running, the gait phase at which this foot left early at full stretch (-1: it leaves at the planted share). */
-  earlyP = -1;
   planted = new Vector3(); plantedUp = new Vector3(0, 1, 0); plantedYaw = 0;
   lift = new Vector3(); liftYaw = 0; liftPitch = 0; liftUp = new Vector3(0, 1, 0);
   target = new Vector3(); targetUp = new Vector3(0, 1, 0); targetYaw = 0;
@@ -168,6 +166,8 @@ export interface WalkerStats {
   frames: number;
   /** Sprint leaps pushed off. */
   leaps: number;
+  /** Running foot-frames whose toes dragged forward at full stretch. */
+  toeDrag: number;
 }
 
 export class WalkerSim {
@@ -182,7 +182,7 @@ export class WalkerSim {
   pelvisQ = new Quaternion();
   hullQ = new Quaternion();
   feet: [Foot, Foot] = [new Foot(1, 0), new Foot(-1, 0.5)];
-  stats: WalkerStats = { steps: 0, takeoffs: 0, landings: 0, airFrames: 0, overreach: 0, scuffs: 0, frames: 0, leaps: 0 };
+  stats: WalkerStats = { steps: 0, takeoffs: 0, landings: 0, airFrames: 0, overreach: 0, scuffs: 0, frames: 0, leaps: 0, toeDrag: 0 };
   /**
    * The sprint, set from outside each frame (src/mech/bound.ts: Space held after the dash). The walker decides when it
    * can run it: not while staggered or squatting out of a hard landing.
@@ -538,15 +538,10 @@ export class WalkerSim {
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
-    // Running, a trailing leg at full stretch leaves the ground there (the toes' last push) instead of staying planted
-    // with the leg pulled past its length (Keith 2026-10-27: his 4 m stance at the sprint's speeds stretched the cannon
-    // up to half a metre at every push-off); it lands at the same beat as it would have.
-    const fullLeg = v.femur + v.shin + v.cannon - 0.03 - 2 * this.speed * dt;
     for (const f of this.feet) {
       const p = (this.phase + f.offset) % 1;
-      if (f.earlyP >= 0 && (p < f.earlyP || p >= d)) f.earlyP = -1;
-      if (!f.swinging && !f.hang && rk > 0.5 && f.stanceT > 0.5 && p < d && f.pose.hip.distanceTo(f.pose.ankle) > fullLeg) f.earlyP = p;
-      const swing = p >= d || f.earlyP >= 0;
+      if (!f.swinging && !f.hang && rk > 0.5 && f.stanceT > 0.5) this.toeDrag(f, dt);
+      const swing = p >= d;
       if (f.hang) {
         // Hanging at full reach over ground that fell away: it plants once the ground comes within reach.
         f.u = 1; f.stanceT = 0;
@@ -558,8 +553,7 @@ export class WalkerSim {
         if (f.short) { f.hang = true; f.u = 1; } else this.land(f);
       }
       if (f.swinging && !f.hang) {
-        const s0 = f.earlyP >= 0 ? f.earlyP : d;
-        f.u = Math.max(f.u, clamp((p - s0) / (1 - s0), 0, 1));
+        f.u = Math.max(f.u, clamp((p - d) / (1 - d), 0, 1));
         f.stanceT = 0;
         if (f.u < RE_AIM_UNTIL) this.aim(f);
       } else if (!f.swinging) {
@@ -714,15 +708,7 @@ export class WalkerSim {
     const v = this.v, d = this.dutyNow;
     const Tsw = (1 - d) / Math.max(MIN_CYCLE, this.cpsNow);
     const remain = (1 - f.u) * Tsw;
-    // The whip (Keith 2026-10-26 21:54: the sprint's swing looked slower than the walk's): the foot hangs behind after
-    // the push-off, whips up toward the tuck, (1 + 2 x runWhip)^2 faster at its fastest, and eases into the reach; its
-    // speed at lift-off and at the plant is unchanged, so the plant still matches the ground.
-    // The fastest point is at runWhipAt of the swing (the thigh passing under the hips on its way up to the tuck).
-    const wh = clamp(v.runWhip, 0, 0.95), c = clamp(v.runWhipAt, 0.1, 0.9);
-    // Twice over: up to (1 + 2 x runWhip)^2 at the fastest, still never backwards.
-    const W1 = (x: number) => x + wh * (Math.sin(4 * Math.PI * x) / (4 * Math.PI) - Math.sin(2 * Math.PI * x) / (2 * Math.PI));
-    const W = (x: number) => W1(W1(x));
-    const u = f.u < c ? 2 * c * W(f.u / (2 * c)) : c + 2 * (1 - c) * (W(0.5 + (f.u - c) / (2 * (1 - c))) - 0.5);
+    const u = f.u;
     const fw = forwardOf(this.heading, this.t.f), lf = leftOf(this.heading, this.t.l);
     const hipY = this.bodyY.x;
     const A = f.runA, tk = this.tuck;
@@ -1238,7 +1224,7 @@ export class WalkerSim {
           f.bState = 2; f.swinging = true; f.u = 0; f.liftTheta = f.theta; f.stanceT = 0;
           f.airRel.subVectors(f.pos, this.pelvis);
           this.onLiftOff?.(f, kStep);
-        } else { this.moveFoot(f); continue; }
+        } else { this.toeDrag(f, dt); this.moveFoot(f); continue; }
       }
       // Lifted: following the air pose, kept above the sand.
       this.airFoot(f, dt, len);
@@ -1627,6 +1613,24 @@ export class WalkerSim {
 
   /** How far the legs are sprinting for the walk-or-sprint limits: all the way while Space holds the sprint, else the run share. */
   private get sprintK() { return this.bound ? 1 : this.runK; }
+
+  /**
+   * Running, a planted leg at full stretch keeps its push-off look (the long straight leg, Keith 2026-10-27: main's
+   * sprint shape) but is never pulled past its length: its toes drag on with the body instead (his 4 m stance at the
+   * sprint's speeds stretched the cannon up to half a metre at every push-off, the reach misses; landing stances on dune
+   * crests up to a metre and a half).
+   */
+  private toeDrag(f: Foot, dt: number) {
+    const v = this.v, full = v.femur + v.shin + v.cannon - 0.04, P = f.pose;
+    const hx = P.hip.x + this.vel.x * dt - P.ankle.x, hy = P.hip.y - P.ankle.y, hz = P.hip.z + this.vel.z * dt - P.ankle.z;
+    const hd = Math.hypot(hx, hz);
+    if (Math.hypot(hx, hy, hz) <= full || hd < 0.05) return;
+    // The horizontal shift that brings the ankle back within full length (the height difference stays, as far as it can).
+    const want = Math.sqrt(Math.max(0, full * full - hy * hy)), k = (hd - want) / hd;
+    f.planted.x += hx * k; f.planted.z += hz * k;
+    f.planted.y = this.ground.height(f.planted.x, f.planted.z) - this.sink(f.planted.x, f.planted.z);
+    this.stats.toeDrag++;
+  }
 
   /** The sink depth at (x, z) (0 without a sinkAt). */
   sink(x: number, z: number) { return this.sinkAt ? Math.max(0, this.sinkAt(x, z)) : 0; }
