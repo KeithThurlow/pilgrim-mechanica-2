@@ -223,6 +223,8 @@ export class WalkerSim {
   private plantPitch = 0;
   /** The over-stretch hurry on the cadence (1: none), eased while running. */
   private hurry = 1;
+  /** How far the hips sit below where they want to be (m): the stretch is read as if they were there. */
+  private hipShort = 0;
   /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
   private reachCap = NaN;
   /** The idle flex: steps left in it (0: not flexing), and how far its gait has blended in (0..1). */
@@ -513,7 +515,7 @@ export class WalkerSim {
     // Gait phase. The run (sprinting) and the walk share it: the run's cadence rises with speed and its planted share
     // is the ground per stance over the stride, so the flights grow with speed; the planted share eases toward what's
     // wanted (never jumping a foot from stance to swing and back).
-    const S = this.stride(), rk = this.runK;
+    const S = this.stride(), rk = this.gaitK;
     let dWant = this.duty(), cps = this.speed / S;
     if (rk > 0) {
       const { cps: cpsR, duty: dR } = this.runCadence();
@@ -632,21 +634,30 @@ export class WalkerSim {
     this.skid.set(vx - this.vel.x, 0, vz - this.vel.z);
     this.boundSpeed = 0;
     this.running = false;
-    // The footing too (Keith 2026-10-27: the splits on letting go). The run plants under the hips, the walk a little
-    // ahead and for a whole stance of d × stride; held that long, a foot the run planted trails out of reach and the
-    // hips drop to the ground after it. Put the phase where the rearmost planted foot already is along the walk's stance.
-    let rear: Foot | null = null, rx = Infinity;
+    this.walkPhaseFromFeet(fw);
+  }
+
+  /**
+   * Handing the sprint's footing to the walk (Keith 2026-10-27: the splits on letting go). The run plants under the
+   * hips, the walk a little ahead and for a whole stance of d × stride; held that long, a foot the sprint planted trails
+   * out of reach and the hips drop to the ground after it. The phase goes where the frontmost planted foot already is
+   * along the walk's stance; a foot behind it that's past its push-off lifts at once.
+   */
+  private walkPhaseFromFeet(fw: Vector3) {
+    const v = this.v;
+    let front: Foot | null = null, fx = -Infinity;
     for (const f of this.feet) {
       if (f.swinging || f.hang) continue;
       const x = (f.planted.x - this.pos.x) * fw.x + (f.planted.z - this.pos.z) * fw.z;
-      if (x < rx) { rx = x; rear = f; }
+      if (x > fx) { fx = x; front = f; }
     }
-    if (rear) {
-      const d = this.dutyNow, L = d * this.stride();
-      const ahead = L * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
-      const st = clamp((ahead - rx) / Math.max(0.1, L), 0, 0.98);
-      this.phase = (((st * d - rear.offset) % 1) + 1) % 1;
-    }
+    if (!front) return;
+    // The walk's planted share at once (the sprint's is under a half: both feet would be up together).
+    this.dutyNow = this.duty();
+    const d = this.dutyNow, L = d * this.stride();
+    const ahead = L * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
+    const st = clamp((ahead - fx) / Math.max(0.1, L), 0, 0.98);
+    this.phase = (((st * d - front.offset) % 1) + 1) % 1;
   }
 
   /**
@@ -1462,10 +1473,8 @@ export class WalkerSim {
     this.speed = clamp(vx * fw.x + vz * fw.z, 0, Math.max(v.walkSpeed, v.sprintSpeed));
     this.vel.copy(fw).multiplyScalar(this.speed);
     this.skid.set(vx - this.vel.x, 0, vz - this.vel.z);
-    // The foot behind steps first.
-    const d = this.duty(), [a, b] = this.feet;
-    const aBehind = (a.planted.x - b.planted.x) * fw.x + (a.planted.z - b.planted.z) * fw.z < 0;
-    this.phase = aBehind ? d - 0.02 : (d - 0.02 + 0.5) % 1;
+    // The foot behind steps first (if it's past its push-off), the front one carries on from where it stands.
+    this.walkPhaseFromFeet(fw);
     this.bodyY.x = this.pelvis.y - this.impact.x; this.bodyY.v = 0;
     this.boundSpeed = 0;
     this.running = false;
@@ -1510,8 +1519,15 @@ export class WalkerSim {
   /** How close the most stretched planted leg is to full reach (1 = straight). */
   private stretch() {
     const reach = this.v.femur + this.v.shin + this.v.cannon * 0.8;
+    // Off the run, read at the hips' wanted height (Keith 2026-10-27, the splits letting go of the sprint): hips dragged
+    // down after a trailing foot give it more reach, so the stretch never showed, the step never hurried, and the foot
+    // trailed further. The run holds its hips low on purpose (its reach cap), so it reads them where they are.
+    const up = this.running ? 0 : this.hipShort;
     let m = 0;
-    for (const f of this.feet) if (!f.swinging) m = Math.max(m, f.pose.hip.distanceTo(f.pose.ankle) / reach);
+    for (const f of this.feet) if (!f.swinging) {
+      const P = f.pose, dx = P.hip.x - P.ankle.x, dy = P.hip.y + up - P.ankle.y, dz = P.hip.z - P.ankle.z;
+      m = Math.max(m, Math.sqrt(dx * dx + dy * dy + dz * dz) / reach);
+    }
     return m;
   }
 
@@ -1601,14 +1617,14 @@ export class WalkerSim {
   /** Landing spot: where this foot belongs when the body gets there, on the ground. */
   private aim(f: Foot) {
     const v = this.v, d = this.dutyNow, S = this.stride();
-    const cps = Math.max(this.speed / S + (this.cpsNow - this.speed / S) * this.runK, MIN_CYCLE);
+    const cps = Math.max(this.speed / S + (this.cpsNow - this.speed / S) * this.gaitK, MIN_CYCLE);
     const remain = ((1 - f.u) * (1 - d)) / cps;
     const h = this.heading + this.turnSpeed * remain * 0.5;
     const fw = forwardOf(h, this.t.f), lf = leftOf(h, this.t.l);
     // Downhill the feet plant in closer under the body, so the legs don't reach out ahead and tiptoe down. Running they
     // land under the hips (runPlant).
     let ahead = d * S * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
-    ahead += (v.runPlant - ahead) * this.runK;
+    ahead += (v.runPlant - ahead) * this.gaitK;
     ahead *= 1 - v.downhillPlant * smooth(0, 0.35, -this.grade);
     f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * this.spread());
     this.groundAt(f.target, f.targetUp);
@@ -1620,7 +1636,7 @@ export class WalkerSim {
     for (const o of this.feet) if (o !== f && !o.swinging) hipLow = Math.min(hipLow, o.planted.y + v.hipHeight * 0.6);
     // Running, the hips come down to their running height over the landing spot (the reach cap in body()): a run down a
     // slope lands its feet instead of hanging them in the flight and dropping (Keith 21:54: the run hopped downhill).
-    if (this.runK > 0.5) hipLow = Math.min(hipLow, f.target.y + this.boundStand());
+    if (this.gaitK > 0.5) hipLow = Math.min(hipLow, f.target.y + this.boundStand());
     const hx = this.pos.x + this.vel.x * remain + lf.x * f.side * v.hipWidth - f.target.x;
     const hz = this.pos.z + this.vel.z * remain + lf.z * f.side * v.hipWidth - f.target.z;
     const lowest = hipLow - Math.sqrt(Math.max(0, R * R - hx * hx - hz * hz)) - v.ankleHeight;
@@ -1630,6 +1646,12 @@ export class WalkerSim {
 
   /** How far the legs are sprinting for the walk-or-sprint limits: all the way while Space holds the sprint, else the run share. */
   private get sprintK() { return this.bound ? 1 : this.runK; }
+  /**
+   * The run's share of the step timing (cadence, planted share, where feet land): off the moment the run ends, while the
+   * pose blends back over runBlend (Keith 2026-10-27: timed like the run after letting go, the steps trailed and the
+   * hips dropped into the splits).
+   */
+  private get gaitK() { return this.running ? this.runK : 0; }
 
   /**
    * Running, a planted leg at full stretch keeps its push-off look (the long straight leg, Keith 2026-10-27: main's
@@ -1832,6 +1854,7 @@ export class WalkerSim {
     const yv = Number.isFinite(this.prevYT) ? clamp((yT - this.prevYT) / dt, -12, 12) : 0;
     this.prevYT = yT;
     this.bodyY.stepFF(yT, yv * rk, dt);
+    this.hipShort = Math.max(0, yT - this.bodyY.x);
     this.impact.step(0, dt);
 
     // Weight onto the planted leg: shift over it, roll the pelvis down onto it (much less running).
