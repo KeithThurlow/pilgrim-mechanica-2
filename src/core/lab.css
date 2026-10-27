@@ -54,10 +54,11 @@ summary { cursor: pointer; color: #7fc0d0; font-size: 12px; letter-spacing: 0.06
   .help { display: none; }
 }
 
-/* Report box (src/core/report.ts) */
-.report-btn { position: fixed; left: 10px; bottom: 44px; z-index: 5; }
+/* Report box (src/core/report.ts): above every lab's own boxes, so it can always be pressed (Keith 2026-10-27: the
+   stress lab's results covered it). */
+.report-btn { position: fixed; left: 10px; bottom: 44px; z-index: 8; }
 .report {
-  position: fixed; left: 10px; bottom: 84px; width: min(380px, calc(100% - 20px)); z-index: 5;
+  position: fixed; left: 10px; bottom: 84px; width: min(380px, calc(100% - 20px)); z-index: 8;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
 }
 .report textarea { width: 100%; margin-top: 6px; background: #121417; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; font: 13px var(--sans); padding: 6px; }

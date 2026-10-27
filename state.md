@@ -219,6 +219,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Report button above every lab's own boxes (Claude, Keith's report)
+- Keith couldn't press Report in the stress lab: its results box (bottom left, z-index 5) covered the button and box (also 5). They're at 8 now, in every lab. `src/core/lab.css`.
+- Checked: build.
+
 ### 2026-10-27 · Keith's minigun dent values as the defaults (Keith)
 - `dentHitDepth` 0.06, `dentHitSize` 0.15, `dentHitOpen` 1, `dentHitLength` 4 (slider max now 6), `dentHitAngle` 1. Every lab with dents (walker, convoy, combat labs; the battlefield fills in the defaults elsewhere). Keith: use this dent for other small-calibre weapons (SMGs) too. `src/fx/dents.ts`.
 - Checked: typecheck and build.
