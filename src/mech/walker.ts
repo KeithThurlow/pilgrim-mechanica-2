@@ -1616,6 +1616,9 @@ export class WalkerSim {
     if (f.short) { f.target.y = lowest; f.targetUp.copy(UP); }
   }
 
+  /** How far the legs are sprinting for the walk-or-sprint limits: all the way while Space holds the sprint, else the run share. */
+  private get sprintK() { return this.bound ? 1 : this.runK; }
+
   /** The sink depth at (x, z) (0 without a sinkAt). */
   sink(x: number, z: number) { return this.sinkAt ? Math.max(0, this.sinkAt(x, z)) : 0; }
 
@@ -1713,7 +1716,9 @@ export class WalkerSim {
       f.pos.set(ex + (f.pos.x - ex) * w, ey + (f.pos.y - ey) * w, ez + (f.pos.z - ez) * w);
       if (w >= 1) f.entryU = -1;
     }
-    this.toesClear(f);
+    // Walking (Keith 2026-10-27: the walk looked bad with the foot flattened), only the toe tips are kept out of the sand,
+    // just touching it; the sprint also eases the foot's pitch and keeps both clear by toeClear.
+    this.toesClear(f, Math.sin(Math.PI * clamp(f.u, 0, 1)), this.sprintK > 0, this.sprintK);
   }
 
   /**
@@ -1721,9 +1726,10 @@ export class WalkerSim {
    * pitched toes-down, the toes uncurled and curled under faster than the foot rose, up to 0.37 m into flat sand):
    * the pitch eases off so the ball of the foot clears, and the toes stay bent up as if still pushing.
    */
-  private toesClear(f: Foot, env = Math.sin(Math.PI * clamp(f.u, 0, 1)), pitchToo = true) {
+  private toesClear(f: Foot, env = Math.sin(Math.PI * clamp(f.u, 0, 1)), pitchToo = true, clearK = 1) {
     // env: 1 mid-swing (clear by toeClear) .. 0 planted (the toes may be in the sand as deep as the foot sinks).
-    const v = this.v, m = (0.02 + v.toeClear) * env - this.sink(f.pos.x, f.pos.z) * (1 - env);
+    // clearK scales the margin over the ground (0: the tips just touch it).
+    const v = this.v, m = (0.02 + v.toeClear) * env * clearK - this.sink(f.pos.x, f.pos.z) * (1 - env);
     const h = v.toeHinge, L = Math.max(0.01, v.toeLength - v.toeHinge);
     // On the plate's own frame (as pose() builds it): forward along its yaw over its up; pitch turns the toes down.
     const up = f.up, fw = this.plateForward(up, f.yaw, this.t.f);
@@ -1734,6 +1740,14 @@ export class WalkerSim {
       return out[1] - this.ground.height(out[0], out[2]) - m;
     };
     const P = this.t.n, Q = [0, 0, 0];
+    // Walking, the foot first rises (a share, toeLift) by as much as its curled toes would be in the ground.
+    const lift = pitchToo ? 0 : v.toeLift * (1 - clearK);
+    if (lift > 0) {
+      const ball = over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P);
+      const tip = over(P[0], P[1], P[2], f.pitch + f.toe, L, Q);
+      const short = -Math.min(ball, tip, 0);
+      f.pos.y += short * lift;
+    }
     // The ball of the foot: ease the toes-down pitch until it clears.
     if (pitchToo && h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
       let lo = Math.min(f.pitch, 0) - 0.8, hi = f.pitch;
@@ -1758,7 +1772,9 @@ export class WalkerSim {
     const v = this.v;
     const [a, b] = this.feet;
     const avg = (a.groundY + b.groundY) / 2, low = Math.min(a.groundY, b.groundY);
-    const under = this.ground.height(this.pos.x, this.pos.z);
+    // Walking, the ground under the body as deep as the feet sink in, so on sand the whole mech sits that much lower (the
+    // legs keep their shape) rather than the hips dropping only part of the way (the sprint keeps its own heights).
+    const under = this.ground.height(this.pos.x, this.pos.z) - this.sink(this.pos.x, this.pos.z) * (1 - this.sprintK);
     const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
     // Walking the hips are highest over the planted foot (vaulting); running they sink onto it and spring off.
     const run = this.runShare(), rk = this.runK;
@@ -2013,11 +2029,12 @@ export class WalkerSim {
       f.theta = theta;
 
       // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
-      // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
-      // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
+      // of a straight knee (kneeMaxPlanted sprinting, kneeMaxWalk walking): at the end of a push-off the hock opens just
+      // enough instead (Keith 2026-10-24 didn't want the knee going straight; with the hock not opening by itself,
+      // hockExtend 0, it did). The walk's stop sits past Keith's tuned push-off (Keith 2026-10-27: 165° spoilt the walk).
       const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
       const dirHip = toHip.clone().normalize();
-      const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
+      const kneeCap = clamp(v.kneeMaxWalk + (v.kneeMaxPlanted - v.kneeMaxWalk) * this.sprintK, 90, 180) * D2R;
       const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
       const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
       P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
