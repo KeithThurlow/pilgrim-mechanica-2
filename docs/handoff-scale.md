@@ -35,7 +35,11 @@ pushed to `wip/scale` after every working step. Read this, then `git log`, when 
   `scale/shots/w3-three.png`): GPU matches once drawn oldest-last in two passes (clumps, then cloud); unsorted
   newest-last showed dark mottling (new clumps over old cloud). GPU tracers draw in the lab (`shots/tracertest.png`).
   WebGPU: the feasibility test and a robots-lab load had no errors; a WebGPU readback timed out on this box (too slow).
-- Open: in the robots lab firing shot (`shots/r-gpu.png` vs `r-cpu.png`) the GPU frame shows less dust haze round the
+- WebGPU walker shot after the merge (`scale/shots/w4-webgpu.png`): GPU dust draws on WebGPU too.
+- Numbers: `docs/perf-2026-10-26.md` Pass 2 (worst-case dust 3.9 to 0.34 ms CPU, 22k puffs alive vs the 4,096 cap).
+- **Status: steps 1, 3, 4, 5 built and verified; ready to merge.** Left: far LOD and shadow distance for units
+  (proposal step 5), register ids in shot events, seeded spread in mechUnit, per-look GPU cost on Keith's PC.
+- Not a dust bug (checked by counting puffs): in the robots lab firing shot (`shots/r-gpu.png` vs `r-cpu.png`) the GPU frame shows less dust haze round the
   mech's left gun; not yet pinned down (random run-to-run, or puffs missing there).
 - Scripts: `scale/gpucheck.mjs <url> frames` reads the pools back (live, height over the true ground); `smoke2.mjs`
   (console errors too). Shots: `shotg.mjs` stops the loop before the screenshot (the box renders 6-10 s a frame).
