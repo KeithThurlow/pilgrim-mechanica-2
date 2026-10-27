@@ -254,6 +254,7 @@ export class WalkerSim {
   } | null = null;
   /** The dash's shove is being ignored (the steps move the body) until it's gone. */
   private pushLatch = false;
+  private pushQuiet = 0;
   /** The dash's lean (roll, left side up +; pitch, nose down +) and hip height change (m), eased out after it. */
   private dashRoll = 0;
   private dashPitch = 0;
@@ -331,6 +332,7 @@ export class WalkerSim {
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
+    this.pushLatch = false; this.pushQuiet = 0; this.burstLeft = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -398,7 +400,7 @@ export class WalkerSim {
    * a crane letting go, a jump, a blast. The walker lands by itself.
    */
   launch(vx: number, vy: number, vz: number) {
-    this.dashMove = null;
+    this.dashMove = null; this.burstLeft = 0;
     this.hipOpen = 0;
     for (const f of this.feet) f.kneeYaw = 0;
     if (!this.airborne) {
@@ -439,7 +441,12 @@ export class WalkerSim {
     const v = this.v;
     this.stats.frames++;
     // A dash's shove, once its steps have started, moves nothing (the steps do) until it's gone.
-    if (this.pushLatch) { if (this.push.lengthSq() < 0.25) this.pushLatch = false; else this.push.set(0, 0, 0); }
+    // (Gone: quiet for a quarter second; the shove's tail dips to nothing just before its glide picks up.)
+    if (this.pushLatch) {
+      this.pushQuiet = this.push.lengthSq() < 0.25 ? this.pushQuiet + dt : 0;
+      if (this.pushQuiet > 0.25) this.pushLatch = false;
+      this.push.set(0, 0, 0);
+    }
     if (this.stagger > 0) { this.stagger = Math.max(0, this.stagger - dt); cmd = { x: 0, z: 0, sprint: false }; }
     this.footSlip = 0;
     this.slip.set(0, 0, 0);
@@ -1305,7 +1312,7 @@ export class WalkerSim {
   private dashBegin() {
     const v = this.v, l = Math.hypot(this.push.x, this.push.z), dx = this.push.x / l, dz = this.push.z / l;
     const yaw = Math.atan2(dx, dz);
-    this.pushLatch = true;
+    this.pushLatch = true; this.pushQuiet = 0;
     const mx = this.vel.x + this.skid.x, mz = this.vel.z + this.skid.z, ms = Math.hypot(mx, mz);
     const travel = ms > 1 ? Math.atan2(mx, mz) : this.heading;
     const kind = dashKind(wrap(yaw - travel), v);
@@ -1329,6 +1336,12 @@ export class WalkerSim {
       iSw: null, oSw: null, iDown: false, oSet: !O.swinging, oUp: false,
     };
     for (const f of this.feet) { f.hang = false; f.short = false; f.bState = 0; }
+    // Both in the air (a hurried step): the outside foot goes down where it is, to push.
+    if (I.swinging && O.swinging) { this.plantFoot(O, O.pos.x, O.pos.z); this.dashMove.oSet = true; }
+    // The outside foot trailing far behind (late in its stance): it steps in under its hip to push, not from back there.
+    else if (!I.swinging && !O.swinging && O.stanceT > 0.7 && kind !== "burst") { this.dashMove.oSet = false; this.dashLift(O, true); }
+    // The inside foot trailing: it lifts at once (it steps out toward the dash from wherever it is).
+    else if (!I.swinging && !O.swinging && I.stanceT > 0.6) this.dashLift(I, true);
     // A foot already in the air carries on into its dash swing from where it is.
     if (I.swinging) this.dashLift(I, false);
     if (O.swinging) this.dashLift(O, false);

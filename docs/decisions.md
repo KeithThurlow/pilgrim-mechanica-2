@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-27 | The dash is footwork: load, the outside leg pushes onto its foot's edge, the inside foot steps out, the outside leg comes through, then the run along the dash (held: the sprint; let go: a short sprint that rolls off, then the walk). Side step 35-125° off the line of travel, a burst closer, a cutback further | Keith | Keith | Claude's takes (sliders): the beats (0.1 / 0.16 / 0.04 / 0.24 s), hips turn until the dash is 70° off them, 22° edge, 15° lean, burst 0.5 s at 6 m/s². The walker moves the body through the steps; the shove only gives the way. |
 | 2026-10-27 | Effects priority: yours, then co-op allies', then everyone else's | Keith | Keith | Claude's takes (slider): allies' far hits never below 70% kept, pressure thins them half as hard (square root), their extras still trimmed. |
 | 2026-10-27 | Minigun dents: Keith's values (depth 0.06, size 0.15, fully open, 4 long, full entry-angle effect) are the defaults everywhere; the same dent for other small-calibre weapons (SMGs) | Keith | Keith | Shells and blasts keep their round crater. |
 | 2026-10-27 | A minigun round's dent is a U open toward the shooter, not a crater | Keith | Keith | Claude's takes (sliders): 0.85 open, 1.8 long; the back half 65% shallower and rimless, the far rim 60% higher. |

@@ -154,6 +154,8 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // as in the combat and convoy labs); ?dash makes the demo dash every 3 s; ?bound makes the demo hold Space (sprint).
 const boundDemo = params.has("bound");
 const dashAt = Number(params.get("dashat") ?? 0);
+/** The demo dash's angle off the legs' heading (radians, + left): ?dashdir, or the default given. */
+const demoDashOff = (fallback: string) => ({ right: -90, left: 90, diag: -45, fwd: 0, back: 180, backdiag: -135 } as Record<string, number>)[params.get("dashdir") ?? fallback] * Math.PI / 180 || 0;
 let dashPressed = false, spaceDown = false;
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || typing(e)) return;
@@ -308,9 +310,10 @@ function tick(rawDt: number) {
   // Held Space carries the dash on into the sprint (?bound: the demo holds it; with ?dashat, from the dash on).
   mech.dashHold = (spaceDown && !auto) || (auto && boundDemo && clock >= dashAt);
   // The demo sidesteps now and then (with ?dash: every 3 s from 1.5 s; with ?walk=straight for repeatable furrows).
-  if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) mech.tryDash(Math.cos(sim.heading), -Math.sin(sim.heading));
-  // ?dashat=seconds: the demo dashes straight ahead once, then (with ?bound) holds Space on into the sprint.
-  if (auto && dashAt > 0 && clock >= dashAt && clock - dt < dashAt) mech.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
+  // ?dashdir=right|left|diag|fwd|back picks the way, off the legs' heading (the steps: side step, burst or cutback).
+  if (auto && params.has("dash") && (clock + 1.5) % 3 < dt) { const a = sim.heading + demoDashOff("left"); mech.tryDash(Math.sin(a), Math.cos(a)); }
+  // ?dashat=seconds: the demo dashes once (straight ahead, or ?dashdir), then (with ?bound) holds Space on into the sprint.
+  if (auto && dashAt > 0 && clock >= dashAt && clock - dt < dashAt) { const a = sim.heading + demoDashOff("fwd"); mech.tryDash(Math.sin(a), Math.cos(a)); }
   mech.step(dt, cmd, aim, trigger);
 
   reticle.visible = !!aim && !!rampart;

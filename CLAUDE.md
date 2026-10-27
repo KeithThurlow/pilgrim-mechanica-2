@@ -107,7 +107,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?surface=gravel|dirt|concrete|snow` (dust and dents as if the ground were that), `?dash`, `?at=x,z`, `?warm=seconds` (run that much sim time before the
   first drawn frame, for slow headless filmstrips), `?drop=metres[,m/s]` (start in the air that high, as if a crane let
   go, optionally moving), `?bound` (the demo holds Space: it sprints; with `?walk=straight` in a line), `?dashat=seconds`
-  (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?wall=degrees[,metres]` (a steep-faced block
+  (the demo dashes ahead once; with `?bound` it sprints on from the dash), `?dashdir=left|right|diag|fwd|back|backdiag` (the demo dash's way off the legs' heading: side step, burst or cutback; with `?dash` or `?dashat`), `?wall=degrees[,metres]` (a steep-faced block
   30 m ahead of the straight demo), `?turnat=seconds` (with `?walk=straight`, the demo turns hard right then).
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed.
