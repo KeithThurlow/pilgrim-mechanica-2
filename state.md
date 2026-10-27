@@ -220,7 +220,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## Changes
 
 ### 2026-10-27 · Round dents as a U open toward the shooter (Keith, Claude)
-- Keith: a minigun round's dent should be a U/V, not a crater, the open, softer side toward where the round came in. A brush can now be open (`Brush.open`, in the slot the unused `seed` had): along its yaw, the back half shallows (by 65%) and loses its rim, the far end's rim heaps up (+60%); the pass and `dentRule.splat` agree. Rounds pass their flight to `GroundMarks.crater` (the battlefield's sand hits) and stamp elongated along it. Sliders in Ground dents: `dentRoundOpen` (0.85, 0 = the old crater), `dentRoundLength` (1.8). Blasts unchanged. `src/fx/dentRule.ts`, `dents.ts`, `groundMarks.ts`, `src/game/battlefield.ts`.
+- Keith: a minigun round's dent should be a U/V, not a crater, the open, softer side toward where the round came in. A brush can now be open (`Brush.open`, in the slot the unused `seed` had): along its yaw, the back half shallows (by 65%) and loses its rim, the far end's rim heaps up (+60%); the pass and `dentRule.splat` agree. Rounds pass their flight to `GroundMarks.crater` (the battlefield's sand hits) and stamp elongated along it. Any hit given a flight gets the U: a hull round's k (Hit size 2.1 × scale) is past the blast line of 2, so it keeps the blast depth it always had and only changes shape. Sliders in Ground dents: `dentRoundOpen` (0.85, 0 = the old crater), `dentRoundLength` (1.8). Blasts unchanged. `src/fx/dentRule.ts`, `dents.ts`, `groundMarks.ts`, `src/game/battlefield.ts`.
 - Checked: typecheck and build only (Keith reviews it himself).
 
 ### 2026-10-27 · Keith's sprint and landing values from a clean start as the defaults (Keith, Claude)
