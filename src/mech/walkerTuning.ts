@@ -2,8 +2,11 @@
 // Starting values come from the old walker lab's Mechanical walk (build 65, Keith 2026-10-19), scaled to a mech
 // about 5 m to the top of the hull; the names are new and the old lab's 140 sliders are cut to what matters here.
 import type { Param } from "../core/tweaks";
+import { SINK_DEFAULTS, SINK_PARAMS } from "./sink";
 
 export const WALKER_DEFAULTS = {
+  // Feet sink into soft ground (src/mech/sink.ts).
+  ...SINK_DEFAULTS,
   // Move
   // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
   walkSpeed: 6,
@@ -154,6 +157,11 @@ export const WALKER_DEFAULTS = {
   runClear: 3,
   // Climbing at a run (Keith 2026-10-26 21:54): quicker, shorter strides uphill.
   runClimbSteps: 0.1,
+  runWhip: 0.5,
+  runPlantDrop: 0.12,
+  runPlantPitch: 3,
+  runPushRise: 0.05,
+  runWhipAt: 0.3,
   runDescentSteps: 0,
   runHurry: 0.3,
   runReachGive: 0.1,
@@ -193,6 +201,7 @@ export const WALKER_DEFAULTS = {
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
 export const WALKER_PARAMS: Param[] = [
+  ...SINK_PARAMS,
   { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
   { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
   { key: "accel", label: "Speed up (m/s²)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "Low = heavy, takes time to get going" },
@@ -329,6 +338,11 @@ export const WALKER_PARAMS: Param[] = [
   { key: "runRollStart", label: "Run: heel starts lifting at", min: 0.1, max: 0.95, step: 0.01, group: "Sprint" },
   { key: "runLookAhead", label: "Run: hull looks ahead (s)", min: 0, max: 0.6, step: 0.01, group: "Sprint", tip: "The hips keep the clearance below over the highest ground this far ahead in travel (at least 1.5 m), so the hull doesn't dip into rising ground: the legs take it" },
   { key: "runClear", label: "Run: hips over the ground ahead (m)", min: 1, max: 3.5, step: 0.01, group: "Sprint" },
+  { key: "runWhip", label: "Run: leg whips through the swing", min: 0, max: 0.95, step: 0.01, group: "Sprint", tip: "The swinging leg hangs behind after the push-off, whips up toward the tuck ((1 + 2 × this)² times as fast at its fastest) and eases into the reach: a snappier swing at the same cadence and stride. 0: an even swing" },
+  { key: "runPlantDrop", label: "Run: hips drop at each plant (m)", min: 0, max: 0.5, step: 0.005, group: "Sprint", tip: "Each running footfall compresses the body over the first half of the stance: force going into the ground (Keith 2026-10-26 21:54)" },
+  { key: "runPlantPitch", label: "Run: nose dips at each plant (°)", min: 0, max: 15, step: 0.1, group: "Sprint" },
+  { key: "runPushRise", label: "Run: hips rise through the push-off (m)", min: 0, max: 0.3, step: 0.005, group: "Sprint", tip: "The second half of the stance: the leg extends and throws the body on" },
+  { key: "runWhipAt", label: "Run: whip fastest at (share of the swing)", min: 0.1, max: 0.9, step: 0.01, group: "Sprint", tip: "Where in the swing the leg moves fastest: about 0.3 is the thigh passing under the hips on its way up to the tuck" },
   { key: "runClimbSteps", label: "Run: more steps/s per degree uphill", min: 0, max: 0.3, step: 0.005, group: "Sprint", tip: "Climbing, the steps come quicker and shorter (the speed still falls by Slow uphill): 0.1 is 2 more steps a second up a 20° climb" },
   { key: "runDescentSteps", label: "Run: fewer steps/s per degree downhill", min: 0, max: 0.2, step: 0.005, group: "Sprint", tip: "0 keeps the cadence downhill; more eases it into longer strides" },
   { key: "runHurry", label: "Run: hurry when a leg is stretched", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "Share of the walk's hurry (steps quicken when a planted leg nears full stretch) the run keeps, eased. 1 flicked the cadence on climbs" },

@@ -211,6 +211,14 @@ export class WalkerSim {
   /** The gait's planted share and cycles per second now (the planted share eases, so steps never jump). */
   dutyNow = 0.6;
   cpsNow = 0;
+  /**
+   * How far a planted foot sinks into the ground at (x, z) (m; src/mech/sink.ts, set by the mech unit from the surface).
+   * Planted spots and landing spots sit this far under the ground; a swinging foot eases out of it and back in.
+   * Null: none (feet on top).
+   */
+  sinkAt: ((x: number, z: number) => number) | null = null;
+  /** The run's plant compression: the hull's extra nose-down pitch now (radians), from body(). */
+  private plantPitch = 0;
   /** The over-stretch hurry on the cadence (1: none), eased while running. */
   private hurry = 1;
   /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
@@ -415,6 +423,7 @@ export class WalkerSim {
     this.slip.set(0, 0, 0);
     this.tuckPose();
     this.turnLean(dt);
+    this.plantPitch = 0;
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
     const gallop = v.boundGallop >= 0.5;
@@ -693,9 +702,18 @@ export class WalkerSim {
    * foot's place to out and the pitch, toe and cannon angle the swing wants.
    */
   private runSwing(f: Foot, out: Vector3) {
-    const v = this.v, u = f.u, d = this.dutyNow;
+    const v = this.v, d = this.dutyNow;
     const Tsw = (1 - d) / Math.max(MIN_CYCLE, this.cpsNow);
-    const remain = (1 - u) * Tsw;
+    const remain = (1 - f.u) * Tsw;
+    // The whip (Keith 2026-10-26 21:54: the sprint's swing looked slower than the walk's): the foot hangs behind after
+    // the push-off, whips up toward the tuck, (1 + 2 x runWhip)^2 faster at its fastest, and eases into the reach; its
+    // speed at lift-off and at the plant is unchanged, so the plant still matches the ground.
+    // The fastest point is at runWhipAt of the swing (the thigh passing under the hips on its way up to the tuck).
+    const wh = clamp(v.runWhip, 0, 0.95), c = clamp(v.runWhipAt, 0.1, 0.9);
+    // Twice over: up to (1 + 2 x runWhip)^2 at the fastest, still never backwards.
+    const W1 = (x: number) => x + wh * (Math.sin(4 * Math.PI * x) / (4 * Math.PI) - Math.sin(2 * Math.PI * x) / (2 * Math.PI));
+    const W = (x: number) => W1(W1(x));
+    const u = f.u < c ? 2 * c * W(f.u / (2 * c)) : c + 2 * (1 - c) * (W(0.5 + (f.u - c) / (2 * (1 - c))) - 0.5);
     const fw = forwardOf(this.heading, this.t.f), lf = leftOf(this.heading, this.t.l);
     const hipY = this.bodyY.x;
     const A = f.runA, tk = this.tuck;
@@ -731,7 +749,8 @@ export class WalkerSim {
     const env = Math.sin(Math.PI * u);
     const g = this.ground.height(out.x, out.z);
     const gToe = this.ground.height(out.x + fw.x * v.toeLength, out.z + fw.z * v.toeLength);
-    out.y = Math.max(out.y, Math.max(g, gToe) + v.footClear * env, g);
+    const sk = this.sink(out.x, out.z);
+    out.y = Math.max(out.y, Math.max(g, gToe) + v.footClear * env - sk * (1 - env), g - sk * (1 - env));
     // Orientation: from the push-off's rolled heel to hanging toes-down at the tuck to flat at the plant; the toes from
     // bent up (pushing) to curled down and back, opening flat for the plant; the cannon folding up and opening again.
     const a = smooth(0, uc, u), b = smooth(uc, 0.92, u);
@@ -819,6 +838,7 @@ export class WalkerSim {
       f.pitch = 0.35 * (1 - this.airExt);
       f.toe = 0.3 * (1 - this.airExt);
       f.groundY = g;
+      this.toesClear(f, 0.5);
     }
     void lf;
     if (this.airT > AIR_MIN) {
@@ -1193,7 +1213,7 @@ export class WalkerSim {
       if (f.bState === 1) {
         const w = clamp(st.t / Math.max(0.02, st.lag), 0, 1), e = w * w * (3 - 2 * w);
         f.pos.lerpVectors(f.lift, f.target, e);
-        f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z));
+        f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z) - this.sink(f.pos.x, f.pos.z) * e);
         f.up.copy(f.liftUp).lerp(f.targetUp, e).normalize();
         f.yaw = f.targetYaw; f.pitch = 0; f.toe = 0;
         f.u = 0.85 + 0.15 * w;
@@ -1217,6 +1237,7 @@ export class WalkerSim {
       const g = this.ground.height(f.pos.x, f.pos.z);
       if (f.pos.y < g + 0.05) { f.pos.y = g + 0.05; f.airRel.y = f.pos.y - this.pelvis.y; }
       f.up.copy(UP); f.yaw = this.heading + f.side * v.toeOut * D2R; f.pitch = 0.3; f.toe = 0.25;
+      this.toesClear(f, 0.5);
       f.u = Math.min(0.3, f.u + dt * 2);
       f.groundY = g;
     }
@@ -1290,7 +1311,7 @@ export class WalkerSim {
       const sx = this.pos.x + rel.x, sz = this.pos.z + rel.z, sy = hipY + rel.y;
       f.pos.set(sx + (tx - sx) * e, 0, sz + (tz - sz) * e);
       const g = this.ground.height(f.pos.x, f.pos.z);
-      f.pos.y = Math.max(g, sy + (g - sy) * e) + lift * Math.sin(Math.PI * k);
+      f.pos.y = Math.max(g - this.sink(f.pos.x, f.pos.z) * e, sy + (g - sy) * e) + lift * Math.sin(Math.PI * k);
       f.u = k; f.stanceT = 0;
       f.up.copy(UP); f.yaw = this.heading + f.side * v.toeOut * D2R;
       f.groundY = g;
@@ -1330,7 +1351,7 @@ export class WalkerSim {
       const jx = this.pos.x + lf.x * f.side * v.hipWidth, jz = this.pos.z + lf.z * f.side * v.hipWidth;
       const rx = f.pos.x - jx, ry = f.pos.y + v.ankleHeight - hipY, rz = f.pos.z - jz, rd = Math.hypot(rx, ry, rz);
       if (rd > R) { const s = R / rd; f.pos.set(jx + rx * s, hipY + ry * s - v.ankleHeight, jz + rz * s); }
-      f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z));
+      f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z) - this.sink(f.pos.x, f.pos.z) * f.u);
     }
     // The lead knee drives toward the dash.
     const toward = wrap(dm.yaw - this.heading);
@@ -1445,8 +1466,9 @@ export class WalkerSim {
    */
   private orient(pelvisYaw: number) {
     const v = this.v, tr = this.turnRoll;
-    this.pelvisQ.setFromEuler(this.t.e.set(this.pitch.x, pelvisYaw, this.roll.x + tr, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(this.pitch.x, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
+    const pitch = this.pitch.x + this.plantPitch;
+    this.pelvisQ.setFromEuler(this.t.e.set(pitch, pelvisYaw, this.roll.x + tr, "YXZ"));
+    this.hullQ.setFromEuler(this.t.e.set(pitch, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
     if (tr !== 0) {
       // Rolled about the outside hip, so the outside leg reaches no further than upright and the inside one folds.
       const H = v.hipHeight * v.turnLeanShift, l = leftOf(this.heading, this.t.l);
@@ -1594,9 +1616,12 @@ export class WalkerSim {
     if (f.short) { f.target.y = lowest; f.targetUp.copy(UP); }
   }
 
-  /** Put p on the ground and write the tilt-limited ground normal into up. */
+  /** The sink depth at (x, z) (0 without a sinkAt). */
+  sink(x: number, z: number) { return this.sinkAt ? Math.max(0, this.sinkAt(x, z)) : 0; }
+
+  /** Put p on the ground (a planted foot's depth into it) and write the tilt-limited ground normal into up. */
   private groundAt(p: Vector3, up: Vector3) {
-    p.y = this.ground.height(p.x, p.z);
+    p.y = this.ground.height(p.x, p.z) - this.sink(p.x, p.z);
     const n = this.ground.normal(p.x, p.z, this.t.n);
     up.set(n[0], n[1], n[2]);
     const ang = Math.acos(clamp(up.y, -1, 1)), max = this.v.footTiltMax * D2R;
@@ -1631,6 +1656,8 @@ export class WalkerSim {
         f.pos.sub(hinge).applyAxisAngle(axis, roll).add(hinge);
       }
       f.groundY = f.planted.y;
+      // A rigid plate on curved ground: its toes bend up rather than into the ground (no deeper than the foot sinks).
+      this.toesClear(f, 0, false);
       return;
     }
 
@@ -1657,9 +1684,10 @@ export class WalkerSim {
     // Clear the ground under the foot (stepping up a dune face).
     const g = this.ground.height(f.pos.x, f.pos.z);
     const gToe = this.ground.height(f.pos.x + Math.sin(f.yaw) * v.toeLength, f.pos.z + Math.cos(f.yaw) * v.toeLength);
-    y = Math.max(y, Math.max(g, gToe) + mixI(v.footClear, v.idleClear) * liftK);
+    const sk = this.sink(f.pos.x, f.pos.z);
+    y = Math.max(y, Math.max(g, gToe) + mixI(v.footClear, v.idleClear) * liftK - sk * (1 - liftK));
     f.pos.y = y;
-    if (y < g - 0.02) this.stats.scuffs++;
+    if (y < g - sk - 0.02) this.stats.scuffs++;
 
     f.up.copy(f.liftUp).lerp(f.targetUp, e).normalize();
     f.yaw = f.liftYaw + wrap(f.targetYaw - f.liftYaw) * e;
@@ -1693,8 +1721,9 @@ export class WalkerSim {
    * pitched toes-down, the toes uncurled and curled under faster than the foot rose, up to 0.37 m into flat sand):
    * the pitch eases off so the ball of the foot clears, and the toes stay bent up as if still pushing.
    */
-  private toesClear(f: Foot) {
-    const v = this.v, m = 0.02 + v.toeClear * Math.sin(Math.PI * clamp(f.u, 0, 1));
+  private toesClear(f: Foot, env = Math.sin(Math.PI * clamp(f.u, 0, 1)), pitchToo = true) {
+    // env: 1 mid-swing (clear by toeClear) .. 0 planted (the toes may be in the sand as deep as the foot sinks).
+    const v = this.v, m = (0.02 + v.toeClear) * env - this.sink(f.pos.x, f.pos.z) * (1 - env);
     const h = v.toeHinge, L = Math.max(0.01, v.toeLength - v.toeHinge);
     // On the plate's own frame (as pose() builds it): forward along its yaw over its up; pitch turns the toes down.
     const up = f.up, fw = this.plateForward(up, f.yaw, this.t.f);
@@ -1706,7 +1735,7 @@ export class WalkerSim {
     };
     const P = this.t.n, Q = [0, 0, 0];
     // The ball of the foot: ease the toes-down pitch until it clears.
-    if (h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
+    if (pitchToo && h > 0 && over(f.pos.x, f.pos.y, f.pos.z, f.pitch, h, P) < 0) {
       let lo = Math.min(f.pitch, 0) - 0.8, hi = f.pitch;
       if (over(f.pos.x, f.pos.y, f.pos.z, lo, h, P) >= 0) {
         for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (over(f.pos.x, f.pos.y, f.pos.z, mid, h, P) >= 0) lo = mid; else hi = mid; }
@@ -1800,7 +1829,19 @@ export class WalkerSim {
       const over = this.bodyY.x + extra - yMax;
       if (over > 0) { this.bodyY.x -= over * (1 - rk); if (rk < 0.5) this.bodyY.v = Math.min(0, this.bodyY.v); }
     }
-    this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat, this.pos.z + l.z * this.lat.x - fw.z * back);
+    // Running, each plant compresses the body (Keith 2026-10-26 21:54: "communication of energy being pushed into the
+    // ground"): a quick hip drop and the nose pitching down over the first half of the stance, then the hips rising a little
+    // as the leg extends through the push-off.
+    let comp = 0, ext = 0;
+    if (rk > 0) for (const f of this.feet) {
+      if (f.swinging) continue;
+      const st = f.stanceT;
+      comp = Math.max(comp, st < 0.5 ? Math.sin((Math.PI * st) / 0.5) : 0);
+      ext = Math.max(ext, st >= 0.5 ? Math.sin((Math.PI * (st - 0.5)) / 0.5) : 0);
+    }
+    const plantY = (v.runPushRise * ext - v.runPlantDrop * comp) * rk;
+    this.plantPitch = v.runPlantPitch * D2R * comp * rk;
+    this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat + plantY, this.pos.z + l.z * this.lat.x - fw.z * back);
     // The dash opens the hips toward where it's going (the hull above keeps facing the heading).
     const dm = this.dashMove;
     const open = dm ? clamp(wrap(dm.yaw - this.heading), -60 * D2R, 60 * D2R) * v.dashHipOpen * (1 - smooth(0.3, 0.7, dm.t)) : 0;

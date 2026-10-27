@@ -13,6 +13,7 @@ import type { DesertLook } from "../world/look";
 import { rayGround } from "../world/raycast";
 import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
+import { sinkDepth, type SinkSurface, type SinkValues } from "../mech/sink";
 import { DustSim, type DustValues } from "../fx/dust";
 import { DustDraw } from "../fx/dustDraw";
 import { GroundMarks } from "../fx/groundMarks";
@@ -272,8 +273,17 @@ export class Battlefield {
     return this.dents;
   }
 
-  /** How far a foot sinks into the ground here (m; looks only, for snow later): 0 without dents. */
-  sinkDepth(x: number, z: number) { return this.marks.denting ? this.dents!.sinkDepth(x, z) : 0; }
+  /**
+   * How far a planted foot sinks into the ground here (m; src/mech/sink.ts, Keith 2026-10-26 21:54): by the surface and
+   * the crater layer's hardness, deterministic (the walkers plant their feet this deep). sinkSurface: a lab can pretend
+   * the ground is another surface (?surface=snow).
+   */
+  sinkSurface: ((x: number, z: number) => SinkSurface) | null = null;
+  sinkDepth(x: number, z: number) {
+    const s = this.sinkSurface ? this.sinkSurface(x, z) : this.field.surfaceAt(x, z);
+    const hard = (this.field.dents as { hardness?: (x: number, z: number) => number } | null)?.hardness?.(x, z) ?? 0;
+    return sinkDepth(this.v as Partial<SinkValues>, s, hard);
+  }
 
   /** Is (x, z) under the shallows' water (deep enough to splash)? */
   inWater(x: number, z: number, depth = 0.04): boolean {

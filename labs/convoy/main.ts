@@ -209,6 +209,8 @@ carry.onTouchdown = (x, y, z, speed) => {
   shaker.add(V.craneLandShake * k);
 };
 player.onLanding = (l) => { shaker.add(V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
+// Each sprinting footfall: a small shake (sprintShake).
+player.onSprintStep = (k) => shaker.add(V.sprintShake * Math.min(1.5, k));
 
 const iso = new IsoCamera(camera, canvas, V);
 const keys = new Keys();
@@ -397,7 +399,7 @@ const panel = tweakPanel({
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     WEAPON_TOPIC,
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
     { id: "light", label: "Light", groups: ["Look", "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },

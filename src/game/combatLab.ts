@@ -163,6 +163,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // The weapons that aren't miniguns (nothing until a loadout fits one), camera shake, blasts (src/game/playerAim.ts).
   const shaker = new CameraShake();
   const shake = shaker.add;
+  // Each sprinting footfall: a small shake (sprintShake).
+  player.onSprintStep = (k) => shake(V.sprintShake * Math.min(1.5, k));
   const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 
   const iso = new IsoCamera(camera, canvas, V);
@@ -200,7 +202,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
       WEAPON_TOPIC,
-      { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Terrain"] },
+      { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
