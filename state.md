@@ -201,6 +201,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Next candidates (ask Keith which)
 
+- **Performance: crater and dent spikes (Keith 2026-10-27, a todo for another agent).** From Keith's stress runs (state.md In progress, reports/2026-10-27T02-04-36-stress.md): spread crater refits (true-ground reshapes after blasts) over several frames, since at co-op scale they cost 3.8 ms avg / 21 ms spikes at 100% and 14 / 31 at 150%; and take dent stamping off the critical path (~11 ms spikes at every load). Also worth a look: cap and fade old bodies (1000-1500 pile up), fewer robot draw calls, spread terrain chunk builds (22 ms spikes when new ground streams in), and the stress lab's "of which allies" counter (reads 0).
 - **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built.
 - **The convoy, its cranes and escort**: plan in `docs/proposal-convoy.md` (route, a flattened corridor in the height
   function, platforms, a crane state machine for deploy and pick-up, escorts), waiting for Keith.
