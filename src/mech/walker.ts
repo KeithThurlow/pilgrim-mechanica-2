@@ -717,6 +717,8 @@ export class WalkerSim {
       else if (this.boostTo > this.boundSpeed) this.boundSpeed = Math.min(this.boostTo, this.boundSpeed + v.dashBoostAccel * dt);
       else if (this.burstHold > 0) { this.boostTo = 0; this.burstHold -= this.boundSpeed * dt; }
       else { this.boostTo = 0; this.boundSpeed -= v.dashRolloff * dt; }
+      // The slope along it, both ways: further downhill, shorter up (Keith 2026-10-25: slides work better downhill).
+      if (this.grade < 0) this.boundSpeed -= G * Math.sin(Math.atan(this.grade)) * dt;
       const floor = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
       if (this.boostTo <= 0 && this.boundSpeed <= Math.max(floor, 3)) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.boostTo = 0; }
     } else if (this.boostTo > this.boundSpeed) {

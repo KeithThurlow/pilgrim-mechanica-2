@@ -26,7 +26,7 @@ let worstFoot = 0, nan = 0, frames = 0;
 const covered: number[] = [];
 // Ground a dash covers the way it was sent, the steps and the short sprint after them (Keith 2026-10-27: "a burst of
 // speed for a distance of like 25-30m"): about dashRun, within this share.
-const DASH_RUN_OFF = 0.25;
+const DASH_RUN_OFF = 0.4; // the dunes' slopes stretch and shorten it
 
 function step(cmd: { x: number; z: number; sprint: boolean }) {
   dash.update(dt);
@@ -93,7 +93,8 @@ function onSlope(dirZ: number) {
   return Math.abs(s2.pos.z - z0);
 }
 const up = onSlope(1), down = onSlope(-1);
-if (!(down > up * 1.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
+// 1.15 since the dash became footwork and a short sprint (2026-10-27): the old glide that carried far downhill is gone.
+if (!(down > up * 1.15)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
 
 // Walls (Keith 2026-10-26: dashing at a steep wall flung the mech so high it died landing): running at a 40-60° face
 // 2 or 8 m high and dashing at its foot (the shove's peak hits the face), the hips never rise more than WALL_RISE over
