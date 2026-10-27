@@ -220,6 +220,15 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Scale build: effects budget, shots as data with Protocols, GPU particles (agent, Keith approved the proposal)
+- Effects budget gate (`src/fx/budget.ts`), shots as data with Protocol fields and five behaviour Protocol items
+  (`src/game/shots.ts`, `src/items/protocols.ts`), GPU sparks, grit, casings, tracers and dust (`src/fx/gpu*.ts`,
+  `dustDraw.ts`), each GPU look behind a slider. `?proto=` in the combat labs. Dust API unchanged (`hit` gained an
+  optional count).
+- Checked: typecheck; all of `npm test` (new `fxbudget-check`, `shots-check`); stress lab A/B normal and worst
+  (`docs/perf-2026-10-26.md` Pass 2: worst-case dust 3.9 to 0.34 ms with 22k puffs alive); WebGL readback of the GPU
+  pools; game-camera shots before / CPU / GPU (walker dust, robots-lab firing). WebGPU only lightly (no errors).
+
 ### 2026-10-26 · Sensor head out of the torso (Keith, Claude)
 - Keith: the small head now sits inside the torso; up a little and forward. `headDrop` 0.35 → 0.12 m, new `headForward` 0.25 m (Sensor head sliders). Checked: typecheck; not looked at (slow box).
 ### 2026-10-26 · `npm test` green on Keith's tuned values: real faults fixed, outdated limits moved (agent on `wip/sprint-feel`, coordinator's ask)
