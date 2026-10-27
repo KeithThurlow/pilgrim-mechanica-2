@@ -73,8 +73,12 @@ desert look direction. What came from where: `docs/decisions.md`.
    - **Builds over self-review:** Keith's review in game is what counts. Finish, merge and hand over a build he can
      play, rather than spending usage judging feel or looks yourself. When Keith is away, prefer work that doesn't
      need his eyes: performance, checks, fixes with clear numbers, refactors, proposals.
-   - **The coordinator:** starts a fresh agent from a handoff note rather than resuming one with a huge context, keeps
-     briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight.
+   - **The coordinator:**
+     - starts a fresh agent from a handoff note rather than resuming one with a huge context; about 300k tokens is
+       the soft limit, past which the agent writes its handoff and a new one takes over;
+     - keeps briefs short, and pauses agents whose work Keith isn't waiting on when usage is tight;
+     - picks the model (Keith 2026-10-27): Opus specs the work and takes anything with a visual intent (looks, feel,
+       animation, models); Sonnet implements code from a clear spec.
 
 ## Stack
 
