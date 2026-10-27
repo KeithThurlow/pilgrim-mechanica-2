@@ -195,7 +195,7 @@ console.log(`dash from ${dashes} points in the step and directions: feet at most
 // The steps (Keith 2026-10-27): from standing, walking and the Shift run, every way, at points through the step: the hips
 // never more than HIP_DROP under standing height, never both feet up before the hand-over, the hips facing the dash
 // within FACE degrees when it comes (by HAND_BY seconds), and no dip after it in the short sprint.
-const HIP_DROP = 1.1, FACE = 10, HAND_BY = 0.9;
+const HIP_DROP = 1.1, FACE = 10, HAND_BY = 1.3; // a cutback backpedals first
 {
   let lowest = 9, lowestAt = "", bothWorst = 0, faceWorst = 0, handWorst = 0, n = 0;
   for (const pace of ["stand", "walk", "run"] as const) for (let ph = 0; ph < 6; ph++)
@@ -228,6 +228,31 @@ const HIP_DROP = 1.1, FACE = 10, HAND_BY = 0.9;
     else if (face > FACE) problems.push(`${what}: facing ${face.toFixed(0)}° off the dash at the hand-over`);
   }
   console.log(`dash steps from ${n} starts: hips at least ${lowest.toFixed(2)} m (${lowestAt}) · both feet up ${bothWorst} frames · handed over by ${handWorst.toFixed(2)} s, facing within ${faceWorst.toFixed(0)}°`);
+}
+
+// Reversing mid-dash (Keith 2026-10-27: the dash is "the one way you can change direction immediately"; a reverse dash
+// sometimes didn't win): from points through a dash and its short sprint (up to the boost's peak), a dash straight back
+// always goes the new way within TURN_BY, the hips never drop past HIP_DROP, and it runs off the new way.
+const TURN_BY = 0.5;
+{
+  let worstTurn = 0, low = 9, fast = 0;
+  for (const after of [0.2, 0.4, 0.6, 0.7, 0.9, 1.2, 1.6]) {
+    const s7 = new WalkerSim(v, flatG);
+    s7.reset(0, 0, 0);
+    for (let i = 0; i < 240; i++) s7.update(dt, { x: 0, z: 1, sprint: false });
+    s7.dash(0, 1);
+    let t = 0, went = -1, turned = false, v0 = 0;
+    for (; t < after + 2.5; t += dt) {
+      if (!turned && t >= after) { v0 = s7.vel.z; turned = s7.dash(0, -1); if (!turned) { problems.push(`a dash back ${after} s into a dash was refused`); break; } }
+      s7.update(dt, turned ? { x: 0, z: -1, sprint: false } : { x: 0, z: 1, sprint: false });
+      if (turned) { if (went < 0 && s7.vel.z < 0) went = t - after; if (!s7.airborne) low = Math.min(low, s7.pelvis.y); }
+    }
+    fast = Math.max(fast, v0);
+    if (turned && (went < 0 || went > TURN_BY)) problems.push(`a dash back ${after} s into a dash (at ${v0.toFixed(1)} m/s) went the new way ${went < 0 ? "never" : `after ${went.toFixed(2)} s`}`);
+    if (turned) worstTurn = Math.max(worstTurn, went < 0 ? 99 : went);
+  }
+  if (low < v.hipHeight - HIP_DROP) problems.push(`dashing back mid-dash: hips down to ${low.toFixed(2)} m`);
+  console.log(`dash back mid-dash (up to ${fast.toFixed(1)} m/s): the new way within ${worstTurn.toFixed(2)} s, hips at least ${low.toFixed(2)} m`);
 }
 
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);

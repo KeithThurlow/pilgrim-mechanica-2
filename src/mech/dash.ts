@@ -91,7 +91,8 @@ export class Dash {
   /** Try to dash along (x, z) (any length); returns true if it started. */
   start(x: number, z: number): boolean {
     const l = Math.hypot(x, z);
-    if (l < 1e-4 || this.charges < 1 || this.active || this.since < this.v.dashGap) return false;
+    // A dash can follow another at once, as soon as dashGap has passed (Keith 2026-10-27: the one instant change of way).
+    if (l < 1e-4 || this.charges < 1 || this.since < this.v.dashGap) return false;
     this.dirX = x / l; this.dirZ = z / l;
     this.charges--;
     this.t = 0;

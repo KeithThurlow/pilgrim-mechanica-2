@@ -251,6 +251,8 @@ export class WalkerSim {
     t: number; kind: DashKind; dx: number; dz: number; yaw: number; side: number; I: Foot; O: Foot; B: DashBeats;
     h0: number; turn: number; pre: number; carried: number; ax: number; az: number; slope: number; covered: number;
     iSw: DashSwing | null; oSw: DashSwing | null; iDown: boolean; oSet: boolean; oUp: boolean;
+    /** Backpedalling first (a dash against the way it's going): steps taken, the stepping foot's swing, seconds in. */
+    pedal: { n: number; sw: DashSwing | null; foot: Foot | null; t: number; since: number } | null;
   } | null = null;
   /** The dash's shove is being ignored (the steps move the body) until it's gone. */
   private pushLatch = false;
@@ -716,7 +718,7 @@ export class WalkerSim {
       else if (this.burstHold > 0) { this.boostTo = 0; this.burstHold -= this.boundSpeed * dt; }
       else { this.boostTo = 0; this.boundSpeed -= v.dashRolloff * dt; }
       const floor = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
-      if (this.boundSpeed <= Math.max(floor, 3)) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.boostTo = 0; }
+      if (this.boostTo <= 0 && this.boundSpeed <= Math.max(floor, 3)) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.boostTo = 0; }
     } else if (this.boostTo > this.boundSpeed) {
       this.boundSpeed = Math.min(this.boostTo, this.boundSpeed + v.dashBoostAccel * dt);
       if (this.boundSpeed >= this.boostTo) this.boostTo = 0;
@@ -1332,16 +1334,42 @@ export class WalkerSim {
    */
   private dashBegin(x: number, z: number) {
     const v = this.v, l = Math.hypot(x, z) || 1, dx = x / l, dz = z / l;
-    const yaw = Math.atan2(dx, dz);
     this.pushLatch = true; this.pushQuiet = 0;
     const mx = this.vel.x + this.skid.x, mz = this.vel.z + this.skid.z, ms = Math.hypot(mx, mz);
     const travel = ms > 1 ? Math.atan2(mx, mz) : this.heading;
-    const kind = dashKind(wrap(yaw - travel), v);
+    const kind = dashKind(wrap(Math.atan2(dx, dz) - travel), v);
+    // All the speed it has (a skid off a let-go sprint too) goes into the dash.
+    this.vel.set(mx, 0, mz); this.speed = ms;
+    this.skid.set(0, 0, 0);
+    // Against the way it's going (Keith 2026-10-27: "a back pedal into our side step then run"): backpedal first,
+    // braking, until it moves the dash's way; then the side step round. Any dash still gets its direction.
+    const pedal = v.dashPedalSteps > 0 && (kind === "cut" || mx * dx + mz * dz < -v.dashPedalFrom);
+    this.dashPlan(dx, dz, mx, mz, kind, !pedal, 0);
+    if (pedal) {
+      const dm = this.dashMove!;
+      dm.pedal = { n: 0, sw: null, foot: null, t: 0, since: 1 };
+      const [a, b] = this.feet;
+      // Both in the air: the lower one goes down where it is; one in the air steps first.
+      if (a.swinging && b.swinging) { const lo = a.pos.y <= b.pos.y ? a : b; this.plantFoot(lo, lo.pos.x, lo.pos.z); }
+      for (const f of this.feet) if (f.swinging) this.pedalLift(f, false);
+    }
+  }
+
+  /**
+   * The side step's plan from the body as it is: the kind, the push foot and the step foot, the turn and the beats;
+   * feet: set the feet going now (not while a backpedal comes first). covered: metres the dash has gone already.
+   */
+  private dashPlan(dx: number, dz: number, mx: number, mz: number, kind: DashKind, feet: boolean, covered: number) {
+    const v = this.v, yaw = Math.atan2(dx, dz);
     const [a, b] = this.feet;
-    // The turn's side: toward the dash; straight back, so that the foot that's down is the outside one (it pushes).
+    // The turn's side: toward the dash; straight back, so that the foot that's down is the outside one (it pushes), or
+    // with both down, the one further from the dash.
     const rel = wrap(yaw - this.heading);
     let side = rel >= 0 ? 1 : -1;
-    if (Math.abs(rel) > Math.PI * 0.9 && a.swinging !== b.swinging) side = -(a.swinging ? b : a).side;
+    if (Math.abs(rel) > Math.PI * 0.9) {
+      if (a.swinging !== b.swinging) side = -(a.swinging ? b : a).side;
+      else side = -((a.pos.x - b.pos.x) * dx + (a.pos.z - b.pos.z) * dz < 0 ? a : b).side;
+    }
     let I: Foot, O: Foot;
     if (kind === "burst") {
       // The foot further back along the dash pushes (the one that's down, if only one is).
@@ -1350,13 +1378,13 @@ export class WalkerSim {
     } else { I = a.side === side ? a : b; O = I === a ? b : a; }
     const turn = dashTurn(this.heading, yaw, side), B = dashBeats(kind, v);
     const carried = mx * dx + mz * dz;
-    this.skid.set(0, 0, 0);
     this.dashMove = {
       t: 0, kind, dx, dz, yaw, side, I, O, B, h0: this.heading, turn, pre: kind === "burst" ? 0 : dashPreTurn(turn, v),
-      carried, ax: mx - carried * dx, az: mz - carried * dz, slope: 0, covered: 0,
-      iSw: null, oSw: null, iDown: false, oSet: !O.swinging, oUp: false,
+      carried, ax: mx - carried * dx, az: mz - carried * dz, slope: 0, covered,
+      iSw: null, oSw: null, iDown: false, oSet: !O.swinging, oUp: false, pedal: null,
     };
     for (const f of this.feet) { f.hang = false; f.short = false; f.bState = 0; }
+    if (!feet) return;
     // Both in the air (a hurried step): the outside foot goes down where it is, to push.
     if (I.swinging && O.swinging) { this.plantFoot(O, O.pos.x, O.pos.z); this.dashMove.oSet = true; }
     // The outside foot trailing far behind (late in its stance): it steps in under its hip to push, not from back there.
@@ -1368,8 +1396,8 @@ export class WalkerSim {
     if (O.swinging) this.dashLift(O, false);
   }
 
-  /** The legs can start a dash now (on the ground, not mid-dash, staggered or in a landing squat). */
-  get canDash() { return !this.dashMove && !this.airborne && !this.squatState && this.stagger <= 0 && !this.bStance; }
+  /** The legs can start a dash now (on the ground, not staggered or in a landing squat; mid-dash too). */
+  get canDash() { return !this.airborne && !this.squatState && this.stagger <= 0 && !this.bStance; }
 
   /**
    * Start a dash the way (x, z) points (src/mech/dash.ts keeps the charges); out of the sprint or a dash's short sprint
@@ -1378,6 +1406,8 @@ export class WalkerSim {
   dash(x: number, z: number) {
     if (!this.canDash || x * x + z * z < 1e-6) return false;
     if (this.running) this.runEnd();
+    // Mid-dash: the new one starts from the feet as they are (a swinging one carries on into the new plan).
+    this.dashMove = null;
     this.burst = false; this.boostTo = 0;
     this.dashBegin(x, z);
     return true;
@@ -1386,6 +1416,7 @@ export class WalkerSim {
   /** The body through the steps: the hips turn onto the dash, the speed comes round onto it, the lean and the crouch. */
   private dashSteer(dt: number) {
     const v = this.v, dm = this.dashMove!, B = dm.B;
+    if (dm.pedal) { this.pedalSteer(dt); return; }
     dm.t += dt;
     const t = dm.t;
     const h = wrap(dashYaw(t, dm.h0, dm.pre, dm.turn, B));
@@ -1404,6 +1435,110 @@ export class WalkerSim {
     this.dashRoll = -lean * (dm.dx * lf.x + dm.dz * lf.z);
     this.dashPitch = lean * 0.6 * Math.max(0, dm.dx * fw.x + dm.dz * fw.z);
     this.dashDipNow = dashDip(t, B, v);
+  }
+
+  /**
+   * Backpedalling: still facing the way it was going, crouched and leaning back, it brakes (dashPedalBrake) toward
+   * dashPedalSpeed the dash's way; the speed across the dash goes too. Faster than the feet can grip (dashPedalGrip), the
+   * planted feet skid with it.
+   */
+  private pedalSteer(dt: number) {
+    const v = this.v, dm = this.dashMove!, p = dm.pedal!;
+    p.t += dt; p.since += dt;
+    this.turnSpeed = 0;
+    this.grade += (this.gradeAlong(dm.dx, dm.dz, 2) - this.grade) * Math.min(1, dt * 4);
+    let along = this.vel.x * dm.dx + this.vel.z * dm.dz;
+    let ax = this.vel.x - along * dm.dx, az = this.vel.z - along * dm.dz;
+    const r = v.dashPedalBrake * dt;
+    along += clamp(v.dashPedalSpeed - along, -r, r) - G * this.grade * dt;
+    const al = Math.hypot(ax, az);
+    if (al > 1e-6) { const k = Math.max(0, al - r) / al; ax *= k; az *= k; }
+    const out = this.faceScrub(dm.dx * along + ax, dm.dz * along + az, Math.min(1, v.wallScrub * dt), false);
+    const ox = out.x, oz = out.z;
+    // The feet skid with whatever of the speed against the dash they can't grip.
+    const back = Math.max(0, -along - v.dashPedalGrip);
+    if (back > 0) for (const f of this.feet) if (!f.swinging) { f.planted.x -= dm.dx * back * dt; f.planted.z -= dm.dz * back * dt; this.groundAt(f.planted, f.plantedUp); }
+    this.vel.set(ox, 0, oz);
+    this.speed = Math.hypot(ox, oz);
+    this.pos.addScaledVector(this.vel, dt);
+    dm.covered += Math.max(0, along) * dt;
+    // Crouched, leaning back against the way it was going.
+    const k = smooth(0, 0.12, p.t), fw = forwardOf(this.heading, this.t.f);
+    this.dashPitch = v.dashLeanSide * D2R * 0.8 * k * (dm.dx * fw.x + dm.dz * fw.z);
+    this.dashRoll = 0;
+    this.dashDipNow = -v.dashDip * k;
+  }
+
+  /** A backpedal step starts: this foot back past the other, toward the dash. */
+  private pedalLift(f: Foot, fromPlant: boolean) {
+    const dm = this.dashMove!, p = dm.pedal!;
+    if (fromPlant) this.onLiftOff?.(f, 1.1);
+    f.swinging = true; f.u = 0; f.stanceT = 0;
+    f.liftTheta = f.theta; f.liftPitch = f.pitch; f.liftToe = f.toe; f.liftUp.copy(f.up); f.liftYaw = f.yaw;
+    p.foot = f;
+    p.sw = { from: f.pos.clone(), to: new Vector3(), toYaw: 0, t0: dm.t, t1: dm.t + this.v.dashPedalStep, lift: this.v.dashPedalLift, under: false };
+    this.pedalAim(f, p.sw);
+  }
+
+  /** A backpedal step's spot: behind toward the dash from where the body will be, on its own side. */
+  private pedalAim(f: Foot, sw: DashSwing) {
+    const v = this.v, dm = this.dashMove!, lf = leftOf(this.heading, this.t.l), spread = this.spread();
+    // Where the body will be, braking (dashPedalBrake toward dashPedalSpeed the dash's way), not coasting.
+    const T = Math.max(0, sw.t1 - dm.t), a = v.dashPedalBrake;
+    const along = this.vel.x * dm.dx + this.vel.z * dm.dz, ax = this.vel.x - along * dm.dx, az = this.vel.z - along * dm.dz;
+    const tr = Math.min(T, Math.abs(v.dashPedalSpeed - along) / Math.max(1, a)), sg = Math.sign(v.dashPedalSpeed - along);
+    const go = along * tr + 0.5 * sg * a * tr * tr + v.dashPedalSpeed * (T - tr);
+    const al = Math.hypot(ax, az), ta = Math.min(T, al / Math.max(1, a)), across = al > 1e-6 ? (al * ta - 0.5 * a * ta * ta) / al : 0;
+    const at = this.t.b.set(this.pos.x + dm.dx * go + ax * across, 0, this.pos.z + dm.dz * go + az * across);
+    sw.to.set(at.x + dm.dx * v.dashPedalReach + lf.x * f.side * spread, 0, at.z + dm.dz * v.dashPedalReach + lf.z * f.side * spread);
+    sw.to.y = this.ground.height(sw.to.x, sw.to.z) - this.sink(sw.to.x, sw.to.z);
+    sw.toYaw = this.heading + f.side * v.toeOut * D2R;
+    f.target.copy(sw.to); this.groundAt(f.target, f.targetUp); f.targetYaw = sw.toYaw;
+  }
+
+  /** Backpedal feet: one steps back past the other at a time; enough steps and going the dash's way, the side step. */
+  private pedalFeet(dt: number) {
+    const v = this.v, dm = this.dashMove!, p = dm.pedal!;
+    // The pedal's swings run on dm.t (dashSwing's clock): it ticks here while the side step's beats wait.
+    dm.t += dt;
+    if (p.sw && p.foot) {
+      const f = p.foot, o = f === this.feet[0] ? this.feet[1] : this.feet[0];
+      // The planted leg at full stretch: this step comes down now.
+      if (this.legStretch(o) > 0.95) p.sw.t1 = Math.min(p.sw.t1, dm.t + 0.03);
+      if (p.sw.t1 - dm.t > 0.03) this.pedalAim(f, p.sw);
+      const k = clamp((dm.t - p.sw.t0) / Math.max(0.02, p.sw.t1 - p.sw.t0), 0, 1), e = smooth(0, 1, k);
+      f.pos.set(p.sw.from.x + (p.sw.to.x - p.sw.from.x) * e, 0, p.sw.from.z + (p.sw.to.z - p.sw.from.z) * e);
+      const g = this.ground.height(f.pos.x, f.pos.z), rise = Math.sin(Math.PI * k);
+      f.pos.y = Math.max(p.sw.from.y + (p.sw.to.y - p.sw.from.y) * e + p.sw.lift * rise, g + v.footClear * rise - this.sink(f.pos.x, f.pos.z) * (1 - rise));
+      f.u = k; f.groundY = g;
+      f.up.copy(f.liftUp).lerp(UP, smooth(0, 0.4, k)).normalize();
+      f.yaw = f.liftYaw + wrap(p.sw.toYaw - f.liftYaw) * e;
+      f.pitch = f.liftPitch * (1 - smooth(0, 0.45, k)); f.toe = f.liftToe * (1 - smooth(0, 0.3, k));
+      f.runTheta = f.theta;
+      if (k >= 1) {
+        this.plantFoot(f, p.sw.to.x, p.sw.to.z); f.plantedYaw = f.yaw = p.sw.toYaw;
+        p.sw = null; p.foot = null; p.n++; p.since = 0; this.stats.steps++;
+        this.onFootfall?.(f, 1.2 * v.dashStomp);
+      }
+    }
+    for (const f of this.feet) if (!f.swinging) { f.stanceT = 0.15; this.moveFoot(f); }
+    const along = this.vel.x * dm.dx + this.vel.z * dm.dz;
+    if (!p.sw) {
+      // Done: the side step round, from here (both feet down, going the dash's way).
+      if ((p.n >= v.dashPedalSteps && along >= v.dashPedalSpeed * 0.6) || p.t > 1.5) {
+        const covered = dm.covered;
+        this.dashPlan(dm.dx, dm.dz, this.vel.x, this.vel.z, "cut", true, covered);
+        return;
+      }
+      // The next step. Still going the old way, the foot trailing behind the body steps through to plant and brake;
+      // going the dash's way, the foot further from the dash goes back past the other. A leg at full stretch goes first.
+      if (p.since >= 0.02) {
+        const [a, b] = this.feet, toward = (a.pos.x - b.pos.x) * dm.dx + (a.pos.z - b.pos.z) * dm.dz > 0;
+        let f = along < 0 ? (toward ? a : b) : (toward ? b : a);
+        if (this.legStretch(a) > 0.95) f = a; else if (this.legStretch(b) > 0.95) f = b;
+        this.pedalLift(f, true);
+      }
+    }
   }
 
   /** Where the body will be in s seconds at its speed now. */
@@ -1459,6 +1594,7 @@ export class WalkerSim {
   /** One step of the dash's feet: each down, lifting, swinging or planting on its beat; then the hand-over. */
   private dashFeet(dt: number) {
     const v = this.v, dm = this.dashMove!, B = dm.B, t = dm.t, { I, O } = dm;
+    if (dm.pedal) { this.pedalFeet(dt); return; }
     // The beats give way to the legs: a planted leg at full stretch can't push any longer (moving fast, the body passes
     // its foot before the beat comes), so the next foot comes down now, or the stretched one lifts if the other is down.
     if (!O.swinging && !dm.oUp && this.legStretch(O) > 0.95) {
