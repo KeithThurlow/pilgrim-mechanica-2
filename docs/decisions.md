@@ -4,6 +4,9 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-27 | No fuel, and no munitions as a resource, for now (minigun reloads stay; every weapon has upsides and penalties in combat) | Keith | Keith | Replaces the expedition's fuel and its out-of-fuel recovery. |
+| 2026-10-27 | An energy bar: the sprint becomes cruise mode and drains it; every dash or dodge costs it; it refills when you're not cruising; so cruising into a fight leaves you unable to dodge | Keith | Keith | `docs/proposal-expedition.md`. |
+| 2026-10-27 | Almost any item can drop almost anywhere; risk and depth raise drop rates; extraction pickups take longer the further out you are (survive the wait) | Keith | Keith | `docs/proposal-extraction.md`. |
 | 2026-10-27 | Further out = better loot and more danger; paid extraction pads (ARC Raiders-like, a large quadcopter) to get home from deep runs, the fee rising with distance; walking back to the convoy stays free | Keith | Keith | `docs/proposal-extraction.md` (details proposed, questions open). |
 | 2026-10-27 | Keith's clean-start sprint and landing values are the defaults; his earlier exports (old saved browser values) are dropped | Keith | Keith | Ten values; walker and slope checks fail on them (state.md In progress). |
 | 2026-10-26 | Sprinting turns weapons off (after a short delay so a mid-fight sprint keeps firing a moment), the torso faces forward and leans forward; the mech leans into sprint turns, shoulders over the inside; uphill sprint cadence rises with the grade; the sprint should communicate force into the ground; feet sink a little into soft ground (sand, snow), sit on rock | Keith | Keith | Replaces the earlier guns-on-while-sprinting default. Agent on `wip/sprint-feel`. |

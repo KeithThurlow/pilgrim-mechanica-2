@@ -1,4 +1,4 @@
-# Proposal: paid extraction pads, and danger and loot that rise with distance (not built; waiting for Keith)
+# Proposal: paid extraction pads, and danger and loot that rise with distance (direction set by Keith 2026-10-27; not built)
 
 Keith 2026-10-27: "Encourage expeditions further and further out... the further out you go, the better the loot, but
 the more dangerous it gets... extraction points, kind of like ARC Raiders... helicopter pads that a large quadcopter
@@ -115,3 +115,14 @@ These would be tuned so a Deep run carries a few times the fee home, and a Far r
 4. **The 20 minute cap:** does it still hold for deep runs, or can a Far run go longer?
 5. **Depth from the road:** should it be measured from the road, or from where the convoy is right now? From the road
    is steadier, and multiplayer-safe.
+
+## Answers (Keith 2026-10-27)
+
+- **No fuel.** Drop fuel, and munitions as a resource, for now; bring them back only if needed. "Fuel is the brake" in
+  section 1 no longer applies. What keeps you from roaming endlessly is the convoy rolling away, the danger of depth,
+  and the energy bar (below).
+- **Loot:** almost any item can drop almost anywhere, within reason. Depth and risk raise the drop rates and rarity
+  rather than gating them by ring. Further out there are more enemies and a bigger chance of being overwhelmed.
+- **The wait grows with distance:** like ARC Raiders, triggering a pad means surviving until the pickup, and the
+  further out you are the longer it takes. That wait is part of why it costs more.
+- Still open: what pays the fee, fade vs a real flight, the 20 minute cap, depth from the road vs the convoy.
