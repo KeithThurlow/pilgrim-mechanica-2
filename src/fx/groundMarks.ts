@@ -49,19 +49,30 @@ export class GroundMarks {
     this.dents!.stamp((x0 + x1) / 2, (z0 + z1) / 2, r, Math.atan2(dx, dz), 1 + len / (2 * r), this.v.dentFurrow, { berm: 1.2, comp: 0.7 });
   }
 
-  /** A round (k about 1) or a blast (k several) into the sand. (dx, dz): the round's flight, for a U open toward the
-   *  shooter (Keith 2026-10-27); without it (blasts), a round crater. */
-  crater(x: number, z: number, k: number, dx = 0, dz = 0) {
+  /** A shell (k about 1) or a blast (k several) into the sand: a round crater. */
+  crater(x: number, z: number, k: number) {
     if (!this.denting) return;
     const v = this.v, d = this.dents!;
     const big = k >= 2;
     if (!big && !d.roundDue()) return;
     const r = v.craterSize * (0.7 + Math.random() * 0.6) * Math.sqrt(Math.max(0.2, k));
-    // The U goes on anything that came in on a line (rounds pass their flight; a hull minigun's k is past 2, so "big"
-    // only picks the depth here, not the shape).
-    const aimed = dx * dx + dz * dz > 1e-6;
-    const yaw = aimed ? Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.2 : Math.random() * Math.PI * 2;
-    d.stamp(x, z, r, yaw, aimed ? v.dentRoundLength : 1, (big ? v.dentBlast : v.dentRound) * Math.sqrt(Math.max(0.2, k)), { mode: "add", comp: 0.25, open: aimed ? v.dentRoundOpen : 0 });
+    d.stamp(x, z, r, Math.random() * Math.PI * 2, 1, (big ? v.dentBlast : v.dentRound) * Math.sqrt(Math.max(0.2, k)), { mode: "add", comp: 0.25 });
+  }
+
+  /**
+   * A minigun round into the sand (Keith 2026-10-27): a U open toward the shooter, along its flight (dx, dz), longer
+   * and more open the lower it skims in (down: 0 level .. 1 straight down). k: the hit's strength (Hit size × scale).
+   * Only the minigun's sand hits come here; shells and blasts keep crater().
+   */
+  roundHit(x: number, z: number, k: number, dx: number, dz: number, down: number) {
+    if (!this.denting || !this.dents!.roundDue()) return;
+    const v = this.v;
+    const steep = Math.min(1, Math.max(0, down)) * v.dentHitAngle;
+    const s = Math.sqrt(Math.max(0.2, k / 2.1));
+    const r = v.dentHitSize * (0.7 + Math.random() * 0.6) * s;
+    const yaw = Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.2;
+    const elong = 1 + (v.dentHitLength - 1) * (1 - steep);
+    this.dents!.stamp(x, z, r, yaw, elong, v.dentHitDepth * s, { mode: "add", comp: 0.25, open: v.dentHitOpen * (1 - 0.7 * steep) });
   }
 
   /**

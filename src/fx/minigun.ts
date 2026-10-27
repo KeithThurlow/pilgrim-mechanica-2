@@ -64,7 +64,8 @@ export class MinigunFx {
   /** Called where a round hits, with what it hit, and where a casing first lands (for sound). */
   onHit: ((at: THREE.Vector3, surface: HitSurface) => void) | null = null;
   /** A round into the sand: where, its flat travel direction, and the hit size (the dust system makes the dust). */
-  onSandHit: ((at: THREE.Vector3, dir: THREE.Vector3, k: number) => void) | null = null;
+  /** A round into sand: where, its flight flattened, strength, and how steeply it came down (0 level .. 1 vertical). */
+  onSandHit: ((at: THREE.Vector3, dir: THREE.Vector3, k: number, down?: number) => void) | null = null;
   /** Smoke off a steel hit: where, the face normal, how many puffs, the hit size. */
   onSteelSmoke: ((at: THREE.Vector3, normal: THREE.Vector3, puffs: number, k: number) => void) | null = null;
   /** Hits so far by surface (HUD and tests). */
@@ -159,8 +160,9 @@ export class MinigunFx {
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, 1);
     fwd.normalize();
     const along = fwd.clone();
+    const down = Math.max(0, -dir.y) / Math.max(1e-6, dir.length());
     // The dust itself (the low layer torn up and pushed downrange, and the dust thrown up) is the shared dust system.
-    this.onSandHit?.(at, along, k);
+    this.onSandHit?.(at, along, k, down);
     // Grit: sand thrown up in an arc, mostly on downrange.
     for (let i = 0; i < Math.round(v.sandGrit * Math.min(1, k / Math.max(1e-3, v.hitDust))); i++) {
       const g = this.gritBits[this.gritI++ % GRIT];

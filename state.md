@@ -219,6 +219,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-10-27 · Minigun dents on their own: size, depth, entry angle; shells and blasts back as they were (Keith, Claude)
+- Keith: the dent depth slider did nothing, size 0.1 and length 2.0 looked best, the shape should follow the entry angle, and explosives mustn't change. Rounds had gone through `crater()` with k = Hit size × scale past its blast line of 2, so they took the blast depth and size; now the minigun's sand hits call `GroundMarks.roundHit` with their own sliders: `dentHitDepth` 0.2, `dentHitSize` 0.15 (Keith's 0.1 on the old slider, which was × √k ≈ 1.45), `dentHitOpen` 0.85, `dentHitLength` 2, `dentHitAngle` 0.7 (steep rounds shorter, rounder, less open; `MinigunFx.onSandHit` passes how steeply the round came down). `crater()` is exactly as before 5f9fd1b: round, for shells and blasts. The shared sliders say what they're for ("Small shell dent depth", "Shell and blast dent size"); `dentRoundOpen` / `dentRoundLength` are gone. `src/fx/groundMarks.ts`, `dents.ts`, `minigun.ts`, `src/game/battlefield.ts`.
+- Idea for later (Keith): blasts a little directional too.
+- Checked: typecheck and build (Keith reviews).
+
 ### 2026-10-27 · Round dents as a U open toward the shooter (Keith, Claude)
 - Keith: a minigun round's dent should be a U/V, not a crater, the open, softer side toward where the round came in. A brush can now be open (`Brush.open`, in the slot the unused `seed` had): along its yaw, the back half shallows (by 65%) and loses its rim, the far end's rim heaps up (+60%); the pass and `dentRule.splat` agree. Rounds pass their flight to `GroundMarks.crater` (the battlefield's sand hits) and stamp elongated along it. Any hit given a flight gets the U: a hull round's k (Hit size 2.1 × scale) is past the blast line of 2, so it keeps the blast depth it always had and only changes shape. Sliders in Ground dents: `dentRoundOpen` (0.85, 0 = the old crater), `dentRoundLength` (1.8). Blasts unchanged. `src/fx/dentRule.ts`, `dents.ts`, `groundMarks.ts`, `src/game/battlefield.ts`.
 - Checked: typecheck and build only (Keith reviews it himself).
