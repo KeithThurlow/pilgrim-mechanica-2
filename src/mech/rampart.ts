@@ -329,7 +329,7 @@ export class RampartBody {
     // Size and height of a fitted head (sliders); a cluster on top keeps its own size.
     if (this.sensorStyle === "head") {
       m.root.scale.setScalar(v.headSize);
-      this.sensorFront.position.set(MOUNT_STANDIN.sensorFront[0], MOUNT_STANDIN.sensorFront[1] - v.headDrop, MOUNT_STANDIN.sensorFront[2]);
+      this.sensorFront.position.set(MOUNT_STANDIN.sensorFront[0], MOUNT_STANDIN.sensorFront[1] - v.headDrop, MOUNT_STANDIN.sensorFront[2] + v.headForward);
     }
     const sweep = this.sensorId ? BASE_BY_ID[this.sensorId]?.sensor?.sweep ?? 0 : 0;
     let local: { x: number; y: number; z: number } | null = null, behind = 0;
