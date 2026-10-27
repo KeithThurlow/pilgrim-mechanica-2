@@ -300,14 +300,15 @@ export class MechUnit implements Hittable {
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
       dash.update(dt / sub, grade);
+      // The shove gives the dash's way; the walker's steps (src/mech/dashSteps.ts) move the body, crouch and lean it.
       sim.push.set(dash.vx, 0, dash.vz);
-      sim.crouch = dash.crouch + this.kneel;
-      // Lean into the dash: along the heading pitches the nose, across it rolls.
-      const fwd = dash.dirX * Math.sin(sim.heading) + dash.dirZ * Math.cos(sim.heading);
-      const side = dash.dirX * Math.cos(sim.heading) - dash.dirZ * Math.sin(sim.heading);
-      sim.leanPitch = dash.lean * fwd + this.kneelPitch;
-      sim.leanRoll = -dash.lean * side;
+      sim.crouch = this.kneel;
+      sim.leanPitch = this.kneelPitch;
+      sim.leanRoll = 0;
+      const wasDashing = sim.dashing;
       sim.update(dt / sub, cmd);
+      // Its steps done, the shove and its glide are over too (the run or the walk has the speed).
+      if (wasDashing && !sim.dashing) dash.cut();
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);
     }
     body.update(sim, upper);

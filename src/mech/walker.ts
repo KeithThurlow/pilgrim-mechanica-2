@@ -28,6 +28,7 @@
 // that can't reach the ground hangs while the mech drops the rest.
 import { Vector3, Quaternion, Euler, Matrix4 } from "three";
 import type { WalkerValues } from "./walkerTuning";
+import { dashAcross, dashAlong, dashBeats, dashDip, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
 
 export interface Ground {
   height(x: number, z: number): number;
@@ -82,6 +83,9 @@ class Spring {
     return this.x;
   }
 }
+
+/** A foot's swing in the dash's steps: from where it left to its spot (world), over t0..t1 seconds into the dash. */
+interface DashSwing { from: Vector3; to: Vector3; toYaw: number; t0: number; t1: number; lift: number; under: boolean }
 
 export class Foot {
   swinging = false;
@@ -243,7 +247,19 @@ export class WalkerSim {
    * The dash as a push-off (Keith 2026-10-26 18:28): P the foot it pushes off (held, then drawn back under), L the lead
    * foot (steps out toward the dash and slides). Offsets are world x/z from the body and y from the hips.
    */
-  private dashMove: { t: number; dx: number; dz: number; yaw: number; sg: number; P: Foot; L: Foot; released: boolean; relT: number; pRel: Vector3; lRel: Vector3 } | null = null;
+  private dashMove: {
+    t: number; kind: DashKind; dx: number; dz: number; yaw: number; side: number; I: Foot; O: Foot; B: DashBeats;
+    h0: number; turn: number; pre: number; carried: number; ax: number; az: number; slope: number;
+    iSw: DashSwing | null; oSw: DashSwing | null; iDown: boolean; oSet: boolean; oUp: boolean;
+  } | null = null;
+  /** The dash's shove is being ignored (the steps move the body) until it's gone. */
+  private pushLatch = false;
+  /** The dash's lean (roll, left side up +; pitch, nose down +) and hip height change (m), eased out after it. */
+  private dashRoll = 0;
+  private dashPitch = 0;
+  private dashDipNow = 0;
+  /** Let go after a dash: seconds the run carries on along it (dashBurst). */
+  burstLeft = 0;
   /** In the dash's push-off and slide. */
   get dashing() { return this.dashMove !== null; }
   /** Hips turned toward the dash (radians, eased). */
@@ -297,7 +313,7 @@ export class WalkerSim {
   crouch = 0;
   leanPitch = 0;
   leanRoll = 0;
-  private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
+  private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n3: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
     this.reset(0, 0, 0);
@@ -422,6 +438,8 @@ export class WalkerSim {
     if (dt <= 0) return;
     const v = this.v;
     this.stats.frames++;
+    // A dash's shove, once its steps have started, moves nothing (the steps do) until it's gone.
+    if (this.pushLatch) { if (this.push.lengthSq() < 0.25) this.pushLatch = false; else this.push.set(0, 0, 0); }
     if (this.stagger > 0) { this.stagger = Math.max(0, this.stagger - dt); cmd = { x: 0, z: 0, sprint: false }; }
     this.footSlip = 0;
     this.slip.set(0, 0, 0);
@@ -431,20 +449,26 @@ export class WalkerSim {
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
     const gallop = v.boundGallop >= 0.5;
-    const sprinting = this.bound && this.stagger <= 0 && !this.squatState;
+    const sprinting = (this.bound || this.burstLeft > 0 || (this.dashMove !== null && this.dashMove.oUp)) && this.stagger <= 0 && !this.squatState;
     this.runK = clamp(this.runK + (sprinting && !gallop ? dt : -dt) / Math.max(0.02, v.runBlend), 0, 1);
     if (this.airborne) { this.stats.airFrames++; this.fly(dt, cmd); this.pose(); this.pushPrev.copy(this.push); this.trackSlides(dt); return; }
     if (this.squatState) { this.squatState.t += dt; if (this.squatState.t >= this.squatState.down + this.squatState.up) this.squatState = null; }
     if (this.bound && this.stagger <= 0 && !this.squatState && (gallop || this.bStance)) { this.boundStep(dt, cmd); this.pushPrev.copy(this.push); this.trackSlides(dt); return; }
     if (this.bStance) this.endBound();
     this.prevPos.copy(this.pos);
-    if (this.bound && this.stagger <= 0 && !this.squatState) { if (!this.running) { if (this.dashMove) this.runFromDash(); else this.runStart(); } }
-    else if (this.running) this.runEnd();
+    // The run: the sprint while Space holds it, or a dash's short sprint after letting go (burstLeft). The dash's steps
+    // hand over to it themselves.
+    if (this.burstLeft > 0) this.burstLeft = this.bound ? 0 : this.burstLeft - dt;
+    if (!this.dashMove) {
+      if ((this.bound || this.burstLeft > 0) && this.stagger <= 0 && !this.squatState) { if (!this.running) this.runStart(); }
+      else if (this.running) this.runEnd();
+    }
     this.pushPrev.copy(this.push);
-    // A dash's shove (from outside, src/mech/dash.ts) starting: the push-off.
+    // A dash's shove (from outside, src/mech/dash.ts) starting: the steps.
     if (!this.dashMove && !this.running && this.push.lengthSq() > 4) this.dashBegin();
 
     if (this.running) this.runSteer(dt, cmd);
+    else if (this.dashMove) this.dashSteer(dt);
     else {
     // Grade along the heading: slows the walk uphill; shapes the stance downhill (aim, body).
     {
@@ -670,7 +694,11 @@ export class WalkerSim {
     const prev = this.boundSpeed;
     this.grade += (this.gradeAlong(Math.sin(this.course), Math.cos(this.course), 2) - this.grade) * Math.min(1, dt * 4);
     const top = this.boundTop(this.grade);
-    this.boundSpeed += (top - this.boundSpeed) * Math.min(1, v.boundBuild * dt);
+    // A dash's short sprint after letting go rolls its speed off (dashRolloff) toward the walk's; the sprint builds.
+    if (!this.bound && this.burstLeft > 0) {
+      const floor = Math.min(1, Math.hypot(cmd.x, cmd.z)) * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
+      this.boundSpeed = Math.max(Math.min(this.boundSpeed, floor), this.boundSpeed - v.dashRolloff * dt);
+    } else this.boundSpeed += (top - this.boundSpeed) * Math.min(1, v.boundBuild * dt);
     const grip = (v.boundGrip * G) / Math.max(1, this.boundSpeed);
     const rc = Math.min(v.turnRate * D2R, grip), rh = Math.min(v.turnRate * D2R, grip * (1 + v.boundYaw));
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
@@ -1268,34 +1296,217 @@ export class WalkerSim {
     if (st.t >= st.T) { if (this.v.boundGallop >= 0.5) this.boundLaunch(); else this.runFromStance(); }
   }
 
-  // ---- The dash as a push-off (Keith 2026-10-26 18:28) ----
+  // ---- The dash as footwork (Keith 2026-10-27; beats and curves in src/mech/dashSteps.ts) ----
 
   /**
-   * The shove starts: whatever the step, the foot that's down (the one further back along the dash if both are, the
-   * nearer to the ground if neither) pushes off; the other steps out toward the dash and lands to slide on.
+   * The dash starts (its shove from outside, src/mech/dash.ts, gives the way; the steps move the body from here on and
+   * the shove is ignored until it's gone): pick the kind, the push foot and the step foot, and the turn.
    */
   private dashBegin() {
     const v = this.v, l = Math.hypot(this.push.x, this.push.z), dx = this.push.x / l, dz = this.push.z / l;
+    const yaw = Math.atan2(dx, dz);
+    this.pushLatch = true;
+    const mx = this.vel.x + this.skid.x, mz = this.vel.z + this.skid.z, ms = Math.hypot(mx, mz);
+    const travel = ms > 1 ? Math.atan2(mx, mz) : this.heading;
+    const kind = dashKind(wrap(yaw - travel), v);
     const [a, b] = this.feet;
-    const above = (f: Foot) => f.pos.y - this.ground.height(f.pos.x, f.pos.z);
-    let P: Foot;
-    if (!a.swinging && b.swinging) P = a;
-    else if (a.swinging && !b.swinging) P = b;
-    else if (!a.swinging && !b.swinging) P = (a.planted.x - b.planted.x) * dx + (a.planted.z - b.planted.z) * dz < 0 ? a : b;
-    else P = above(a) <= above(b) ? a : b;
-    const L = P === a ? b : a;
-    // The push foot is down (a foot nearly down is put down where it is).
-    if (P.swinging) this.plantFoot(P, P.pos.x, P.pos.z);
-    P.hang = false; L.hang = false; L.short = false;
-    const lRel = new Vector3(L.pos.x - this.pos.x, L.pos.y - this.bodyY.x, L.pos.z - this.pos.z);
-    // The lead foot leaves at once.
-    if (!L.swinging) this.onLiftOff?.(L, 1.2);
-    L.swinging = true; L.u = 0; L.liftTheta = L.theta; L.liftPitch = L.pitch; L.liftToe = L.toe;
-    // Which side of the push foot the lead foot is, across the dash (it stays there).
-    const sg = (L.pos.x - P.pos.x) * -dz + (L.pos.z - P.pos.z) * dx >= 0 ? 1 : -1;
-    this.dashMove = { t: 0, dx, dz, yaw: Math.atan2(dx, dz), sg, P, L, released: v.dashPushTime <= 0, relT: 0, pRel: new Vector3(P.pos.x - this.pos.x, P.pos.y - this.bodyY.x, P.pos.z - this.pos.z), lRel };
-    if (this.dashMove.released) { P.swinging = true; P.u = 0; P.liftTheta = P.theta; P.liftPitch = P.pitch; P.liftToe = P.toe; }
-    P.stanceT = Math.max(P.stanceT, 0.55);
+    // The turn's side: toward the dash; straight back, so that the foot that's down is the outside one (it pushes).
+    const rel = wrap(yaw - this.heading);
+    let side = rel >= 0 ? 1 : -1;
+    if (Math.abs(rel) > Math.PI * 0.9 && a.swinging !== b.swinging) side = -(a.swinging ? b : a).side;
+    let I: Foot, O: Foot;
+    if (kind === "burst") {
+      // The foot further back along the dash pushes (the one that's down, if only one is).
+      O = !a.swinging && b.swinging ? a : a.swinging && !b.swinging ? b : (a.pos.x - b.pos.x) * dx + (a.pos.z - b.pos.z) * dz < 0 ? a : b;
+      I = O === a ? b : a;
+    } else { I = a.side === side ? a : b; O = I === a ? b : a; }
+    const turn = dashTurn(this.heading, yaw, side), B = dashBeats(kind, v);
+    const carried = mx * dx + mz * dz;
+    this.skid.set(0, 0, 0);
+    this.dashMove = {
+      t: 0, kind, dx, dz, yaw, side, I, O, B, h0: this.heading, turn, pre: kind === "burst" ? 0 : dashPreTurn(turn, v),
+      carried, ax: mx - carried * dx, az: mz - carried * dz, slope: 0,
+      iSw: null, oSw: null, iDown: false, oSet: !O.swinging, oUp: false,
+    };
+    for (const f of this.feet) { f.hang = false; f.short = false; f.bState = 0; }
+    // A foot already in the air carries on into its dash swing from where it is.
+    if (I.swinging) this.dashLift(I, false);
+    if (O.swinging) this.dashLift(O, false);
+  }
+
+  /** The body through the steps: the hips turn onto the dash, the speed comes round onto it, the lean and the crouch. */
+  private dashSteer(dt: number) {
+    const v = this.v, dm = this.dashMove!, B = dm.B;
+    dm.t += dt;
+    const t = dm.t;
+    const h = wrap(dashYaw(t, dm.h0, dm.pre, dm.turn, B));
+    this.turnSpeed = wrap(h - this.heading) / dt;
+    this.heading = h;
+    this.grade += (this.gradeAlong(dm.dx, dm.dz, 2) - this.grade) * Math.min(1, dt * 4);
+    dm.slope -= G * this.grade * dt;
+    const along = dashAlong(t, dm.carried, B, v) + dm.slope, k = dashAcross(t, B);
+    const out = this.faceScrub(dm.dx * along + dm.ax * k, dm.dz * along + dm.az * k, Math.min(1, v.wallScrub * dt), false);
+    this.vel.set(out.x, 0, out.z);
+    this.speed = Math.hypot(out.x, out.z);
+    this.pos.addScaledVector(this.vel, dt);
+    // Lean into the dash (hips and shoulders, about the outside hip: orient), the rest of it forward as the hips come round.
+    const lean = dashLeanK(t, B) * v.dashLeanSide * D2R, fw = forwardOf(h, this.t.f), lf = leftOf(h, this.t.l);
+    this.dashRoll = -lean * (dm.dx * lf.x + dm.dz * lf.z);
+    this.dashPitch = lean * 0.6 * Math.max(0, dm.dx * fw.x + dm.dz * fw.z);
+    this.dashDipNow = dashDip(t, B, v);
+  }
+
+  /** Where the body will be in s seconds at its speed now. */
+  private ahead(s: number, out: Vector3) { return out.copy(this.pos).addScaledVector(this.vel, Math.max(0, s)); }
+
+  /** A foot starts its dash swing: the inside one to its step out toward the dash, the outside one to its set or through-step. */
+  private dashLift(f: Foot, fromPlant: boolean) {
+    const dm = this.dashMove!, B = dm.B, t = dm.t;
+    if (fromPlant) this.onLiftOff?.(f, 1.3);
+    f.swinging = true; f.u = 0; f.stanceT = 0;
+    f.liftTheta = f.theta; f.liftPitch = f.pitch; f.liftToe = f.toe; f.liftUp.copy(f.up); f.liftYaw = f.yaw;
+    const sw: DashSwing = { from: f.pos.clone(), to: new Vector3(), toYaw: 0, t0: t, t1: 0, lift: 0, under: false };
+    if (f === dm.I) { sw.t1 = Math.max(t + 0.06, B.step); sw.lift = this.v.dashKnee; sw.under = true; dm.iSw = sw; }
+    else if (!dm.oSet) { sw.t1 = Math.max(t + 0.05, B.load * 0.8); sw.lift = 0.15; dm.oSw = sw; }
+    else { sw.t1 = Math.max(t + 0.08, B.through); sw.lift = this.v.dashThroughLift; dm.oSw = sw; }
+    this.dashAim(f, sw);
+  }
+
+  /** The swing's landing spot, from where the body will be when it lands. */
+  private dashAim(f: Foot, sw: DashSwing) {
+    const v = this.v, dm = this.dashMove!, B = dm.B, spread = this.spread();
+    const tl = sw.t1 - dm.t, hl = wrap(dashYaw(sw.t1, dm.h0, dm.pre, dm.turn, B));
+    const at = this.ahead(tl, this.t.b);
+    if (f === dm.I) {
+      // Out toward the dash, a little to its own side.
+      const lf = leftOf(hl, this.t.l);
+      sw.to.set(at.x + dm.dx * v.dashStepOut + lf.x * f.side * spread * 0.6, 0, at.z + dm.dz * v.dashStepOut + lf.z * f.side * spread * 0.6);
+      sw.toYaw = hl + f.side * v.toeOut * D2R;
+    } else if (!dm.oSet) {
+      // Set under the outside hip, a little wide, its length across the dash (a burst: along it, to push off the toes).
+      const lf = leftOf(this.heading, this.t.l);
+      sw.to.set(at.x + lf.x * f.side * (spread + 0.15), 0, at.z + lf.z * f.side * (spread + 0.15));
+      sw.toYaw = this.pushYaw();
+    } else {
+      // Through in front along the dash, on its own side: the run's first stride.
+      const lf = leftOf(dm.yaw, this.t.l);
+      sw.to.set(at.x + dm.dx * v.runPlant + lf.x * f.side * spread, 0, at.z + dm.dz * v.runPlant + lf.z * f.side * spread);
+      sw.toYaw = dm.yaw + f.side * v.toeOut * D2R;
+    }
+    sw.to.y = this.ground.height(sw.to.x, sw.to.z) - this.sink(sw.to.x, sw.to.z);
+    // The body reads a swinging foot's landing spot (the run's reach cap): this one.
+    f.target.copy(sw.to); this.groundAt(f.target, f.targetUp); f.targetYaw = sw.toYaw;
+  }
+
+  /** The push foot's yaw: its length across the dash (Keith 2026-10-27: the whole foot's traction sideways), nearest the legs'. */
+  private pushYaw() {
+    const dm = this.dashMove!;
+    if (dm.kind === "burst") return this.heading;
+    const a = dm.yaw - Math.PI / 2, b = dm.yaw + Math.PI / 2;
+    return Math.abs(wrap(a - this.heading)) < Math.abs(wrap(b - this.heading)) ? a : b;
+  }
+
+  /** One step of the dash's feet: each down, lifting, swinging or planting on its beat; then the hand-over. */
+  private dashFeet(dt: number) {
+    const v = this.v, dm = this.dashMove!, B = dm.B, t = dm.t, { I, O } = dm;
+    // The beats give way to the legs: a planted leg at full stretch can't push any longer (moving fast, the body passes
+    // its foot before the beat comes), so the next foot comes down now, or the stretched one lifts if the other is down.
+    if (!O.swinging && !dm.oUp && this.legStretch(O) > 0.95) {
+      if (dm.iDown) { dm.oUp = true; this.dashLift(O, true); }
+      else if (dm.iSw) dm.iSw.t1 = Math.min(dm.iSw.t1, t + 0.03);
+    }
+    if (dm.iDown && !I.swinging && dm.oSw && dm.oSet && this.legStretch(I) > 0.95) {
+      // The turn onto the dash finishes with the through-step, whenever it comes.
+      dm.oSw.t1 = Math.min(dm.oSw.t1, t + 0.04);
+      dm.B.through = Math.min(dm.B.through, dm.oSw.t1);
+    }
+    // Inside foot: down through the load (if it was), lifts as the push starts, plants out toward the dash.
+    if (!I.swinging && !dm.iDown && dm.oSet && t >= B.load * 0.7) this.dashLift(I, true);
+    if (I.swinging && dm.iSw) {
+      if (this.dashSwing(I, dm.iSw)) {
+        this.plantFoot(I, dm.iSw.to.x, dm.iSw.to.z); I.plantedYaw = I.yaw = dm.iSw.toYaw;
+        dm.iSw = null; dm.iDown = true; this.stats.steps++;
+        this.impact.v -= v.impact * 0.3;
+        this.onFootfall?.(I, 1.3);
+      }
+    } else if (!I.swinging) {
+      I.stanceT = dm.iDown ? 0.75 * smooth(B.step, B.through, t) : 0.05;
+      this.moveFoot(I);
+    }
+    // Outside foot: set down if it was in the air, pivots its length across the dash, pushes (onto its edge, then the
+    // ball and toes), lifts after the inside plant and comes through.
+    if (O.swinging && dm.oSw) {
+      if (this.dashSwing(O, dm.oSw)) {
+        this.plantFoot(O, dm.oSw.to.x, dm.oSw.to.z); O.plantedYaw = O.yaw = dm.oSw.toYaw;
+        dm.oSw = null; this.stats.steps++;
+        if (!dm.oSet) { dm.oSet = true; this.onFootfall?.(O, 1); }
+        else { this.onFootfall?.(O, 1.4); this.dashHandOver(); return; }
+      }
+    } else if (!O.swinging) {
+      if (!dm.oUp) {
+        if (t < B.load) O.plantedYaw += wrap(this.pushYaw() - O.plantedYaw) * Math.min(1, dt * 10) * 0.5;
+        O.stanceT = 0.3 + 0.7 * smooth(B.load, B.lift, t);
+        this.moveFoot(O);
+        this.edgeRoll(O, dashEdgeK(t, B) * v.dashEdge * D2R);
+        if (t >= B.lift && dm.iDown) { dm.oUp = true; this.dashLift(O, true); }
+      } else this.moveFoot(O);
+    }
+    // No splits: a swinging foot never further than dashSpreadMax from the other, nor out of the leg's reach.
+    const lf = leftOf(this.heading, this.t.l), hipY = this.bodyY.x, R = v.legReachMax * (v.femur + v.shin + v.cannon);
+    for (const f of this.feet) {
+      if (!f.swinging) continue;
+      const o = f === O ? I : O;
+      const ox = f.pos.x - o.pos.x, oz = f.pos.z - o.pos.z, od = Math.hypot(ox, oz);
+      if (od > v.dashSpreadMax) { f.pos.x = o.pos.x + (ox / od) * v.dashSpreadMax; f.pos.z = o.pos.z + (oz / od) * v.dashSpreadMax; }
+      const jx = this.pos.x + lf.x * f.side * v.hipWidth, jz = this.pos.z + lf.z * f.side * v.hipWidth;
+      const rx = f.pos.x - jx, ry = f.pos.y + v.ankleHeight - hipY, rz = f.pos.z - jz, rd = Math.hypot(rx, ry, rz);
+      if (rd > R) { const s = R / rd; f.pos.set(jx + rx * s, hipY + ry * s - v.ankleHeight, jz + rz * s); }
+      f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z) - this.sink(f.pos.x, f.pos.z) * f.u);
+    }
+    if (t > 2) this.dashHandOver();
+  }
+
+  /**
+   * A dash swing for this frame; true when it lands. The inside foot rises under its hip first (the knee up, ready to
+   * push down), then reaches out; the others go straight to their spot in an arc. Re-aimed until late.
+   */
+  private dashSwing(f: Foot, sw: DashSwing) {
+    const v = this.v, dm = this.dashMove!;
+    const k = clamp((dm.t - sw.t0) / Math.max(0.02, sw.t1 - sw.t0), 0, 1);
+    if (k < 0.75) this.dashAim(f, sw);
+    const e = smooth(0, 1, k);
+    if (sw.under) {
+      const lf = leftOf(this.heading, this.t.l);
+      const ux = this.pos.x + lf.x * f.side * v.hipWidth, uz = this.pos.z + lf.z * f.side * v.hipWidth;
+      const a = smooth(0, 0.45, k), b = smooth(0.4, 1, k);
+      const mx = sw.from.x + (ux - sw.from.x) * a, mz = sw.from.z + (uz - sw.from.z) * a;
+      f.pos.set(mx + (sw.to.x - mx) * b, 0, mz + (sw.to.z - mz) * b);
+    } else f.pos.set(sw.from.x + (sw.to.x - sw.from.x) * e, 0, sw.from.z + (sw.to.z - sw.from.z) * e);
+    const g = this.ground.height(f.pos.x, f.pos.z), base = sw.from.y + (sw.to.y - sw.from.y) * e;
+    const rise = sw.under ? Math.pow(Math.sin(Math.PI * k), 0.6) : Math.sin(Math.PI * k);
+    f.pos.y = Math.max(base + sw.lift * rise, g + v.footClear * rise - this.sink(f.pos.x, f.pos.z) * (1 - rise));
+    f.u = k; f.stanceT = 0; f.groundY = g;
+    f.up.copy(f.liftUp).lerp(UP, smooth(0, 0.4, k)).normalize();
+    f.yaw = f.liftYaw + wrap(sw.toYaw - f.liftYaw) * e;
+    const env = Math.sin(Math.PI * Math.min(1, k / 0.85)) * (1 - smooth(0.85, 1, k));
+    f.pitch = f.liftPitch * (1 - smooth(0, 0.45, k)) + v.swingCurl * D2R * env;
+    f.toe = f.liftToe * (1 - smooth(0, 0.3, k)) + v.toeCurl * D2R * env;
+    // The cannon folds up as the leg comes through (blended in by the run share once the run's pose comes in).
+    const rake = v.cannonRake * D2R;
+    f.runTheta = f.liftTheta + (rake - f.liftTheta) * smooth(0, 0.5, k) + (v.swingTuck + v.runHockFold * 0.5) * D2R * env;
+    return k >= 1;
+  }
+
+  /** Roll a planted foot onto its edge toward the dash by ang (radians): its up tips that way, pivoting on that edge. */
+  private edgeRoll(f: Foot, ang: number) {
+    if (ang <= 1e-4) return;
+    const dm = this.dashMove!, fw = this.plateForward(f.up, f.yaw, this.t.f);
+    const lf = this.t.a.crossVectors(f.up, fw).normalize();
+    const toward = lf.x * dm.dx + lf.z * dm.dz >= 0 ? 1 : -1; // +1: the foot's left is toward the dash
+    const edge = this.t.b.copy(f.pos).addScaledVector(lf, toward * 0.22);
+    const axis = this.t.n3.copy(fw).multiplyScalar(-toward);
+    f.pos.sub(edge).applyAxisAngle(axis, ang).add(edge);
+    f.up.applyAxisAngle(axis, ang);
   }
 
   /** Put a foot down at (x, z) on the ground, flat, facing the way the legs do. */
@@ -1308,123 +1519,48 @@ export class WalkerSim {
     f.groundY = f.planted.y;
   }
 
-  /** One step of the dash: the push foot holds then lets go and comes back under; the lead foot lands and slides. */
-  private dashFeet(dt: number) {
+  /**
+   * The through-step is down: the run takes over along the dash. Held, the sprint; let go, a short sprint (dashBurst,
+   * rolling off at dashRolloff) and then the walk. The outside foot has just planted; the inside one is late in its stance.
+   */
+  private dashHandOver() {
     const v = this.v, dm = this.dashMove!;
-    dm.t += dt;
-    const mx = this.pos.x - this.prevPos.x, mz = this.pos.z - this.prevPos.z;
-    const lf = leftOf(this.heading, this.t.l);
-    const hipY = this.bodyY.x, spread = this.spread();
-    const R = v.legReachMax * (v.femur + v.shin + v.cannon);
-    const { P, L, dx, dz } = dm;
-    // Where the lead foot slides: out toward the dash; where the push foot comes back to. The two sit apart across the
-    // dash's direction, each keeping its side of the other (no crossing, whichever leg leads).
-    const px = -dz, pz = dx, sg = dm.sg;
-    const leadX = this.pos.x + dx * v.dashLeadReach + px * sg * spread, leadZ = this.pos.z + dz * v.dashLeadReach + pz * sg * spread;
-    const backX = this.pos.x + dx * v.dashLeadReach * 0.3 - px * sg * spread, backZ = this.pos.z + dz * v.dashLeadReach * 0.3 - pz * sg * spread;
-    const slide = (f: Foot) => {
-      f.planted.x += mx; f.planted.z += mz;
-      this.groundAt(f.planted, f.plantedUp);
-      f.stanceT = Math.min(f.stanceT, 0.3);
-      this.moveFoot(f);
-    };
-    // A swinging foot from its start (riding with the body) to a spot, lifted in an arc, over the ground.
-    const swingTo = (f: Foot, rel: Vector3, tx: number, tz: number, k: number, lift: number) => {
-      const e = smooth(0, 1, k);
-      const sx = this.pos.x + rel.x, sz = this.pos.z + rel.z, sy = hipY + rel.y;
-      f.pos.set(sx + (tx - sx) * e, 0, sz + (tz - sz) * e);
-      const g = this.ground.height(f.pos.x, f.pos.z);
-      f.pos.y = Math.max(g - this.sink(f.pos.x, f.pos.z) * e, sy + (g - sy) * e) + lift * Math.sin(Math.PI * k);
-      f.u = k; f.stanceT = 0;
-      f.up.copy(UP); f.yaw = this.heading + f.side * v.toeOut * D2R;
-      f.groundY = g;
-    };
-    // Lead foot.
-    if (L.swinging) {
-      const k = clamp(dm.t / Math.max(0.02, v.dashLeadTime), 0, 1);
-      swingTo(L, dm.lRel, leadX, leadZ, k, v.dashLeadLift);
-      L.pitch = L.liftPitch * (1 - k); L.toe = L.liftToe * (1 - k);
-      if (k >= 1) { this.plantFoot(L, L.pos.x, L.pos.z); this.stats.steps++; this.onFootfall?.(L, 1.3); }
-    } else slide(L);
-    // Push foot: holds while the leg extends (heel rolling, hock opening), lets go at full stretch or after dashPushTime.
-    if (!dm.released) {
-      P.stanceT = Math.min(1, Math.max(P.stanceT, 0.55 + 0.45 * dm.t / Math.max(0.02, v.dashPushTime)));
-      this.moveFoot(P);
-      const hx = this.pos.x + lf.x * P.side * v.hipWidth - P.pos.x, hz = this.pos.z + lf.z * P.side * v.hipWidth - P.pos.z, hy = hipY - P.pos.y - v.ankleHeight;
-      const apart = Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z);
-      if (dm.t >= v.dashPushTime || Math.hypot(hx, hy, hz) >= R || apart > v.dashSpreadMax) {
-        dm.released = true; dm.relT = dm.t;
-        dm.pRel.set(P.pos.x - this.pos.x, P.pos.y - hipY, P.pos.z - this.pos.z);
-        P.swinging = true; P.u = 0; P.liftTheta = P.theta; P.liftPitch = P.pitch; P.liftToe = P.toe;
-        this.onLiftOff?.(P, 1.4);
-      }
-    } else if (P.swinging) {
-      const k = clamp((dm.t - dm.relT) / Math.max(0.05, v.dashRecover), 0, 1);
-      swingTo(P, dm.pRel, backX, backZ, k, 0.25);
-      // Toes trail down as the foot is dragged in, then flatten for the plant.
-      P.pitch = P.liftPitch * (1 - smooth(0, 0.6, k)); P.toe = P.liftToe * (1 - smooth(0, 0.5, k));
-      if (k >= 1) { this.plantFoot(P, P.pos.x, P.pos.z); this.stats.steps++; this.onFootfall?.(P, 1); }
-    } else slide(P);
-    // No splits: a swinging foot never further than dashSpreadMax from the other, nor out of the leg's reach.
-    for (const f of this.feet) {
-      if (!f.swinging) continue;
-      const o = f === P ? L : P;
-      const ox = f.pos.x - o.pos.x, oz = f.pos.z - o.pos.z, od = Math.hypot(ox, oz);
-      if (od > v.dashSpreadMax) { f.pos.x = o.pos.x + (ox / od) * v.dashSpreadMax; f.pos.z = o.pos.z + (oz / od) * v.dashSpreadMax; }
-      const jx = this.pos.x + lf.x * f.side * v.hipWidth, jz = this.pos.z + lf.z * f.side * v.hipWidth;
-      const rx = f.pos.x - jx, ry = f.pos.y + v.ankleHeight - hipY, rz = f.pos.z - jz, rd = Math.hypot(rx, ry, rz);
-      if (rd > R) { const s = R / rd; f.pos.set(jx + rx * s, hipY + ry * s - v.ankleHeight, jz + rz * s); }
-      f.pos.y = Math.max(f.pos.y, this.ground.height(f.pos.x, f.pos.z) - this.sink(f.pos.x, f.pos.z) * f.u);
+    this.dashMove = null;
+    const s = Math.hypot(this.vel.x, this.vel.z);
+    if (!this.bound && v.dashBurst <= 0) {
+      // Straight back to the walk with the speed the legs walk with; the rest skids off.
+      for (const f of this.feet) if (f.swinging) this.plantFoot(f, f.pos.x, f.pos.z);
+      const fw = forwardOf(this.heading, this.t.f);
+      this.speed = clamp(this.vel.x * fw.x + this.vel.z * fw.z, 0, Math.max(v.walkSpeed, v.sprintSpeed));
+      this.skid.set(this.vel.x - fw.x * this.speed, 0, this.vel.z - fw.z * this.speed);
+      this.vel.copy(fw).multiplyScalar(this.speed);
+      this.walkPhaseFromFeet(fw);
+      return;
     }
-    // The lead knee drives toward the dash.
-    const toward = wrap(dm.yaw - this.heading);
-    const kneeWant = clamp(toward - this.hipOpen, -v.dashKneeOut * D2R, v.dashKneeOut * D2R);
-    L.kneeYaw += (kneeWant * (1 - smooth(0.25, 0.6, dm.t)) - L.kneeYaw) * Math.min(1, dt * 14);
-    P.kneeYaw += (0 - P.kneeYaw) * Math.min(1, dt * 14);
-    // Done: the shove and its glide are over and both feet are down (or it's gone on too long).
-    if ((this.push.lengthSq() < 0.36 && !P.swinging && !L.swinging) || dm.t > 2.5) this.dashEnd();
-  }
-
-  /** Back to the gait after the slide: the foot further back steps first, so it regains its footing. */
-  private dashEnd() {
-    const dm = this.dashMove!;
-    this.dashMove = null;
-    for (const f of this.feet) if (f.swinging) this.plantFoot(f, f.pos.x, f.pos.z);
-    const fw = forwardOf(this.heading, this.t.f), [a, b] = this.feet, d = this.dutyNow;
-    const behind = (a.planted.x - b.planted.x) * fw.x + (a.planted.z - b.planted.z) * fw.z < 0 ? a : b;
-    this.phase = (d - 0.04 - behind.offset + 2) % 1;
-    for (const f of this.feet) { f.u = 0; f.stanceT = ((this.phase + f.offset) % 1) / d; }
-    void dm;
-  }
-
-  /** Held through the dash: its push-off is the first stride of the run, at up to dashIntoRun, along the dash. */
-  private runFromDash() {
-    const v = this.v, dm = this.dashMove!;
-    this.dashMove = null;
-    const mx = this.vel.x + this.skid.x + this.pushPrev.x, mz = this.vel.z + this.skid.z + this.pushPrev.z;
-    const s = Math.hypot(mx, mz);
-    this.boundSpeed = clamp(s, v.sprintSpeed, Math.max(v.sprintSpeed, v.dashIntoRun));
-    // The line of run starts along the dash, as far as the body can drift off its heading.
+    this.burstLeft = this.bound ? 0 : v.dashBurst;
+    this.boundSpeed = clamp(s, Math.min(s, v.walkSpeed), Math.max(v.sprintSpeed, v.dashIntoRun));
     this.course = wrap(this.heading + clamp(wrap(dm.yaw - this.heading), -v.boundDriftMax * D2R, v.boundDriftMax * D2R));
     this.skid.set(0, 0, 0);
     this.running = true;
     this.speed = this.boundSpeed;
     this.vel.set(Math.sin(this.course) * this.boundSpeed, 0, Math.cos(this.course) * this.boundSpeed);
-    // The lead foot is down early in its stance; the push foot comes through.
     const cps = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
     this.cpsNow = cps;
     const d = this.dutyNow = clamp((v.boundStanceLen * cps) / Math.max(1, this.speed), 0.2, 0.5);
-    const { P, L } = dm;
-    if (L.swinging) this.plantFoot(L, L.pos.x, L.pos.z);
-    this.phase = (0.25 * d - L.offset + 2) % 1;
-    L.stanceT = 0.25;
-    if (P.swinging) {
-      this.beginSwing(P);
-      P.u = clamp(((this.phase + P.offset) % 1 - d) / (1 - d), 0, 0.95);
-      P.entryU = P.u;
-      P.entryRel.copy(P.runA);
-      this.aim(P);
-    }
+    const { O, I } = dm;
+    if (O.swinging) this.plantFoot(O, O.pos.x, O.pos.z);
+    this.phase = (0.05 * d - O.offset + 2) % 1;
+    O.stanceT = 0.05;
+    const pI = (this.phase + I.offset) % 1;
+    if (pI >= d) {
+      if (!I.swinging) this.onLiftOff?.(I, 1.2);
+      this.beginSwing(I);
+      I.u = clamp((pI - d) / (1 - d), 0, 0.95);
+      I.entryU = I.u;
+      I.entryRel.copy(I.runA);
+      this.aim(I);
+    } else if (I.swinging) this.plantFoot(I, I.pos.x, I.pos.z);
+    else I.stanceT = pI / d;
     this.prevYT = NaN; this.reachCap = NaN;
   }
 
@@ -1486,7 +1622,7 @@ export class WalkerSim {
    * toward the inside of it (turnLeanShift), as if the body leaned over its feet.
    */
   private orient(pelvisYaw: number) {
-    const v = this.v, tr = this.turnRoll;
+    const v = this.v, tr = this.turnRoll + this.dashRoll;
     const pitch = this.pitch.x + this.plantPitch;
     this.pelvisQ.setFromEuler(this.t.e.set(pitch, pelvisYaw, this.roll.x + tr, "YXZ"));
     this.hullQ.setFromEuler(this.t.e.set(pitch, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
@@ -1514,6 +1650,13 @@ export class WalkerSim {
     const want = sprinting ? -clamp(Math.atan((this.boundSpeed * this.courseRate) / G) * v.turnRoll, -max, max) : 0;
     this.turnRoll += (want - this.turnRoll) * Math.min(1, dt * v.turnRollEase);
     this.turnRoll = clamp(this.turnRoll, -max, max);
+  }
+
+  /** How close one leg is to full reach, read at the hips' wanted height off the run (as stretch()). */
+  private legStretch(f: Foot) {
+    const reach = this.v.femur + this.v.shin + this.v.cannon * 0.8, P = f.pose, up = this.running ? 0 : this.hipShort;
+    const dx = P.hip.x - P.ankle.x, dy = P.hip.y + up - P.ankle.y, dz = P.hip.z - P.ankle.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz) / reach;
   }
 
   /** How close the most stretched planted leg is to full reach (1 = straight). */
@@ -1828,7 +1971,8 @@ export class WalkerSim {
       - v.runBob * Math.cos(4 * Math.PI * (this.phase - d / 2)) * rk;
     const down = smooth(0, 0.35, -this.grade);
     const sprintCrouch = v.boundCrouch * (0.4 + 0.6 * this.speedShare());
-    let yT = ref + v.hipHeight - v.downhillCrouch * down - (v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch;
+    if (!this.dashMove) { const e = Math.max(0, 1 - dt * 8); this.dashRoll *= e; this.dashPitch *= e; this.dashDipNow *= e; }
+    let yT = ref + v.hipHeight - v.downhillCrouch * down - (v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
     if (rk > 0) {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).
       const clear = this.groundAhead(Math.max(1.5, this.speed * v.runLookAhead)) + v.runClear;
@@ -1869,7 +2013,7 @@ export class WalkerSim {
     const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
     const walkLean = (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R;
     const runLean = v.boundLean * D2R * (0.35 + 0.65 * this.speedShare());
-    this.pitch.step(-slope * pitchShare + walkLean + (runLean - walkLean) * rk + v.landPitch * D2R * Math.max(0, this.squat) / Math.max(0.1, v.landSquatMax) + this.leanPitch, dt);
+    this.pitch.step(-slope * pitchShare + walkLean + (runLean - walkLean) * rk + v.landPitch * D2R * Math.max(0, this.squat) / Math.max(0.1, v.landSquatMax) + this.leanPitch + this.dashPitch, dt);
 
     // Weight back over the feet downhill: the hips sit back from the body point the feet are placed around.
     const back = v.downhillSitBack * down;
@@ -1903,12 +2047,10 @@ export class WalkerSim {
     const plantY = (v.runPushRise * ext - v.runPlantDrop * comp) * rk;
     this.plantPitch = v.runPlantPitch * D2R * comp * rk;
     this.pelvis.set(this.pos.x + l.x * this.lat.x - fw.x * back, this.bodyY.x + this.impact.x + bob - this.squat + plantY, this.pos.z + l.z * this.lat.x - fw.z * back);
-    // The dash opens the hips toward where it's going (the hull above keeps facing the heading).
-    const dm = this.dashMove;
-    const open = dm ? clamp(wrap(dm.yaw - this.heading), -60 * D2R, 60 * D2R) * v.dashHipOpen * (1 - smooth(0.3, 0.7, dm.t)) : 0;
-    this.hipOpen += (open - this.hipOpen) * Math.min(1, dt * 14);
+    // The dash turns the whole body itself (its heading): no extra opening of the hips.
+    this.hipOpen += (0 - this.hipOpen) * Math.min(1, dt * 14);
     this.orient(this.heading + this.hipOpen);
-    if (!dm) for (const f of this.feet) f.kneeYaw += (0 - f.kneeYaw) * Math.min(1, dt * 10);
+    for (const f of this.feet) f.kneeYaw += (0 - f.kneeYaw) * Math.min(1, dt * 10);
   }
 
   /**
