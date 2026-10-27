@@ -55,23 +55,24 @@ for (const [dx, dz, walking] of dirs) {
   covered.push(along);
   if (Math.abs(along - v.dashRun) > v.dashRun * DASH_RUN_OFF) problems.push(`a dash covered ${along.toFixed(1)} m the way it was sent (about ${v.dashRun})`);
 }
-// Charges: spend them all, the next is refused, then they come back.
+// Energy (Keith 2026-10-27): each charge is a bar. A dash needs a full bar and empties exactly one; with none full there's
+// no dash; nothing refills for dashRegenDelay after use, then the bar nearest full refills at one bar per dashRecharge.
 for (let i = 0; i < 120 * 10; i++) step({ x: 0, z: 0, sprint: false });
-// Each attempt waits for the last dash to end; since Keith's longer dash (1.05 s and its glide, 2026-10-26) a charge can
-// recharge during the sequence, so the expectation counts the recharges that fit between the first dash and each attempt
-// (the check used to assume none would).
-let went = 0, expected = 0, t0 = -1, clockT = 0;
+let went = 0;
 for (let k = 0; k < 4; k++) {
-  const ok = dash.start(1, 0);
-  if (t0 < 0) t0 = clockT;
-  // Charges available at this attempt: the full set, plus one per recharge since the first dash, less the ones spent.
-  if (went < dv.dashCharges + Math.floor((clockT - t0) / dv.dashRecharge + 1e-6)) expected++;
-  if (ok) went++;
-  while (dash.active || dash.since < dv.dashGap) { step({ x: 0, z: 0, sprint: false }); clockT += dt; }
+  const e0 = dash.energy;
+  if (dash.start(1, 0)) { went++; if (Math.abs(e0 - dash.energy - 1) > 1e-6) problems.push(`a dash took ${(e0 - dash.energy).toFixed(2)} bars (want 1)`); }
+  for (let i = 0; i < 120 * dv.dashGap + 2; i++) step({ x: 0, z: 0, sprint: false });
 }
-if (went !== expected || went < dv.dashCharges) problems.push(`${went} dashes went from full charges (expected ${expected}: ${dv.dashCharges} charges and the recharges in between)`);
-for (let i = 0; i < 120 * (dv.dashRecharge * dv.dashCharges + 0.5); i++) step({ x: 0, z: 0, sprint: false });
-if (dash.charges !== dv.dashCharges) problems.push(`charges came back to ${dash.charges} of ${dv.dashCharges}`);
+if (went !== dv.dashCharges) problems.push(`${went} dashes went from ${dv.dashCharges} full bars`);
+{
+  const e0 = dash.energy;
+  for (let i = 0; i < 120 * (dv.dashRegenDelay - 0.2 - dv.dashGap * 4); i++) step({ x: 0, z: 0, sprint: false });
+  if (dash.energy > e0 + 1e-6) problems.push("energy refilled before dashRegenDelay");
+}
+for (let i = 0; i < 120 * (dv.dashRecharge * dv.dashCharges + dv.dashRegenDelay + 0.5); i++) step({ x: 0, z: 0, sprint: false });
+if (dash.charges !== dv.dashCharges) problems.push(`bars came back to ${dash.charges} full of ${dv.dashCharges}`);
+const chargesMsg = `${went}/${dv.dashCharges}`;
 
 // Slope (Keith 2026-10-25: slides work better downhill): on a tilted plane a dash goes further down than up.
 function onSlope(dirZ: number) {
@@ -256,11 +257,46 @@ const TURN_BY = 0.5;
   console.log(`dash back mid-dash (up to ${fast.toFixed(1)} m/s): the new way within ${worstTurn.toFixed(2)} s, hips at least ${low.toFixed(2)} m`);
 }
 
+// The sprint on energy (Keith 2026-10-27): it only comes out of a held dash and drains the bars (the dash took one, the
+// sprint the rest at sprintDrain), ends when they're empty, refills nothing while it runs; with only one bar, a held dash
+// can't sprint. Weapons: the dash fires; off the moment the sprint runs (sprintGunsAfter 0).
+{
+  const run = (bars: number) => {
+    const s8 = new WalkerSim(v, flatG);
+    s8.reset(0, 0, 0);
+    const d8 = new Dash({ ...DASH_DEFAULTS });
+    const b8 = new Bound({ ...BOUND_DEFAULTS });
+    for (let i = 0; i < 240; i++) { b8.update(dt, false, s8, d8); d8.update(dt, 0); s8.update(dt, { x: 0, z: 1, sprint: false }); }
+    d8.charges = bars; // set now: an empty bar would have refilled through the walk
+    if (d8.start(0, 1)) s8.dash(0, 1);
+    let t = 0, sprintFor = 0, offBeforeRun = 0, rose = false, offLate = -1, last = d8.energy, endE = 0;
+    for (; t < 12; t += dt) {
+      b8.update(dt, true, s8, d8); d8.update(dt, 0); s8.push.set(0, 0, 0);
+      s8.update(dt, { x: 0, z: 1, sprint: false });
+      if (b8.on) sprintFor += dt;
+      if (b8.gunsOff && !s8.running) offBeforeRun++;
+      if (b8.on && s8.running && !b8.gunsOff && offLate < 0) offLate = t;
+      if (b8.on && d8.energy > last + 1e-9) rose = true;
+      last = d8.energy;
+      if (!b8.on && sprintFor > 0) { endE = d8.energy; break; }
+    }
+    return { sprintFor, offBeforeRun, rose, endE, ranOut: !b8.on };
+  };
+  const two = run(2), one = run(1);
+  const want = 1 / Math.max(1e-3, DASH_DEFAULTS.sprintDrain);
+  if (Math.abs(two.sprintFor - want) > 0.5) problems.push(`sprint on one bar after the dash lasted ${two.sprintFor.toFixed(2)} s (want about ${want.toFixed(1)})`);
+  if (!two.ranOut || two.endE > 0.01) problems.push(`the sprint didn't end when the energy ran out (${two.endE.toFixed(2)} left)`);
+  if (two.rose) problems.push("energy refilled while sprinting");
+  if (two.offBeforeRun > 0) problems.push("weapons off during the dash's steps (the dash fires)");
+  if (one.sprintFor > 0) problems.push(`with one bar, a held dash sprinted for ${one.sprintFor.toFixed(2)} s`);
+  console.log(`energy: two bars sprint ${two.sprintFor.toFixed(2)} s after the dash, then end with ${two.endE.toFixed(2)} left · one bar sprints ${one.sprintFor.toFixed(2)} s · refilled while sprinting: ${two.rose}`);
+}
+
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);
 if (misses > 0.15) problems.push(`legs out of reach ${(misses * 100).toFixed(1)}% of frames`);
 console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · into walls, hips over standing at most: ${wallRises.join(", ")}`);
-console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (about ${v.dashRun}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${went}/${dv.dashCharges}`);
+console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (about ${v.dashRun}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${chargesMsg}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("dash check failed"); }
 console.log("dash check passed");

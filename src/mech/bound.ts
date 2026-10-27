@@ -1,8 +1,11 @@
 // The sprint's input and kit (Keith 2026-10-26; docs/proposal-bound.md). Pure: no input reading, no drawing.
 // Space pressed dashes at once (src/mech/dash.ts); keep holding (dashHoldRun) and the dash's push-off flows straight into
 // the sprint's run, which builds toward the legs' top speed while held (the gait itself is the walker's, `bound`).
-// Let go and it lands out of its stride and runs on, skidding off what the run can't hold. With no dash charge, holding
-// Space for boundTap starts the sprint from the walk.
+// Let go and it lands out of its stride and runs on, skidding off what the run can't hold.
+// Energy (Keith 2026-10-27): the sprint only ever comes out of a held dash, and drains the energy bars (src/mech/dash.ts:
+// the dash took a full one, the sprint takes the rest slowly); out of energy, it ends. Without a full bar there's no
+// dash, so no sprint (boundTap is no longer used). Weapons are off the moment the sprint runs (sprintGunsAfter 0;
+// Keith: "lose the grace"); the dash and its short sprint still fire.
 // The booster pack (simple version, Keith's answer: the rocket slide goes, the booster later adds thrust and glide):
 // while its tank lasts, the sprint's top speed is boostTop higher and leaps fall boostGlide slower; it burns boostBurn
 // tank-seconds a second while sprinting and refills when not.
@@ -22,7 +25,7 @@ export const BOUND_DEFAULTS = {
   boostTop: 8,
   boostGlide: 0,
   boostBurn: 0.25,
-  sprintGunsAfter: 0.6,
+  sprintGunsAfter: 0,
   sprintFaceDrift: 0.5,
   sprintHullLean: 8,
   airGunSpread: 3,
@@ -36,7 +39,6 @@ export type BoundValues = typeof BOUND_DEFAULTS;
 
 const G = "Sprint kit";
 export const BOUND_PARAMS: Param[] = [
-  { key: "boundTap", label: "Hold to sprint without a dash (s)", min: 0, max: 1, step: 0.01, group: G, tip: "With a dash charge, the sprint follows the dash as soon as its shove ends; without one, after holding Space this long" },
   { key: "dashHoldRun", label: "Held this long, the dash becomes the run (s)", min: 0.03, max: 0.5, step: 0.01, group: G, tip: "Space still down this long into a dash: its push-off flows into the sprint instead of a slide" },
   { key: "boostTop", label: "Booster: top speed + (m/s)", min: 0, max: 12, step: 0.5, group: G, tip: "With a booster pack fitted (a booster tank above 0, Dash group), while its tank lasts" },
   { key: "boostGlide", label: "Booster: glide (share of gravity)", min: 0, max: 0.9, step: 0.01, group: G, tip: "Falling out of a leap this much slower: more hang time off crests" },
@@ -60,7 +62,7 @@ export class Bound {
   /** Seconds sprinting (0 when not). */
   onFor = 0;
   /** Sprinting long enough that the weapons are off (sprintGunsAfter): the torso faces the travel line. */
-  get gunsOff() { return this.on && this.onFor >= this.v.sprintGunsAfter; }
+  get gunsOff() { return this.on && this.onFor > 0 && this.onFor >= this.v.sprintGunsAfter; }
 
   constructor(public v: BoundValues) {}
 
@@ -68,12 +70,14 @@ export class Bound {
   update(dt: number, held: boolean, sim: WalkerSim, dash: Dash) {
     const v = this.v;
     this.heldFor = held ? this.heldFor + dt : 0;
-    // Held through the dash (Keith 2026-10-26 18:28: a long press becomes a run, not a sliding dash): once its push-off
-    // has gone, the shove ends and the run takes the speed (src/mech/walker.ts, at most dashIntoRun).
-    const want = held && this.heldFor >= (dash.shoving ? v.dashHoldRun : v.boundTap);
+    // Held through a dash (Keith 2026-10-26 18:28: a long press becomes a run, not a sliding dash), while there's energy:
+    // the run takes the dash's speed (src/mech/walker.ts); the sprint drains the bars as it goes.
+    let want = held && (this.on || (sim.dashing && this.heldFor >= v.dashHoldRun));
+    if (want && !dash.drain(dt)) want = false;
     if (want && !this.on) dash.cut();
     this.on = want;
-    this.onFor = want ? this.onFor + dt : 0;
+    // Weapons off once the sprint actually runs (not while the dash's steps are still going).
+    this.onFor = want && sim.running ? this.onFor + dt : 0;
     const booster = dash.v.boostFuel > 0 && dash.fuel > 0.02;
     dash.boosting = this.on && booster;
     if (dash.boosting) dash.fuel = Math.max(0, dash.fuel - v.boostBurn * dt);

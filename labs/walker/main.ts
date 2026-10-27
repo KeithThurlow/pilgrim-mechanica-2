@@ -32,6 +32,7 @@ import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS } from "../../src/game/mechUnit";
 import { DASH_PARAMS } from "../../src/mech/dash";
+import { energyHud } from "../../src/ui/energyBar";
 import { HEAD_PARAMS } from "../../src/mech/head";
 import { BOUND_PARAMS } from "../../src/mech/bound";
 
@@ -349,6 +350,7 @@ function tick(rawDt: number) {
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);
   const torsoRel = ((((upper.torsoYaw - sim.heading) * 180) / Math.PI + 540) % 360) - 180;
+  energyHud().update(mech.dash);
   const dashDots = "●".repeat(mech.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - mech.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * mech.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   const driftDeg = Math.abs(((((sim.course - sim.heading) * 180) / Math.PI + 540) % 360) - 180);

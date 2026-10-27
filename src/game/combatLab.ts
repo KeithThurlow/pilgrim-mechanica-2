@@ -3,6 +3,7 @@
 // pilot (hold F to hop out and back in; the enemies pick him through lab.foot.quarry when he's nearer), the
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
+import { energyHud } from "../ui/energyBar";
 import * as THREE from "three/webgpu";
 import { createApp, type App } from "../core/app";
 import { installReport } from "../core/report";
@@ -410,6 +411,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : `, killed (back in the mech in ${Math.max(0, V.respawn - foot.deadFor).toFixed(1)} s)`} · health ${Math.round(foot.sim.health)}/${V.pilotHealth} · ${foot.toMech.toFixed(1)} m from the mech`);
     app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
+    energyHud().update(player.dash, foot.driving);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
     if (cst) app.hud.set("costs", cst.end());

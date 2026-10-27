@@ -89,7 +89,8 @@ export class ExpeditionLoop {
   private world: RadarWorld = { mech: { x: 0, z: 0 }, convoy: [], route: [], home: null, pois: [], blobs: [], unknown: [], contacts: [] };
   private slowT = 0;
   private homeT = 0;
-  private charges = 0;
+  /** Dashes counted so far (fuel per dash). */
+  private dashes = 0;
   private turretPts: THREE.Vector3[] = [];
   /** Demo: the POI it's heading for and what it's doing. */
   private demoGoal: { x: number; z: number; id: string } | null = null;
@@ -121,7 +122,7 @@ export class ExpeditionLoop {
     this.radar = new RadarDraw(v);
     this.hud = new ExpeditionHud(this.radar.canvas);
     this.sound = new RadarSound(bf.sfx.ctx);
-    this.charges = player.dash.charges;
+    this.dashes = player.dash.dashes;
     // Nothing turns up on the road or within 150 m of the train.
     this.threats = new ThreatField(v, 17, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.field = field;
@@ -187,8 +188,8 @@ export class ExpeditionLoop {
 
     // Fuel: burns only out in the field.
     const dash = player.dash;
-    if (dash.charges < this.charges && exp.state === "out") fuel.dash();
-    this.charges = dash.charges;
+    if (dash.dashes > this.dashes && exp.state === "out") fuel.dash();
+    this.dashes = dash.dashes;
     if (exp.state === "out" && player.alive) {
       const speed = Math.hypot(sim.vel.x, sim.vel.z) + (dash.phase === "glide" ? 0 : Math.hypot(dash.vx, dash.vz));
       fuel.burn(dt, { speed, walkSpeed: v.walkSpeed, sprintSpeed: v.sprintSpeed, bounding: player.bound.on, stripping: !!this.sites.salvage.active });

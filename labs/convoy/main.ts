@@ -19,6 +19,7 @@
 // (start out with little fuel left), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
+import { energyHud } from "../../src/ui/energyBar";
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { createApp } from "../../src/core/app";
@@ -728,6 +729,7 @@ app.onTick((rawDt) => {
   app.hud.set("plough", `plough: cut ${pl.cut.toFixed(0)} m² at the blade · moving ${pl.rate.left.toFixed(0)} / ${pl.rate.right.toFixed(0)} m³/s left / right (load ${(ploughFx.load[0] * 100).toFixed(0)}% / ${(ploughFx.load[1] * 100).toFixed(0)}%) · patched ${patchVerts} vertices in ${patchMs.toFixed(2)} ms, ${patchQueue.length} boxes waiting · wake stations ${route.wake.computed}`);
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
+  energyHud().update(player.dash, foot.driving);
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   app.hud.set("dash", `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);

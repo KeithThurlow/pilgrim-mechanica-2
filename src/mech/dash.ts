@@ -6,6 +6,11 @@
 // Holding Space after the dash no longer boosts (Keith 2026-10-26: "boosted by rockets... not quite what I was after"):
 // it carries on into the sprint (src/mech/bound.ts). The booster pack's tank (boostFuel) stays here, refilling between
 // uses; the sprint spends it on thrust and glide.
+// Energy (Keith 2026-10-27): the charges are bars of energy, each its own bar (a HUD at the side, src/ui/energyBar.ts).
+// A dash needs a full bar and empties it; the sprint (only ever out of a held dash) drains the rest slowly, the emptiest
+// bar with any left first, so the full ones stay for dashes. Nothing refills while sprinting; otherwise, dashRegenDelay
+// after the last use, the bar nearest full refills at one bar per dashRecharge seconds, then the next.
+// Ownership: the player's own state (their movement), like the walk.
 import type { Param } from "../core/tweaks";
 
 export const DASH_DEFAULTS = {
@@ -15,6 +20,8 @@ export const DASH_DEFAULTS = {
   dashCharges: 2,
   dashRecharge: 3,
   dashGap: 0.25,
+  dashRegenDelay: 0.8,
+  sprintDrain: 0.25,
   dashCrouch: 1.2,
   dashLean: 25,
   dashShoveRadius: 4,
@@ -34,8 +41,10 @@ export type DashValues = typeof DASH_DEFAULTS;
 // (Keith 2026-10-27, src/mech/dashSteps.ts): off the panel; it still times the damage cut and the crowd shove.
 const G = "Dash";
 export const DASH_PARAMS: Param[] = [
-  { key: "dashCharges", label: "Charges", min: 1, max: 5, step: 1, group: G },
-  { key: "dashRecharge", label: "Recharge per charge (s)", min: 0.2, max: 15, step: 0.1, group: G },
+  { key: "dashCharges", label: "Energy bars (charges)", min: 1, max: 5, step: 1, group: G, tip: "A dash empties a full bar; the sprint drains the rest" },
+  { key: "dashRecharge", label: "Refill per bar (s)", min: 0.2, max: 15, step: 0.1, group: G },
+  { key: "dashRegenDelay", label: "Refill waits after use (s)", min: 0, max: 5, step: 0.05, group: G, tip: "Nothing refills while sprinting" },
+  { key: "sprintDrain", label: "Sprint drains (bars/s)", min: 0, max: 2, step: 0.01, group: G, tip: "The sprint only comes out of a held dash, so it needs two bars: one for the dash, then this" },
   { key: "dashGap", label: "Least time between dashes (s)", min: 0, max: 2, step: 0.05, group: G },
   { key: "dashShoveRadius", label: "Shoves small things within (m)", min: 0, max: 10, step: 0.1, group: G, tip: "Bandits and small robots in the way are knocked aside; clingers are shaken off" },
   { key: "dashShove", label: "Shove speed (m/s)", min: 0, max: 30, step: 0.5, group: G },
@@ -59,9 +68,14 @@ function shapeArea(a: number) {
 }
 
 export class Dash {
-  charges: number;
-  /** Seconds into the current charge's refill. */
-  refill = 0;
+  /** Each bar's energy, 0..1 (a full bar is a dash). */
+  bars: number[] = [];
+  /** Dashes started (the expedition charges fuel per dash). */
+  dashes = 0;
+  /** Seconds since energy was last spent (a dash or the sprint). */
+  idle = 99;
+  /** The sprint is draining this frame (nothing refills). */
+  draining = false;
   /** Seconds into the current dash; -1 when not dashing. */
   t = -1;
   since = 99;
@@ -83,6 +97,31 @@ export class Dash {
 
   constructor(public v: DashValues) { this.charges = v.dashCharges; }
 
+  /** Full bars: dashes in hand. Setting it fills that many bars (the rest empty), sized to dashCharges. */
+  get charges() { return this.bars.filter((b) => b >= 0.999).length; }
+  set charges(n: number) {
+    const max = Math.max(1, Math.round(this.v.dashCharges));
+    this.bars = Array.from({ length: max }, (_, i) => (i < n ? 1 : 0));
+  }
+  /** All the energy there is (bars). */
+  get energy() { return this.bars.reduce((a, b) => a + b, 0); }
+  /** The bar refilling now (index, or -1), and how far it's come (the HUD). */
+  get refilling() { let k = -1; for (let i = 0; i < this.bars.length; i++) if (this.bars[i] < 0.999 && (k < 0 || this.bars[i] > this.bars[k])) k = i; return k; }
+  get refillShare() { const k = this.refilling; return k < 0 ? 0 : this.bars[k]; }
+
+  /**
+   * The sprint drains energy (sprintDrain bars per second): the emptiest bar with any left first. False when there's
+   * none left (the sprint ends).
+   */
+  drain(dt: number): boolean {
+    let k = -1;
+    for (let i = 0; i < this.bars.length; i++) if (this.bars[i] > 1e-6 && (k < 0 || this.bars[i] < this.bars[k])) k = i;
+    if (k < 0) return false;
+    this.bars[k] = Math.max(0, this.bars[k] - this.v.sprintDrain * dt);
+    this.draining = true; this.idle = 0;
+    return true;
+  }
+
   /** Skidding on its feet: the shove or the glide after it. */
   get active() { return this.phase !== "none"; }
   /** The shove itself (damage cut, the sand burst). */
@@ -94,7 +133,9 @@ export class Dash {
     // A dash can follow another at once, as soon as dashGap has passed (Keith 2026-10-27: the one instant change of way).
     if (l < 1e-4 || this.charges < 1 || this.since < this.v.dashGap) return false;
     this.dirX = x / l; this.dirZ = z / l;
-    this.charges--;
+    // A full bar empties (the last full one, so the bars read down from the top).
+    for (let i = this.bars.length - 1; i >= 0; i--) if (this.bars[i] >= 0.999) { this.bars[i] = 0; break; }
+    this.dashes++; this.idle = 0;
     this.t = 0;
     this.speed = 0;
     this.phase = "dash";
@@ -112,12 +153,16 @@ export class Dash {
     const v = this.v;
     this.since += dt;
     this.fuel = Math.min(v.boostFuel, this.fuel + (this.boosting ? 0 : v.boostRegen * dt));
+    // Bars: as many as dashCharges (a pack or a slider changing it adds empty ones or drops the last).
     const max = Math.max(1, Math.round(v.dashCharges));
-    if (this.charges > max) this.charges = max;
-    if (this.charges < max) {
-      this.refill += dt;
-      if (this.refill >= v.dashRecharge) { this.refill -= v.dashRecharge; this.charges++; }
-    } else this.refill = 0;
+    while (this.bars.length < max) this.bars.push(0);
+    if (this.bars.length > max) this.bars.length = max;
+    if (this.draining) this.idle = 0; else this.idle += dt;
+    this.draining = false;
+    if (this.idle >= v.dashRegenDelay) {
+      const k = this.refilling;
+      if (k >= 0) this.bars[k] = Math.min(1, this.bars[k] + dt / Math.max(0.05, v.dashRecharge));
+    }
     this.vx = this.vz = this.crouch = this.lean = 0;
     if (!this.active) return;
     const g = 9.8 * v.dashSlope * grade; // slows uphill (+ grade), speeds downhill
@@ -153,6 +198,4 @@ export class Dash {
     this.lean = (v.dashLean * Math.PI / 180) * 0.5 * k;
   }
 
-  /** How far the charge in refill has come (0..1), for the HUD. */
-  get refillShare() { return this.refill / Math.max(0.01, this.v.dashRecharge); }
 }

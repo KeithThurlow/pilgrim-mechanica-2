@@ -1517,6 +1517,7 @@ export class WalkerSim {
       f.yaw = f.liftYaw + wrap(p.sw.toYaw - f.liftYaw) * e;
       f.pitch = f.liftPitch * (1 - smooth(0, 0.45, k)); f.toe = f.liftToe * (1 - smooth(0, 0.3, k));
       f.runTheta = f.theta;
+      this.toesClear(f);
       if (k >= 1) {
         this.plantFoot(f, p.sw.to.x, p.sw.to.z); f.plantedYaw = f.yaw = p.sw.toYaw;
         p.sw = null; p.foot = null; p.n++; p.since = 0; this.stats.steps++;
@@ -1636,6 +1637,7 @@ export class WalkerSim {
         O.stanceT = 0.3 + 0.7 * smooth(B.load, B.lift, t);
         this.moveFoot(O);
         this.edgeRoll(O, dashEdgeK(t, B) * v.dashEdge * D2R);
+        this.toesClear(O, 0, false);
         if (t >= B.lift && dm.iDown) { dm.oUp = true; this.dashLift(O, true); }
       } else this.moveFoot(O);
     }
@@ -1682,6 +1684,7 @@ export class WalkerSim {
     // The cannon folds up as the leg comes through (blended in by the run share once the run's pose comes in).
     const rake = v.cannonRake * D2R;
     f.runTheta = f.liftTheta + (rake - f.liftTheta) * smooth(0, 0.5, k) + (v.swingTuck + v.runHockFold * 0.5) * D2R * env;
+    this.toesClear(f);
     return k >= 1;
   }
 

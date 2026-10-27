@@ -391,7 +391,7 @@ function stubMech(field: DuneField, over: Record<string, number> = {}, surface: 
 {
   console.log("-- sprint weapons");
   const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
-  const { mech, count, v } = stubMech(flat);
+  const { mech, count } = stubMech(flat);
   mech.reset(0, 0, 0);
   const problems: string[] = [];
   const aimSide = () => ({ x: mech.sim.pos.x + 20, y: 1, z: mech.sim.pos.z + 5 });
@@ -401,7 +401,10 @@ function stubMech(field: DuneField, over: Record<string, number> = {}, surface: 
     return count.rounds - n0;
   };
   run(2, false);
-  const early = run(v.sprintGunsAfter + v.boundTap - 0.05, true);
+  // The sprint only comes out of a held dash (Keith 2026-10-27, energy bars); the dash fires, the sprint doesn't.
+  mech.tryDash(0, 1);
+  let early = 0;
+  for (let i = 0; i < 60 && !mech.sim.running; i++) { const n0 = count.rounds; mech.dashHold = true; mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true); if (!mech.gunsOff) early += count.rounds - n0; }
   let late = 0, offSince = -1, worstFace = 0;
   for (let i = 0; i < 4 * 60; i++) {
     const n0 = count.rounds;
@@ -409,17 +412,18 @@ function stubMech(field: DuneField, over: Record<string, number> = {}, surface: 
     mech.step(1 / 60, { x: 0, z: 1, sprint: false }, aimSide(), true);
     if (mech.gunsOff) { late += count.rounds - n0; if (offSince < 0) offSince = i / 60; }
     const off = Math.atan2(Math.sin(mech.upper.torsoYaw - mech.sim.course), Math.cos(mech.upper.torsoYaw - mech.sim.course));
-    if (i > 2.5 * 60) worstFace = Math.max(worstFace, (Math.abs(off) * 180) / Math.PI);
+    if (i > 2.5 * 60 && mech.gunsOff) worstFace = Math.max(worstFace, (Math.abs(off) * 180) / Math.PI);
   }
   const after = run(2, false);
-  if (early === 0) problems.push("no rounds in the first moment of the sprint (sprintGunsAfter)");
+  if (early === 0) problems.push("no rounds during the dash before the sprint (the dash fires)");
   if (offSince < 0) problems.push("the weapons never went off sprinting");
   if (late > 0) problems.push(`${late} rounds fired with the weapons off`);
   if (worstFace > 5) problems.push(`weapons off, the torso is ${worstFace.toFixed(0)}° off the line of travel`);
   if (after === 0) problems.push("let go of the sprint, the guns didn't fire again");
   // The sprint's push-offs (Keith 21:54): each throws sand back off the toes and digs them in.
   if (count.digs < 5) problems.push(`the sprint's push-offs dug in only ${count.digs} times`);
-  console.log(`${problems.length ? "FAIL " : "ok   "}rounds: ${early} in the first ${(v.sprintGunsAfter + v.boundTap).toFixed(2)} s, ${late} with the weapons off · torso within ${worstFace.toFixed(1)}° of the travel line · ${after} after letting go` + (problems.length ? "\n       " + problems.join("; ") : ""));
+  if (problems.length) console.log("  " + problems.join("; "));
+  console.log(`${problems.length ? "FAIL " : "ok   "}rounds: ${early} in the dash before the sprint, ${late} with the weapons off · torso within ${worstFace.toFixed(1)}° of the travel line · ${after} after letting go` + (problems.length ? "\n       " + problems.join("; ") : ""));
   if (problems.length) failed = true;
 }
 
@@ -496,6 +500,8 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     const d = want[s];
     let deepest = 0, toes = 0, plantedErr = 0, n = 0;
     for (let i = 0; i < 16 * 60; i++) {
+      // The sprint comes out of a held dash (energy bars, 2026-10-27).
+      if (i === 6 * 60) mech.tryDash(0.3, 1);
       mech.dashHold = i > 6 * 60;
       mech.step(1 / 60, { x: 0.3, z: 1, sprint: false }, null, false);
       for (const f of mech.sim.feet) {
@@ -511,6 +517,7 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (n === 0 || plantedErr > 0.005) problems.push(`${s}: planted feet off the sink depth by up to ${plantedErr.toFixed(3)} m`);
     rows.push(`${s} ${d} m: planted at it within ${plantedErr.toFixed(3)} m, deepest foot ${deepest.toFixed(3)} m`);
   }
+  if (problems.length) console.log("  " + problems.join("; "));
   console.log(`${problems.length ? "FAIL " : "ok   "}${rows.join(" · ")} · bare rock sinks at ${rockSunk}/${rockPts} points (${gravelPts} rocky sand)` + (problems.length ? "\n       " + problems.join("; ") : ""));
   if (problems.length) failed = true;
 }
