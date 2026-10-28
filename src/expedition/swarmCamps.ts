@@ -105,7 +105,7 @@ export class SwarmCamps {
       if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
       const n = this.left.get(c.id) ?? c.size;
       if (n <= 0) continue;
-      const slots = sw.spawn(n, c.x, c.z, c.radius);
+      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big } : undefined);
       for (const i of slots) sw.frozen[i] = 1;
       const l: Live = { camp: c, slots, gens: slots.map((i) => sw.gen[i]), awake: false, hp: 0 };
       l.hp = this.hp(l);
@@ -179,7 +179,7 @@ export class SwarmCamps {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
     const slots = this.sw.spawn(n, x, z, radius, shares);
-    const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0 };
+    const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0 };
     const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true };
     l.hp = this.hp(l);
     this.live.set(id, l);

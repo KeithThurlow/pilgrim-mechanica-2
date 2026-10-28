@@ -28,8 +28,9 @@ import { Expedition, EXPEDITION_DEFAULTS } from "../src/expedition/expedition";
 import { Fuel, FUEL_DEFAULTS, burnRate, fuelWarning } from "../src/expedition/fuel";
 import { returnPoint, craneTracks, clock, RETURN_DEFAULTS } from "../src/expedition/returnPoint";
 import { RadarZoom, RADAR_DEFAULTS, linked, radarPicture, type RadarWorld } from "../src/expedition/radar";
+import { SalvageSim, SALVAGE_DEFAULTS } from "../src/pois/salvage";
 import { CampField, CAMP_DEFAULTS } from "../src/expedition/camps";
-import { depthAt, dangerOf, ringOf, DEPTH_DEFAULTS } from "../src/expedition/depth";
+import { scaled, convoyDepth, DepthField, depthAt, dangerOf, ringOf, DEPTH_DEFAULTS } from "../src/expedition/depth";
 import { ThreatField, THREAT_DEFAULTS, type ThreatEvent } from "../src/expedition/threats";
 import { POI_DEFAULTS, PoiField } from "../src/world/pois";
 import { rawGround } from "../src/world/poiPads";
@@ -411,11 +412,132 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
   for (let k = 0; k <= 30; k++) { const d = depthAt(r0, p.x + nx * k * 100, p.z + nz * k * 100); ds.push(d); if (d < prev - 1e-6) mono = false; prev = d; }
   if (!mono) fail("depth fell going away from the road");
   if (Math.abs(ds[10] - 1000) > 120) fail(`1000 m off the road reads ${ds[10].toFixed(0)} m deep`);
+  // From the convoy: zero at its head, the same at any clock for a point that moves with it, deterministic, blended by depthLive.
+  const rc = new ConvoyRoute({ ...FLAT }, 0, 0), hd = { x: 0, z: 0, heading: 0 };
+  rc.jump(500);
+  rc.ahead(rc.s, hd);
+  if (convoyDepth(rc, hd.x, hd.z) > 1e-6) fail("convoy depth is not zero at the head");
+  const cdA = convoyDepth(rc, hd.x + 900, hd.z + 700), cdB = convoyDepth(rc, hd.x + 900, hd.z + 700);
+  const roadD = depthAt(rc, hd.x + 900, hd.z + 700);
+  if (cdA !== cdB || cdA < roadD - 1e-6) fail(`convoy depth ${cdA.toFixed(0)} vs road ${roadD.toFixed(0)}`);
+  const farAhead = [hd.x + Math.sin(rc.ahead(rc.s + 1500, hd).heading) * 0, 0];
+  rc.ahead(rc.s + 1500, hd);
+  const aheadRoad = depthAt(rc, hd.x, hd.z), aheadConvoy = convoyDepth(rc, hd.x, hd.z);
+  const df = new DepthField(rc, { ...D, depthLive: 1 }), df0 = new DepthField(rc, { ...D, depthLive: 0 });
+  if (!(aheadRoad < 5 && aheadConvoy > 1000 && df.liveDepth(hd.x, hd.z) > 1000 && df0.liveDepth(hd.x, hd.z) < 5)) fail("live depth blend wrong");
+  console.log(`convoy depth: 0 at the head; a spot on the road 1500 m ahead is ${aheadRoad.toFixed(0)} m from the road and ${aheadConvoy.toFixed(0)} m from the convoy (live depth ${df.liveDepth(hd.x, hd.z).toFixed(0)} at depthLive 1, ${df0.liveDepth(hd.x, hd.z).toFixed(0)} at 0)`);
+  void farAhead;
   const rings = [100, 600, 1500, 2600].map((d) => ringOf(D, d)).join("/");
   if (rings !== "Near/Out/Deep/Far") fail(`rings ${rings}`);
   if (dangerOf(D, 100) !== 0 || dangerOf(D, 2000) < 0.99 || dangerOf(D, 1e6) !== D.depthCap) fail("danger curve ends wrong");
   console.log(`depth: stable as the convoy rolls (max drift ${drift.toFixed(1)} m in a 2000-step roll), 1000 m off reads ${ds[10].toFixed(0)}, rings ${rings}, danger 0/${dangerOf(D, 1000).toFixed(2)}/${dangerOf(D, 2000).toFixed(2)} at 100/1000/2000 m`);
   if (drift > 30) fail(`depth drifted ${drift.toFixed(1)} m with the clock`);
+}
+
+// ---- Camps grow with depth: averages over many cells, a straight road along z, depth = |x| ----
+{
+  const D = { ...DEPTH_DEFAULTS };
+  const stat = (i0: number, i1: number) => {
+    const cf = new CampField({ ...CAMP_DEFAULTS, campClear: 0 });
+    cf.danger = (x) => dangerOf(D, Math.abs(x));
+    let cells = 0, camps = 0, robots = 0;
+    for (let j = 0; j < 150; j++) for (let i = i0; i <= i1; i++) { cells++; const c = cf.camp(i, j); if (c) { camps++; robots += c.size; } }
+    return { perCell: camps / cells, robotsPerCell: robots / cells, size: robots / Math.max(1, camps) };
+  };
+  const near = stat(0, 0), out = stat(2, 2), deep = stat(3, 3), far = stat(6, 8);
+  const f = (k: ReturnType<typeof stat>) => `${k.perCell.toFixed(2)} camps/cell, ${k.size.toFixed(1)} robots each, ${k.robotsPerCell.toFixed(1)} robots/cell`;
+  console.log(`camps by depth: near ${f(near)}; out ${f(out)}; deep ${f(deep)}; far ${f(far)}`);
+  if (!(near.perCell < far.perCell && near.size < out.size && out.size < far.size && near.robotsPerCell < out.robotsPerCell && out.robotsPerCell < far.robotsPerCell)) fail("camp density or size does not rise from Near to Far");
+  // Without a depth function camps are what they were.
+  const a = new CampField({ ...CAMP_DEFAULTS }), b = new CampField({ ...CAMP_DEFAULTS });
+  b.danger = () => 0;
+  let same = true;
+  for (let j = 0; j < 40; j++) for (let i = 0; i < 6; i++) if (JSON.stringify(a.camp(i, j)) !== JSON.stringify(b.camp(i, j))) same = false;
+  if (!same) fail("camps at danger 0 differ from camps without depth");
+}
+
+// ---- Packs and raids by depth: more, bigger, sooner ----
+{
+  const sim = (danger: number, seed: number) => {
+    const tf = new ThreatField({ ...THREAT_DEFAULTS }, seed);
+    const ev: ThreatEvent[] = [];
+    let raids = 0, raidRobots = 0, firstRaid = -1, packs = 0, packSize = 0, n = 0;
+    for (let t = 0; t < 600; t += 0.1) {
+      for (const e of tf.update(0.1, { x: 0, z: 0, out: true, loud: false, danger }, ev)) if (e.type === "raid") { raids++; raidRobots += e.pack.n; if (firstRaid < 0) firstRaid = t; }
+      for (const p of tf.packs) if (p.state === "live") tf.setLive(p, 0, 0, 0);
+      if (t % 10 < 0.1) { const r = tf.packs.filter((q) => q.kind === "pack"); packs += r.length; for (const q of r) { packSize += q.n; n++; } }
+    }
+    return { raids, raidSize: raidRobots / Math.max(1, raids), firstRaid, packs: packs / 60, packSize: packSize / Math.max(1, n) };
+  };
+  const avg = (d: number) => { const r = [1, 2, 3, 4].map((s) => sim(d, s)); const m = (k: keyof typeof r[0]) => r.reduce((a, b) => a + b[k], 0) / r.length; return { raids: m("raids"), raidSize: m("raidSize"), firstRaid: m("firstRaid"), packs: m("packs"), packSize: m("packSize") }; };
+  const n0 = avg(0), n1 = avg(1);
+  const g = (k: typeof n0) => `${k.raids.toFixed(1)} raids of ${k.raidSize.toFixed(0)}, first at ${k.firstRaid.toFixed(0)} s, ${k.packs.toFixed(1)} packs round the mech of ${k.packSize.toFixed(1)}`;
+  console.log(`threats per 10 min: danger 0: ${g(n0)}; danger 1: ${g(n1)}`);
+  if (!(n1.raids > n0.raids * 1.5 && n1.raidSize > n0.raidSize * 1.5 && n1.firstRaid < n0.firstRaid && n1.packs > n0.packs * 1.5 && n1.packSize > n0.packSize * 1.5)) fail("threats do not rise with depth");
+  if (Math.abs(n0.firstRaid - THREAT_DEFAULTS.raidFirst) > 5) fail("near the road the first raid moved");
+  // First fight: by the new time (firstFight 25 s plus the scout's walk in).
+  const tf = new ThreatField({ ...THREAT_DEFAULTS }, 9), ev: ThreatEvent[] = [];
+  let first = -1;
+  for (let t = 0; t < 120 && first < 0; t += 0.1) for (const e of tf.update(0.1, { x: 0, z: 0, out: true, loud: false }, ev)) if (e.type === "engage") first = t;
+  console.log(`first fight (standing still): ${first.toFixed(0)} s after the drop (scout due at ${THREAT_DEFAULTS.firstFight} s)`);
+  if (first < 0 || first > THREAT_DEFAULTS.firstFight + 30) fail(`first fight at ${first.toFixed(0)} s`);
+  // Heat answers: a pull makes the nearest pack hunt for good; a heat raid is aimed at the mech.
+  const t2 = new ThreatField({ ...THREAT_DEFAULTS }, 5);
+  t2.update(0.1, { x: 0, z: 0, out: true, loud: false }, ev);
+  const roam = t2.packs.filter((q) => q.kind === "pack"), nearest = [...roam].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+  const pulled = t2.pull({ x: 0, z: 0, out: true, loud: false });
+  if (!pulled || pulled !== nearest || pulled.state !== "hunt") fail("pull did not take the nearest pack");
+  const hr = t2.heatRaid({ x: 0, z: 0, out: true, loud: false, danger: 1 });
+  const want = Math.round(THREAT_DEFAULTS.heatRaidSize * scaled(THREAT_DEFAULTS.raidSizeFar, 1));
+  if (!hr || hr.type !== "raid" || hr.pack.n !== want || Math.hypot(hr.pack.tx, hr.pack.tz) > 1) fail(`heat raid wrong (${hr && hr.type === "raid" ? hr.pack.n : "none"} want ${want})`);
+}
+
+// ---- Salvage heat, and scrap by depth ----
+{
+  const S = { ...SALVAGE_DEFAULTS };
+  const sim = new SalvageSim(S);
+  const spots = Array.from({ length: 12 }, (_, i) => ({ id: `t#${i}`, section: 0, x: 0, z: 0, h: 1, value: 60, time: 5, label: "sealed hold" }));
+  sim.add({ place: { id: "t" }, sections: [{ name: "s", value: 720, spots }], value: 720 } as never);
+  const hits: string[] = []; const when: number[] = []; let noise0 = 0, noiseLast = 0;
+  sim.onHeat = (w) => { hits.push(w); when.push(t); };
+  sim.onNoise = (_x, _z, r) => { if (!noise0) noise0 = r; noiseLast = r; };
+  let t = 0;
+  for (; t < 40; t += 1 / 60) sim.update(1 / 60, 0, 0, true);
+  const hotAt = sim.heat;
+  if (hits[0] !== "pack" || hits[1] !== "raid" || hits.length !== 2) fail(`heat thresholds fired ${hits.join(",")} (want pack then raid, once each)`);
+  if (!(noiseLast > noise0 * 1.3)) fail(`noise did not grow with heat (${noise0.toFixed(0)} to ${noiseLast.toFixed(0)})`);
+  // Held, then it falls slowly; the thresholds re-arm and fire again on the next heating.
+  const held = sim.heat;
+  for (let k = 0; k < 60 * 2; k++, t += 1 / 60) sim.update(1 / 60, 500, 500, false);
+  if (Math.abs(sim.heat - held) > 1e-9) fail("heat fell inside the hold time");
+  for (let k = 0; k < 60 * 20; k++, t += 1 / 60) sim.update(1 / 60, 500, 500, false);
+  const cooled = sim.heat;
+  if (!(cooled < held && cooled > 0)) fail(`heat after 20 s idle ${cooled.toFixed(2)} from ${held.toFixed(2)} (want lower, slowly)`);
+  for (let k = 0; k < 60 * 120; k++, t += 1 / 60) sim.update(1 / 60, 500, 500, false);
+  const pilot = new SalvageSim(S);
+  pilot.add({ place: { id: "t" }, sections: [{ name: "s", value: 60, spots: [{ ...spots[0], id: "p#0", time: 400 }] }], value: 60 } as never);
+  for (let k = 0; k < 60 * 12; k++) pilot.update(1 / 60, 0, 0, true, 7, 0.5, 0.35, false);
+  const mech = new SalvageSim(S);
+  mech.add({ place: { id: "t" }, sections: [{ name: "s", value: 60, spots: [{ ...spots[0], id: "m#0", time: 400 }] }], value: 60 } as never);
+  for (let k = 0; k < 60 * 12; k++) mech.update(1 / 60, 0, 0, true);
+  if (!(pilot.heat < mech.heat * 0.5)) fail("stripping by hand is as hot as in the mech");
+  // Rich spots are louder and slower.
+  const small = { ...spots[0], value: 12 }, rich = { ...spots[0], value: 120 };
+  if (!(sim.size(rich) > sim.size(small))) fail("size does not rise with value");
+  console.log(`salvage heat: 40 s of stripping 60-scrap spots reaches ${hotAt.toFixed(2)} (pack at ${S.heatPack}, raid at ${S.heatRaid}), fired ${hits.join(" then ")} at ${when.map((w) => w.toFixed(0) + " s").join(" and ")}; noise ${noise0.toFixed(0)} to ${noiseLast.toFixed(0)} m; held ${S.heatHold} s then ${held.toFixed(2)} to ${cooled.toFixed(2)} after 20 s, ${sim.heat.toFixed(2)} after 2 min more; by hand ${pilot.heat.toFixed(2)} vs mech ${mech.heat.toFixed(2)} in 12 s`);
+  // A second heating fires again.
+  const before = hits.length;
+  for (let k = 0; k < 60 * 25; k++) sim.update(1 / 60, 0, 0, true);
+  if (hits.length <= before) fail("heat thresholds did not re-arm after cooling");
+  // Scrap rises with depth.
+  const D = { ...DEPTH_DEFAULTS };
+  const pay = new SalvageSim(S);
+  pay.danger = (x) => dangerOf(D, x);
+  const spot = (x: number) => ({ ...spots[0], x });
+  const pays = [0, 400, 1000, 2000, 3000].map((x) => pay.pay(spot(x)));
+  console.log(`scrap for a 60-scrap spot at 0/400/1000/2000/3000 m: ${pays.join("/")}`);
+  for (let i = 1; i < pays.length; i++) if (pays[i] < pays[i - 1]) fail("scrap fell with depth");
+  if (!(pays[3] >= 60 * S.scrapFar * 0.95) || pays[0] !== 60) fail(`scrap at the road ${pays[0]} / full depth ${pays[3]}`);
 }
 
 if (problems.length) { console.log(`expedition check FAILED (${problems.length})`); throw new Error("expedition check failed"); }

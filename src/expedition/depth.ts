@@ -15,6 +15,8 @@ export const DEPTH_DEFAULTS = {
   depthNear: 400, depthOut: 1000, depthDeep: 2000,
   depthStart: 150, depthFull: 2000, depthCap: 1.5,
   depthRings: 1,
+  depthLive: 1,
+  depthTrain: 130,
 };
 export type DepthValues = typeof DEPTH_DEFAULTS;
 export const DEPTH_PARAMS: Param[] = [
@@ -25,6 +27,8 @@ export const DEPTH_PARAMS: Param[] = [
   { key: "depthFull", label: "Danger 1 at (m)", min: 300, max: 6000, step: 10, group: DEPTH_GROUP, tip: "Every 'at full depth' multiplier below applies in full here" },
   { key: "depthCap", label: "Danger tops out at", min: 1, max: 3, step: 0.05, group: DEPTH_GROUP, tip: "Past full depth the multipliers keep growing, up to this many times the full effect" },
   { key: "depthRings", label: "Rings on the convoy radar (0/1)", min: 0, max: 1, step: 1, group: DEPTH_GROUP },
+  { key: "depthLive", label: "Live depth from convoy (0-1)", min: 0, max: 1, step: 0.05, group: DEPTH_GROUP, tip: "For what happens live (roaming packs, raids, the salvage heat's answer): 1 measures depth from the convoy as it is now, 0 from the road. Camps and scrap are placed in the world, so they always use the road" },
+  { key: "depthTrain", label: "Convoy length for depth (m)", min: 0, max: 400, step: 5, group: DEPTH_GROUP, tip: "Depth from the convoy is the distance to the stretch of road this long behind its head" },
 ];
 
 export type Ring = "Near" | "Out" | "Deep" | "Far";
@@ -59,6 +63,17 @@ export function depthAt(route: ConvoyRoute, x: number, z: number): number {
   return best;
 }
 
+/**
+ * Distance (m) from (x, z) to the convoy as it is at clock s (the head's distance along the route; default now): to
+ * the stretch of road the train fills, trainLen behind the head. Deterministic, since the convoy follows the clock.
+ */
+export function convoyDepth(route: ConvoyRoute, x: number, z: number, trainLen = 130, s = route.s): number {
+  const a = route.ahead(s, { x: 0, z: 0, heading: 0 }), b = route.ahead(s - Math.max(0, trainLen), { x: 0, z: 0, heading: 0 });
+  const bx = a.x - b.x, bz = a.z - b.z;
+  const t = Math.max(0, Math.min(1, ((x - b.x) * bx + (z - b.z) * bz) / (bx * bx + bz * bz || 1)));
+  return Math.hypot(x - b.x - bx * t, z - b.z - bz * t);
+}
+
 /** Danger from a depth: 0 until depthStart, 1 at depthFull, on past it up to depthCap. */
 export function dangerOf(v: DepthValues, depth: number): number {
   const span = Math.max(1, v.depthFull - v.depthStart);
@@ -80,6 +95,13 @@ export class DepthField {
     if (x !== this.lx || z !== this.lz) { this.ld = depthAt(this.route, x, z); this.lx = x; this.lz = z; }
     return this.ld;
   }
+  /** Depth for what happens live: from the convoy now, the road, or a blend (depthLive). */
+  liveDepth(x: number, z: number): number {
+    const k = Math.max(0, Math.min(1, this.v.depthLive));
+    const road = this.depth(x, z);
+    return k > 0 ? road * (1 - k) + convoyDepth(this.route, x, z, this.v.depthTrain) * k : road;
+  }
+  liveDanger: DangerFn = (x, z) => dangerOf(this.v, this.liveDepth(x, z));
   danger: DangerFn = (x, z) => dangerOf(this.v, this.depth(x, z));
   ring(x: number, z: number): Ring { return ringOf(this.v, this.depth(x, z)); }
 }

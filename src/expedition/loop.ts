@@ -29,23 +29,24 @@ import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
 import { SwarmCamps, SWARM_CAMP_DEFAULTS, SWARM_CAMP_PARAMS } from "./swarmCamps";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP } from "./depth";
 import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type ThreatEvent } from "./threats";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
-  ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS,
+  ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
-  ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
+  ...DEPTH_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
-  { id: "expedition", label: "Expedition", groups: ["Expedition", "Fuel", "Way home", "Radar"] },
-  { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
+  { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] },
 ];
@@ -67,6 +68,8 @@ export class ExpeditionLoop {
   readonly fuel: Fuel;
   readonly sites: FieldSites;
   readonly camps: CampField;
+  /** Distance from the road and the danger it makes (depth.ts). */
+  readonly depth: DepthField;
   readonly swarms: SwarmCamps;
   readonly zoom: RadarZoom;
   readonly radar: RadarDraw;
@@ -81,6 +84,10 @@ export class ExpeditionLoop {
   private blasts: { id: string; x: number; z: number; t: number }[] = [];
   private plumeT = 0;
   private blastSeq = 0;
+  /** Raids sent by salvage heat, handled with the next threat step. */
+  private pending: ThreatEvent[] = [];
+  /** Where the mech (or the pilot on foot) was at the last threat step. */
+  private at = { x: 0, z: 0 };
   readonly home: ReturnPoint = { x: 0, z: 0, walk: 0, eta: 0, crane: 0, reachable: false };
   /** The same, sprinting all the way. */
   readonly homeSprint: ReturnPoint = { x: 0, z: 0, walk: 0, eta: 0, crane: 0, reachable: false };
@@ -113,10 +120,14 @@ export class ExpeditionLoop {
     this.exp = new Expedition(v);
     this.fuel = new Fuel(v);
     this.sites = new FieldSites(v, field, bf, scene, blocked);
+    this.depth = new DepthField(route, v);
     this.camps = new CampField(v);
+    this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
     this.sites.onLoot = (label, scrap) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); };
     this.sites.onNoise = (x, z, r) => this.swarms.noise(x, z, r);
+    this.sites.salvage.danger = this.depth.danger;
+    this.sites.salvage.onHeat = (what) => this.heatAnswer(what);
     player.onDash = (x, z, dx, dz) => this.swarms.dashed(x, z, dx, dz, v.dashShoveRadius, v.dashShoveDamage);
     this.zoom = new RadarZoom(v);
     this.radar = new RadarDraw(v);
@@ -146,6 +157,17 @@ export class ExpeditionLoop {
 
   /** Placement sliders changed. */
   rebuild(what: "sites" | "camps") { if (what === "sites") this.sites.rebuild(); else { this.swarms.reset(); this.threats.reset(); } this.slowT = 0; }
+
+  /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
+  private heatAnswer(what: "pack" | "raid") {
+    const m = { x: this.at.x, z: this.at.z, out: true, loud: true, danger: this.depth.liveDanger(this.at.x, this.at.z) };
+    if (what === "pack") {
+      if (this.threats.pull(m)) this.hud.note("The noise is drawing a pack in", "#ffcf7a", 3);
+    } else {
+      const e = this.threats.heatRaid(m);
+      if (e) this.pending.push(e);
+    }
+  }
 
   /** Turret targets: awake robots near the train. */
   turretThreats(): THREE.Vector3[] {
@@ -229,6 +251,9 @@ export class ExpeditionLoop {
       w.route = [];
       const head = this.route.s, out = { x: 0, z: 0, heading: 0 };
       for (let s = -100; s <= v.convoyRadar * 1.6; s += 50) { this.route.ahead(head + s, out); w.route.push({ x: out.x, z: out.z }); }
+      // The road a good way back too, and the depth rings round it.
+      w.band = []; w.rings = v.depthRings > 0 ? [v.depthNear, v.depthOut, v.depthDeep] : [];
+      if (w.rings.length) for (let s = -v.convoyRadar * 1.6; s <= v.convoyRadar * 1.6; s += 100) { this.route.ahead(head + s, out); w.band.push({ x: out.x, z: out.z }); }
     }
     this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     // Moving danger as heat: packs and raids (hotter hunting), and blasts for a few seconds.
@@ -259,7 +284,9 @@ export class ExpeditionLoop {
       exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
       sprint: exp.state === "out" && this.homeSprint.reachable
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
-      canRecall: exp.state === "out" && player.alive, bankShow: v.bankShow, seek: this.seeker.label(seek),
+      canRecall: exp.state === "out" && player.alive,
+      depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
+      heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
   }
@@ -276,10 +303,15 @@ export class ExpeditionLoop {
     const loud = !!this.sites.salvage.active || (!pilot && (player.upper.guns.some((g) => g.firing || g.spin > 0.3)
       || sim.speed > v.walkSpeed + 0.5 || player.dash.active || player.bound.on));
     if (swarms.anyAwake) threats.engaged = true;
-    for (const e of threats.update(dt, { x: p.x, z: p.z, out: hunting, loud }, this.events)) {
+    this.at.x = p.x; this.at.z = p.z;
+    this.events = threats.update(dt, { x: p.x, z: p.z, out: hunting, loud, danger: hunting ? this.depth.liveDanger(p.x, p.z) : 0 }, this.events);
+    if (this.pending.length) { if (hunting) this.events.push(...this.pending); this.pending.length = 0; }
+    for (const e of this.events) {
       if (e.type === "engage") {
         const q = e.pack;
-        swarms.addGroup(q.id, q.n, q.x, q.z, q.kind === "raid" ? { mid: v.raidMidShare, big: v.raidBigShare } : undefined);
+        const raid = q.kind === "raid";
+        swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: v.raidMidShare + q.mid, big: v.raidBigShare + q.big }
+          : q.mid > 0 || q.big > 0 ? { mid: v.robotMidShare + q.mid, big: v.robotBigShare + q.big } : undefined);
       } else if (e.type === "raid") {
         this.hud.note(`Raid coming · ${e.pack.n} robots · ${Math.round(Math.hypot(e.pack.x - p.x, e.pack.z - p.z))} m`, "#ff9a7a", 4);
         this.sound.alarm();
