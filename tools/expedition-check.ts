@@ -29,6 +29,7 @@ import { Fuel, FUEL_DEFAULTS, burnRate, fuelWarning } from "../src/expedition/fu
 import { returnPoint, craneTracks, clock, RETURN_DEFAULTS } from "../src/expedition/returnPoint";
 import { RadarZoom, RADAR_DEFAULTS, linked, radarPicture, type RadarWorld } from "../src/expedition/radar";
 import { CampField, CAMP_DEFAULTS } from "../src/expedition/camps";
+import { depthAt, dangerOf, ringOf, DEPTH_DEFAULTS } from "../src/expedition/depth";
 import { ThreatField, THREAT_DEFAULTS, type ThreatEvent } from "../src/expedition/threats";
 import { POI_DEFAULTS, PoiField } from "../src/world/pois";
 import { rawGround } from "../src/world/poiPads";
@@ -384,6 +385,37 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
   let engagedAboard = 0;
   for (let t = 0; t < 300; t += 0.1) for (const e of tf.update(0.1, { x: 0, z: 0, out: false, loud: true })) if (e.type !== "blast") engagedAboard++;
   if (engagedAboard) fail(`${engagedAboard} packs or raids came for a mech aboard`);
+}
+
+// ---- Depth (Keith 2026-10-28): distance from the road, the same at any clock time, growing away from it ----
+{
+  const D = { ...DEPTH_DEFAULTS };
+  const route = new ConvoyRoute({ ...FLAT }, 0, 0);
+  const pts = [[0, 0], [300, 100], [-700, 900], [1500, 2000], [-2500, 600], [90, 3000]];
+  const before = pts.map(([x, z]) => depthAt(route, x, z));
+  route.jump(40);
+  for (let i = 0; i < 2000; i++) route.update(1 / 60);
+  // The convoy has rolled on; every point that was in the window and still has its nearest road ahead is unchanged.
+  const same = pts.map(([x, z]) => depthAt(route, x, z));
+  let drift = 0;
+  for (let i = 0; i < pts.length; i++) drift = Math.max(drift, Math.abs(same[i] - before[i]));
+  const fresh = new ConvoyRoute({ ...FLAT }, 0, 0);
+  const a = depthAt(fresh, 300, 100), b = depthAt(fresh, 300, 100);
+  if (a !== b) fail("depth differs between two calls");
+  // Away from the road it only grows.
+  const r0 = new ConvoyRoute({ ...FLAT }, 0, 0), p = { x: 0, z: 0, heading: 0 };
+  r0.ahead(300, p);
+  const nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
+  let prev = -1, mono = true;
+  const ds: number[] = [];
+  for (let k = 0; k <= 30; k++) { const d = depthAt(r0, p.x + nx * k * 100, p.z + nz * k * 100); ds.push(d); if (d < prev - 1e-6) mono = false; prev = d; }
+  if (!mono) fail("depth fell going away from the road");
+  if (Math.abs(ds[10] - 1000) > 120) fail(`1000 m off the road reads ${ds[10].toFixed(0)} m deep`);
+  const rings = [100, 600, 1500, 2600].map((d) => ringOf(D, d)).join("/");
+  if (rings !== "Near/Out/Deep/Far") fail(`rings ${rings}`);
+  if (dangerOf(D, 100) !== 0 || dangerOf(D, 2000) < 0.99 || dangerOf(D, 1e6) !== D.depthCap) fail("danger curve ends wrong");
+  console.log(`depth: stable as the convoy rolls (max drift ${drift.toFixed(1)} m in a 2000-step roll), 1000 m off reads ${ds[10].toFixed(0)}, rings ${rings}, danger 0/${dangerOf(D, 1000).toFixed(2)}/${dangerOf(D, 2000).toFixed(2)} at 100/1000/2000 m`);
+  if (drift > 30) fail(`depth drifted ${drift.toFixed(1)} m with the clock`);
 }
 
 if (problems.length) { console.log(`expedition check FAILED (${problems.length})`); throw new Error("expedition check failed"); }
