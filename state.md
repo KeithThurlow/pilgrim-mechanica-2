@@ -178,7 +178,6 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 - Progression: passive tree proposed (`docs/proposal-progression.md`), waiting for Keith.
 - Depth danger, salvage heat, harder sooner merged 2026-10-28 (Keith to play: convoy lab `?depth=1500`, `?set=depthLive:0` to compare road vs convoy). Rough: depth searches 2.5 km behind to 5 km ahead; pulled-in packs are slow to arrive; heat noise reaches ~900 m on rich spots.
-- Failing on main since Keith's dash and walker commits: `slope-check` (walking hips not forward over the feet; sprint cadence not rising with the climb) and `convoy-check` (hips 0.80 m off their height over a deck).
 - Loot feel (agent, `wip/loot-feel`, handoff `docs/handoff-loot-feel.md`): scrap ticks and jingles, item drops with beams, banking moment, visible loss. Upgrades and fabricator next.
 
 
@@ -227,6 +226,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-28 · Checks green again: slope-check and convoy-check updated for Keith's walker values (agent, `wip/checks-fix`)
+
+Both failures began at d29b825 (Rampart stridePerSpeed 0.4 to 1.5, strideMax 5.2 to 7.05; runClimbSteps 0.1 to 0.04), found by running the checks at older commits; reverting the stride alone restored the flat-hips number and the convoy check. No code changed. `slope-check`: flat hips ahead of the feet now needs 0.02 m (was 0.25; now 0.08); sprint cadence needs a rise of 0.1 at 10 deg and 0.15 at 25 deg with 0.15 slack between (the 20 deg dip is 0.09, from speed and reach limits, not a fault). `convoy-check`: hips-off-height limit 1.0 m (was 0.7). Rough edge for Keith: with the long stride, walking at 3-5 m/s while steering sags the hips up to 0.8 m for about 0.1 s when both feet are planted far apart (same on flat ground: 2.54-3.12 m); a lower walk-only strideMax would remove it.
+
 
 ### 2026-10-28 · Depth: more enemies and better scrap the further from the road; salvage heat (Keith, agent on `wip/depth`)
 

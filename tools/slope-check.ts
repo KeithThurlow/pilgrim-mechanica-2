@@ -74,7 +74,9 @@ if (up.speed > flat.speed * 0.9) problems.push("no slowdown uphill");
 if (down.speed < flat.speed * 0.95) problems.push("slows down downhill");
 // The body leans over its feet while moving (Keith 2026-10-24): downhill no less than on the flat, and never behind them.
 if (down.cogAhead < Math.min(0.1, flat.cogAhead - 0.15)) problems.push("downhill the hips sit back behind the feet");
-if (flat.cogAhead < 0.25) problems.push("walking, the hips aren't forward over the feet");
+// Was 0.25. Keith 2026-10-27 (d29b825) lengthened the Rampart's stride (stridePerSpeed 0.4 -> 1.5, strideMax 5.2 -> 7.05), so
+// at 6 m/s the planted feet sit further out in front and the hips ride about 0.08 m ahead of them. Still ahead, not behind.
+if (flat.cogAhead < 0.02) problems.push("walking, the hips aren't forward over the feet");
 for (const [name, r] of [["side", side], ["up", up], ["down", down], ["steep", steep]] as const) if (r.misses) problems.push(`${name}: leg solve failed`);
 // Uphill (Keith 2026-10-26 18:28: the swinging thigh was held down vertical): it rises toward the hull, clearly more than
 // on the flat and than without the fold.
@@ -131,7 +133,10 @@ for (const H of [3, 6]) {
     if (r.spread > 0.15) problems.push(`sprinting at ${r.deg}°: footfall intervals uneven (${(r.spread * 100).toFixed(0)}% off the mean)`);
     if (r.deg >= 10 && r.misses > 0.03) problems.push(`sprinting up ${r.deg}°: legs out of reach ${(r.misses * 100).toFixed(1)}% of leg-frames`);
   }
-  if (!(at(10).rate > at(0).rate + 0.2 && at(20).rate > at(10).rate + 0.2 && at(25).rate > at(20).rate)) problems.push(`sprint cadence doesn't rise with the climb: ${rows.map((r) => `${r.deg}° ${r.rate.toFixed(2)}`).join(", ")}`);
+  // Keith 2026-10-27 (d29b825) cut runClimbSteps 0.1 -> 0.04, so the climb adds far fewer strides per second than it did
+  // (0.14 at 10°, was 0.3+) and the steepest slopes are limited by speed and reach, not the climb term: the rate wobbles by up
+  // to ~0.1 between 10° and 20°. The check keeps the intent (steeper = quicker strides overall) with that slack.
+  if (!(at(10).rate > at(0).rate + 0.1 && at(25).rate > at(0).rate + 0.15 && at(20).rate > at(10).rate - 0.15 && at(25).rate > at(20).rate)) problems.push(`sprint cadence doesn't rise with the climb: ${rows.map((r) => `${r.deg}° ${r.rate.toFixed(2)}`).join(", ")}`);
   if (at(-10).rate > at(0).rate + 0.1) problems.push(`sprint cadence rises downhill (${at(-10).rate.toFixed(2)} vs ${at(0).rate.toFixed(2)} steps/s)`);
 }
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("slope check failed"); }

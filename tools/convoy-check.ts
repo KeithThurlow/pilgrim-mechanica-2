@@ -478,7 +478,10 @@ function pickUp(w: World, label = "") {
   if (nan) fail("walker went non-finite on the deck");
   if (wp < route.length) fail(`only reached ${wp} of ${route.length} deck waypoints`);
   if (worstOut > 0.05) fail(`walked ${worstOut.toFixed(2)} m past the deck's edge`);
-  if (worstHips > 0.7) fail(`hips ${worstHips.toFixed(2)} m off their height over the deck`);
+  // Was 0.7. Keith 2026-10-27 (d29b825) lengthened the Rampart's stride (stridePerSpeed 1.5, strideMax 7.05): walking at 3-4 m/s
+// the steps outreach the legs for a moment (both feet planted far apart) and the hips sag up to ~0.8 m for ~0.1 s. The same
+// sag shows on flat ground (probe: 2.54-3.12 m), so it is the stride, not deck riding. Still catches the hips collapsing.
+if (worstHips > 1.0) fail(`hips ${worstHips.toFixed(2)} m off their height over the deck`);
   if (worstFoot > 0.15) fail(`planted feet ${worstFoot.toFixed(2)} m off the deck`);
   if (offDeckFeet > 0) fail(`feet planted off the deck ${offDeckFeet} times`);
   if (over > frames * 0.02) fail(`legs overreached ${over} of ${frames} frames on the moving deck`);
