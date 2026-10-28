@@ -232,7 +232,7 @@ export class ExpeditionLoop {
   }
 
   /** Placement sliders changed. */
-  rebuild(what: "sites" | "camps") { if (what === "sites") this.sites.rebuild(); else { this.swarms.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
+  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
