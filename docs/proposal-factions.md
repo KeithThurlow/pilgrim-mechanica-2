@@ -60,3 +60,14 @@ feel like the biggest bad out there") and more kinds of robot, including one clo
 1. **Bandits and war bands:** wary of each other (fight if provoked), or always hostile?
 2. **Rival military:** a proper faction with its own look (cleaner, painted, uniform), or rogue mechs?
 3. **The mech-sized robot:** a reverse-jointed walker like ours, or a big humanoid?
+
+## Answers (Keith 2026-10-28)
+
+- **Bandits and war bands may merge** into one human faction (raiders), with two behaviours: settled camps and
+  roaming columns. They never fight each other.
+- **Rival military** and **robots** are hostile to everyone.
+- **The heavier robot stays on the robot theme.** Every enemy type should look distinct, so no humanoid. It's a
+  quadruped, low to the ground, heavier and scarier, with a turret on top (dual miniguns or dual lasers). It starts to
+  look mech-like without being a mech (working name **Warden**). This replaces the walker-based Reclaimer idea.
+- **The tall spider-like excavators** get cooler designs later, and their power may go up a lot so they stay the
+  scariest.
