@@ -290,7 +290,7 @@ const SLOTS_MAX = 64;
  */
 export interface RobotTarget { x: number; y: number; z: number; radius: number; vx?: number; vz?: number; latchLow?: number; latchHigh?: number }
 /** A round fired: muzzle, a point far along the shot, and the kind that fired it (SMALL, MID, BIG). */
-export type RobotShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, kind: number) => void;
+export type RobotShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, kind: number, robot: number) => void;
 export type RobotBiteFn = (i: number, damage: number) => void;
 /** A medium one's saw strike landing: robot, damage, where the saw's edge meets the mech. */
 export type RobotCutFn = (i: number, damage: number, x: number, y: number, z: number) => void;
@@ -368,6 +368,22 @@ export class RobotSwarm {
    * the sand (the expedition lab). The dead still collapse.
    */
   readonly frozen = new Uint8Array(ROBOT_MAX);
+  /**
+   * Its own target instead of the one update() is given (a fight with another faction): position, aim height, radius,
+   * set with setTarget(), cleared by clearTarget(). Such a robot doesn't leap or latch; small ones bite what they reach.
+   */
+  readonly hasT = new Uint8Array(ROBOT_MAX);
+  readonly tgx = new Float32Array(ROBOT_MAX); readonly tgy = new Float32Array(ROBOT_MAX);
+  readonly tgz = new Float32Array(ROBOT_MAX); readonly tgr = new Float32Array(ROBOT_MAX);
+  private slotT: RobotTarget = { x: 0, y: 0, z: 0, radius: 0 };
+  setTarget(i: number, x: number, y: number, z: number, radius: number) { this.hasT[i] = 1; this.tgx[i] = x; this.tgy[i] = y; this.tgz[i] = z; this.tgr[i] = radius; }
+  clearTarget(i: number) { this.hasT[i] = 0; }
+  private targetOf(i: number, base: RobotTarget): RobotTarget {
+    if (!this.hasT[i]) return base;
+    const t = this.slotT;
+    t.x = this.tgx[i]; t.y = this.tgy[i]; t.z = this.tgz[i]; t.radius = this.tgr[i];
+    return t;
+  }
   /** Live (not DEAD) robots. */
   count = 0;
   /** One past the highest slot ever used: loops stop here. */
@@ -450,7 +466,7 @@ export class RobotSwarm {
       const i = this.freeSlot();
       if (i < 0) return made;
       made.push(i);
-      this.frozen[i] = 0;
+      this.frozen[i] = 0; this.hasT[i] = 0;
       const kind = plan[k], big = kind === BIG, mid = kind === MID;
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -642,23 +658,22 @@ export class RobotSwarm {
 
   private tmp = [0, 0, 0];
 
-  update(dt: number, target: RobotTarget, onShot: RobotShotFn, onBite?: RobotBiteFn, onCut?: RobotCutFn): void {
+  update(dt: number, base: RobotTarget, onShot: RobotShotFn, onBite?: RobotBiteFn, onCut?: RobotCutFn): void {
     const v = this.v, { px, py, pz, vx, vy, vz, state, stateTime, size } = this;
     if (dt <= 0) return;
     // The mech's motion: given, or measured from its last position.
-    if (target.vx !== undefined && target.vz !== undefined) { this.tvx = target.vx; this.tvz = target.vz; }
+    if (base.vx !== undefined && base.vz !== undefined) { this.tvx = base.vx; this.tvz = base.vz; }
     else if (Number.isFinite(this.tPrevX)) {
       const k = Math.min(1, dt * 8);
-      this.tvx += ((target.x - this.tPrevX) / dt - this.tvx) * k;
-      this.tvz += ((target.z - this.tPrevZ) / dt - this.tvz) * k;
+      this.tvx += ((base.x - this.tPrevX) / dt - this.tvx) * k;
+      this.tvz += ((base.z - this.tPrevZ) / dt - this.tvz) * k;
     }
-    this.tPrevX = target.x; this.tPrevZ = target.z;
-    this.tx = target.x; this.tz = target.z; this.tr = target.radius; this.tLow = target.latchLow ?? -1; this.tHigh = target.latchHigh ?? -1;
-    this.baseY = this.ground.height(target.x, target.z);
+    this.tPrevX = base.x; this.tPrevZ = base.z;
+    this.tx = base.x; this.tz = base.z; this.tr = base.radius; this.tLow = base.latchLow ?? -1; this.tHigh = base.latchHigh ?? -1;
+    this.baseY = this.ground.height(base.x, base.z);
     const tSpeed = Math.hypot(this.tvx, this.tvz);
     this.buildHash();
 
-    const keep = target.radius + v.robotKeepOut;
     const sp = v.robotSpacing, sp2 = sp * sp, ar = v.robotAlignRadius, ar2 = ar * ar;
     const reach = Math.max(sp, ar);
     const cx = this.cx, cz = this.cz, tmp = this.tmp, g = v.robotGravity;
@@ -671,6 +686,7 @@ export class RobotSwarm {
       if (s === EMPTY) continue;
       if (this.frozen[i] && s < DEAD) continue;
       stateTime[i] += dt;
+      const target = this.targetOf(i, base), own = this.hasT[i] === 1, keep = target.radius + v.robotKeepOut;
       const kind = this.kind[i], big = kind === BIG, mid = kind === MID, walker = big || mid;
 
       if (s === DEAD) {
@@ -762,7 +778,7 @@ export class RobotSwarm {
         const stop = v.robotShootNear + this.range[i] * Math.max(0, v.robotShootFar - v.robotShootNear);
         if (st === RUN && dist <= stop) st = FIRE;
         else if (st === FIRE && dist > stop + v.robotShootSlack) st = RUN;
-      } else if (st === RUN && dist - target.radius < v.robotLeapRange && !full && stateTime[i] > 0.2) {
+      } else if (st === RUN && !own && dist - target.radius < v.robotLeapRange && !full && stateTime[i] > 0.2) {
         if (this.startLeap(i, dt)) { full = slotsFull(); continue; }
       }
       if (st !== s) {
@@ -777,7 +793,7 @@ export class RobotSwarm {
       const hill = Math.max(0.3, Math.min(1 + v.robotDownhill, 1 - this.slope[i] * v.robotUphill));
       if (st === RUN) {
         const spd = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * this.speedK[i] * hill;
-        if (!walker && !this.shooter[i] && full && dist < keep + v.robotWaitDist * 1.4 + 2) {
+        if (!walker && !own && !this.shooter[i] && full && dist < keep + v.robotWaitDist * 1.4 + 2) {
           // Every spot is taken: circle the mech, waiting for one to come free.
           // A band, not a ring, so the waiting pack doesn't pile up on one circle.
           const want = keep + v.robotWaitDist * (0.6 + 0.8 * this.range[i]), side = this.flank[i] < 0 ? -1 : 1;
@@ -870,6 +886,12 @@ export class RobotSwarm {
         this.heading[i] += drift * dt;
       }
 
+      // On another faction's target a small runner can't leap: it bites what it reaches.
+      if (own && !walker && !this.shooter[i] && st === RUN && dist - target.radius < 1.8) {
+        this.fireClock[i] -= dt;
+        if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; onBite?.(i, v.robotBiteDamage); }
+      }
+
       // Guns.
       if (st === FIRE) {
         let dh = Math.atan2(ux, uz) - this.heading[i];
@@ -909,6 +931,7 @@ export class RobotSwarm {
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
       if (!this.grounded(s) || this.frozen[i]) continue;
+      const target = this.targetOf(i, base), keep = target.radius + v.robotKeepOut;
       const ox = px[i], oz = pz[i], oy = py[i];
       let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = keep + this.rad(i) * 0.5;
@@ -1110,7 +1133,7 @@ export class RobotSwarm {
     const el = Math.hypot(ex, ey, ez); ex /= el; ey /= el; ez /= el;
     const reach = L * 1.5;
     this.shots++;
-    onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, kind);
+    onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, kind, i);
   }
 
   /**
