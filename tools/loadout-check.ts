@@ -267,7 +267,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   sk.setModes(["wreck"]);
   must(sk.mode === "wreck" && sk.label(seekNearest("wreck", V, sw)).includes("Wrecks"), "the seeker label is wrong");
   // Salvage: the gear speeds the mech's stripping, not the pilot's by hand.
-  const sim = new SalvageSim({ ...SALVAGE_DEFAULTS, gearSalvage: 2 });
+  const sim = new SalvageSim({ ...SALVAGE_DEFAULTS, gearSalvage: 2, stripSizeSlow: 0 }); // plain strip time (spot size not slowing it)
   const spot = { id: "s", x: 0, z: 0, time: 10, value: 5, label: "x" };
   sim.add({ place: { id: "p" }, sections: [{ name: "a", value: 5, spots: [spot] }] } as never);
   sim.update(1, 0, 0, true);

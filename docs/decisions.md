@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-28 | Items have levels that rise the further you are from the convoy; pickups show an item power and DPS (and a comparison with what's fitted); satisfying drop dings by rarity, a big Diablo-style sound for legendary or unique drops | Keith | Keith | Loot feel agent (`wip/loot-feel`). |
 | 2026-10-28 | Scrap ticks up like money with satisfying jingles; banking feels like payday; the at-risk list visibly empties on a loss; no hull damage carryover for now; a fabricator later; walk over items, E for scrap spots; no 20-minute cap | Keith | Keith | `docs/proposal-economy.md`; loot feel on `wip/loot-feel`. |
 | 2026-10-28 | Depth both ways: from the road for placement, from the convoy for live threats, blended by a slider (Keith unsure) | Claude | open | `wip/depth`. |
 | 2026-10-28 | Scrap must feel valuable, loot must feel good, salvaging must feel risky (it attracts things); combat harder sooner; more enemies, or risk of them, the further from the convoy | Keith | Keith | Depth danger + risky salvage on `wip/depth` (Sonnet); economy in `docs/proposal-economy.md`. |
@@ -248,3 +249,4 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 | 2026-10-24 | Ground rules: lab per system, every feel value a slider, frame time in every lab, rewrite over workaround | Claude | Keith | In `CLAUDE.md`. Keith: half the Unity slowdown was not setting rules early enough. |
 | 2026-10-24 | Restart as Pilgrim Mechanica 2: a moving convoy village, salvage runs against the convoy's range, swarms | Keith | Keith | `docs/design.md`. |
 | 2026-10-24 | Terrain: transverse dunes with a crossing set, streamed chunks, vertex colours | Claude | open | Tune in the terrain lab. |
+| 2026-10-28 | Depth from the road scales camps, packs, raids and scrap; salvage builds heat that pulls a pack then a raid; harder first fight | Keith | Keith | Keith: more enemies further out, scrapping should feel risky, harder sooner. Values are sliders (Depth group); `docs/handoff-depth.md`. |

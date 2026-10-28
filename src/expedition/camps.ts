@@ -5,6 +5,7 @@
 // Both on square cells: each cell's hash decides 0-1 of them, where (inset in the cell), and how big.
 import type { Param } from "../core/tweaks";
 import { hash4, rng } from "../world/pois";
+import { DEPTH_GROUP, scaled, type DangerFn } from "./depth";
 
 export const CAMP_DEFAULTS = {
   campSeed: 7,
@@ -14,6 +15,10 @@ export const CAMP_DEFAULTS = {
   campMax: 36,
   campGuess: 0.4,
   campClear: 260,
+  campChanceFar: 1.5,
+  campSizeFar: 2.5,
+  campMidFar: 0.3,
+  campBigFar: 0.12,
   fogCell: 1100,
   fogChance: 0.3,
   fogMin: 180,
@@ -30,6 +35,10 @@ export const CAMP_PARAMS: Param[] = [
   { key: "campMax", label: "Biggest camp (robots)", min: 1, max: 200, step: 1, group: G, onRelease: true },
   { key: "campGuess", label: "Radar's guess off by (±share)", min: 0, max: 1, step: 0.01, group: G, tip: "How wrong the convoy radar's danger estimate can be", onRelease: true },
   { key: "campClear", label: "None within (m) of the start", min: 0, max: 1500, step: 10, group: G, onRelease: true },
+  { key: "campChanceFar", label: "Camp chance × at full depth", min: 1, max: 3, step: 0.05, group: DEPTH_GROUP, tip: "Chance per cell is multiplied by 1 at the road up to this at danger 1 (capped at 95%)", onRelease: true },
+  { key: "campSizeFar", label: "Camp size × at full depth", min: 1, max: 6, step: 0.05, group: DEPTH_GROUP, onRelease: true },
+  { key: "campMidFar", label: "Cutters added to camps at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP, tip: "Added to the robot lab's cutter share", onRelease: true },
+  { key: "campBigFar", label: "Excavators added to camps at full depth (share)", min: 0, max: 0.5, step: 0.005, group: DEPTH_GROUP, onRelease: true },
   { key: "fogCell", label: "Cell size (m)", min: 300, max: 4000, step: 10, group: F, onRelease: true },
   { key: "fogChance", label: "Chance per cell", min: 0, max: 1, step: 0.01, group: F, onRelease: true },
   { key: "fogMin", label: "Smallest radius (m)", min: 30, max: 1000, step: 5, group: F, onRelease: true },
@@ -46,6 +55,10 @@ export interface Camp {
   /** Spread of the group round its centre (m). */
   radius: number;
   seed: number;
+  /** Danger at the camp (0 near the road, 1 at full depth): how its size and robot mix were scaled. */
+  danger: number;
+  /** Shares of cutters and excavators added to the robot lab's mix. */
+  mid: number; big: number;
 }
 
 export interface Unknown { id: string; x: number; z: number; r: number }
@@ -55,6 +68,8 @@ export class CampField {
   private fog = new Map<string, Unknown | null>();
   /** Where the lab starts (no camps near it). */
   start = { x: 0, z: 0 };
+  /** Danger at a place (src/expedition/depth.ts); none: 0 everywhere, camps as before depth. */
+  danger: DangerFn | null = null;
 
   constructor(public v: CampValues) {}
 
@@ -108,15 +123,17 @@ export class CampField {
 
   private placeCamp(i: number, j: number): Camp | null {
     const v = this.v, C = v.campCell, r = rng(hash4(v.campSeed, 31, i, j));
-    if (r() >= v.campChance) return null;
+    const roll = r();
     const inset = C * 0.2;
     const x = i * C + inset + r() * (C - 2 * inset), z = j * C + inset + r() * (C - 2 * inset);
+    const d = this.danger ? this.danger(x, z) : 0;
+    if (roll >= Math.max(v.campChance, Math.min(0.95, v.campChance * scaled(v.campChanceFar, d)))) return null;
     if (Math.hypot(x - this.start.x, z - this.start.z) < v.campClear) return null;
     const lo = Math.min(v.campMin, v.campMax), hi = Math.max(v.campMin, v.campMax);
-    // Sizes lean small: most camps a handful, a few big.
-    const size = Math.round(lo + (hi - lo) * r() * r());
+    // Sizes lean small: most camps a handful, a few big; deeper ones are bigger.
+    const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * scaled(v.campSizeFar, d)));
     const guess = Math.max(1, size * (1 + (r() * 2 - 1) * v.campGuess));
-    return { id: `camp:${i}:${j}`, x, z, size, guess, radius: 6 + Math.sqrt(size) * 2.5, seed: hash4(v.campSeed, i, j, 97) };
+    return { id: `camp:${i}:${j}`, x, z, size, guess, radius: 6 + Math.sqrt(size) * 2.5, seed: hash4(v.campSeed, i, j, 97), danger: d, mid: v.campMidFar * d, big: v.campBigFar * d };
   }
 
   private placeFog(i: number, j: number): Unknown | null {

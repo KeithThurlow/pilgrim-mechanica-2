@@ -24,6 +24,10 @@ export interface HudFrame {
   /** Show the recall hint (out, alive). */
   canRecall: boolean;
   bankShow: number;
+  /** Distance from the road and its ring, while out. */
+  depth?: { m: number; live: number; ring: string } | null;
+  /** Salvage heat and its thresholds (the meter shows while it's above zero). */
+  heat?: { v: number; max: number; pack: number; raid: number };
   /** The active seeker and what it points at (or ""). */
   seek?: string;
 }
@@ -104,6 +108,13 @@ export class ExpeditionHud {
       for (const l of e.atRisk.slice(-4)) lines.push(`<div style="color:${COL.amber};opacity:0.8;font-weight:500;padding-left:10px">${l.label} ${l.kind === "scrap" ? `+${l.amount}` : `${l.item.rarity} ${l.item.base}`}</div>`);
     } else if (banked && e.last) {
       lines.push(`<div style="color:${COL.ok}">${LOCK} Banked ◆ ${e.last.scrap} scrap${e.last.items ? ` · ${e.last.items} items` : ""}</div>`);
+    }
+    if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
+    if (f.heat && f.heat.v > 0.005 && e.state === "out") {
+      const h = f.heat, k = Math.min(1, h.v / h.max) * 100, col = h.v >= h.raid ? COL.red : h.v >= h.pack ? "#ff9a3c" : COL.amber;
+      const mk = (t: number) => `<div style="position:absolute;left:${Math.min(100, (t / h.max) * 100)}%;top:-2px;bottom:-2px;width:1px;background:#ffffff66"></div>`;
+      lines.push(`<div style="font-size:11px;color:${col};margin-top:4px;letter-spacing:0.08em">${h.v >= h.raid ? "RAID INBOUND" : h.v >= h.pack ? "PACK DRAWN IN" : "NOISE"}</div>`
+        + `<div style="position:relative;height:5px;background:#ffffff1c;border-radius:3px;margin-top:2px"><div style="height:100%;width:${k}%;background:${col};border-radius:3px"></div>${mk(h.pack)}${mk(h.raid)}</div>`);
     }
     lines.push(`<div style="color:${COL.ok};margin-top:4px">Convoy ${LOCK} ◆ ${e.bank.scrap}</div>`);
     if (f.seek) lines.push(`<div style="color:${SEEK};margin-top:4px">◇ ${f.seek}</div>`);
