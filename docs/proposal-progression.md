@@ -78,3 +78,27 @@ passive tree drawn as a "Vitruvian mech" (the old idea paid it with scrap; Keith
   Default: Survey.
 - **The convoy grows with scrap** (`docs/proposal-economy.md`): it starts with fewer capabilities, and scrap unlocks
   them, including extraction pickups and, later, heli drop-offs further out at harder spots.
+
+## Starting frames (Keith 2026-10-28, after Anthem's javelins)
+
+You pick a starting frame, which is really just your first set of parts. Every part stays interchangeable afterwards.
+Each frame leans toward a tree region and a play style, and its legs set its own dodge. That matches the old project's
+"each weight class has its own dodge" idea.
+
+| Frame (working name) | Like Anthem's | Parts | Dodge | Play |
+| --- | --- | --- | --- | --- |
+| **Light: Skimmer** | Interceptor | Stilt-type legs, light hull, short arms | three quick dashes (more, smaller energy bars) | fast hit and run, low hull; melee later if it comes back |
+| **Medium: Rampart** | Ranger | today's Rampart | the dash as built | balanced: miniguns, missile pod, the all-rounder |
+| **Medium energy: Tempest** | Storm | a hover or thruster drive, a capacitor hull | short hover-dash, glides over ground | glass-cannon "magic": energy weapons (plasma, lasers, arcs), big area strikes, lives on energy |
+| **Heavy: Bastion** | Colossus | Siege-type legs, heavy hull | none: Space raises a deployable shield or hydraulic brace | tank: most hull, heavy weapons (mortars, autocannon, flamer later), shove and crowd control |
+
+A summoner build isn't a starting frame. Manufacturing hulls (high build rate, drone bays) are found as parts, so any
+frame can become one.
+
+### Questions for Keith
+
+1. **The four starting frames:** these four? Or three at first: light, medium and heavy, with the energy frame
+   unlocked later?
+2. **Names:** keep ours (Skimmer, Rampart, Tempest, Bastion are placeholders), and avoid Anthem's.
+3. **The heavy's dodge:** does it really give up the dash for a shield or brace, as in Anthem?
+4. **The energy frame's hover drive:** is it a new leg type (hover) for this frame, or thrusters on normal legs?
