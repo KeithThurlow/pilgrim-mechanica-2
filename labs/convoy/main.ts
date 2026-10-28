@@ -30,7 +30,7 @@ import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
-import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
+import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../../src/world/look";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../../src/mech/upper";
 import type { MoveCommand } from "../../src/mech/walker";
@@ -102,6 +102,8 @@ const V = {
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
   ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS,
   radius: 5, shadowBox: 60,
+  // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
+  dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
@@ -174,6 +176,9 @@ const body = await RampartBody.load(toon);
 Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
 Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
 scene.add(body.root);
+look.lights.track(body.root);
+// Night lights: the bay terminals' lamp masts light the decks.
+look.lights.addLamps(() => bodies.flatMap((b) => b.terminalMeshes().filter((m) => (m as THREE.Mesh).geometry?.type === "SphereGeometry")));
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 bf.targets.push(player);
 bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
@@ -449,7 +454,7 @@ const panel = tweakPanel({
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
-    { id: "light", label: "Light", groups: ["Look", "Cel look"] },
+    { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },
     ...LOOP_TOPICS,
@@ -755,7 +760,7 @@ app.onTick((rawDt) => {
   streamer.update(follow.x, follow.z);
   costs.mark("ground");
   const camDist = camera.position.distanceTo(follow);
-  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
   costs.mark("light");
   bf.update(dt, camera, look);
   arsenalDraw.update();

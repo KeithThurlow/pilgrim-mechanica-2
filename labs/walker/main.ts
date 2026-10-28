@@ -15,7 +15,7 @@ import { BIOME_DEFAULTS, BIOME_PARAMS } from "../../src/world/biomes";
 import { ROCK_DEFAULTS, ROCK_PARAMS } from "../../src/world/rock";
 import { SHALLOWS_DEFAULTS, SHALLOWS_PARAMS } from "../../src/world/shallows";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
-import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
+import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../../src/world/look";
 import { screenToGround } from "../../src/world/raycast";
 import type { MoveCommand } from "../../src/mech/walker";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
@@ -81,6 +81,7 @@ const legType = LEG_TYPES[rampart ? mechLegType() : "standin"];
 Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
+if (rampart) look.lights.track(rampart.root);
 // ?sensor=<base id>|none: the sensor on the hull (default the Rampart visor head; e.g. sensor-dish for a cluster).
 { const id = params.get("sensor"); if (rampart && id) rampart.setSensor(id === "none" ? null : id); }
 // Steel to shoot at near the start: rounds spark off these and tear up the sand everywhere else.
@@ -192,7 +193,7 @@ const panel = tweakPanel({
     { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Effects", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
-    { id: "light", label: "Light", groups: ["Look", "Cel look"] },
+    { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },
   ],
@@ -344,7 +345,7 @@ function tick(rawDt: number) {
   streamer.update(sim.pos.x, sim.pos.z);
   // Haze and shadows scale with the zoom: fog counts from the camera, and far views need a bigger shadow box.
   const camDist = camera.position.distanceTo(follow);
-  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
   bf.update(dt, camera, look);
 
   const [a, b] = sim.feet;

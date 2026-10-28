@@ -13,7 +13,7 @@ import { Keys, typing } from "../core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../world/chunks";
-import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../world/look";
+import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../world/look";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../mech/upper";
 import type { MoveCommand } from "../mech/walker";
@@ -157,6 +157,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
   Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
   scene.add(body.root);
+  look.lights.track(body.root);
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
   bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
@@ -218,7 +219,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
       { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
-      { id: "light", label: "Light", groups: ["Look", "Cel look"] },
+      { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
       { id: "camera", label: "Camera", groups: ["Camera"] },
       { id: "perf", label: "Performance", groups: ["Performance"] },
     ],
@@ -397,7 +398,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     streamer.update(follow.x, follow.z);
     cst?.mark("terrain streaming");
     const camDist = camera.position.distanceTo(follow);
-    look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+    look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
     cst?.mark("light");
     bf.update(dt, camera, look);
     arsenalDraw.update();

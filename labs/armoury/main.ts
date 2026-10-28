@@ -16,7 +16,7 @@ import { BIOME_DEFAULTS } from "../../src/world/biomes";
 import { ROCK_DEFAULTS } from "../../src/world/rock";
 import { SHALLOWS_DEFAULTS } from "../../src/world/shallows";
 import { TerrainStreamer, STREAM_DEFAULTS } from "../../src/world/chunks";
-import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
+import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../../src/world/look";
 import { WalkerSim } from "../../src/mech/walker";
 import { WALKER_DEFAULTS } from "../../src/mech/walkerTuning";
 import { UpperSim, UPPER_DEFAULTS } from "../../src/mech/upper";
@@ -207,7 +207,7 @@ const panel = tweakPanel({
     { id: "viewer", label: "Viewer", groups: ["Viewer"] },
     { id: "unit", label: "Unit look", groups: ["Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
-    { id: "light", label: "Light", groups: ["Look"] },
+    { id: "light", label: "Light", groups: LIGHT_GROUPS },
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => {
@@ -261,7 +261,7 @@ app.onTick((rawDt) => {
   toon.update(camera, canvas.clientHeight);
   look.update(camera, canvas.clientHeight);
   const camDist = camera.position.distanceTo(view === "rampart" ? focus : controls.target);
-  desert.update(view === "rampart" ? focus : controls.target, camDist + 120, Math.max(1, camDist / 40));
+  desert.update(view === "rampart" ? focus : controls.target, camDist + 120, Math.max(1, camDist / 40), dt);
   streamer.update(focus.x, focus.z);
   app.hud.set("model", `${entry(current).label} · ${SCHEMES[Math.round(V.weaponScheme)]?.name ?? ""}`);
 });

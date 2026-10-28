@@ -44,7 +44,10 @@ export class DustDraw {
   private uShade = uniform(lin(0x8c6e4c));
   /** Dust in shade is lit by the sky: paler and greyer than its own shaded side, not a dark brown (Keith's shot 2026-10-24). */
   private uShadowCol = uniform(lin(0xa39282));
-  private uBright = uniform(1);
+  /** Brightness × the light's colour (the time of day tints the dust: src/world/look.ts `tint`). */
+  private uBright = uniform(new THREE.Color(1, 1, 1));
+  /** The light's colour on the dust, set by the look each frame (white at noon). */
+  readonly tint = new THREE.Color(1, 1, 1);
   private uShadeAmt = uniform(0.5);
   private uFray = uniform(0.5);
   private uGrain = uniform(0.35);
@@ -242,7 +245,7 @@ export class DustDraw {
     const me = camera.matrixWorld.elements;
     this.uCamRight.value.set(me[0], me[1], me[2]).normalize();
     this.uCamUp.value.set(me[4], me[5], me[6]).normalize();
-    this.uBright.value = v.dustBright; this.uShadeAmt.value = v.dustShade; this.uFray.value = v.edgeFray;
+    this.uBright.value.copy(this.tint).multiplyScalar(v.dustBright); this.uShadeAmt.value = v.dustShade; this.uFray.value = v.edgeFray;
     this.uGrain.value = v.grain; this.uSoft.value = v.softDistance; this.uShadow.value = v.shadowStrength; this.uBillow.value = v.billow;
     this.uSunView.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
     this.uSunWorld.value.copy(sunDir);

@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-28 | Day-night cycle: the day longer than the night (night about 0.35 of 24 h, as in a summer hemisphere), not pitch black at night but moonlit and starlit, long evening shadows kept in check | Keith | Keith | `src/world/daynight.ts`, `wip/daynight`. |
+| 2026-10-28 | Day-night details: the noon sun is the old Sun direction/height sliders (so a held noon is the old look); the shadow light never drops under 13° while the sky follows the real sun; one key light at a time, sun to moon through a blue hour with both off; the moon high (50°); grade keyed by sun height (pink dawn, amber/violet evening); labs hold the fixed look unless `?time=`, the convoy lab runs the clock | Claude | open | Keith to look in the convoy lab. |
 | 2026-10-28 | A day-night cycle: day longer than night (night about a third of the cycle), a moonlit, starlit night that isn't pitch black | Keith | Keith | Agent on `wip/daynight`. |
 | 2026-10-28 | Low sun: a clamped shadow-casting sun separate from the visible sun; shadows soften and fade as the sun drops; one key light at a time (sun to moon through a blue hour); colour grade by time; night lights (lamps, convoy, flashes) | Claude | open | |
 | 2026-10-28 | Bandits and war bands may be one human faction (settled camps and roaming columns), never fighting each other; rival military and robots hostile to all; the heavier robot is a low, scary quadruped with a turret (dual miniguns or lasers), mech-like but not a mech, keeping every enemy type distinct; tall excavators maybe much stronger | Keith | Keith | `docs/proposal-factions.md`. |

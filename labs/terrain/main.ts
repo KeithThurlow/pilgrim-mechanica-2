@@ -9,7 +9,7 @@ import { Selector } from "../../src/core/select";
 import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
-import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS } from "../../src/world/look";
+import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../../src/world/look";
 import { BIOME_DEFAULTS, BIOME_PARAMS } from "../../src/world/biomes";
 import { ROCK_DEFAULTS, ROCK_PARAMS } from "../../src/world/rock";
 import { SHALLOWS_DEFAULTS, SHALLOWS_PARAMS } from "../../src/world/shallows";
@@ -51,7 +51,7 @@ const panel = tweakPanel({
     { id: "biomes", label: "Biomes", groups: ["Biome map", "Rocky ground", "Shallows"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Streaming"] },
     { id: "drive", label: "Marker", groups: ["Drive"] },
-    { id: "light", label: "Light", groups: ["Look"] },
+    { id: "light", label: "Light", groups: LIGHT_GROUPS },
     { id: "perf", label: "Performance", groups: ["Performance"] },
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
@@ -130,7 +130,7 @@ app.onTick((dt) => {
   streamer.update(focus.x, focus.z);
   // Haze counts from the camera, and the shadow area grows with distance so dune shadows reach across the view.
   const camDist = camera.position.distanceTo(focus);
-  look.update(focus, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40));
+  look.update(focus, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
 
   const s = streamer.stats;
   app.hud.set("chunks", `chunks ${s.loaded} · built ${s.built} in ${s.buildMs.toFixed(1)} ms · queued ${s.pending}`);
