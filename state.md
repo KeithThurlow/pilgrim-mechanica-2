@@ -175,6 +175,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Depth danger, salvage heat, harder sooner (agent, Sonnet, `wip/depth`, handoff `docs/handoff-depth.md`).
+- Scrap economy and loot feel: proposed (`docs/proposal-economy.md`), waiting for Keith.
 - **Stress on Keith's PC (2026-10-27), worst case with the allies drawn:** 25/50/100/150% = 12.6 / 17.5 / 27.9 / 44.7 ms, CPU-bound (GPU 1-2.6 ms). Keith "pretty happy for the most part". Craters scale worst (100%: 3.8 avg / 21 ms spikes, 150%: 14 / 31): the first target if co-op at full scale must fit. Dent stamps spike ~11 ms at every load. The stress lab's "of which allies" shot counter reads 0 though they fire (readout bug). Normal run: 100% 19.8 ms. Nothing started.
 - Walk fix and sprint feel merged 2026-10-27: Keith to play. Values to judge in play: push-off sand 0.8, per-footfall shake 0.05 m, thump 0.35, sand sink 0.35 m. Try: walker lab `?walk=straight&flat&cam=side` (add `&sprint` or `&bound`).
 - Scale build merged 2026-10-27 (effects budget, shots as data, real Protocols, GPU particles). Left: shot events by register id (network-ready), mech spread off `Math.random`, far LOD and shadow distance for units; GPU cost needs measuring on Keith's PC (`labs/stress/?worst`).
