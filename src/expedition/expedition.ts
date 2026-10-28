@@ -33,6 +33,16 @@ export type Loot =
   | { kind: "scrap"; amount: number; label: string }
   | { kind: "item"; item: Item; label: string };
 
+/**
+ * What happened, as plain data (rule 12): something joined the at-risk list, the list was banked (the lines as they
+ * were and the bank's scrap before, for the HUD's count-in), or lost (the lines, for the HUD's strike-through). The
+ * rules apply at once; the ceremony is only drawing. Whoever shows them drains the list each frame.
+ */
+export type ExpEvent =
+  | { type: "added"; loot: Loot }
+  | { type: "banked"; lines: Loot[]; scrapBefore: number }
+  | { type: "lost"; lines: Loot[]; reason: EndReason };
+
 /** The crane's states (CraneCarry.state) with the mech out on the sand. */
 export const ON_SAND = new Set(["walking", "inRange", "pickup", "falling", "landing"]);
 
@@ -71,6 +81,8 @@ export class Expedition {
   readonly counts: Record<EndReason, number> = { banked: 0, recalled: 0, fuel: 0, destroyed: 0, pilot: 0 };
   /** Fade over the screen 0..1 (recovering, lost). */
   fade = 0;
+  /** What happened since the last drain (see ExpEvent). */
+  readonly events: ExpEvent[] = [];
 
   constructor(public v: ExpeditionValues) {}
 
@@ -92,6 +104,7 @@ export class Expedition {
   /** Picked something up. Only counts while out (aboard, nothing is at risk). */
   add(l: Loot) {
     if (this.state !== "out") return false;
+    this.events.push({ type: "added", loot: { ...l } });
     // Scrap from the same source merges into one line.
     if (l.kind === "scrap") {
       const same = this.atRisk.find((q) => q.kind === "scrap" && q.label === l.label);
@@ -105,6 +118,7 @@ export class Expedition {
   pickedUp() {
     if (this.state !== "out") return false;
     const scrap = this.scrapAtRisk, items = this.itemsAtRisk;
+    this.events.push({ type: "banked", lines: this.atRisk.map((l) => ({ ...l })), scrapBefore: this.bank.scrap });
     this.bank.scrap += scrap;
     for (const l of this.atRisk) if (l.kind === "item") this.bank.items.push(l.item);
     this.atRisk.length = 0;
@@ -186,6 +200,7 @@ export class Expedition {
   }
 
   private end(reason: EndReason, scrap: number, items: number) {
+    if (reason !== "banked") this.events.push({ type: "lost", lines: this.atRisk.map((l) => ({ ...l })), reason });
     this.last = { reason, scrap, items, duration: this.outFor, at: this.clock };
     this.counts[reason]++;
   }

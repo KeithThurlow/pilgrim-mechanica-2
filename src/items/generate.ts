@@ -5,6 +5,7 @@ import { BASES, BASE_BY_ID, STATS, type Base } from "./bases";
 import { PROTOCOLS, PROTOCOL_BY_ID, type Protocol } from "./protocols";
 import { RARITIES, RARITY, rollRange, tierOf, type Rarity, type WidenTuning } from "./rarity";
 import type { Item, ItemKind, SeekerMode } from "./item";
+import { levelMul } from "./level";
 
 export const LOOT_DEFAULTS = {
   rarityWiden: 0.5,
@@ -16,6 +17,7 @@ export const LOOT_DEFAULTS = {
   weightLegendary: 2,
   protocolShare: 0.2,
   sensorRangePerTier: 0.1,
+  levelGrowth: 0.04,
 };
 export type LootValues = typeof LOOT_DEFAULTS;
 
@@ -29,6 +31,7 @@ export const LOOT_PARAMS: Param[] = [
   { key: "weightEpic", label: "Epic weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightLegendary", label: "Legendary weight", min: 0, max: 100, step: 1, group: G },
   { key: "sensorRangePerTier", label: "Sensor range per rarity tier", min: 0, max: 0.5, step: 0.01, group: G, tip: "Each tier above Common reaches this share further on a sensor's radar range (rarer sensors also carry one more seeker mode per tier)" },
+  { key: "levelGrowth", label: "Stat growth per item level", min: 0, max: 0.3, step: 0.005, group: G, tip: "Each item level above 1 moves a stat toward better by this share (times the stat's weight in src/items/level.ts: damage and hull fully, handling and speed less, shapes not at all)" },
   { key: "protocolShare", label: "Protocols in random loot", min: 0, max: 1, step: 0.01, group: G, tip: "Share of random rolls that come up a Protocol instead of a part or weapon" },
 ];
 
@@ -75,7 +78,7 @@ export function makeItem(baseId: string, rarity: Rarity = "common", id = "defaul
   if (!b) throw new Error(`no base ${baseId}`);
   const stats: Record<string, number> = {};
   for (const k in b.stats) stats[k] = b.stats[k].base;
-  const it: Item = { id, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker: b.makers[0], look: b.look, weight: b.weight, seed: 0 };
+  const it: Item = { id, base: b.id, kind: b.kind, size: b.size, rarity, level: 1, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker: b.makers[0], look: b.look, weight: b.weight, seed: 0 };
   if (b.seekers) it.seekers = seekersFor(b, rarity);
   return it;
 }
@@ -84,6 +87,8 @@ export interface RollOptions {
   kind?: Exclude<ItemKind, "protocol">;
   base?: string;
   rarity?: Rarity;
+  /** Item level (1 by default); scales the rolls (src/items/level.ts). */
+  level?: number;
 }
 
 /** Roll one part or weapon from a seed. */
@@ -92,14 +97,15 @@ export function rollItem(seed: number, v: LootValues, o: RollOptions = {}): Item
   const pool = o.base ? [BASE_BY_ID[o.base]] : BASES.filter((b) => !o.kind || b.kind === o.kind);
   const b = pick(r, pool, (x) => x.drop);
   const rarity = o.rarity ?? pick(r, RARITIES, (x) => weightOf(v, x));
+  const level = Math.max(1, Math.round(o.level ?? 1));
   const stats: Record<string, number> = {};
   for (const k in b.stats) {
     const [lo, hi] = statRange(b, k, rarity, v);
-    stats[k] = finish(k, lo + (hi - lo) * r());
+    stats[k] = finish(k, (lo + (hi - lo) * r()) * levelMul(k, level, v.levelGrowth ?? 0));
   }
   if (stats.radarRange !== undefined) stats.radarRange *= 1 + (v.sensorRangePerTier ?? 0) * tierOf(rarity);
   const maker = b.makers[Math.floor(r() * b.makers.length)];
-  const it: Item = { id: `${b.id}#${(seed >>> 0).toString(36)}`, base: b.id, kind: b.kind, size: b.size, rarity, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker, look: b.look, weight: b.weight, seed: seed >>> 0 };
+  const it: Item = { id: `${b.id}#${(seed >>> 0).toString(36)}${level > 1 ? "L" + level : ""}`, base: b.id, kind: b.kind, size: b.size, rarity, level, stats, tags: [...b.tags], sockets: RARITY[rarity].sockets, socketed: [], maker, look: b.look, weight: b.weight, seed: seed >>> 0 };
   if (b.seekers) it.seekers = seekersFor(b, rarity);
   return it;
 }
@@ -115,7 +121,7 @@ export function rollProtocol(seed: number, id?: string): Item {
 }
 
 /** Random loot: mostly parts and weapons, a share of Protocols. A given rarity rolls only parts and weapons. */
-export function rollLoot(seed: number, v: LootValues, rarity?: Rarity): Item {
+export function rollLoot(seed: number, v: LootValues, rarity?: Rarity, level?: number): Item {
   if (!rarity && rng(seed ^ 0x51ed27)() < v.protocolShare) return rollProtocol(seed);
-  return rollItem(seed, v, { rarity });
+  return rollItem(seed, v, { rarity, level });
 }

@@ -20,6 +20,8 @@ export interface Item {
   kind: ItemKind;
   size?: Size;
   rarity: Rarity;
+  /** Item level (src/items/level.ts), separate from rarity; deeper drops roll higher. Missing on old saves: level 1. */
+  level?: number;
   /** Rolled stats, by stat key (see `STATS`). */
   stats: Record<string, number>;
   tags: string[];
