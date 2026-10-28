@@ -289,7 +289,39 @@ export class Warband {
     this.waves++;
   }
 
-  private serials = new ObjectSerials();
+  /** Roll in the next band by itself when this one is beaten (the lab's way); a column placed on the sand (spawnColumn) turns it off. */
+  autoWaves = true;
+  /**
+   * Who a raider or bandit mech goes for, when not the player: a fight with another faction (src/expedition/fights.ts)
+   * hands each vehicle its own target. Null/undefined from it: the band's target as given to update().
+   */
+  targetFor: ((u: Raider | MechUnit) => WarTarget | null) | null = null;
+
+  /**
+   * A column on the sand (Keith 2026-10-28): these kinds in a loose line from (x, z) along `heading` (the first leads),
+   * nose forward, at `speed` already. health: 0..1, the share of each hull left (survivors of an off-view fight stay
+   * damaged). Returns the raiders made.
+   */
+  spawnColumn(x: number, z: number, heading: number, kinds: CarKind[], speed = 0, health = 1): Raider[] {
+    const fx = Math.sin(heading), fz = Math.cos(heading), made: Raider[] = [];
+    kinds.forEach((kind, i) => {
+      const r = new Raider(kind, this.bf.field, () => this.slot(), this.v);
+      // Staggered along and across the line so they don't start in a queue.
+      const back = i * 11, side = ((i % 3) - 1) * 6;
+      const px = x - fx * back + fz * side, pz = z - fz * back - fx * side;
+      r.sim.reset(px, pz, heading);
+      r.sim.vel.set(fx * speed, 0, fz * speed);
+      r.hp = Math.max(1, r.maxHp * health);
+      this.raiders.push(r);
+      this.bf.targets.push(r);
+      this.group.add(r.body.root);
+      made.push(r);
+    });
+    return made;
+  }
+
+  /** Shared by the bands of a field so ids never repeat across them (src/expedition/humans.ts). */
+  serials = new ObjectSerials();
   /** Into the register (src/game/register.ts): live raiders (vehicles) and bandit mechs, each a new id per life. */
   publish(reg: Register): void {
     const flags = FLAG.Hittable | FLAG.Detectable;
@@ -315,7 +347,7 @@ export class Warband {
     const v = this.v;
     const target = player.sim.pelvis;
     // Next band when this one is beaten (or there isn't one yet).
-    if (this.liveCount === 0) {
+    if (this.autoWaves && this.liveCount === 0) {
       this.gap += dt;
       if (this.gap >= v.waveGap || this.waves === 0) { this.gap = 0; this.spawn(target); }
     }
@@ -330,8 +362,8 @@ export class Warband {
         this.runClock = 0;
       }
     }
-    for (const r of this.raiders) this.drive(r, dt, player);
-    for (const m of this.mechs) this.walkMech(m, dt, player);
+    for (const r of this.raiders) this.drive(r, dt, this.targetFor?.(r) ?? player);
+    for (const m of this.mechs) this.walkMech(m, dt, this.targetFor?.(m) ?? player);
     // Clear wrecks that have burnt out and runaways that are far off.
     for (let i = this.raiders.length - 1; i >= 0; i--) {
       const r = this.raiders[i];
@@ -346,6 +378,18 @@ export class Warband {
         this.bf.targets.splice(this.bf.targets.indexOf(m), 1);
         this.mechs.splice(i, 1);
       }
+    }
+  }
+
+  /** Take the whole band off the field (a column handed back to the map, or the lab starting over). */
+  clear() {
+    for (let i = this.raiders.length - 1; i >= 0; i--) this.remove(this.raiders[i], i);
+    for (let i = this.mechs.length - 1; i >= 0; i--) {
+      const m = this.mechs[i];
+      this.group.remove(m.body.root);
+      const k = this.bf.targets.indexOf(m);
+      if (k >= 0) this.bf.targets.splice(k, 1);
+      this.mechs.splice(i, 1);
     }
   }
 

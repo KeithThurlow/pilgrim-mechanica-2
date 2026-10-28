@@ -10,6 +10,7 @@ import { KIND, FLAG, type Register } from "../game/register";
 
 export const INFANTRY_DEFAULTS = {
   runSpeed: 4.5,
+  banditPatrol: 0.4,
   speedJitter: 0.15,
   banditAccel: 6,
   banditTurn: 540,
@@ -58,6 +59,7 @@ export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
 export const INFANTRY_PARAMS: Param[] = [
   { key: "runSpeed", label: "Run speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Bandits" },
+  { key: "banditPatrol", label: "Patrol walk (× run speed)", min: 0.1, max: 1, step: 0.01, group: "Bandits", tip: "How fast calm bandits (camp patrols, walking home) go" },
   { key: "speedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: "Bandits", tip: "Each bandit's own speed, so the swarm strings out" },
   { key: "banditAccel", label: "Acceleration (1/s)", min: 0.5, max: 20, step: 0.1, group: "Bandits" },
   { key: "banditTurn", label: "Turn rate (°/s)", min: 30, max: 1440, step: 10, group: "Bandits" },
@@ -139,6 +141,16 @@ export class InfantrySwarm {
   /** Serial per bandit, handed out at spawn and never reused (the register's ids, rule 12). */
   readonly uid = new Uint32Array(INFANTRY_MAX);
   private nextUid = 1;
+  /** Asleep: skipped by the step (a camp that has not woken, or one the player left; bodies and the downed still settle). */
+  readonly frozen = new Uint8Array(INFANTRY_MAX);
+  /** Calm: walks to its target spot and stands there, never shooting or afraid (a patrol, or the way home to the camp). */
+  readonly calm = new Uint8Array(INFANTRY_MAX);
+  /** Its own target instead of the one update() is given (a fight with another faction, a patrol point): set with
+   *  setTarget(), cleared by clearTarget(). */
+  readonly hasT = new Uint8Array(INFANTRY_MAX);
+  readonly tgx = new Float32Array(INFANTRY_MAX); readonly tgy = new Float32Array(INFANTRY_MAX);
+  readonly tgz = new Float32Array(INFANTRY_MAX); readonly tgr = new Float32Array(INFANTRY_MAX);
+  private slotT: InfantryTarget = { x: 0, y: 0, z: 0, radius: 0 };
   /** Live (not DEAD) bandits. */
   count = 0;
   /** One past the highest slot ever used: loops stop here. */
@@ -179,11 +191,12 @@ export class InfantrySwarm {
   }
 
   /** A group of n around (cx, cz) within radius, spaced so they don't start on top of each other. */
-  spawn(n: number, cx: number, cz: number, radius: number): void {
-    const v = this.v;
+  spawn(n: number, cx: number, cz: number, radius: number): number[] {
+    const v = this.v, made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
-      if (i < 0) return;
+      if (i < 0) return made;
+      made.push(i);
       // Sunflower spiral fill plus jitter: even spacing whatever n is.
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -198,11 +211,32 @@ export class InfantrySwarm {
       this.range[i] = this.rand();
       this.flank[i] = this.rand() * 2 - 1;
       this.slope[i] = 0; this.fallYaw[i] = 0;
+      this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
       this.count++;
     }
+    return made;
+  }
+
+  /** Take bandit i off the field (its camp streamed out). */
+  remove(i: number) {
+    if (this.state[i] === EMPTY) return;
+    if (this.state[i] < DEAD) this.count--;
+    this.state[i] = EMPTY; this.frozen[i] = 0; this.hasT[i] = 0; this.calm[i] = 0;
+  }
+
+  /** Give bandit i its own target (position, aim height, radius); calm: walk there and stand instead of fighting. */
+  setTarget(i: number, x: number, y: number, z: number, radius: number, calm = false) {
+    this.hasT[i] = 1; this.tgx[i] = x; this.tgy[i] = y; this.tgz[i] = z; this.tgr[i] = radius; this.calm[i] = calm ? 1 : 0;
+  }
+  clearTarget(i: number) { this.hasT[i] = 0; this.calm[i] = 0; }
+  private targetOf(i: number, base: InfantryTarget): InfantryTarget {
+    if (!this.hasT[i]) return base;
+    const t = this.slotT;
+    t.x = this.tgx[i]; t.y = this.tgy[i]; t.z = this.tgz[i]; t.radius = this.tgr[i];
+    return t;
   }
 
   private hashOf(x: number, z: number): number {
@@ -237,7 +271,7 @@ export class InfantrySwarm {
     }
   }
 
-  update(dt: number, target: InfantryTarget, onShot: ShotFn): void {
+  update(dt: number, base: InfantryTarget, onShot: ShotFn): void {
     const v = this.v, { px, py, pz, vx, vz, state, stateTime } = this;
     if (dt <= 0) return;
     this.buildHash();
@@ -254,7 +288,6 @@ export class InfantrySwarm {
     }
     this.evN = 0;
 
-    const keep = target.radius + v.keepOut;
     const sp = v.banditSpacing, sp2 = sp * sp, gap = v.bodyGap;
     const turn = v.banditTurn * DEG * dt;
     const steer = Math.min(1, v.banditAccel * dt);
@@ -266,6 +299,7 @@ export class InfantrySwarm {
       const s = state[i];
       cx[i] = 0; cz[i] = 0;
       if (s === EMPTY) continue;
+      if (this.frozen[i] && s < DOWN) continue;
       stateTime[i] += dt;
 
       if (s === DEAD) {
@@ -278,22 +312,25 @@ export class InfantrySwarm {
         continue;
       }
 
+      const target = this.targetOf(i, base), calm = this.calm[i] === 1;
+      const keep = target.radius + v.keepOut;
       const tx = target.x - px[i], tz = target.z - pz[i];
       const dist = Math.hypot(tx, tz) || 1e-6;
       const ux = tx / dist, uz = tz / dist;
 
       // Fear: fades, and builds standing close to the mech.
       this.fear[i] = Math.max(0, this.fear[i] - v.fearDecay * dt);
-      if (dist < v.dreadRange) this.fear[i] += v.dread * dt;
+      if (dist < v.dreadRange && !calm) this.fear[i] += v.dread * dt;
       const brave = fleeAt * this.braveK[i];
 
       let st = s;
       if (st === DOWN) {
         if (stateTime[i] >= v.downTime * (0.8 + 0.4 * this.seed[i])) { st = this.fear[i] > brave ? FLEEING : ADVANCE; }
-      } else if (st !== FLEEING && this.fear[i] > brave) st = FLEEING;
+      } else if (st !== FLEEING && this.fear[i] > brave && !calm) st = FLEEING;
       else if (st === FLEEING && stateTime[i] > v.minFlee && this.fear[i] < brave * v.rallyAt && dist > v.rallyDist) st = ADVANCE;
       const stop = v.bandNear + this.range[i] * Math.max(0, v.bandFar - v.bandNear);
-      if (st === ADVANCE && dist <= stop) st = FIRING;
+      if (calm) { if (st === FIRING) st = ADVANCE; }
+      else if (st === ADVANCE && dist <= stop) st = FIRING;
       else if (st === FIRING && dist > stop + v.bandSlack) st = ADVANCE;
       if (st !== s) {
         state[i] = st; stateTime[i] = 0;
@@ -308,8 +345,10 @@ export class InfantrySwarm {
         // Fan out round the mech on the way in; straight at it once close.
         const fa = this.flank[i] * v.flankAngle * DEG * Math.min(1, dist / 60);
         const c = Math.cos(fa), sn = Math.sin(fa);
-        const spd = v.runSpeed * this.speedK[i] * hill;
-        wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
+        const spd = v.runSpeed * this.speedK[i] * hill * (calm ? v.banditPatrol : 1);
+        // Calm ones (a patrol point, the way home) walk straight to the spot and stand there.
+        if (calm) { if (dist > 1.2) { wx = ux * spd; wz = uz * spd; } }
+        else { wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd; }
       } else if (st === FIRING) {
         face = Math.atan2(ux, uz);
         if (dist < v.bandNear) { wx = -ux * v.backOff; wz = -uz * v.backOff; }
@@ -375,10 +414,11 @@ export class InfantrySwarm {
     // Move, apply the hard gaps, keep clear of the mech, stand on the sand.
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
-      if (s >= DEAD) continue;
+      if (s >= DEAD || (this.frozen[i] && s < DOWN)) continue;
+      const target = this.targetOf(i, base), calm = this.calm[i] === 1;
       const ox = px[i], oz = pz[i], oy = py[i];
       let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
-      const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = keep;
+      const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = calm ? 0 : target.radius + v.keepOut;
       if (d < m) {
         if (d > 1e-5) { x = target.x + (dx / d) * m; z = target.z + (dz / d) * m; } else { x = target.x + m; }
       }
@@ -471,7 +511,7 @@ export class InfantrySwarm {
     const flags = FLAG.Hittable | FLAG.Detectable | FLAG.Light;
     for (let i = 0; i < this.hi; i++) {
       if (this.state[i] >= DOWN) continue; // down, dead, empty (rounds pass over the downed too)
-      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
+      reg.put(i, this.uid[i], KIND.Unit, team, this.frozen[i] ? flags | FLAG.Asleep : flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
     }
   }
 

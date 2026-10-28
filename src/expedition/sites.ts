@@ -10,6 +10,7 @@ import { POI_DEFAULTS, POI_KINDS, PoiField, type PoiPlacement } from "../world/p
 import { PoiPads, rawGround } from "../world/poiPads";
 import { addModifier } from "../world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../pois/kinds";
+import type { PoiSite } from "../pois/site";
 import { PoiDraw } from "../pois/poiDraw";
 import { SalvageSim, SALVAGE_DEFAULTS, type SpotState } from "../pois/salvage";
 import { SalvageDraw, SALVAGE_FX_DEFAULTS } from "../pois/salvageDraw";
@@ -31,6 +32,8 @@ export class FieldSites {
   private raw: ReturnType<typeof rawGround>;
   private drawn = new Map<string, PoiDraw>();
   private memory = new Map<string, { progress: number; done: boolean }>();
+  /** Sites made on the sand by what happens there (the wrecks a clash leaves): kept, built and drawn like any POI. */
+  private extra = new Map<string, PoiSite>();
   private syncT = 0;
   /** A spot stripped: its POI's label and the scrap it paid. */
   onLoot: ((label: string, scrap: number, s: SpotState) => void) | null = null;
@@ -62,6 +65,7 @@ export class FieldSites {
 
   /** Placement or dune values changed: start over (stripped spots forgotten). */
   rebuild() {
+    this.extra.clear();
     this.raw.refresh();
     this.pois.reset();
     for (const id of [...this.drawn.keys()]) this.drop(id);
@@ -71,7 +75,15 @@ export class FieldSites {
 
   /** Generated POIs in a box, without the ones the road has taken. */
   poisIn(x0: number, z0: number, x1: number, z1: number): PoiPlacement[] {
-    return this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z));
+    const out = this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z));
+    for (const s of this.extra.values()) { const p = s.place; if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1) out.push(p); }
+    return out;
+  }
+
+  /** A site made on the sand (a clash's wreckage): from now on it is a POI with spots to strip. */
+  addExtra(site: PoiSite) {
+    this.extra.set(site.place.id, site);
+    if (!this.drawn.has(site.place.id)) this.add(site.place);
   }
 
   /** Is this POI stripped bare (every spot done, as far as we've seen)? */
@@ -105,7 +117,7 @@ export class FieldSites {
   }
 
   private add(p: PoiPlacement) {
-    const site = buildSite(p, this.v);
+    const site = this.extra.get(p.id) ?? buildSite(p, this.v);
     const d = new PoiDraw(site, this.field);
     this.scene.add(d.group);
     this.drawn.set(p.id, d);

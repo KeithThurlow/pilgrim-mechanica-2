@@ -16,6 +16,9 @@
 // - loot: seeded drops repeat for the same seed, rarity improves with depth and heat, levels with depth, power and DPS
 //   rise with level, a walked-over drop joins the at-risk list, one left far behind vanishes, banking moves everything
 //   into the bank and a loss empties the list (each with its event).
+// - factions (docs/proposal-factions.md): bandit camp and war band column placement is seeded and rises with depth,
+//   robots and bandits placed near each other both take damage, bandits and war bands never fight each other, the
+//   engaged-group cap holds, and an out-of-view clash resolves with a winner, hurt survivors, wreckage and loot.
 // Run: npm test (or npx tsx tools/expedition-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
@@ -43,6 +46,14 @@ import { rollProtocol, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
 import { tierOf } from "../src/items/rarity";
 import { DropField, DROP_DEFAULTS } from "../src/expedition/drops";
 import { itemPower, itemDps } from "../src/items/power";
+import { BanditField, BANDIT_DEFAULTS } from "../src/expedition/banditCamps";
+import { WarColumns, COLUMN_DEFAULTS } from "../src/expedition/warColumns";
+import { Skirmishes, aftermathSite, clashDrops } from "../src/expedition/fights";
+import { FACTION_DEFAULTS, FACTION, TEAM, Relations, FightDirector, type AbstractGroup } from "../src/game/factions";
+import { RobotGroup, BanditGroup } from "../src/game/fightGroups";
+import { RobotSwarm, ROBOT_DEFAULTS, DEAD as ROBOT_DEAD } from "../src/combat/robots";
+import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD as BANDIT_DEAD } from "../src/combat/infantry";
+import { Register } from "../src/game/register";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 40) console.log("  FAIL " + s); problems.push(s); };
@@ -608,6 +619,163 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
   e.recover("recalled");
   const lev = e.events.find((ev) => ev.type === "lost");
   if (e.atRisk.length || e.bank.scrap !== 40 || e.bank.items.length !== 1 || !lev || lev.type !== "lost" || lev.lines.length !== 2) fail("loot: a loss didn't empty the list (with a lost event of the lines), or touched the bank");
+}
+
+// ---- Factions (docs/proposal-factions.md): raiders (bandit camps + war band columns) and robots ----
+{
+  const FV = { ...FACTION_DEFAULTS };
+  const D = { ...DEPTH_DEFAULTS };
+  const gfield = new DuneField({ ...V });
+  const pois = new PoiField({ ...V, ...FLAT }, rawGround(gfield));
+  const far0 = { x: 1e7, z: 0 };
+
+  // Seeded placement is deterministic, and bandit camps get more numerous and bigger with depth (road along z, depth = |x|).
+  const mk = () => {
+    const f = new BanditField({ ...BANDIT_DEFAULTS }, (x0, z0, x1, z1) => pois.poisIn(x0, z0, x1, z1));
+    f.start = far0; f.danger = (x) => dangerOf(D, Math.abs(x));
+    return f;
+  };
+  const camps = (f: BanditField, x0: number, x1: number) => {
+    const out = [];
+    for (let z = -6000; z < 6000; z += 500) for (const p of pois.poisIn(x0, z, x1, z + 500)) { const c = f.campAt(p); if (c) out.push(c); }
+    return out;
+  };
+  const fa = mk(), fb = mk();
+  const ja = JSON.stringify(camps(fa, 0, 400)), jb = JSON.stringify(camps(fb, 0, 400));
+  if (ja !== jb || ja.length < 3) fail("factions: bandit camp placement differs between two builds (or is empty)");
+  const sumSize = (cs: { size: number }[]) => cs.reduce((a, c) => a + c.size, 0);
+  const nearC = camps(fa, 0, 400), farC = camps(fa, 2200, 2600);
+  const nearPer = nearC.length, farPer = farC.length;
+  const nearSize = sumSize(nearC) / Math.max(1, nearPer), farSize = sumSize(farC) / Math.max(1, farPer);
+  console.log(`bandit camps by depth (12 km of road, 400 m wide): near ${nearPer} camps of ${nearSize.toFixed(1)}; far ${farPer} camps of ${farSize.toFixed(1)}`);
+  if (!(farPer > nearPer && farSize > nearSize)) fail(`factions: bandit camps do not get more numerous and bigger with depth (near ${nearPer}/${nearSize.toFixed(1)}, far ${farPer}/${farSize.toFixed(1)})`);
+
+  // War band columns: deterministic per cell, more and bigger with depth.
+  const CV = { ...COLUMN_DEFAULTS };
+  const colStat = (i0: number, i1: number) => {
+    let n = 0, size = 0, heavy = 0;
+    for (let j = -60; j < 60; j++) for (let i = i0; i <= i1; i++) {
+      const c = WarColumns.initial(CV, i, j, far0, (x) => dangerOf(D, Math.abs(x)));
+      const c2 = WarColumns.initial(CV, i, j, far0, (x) => dangerOf(D, Math.abs(x)));
+      if (JSON.stringify(c) !== JSON.stringify(c2)) fail("factions: a column cell differs between two calls");
+      if (c) { n++; size += c.kinds.length; heavy += c.kinds.filter((k) => k === "warRig" || k === "tank" || k === "sixWheeler").length; }
+    }
+    return { n, size: size / Math.max(1, n), heavy };
+  };
+  const cell = CV.colCell;
+  const cn = colStat(0, Math.floor(400 / cell)), cf = colStat(Math.floor(2200 / cell), Math.floor(2600 / cell) + 1);
+  console.log(`war band columns by depth: near ${cn.n} of ${cn.size.toFixed(1)} vehicles (${cn.heavy} heavy); far ${cf.n} of ${cf.size.toFixed(1)} (${cf.heavy} heavy)`);
+  if (!(cf.n * (Math.floor(400 / cell) + 1) > cn.n * (Math.floor(2600 / cell) - Math.floor(2200 / cell) + 2) * 0.99 && cf.size > cn.size)) fail("factions: war band columns do not get more numerous and bigger with depth");
+
+  // Relations: raiders (bandits and the war band) never fight each other; robots fight everyone.
+  const rel = new Relations(FV);
+  if (rel.hostile(FACTION.raiders, FACTION.raiders) || rel.hostileTeams(TEAM.raiders, TEAM.raiders)) fail("factions: raiders are hostile to raiders");
+  if (!rel.hostile(FACTION.robots, FACTION.raiders) || !rel.hostile(FACTION.robots, FACTION.player) || !rel.hostile(FACTION.raiders, FACTION.player)) fail("factions: robots / raiders / player are not hostile by default");
+
+  // Live fights: a robot pack and a bandit camp 60 m apart, the player far away. Both must take damage from each other.
+  const gr = new DuneField({ ...TERRAIN_DEFAULTS });
+  const robots = new RobotSwarm({ ...ROBOT_DEFAULTS }, gr, 11), bandits = new InfantrySwarm({ ...INFANTRY_DEFAULTS }, gr, 12);
+  const rs = robots.spawn(14, 0, 0, 6), bs = bandits.spawn(14, 60, 0, 6);
+  const reg = new Register();
+  reg.add({ name: "robots", publish: (r) => robots.publish(r, TEAM.robots) });
+  reg.add({ name: "bandits", publish: (r) => bandits.publish(r, TEAM.raiders) });
+  const gR = new RobotGroup("robots:a", robots, () => rs);
+  const gB = new BanditGroup("bandits:a", bandits, () => bs, () => ({ x: 60, z: 0 }), () => 400);
+  const dir = new FightDirector({ ...FV }, rel);
+  const player = { x: 5000, y: 3, z: 0, radius: 3 };
+  const nearest = (sw: { px: Float32Array; pz: Float32Array; state: Uint8Array; hi: number }, dead: number, x: number, z: number, r: number) => {
+    let b = -1, bd = r;
+    for (let i = 0; i < sw.hi; i++) { if (sw.state[i] >= dead) continue; const d = Math.hypot(sw.px[i] - x, sw.pz[i] - z); if (d < bd) { bd = d; b = i; } }
+    return b;
+  };
+  const hpR0 = rs.reduce((a, i) => a + robots.hp[i], 0), hpB0 = bs.reduce((a, i) => a + bandits.hp[i], 0);
+  let hitsOnBandits = 0, hitsOnRobots = 0, hitsOnPlayer = 0;
+  const DT = 1 / 120;
+  for (let t = 0; t < 40 * 120; t++) {
+    robots.update(DT, { x: player.x, y: player.y, z: player.z, radius: player.radius }, (_fx, _fy, _fz, tx, _ty, tz, _k, i) => {
+      const j = nearest(bandits, BANDIT_DEAD, tx, tz, 8);
+      if (j >= 0) { hitsOnBandits++; bandits.damage(j, 3, Math.sin(robots.heading[i]), Math.cos(robots.heading[i])); } else hitsOnPlayer++;
+    }, (i, d) => { const j = nearest(bandits, BANDIT_DEAD, robots.px[i], robots.pz[i], 3); if (j >= 0) { hitsOnBandits++; bandits.damage(j, d, 1, 0); } });
+    bandits.update(DT, { x: player.x, y: player.y, z: player.z, radius: player.radius }, (_fx, _fy, _fz, tx, _ty, tz) => {
+      const j = nearest(robots, ROBOT_DEAD, tx, tz, 8);
+      if (j >= 0) { hitsOnRobots++; robots.damage(j, 3, 1, 0); } else hitsOnPlayer++;
+    });
+    if (t % 12 === 0) { reg.rebuild(); dir.update(0.1, [gR, gB], reg); }
+  }
+  const hpR1 = rs.reduce((a, i) => a + Math.max(0, robots.hp[i]), 0), hpB1 = bs.reduce((a, i) => a + Math.max(0, bandits.hp[i]), 0);
+  console.log(`robots vs bandits: 14 vs 14, 40 s: robots took ${hitsOnRobots} hits (hp ${hpR0.toFixed(0)} -> ${hpR1.toFixed(0)}), bandits took ${hitsOnBandits} (hp ${hpB0.toFixed(0)} -> ${hpB1.toFixed(0)}), ${hitsOnPlayer} at the player`);
+  if (!(hitsOnBandits > 0 && hitsOnRobots > 0 && hpR1 < hpR0 && hpB1 < hpB0)) fail("factions: robots and bandits placed near each other did not both take damage");
+
+  // Two bandit camps side by side never fight (and the director doesn't pair them).
+  {
+    const sw = new InfantrySwarm({ ...INFANTRY_DEFAULTS }, gr, 3);
+    const a = sw.spawn(6, 0, 0, 4), b = sw.spawn(6, 20, 0, 4);
+    const r2 = new Register();
+    r2.add({ name: "bandits", publish: (r) => sw.publish(r, TEAM.raiders) });
+    const d2 = new FightDirector({ ...FV }, rel);
+    const gs = [new BanditGroup("b1", sw, () => a, () => ({ x: 0, z: 0 }), () => 400), new BanditGroup("b2", sw, () => b, () => ({ x: 20, z: 0 }), () => 400)];
+    r2.rebuild();
+    d2.update(1, gs, r2);
+    if (d2.count) fail(`factions: ${d2.count} bandit camps went for each other`);
+    // A raider column vs a bandit camp out of view: no clash starts.
+    const mkG = (id: string, x: number): AbstractGroup => ({ id, faction: FACTION.raiders, x, z: 0, count: 8, power: 20, vehicles: id.startsWith("col"), apply: () => {}, hold: () => {} });
+    const sk = new Skirmishes({ ...FV }, rel, [(_x, _z, _r, out) => { out.push(mkG("bandit:x", 0), mkG("col:y", 30)); }]);
+    for (let t = 0; t < 60; t += 0.5) sk.update(0.5, 0, 0);
+    if (sk.started || sk.events.length) fail("factions: a bandit camp and a war band column clashed");
+    console.log("bandits and the war band: no pairing in view, no clash out of view");
+  }
+
+  // The cap on groups fighting at once: 5 robot groups each 40 m from a bandit group, 200 m apart.
+  {
+    const sr = new RobotSwarm({ ...ROBOT_DEFAULTS }, gr, 21), sb = new InfantrySwarm({ ...INFANTRY_DEFAULTS }, gr, 22);
+    const rg: RobotGroup[] = [], bg: BanditGroup[] = [];
+    for (let k = 0; k < 5; k++) {
+      const a = sr.spawn(4, k * 300, 0, 3), b = sb.spawn(4, k * 300 + 40, 0, 3);
+      rg.push(new RobotGroup("r" + k, sr, () => a));
+      bg.push(new BanditGroup("b" + k, sb, () => b, () => ({ x: k * 300 + 40, z: 0 }), () => 400));
+    }
+    const r3 = new Register();
+    r3.add({ name: "r", publish: (r) => sr.publish(r, TEAM.robots) });
+    r3.add({ name: "b", publish: (r) => sb.publish(r, TEAM.raiders) });
+    r3.rebuild();
+    const counts: string[] = [];
+    for (const cap of [0, 1, 3, 6, 10]) {
+      const d3 = new FightDirector({ ...FV, maxEngaged: cap }, rel);
+      d3.update(1, [...rg, ...bg], r3);
+      counts.push(`${cap}:${d3.count}`);
+      if (d3.count > cap) fail(`factions: ${d3.count} groups engaged with the cap at ${cap}`);
+      if (cap >= 10 && d3.count !== 10) fail(`factions: with room under the cap only ${d3.count} of 10 groups engaged`);
+      if (cap === 3 && d3.count !== 3) fail(`factions: the default cap of 3 engaged ${d3.count}`);
+    }
+    console.log(`engaged-group cap (10 groups in 5 pairs): cap:engaged ${counts.join(" ")}`);
+  }
+
+  // An out-of-view clash resolves with a winner, survivors that stay hurt, wreckage to strip and loot.
+  {
+    const st = { r: { count: 30, hurt: 0 }, b: { count: 10, hurt: 0 }, held: 0 };
+    const gRob: AbstractGroup = { id: "pack:1", faction: FACTION.robots, x: 0, z: 0, count: 30, power: 30, vehicles: false, apply: (c, h) => { st.r = { count: c, hurt: h }; gRob.count = c; }, hold: (on) => { st.held += on ? 1 : -1; } };
+    const gBan: AbstractGroup = { id: "bandit:1", faction: FACTION.raiders, x: 40, z: 0, count: 10, power: 12, vehicles: false, apply: (c, h) => { st.b = { count: c, hurt: h }; gBan.count = c; }, hold: (on) => { st.held += on ? 1 : -1; } };
+    const sk = new Skirmishes({ ...FV }, rel, [(_x, _z, _r, out) => { out.push(gRob, gBan); }]);
+    let t = 0;
+    for (; t < 600 && !sk.events.length; t += 0.5) sk.update(0.5, 3000, 0);
+    const ev = sk.events[0];
+    if (!ev) { fail("factions: an out-of-view clash never resolved"); }
+    else {
+      const winnerRobots = ev.winner.faction === FACTION.robots;
+      const drops = clashDrops(ev, FV);
+      const site = aftermathSite(ev, FV, 0);
+      const spots = site.sections.reduce((a, sec) => a + sec.spots.length, 0);
+      const f = new DropField({ ...DROP_DEFAULTS, ...LOOT_DEFAULTS }, 99);
+      let rolled = 0;
+      for (let k = 0; k < drops; k++) if (f.roll(`clash:${ev.id}:0:${k}`, 1, ev.x + k * 2, ev.z, { danger: 0.5, heat: 0, depth: 1500 })) rolled++;
+      console.log(`out-of-view clash: 30 robots (power 30) vs 10 bandits (12) resolved in ${ev.seconds.toFixed(0)} s: ${winnerRobots ? "robots" : "bandits"} win with ${ev.kept} left, ${(ev.hurt * 100).toFixed(0)}% hurt; ${ev.lostRobots} robots and ${ev.lostRaiders} bandits lost; wreckage with ${spots} scrap spots, ${rolled} item drops`);
+      if (!winnerRobots) fail("factions: the stronger side (30 robots vs 10 bandits) lost the clash");
+      if (st.r.count < 1 || st.r.count >= 30 || st.r.hurt <= 0) fail(`factions: the winner did not keep damaged survivors (${st.r.count} left, ${st.r.hurt.toFixed(2)} hurt)`);
+      if (st.b.count !== 0) fail("factions: the loser survived");
+      if (st.held !== 0) fail(`factions: groups still held after the clash (${st.held})`);
+      if (!spots || !drops || rolled < 1) fail(`factions: the clash left no loot (${spots} spots, ${drops} drops, ${rolled} rolled)`);
+    }
+  }
 }
 
 if (problems.length) { console.log(`expedition check FAILED (${problems.length})`); throw new Error("expedition check failed"); }

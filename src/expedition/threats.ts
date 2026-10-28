@@ -27,6 +27,7 @@ export const THREAT_DEFAULTS = {
   roamHear: 200,
   roamLoud: 1.8,
   roamEngage: 130,
+  roamView: 320,
   firstFight: 25,
   raidEvery: 120,
   raidJitter: 0.35,
@@ -84,6 +85,7 @@ export const THREAT_PARAMS: Param[] = [
   { key: "roamHear", label: "Hears the mech within (m)", min: 0, max: 800, step: 5, group: R },
   { key: "roamLoud", label: "Loud: hearing ×", min: 1, max: 4, step: 0.05, group: R, tip: "While the mech fires, strips salvage, sprints or dashes, packs hear it this much further" },
   { key: "roamEngage", label: "Comes in as robots within (m)", min: 40, max: 400, step: 5, group: R },
+  { key: "roamView", label: "A pack with its own target comes in within (m)", min: 100, max: 800, step: 10, group: R, tip: "A pack heading for another faction's camp (not the mech) comes onto the field this close to the mech, so you can watch the fight" },
   { key: "firstFight", label: "First fight by (s after the drop)", min: 0, max: 300, step: 5, group: R, tip: "If nothing has come for the mech by then, a scout pack turns up just outside the engage range and hunts (0: off)" },
   { key: "raidEvery", label: "A raid every (s)", min: 0, max: 600, step: 5, group: RD, tip: "0: no raids" },
   { key: "raidJitter", label: "Raid timing spread ±", min: 0, max: 0.9, step: 0.01, group: RD },
@@ -120,6 +122,12 @@ export interface Pack {
   mid: number; big: number;
   /** Pulled in by salvage heat: keeps hunting however far it is. */
   pulled?: boolean;
+  /** Heading for this place instead of the mech (a pack drawn to another faction's camp). */
+  goal?: { x: number; z: number };
+  /** Fighting off the field (src/game/factions.ts clashes): stands still. */
+  busy?: boolean;
+  /** How hurt its robots are (0-1) after such a fight. */
+  hurt?: number;
 }
 
 export interface MechNow {
@@ -191,6 +199,13 @@ export class ThreatField {
   private add(kind: PackKind, x: number, z: number, n: number, state: Pack["state"], heading: number, speed: number): Pack {
     const p: Pack = { id: `${kind}:${this.seq++}`, kind, x, z, heading, speed, n, state, turn: 5 + 10 * this.rand(), tx: x, tz: z, mid: 0, big: 0 };
     this.packs.push(p);
+    return p;
+  }
+
+  /** A pack by hand (the lab's ?clash): n robots at (x, z) hunting the place `goal` instead of the mech. */
+  spawnPack(x: number, z: number, n: number, goal: { x: number; z: number }): Pack {
+    const p = this.add("pack", x, z, n, "hunt", Math.atan2(goal.x - x, goal.z - z), this.v.roamHuntSpeed);
+    p.goal = goal;
     return p;
   }
 
@@ -291,9 +306,11 @@ export class ThreatField {
     }
     // Move the ones not on the field.
     for (const p of this.packs) {
-      if (p.state === "live") continue;
+      if (p.state === "live" || p.busy) continue;
       const d = Math.hypot(m.x - p.x, m.z - p.z);
-      if (!m.out) {
+      if (p.goal) {
+        p.state = "hunt"; p.speed = v.roamHuntSpeed; p.tx = p.goal.x; p.tz = p.goal.z;
+      } else if (!m.out) {
         // Nothing to hunt: everything wanders (a raid too, from now on).
         if (p.state === "hunt") { p.state = "roam"; p.speed = v.roamSpeed; }
       } else if (p.kind === "raid") {
@@ -317,7 +334,8 @@ export class ThreatField {
       const nx = p.x + Math.sin(p.heading) * p.speed * dt, nz = p.z + Math.cos(p.heading) * p.speed * dt;
       if (p.state !== "hunt" && this.avoid(nx, nz)) { p.heading += Math.PI * (0.6 + 0.4 * this.rand()); continue; }
       p.x = nx; p.z = nz;
-      if (m.out && p.state === "hunt" && Math.hypot(m.x - p.x, m.z - p.z) < v.roamEngage) {
+      if (p.goal && Math.hypot(p.goal.x - p.x, p.goal.z - p.z) < 15) p.goal = undefined;
+      if (m.out && p.state === "hunt" && Math.hypot(m.x - p.x, m.z - p.z) < (p.goal ? v.roamView : v.roamEngage)) {
         p.state = "live";
         this.engaged = true;
         out.push({ type: "engage", pack: p });
