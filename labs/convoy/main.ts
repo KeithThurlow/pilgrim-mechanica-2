@@ -16,7 +16,7 @@
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
-// (start out with little fuel left), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it).
+// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { energyHud } from "../../src/ui/energyBar";
@@ -322,8 +322,8 @@ function restart() {
     carry.grab(sim);
   }
   // Expedition starts: out in the field (?out, ?far), short of fuel, with scrap at risk.
-  if (params.has("out") || params.has("far") || params.has("lowfuel")) {
-    const side = params.has("far") ? 850 : 280, ahead = params.has("far") ? 120 : 60;
+  if (params.has("out") || params.has("far") || params.has("lowfuel") || params.has("depth")) {
+    const side = params.has("depth") ? Number(params.get("depth")) || 1000 : params.has("far") ? 850 : 280, ahead = params.has("far") ? 120 : 60;
     const w = p.toWorld(side, 0, ahead);
     player.reset(w.x, w.z, p.heading + Math.PI / 2);
     carry.armed = true;
@@ -340,14 +340,14 @@ function restart() {
     }
   }
   loop.exp.launch();
-  if (["out", "far", "lowfuel", "nearcamp"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "depth"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   if (params.has("lowfuel")) loop.fuel.left = Number(params.get("lowfuel")) || 150;
   if (carry.state !== "walking") loop.exp.state = "aboard";
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);

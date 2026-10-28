@@ -48,6 +48,9 @@ export interface RadarWorld {
   convoy: { x: number; z: number; length: number; width: number; heading: number }[];
   /** The route ahead, as points. */
   route: { x: number; z: number }[];
+  /** The road behind and ahead, further than `route`, and the depth ring distances (m) to shade round it (empty: none). */
+  band?: { x: number; z: number }[];
+  rings?: number[];
   /** The return point (null aboard). */
   home: { x: number; z: number } | null;
   pois: { id: string; x: number; z: number; tier: number; kind?: string; stripped?: boolean }[];
@@ -71,6 +74,8 @@ export interface RadarPicture {
   blobs: Blob[];
   fog: { x: number; z: number; r: number }[];
   route: { x: number; z: number }[];
+  /** Depth rings round the road: its points offset from the mech and the ring distances, widest first. */
+  band?: { pts: { x: number; z: number }[]; rings: number[] };
   convoy: { x: number; z: number; length: number; width: number; heading: number }[];
   /** The return point, offset from the mech; its distance and bearing (world radians, 0 = +Z). */
   home: { x: number; z: number; dist: number; bearing: number } | null;
@@ -117,6 +122,7 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
     }
     for (const u of w.unknown) if (near(u.x, u.z, u.r)) pic.fog.push({ x: u.x - mx, z: u.z - mz, r: u.r });
     for (const p of w.route) pic.route.push({ x: p.x - mx, z: p.z - mz });
+    if (w.band && w.rings && w.rings.length) pic.band = { pts: w.band.map((p) => ({ x: p.x - mx, z: p.z - mz })), rings: [...w.rings].sort((a, b) => b - a) };
     if (cc) pic.edge = { x: cc.x - mx, z: cc.z - mz, r: v.convoyLink };
   } else {
     for (const p of w.pois) if (near(p.x, p.z)) pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "poi", tier: p.tier, size: p.tier, stripped: p.stripped });

@@ -176,7 +176,7 @@ function world(v = V) {
 
 // ---- 5. stripping only within reach ----
 {
-  const v = { ...SALVAGE_DEFAULTS };
+  const v = { ...SALVAGE_DEFAULTS, stripSizeSlow: 0 };
   const p = world().pois.placeAt("reach", "supplyPod", 0, 0, 0, 5);
   const site = buildSite(p, V);
   const sim = new SalvageSim(v);

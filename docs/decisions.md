@@ -249,3 +249,4 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 | 2026-10-24 | Ground rules: lab per system, every feel value a slider, frame time in every lab, rewrite over workaround | Claude | Keith | In `CLAUDE.md`. Keith: half the Unity slowdown was not setting rules early enough. |
 | 2026-10-24 | Restart as Pilgrim Mechanica 2: a moving convoy village, salvage runs against the convoy's range, swarms | Keith | Keith | `docs/design.md`. |
 | 2026-10-24 | Terrain: transverse dunes with a crossing set, streamed chunks, vertex colours | Claude | open | Tune in the terrain lab. |
+| 2026-10-28 | Depth from the road scales camps, packs, raids and scrap; salvage builds heat that pulls a pack then a raid; harder first fight | Keith | Keith | Keith: more enemies further out, scrapping should feel risky, harder sooner. Values are sliders (Depth group); `docs/handoff-depth.md`. |

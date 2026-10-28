@@ -122,6 +122,17 @@ export class RadarDraw {
       g.addColorStop(1, "rgba(255, 60, 20, 0)");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     }
+    // Depth rings: bands of rising danger either side of the road, faint (each ring adds a layer).
+    if (pic.band && pic.band.pts.length > 1) {
+      ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255, 120, 70, 0.045)";
+      for (const r of pic.band.rings) {
+        ctx.lineWidth = Math.max(2, 2 * r * scale);
+        ctx.beginPath();
+        pic.band.pts.forEach((p, i) => { const [x, y] = at(p.x, p.z); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+    }
     // The route ahead.
     if (pic.route.length > 1) {
       ctx.setLineDash([5, 5]); ctx.strokeStyle = "rgba(159, 227, 208, 0.55)"; ctx.lineWidth = 1.5;
