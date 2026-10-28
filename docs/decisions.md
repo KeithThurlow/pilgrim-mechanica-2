@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-28 | A day-night cycle: day longer than night (night about a third of the cycle), a moonlit, starlit night that isn't pitch black | Keith | Keith | Agent on `wip/daynight`. |
+| 2026-10-28 | Low sun: a clamped shadow-casting sun separate from the visible sun; shadows soften and fade as the sun drops; one key light at a time (sun to moon through a blue hour); colour grade by time; night lights (lamps, convoy, flashes) | Claude | open | |
 | 2026-10-28 | Bandits and war bands may be one human faction (settled camps and roaming columns), never fighting each other; rival military and robots hostile to all; the heavier robot is a low, scary quadruped with a turret (dual miniguns or lasers), mech-like but not a mech, keeping every enemy type distinct; tall excavators maybe much stronger | Keith | Keith | `docs/proposal-factions.md`. |
 | 2026-10-28 | Loot sounds match the Mad Max tone: item drops as electric guitar (chugs to a Legendary feedback squeal and dive), scrap as heavy steel clanks, not coins | Keith | Keith | `src/audio/lootSound.ts`. |
 | 2026-10-28 | Factions fight each other when they meet (bandits vs robots), capped in view, resolved by numbers out of view; bandits and war bands get distinct identities (settled vs nomad; war band vehicles drop melee infantry who swarm you); rival military mech factions; more robot kinds incl. one near mech size and power | Keith | Keith | `docs/proposal-factions.md`. |

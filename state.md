@@ -177,6 +177,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Day-night cycle (agent, `wip/daynight`, handoff `docs/handoff-daynight.md`).
 - Enemy factions: proposed (`docs/proposal-factions.md`); step 1 (bandits and war bands in the convoy lab) can start.
 - Loot feel merged 2026-10-28, never run in a browser: Keith's playtest is its first real test (convoy lab `?drop=all,10&manual`, `?drop=legendary,20&manual`, `?out&loot=120&items=5`). Rough: clumps still in flight keep clinking during the bank count; the pickup card compares with the weakest fitted item of that kind.
 - Progression: passive tree proposed (`docs/proposal-progression.md`), waiting for Keith.
