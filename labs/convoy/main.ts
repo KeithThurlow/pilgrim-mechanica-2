@@ -82,7 +82,10 @@ import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src
 import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
-import { newBag } from "../../src/items/cargo";
+import { newBag, addTo } from "../../src/items/cargo";
+import { rollLoot } from "../../src/items/generate";
+import { RARITIES, type Rarity } from "../../src/items/rarity";
+import { itemName } from "../../src/expedition/drops";
 import { applyLoadout } from "../../src/game/loadoutApply";
 
 const app = await createApp(document.getElementById("view")!);
@@ -227,6 +230,14 @@ const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
 let armedWhenOut = true;
 // The bay screen (src/ui/bay.ts): opened at a bay terminal on foot (E), B anywhere as a lab shortcut.
 const BAY_KEY = "pm2:convoy-lab:bay";
+// ?drop=rarity[,level] (Keith 2026-10-28): start out on the sand and drop an item of that rarity (and level) ahead of the
+// mech, again every few seconds; ?drop=all[,level] drops one of each rarity in turn. A bare ?drop is still the crane's drop.
+const itemDrops: { rarity: Rarity; level?: number }[] = (() => {
+  const [r, l] = (params.get("drop") ?? "").split(","), level = l ? Number(l) : undefined;
+  if (r === "all") return RARITIES.map((rarity) => ({ rarity, level }));
+  return (RARITIES as readonly string[]).includes(r) ? [{ rarity: r as Rarity, level }] : [];
+})();
+let dropT = 1.2, dropK = 0, bankedSeen = 0;
 // A fresh bay fits a mixed build (the mounts, Keith 2026-10-26): a hull minigun on the right, an arm on the left with
 // a light minigun and the missile pod on 1, the power pack; ?left= ?right= ?k1= ?k2= ?k3= (as in the weapons lab) fit
 // those instead.
@@ -243,6 +254,8 @@ function refit() {
   saveBay(BAY_KEY, bayState);
 }
 refit();
+// The pickup card compares with what is fitted.
+loop.loot.hud.fitted = () => Object.values(bayState.loadout);
 // Tab cycles the sensor's seeker mode (shown on the radar and in the expedition HUD).
 addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.preventDefault(); loop.seeker.cycle(); } });
 // ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
@@ -314,7 +327,7 @@ function restart() {
     sim.reset(w.x, w.z, p.heading);
     carry.togglePark(sim);
   }
-  if (params.has("drop")) carry.dropBeside(sim, 1);
+  if (params.has("drop") && !itemDrops.length) carry.dropBeside(sim, 1);
   if (params.has("hang")) {
     // Hanging from the crane out over the sand beside the bay, as if just picked up.
     const w = p.toWorld(16, 0, V.craneMount + 6);
@@ -322,7 +335,7 @@ function restart() {
     carry.grab(sim);
   }
   // Expedition starts: out in the field (?out, ?far), short of fuel, with scrap at risk.
-  if (params.has("out") || params.has("far") || params.has("lowfuel") || params.has("depth")) {
+  if (params.has("out") || params.has("far") || params.has("lowfuel") || params.has("depth") || itemDrops.length) {
     const side = params.has("depth") ? Number(params.get("depth")) || 1000 : params.has("far") ? 850 : 280, ahead = params.has("far") ? 120 : 60;
     const w = p.toWorld(side, 0, ahead);
     player.reset(w.x, w.z, p.heading + Math.PI / 2);
@@ -342,6 +355,8 @@ function restart() {
   loop.exp.launch();
   if (["out", "far", "lowfuel", "nearcamp", "depth"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
+  // ?items=N: N random items at risk (for the banking count-in and the loss).
+  for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
   if (params.has("lowfuel")) loop.fuel.left = Number(params.get("lowfuel")) || 150;
   if (carry.state !== "walking") loop.exp.state = "aboard";
   foot.reset();
@@ -425,6 +440,7 @@ selector = new Selector(app, {
     { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
     { topic: "pilot", label: "Bay terminal", objects: () => bodies.flatMap((b) => b.terminalMeshes()) },
     { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
+    { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },
     { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
@@ -721,6 +737,13 @@ app.onTick((rawDt) => {
     } : undefined,
   });
   app.hud.set("expedition", loop.line);
+  // Banked items go into the bay stash; ?drop drops its items ahead of the mech while out.
+  for (; bankedSeen < loop.exp.bank.items.length; bankedSeen++) { addTo(bayState.stash, loop.exp.bank.items[bankedSeen]); saveBay(BAY_KEY, bayState); }
+  if (itemDrops.length && loop.exp.state === "out" && (dropT -= dt) <= 0) {
+    const d = itemDrops[dropK++ % itemDrops.length];
+    loop.loot.force(d.rarity, sim.pelvis.x, sim.pelvis.z, sim.heading, d.level);
+    dropT = d.rarity === "legendary" ? 4 : 2.5;
+  }
   app.hud.set("costs", costs.end());
 
   const p = convoy.bay;

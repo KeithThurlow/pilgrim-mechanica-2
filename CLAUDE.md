@@ -143,7 +143,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
   the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
   (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
-  `?seek=scrap|wreck|rare|legendary`.
+  `?seek=scrap|wreck|rare|legendary`. Loot: `?drop=rarity[,level]` (start out on the sand, an item of that rarity dropped ahead of the mech every few
+  seconds; `?drop=all[,level]` one of each rarity in turn; a bare `?drop` is still the crane's drop), `?items=N` (N items at risk).
   Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
   the sand beside it instead), `?pilotat=N,x,z` (on car N at local x, z) or `?pilotat=bN,t` (on footbridge N, t of the
   way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.

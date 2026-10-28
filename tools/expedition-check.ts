@@ -12,7 +12,10 @@
 //   unknown areas hide POIs and swarms from the convoy radar but not from the mech's own, mech radar only in range;
 // - and it measures a typical out-and-back (launch, walk to the nearest POIs ahead, strip a stop or two, follow the
 //   return point home) with the default tuning, reporting the time and the fuel, which must stay under 20 minutes;
-// - packs and raids: the first fight within 75 s of the drop, about one a minute or two after, none while aboard.
+// - packs and raids: the first fight within 75 s of the drop, about one a minute or two after, none while aboard;
+// - loot: seeded drops repeat for the same seed, rarity improves with depth and heat, levels with depth, power and DPS
+//   rise with level, a walked-over drop joins the at-risk list, one left far behind vanishes, banking moves everything
+//   into the bank and a loss empties the list (each with its event).
 // Run: npm test (or npx tsx tools/expedition-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
@@ -36,7 +39,10 @@ import { POI_DEFAULTS, PoiField } from "../src/world/pois";
 import { rawGround } from "../src/world/poiPads";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
 import { defaultLoadout } from "../src/items/loadout";
-import { rollProtocol } from "../src/items/generate";
+import { rollProtocol, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
+import { tierOf } from "../src/items/rarity";
+import { DropField, DROP_DEFAULTS } from "../src/expedition/drops";
+import { itemPower, itemDps } from "../src/items/power";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 40) console.log("  FAIL " + s); problems.push(s); };
@@ -538,6 +544,70 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
   console.log(`scrap for a 60-scrap spot at 0/400/1000/2000/3000 m: ${pays.join("/")}`);
   for (let i = 1; i < pays.length; i++) if (pays[i] < pays[i - 1]) fail("scrap fell with depth");
   if (!(pays[3] >= 60 * S.scrapFar * 0.95) || pays[0] !== 60) fail(`scrap at the road ${pays[0]} / full depth ${pays[3]}`);
+}
+
+// ---- Loot: seeded drops, rarity and level by depth and heat, pick-ups, banking, losing it, power and DPS ----
+{
+  const LV = { ...DROP_DEFAULTS, ...LOOT_DEFAULTS };
+  const here = { danger: 0, heat: 0, depth: 0 };
+  // The same seed and keys drop the same items.
+  const a = new DropField(LV, 77), b = new DropField(LV, 77);
+  let same = 0, dropped = 0;
+  for (let k = 0; k < 400; k++) {
+    const da = a.roll(`spot:${k}`, 0.5, k, 0, here), db = b.roll(`spot:${k}`, 0.5, k, 0, here);
+    if (!!da !== !!db || (da && db && (da.item.id !== db.item.id || da.x !== db.x || JSON.stringify(da.item.stats) !== JSON.stringify(db.item.stats)))) continue;
+    same++; if (da) dropped++;
+  }
+  if (same !== 400) fail(`drops: ${400 - same} of 400 rolls differ for the same seed`);
+  if (a.roll("spot:3", 1, 0, 0, here)) fail("drops: a spot rolled twice");
+  // Rarity improves with depth and with heat; levels rise with depth.
+  const mean = (ctx: { danger: number; heat: number; depth: number }) => {
+    const f = new DropField(LV, 5);
+    let tiers = 0, levels = 0, n = 0;
+    for (let k = 0; k < 3000; k++) { const d = f.roll(`k${k}`, 1, 0, 0, ctx, undefined); if (d && d.item.kind !== "protocol") { tiers += tierOf(d.item.rarity); levels += d.item.level ?? 1; n++; } }
+    return { tier: tiers / n, level: levels / n };
+  };
+  const shallow = mean({ danger: 0, heat: 0, depth: 0 }), deep = mean({ danger: 1, heat: 0, depth: 1500 }), hot = mean({ danger: 0, heat: 1, depth: 0 });
+  console.log(`loot: ${dropped}/400 spots dropped at 50%; mean rarity tier shallow ${shallow.tier.toFixed(2)}, deep ${deep.tier.toFixed(2)}, hot ${hot.tier.toFixed(2)}; mean level shallow ${shallow.level.toFixed(1)}, 1.5 km ${deep.level.toFixed(1)}`);
+  if (!(deep.tier > shallow.tier + 0.2)) fail("loot: rarity doesn't improve with depth");
+  if (!(hot.tier > shallow.tier + 0.15)) fail("loot: rarity doesn't improve with heat");
+  if (!(deep.level > shallow.level + 5)) fail("loot: deeper drops don't roll higher levels");
+  // Power and DPS rise with level (same seed, same rarity).
+  let powerUp = 0, dpsUp = 0, weapons = 0;
+  for (let s = 1; s <= 60; s++) {
+    const lo = rollItem(s * 31, LV, { rarity: "rare", level: 1 }), hi = rollItem(s * 31, LV, { rarity: "rare", level: 20 });
+    if (itemPower(hi) > itemPower(lo)) powerUp++;
+    const dl = itemDps(lo), dh = itemDps(hi);
+    if (dl !== null && dh !== null) { weapons++; if (dh > dl) dpsUp++; }
+  }
+  console.log(`loot: level 20 over level 1: power up on ${powerUp}/60 items, DPS up on ${dpsUp}/${weapons} weapons`);
+  if (powerUp < 60) fail(`loot: power didn't rise with level on ${60 - powerUp} items`);
+  if (!weapons || dpsUp < weapons) fail(`loot: DPS didn't rise with level on ${weapons - dpsUp} weapons`);
+  // A walked-over item joins the at-risk list; banking moves everything; a loss empties the list.
+  const e = new Expedition({ ...EXPEDITION_DEFAULTS });
+  const f = new DropField(LV, 9);
+  e.launch();
+  e.add({ kind: "scrap", amount: 40, label: "Wreck" });
+  const d = f.roll("spot:x", 1, 10, 0, here)!;
+  if (f.update([{ x: 0, z: 0, by: "mech" }], true).length) fail("loot: a drop 10 m off was picked up");
+  const got = f.update([{ x: 9, z: 0, by: "mech" }], true);
+  for (const g of got) e.add({ kind: "item", item: g.item, label: "x" });
+  if (got.length !== 1 || got[0] !== d || e.itemsAtRisk !== 1 || f.drops.length) fail("loot: walking over a drop didn't put it on the at-risk list");
+  if (!f.events.some((ev) => ev.type === "picked")) fail("loot: no picked event");
+  const far = f.roll("spot:far", 1, 0, 0, here)!;
+  f.update([{ x: LV.dropForget + 50, z: 0, by: "pilot" }], true);
+  if (f.drops.includes(far)) fail("loot: a drop left far behind didn't vanish");
+  e.events.length = 0;
+  e.pickedUp();
+  const bev = e.events.find((ev) => ev.type === "banked");
+  if (e.atRisk.length || e.bank.scrap !== 40 || e.bank.items.length !== 1 || !bev || bev.type !== "banked" || bev.lines.length !== 2) fail("loot: banking didn't move everything to the bank (with a banked event of the lines)");
+  e.launch();
+  e.add({ kind: "scrap", amount: 25, label: "Wreck" });
+  e.add({ kind: "item", item: rollItem(4, LV), label: "y" });
+  e.events.length = 0;
+  e.recover("recalled");
+  const lev = e.events.find((ev) => ev.type === "lost");
+  if (e.atRisk.length || e.bank.scrap !== 40 || e.bank.items.length !== 1 || !lev || lev.type !== "lost" || lev.lines.length !== 2) fail("loot: a loss didn't empty the list (with a lost event of the lines), or touched the bank");
 }
 
 if (problems.length) { console.log(`expedition check FAILED (${problems.length})`); throw new Error("expedition check failed"); }

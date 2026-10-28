@@ -53,6 +53,8 @@ export function readBay(raw: unknown): BayState | null {
     }
     i.kind = b.kind; i.size = b.size;
     if (b.seekers && !i.seekers) i.seekers = seekersFor(b, i.rarity);
+    // Saved before item levels (2026-10-28): level 1.
+    if (i.level === undefined) i.level = 1;
     i.socketed = i.socketed.map(fix).filter((x): x is Item => !!x);
     return i;
   };

@@ -9,6 +9,8 @@ import "./bay.css";
 import { STATS, type MountSide } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY, RARITIES, tierOf, type Rarity } from "../items/rarity";
+import { levelOf } from "../items/level";
+import { itemPower, itemDps } from "../items/power";
 import { itemWeight, type Item } from "../items/item";
 import { rollItem, rollLoot, rollProtocol, type LootValues } from "../items/generate";
 import {
@@ -191,6 +193,9 @@ export function bayScreen(o: BayOptions) {
     const head = el("div", "bay-cardhead");
     head.append(nameEl(it), el("span", "dim", `${RARITY[it.rarity].name}${sizeLabel(it)} · ${it.maker} · ${fmt(itemWeight(it), 1)} t`));
     c.append(head);
+    // Level, power and (weapons) DPS (Keith 2026-10-28).
+    const dps = itemDps(it);
+    c.append(el("div", "", `Level ${levelOf(it)} · Power ${itemPower(it)}${dps !== null ? ` · ${fmt(dps, 0)} dps` : ""}`));
     statLines(it, c);
     // Protocol sockets: a socketed one with a Remove button, an empty one with a pick-a-Protocol control.
     if (it.sockets > 0) {
@@ -331,7 +336,8 @@ export function bayScreen(o: BayOptions) {
     const where = st.cargo.items.includes(x) ? "cargo" : "stash";
     const def = x.kind === "protocol" ? PROTOCOL_BY_ID[x.base] : null;
     const what = def ? "Protocol · " + def.text : x.kind === "weapon" ? sizeLabel(x).slice(3) : x.kind;
-    row.append(el("span", "dim", `${what}${x.socketed.length ? ` · ${x.socketed.length}◆` : ""} · ${fmt(itemWeight(x), 1)} t · ${where}`));
+    const dps = itemDps(x);
+    row.append(el("span", "dim", `Lv ${levelOf(x)} · P ${itemPower(x)}${dps !== null ? ` · ${fmt(dps, 0)} dps` : ""} · ${what}${x.socketed.length ? ` · ${x.socketed.length}◆` : ""} · ${fmt(itemWeight(x), 1)} t · ${where}`));
     return row;
   }
 

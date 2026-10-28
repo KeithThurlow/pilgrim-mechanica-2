@@ -102,3 +102,22 @@ frame can become one.
 2. **Names:** keep ours (Skimmer, Rampart, Tempest, Bastion are placeholders), and avoid Anthem's.
 3. **The heavy's dodge:** does it really give up the dash for a shield or brace, as in Anthem?
 4. **The energy frame's hover drive:** is it a new leg type (hover) for this frame, or thrusters on normal legs?
+
+## Weight class and soft costs (Claude's suggestion; Keith agreed 2026-10-28)
+
+- **Class from legs plus hull** (Keith): the sum of the two big parts sets Light, Medium or Heavy. It's stable, and
+  set mostly by the frame you chose.
+  - **What the class sets:** energy bars and refill, the dodge type (three quick dashes, the dash, a hover-dash, a
+    brace or shield), base mobility (top speed, acceleration, turn rate), and the base gait and stomp weight (the leg
+    types' walks).
+- **Everything else adds mass inside the class:** weapons, shoulder gear, the pack, waist kit. That mass is measured
+  against the legs' carry, as in the old project. It brings soft costs (slower acceleration and turning, a little less
+  sprint speed) but never changes the class.
+- **No equipment gated by class.** The mount rules (what fits where) stay the only hard gates. A heavy or power-hungry
+  item on the wrong mech costs mass or energy and runs suboptimally rather than being banned.
+- **Keith's example, and the point of it:** you find an awesome energy weapon, a massive upgrade, but your mech
+  doesn't have the power for it. You can still run it, suboptimally: it fires slower, charges longer or drains your
+  energy bars. That's the toss-up: run it as is, or start adapting your build around it (a capacitor hull, energy
+  tree nodes, a different pack).
+  - Energy weapons draw from the energy bars (or a weapon power budget from the pack and hull).
+  - Under budget, they work at full strength. Over it, they slow down gracefully, never cut off.
