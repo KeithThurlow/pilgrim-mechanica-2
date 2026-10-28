@@ -365,6 +365,8 @@ export class Battlefield {
     const s = { team, radius, damage };
     const k = Math.max(0.5, s.radius / 3);
     this.onBlast?.(p, radius);
+    // At night a blast lights the ground for a moment (cosmetic: src/world/nightLights.ts).
+    this.look?.lights.flash(p.x, p.y + 1, p.z, radius);
     // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
     // An air burst (on a tall robot's chassis or legs) doesn't dig or mark the ground (blastGroundReach × radius up).
     const low = p.y - this.field.height(p.x, p.z) < s.radius * ((this.v as { blastGroundReach?: number }).blastGroundReach ?? 0.5);
@@ -407,7 +409,11 @@ export class Battlefield {
   /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into dents, gun fx, dust. */
   costs: Costs | null = null;
 
+  /** The look last seen in update(): blasts light the ground through its night lights. */
+  private look: DesertLook | null = null;
+
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
+    this.look = look;
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
     // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
     this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
@@ -442,6 +448,7 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
+    this.dustDraw.tint.copy(look.tint);
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
     // Everything this frame has asked for its effects: roll the budget's pressure on (against the pool in use).
     this.fx.pool = gpuDust ? gd!.pool.N : DUST_MAX;

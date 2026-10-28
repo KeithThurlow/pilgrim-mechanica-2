@@ -39,4 +39,4 @@ if (!(c.hour >= 0 && c.hour < 1)) fail(`clock wrap ${c.hour}`);
 
 console.log(marks.join("\n"));
 console.log(fails ? `daynight-check: ${fails} failed` : "daynight-check: ok (noon height, night share, shadow floor, one key light, smooth grade, wrap)");
-if (fails) process.exit(1);
+if (fails) throw new Error("daynight check failed");
