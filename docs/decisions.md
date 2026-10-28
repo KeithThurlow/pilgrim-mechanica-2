@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-28 | Two currencies: scrap is money (items, fabricator, convoy); a separate progression currency for the passive tree, earned by venturing further and finding new areas; the convoy starts small and scrap unlocks its capabilities, including extraction pickups and later heli drop-offs at harder spots | Keith | Keith | Name of the progression currency open (Claude suggests Survey). |
 | 2026-10-28 | Protocols are unlocks, not consumables: a found Protocol joins your library for good, its rarity sets its strength, duplicates level it up, item sockets limit how many you run, swapped free at the convoy and never in the field | Claude | Keith | `docs/proposal-progression.md`. |
 | 2026-10-28 | Legendary stays the top rarity for now (more tiers later if needed) | Keith | Keith | |
 | 2026-10-28 | Progression outside items: a passive tree; builds lean into archetypes (drones and manufacturing rate, energy, bullet hose, armour and tank) and players hunt items of those types; Protocols get rarities, consumable vs unlock open | Keith | Keith | `docs/proposal-progression.md` (Claude suggests scrap-funded, Vitruvian mech layout, Protocols as unlocks). |

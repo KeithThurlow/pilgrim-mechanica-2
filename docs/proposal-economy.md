@@ -54,3 +54,17 @@ Repairs make scrap matter from the first run. Upgrades and the fabricator give i
 - **No 20-minute cap:** runs are open-ended. Missions may add conditions later.
 - **Depth:** unsure whether from the road or from the convoy ("more dynamic"). Built both ways: the road for what's
   placed in the world, the convoy (right now) for live threats, with a blend slider to try.
+
+## Change (Keith 2026-10-28): the convoy grows with scrap
+
+- **Starting small:** the convoy starts with fewer capabilities, and scrap unlocks them over time. That's the main
+  scrap sink alongside items and the fabricator.
+- **Unlock path** (rough):
+  1. Extraction pickups (the pads stop working until unlocked).
+  2. Radar range.
+  3. A second mech bay.
+  4. Turrets.
+  5. Crane speed.
+  6. Heli drop-offs: pay to be dropped further from the convoy, at a harder spot.
+- **Not scrap:** player progression (the passive tree) uses a separate currency earned by exploring
+  (`docs/proposal-progression.md`), so scrap is purely money.

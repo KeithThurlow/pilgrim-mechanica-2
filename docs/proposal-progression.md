@@ -6,7 +6,7 @@ passive tree does kind of make sense, and having people lean into builds and sea
 tanky builds."
 
 This builds on the old project's idea (`pilgrim-mechanica/docs/idea-scrap-passive-trees.md`, Keith 2026-10-04): a
-passive tree drawn as a "Vitruvian mech", paid for with banked scrap.
+passive tree drawn as a "Vitruvian mech" (the old idea paid it with scrap; Keith 2026-10-28: a separate currency instead, see the bottom).
 
 ## The tree
 
@@ -54,8 +54,27 @@ passive tree drawn as a "Vitruvian mech", paid for with banked scrap.
 ## Questions for Keith
 
 1. **One tree for the mech, or a separate small one for the pilot?** The old idea had both. I'd do mech only first.
-2. **Paid in scrap directly, or scrap converted into tech points?** Direct is simpler.
+2. ~~Paid in scrap?~~ No: a separate progression currency earned by exploring (Keith 2026-10-28).
 3. **Respec:** free, costly, or none? I'd say costly in scrap, so builds feel committed but fixable.
 4. ~~Protocols as unlocks, or consumables?~~ Unlocks (Keith 2026-10-28).
 5. **Drones and manufacturing** need the drone weapons first. Build the tree's drone region alongside a first drone
    bay?
+
+## Change (Keith 2026-10-28): a separate progression currency, not scrap
+
+- **Two currencies.** Scrap is money: items, the fabricator, convoy upgrades. The tree runs on a separate progression
+  currency, so players never choose between getting stronger and buying things.
+- **Earned by exploring:** venturing further and finding new areas. Default sources:
+  - first visits to new ground (the convoy radar's unknown areas, new cells);
+  - the deepest point reached in a run, by ring;
+  - finding points of interest;
+  - some from big kills.
+- **Name** (open; Keith isn't sure "experience" is right). Candidates:
+  - **Survey** (survey points from mapping the wastes; fits the convoy and radar);
+  - **Intel**;
+  - **Data**;
+  - **Salvage logs**.
+
+  Default: Survey.
+- **The convoy grows with scrap** (`docs/proposal-economy.md`): it starts with fewer capabilities, and scrap unlocks
+  them, including extraction pickups and, later, heli drop-offs further out at harder spots.
