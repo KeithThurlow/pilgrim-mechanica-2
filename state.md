@@ -177,7 +177,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Day-night cycle on `wip/daynight` (agent, 2026-10-28): built, waiting for Keith's look; handoff `docs/handoff-daynight.md`.
+- Day-night cycle on `wip/daynight` (agent, 2026-10-28): built, ready to merge, waiting for Keith's look; handoff `docs/handoff-daynight.md` (delete on merge).
 - Enemy factions: proposed (`docs/proposal-factions.md`); step 1 (bandits and war bands in the convoy lab) can start.
 - Loot feel merged 2026-10-28, never run in a browser: Keith's playtest is its first real test (convoy lab `?drop=all,10&manual`, `?drop=legendary,20&manual`, `?out&loot=120&items=5`). Rough: clumps still in flight keep clinking during the bank count; the pickup card compares with the weakest fitted item of that kind.
 - Progression: passive tree proposed (`docs/proposal-progression.md`), waiting for Keith.
@@ -230,6 +230,15 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-28 · Day-night cycle (agent, `wip/daynight`)
+
+Keith: a day-night cycle, day longer than night, moonlit and starlit night, long shadows kept in check. `src/world/daynight.ts`
+(pure: shared clock, hemisphere sun path from the noon sliders, sun/moon key handover, grade keys by sun height),
+`look.ts` (drives light, environment repaint, haze, exposure, stars, moon disc, dust tint), `nightLights.ts` (pooled
+lights: terminal lamps, blast flashes, sensor-head headlamp); wired into walker, convoy (runs from 16:00), combat,
+terrain and armoury labs; off elsewhere unless `?time=`. Checked: typecheck, `npm test` with the new `daynight-check`,
+convoy-lab game-camera shots at 12, 18.5, 20.3 and 23 (night first too bright and grey: moonlight, fill and colour retuned).
+
 ### 2026-10-28 · Loot sounds: electric guitar drops and heavy steel scrap (agent, `wip/loot-sound`)
 
 Keith: the loot sounds were gacha-like and the scrap coin-like. Item drops and pickups are now a distorted electric guitar (Karplus-Strong `pluck` into a waveshaper, cabinet and room; chug, two chugs, power chord, bend + sub, Legendary feedback squeal and whammy dive with a crash); scrap clumps are randomised steel clanks that build weight and density through a streak, with a slam on a big haul; banking clanks, crates and an industrial clunk with a power-chord sting; the loss a sludgy falling drone. Same events and timing. `src/audio/lootSound.ts`. Checked: typecheck, expedition-check, audio-check, a node probe of the string decay (muted chug gone by 0.3 s; ringing string -24 dB at 1 s before the drive). Try: convoy lab `?drop=all,10&manual`, `?drop=legendary,20&manual`, `?out&loot=120&items=5`.

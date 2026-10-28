@@ -12,7 +12,7 @@ export const NIGHT_LIGHT_DEFAULTS = {
   lampStrength: 22,
   lampRange: 14,
   headlamp: 1,
-  headlampStrength: 420,
+  headlampStrength: 220,
   headlampRange: 50,
   headlampAngle: 30,
   headlampDip: 24,

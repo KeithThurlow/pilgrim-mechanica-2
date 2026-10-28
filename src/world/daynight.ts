@@ -23,16 +23,16 @@ export const DAYNIGHT_DEFAULTS = {
   shadowMinEl: 13,
   lowShadow: 0.55,
   lowSoft: 1.8,
-  lowSunFill: 0.6,
+  lowSunFill: 0.4,
   handoverEl: -2,
   blueHour: 4,
   moonEl: 50,
   moonAz: 140,
   moonDrift: 30,
-  moonStrength: 0.42,
+  moonStrength: 0.18,
   moonShadow: 0.7,
-  nightExposure: 1.5,
-  nightFill: 0.9,
+  nightExposure: 1.4,
+  nightFill: 0.3,
   stars: 1,
 };
 export type DayNightValues = typeof DAYNIGHT_DEFAULTS;
@@ -91,14 +91,14 @@ export interface Grade {
 // the horizon; below -8° both are the same night.
 type Key = { el: number } & Grade;
 const NOON: Omit<Key, "el"> = { key: 0xfff3e2, keyK: 1, skyTop: 0x3f78c9, skyHor: 0xd9e2e6, ground: 0xc99a66, haze: 0xe6d6bc, hazeK: 1, env: 1, night: 0 };
-const NIGHT: Omit<Key, "el"> = { key: 0x9db4ff, keyK: 0, skyTop: 0x0c1838, skyHor: 0x24305c, ground: 0x2a2c3a, haze: 0x1e2850, hazeK: 1.2, env: 1, night: 1 };
+const NIGHT: Omit<Key, "el"> = { key: 0x7090ff, keyK: 0, skyTop: 0x0c1838, skyHor: 0x24305c, ground: 0x2a2c3a, haze: 0x1e2850, hazeK: 1.2, env: 1, night: 1 };
 const DUSK_DEEP: Omit<Key, "el"> = { key: 0x8a7fc0, keyK: 0, skyTop: 0x182352, skyHor: 0x3e4478, ground: 0x34303e, haze: 0x343a68, hazeK: 1.3, env: 0.9, night: 0.8 };
 const EVENING: Key[] = [
   { el: 35, ...NOON },
   { el: 18, key: 0xffe7c8, keyK: 0.97, skyTop: 0x467bc6, skyHor: 0xe0ddd2, ground: 0xc79763, haze: 0xe8d3b2, hazeK: 1.05, env: 0.97, night: 0 },
   { el: 8, key: 0xffb468, keyK: 0.88, skyTop: 0x5276b0, skyHor: 0xf0c48c, ground: 0xb8875a, haze: 0xe8b688, hazeK: 1.2, env: 0.9, night: 0 },
   { el: 2, key: 0xff7a3a, keyK: 0.62, skyTop: 0x465c98, skyHor: 0xf0966a, ground: 0x8e6852, haze: 0xd88c6c, hazeK: 1.35, env: 0.85, night: 0.1 },
-  { el: -3, key: 0xc07ab0, keyK: 0.3, skyTop: 0x2c3672, skyHor: 0x8a6ea0, ground: 0x4c4460, haze: 0x6c6294, hazeK: 1.4, env: 0.9, night: 0.45 },
+  { el: -3, key: 0xc07ab0, keyK: 0.3, skyTop: 0x2a3a7a, skyHor: 0x6a70aa, ground: 0x464460, haze: 0x5a6296, hazeK: 1.4, env: 0.9, night: 0.45 },
   { el: -8, ...DUSK_DEEP },
   { el: -14, ...NIGHT },
 ];

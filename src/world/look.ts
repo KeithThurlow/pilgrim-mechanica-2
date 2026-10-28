@@ -207,7 +207,7 @@ export class DesertLook {
     if (g) {
       // The fill takes the sky's and the ground's hue at full brightness: its strength comes from the intensity.
       const norm = (c: THREE.Color) => c.multiplyScalar(1 / Math.max(0.05, c.r, c.g, c.b));
-      norm(this.fill.color.setHex(g.night > 0.5 ? 0x6f8ad8 : g.skyHor).lerp(new THREE.Color(g.skyTop), 0.5));
+      norm(this.fill.color.setHex(g.night > 0.5 ? 0x4c6ce0 : g.skyHor).lerp(new THREE.Color(g.skyTop), 0.5));
       norm(this.fill.groundColor.setHex(g.ground)).multiplyScalar(0.6);
     } else { this.fill.color.setHex(0x6f98ea); this.fill.groundColor.setHex(0x8a6a5a); }
     this.sky2env(g?.skyTop ?? SKY_TOP, g?.skyHor ?? SKY_HORIZON, g?.ground ?? SAND);
