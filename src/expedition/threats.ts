@@ -202,6 +202,13 @@ export class ThreatField {
     return p;
   }
 
+  /** A pack by hand (the lab's ?clash): n robots at (x, z) hunting the place `goal` instead of the mech. */
+  spawnPack(x: number, z: number, n: number, goal: { x: number; z: number }): Pack {
+    const p = this.add("pack", x, z, n, "hunt", Math.atan2(goal.x - x, goal.z - z), this.v.roamHuntSpeed);
+    p.goal = goal;
+    return p;
+  }
+
   /** Count left in a pack that's on the field (the glue), or gone when 0. */
   setLive(p: Pack, x: number, z: number, n: number) { p.x = x; p.z = z; p.n = n; }
 

@@ -54,17 +54,18 @@ export interface RadarWorld {
   /** The return point (null aboard). */
   home: { x: number; z: number } | null;
   pois: { id: string; x: number; z: number; tier: number; kind?: string; stripped?: boolean }[];
-  blobs: { id: string; x: number; z: number; guess: number; awake: boolean }[];
+  /** faction: 0 robots (the default), 1 raiders (bandit camps, war band columns); each has its own heat colour. */
+  blobs: { id: string; x: number; z: number; guess: number; awake: boolean; faction?: number }[];
   unknown: Unknown[];
   /** Live robots (only the mech radar shows them). */
-  contacts: { id: number; x: number; z: number; kind: number }[];
+  contacts: { id: number; x: number; z: number; kind: number; faction?: number }[];
   /** Moving danger (roaming packs, raids, a blast just now): heat on both scopes, seen through unknown areas too
    *  (the ground shakes; Keith 2026-10-26: show the danger on the radar as heat). */
-  heat?: { id: string; x: number; z: number; guess: number; awake: boolean }[];
+  heat?: { id: string; x: number; z: number; guess: number; awake: boolean; faction?: number; fighting?: boolean }[];
 }
 
-export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean }
-export interface Blob { id: string; x: number; z: number; r: number; heat: number; awake: boolean }
+export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean; faction?: number }
+export interface Blob { id: string; x: number; z: number; r: number; heat: number; awake: boolean; faction: number; fighting?: boolean }
 
 export interface RadarPicture {
   mode: RadarMode;
@@ -118,7 +119,7 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
       if (!covered(b.x, b.z) || inFog(b.x, b.z)) continue;
       const r = v.blobBase + v.blobGrow * Math.sqrt(Math.max(0, b.guess));
       if (!near(b.x, b.z, r)) continue;
-      pic.blobs.push({ id: b.id, x: b.x - mx, z: b.z - mz, r, heat: Math.min(1, b.guess / Math.max(1, v.blobHot)), awake: b.awake });
+      pic.blobs.push({ id: b.id, x: b.x - mx, z: b.z - mz, r, heat: Math.min(1, b.guess / Math.max(1, v.blobHot)), awake: b.awake, faction: b.faction ?? 0 });
     }
     for (const u of w.unknown) if (near(u.x, u.z, u.r)) pic.fog.push({ x: u.x - mx, z: u.z - mz, r: u.r });
     for (const p of w.route) pic.route.push({ x: p.x - mx, z: p.z - mz });
@@ -126,7 +127,7 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
     if (cc) pic.edge = { x: cc.x - mx, z: cc.z - mz, r: v.convoyLink };
   } else {
     for (const p of w.pois) if (near(p.x, p.z)) pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "poi", tier: p.tier, size: p.tier, stripped: p.stripped });
-    for (const c of w.contacts) if (near(c.x, c.z)) pic.blips.push({ id: "r" + c.id, x: c.x - mx, z: c.z - mz, kind: "robot", tier: 0, size: c.kind === 1 ? 3 : c.kind === 2 ? 2 : 1 });
+    for (const c of w.contacts) if (near(c.x, c.z)) pic.blips.push({ id: "r" + c.id, x: c.x - mx, z: c.z - mz, kind: "robot", tier: 0, size: c.kind === 1 ? 3 : c.kind === 2 ? 2 : 1, faction: c.faction ?? 0 });
   }
   // Moving danger: sized to the scope (the blob sizes are for the convoy's); on the mech's scope, heat out to three
   // times its range glows on the rim the way it lies, fainter with distance.
@@ -140,7 +141,7 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
       heat *= 1 - (d - range) / (range * 2.4);
       x *= (range * 0.97) / d; z *= (range * 0.97) / d;
     } else if (!near(b.x, b.z, r)) continue;
-    pic.blobs.push({ id: b.id, x, z, r, heat, awake: b.awake });
+    pic.blobs.push({ id: b.id, x, z, r, heat, awake: b.awake, faction: b.faction ?? 0, fighting: b.fighting });
   }
   return pic;
 }

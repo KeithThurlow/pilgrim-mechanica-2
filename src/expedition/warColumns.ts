@@ -121,6 +121,16 @@ export class WarColumns {
     return { id: `col:${i}:${j}`, x, z, heading, speed: v.colSpeed, kinds: columnKinds(n, d, v.colHeavyFar, r), health: 1, state: "roam", turn: 6 + r() * 10, tx: x, tz: z, lure: 0, danger: d };
   }
 
+  private placed = 0;
+  /** A column by hand (the lab's ?warband): n vehicles at (x, z) heading toward (tx, tz), hunting it. */
+  place(x: number, z: number, n: number, tx: number, tz: number, danger = 0): Column {
+    const r = rng(hash4(this.v.colSeed, 77, this.placed, 1));
+    const c: Column = { id: `col:test:${this.placed++}`, x, z, heading: Math.atan2(tx - x, tz - z), speed: this.v.colHuntSpeed, kinds: columnKinds(n, danger, this.v.colHeavyFar, r),
+      health: 1, state: "hunt", turn: 10, tx, tz, lure: 600, danger };
+    this.cols.push(c);
+    return c;
+  }
+
   /** Strength-relevant count. */
   static size(c: Column) { return c.kinds.length; }
 

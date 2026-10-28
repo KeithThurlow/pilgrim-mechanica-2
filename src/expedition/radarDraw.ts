@@ -5,7 +5,9 @@
 // home: on the rim when the return point is out of range (pulsing when fuel is short), a ring on it when in range.
 import type { RadarPicture, RadarValues } from "./radar";
 
-interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean }
+interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean; faction?: number }
+/** Heat and contact colours per faction (0 robots: orange-red as before; 1 raiders: magenta). */
+const FACTION_RGB = [[255, 90, 60], [255, 70, 170]] as const;
 
 const TAU = Math.PI * 2;
 const INK = "#9fe3d0";
@@ -74,7 +76,7 @@ export class RadarDraw {
       const p = this.painted.get(b.id);
       if (!p) {
         // POIs (the convoy's charts) show at once, faint; robots wait for the sweep.
-        this.painted.set(b.id, { x: b.x, z: b.z, glow: b.kind === "poi" ? 0.01 : 0, kind: b.kind, tier: b.tier, size: b.size, stripped: b.stripped });
+        this.painted.set(b.id, { x: b.x, z: b.z, glow: b.kind === "poi" ? 0.01 : 0, kind: b.kind, tier: b.tier, size: b.size, stripped: b.stripped, faction: b.faction });
       }
       const q = this.painted.get(b.id)!;
       q.stripped = b.stripped;
@@ -117,10 +119,23 @@ export class RadarDraw {
       const pulse = b.awake ? 0.75 + 0.25 * Math.sin(this.time * 6) : 1;
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
       const a = (0.4 + 0.5 * b.heat) * pulse;
-      g.addColorStop(0, `rgba(255, ${Math.round(150 - 90 * b.heat)}, 40, ${a})`);
-      g.addColorStop(0.55, `rgba(255, ${Math.round(110 - 70 * b.heat)}, 30, ${a * 0.45})`);
-      g.addColorStop(1, "rgba(255, 60, 20, 0)");
+      if (b.faction === 1) {
+        // Raiders: magenta heat, hotter toward white-pink.
+        g.addColorStop(0, `rgba(255, ${Math.round(90 + 60 * b.heat)}, 200, ${a})`);
+        g.addColorStop(0.55, `rgba(230, 60, 170, ${a * 0.45})`);
+        g.addColorStop(1, "rgba(200, 40, 160, 0)");
+      } else {
+        g.addColorStop(0, `rgba(255, ${Math.round(150 - 90 * b.heat)}, 40, ${a})`);
+        g.addColorStop(0.55, `rgba(255, ${Math.round(110 - 70 * b.heat)}, 30, ${a * 0.45})`);
+        g.addColorStop(1, "rgba(255, 60, 20, 0)");
+      }
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      // Two factions at each other's throats: a white flicker ring (a fight we are not watching).
+      if (b.fighting) {
+        const f = 0.35 + 0.65 * Math.abs(Math.sin(this.time * 17 + x * 0.3) * Math.sin(this.time * 7.3 + y));
+        ctx.strokeStyle = `rgba(255, 245, 210, ${f})`; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
+        ctx.beginPath(); ctx.arc(x, y, r * (0.55 + 0.25 * f), 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      }
     }
     // Depth rings: bands of rising danger either side of the road, faint (each ring adds a layer).
     if (pic.band && pic.band.pts.length > 1) {
@@ -174,7 +189,8 @@ export class RadarDraw {
       const [x, y] = at(p.x, p.z);
       if (p.kind === "robot") {
         if (p.glow <= 0) continue;
-        ctx.fillStyle = `rgba(255, 90, 60, ${Math.min(1, p.glow * 1.2)})`;
+        const rgb = FACTION_RGB[p.faction ?? 0] ?? FACTION_RGB[0];
+        ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${Math.min(1, p.glow * 1.2)})`;
         ctx.beginPath(); ctx.arc(x, y, 1.6 + p.size * 0.9, 0, TAU); ctx.fill();
       } else {
         const a = 0.4 + 0.6 * Math.max(0, p.glow), s = p.tier >= 2 ? 5 : 3.5;

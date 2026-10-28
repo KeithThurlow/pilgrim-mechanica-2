@@ -32,7 +32,7 @@ export const SWARM_CAMP_PARAMS: Param[] = [
 ];
 
 /** A streamed camp: its robots' slots, each with the slot's spawn count then (a slot freed and reused is no longer its). */
-interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number; roam?: boolean; group: RobotGroup }
+interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number; roam?: boolean; group: RobotGroup; goal?: { x: number; z: number } }
 export interface SwarmBlob { id: string; x: number; z: number; guess: number; awake: boolean }
 
 export class SwarmCamps {
@@ -141,7 +141,11 @@ export class SwarmCamps {
         if (l.awake && !fighting && (!hunting || d > v.campGiveUp)) l.awake = false;
       }
       l.hp = hp;
+      // A pack heading for another faction's camp walks there until the fight director takes it over.
+      if (l.goal && Math.hypot(l.goal.x - this.centre(l).x, l.goal.z - this.centre(l).z) < 20) l.goal = undefined;
       for (const i of this.own(l)) {
+        if (l.goal && !l.group.fighting && !sw.hasT[i]) sw.setTarget(i, l.goal.x, 0, l.goal.z, 4);
+        else if (!l.goal && !l.group.fighting && sw.hasT[i] && l.roam) sw.clearTarget(i);
         if (l.awake) { sw.frozen[i] = 0; continue; }
         // Calming down: clingers shaken off first, then frozen where they land.
         if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
@@ -191,13 +195,13 @@ export class SwarmCamps {
    * A roaming pack or a raid comes in as robots (src/expedition/threats.ts): n of them round (x, z), awake and
    * hunting; shares of medium and big ones if given. They calm down like a camp when the mech goes aboard.
    */
-  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt = 0) {
+  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt = 0, goal?: { x: number; z: number }) {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
     const slots = this.sw.spawn(n, x, z, radius, shares);
     if (hurt > 0) for (const i of slots) this.sw.hp[i] *= 1 - hurt;
     const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0 };
-    const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id) };
+    const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };
     l.hp = this.hp(l);
     this.live.set(id, l);
   }

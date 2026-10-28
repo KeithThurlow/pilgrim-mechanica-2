@@ -302,6 +302,13 @@ export class WarBands {
   /** Register owner: every live band's vehicles (ids unique across the bands). */
   publish(reg: Parameters<Warband["publish"]>[0]) { for (const l of this.live.values()) l.wb.publish(reg); }
 
+  /** Drop every live band (a restart or rebuild). */
+  reset() {
+    for (const l of this.live.values()) { this.group.remove(l.wb.group); l.wb.clear(); }
+    this.live.clear();
+    this.abstracts.clear();
+  }
+
   groups(out: WarGroup[] = []): WarGroup[] { out.length = 0; for (const l of this.live.values()) out.push(l.group); return out; }
 
   /** A column closes with the mech: onto the field. */
