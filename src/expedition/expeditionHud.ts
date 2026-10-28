@@ -6,7 +6,7 @@
 import type { Expedition } from "./expedition";
 import { clock } from "./returnPoint";
 
-const LOCK = `<svg width="12" height="13" viewBox="0 0 12 13" style="vertical-align:-1px"><rect x="1" y="5.5" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M3.3 5.5V4a2.7 2.7 0 0 1 5.4 0v1.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`;
+export const LOCK = `<svg width="12" height="13" viewBox="0 0 12 13" style="vertical-align:-1px"><rect x="1" y="5.5" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M3.3 5.5V4a2.7 2.7 0 0 1 5.4 0v1.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`;
 const SEEK = "#9fd8ff";
 const COL = { ok: "#cfe9df", amber: "#ffb347", red: "#ff6a4a", dim: "#9a958c" };
 
@@ -35,6 +35,9 @@ export interface HudFrame {
 export class ExpeditionHud {
   readonly root = document.createElement("div");
   private col = document.createElement("div");
+  private info = document.createElement("div");
+  /** Where the loot panel goes (it draws itself). */
+  readonly lootSlot = document.createElement("div");
   private top = document.createElement("div");
   private promptEl = document.createElement("div");
   private noteEl = document.createElement("div");
@@ -53,6 +56,8 @@ export class ExpeditionHud {
     Object.assign(this.col.style, {
       background: "rgba(10, 14, 14, 0.62)", padding: "8px 10px", borderRadius: "6px", minWidth: "190px", fontVariantNumeric: "tabular-nums",
     } as CSSStyleDeclaration);
+    // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
+    this.col.append(this.info, this.lootSlot);
     this.root.append(radar, this.col);
     document.body.appendChild(this.root);
 
@@ -101,14 +106,6 @@ export class ExpeditionHud {
     } else lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
     const w = Math.round(Math.max(0, Math.min(1, f.fuelShare)) * 100);
     lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
-    // At risk while out; banked with a lock just after a pick-up.
-    const banked = e.last && e.last.reason === "banked" && e.clock - e.last.at < f.bankShow;
-    if (e.state === "out") {
-      lines.push(`<div style="color:${COL.amber}">At risk ◆ ${e.scrapAtRisk} scrap${e.itemsAtRisk ? ` · ${e.itemsAtRisk} item${e.itemsAtRisk > 1 ? "s" : ""}` : ""}</div>`);
-      for (const l of e.atRisk.slice(-4)) lines.push(`<div style="color:${COL.amber};opacity:0.8;font-weight:500;padding-left:10px">${l.label} ${l.kind === "scrap" ? `+${l.amount}` : `${l.item.rarity} ${l.item.base}`}</div>`);
-    } else if (banked && e.last) {
-      lines.push(`<div style="color:${COL.ok}">${LOCK} Banked ◆ ${e.last.scrap} scrap${e.last.items ? ` · ${e.last.items} items` : ""}</div>`);
-    }
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
     if (f.heat && f.heat.v > 0.005 && e.state === "out") {
       const h = f.heat, k = Math.min(1, h.v / h.max) * 100, col = h.v >= h.raid ? COL.red : h.v >= h.pack ? "#ff9a3c" : COL.amber;
@@ -116,14 +113,13 @@ export class ExpeditionHud {
       lines.push(`<div style="font-size:11px;color:${col};margin-top:4px;letter-spacing:0.08em">${h.v >= h.raid ? "RAID INBOUND" : h.v >= h.pack ? "PACK DRAWN IN" : "NOISE"}</div>`
         + `<div style="position:relative;height:5px;background:#ffffff1c;border-radius:3px;margin-top:2px"><div style="height:100%;width:${k}%;background:${col};border-radius:3px"></div>${mk(h.pack)}${mk(h.raid)}</div>`);
     }
-    lines.push(`<div style="color:${COL.ok};margin-top:4px">Convoy ${LOCK} ◆ ${e.bank.scrap}</div>`);
     if (f.seek) lines.push(`<div style="color:${SEEK};margin-top:4px">◇ ${f.seek}</div>`);
     if (f.canRecall) {
       const k = Math.round(e.recall * 100);
       lines.push(`<div style="color:${COL.dim};font-weight:500;margin-top:4px">Hold Q: call recovery (loot lost)</div>`);
       if (k > 0) lines.push(`<div style="height:4px;background:#ffffff1c;border-radius:2px;margin-top:2px"><div style="height:100%;width:${k}%;background:${COL.red};border-radius:2px"></div></div>`);
     }
-    this.col.innerHTML = lines.join("");
+    this.info.innerHTML = lines.join("");
 
     // Top: the salvage prompt, and a note when a run ends.
     this.promptEl.textContent = f.prompt;

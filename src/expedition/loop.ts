@@ -33,21 +33,26 @@ import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP } from "./depth";
 import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type ThreatEvent } from "./threats";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
+import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
+import type { LootValues } from "../items/generate";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS,
+  ...FIELD_LOOT_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
   ...DEPTH_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
+  ...FIELD_LOOT_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
   { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
+  { id: "loot", label: "Loot", groups: ["Loot"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] },
 ];
 
@@ -74,6 +79,8 @@ export class ExpeditionLoop {
   readonly zoom: RadarZoom;
   readonly radar: RadarDraw;
   readonly hud: ExpeditionHud;
+  /** Scrap clumps, item drops, the loot panel and its sounds (loot.ts). */
+  readonly loot: FieldLoot;
   /** The sensor's seekers (src/expedition/seekers.ts): the lab sets the modes from the loadout and cycles them. */
   readonly seeker = new Seeker();
   private sound: RadarSound;
@@ -111,7 +118,7 @@ export class ExpeditionLoop {
   onHome: (() => void) | null = null;
 
   constructor(
-    readonly v: LoopValues & { walkSpeed: number; sprintSpeed: number; boundTop: number; craneRange: number; craneMount: number; convoySpeed: number; camYaw: number; dashShoveRadius: number; dashShoveDamage: number },
+    readonly v: LoopValues & LootValues & { walkSpeed: number; sprintSpeed: number; boundTop: number; craneRange: number; craneMount: number; convoySpeed: number; camYaw: number; dashShoveRadius: number; dashShoveDamage: number },
     field: DuneField, bf: Battlefield, scene: THREE.Scene, private camera: THREE.Camera,
     private route: ConvoyRoute, private convoy: Convoy, private carry: CraneCarry, private player: MechUnit,
   ) {
@@ -124,7 +131,7 @@ export class ExpeditionLoop {
     this.camps = new CampField(v);
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
-    this.sites.onLoot = (label, scrap) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); };
+    this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); };
     this.sites.onNoise = (x, z, r) => this.swarms.noise(x, z, r);
     this.sites.salvage.danger = this.depth.danger;
     this.sites.salvage.onHeat = (what) => this.heatAnswer(what);
@@ -132,8 +139,13 @@ export class ExpeditionLoop {
     this.zoom = new RadarZoom(v);
     this.radar = new RadarDraw(v);
     this.hud = new ExpeditionHud(this.radar.canvas);
+    // Loot rolls by where it drops: the live depth (level, danger: rarity) and the salvage heat (rarity).
+    this.loot = new FieldLoot(v, scene, field, bf.sfx.ctx, this.hud.lootSlot, this.exp, (x, z) => ({
+      danger: this.depth.liveDanger(x, z), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, v.heatMax)), depth: this.depth.liveDepth(x, z),
+    }));
     this.sound = new RadarSound(bf.sfx.ctx);
     this.dashes = player.dash.dashes;
+    this.loot.watch(this.swarms.sw);
     // Nothing turns up on the road or within 150 m of the train.
     this.threats = new ThreatField(v, 17, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.field = field;
@@ -289,6 +301,13 @@ export class ExpeditionLoop {
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
+    // Loot: drops picked up, clumps flying in, the loot panel (after the HUD, which holds its slot).
+    const pa = foot && pl!.alive ? pl! : null;
+    this.loot.update(dt, {
+      mech: { x: p.x, y: p.y + 1.5, z: p.z, grabs: !foot && player.alive && onSand },
+      pilot: pa ? { x: pa.x, y: this.field.height(pa.x, pa.z) + 1.2, z: pa.z } : null,
+    });
+    inp.mark?.("loot");
   }
 
   /**
