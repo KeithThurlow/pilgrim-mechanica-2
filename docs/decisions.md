@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-28 | Protocols are unlocks, not consumables: a found Protocol joins your library for good, its rarity sets its strength, duplicates level it up, item sockets limit how many you run, swapped free at the convoy and never in the field | Claude | Keith | `docs/proposal-progression.md`. |
 | 2026-10-28 | Legendary stays the top rarity for now (more tiers later if needed) | Keith | Keith | |
 | 2026-10-28 | Progression outside items: a passive tree; builds lean into archetypes (drones and manufacturing rate, energy, bullet hose, armour and tank) and players hunt items of those types; Protocols get rarities, consumable vs unlock open | Keith | Keith | `docs/proposal-progression.md` (Claude suggests scrap-funded, Vitruvian mech layout, Protocols as unlocks). |
 | 2026-10-28 | Items have levels that rise the further you are from the convoy; pickups show an item power and DPS (and a comparison with what's fitted); satisfying drop dings by rarity, a big Diablo-style sound for legendary or unique drops | Keith | Keith | Loot feel agent (`wip/loot-feel`). |

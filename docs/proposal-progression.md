@@ -38,7 +38,7 @@ passive tree drawn as a "Vitruvian mech", paid for with banked scrap.
   a drone build goes looking for drone-tagged items.
 - The tree shapes and leans a build; items, Protocols and skills stay the main build axis. That's the old project's
   "construction blocks, not build-defining" rule.
-- **Protocols as unlocks** (Claude's suggestion, open):
+- **Protocols as unlocks** (Claude's suggestion; Keith agreed 2026-10-28):
   - a found Protocol joins your library for good, its rarity setting its strength;
   - duplicates level it up;
   - item sockets limit how many you run;
@@ -56,6 +56,6 @@ passive tree drawn as a "Vitruvian mech", paid for with banked scrap.
 1. **One tree for the mech, or a separate small one for the pilot?** The old idea had both. I'd do mech only first.
 2. **Paid in scrap directly, or scrap converted into tech points?** Direct is simpler.
 3. **Respec:** free, costly, or none? I'd say costly in scrap, so builds feel committed but fixable.
-4. **Protocols as unlocks** (above), or consumables?
+4. ~~Protocols as unlocks, or consumables?~~ Unlocks (Keith 2026-10-28).
 5. **Drones and manufacturing** need the drone weapons first. Build the tree's drone region alongside a first drone
    bay?
