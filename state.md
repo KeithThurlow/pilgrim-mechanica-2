@@ -176,6 +176,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Progression: passive tree proposed (`docs/proposal-progression.md`), waiting for Keith.
 - Depth danger, salvage heat, harder sooner merged 2026-10-28 (Keith to play: convoy lab `?depth=1500`, `?set=depthLive:0` to compare road vs convoy). Rough: depth searches 2.5 km behind to 5 km ahead; pulled-in packs are slow to arrive; heat noise reaches ~900 m on rich spots.
 - Failing on main since Keith's dash and walker commits: `slope-check` (walking hips not forward over the feet; sprint cadence not rising with the climb) and `convoy-check` (hips 0.80 m off their height over a deck).
 - Loot feel (agent, `wip/loot-feel`, handoff `docs/handoff-loot-feel.md`): scrap ticks and jingles, item drops with beams, banking moment, visible loss. Upgrades and fabricator next.
