@@ -51,7 +51,7 @@ export class FieldLoot {
   private collectors: Collector[] = [];
 
   constructor(
-    readonly v: FieldLootValues & LootValues, scene: THREE.Scene, private field: DuneField, ctx: AudioContext, hudSlot: HTMLElement,
+    readonly v: FieldLootValues & LootValues & { bankShow: number }, scene: THREE.Scene, private field: DuneField, ctx: AudioContext, hudSlot: HTMLElement,
     private exp: Expedition, private at: (x: number, z: number) => DropContext, seed = 0x10a7,
   ) {
     this.drops = new DropField(v, seed);

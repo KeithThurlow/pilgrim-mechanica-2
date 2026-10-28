@@ -17,15 +17,14 @@ import { itemPower, itemDps, versusFitted } from "../items/power";
 import { itemName } from "./drops";
 import { LOCK } from "./expeditionHud";
 
-export const LOOT_HUD_DEFAULTS = { rollMin: 25, rollK: 8, bankScrapTime: 1.4, bankItemGap: 0.5, bankHold: 3.5, lostLineGap: 0.15, lostFade: 1.4, cardShow: 3.5, riskLines: 6 };
-export type LootHudValues = typeof LOOT_HUD_DEFAULTS;
+export const LOOT_HUD_DEFAULTS = { rollMin: 25, rollK: 8, bankScrapTime: 1.4, bankItemGap: 0.5, lostLineGap: 0.15, lostFade: 1.4, cardShow: 3.5, riskLines: 6 };
+export type LootHudValues = typeof LOOT_HUD_DEFAULTS & { bankShow: number };
 const G = "Loot";
 export const LOOT_HUD_PARAMS: Param[] = [
   { key: "rollMin", label: "Scrap count rolls at least (/s)", min: 1, max: 200, step: 1, group: G },
   { key: "rollK", label: "Scrap count catch-up (per s)", min: 0.5, max: 30, step: 0.5, group: G, tip: "The rolling number closes this share of the gap each second (or rollMin, whichever is faster)" },
   { key: "bankScrapTime", label: "Banking: scrap rolls over in (s)", min: 0.2, max: 5, step: 0.1, group: G },
   { key: "bankItemGap", label: "Banking: per item (s)", min: 0.1, max: 2, step: 0.05, group: G },
-  { key: "bankHold", label: "Banking: BANKED held (s)", min: 0.5, max: 10, step: 0.5, group: G },
   { key: "lostLineGap", label: "Lost: lines go every (s)", min: 0, max: 1, step: 0.01, group: G },
   { key: "lostFade", label: "Lost: a line fades in (s)", min: 0.2, max: 4, step: 0.1, group: G },
   { key: "cardShow", label: "Pickup card shown (s)", min: 0.5, max: 10, step: 0.5, group: G },
@@ -127,6 +126,7 @@ export class LootHud {
       return `<div style="font-weight:500;padding-left:6px;border-left:3px solid ${col};margin-top:2px;background:${col}${Math.round(flash * 90).toString(16).padStart(2, "0")};${style}"><span style="color:${col}">${itemLine(it)}</span></div>`;
     };
 
+    if (this.mode === "risk" && e.state !== "out") this.mode = "idle";
     if (this.mode === "risk") {
       const target = Math.max(0, e.scrapAtRisk - inFlight);
       if (target < this.shown) this.shown = target;
@@ -152,11 +152,11 @@ export class LootHud {
       while (this.thunked < due) { const l = this.bankItems[this.thunked++]; if (l.kind === "item") this.sound?.thunk(tierOf(l.item.rarity)); }
       const done = k >= 1 && this.thunked >= this.bankItems.length;
       const doneAt = T + this.bankItems.length * v.bankItemGap + 0.15;
-      if (done && !this.paid && this.t >= doneAt) { this.paid = true; this.sound?.payday(); }
+      if (done && !this.paid && this.t >= doneAt) { this.paid = true; if (this.bankScrap > 0 || this.bankItems.length) this.sound?.payday(); }
       if (this.paid) {
         out.push(`<div style="color:${GREEN};letter-spacing:0.06em">${LOCK} BANKED</div>`);
         out.push(`<div style="color:${GREEN};font-size:18px">◆ ${this.bankScrap} scrap${this.bankItems.length ? ` · ${this.bankItems.length} item${this.bankItems.length > 1 ? "s" : ""}` : ""}</div>`);
-        if (this.t > doneAt + v.bankHold) this.mode = e.state === "out" ? "risk" : "idle";
+        if (this.t > doneAt + v.bankShow) this.mode = e.state === "out" ? "risk" : "idle";
       } else {
         out.push(`<div style="color:${GREEN};letter-spacing:0.06em">BANKING…</div>`);
         out.push(`<div style="color:${left > 0 ? AMBER : DIM};font-size:20px">◆ ${left} <span style="font-size:13px">scrap</span></div>`);

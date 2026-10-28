@@ -440,6 +440,7 @@ selector = new Selector(app, {
     { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
     { topic: "pilot", label: "Bay terminal", objects: () => bodies.flatMap((b) => b.terminalMeshes()) },
     { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
+    { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },
     { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },

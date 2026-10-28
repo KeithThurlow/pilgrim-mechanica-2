@@ -52,7 +52,7 @@ export const LOOP_TOPICS = [
   { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
-  { id: "loot", label: "Loot", groups: ["Loot"] },
+  { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] },
 ];
 
