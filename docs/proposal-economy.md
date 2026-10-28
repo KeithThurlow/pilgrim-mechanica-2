@@ -1,4 +1,4 @@
-# Proposal: making scrap valuable and loot feel good (not built; waiting for Keith)
+# Proposal: making scrap valuable and loot feel good (direction set by Keith 2026-10-28; loot feel being built)
 
 Keith 2026-10-28: "Really lean into making scrap feel valuable, making loot feel good, making scrapping things feel
 risky." Risky salvage, depth danger and harder-sooner combat are being built now (`wip/depth`). This covers the
@@ -43,3 +43,14 @@ Repairs make scrap matter from the first run. Upgrades and the fabricator give i
 3. **Pickups:** walk over items, or hold E like salvage? I'd say walk over items and hold E for scrap spots.
 4. **Extraction defaults:** I'll take the fee from carried scrap, topped up from the bank; fade to the convoy for now;
    no 20-minute cap for deep runs; depth measured from the road. Change any of these if you disagree.
+
+## Answers (Keith 2026-10-28)
+
+- **Scrap like money:** it ticks up, with satisfying jingles to collect. The banking moment should feel good, and the
+  at-risk list visibly empties when it's lost.
+- **No hull damage carrying over** for now, so repairs aren't a sink.
+- **A fabricator to build things:** yes. Default: parts you've seen.
+- **Pickups:** walk over items; hold E for scrap spots.
+- **No 20-minute cap:** runs are open-ended. Missions may add conditions later.
+- **Depth:** unsure whether from the road or from the convoy ("more dynamic"). Built both ways: the road for what's
+  placed in the world, the convoy (right now) for live threats, with a blend slider to try.
