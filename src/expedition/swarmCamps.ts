@@ -16,6 +16,9 @@ import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
 import type { CampField, Camp } from "./camps";
 import type { Prey } from "../pilot/quarry";
+import { RobotGroup } from "../game/fightGroups";
+import { splashBlast } from "../game/splash";
+import { FACTION, TEAM, robotPower, type AbstractGroup, type FactionValues } from "../game/factions";
 
 export const SWARM_CAMP_DEFAULTS = { campWake: 130, campGiveUp: 320, campSpawn: 650, campDrop: 950, campHear: 1 };
 export type SwarmCampValues = typeof SWARM_CAMP_DEFAULTS;
@@ -29,7 +32,7 @@ export const SWARM_CAMP_PARAMS: Param[] = [
 ];
 
 /** A streamed camp: its robots' slots, each with the slot's spawn count then (a slot freed and reused is no longer its). */
-interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number; roam?: boolean }
+interface Live { camp: Camp; slots: number[]; gens: number[]; awake: boolean; hp: number; roam?: boolean; group: RobotGroup }
 export interface SwarmBlob { id: string; x: number; z: number; guess: number; awake: boolean }
 
 export class SwarmCamps {
@@ -41,6 +44,9 @@ export class SwarmCamps {
   /** Robots each camp still has after a visit. */
   private left = new Map<string, number>();
   private near: Camp[] = [];
+  /** How hurt each camp's robots are after an off-view fight (0-1), applied when they stream in. */
+  private hurt = new Map<string, number>();
+  private abstracts = new Map<string, AbstractGroup>();
   private slot = 2;
   private from = new THREE.Vector3(); private dir = new THREE.Vector3(); private bite = new THREE.Vector3();
   private lobFrom = new THREE.Vector3(); private up = new THREE.Vector3(0, -1, 0);
@@ -61,8 +67,8 @@ export class SwarmCamps {
     scene.add(this.tear.group);
     // Walkers' feet kick up sand; big ones lob charges through the battlefield's shells.
     this.sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, this.sw.kind[i] === BIG ? 0.5 : 0.12);
-    this.sw.onLob = (_i, fx, fy, fz, x, z, flight) => {
-      if (!player.alive) return;
+    this.sw.onLob = (i, fx, fy, fz, x, z, flight) => {
+      if (!player.alive && !this.sw.hasT[i]) return;
       bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, v.robotBigLobArc, v.robotBigLobRadius, v.robotBigShotDamage);
     };
     // The mech's stomps crush small ones; a dash throws clingers off.
@@ -85,6 +91,8 @@ export class SwarmCamps {
     for (const l of this.live.values()) for (const i of this.own(l)) this.sw.remove(i);
     this.live.clear();
     this.left.clear();
+    this.hurt.clear();
+    this.abstracts.clear();
     this.camps.reset();
   }
 
@@ -107,7 +115,9 @@ export class SwarmCamps {
       if (n <= 0) continue;
       const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big } : undefined);
       for (const i of slots) sw.frozen[i] = 1;
-      const l: Live = { camp: c, slots, gens: slots.map((i) => sw.gen[i]), awake: false, hp: 0 };
+      const hurt = this.hurt.get(c.id) ?? 0;
+      if (hurt > 0) for (const i of slots) sw.hp[i] *= 1 - hurt;
+      const l: Live = { camp: c, slots, gens: slots.map((i) => sw.gen[i]), awake: false, hp: 0, group: this.groupFor(c.id) };
       l.hp = this.hp(l);
       this.live.set(c.id, l);
     }
@@ -123,10 +133,12 @@ export class SwarmCamps {
       const hp = this.hp(l), d = this.dist(l, p.x, p.z);
       const dp = pilot ? this.dist(l, pilot.x, pilot.z) : Infinity;
       // Packs and raids came looking for the mech (or the pilot on foot): awake while either is within reach.
-      if (l.roam) l.awake = hunting && Math.min(d, dp) <= v.campGiveUp;
+      // Fighting another faction's group keeps a camp or pack up whatever the mech is doing (src/game/factions.ts).
+      const fighting = l.group.fighting;
+      if (l.roam) l.awake = fighting || (hunting && Math.min(d, dp) <= v.campGiveUp);
       else {
-        if (hunting && !l.awake && (d < v.campWake || dp < v.campWake * (pilot?.notice ?? 0) || hp < l.hp - 1e-3)) l.awake = true;
-        if (l.awake && (!hunting || d > v.campGiveUp)) l.awake = false;
+        if (!l.awake && (fighting || hp < l.hp - 1e-3 || (hunting && (d < v.campWake || dp < v.campWake * (pilot?.notice ?? 0))))) l.awake = true;
+        if (l.awake && !fighting && (!hunting || d > v.campGiveUp)) l.awake = false;
       }
       l.hp = hp;
       for (const i of this.own(l)) {
@@ -144,10 +156,12 @@ export class SwarmCamps {
     this.lastPrey = q.kind;
     const T = q.at;
     sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.radius, vx: q.sim.vel.x, vz: q.sim.vel.z, latchLow: q.latchLow, latchHigh: q.latchHigh },
-      (fx, fy, fz, tx, ty, tz, kind) => {
-        if (!q.alive) return;
+      (fx, fy, fz, tx, ty, tz, kind, i) => {
+        // On another faction's target the round goes where its robot aims (and hits what is in the way).
+        const own = sw.hasT[i] === 1;
+        if (!own && !q.alive) return;
         const from = this.from.set(fx, fy, fz);
-        if (!bf.canSee(from, T)) return;
+        if (!bf.canSee(from, own ? this.lobFrom.set(tx, ty, tz) : T)) return;
         this.dir.set(tx - fx, ty - fy, tz - fz).normalize();
         const drawn = kind !== SMALL || Math.random() < 0.5;
         if (drawn) this.slot = this.slot >= 19 ? 2 : this.slot + 1;
@@ -157,11 +171,13 @@ export class SwarmCamps {
           drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
       },
       (i, damage) => {
+        if (sw.hasT[i]) { this.meleeAt(sw.px[i], sw.py[i], sw.pz[i], damage); return; }
         if (!q.alive) return;
         q.unit.damage(damage, this.bite.set(sw.px[i], sw.py[i], sw.pz[i]), this.up);
         this.tear.bite(sw.px[i], sw.py[i], sw.pz[i], T.x, T.z);
       },
-      (_i, damage, x, y, z) => {
+      (i, damage, x, y, z) => {
+        if (sw.hasT[i]) { this.meleeAt(x, y, z, damage); return; }
         if (!q.alive) return;
         q.unit.damage(damage, this.bite.set(x, y, z), this.up);
         this.tear.bite(x, y, z, T.x, T.z);
@@ -175,12 +191,13 @@ export class SwarmCamps {
    * A roaming pack or a raid comes in as robots (src/expedition/threats.ts): n of them round (x, z), awake and
    * hunting; shares of medium and big ones if given. They calm down like a camp when the mech goes aboard.
    */
-  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }) {
+  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt = 0) {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
     const slots = this.sw.spawn(n, x, z, radius, shares);
+    if (hurt > 0) for (const i of slots) this.sw.hp[i] *= 1 - hurt;
     const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0 };
-    const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true };
+    const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id) };
     l.hp = this.hp(l);
     this.live.set(id, l);
   }
@@ -203,6 +220,43 @@ export class SwarmCamps {
     for (const i of this.own(l)) this.sw.remove(i);
     this.live.delete(id);
     return n;
+  }
+
+  /** A bite or a saw stroke on another faction's unit: a small blast of the robots' team at the spot. */
+  private meleeAt(x: number, y: number, z: number, damage: number) {
+    splashBlast(this.bf.targets, TEAM.robots, this.bite.set(x, y, z), 1.8, damage, this.up);
+  }
+
+  private groupFor(id: string) { return new RobotGroup(id, this.sw, () => this.live.get(id)?.slots ?? []); }
+
+  /** The fight groups of every camp and pack on the field (the director skips the ones that are asleep). */
+  groups(out: RobotGroup[] = []): RobotGroup[] {
+    out.length = 0;
+    for (const l of this.live.values()) out.push(l.group);
+    return out;
+  }
+
+  /** Camps off the field with robots left, as groups for the clashes. */
+  abstractGroups(x: number, z: number, r: number, out: AbstractGroup[], f: FactionValues) {
+    this.near.length = 0;
+    for (const c of this.camps.campsNear(x, z, r, this.near)) {
+      if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
+      const n = this.left.get(c.id) ?? c.size;
+      if (n <= 0) continue;
+      let g = this.abstracts.get(c.id);
+      if (!g) {
+        const id = c.id;
+        g = {
+          id, faction: FACTION.robots, x: c.x, z: c.z, count: n, power: 0, vehicles: false,
+          apply: (count, hurt) => { this.left.set(id, count); this.hurt.set(id, Math.min(0.9, 1 - (1 - (this.hurt.get(id) ?? 0)) * (1 - hurt))); },
+          hold() {},
+        };
+        this.abstracts.set(id, g);
+      }
+      g.count = n;
+      g.power = robotPower(f, n, this.v.robotMidShare + c.mid, this.v.robotBigShare + c.big) * (1 - (this.hurt.get(c.id) ?? 0));
+      out.push(g);
+    }
   }
 
   /** Any camp or group awake (hunting the mech) now? */

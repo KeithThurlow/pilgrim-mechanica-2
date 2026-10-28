@@ -247,3 +247,21 @@ export class FightDirector {
     }
   }
 }
+
+// ---- Groups that are not on the field (what the clashes act on) ----
+
+/**
+ * A group away from the field, as the clash sees it: where, how many, what it is worth. apply() writes the outcome back
+ * to its owner (survivors and how hurt they are; 0 survivors: gone); hold() keeps it still while it fights.
+ */
+export interface AbstractGroup {
+  id: string;
+  faction: Faction;
+  x: number; z: number;
+  count: number;
+  power: number;
+  /** Vehicles (wrecks of cars) rather than bodies or machines. */
+  vehicles: boolean;
+  apply(count: number, hurt: number): void;
+  hold(on: boolean): void;
+}

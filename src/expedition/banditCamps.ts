@@ -31,6 +31,8 @@ export const BANDIT_DEFAULTS = {
   banditPatrolShare: 0.3,
   banditPatrolRadius: 45,
   banditPatrolPause: 4,
+  banditDamage: 0.6,
+  banditTracer: 0.3,
 };
 export type BanditValues = typeof BANDIT_DEFAULTS;
 
@@ -59,6 +61,8 @@ export const BANDIT_PARAMS: Param[] = [
   { key: "banditPatrolShare", label: "Share on patrol", min: 0, max: 1, step: 0.05, group: B },
   { key: "banditPatrolRadius", label: "Patrol round the camp (m)", min: 5, max: 200, step: 1, group: B },
   { key: "banditPatrolPause", label: "Patrol pause at each point (s)", min: 0, max: 30, step: 0.5, group: B },
+  { key: "banditDamage", label: "Damage per bandit round", min: 0, max: 20, step: 0.1, group: B },
+  { key: "banditTracer", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: B, tip: "Hundreds fire at once: only this share draw a tracer and make a sound; the rest still hit" },
 ];
 export const BANDIT_GROUPS = [G, B];
 

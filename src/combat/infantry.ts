@@ -191,11 +191,12 @@ export class InfantrySwarm {
   }
 
   /** A group of n around (cx, cz) within radius, spaced so they don't start on top of each other. */
-  spawn(n: number, cx: number, cz: number, radius: number): void {
-    const v = this.v;
+  spawn(n: number, cx: number, cz: number, radius: number): number[] {
+    const v = this.v, made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
-      if (i < 0) return;
+      if (i < 0) return made;
+      made.push(i);
       // Sunflower spiral fill plus jitter: even spacing whatever n is.
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -216,6 +217,14 @@ export class InfantrySwarm {
       this.uid[i] = this.nextUid++;
       this.count++;
     }
+    return made;
+  }
+
+  /** Take bandit i off the field (its camp streamed out). */
+  remove(i: number) {
+    if (this.state[i] === EMPTY) return;
+    if (this.state[i] < DEAD) this.count--;
+    this.state[i] = EMPTY; this.frozen[i] = 0; this.hasT[i] = 0; this.calm[i] = 0;
   }
 
   /** Give bandit i its own target (position, aim height, radius); calm: walk there and stand instead of fighting. */

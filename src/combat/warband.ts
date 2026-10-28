@@ -320,7 +320,8 @@ export class Warband {
     return made;
   }
 
-  private serials = new ObjectSerials();
+  /** Shared by the bands of a field so ids never repeat across them (src/expedition/humans.ts). */
+  serials = new ObjectSerials();
   /** Into the register (src/game/register.ts): live raiders (vehicles) and bandit mechs, each a new id per life. */
   publish(reg: Register): void {
     const flags = FLAG.Hittable | FLAG.Detectable;
@@ -377,6 +378,18 @@ export class Warband {
         this.bf.targets.splice(this.bf.targets.indexOf(m), 1);
         this.mechs.splice(i, 1);
       }
+    }
+  }
+
+  /** Take the whole band off the field (a column handed back to the map, or the lab starting over). */
+  clear() {
+    for (let i = this.raiders.length - 1; i >= 0; i--) this.remove(this.raiders[i], i);
+    for (let i = this.mechs.length - 1; i >= 0; i--) {
+      const m = this.mechs[i];
+      this.group.remove(m.body.root);
+      const k = this.bf.targets.indexOf(m);
+      if (k >= 0) this.bf.targets.splice(k, 1);
+      this.mechs.splice(i, 1);
     }
   }
 
