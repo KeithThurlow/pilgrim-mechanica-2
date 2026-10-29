@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-29 | Extraction defaults (Claude's calls, all sliders): wait 30 s + 15 s per km from the convoy, capped at 150 s (Keith: longer further out); fee comes from carried scrap first, the bank tops up at ×1.5 (`padBankTopUp`, `padBankMarkup`); cancel refunds 50% to where each part came from; a raid at half the wait; the pad works from the pilot on foot too; unlock prices 250 (pickup), 120/320/700 (radar), 150/400 (crane); bank scrap now saved with the bay | Claude | Claude (Keith's open question on the fee source stays open) | Agent on `wip/extraction`. |
 | 2026-10-29 | Night lights: headlights on every vehicle; the mech's lamps cast shadows; robots carry red spotlights; the convoy lights up after dark (cabs, floodlights on the bays and ramps, side lights) | Keith | Keith | Claude: few real lights (nearest N, one shadowed: the mech's), the rest faked as glow and ground pools so it scales. Agent on `wip/nightlights`. |
 | 2026-10-29 | Robots must feel dangerous: excavators (tall walkers) fire more often, cutters hit harder; scrappers stay the swarm | Keith | Keith | Agent on `wip/raiders2`. |
 | 2026-10-29 | War bands have no real tanks: scrappy salvage instead (a truck with a salvaged tank turret, a "technical"); add a party bus that drops bandit infantry, a priority target | Keith | Keith | Agent on `wip/raiders2`. |

@@ -150,7 +150,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.
   Weapons as in the combat labs (only while driving the mech); a fresh convoy bay fits miniguns, missile pod and big mortar,
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
-  cursor held on its bucket, both guns firing), `?raid` (a raid at once).
+  cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
+  pickups bought, 400+ scrap at risk; hold E on the pad to call), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
+  `?bank=N` (N scrap banked), `?raid` (a raid at once).
 
 ## Layout
 
