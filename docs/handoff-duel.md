@@ -37,9 +37,24 @@ lead share 0.85, dash use 0.75 (keeps 1 charge for dodges), preferred range 0 = 
 autocannon 40, rocket 34, mortar 55, line mortar 38, missiles 42; mean of what it carries), band ±8 m, strafe 0.7, flip
 every ~3.5 s, retreat at 35% hull, cover 0.6, paint time 0.7 s (its telegraphs stay readable).
 
-## Status
+## Status (2026-10-29)
 
-- [ ] AI, kit, ground, score, threats, duelSim, lab, check, docs.
+- [x] AI (`rivalAi.ts`), kit (`rivalKit.ts`), arena (`duelGround.ts`, wreck stand-ins take scale/sink/rebuild), score,
+  threats glue, headless duel, lab (`labs/duel/`, hub entry), check (`tools/duel-check.ts`, in `npm test`), state.md,
+  CLAUDE.md, decisions.
+- Combat lab shell: new `wrecks` option (steel stand-ins on the battlefield).
+- Not done / next: never run in a browser (no browser in the agent's box): Keith's first play is the real test. Then:
+  the rival going for the pilot on foot; rival squads (2-4, factions step 5); real loot from a killed rival.
+
+As built, differences from the proposal: a rail can't be dodged (instant, the lock follows), so the AI dashes after a
+random 0-1 s beat once a rail is charged past 0.9, for the shove's half damage; homing missiles the same (a dash as
+they land). Retreat and cover are time-boxed (out after 1.5-4 s hidden or 10 s, then fights `aiPeek` 2.5 s before it
+may hide again). Arm lead 0.12 s (the player's lockLead). The damage board tags each weapon's work by wrapping the
+arsenals' rail/shells/rockets/shoulder steps and the battlefield's shell update (lab-only glue in `labs/duel/main.ts`).
+
+Known rough edges: rolled rails (900+ a slug) make short rounds; the rival's minigun rounds have no penetration sheet
+(like bandit mechs); the rival doesn't target the pilot on foot; rivalAi's view `sees` reads the height function (dunes
+and drifts) plus wreck height, not the wreck meshes.
 
 ## How to test
 
