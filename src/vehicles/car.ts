@@ -113,7 +113,7 @@ export const CAR_PARAMS: Param[] = [
   { key: "pivotDrag", label: "Tracks: turning drag (m/s²)", min: 0, max: 10, step: 0.1, group: G, tip: "Slowdown while the tracks drive against each other" },
 ];
 
-export type CarKind = "technical" | "gunTruck" | "sixWheeler" | "warRig" | "tank";
+export type CarKind = "technical" | "gunTruck" | "sixWheeler" | "warRig" | "tank" | "turretTruck" | "partyBus";
 /** Per-kind overrides on CAR_DEFAULTS (the defaults are the technical). */
 export const CAR_KINDS: Record<CarKind, Partial<CarValues>> = {
   technical: {},
@@ -135,7 +135,23 @@ export const CAR_KINDS: Record<CarKind, Partial<CarValues>> = {
     wheelRadius: 0.7, suspFreq: 1.2, suspDamp: 0.6, travel: 0.4, droop: 0.8, frontAxles: 2, rearAxles: 2,
     axleGap: 1.55, steer2: 0.7, maxClimb: 32, climb: 0.45, airGravity: 3,
   },
-  // A makeshift tank on tracks: turns on the spot, slow, very heavy, a big slow turret.
+  // The war band's heavy gun (Keith 2026-10-29: bandits are scrappy salvage, at most "a tank turret on a truck"): a
+  // six-wheel truck with a salvaged tank turret on cribbing, top heavy and slow; about 8 m long.
+  turretTruck: {
+    topSpeed: 10, accel: 2.6, brake: 7, reverseSpeed: 3.5, maxSteer: 30, maxYawRate: 55, yawResponse: 4.5,
+    grip: 6, cornerG: 0.65, drift: 0.12, wheelbase: 4.6, track: 2.4, rideHeight: 1.2, wheelRadius: 0.62,
+    suspFreq: 1.25, suspDamp: 0.65, travel: 0.35, droop: 0.7, rearAxles: 2, axleGap: 1.4, maxClimb: 32, climb: 0.5,
+    airGravity: 3,
+  },
+  // The party bus (Keith 2026-10-29): an old coach full of bandits, lit up and loud; long, soft and slow to turn.
+  partyBus: {
+    topSpeed: 12, accel: 2.8, brake: 6, reverseSpeed: 3, coast: 1.2, maxSteer: 32, steerRate: 110, maxYawRate: 50,
+    yawResponse: 4, grip: 5.5, cornerG: 0.6, drift: 0.15, maxSlide: 25, wheelbase: 6.2, track: 2.4, rideHeight: 1.1,
+    wheelRadius: 0.6, suspFreq: 1.1, suspDamp: 0.55, travel: 0.4, droop: 0.75, rearAxles: 2, axleGap: 1.3,
+    maxClimb: 30, climb: 0.45, airGravity: 3,
+  },
+  // A makeshift tank on tracks: turns on the spot, slow, very heavy, a big slow turret. Not in war bands any more
+  // (Keith 2026-10-29: bandits field turret trucks); kept for the convoy's escorts and the rival military's real tanks.
   tank: {
     topSpeed: 8, accel: 3, brake: 7, reverseSpeed: 3.5, coast: 1.5, climb: 0.5, yawResponse: 4, grip: 12, cornerG: 1.2,
     drift: 0, maxSlide: 12, wheelbase: 4.4, track: 2.9, rideHeight: 0.95, wheelRadius: 0.36, suspFreq: 1.5,

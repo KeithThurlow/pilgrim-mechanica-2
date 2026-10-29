@@ -50,7 +50,8 @@ export const FACTION_DEFAULTS = {
   powGunTruck: 9,
   powSixWheeler: 14,
   powWarRig: 30,
-  powTank: 36,
+  powTurretTruck: 28,
+  powPartyBus: 24,
   powBanditMech: 20,
 };
 export type FactionValues = typeof FACTION_DEFAULTS;
@@ -83,7 +84,8 @@ export const FACTION_PARAMS: Param[] = [
   { key: "powGunTruck", label: "Strength: gun truck", min: 0.1, max: 150, step: 0.5, group: C },
   { key: "powSixWheeler", label: "Strength: six-wheeler", min: 0.1, max: 200, step: 0.5, group: C },
   { key: "powWarRig", label: "Strength: War Rig", min: 0.1, max: 400, step: 1, group: C },
-  { key: "powTank", label: "Strength: tank", min: 0.1, max: 500, step: 1, group: C },
+  { key: "powTurretTruck", label: "Strength: turret truck", min: 0.1, max: 500, step: 1, group: C },
+  { key: "powPartyBus", label: "Strength: party bus (and its bandits)", min: 0.1, max: 500, step: 1, group: C },
   { key: "powBanditMech", label: "Strength: bandit mech", min: 0.1, max: 300, step: 1, group: C },
 ];
 export const FACTION_GROUPS = [R, F, C];
@@ -111,7 +113,7 @@ export function robotPower(v: FactionValues, n: number, mid: number, big: number
 }
 /** Strength of a war band column by its vehicle kinds. */
 export function columnPower(v: FactionValues, kinds: readonly string[]): number {
-  const p: Record<string, number> = { technical: v.powTechnical, gunTruck: v.powGunTruck, sixWheeler: v.powSixWheeler, warRig: v.powWarRig, tank: v.powTank };
+  const p: Record<string, number> = { technical: v.powTechnical, gunTruck: v.powGunTruck, sixWheeler: v.powSixWheeler, warRig: v.powWarRig, turretTruck: v.powTurretTruck, partyBus: v.powPartyBus };
   let s = 0;
   for (const k of kinds) s += p[k] ?? v.powTechnical;
   return s;

@@ -6,7 +6,9 @@
 //
 // Kinds: technical (pickup, MG on a post), gun truck (twin heavy guns), six-wheeler (three axles, an autocannon on a
 // ring), war rig (the band's lead truck: cab-over hauler with a fuel tank, ram plate, a gunner on the cab roof and
-// one at the back), tank (makeshift: welded plates on a tracked hull, road wheels, a big slow turret).
+// one at the back), tank (makeshift: welded plates on a tracked hull, road wheels, a big slow turret; the convoy's escorts
+// and later the rival military), turret truck (a six-wheeler with a salvaged tank turret on a timber crib, the war
+// band's heavy gun), party bus (an old coach full of bandits, lit up).
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { carAxles, carValues, type CarKind, type CarSim, type CarValues } from "./car";
@@ -149,7 +151,37 @@ const tankGun: GunLook = (k, housing, color) => {
   return { pivot: [0, 0.4, 0.95], muzzle: [0, 0, 4.75] };
 };
 
+/**
+ * A tank turret salvaged off a wreck for the turret truck (Keith 2026-10-29: bandits at most put "a tank turret on a
+ * truck"): the old army paint under rust, mismatched welded patches, a tarp lashed over the bustle, a chain and a
+ * shortened barrel with a home-made muzzle brake.
+ */
+const salvagedTurret: GunLook = (k, housing) => {
+  k.box([1.8, 0.7, 2.0], [0, 0.35, -0.2], PAL.olive);
+  for (const s of [1, -1]) k.box([0.1, 0.62, 1.9], [s * 0.93, 0.33, -0.2], PAL.steel, [0, 0, s * -0.3]);
+  // Patches: plates welded over holes, in whatever colour they came in.
+  k.box([0.7, 0.05, 0.6], [0.4, 0.72, 0.1], PAL.rust, [0.06, 0.2, 0]);
+  k.box([0.5, 0.45, 0.06], [-0.6, 0.35, 0.82], PAL.paint, [0.25, 0.1, 0]);
+  k.box([0.06, 0.4, 0.55], [0.98, 0.35, -0.7], PAL.sand, [0, 0, -0.3]);
+  k.box([1.3, 0.5, 0.8], [0, 0.35, -1.55], PAL.dark); // bustle
+  k.box([1.4, 0.18, 0.9], [0, 0.66, -1.55], PAL.sand, [0.08, 0, 0.04]); // tarp lashed over it
+  for (const s of [1, -1]) k.bar([s * 0.68, 0.75, -1.15], [s * 0.66, 0.1, -1.2], 0.02, PAL.dark); // lashings
+  k.cyl(0.28, 0.16, [0.45, 0.78, -0.5], PAL.steel, [0, 0, 0], 8); // hatch, propped open
+  k.box([0.5, 0.05, 0.5], [0.45, 1.0, -0.82], PAL.steel, [1.2, 0, 0]);
+  k.box([0.7, 0.08, 0.5], [-0.45, 0.74, 0.0], PAL.hazard); // a stencil square
+  k.bar([-0.6, 0.72, -0.9], [-0.6, 1.5, -0.95], 0.025, PAL.dark); // a whip antenna
+  housing(k.build());
+  k.box([0.8, 0.5, 0.45], [0, 0, 0.15], PAL.steel);
+  k.cyl(0.12, 3.0, [0, 0, 1.8], PAL.dark, [Math.PI / 2, 0, 0], 10, 0.1);
+  k.cyl(0.16, 0.3, [0, 0, 0.75], PAL.rust, [Math.PI / 2, 0, 0], 8); // a sleeve clamp
+  k.box([0.42, 0.3, 0.36], [0, 0, 3.35], PAL.rust); // the welded-on muzzle brake
+  for (const s of [1, -1]) k.box([0.06, 0.2, 0.3], [s * 0.24, 0, 3.35], PAL.dark);
+  return { pivot: [0, 0.4, 0.85], muzzle: [0, 0, 3.55] };
+};
+
 const tmpV = new THREE.Vector3(), tmpU = new THREE.Vector3(), invQ = new THREE.Quaternion();
+/** The party bus's lights (cosmetic): bulbs drawn unlit in their own colours, cycled each frame. */
+const GLOW_BASE = new THREE.MeshBasicMaterial({ vertexColors: true });
 
 export class CarBody {
   readonly root = new THREE.Group();
@@ -171,6 +203,7 @@ export class CarBody {
     const k = new Kit();
     if (kind === "warRig") this.buildWarRig(k, color);
     else if (kind === "tank") this.buildTank(k, color);
+    else if (kind === "partyBus") this.buildBus(k);
     else this.buildTruck(k, color);
     this.chassis = mesh(k.build(), this.root);
     this.buildWheels(k);
@@ -183,7 +216,7 @@ export class CarBody {
   private buildTruck(k: Kit, color: number) {
     const v = this.v, kind = this.kind, T = v.track, R = v.wheelRadius, hubY = this.hubY;
     const axles = carAxles(v), zF = axles[0].z, zR = axles[axles.length - 1].z;
-    const big = kind !== "technical", six = kind === "sixWheeler";
+    const big = kind !== "technical", tt = kind === "turretTruck", six = kind === "sixWheeler";
     // Ladder frame and lower hull, sitting just above the hubs.
     const base = hubY + R * 0.45;
     const w = T * 0.96;
@@ -224,15 +257,37 @@ export class CarBody {
     for (const s of [1, -1]) k.box([0.07, 0.35, bedLen], [s * (w / 2 - 0.03), deck + 0.25, bedZ], big ? PAL.steel : PAL.sand);
     k.box([w, 0.35, 0.07], [0, deck + 0.25, back + 0.03], PAL.steel);
     k.box([w * 0.3, 0.08, 0.08], [w * 0.25, deck + 0.38, back + 0.03], PAL.hazard);
-    // Roll cage over the cab: posts at the back of the cab, a top bar, braces to the bed.
+    // Roll cage over the cab: posts at the back of the cab, a top bar, braces to the bed (not on the turret truck:
+    // the turret's barrel swings over the cab).
     const cageY = deck + cabH + (big ? 0.45 : 0.35), cz = bedFront - 0.05;
-    for (const s of [1, -1]) {
+    for (const s of tt ? [] : [1, -1]) {
       const x = s * w * 0.42;
       k.bar([x, deck + 0.1, cz], [x, cageY, cz], 0.045, PAL.steel);
       k.bar([x, cageY, cz], [x * 0.95, deck + cabH + 0.12, cabZ + cabLen * 0.35], 0.04, PAL.steel);
       k.bar([x, cageY, cz], [x, deck + 0.1, cz - 0.7], 0.035, PAL.steel);
     }
-    k.bar([w * 0.42, cageY, cz], [-w * 0.42, cageY, cz], 0.045, PAL.steel);
+    if (!tt) k.bar([w * 0.42, cageY, cz], [-w * 0.42, cageY, cz], 0.045, PAL.steel);
+
+    if (tt) {
+      // Turret truck: the turret sits on a crib of timber beams chained down, outrigger legs kicked out to the sand
+      // for when it fires, a grille of rebar over the cab glass and a spare tyre on the door.
+      const tz = bedZ + 0.1, cribTop = deck + 0.62;
+      for (let i = 0; i < 4; i++) {
+        const y = deck + 0.12 + i * 0.15, along = i % 2 === 0;
+        for (const s of [1, -1]) k.box(along ? [0.2, 0.15, 1.9] : [1.9, 0.15, 0.2], along ? [s * 0.75, y, tz] : [0, y, tz + s * 0.75], i % 2 ? PAL.sand : PAL.bone);
+      }
+      for (const s of [1, -1]) for (const t of [1, -1]) k.bar([s * 0.9, cribTop, tz + t * 0.9], [s * (w / 2), deck, tz + t * 1.0], 0.025, PAL.dark); // chains
+      k.cyl(0.9, 0.16, [0, cribTop + 0.02, tz], PAL.dark, [0, 0, 0], 12); // the ring, cut out with the turret
+      for (const s of [1, -1]) for (const t of [-1, 1]) {
+        const z = tz + t * (bedLen / 2 - 0.3);
+        k.bar([s * (w / 2 - 0.1), deck - 0.1, z], [s * (w / 2 + 0.9), hubY - R + 0.15, z + t * 0.2], 0.06, PAL.steel);
+        k.box([0.45, 0.06, 0.45], [s * (w / 2 + 0.9), hubY - R + 0.12, z + t * 0.2], PAL.dark);
+      }
+      for (let i = 0; i < 4; i++) k.box([0.04, cabH * 0.32, 0.04], [-w * 0.3 + i * w * 0.2, deck + cabH * 0.62, cabZ + cabLen / 2 + 0.1], PAL.rust, [-0.3, 0, 0]);
+      k.cyl(R * 0.85, 0.28, [w / 2 + 0.12, deck + 0.4, cabZ], PAL.tyre, [0, 0, Math.PI / 2], 10);
+      this.addTurret([0, cribTop + 0.1, tz], salvagedTurret, color);
+      return;
+    }
 
     if (big) {
       // Gun truck and six-wheeler: slat armour along the sides, a plough instead of a bumper.
@@ -383,6 +438,86 @@ export class CarBody {
     this.addTurret([0, top + 0.2, tz], tankGun, color);
   }
 
+  /**
+   * The party bus (Keith 2026-10-29): an old coach, faded teal under rust and sprayed colour, windows half boarded
+   * with plate, a ram and spikes up front, loudspeaker stacks and junk on a roof rack, the back door hanging open
+   * (the bandits pile out there), and strings of coloured bulbs along the roof and a disco ball (`glow`, cycled).
+   */
+  private buildBus(k: Kit) {
+    const v = this.v, T = v.track, R = v.wheelRadius, hubY = this.hubY;
+    const axles = carAxles(v), zF = axles[0].z, zR = axles[axles.length - 1].z;
+    const base = hubY + R * 0.4, w = T * 1.02;
+    const front = zF + 1.6, back = zR - 1.9, len = front - back, mid = (front + back) / 2;
+    const floor = base + 0.25, H = 2.3, roof = floor + H;
+    const teal = 0x4d8a84;
+    k.box([T * 0.5, 0.25, len - 0.4], [0, base, mid], PAL.dark);
+    k.box([w, H, len], [0, floor + H / 2, mid], teal);
+    k.box([w + 0.04, 0.12, len + 0.04], [0, roof + 0.02, mid], PAL.bone, [0.01, 0, 0]);
+    // A rust band low down and a sprayed stripe, a few patches of other paint.
+    for (const s of [1, -1]) {
+      const x = s * (w / 2 + 0.01);
+      k.box([0.04, 0.35, len * 0.98], [x, floor + 0.2, mid], PAL.rust);
+      k.box([0.04, 0.16, len * 0.9], [x, floor + 0.75, mid], PAL.paint);
+      k.box([0.05, 0.7, 1.1], [x, floor + 0.6, mid + s * 1.4], PAL.hazard, [0.2 * s, 0, 0]);
+      k.box([0.05, 0.9, 0.9], [x, floor + 0.9, back + 1.3], 0xb02a6a, [0, 0, 0]);
+      // Windows down the side, every third one plated over.
+      const n = Math.floor((len - 2.6) / 1.15);
+      for (let i = 0; i < n; i++) {
+        const z = back + 1.3 + i * 1.15 + 0.55;
+        k.box([0.05, 0.75, 0.95], [x + s * 0.01, floor + 1.55, z], (i + (s > 0 ? 0 : 1)) % 3 === 0 ? PAL.steel : PAL.glass, [0, 0, 0]);
+      }
+      // Wheel arches.
+      for (const a of axles) k.box([0.08, 0.2, R * 2.5], [s * (w / 2 + 0.03), hubY + R + 0.12, a.z], PAL.dark);
+    }
+    // Front: a big windscreen with a rebar grille, the destination board, lamps, a ram plate with spikes.
+    k.box([w * 0.9, 1.0, 0.06], [0, floor + 1.45, front + 0.01], PAL.glass, [-0.08, 0, 0]);
+    for (let i = 0; i < 5; i++) k.box([0.05, 1.0, 0.05], [-w * 0.36 + i * w * 0.18, floor + 1.45, front + 0.06], PAL.rust, [-0.08, 0, 0]);
+    k.box([w * 0.7, 0.28, 0.06], [0, roof - 0.25, front + 0.02], PAL.dark);
+    k.box([w * 0.5, 0.12, 0.07], [0, roof - 0.25, front + 0.04], PAL.hazard);
+    k.box([w * 1.1, 0.6, 0.14], [0, base + 0.15, front + 0.3], PAL.steel, [0.45, 0, 0]);
+    for (let i = 0; i < 6; i++) k.cyl(0.07, 0.6, [-w * 0.5 + (i * w) / 5, base + 0.3, front + 0.55], PAL.bone, [Math.PI / 2, 0, 0], 5, 0.005);
+    // Back: the door hanging open on one hinge, a ladder to the roof, tail lights.
+    k.box([w * 0.95, H * 0.5, 0.06], [0, floor + H * 0.75, back - 0.01], PAL.glass);
+    k.box([0.9, 1.9, 0.06], [w * 0.5 + 0.35, floor + 0.95, back - 0.3], teal, [0, -1.1, 0.05]);
+    for (const s of [1, -1]) k.box([0.25, 0.14, 0.06], [s * w * 0.38, floor + 0.35, back - 0.03], 0xb02818);
+    for (let i = 0; i < 6; i++) k.box([0.5, 0.04, 0.06], [-w * 0.3, floor + 0.3 + i * 0.35, back - 0.08], PAL.steel);
+    // Roof rack: rails, loudspeaker stacks, tyres, crates and a jerrycan or two.
+    for (const s of [1, -1]) k.box([0.05, 0.05, len * 0.8], [s * w * 0.42, roof + 0.3, mid], PAL.steel);
+    for (let i = 0; i < 4; i++) k.box([w * 0.88, 0.05, 0.05], [0, roof + 0.3, back + 1 + i * (len - 2) / 3], PAL.steel);
+    for (const s of [1, -1]) for (const z of [front - 1.1, back + 1.2]) {
+      k.box([0.6, 0.85, 0.5], [s * w * 0.28, roof + 0.5, z], PAL.dark, [0, s > 0 ? 0 : Math.PI, 0]);
+      k.cyl(0.2, 0.06, [s * w * 0.28, roof + 0.62, z + (z > mid ? 0.26 : -0.26)], PAL.steel, [Math.PI / 2, 0, 0], 10);
+      k.cyl(0.1, 0.06, [s * w * 0.28, roof + 0.3, z + (z > mid ? 0.26 : -0.26)], PAL.steel, [Math.PI / 2, 0, 0], 8);
+    }
+    k.cyl(R * 0.85, 0.3, [0.4, roof + 0.25, mid - 1], PAL.tyre, [0, 0, 0], 10);
+    k.cyl(R * 0.85, 0.3, [0.4, roof + 0.55, mid - 1.1], PAL.tyre, [0, 0, 0], 10);
+    k.box([0.8, 0.5, 0.6], [-0.5, roof + 0.3, mid + 0.5], PAL.olive);
+    k.box([0.25, 0.4, 0.35], [-0.6, roof + 0.25, mid - 0.6], PAL.rust);
+    // Exhaust stacks up the back corners.
+    for (const s of [1, -1]) k.cyl(0.09, H + 0.8, [s * (w / 2 - 0.15), floor + (H + 0.8) / 2, back + 0.15], PAL.dark, [0, 0, 0], 8);
+    // Lights: bulbs along both roof edges and round the windscreen, a disco ball on a pole.
+    const g = new Kit(), cols = [0xff3a6e, 0x3aff9a, 0xffd23a, 0x4ab8ff];
+    let c = 0;
+    for (const s of [1, -1]) for (let z = back + 0.3; z < front - 0.2; z += 0.55) g.box([0.12, 0.12, 0.12], [s * (w / 2 + 0.03), roof + 0.06, z], cols[c++ % 4]);
+    for (let x = -w * 0.45; x <= w * 0.45; x += 0.4) g.box([0.12, 0.12, 0.12], [x, roof - 0.05, front + 0.05], cols[c++ % 4]);
+    g.cyl(0.32, 0.6, [0, roof + 1.3, mid + 1], 0xe8e8f0, [0, 0, 0], 8);
+    g.box([0.05, 0.05, 0.05], [0, roof + 0.7, mid + 1], 0xe8e8f0);
+    k.bar([0, roof + 0.05, mid + 1], [0, roof + 1.0, mid + 1], 0.04, PAL.steel);
+    this.glowMat = GLOW_BASE.clone();
+    this.glow = new THREE.Mesh(g.build(), this.glowMat);
+    this.root.add(this.glow);
+  }
+
+  private glow: THREE.Mesh | null = null;
+  private glowMat: THREE.MeshBasicMaterial | null = null;
+
+  /** Cosmetic: the party bus's lights chase through bright and dim (t in seconds). */
+  flashLights(t: number) {
+    if (!this.glowMat || this.wrecked) return;
+    const k = 0.55 + 0.45 * Math.abs(Math.sin(t * 7.5));
+    this.glowMat.color.setRGB(k, 0.6 + 0.4 * Math.abs(Math.sin(t * 3.1 + 1)), k * (0.7 + 0.3 * Math.sin(t * 5)));
+  }
+
   /** A turret at `at` on the body: the gun look builds its yaw (housing) and pitch (gun) meshes in its own kit. */
   private addTurret(at: V3, look: GunLook, color: number) {
     const k = new Kit();
@@ -481,13 +616,13 @@ export class CarBody {
   }
 
   meshes(): THREE.Mesh[] {
-    return [this.chassis, ...this.gunMeshes, ...this.wheels.map((w) => w.spin)];
+    return [this.chassis, ...this.gunMeshes, ...this.wheels.map((w) => w.spin), ...(this.glow ? [this.glow] : [])];
   }
 
   /** Burnt-out look: dark, wheels splayed (road wheels stay on their tracks), the guns slumped and still. */
   setWrecked(on: boolean) {
     this.wrecked = on;
-    for (const m of this.meshes()) m.material = on ? BURNT : LIVE;
+    for (const m of this.meshes()) m.material = on ? BURNT : m === this.glow ? this.glowMat! : LIVE;
     this.wheels.forEach((w, i) => {
       if (on && !this.tracked) w.pivot.rotation.set(0, (i === 1 ? 0.3 : 0), w.side * (i === 2 ? 0.45 : i > 3 && i === this.wheels.length - 1 ? 0.3 : 0.18));
       else w.pivot.rotation.set(0, 0, 0);
