@@ -158,6 +158,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
   scene.add(body.root);
   look.lights.track(body.root);
+  look.lights.ground = field; look.lights.camera = camera;
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
   bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
@@ -238,6 +239,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
       { topic: "mech", label: "Sensor head", objects: () => regions.sensor },
+      { topic: "light", label: "Night lamps", objects: () => look.lights.selectables() },
       ...(o.selectables ?? []),
     ],
     ground: { topic: "dunes", label: "Dunes", field },

@@ -9,6 +9,7 @@ import { TrackBody } from "./trackBody";
 import type { Pod } from "./tracks";
 import { Plough, PLOUGH_BASE_LENGTH, PLOUGH_BASE_HALF, BLADE_AHEAD, BLADE_HEIGHT } from "./plough";
 import { sweepTan } from "./wake";
+import { LAMP_HEAD, type LampSpot } from "../world/lamps";
 
 const PAINT = 0xc08a2e;
 const Y = new THREE.Vector3(0, 1, 0);
@@ -20,9 +21,12 @@ export class PloughBody {
   private tracks: TrackBody;
   private key = "";
   private m = new THREE.Matrix4();
+  /** Lamps lit after dark: the cab's light bar. */
+  readonly lamps: LampSpot[] = [];
 
   constructor(readonly plough: Plough) {
     this.root.name = "Plough";
+    this.root.userData.lamps = this.lamps;
     this.root.matrixAutoUpdate = false;
     const L = PLOUGH_BASE_LENGTH, x = PLOUGH_BASE_HALF - 1.6;
     const pods: Pod[] = [1, -1].map((sx) => ({ x: sx * x, z0: L / 2 - 0.4, z1: -L / 2 + 0.4, slope: 2.6, h: 3.4, w: 3.2 }));
@@ -49,6 +53,8 @@ export class PloughBody {
     k.box([5.4, 1.4, 4.4], [0, 7.4, L * 0.18], PAL.glass);
     k.box([5.8, 0.35, 4.8], [0, 8.65, L * 0.18], PAL.dark);
     for (let i = -2; i <= 2; i++) k.box([0.5, 0.3, 0.3], [i * 1.1, 8.95, L * 0.18 + 2.2], PAL.bone);
+    // After dark the light bar lights the cut ahead (src/world/nightLights.ts).
+    for (let i = -2; i <= 2; i += 2) this.lamps.push({ kind: LAMP_HEAD, p: [i * 1.1, 8.95, L * 0.18 + 2.4], d: [i * 0.08, -0.3, 1], len: 24, ground: true });
     // Front bumper and the push frame (C-frame arms from the track frames forward to the blade).
     k.box([2 * W - 2, 1.4, 1.2], [0, 1.9, L / 2 - 0.2], PAL.dark);
     for (const sx of [1, -1]) {

@@ -10,6 +10,7 @@
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { carAxles, carValues, type CarKind, type CarSim, type CarValues } from "./car";
+import { LAMP_HEAD, LAMP_TAIL, type LampSpot } from "../world/lamps";
 
 const PAL = {
   paint: 0xa8552c, // rust orange, the default body colour
@@ -161,10 +162,13 @@ export class CarBody {
   private hubY: number;
   private wrecked = false;
   private readonly tracked: boolean;
+  /** Headlights and tail lights (body frame), lit at night by src/world/nightLights.ts. */
+  readonly lamps: LampSpot[] = [];
 
   constructor(readonly kind: CarKind, color: number = PAL.paint, values?: CarValues) {
     const v = (this.v = values ?? carValues(kind));
     this.root.name = kind;
+    this.root.userData.lamps = this.lamps;
     this.tracked = v.tracked > 0.5;
     const R = v.wheelRadius, H = v.rideHeight;
     this.hubY = R - H;
@@ -204,6 +208,7 @@ export class CarBody {
     k.box([w * 0.88, 0.3, hoodLen], [0, deck + 0.12, front - hoodLen / 2], color, [-0.08, 0, 0]);
     k.box([w * 0.3, 0.06, hoodLen * 0.9], [w * 0.2, deck + 0.29, front - hoodLen / 2], PAL.hazard, [-0.08, 0, 0]);
     k.box([w * 0.8, 0.42, 0.12], [0, deck - 0.02, front + 0.02], PAL.dark);
+    this.addLamps(k, w * 0.33, deck + 0.02, front + 0.1, w * 0.42, deck + 0.2, back - 0.02);
     k.box([w * 1.05, 0.38, 0.18], [0, base + 0.05, front + 0.22], PAL.steel, [0.35, 0, 0]);
     for (const s of [1, -1]) k.box([0.1, 0.5, 0.5], [s * w * 0.3, base + 0.15, front + 0.2], PAL.steel, [0.6, 0, 0]);
     // Cab: a box with a sloped windscreen and a roof plate, a colour block on the doors.
@@ -300,6 +305,7 @@ export class CarBody {
     k.box([w * 0.95, 0.06, 0.06], [0, deck + cabH * 0.5, cabZ + cabLen / 2 + 0.03], PAL.hazard);
     // Grille, bull bar and the wedge ram plate, low and out front.
     k.box([w * 0.85, 0.7, 0.1], [0, deck + 0.2, front - 0.22], PAL.dark);
+    this.addLamps(k, w * 0.36, deck + 0.42, front - 0.14, w * 0.45, base + 0.35, back - 0.02);
     for (const s of [1, -1]) k.bar([s * w * 0.48, base + 0.1, front], [s * w * 0.3, deck + 1.0, front - 0.1], 0.07, PAL.steel);
     k.bar([w * 0.45, deck + 0.85, front - 0.05], [-w * 0.45, deck + 0.85, front - 0.05], 0.07, PAL.steel);
     k.box([w * 1.15, 0.9, 0.14], [0, base + 0.1, front + 0.35], PAL.rust, [0.55, 0, 0]);
@@ -375,12 +381,23 @@ export class CarBody {
     }
     // Headlights with guards and a dozer-ish plough on the front.
     for (const s of [1, -1]) k.cyl(0.1, 0.12, [s * hw * 0.38, top + 0.05, front - 0.1], PAL.bone, [Math.PI / 2, 0, 0], 6);
+    this.addLamps(k, hw * 0.38, top + 0.05, front - 0.04, hw * 0.4, top - 0.1, back - 0.02, false);
     k.box([T + 0.2, 0.55, 0.1], [0, hubY + 0.2, front + 0.25], PAL.steel, [0.55, 0, 0]);
     for (const s of [1, -1]) k.bar([s * T * 0.42, hubY + 0.2, front + 0.2], [s * T * 0.3, belly + 0.4, front - 0.4], 0.06, PAL.dark);
     // Turret ring, then the turret (slow to turn: the war band sets its turn rate).
     const tz = mid + 0.15;
     k.cyl(1.0, 0.2, [0, top + 0.12, tz], PAL.dark, [0, 0, 0], 12);
     this.addTurret([0, top + 0.2, tz], tankGun, color);
+  }
+
+  /** A pair of headlights at (±x, y, z) looking ahead onto the sand, a pair of tail lights at (±tx, ty, tz). */
+  private addLamps(k: Kit, x: number, y: number, z: number, tx: number, ty: number, tz: number, housing = true) {
+    for (const s of [1, -1]) {
+      if (housing) k.box([0.2, 0.14, 0.08], [s * x, y, z], PAL.bone);
+      this.lamps.push({ kind: LAMP_HEAD, p: [s * x, y, z + 0.06], d: [0, -0.04, 1], ground: true });
+      k.box([0.14, 0.08, 0.05], [s * tx, ty, tz], PAL.rust);
+      this.lamps.push({ kind: LAMP_TAIL, p: [s * tx, ty, tz - 0.04] });
+    }
   }
 
   /** A turret at `at` on the body: the gun look builds its yaw (housing) and pitch (gun) meshes in its own kit. */
@@ -487,6 +504,7 @@ export class CarBody {
   /** Burnt-out look: dark, wheels splayed (road wheels stay on their tracks), the guns slumped and still. */
   setWrecked(on: boolean) {
     this.wrecked = on;
+    this.root.userData.lampsOff = on;
     for (const m of this.meshes()) m.material = on ? BURNT : LIVE;
     this.wheels.forEach((w, i) => {
       if (on && !this.tracked) w.pivot.rotation.set(0, (i === 1 ? 0.3 : 0), w.side * (i === 2 ? 0.45 : i > 3 && i === this.wheels.length - 1 ? 0.3 : 0.18));
