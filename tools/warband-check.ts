@@ -12,7 +12,9 @@ import { Warband, WARBAND_DEFAULTS } from "../src/combat/warband";
 import type { Battlefield, Hittable } from "../src/game/battlefield";
 import type { MechUnit } from "../src/game/mechUnit";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD } from "../src/combat/infantry";
-import { columnKinds } from "../src/expedition/warColumns";
+import { columnKinds, WarColumns, COLUMN_DEFAULTS } from "../src/expedition/warColumns";
+import { WarBands } from "../src/expedition/humans";
+import { FACTION_DEFAULTS } from "../src/game/factions";
 
 // Repeatable: the war band's randomness (spawn spread, circling side, gun spread) from a seeded generator.
 let seed = 12345;
@@ -87,7 +89,7 @@ const footAfter = riders.count;
 let colTanks = 0, colTurret = 0, colBus = 0;
 for (let k = 0; k < 200; k++) {
   let q = k * 7 + 1;
-  const ks = columnKinds(3 + (k % 6), (k % 10) / 9, 0.5, () => { q = (q * 16807) % 2147483647; return q / 2147483647; }, 4);
+  const ks = columnKinds(3 + (k % 6), (k % 10) / 9, 0.5, () => { q = (q * 16807) % 2147483647; return q / 2147483647; });
   colTanks += ks.filter((x) => x === "tank").length; colTurret += ks.filter((x) => x === "turretTruck").length; colBus += ks.filter((x) => x === "partyBus").length;
 }
 // Kill the band: wrecks blow up, tumble and settle on the sand; then the next band comes.
@@ -99,7 +101,27 @@ for (const r of wb.raiders.filter((x) => !x.alive)) {
   if (!r.tumbling) settled++;
   if (r.sim.pos.y < field.height(r.sim.pos.x, r.sim.pos.z) - 0.05) below++;
 }
+// The convoy lab's columns (src/expedition/humans.ts): a column of 6 brought onto the field has its bus drop into the
+// shared swarm under the column's id; handed back to the map, its bus's bandits climb back on (off the swarm).
+const cols = new WarColumns({ ...COLUMN_DEFAULTS }, 5);
+const col = cols.place(150, 0, 6, 0, 0, 0.7);
+const bands = new WarBands({ ...WARBAND_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS, bandMechs: 0 }, bf, new THREE.Scene(), cols);
+const shared = new InfantrySwarm({ ...INFANTRY_DEFAULTS }, field, 9);
+bands.riders = shared;
+bands.bring(col);
+for (let i = 0; i < 60 * 40; i++) {
+  bands.update(dt, player, true, { x: 0, z: 0 });
+  shared.update(dt, { x: pelvis.x, y: pelvis.y, z: pelvis.z, radius: 3 }, () => {});
+}
+const colOnFoot = shared.count;
+for (let i = 0; i < 60 * 6; i++) bands.update(dt, player, false, { x: 0, z: 0 });
+const colAfter = shared.count;
+console.log(`convoy lab column ${col.id} (${col.kinds.join(", ")}): ${colOnFoot} bus bandits on foot, ${colAfter} after it was handed back (${bands.columnsLive} bands live)`);
+
 const problems: string[] = [];
+if (!col.kinds.includes("partyBus") || !col.kinds.includes("turretTruck")) problems.push(`a column of 6 at danger 0.7 has no bus or turret truck (${col.kinds.join(", ")})`);
+if (colOnFoot === 0) problems.push("a column's bus dropped nobody in the convoy lab glue");
+if (colAfter !== 0 || bands.columnsLive !== 0) problems.push(`a handed-back column left ${colAfter} bus bandits on the field`);
 if (nan) problems.push(`${nan} NaN positions`);
 if (flipped) problems.push(`${flipped} frames with a live vehicle past 60° of roll or pitch`);
 if (shots === 0) problems.push("nobody fired");

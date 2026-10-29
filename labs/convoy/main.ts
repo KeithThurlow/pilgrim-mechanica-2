@@ -380,11 +380,12 @@ function restart() {
       }
     }
   }
-  // ?warband: a war band column (4 vehicles) hunting the mech from a few hundred metres off.
+  // ?warband[=N]: a war band column (N vehicles, 6 by default: with a party bus and a turret truck at the back)
+  // hunting the mech from a few hundred metres off.
   if (params.has("warband")) {
     const m = sim.pos, ang = p.heading;
     const x = m.x + Math.sin(ang) * 260, z = m.z + Math.cos(ang) * 260;
-    loop.columns.place(x, z, 4, m.x, m.z, 0.5);
+    loop.columns.place(x, z, Math.max(1, Number(params.get("warband")) || 6), m.x, m.z, 0.7);
     carry.armed = true;
   }
   loop.exp.launch();

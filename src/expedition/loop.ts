@@ -170,6 +170,7 @@ export class ExpeditionLoop {
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.columns.danger = this.depth.danger;
     this.bands = new WarBands(v, bf, scene, this.columns);
+    this.bands.riders = this.banditCamps.sw;
     this.relations = new Relations(v);
     this.director = new FightDirector(v, this.relations);
     this.skirmish = new Skirmishes(v, this.relations, [
