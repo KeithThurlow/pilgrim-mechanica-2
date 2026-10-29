@@ -21,7 +21,7 @@ const pivot: Run = { name: "pivot", seconds: 15, cmd: (t) => [0, t < 8 ? 1 : -1]
 
 const dt = 1 / 120;
 let failed = false;
-const kinds: CarKind[] = ["technical", "gunTruck", "sixWheeler", "warRig", "tank"];
+const kinds: CarKind[] = ["technical", "gunTruck", "sixWheeler", "warRig", "tank", "turretTruck", "partyBus"];
 for (const kind of kinds) {
   const v = carValues(kind);
   for (const flat of [false, true]) {

@@ -271,8 +271,9 @@ export class CarBody {
     if (tt) {
       // Turret truck: the turret sits on a crib of timber beams chained down, outrigger legs kicked out to the sand
       // for when it fires, a grille of rebar over the cab glass and a spare tyre on the door.
-      const tz = bedZ + 0.1, cribTop = deck + 0.62;
-      for (let i = 0; i < 4; i++) {
+      // Five layers of beams lift the barrel clear of the cab roof.
+      const tz = bedZ + 0.1, cribTop = deck + 0.8;
+      for (let i = 0; i < 5; i++) {
         const y = deck + 0.12 + i * 0.15, along = i % 2 === 0;
         for (const s of [1, -1]) k.box(along ? [0.2, 0.15, 1.9] : [1.9, 0.15, 0.2], along ? [s * 0.75, y, tz] : [0, y, tz + s * 0.75], i % 2 ? PAL.sand : PAL.bone);
       }
