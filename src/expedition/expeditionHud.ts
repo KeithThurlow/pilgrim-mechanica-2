@@ -26,6 +26,8 @@ export interface HudFrame {
   bankShow: number;
   /** Distance from the road and its ring, while out. */
   depth?: { m: number; live: number; ring: string } | null;
+  /** The nearest extraction pad: distance, what calling it costs and who pays, and the call's state. */
+  pad?: { dist: number; quote: { fee: number; wait: number; ok: boolean; reason: string }; state: string; remaining: number; text: string } | null;
   /** Salvage heat and its thresholds (the meter shows while it's above zero). */
   heat?: { v: number; max: number; pack: number; raid: number };
   /** The active seeker and what it points at (or ""). */
@@ -107,6 +109,13 @@ export class ExpeditionHud {
     const w = Math.round(Math.max(0, Math.min(1, f.fuelShare)) * 100);
     lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
+    if (f.pad) {
+      const p = f.pad, col = p.state !== "idle" ? "#8fd0ff" : p.quote.reason === "locked" ? COL.dim : p.quote.ok ? COL.ok : COL.red;
+      const head = p.state === "waiting" ? `PICKUP IN ${clock(p.remaining)}` : p.state === "lifting" ? "LIFTING" : `PAD ${p.dist >= 1000 ? (p.dist / 1000).toFixed(1) + " km" : Math.round(p.dist) + " m"}`;
+      lines.push(`<div style="font-size:12px;color:${col};margin-top:4px"><span style="letter-spacing:0.08em">${head}</span>`
+        + (p.state === "idle" ? ` · ${p.quote.reason === "locked" ? "pickups not bought" : `${p.quote.fee} scrap · wait ${clock(p.quote.wait)}`}` : "")
+        + (p.state === "idle" && p.quote.reason !== "locked" ? `<div style="font-size:10px;color:${COL.dim}">${p.text}${p.quote.ok ? "" : " · NOT ENOUGH"}</div>` : "") + `</div>`);
+    }
     if (f.heat && f.heat.v > 0.005 && e.state === "out") {
       const h = f.heat, k = Math.min(1, h.v / h.max) * 100, col = h.v >= h.raid ? COL.red : h.v >= h.pack ? "#ff9a3c" : COL.amber;
       const mk = (t: number) => `<div style="position:absolute;left:${Math.min(100, (t / h.max) * 100)}%;top:-2px;bottom:-2px;width:1px;background:#ffffff66"></div>`;

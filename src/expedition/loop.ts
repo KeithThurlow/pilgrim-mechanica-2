@@ -30,7 +30,7 @@ import { SALVAGE_PARAMS } from "../pois/salvage";
 import { SALVAGE_FX_PARAMS } from "../pois/salvageDraw";
 import { Expedition, EXPEDITION_DEFAULTS, EXPEDITION_PARAMS, ON_SAND as SAND } from "./expedition";
 import { Fuel, FUEL_DEFAULTS, FUEL_PARAMS, fuelWarning } from "./fuel";
-import { returnPoint, craneTracks, RETURN_DEFAULTS, RETURN_PARAMS, type ReturnPoint, type CraneTrack } from "./returnPoint";
+import { returnPoint, craneTracks, clock, RETURN_DEFAULTS, RETURN_PARAMS, type ReturnPoint, type CraneTrack } from "./returnPoint";
 import { RadarZoom, RADAR_DEFAULTS, RADAR_PARAMS, linked, radarPicture, type RadarWorld } from "./radar";
 import { Seeker, SEEKER_DEFAULTS, SEEKER_PARAMS, seekNearest } from "./seekers";
 import { RadarDraw } from "./radarDraw";
@@ -39,7 +39,10 @@ import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
 import { SwarmCamps, SWARM_CAMP_DEFAULTS, SWARM_CAMP_PARAMS } from "./swarmCamps";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
-import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP } from "./depth";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, convoyDepth } from "./depth";
+import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
+import { PadDraw } from "./padDraw";
+import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS, UNLOCK_GROUP } from "./unlocks";
 import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type ThreatEvent } from "./threats";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
@@ -48,18 +51,19 @@ import type { LootValues } from "../items/generate";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
-  ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS,
+  ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS, ...PAD_DEFAULTS, ...UNLOCK_DEFAULTS,
   ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
-  ...DEPTH_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
+  ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
   ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
   { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
@@ -80,7 +84,7 @@ export interface LoopPilot {
 }
 /** Optional extras for the loop: the bandit bake (boxes if null). */
 export interface LoopOptions { vat?: BanditVatData | null }
-export interface LoopInput { eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
+export interface LoopInput { night?: number; eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -145,6 +149,15 @@ export class ExpeditionLoop {
   demoHold = false;
   demoAim: Aim | null = null;
   demoTrigger = false;
+  /** Extraction pads: where they are, the call in progress, what the convoy has bought, their drawing. */
+  readonly pads: PadField;
+  readonly padCall: PadCaller;
+  readonly unlocks = new Unlocks();
+  readonly padDraw: PadDraw;
+  private padList: Pad[] = [];
+  private padMech = new THREE.Vector3();
+  /** The nearest pad and what calling it would cost now (the HUD line), null when none is near. */
+  nearPad: { pad: Pad; dist: number; quote: Quote; on: boolean } | null = null;
   /** Called when the mech should be put back aboard (recovered, lost). */
   onHome: (() => void) | null = null;
 
@@ -158,6 +171,11 @@ export class ExpeditionLoop {
     const blocked = (x: number, z: number) => route.corridor(x, z) > 0.02;
     this.exp = new Expedition(v);
     this.fuel = new Fuel(v);
+    this.pads = new PadField(v);
+    this.pads.depth = (x, z) => this.depth.depth(x, z);
+    this.pads.blocked = (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150);
+    this.padCall = new PadCaller(v, this.exp);
+    this.padDraw = new PadDraw(field, scene);
     this.sites = new FieldSites(v, field, bf, scene, blocked);
     this.depth = new DepthField(route, v);
     this.camps = new CampField(v);
@@ -215,6 +233,7 @@ export class ExpeditionLoop {
   /** Start over where the lab put the convoy (POIs kept clear of the start; camps too). */
   restart(x: number, z: number) {
     this.camps.start = { x, z };
+    this.padCall.reset();
     this.bandits.start = { x, z };
     this.columns.start = { x, z };
     this.swarms.reset();
@@ -299,6 +318,9 @@ export class ExpeditionLoop {
       fuel.burn(dt, { speed, walkSpeed: v.walkSpeed, sprintSpeed: v.sprintSpeed, bounding: player.bound.on, stripping: !!this.sites.salvage.active });
     } else if (exp.state === "aboard" && !SAND.has(carry.state)) fuel.refill();
 
+    this.updatePads(dt, inp, foot ? pl! : null);
+    inp.mark?.("extraction pads");
+
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
     const ev = exp.update(dt, inp.qHeld && !inp.demo && player.alive, fuel.empty);
     if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
@@ -331,6 +353,7 @@ export class ExpeditionLoop {
       this.swarms.blobs(p.x, p.z, R, w.blobs);
       for (const b of this.banditCamps.blobs(p.x, p.z, R, this.humanBlobs)) w.blobs.push({ ...b, faction: 1 });
       w.unknown = this.camps.unknownNear(p.x, p.z, R);
+      w.pads = this.pads.near(p.x, p.z, R).map((q) => ({ id: q.id, x: q.x, z: q.z, fee: padQuote(v, true, convoyDepth(this.route, q.x, q.z, v.depthTrain) / 1000, 0, 0).fee, live: this.padCall.pad?.id === q.id }));
       w.route = [];
       const head = this.route.s, out = { x: 0, z: 0, heading: 0 };
       for (let s = -100; s <= v.convoyRadar * 1.6; s += 50) { this.route.ahead(head + s, out); w.route.push({ x: out.x, z: out.z }); }
@@ -363,8 +386,8 @@ export class ExpeditionLoop {
 
     // HUD.
     const s = this.sites.salvage;
-    let prompt = "";
-    if (exp.state === "out" && onSand) {
+    let prompt = this.padPrompt();
+    if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
@@ -373,7 +396,7 @@ export class ExpeditionLoop {
       sprint: exp.state === "out" && this.homeSprint.reachable
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive,
-      depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
+      pad: this.padHud(), depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
@@ -384,6 +407,69 @@ export class ExpeditionLoop {
       pilot: pa ? { x: pa.x, y: this.field.height(pa.x, pa.z) + 1.2, z: pa.z } : null,
     });
     inp.mark?.("loot");
+  }
+
+  /**
+   * Extraction pads: hold E on one to call the pickup (pads.ts has the rules); here the beacon's effects on the camps,
+   * packs and war bands, the messages, the sounds, and what the HUD and the drawing are told.
+   */
+  private updatePads(dt: number, inp: LoopInput, pilot: LoopPilot | null) {
+    const { v, player, exp, padCall: call } = this, p = player.sim.pelvis;
+    const who = pilot ?? { x: p.x, z: p.z, alive: player.alive };
+    const on = this.pads.nearest(who.x, who.z, v.padRadius);
+    const unlocked = this.unlocks.has("pickup");
+    call.update(dt, on, {
+      x: who.x, z: who.z, alive: who.alive, eHeld: inp.eHeld && !inp.demo, unlocked,
+      convoyM: convoyDepth(this.route, who.x, who.z, v.depthTrain),
+    });
+    for (const e of call.events) {
+      if (e.type === "called") {
+        this.hud.note(`Pickup called · ${e.quote.fee} scrap · hold the pad ${clock(e.quote.wait)}`, "#8fd0ff", 5);
+      } else if (e.type === "refused") {
+        this.hud.note(e.reason === "locked" ? "Extraction pickups are not bought yet (convoy terminal)" : `Not enough scrap for the fee${v.padBankTopUp >= 0.5 ? " (carried plus bank)" : " (carried scrap only)"}`, "#ffb09a", 4);
+      } else if (e.type === "cancelled") {
+        this.hud.note(`Call cancelled · ${e.refundCarried + e.refundBank} scrap refunded`, "#ffcf7a", 4);
+      } else if (e.type === "beacon") {
+        const { x, z } = e.pad;
+        this.swarms.noise(x, z, v.padWake); this.banditCamps.noise(x, z, v.padWake);
+        this.columns.noise(x, z, v.padPull);
+        const n = this.threats.pullNear(x, z, v.padPull);
+        if (e.first) { this.hud.note(`Beacon lit: it carries${n ? ` · ${n} pack${n > 1 ? "s" : ""} turning your way` : ""}`, "#ff9a7a", 4); this.sound.alarm(); }
+      } else if (e.type === "raid") {
+        this.heatAnswer("raid");
+      } else if (e.type === "extracted") {
+        this.sound.banked();
+      }
+    }
+    call.events.length = 0;
+    // The nearest pad, and the price of calling it now.
+    const q = this.pads.nearest(who.x, who.z, 3000);
+    this.nearPad = q ? { pad: q, dist: Math.hypot(q.x - who.x, q.z - who.z), quote: padQuote(v, unlocked, convoyDepth(this.route, q.x, q.z, v.depthTrain) / 1000, exp.scrapAtRisk, exp.bank.scrap), on: q === on } : null;
+    // Drawing.
+    this.padList = this.pads.near(who.x, who.z, 760, this.padList);
+    const mid = this.convoy.platforms[Math.floor(this.convoy.platforms.length / 2)];
+    this.padMech.set(who.x, this.field.height(who.x, who.z) + 4.4, who.z);
+    this.padDraw.update(dt, v, this.padList, inp.night ?? 0, call, this.padMech, mid);
+  }
+
+  /** The pickup prompt for the top of the screen ("" when there is nothing to say). */
+  padPrompt(): string {
+    const c = this.padCall, n = this.nearPad;
+    if (c.state === "waiting") return `Pickup in ${clock(c.remaining)} · stay on the pad · the beacon is loud`;
+    if (c.state === "lifting") return "Lifting off…";
+    if (!n || !n.on || this.exp.state !== "out") return "";
+    const q = n.quote;
+    if (c.hold > 0) return `Calling… ${Math.round(c.hold * 100)}%`;
+    if (q.reason === "locked") return "Extraction pad · pickups not bought yet (convoy terminal)";
+    const short = q.reason === "short" ? ` · NOT ENOUGH SCRAP${this.v.padBankTopUp >= 0.5 ? "" : " CARRIED"}` : "";
+    return `Hold E: call the pickup · ${quoteText(q)} · wait ${clock(q.wait)}${short}`;
+  }
+
+  /** The HUD column's pad line. */
+  private padHud() {
+    const n = this.nearPad;
+    if (!n || this.exp.state !== "out") return null;
+    return { dist: n.dist, quote: n.quote, state: this.padCall.state as CallState, remaining: this.padCall.remaining, text: quoteText(n.quote) };
   }
 
   /**

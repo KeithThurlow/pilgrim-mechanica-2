@@ -62,9 +62,11 @@ export interface RadarWorld {
   /** Moving danger (roaming packs, raids, a blast just now): heat on both scopes, seen through unknown areas too
    *  (the ground shakes; Keith 2026-10-26: show the danger on the radar as heat). */
   heat?: { id: string; x: number; z: number; guess: number; awake: boolean; faction?: number; fighting?: boolean }[];
+  /** Extraction pads (known to both scopes) with what a call costs from here (scrap), for the mech scope's label. */
+  pads?: { id: string; x: number; z: number; fee: number; live?: boolean }[];
 }
 
-export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean; faction?: number }
+export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot" | "pad"; tier: number; size: number; stripped?: boolean; faction?: number; label?: string }
 export interface Blob { id: string; x: number; z: number; r: number; heat: number; awake: boolean; faction: number; fighting?: boolean }
 
 export interface RadarPicture {
@@ -128,6 +130,11 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
   } else {
     for (const p of w.pois) if (near(p.x, p.z)) pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "poi", tier: p.tier, size: p.tier, stripped: p.stripped });
     for (const c of w.contacts) if (near(c.x, c.z)) pic.blips.push({ id: "r" + c.id, x: c.x - mx, z: c.z - mz, kind: "robot", tier: 0, size: c.kind === 1 ? 3 : c.kind === 2 ? 2 : 1, faction: c.faction ?? 0 });
+  }
+  // Extraction pads: the convoy's charts know them all (inside its coverage); the mech's scope shows the near ones with their price.
+  for (const p of w.pads ?? []) {
+    if (!near(p.x, p.z) || (mode === "convoy" && !covered(p.x, p.z))) continue;
+    pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "pad", tier: 0, size: 2, label: mode === "mech" ? String(p.fee) : undefined, stripped: p.live });
   }
   // Moving danger: sized to the scope (the blob sizes are for the convoy's); on the mech's scope, heat out to three
   // times its range glows on the rim the way it lies, fainter with distance.

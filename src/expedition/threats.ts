@@ -235,6 +235,18 @@ export class ThreatField {
     return best;
   }
 
+  /** A loud beacon at (x, z) (an extraction pad): every pack not yet fighting within r turns and hunts the spot. Returns how many. */
+  pullNear(x: number, z: number, r: number): number {
+    let n = 0;
+    for (const p of this.packs) {
+      if (p.state === "live" || p.busy || Math.hypot(p.x - x, p.z - z) > r) continue;
+      p.pulled = true; p.state = "hunt"; p.tx = x; p.tz = z;
+      p.speed = p.kind === "raid" ? this.v.raidSpeed : this.v.roamHuntSpeed;
+      n++;
+    }
+    return n;
+  }
+
   /** Salvage heat past its second threshold: a small raid aimed at the mech (the raid event, or null). */
   heatRaid(m: MechNow): ThreatEvent | null {
     const v = this.v, dg = m.danger ?? this.danger;

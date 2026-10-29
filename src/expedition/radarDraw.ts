@@ -5,7 +5,7 @@
 // home: on the rim when the return point is out of range (pulsing when fuel is short), a ring on it when in range.
 import type { RadarPicture, RadarValues } from "./radar";
 
-interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot"; tier: number; size: number; stripped?: boolean; faction?: number }
+interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot" | "pad"; tier: number; size: number; stripped?: boolean; faction?: number; label?: string }
 /** Heat and contact colours per faction (0 robots: orange-red as before; 1 raiders: magenta). */
 const FACTION_RGB = [[255, 90, 60], [255, 70, 170]] as const;
 
@@ -76,10 +76,10 @@ export class RadarDraw {
       const p = this.painted.get(b.id);
       if (!p) {
         // POIs (the convoy's charts) show at once, faint; robots wait for the sweep.
-        this.painted.set(b.id, { x: b.x, z: b.z, glow: b.kind === "poi" ? 0.01 : 0, kind: b.kind, tier: b.tier, size: b.size, stripped: b.stripped, faction: b.faction });
+        this.painted.set(b.id, { x: b.x, z: b.z, glow: b.kind === "robot" ? 0 : 0.01, kind: b.kind, tier: b.tier, size: b.size, stripped: b.stripped, faction: b.faction, label: b.label });
       }
       const q = this.painted.get(b.id)!;
-      q.stripped = b.stripped;
+      q.stripped = b.stripped; q.label = b.label;
       if (passed(a)) { q.x = b.x; q.z = b.z; q.glow = 1; }
     }
     const fade = dt / Math.max(0.05, v.radarSweep * v.radarGlow);
@@ -192,6 +192,15 @@ export class RadarDraw {
         const rgb = FACTION_RGB[p.faction ?? 0] ?? FACTION_RGB[0];
         ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${Math.min(1, p.glow * 1.2)})`;
         ctx.beginPath(); ctx.arc(x, y, 1.6 + p.size * 0.9, 0, TAU); ctx.fill();
+      } else if (p.kind === "pad") {
+        // An extraction pad: a pale blue ring with a dot (a pulsing ring while a call is on it), the price beside it up close.
+        ctx.globalAlpha = 0.55 + 0.45 * Math.max(0, p.glow);
+        ctx.strokeStyle = "#8fd0ff"; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(x, y, 4.5, 0, TAU); ctx.stroke();
+        ctx.fillStyle = "#8fd0ff"; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, TAU); ctx.fill();
+        if (p.stripped) { ctx.strokeStyle = "#ffffff"; ctx.beginPath(); ctx.arc(x, y, 7 + 2 * Math.sin(this.time * 6), 0, TAU); ctx.stroke(); }
+        if (p.label) { ctx.font = "600 10px system-ui, sans-serif"; ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(p.label, x + 8, y + 4); ctx.fillStyle = "#cfeaff"; ctx.fillText(p.label, x + 7, y + 3); }
+        ctx.globalAlpha = 1;
       } else {
         const a = 0.4 + 0.6 * Math.max(0, p.glow), s = p.tier >= 2 ? 5 : 3.5;
         ctx.globalAlpha = a;
