@@ -84,6 +84,7 @@ import { Walkable } from "../../src/world/walkable";
 import { ConvoyWalkways, WALKWAY_DEFAULTS, WALKWAY_PARAMS, platformFrame, deckPlane } from "../../src/convoy/walkways";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src/pilot/onFoot";
 import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
+import { convoyShop } from "../../src/ui/convoyShop";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag, addTo } from "../../src/items/cargo";
@@ -255,13 +256,25 @@ const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "none
 const kitFlagged = pickFromParams(kit, params);
 const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
 if (kitFlagged) bayState.loadout = loadoutFor(kit);
+// What the convoy has banked and bought comes back from the save; ?unlock=all buys everything, ?bank=N sets the scrap.
+loop.unlocks.load(bayState.unlocks);
+loop.exp.bank.scrap = bayState.scrap ?? 0;
+if (params.get("unlock") === "all") loop.unlocks.unlockAll();
+if (params.has("bank")) loop.exp.bank.scrap = Number(params.get("bank")) || 0;
+let savedScrap = loop.exp.bank.scrap;
+function persist() {
+  bayState.scrap = Math.floor(loop.exp.bank.scrap);
+  bayState.unlocks = { ...loop.unlocks.levels };
+  savedScrap = loop.exp.bank.scrap;
+  saveBay(BAY_KEY, bayState);
+}
 function refit() {
   const r = resolve(bayState.loadout, V);
   bayState.cargo.capacity = r.cargoCapacity;
   applyLoadout(player, r);
   // The sensor's seekers (its radar range already went into V.mechRadar through the loadout's values).
   loop.seeker.setModes(r.seekers);
-  saveBay(BAY_KEY, bayState);
+  persist();
 }
 refit();
 // The pickup card compares with what is fitted.
@@ -271,8 +284,24 @@ addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.pr
 // ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
 for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeker.mode !== params.get("seek"); i++) loop.seeker.cycle();
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
+// The convoy's unlock shop: beside the bay screen at the terminal (U shows it on its own). Radar range and crane speed
+// scale the sliders' values (kept as `base`, so a slider moved by hand is still the base).
+const shop = convoyShop({ unlocks: loop.unlocks, tuning: V, bank: loop.exp.bank, onChange: () => { applyUnlocks(); persist(); } });
+addEventListener("keydown", (e) => { if (e.code === "KeyU" && !e.repeat) shop.toggle(); });
+const UNLOCK_RADAR_KEYS = ["convoyRadar"] as const;
+const UNLOCK_CRANE_KEYS = ["craneSlew", "craneSlewAccel", "craneLuff", "craneLuffAccel", "craneHoist", "craneHoistAccel"] as const;
+const unlockBase: Record<string, number> = {};
+let appliedRadar = 1, appliedCrane = 1;
+function applyUnlocks() {
+  const rm = loop.unlocks.mul(V, "radar"), cm = loop.unlocks.mul(V, "crane");
+  const Vk = V as unknown as Record<string, number>;
+  for (const k of UNLOCK_RADAR_KEYS) { unlockBase[k] ??= Vk[k] / appliedRadar; Vk[k] = unlockBase[k] * rm; }
+  for (const k of UNLOCK_CRANE_KEYS) { unlockBase[k] ??= Vk[k] / appliedCrane; Vk[k] = unlockBase[k] * cm; }
+  appliedRadar = rm; appliedCrane = cm;
+  panel?.refresh();
+}
 const terminals: ReturnType<typeof ways.terminals> = [];
-let auto = !params.has("manual") && !params.has("onfoot");
+let auto = !params.has("manual") && !params.has("onfoot") && !params.has("pad");
 // Left click fires the left side's weapon, right click the right side's (both can be held); keys 1-3 the shoulder
 // weapons; only while driving the mech (F is hold to hop out and back in, Keith 2026-10-26).
 const buttons = new MouseButtons(canvas, () => { auto = false; });
@@ -351,6 +380,17 @@ function restart() {
     player.reset(w.x, w.z, p.heading + Math.PI / 2);
     carry.armed = true;
   }
+  // ?pad[=metres]: out on the sand that close to the nearest extraction pad (pickups bought), loot at risk.
+  if (params.has("pad")) {
+    const pd = loop.pads.nearest(p.x, p.z, 6000);
+    if (pd) {
+      const near = Number(params.get("pad")) || 60, d = Math.hypot(pd.x - p.x, pd.z - p.z) || 1;
+      const px = pd.x + ((p.x - pd.x) / d) * near, pz = pd.z + ((p.z - pd.z) / d) * near;
+      player.reset(px, pz, Math.atan2(pd.x - px, pd.z - pz));
+      carry.armed = true;
+      if (!loop.unlocks.has("pickup")) { loop.unlocks.levels.pickup = 1; loop.unlocks.rev++; }
+    }
+  }
   // ?nearcamp: out on the sand just outside the wake range of the nearest swarm camp, facing it.
   if (params.has("nearcamp")) {
     const c = loop.camps.campsNear(p.x, p.z, 2500).filter((q) => route.corridor(q.x, q.z) <= 0)
@@ -388,7 +428,8 @@ function restart() {
     carry.armed = true;
   }
   loop.exp.launch();
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
   for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
@@ -397,7 +438,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -461,6 +502,9 @@ const panel = tweakPanel({
   ],
   onFocus: () => { if (!picking) selector?.clear(); },
   onChange: (k) => {
+    // A slider the unlocks scale: what was set is the new base (the shown value stays base × the unlock's step).
+    if ((UNLOCK_RADAR_KEYS as readonly string[]).includes(k)) unlockBase[k] = (V as unknown as Record<string, number>)[k] / appliedRadar;
+    if ((UNLOCK_CRANE_KEYS as readonly string[]).includes(k)) unlockBase[k] = (V as unknown as Record<string, number>)[k] / appliedCrane;
     if (shapeKeys.has(k)) { field.update(); route.wake.clear(); streamer.rebuildAll(); }
     // The road reindexes itself (and works its berms out again) on its next step; the chunks need building again.
     if (roadKeys.has(k)) { route.wake.clear(); streamer.rebuildAll(); }
@@ -469,12 +513,14 @@ const panel = tweakPanel({
     if (CAMP_PARAMS.some((p) => p.key === k) || BANDIT_PARAMS.some((p) => p.key === k) || COLUMN_PARAMS.some((p) => p.key === k) || FACTION_PARAMS.some((p) => p.key === k)) loop.rebuild("camps");
   },
 });
+applyUnlocks();
 const regions = body.regions();
 selector = new Selector(app, {
   items: [
     { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
     { topic: "pilot", label: "Bay terminal", objects: () => bodies.flatMap((b) => b.terminalMeshes()) },
     { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
+    { topic: "extraction", label: "Extraction pads", objects: () => loop.padDraw.objects() },
     { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },
     { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
@@ -636,6 +682,8 @@ app.onTick((rawDt) => {
     held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
   }
   // Weapons work only out on the sand (not on the deck, hanging or parked).
+  // Clamped in the pickup's cradle: no driving, no guns.
+  if (loop.padCall.clamped) { cmd = { x: 0, z: 0, sprint: false }; trigger = false; }
   if (sel.active || (carry.state !== "walking" && carry.state !== "inRange")) { trigger = false; held = [false, false, false, false]; }
   player.keys = held;
   player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
@@ -767,13 +815,16 @@ app.onTick((rawDt) => {
   app.hud.set("weapons", arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
   loop.update(dt, {
-    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st), canvas,
+    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
     pilot: foot.mount.onFoot ? {
       onFoot: true, alive: foot.sim.alive, x: fp.x, z: fp.z, prey: (x, z) => foot.quarry.pick(x, z), notice: V.pilotNotice,
       reach: V.pilotReach, rate: V.pilotStripRate, noise: V.pilotStripNoise,
     } : undefined,
   });
-  app.hud.set("expedition", loop.line);
+  app.hud.set("expedition", loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
+  // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
+  shop.sync(bay.isOpen);
+  if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }
   // Banked items go into the bay stash; ?drop drops its items ahead of the mech while out.
   for (; bankedSeen < loop.exp.bank.items.length; bankedSeen++) { addTo(bayState.stash, loop.exp.bank.items[bankedSeen]); saveBay(BAY_KEY, bayState); }
   if (itemDrops.length && loop.exp.state === "out" && (dropT -= dt) <= 0) {

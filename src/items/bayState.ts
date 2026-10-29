@@ -14,6 +14,9 @@ export interface BayState {
   cargo: Bag;
   /** Next loot seed. */
   seed: number;
+  /** The convoy's bank scrap and what it has bought (src/expedition/unlocks.ts); optional, so older saves read fine. */
+  scrap?: number;
+  unlocks?: Record<string, number>;
   /** What a save migration did (shown once at the top of the bay). */
   notes?: string[];
 }
@@ -26,7 +29,7 @@ export function itemName(it: Item) {
 export const SAVE_VERSION = 2;
 
 /** The bay as JSON-safe data (items are plain data). */
-export const bayToJson = (st: BayState) => ({ v: SAVE_VERSION, loadout: st.loadout, stash: st.stash.items, cargo: st.cargo.items, seed: st.seed });
+export const bayToJson = (st: BayState) => ({ v: SAVE_VERSION, loadout: st.loadout, stash: st.stash.items, cargo: st.cargo.items, seed: st.seed, scrap: st.scrap, unlocks: st.unlocks });
 
 /**
  * A saved bay from its JSON, or null if it isn't one. Version 1 (before the mounts, Keith 2026-10-26) is migrated,
@@ -36,7 +39,7 @@ export const bayToJson = (st: BayState) => ({ v: SAVE_VERSION, loadout: st.loado
  * side without an arm, a back weapon with a pack fitted) goes to the stash. `notes` say what moved.
  */
 export function readBay(raw: unknown): BayState | null {
-  const r = raw as { v?: number; loadout?: Record<string, Item | null>; stash?: Item[]; cargo?: Item[]; seed?: number } | null;
+  const r = raw as { v?: number; loadout?: Record<string, Item | null>; stash?: Item[]; cargo?: Item[]; seed?: number; scrap?: number; unlocks?: Record<string, number> } | null;
   if (!r || typeof r !== "object" || (r.v !== 1 && r.v !== SAVE_VERSION)) return null;
   const notes: string[] = [];
   let dropped = 0;
@@ -86,5 +89,5 @@ export function readBay(raw: unknown): BayState | null {
   stash.items.push(...off);
   if (off.length) notes.push(`To the stash (the mount rules don't take them where they were): ${off.map(itemName).join(", ")}.`);
   if (dropped) notes.push(`${dropped} item${dropped > 1 ? "s" : ""} of a kind that no longer exists ${dropped > 1 ? "were" : "was"} dropped.`);
-  return { loadout: lo, stash, cargo, seed: Number(r.seed) || 1, notes: notes.length ? notes : undefined };
+  return { loadout: lo, stash, cargo, seed: Number(r.seed) || 1, scrap: Number(r.scrap) > 0 ? Math.floor(Number(r.scrap)) : 0, unlocks: r.unlocks && typeof r.unlocks === "object" ? r.unlocks : undefined, notes: notes.length ? notes : undefined };
 }
