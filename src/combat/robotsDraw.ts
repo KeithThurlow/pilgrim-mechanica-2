@@ -17,6 +17,7 @@ import {
   smallBodyGeometry, midBodyGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
   YELLOW, YELLOW_DIRTY, GREY, DARK, BLACK, CHROME,
 } from "./robotShapes";
+import { LAMP_ROBOT, type LampEmit } from "../world/lamps";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
 const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5;
@@ -83,6 +84,9 @@ export class RobotsDraw {
   private bx = new THREE.Vector3(); private by = new THREE.Vector3(); private bz = new THREE.Vector3();
   private ax = new THREE.Vector3(1, 0, 0); private ay = new THREE.Vector3(0, 1, 0); private az = new THREE.Vector3(0, 0, 1);
   private hips = new Float32Array(SMALL_LEGS * 3); private feet = new Float32Array(SMALL_LEGS * 3);
+  /** Red eye lamps this frame (Keith 2026-10-29): x, y, z, heading, seed, flags (1 locked on, +2 big) per robot. */
+  private eyes = new Float32Array(ROBOT_MAX * 6);
+  private eyeN = 0;
   private h3: V3 = { x: 0, y: 0, z: 0 }; private k3: V3 = { x: 0, y: 0, z: 0 }; private t3: V3 = { x: 0, y: 0, z: 0 }; private f3: V3 = { x: 0, y: 0, z: 0 };
 
   constructor(private swarm: RobotSwarm) {
@@ -102,11 +106,33 @@ export class RobotsDraw {
     this.pipes = pool(pipeGeometry(), ROBOT_MAX * 10);
     this.knuckles = pool(knuckleGeometry(), ROBOT_MAX * 8);
     this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), ROBOT_MAX * 3, lamp, false);
+    // After dark every working robot sweeps a red beam where it looks; the night lights (src/world/nightLights.ts)
+    // find this on the group and draw the beams (faked, a real red light on the nearest few).
+    this.group.userData.lampSource = (emit: LampEmit, time: number, v: { readonly [k: string]: number }) => this.emitEyes(emit, time, v);
+  }
+
+  private emitEyes(emit: LampEmit, time: number, v: { readonly [k: string]: number }) {
+    const e = this.eyes, sweep = ((v.robotSweep ?? 35) * Math.PI) / 180, w = Math.PI * 2 * (v.robotSweepRate ?? 0.3), reach = v.robotReach ?? 9;
+    for (let j = 0; j < this.eyeN; j++) {
+      const o = j * 6, f = e[o + 5], locked = (f & 1) !== 0, big = (f & 2) !== 0;
+      const yaw = e[o + 3] + (locked ? 0 : sweep * Math.sin(w * time + e[o + 4] * 40));
+      emit(LAMP_ROBOT, e[o], e[o + 1], e[o + 2], Math.sin(yaw), 0, Math.cos(yaw), true, reach * (big ? 1.7 : 1), 1);
+    }
+  }
+
+  /** Note a robot's eye at body-frame point (x, y, z) of frame m. */
+  private eye(i: number, m: THREE.Matrix4, x: number, y: number, z: number, locked: boolean, big: boolean) {
+    if (this.eyeN >= ROBOT_MAX) return;
+    this.tmp.set(x, y, z).applyMatrix4(m);
+    const o = this.eyeN++ * 6, e = this.eyes;
+    e[o] = this.tmp.x; e[o + 1] = this.tmp.y; e[o + 2] = this.tmp.z;
+    e[o + 3] = this.swarm.heading[i]; e[o + 4] = this.swarm.seed[i]; e[o + 5] = (locked ? 1 : 0) + (big ? 2 : 0);
   }
 
   update(dt: number): void {
     const sw = this.swarm;
     this.time += dt;
+    this.eyeN = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
@@ -168,6 +194,7 @@ export class RobotsDraw {
     if (dead) c.multiplyScalar(0.4); else if (st === DOWN) c.multiplyScalar(0.85);
     this.smallBodies.put(m, c);
     this.lamp(m, 0, HUB_H * 0.2, HUB_R * 0.97, 0.07, 0.045, 0.04, dead ? 0x201810 : st === FIRE ? ALARM : LAMP);
+    if (standing) this.eye(i, m, 0, HUB_H * 0.2, HUB_R * 0.97 + 0.03, st === FIRE, false);
 
     // Legs: thin pipes, knees up.
     const L1 = S_THIGH * S, L2 = S_SHIN * S;
@@ -230,6 +257,7 @@ export class RobotsDraw {
     // Lamps: two on the cab, a beacon on its mast (red and flashing while it winds up the saw).
     const cabY = MID_BODY_H * 0.4 + 0.06, lampC = dead ? 0x201810 : alarm ? ALARM : LAMP;
     this.lamp(m, 0.12, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
+    if (st === RUN || st === FIRE || st === CUT) this.eye(i, m, 0.16, cabY, 0.34, st !== RUN, false);
     this.lamp(m, 0.2, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
     const blink = Math.sin(this.time * 6 + sw.seed[i] * 20) > 0;
     this.lamp(m, 0.16, MID_BODY_H * 0.4 + 0.24, 0.2, 0.05, 0.05, 0.05, dead ? 0x201810 : alarm ? ALARM : blink ? AMBER : 0x6a3a08);
@@ -274,6 +302,7 @@ export class RobotsDraw {
     // Lamps: two work lights on the cab, one under the gun, a turning beacon.
     const cabY = BIG_BODY_H * 0.3 + 0.12, off = dead ? 0x201810 : 0;
     this.lamp(m, 0.14, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
+    if (st === RUN || st === FIRE) this.eye(i, m, 0.2, cabY, 0.4, st === FIRE, true);
     this.lamp(m, 0.26, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
     const flash = tell && Math.sin(this.time * 24) > -0.2;
     this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (flash ? ALARM : LAMP));

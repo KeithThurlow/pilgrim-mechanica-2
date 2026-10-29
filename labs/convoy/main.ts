@@ -178,6 +178,7 @@ Object.assign(V, LEG_TYPES[mechLegType()].values, body.legValues());
 Object.assign(DEFAULTS, LEG_TYPES[mechLegType()].values, body.legValues());
 scene.add(body.root);
 look.lights.track(body.root);
+look.lights.ground = field; look.lights.camera = camera;
 // Night lights: the bay terminals' lamp masts light the decks.
 look.lights.addLamps(() => bodies.flatMap((b) => b.terminalMeshes().filter((m) => (m as THREE.Mesh).geometry?.type === "SphereGeometry")));
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
@@ -520,6 +521,7 @@ selector = new Selector(app, {
   items: [
     { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
     { topic: "pilot", label: "Bay terminal", objects: () => bodies.flatMap((b) => b.terminalMeshes()) },
+    { topic: "light", label: "Night lamps", objects: () => look.lights.selectables() },
     { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
     { topic: "extraction", label: "Extraction pads", objects: () => loop.padDraw.objects() },
     { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },

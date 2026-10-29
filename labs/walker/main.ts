@@ -82,6 +82,7 @@ Object.assign(V, legType.values, rampart?.legValues() ?? {});
 Object.assign(DEFAULTS, legType.values, rampart?.legValues() ?? {});
 scene.add(rampart ? rampart.root : standIn!.root);
 if (rampart) look.lights.track(rampart.root);
+look.lights.ground = field; look.lights.camera = camera;
 // ?sensor=<base id>|none: the sensor on the hull (default the Rampart visor head; e.g. sensor-dish for a cluster).
 { const id = params.get("sensor"); if (rampart && id) rampart.setSensor(id === "none" ? null : id); }
 // Steel to shoot at near the start: rounds spark off these and tear up the sand everywhere else.
@@ -206,6 +207,7 @@ const r = regions as Partial<ReturnType<RampartBody["regions"]>>;
 selector = new Selector(app, {
   items: [
     { topic: "legs", label: "Legs", objects: () => regions.legs },
+    { topic: "light", label: "Night lamps", objects: () => look.lights.selectables() },
     { topic: "hull", label: "Hull", objects: () => regions.hull },
     ...(r.gunLeft ? [{ topic: "guns", label: "Left minigun", objects: () => r.gunLeft! }] : []),
     ...(r.gunRight ? [{ topic: "guns", label: "Right minigun", objects: () => r.gunRight! }] : []),

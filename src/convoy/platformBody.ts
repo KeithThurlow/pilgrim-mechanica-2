@@ -19,6 +19,7 @@ import { landingEnds, landingLayout, stairBox, LANDING_HALF, CAB_ROOF, type Trai
 import { WHEEL_X_IN, WHEEL_Z } from "./trail";
 import { CarBody } from "../vehicles/carBody";
 import { CarSim, carValues } from "../vehicles/car";
+import { LAMP_HEAD, LAMP_FLOOD, LAMP_RUNNING, LAMP_CAB, type LampSpot } from "../world/lamps";
 
 const MAT = KIT_MAT;
 /** Deck markings get their own material so hold-V can light them apart from the platform. */
@@ -33,7 +34,7 @@ export const FRIENDLY = 0x5f7f78;
 const FLAT = { height: () => 0, normal: (_x: number, _z: number, out: number[] = [0, 1, 0]) => { out[0] = 0; out[1] = 1; out[2] = 0; return out; } };
 
 interface Wheel { mesh: THREE.Mesh; r: number }
-type BodyValues = TrackValues & PipeValues & TrainValues;
+type BodyValues = TrackValues & PipeValues & TrainValues & { runningGap: number };
 
 export class PlatformBody {
   /** Rides the platform (local frame: x left, y up, z forward). */
@@ -51,10 +52,13 @@ export class PlatformBody {
   private m = new THREE.Matrix4();
   /** Pipe runs on this platform (for the HUD). */
   pipeRuns = 0;
+  /** Lamps lit after dark (src/world/nightLights.ts): cab headlights and window, running lights, the bay's floods. */
+  readonly lamps: LampSpot[] = [];
 
   constructor(readonly platform: Platform, private carry: (CraneValues & DeckValues) | null, private v: BodyValues, private all: Platform[]) {
     this.root.matrixAutoUpdate = false;
     this.root.name = platform.spec.name;
+    this.root.userData.lamps = this.lamps;
   }
 
   get index() { return this.all.indexOf(this.platform); }
@@ -72,7 +76,7 @@ export class PlatformBody {
     const p = this.platform, c = this.carry, v = this.v;
     const ends = landingEnds(this.all)[this.index];
     const key = [p.deck, v.trackPods, v.trackTop, v.trackHeight, v.trackWidth, v.trackPitch, v.trackPodGap, v.pipeDensity, v.pipeSeed, v.pipeScale,
-      v.bridgeCount, v.bridgeRise, ends.nose, ends.tail,
+      v.bridgeCount, v.bridgeRise, ends.nose, ends.tail, v.runningGap,
       ...(c ? [c.craneSetDown, c.craneMount, c.deckParkX, c.deckParkZ, c.deckLaunchX, c.deckPadRadius] : [])].join("|");
     if (key !== this.built) { this.build(ends); this.built = key; }
     this.m.makeBasis(new THREE.Vector3(p.left.x, p.left.y, p.left.z), new THREE.Vector3(p.up.x, p.up.y, p.up.z), new THREE.Vector3(p.fwd.x, p.fwd.y, p.fwd.z));
@@ -97,6 +101,7 @@ export class PlatformBody {
     this.cars = [];
     for (const m of this.screens) { this.root.remove(m); m.geometry.dispose(); }
     this.screens = [];
+    this.lamps.length = 0;
   }
 
   /** The bay terminal (screen, lamp, console) for hold-V. */
@@ -180,6 +185,22 @@ export class PlatformBody {
     const cab = items[0];
     k.box([cab.size[0] - 0.4, 0.7, 0.1], [0, D + 1.7, cab.at[2] + cab.size[2] / 2 + 0.02], PAL.glass);
     k.box([cab.size[0] + 0.4, 0.2, cab.size[2] + 0.4], [0, D + 2.5, cab.at[2]], PAL.dark);
+    // After dark (Keith 2026-10-29): headlights on the cab's nose, the cab window lit, running lights down both sides.
+    const cabFront = cab.at[2] + cab.size[2] / 2;
+    for (const sx of [1, -1]) {
+      k.box([0.5, 0.3, 0.12], [sx * (cab.size[0] / 2 - 0.45), D + 0.9, cabFront + 0.06], PAL.bone);
+      this.lamps.push({ kind: LAMP_HEAD, p: [sx * (cab.size[0] / 2 - 0.45), D + 0.9, cabFront + 0.16], d: [0, -0.05, 1], len: 22, ground: true });
+    }
+    this.lamps.push({ kind: LAMP_CAB, p: [0, D + 1.7, cabFront + 0.15] });
+    const gap = Math.max(1.5, v.runningGap), nRun = Math.max(1, Math.floor((L - 2) / gap));
+    for (let i = 0; i <= nRun; i++) {
+      const z = -L / 2 + 1 + ((L - 2) * i) / nRun;
+      for (const sx of [1, -1]) {
+        const x = sx * (halfWidthAt(ol, z) + 0.02);
+        k.box([0.08, 0.1, 0.18], [x, D - 0.2, z], PAL.orange);
+        this.lamps.push({ kind: LAMP_RUNNING, p: [x + sx * 0.06, D - 0.2, z] });
+      }
+    }
     if (kind === "housing") {
       for (let i = 0; i < 3; i++) k.box([0.06, 0.6, 0.9], [-(W / 2 - 0.39), D + 1.7, -5.5 + i * 1.5], PAL.glass);
       k.box([5, 0.08, 4], [0, D + 3, -L / 2 + 4], PAL.orange);
@@ -203,6 +224,7 @@ export class PlatformBody {
       const body = new CarBody(slot.kind, FRIENDLY), sim = new CarSim(carValues(slot.kind), FLAT);
       sim.reset(0, 0, 0);
       body.update(sim, 0, 0);
+      body.root.userData.lampsOff = true; // tied down: lights off
       body.root.position.set(slot.x, D + sim.pos.y, slot.z);
       body.root.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), slot.heading);
       this.root.add(body.root);
@@ -281,6 +303,23 @@ export class PlatformBody {
       for (const sx of [1, -1]) for (const sz of [1, -1]) mk.box([0.25, 4.6, 0.25], [sx * 0.6, D + 2.3, tz + sz * 1.7], PAL.steel);
       for (const y of [1.6, 3.2]) mk.box([1.6, 0.15, 3.8], [0, D + y, tz], PAL.ochre);
       mk.box([0.6, 0.6, 0.6], [0, D + 4.9, tz + 1.6], PAL.bone);
+      // Floods: the tower's light on each parking bay; a post at each rail gap lighting its launch pad and the sand
+      // below where the crane sets a mech down.
+      const flood = (from: [number, number, number], to: [number, number, number], ground = false) => {
+        const d: [number, number, number] = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+        const dl = Math.hypot(d[0], d[1], d[2]), len = ground ? Math.hypot(d[0], d[2]) : dl;
+        this.lamps.push({ kind: LAMP_FLOOD, p: from, d: [d[0] / dl, d[1] / dl, d[2] / dl], len, ground });
+      };
+      for (const s of lay.spots) {
+        if (s.kind === "park") flood([Math.sign(s.x || 1) * 0.35, D + 4.9, tz + 1.6], [s.x, D, s.z]);
+        if (s.kind === "launch") {
+          const sx = s.side ?? Math.sign(s.x || 1), px = sx * (W / 2 - 0.3), pz = s.z + 4.6;
+          mk.box([0.15, 4.2, 0.15], [px, D + 2.1, pz], PAL.steel);
+          mk.box([0.5, 0.35, 0.4], [px, D + 4.2, pz - 0.15], PAL.bone);
+          flood([px, D + 4.2, pz - 0.35], [s.x, D, s.z]);
+          flood([px + sx * 0.2, D + 4.2, pz - 0.35], [px + sx * 7, D - 3, s.z], true);
+        }
+      }
       // The bay terminal: a console on a pedestal, its screen tipped back toward whoever walks up from aft, a lamp mast.
       const t = terminalSpot(p, this.carry), f = t.facing;
       mk.box([0.5, 1.05, 0.4], [t.x, D + 0.52, t.z], PAL.teal);
