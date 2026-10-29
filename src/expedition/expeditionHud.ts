@@ -126,12 +126,12 @@ export class ExpeditionHud {
     if (e.last && e.last !== this.lastEnd) {
       this.lastEnd = e.last;
       const r = e.last, what = `${r.scrap} scrap${r.items ? ` and ${r.items} item${r.items > 1 ? "s" : ""}` : ""}`;
-      const text = r.reason === "banked" ? `Banked ${what}` : r.reason === "destroyed" ? `Mech destroyed: ${what} lost` : r.reason === "pilot" ? `Pilot killed: ${what} lost`
+      const text = r.reason === "banked" ? `Banked ${what}` : r.reason === "extracted" ? `Extracted: banked ${what}` : r.reason === "destroyed" ? `Mech destroyed: ${what} lost` : r.reason === "pilot" ? `Pilot killed: ${what} lost`
         : r.reason === "fuel" ? `Out of fuel: recovered, ${what} lost` : `Recovered: ${what} lost`;
       this.noteEl.textContent = `${text} · ${clock(r.duration)} out`;
-      this.noteEl.style.color = r.reason === "banked" ? "#bdf0c8" : "#ffb09a";
+      this.noteEl.style.color = r.reason === "banked" || r.reason === "extracted" ? "#bdf0c8" : "#ffb09a";
       this.noteT = 4;
-      this.fadeText.textContent = r.reason === "destroyed" ? "Mech lost · recovering the pilot" : r.reason === "pilot" ? "Pilot killed · the convoy recovers the mech" : r.reason === "fuel" ? "Out of fuel · recovery" : "Recovery";
+      this.fadeText.textContent = r.reason === "extracted" ? "Extraction · flying home" : r.reason === "destroyed" ? "Mech lost · recovering the pilot" : r.reason === "pilot" ? "Pilot killed · the convoy recovers the mech" : r.reason === "fuel" ? "Out of fuel · recovery" : "Recovery";
     }
     this.noteT = Math.max(0, this.noteT - dt);
     this.noteEl.style.opacity = String(Math.min(1, this.noteT));

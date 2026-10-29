@@ -85,7 +85,7 @@ export class LootHud {
         this.bankBefore = ev.scrapBefore; this.bankShown = ev.scrapBefore;
         this.bankScrap = ev.lines.reduce((n, l) => n + (l.kind === "scrap" ? l.amount : 0), 0);
         this.bankItems = ev.lines.filter((l) => l.kind === "item");
-      } else {
+      } else if (ev.type === "lost") {
         this.mode = "lost"; this.t = 0;
         this.lines = ev.lines.map((loot) => ({ loot, age: 0 }));
         this.sound?.lost();

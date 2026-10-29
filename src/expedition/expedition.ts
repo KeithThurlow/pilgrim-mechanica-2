@@ -47,7 +47,7 @@ export type ExpEvent =
 export const ON_SAND = new Set(["walking", "inRange", "pickup", "falling", "landing"]);
 
 export type ExpeditionState = "aboard" | "out" | "recovering" | "lost";
-export type EndReason = "banked" | "recalled" | "fuel" | "destroyed" | "pilot";
+export type EndReason = "banked" | "recalled" | "fuel" | "destroyed" | "pilot" | "extracted";
 
 export interface RunResult {
   reason: EndReason;
@@ -78,7 +78,7 @@ export class Expedition {
   /** Expedition clock (s), for "banked n s ago". */
   clock = 0;
   /** Runs ended per reason. */
-  readonly counts: Record<EndReason, number> = { banked: 0, recalled: 0, fuel: 0, destroyed: 0, pilot: 0 };
+  readonly counts: Record<EndReason, number> = { banked: 0, recalled: 0, fuel: 0, destroyed: 0, pilot: 0, extracted: 0 };
   /** Fade over the screen 0..1 (recovering, lost). */
   fade = 0;
   /** What happened since the last drain (see ExpEvent). */
@@ -125,6 +125,34 @@ export class Expedition {
     this.end("banked", scrap, items);
     this.state = "aboard";
     return true;
+  }
+
+  /**
+   * Paid pickup (src/expedition/pads.ts): the quadcopter has the mech. Everything at risk is banked like a crane
+   * pick-up, then the fade carries the mech home (recovering; the lab puts it aboard at the bottom of the fade).
+   */
+  extracted() {
+    if (this.state !== "out") return false;
+    const scrap = this.scrapAtRisk, items = this.itemsAtRisk;
+    this.events.push({ type: "banked", lines: this.atRisk.map((l) => ({ ...l })), scrapBefore: this.bank.scrap });
+    this.bank.scrap += scrap;
+    for (const l of this.atRisk) if (l.kind === "item") this.bank.items.push(l.item);
+    this.atRisk.length = 0;
+    this.end("extracted", scrap, items);
+    this.state = "recovering";
+    this.t = 0; this.teleported = false;
+    return true;
+  }
+
+  /** Pay a fee out of the carried scrap (lines in order; emptied lines go). The caller checked there is enough. */
+  spendScrap(n: number) {
+    for (let i = 0; i < this.atRisk.length && n > 0; i++) {
+      const l = this.atRisk[i];
+      if (l.kind !== "scrap") continue;
+      const take = Math.min(l.amount, n);
+      l.amount -= take; n -= take;
+    }
+    for (let i = this.atRisk.length - 1; i >= 0; i--) { const l = this.atRisk[i]; if (l.kind === "scrap" && l.amount <= 0) this.atRisk.splice(i, 1); }
   }
 
   /** The mech was destroyed out there: everything carried is lost; after lostWait, the fade home. */
@@ -200,7 +228,7 @@ export class Expedition {
   }
 
   private end(reason: EndReason, scrap: number, items: number) {
-    if (reason !== "banked") this.events.push({ type: "lost", lines: this.atRisk.map((l) => ({ ...l })), reason });
+    if (reason !== "banked" && reason !== "extracted") this.events.push({ type: "lost", lines: this.atRisk.map((l) => ({ ...l })), reason });
     this.last = { reason, scrap, items, duration: this.outFor, at: this.clock };
     this.counts[reason]++;
   }

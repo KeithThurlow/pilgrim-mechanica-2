@@ -54,6 +54,10 @@ import { RobotGroup, BanditGroup } from "../src/game/fightGroups";
 import { RobotSwarm, ROBOT_DEFAULTS, DEAD as ROBOT_DEAD } from "../src/combat/robots";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD as BANDIT_DEAD } from "../src/combat/infantry";
 import { Register } from "../src/game/register";
+import { PadField, PadCaller, PAD_DEFAULTS, padFee, padWait, padQuote, type Pad, type PadEvent, type PadNow } from "../src/expedition/pads";
+import { Unlocks, UNLOCK_DEFAULTS } from "../src/expedition/unlocks";
+
+const U = { ...UNLOCK_DEFAULTS };
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 40) console.log("  FAIL " + s); problems.push(s); };
@@ -775,6 +779,155 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
       if (st.held !== 0) fail(`factions: groups still held after the clash (${st.held})`);
       if (!spots || !drops || rolled < 1) fail(`factions: the clash left no loot (${spots} spots, ${drops} drops, ${rolled} rolled)`);
     }
+  }
+}
+
+// ---- extraction pads and convoy unlocks (docs/proposal-extraction.md) ----
+{
+  const PV = { ...PAD_DEFAULTS, ...DEPTH_DEFAULTS };
+  const mk = () => {
+    const route = new ConvoyRoute({ ...FLAT }, 0, 0), f = new PadField({ ...PV });
+    f.depth = (x, z) => depthAt(route, x, z);
+    return { route, f };
+  };
+  // Placed the same every build, and none in the Near ring.
+  const A = mk(), B = mk();
+  const pa = A.f.near(0, 0, 6000), pb = B.f.near(0, 0, 6000);
+  const sig = (l: Pad[]) => l.map((p) => `${p.id}@${p.x.toFixed(1)},${p.z.toFixed(1)}`).sort().join("|");
+  if (!pa.length) fail("pads: none placed within 6 km");
+  if (sig(pa) !== sig(pb)) fail("pads: a second build placed them differently");
+  if (pa.some((p) => ringOf(PV, depthAt(A.route, p.x, p.z)) === "Near")) fail("pads: one stands in the Near ring");
+  if (PV.padChanceNear !== 0) fail("pads: the Near chance default is not 0");
+  const byRing: Record<string, number> = {};
+  for (const p of pa) byRing[p.ring] = (byRing[p.ring] ?? 0) + 1;
+  console.log(`pads: ${pa.length} within 6 km (${Object.entries(byRing).map(([k, n]) => `${k} ${n}`).join(", ")}), same every build, none Near`);
+
+  // The fee and the wait rise with distance (and the wait is capped).
+  let rising = true, pf = -1, pw = -1;
+  for (let km = 0; km <= 8; km += 0.5) {
+    const f = padFee(PV, km), w = padWait(PV, km);
+    if (f <= pf || w < pw) rising = false;
+    pf = f; pw = w;
+  }
+  if (!rising) fail("pads: fee or wait did not rise with distance");
+  if (padWait(PV, 100) !== PV.padWaitMax) fail("pads: the wait is not capped");
+  console.log(`pads: fee ${padFee(PV, 0.5)} / ${padFee(PV, 2)} / ${padFee(PV, 4)} scrap, wait ${padWait(PV, 0.5)} / ${padWait(PV, 2)} / ${padWait(PV, 4)} s at 0.5 / 2 / 4 km`);
+
+  // A fresh expedition out in the field, a pad under it, the mech 2 km from the convoy.
+  const pad: Pad = { id: "pad:t", x: 1000, z: 1000, ring: "Deep", depth: 1500 };
+  const setup = (over: Partial<typeof PV> = {}, carried = 300, bank = 0) => {
+    const e = new Expedition(V);
+    e.bank.scrap = bank;
+    e.launch();
+    if (carried) e.add({ kind: "scrap", amount: carried, label: "Hoard" });
+    const c = new PadCaller({ ...PV, ...over }, e);
+    const now = (o: Partial<PadNow> = {}): PadNow => ({ x: pad.x, z: pad.z, alive: true, eHeld: true, unlocked: true, convoyM: 2000, ...o });
+    const step = (s: number, on: Pad | null = pad, o: Partial<PadNow> = {}) => {
+      for (let t = 0; t < s; t += 1 / 30) { c.update(1 / 30, on, now(o)); e.update(1 / 30, false, false); }
+    };
+    return { e, c, now, step };
+  };
+
+  // Unusable until the pickup is unlocked; the unlock rules.
+  {
+    const u = new Unlocks(), { e, c, step } = setup();
+    step(3, pad, { unlocked: u.has("pickup") });
+    if (c.state !== "idle" || e.scrapAtRisk !== 300) fail("pads: a call went through before the unlock");
+    if (c.refusal !== "locked") fail(`pads: refusal before the unlock was '${c.refusal}'`);
+    const bank = { scrap: 100 };
+    if (u.buy(U, "pickup", bank)) fail("unlock: bought with too little in the bank");
+    bank.scrap = 1000;
+    if (!u.buy(U, "pickup", bank) || bank.scrap !== 1000 - U.unlPickup || !u.has("pickup")) fail("unlock: buying the pickup did not charge the price");
+    if (u.buy(U, "pickup", bank)) fail("unlock: a one-level unlock bought twice");
+    const r = new Unlocks();
+    r.buy(U, "radar", { scrap: 9999 });
+    if (Math.abs(r.mul(U, "radar") - U.unlRadarMul1) > 1e-9 || r.nextPrice(U, "radar") !== U.unlRadar2) fail("unlock: radar level 1 effect or next price wrong");
+    const all = new Unlocks(); all.unlockAll();
+    if (all.nextPrice(U, "radar") !== null || all.nextPrice(U, "crane") !== null || Math.abs(all.mul(U, "crane") - U.unlCraneMul2) > 1e-9) fail("unlock: unlockAll is not the top level");
+    const back = new Unlocks(); back.load(JSON.parse(JSON.stringify(all.levels)));
+    if (back.level("radar") !== 3 || back.level("crane") !== 2 || !back.has("pickup")) fail("unlock: levels lost through save and load");
+    back.load({ radar: 99, bogus: 3, crane: -1 });
+    if (back.level("radar") !== 3 || back.level("crane") !== 0 || "bogus" in back.levels) fail("unlock: bad saved levels not cleaned");
+    console.log(`unlocks: locked pad refuses; pickup ${U.unlPickup}, radar ${U.unlRadar1}/${U.unlRadar2}/${U.unlRadar3} (x${U.unlRadarMul1}/${U.unlRadarMul2}/${U.unlRadarMul3}), crane ${U.unlCrane1}/${U.unlCrane2}; save and load round-trip`);
+  }
+
+  // A paid pickup banks everything and brings the mech home.
+  {
+    const { e, c, step } = setup({}, 400, 0);
+    const it = rollItem(4242, { ...LOOT_DEFAULTS });
+    e.add({ kind: "item", item: it, label: "Gun" });
+    const fee = padFee(PV, 2);
+    step(PV.padHold + 0.5);
+    if (c.state !== "waiting") fail(`pads: holding E did not start the call (${c.state})`);
+    if (e.scrapAtRisk !== 400 - fee) fail(`pads: carried scrap after the fee is ${e.scrapAtRisk}, expected ${400 - fee}`);
+    let homes = 0;
+    for (let t = 0; t < 400 && c.state !== "idle"; t += 1 / 30) {
+      c.update(1 / 30, pad, { x: pad.x, z: pad.z, alive: true, eHeld: false, unlocked: true, convoyM: 2000 });
+      if (e.update(1 / 30, false, false) === "home") homes++;
+    }
+    for (let t = 0; t < 6; t += 1 / 30) if (e.update(1 / 30, false, false) === "home") homes++;
+    if (!c.events.some((x) => x.type === "extracted")) fail("pads: no extracted event");
+    if (e.bank.scrap !== 400 - fee || e.bank.items.length !== 1 || e.atRisk.length !== 0) fail(`pads: pickup banked ${e.bank.scrap} scrap / ${e.bank.items.length} items, at risk ${e.atRisk.length}`);
+    if (e.counts.extracted !== 1 || e.counts.destroyed !== 0 || e.last?.reason !== "extracted") fail("pads: the run did not end as extracted");
+    if (e.events.filter((x) => x.type === "banked").length !== 1 || e.events.some((x) => x.type === "lost")) fail("pads: banking events wrong (one banked, no lost)");
+    if (homes !== 1) fail(`pads: the mech was sent home ${homes} times`);
+    console.log(`pads: paid pickup (fee ${fee}, waited ${PV.padWaitBase + PV.padWaitPerKm * 2} s) banked ${e.bank.scrap} scrap and ${e.bank.items.length} item, mech home once`);
+  }
+
+  // Cancel: leave the pad while waiting, the set share comes back.
+  {
+    const { e, c, step } = setup({}, 300, 0);
+    const fee = padFee(PV, 2);
+    step(PV.padHold + 0.3);
+    if (c.state !== "waiting") fail("pads(cancel): call did not start");
+    step(5, pad);
+    step(0.5, null, { x: pad.x + PV.padLeave + 3, eHeld: false });
+    const ev = c.events.find((x) => x.type === "cancelled") as Extract<PadEvent, { type: "cancelled" }> | undefined;
+    if (c.state !== "idle" || !ev) fail("pads(cancel): leaving did not cancel");
+    else {
+      const want = Math.round(fee * PV.padRefund);
+      if (ev.refundCarried !== want || e.scrapAtRisk !== 300 - fee + want) fail(`pads(cancel): refunded ${ev.refundCarried}, carried ${e.scrapAtRisk}, expected refund ${want}`);
+      console.log(`pads: cancel refunds ${ev.refundCarried} of the ${fee} fee (${PV.padRefund * 100}%)`);
+    }
+  }
+
+  // Destroyed while waiting: everything and the fee lost.
+  {
+    const { e, c, step } = setup({}, 300, 77);
+    step(PV.padHold + 0.3);
+    if (c.state !== "waiting") fail("pads(destroyed): call did not start");
+    step(10);
+    e.destroyed();
+    step(1, pad, { alive: false });
+    if (c.state !== "idle" || e.bank.scrap !== 77 || e.atRisk.length !== 0 || e.counts.destroyed !== 1) fail(`pads(destroyed): state ${c.state}, bank ${e.bank.scrap}, at risk ${e.atRisk.length}`);
+    if (c.events.some((x) => x.type === "extracted" || x.type === "cancelled")) fail("pads(destroyed): extracted or refunded after the mech died");
+    console.log("pads: destroyed while waiting loses everything carried and the fee (bank untouched)");
+  }
+
+  // Carried-only mode refuses when the carried scrap is short, even with a full bank.
+  {
+    const { e, c, step } = setup({ padBankTopUp: 0 }, 50, 9999);
+    step(PV.padHold + 0.5);
+    if (c.state !== "idle" || c.refusal !== "short" || e.scrapAtRisk !== 50 || e.bank.scrap !== 9999) fail(`pads(carried only): state ${c.state}, refusal '${c.refusal}'`);
+    const q = padQuote({ ...PV, padBankTopUp: 0 }, true, 2, 300, 0);
+    if (!q.ok || q.bankCost !== 0) fail("pads(carried only): enough carried scrap was refused");
+    console.log(`pads: carried-only mode refuses 50 carried against a fee of ${padFee(PV, 2)}, takes nothing from the bank`);
+  }
+
+  // Top-up mode charges the bank the markup on what the carried scrap lacks.
+  {
+    const fee = padFee(PV, 2), carried = 50, rest = fee - carried, cost = Math.ceil(rest * PV.padBankMarkup);
+    const { e, c, step } = setup({ padBankTopUp: 1 }, carried, 1000);
+    step(PV.padHold + 0.5);
+    if (c.state !== "waiting" || e.scrapAtRisk !== 0 || e.bank.scrap !== 1000 - cost) fail(`pads(top-up): carried ${e.scrapAtRisk}, bank ${e.bank.scrap}, expected 0 and ${1000 - cost}`);
+    // Cancel returns the share to where it came from.
+    step(0.5, null, { x: pad.x + 99, eHeld: false });
+    const rc = Math.round(carried * PV.padRefund), rb = Math.round(cost * PV.padRefund);
+    if (e.scrapAtRisk !== rc || e.bank.scrap !== 1000 - cost + rb) fail(`pads(top-up cancel): carried ${e.scrapAtRisk} (want ${rc}), bank ${e.bank.scrap} (want ${1000 - cost + rb})`);
+    const poor = setup({ padBankTopUp: 1 }, 50, cost - 1);
+    poor.step(PV.padHold + 0.5);
+    if (poor.c.state !== "idle" || poor.c.refusal !== "short") fail("pads(top-up): a bank one short of the marked-up cost was accepted");
+    console.log(`pads: top-up covers ${rest} lacking at x${PV.padBankMarkup} = ${cost} from the bank; a bank one short refuses`);
   }
 }
 
