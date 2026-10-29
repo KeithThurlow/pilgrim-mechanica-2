@@ -41,9 +41,9 @@ export const NIGHT_LIGHT_DEFAULTS = {
   lightFar: 160,
   // Vehicle lights
   vehReach: 16,
-  vehAngle: 24,
+  vehAngle: 16,
   vehGlow: 0.9,
-  vehPool: 0.3,
+  vehPool: 0.25,
   vehBeam: 0.05,
   vehReal: 160,
   tailGlow: 0.45,
@@ -53,7 +53,7 @@ export const NIGHT_LIGHT_DEFAULTS = {
   robotSweep: 35,
   robotSweepRate: 0.3,
   robotGlow: 0.7,
-  robotPool: 0.55,
+  robotPool: 0.35,
   robotBeam: 0.14,
   robotReal: 260,
   // Convoy lights
@@ -136,6 +136,8 @@ interface Flash { x: number; y: number; z: number; r: number; t: number; T: numb
 /** A lamp wanting a real light this frame. */
 interface Want { score: number; kind: LampKind; x: number; y: number; z: number; tx: number; ty: number; tz: number; dist: number; k: number; color: number; range: number }
 
+const byScore = (a: Want, b: Want) => b.score - a.score;
+
 export interface LightGround { height(x: number, z: number): number; normal?(x: number, z: number, out?: number[]): number[] }
 
 export class NightLights {
@@ -162,10 +164,10 @@ export class NightLights {
   private p = new THREE.Vector3();
   private q = new THREE.Vector3();
   private m = new THREE.Matrix4();
-  private nrm = [0, 1, 0];
   private kinds: KindLook[] = [];
   private wants: Want[] = [];
   private nWant = 0;
+  private order: Want[] = [];
   private focus = new THREE.Vector3();
   private n = 0;
   private emitFn: LampEmit;
@@ -270,8 +272,14 @@ export class NightLights {
     if (K.pool <= 0 && K.beam <= 0 && K.real <= 0 || R <= 0) { this.light(kind, x, y, z, 0, 0, 0, 0, 1, 0, false, k); return; }
     if (ground) {
       const h = Math.hypot(ax, az) || 1, lx = x + (ax / h) * R, lz = z + (az / h) * R;
-      const n = this.ground?.normal ? this.ground.normal(lx, lz, this.nrm) : null;
-      this.light(kind, x, y, z, lx, this.groundAt(lx, lz), lz, n ? n[0] : 0, n ? n[1] : 1, n ? n[2] : 0, true, k);
+      // The pool lies on the slope near the focus (two more height samples); far ones lie level (cheaper).
+      const h0 = this.groundAt(lx, lz);
+      let nx = 0, nz = 0;
+      if (this.ground && Math.hypot(lx - this.focus.x, lz - this.focus.z) < 35) {
+        nx = (h0 - this.ground.height(lx + 0.8, lz)) / 0.8; nz = (h0 - this.ground.height(lx, lz + 0.8)) / 0.8;
+      }
+      const nl = Math.hypot(nx, 1, nz);
+      this.light(kind, x, y, z, lx, h0, lz, nx / nl, 1 / nl, nz / nl, true, k);
     } else this.light(kind, x, y, z, x + ax * R, y + ay * R, z + az * R, 0, 1, 0, true, k);
   }
 
@@ -291,7 +299,7 @@ export class NightLights {
         const rad = Math.max(0.3, dist * K.tanHalf);
         // Low beams stretch their pool along the way they come in.
         const sinG = Math.max(0.22, -(dx * nx + dy * ny + dz * nz) / dist);
-        if (K.pool > 0) this.draw.pool(lx, ly, lz, nx, ny, nz, dx, dz, rad, Math.min(rad * 4, rad / sinG), r * K.pool, g * K.pool, b * K.pool);
+        if (K.pool > 0) this.draw.pool(lx, ly, lz, nx, ny, nz, dx, dz, rad, Math.min(rad * 2.5, rad / sinG), r * K.pool, g * K.pool, b * K.pool);
         if (K.beam > 0) this.draw.beam(x, y, z, lx, ly, lz, rad, r * K.beam, g * K.beam, b * K.beam);
       }
       if (K.real > 0 && K.spot) this.want(kind, x, y, z, lx, ly, lz, Math.max(1, dist), a, K.real, 0);
@@ -370,7 +378,9 @@ export class NightLights {
         this.wants[this.nWant - 1].score *= 1.5;
       }
     }
-    const wants = this.wants.slice(0, this.nWant).sort((a, b) => b.score - a.score);
+    const wants = this.order; wants.length = 0;
+    for (let i = 0; i < this.nWant; i++) wants.push(this.wants[i]);
+    wants.sort(byScore);
     let spotsUsed = 0;
     for (const w of wants) {
       if (w.kind === LAMP_CAB) {

@@ -9,6 +9,7 @@ import { skyAt } from "../src/world/daynight";
 import { CarBody } from "../src/vehicles/carBody";
 import { CarSim, carValues } from "../src/vehicles/car";
 import { LAMP_ROBOT, type LampEmit } from "../src/world/lamps";
+import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 let fails = 0;
 const fail = (m: string) => { fails++; console.log("FAIL", m); };
@@ -31,7 +32,7 @@ for (let i = 0; i < 20; i++) {
 }
 // A swarm of robot eyes: 300 in a ring, the nearest at 12 m.
 const swarm = new THREE.Group();
-const N = 300;
+let N = 300;
 swarm.userData.lampSource = (emit: LampEmit) => {
   for (let i = 0; i < N; i++) {
     const a = i * 2.4, r = 12 + i * 0.4;
@@ -81,12 +82,16 @@ let still = 0;
 for (let i = 0; i < pools.count; i++) { pools.getMatrixAt(i, mtx); p.setFromMatrixPosition(mtx); if (Math.abs(p.x + 6) < 1.5 && p.z > V.vehReach && p.z < V.vehReach + 8) still++; }
 if (still > ahead - 2) fail(`a wreck still lights its pools (${ahead} before, ${still} after)`);
 
-// Cost of a night update: 300 eyes, 20 trucks.
-const T = 200, t0 = performance.now();
-for (let i = 0; i < T; i++) lights.update(1 / 60, mid, focus);
-const ms = (performance.now() - t0) / T;
+// Cost of a night update: 300 eyes, 20 trucks, beams landing on the real dunes.
+lights.ground = new DuneField({ ...TERRAIN_DEFAULTS });
+for (let i = 0; i < 50; i++) lights.update(1 / 60, mid, focus);
+const cost = () => { const T = 300, t0 = performance.now(); for (let i = 0; i < T; i++) lights.update(1 / 60, mid, focus); return (performance.now() - t0) / T; };
+const ms = cost();
+N = 100;
+const ms100 = cost();
+N = 300;
 const c = lights.draw.counts;
 console.log(marks.join("\n"));
-console.log(`night update: ${ms.toFixed(3)} ms (300 robot eyes, 20 trucks; ${c.glows} glows, ${c.pools} pools, ${c.beams} beams, max ${maxLit} real lights)`);
+console.log(`night update on dunes: ${ms.toFixed(2)} ms (100 eyes: ${ms100.toFixed(2)} ms) (300 robot eyes, 20 trucks; ${c.glows} glows, ${c.pools} pools, ${c.beams} beams, max ${maxLit} real lights)`);
 if (fails) throw new Error(`nightlights check: ${fails} failed`);
 console.log("night lights ok");
