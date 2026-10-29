@@ -8,7 +8,6 @@
 // - Dodge drills: a scripted shooter fires mortars, line mortars, missile swarms and held rail charges at a rival told
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
-import { readFileSync } from "node:fs";
 import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand } from "../src/combat/rivalAi";
 import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout } from "../src/combat/rivalKit";
 import { runDuel, type DuelOptions } from "../src/combat/duelSim";
@@ -22,8 +21,10 @@ const must = (ok: boolean, why: string) => { if (!ok) fails.push(why); };
 
 // ---- The AI only issues commands ----
 {
-  const src = readFileSync(new URL("../src/combat/rivalAi.ts", import.meta.url), "utf8");
-  const code = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  // (node:fs through the process, so the typecheck needs no node types)
+  const fs = (globalThis as unknown as { process: { getBuiltinModule(m: string): { readFileSync(p: URL, e: string): string } } }).process.getBuiltinModule("node:fs");
+  const src = fs.readFileSync(new URL("../src/combat/rivalAi.ts", import.meta.url), "utf8");
+  const code = src.split("\n").filter((l: string) => !l.trim().startsWith("//")).join("\n");
   for (const bad of ["Math.random", "WalkerSim", "MechUnit", "addEventListener", "document.", "window.", ".sim.", "import * as THREE"]) must(!code.includes(bad), `rivalAi.ts uses ${bad}`);
   const imports = [...code.matchAll(/^import\s+(type\s+)?.*from\s+"([^"]+)"/gm)].filter((m) => !m[1]).map((m) => m[2]);
   for (const i of imports) must(["../items/generate", "./rivalKit"].includes(i), `rivalAi.ts imports ${i} (only seeded rng and the kit's pure helpers)`);
