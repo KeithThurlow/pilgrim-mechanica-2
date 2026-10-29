@@ -8,7 +8,7 @@ export class WreckStandIns {
   readonly meshes: THREE.Mesh[] = [];
   private ray = new THREE.Raycaster();
 
-  constructor(ground: Ground, spots: { x: number; z: number; yaw: number; kind: "hulk" | "plate" | "tank" }[]) {
+  constructor(ground: Ground, spots: { x: number; z: number; yaw: number; kind: "hulk" | "plate" | "tank"; scale?: number; sink?: number }[]) {
     const steel = new THREE.MeshStandardMaterial({ color: 0x8a8178, metalness: 0.35, roughness: 0.55, flatShading: true });
     const rust = new THREE.MeshStandardMaterial({ color: 0x7a4a2e, metalness: 0.3, roughness: 0.8, flatShading: true });
     for (const s of spots) {
@@ -28,8 +28,9 @@ export class WreckStandIns {
         add(new THREE.CylinderGeometry(1.1, 1.1, 4.5, 8).rotateZ(Math.PI / 2), rust, 0, 0.7, 0, 0, 0.1);
       }
       // Sit on the dunes, partly buried.
-      g.position.set(s.x, ground.height(s.x, s.z) - 0.2, s.z);
+      g.position.set(s.x, ground.height(s.x, s.z) - (s.sink ?? 0.2), s.z);
       g.rotation.y = s.yaw;
+      g.scale.setScalar(s.scale ?? 1);
       this.group.add(g);
     }
     this.group.updateMatrixWorld(true);
