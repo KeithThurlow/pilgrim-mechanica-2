@@ -1,8 +1,9 @@
 // A raider war band (Keith 2026-10-24): Mad Max style pickups with machine guns on the back, bigger gun trucks,
-// six-wheelers with autocannons, a War Rig lead truck (eight wheels, two turrets) and a makeshift tank, that swarm the
-// player's mech, circling it at range and breaking in for gun runs a few at a time, and bandit mechs
-// (red Ramparts) that hold off and trade fire. Hurt vehicles flee; wrecks burn out and are cleared. When a band is
-// gone, the next one rolls in from the dunes.
+// six-wheelers with autocannons, a War Rig lead truck (eight wheels, two turrets), a turret truck (a salvaged tank
+// turret on a six-wheeler, Keith 2026-10-29: bandits are scrappy salvage, no real tanks) and a party bus that drops
+// bandits on foot (partyBus.ts), that swarm the player's mech, circling it at range and breaking in for gun runs a few
+// at a time, and bandit mechs (red Ramparts) that hold off and trade fire. Hurt vehicles flee; wrecks burn out and are
+// cleared. When a band is gone, the next one rolls in from the dunes.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { CarSim, CAR_DEFAULTS, CAR_KINDS, axleSpan, type CarKind, type CarValues } from "../vehicles/car";
@@ -13,6 +14,9 @@ import type { HitSurface } from "../fx/minigun";
 import { KIND, FLAG, ObjectSerials, type Register } from "../game/register";
 import { putMech } from "../game/registerOwners";
 import type { DeathPhysics, Dead } from "../physics/deaths";
+import { BusCrew, BUS_DEFAULTS, BUS_PARAMS } from "./partyBus";
+import type { InfantrySwarm } from "./infantry";
+import { BusMusic } from "../audio/busMusic";
 
 /**
  * What the band goes for: the player's mech, or the pilot on foot (src/pilot/quarry.ts Prey has this shape): alive,
@@ -25,7 +29,7 @@ export const WARBAND_DEFAULTS = {
   bandTrucks: 2,
   bandSixWheelers: 1,
   bandWarRigs: 1,
-  bandTanks: 1,
+  bandTurretTrucks: 1,
   bandMechs: 1,
   circleRadius: 24,
   circleSpread: 8,
@@ -42,19 +46,19 @@ export const WARBAND_DEFAULTS = {
   sixRate: 1.5,
   sixDamage: 12,
   sixSpread: 1.5,
-  tankRate: 0.2,
-  tankDamage: 35,
-  tankSpread: 0.8,
-  tankTurn: 25,
-  tankShellSpeed: 22,
-  tankShellArc: 7,
-  tankShellRadius: 4,
-  tankLead: 0.6,
+  turretRate: 0.3,
+  turretDamage: 35,
+  turretSpread: 0.8,
+  turretTurn: 30,
+  turretShellSpeed: 22,
+  turretShellArc: 7,
+  turretShellRadius: 4,
+  turretLead: 0.6,
   techHull: 140,
   truckHull: 380,
   sixHull: 650,
   rigHull: 1400,
-  tankHull: 1800,
+  turretHull: 1100,
   banditMechHull: 650,
   banditMechDamage: 0.2,
   banditMechRange: 26,
@@ -74,11 +78,12 @@ export const WARBAND_DEFAULTS = {
   truckSteer: 28,
   sixTopSpeed: 12,
   rigTopSpeed: 11,
-  tankTopSpeed: 8,
+  turretTopSpeed: 10,
   avoidSteep: 26,
   blastLift: 6,
   blastSpin: 4,
   blastPush: 4,
+  ...BUS_DEFAULTS,
 };
 export type WarbandValues = typeof WARBAND_DEFAULTS;
 
@@ -87,7 +92,7 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "bandTrucks", label: "Gun trucks per band", min: 0, max: 8, step: 1, group: "War band" },
   { key: "bandSixWheelers", label: "Six-wheelers per band", min: 0, max: 8, step: 1, group: "War band" },
   { key: "bandWarRigs", label: "War Rigs per band (lead truck)", min: 0, max: 3, step: 1, group: "War band" },
-  { key: "bandTanks", label: "Tanks per band", min: 0, max: 4, step: 1, group: "War band" },
+  { key: "bandTurretTrucks", label: "Turret trucks per band", min: 0, max: 4, step: 1, group: "War band", tip: "A salvaged tank turret on a six-wheel truck: stops to lob slow heavy shells" },
   { key: "bandMechs", label: "Bandit mechs per band", min: 0, max: 4, step: 1, group: "War band" },
   { key: "circleRadius", label: "Circle distance (m)", min: 8, max: 60, step: 1, group: "War band", tip: "How far out they circle the mech" },
   { key: "circleSpread", label: "Circle spread (m)", min: 0, max: 30, step: 1, group: "War band" },
@@ -104,19 +109,19 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "sixRate", label: "Autocannon (six-wheeler, War Rig rear): rounds/s", min: 0.1, max: 6, step: 0.1, group: "Raider guns" },
   { key: "sixDamage", label: "Autocannon: damage per round", min: 0, max: 100, step: 0.5, group: "Raider guns" },
   { key: "sixSpread", label: "Autocannon: spread (°)", min: 0, max: 10, step: 0.1, group: "Raider guns" },
-  { key: "tankRate", label: "Tank: rounds/s", min: 0.05, max: 2, step: 0.01, group: "Raider guns" },
-  { key: "tankDamage", label: "Tank: damage per round", min: 0, max: 300, step: 1, group: "Raider guns" },
-  { key: "tankSpread", label: "Tank: spread (°)", min: 0, max: 5, step: 0.1, group: "Raider guns" },
-  { key: "tankShellSpeed", label: "Tank: shell speed (m/s)", min: 5, max: 80, step: 1, group: "Raider guns", tip: "Slow, lobbed and marked where it lands: dash out of the ring" },
-  { key: "tankShellArc", label: "Tank: shell arc (m)", min: 0, max: 30, step: 0.5, group: "Raider guns" },
-  { key: "tankShellRadius", label: "Tank: blast radius (m)", min: 0.5, max: 10, step: 0.1, group: "Raider guns" },
-  { key: "tankLead", label: "Tank: lead on a moving mech (0-1)", min: 0, max: 1.5, step: 0.05, group: "Raider guns" },
-  { key: "tankTurn", label: "Tank: turret turn (°/s)", min: 5, max: 120, step: 1, group: "Raider guns" },
+  { key: "turretRate", label: "Turret truck: rounds/s", min: 0.05, max: 2, step: 0.01, group: "Raider guns" },
+  { key: "turretDamage", label: "Turret truck: damage per round", min: 0, max: 300, step: 1, group: "Raider guns" },
+  { key: "turretSpread", label: "Turret truck: spread (°)", min: 0, max: 5, step: 0.1, group: "Raider guns" },
+  { key: "turretShellSpeed", label: "Turret truck: shell speed (m/s)", min: 5, max: 80, step: 1, group: "Raider guns", tip: "Slow, lobbed and marked where it lands: dash out of the ring" },
+  { key: "turretShellArc", label: "Turret truck: shell arc (m)", min: 0, max: 30, step: 0.5, group: "Raider guns" },
+  { key: "turretShellRadius", label: "Turret truck: blast radius (m)", min: 0.5, max: 10, step: 0.1, group: "Raider guns" },
+  { key: "turretLead", label: "Turret truck: lead on a moving mech (0-1)", min: 0, max: 1.5, step: 0.05, group: "Raider guns" },
+  { key: "turretTurn", label: "Turret truck: turret turn (°/s)", min: 5, max: 120, step: 1, group: "Raider guns" },
   { key: "techHull", label: "Technical: hit points", min: 10, max: 2000, step: 10, group: "Raider health" },
   { key: "truckHull", label: "Gun truck: hit points", min: 10, max: 4000, step: 10, group: "Raider health" },
   { key: "sixHull", label: "Six-wheeler: hit points", min: 10, max: 5000, step: 10, group: "Raider health" },
   { key: "rigHull", label: "War Rig: hit points", min: 10, max: 8000, step: 10, group: "Raider health" },
-  { key: "tankHull", label: "Tank: hit points", min: 10, max: 8000, step: 10, group: "Raider health" },
+  { key: "turretHull", label: "Turret truck: hit points", min: 10, max: 8000, step: 10, group: "Raider health" },
   { key: "banditMechHull", label: "Bandit mech: hit points", min: 50, max: 5000, step: 10, group: "Raider health" },
   { key: "banditMechDamage", label: "Bandit mech: damage ×", min: 0, max: 2, step: 0.01, group: "Raider guns", tip: "Their miniguns' rounds against yours" },
   { key: "banditMechRange", label: "Bandit mech: holds off (m)", min: 8, max: 60, step: 1, group: "War band" },
@@ -138,9 +143,10 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "truckSteer", label: "Gun truck: steering lock (°)", min: 10, max: 50, step: 1, group: "Raider driving" },
   { key: "sixTopSpeed", label: "Six-wheeler: top speed (m/s)", min: 2, max: 30, step: 0.5, group: "Raider driving" },
   { key: "rigTopSpeed", label: "War Rig: top speed (m/s)", min: 2, max: 30, step: 0.5, group: "Raider driving" },
-  { key: "tankTopSpeed", label: "Tank: top speed (m/s)", min: 1, max: 20, step: 0.5, group: "Raider driving" },
+  { key: "turretTopSpeed", label: "Turret truck: top speed (m/s)", min: 1, max: 30, step: 0.5, group: "Raider driving" },
   { key: "avoidSteep", label: "Steer round slopes over (°)", min: 10, max: 60, step: 1, group: "Raider driving", tip: "Drivers turn aside rather than drive up a dune face steeper than this (the trucks bog down past about 36°)" },
   { key: "rutEvery", label: "Tyre rut every (m)", min: 0.4, max: 6, step: 0.1, group: "War band" },
+  ...BUS_PARAMS,
 ];
 
 export const RAIDERS = 2;
@@ -161,8 +167,13 @@ const SHAPES: Record<CarKind, KindShape> = {
   gunTruck: { half: 3.4, radius: 1.6, capY: 0.3, clear: 11, blast: 1.4, turn: 1, flash: 1.3, boxEnd: 0.85, boxHalfY: 0.45, top: null },
   sixWheeler: { half: 3.6, radius: 1.6, capY: 0.3, clear: 12, blast: 1.5, turn: 0.6, flash: 1.6, boxEnd: 0.9, boxHalfY: 0.5, top: null },
   warRig: { half: 5.5, radius: 1.9, capY: 0.6, clear: 15, blast: 2.2, turn: 1, flash: 1.3, boxEnd: 1.5, boxHalfY: 0.6, top: { half: [1.2, 0.85, 1.15], at: [0, 1.7, 4.1] } },
+  // The tank isn't in war bands (Keith 2026-10-29); its shape stays for whoever fields one later (rival military).
   tank: { half: 3.3, radius: 1.75, capY: 0.3, clear: 12, blast: 2.0, turn: 0, flash: 2.6, boxEnd: 1.2, boxHalfY: 0.5, top: { half: [1.05, 0.4, 1.3], at: [0, 0.9, 0] } },
+  turretTruck: { half: 3.6, radius: 1.6, capY: 0.4, clear: 13, blast: 1.8, turn: 0, flash: 2.2, boxEnd: 0.9, boxHalfY: 0.5, top: { half: [0.95, 0.55, 1.1], at: [0, 1.3, -0.6] } },
+  partyBus: { half: 4.4, radius: 1.5, capY: 1.0, clear: 15, blast: 2.2, turn: 1, flash: 0, boxEnd: 1.8, boxHalfY: 0.4, top: { half: [1.2, 1.1, 4.8], at: [0, 1.4, -0.2] } },
 };
+/** Kinds that fire the slow lobbed shell (a big turret). */
+const shellGun = (k: CarKind) => k === "turretTruck" || k === "tank";
 
 /** One turret's gunner state. */
 interface Turret { yaw: number; pitch: number; fireClock: number; hasLos: boolean; losClock: number; slot: number }
@@ -198,14 +209,20 @@ export class Raider implements Hittable {
   private a = new THREE.Vector3();
   private b = new THREE.Vector3();
 
+  /** Stable id (rule 12): the band's id and its place in the band. */
+  id = "";
+  /** The party bus's crew (partyBus.ts); null on every other kind. */
+  crew: BusCrew | null = null;
+
   constructor(readonly kind: CarKind, ground: CarGround, slot: () => number, w: WarbandValues) {
     const cv: CarValues = { ...CAR_DEFAULTS, ...CAR_KINDS[kind] };
     this.sim = new CarSim(cv, ground);
     this.body = new CarBody(kind);
     this.shape = SHAPES[kind];
-    const hull = { technical: w.techHull, gunTruck: w.truckHull, sixWheeler: w.sixHull, warRig: w.rigHull, tank: w.tankHull };
+    const hull: Record<CarKind, number> = { technical: w.techHull, gunTruck: w.truckHull, sixWheeler: w.sixHull, warRig: w.rigHull,
+      tank: w.turretHull * 1.6, turretTruck: w.turretHull, partyBus: w.busHull };
     this.maxHp = this.hp = hull[kind];
-    this.radius = w.circleRadius + (Math.random() - 0.5) * w.circleSpread + (this.shape.clear - 9);
+    this.radius = kind === "partyBus" ? w.busRing + (Math.random() - 0.5) * w.circleSpread : w.circleRadius + (Math.random() - 0.5) * w.circleSpread + (this.shape.clear - 9);
     for (let i = 0; i < this.body.turretCount; i++) this.turrets.push({ yaw: 0, pitch: 0, fireClock: Math.random(), hasLos: true, losClock: Math.random() * 0.25, slot: slot() });
     this.wheelAcc = new Array(this.sim.wheels.length).fill(0);
   }
@@ -247,6 +264,17 @@ export class Warband {
   private muzzle = new THREE.Vector3();
   private dir = new THREE.Vector3();
   private aim = new THREE.Vector3();
+  /** The band's stable name (a column's id on the map; the lab's bands are "band"), the prefix of every raider's id. */
+  name = "band";
+  /**
+   * Where the party bus's bandits go (the infantry swarm of the lab or the convoy lab's camps; its owner steps and
+   * draws it). Null: buses drive and can be killed but drop nobody.
+   */
+  riders: InfantrySwarm | null = null;
+  /** A bus let bandits out (for notes or alerts). */
+  onDrop: ((bus: Raider, slots: number[]) => void) | null = null;
+  private music: BusMusic | null = null;
+  private lightClock = 0;
 
   constructor(
     private bf: Battlefield,
@@ -262,13 +290,14 @@ export class Warband {
     const v = this.v;
     const a0 = Math.random() * Math.PI * 2;
     const n = (k: number, kind: CarKind): CarKind[] => Array(Math.max(0, Math.round(k))).fill(kind);
-    // The War Rig leads from the middle; the tank trails.
+    // The War Rig leads from the middle; the party bus and the turret truck trail.
     const kinds: CarKind[] = [...n(v.bandTechnicals / 2, "technical"), ...n(v.bandTrucks, "gunTruck"), ...n(v.bandWarRigs, "warRig"),
-      ...n(v.bandSixWheelers, "sixWheeler"), ...n(v.bandTechnicals - Math.round(v.bandTechnicals / 2), "technical"), ...n(v.bandTanks, "tank")];
+      ...n(v.bandSixWheelers, "sixWheeler"), ...n(v.bandTechnicals - Math.round(v.bandTechnicals / 2), "technical"), ...n(v.bandBuses, "partyBus"),
+      ...n(v.bandTurretTrucks, "turretTruck")];
     kinds.forEach((kind, i) => {
       const a = a0 + (i - kinds.length / 2) * 0.12;
-      const d = v.spawnDistance + Math.random() * 15 + (kind === "tank" ? 20 : 0);
-      const r = new Raider(kind, this.bf.field, () => this.slot(), v);
+      const d = v.spawnDistance + Math.random() * 15 + (kind === "turretTruck" || kind === "partyBus" ? 20 : 0);
+      const r = this.make(kind, `${this.name}:w${this.waves + 1}:${i}`);
       const x = target.x + Math.sin(a) * d, z = target.z + Math.cos(a) * d;
       r.sim.reset(x, z, a + Math.PI);
       this.raiders.push(r);
@@ -305,7 +334,7 @@ export class Warband {
   spawnColumn(x: number, z: number, heading: number, kinds: CarKind[], speed = 0, health = 1): Raider[] {
     const fx = Math.sin(heading), fz = Math.cos(heading), made: Raider[] = [];
     kinds.forEach((kind, i) => {
-      const r = new Raider(kind, this.bf.field, () => this.slot(), this.v);
+      const r = this.make(kind, `${this.name}:${i}`);
       // Staggered along and across the line so they don't start in a queue.
       const back = i * 11, side = ((i % 3) - 1) * 6;
       const px = x - fx * back + fz * side, pz = z - fz * back - fx * side;
@@ -319,6 +348,17 @@ export class Warband {
     });
     return made;
   }
+
+  /** A raider with its stable id (and a crew when it's a party bus). */
+  private make(kind: CarKind, id: string): Raider {
+    const r = new Raider(kind, this.bf.field, () => this.slot(), this.v);
+    r.id = id;
+    if (kind === "partyBus") r.crew = new BusCrew(id, this.v);
+    return r;
+  }
+
+  /** Bandits on foot the party buses have out now (alive). */
+  get riderCount() { let n = 0; for (const r of this.raiders) if (r.crew && this.riders) n += r.crew.alive(this.riders); return n; }
 
   /** Shared by the bands of a field so ids never repeat across them (src/expedition/humans.ts). */
   serials = new ObjectSerials();
@@ -355,7 +395,7 @@ export class Warband {
     this.runClock += dt;
     const running = this.raiders.filter((r) => r.alive && r.mode === "run").length;
     if (this.runClock >= v.runEvery && running < v.attackers) {
-      const pick = this.raiders.filter((r) => r.alive && r.mode === "circle");
+      const pick = this.raiders.filter((r) => r.alive && r.mode === "circle" && r.kind !== "partyBus");
       if (pick.length) {
         const r = pick[Math.floor(Math.random() * pick.length)];
         r.mode = "run"; r.runTime = 0; r.runFrom.copy(r.sim.pos);
@@ -363,6 +403,7 @@ export class Warband {
       }
     }
     for (const r of this.raiders) this.drive(r, dt, this.targetFor?.(r) ?? player);
+    this.buses(dt, player);
     for (const m of this.mechs) this.walkMech(m, dt, this.targetFor?.(m) ?? player);
     // Clear wrecks that have burnt out and runaways that are far off.
     for (let i = this.raiders.length - 1; i >= 0; i--) {
@@ -381,8 +422,31 @@ export class Warband {
     }
   }
 
+  /**
+   * The party buses: each one's crew (drops while it lives, never after), and the cosmetic part: its lights chasing
+   * and its music, panned to it and fading with distance from the mech.
+   */
+  private buses(dt: number, player: WarTarget) {
+    this.lightClock += dt;
+    if (!this.music && this.bf.sfx && typeof (this.bf.sfx as { addSound?: unknown }).addSound === "function") this.music = new BusMusic(this.bf.sfx, () => this.v.busMusic);
+    const P = player.sim.pelvis;
+    for (const r of this.raiders) {
+      if (!r.crew) continue;
+      const s = r.sim, T = (this.targetFor?.(r) ?? player).sim.pelvis;
+      const dist = Math.hypot(s.pos.x - T.x, s.pos.z - T.z);
+      const made = r.crew.step(dt, this.v, this.riders, r.alive, r.mode === "flee", { x: s.pos.x, z: s.pos.z, heading: s.heading, speed: s.speed, half: r.shape.half }, dist);
+      if (made.length) {
+        this.onDrop?.(r, made);
+        this.bf.sfx.play("brap", s.pos, 0.5, 1.6, false); // the door banging open
+      }
+      if (r.alive) r.body.flashLights(this.lightClock);
+      this.music?.set(r, r.alive, s.pos, Math.hypot(s.pos.x - P.x, s.pos.z - P.z));
+    }
+  }
+
   /** Take the whole band off the field (a column handed back to the map, or the lab starting over). */
   clear() {
+    this.music?.clear();
     for (let i = this.raiders.length - 1; i >= 0; i--) this.remove(this.raiders[i], i);
     for (let i = this.mechs.length - 1; i >= 0; i--) {
       const m = this.mechs[i];
@@ -394,6 +458,7 @@ export class Warband {
   }
 
   private remove(r: Raider, i: number) {
+    this.music?.set(r, false, r.sim.pos, 0);
     this.group.remove(r.body.root);
     this.bf.targets.splice(this.bf.targets.indexOf(r), 1);
     this.raiders.splice(i, 1);
@@ -406,7 +471,7 @@ export class Warband {
       const tr = r.kind === "gunTruck";
       s.v.topSpeed = tr ? v.truckTopSpeed : v.techTopSpeed; s.v.accel = tr ? v.truckAccel : v.techAccel;
       s.v.grip = tr ? v.truckGrip : v.techGrip; s.v.drift = tr ? v.truckDrift : v.techDrift; s.v.maxSteer = tr ? v.truckSteer : v.techSteer;
-    } else s.v.topSpeed = r.kind === "sixWheeler" ? v.sixTopSpeed : r.kind === "warRig" ? v.rigTopSpeed : v.tankTopSpeed;
+    } else s.v.topSpeed = r.kind === "sixWheeler" ? v.sixTopSpeed : r.kind === "warRig" ? v.rigTopSpeed : r.kind === "partyBus" ? v.busTopSpeed : v.turretTopSpeed;
     let throttle = 0, steer = 0;
     if (!r.alive) {
       if (r.deadFor === 0) this.blowUp(r);
@@ -458,8 +523,9 @@ export class Warband {
     // Never drive into the mech. From well out, if the line ahead would cut inside the clearance, aim for the line
     // that grazes it instead (the side nearer the way it wants to go); inside, swerve out along the tangent.
     const clear = r.shape.clear;
-    // The tank stops to shoot once the mech is in range (it turns on the spot to drive on).
-    if (r.kind === "tank" && r.mode === "circle" && dist < v.gunRange * 0.85) want = 0;
+    // The turret truck stops to shoot once the mech is in range; the party bus brakes to let its bandits out.
+    if (shellGun(r.kind) && r.mode === "circle" && dist < v.gunRange * 0.85) want = 0;
+    if (r.crew?.braking) want = 0;
     if (dist >= clear && dist < 35) {
       const toMech = Math.atan2(-dx, -dz);
       const graze = Math.asin(Math.min(1, clear / dist));
@@ -592,14 +658,14 @@ export class Warband {
     if (k === "technical") return { rate: v.techRate, damage: v.techDamage, spread: v.techSpread, flash: 0.6, hit: 0.4 };
     if (k === "gunTruck") return { rate: v.truckRate, damage: v.truckDamage, spread: v.truckSpread, flash: 1.3, hit: 0.75 };
     if (k === "sixWheeler") return { rate: v.sixRate, damage: v.sixDamage, spread: v.sixSpread, flash: 1.6, hit: 1 };
-    return { rate: v.tankRate, damage: v.tankDamage, spread: v.tankSpread, flash: 2.6, hit: 1.6 };
+    return { rate: v.turretRate, damage: v.turretDamage, spread: v.turretSpread, flash: 2.6, hit: 1.6 };
   }
 
   private gunner(r: Raider, dt: number, player: WarTarget) {
     const v = this.v, s = r.sim;
     if (r.mode === "flee" || !player.alive) return;
     const T = this.aim.copy(player.sim.pelvis);
-    const turnRate = (r.kind === "tank" ? v.tankTurn : v.gunTurn * r.shape.turn) * D2R * dt;
+    const turnRate = (shellGun(r.kind) ? v.turretTurn : v.gunTurn * r.shape.turn) * D2R * dt;
     r.turrets.forEach((t, i) => {
       // Aim at the hull, turning at a capped rate.
       r.body.muzzle(this.muzzle, i);
@@ -624,14 +690,14 @@ export class Warband {
         const spread = g.spread * D2R;
         const tilt = this.tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
-        if (r.kind === "tank") {
+        if (shellGun(r.kind)) {
           // A slow lobbed shell at where the mech will be (its walk, not a dash), marked on the sand.
           const P = player.sim.pos, pv = player.sim.vel;
-          const flight = Math.hypot(P.x - this.muzzle.x, P.z - this.muzzle.z) / Math.max(1, v.tankShellSpeed);
-          this.bf.lob(RAIDERS, this.muzzle, P.x + pv.x * flight * v.tankLead, P.z + pv.z * flight * v.tankLead, flight, v.tankShellArc, v.tankShellRadius, g.damage);
+          const flight = Math.hypot(P.x - this.muzzle.x, P.z - this.muzzle.z) / Math.max(1, v.turretShellSpeed);
+          this.bf.lob(RAIDERS, this.muzzle, P.x + pv.x * flight * v.turretLead, P.z + pv.z * flight * v.turretLead, flight, v.turretShellArc, v.turretShellRadius, g.damage);
           this.bf.gunFx.shot(t.slot, this.muzzle, d, this.muzzle, null, null, "sand", undefined, g.flash, 0);
         } else this.bf.fire(t.slot, RAIDERS, this.muzzle, d, v.gunRange + 6, g.damage, { flashScale: g.flash, voice: "other", hitScale: g.hit });
-        if (r.kind === "tank") {
+        if (shellGun(r.kind)) {
           // The cannon kicks sand up round the tank.
           this.bf.dust.stomp(s.pos.x, s.pos.y - s.v.rideHeight, s.pos.z, 1.2);
           this.bf.sfx.play("brap", this.muzzle, 1.2, 0.5, false);

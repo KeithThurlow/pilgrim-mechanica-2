@@ -142,7 +142,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?crest[=m]` (the plough's blade that far short of the biggest cut ahead), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead; `plough` the plough;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
   the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
-  (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close), `?banditcamp[=metres]` (the same for the nearest bandit camp), `?clash` (330 m from a bandit camp with a robot pack walking into it, out of view), `?warband` (a war band column 260 m ahead hunting the mech); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
+  (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close), `?banditcamp[=metres]` (the same for the nearest bandit camp), `?clash` (330 m from a bandit camp with a robot pack walking into it, out of view), `?warband[=N]` (a war band column of N vehicles, 6 by default with a party bus and a turret truck, 260 m ahead hunting the mech); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
   `?seek=scrap|wreck|rare|legendary`. Loot: `?drop=rarity[,level]` (start out on the sand, an item of that rarity dropped ahead of the mech every few
   seconds; `?drop=all[,level]` one of each rarity in turn; a bare `?drop` is still the crane's drop), `?items=N` (N items at risk).
   Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
@@ -185,7 +185,7 @@ src/convoy/             route (heading + flattened road), platform, crane (axes 
                         + ploughFx, walkways (decks, stairs, landings, footbridges as walkable
                         surfaces); drawing: platformBody, trackBody, pipesDraw, bridgeBody, craneBody, escortBody, kit
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
-src/combat/             warband (raider vehicles and bandit mechs), infantry (bandit swarm) + infantryDraw, infantryTarget,
+src/combat/             warband (raider vehicles and bandit mechs) + partyBus (the bus's drops), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
                         robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),

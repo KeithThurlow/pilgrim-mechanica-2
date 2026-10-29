@@ -176,4 +176,29 @@ export class Sfx {
     e.playing.push(src);
     src.onended = () => { const i = e.playing.indexOf(src); if (i >= 0) e.playing.splice(i, 1); };
   }
+
+  /** Loop a sound added with addSound (its first variant), silent until bent with setSoundLoop; stop with stopLoop. */
+  startSoundLoop(name: string, offset = 0): Loop | null {
+    const e = this.extra.get(name);
+    if (!e) return null;
+    const src = this.ctx.createBufferSource();
+    src.buffer = e.buffers[0];
+    src.loop = true;
+    const g = this.ctx.createGain();
+    g.gain.value = 0;
+    const p = this.ctx.createStereoPanner();
+    src.connect(g).connect(p).connect(this.master);
+    src.start(0, offset * src.buffer.duration);
+    return new Loop(src, g, p);
+  }
+
+  /** Level, pitch and pan of a sound loop (volume times the sound's own level). */
+  setSoundLoop(loop: Loop, name: string, at: THREE.Vector3, volume: number, pitch = 1) {
+    const t = this.ctx.currentTime, e = this.extra.get(name);
+    loop.gain.gain.setTargetAtTime(volume * (e ? e.level() : 1), t, 0.05);
+    loop.src.playbackRate.setTargetAtTime(Math.max(0.05, pitch), t, 0.05);
+    loop.pan.pan.setTargetAtTime(this.panFor(at) ?? 0, t, 0.05);
+  }
+
+  stopLoop(loop: Loop) { try { loop.src.stop(); } catch { /* already stopped */ } loop.src.disconnect(); }
 }

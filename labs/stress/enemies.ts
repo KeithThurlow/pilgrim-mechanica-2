@@ -176,7 +176,7 @@ export class StressWarband {
     this.wb = wb;
     bf.register.add({ name: "warband", publish: (r) => wb.publish(r) });
     // No band of its own until topUp asks for one.
-    (V as WarbandValues).bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTanks = 0; V.bandMechs = 0;
+    (V as WarbandValues).bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTurretTrucks = 0; V.bandBuses = 0; V.bandMechs = 0;
     this.lab.app.scene.add(wb.group);
   }
 
@@ -192,10 +192,10 @@ export class StressWarband {
     this.clock = 0;
     const V = this.lab.V;
     const trucks = Math.floor(nv * 0.25), six = Math.floor(nv * 0.1), rigs = Math.floor(nv * 0.05), tanks = Math.floor(nv * 0.1);
-    V.bandTrucks = trucks; V.bandSixWheelers = six; V.bandWarRigs = rigs; V.bandTanks = tanks;
+    V.bandTrucks = trucks; V.bandSixWheelers = six; V.bandWarRigs = rigs; V.bandTurretTrucks = tanks;
     V.bandTechnicals = nv - trucks - six - rigs - tanks; V.bandMechs = nm;
     this.wb.spawn(this.lab.player.sim.pelvis);
-    V.bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTanks = 0; V.bandMechs = 0;
+    V.bandTechnicals = 0; V.bandTrucks = 0; V.bandSixWheelers = 0; V.bandWarRigs = 0; V.bandTurretTrucks = 0; V.bandBuses = 0; V.bandMechs = 0;
   }
 
   update(dt: number, mark: Mark) {

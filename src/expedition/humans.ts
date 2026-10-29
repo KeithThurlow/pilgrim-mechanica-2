@@ -8,7 +8,9 @@
 //   Kills and survivors are remembered when the camp streams out.
 // - WarBands: the roaming columns (warColumns.ts) that close with the mech come onto the field as the war band
 //   (src/combat/warband.ts), one Warband per column, keeping its behaviour (circle, gun runs, drive-bys); handed back as
-//   points with their survivors when the mech gets far or goes aboard.
+//   points with their survivors when the mech gets far or goes aboard. A column's party bus drops bandits on foot into
+//   the camps' swarm (`riders`, set by the loop; they belong to no camp and go for the mech); when the band is handed
+//   back, the bus's bandits still alive climb back on (taken off the field).
 // Both publish FightGroups so the fight director (src/game/factions.ts) can point them at other factions' groups.
 // Ownership: host state (camps, columns, damage); drawing and sounds are cosmetic.
 import * as THREE from "three/webgpu";
@@ -291,6 +293,8 @@ export class WarBands {
   private live = new Map<string, LiveCol>();
   private serials = new ObjectSerials();
   private abstracts = new Map<string, AbstractGroup>();
+  /** Where party buses drop their bandits (the camps' swarm, src/expedition/loop.ts sets it). */
+  riders: InfantrySwarm | null = null;
 
   constructor(readonly v: WarbandValues & ColumnValues & FactionValues, private bf: Battlefield, scene: THREE.Scene, readonly columns: WarColumns) {
     scene.add(this.group);
@@ -304,7 +308,7 @@ export class WarBands {
 
   /** Drop every live band (a restart or rebuild). */
   reset() {
-    for (const l of this.live.values()) { this.group.remove(l.wb.group); l.wb.clear(); }
+    for (const l of this.live.values()) { this.offBus(l.wb); this.group.remove(l.wb.group); l.wb.clear(); }
     this.live.clear();
     this.abstracts.clear();
   }
@@ -317,6 +321,8 @@ export class WarBands {
     const wb = new Warband(this.bf, this.v, null);
     wb.autoWaves = false;
     wb.serials = this.serials;
+    wb.name = col.id;
+    wb.riders = this.riders;
     wb.spawnColumn(col.x, col.z, col.heading, col.kinds, col.speed, col.health);
     this.group.add(wb.group);
     this.live.set(col.id, { col, wb, group: new WarGroup(col.id, wb), away: 0 });
@@ -346,11 +352,19 @@ export class WarBands {
       if (l.away > (far ? 0.1 : 4) && !l.group.fighting) {
         this.columns.setAbstract(c, alive.map((r) => r.kind), Math.max(0.1, hp / max), c.x, c.z);
         c.heading = alive[0].sim.heading;
+        this.offBus(l.wb);
         this.group.remove(l.wb.group);
         l.wb.clear();
         this.live.delete(id);
       }
     }
+  }
+
+  /** A band leaving the field: its party buses' bandits still alive go with it (taken off the swarm). */
+  private offBus(wb: Warband) {
+    const sw = this.riders;
+    if (!sw) return;
+    for (const r of wb.raiders) if (r.crew) { r.crew.alive(sw); for (const i of r.crew.slots) sw.remove(i); }
   }
 
   contacts(x: number, z: number, r: number, out: HumanContact[] = []) {

@@ -28,6 +28,7 @@ export const COLUMN_DEFAULTS = {
   colChanceFar: 1.8,
   colSizeFar: 2,
   colHeavyFar: 0.5,
+  colBusFrom: 5,
 };
 export type ColumnValues = typeof COLUMN_DEFAULTS;
 
@@ -49,7 +50,8 @@ export const COLUMN_PARAMS: Param[] = [
   { key: "colDrop", label: "Forgotten past (m)", min: 600, max: 5000, step: 50, group: G },
   { key: "colChanceFar", label: "Columns × at full depth (chance)", min: 1, max: 5, step: 0.05, group: DEPTH_GROUP, onRelease: true },
   { key: "colSizeFar", label: "Column size × at full depth", min: 1, max: 5, step: 0.05, group: DEPTH_GROUP, onRelease: true },
-  { key: "colHeavyFar", label: "Heavy vehicles at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP, tip: "Share of a column that is gun trucks, six-wheelers, a War Rig and a tank rather than technicals", onRelease: true },
+  { key: "colHeavyFar", label: "Heavy vehicles at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP, tip: "Share of a column that is gun trucks, six-wheelers, a War Rig and a turret truck rather than technicals", onRelease: true },
+  { key: "colBusFrom", label: "Party bus in columns of (vehicles)", min: 1, max: 21, step: 1, group: G, tip: "Columns this big or bigger bring a party bus that drops bandits on foot (21: never)", onRelease: true },
 ];
 
 export interface Column {
@@ -71,8 +73,12 @@ export interface Column {
 export interface ColumnMe { x: number; z: number; out: boolean; loud: boolean }
 export type ColumnEvent = { type: "engage"; col: Column };
 
-/** The vehicles of a column of n: technicals mostly, more of the heavy kinds (and a War Rig lead, a tank at the back) deeper out. */
-export function columnKinds(n: number, danger: number, heavyFar: number, r: () => number): CarKind[] {
+/**
+ * The vehicles of a column of n: technicals mostly, more of the heavy kinds (and a War Rig lead, a turret truck at the
+ * back) deeper out; a party bus second from the back in columns of busFrom or more (Keith 2026-10-29: no tanks, those
+ * are the rival military's).
+ */
+export function columnKinds(n: number, danger: number, heavyFar: number, r: () => number, busFrom = COLUMN_DEFAULTS.colBusFrom): CarKind[] {
   const heavy = Math.min(0.9, 0.12 + heavyFar * danger);
   const kinds: CarKind[] = [];
   for (let k = 0; k < n; k++) {
@@ -80,7 +86,8 @@ export function columnKinds(n: number, danger: number, heavyFar: number, r: () =
     kinds.push(x >= heavy ? "technical" : x < heavy * 0.5 ? "gunTruck" : "sixWheeler");
   }
   if (n >= 6 && danger > 0.4) kinds[0] = "warRig";
-  if (n >= 5 && danger > 0.8) kinds[kinds.length - 1] = "tank";
+  if (n >= 5 && danger > 0.6) kinds[kinds.length - 1] = "turretTruck";
+  if (n >= busFrom) kinds[Math.max(0, kinds.length - 2)] = "partyBus";
   return kinds;
 }
 
@@ -118,14 +125,14 @@ export class WarColumns {
     const lo = Math.min(v.colMin, v.colMax), hi = Math.max(v.colMin, v.colMax);
     const n = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * scaled(v.colSizeFar, d)));
     const heading = r() * Math.PI * 2;
-    return { id: `col:${i}:${j}`, x, z, heading, speed: v.colSpeed, kinds: columnKinds(n, d, v.colHeavyFar, r), health: 1, state: "roam", turn: 6 + r() * 10, tx: x, tz: z, lure: 0, danger: d };
+    return { id: `col:${i}:${j}`, x, z, heading, speed: v.colSpeed, kinds: columnKinds(n, d, v.colHeavyFar, r, v.colBusFrom), health: 1, state: "roam", turn: 6 + r() * 10, tx: x, tz: z, lure: 0, danger: d };
   }
 
   private placed = 0;
   /** A column by hand (the lab's ?warband): n vehicles at (x, z) heading toward (tx, tz), hunting it. */
   place(x: number, z: number, n: number, tx: number, tz: number, danger = 0): Column {
     const r = rng(hash4(this.v.colSeed, 77, this.placed, 1));
-    const c: Column = { id: `col:test:${this.placed++}`, x, z, heading: Math.atan2(tx - x, tz - z), speed: this.v.colHuntSpeed, kinds: columnKinds(n, danger, this.v.colHeavyFar, r),
+    const c: Column = { id: `col:test:${this.placed++}`, x, z, heading: Math.atan2(tx - x, tz - z), speed: this.v.colHuntSpeed, kinds: columnKinds(n, danger, this.v.colHeavyFar, r, this.v.colBusFrom),
       health: 1, state: "hunt", turn: 10, tx, tz, lure: 600, danger };
     this.cols.push(c);
     return c;
