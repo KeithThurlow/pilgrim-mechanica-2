@@ -20,6 +20,11 @@ Branch pushed to `wip/nightlights`. Delete this note when it merges.
 ## Left / ideas
 - Judge in the browser (looks never seen by the agent beyond any shots listed in state.md).
 - Escort bodies get lamps via CarBody automatically; war band vehicles too.
+- CarBody lamps add no geometry: `tools/warband-check.ts` seeds Math.random and three's uuids draw from it, so any
+  extra mesh part in CarBody shifts the war band's random stream (a near miss at 3.2 m then fails the check). The war
+  band's own randomness should get its own seeded generator (rule 12); flagged, not changed here.
+- Cost: faked lamps ~0.5 ms CPU with 100 robot eyes, ~1 ms with 300 (ground height lookups). If too much: cap faked
+  robot beams to the nearest N.
 
 ## Test
 - `npx tsx tools/nightlights-check.ts`; convoy lab `?time=23&set=dayRun:0`; robots lab `?time=22`.

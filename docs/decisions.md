@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-29 | Night lights: real lights stay a fixed few (pools sized by sliders, made once, handed out by priority and nearness); every other lamp is faked with additive glows, ground pools and beam cones; the headlamp alone casts shadows, its map drawn only at night | Claude | Claude (from the coordinator's spec) | `src/world/nightLights.ts` |
 | 2026-10-29 | Night lights: headlights on every vehicle; the mech's lamps cast shadows; robots carry red spotlights; the convoy lights up after dark (cabs, floodlights on the bays and ramps, side lights) | Keith | Keith | Claude: few real lights (nearest N, one shadowed: the mech's), the rest faked as glow and ground pools so it scales. Agent on `wip/nightlights`. |
 | 2026-10-29 | Robots must feel dangerous: excavators (tall walkers) fire more often, cutters hit harder; scrappers stay the swarm | Keith | Keith | Agent on `wip/raiders2`. |
 | 2026-10-29 | War bands have no real tanks: scrappy salvage instead (a truck with a salvaged tank turret, a "technical"); add a party bus that drops bandit infantry, a priority target | Keith | Keith | Agent on `wip/raiders2`. |
