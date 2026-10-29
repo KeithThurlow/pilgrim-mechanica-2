@@ -4,6 +4,12 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-29 | Night lights: headlights on every vehicle; the mech's lamps cast shadows; robots carry red spotlights; the convoy lights up after dark (cabs, floodlights on the bays and ramps, side lights) | Keith | Keith | Claude: few real lights (nearest N, one shadowed: the mech's), the rest faked as glow and ground pools so it scales. Agent on `wip/nightlights`. |
+| 2026-10-29 | Robots must feel dangerous: excavators (tall walkers) fire more often, cutters hit harder; scrappers stay the swarm | Keith | Keith | Agent on `wip/raiders2`. |
+| 2026-10-29 | War bands have no real tanks: scrappy salvage instead (a truck with a salvaged tank turret, a "technical"); add a party bus that drops bandit infantry, a priority target | Keith | Keith | Agent on `wip/raiders2`. |
+| 2026-10-29 | Rival military gets the real kit: mechs, tanks, armoured infantry with rocket launchers who last longer | Keith | Keith | Factions step 5. |
+| 2026-10-29 | Extraction pads now, with the convoy unlock that enables them. Fee from carried scrap or the bank: Keith unsure; built as a slider (bank top-up allowed or not, and at what markup) | Keith | open | Claude suggests carried first, the bank tops up at a markup. Agent on `wip/extraction`. |
+| 2026-10-29 | A duel lab: one rival mech with random weapons, scary to fight, for tuning weapons and loadouts against | Keith | Keith | Agent on `wip/duel`. |
 | 2026-10-28 | Day-night cycle: the day longer than the night (night about 0.35 of 24 h, as in a summer hemisphere), not pitch black at night but moonlit and starlit, long evening shadows kept in check | Keith | Keith | `src/world/daynight.ts`, `wip/daynight`. |
 | 2026-10-28 | Day-night details: the noon sun is the old Sun direction/height sliders (so a held noon is the old look); the shadow light never drops under 13° while the sky follows the real sun; one key light at a time, sun to moon through a blue hour with both off; the moon high (50°); grade keyed by sun height (pink dawn, amber/violet evening); labs hold the fixed look unless `?time=`, the convoy lab runs the clock | Claude | open | Keith to look in the convoy lab. |
 | 2026-10-28 | A day-night cycle: day longer than night (night about a third of the cycle), a moonlit, starlit night that isn't pitch black | Keith | Keith | Agent on `wip/daynight`. |

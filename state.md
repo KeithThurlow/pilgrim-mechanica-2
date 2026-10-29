@@ -178,6 +178,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Started 2026-10-29 (Keith's asks): night lights (`wip/nightlights`), robot danger + war band party bus and technicals (`wip/raiders2`), extraction pads + convoy unlocks (`wip/extraction`), duel lab with a rival mech (`wip/duel`). Handoffs `docs/handoff-<topic>.md`.
 - Day-night cycle merged 2026-10-28: Keith to look (convoy lab `?time=18.5`, `?time=20.3`, `?time=23&set=dayRun:0`, `?time=4`; walker lab `?time=21`). Rough: the blue hour (~20.3) is muddy purple; stars and moon only show zoomed far out; only the player's muzzle flashes light the ground; the headlamp is a strong warm blob; the plough stays bright at night.
 - Enemy factions steps 1 and 2 merged 2026-10-28, never run in a browser: Keith to play (convoy lab `?clash`, `?warband`, `?banditcamp`). Rough: no bandit ragdolls in the convoy lab; wreckage uses the dead-convoy look; war bands drop no melee infantry yet (step 3); the headless fight balance is crude. Next: steps 3-5 (war band melee infantry, the Warden, rival military).
 - Loot feel merged 2026-10-28, never run in a browser: Keith's playtest is its first real test (convoy lab `?drop=all,10&manual`, `?drop=legendary,20&manual`, `?out&loot=120&items=5`). Rough: clumps still in flight keep clinking during the bank count; the pickup card compares with the weakest fitted item of that kind.
