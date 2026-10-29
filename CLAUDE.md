@@ -135,6 +135,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   back in (Keith 2026-10-26; F no longer fires).
 - Pilot (every combat lab and the convoy lab): `?onfoot` (start on foot beside the mech), `?holdf=seconds` (F held
   from the start, for shots of getting out).
+- Duel lab: `?rival=seed` (which rival mech; Reroll steps on), `?rivalfit=slot:base[:rarity],...` (fit these over its roll,
+  as the loadout lab's `?fit=`), `?left= ?right= ?k1= ?k2= ?k3=` (your weapons, as the weapons lab; else the loadout lab's bay
+  save, else the weapons lab's last pick), `?bay` (use the bay save), plus the combat-lab flags; R restarts the round.
 - Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, `?worst` (the co-op worst
   case: three AI allies, max-Protocol stand-ins, effects ×4), plus the combat-lab flags.
   Results go to the screen, the console and `window.__stress`.
@@ -177,7 +180,8 @@ src/game/               battlefield (shared combat stage), sheet + sheetFire (di
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
-                        firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop)
+                        firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop),
+                        duelGround (the duel lab's arena, cover drifts, line of sight)
 src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
@@ -187,7 +191,9 @@ src/convoy/             route (heading + flattened road), platform, crane (axes 
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs) + partyBus (the bus's drops), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
-                        robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx
+                        robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx,
+                        rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
+                        the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)

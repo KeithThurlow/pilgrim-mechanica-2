@@ -3,14 +3,27 @@
 import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
 
+export interface WreckSpot { x: number; z: number; yaw: number; kind: "hulk" | "plate" | "tank"; scale?: number; sink?: number }
+
 export class WreckStandIns {
   readonly group = new THREE.Group();
   readonly meshes: THREE.Mesh[] = [];
   private ray = new THREE.Raycaster();
+  private steel = new THREE.MeshStandardMaterial({ color: 0x8a8178, metalness: 0.35, roughness: 0.55, flatShading: true });
+  private rust = new THREE.MeshStandardMaterial({ color: 0x7a4a2e, metalness: 0.3, roughness: 0.8, flatShading: true });
 
-  constructor(ground: Ground, spots: { x: number; z: number; yaw: number; kind: "hulk" | "plate" | "tank" }[]) {
-    const steel = new THREE.MeshStandardMaterial({ color: 0x8a8178, metalness: 0.35, roughness: 0.55, flatShading: true });
-    const rust = new THREE.MeshStandardMaterial({ color: 0x7a4a2e, metalness: 0.3, roughness: 0.8, flatShading: true });
+  constructor(ground: Ground, spots: WreckSpot[]) { this.build(ground, spots); }
+
+  /** Put them somewhere else (the duel lab's cover layout changed): the old ones go. */
+  rebuild(ground: Ground, spots: WreckSpot[]) {
+    for (const m of this.meshes) m.geometry.dispose();
+    this.meshes.length = 0;
+    this.group.clear();
+    this.build(ground, spots);
+  }
+
+  private build(ground: Ground, spots: WreckSpot[]) {
+    const { steel, rust } = this;
     for (const s of spots) {
       const g = new THREE.Group();
       const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, rz = 0) => {
@@ -28,8 +41,9 @@ export class WreckStandIns {
         add(new THREE.CylinderGeometry(1.1, 1.1, 4.5, 8).rotateZ(Math.PI / 2), rust, 0, 0.7, 0, 0, 0.1);
       }
       // Sit on the dunes, partly buried.
-      g.position.set(s.x, ground.height(s.x, s.z) - 0.2, s.z);
+      g.position.set(s.x, ground.height(s.x, s.z) - (s.sink ?? 0.2), s.z);
       g.rotation.y = s.yaw;
+      g.scale.setScalar(s.scale ?? 1);
       this.group.add(g);
     }
     this.group.updateMatrixWorld(true);

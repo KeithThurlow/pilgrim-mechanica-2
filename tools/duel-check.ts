@@ -1,0 +1,171 @@
+// Headless duel check (Keith 2026-10-29: a lab to fight a rival mech that rolls random weapons; src/combat/rivalAi.ts).
+// - The AI only issues commands: rivalAi.ts imports no sim, reads no input, uses no Math.random, and decide() works on
+//   a deep-frozen view (any write to it would throw) and returns only the command fields.
+// - Rolled rival loadouts are repeatable by seed, differ across seeds, break no fit rule and always carry a weapon;
+//   ?rivalfit= fits over them.
+// - Duels between two AIs on fixed seeds (the headless duel, src/combat/duelSim.ts) are repeatable, both sides take
+//   damage in most, nothing goes NaN and no mech stands neither moving nor firing for long.
+// - Dodge drills: a scripted shooter fires mortars, line mortars, missile swarms and held rail charges at a rival told
+//   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
+// Run: npm test (or npx tsx tools/duel-check.ts).
+import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand } from "../src/combat/rivalAi";
+import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout } from "../src/combat/rivalKit";
+import { runDuel, type DuelOptions } from "../src/combat/duelSim";
+import { LOOT_DEFAULTS } from "../src/items/generate";
+import { problems, resolve } from "../src/items/loadout";
+import { loadoutFor } from "../src/items/weaponPick";
+import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
+
+const fails: string[] = [];
+const must = (ok: boolean, why: string) => { if (!ok) fails.push(why); };
+
+// ---- The AI only issues commands ----
+{
+  // (node:fs through the process, so the typecheck needs no node types)
+  const fs = (globalThis as unknown as { process: { getBuiltinModule(m: string): { readFileSync(p: URL, e: string): string } } }).process.getBuiltinModule("node:fs");
+  const src = fs.readFileSync(new URL("../src/combat/rivalAi.ts", import.meta.url), "utf8");
+  const code = src.split("\n").filter((l: string) => !l.trim().startsWith("//")).join("\n");
+  for (const bad of ["Math.random", "WalkerSim", "MechUnit", "addEventListener", "document.", "window.", ".sim.", "import * as THREE"]) must(!code.includes(bad), `rivalAi.ts uses ${bad}`);
+  const imports = [...code.matchAll(/^import\s+(type\s+)?.*from\s+"([^"]+)"/gm)].filter((m) => !m[1]).map((m) => m[2]);
+  for (const i of imports) must(["../items/generate", "./rivalKit"].includes(i), `rivalAi.ts imports ${i} (only seeded rng and the kit's pure helpers)`);
+
+  const freeze = <T>(o: T): T => { if (o && typeof o === "object") { Object.freeze(o); for (const k of Object.keys(o)) freeze((o as Record<string, unknown>)[k]); } return o; };
+  const lo = rollRivalLoadout(3, LOOT_DEFAULTS), kit = kitOf(resolve(lo), WEAPON_DEFAULTS);
+  const ai = new RivalAi({ ...RIVAL_AI_DEFAULTS }, 5);
+  const keys = ["move", "aim", "shotAt", "cursor", "lock", "trigger", "keys", "dash", "dashHold"].sort().join();
+  let threw = "", odd = "";
+  for (let n = 0; n < 600; n++) {
+    const t = n / 60;
+    const view: DuelView = freeze({
+      t, cover: [{ x: 10, z: 0, yaw: 0, hl: 6, hw: 2.5 }], sees: () => n % 90 < 60, arena: { x: 0, z: 0, r: 80 },
+      self: { x: Math.sin(t) * 5, z: -30, vx: 1, vz: 0, heading: 0, health: 1 - n / 800, dashCharges: 2, canDash: true, dashing: false, walkSpeed: 6, kit, weapons: kit.map((_, i) => ({ i, ready: n % 120 > 30, charge: (n % 60) / 60 })) },
+      foe: { x: 0, y: 3, z: 10, vx: 3, vz: -1, health: 0.8, dashCharges: n % 200 < 20 ? 0 : 2, alive: true, gunsOff: false, airborne: false, staggered: false, r: 1.7 },
+      threats: n % 50 < 25 ? [{ id: 1 + Math.floor(n / 50), kind: "ring", x: 0, z: -30, r: 7, t: 1.5 - (n % 50) / 60 }] : [{ id: 900, kind: "line", ax: 0, az: 10, x: 0, z: -80, r: 0.6, t: Infinity, rail: true, charge: (n % 50) / 50 }],
+    });
+    let c: MechCommand;
+    try { c = ai.decide(view, 1 / 60); } catch (e) { threw = String(e); break; }
+    if (Object.keys(c).sort().join() !== keys) odd = Object.keys(c).join();
+    if (!Number.isFinite(c.move.x + c.move.z) || Math.hypot(c.move.x, c.move.z) > 1.001) odd = `move ${c.move.x},${c.move.z}`;
+  }
+  must(!threw, `decide() wrote to its view or threw: ${threw}`);
+  must(!odd, `decide() returned something other than a command: ${odd}`);
+}
+
+// ---- Seeded rival loadouts ----
+{
+  const seen = new Set<string>();
+  for (let s = 1; s <= 30; s++) {
+    const a = JSON.stringify(rollRivalLoadout(s, LOOT_DEFAULTS)), b = JSON.stringify(rollRivalLoadout(s, LOOT_DEFAULTS));
+    must(a === b, `rival seed ${s} rolled two different loadouts`);
+    seen.add(a);
+    const lo = rollRivalLoadout(s, LOOT_DEFAULTS);
+    const p = problems(lo);
+    must(!p.length, `rival seed ${s} breaks the fit rules: ${p.join("; ")}`);
+    must(kitOf(resolve(lo), WEAPON_DEFAULTS).length > 0, `rival seed ${s} carries no weapon: ${describeLoadout(lo).join(" | ")}`);
+  }
+  must(seen.size === 30, `30 seeds rolled only ${seen.size} different rivals`);
+  const lo = rollRivalLoadout(4, LOOT_DEFAULTS);
+  const notes = applyFitSpec(lo, "mountL:rail-medium:epic,pack:sh-mortar,legs:nope", LOOT_DEFAULTS, 4);
+  must(lo.mountL?.base === "rail-medium" && lo.mountL.rarity === "epic" && lo.pack?.base === "sh-mortar", "?rivalfit= didn't fit its items");
+  must(notes.length === 1, `?rivalfit= with a bad base should leave one note (${notes.length})`);
+}
+
+// ---- Duels between two AIs ----
+const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
+let both = 0, worstStuck = 0, kills = 0, ttk = 0;
+const thr = [0, 0];
+for (const [a, b] of pairs) {
+  const r = runDuel({ seedA: a, seedB: b, maxTime: 90 });
+  const rd = r.score.rounds[0];
+  const dealt = Object.values(rd.dealt).reduce((x, y) => x + y, 0), taken = Object.values(rd.taken).reduce((x, y) => x + y, 0);
+  if (dealt > 0 && taken > 0) both++;
+  if (r.winner >= 0) { kills++; ttk += r.time; }
+  worstStuck = Math.max(worstStuck, r.stuckWorst);
+  must(!r.nan, `duel ${a}-${b} went NaN`);
+  thr[0] += r.threatened[0] + r.threatened[1]; thr[1] += r.dodged[0] + r.dodged[1];
+}
+must(both >= pairs.length * 0.75, `both sides took damage in only ${both} of ${pairs.length} duels`);
+must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m or firing`);
+{
+  const a = runDuel({ seedA: 5, seedB: 6, maxTime: 60 }), b = runDuel({ seedA: 5, seedB: 6, maxTime: 60 });
+  must(a.time === b.time && JSON.stringify(a.score.rounds) === JSON.stringify(b.score.rounds), "the same seeds fought two different duels");
+}
+// A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
+{
+  const r = runDuel({ seedA: 21, seedB: 22, maxTime: 90, hull: 1e6 });
+  must(r.stuckWorst < 12, `long duel: a mech went ${r.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
+  must(Object.values(r.states[0]).filter((x) => x > 0).length >= 2, "long duel: the AI never changed state");
+  worstStuck = Math.max(worstStuck, r.stuckWorst);
+}
+
+// ---- Dodge drills: a scripted shooter 40 m off, the rival told to stand (no strafing, any range, no cover) ----
+const STAND = { aiStrafe: 0, aiRangeBand: 90, aiCover: 0, aiRetreatAt: 0, aiAggression: 0 };
+/** The shooter: stands, aims at the rival where it is (no lead), holds key 3 for 0.7 s whenever it's ready, or charges
+ *  its left rail and holds the full charge a varying while before letting go. */
+function shooter(kind: "shoulder" | "rail") {
+  let since = -1, shots = 0;
+  return (i: number, v: DuelView, t: number): MechCommand | null => {
+    if (i !== 0) return null;
+    const f = v.foe, at = { x: f.x, y: f.y, z: f.z };
+    const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: at, shotAt: at, cursor: { x: f.x, y: f.y - 1.5, z: f.z }, lock: { x: f.x, y: f.y, z: f.z, r: f.r, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+    const w = v.self.weapons[v.self.kit.findIndex((k) => (kind === "rail" ? k.kind === "rail" : "key" in k.ctl))];
+    if (!w) return c;
+    if (kind === "rail") {
+      // Holds the full charge a varying while (0.2-1.4 s), as a player lining up would.
+      if (w.charge >= 1 && since < 0) { since = t; shots++; }
+      const hold = since < 0 || t - since < 0.2 + ((shots * 0.618) % 1) * 1.2;
+      c.trigger[0] = (w.ready || w.charge > 0) && hold;
+      if (!c.trigger[0]) since = -1;
+    } else {
+      if (w.ready && since < 0 && t > 1) since = t;
+      c.keys[2] = since >= 0 && t - since < 0.7;
+      if (since >= 0 && t - since >= 0.7) since = -1;
+    }
+    return c;
+  };
+}
+const drill = (pick: Parameters<typeof loadoutFor>[0], kind: "shoulder" | "rail", ai: Partial<typeof RIVAL_AI_DEFAULTS>, time = 60) => {
+  const o: DuelOptions = {
+    seedA: 1, seedB: 2, maxTime: time, hull: 1e6, ai, script: shooter(kind), cover: 0,
+    loadouts: [loadoutFor(pick), loadoutFor({ left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" })],
+    starts: [{ x: 0, z: -20, heading: 0 }, { x: 0, z: 20, heading: Math.PI }],
+  };
+  const r = runDuel(o);
+  return { thr: r.threatened[1], dodged: r.dodged[1], dashes: r.dashes[1], taken: Object.values(r.score.rounds[0].dealt).reduce((a, b) => a + b, 0) };
+};
+type Drill = ReturnType<typeof drill>;
+const drills: Record<string, Drill> = {};
+const blind: Record<string, Drill> = {};
+const KITS = { mortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "mortar" }, linemortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "linemortar" }, missiles: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "missiles" }, rail: { left: "rail", right: "minigun", k1: "none", k2: "none", k3: "pack" } } as const;
+for (const [name, pick] of Object.entries(KITS)) {
+  const kind = name === "rail" ? "rail" : "shoulder";
+  drills[name] = drill(pick, kind, STAND);
+  blind[name] = drill(pick, kind, { ...STAND, aiReaction: 99 });
+}
+let dThr = 0, dOk = 0, bThr = 0, bOk = 0;
+const missileTaken = [drills.missiles.taken, blind.missiles.taken], railTaken = [drills.rail.taken, blind.rail.taken];
+// A rail is instant and the shooter's lock follows: no getting out of its line, but a dash after a random beat is often
+// mid-shove at the release (half damage).
+must(railTaken[0] < railTaken[1] * 0.95, `rail drill: dashing didn't cut the damage (${Math.round(railTaken[0])} vs ${Math.round(railTaken[1])} blind)`);
+delete drills.rail; delete blind.rail;
+// Missiles follow it down: no getting out, but dashing as they land takes the shove's damage cut.
+{
+  const d = drills.missiles, b = blind.missiles;
+  must(d.taken < b.taken * 0.85, `missiles drill: bracing with a dash didn't cut the damage (${Math.round(d.taken)} vs ${Math.round(b.taken)} blind)`);
+  delete drills.missiles; delete blind.missiles;
+}
+for (const k of Object.keys(drills)) {
+  const d = drills[k], b = blind[k];
+  dThr += d.thr; dOk += d.dodged; bThr += b.thr; bOk += b.dodged;
+  must(d.thr >= 3, `${k} drill: only ${d.thr} shots threatened the rival`);
+  must(d.dodged >= d.thr * 0.4, `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
+}
+must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
+
+const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;
+console.log(`duels ${pairs.length}: both damaged in ${both}, ${kills} kills (mean ${(ttk / Math.max(1, kills)).toFixed(1)} s), telegraphed shots dodged ${thr[1]}/${thr[0]} (${pct(thr[1], thr[0])}), worst idle ${worstStuck.toFixed(1)} s`);
+console.log(`rail drill: damage ${Math.round(railTaken[0])} dashing vs ${Math.round(railTaken[1])} blind`);
+console.log(`missiles drill: damage ${Math.round(missileTaken[0])} bracing vs ${Math.round(missileTaken[1])} blind`);
+console.log("drills (dodged/threatened, dashes; blind):", Object.entries(drills).map(([k, d]) => `${k} ${d.dodged}/${d.thr} ${d.dashes}d (${blind[k].dodged}/${blind[k].thr})`).join(" · "), `· total ${pct(dOk, dThr)} vs blind ${pct(bOk, bThr)}`);
+if (fails.length) { console.log("FAIL\n  " + fails.join("\n  ")); throw new Error("duel check failed"); }
+console.log("duel check passed");

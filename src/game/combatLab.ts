@@ -43,6 +43,7 @@ import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
 import type { Costs } from "../core/costs";
 import { Walkable } from "../world/walkable";
+import type { WreckStandIns } from "../world/wrecks";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../pilot/onFoot";
 import type { Prey } from "../pilot/quarry";
 
@@ -71,6 +72,8 @@ export interface CombatLabOptions<E extends object> {
   report?: () => Record<string, unknown>;
   /** Called with the dune field before any ground is streamed (e.g. to add ground modifiers). */
   setup?: (field: DuneField, values: BaseValues & E) => void;
+  /** Steel wreck stand-ins on the ground (rounds spark off them and stop; the duel lab's cover). */
+  wrecks?: (field: DuneField, values: BaseValues & E) => WreckStandIns;
   /** The lab's own demo: what the mech does while the demo runs (null: the shared demo this frame). No demo dashes. */
   demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; keys?: readonly boolean[]; lock?: TargetCandidate | null } | null;
   /** After any slider changes (after the shared handling, e.g. the dunes rebuilt). */
@@ -132,7 +135,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const streamer = new TerrainStreamer(field, V);
   scene.add(streamer.group);
   const look = new DesertLook(scene, app.renderer, V);
-  const bf = new Battlefield(field, V, camera);
+  const bf = new Battlefield(field, V, camera, o.wrecks?.(field, V) ?? null);
   scene.add(bf.group);
   // Ground marks as dents on a fine patch (Keith 2026-10-25).
   bf.useDents(app.renderer, streamer);
