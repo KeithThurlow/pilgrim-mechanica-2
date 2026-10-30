@@ -239,6 +239,12 @@ export const BASES: Base[] = [
     id: "rail-light", name: "Light rail cannon", kind: "weapon", size: "L", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 1.3, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 1,
     stats: { damage: s(WD.railDamage * WD.railLightDamage, 0.1), ap: s(WD.railLightAp, 0), charge: s(WD.railCharge * WD.railLightCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange * 0.85, 0.06), handling: s(1.1, 0.08), arcBonus: s(4, 0.2) },
   },
+  // The arm's rocket pod (Keith 2026-10-31, the old Rampart's left-arm pod; model missile-pod-l): a Light rocket
+  // launcher in the hand, quick small rockets out of a short magazine. Base values from the rocket pod sliders.
+  {
+    id: "rpg-light", name: "Rocket pod", kind: "weapon", size: "L", cls: "rpg", tags: ["weapon", "explosive", "rocket"], weight: 1.2, makers: ["Stratford-Aegis", "Suzaku"], look: "rampart-rocket", drop: 1,
+    stats: { damage: s(WD.rpgDamage * WD.podDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.podBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.podCooldown, 0.1), magazine: s(WD.podMag, 0.25), reload: s(WD.podReload, 0.1), handling: s(1.15, 0.08), arcBonus: s(4, 0.2) },
+  },
   {
     id: "rail-medium", name: "Rail cannon", kind: "weapon", size: "M", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 2.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 1,
     stats: { damage: s(WD.railDamage, 0.1), ap: s(WD.railAp, 0), charge: s(WD.railCharge, 0.1), cooldown: s(WD.railCooldown, 0.1), range: s(WD.railRange, 0.06), arc: s(20, 0.08), track: s(8, 0.08) },

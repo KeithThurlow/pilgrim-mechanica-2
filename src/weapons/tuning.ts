@@ -95,6 +95,12 @@ export const WEAPON_DEFAULTS = {
   rpgShoulderCooldown: 1,
   rpgRange: 70,
   rpgSmoke: 1,
+  // Rocket pod (arm, Light; Keith 2026-10-31): its damage a share of the rocket launcher's
+  podDamage: 0.4,
+  podBlast: 3,
+  podCooldown: 0.3,
+  podMag: 6,
+  podReload: 3.5,
   // Missile pod (shoulder)
   swarmMissiles: 10,
   swarmDamage: 60,
@@ -244,6 +250,11 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "acReload", label: "Autocannon: reload (s)", min: 0.2, max: 15, step: 0.1, group: MAG },
   { key: "rpgRange", label: "Range (m)", min: 10, max: 200, step: 1, group: RPG, tip: "The cursor's point is pulled in to this far" },
   { key: "rpgSmoke", label: "Smoke trail", min: 0, max: 3, step: 0.05, group: RPG },
+  { key: "podDamage", label: "Rocket pod (arm): damage share", min: 0.05, max: 2, step: 0.05, group: RPG, tip: "An arm rocket pod's rocket does this share of the rocket launcher's damage" },
+  { key: "podBlast", label: "Rocket pod (arm): blast (m)", min: 0.5, max: 10, step: 0.1, group: RPG },
+  { key: "podCooldown", label: "Rocket pod (arm): between rockets (s)", min: 0.05, max: 5, step: 0.05, group: RPG },
+  { key: "podMag", label: "Rocket pod (arm): magazine", min: 1, max: 24, step: 1, group: MAG },
+  { key: "podReload", label: "Rocket pod (arm): reload (s)", min: 0.2, max: 20, step: 0.1, group: MAG },
 
   { key: "swarmMissiles", label: "Missiles", min: 1, max: 24, step: 1, group: SW },
   { key: "swarmDamage", label: "Damage per missile", min: 0, max: 1000, step: 5, group: SW },
