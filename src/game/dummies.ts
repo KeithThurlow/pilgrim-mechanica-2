@@ -5,7 +5,8 @@
 // figures in lines and columns that rounds pierce, blasts reach and a rail beam throws back.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import type { Hittable } from "./battlefield";
+import type { Hittable, SplashOpts } from "./battlefield";
+import { armourHit } from "./armour";
 import type { HitSurface } from "../fx/minigun";
 import { rayCapsule, capsuleNormal } from "./mechUnit";
 import { inBand, sheetCircle, type Sheet, type SheetHit } from "./sheet";
@@ -16,6 +17,7 @@ export const DUMMY_DEFAULTS = {
   dummyFar: 36,
   dummySpreadAngle: 70,
   dummyHealth: 900,
+  dummyArmour: 0,
   dummyRespawn: 3,
   dummyMovers: 3,
   dummyMoveSpeed: 4,
@@ -37,6 +39,7 @@ export const DUMMY_PARAMS: Param[] = [
   { key: "dummyFar", label: "Farthest (m)", min: 5, max: 90, step: 1, group: G },
   { key: "dummySpreadAngle", label: "Spread round the front (°)", min: 0, max: 180, step: 1, group: G, tip: "They stand in an arc this wide ahead of where the mech starts" },
   { key: "dummyHealth", label: "Health", min: 10, max: 10000, step: 10, group: G },
+  { key: "dummyArmour", label: "Armour (the steel ones)", min: 0, max: 40, step: 0.5, group: G, tip: "Flat armour per hit (src/game/armour.ts): try 10 for an excavator's, 8 for a mech's; cutouts have none" },
   { key: "dummyRespawn", label: "Stands up again after (s)", min: 0.5, max: 20, step: 0.5, group: G },
   { key: "dummyMovers", label: "How many move", min: 0, max: 20, step: 1, group: G, tip: "These slide side to side, for feeling the guns' tracking and arc" },
   { key: "dummyMoveSpeed", label: "Move speed (m/s)", min: 0, max: 15, step: 0.1, group: G },
@@ -81,6 +84,7 @@ export class Dummy implements Hittable {
   }
 
   get maxHealth() { return this.light ? this.range.v.cutoutHealth : this.range.v.dummyHealth; }
+  armourOf() { return this.light ? 0 : this.range.v.dummyArmour ?? 0; }
   get radius() { return this.light ? this.range.v.cutoutRadius : this.range.v.dummyRadius; }
   get height() { return this.light ? this.range.v.cutoutHeight : this.range.v.dummyHeight; }
 
@@ -132,7 +136,7 @@ export class Dummy implements Hittable {
   }
 
   /** A blast: hurt if it reaches the body, full at the centre, half at the edge; it falls away from the blast. */
-  splash(at: THREE.Vector3, radius: number, damage: number, _dir: THREE.Vector3) {
+  splash(at: THREE.Vector3, radius: number, damage: number, _dir: THREE.Vector3, o?: SplashOpts) {
     if (!this.alive) return 0;
     const dx = this.x - at.x, dz = this.z - at.z;
     const y = Math.min(Math.max(at.y, this.y), this.y + this.height);
@@ -140,7 +144,7 @@ export class Dummy implements Hittable {
     if (d > radius) return 0;
     this.fallYaw = Math.atan2(dx, dz);
     if (this.light) { const l = Math.hypot(dx, dz) || 1, k = 4 * (1 - d / Math.max(0.01, radius)); this.kvx += (dx / l) * k; this.kvz += (dz / l) * k; }
-    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)));
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), undefined, undefined, o?.pierce);
     return 1;
   }
 
@@ -153,8 +157,9 @@ export class Dummy implements Hittable {
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
-  damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3) {
+  damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
+    amount = armourHit(amount, this.armourOf(), pierce);
     if (dir) this.fallYaw = Math.atan2(dir.x, dir.z);
     this.health -= amount;
     this.flash = 1;

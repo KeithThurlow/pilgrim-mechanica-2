@@ -48,6 +48,7 @@ import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
 import type { LootValues } from "../items/generate";
+import { levelPower } from "../items/level";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
@@ -181,6 +182,8 @@ export class ExpeditionLoop {
     this.camps = new CampField(v);
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
+    // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
+    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.levelGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
     this.bandits = new BanditField(v, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1).filter((q) => !q.id.startsWith("clash:")));
     this.bandits.danger = this.depth.danger;

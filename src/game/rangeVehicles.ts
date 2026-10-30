@@ -4,7 +4,8 @@
 // comes back after a while. Sim and drawing in one small file (the body is src/vehicles/carBody.ts).
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import type { Hittable } from "./battlefield";
+import type { Hittable, SplashOpts } from "./battlefield";
+import { armourHit } from "./armour";
 import type { HitSurface } from "../fx/minigun";
 import { CarSim, CAR_DEFAULTS, CAR_KINDS, type CarKind, type CarValues } from "../vehicles/car";
 import { CarBody } from "../vehicles/carBody";
@@ -18,6 +19,7 @@ export const RANGE_CAR_DEFAULTS = {
   carLoopW: 30,
   carLoopD: 6,
   carHealth: 1400,
+  carArmour: 4,
   carRespawn: 5,
 };
 export type RangeCarValues = typeof RANGE_CAR_DEFAULTS;
@@ -31,6 +33,7 @@ export const RANGE_CAR_PARAMS: Param[] = [
   { key: "carLoopW", label: "Loop half-width (m)", min: 5, max: 80, step: 1, group: G },
   { key: "carLoopD", label: "Loop half-depth (m)", min: 2, max: 40, step: 0.5, group: G },
   { key: "carHealth", label: "Health", min: 50, max: 10000, step: 50, group: G },
+  { key: "carArmour", label: "Armour", min: 0, max: 40, step: 0.5, group: G, tip: "Flat armour per hit (src/game/armour.ts): a gun truck's 4 by default" },
   { key: "carRespawn", label: "Back after (s)", min: 1, max: 30, step: 0.5, group: G },
 ];
 
@@ -108,17 +111,20 @@ export class RangeCar implements Hittable {
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
-  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts) {
     if (!this.alive) return 0;
     const p = this.sim.pos;
     const d = Math.max(0, Math.hypot(at.x - p.x, at.z - p.z) - this.half);
     if (d > radius) return 0;
-    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir);
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir, o?.pierce);
     return 1;
   }
 
-  damage(amount: number, _at?: THREE.Vector3, _dir?: THREE.Vector3) {
+  armourOf() { return this.v.carArmour ?? 0; }
+
+  damage(amount: number, _at?: THREE.Vector3, _dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
+    amount = armourHit(amount, this.armourOf(), pierce);
     this.health -= amount;
     this.onDamage?.(amount);
     if (this.health <= 0) { this.alive = false; this.health = 0; this.deadFor = 0; this.body.setWrecked(true); }

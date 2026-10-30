@@ -69,7 +69,7 @@ export class SwarmCamps {
     this.sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, this.sw.kind[i] === BIG ? 0.5 : 0.12);
     this.sw.onLob = (i, fx, fy, fz, x, z, flight) => {
       if (!player.alive && !this.sw.hasT[i]) return;
-      bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, v.robotBigLobArc, v.robotBigLobRadius, v.robotBigShotDamage);
+      bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, v.robotBigLobArc, v.robotBigLobRadius, v.robotBigShotDamage * this.sw.power[i]);
     };
     // The mech's stomps crush small ones; a dash throws clingers off.
     player.onStomp = (x, z, k) => this.sw.stomp(x, z, 2.6 * Math.min(1.5, k));
@@ -98,6 +98,8 @@ export class SwarmCamps {
 
   /** Who the swarm went for last frame (a change shakes the clingers off). */
   private lastPrey: Prey["kind"] | null = null;
+  /** The area's power at a point (src/items/level.ts levelPower at its level), for robots spawned there; null: 1. */
+  power: ((x: number, z: number) => number) | null = null;
 
   /**
    * One frame. hunting: the mech is out in the field and alive (else every camp gives up). Streams camps, wakes and
@@ -113,7 +115,7 @@ export class SwarmCamps {
       if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
       const n = this.left.get(c.id) ?? c.size;
       if (n <= 0) continue;
-      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big } : undefined);
+      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big } : undefined, this.power?.(c.x, c.z) ?? 1);
       for (const i of slots) sw.frozen[i] = 1;
       const hurt = this.hurt.get(c.id) ?? 0;
       if (hurt > 0) for (const i of slots) sw.hp[i] *= 1 - hurt;
@@ -169,7 +171,7 @@ export class SwarmCamps {
         this.dir.set(tx - fx, ty - fy, tz - fz).normalize();
         const drawn = kind !== SMALL || Math.random() < 0.5;
         if (drawn) this.slot = this.slot >= 19 ? 2 : this.slot + 1;
-        const damage = kind === BIG ? v.robotBigShotDamage : kind === MID ? v.robotMidShotDamage : v.robotShotDamage;
+        const damage = (kind === BIG ? v.robotBigShotDamage : kind === MID ? v.robotMidShotDamage : v.robotShotDamage) * sw.power[i];
         const look = kind === BIG ? { flash: 1.2, hit: 1 } : kind === MID ? { flash: 0.7, hit: 0.6 } : { flash: 0.35, hit: 0.3 };
         bf.fire(this.slot, 3, from, this.dir, from.distanceTo(T) + 8, damage,
           drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
@@ -198,7 +200,7 @@ export class SwarmCamps {
   addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt = 0, goal?: { x: number; z: number }) {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
-    const slots = this.sw.spawn(n, x, z, radius, shares);
+    const slots = this.sw.spawn(n, x, z, radius, shares, this.power?.(x, z) ?? 1);
     if (hurt > 0) for (const i of slots) this.sw.hp[i] *= 1 - hurt;
     const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0 };
     const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };

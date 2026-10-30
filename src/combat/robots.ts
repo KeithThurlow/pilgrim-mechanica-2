@@ -311,6 +311,10 @@ export class RobotSwarm {
   /** Facing (radians, 0 = +Z). Latched ones face the mech's centre. */
   readonly heading = new Float32Array(ROBOT_MAX);
   readonly hp = new Float32Array(ROBOT_MAX);
+  /** Health it spawned with (hp bars read hp / maxHp). */
+  readonly maxHp = new Float32Array(ROBOT_MAX);
+  /** Its area level's power (src/items/level.ts levelPower; 1 at level 1): spawn health and every attack's damage ×. */
+  readonly power = new Float32Array(ROBOT_MAX).fill(1);
   /** Body length (m). */
   readonly size = new Float32Array(ROBOT_MAX);
   readonly kind = new Uint8Array(ROBOT_MAX);
@@ -467,7 +471,7 @@ export class RobotSwarm {
   }
 
   /** n robots around (cx, cz) within radius; shares of them medium and big (the sliders', or these). Returns the slots used. */
-  spawn(n: number, cx: number, cz: number, radius: number, shares?: { mid: number; big: number }): number[] {
+  spawn(n: number, cx: number, cz: number, radius: number, shares?: { mid: number; big: number }, power = 1): number[] {
     const v = this.v, plan = this.planKinds(n, shares), made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
@@ -483,7 +487,8 @@ export class RobotSwarm {
       this.kind[i] = kind;
       const jit = (j: number) => 1 + (this.rand() * 2 - 1) * j;
       this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
-      this.hp[i] = big ? v.robotBigHp : mid ? v.robotMidHp : v.robotHp;
+      this.hp[i] = (big ? v.robotBigHp : mid ? v.robotMidHp : v.robotHp) * power;
+      this.maxHp[i] = this.hp[i]; this.power[i] = power;
       this.state[i] = RUN; this.stateTime[i] = 0;
       this.gait[i] = this.rand() * Math.PI * 2;
       this.tumble[i] = 0; this.spin[i] = 0; this.fallYaw[i] = 0; this.slope[i] = 0;
@@ -739,7 +744,7 @@ export class RobotSwarm {
         if (this.fireClock[i] <= 0) {
           this.fireClock[i] += v.robotBiteInterval;
           this.bites++;
-          onBite?.(i, v.robotBiteDamage);
+          onBite?.(i, v.robotBiteDamage * this.power[i]);
         }
         // A fast mech works it loose; a slow one lets the clock fade.
         if (tSpeed > v.robotShakeSpeed) this.shake[i] += dt;
@@ -765,7 +770,7 @@ export class RobotSwarm {
           const edge = dist - size[i] * (MID_SAW_Z + MID_SAW_R) - target.radius;
           if (edge < v.robotMidCutReach) {
             this.cuts++;
-            onCut?.(i, v.robotMidCutDamage, target.x - ux * target.radius * 0.8, this.hubY[i], target.z - uz * target.radius * 0.8);
+            onCut?.(i, v.robotMidCutDamage * this.power[i], target.x - ux * target.radius * 0.8, this.hubY[i], target.z - uz * target.radius * 0.8);
           }
         }
         if (stateTime[i] >= w + L + v.robotMidCutRecover) { st = RUN; this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
@@ -896,7 +901,7 @@ export class RobotSwarm {
       // On another faction's target a small runner can't leap: it bites what it reaches.
       if (own && !walker && !this.shooter[i] && st === RUN && dist - target.radius < 1.8) {
         this.fireClock[i] -= dt;
-        if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; onBite?.(i, v.robotBiteDamage); }
+        if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; onBite?.(i, v.robotBiteDamage * this.power[i]); }
       }
 
       // Guns.

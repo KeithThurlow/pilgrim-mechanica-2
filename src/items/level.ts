@@ -6,12 +6,19 @@
 import { STATS } from "./bases";
 import type { Item } from "./item";
 
-/** How much each stat grows with level (missing: not at all). */
+/**
+ * How much each stat grows with level (missing: not at all). Balance pass (2026-10-31, docs/proposal-balance.md
+ * section 6): one power curve for items and enemies, P(n) = 1 + levelGrowth × (n − 1), on an item's damage (so its
+ * DPS) and hull; rate, cooldowns, handling and speed don't change with level (feel stays put); a few utility stats grow
+ * by part of it (about their old 4%-a-level pace).
+ */
 export const LEVEL_WEIGHT: Record<string, number> = {
-  damage: 1, hull: 1, carry: 1, carryBonus: 1, radarRange: 0.5, boostFuel: 1, ammoPerGun: 1, salvage: 1, blast: 0.5, splash: 0.5,
-  range: 0.3, fireRate: 0.5, walkSpeed: 0.25, sprintSpeed: 0.25, accel: 0.5, torsoTurnRate: 0.5, track: 0.5, handling: 0.5,
-  cooldown: 0.5, dashRecharge: 0.5, charge: 0.5, spinUp: 0.5, impact: 0.5,
+  damage: 1, hull: 1, burnDps: 1, armour: 0.5, carry: 0.5, carryBonus: 0.5, radarRange: 0.25, boostFuel: 0.5, salvage: 0.5,
+  blast: 0.15, splash: 0.15, range: 0.1, magazine: 0.25,
 };
+
+/** The power curve's multiplier at a level (items' damage and hull; enemies' health and damage at an area level). */
+export const levelPower = (level: number, growth: number) => 1 + growth * Math.max(0, level - 1);
 
 export const levelOf = (item: { level?: number }) => Math.max(1, item.level ?? 1);
 
