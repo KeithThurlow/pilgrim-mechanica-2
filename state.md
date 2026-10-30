@@ -180,6 +180,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Shoulder mounts on every mech (Keith 2026-10-30): proposed (`docs/proposal-shoulders.md`), waiting for Keith.
 - Robot danger, turret trucks and the party bus merged 2026-10-29, never run in a browser: Keith to try robots lab, war band lab, convoy lab `?warband` (or `?warband=8`). Rough: war band randomness other than the bus is still `Math.random`; the bus's bandits belong to no camp so always go for the player; the stress lab fields no buses.
 - Night lights merged 2026-10-29, never seen in a browser: Keith to look (convoy lab `?time=23&set=dayRun:0`, robots lab `?time=22`, walker lab `?time=21`). Rough: faked-lamp CPU about 0.5 ms with 100 robot eyes, 1 ms with 300 (container; ground lookups); the GPU cost of 4 more spots and the headlamp shadow is unmeasured; `warband-check` breaks if CarBody gains geometry (three's uuids eat its seeded Math.random: the war band should seed its own randomness).
 - Duel lab merged 2026-10-29, never run in a browser: Keith to play (`labs/duel/?rival=3`, Reroll). Handoff `docs/handoff-duel.md`. Rough: the rival only fights the mech (not the pilot on foot); its rail is deadly (rolled rails 900+ a slug); cover drifts are sand against stand-in boxes; the rival's rounds have no penetration sheet (like bandit mechs).
