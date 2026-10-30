@@ -85,6 +85,12 @@ export class Dummy implements Hittable {
 
   get maxHealth() { return this.light ? this.range.v.cutoutHealth : this.range.v.dummyHealth; }
   armourOf() { return this.light ? 0 : this.range.v.dummyArmour ?? 0; }
+
+  /** Health bar when hurt (the steel ones; cutouts fall to a hit or two). */
+  bars(out: import("../ui/healthBars").BarEntry[]) {
+    if (!this.alive || this.light) return;
+    out.push({ key: this, x: this.x + this.kx, y: this.y + this.height + 0.8, z: this.z + this.kz, hp: this.health, max: this.maxHealth, armour: this.armourOf(), width: 2.4, always: false });
+  }
   get radius() { return this.light ? this.range.v.cutoutRadius : this.range.v.dummyRadius; }
   get height() { return this.light ? this.range.v.cutoutHeight : this.range.v.dummyHeight; }
 

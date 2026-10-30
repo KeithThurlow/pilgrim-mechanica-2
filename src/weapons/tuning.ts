@@ -303,4 +303,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", MAG, L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

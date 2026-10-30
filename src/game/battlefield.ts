@@ -51,6 +51,8 @@ export interface Hittable {
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number): void;
   /** Flat armour per hit (src/game/armour.ts), of the last unit hitRay or pick struck (swarms) or of the whole thing. */
   armourOf?(): number;
+  /** Health bars (src/ui/healthBars.ts): push a bar for each of its units worth one (cosmetic). */
+  bars?(out: import("../ui/healthBars").BarEntry[]): void;
   /**
    * Swarms: damage everything of theirs within radius of a point (a round's splash, or with o.blast an explosive's
    * blast, measured to each unit's nearest part); returns how many were hit.

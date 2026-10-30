@@ -18,6 +18,7 @@ import { BusCrew, BUS_DEFAULTS, BUS_PARAMS } from "./partyBus";
 import type { InfantrySwarm } from "./infantry";
 import { BusMusic } from "../audio/busMusic";
 import { armourHit } from "../game/armour";
+import type { BarEntry } from "../ui/healthBars";
 
 /**
  * What the band goes for: the player's mech, or the pilot on foot (src/pilot/quarry.ts Prey has this shape): alive,
@@ -262,6 +263,14 @@ export class Raider implements Hittable {
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
   armourOf() { return this.armour; }
+
+  /** Health bar: when hurt; the heavies (turret truck, tank, party bus, War Rig) always. */
+  bars(out: BarEntry[]) {
+    if (!this.alive) return;
+    const s = this.sim, k = this.kind;
+    out.push({ key: this, x: s.pos.x, y: s.pos.y + this.shape.capY + this.shape.radius + 2.2, z: s.pos.z, hp: this.hp, max: this.maxHp, armour: this.armour,
+      width: Math.max(2.4, this.shape.half * 1.1), always: k === "turretTruck" || k === "tank" || k === "partyBus" || k === "warRig" });
+  }
 
   damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;

@@ -122,6 +122,13 @@ export class RangeCar implements Hittable {
 
   armourOf() { return this.v.carArmour ?? 0; }
 
+  /** Health bar when hurt. */
+  bars(out: import("../ui/healthBars").BarEntry[]) {
+    if (!this.alive) return;
+    const p = this.sim.pos;
+    out.push({ key: this, x: p.x, y: p.y + 3.5, z: p.z, hp: this.health, max: this.v.carHealth, armour: this.armourOf(), width: 3, always: false });
+  }
+
   damage(amount: number, _at?: THREE.Vector3, _dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
     amount = armourHit(amount, this.armourOf(), pierce);

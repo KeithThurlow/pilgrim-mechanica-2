@@ -41,6 +41,8 @@ import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning"
 import { SHOT_DEFAULTS, SHOT_PARAMS } from "./shots";
 import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
+import { ReloadHud } from "../ui/reloadHud";
+import { HealthBars, BAR_DEFAULTS, BAR_PARAMS } from "../ui/healthBars";
 import type { Costs } from "../core/costs";
 import { Walkable } from "../world/walkable";
 import type { WreckStandIns } from "../world/wrecks";
@@ -50,10 +52,10 @@ import type { Prey } from "../pilot/quarry";
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
-  ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...BAR_DEFAULTS, ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -192,6 +194,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // Left click fires the left side's weapon, right click the right side's (Keith 2026-10-25); both can be held. F no
   // longer fires both: it's hold to hop out of the mech and back in (Keith 2026-10-26).
   const buttons = new MouseButtons(canvas, () => { auto = false; });
+  const reloadHud = new ReloadHud();
+  const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V);
   // Space: dash the way WASD points (Keith 2026-10-24), on charges; keep holding to carry on into the sprint (Keith 2026-10-26).
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {
@@ -392,6 +396,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
     softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
+    // Each gun's magazine and reload round the cursor (src/ui/reloadHud.ts); enemies' health bars.
+    reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
+    healthBars.update(dt);
 
     const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
     follow.lerp(want, Math.min(1, rawDt * 6));

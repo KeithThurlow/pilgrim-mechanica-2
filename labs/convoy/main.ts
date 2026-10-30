@@ -77,6 +77,8 @@ import { mechOwner } from "../../src/game/registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../../src/weapons/tuning";
 import { SHOT_DEFAULTS, SHOT_PARAMS } from "../../src/game/shots";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "../../src/game/playerAim";
+import { ReloadHud } from "../../src/ui/reloadHud";
+import { HealthBars, BAR_DEFAULTS, BAR_PARAMS } from "../../src/ui/healthBars";
 import { BIG, DOWN } from "../../src/combat/robots";
 import { WALK_LEGS } from "../../src/combat/robotLegs";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
@@ -101,14 +103,14 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...TARGET_PARAMS,
+  ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
@@ -182,6 +184,9 @@ look.lights.ground = field; look.lights.camera = camera;
 // Night lights: the bay terminals' lamp masts light the decks.
 look.lights.addLamps(() => bodies.flatMap((b) => b.terminalMeshes().filter((m) => (m as THREE.Mesh).geometry?.type === "SphereGeometry")));
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
+// Each gun's magazine round the cursor; enemies' health bars (Keith 2026-10-31).
+const reloadHud = new ReloadHud();
+const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V);
 bf.targets.push(player);
 bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
 const sim = player.sim;
@@ -801,6 +806,8 @@ app.onTick((rawDt) => {
   costs.mark("plough patch");
 
   softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
+  reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
+  healthBars.update(rawDt);
 
   follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   // Out on the sand the camera leads the mech at speed (the sprint).

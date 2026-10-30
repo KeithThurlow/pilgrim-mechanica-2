@@ -427,6 +427,13 @@ export class MechUnit implements Hittable {
   /** Flat armour per hit (src/game/armour.ts): the hull's. */
   armourOf() { return this.armourOverride ?? this.v.armour; }
 
+  /** Health bar (an enemy mech's: the bars skip the player's team): always on, over the hull. */
+  bars(out: import("../ui/healthBars").BarEntry[]) {
+    if (!this.alive) return;
+    const p = this.sim.pelvis;
+    out.push({ key: this, x: p.x, y: p.y + 3.4, z: p.z, hp: this.health, max: this.maxHealth, armour: this.armourOf(), width: 3.6, always: true });
+  }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
     amount = armourHit(amount, this.armourOf(), pierce);

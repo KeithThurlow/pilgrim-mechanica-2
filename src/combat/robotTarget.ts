@@ -15,6 +15,7 @@ import { BIG_BODY_H, MID_BODY_H, WALK_LEGS, type V3 } from "./robotLegs";
 import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
 import { armourHit } from "../game/armour";
+import type { BarEntry } from "../ui/healthBars";
 
 export class RobotTarget implements Hittable, Owner {
   readonly name = "robots";
@@ -195,6 +196,20 @@ export class RobotTarget implements Hittable, Owner {
 
   /** The armour of the robot last struck (0 with none). */
   armourOf() { return this.last < 0 ? 0 : this.swarm.armourOf(this.last); }
+
+  /** Health bars: cutters and excavators (scrappers die to a hit); excavators always. Keys by slot and generation. */
+  bars(out: BarEntry[]) {
+    const sw = this.swarm;
+    for (let i = 0; i < sw.hi; i++) {
+      const kind = sw.kind[i];
+      if (kind === SMALL || sw.state[i] >= DEAD) continue;
+      const big = kind === BIG, S = sw.size[i];
+      out.push({ key: this.keyBase + i * 4096 + (sw.gen[i] & 4095), x: sw.px[i], y: sw.hubY[i] + S * (big ? 0.9 : 0.75) + 0.6, z: sw.pz[i],
+        hp: sw.hp[i], max: sw.maxHp[i] || sw.hp[i], armour: sw.armourOf(i), width: big ? 5 : 2.4, always: big });
+    }
+  }
+  private static keys = 0;
+  private readonly keyBase = ++RobotTarget.keys * 1e9;
 }
 
 /** Distance from a point to the segment a-b. */
