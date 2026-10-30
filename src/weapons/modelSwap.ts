@@ -5,12 +5,12 @@
 // While a GLB is still loading the box stand-in shows, then the model takes its place.
 import * as THREE from "three/webgpu";
 import type { ToonLook } from "../look/toon";
-import type { ModelKind, WeaponModel as ArsenalModel } from "./models";
+import type { LauncherKind, WeaponModel as ArsenalModel } from "./models";
 import { createWeapon, entry, isLoaded, loadDef, preloadWeapons, type WeaponModel } from "./library";
 import { WeaponLook, WEAPON_LOOK_DEFAULTS } from "./weaponLook";
 
 /** Which library model each arsenal kind draws as (scale on top of its fit; tilt raises a pod's face, degrees). */
-export const KIND_MODELS: Record<ModelKind, { id: string; scale?: number; tilt?: number }> = {
+export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; tilt?: number }> = {
   rail: { id: "rail-cannon-hull" },
   railLight: { id: "rail-cannon-hull", scale: 0.75 },
   autocannon: { id: "autocannon-hull" },
@@ -36,7 +36,7 @@ export function weaponLookFor(toon: ToonLook) {
 let frameStamp = -1;
 
 /** An arsenal model for a kind on a side: the library's, with the boxes until it's loaded. */
-export function libraryModel(kind: ModelKind, toon: ToonLook, side: "left" | "right", fallback: () => ArsenalModel): ArsenalModel {
+export function libraryModel(kind: LauncherKind, toon: ToonLook, side: "left" | "right", fallback: () => ArsenalModel): ArsenalModel {
   const pick = KIND_MODELS[kind];
   const id = side === "left" ? entry(pick.id).mirror ?? pick.id : pick.id;
   const root = new THREE.Group();

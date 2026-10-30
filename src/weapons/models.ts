@@ -7,7 +7,11 @@ import * as THREE from "three/webgpu";
 import type { ToonLook } from "../look/toon";
 import { libraryModel } from "./modelSwap";
 
-export type ModelKind = "rail" | "railLight" | "autocannon" | "rpg" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
+/** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
+export type GearKind = "beltfeed" | "incendiary" | "capacitor";
+export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
+export type ModelKind = LauncherKind | GearKind;
+const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor"];
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -165,6 +169,45 @@ function lineMortarModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+/**
+ * Belt feed (shoulder, on the hull top above its gun): an ammo box with a belt chute running down and forward to the
+ * gun below, and a lamp that lights while the overdrive runs. Mirrored by the side's sign through the mount.
+ */
+function beltFeedModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, group } = kit("beltfeed", look);
+  add(recoil, box, OLIVE, [0.7, 0.55, 0.9], [0, 0.3, 0]);
+  add(recoil, box, KHAKI, [0.76, 0.1, 0.96], [0, 0.6, 0]);
+  const chute = group(recoil, [0, 0.1, 0.35], [0.9, 0, 0]);
+  add(chute, box, STEEL, [0.16, 0.5, 0.1], [0, -0.3, 0]);
+  for (let i = 0; i < 4; i++) add(chute, box, KHAKI, [0.12, 0.06, 0.1], [0, -0.1 - i * 0.12, 0.07]);
+  glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.3, 0.45, 0.47]);
+  return m;
+}
+
+/** Incendiary feed: the belt box in dark red with a stripe, a fuel tank on top; its lamp glows while ignited rounds are loaded. */
+function incendiaryFeedModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, group } = kit("incendiary", look);
+  add(recoil, box, DARK, [0.7, 0.5, 0.9], [0, 0.28, 0]);
+  add(recoil, box, HOT, [0.74, 0.08, 0.5], [0, 0.4, 0.1]);
+  add(recoil, cyl, KHAKI, [0.34, 0.8, 0.34], [0, 0.72, -0.1], [0, 0, Math.PI / 2]);
+  const chute = group(recoil, [0, 0.1, 0.35], [0.9, 0, 0]);
+  add(chute, box, STEEL, [0.16, 0.5, 0.1], [0, -0.3, 0]);
+  for (let i = 0; i < 4; i++) add(chute, box, HOT, [0.12, 0.06, 0.1], [0, -0.1 - i * 0.12, 0.07]);
+  glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.3, 0.45, 0.47]);
+  return m;
+}
+
+/** Capacitor bank: a block of cells with a cooling fin on top and cables looping down to the hull; glows when it can discharge. */
+function capacitorModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow } = kit("capacitor", look);
+  add(recoil, box, DARK, [0.8, 0.5, 0.8], [0, 0.25, 0]);
+  for (const x of [-0.24, 0, 0.24]) add(recoil, cyl, KHAKI, [0.2, 0.5, 0.2], [x, 0.7, 0]);
+  for (const x of [-0.24, 0, 0.24]) glow(recoil, cyl, GLOW, [0.14, 0.06, 0.14], [x, 0.97, 0]);
+  add(recoil, box, STEEL, [0.9, 0.06, 0.1], [0, 0.52, 0.35]);
+  for (const x of [-0.3, 0.3]) add(recoil, cyl, DARK, [0.07, 0.7, 0.07], [x, 0.0, -0.4], [0.5, 0, 0]);
+  return m;
+}
+
 /** The box stand-ins, by kind (the fallback). */
 export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   rail: (l) => railModel("rail", l),
@@ -175,9 +218,13 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   missiles: missilesModel,
   mortar: mortarModel,
   linemortar: lineMortarModel,
+  beltfeed: beltFeedModel,
+  incendiary: incendiaryFeedModel,
+  capacitor: capacitorModel,
 };
 
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */
 export const WEAPON_MODELS: Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel> = Object.fromEntries(
-  (Object.keys(BOX_MODELS) as ModelKind[]).map((k) => [k, (look: ToonLook, side: "left" | "right" = "right") => libraryModel(k, look, side, () => BOX_MODELS[k](look))]),
+  (Object.keys(BOX_MODELS) as ModelKind[]).map((k) => [k, (look: ToonLook, side: "left" | "right" = "right") =>
+    GEAR_KINDS.includes(k) ? BOX_MODELS[k](look) : libraryModel(k as LauncherKind, look, side, () => BOX_MODELS[k](look))]),
 ) as Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel>;

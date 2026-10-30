@@ -6,13 +6,16 @@
 //
 // Gun sides: rail cannon (hold to charge, release fires one slug through a penetrating sheet), autocannon (shells on the gun's clock, leading the lock), RPG
 // rocket (fires at the ground under the cursor while held, on its cooldown). Miniguns and rocket launchers carry a
-// faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar.
+// faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar (a key paints, release
+// fires), and (Keith 2026-10-30) feeds and power (src/weapons/gear.ts): a press on the key overdrives or loads special
+// rounds into the gun on that side, or refills energy bars; their passives are applied to the guns and the dash.
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { MechUnit, MechWeapons } from "../game/mechUnit";
 import { triggerOf, type Aim, type Trigger } from "../mech/upper";
 import type { Resolved } from "../items/loadout";
-import type { ShoulderWeapon } from "../items/bases";
+import type { ShoulderFamily, ShoulderWeapon } from "../items/bases";
+import { GearSim, gearStats, type RoundSpec } from "./gear";
 import type { ToonLook } from "../look/toon";
 import type { TargetCandidate } from "../game/targeting";
 import type { WeaponValues } from "./tuning";
@@ -65,7 +68,10 @@ export interface Shoulder {
   key: 1 | 2 | 3;
   mount: "shoulderL" | "shoulderR" | "back";
   weapon: ShoulderWeapon;
+  family: ShoulderFamily;
   own: Record<string, number> | null;
+  /** Feeds and power: the key's state (null on a launcher). */
+  gear: GearSim | null;
   model: WeaponModel | null;
   paint: Paint;
   /** The strip a line mortar was fired at, shown until its shells are down. */
@@ -82,7 +88,7 @@ export interface Shoulder {
 }
 
 const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
-const NAMES: Record<string, string> = { rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar" };
+const NAMES: Record<string, string> = { rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 const newLaser = (): Laser => ({ on: false, from: new THREE.Vector3(), to: new THREE.Vector3(), k: 0 });
 
 export class Arsenal implements MechWeapons {
@@ -135,8 +141,29 @@ export class Arsenal implements MechWeapons {
       const mk: ModelKind = x.weapon === "rpg" ? "shoulderRpg" : x.weapon;
       const model = body.mount ? WEAPON_MODELS[mk](this.look, x.mount === "shoulderL" ? "left" : "right") : null;
       if (model && body.mount) body.mount(x.mount).add(model.root);
-      return { ...x, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
+      const gear = x.family === "launcher" ? null : new GearSim(gearStats(x.weapon, x.own, this.v));
+      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
+    // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
+    // sliders stay live), a capacitor's faster refill.
+    for (const g of this.unit.upper.guns) { g.rateMul = 1; g.spinCut = 0; g.ammoMul = 1; }
+    this.unit.dash.refillMul = 1;
+    for (const sh of this.shoulders) {
+      if (!sh.gear) continue;
+      const st = sh.gear.stats, gi = this.gunOf(sh);
+      if (st.family === "feed" && (gi === 0 || gi === 1)) this.unit.upper.guns[gi].ammoMul *= 1 + st.ammo;
+      if (st.family === "power") this.unit.dash.refillMul += st.refill;
+    }
+  }
+
+  /** The gun a shoulder feed feeds: its own side's (0 left, 1 right); -1 on the back. */
+  private gunOf(sh: Shoulder) { return sh.mount === "shoulderL" ? 0 : sh.mount === "shoulderR" ? 1 : -1; }
+
+  /** Special rounds loaded into a side's gun now (the unit asks as it fires), or null. */
+  rounds(side: 1 | -1): RoundSpec | null {
+    const gi = side === 1 ? 0 : 1;
+    for (const sh of this.shoulders) if (sh.gear && this.gunOf(sh) === gi) { const r = sh.gear.rounds; if (r) return r; }
+    return null;
   }
 
   /** The fitted stand-ins (for the hold-V selector). */
@@ -243,7 +270,16 @@ export class Arsenal implements MechWeapons {
 
     // Shoulders: hold the key to paint, release to fire.
     // Sprinting with the weapons off, a painted shot is dropped, not fired (stepShoulder).
-    for (const sh of this.shoulders) this.stepShoulder(sh, dt, alive && !u.gunsOff && u.keys[sh.key - 1] && !!u.cursor, laserK);
+    for (const sh of this.shoulders) {
+      if (sh.gear) this.stepGear(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1]);
+      else this.stepShoulder(sh, dt, alive && !u.gunsOff && u.keys[sh.key - 1] && !!u.cursor, laserK);
+    }
+    // Each side's guns run on their feeds' passives and overdrives (a side with two feeds multiplies them).
+    this.unit.upper.guns.forEach((g, gi) => {
+      let rate = 1, spin = 0;
+      for (const sh of this.shoulders) if (sh.gear?.stats.family === "feed" && this.gunOf(sh) === gi) { rate *= sh.gear.rateMul; spin = Math.max(spin, sh.gear.stats.spin); }
+      g.rateMul = rate; g.spinCut = spin;
+    });
 
     // Everything in flight.
     this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept), this.shellSweep);
@@ -253,6 +289,24 @@ export class Arsenal implements MechWeapons {
       this.blast(at, r.blast, r.damage);
     });
     if (v.rpgSmoke > 0) for (const r of this.rockets.list) if (r.live) this.trail(r.prev, r.pos, 0.3 * v.rpgSmoke, 4);
+  }
+
+  /** A feed or power key: a press (not paint-and-release) fires it if it's off cooldown. */
+  private stepGear(sh: Shoulder, dt: number, down: boolean) {
+    const gear = sh.gear!, u = this.unit, bf = this.bf;
+    gear.update(dt);
+    const pressed = down && !sh.held;
+    sh.held = down;
+    if (sh.model) sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 6);
+    const lit = gear.left > 0;
+    for (const mat of sh.model?.glow ?? []) mat.opacity = lit ? 0.95 : gear.cool <= 0 ? 0.5 : 0.12;
+    if (!pressed || !gear.press()) return;
+    const st = gear.stats;
+    if (st.family === "power") u.dash.refillNow(st.bars);
+    if (sh.model) sh.model.recoil.position.y = -0.12;
+    bf.sfx.playSound("railCharge", u.sim.pelvis, 0.5, st.family === "power" ? 2.6 : 1.9);
+    this.onFire?.(sh.weapon);
+    this.onShake?.(0.03);
   }
 
   private stepShoulder(sh: Shoulder, dt: number, held: boolean, laserK: number) {
@@ -613,6 +667,12 @@ export class Arsenal implements MechWeapons {
       out.push(`${b} ${NAMES[s.kind]}${s.light ? " (hand)" : ""} ${state}`);
     });
     for (const sh of this.shoulders) {
+      if (sh.gear) {
+        const g = sh.gear, st = g.stats;
+        const what = st.family === "power" ? "discharge" : st.round ? "ignited rounds" : "overdrive";
+        out.push(`${sh.key} ${NAMES[sh.weapon]} ${g.left > 0 ? `<b style="color:#ffb347">${what} ${g.left.toFixed(1)} s</b>` : g.cool > 0 ? `${g.cool.toFixed(1)} s` : "ready"}`);
+        continue;
+      }
       const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : sh.cool;
       out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon} ${cd > 0 ? `${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready"}`);
     }

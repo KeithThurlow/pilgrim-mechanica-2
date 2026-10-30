@@ -250,10 +250,10 @@ const itemDrops: { rarity: Rarity; level?: number }[] = (() => {
   return (RARITIES as readonly string[]).includes(r) ? [{ rarity: r as Rarity, level }] : [];
 })();
 let dropT = 1.2, dropK = 0, bankedSeen = 0;
-// A fresh bay fits a mixed build (the mounts, Keith 2026-10-26): a hull minigun on the right, an arm on the left with
-// a light minigun and the missile pod on 1, the power pack; ?left= ?right= ?k1= ?k2= ?k3= (as in the weapons lab) fit
-// those instead.
-const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "none", k3: "pack" };
+// A fresh bay fits the default mech (Keith 2026-10-30): a minigun on each hull mount, the missile pod on shoulder 1 and
+// a belt feed on shoulder 2 (its key overdrives the right gun), the power pack; ?left= ?right= ?k1= ?k2= ?k3= (as in
+// the weapons lab) fit those instead.
+const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "beltfeed", k3: "pack" };
 const kitFlagged = pickFromParams(kit, params);
 const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
 if (kitFlagged) bayState.loadout = loadoutFor(kit);

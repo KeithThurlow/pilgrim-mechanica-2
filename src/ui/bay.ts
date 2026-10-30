@@ -6,7 +6,7 @@
 // and stash lists with their weights; loot rolls to fill the stash. Lists for now (Keith 2026-10-25: a grid inventory
 // is the long-term goal). B or the Bay button opens and closes it.
 import "./bay.css";
-import { STATS, type MountSide } from "../items/bases";
+import { STATS, BASE_BY_ID, type MountSide } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY, RARITIES, tierOf, type Rarity } from "../items/rarity";
 import { levelOf } from "../items/level";
@@ -36,8 +36,8 @@ const KIND_FOR: Record<SlotId, string> = {
   legs: "legs", hull: "hull", sensor: "a sensor: a head at the front (follows the aim) or a cluster on top (radar range, seekers)",
   mountL: "a hull weapon or an arm", mountR: "a hull weapon or an arm",
   heldL: "a held weapon (Light; a Heavy two-hander takes both arms)", heldR: "a held weapon (Light; a Heavy two-hander takes both arms)",
-  shoulderL: "a shoulder weapon", shoulderR: "a shoulder weapon",
-  pack: "a power pack, or a shoulder weapon as a back weapon", waistL: "ammo drum, cargo rack or kit", waistR: "ammo drum, cargo rack or kit",
+  shoulderL: "shoulder gear: a launcher, a feed for the left gun or power (key 1)", shoulderR: "shoulder gear: a launcher, a feed for the right gun or power (key 2)",
+  pack: "a power pack, or a launcher as a back weapon", waistL: "ammo drum, cargo rack or kit", waistR: "ammo drum, cargo rack or kit",
 };
 const SEEKER_NAMES: Record<string, string> = { scrap: "Scrap", wreck: "Wrecks", rare: "Rare", legendary: "Legendary" };
 
@@ -325,7 +325,7 @@ export function bayScreen(o: BayOptions) {
     if (isMountSlot(s)) return x.kind === "arm" || (x.kind === "weapon" && x.size === "M");
     if (s === "heldL" || s === "heldR") return x.kind === "weapon" && x.size !== "M";
     if (s === "shoulderL" || s === "shoulderR") return x.kind === "shoulder";
-    if (s === "pack") return x.kind === "pack" || x.kind === "shoulder";
+    if (s === "pack") return x.kind === "pack" || (x.kind === "shoulder" && BASE_BY_ID[x.base]?.family === "launcher");
     if (s === "waistL" || s === "waistR") return x.kind === "waist";
     return x.kind === s;
   }

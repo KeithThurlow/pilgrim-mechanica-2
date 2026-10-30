@@ -67,6 +67,7 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     }
   });
   for (const s of r.shoulders) {
+    if (s.family !== "launcher") continue;
     const ctl = { key: s.key } as KitControl, o = s.own;
     if (s.weapon === "mortar") out.push(w(ctl, "mortar", { range: v.mortarMaxRange, minRange: 10, damage: o?.damage ?? v.mortarDamage, blast: o?.blast ?? v.mortarBlast, cooldown: o?.cooldown ?? v.mortarCooldown, flight: v.mortarFlight, count: v.mortarShells }));
     else if (s.weapon === "linemortar") out.push(w(ctl, "linemortar", { range: v.salvoMaxRange, minRange: v.salvoMinRange, damage: o?.damage ?? v.salvoDamage, blast: o?.blast ?? v.salvoBlast, cooldown: o?.cooldown ?? v.salvoCooldown, count: o?.shells ?? v.salvoRockets, speed: v.salvoSpeed }));
@@ -93,7 +94,8 @@ function pickBase(r: () => number, pool: Base[]): Base {
   return pool[pool.length - 1];
 }
 
-const ofKind = (kind: string, size?: string) => BASES.filter((b) => b.kind === kind && (!size || b.size === size));
+// A rival's shoulders are launchers (its AI knows no feeds or power yet, Keith 2026-10-30: shoulder gear is the player's).
+const ofKind = (kind: string, size?: string) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher"));
 
 /**
  * A random rival loadout from a seed (the same seed always rolls the same mech): legs, hull, a sensor that fits it, each
