@@ -74,6 +74,8 @@ export class Dash {
   dashes = 0;
   /** Seconds since energy was last spent (a dash or the sprint). */
   idle = 99;
+  /** A shoulder capacitor's passive (Keith 2026-10-30): the bars refill this many times faster. */
+  refillMul = 1;
   /** The sprint is draining this frame (nothing refills). */
   draining = false;
   /** Seconds into the current dash; -1 when not dashing. */
@@ -122,6 +124,22 @@ export class Dash {
     return true;
   }
 
+  /**
+   * A capacitor's discharge (Keith 2026-10-30): fill n bars at once, the nearest full first. Returns how many bars'
+   * worth of energy it added.
+   */
+  refillNow(n: number): number {
+    let added = 0;
+    for (let k = 0; k < Math.max(0, Math.round(n)); k++) {
+      let best = -1;
+      for (let i = 0; i < this.bars.length; i++) if (this.bars[i] < 0.999 && (best < 0 || this.bars[i] > this.bars[best])) best = i;
+      if (best < 0) break;
+      added += 1 - this.bars[best];
+      this.bars[best] = 1;
+    }
+    return added;
+  }
+
   /** Skidding on its feet: the shove or the glide after it. */
   get active() { return this.phase !== "none"; }
   /** The shove itself (damage cut, the sand burst). */
@@ -161,7 +179,7 @@ export class Dash {
     this.draining = false;
     if (this.idle >= v.dashRegenDelay) {
       const k = this.refilling;
-      if (k >= 0) this.bars[k] = Math.min(1, this.bars[k] + dt / Math.max(0.05, v.dashRecharge));
+      if (k >= 0) this.bars[k] = Math.min(1, this.bars[k] + (dt * this.refillMul) / Math.max(0.05, v.dashRecharge));
     }
     this.vx = this.vz = this.crouch = this.lean = 0;
     if (!this.active) return;

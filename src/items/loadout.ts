@@ -5,15 +5,16 @@
 // - legs, hull, and an optional sensor (radar range and seekers): a head at the front (it follows the aim) or a
 //   cluster on top, and the hull says which of those sockets it has;
 // - each hull mount (left and right, chosen per side) holds EITHER a hull weapon (a Medium gun, the whole mount) OR an
-//   arm; an arm's side then has a held weapon (Light; a Heavy two-hander needs arms on both mounts and sits in heldR)
-//   and a shoulder weapon (keys 1 and 2). Those two slots exist only while that side has an arm;
+//   arm; an arm's side then has a held weapon (Light; a Heavy two-hander needs arms on both mounts and sits in heldR);
+// - a shoulder slot per side (keys 1 and 2) on the hull top, whatever the hull mount holds (Keith 2026-10-30): a
+//   launcher, a feed for that side's gun (its key overdrives it or loads special rounds) or power (src/weapons/gear.ts);
 // - the pack mount, high on the back: a power pack, or a shoulder weapon as a back weapon (key 3) in its place;
 // - the waist mounts, left and right: ammo drums (each feeds its own side's gun), cargo racks, small kit.
 // The hull item says which mounts it offers and what each takes (`Base.mounts` in bases.ts). More mounts later: add
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import type { Param } from "../core/tweaks";
-import { BASE_BY_ID, STATS, SENSOR_SOCKET, type MountSide, type SensorStyle, type ShoulderWeapon } from "./bases";
+import { BASE_BY_ID, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf } from "./protocols";
 import { itemWeight, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
@@ -58,12 +59,14 @@ export const LOADOUT_PARAMS: Param[] = [
 ];
 
 /** Today's mech: Rampart legs and hull, the Rampart visor head (Keith 2026-10-26: hulls have heads), a Medium minigun on each hull mount, the stand-in power
- *  pack, an ammo drum on each waist mount (the half drum per gun the model always had). */
+ *  pack, an ammo drum on each waist mount (the half drum per gun the model always had), and (Keith 2026-10-30, Claude's
+ *  suggestion) a missile pod on the left shoulder (key 1) and a belt feed on the right (key 2: overdrive the right gun),
+ *  so a fresh player has a keyed weapon and a keyed boost from the start. */
 export function defaultLoadout(): Loadout {
   return {
     legs: makeItem("legs-rampart"), hull: makeItem("hull-rampart"), sensor: makeItem("sensor-visor"),
-    mountL: makeItem("mg-medium", "common", "default-mg-medium-L"), heldL: null, shoulderL: null,
-    mountR: makeItem("mg-medium", "common", "default-mg-medium-R"), heldR: null, shoulderR: null,
+    mountL: makeItem("mg-medium", "common", "default-mg-medium-L"), heldL: null, shoulderL: makeItem("sh-missiles", "common", "default-sh-missiles-L"),
+    mountR: makeItem("mg-medium", "common", "default-mg-medium-R"), heldR: null, shoulderR: makeItem("sh-beltfeed", "common", "default-sh-beltfeed-R"),
     pack: makeItem("pack-standin"),
     waistL: makeItem("waist-drums", "common", "default-waist-drums-L"), waistR: makeItem("waist-drums", "common", "default-waist-drums-R"),
   };
@@ -114,11 +117,12 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
       return hasArm(lo, side!) ? null : "a held weapon needs an arm on this hull mount";
     }
     case "shoulderL": case "shoulderR": {
-      if (item.kind !== "shoulder") return "only shoulder weapons go here";
-      return hasArm(lo, side!) ? null : "a shoulder weapon rides on an arm: fit an arm on this hull mount";
+      // Whatever the hull mount holds (Keith 2026-10-30): no arm needed.
+      return item.kind === "shoulder" ? null : "only shoulder gear goes here";
     }
     case "pack": {
-      if (item.kind !== "pack" && item.kind !== "shoulder") return "a power pack, or a shoulder weapon as a back weapon";
+      if (item.kind !== "pack" && item.kind !== "shoulder") return "a power pack, or a launcher as a back weapon";
+      if (item.kind === "shoulder" && BASE_BY_ID[item.base]?.family !== "launcher") return "feeds and power ride on a shoulder, not the back";
       return hull?.mounts?.pack ? null : "the hull has no pack mount";
     }
     case "waistL": case "waistR": {
@@ -136,8 +140,8 @@ export const slotsFor = (lo: Loadout, item: Item) => SLOTS.filter((s) => !fitPro
 
 /**
  * Fit an item (throws if it doesn't fit). Returns everything that came off: what was in the slot, and anything that
- * no longer fits after the change (a hull weapon in place of an arm bounces that side's held and shoulder weapons and
- * a two-hander; an arm in place of a hull weapon bounces the hull weapon).
+ * no longer fits after the change (a hull weapon in place of an arm bounces that side's held weapon and a two-hander,
+ * not its shoulder gear; an arm in place of a hull weapon bounces the hull weapon).
  */
 export function fit(lo: Loadout, slot: SlotId, item: Item): Item[] {
   const why = fitProblem(lo, slot, item);
@@ -284,7 +288,7 @@ export interface Resolved {
   parts: { drums: boolean; drumsL: boolean; drumsR: boolean; pack: boolean; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null };
   /** Shoulder weapons on their keys: the arms' shoulders 1 and 2, the back weapon on the pack mount 3 (mount "back"
    *  is the model's top of the back); their own rolled stats (null: an unrolled base item, on the weapon sliders). */
-  shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; own: Record<string, number> | null }[];
+  shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null }[];
   /** The sensor's seeker modes (empty without a sensor). */
   seekers: SeekerMode[];
   /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
@@ -366,7 +370,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     parts: { drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), pack: !!pack, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R") },
     shoulders: ([["shoulderL", 1, "shoulderL"], ["shoulderR", 2, "shoulderR"], ["pack", 3, "back"]] as const).flatMap(([slot, key, mount]) => {
       const it = lo[slot], w = it?.kind === "shoulder" ? BASE_BY_ID[it.base]?.shoulder : undefined;
-      return it && w ? [{ key, mount, weapon: w, own: it.seed ? effectiveStats(it) : null }] : [];
+      return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null }] : [];
     }),
     seekers: lo.sensor?.seekers ? [...lo.sensor.seekers] : [],
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0) + racks,

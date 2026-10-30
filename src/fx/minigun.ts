@@ -102,13 +102,16 @@ export class MinigunFx {
   private tracerNext = 0;
   /** GPU casings: when each lands (for its tonk), worked out when it's thrown. */
   private landings: { t: number; at: THREE.Vector3 }[] = [];
+  private tracerMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, toneMapped: false });
+  /** Ignited rounds' tracers (the incendiary feed, Keith 2026-10-30). */
+  private hotMat = new THREE.MeshBasicMaterial({ color: 0xff4a12, toneMapped: false });
   private get gpuB() { return this.gpuBits !== null && this.v.fxGpuBits > 0.5; }
   private get gpuT() { return this.gpuTracers !== null && this.v.fxGpuTracers > 0.5; }
 
   constructor(private ground: Ground, public v: MinigunFxValues) {
     this.budget = new FxBudget(v);
     const tracerGeo = new THREE.BoxGeometry(0.07, 0.07, 1).translate(0, 0, -0.5);
-    const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, toneMapped: false });
+    const tracerMat = this.tracerMat;
     for (let i = 0; i < ROUNDS_IN_FLIGHT; i++) {
       let mesh: THREE.Mesh | null = null;
       if (i < TRACERS) {
@@ -151,7 +154,7 @@ export class MinigunFx {
    * eject: casing port; outboard: unit direction. own: the local player's own round (its hit is never merged,
    * thinned or trimmed). gun -1: no muzzle flash (a split round or a ricochet riding along with another).
    */
-  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1, own = false, ally = false) {
+  shot(gun: number, muzzle: THREE.Vector3, dir: THREE.Vector3, hit: THREE.Vector3, eject: THREE.Vector3 | null, outboard: THREE.Vector3 | null, surface: HitSurface = "sand", normal?: THREE.Vector3, flashScale = 1, hitScale = 1, own = false, ally = false, hot = false) {
     this.round++;
     if (gun >= 0) {
       const f = this.flashes[Math.min(FLASHES - 1, gun)];
@@ -174,8 +177,9 @@ export class MinigunFx {
     t.surface = surface; t.normal.copy(normal ?? UP); t.scale = hitScale; t.own = own; t.ally = ally;
     // Far tracers that aren't yours thin with the budget (the round still flies and hits).
     const shown = this.round % Math.max(1, Math.round(this.v.tracerEvery)) === 0 && (own || this.budget.admit(hit.x, hit.z, false, ally));
-    if (this.gpuT) { this.gpuTracers!.set(ti, muzzle, hit, this.clock, shown); if (t.mesh) t.mesh.visible = false; }
-    else if (t.mesh) t.mesh.visible = shown;
+    // Ignited rounds glow orange-red (the GPU tracers by the shown flag's value, the CPU ones by a second material).
+    if (this.gpuT) { this.gpuTracers!.set(ti, muzzle, hit, this.clock, shown, hot); if (t.mesh) t.mesh.visible = false; }
+    else if (t.mesh) { t.mesh.visible = shown; t.mesh.material = hot ? this.hotMat : this.tracerMat; }
 
     if (!eject || !outboard) return;
     const vel = this.s.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));

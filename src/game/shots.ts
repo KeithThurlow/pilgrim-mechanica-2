@@ -40,6 +40,8 @@ export interface ShotProtocols {
   ricochet?: number;
   /** Hops from a struck enemy to the nearest others not yet hit by this shot, within protoChainRange. */
   chain?: number;
+  /** Ignited (Keith 2026-10-30, the incendiary feed): what it hits burns for `time` seconds at `dps` (src/game/burn.ts). */
+  burn?: { time: number; dps: number };
 }
 
 export const SHOT_DEFAULTS = {
@@ -106,11 +108,13 @@ export interface ShotLook {
   own?: boolean;
   /** A co-op ally's (Keith 2026-10-27): shown before others' but after yours (FxBudget.admit). */
   ally?: boolean;
+  /** Ignited rounds: the tracer glows orange-red. */
+  hot?: boolean;
 }
 
 /** What happened (plain data, host-made; what the host would send). */
 export interface ShotEvent {
-  kind: "hit" | "splash" | "ricochet" | "chain" | "miss";
+  kind: "hit" | "splash" | "ricochet" | "chain" | "miss" | "ignite";
   /** The shot (row id) and the command it came from (family). */
   shot: number;
   family: number;
@@ -144,6 +148,8 @@ export interface ShotWorld {
   wrecks: Steel | null;
   register: Register;
   v: PenValues & ShotValues;
+  /** An ignited round hit a target (key = the part): set it burning (src/game/burn.ts). */
+  ignite?: (target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number) => void;
 }
 
 const CAP = 16384;
@@ -172,6 +178,8 @@ export class Shots {
   readonly team = new Uint8Array(CAP); readonly gen = new Uint8Array(CAP); readonly kind = new Uint8Array(CAP);
   readonly ric = new Uint8Array(CAP); readonly chain = new Uint8Array(CAP); readonly flags = new Uint8Array(CAP);
   readonly seed = new Uint32Array(CAP);
+  /** Ignited rounds: burn time (s) and damage per second (0: plain). */
+  readonly burnT = new Float32Array(CAP); readonly burnD = new Float32Array(CAP);
   readonly id = new Float64Array(CAP); readonly family = new Float64Array(CAP);
   /** The look of each row's command (cosmetic, by family). */
   private look: (ShotLook | null)[] = new Array(CAP).fill(null);
@@ -227,6 +235,7 @@ export class Shots {
         const i = this.row(family, K_ROUND, 0, c.team, c.origin.x, c.origin.y, c.origin.z, dxr, c.dir.y, dzr, c.range, c.damage, lk, hash(seed + r * 977 + s * 131));
         if (i < 0) return family;
         this.wait[i] = r * gap;
+        this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0;
         this.splash[i] = splash; this.splashShare[i] = share;
         this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
         let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 ? F_FIRST : 0);
@@ -249,7 +258,7 @@ export class Shots {
 
   /** One look per command, shared by its rows (the caller's vectors are reused, so they're copied). */
   private copyLook(l: ShotLook): ShotLook {
-    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own,
+    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own, hot: l.hot,
       eject: l.eject ? l.eject.clone() : null, outboard: l.outboard ? l.outboard.clone() : null };
   }
 
@@ -261,7 +270,7 @@ export class Shots {
     const l = Math.hypot(dx, dy, dz) || 1;
     this.ox[i] = x; this.oy[i] = y; this.oz[i] = z; this.dx[i] = dx / l; this.dy[i] = dy / l; this.dz[i] = dz / l;
     this.range[i] = range; this.damage[i] = damage; this.wait[i] = 0; this.splash[i] = 0; this.splashShare[i] = 0;
-    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0;
+    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0; this.burnT[i] = 0; this.burnD[i] = 0;
     this.seed[i] = seed; this.id[i] = this.nextId++; this.family[i] = family; this.look[i] = look;
     return i;
   }
@@ -295,7 +304,7 @@ export class Shots {
   private move(a: number, b: number) {
     for (const arr of [this.ox, this.oy, this.oz, this.dx, this.dy, this.dz, this.range, this.damage, this.wait, this.splash, this.splashShare,
       this.half, this.height, this.line, this.pen, this.knock, this.ax, this.ay, this.az, this.team, this.gen, this.kind, this.ric, this.chain,
-      this.flags, this.seed, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
+      this.flags, this.seed, this.burnT, this.burnD, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
     this.look[b] = this.look[a];
   }
 
@@ -332,6 +341,7 @@ export class Shots {
         if (!h.target) continue;
         this.event("hit", i, w.targets.indexOf(h.target), h.key, damage * st.share, h.x, h.y, h.z);
         this.stats.hits++;
+        this.setAlight(i, h.target, h.key, h.x, h.y, h.z);
       }
       for (const x of shot.exits) draw.exits.push(x);
       const last = shot.result.steps[shot.result.steps.length - 1];
@@ -354,6 +364,7 @@ export class Shots {
         near.damage(damage, this.pt, d);
         this.event("hit", i, w.targets.indexOf(near), -1, damage, this.pt.x, this.pt.y, this.pt.z);
         this.stats.hits++;
+        this.setAlight(i, near, -1, this.pt.x, this.pt.y, this.pt.z);
         struck = near; end.copy(this.pt); surface = near.surface;
         if (near.normalAt) near.normalAt(end, normal); else normal.copy(d).negate();
       }
@@ -392,6 +403,14 @@ export class Shots {
       }
     }
     if (struck && this.chain[i] > 0) this.chainFrom(i, end, struckE, damage, look, f);
+  }
+
+  /** An ignited round's hit: the target burns (an event, then the burn system). */
+  private setAlight(i: number, t: Hittable, key: number, x: number, y: number, z: number) {
+    const time = this.burnT[i];
+    if (!(time > 0) || !this.world.ignite) return;
+    this.event("ignite", i, this.world.targets.indexOf(t), key, this.burnD[i], x, y, z);
+    this.world.ignite(t, key, time, this.burnD[i], x, y, z);
   }
 
   private nearD = 0;

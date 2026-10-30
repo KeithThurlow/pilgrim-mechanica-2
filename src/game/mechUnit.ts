@@ -49,6 +49,8 @@ export interface MechWeapons {
   shot(side: 1 | -1): void;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
   configure?(r: import("../items/loadout").Resolved): void;
+  /** Special rounds loaded into this side's gun now (the incendiary feed's key, src/weapons/gear.ts), or null. */
+  rounds?(side: 1 | -1): import("../weapons/gear").RoundSpec | null;
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
@@ -362,9 +364,12 @@ export class MechUnit implements Hittable {
       const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
       const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
+      // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
+      const special = this.weapons?.rounds?.(s) ?? null;
+      const proto = special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto: own?.proto }
-        : { voice: "other", hitScale: 0.7 });
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto, hot: !!special }
+        : { voice: "other", hitScale: 0.7, proto: special ? proto : undefined, hot: !!special });
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);

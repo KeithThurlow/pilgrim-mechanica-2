@@ -33,6 +33,7 @@ import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetH
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
 import { splashBlast, firstBody } from "./splash";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
+import { Burns } from "./burn";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -102,6 +103,8 @@ export interface FireOptions {
   interval?: number;
   /** Seeds the shot's random choices (else the battlefield's own sequence). */
   seed?: number;
+  /** Ignited rounds: the tracer glows hot (the burn itself rides in proto.burn). */
+  hot?: boolean;
 }
 
 export class Battlefield {
@@ -150,6 +153,9 @@ export class Battlefield {
   onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
   private hit = new THREE.Vector3();
   private back = new THREE.Vector3();
+  /** Targets set burning by ignited rounds (the incendiary feed, Keith 2026-10-30): damage over time, flames drawn at them. */
+  readonly burns: Burns;
+  private flameT = 0;
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     // Labs that don't list the dent or penetration sliders still get their defaults.
@@ -161,7 +167,8 @@ export class Battlefield {
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never });
+    this.burns = new Burns(v as never);
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z) => this.burns.ignite(t, k, time, dps, x, y, z) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -215,7 +222,25 @@ export class Battlefield {
   fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): number {
     return this.shots.fire(
       { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed },
-      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally });
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot });
+  }
+
+  /** Burning targets: damage over time, and a few embers and a thread of dark smoke at each (cosmetic, local). */
+  private stepBurns(dt: number) {
+    const bn = this.burns;
+    if (!bn.list.length) return;
+    bn.step(dt);
+    const k = (this.v as { burnFlames?: number }).burnFlames ?? 1;
+    this.flameT += dt;
+    if (k <= 0 || this.flameT < 0.08) return;
+    this.flameT = 0;
+    const up = this.hit.set(0, 1, 0);
+    for (const b of bn.list) {
+      if (Math.random() > 0.6 * k) continue;
+      this.back.set(b.x + (Math.random() - 0.5) * 0.6, b.y + Math.random() * 0.4, b.z + (Math.random() - 0.5) * 0.6);
+      this.gunFx.sparksAt(this.back, up, 1, 1.5 + Math.random() * 2);
+      if (Math.random() < 0.5) this.dust.smoke(this.back.x, this.back.y + 0.3, this.back.z, (Math.random() - 0.5) * 0.4, 1 + Math.random(), (Math.random() - 0.5) * 0.4, 0.28, 1.1, 0.5, 0.85);
+    }
   }
 
   /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
@@ -226,7 +251,7 @@ export class Battlefield {
       for (const x of dr.exits) this.gunFx.sparksAt(x, dr.dir, 3, 6);
       // Only a command's first round flashes, throws brass and sounds; split rounds and children ride along quietly.
       this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
-        dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own, !!L.ally);
+        dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own, !!L.ally, !!L.hot);
       if (!dr.first) continue;
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);
@@ -432,6 +457,7 @@ export class Battlefield {
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     this.resolveShots(dt);
+    this.stepBurns(dt);
     c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);

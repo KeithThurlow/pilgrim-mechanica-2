@@ -97,6 +97,24 @@ export const WEAPON_DEFAULTS = {
   swarmFan: 2.5,
   swarmSpeed: 40,
   swarmDrop: 10,
+  // Shoulder gear (Keith 2026-10-30): feeds boost their own side's gun, power feeds the energy bars; each has a key.
+  beltRate: 0.12,
+  beltSpin: 0.25,
+  beltBoost: 0.6,
+  beltTime: 4,
+  beltCooldown: 20,
+  incRate: 0.05,
+  incAmmo: 0.15,
+  incTime: 6,
+  incCooldown: 18,
+  burnTime: 3,
+  burnDps: 14,
+  capRefill: 0.3,
+  capBars: 1,
+  capCooldown: 25,
+  burnTick: 0.25,
+  burnMax: 192,
+  burnFlames: 1,
   // Targeting laser (minigun, rocket launchers)
   laserDay: 0.12,
   laserNight: 0.75,
@@ -120,7 +138,7 @@ export const WEAPON_DEFAULTS = {
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
-const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound";
+const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound", SG = "Shoulder gear";
 export const WEAPON_PARAMS: Param[] = [
   { key: "paintOpacity", label: "Paint strength", min: 0, max: 1, step: 0.01, group: P },
   { key: "paintPulse", label: "Pulse speed (/s)", min: 0, max: 10, step: 0.1, group: P },
@@ -212,6 +230,24 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "swarmSpeed", label: "Missile speed (m/s)", min: 5, max: 120, step: 1, group: SW },
   { key: "swarmDrop", label: "Dive from (m)", min: 0, max: 40, step: 0.5, group: SW, tip: "How high above its target a missile turns into its dive" },
 
+  { key: "beltRate", label: "Belt feed: fire rate + (always)", min: 0, max: 1, step: 0.01, group: SG, tip: "Its side's gun fires this much faster whenever the belt feed is fitted (Keith 2026-10-30)" },
+  { key: "beltSpin", label: "Belt feed: spin-up cut (always)", min: 0, max: 0.9, step: 0.01, group: SG, tip: "Its side's gun spins up this much sooner" },
+  { key: "beltBoost", label: "Overdrive: fire rate +", min: 0, max: 3, step: 0.05, group: SG, tip: "The belt feed's key: its side's gun fires this much faster (on top of the passive)" },
+  { key: "beltTime", label: "Overdrive lasts (s)", min: 0.5, max: 20, step: 0.5, group: SG },
+  { key: "beltCooldown", label: "Overdrive cooldown (s)", min: 1, max: 90, step: 0.5, group: SG, tip: "From the moment the overdrive starts" },
+  { key: "incRate", label: "Incendiary feed: fire rate + (always)", min: 0, max: 1, step: 0.01, group: SG },
+  { key: "incAmmo", label: "Incendiary feed: rounds + (always)", min: 0, max: 2, step: 0.01, group: SG, tip: "Its side's drum holds this much more" },
+  { key: "incTime", label: "Ignited rounds: loaded for (s)", min: 0.5, max: 30, step: 0.5, group: SG, tip: "The incendiary feed's key: every round from its side's gun sets what it hits burning for this long" },
+  { key: "incCooldown", label: "Ignited rounds cooldown (s)", min: 1, max: 90, step: 0.5, group: SG },
+  { key: "burnTime", label: "Burn lasts (s)", min: 0.5, max: 15, step: 0.1, group: SG, tip: "How long a target burns after the last ignited round hit it (a new hit renews it)" },
+  { key: "burnDps", label: "Burn damage per second", min: 0, max: 200, step: 1, group: SG, tip: "Per burning target, on top of the round itself; a swarm unit takes it once, a part keeps its own" },
+  { key: "burnTick", label: "Burn tick (s)", min: 0.05, max: 1, step: 0.01, group: SG, tip: "Damage is applied this often" },
+  { key: "burnMax", label: "Burning targets at most", min: 8, max: 1000, step: 8, group: SG, tip: "A safety cap; the one with least time left is dropped for a new one" },
+  { key: "burnFlames", label: "Burn flames and smoke", min: 0, max: 3, step: 0.05, group: SG },
+  { key: "capRefill", label: "Capacitor bank: refill + (always)", min: 0, max: 3, step: 0.05, group: SG, tip: "The energy bars refill this much faster" },
+  { key: "capBars", label: "Discharge: bars refilled", min: 1, max: 8, step: 1, group: SG, tip: "The capacitor bank's key tops up this many bars at once, the nearest full first" },
+  { key: "capCooldown", label: "Discharge cooldown (s)", min: 1, max: 90, step: 0.5, group: SG },
+
   { key: "laserDay", label: "Strength by day", min: 0, max: 1, step: 0.01, group: L, tip: "A very faint line on the minigun and rocket launchers, quite faint by day" },
   { key: "laserNight", label: "Strength at night", min: 0, max: 1, step: 0.01, group: L, tip: "Brighter as the sun goes down (read from the light's sun height)" },
   { key: "laserWidth", label: "Width (m)", min: 0.005, max: 0.3, step: 0.005, group: L },
@@ -233,4 +269,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, M, S, SA, R, A, "Penetration", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", L, B, SND] };

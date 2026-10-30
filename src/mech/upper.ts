@@ -89,6 +89,11 @@ export interface Gun {
   enabled: boolean;
   /** This gun's own values from its item (src/items); null runs on the shared sliders. */
   stats: GunStats | null;
+  /** A shoulder feed's boost (Keith 2026-10-30, src/weapons/gear.ts): the fire clock runs this many times faster (the
+   *  passive and any overdrive), spin-up takes this much less of its time, the drum holds this many times the rounds. */
+  rateMul: number;
+  spinCut: number;
+  ammoMul: number;
 }
 
 /** One gun's values when a loadout gives it its own (else the shared sliders). Damage, spread, range and pierce are
@@ -127,7 +132,7 @@ export interface Aim {
   x: number; y: number; z: number;
 }
 
-const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0, enabled: true, stats: null });
+const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0, enabled: true, stats: null, rateMul: 1, spinCut: 0, ammoMul: 1 });
 
 export class UpperSim {
   /** Torso yaw in world space (radians, heading convention). */
@@ -149,7 +154,7 @@ export class UpperSim {
   reset(yaw: number) { this.torsoYaw = yaw; for (const g of this.guns) { g.spin = 0; g.clock = 0; } this.resupply(); }
 
   /** Fill both drums. */
-  resupply() { for (const g of this.guns) g.ammo = g.stats?.ammo ?? this.v.ammoPerGun; }
+  resupply() { for (const g of this.guns) g.ammo = Math.round((g.stats?.ammo ?? this.v.ammoPerGun) * g.ammoMul); }
 
   /**
    * legsHeading: where the legs face. shoulder: world position of the middle of the gun line. aim: target or null.
@@ -229,14 +234,14 @@ export class UpperSim {
       // A rail cannon or rocket launcher only aims here: it charges and fires in src/weapons.
       if (own?.cls === "rail" || own?.cls === "rpg") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       const trigger = triggerOf(triggers, g.side === 1 ? 0 : 1);
-      g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit);
+      g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit) * (1 - g.spinCut);
       g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
       this.spin = Math.max(this.spin, g.spin);
 
       g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && g.ammo > 0;
       if (g.firing) {
-        g.clock += dt * (own?.fireRate ?? v.fireRate) * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
+        g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
         while (g.clock >= 1 && g.ammo > 0) {
           g.clock -= 1;
           g.ammo--;

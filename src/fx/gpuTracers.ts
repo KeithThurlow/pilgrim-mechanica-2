@@ -3,7 +3,7 @@
 // the vertex shader flies it: its head at (now - left) × speed along the line, its tail tracerLength behind, gone
 // once it arrives. The CPU still times each round's arrival for its impact (MinigunFx); nothing is written per frame.
 import * as THREE from "three/webgpu";
-import { Fn, float, vec3, uniform, select, cross, normalize, max, min, positionLocal, instancedBufferAttribute } from "three/tsl";
+import { Fn, float, vec3, uniform, select, cross, normalize, max, min, clamp, mix, positionLocal, instancedBufferAttribute } from "three/tsl";
 
 export class GpuTracers {
   readonly mesh: THREE.InstancedMesh;
@@ -18,11 +18,13 @@ export class GpuTracers {
 
   constructor(readonly N: number) {
     this.from = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
-    // w: shown (1) or not (0); a never-used slot has from = to so it's already arrived.
+    // w: shown (1), shown and ignited (2) or not (0); a never-used slot has from = to so it's already arrived.
     this.to = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
     for (const a of [this.from, this.to]) a.setUsage(THREE.DynamicDrawUsage);
     const f = instancedBufferAttribute<"vec4">(this.from), t = instancedBufferAttribute<"vec4">(this.to);
     const mat = new THREE.MeshBasicNodeMaterial({ color: 0xffc46b, toneMapped: false });
+    // Ignited rounds (Keith 2026-10-30): orange-red instead of amber.
+    mat.colorNode = mix(vec3(1, 0.77, 0.42), vec3(1, 0.29, 0.07), clamp(t.w.sub(1), 0, 1));
     mat.positionNode = Fn(() => {
       const d = t.xyz.sub(f.xyz), dist = d.length();
       const dir = d.div(max(dist, 1e-4));
@@ -43,10 +45,10 @@ export class GpuTracers {
   }
 
   /** Slot i flies from a to b, leaving now (s on the uNow clock), shown or not. */
-  set(i: number, a: THREE.Vector3, b: THREE.Vector3, now: number, shown: boolean) {
+  set(i: number, a: THREE.Vector3, b: THREE.Vector3, now: number, shown: boolean, hot = false) {
     const F = this.from.array as Float32Array, T = this.to.array as Float32Array, o = i * 4;
     F[o] = a.x; F[o + 1] = a.y; F[o + 2] = a.z; F[o + 3] = now;
-    T[o] = b.x; T[o + 1] = b.y; T[o + 2] = b.z; T[o + 3] = shown ? 1 : 0;
+    T[o] = b.x; T[o + 1] = b.y; T[o + 2] = b.z; T[o + 3] = shown ? (hot ? 2 : 1) : 0;
     this.dirty0 = Math.min(this.dirty0, i); this.dirty1 = Math.max(this.dirty1, i);
     if (i + 1 > this.top) { this.top = i + 1; this.mesh.count = this.top; }
   }

@@ -66,7 +66,7 @@ export function statRange(base: Base, stat: string, rarity: Rarity, t: WidenTuni
 
 function finish(stat: string, x: number) {
   const info = STATS[stat];
-  return info?.whole ? Math.max(stat === "dashCharges" ? 1 : 0, Math.round(x)) : Math.max(0.01, x);
+  return info?.whole ? Math.max(stat === "dashCharges" || stat === "dischargeBars" ? 1 : 0, Math.round(x)) : Math.max(0.01, x);
 }
 
 /** A sensor's seeker modes by rarity: the base's first, one more per tier above Common. */

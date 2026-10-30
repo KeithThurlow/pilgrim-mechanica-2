@@ -13,9 +13,19 @@ import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
 
-/** Shoulder weapons (Keith 2026-10-25): on an arm's shoulder (keys 1 and 2) or on the pack mount as a back weapon
- *  (key 3, in place of the pack). */
-export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar";
+/** Shoulder gear (Keith 2026-10-25, widened 2026-10-30): on a hull's shoulder (keys 1 and 2, whatever its hull mount
+ *  holds) or, for launchers, on the pack mount as a back weapon (key 3, in place of the pack). Every one has a key. */
+export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar" | "beltfeed" | "incendiary" | "capacitor";
+/** What a shoulder item is (Keith 2026-10-30): a launcher (its key paints and fires it), a feed (boosts its own side's
+ *  gun; its key overdrives it or loads special rounds) or power (faster energy refill; its key discharges a bar). */
+export type ShoulderFamily = "launcher" | "feed" | "power";
+/** Special rounds a feed's key can load into its gun (only incendiary so far; armour-piercing and explosive come
+ *  later: add the name here, its numbers in src/weapons/gear.ts and its effect in src/game/shots.ts). */
+export type RoundType = "incendiary";
+/** A shoulder weapon's family. */
+export const SHOULDER_FAMILY: Record<ShoulderWeapon, ShoulderFamily> = {
+  rpg: "launcher", missiles: "launcher", mortar: "launcher", linemortar: "launcher", beltfeed: "feed", incendiary: "feed", capacitor: "power",
+};
 
 export interface StatInfo {
   label: string;
@@ -65,6 +75,16 @@ export const STATS: Record<string, StatInfo> = {
   arcBonus: { label: "Arc + (°)", better: 1, decimals: 0 },
   lockAssist: { label: "Lock cone + (°)", better: 1, decimals: 1 },
   trackAssist: { label: "Gun tracking +", better: 1, decimals: 2 },
+  // Shoulder gear (feeds and power; Keith 2026-10-30): shares are fractions (0.1 is +10%).
+  feedRate: { label: "Fire rate + (passive)", better: 1, decimals: 2 },
+  feedSpin: { label: "Spin-up cut (passive)", better: 1, decimals: 2 },
+  feedAmmo: { label: "Rounds + (passive)", better: 1, decimals: 2 },
+  refill: { label: "Energy refill + (passive)", better: 1, decimals: 2 },
+  boost: { label: "Overdrive fire rate +", better: 1, decimals: 2 },
+  effectTime: { label: "Key effect lasts (s)", better: 1, decimals: 1 },
+  burnTime: { label: "Burns for (s)", better: 1, decimals: 1 },
+  burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
+  dischargeBars: { label: "Bars refilled by the key", better: 1, decimals: 0, whole: true },
 };
 
 /** A hull mount's side. Two today; a hull with more mounts adds a side here (and its slots in loadout.ts MOUNTS). */
@@ -107,6 +127,10 @@ export interface Base {
   /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Shoulder items: which shoulder weapon. */
   cls?: GunClass;
   shoulder?: ShoulderWeapon;
+  /** Shoulder items: launcher, feed or power (Keith 2026-10-30). */
+  family?: ShoulderFamily;
+  /** Feeds: the special round their key loads (none: the key overdrives the gun's fire rate). */
+  round?: RoundType;
 }
 
 const R = LEG_TYPES.rampart.values;
@@ -235,6 +259,21 @@ export const BASES: Base[] = [
     id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.8,
     stats: { shells: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
   },
+  // Feeds (Keith 2026-10-30): always boost their own side's gun (the passive), and their key (1 or 2) does more: the
+  // belt feed overdrives it, the incendiary feed loads ignited rounds. Unrolled ones run on the "Shoulder gear" sliders.
+  {
+    id: "sh-beltfeed", name: "Belt feed", kind: "shoulder", shoulder: "beltfeed", tags: ["shoulder", "feed", "kinetic", "hose"], weight: 1.2, makers: ["Stratford-Aegis", "Suzaku"], look: "rampart", drop: 1,
+    stats: { feedRate: s(WD.beltRate, 0.15), feedSpin: s(WD.beltSpin, 0.15), boost: s(WD.beltBoost, 0.12), effectTime: s(WD.beltTime, 0.12), cooldown: s(WD.beltCooldown, 0.1) },
+  },
+  {
+    id: "sh-incendiary", name: "Incendiary feed", kind: "shoulder", shoulder: "incendiary", round: "incendiary", tags: ["shoulder", "feed", "kinetic", "hose", "fire"], weight: 1.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart", drop: 0.8,
+    stats: { feedRate: s(WD.incRate, 0.15), feedAmmo: s(WD.incAmmo, 0.15), effectTime: s(WD.incTime, 0.12), burnTime: s(WD.burnTime, 0.12), burnDps: s(WD.burnDps, 0.12), cooldown: s(WD.incCooldown, 0.1) },
+  },
+  // Power (Keith 2026-10-30): for the energy builds. The passive refills the energy bars faster; the key refills bars at once.
+  {
+    id: "sh-capacitor", name: "Capacitor bank", kind: "shoulder", shoulder: "capacitor", tags: ["shoulder", "power", "energy"], weight: 1.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 0.9,
+    stats: { refill: s(WD.capRefill, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },
+  },
   // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later). Charges are
   // energy bars (Keith 2026-10-27: 4 by default, recharge 30% faster; every pack scaled the same).
   {
@@ -269,6 +308,9 @@ export const BASES: Base[] = [
     stats: { salvage: s(0.3, 0.2) },
   },
 ];
+
+// Every shoulder item has a family (launcher unless it says otherwise: the older four).
+for (const b of BASES) if (b.shoulder) b.family = SHOULDER_FAMILY[b.shoulder];
 
 /** Bases renamed since saves were written (src/ui/bay.ts loadBay migrates them). */
 export const RENAMED_BASES: Record<string, string> = { "back-drums": "waist-drums", "back-fulldrums": "waist-fulldrums" };
