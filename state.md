@@ -181,6 +181,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Balance (agent, `wip/balance`, 2026-10-30): proposal `docs/proposal-balance.md` and `tools/balance-sheet.ts` (`--proposed`, `--check`) done, waiting for Keith; no live value changed. Handoff `docs/handoff-balance.md`.
 - Shoulder gear merged 2026-10-30, never run in a browser: Keith to try weapons lab `?k1=missiles&k2=beltfeed`, `?k2=incendiary`, `?k1=capacitor`; convoy lab `?fresh`. Rough: stand-in models, orange tracers and burn flames never rendered; flames stay at the last hit; rivals roll launchers only.
 - Robot danger, turret trucks and the party bus merged 2026-10-29, never run in a browser: Keith to try robots lab, war band lab, convoy lab `?warband` (or `?warband=8`). Rough: war band randomness other than the bus is still `Math.random`; the bus's bandits belong to no camp so always go for the player; the stress lab fields no buses.
 - Night lights merged 2026-10-29, never seen in a browser: Keith to look (convoy lab `?time=23&set=dayRun:0`, robots lab `?time=22`, walker lab `?time=21`). Rough: faked-lamp CPU about 0.5 ms with 100 robot eyes, 1 ms with 300 (container; ground lookups); the GPU cost of 4 more spots and the headlamp shadow is unmeasured; `warband-check` breaks if CarBody gains geometry (three's uuids eat its seeded Math.random: the war band should seed its own randomness).
@@ -237,6 +238,16 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-30 · Balance proposal and balance sheet (agent, `wip/balance`)
+
+Keith: start balance from a level-1 baseline; armour must matter. `tools/balance-sheet.ts` reads the live item, weapon
+and enemy tables and prints effective DPS per item against five target sets (% of a 150-per-mount budget), time to kill
+per enemy (alone and in pairs), Protocol and feed values, armour, velocity, level vs depth and the player's survival.
+Today: the rail is 2-2.5× budget, the big mortar ~20%, miniguns flat (no armour), enemies die 3-5× faster than the
+proposed targets. `docs/proposal-balance.md`: framework, armour model (flat per hit, pierce, floor), exchange rates,
+Protocol pricing with additive stacking, one level curve shared with enemies, TTK targets, proposed values. Checked:
+typecheck, the tool in both modes. No live value changed.
+
 ### 2026-10-30 · Shoulder gear on every hull: launchers, feeds, power (agent, `wip/shoulders`)
 
 Keith: a hull gun took away that side's shoulder, so the default mech had no keyed weapons. Now every hull has two
