@@ -8,7 +8,8 @@ import type { MechUnit } from "./mechUnit";
 
 const same = (g: GunStats, v: MechUnit["v"]) =>
   g.fireRate === v.fireRate && g.spinUp === v.spinUp && g.ammo === v.ammoPerGun && g.arc === v.podYawMax && g.track === v.podTrack &&
-  g.damage === v.roundDamage && g.spread === v.spread && g.range === v.range && g.pierce === v.roundPierce;
+  g.damage === v.roundDamage && g.spread === v.spread && g.range === v.range && g.pierce === v.roundPierce &&
+  (g.reload ?? v.reloadTime) === v.reloadTime && (g.ap ?? v.roundAp) === v.roundAp && (g.cost ?? 1) === 1 && !g.proto;
 
 export function applyLoadout(unit: MechUnit, r: Resolved) {
   Object.assign(unit.v, r.values);

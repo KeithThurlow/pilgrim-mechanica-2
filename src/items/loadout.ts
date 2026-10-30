@@ -15,7 +15,7 @@
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
-import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf } from "./protocols";
+import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf } from "./protocols";
 import { itemWeight, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
 import type { GunStats } from "../mech/upper";
@@ -44,15 +44,18 @@ export function sideOf(slot: SlotId): MountSide | null {
   return null;
 }
 
+/** What a side's waist does for its gun's magazine: the bonus share and the reload speed. */
+interface Feed { bonus: number; speed: number }
+
 export const LOADOUT_DEFAULTS = {
-  bareAmmo: 300,
+  bareMagBonus: 0,
   bareDashCharges: 2,
   bareDashRecharge: 4.6,
   bareRadar: 90,
 };
 export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
-  { key: "bareAmmo", label: "Rounds per gun without a drum", min: 0, max: 2000, step: 10, group: "Bare mech", tip: "What a gun's own feed holds when its side's waist mount has no ammo drum" },
+  { key: "bareMagBonus", label: "Magazine + without a drum", min: -0.9, max: 2, step: 0.05, group: "Bare mech", tip: "A belt-fed gun's magazine share added when its side's waist mount has no ammo drum (a drum adds its own)" },
   { key: "bareDashCharges", label: "Dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 400, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
@@ -267,6 +270,8 @@ export interface ResolvedValues {
   armour: number;
   dashCharges: number; dashRecharge: number; boostFuel: number;
   ammoPerGun: number;
+  /** The first gun's reload (s). */
+  reloadTime: number;
   /** The shared gun sliders, from the first fitted gun (each gun also has its own in `guns`). */
   fireRate: number; spinUp: number; spread: number; range: number; roundDamage: number; roundPierce: number; podYawMax: number; podTrack: number;
   /** The mech radar's range (src/expedition/radar.ts): the sensor's, or the bare hull's. */
@@ -290,7 +295,7 @@ export interface Resolved {
   parts: { drums: boolean; drumsL: boolean; drumsR: boolean; pack: boolean; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null };
   /** Shoulder weapons on their keys: the arms' shoulders 1 and 2, the back weapon on the pack mount 3 (mount "back"
    *  is the model's top of the back); their own rolled stats (null: an unrolled base item, on the weapon sliders). */
-  shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null }[];
+  shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null; proto?: import("../game/shots").ShotProtocols; cost?: number }[];
   /** The sensor's seeker modes (empty without a sensor). */
   seekers: SeekerMode[];
   /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
@@ -305,29 +310,41 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const pack = lo.pack?.kind === "pack" ? effectiveStats(lo.pack) : null;
   const sensor = lo.sensor ? effectiveStats(lo.sensor) : null;
   const eff = (s: SlotId) => (lo[s] ? effectiveStats(lo[s]!) : null);
-  const ammoOf = (s: MountSide) => eff(MOUNTS[s].waist)?.ammoPerGun ?? bare.bareAmmo;
+  // A side's waist feeds its gun's magazine (Keith 2026-10-31: magazines and reloads): a drum's magazine bonus (an old
+  // drum's rounds read as a bonus, 1200 rounds +50%), an autoloader's reload speed.
+  const feedOf = (s: MountSide): Feed => {
+    const w = eff(MOUNTS[s].waist);
+    return { bonus: w?.magBonus ?? (w?.ammoPerGun !== undefined ? w.ammoPerGun / 2400 : bare.bareMagBonus), speed: w?.reloadSpeed ?? 0 };
+  };
   // A head's tracking help: every gun's tracking times this.
   const trackK = 1 + (sensor?.trackAssist ?? 0);
 
-  const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number, ammo: number): GunStats => {
-    const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
-    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, proto: shotProtocolsOf(item.socketed) };
+  const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number, feed: Feed): GunStats => {
+    const b = BASE_BY_ID[item.base], cls = b?.cls ?? "minigun";
+    // The magazine: the weapon's own (an item saved before magazines: its base's), a belt-fed gun's grown by its drum;
+    // the reload cut by reload speed. What each shot costs from its Protocols.
+    const magOf = (belt: boolean) => Math.max(1, Math.round((w.magazine ?? b?.stats.magazine?.base ?? 1) * (belt ? 1 + feed.bonus : 1)));
+    const reload = (w.reload ?? b?.stats.reload?.base ?? 2) / Math.max(0.1, 1 + feed.speed);
+    const proto = shotProtocolsOf(item.socketed), cost = shotCostOf(item.socketed);
+    const ammo = magOf(cls === "minigun" || cls === "autocannon");
+    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, proto };
     // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
     // an unrolled base item runs on the weapon sliders (own: null).
     const own = item.seed ? w : null, light = item.size === "L";
-    if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, ap: w.ap, cls, own, light };
-    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, ap: w.ap, cls, own, light };
-    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, ap: w.ap, cls, own, light };
+    if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, ap: w.ap, cls, own, light, proto };
+    // The rail charges on energy-tagged coils but spends nothing yet (the energy hook, later): no magazine.
+    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, ap: w.ap, cls, own, light };
+    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, ap: w.ap, cls, own, light, proto };
   };
   // A side's gun: its hull weapon, or the weapon its arm holds (the arm's arc plus the weapon's, the arm's tracking
   // times the weapon's handling).
   const side = (s: MountSide): GunStats | null => {
     const m = MOUNTS[s], mount = lo[m.mount];
-    if (isHullWeapon(mount)) { const w = effectiveStats(mount!); return gunFrom(mount!, w, w.arc, w.track * trackK, ammoOf(s)); }
+    if (isHullWeapon(mount)) { const w = effectiveStats(mount!); return gunFrom(mount!, w, w.arc, w.track * trackK, feedOf(s)); }
     const h = lo[m.held];
     if (isArm(mount) && h?.kind === "weapon" && h.size === "L") {
       const a = effectiveStats(mount!), w = effectiveStats(h);
-      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, ammoOf(s));
+      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, feedOf(s));
     }
     return null;
   };
@@ -336,7 +353,8 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // A two-hander fires from the right side, aimed by both arms: their mean arc, their mean tracking times its
     // handling; fed by the bigger of the two waist drums.
     const w = effectiveStats(lo.heldR!), a = effectiveStats(lo.mountL!), b = effectiveStats(lo.mountR!);
-    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, Math.max(ammoOf("L"), ammoOf("R")));
+    const fl = feedOf("L"), fr = feedOf("R");
+    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, { bonus: Math.max(fl.bonus, fr.bonus), speed: Math.max(fl.speed, fr.speed) });
     left = null;
   }
   const first = right ?? left;
@@ -348,7 +366,8 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     walkSpeed: legs.walkSpeed, sprintSpeed: legs.sprintSpeed, accel: legs.accel, strideBase: legs.strideBase, stridePerSpeed: legs.stridePerSpeed, impact: legs.impact, turnRate: legs.turnRate,
     hull: hull.hull, torsoTurnRate: hull.torsoTurnRate, armour: hull.armour ?? 0,
     dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
-    ammoPerGun: first?.ammo ?? bare.bareAmmo,
+    ammoPerGun: first?.ammo ?? BASE_STATS("mg-medium").magazine,
+    reloadTime: first?.reload ?? D.reload,
     fireRate: first?.fireRate ?? D.fireRate, spinUp: first?.spinUp ?? D.spinUp, spread: first?.spread ?? D.spread, range: first?.range ?? D.range,
     roundDamage: first?.damage ?? D.damage, roundPierce: first?.pierce ?? D.pierce, podYawMax: first?.arc ?? D.arc, podTrack: first?.track ?? D.track,
     mechRadar: sensor?.radarRange ?? bare.bareRadar,
@@ -372,7 +391,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     parts: { drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), pack: !!pack, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R") },
     shoulders: ([["shoulderL", 1, "shoulderL"], ["shoulderR", 2, "shoulderR"], ["pack", 3, "back"]] as const).flatMap(([slot, key, mount]) => {
       const it = lo[slot], w = it?.kind === "shoulder" ? BASE_BY_ID[it.base]?.shoulder : undefined;
-      return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null }] : [];
+      return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null, proto: shotProtocolsOf(it.socketed), cost: shotCostOf(it.socketed) }] : [];
     }),
     seekers: lo.sensor?.seekers ? [...lo.sensor.seekers] : [],
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0) + racks,
@@ -412,7 +431,8 @@ export function summary(r: Resolved): SummaryLine[] {
       line(`${name}ap`, `${name} armour pierce`, g?.ap ?? null, 1, 2),
       line(`${name}arc`, `${name} arc (°)`, g?.arc ?? null, 1, 0),
       line(`${name}track`, `${name} tracking`, g?.track ?? null, 1, 1),
-      line(`${name}ammo`, `${name} rounds`, g?.ammo ?? null, 1, 0),
+      line(`${name}ammo`, `${name} magazine`, g?.ammo ?? null, 1, 0),
+      line(`${name}reload`, `${name} reload (s)`, g?.reload ?? null, -1, 2),
     );
   }
   return out;

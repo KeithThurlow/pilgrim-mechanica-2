@@ -79,12 +79,20 @@ export const WEAPON_DEFAULTS = {
   acPen: 1.5,
   acSheetHalf: 0.4,
   acSheetUp: 4,
+  // Magazines (Keith 2026-10-31): munition weapons fire from a magazine and reload once it's empty. Miniguns' are on
+  // the mech's sliders (ammoPerGun, reloadTime); the volley launchers' cooldown is their reload (a magazine of one volley).
+  acMag: 24,
+  acReload: 2.8,
+  rpgMag: 4,
+  rpgReload: 4,
+  rpgShoulderMag: 3,
+  rpgShoulderReload: 8,
   // RPG rocket (hull: its side's button; shoulder: a number key)
   rpgSpeed: 55,
   rpgDamage: 300,
   rpgBlast: 4.5,
-  rpgCooldown: 2.2,
-  rpgShoulderCooldown: 4,
+  rpgCooldown: 1.4,
+  rpgShoulderCooldown: 1,
   rpgRange: 70,
   rpgSmoke: 1,
   // Missile pod (shoulder)
@@ -149,7 +157,7 @@ export const WEAPON_DEFAULTS = {
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
-const AP = "Armour pierce";
+const AP = "Armour pierce", MAG = "Magazines";
 const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound", SG = "Shoulder gear";
 export const WEAPON_PARAMS: Param[] = [
   { key: "paintOpacity", label: "Paint strength", min: 0, max: 1, step: 0.01, group: P },
@@ -226,8 +234,14 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "rpgSpeed", label: "Speed (m/s)", min: 10, max: 200, step: 1, group: RPG },
   { key: "rpgDamage", label: "Damage", min: 0, max: 3000, step: 10, group: RPG },
   { key: "rpgBlast", label: "Blast radius (m)", min: 0.5, max: 12, step: 0.1, group: RPG },
-  { key: "rpgCooldown", label: "Cooldown, hull (s)", min: 0.1, max: 15, step: 0.1, group: RPG },
-  { key: "rpgShoulderCooldown", label: "Cooldown, shoulder (s)", min: 0.1, max: 20, step: 0.1, group: RPG },
+  { key: "rpgCooldown", label: "Between rockets, hull (s)", min: 0.1, max: 15, step: 0.1, group: RPG, tip: "Time between rockets out of one magazine (Magazines group: then it reloads)" },
+  { key: "rpgShoulderCooldown", label: "Between rockets, shoulder (s)", min: 0.1, max: 20, step: 0.1, group: RPG },
+  { key: "rpgMag", label: "Rocket launcher (hull): magazine", min: 1, max: 20, step: 1, group: MAG },
+  { key: "rpgReload", label: "Rocket launcher (hull): reload (s)", min: 0.2, max: 20, step: 0.1, group: MAG },
+  { key: "rpgShoulderMag", label: "Shoulder rocket: magazine", min: 1, max: 12, step: 1, group: MAG },
+  { key: "rpgShoulderReload", label: "Shoulder rocket: reload (s)", min: 0.2, max: 30, step: 0.1, group: MAG },
+  { key: "acMag", label: "Autocannon: magazine (shells)", min: 1, max: 100, step: 1, group: MAG },
+  { key: "acReload", label: "Autocannon: reload (s)", min: 0.2, max: 15, step: 0.1, group: MAG },
   { key: "rpgRange", label: "Range (m)", min: 10, max: 200, step: 1, group: RPG, tip: "The cursor's point is pulled in to this far" },
   { key: "rpgSmoke", label: "Smoke trail", min: 0, max: 3, step: 0.05, group: RPG },
 
@@ -289,4 +303,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", MAG, L, B, SND] };

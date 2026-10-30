@@ -120,7 +120,7 @@ export class WorstCase {
       for (const c of this.targets()) { const dd = (c.x - p.x) ** 2 + (c.z - p.z) ** 2; if (dd < bd) { bd = dd; e = c; } }
       const aim = e ? { x: e.x, y: e.y, z: e.z } : null;
       m.step(dt, { x: cx, z: cz, sprint: false }, aim, aim ? true : false);
-      if (m.upper.guns[0].ammo < 100) m.upper.resupply();
+      // (Magazines reload by themselves.)
     });
   }
 

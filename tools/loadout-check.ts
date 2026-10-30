@@ -231,10 +231,16 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   const full = rollItem(21, L, { base: "waist-fulldrums" });
   fit(lo, "waistR", full);
   let r = resolve(lo);
-  must(r.guns.right!.ammo === full.stats.ammoPerGun && r.guns.left!.ammo === UPPER_DEFAULTS.ammoPerGun, "a waist drum didn't feed only its own side's gun");
+  // Magazines (2026-10-31): a drum grows its own side's gun's magazine by its bonus.
+  const mag = makeItem("mg-medium").stats.magazine;
+  must(r.guns.right!.ammo === Math.round(mag * (1 + full.stats.magBonus)) && r.guns.left!.ammo === UPPER_DEFAULTS.ammoPerGun, "a waist drum didn't feed only its own side's gun");
   unfit(lo, "waistL");
   r = resolve(lo);
-  must(r.guns.left!.ammo === LOADOUT_DEFAULTS.bareAmmo && r.parts.drumsR && !r.parts.drumsL, "a gun with no drum on its side doesn't fall back to the bare feed");
+  must(r.guns.left!.ammo === Math.round(mag * (1 + LOADOUT_DEFAULTS.bareMagBonus)) && r.parts.drumsR && !r.parts.drumsL, "a gun with no drum on its side doesn't fall back to the bare magazine");
+  // An autoloader cuts its side's reload; an old drum's rounds read as a bonus.
+  fit(lo, "waistL", rollItem(23, L, { base: "waist-autoloader" }));
+  r = resolve(lo);
+  must(r.guns.left!.reload! < makeItem("mg-medium").stats.reload, "an autoloader didn't cut its side's reload");
   // A cargo rack on the waist adds to the cargo.
   const rack = rollItem(22, L, { base: "waist-rack" });
   const cap0 = r.cargoCapacity;
@@ -364,11 +370,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(!!socketProblem(gun, choke), "a third Protocol into two sockets");
   must(!!socketProblem(gun, coolant), "a power Protocol fit a gun");
   for (const p of PROTOCOLS) must(BASES.some((b) => p.fits.some((t) => b.tags.includes(t))), `Protocol ${p.id} fits nothing`);
-  // Stats add up: Overpressure x1.35 and Shredder x0.85 on damage, Shredder +2 pierce, Overpressure x1.4 spin-up.
+  // Stats multiply (Keith 2026-10-31: PoE2-style, multiplicative): Overpressure x1.15 and Shredder x0.9 on damage, Shredder +2 pierce, Overpressure x1.4 spin-up.
   const lo = defaultLoadout();
   fit(lo, "mountL", gun);
   const g = resolve(lo).guns.left!;
-  must(close(g.damage, gun.stats.damage * 1.35 * 0.85), `Protocol damage doesn't add up (${g.damage})`);
+  must(close(g.damage, gun.stats.damage * 1.15 * 0.9), `Protocol damage doesn't add up (${g.damage})`);
   must(g.pierce === Math.round(gun.stats.pierce + 2), "Shredder's pierce doesn't add up");
   must(close(g.spinUp, gun.stats.spinUp * 1.4), "Overpressure's spin-up doesn't add up");
   const back = unsocket(gun, 0);
@@ -456,7 +462,7 @@ for (const b of BASES) {
   const n: Record<number, number> = { 1: 0, [-1]: 0 };
   for (let i = 0; i < 120 * 6; i++) for (const s of sim.update(1 / 120, 0, { x: 0, y: 4.3, z: 0 }, { x: 0, y: 0, z: 20 }, true)) n[s]++;
   must(n[1] === 0 && sim.guns[0].spin === 0, "a gun switched off still spun or fired");
-  must(sim.guns[1].ammo === 5000 - n[-1], "a gun's own drum size wasn't used");
+  must(sim.guns[1].ammo === 5000 - n[-1], "a gun's own magazine size wasn't used");
   must(n[-1] > 30 * 5 * 0.9, `a gun's own fire rate wasn't used (${n[-1]} rounds in 6 s at 30/s)`);
 }
 

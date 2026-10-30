@@ -65,7 +65,7 @@ if (pickFromParams(pick, params)) cleanPick(pick);
 function refit() {
   applyLoadout(player, resolve(loadoutFor(pick), V));
   lab.refresh();
-  try { localStorage.setItem(KEY, JSON.stringify(pick)); } catch { /* private window */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ ...pick, protos: undefined })); } catch { /* private window */ }
   for (const b of buttons) b.el.classList.toggle("on", (pick as unknown as Record<string, string>)[b.row] === b.id);
 }
 

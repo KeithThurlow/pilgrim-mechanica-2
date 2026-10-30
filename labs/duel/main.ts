@@ -132,7 +132,7 @@ function refit() {
   lab.refresh();
   for (const b of pickButtons) b.el.classList.toggle("on", !useBay && (pick as unknown as Record<string, string>)[b.row] === b.id);
   bayBtn.classList.toggle("on", useBay);
-  if (!useBay) try { localStorage.setItem(PICK_KEY, JSON.stringify(pick)); } catch { /* private window */ }
+  if (!useBay) try { localStorage.setItem(PICK_KEY, JSON.stringify({ ...pick, protos: undefined })); } catch { /* private window */ }
 }
 
 const style = document.createElement("style");
@@ -269,7 +269,7 @@ lab.onFrame((dt: number) => {
   rival.dashHold = !!cmd?.dashHold;
   if (cmd?.dash) rival.tryDash(cmd.dash.x, cmd.dash.z);
   rival.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
-  if (rival.upper.guns.some((g) => g.enabled && g.ammo < 50)) rival.upper.resupply();
+  // (Magazines reload by themselves since 2026-10-31: no more topping the rival up.)
   rivalDraw.update();
 
   // A kill ends the round; the next starts after duelAutoRestart (or R).

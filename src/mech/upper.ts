@@ -29,7 +29,8 @@ export const UPPER_DEFAULTS = {
   rateSplit: 0.06,
   fireCone: 4,
   gunSpacing: 1.02,
-  ammoPerGun: 1200,
+  ammoPerGun: 180,
+  reloadTime: 2.6,
 };
 export type UpperValues = typeof UPPER_DEFAULTS;
 
@@ -54,7 +55,8 @@ export const UPPER_PARAMS: Param[] = [
   { key: "rateSplit", label: "Left vs right fire rate", min: -0.3, max: 0.3, step: 0.005, group: "Minigun", tip: "The guns' clocks run this far apart, so their rounds drift in and out of step" },
   { key: "spread", label: "Spread (°)", min: 0, max: 15, step: 0.1, group: "Minigun" },
   { key: "range", label: "Range (m)", min: 5, max: 80, step: 1, group: "Minigun" },
-  { key: "ammoPerGun", label: "Rounds per gun", min: 50, max: 10000, step: 50, group: "Minigun", tip: "What each gun's drum holds when you head out (Keith 2026-10-24: limited ammo per trip); R resupplies in the lab" },
+  { key: "ammoPerGun", label: "Magazine (rounds)", min: 5, max: 2000, step: 5, group: "Magazines", tip: "A gun on these sliders fires this many rounds, then reloads (Keith 2026-10-31: magazines and reloads, no ammo to carry); a fitted gun has its own (its magazine + its side's drum). R refills both in the lab" },
+  { key: "reloadTime", label: "Reload (s)", min: 0.2, max: 10, step: 0.1, group: "Magazines", tip: "A gun on these sliders reloads this long once its magazine is empty" },
   { key: "recoil", label: "Kick per shot (m)", min: 0, max: 0.2, step: 0.005, group: "Minigun" },
   { key: "recoilReturn", label: "Kick return", min: 1, max: 30, step: 0.5, group: "Minigun" },
   { key: "recoilMax", label: "Kick limit (m)", min: 0, max: 0.5, step: 0.01, group: "Minigun" },
@@ -83,8 +85,10 @@ export interface Gun {
   /** This gun's spin-up time (s), from spinUp and the split. */
   spinUpTime: number;
   clock: number;
-  /** Rounds left in this gun's drum. */
+  /** Rounds left in this gun's magazine (the magazine's `left`). */
   ammo: number;
+  /** Its magazine (src/weapons/magazine.ts): it reloads when empty. A rocket launcher on this side uses it too. */
+  mag: Mag;
   /** A gun is fitted on this side (a loadout can leave a side empty: it never spins or fires). */
   enabled: boolean;
   /** This gun's own values from its item (src/items); null runs on the shared sliders. */
@@ -101,7 +105,14 @@ export interface Gun {
 export interface GunStats {
   fireRate: number;
   spinUp: number;
+  /** Its magazine (rounds): the weapon's own, plus its side's drum for belt-fed guns. */
   ammo: number;
+  /** Reload time (s), after reload speed. */
+  reload?: number;
+  /** Magazine rounds per round fired (1; cost Protocols cut it) and what a shot spends (src/weapons/magazine.ts). */
+  cost?: number;
+  /** Energy weapons (later): energy per shot. A data hook: 0 today. */
+  energy?: number;
   /** Arc (°) and tracking: podYawMax and podTrack for this gun. */
   arc: number;
   track: number;
@@ -123,6 +134,7 @@ export interface GunStats {
 }
 
 export type GunClass = "minigun" | "rail" | "autocannon" | "rpg";
+import { newMag, magFill, magResize, magReady, magStep, magTake, shotRounds, type Mag } from "../weapons/magazine";
 
 /** One trigger for both guns, or one per gun (Keith 2026-10-25: left click the left side, right click the right). */
 export type Trigger = boolean | readonly [boolean, boolean];
@@ -134,7 +146,12 @@ export interface Aim {
   x: number; y: number; z: number;
 }
 
-const gun = (side: 1 | -1): Gun => ({ side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, ammo: 0, enabled: true, stats: null, rateMul: 1, spinCut: 0, ammoMul: 1 });
+const gun = (side: 1 | -1): Gun => ({
+  side, yaw: 0, pitch: 0, spin: 0, spinAngle: 0, kick: 0, onTarget: false, firing: false, spinUpTime: 0.5, clock: 0, enabled: true, stats: null, rateMul: 1, spinCut: 0, ammoMul: 1,
+  mag: newMag(1, 1),
+  get ammo() { return this.mag.left; },
+  set ammo(x: number) { this.mag.left = x; },
+});
 
 export class UpperSim {
   /** Torso yaw in world space (radians, heading convention). */
@@ -155,8 +172,13 @@ export class UpperSim {
 
   reset(yaw: number) { this.torsoYaw = yaw; for (const g of this.guns) { g.spin = 0; g.clock = 0; } this.resupply(); }
 
-  /** Fill both drums. */
-  resupply() { for (const g of this.guns) g.ammo = Math.round((g.stats?.ammo ?? this.v.ammoPerGun) * g.ammoMul); }
+  /** Size both magazines from their guns (and feeds), and fill them. */
+  resupply() { for (const g of this.guns) { this.sizeMag(g); magFill(g.mag); } }
+
+  /** A gun's magazine size and reload from its stats (else the sliders) and its feed's rounds bonus; keeps what's left. */
+  sizeMag(g: Gun) {
+    magResize(g.mag, Math.max(1, Math.round((g.stats?.ammo ?? this.v.ammoPerGun) * g.ammoMul)), g.stats?.reload ?? this.v.reloadTime);
+  }
 
   /**
    * legsHeading: where the legs face. shoulder: world position of the middle of the gun line. aim: target or null.
@@ -233,6 +255,8 @@ export class UpperSim {
       g.onTarget = g.enabled && !!aim && inArc && reachUp && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(pitchTo - g.pitch) <= cone * 2;
       this.onTarget ||= g.onTarget;
 
+      // The magazine reloads in its own time (a rocket launcher on this side spends it in src/weapons).
+      magStep(g.mag, dt);
       // A rail cannon or rocket launcher only aims here: it charges and fires in src/weapons.
       if (own?.cls === "rail" || own?.cls === "rpg") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       const trigger = triggerOf(triggers, g.side === 1 ? 0 : 1);
@@ -241,12 +265,13 @@ export class UpperSim {
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
       this.spin = Math.max(this.spin, g.spin);
 
-      g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && g.ammo > 0;
+      g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && magReady(g.mag);
       if (g.firing) {
         g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
-        while (g.clock >= 1 && g.ammo > 0) {
+        // Each tick's shot puts out its split rounds and fire-rate copies, every one from the magazine (magazine.ts).
+        const rounds = shotRounds(own?.proto?.split, own?.proto?.rate), cost = own?.cost ?? 1;
+        while (g.clock >= 1 && magTake(g.mag, rounds, cost)) {
           g.clock -= 1;
-          g.ammo--;
           g.kick = Math.min(v.recoilMax, g.kick + v.recoil);
           this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
           shots.push(g.side);

@@ -3,6 +3,13 @@
 // value (src/items/loadout.ts resolve keys, e.g. hull). Behaviour: `shot` fields go onto every round the gun fires
 // (src/game/shots.ts: split, fire rate, area, ricochet, chain; scale step 4, 2026-10-26). A Protocol fits an item that
 // carries any of its `fits` tags.
+//
+// Pricing (Keith 2026-10-31, docs/proposal-balance.md Answers): PoE2-style multipliers that stack MULTIPLICATIVELY
+// with no cap (runaway builds are part of the fun). Each is worth about ×1.2-1.3 in its niche, with a downside: split
+// is 3 rounds at 0.4 each (×1.2 total, more against crowds, ×0.4 on one target), fire rate ×2 at 0.6, a chain's hops
+// paid for by the first hit. The main downside of the shot-adding ones is cost: every round leaves the magazine
+// (src/weapons/magazine.ts: a split shot of 3 costs 3, an overclocked tick 2), so the reload comes sooner; `cost`
+// Protocols cut it. tools/balance-sheet.ts prints each one's multiplier against every target set (its niche is the best).
 import type { Rarity } from "./rarity";
 import type { ShotProtocols } from "../game/shots";
 
@@ -24,14 +31,19 @@ export interface Protocol {
   mods: StatMod[];
   /** What it does to the gun's rounds (combined over sockets: split, rate and area multiply; ricochet and chain add). */
   shot?: ShotProtocols;
+  /** Magazine rounds each round fired costs × (below 1: fewer rounds per shot). Multiplies over sockets. */
+  cost?: number;
+  /** Energy weapons (later, Keith 2026-10-31): the energy each shot draws ×. A data hook: nothing reads it yet. */
+  draw?: number;
   drop: number;
 }
 
 export const PROTOCOLS: Protocol[] = [
-  { id: "overpressure", name: "Overpressure", text: "+35% damage, 40% slower spin-up", fits: ["ballistic"], rarity: "rare", drop: 1,
-    mods: [{ stat: "damage", mul: 1.35, scope: "item" }, { stat: "spinUp", mul: 1.4, scope: "item" }] },
-  { id: "shredder", name: "Shredder", text: "Pierce +2, −15% damage", fits: ["ballistic"], rarity: "uncommon", drop: 1,
-    mods: [{ stat: "pierce", add: 2, scope: "item" }, { stat: "damage", mul: 0.85, scope: "item" }] },
+  // Damage: worth more the more armour there is (each hit keeps more over the armour), so its niche is heavies.
+  { id: "overpressure", name: "Overpressure", text: "+15% damage, 40% slower spin-up, 15% slower reload", fits: ["ballistic", "rocket"], rarity: "rare", drop: 1,
+    mods: [{ stat: "damage", mul: 1.15, scope: "item" }, { stat: "spinUp", mul: 1.4, scope: "item" }, { stat: "reload", mul: 1.15, scope: "item" }] },
+  { id: "shredder", name: "Shredder", text: "Penetration +2, −10% damage", fits: ["minigun"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "pierce", add: 2, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
   { id: "choke", name: "Choke", text: "−40% spread, −15% rounds/s", fits: ["minigun"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "spread", mul: 0.6, scope: "item" }, { stat: "fireRate", mul: 0.85, scope: "item" }] },
   { id: "hairTrigger", name: "Hair trigger", text: "Half the spin-up, −15% range", fits: ["minigun"], rarity: "rare", drop: 0.8,
@@ -42,24 +54,29 @@ export const PROTOCOLS: Protocol[] = [
     mods: [{ stat: "walkSpeed", mul: 1.08, scope: "item" }, { stat: "sprintSpeed", mul: 1.08, scope: "item" }, { stat: "carry", mul: 0.8, scope: "item" }] },
   { id: "plating", name: "Extra plating", text: "+20% hull, 15% slower torso", fits: ["hull"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "hull", mul: 1.2, scope: "item" }, { stat: "torsoTurnRate", mul: 0.85, scope: "item" }] },
-  // Behaviour Protocols on the rounds (src/game/shots.ts), each with its price.
-  { id: "splitter", name: "Splitter", text: "Each round splits into 3, −50% damage", fits: ["minigun"], rarity: "rare", drop: 0.7,
-    mods: [{ stat: "damage", mul: 0.5, scope: "item" }], shot: { split: 3 } },
-  { id: "overclock", name: "Overclock", text: "Twice the rounds, −30% damage, +40% spread", fits: ["minigun"], rarity: "rare", drop: 0.7,
-    mods: [{ stat: "damage", mul: 0.7, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 } },
-  { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
-    mods: [{ stat: "range", mul: 0.85, scope: "item" }], shot: { area: 1.6 } },
-  { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit, −10% damage", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
+  // Behaviour Protocols on the rounds (src/game/shots.ts; rockets in src/weapons/arsenal.ts), each with its price.
+  { id: "splitter", name: "Splitter", text: "Each shot splits into 3 at 40% damage (×1.2, more on crowds); costs 3 rounds", fits: ["minigun", "rocket"], rarity: "rare", drop: 0.7,
+    mods: [{ stat: "damage", mul: 0.4, scope: "item" }], shot: { split: 3 } },
+  { id: "overclock", name: "Overclock", text: "Twice the rounds at 60% damage, +40% spread; empties the magazine twice as fast", fits: ["minigun"], rarity: "rare", drop: 0.7,
+    mods: [{ stat: "damage", mul: 0.6, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 } },
+  { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −12% damage, −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
+    mods: [{ stat: "damage", mul: 0.88, scope: "item" }, { stat: "range", mul: 0.85, scope: "item" }], shot: { area: 1.6 } },
+  { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit (half damage), −10% damage", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
     mods: [{ stat: "damage", mul: 0.9, scope: "item" }], shot: { ricochet: 1 } },
-  { id: "arcLink", name: "Arc link", text: "Hits jump on to 2 more enemies, −20% damage", fits: ["minigun"], rarity: "epic", drop: 0.4,
-    mods: [{ stat: "damage", mul: 0.8, scope: "item" }], shot: { chain: 2 } },
-  { id: "extendedFeed", name: "Extended feed", text: "+50% rounds per gun, −3% walk speed", fits: ["ammo"], rarity: "rare", drop: 0.8,
-    mods: [{ stat: "ammoPerGun", mul: 1.5, scope: "item" }, { stat: "walkSpeed", mul: 0.97, scope: "mech" }] },
+  { id: "arcLink", name: "Arc link", text: "Hits jump on to 2 more enemies (60%, then 36%), −30% damage", fits: ["minigun"], rarity: "epic", drop: 0.4,
+    mods: [{ stat: "damage", mul: 0.7, scope: "item" }], shot: { chain: 2 } },
+  // Magazines (Keith 2026-10-31): reload speed and cost are stats to build round.
+  { id: "quickLoader", name: "Quick loader", text: "Reloads 35% faster, −15% magazine", fits: ["minigun", "autocannon", "rocket"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "reload", mul: 0.65, scope: "item" }, { stat: "magazine", mul: 0.85, scope: "item" }] },
+  { id: "caseless", name: "Caseless rounds", text: "Each round takes 40% less of the magazine, −15% range, +20% spread", fits: ["minigun", "autocannon"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "range", mul: 0.85, scope: "item" }, { stat: "spread", mul: 1.2, scope: "item" }], cost: 0.6 },
+  { id: "extendedFeed", name: "Extended feed", text: "+50% magazine bonus, −3% walk speed", fits: ["ammo"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "magBonus", mul: 1.5, scope: "item" }, { stat: "ammoPerGun", mul: 1.5, scope: "item" }, { stat: "walkSpeed", mul: 0.97, scope: "mech" }] },
 ];
 
 export const PROTOCOL_BY_ID: Record<string, Protocol> = Object.fromEntries(PROTOCOLS.map((p) => [p.id, p]));
 
-/** What an item's socketed Protocols do to its rounds (undefined: nothing). */
+/** What an item's socketed Protocols do to its rounds (undefined: nothing). Split, rate and area multiply. */
 export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProtocols | undefined {
   let p: ShotProtocols | undefined;
   for (const pi of socketed) {
@@ -73,6 +90,13 @@ export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProt
     if (s.chain) p.chain = (p.chain ?? 0) + s.chain;
   }
   return p;
+}
+
+/** Magazine rounds per round fired (1 plain; cost Protocols multiply). */
+export function shotCostOf(socketed: readonly { base: string }[]): number {
+  let k = 1;
+  for (const pi of socketed) k *= PROTOCOL_BY_ID[pi.base]?.cost ?? 1;
+  return k;
 }
 
 /** Does this Protocol fit an item with these tags? */

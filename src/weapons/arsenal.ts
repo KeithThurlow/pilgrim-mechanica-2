@@ -31,6 +31,8 @@ import { SwarmSim, type SwarmStats } from "./swarm";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
 import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
+import { newMag, magReady, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
+import type { ShotProtocols } from "../game/shots";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | null;
 
@@ -61,6 +63,9 @@ interface Side {
   aimLine: Vec3[];
   /** Rail: the reticle the charge meter rings (the lock or the cursor). */
   meterAt: Vec3 | null;
+  /** Its Protocols' behaviour (a rocket launcher's split) and what each round costs from the magazine. */
+  proto: ShotProtocols | undefined;
+  cost: number;
 }
 
 /** A shoulder weapon on its key. */
@@ -77,8 +82,12 @@ export interface Shoulder {
   /** The strip a line mortar was fired at, shown until its shells are down. */
   fired: Paint;
   held: boolean;
-  /** RPG cooldown (the other weapons keep theirs in their sims). */
+  /** RPG: time between rockets (the other weapons keep their cooldowns in their sims). */
   cool: number;
+  /** RPG: its magazine (src/weapons/magazine.ts); the volley launchers' cooldown is their reload. */
+  mag: Mag;
+  proto?: ShotProtocols;
+  cost?: number;
   line: SalvoSim;
   mortar: MortarSim;
   swarm: SwarmSim;
@@ -116,7 +125,7 @@ export class Arsenal implements MechWeapons {
     /** Targets the snap, the swarm and the leads can see (the lab's candidates). */
     public candidates: () => TargetCandidate[] = () => []) {
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null });
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1 });
     this.sides = [side(), side()];
     addWeaponSounds(bf.sfx, v);
   }
@@ -131,7 +140,7 @@ export class Arsenal implements MechWeapons {
       const kind: SideKind = !g ? null : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
       const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? "rpg" : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
-      s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null;
+      s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0;
@@ -142,7 +151,8 @@ export class Arsenal implements MechWeapons {
       const model = body.mount ? WEAPON_MODELS[mk](this.look, x.mount === "shoulderL" ? "left" : "right") : null;
       if (model && body.mount) body.mount(x.mount).add(model.root);
       const gear = x.family === "launcher" ? null : new GearSim(gearStats(x.weapon, x.own, this.v));
-      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
+      const mag = newMag(x.own?.magazine ?? this.v.rpgShoulderMag, x.own?.reload ?? this.v.rpgShoulderReload);
+      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
     // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
     // sliders stay live), a capacitor's faster refill.
@@ -234,16 +244,19 @@ export class Arsenal implements MechWeapons {
       s.cool = Math.max(0, s.cool - dt);
       // An unrolled autocannon (the picker's) fires at the Shells/s slider, live; its gun clock reads the gun's stats,
       // which carried the base's rate (Keith 2026-10-26: the slider did nothing). A rolled one keeps its own.
-      if (s.kind === "autocannon" && !s.own && g.stats) g.stats.fireRate = v.acRate;
+      if (s.kind === "autocannon" && !s.own && g.stats) { g.stats.fireRate = v.acRate; g.stats.ammo = v.acMag; g.stats.reload = v.acReload; u.upper.sizeMag(g); }
       // Targeting laser on the minigun and the rocket launcher, along the gun.
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
       if (s.kind === "rpg") {
-        // Fires at the ground under the cursor while held, on its cooldown (a click fires one).
-        if ((held || pressed) && s.cool <= 0 && u.cursor) {
+        // Fires at the ground under the cursor while held, a rocket every cooldown out of its magazine (this side's,
+        // in the gun record: the HUD reads it there), then reloads (a click fires one).
+        if (!s.own) magResize(g.mag, v.rpgMag, v.rpgReload);
+        const n = shotRounds(s.proto?.split);
+        if ((held || pressed) && s.cool <= 0 && u.cursor && magTake(g.mag, n, s.cost)) {
           const st = this.rpgStats(s.own, false);
           s.cool = st.cooldown;
-          this.fireRocket(this.muzzleOf(s, side, this.tmp), u.cursor, st);
+          this.fireRockets(this.muzzleOf(s, side, this.tmp), u.cursor, st, n);
           if (s.model) s.model.recoil.position.z = -0.35;
         }
         clearPaint(s.paint);
@@ -313,6 +326,8 @@ export class Arsenal implements MechWeapons {
   private stepShoulder(sh: Shoulder, dt: number, held: boolean, laserK: number) {
     const u = this.unit, bf = this.bf, v = this.v;
     sh.cool = Math.max(0, sh.cool - dt);
+    if (sh.weapon === "rpg" && !sh.own) magResize(sh.mag, v.rpgShoulderMag, v.rpgShoulderReload);
+    magStep(sh.mag, dt);
     const p = sh.paint;
     const launch = this.shoulderMuzzle(sh, 0, this.tmp2);
     const cur = u.cursor;
@@ -345,7 +360,7 @@ export class Arsenal implements MechWeapons {
       } else {
         const st = this.rpgStats(sh.own, true), to = this.rpgPoint(launch, cur);
         sh.at = { x: to.x, z: to.z };
-        p.ring = { x: to.x, z: to.z, r: st.blast }; p.ready = sh.cool <= 0;
+        p.ring = { x: to.x, z: to.z, r: st.blast }; p.ready = sh.cool <= 0 && magReady(sh.mag);
         p.beamTo = { x: to.x, y: to.y, z: to.z };
       }
     } else if (sh.held && u.alive && !u.gunsOff) {
@@ -357,10 +372,10 @@ export class Arsenal implements MechWeapons {
       } else if (sh.weapon === "missiles") {
         const picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         if (sh.swarm.fire(sh.at.x, sh.at.z, this.swarmStats(sh.own), picks, bf.field)) this.onFire?.("missiles");
-      } else if (sh.cool <= 0 && cur) {
+      } else if (sh.cool <= 0 && cur && magTake(sh.mag, shotRounds(sh.proto?.split), sh.cost ?? 1)) {
         const st = this.rpgStats(sh.own, true);
         sh.cool = st.cooldown;
-        this.fireRocket(launch.clone(), cur, st);
+        this.fireRockets(launch.clone(), cur, st, shotRounds(sh.proto?.split));
         if (sh.model) sh.model.recoil.position.z = -0.3;
       }
       clearPaint(p);
@@ -402,7 +417,7 @@ export class Arsenal implements MechWeapons {
     }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
     if (sh.model) { sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 6); sh.model.recoil.position.z += (0 - sh.model.recoil.position.z) * Math.min(1, dt * 8); }
-    const ready = sh.weapon === "linemortar" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0;
+    const ready = sh.weapon === "linemortar" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0 && magReady(sh.mag);
     for (const mat of sh.model?.glow ?? []) mat.opacity = ready ? 0.95 : 0.15;
   }
 
@@ -452,9 +467,22 @@ export class Arsenal implements MechWeapons {
     return h ? h.f : -1;
   };
 
-  private fireRocket(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats) {
+  /** n rockets at once (a Splitter's 3), fanned across the aim protoFan° apart round the launcher. */
+  private fireRockets(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats, n: number) {
+    if (n <= 1) { this.fireRocket(from, cur, st); return; }
+    const fan = (((this.bf.v as { protoFan?: number }).protoFan ?? 6) * Math.PI) / 180;
+    for (let k = 0; k < n; k++) {
+      const a = (k - (n - 1) / 2) * fan, cs = Math.cos(a), sn = Math.sin(a);
+      const dx = cur.x - from.x, dz = cur.z - from.z;
+      const x = from.x + dx * cs + dz * sn, z = from.z - dx * sn + dz * cs;
+      this.fireRocket(from, new THREE.Vector3(x, this.bf.field.height(x, z), z), st, k > 0);
+    }
+  }
+
+  private fireRocket(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats, quiet = false) {
     const bf = this.bf;
     this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st).ap = st.ap;
+    if (quiet) return;
     this.onFire?.("rpg");
     bf.sfx.playSound("rocket", from, 1, 0.8);
     for (let k = 0; k < 5; k++) bf.dust.smoke(from.x, from.y, from.z, (Math.random() - 0.5) * 2, 0.5 + Math.random(), (Math.random() - 0.5) * 2, 0.4, 0.9, 0.7, 0.35);
@@ -663,8 +691,9 @@ export class Arsenal implements MechWeapons {
       const g = u.upper.guns[i];
       let state = "";
       if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
-      else if (s.kind === "rpg") state = s.cool > 0 ? `${s.cool.toFixed(1)} s` : "ready";
-      else if (s.kind === "minigun") state = `${g.ammo} rds`;
+      else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
+      else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;
+      else state = `${Math.ceil(g.ammo)}/${g.mag.size}`;
       out.push(`${b} ${NAMES[s.kind]}${s.light ? " (hand)" : ""} ${state}`);
     });
     for (const sh of this.shoulders) {
@@ -674,8 +703,9 @@ export class Arsenal implements MechWeapons {
         out.push(`${sh.key} ${NAMES[sh.weapon]} ${g.left > 0 ? `<b style="color:#ffb347">${what} ${g.left.toFixed(1)} s</b>` : g.cool > 0 ? `${g.cool.toFixed(1)} s` : "ready"}`);
         continue;
       }
-      const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : sh.cool;
-      out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon} ${cd > 0 ? `${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready"}`);
+      const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
+      const left = sh.weapon === "rpg" ? ` ${Math.ceil(sh.mag.left)}/${sh.mag.size}` : "";
+      out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon}${left} ${cd > 0 ? `${sh.mag.reloading > 0 ? "reload " : ""}${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready"}`);
     }
     return out;
   }

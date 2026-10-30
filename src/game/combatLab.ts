@@ -167,8 +167,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
   // ?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2 puts these Protocols on every round of yours (src/game/shots.ts),
   // over whatever the fitted guns carry: for seeing them without socketing items.
-  if (params.get("proto")) {
-    const proto = Object.fromEntries(params.get("proto")!.split(",").map((kv) => kv.split(":")).map(([k, x]) => [k, Number(x)]));
+  // (Entries without a colon are Protocol ids, priced, socketed into the picked weapons: src/items/weaponPick.ts.)
+  if (params.get("proto")?.includes(":")) {
+    const proto = Object.fromEntries(params.get("proto")!.split(",").filter((kv) => kv.includes(":")).map((kv) => kv.split(":")).map(([k, x]) => [k, Number(x)]));
     const fire = bf.fire.bind(bf);
     bf.fire = (slot, team, muzzle, d, range, damage, fo = {}) => fire(slot, team, muzzle, d, range, damage, fo.voice === "player" ? { ...fo, proto } : fo);
   }
@@ -329,7 +330,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     bf.register.rebuild();
     cst?.mark("register");
     keys.move(camera, stick);
-    if (keys.has("KeyR") || (auto && player.upper.guns[0].ammo < 100)) player.upper.resupply();
+    if (keys.has("KeyR")) player.upper.resupply(); // magazines reload by themselves; R fills them at once
     const fHeld = keys.has("KeyF") || clock < holdF;
     if (stick.lengthSq() > 0 || fHeld) auto = false;
     const driving = foot.driving;

@@ -63,7 +63,12 @@ export const STATS: Record<string, StatInfo> = {
   dashCharges: { label: "Dash charges", better: 1, decimals: 0, whole: true },
   dashRecharge: { label: "Dash recharge (s)", better: -1, decimals: 2 },
   boostFuel: { label: "Boost fuel (s)", better: 1, decimals: 1 },
-  ammoPerGun: { label: "Rounds per gun", better: 1, decimals: 0, whole: true },
+  ammoPerGun: { label: "Rounds per gun (old drum)", better: 1, decimals: 0, whole: true },
+  // Magazines and reloads (Keith 2026-10-31): munition weapons fire from a magazine and reload when it's empty.
+  magazine: { label: "Magazine (rounds)", better: 1, decimals: 0, whole: true },
+  reload: { label: "Reload (s)", better: -1, decimals: 2 },
+  magBonus: { label: "Magazine +", better: 1, decimals: 2 },
+  reloadSpeed: { label: "Reload speed +", better: 1, decimals: 2 },
   charge: { label: "Charge (s)", better: -1, decimals: 2 },
   cooldown: { label: "Cooldown (s)", better: -1, decimals: 1 },
   rockets: { label: "Rockets per salvo", better: 1, decimals: 0, whole: true },
@@ -143,6 +148,8 @@ const s = (base: number, spread: number): StatRange => ({ base, spread });
 
 // Today's mech values that live in src/game/mechUnit.ts (MECH_DEFAULTS; not imported, it pulls in the renderer).
 const HULL_POINTS = 3000, HULL_ARMOUR = 8, ROUND_DAMAGE = 12, ROUND_PIERCE = 2, ROUND_AP = 0.1;
+/** An ammo drum's magazine bonus: the default loadout (a drum per side) gives the Medium minigun the slider's magazine. */
+const DRUM_BONUS = 0.5;
 
 export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
@@ -216,15 +223,15 @@ export const BASES: Base[] = [
   // quicker in the hand (handling: the arm's tracking ×) and wider (arc +).
   {
     id: "mg-light", name: "Light minigun", kind: "weapon", size: "L", tags: ["weapon", "ballistic", "minigun"], weight: 0.9, makers: ["Suzaku", "Novus-Lux"], look: "rampart-wildcat", drop: 1.5,
-    stats: { fireRate: s(15, 0.08), damage: s(9, 0.1), ap: s(0, 0), spread: s(4, 0.1), spinUp: s(0.5, 0.1), range: s(38, 0.06), pierce: s(1, 0.3), handling: s(1.25, 0.08), arcBonus: s(6, 0.2) },
+    stats: { fireRate: s(15, 0.08), damage: s(9, 0.1), ap: s(0, 0), magazine: s(80, 0.12), reload: s(2, 0.1), spread: s(4, 0.1), spinUp: s(0.5, 0.1), range: s(38, 0.06), pierce: s(1, 0.3), handling: s(1.25, 0.08), arcBonus: s(6, 0.2) },
   },
   {
     id: "mg-medium", name: "Minigun", kind: "weapon", size: "M", tags: ["weapon", "ballistic", "minigun"], weight: 1.8, makers: ["Stratford-Aegis", "Suzaku"], look: "rampart", drop: 1.5,
-    stats: { fireRate: s(U.fireRate, 0.08), damage: s(ROUND_DAMAGE, 0.1), ap: s(ROUND_AP, 0), spread: s(U.spread, 0.1), spinUp: s(U.spinUp, 0.1), range: s(U.range, 0.06), pierce: s(ROUND_PIERCE, 0.2), arc: s(U.podYawMax, 0.08), track: s(U.podTrack, 0.08) },
+    stats: { fireRate: s(U.fireRate, 0.08), damage: s(ROUND_DAMAGE, 0.1), ap: s(ROUND_AP, 0), magazine: s(Math.round(U.ammoPerGun / (1 + DRUM_BONUS)), 0.12), reload: s(U.reloadTime, 0.1), spread: s(U.spread, 0.1), spinUp: s(U.spinUp, 0.1), range: s(U.range, 0.06), pierce: s(ROUND_PIERCE, 0.2), arc: s(U.podYawMax, 0.08), track: s(U.podTrack, 0.08) },
   },
   {
     id: "mg-heavy", name: "Heavy minigun", kind: "weapon", size: "H", tags: ["weapon", "ballistic", "minigun", "heavy"], weight: 3.2, makers: ["Suzaku"], look: "rampart-turret", drop: 1,
-    stats: { fireRate: s(14, 0.08), damage: s(20, 0.1), ap: s(0.25, 0), spread: s(2.4, 0.1), spinUp: s(1.4, 0.1), range: s(55, 0.06), pierce: s(3, 0.2), handling: s(0.6, 0.1) },
+    stats: { fireRate: s(14, 0.08), damage: s(20, 0.1), ap: s(0.25, 0), magazine: s(160, 0.12), reload: s(3.4, 0.1), spread: s(2.4, 0.1), spinUp: s(1.4, 0.1), range: s(55, 0.06), pierce: s(3, 0.2), handling: s(0.6, 0.1) },
   },
   // New weapons (docs/proposal-weapons.md, Keith 2026-10-25), each with its own targeting (src/weapons). Base values
   // come from the weapon sliders; the Light rail cannon from the Medium's by the Light-rail shares.
@@ -238,16 +245,16 @@ export const BASES: Base[] = [
   },
   {
     id: "ac-medium", name: "Autocannon", kind: "weapon", size: "M", cls: "autocannon", tags: ["weapon", "ballistic", "explosive", "autocannon"], weight: 2.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-turret", drop: 1,
-    stats: { fireRate: s(WD.acRate, 0.08), damage: s(WD.acDamage, 0.1), ap: s(WD.acAp, 0), splash: s(WD.acSplash, 0.1), shellSpeed: s(WD.acSpeed, 0.08), range: s(WD.acRange, 0.06), spread: s(WD.acSpread, 0.12), spinUp: s(0.15, 0.1), arc: s(28, 0.08), track: s(10, 0.08) },
+    stats: { fireRate: s(WD.acRate, 0.08), damage: s(WD.acDamage, 0.1), ap: s(WD.acAp, 0), magazine: s(WD.acMag, 0.12), reload: s(WD.acReload, 0.1), splash: s(WD.acSplash, 0.1), shellSpeed: s(WD.acSpeed, 0.08), range: s(WD.acRange, 0.06), spread: s(WD.acSpread, 0.12), spinUp: s(0.15, 0.1), arc: s(28, 0.08), track: s(10, 0.08) },
   },
   {
     id: "rpg-medium", name: "Rocket launcher", kind: "weapon", size: "M", cls: "rpg", tags: ["weapon", "explosive", "rocket"], weight: 2.2, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-rocket", drop: 1,
-    stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgCooldown, 0.1), arc: s(26, 0.08), track: s(10, 0.08) },
+    stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgCooldown, 0.1), magazine: s(WD.rpgMag, 0.25), reload: s(WD.rpgReload, 0.1), arc: s(26, 0.08), track: s(10, 0.08) },
   },
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
     id: "sh-rpg", name: "Shoulder rocket", kind: "shoulder", shoulder: "rpg", tags: ["shoulder", "explosive", "rocket"], weight: 1.8, makers: ["Suzaku"], look: "rampart-rocket", drop: 1,
-    stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgShoulderCooldown, 0.1) },
+    stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgShoulderCooldown, 0.1), magazine: s(WD.rpgShoulderMag, 0.3), reload: s(WD.rpgShoulderReload, 0.1) },
   },
   {
     id: "sh-missiles", name: "Missile pod", kind: "shoulder", shoulder: "missiles", tags: ["shoulder", "explosive", "missiles"], weight: 2.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart-rocket", drop: 1,
@@ -292,14 +299,19 @@ export const BASES: Base[] = [
     stats: { dashCharges: s(4, 0.15), dashRecharge: s(2.7, 0.1), boostFuel: s(2.5, 0.15) },
   },
   // Waist mounts, left and right (Keith 2026-10-26: ammo drums, cargo racks, small kit). A drum feeds its own side's
-  // gun (a two-hander takes the bigger of the two).
+  // gun (a two-hander takes the bigger of the two): since the magazines (2026-10-31) it makes that gun's magazine
+  // bigger; an autoloader reloads it faster (the reload-speed stat a tree node can grant later).
   {
     id: "waist-drums", name: "Ammo drum", kind: "waist", tags: ["waist", "ammo"], weight: 0.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { ammoPerGun: s(U.ammoPerGun, 0.12) },
+    stats: { magBonus: s(DRUM_BONUS, 0.15) },
   },
   {
     id: "waist-fulldrums", name: "Full drum", kind: "waist", tags: ["waist", "ammo"], weight: 1, makers: ["Suzaku"], look: "rampart", drop: 0.7,
-    stats: { ammoPerGun: s(2000, 0.12) },
+    stats: { magBonus: s(0.9, 0.12) },
+  },
+  {
+    id: "waist-autoloader", name: "Autoloader", kind: "waist", tags: ["waist", "loader"], weight: 0.8, makers: ["Novus-Lux", "Suzaku"], look: "rampart", drop: 0.8,
+    stats: { reloadSpeed: s(0.35, 0.15) },
   },
   {
     id: "waist-rack", name: "Cargo rack", kind: "waist", tags: ["waist", "cargo"], weight: 0.8, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 0.8,

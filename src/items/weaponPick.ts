@@ -4,7 +4,8 @@
 // 2026-10-30: shoulders no longer need an arm, so a hull minigun keeps its place under a shoulder pick). The "Light"
 // picks are an arm with that gun in its hand. Key 3 is the pack mount: the power pack, or a launcher in its place.
 import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadout";
-import { makeItem } from "./generate";
+import { makeItem, protocolItem } from "./generate";
+import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 
 export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank" } as const;
@@ -12,7 +13,9 @@ export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: 
 export type SidePick = keyof typeof SIDE;
 export type ShoulderPick = keyof typeof SHOULDER;
 export type BackPick = keyof typeof BACK;
-export interface Pick { left: SidePick; right: SidePick; k1: ShoulderPick; k2: ShoulderPick; k3: BackPick }
+/** `protos`: Protocol ids (?proto=splitter,overclock) socketed into every picked weapon they fit, whatever its sockets
+ *  (Keith 2026-10-31: try the priced Protocols in the labs without rolling items). Never saved with the pick. */
+export interface Pick { left: SidePick; right: SidePick; k1: ShoulderPick; k2: ShoulderPick; k3: BackPick; protos?: string[] }
 /** Each pick's row: its key, its control, its options. */
 export const ROWS = [["left", "LMB", SIDE], ["right", "RMB", SIDE], ["k1", "Key 1", SHOULDER], ["k2", "Key 2", SHOULDER], ["k3", "Key 3", BACK]] as const;
 
@@ -28,6 +31,9 @@ export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
     if (q && OLD[q]) q = OLD[q];
     if (q && q in opts) { (pick as unknown as Record<string, string>)[row] = q; any = true; }
   }
+  // ?proto= entries without a colon are Protocol ids (the ones with one are raw round behaviour, src/game/combatLab.ts).
+  const ids = (params.get("proto") ?? "").split(",").filter((x) => x && !x.includes(":") && PROTOCOL_BY_ID[x]);
+  if (ids.length) pick.protos = ids;
   return any;
 }
 
@@ -50,7 +56,11 @@ const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-mis
 
 export function loadoutFor(p: Pick): Loadout {
   const lo = defaultLoadout();
-  const put = (slot: SlotId, base: string) => fit(lo, slot, makeItem(base, "common", `range-${slot}-${base}`));
+  const put = (slot: SlotId, base: string) => {
+    const it = makeItem(base, "common", `range-${slot}-${base}`);
+    for (const id of p.protos ?? []) if (protocolFits(PROTOCOL_BY_ID[id], it.tags)) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
+    fit(lo, slot, it);
+  };
   for (const [side, s, key] of [["left", "L", p.k1], ["right", "R", p.k2]] as const) {
     const w = p[side], m = MOUNTS[s], shoulder = SHOULDER_BASE[key];
     if (HULL_BASE[w]) put(m.mount, HULL_BASE[w]!);
