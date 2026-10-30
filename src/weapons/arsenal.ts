@@ -31,7 +31,7 @@ import { SwarmSim, type SwarmStats } from "./swarm";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
 import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
-import { newMag, magReady, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
+import { newMag, magReady, magResize, magStep, magTake, shotRounds, magRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | null;
@@ -253,7 +253,7 @@ export class Arsenal implements MechWeapons {
         // in the gun record: the HUD reads it there), then reloads (a click fires one).
         if (!s.own) magResize(g.mag, v.rpgMag, v.rpgReload);
         const n = shotRounds(s.proto?.split);
-        if ((held || pressed) && s.cool <= 0 && u.cursor && magTake(g.mag, n, s.cost)) {
+        if ((held || pressed) && s.cool <= 0 && u.cursor && magTake(g.mag, magRounds(s.proto?.split), s.cost)) {
           const st = this.rpgStats(s.own, false);
           s.cool = st.cooldown;
           this.fireRockets(this.muzzleOf(s, side, this.tmp), u.cursor, st, n);
@@ -372,7 +372,7 @@ export class Arsenal implements MechWeapons {
       } else if (sh.weapon === "missiles") {
         const picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         if (sh.swarm.fire(sh.at.x, sh.at.z, this.swarmStats(sh.own), picks, bf.field)) this.onFire?.("missiles");
-      } else if (sh.cool <= 0 && cur && magTake(sh.mag, shotRounds(sh.proto?.split), sh.cost ?? 1)) {
+      } else if (sh.cool <= 0 && cur && magTake(sh.mag, magRounds(sh.proto?.split), sh.cost ?? 1)) {
         const st = this.rpgStats(sh.own, true);
         sh.cool = st.cooldown;
         this.fireRockets(launch.clone(), cur, st, shotRounds(sh.proto?.split));

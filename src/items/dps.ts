@@ -10,7 +10,7 @@
 import { BASE_BY_ID } from "./bases";
 import { effectiveStats } from "./loadout";
 import { shotCostOf, shotProtocolsOf } from "./protocols";
-import { sustainedRate, shotRounds } from "../weapons/magazine";
+import { sustainedRate, shotRounds, magRounds } from "../weapons/magazine";
 import type { ShotProtocols } from "../game/shots";
 import type { Item } from "./item";
 
@@ -37,12 +37,12 @@ export interface Cadence {
 /** The cadence of a weapon or shoulder launcher from its stats and its Protocols' behaviour (null: not a weapon). */
 export function cadenceOf(s: Record<string, number>, shot?: ShotProtocols, cost = 1): Cadence | null {
   if (s.damage === undefined) return null;
-  let rounds: number, gap: number;
-  if (s.fireRate !== undefined) { rounds = shotRounds(shot?.split, shot?.rate); gap = 1 / Math.max(0.01, s.fireRate); }
-  else { rounds = (s.rockets ?? s.shells ?? 1) * shotRounds(shot?.split); gap = Math.max(0.05, (s.cooldown ?? 1) + (s.charge ?? 0)); }
+  let rounds: number, magUse: number, gap: number;
+  if (s.fireRate !== undefined) { rounds = shotRounds(shot?.split, shot?.rate); magUse = magRounds(shot?.split, shot?.rate); gap = 1 / Math.max(0.01, s.fireRate); }
+  else { const volley = s.rockets ?? s.shells ?? 1; rounds = volley * shotRounds(shot?.split); magUse = volley * magRounds(shot?.split); gap = Math.max(0.05, (s.cooldown ?? 1) + (s.charge ?? 0)); }
   const magazine = s.magazine ?? 0, reload = s.reload ?? 0;
   const rate = 1 / gap;
-  const sustained = magazine > 0 ? sustainedRate(magazine, rounds, cost, gap, reload) : rate;
+  const sustained = magazine > 0 ? sustainedRate(magazine, magUse, cost, gap, reload) : rate;
   let bonus = 0, k = 1;
   for (let i = 0; i < (shot?.chain ?? 0); i++) { k *= CHAIN_KEEP; bonus += k; }
   bonus += (shot?.ricochet ?? 0) > 0 ? RICOCHET_KEEP : 0;

@@ -1,5 +1,5 @@
 // Balance rules (docs/proposal-balance.md, Keith 2026-10-31) that must never break: the armour floor holds and pierce
-// scales (src/game/armour.ts) through the hit adapters; a magazine empties and reloads, a split shot costs its rounds
+// scales (src/game/armour.ts) through the hit adapters; a magazine empties and reloads, a split shot costs one round
 // (src/weapons/magazine.ts, in the gun sim too); Protocols stack by multiplying (src/items/protocols.ts) and the item
 // card's DPS follows them (src/items/dps.ts); the level curve scales robots as it does items (src/items/level.ts).
 // The numbers themselves are the balance sheet's (tools/balance-sheet.ts --check).
@@ -86,7 +86,7 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   must(cheap === 20, `rounds at 0.6 each from 12: ${cheap} (want 20)`);
   must(close(sustainedRate(10, 1, 1, 0.1, 2), 10 / (0.9 + 2)), "sustainedRate isn't magazine / (shots' time + reload)");
 }
-// In the gun sim: a 30-round gun with a split of 3 fires 10 shots, reloads, fires again.
+// In the gun sim: a 30-round gun with a split of 3 still fires 30 shots (a split round costs one; Keith 2026-10-31), reloads, fires again.
 {
   const sim = new UpperSim({ ...UPPER_DEFAULTS });
   sim.reset(0);
@@ -96,7 +96,7 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   const times: number[] = [];
   for (let i = 0; i < 120 * 3; i++) for (const _s of sim.update(1 / 120, 0, { x: 0, y: 4.3, z: 0 }, { x: 0, y: 0, z: 20 }, true)) times.push(i / 120);
   const first = times.findIndex((t, k) => k > 0 && t - times[k - 1] > 0.5);
-  must(first === 10, `a 30-round gun with split 3 fired ${first} shots before its reload (want 10)`);
+  must(first === 30, `a 30-round gun with split 3 fired ${first} shots before its reload (want 30: splits are free)`);
   must(first > 0 && times[first] - times[first - 1] >= 0.95, "the reload gap was shorter than the reload");
   must(sim.guns[1].mag.reloads >= 1, "the gun's magazine never reloaded");
 }

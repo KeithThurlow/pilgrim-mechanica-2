@@ -220,6 +220,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Next candidates (ask Keith which)
 
+- **Light clustering (Keith 2026-10-31):** lights that go off near each other at once (blasts, split rockets, muzzle flashes) merge into one brighter light, so a busy fight uses fewer real lights. Fits the fixed pool in `src/world/nightLights.ts` (blasts already take point lights first). Do it when big fights or split rockets at night show the pool running out.
 - **Performance: crater and dent spikes (Keith 2026-10-27, a todo for another agent).** From Keith's stress runs (state.md In progress, reports/2026-10-27T02-04-36-stress.md): spread crater refits (true-ground reshapes after blasts) over several frames, since at co-op scale they cost 3.8 ms avg / 21 ms spikes at 100% and 14 / 31 at 150%; and take dent stamping off the critical path (~11 ms spikes at every load). Also worth a look: cap and fade old bodies (1000-1500 pile up), fewer robot draw calls, spread terrain chunk builds (22 ms spikes when new ground streams in), and the stress lab's "of which allies" counter (reads 0).
 - **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built.
 - **The convoy, its cranes and escort**: plan in `docs/proposal-convoy.md` (route, a flattened corridor in the height
@@ -239,6 +240,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-31 · Split shots cost one magazine round (Keith)
+A split round (fragments, sub-missiles) takes one round from the magazine, not one per fragment; fire-rate copies still count. `magRounds` in `src/weapons/magazine.ts`, used by `arsenal.ts`, `upper.ts`, `src/items/dps.ts`. Checked: balance, weapons, loadout, duel, robot-danger checks, `balance-sheet --check`, full npm test. Splitter now a flat ×1.2 (minigun) / ×1.33 (rockets) against crowds. Who: coordinator.
+
 ### 2026-10-31 · Balance pass 2: armour, level-1 values, multiplying Protocols, magazines, DPS preview, health bars (agent, `wip/balance2`)
 
 Keith's answers to `docs/proposal-balance.md`. Armour and pierce on every hit through the adapters (`src/game/armour.ts`;
