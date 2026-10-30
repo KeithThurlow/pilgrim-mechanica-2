@@ -15,6 +15,8 @@ export interface Shell {
   arc: number;
   radius: number;
   damage: number;
+  /** Armour pierce of its blast (0..1; none: armour-ignoring, src/game/armour.ts); set after lob. */
+  pierce?: number;
   /** Where it is now. */
   pos: THREE.Vector3;
   live: boolean;
@@ -31,7 +33,7 @@ export class Shells {
       this.list.push(s);
     }
     s.team = team; s.from.copy(from); s.to.copy(to); s.t = 0; s.flight = Math.max(0.1, flight); s.arc = arc;
-    s.radius = radius; s.damage = damage; s.pos.copy(from); s.live = true;
+    s.radius = radius; s.damage = damage; s.pierce = undefined; s.pos.copy(from); s.live = true;
     return s;
   }
 

@@ -9,12 +9,12 @@ import type { Hittable } from "./battlefield";
  * it to each unit's nearest part). `struck`: a swarm whose unit this projectile hit directly spares that unit; any
  * other struck target is skipped (it already took the hit).
  */
-export function splashBlast(targets: readonly Hittable[], team: number, at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, struck: Hittable | null = null): number {
+export function splashBlast(targets: readonly Hittable[], team: number, at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, struck: Hittable | null = null, pierce?: number): number {
   let n = 0;
   for (const t of targets) {
     if (!t.alive || t.team === team || !t.splash) continue;
     if (t === struck && !t.spares) continue;
-    n += t.splash(at, radius, damage, dir, { blast: true, spare: t === struck });
+    n += t.splash(at, radius, damage, dir, { blast: true, spare: t === struck, pierce });
   }
   return n;
 }

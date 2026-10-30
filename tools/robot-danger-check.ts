@@ -104,7 +104,9 @@ if (V0.robotBigShotDamage < 25) fail(`excavator charge ${V0.robotBigShotDamage} 
 if (dps.cutter < 4 || dps.cutter > 9) fail(`a cutter's saw deals ${f(dps.cutter)} dps (want 4-9: 2-3x the old 2)`);
 if (dps.midShooter < 2.5) fail(`a cutter's slugs deal ${f(dps.midShooter)} dps (< 2.5)`);
 if (V0.robotMidCutWindup < 0.5 || V0.robotMidShotWindup < 0.5) fail("a cutter's tells under 0.5 s: not readable");
-if (dps.biter < 1.5 || dps.biter > 3) fail(`a scrapper biter deals ${f(dps.biter)} dps (want it as it was, about 2)`);
+// Balance pass (2026-10-31): hulls doubled (3000), robot damage ×1.5-1.75; the biter holds its share of the hull.
+const HK = HULL / 1500;
+if (dps.biter < 1.5 * HK || dps.biter > 3 * HK) fail(`a scrapper biter deals ${f(dps.biter)} dps (want about 2 per 1500 hull: ${f(2 * HK)})`);
 if (p.median < 10) fail(`a pack of 30 destroys a standing mech in ${f(p.median)} s (< 10): too quick to react`);
 if (p.median > 30) fail(`a pack of 30 takes ${f(p.median)} s to destroy a standing mech (> 30): not dangerous`);
 void DEAD;

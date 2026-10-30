@@ -9,7 +9,8 @@ import type { SheetFire } from "../game/sheetFire";
 import type { WeaponValues } from "./tuning";
 
 /** What an item can change. */
-export interface RailStats { damage: number; charge: number; cooldown: number; range: number; pen: number }
+/** What an item can change. `ap`: armour pierce 0..1 (src/game/armour.ts). */
+export interface RailStats { damage: number; charge: number; cooldown: number; range: number; pen: number; ap?: number }
 
 export class RailSim {
   /** 0..1 how full the charge is. */
@@ -54,5 +55,5 @@ export function coilGlow(c: number, i: number, n: number): number {
 /** The rail's sheet: flat out to range, its floor from the mech's feet to the ground under the aim; the slug flies at
  *  its slug height over that floor, so sand above that costs penetration (not just sand above the tall sheet's top). */
 export function railSheet(v: WeaponValues, st: RailStats, aim: { x: number; y: number; z: number } | null): SheetFire {
-  return { half: v.railSheetHalf, height: v.railSheetHeight, line: v.railSlugHeight, pen: st.pen, aim, flat: true, knock: v.railKnock };
+  return { half: v.railSheetHalf, height: v.railSheetHeight, line: v.railSlugHeight, pen: st.pen, aim, flat: true, knock: v.railKnock, pierce: st.ap ?? v.railAp };
 }

@@ -11,10 +11,12 @@ import type { Vec3 } from "./painter";
 interface Ground { height(x: number, z: number): number }
 
 /** What an item can change. */
-export interface CannonStats { damage: number; speed: number; splash: number; range: number; spread: number }
+export interface CannonStats { damage: number; speed: number; splash: number; range: number; spread: number; ap?: number }
 
 export interface Shell {
   pos: THREE.Vector3; vel: THREE.Vector3; travelled: number; range: number; live: boolean; damage: number; splash: number; team: number;
+  /** Armour pierce (src/game/armour.ts), set after fire. */
+  ap?: number;
   /** Penetration left and at the start (m; the sweep spends it), and what it already went through (target, key). */
   pen: number; pen0: number; passed: { t: unknown; key: number }[];
 }

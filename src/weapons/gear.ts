@@ -48,7 +48,8 @@ export function gearStats(weapon: ShoulderWeapon, own: Record<string, number> | 
 }
 
 /** What an ignited round does to what it hits: how long it burns, and its damage per second. */
-export interface RoundSpec { type: RoundType; burnTime: number; burnDps: number }
+/** Special rounds loaded by a feed's key. `ap`: armour pierce they add to the gun's (armour-piercing rounds, later). */
+export interface RoundSpec { type: RoundType; burnTime: number; burnDps: number; ap?: number }
 
 /** The key's state: a cooldown and, for a feed, the time its effect has left. */
 export class GearSim {

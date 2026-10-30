@@ -32,6 +32,7 @@ import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
 import { splashBlast, firstBody } from "./splash";
+import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
 export type { SheetFire, SheetShot } from "./sheetFire";
@@ -45,7 +46,11 @@ export interface Hittable {
   surface: HitSurface;
   /** Distance along the ray (unit dir) to this thing, or -1 if missed within maxDist. */
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number;
-  damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3): void;
+  /** A hit: its damage before armour, and its armour pierce (0..1; none: armour-ignoring, src/game/armour.ts). Each
+   *  adapter takes its own armour off by the one rule (armourHit). */
+  damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number): void;
+  /** Flat armour per hit (src/game/armour.ts), of the last unit hitRay or pick struck (swarms) or of the whole thing. */
+  armourOf?(): number;
   /**
    * Swarms: damage everything of theirs within radius of a point (a round's splash, or with o.blast an explosive's
    * blast, measured to each unit's nearest part); returns how many were hit.
@@ -74,6 +79,8 @@ export interface SplashOpts {
   blast?: boolean;
   /** Spare the unit the adapter's last direct hit struck (it already took the round). */
   spare?: boolean;
+  /** Armour pierce of what made it (0..1; none: armour-ignoring). Armour is taken per unit on the share it gets. */
+  pierce?: number;
 }
 
 export interface FireOptions {
@@ -105,6 +112,8 @@ export interface FireOptions {
   seed?: number;
   /** Ignited rounds: the tracer glows hot (the burn itself rides in proto.burn). */
   hot?: boolean;
+  /** Armour pierce of the round (0..1; none: armour-ignoring, src/game/armour.ts). */
+  pierce?: number;
 }
 
 export class Battlefield {
@@ -221,7 +230,7 @@ export class Battlefield {
    */
   fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): number {
     return this.shots.fire(
-      { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed },
+      { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
       { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot });
   }
 
@@ -374,7 +383,7 @@ export class Battlefield {
   }
 
   /** A shell bursts where it is: its landing point, or a body it came down on (shellHit). */
-  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage); }
+  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage, s.pierce); }
   /** Shells go off on the first body of another team in their path (a tall robot's chassis or legs). */
   private shellHit = (s: Shell, a: THREE.Vector3, b: THREE.Vector3) => { const h = firstBody(this.targets, s.team, a, b); return h ? h.f : -1; };
 
@@ -386,8 +395,8 @@ export class Battlefield {
    * damage through splash() to everything of another team within radius (full at the centre, half at the edge).
    * Shells burst through here; the player's rockets and mortar shells too (src/weapons).
    */
-  blast(team: number, p: THREE.Vector3, radius: number, damage: number) {
-    const s = { team, radius, damage };
+  blast(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number) {
+    const s = { team, radius, damage, pierce };
     const k = Math.max(0.5, s.radius / 3);
     this.onBlast?.(p, radius);
     // At night a blast lights the ground for a moment (cosmetic: src/world/nightLights.ts).
@@ -402,7 +411,7 @@ export class Battlefield {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
       this.sfx.play("brap", p, 1.6, 0.5, false);
-      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0));
+      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce);
       return;
     }
     for (let i = 0; i < 18 * k; i++) {
@@ -415,7 +424,7 @@ export class Battlefield {
     }
     if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
     this.sfx.play("brap", p, 1.8, 0.4, false);
-    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0));
+    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce);
   }
 
   /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
@@ -439,6 +448,9 @@ export class Battlefield {
 
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.look = look;
+    // One armour rule for every hit (src/game/armour.ts): its floor from the lab's slider.
+    const fl = (this.v as { armourFloor?: number }).armourFloor;
+    if (fl !== undefined) armourRule.floor = fl;
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
     // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
     this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;

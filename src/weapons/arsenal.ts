@@ -175,9 +175,10 @@ export class Arsenal implements MechWeapons {
 
   railStats(s: Side): RailStats {
     const v = this.v, o = s.own;
-    if (o) return { damage: o.damage, charge: o.charge, cooldown: o.cooldown, range: o.range, pen: o.pen ?? this.railPen(s) };
+    const ap = s.light ? v.railLightAp : v.railAp;
+    if (o) return { damage: o.damage, charge: o.charge, cooldown: o.cooldown, range: o.range, pen: o.pen ?? this.railPen(s), ap: o.ap ?? ap };
     const lk = s.light ? v.railLightDamage : 1, lc = s.light ? v.railLightCharge : 1;
-    return { damage: v.railDamage * lk, charge: v.railCharge * lc, cooldown: v.railCooldown, range: v.railRange * (s.light ? 0.85 : 1), pen: this.railPen(s) };
+    return { damage: v.railDamage * lk, charge: v.railCharge * lc, cooldown: v.railCooldown, range: v.railRange * (s.light ? 0.85 : 1), pen: this.railPen(s), ap };
   }
   /** Penetration (m): the slider, the Light rail's share of it (items carry none of their own yet). */
   private railPen(s: Side) { return this.v.railPen * (s.light ? this.v.railLightPen : 1); }
@@ -192,12 +193,12 @@ export class Arsenal implements MechWeapons {
   }
   cannonStats(o: Record<string, number> | null): CannonStats {
     const v = this.v;
-    return o ? { damage: o.damage, speed: o.shellSpeed, splash: o.splash, range: o.range, spread: o.spread } : { damage: v.acDamage, speed: v.acSpeed, splash: v.acSplash, range: v.acRange, spread: v.acSpread };
+    return o ? { damage: o.damage, speed: o.shellSpeed, splash: o.splash, range: o.range, spread: o.spread, ap: o.ap ?? v.acAp } : { damage: v.acDamage, speed: v.acSpeed, splash: v.acSplash, range: v.acRange, spread: v.acSpread, ap: v.acAp };
   }
   rpgStats(o: Record<string, number> | null, shoulder: boolean): RocketStats {
     const v = this.v;
-    return o ? { damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown }
-      : { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown };
+    return o ? { damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown, ap: o.ap ?? v.rpgAp }
+      : { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
   }
   swarmStats(o: Record<string, number> | null): SwarmStats {
     const v = this.v;
@@ -282,11 +283,11 @@ export class Arsenal implements MechWeapons {
     });
 
     // Everything in flight.
-    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept), this.shellSweep);
+    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept, s.ap), this.shellSweep);
     const steel = bf.wrecks ? (o: THREE.Vector3, d: THREE.Vector3, max: number) => (bf.wrecks!.hit(o, d, max, this.tmp2, this.dir) ? o.distanceTo(this.tmp2) : -1) : null;
     this.rockets.update(dt, bf.field, bf.targets, steel, (r, at, _why, t) => {
-      if (t) t.damage(r.damage * 0.5, at, r.dir);
-      this.blast(at, r.blast, r.damage);
+      if (t) t.damage(r.damage * 0.5, at, r.dir, r.ap);
+      this.blast(at, r.blast, r.damage, r.ap);
     });
     if (v.rpgSmoke > 0) for (const r of this.rockets.list) if (r.live) this.trail(r.prev, r.pos, 0.3 * v.rpgSmoke, 4);
   }
@@ -373,7 +374,7 @@ export class Arsenal implements MechWeapons {
 
     // Line mortar shells, big mortar shells, missiles.
     sh.line.update(dt, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, (r) => {
-      this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage);
+      this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, sh.own?.ap ?? v.salvoAp);
     }, (r) => {
       bf.sfx.playSound("mortar", this.tmp.set(r.p0.x, r.p0.y, r.p0.z), 0.7, 1.2 + Math.random() * 0.2);
       bf.dust.smoke(r.p0.x, r.p0.y, r.p0.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.35, 0.9, 0.7, 0.4);
@@ -386,7 +387,7 @@ export class Arsenal implements MechWeapons {
       const up = mortarHeight(x, z, u.lock, v);
       const to = { x, y: up ?? bf.field.height(x, z), z };
       const arc = lobArc(bf.field, from, to, v.mortarArc, v.mortarClear);
-      bf.lob(u.team, from, x, z, v.mortarFlight, arc, mst.blast, mst.damage, up);
+      bf.lob(u.team, from, x, z, v.mortarFlight, arc, mst.blast, mst.damage, up).pierce = sh.own?.ap ?? v.mortarAp;
       bf.sfx.playSound("mortar", from, 1.2, 0.75);
       for (let k = 0; k < 8; k++) bf.dust.smoke(from.x, from.y + 0.3, from.z, (Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 1.5, 0.5, 1.6, 0.75, 0.6);
       this.onShake?.(0.18);
@@ -394,7 +395,7 @@ export class Arsenal implements MechWeapons {
     });
     const track = (key: unknown) => this.findTarget(key);
     sh.swarm.update(dt, bf.field, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, track, (m) => {
-      this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage);
+      this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp);
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
       if (sh.model) sh.model.recoil.position.z = -0.05;
@@ -425,7 +426,7 @@ export class Arsenal implements MechWeapons {
     const spread = (st.spread * Math.PI) / 180;
     const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
-    this.shells.fire(u.team, m, d, st, this.v.acPen);
+    this.shells.fire(u.team, m, d, st, this.v.acPen).ap = st.ap;
     this.onFire?.("autocannon");
     this.bf.sfx.playSound("cannon", m, 1);
     this.bf.dust.smoke(m.x, m.y, m.z, d.x * 3, d.y * 3 + 0.5, d.z * 3, 0.3, 0.6, 0.6, 0.4);
@@ -453,7 +454,7 @@ export class Arsenal implements MechWeapons {
 
   private fireRocket(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats) {
     const bf = this.bf;
-    this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st);
+    this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st).ap = st.ap;
     this.onFire?.("rpg");
     bf.sfx.playSound("rocket", from, 1, 0.8);
     for (let k = 0; k < 5; k++) bf.dust.smoke(from.x, from.y, from.z, (Math.random() - 0.5) * 2, 0.5 + Math.random(), (Math.random() - 0.5) * 2, 0.4, 0.9, 0.7, 0.35);
@@ -608,7 +609,7 @@ export class Arsenal implements MechWeapons {
     const d = this.tmp2.set(b.x - a.x, b.y - a.y, b.z - a.z).normalize();
     // The damage this shell still carries, by the budget it has left (the walk's share is relative to what it's given).
     const k = s.pen0 > 0 ? Math.pow(Math.max(0, s.pen / s.pen0), v.penCurve) : 1;
-    const shot = bf.resolveSheet(s.team, sheet, s.damage * k, { half: v.acSheetHalf, height: v.acSheetUp, pen: Math.max(1e-3, s.pen) }, d, true,
+    const shot = bf.resolveSheet(s.team, sheet, s.damage * k, { half: v.acSheetHalf, height: v.acSheetUp, pen: Math.max(1e-3, s.pen), pierce: s.ap }, d, true,
       (h) => s.passed.some((p) => p.t === h.target && p.key === h.key));
     if (!shot.result.steps.length) return null;
     for (const st of shot.result.steps) s.passed.push({ t: st.hit.target, key: st.hit.key });
@@ -619,11 +620,11 @@ export class Arsenal implements MechWeapons {
   };
 
   /** An autocannon shell bursts: the target it struck takes the shell (unless a sweep already hit it), everything near takes a share. */
-  private cannonBurst(team: number, at: THREE.Vector3, t: Hittable | null, damage: number, splash: number, vel: THREE.Vector3, swept = false) {
+  private cannonBurst(team: number, at: THREE.Vector3, t: Hittable | null, damage: number, splash: number, vel: THREE.Vector3, swept = false, ap?: number) {
     const bf = this.bf, v = this.v;
     const d = this.dir.copy(vel).normalize();
-    if (t) { if (!swept) t.damage(damage, at, d); bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 8, 7); }
-    if (splash > 0) splashBlast(bf.targets, team, at, splash, damage * v.acSplashShare, d, t);
+    if (t) { if (!swept) t.damage(damage, at, d, ap); bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 8, 7); }
+    if (splash > 0) splashBlast(bf.targets, team, at, splash, damage * v.acSplashShare, d, t, ap);
     if (!t && bf.inWater(at.x, at.z)) bf.water?.splash(at.x, at.z, 1, d.x, d.z, 1.2);
     else { bf.dust.hit(at.x, at.y, at.z, d.x, d.z, 1.8); if (!t) bf.marks.crater(at.x, at.z, 1.3); }
     for (let k = 0; k < 4; k++) bf.dust.smoke(at.x, at.y + 0.3, at.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.3, 0.8, 0.7, 0.75);
@@ -631,8 +632,8 @@ export class Arsenal implements MechWeapons {
   }
 
   /** A rocket, missile or shell's blast: the battlefield's one blast entry point (crater queued, dust, sound, splash). */
-  private blast(at: THREE.Vector3, radius: number, damage: number) {
-    this.bf.blast(this.unit.team, at.clone(), radius, damage);
+  private blast(at: THREE.Vector3, radius: number, damage: number, ap?: number) {
+    this.bf.blast(this.unit.team, at.clone(), radius, damage, ap);
   }
 
   private muzzleOf(s: Side, side: 1 | -1, out: THREE.Vector3) {

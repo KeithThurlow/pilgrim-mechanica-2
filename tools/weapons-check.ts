@@ -485,13 +485,14 @@ const dt = 1 / 120;
       });
     }
   };
-  // Shots per weapon, and the least share of a robot's health they must take (1: kill).
+  // Shots per weapon, and the least share of a robot's health they must take (1: kill). Balance pass (2026-10-31):
+  // the excavator is a boss of the field (1800 hp, 8-12 s on-role), so a couple of volleys take a share, not its life.
   const weapons: { name: string; shots: number; fire: (s: St, n: number) => void; want: Record<Kind, number> }[] = [
-    { name: "RPG rocket", shots: 2, fire: fireRpg, want: { small: 1, mid: 1, big: 1 } },
-    { name: "missile pod", shots: 1, fire: fireMissiles, want: { small: 1, mid: 1, big: 0.6 } },
-    { name: "big mortar", shots: 2, fire: fireMortar, want: { small: 1, mid: 1, big: 0.5 } },
-    { name: "line mortar", shots: 1, fire: fireLine, want: { small: 1, mid: 1, big: 0.25 } },
-    { name: "autocannon", shots: 12, fire: fireCannon, want: { small: 1, mid: 1, big: 0.5 } },
+    { name: "RPG rocket", shots: 2, fire: fireRpg, want: { small: 1, mid: 1, big: 0.3 } },
+    { name: "missile pod", shots: 1, fire: fireMissiles, want: { small: 1, mid: 1, big: 0.2 } },
+    { name: "big mortar", shots: 2, fire: fireMortar, want: { small: 1, mid: 1, big: 0.4 } },
+    { name: "line mortar", shots: 1, fire: fireLine, want: { small: 1, mid: 1, big: 0.1 } },
+    { name: "autocannon", shots: 12, fire: fireCannon, want: { small: 1, mid: 1, big: 0.25 } },
   ];
   const rows: string[] = [];
   for (const w of weapons) {
@@ -513,9 +514,10 @@ const dt = 1 / 120;
       { kind: "small", x: 2, z: 21 }, { kind: "small", x: -2, z: 28 }, { kind: "small", x: 5, z: 24 }, { kind: "small", x: -5, z: 26 }]);
     fireMissiles(s, 1, s.cands()[0]);
     const lost = s.ids.map((_, j) => s.lost(j));
-    must(lost[0] >= 0.15, `a missile swarm into a group took ${(lost[0] * 100).toFixed(0)}% of the excavator's health (want 15%)`);
-    // The excavator's sprawling arms take some missiles meant for the small ones behind them.
-    must(lost.slice(1, 3).every((l) => l >= 1), `a missile swarm into a group left a cutter standing (${lost.slice(1, 3).map((l) => (l * 100).toFixed(0)).join("/")}%)`);
+    must(lost[0] >= 0.05, `a missile swarm into a group took ${(lost[0] * 100).toFixed(0)}% of the excavator's health (want 5%)`);
+    // The excavator's sprawling arms take some missiles meant for the small ones behind them; the cutters (220 hp
+    // since the balance pass) are hurt, not killed, by one salvo spread over a group.
+    must(lost.slice(1, 3).every((l) => l >= 0.25), `a missile swarm into a group barely touched a cutter (${lost.slice(1, 3).map((l) => (l * 100).toFixed(0)).join("/")}%)`);
     must(lost.slice(3).filter((l) => l >= 1).length >= 3, `a missile swarm into a group left small ones standing (${lost.slice(3).map((l) => (l * 100).toFixed(0)).join("/")}%)`);
     rows.push(`missile pod into a group: excavator ${(lost[0] * 100).toFixed(0)}%, cutters ${lost.slice(1, 3).map((l) => (l * 100).toFixed(0)).join("/")}%, scrappers ${lost.slice(3).map((l) => (l * 100).toFixed(0)).join("/")}%`);
   }

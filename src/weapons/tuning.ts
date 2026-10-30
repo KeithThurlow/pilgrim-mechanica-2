@@ -5,6 +5,7 @@
 // runs on these sliders.
 import type { Param } from "../core/tweaks";
 import { PEN_DEFAULTS, PEN_PARAMS } from "../game/sheet";
+import { ARMOUR_DEFAULTS, ARMOUR_PARAMS } from "../game/armour";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -25,9 +26,9 @@ export const WEAPON_DEFAULTS = {
   salvoRise: 12,
   salvoArc: 9,
   salvoScatter: 0.6,
-  salvoBlast: 2.6,
+  salvoBlast: 3.2,
   salvoDamage: 140,
-  salvoCooldown: 6,
+  salvoCooldown: 4,
   salvoSnap: 0.8,
   salvoSnapReach: 5,
   salvoSmoke: 0.6,
@@ -35,7 +36,7 @@ export const WEAPON_DEFAULTS = {
   railCharge: 0.7,
   railMinCharge: 0.3,
   railGrace: 0.15,
-  railDamage: 900,
+  railDamage: 450,
   railRange: 90,
   railPen: 10,
   railSheetHalf: 0.6,
@@ -50,7 +51,7 @@ export const WEAPON_DEFAULTS = {
   railWisp: 1,
   railBlast: 1,
   railCoilArcs: 1,
-  railLightDamage: 0.55,
+  railLightDamage: 0.67,
   railLightCharge: 0.7,
   railLightPen: 0.6,
   // Big mortar (one huge shell over the hills)
@@ -63,13 +64,13 @@ export const WEAPON_DEFAULTS = {
   mortarClear: 3,
   mortarGap: 0.28,
   mortarLead: 1,
-  mortarCooldown: 10,
+  mortarCooldown: 8,
   mortarMaxRange: 90,
   // Autocannon
   acRate: 3.2,
   acSpeed: 75,
   acGravity: 6,
-  acDamage: 55,
+  acDamage: 50,
   acSplash: 1.8,
   acSplashShare: 0.6,
   acSpread: 0.6,
@@ -80,7 +81,7 @@ export const WEAPON_DEFAULTS = {
   acSheetUp: 4,
   // RPG rocket (hull: its side's button; shoulder: a number key)
   rpgSpeed: 55,
-  rpgDamage: 380,
+  rpgDamage: 300,
   rpgBlast: 4.5,
   rpgCooldown: 2.2,
   rpgShoulderCooldown: 4,
@@ -88,7 +89,7 @@ export const WEAPON_DEFAULTS = {
   rpgSmoke: 1,
   // Missile pod (shoulder)
   swarmMissiles: 10,
-  swarmDamage: 90,
+  swarmDamage: 60,
   swarmBlast: 2.2,
   swarmRadius: 8,
   swarmCooldown: 8,
@@ -134,10 +135,21 @@ export const WEAPON_DEFAULTS = {
   blastLevel: 0.6,
   mortarLevel: 0.5,
   cannonLevel: 0.45,
+  // Armour pierce (docs/proposal-balance.md, Keith 2026-10-31): the share of a target's armour each hit ignores, for
+  // weapons on these sliders (a rolled item carries its own `ap`). Miniguns' is on the mech (roundAp) and their items.
+  railAp: 0.9,
+  railLightAp: 0.8,
+  acAp: 0.5,
+  rpgAp: 0.6,
+  swarmAp: 0.3,
+  mortarAp: 0.4,
+  salvoAp: 0.3,
+  ...ARMOUR_DEFAULTS,
   ...PEN_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
+const AP = "Armour pierce";
 const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound", SG = "Shoulder gear";
 export const WEAPON_PARAMS: Param[] = [
   { key: "paintOpacity", label: "Paint strength", min: 0, max: 1, step: 0.01, group: P },
@@ -265,8 +277,16 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "blastLevel", label: "Big blasts", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "mortarLevel", label: "Mortar thunk", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "cannonLevel", label: "Autocannon", min: 0, max: 1.5, step: 0.01, group: SND },
+  { key: "railAp", label: "Rail cannon", min: 0, max: 1, step: 0.01, group: AP, tip: "Share of a target's armour each hit ignores: damage taken = max(floor × hit, hit − armour × (1 − this))" },
+  { key: "railLightAp", label: "Light rail cannon", min: 0, max: 1, step: 0.01, group: AP },
+  { key: "acAp", label: "Autocannon", min: 0, max: 1, step: 0.01, group: AP },
+  { key: "rpgAp", label: "Rockets", min: 0, max: 1, step: 0.01, group: AP, tip: "The hull and shoulder rocket: its direct hit and its blast" },
+  { key: "swarmAp", label: "Missiles", min: 0, max: 1, step: 0.01, group: AP },
+  { key: "mortarAp", label: "Big mortar", min: 0, max: 1, step: 0.01, group: AP },
+  { key: "salvoAp", label: "Line mortar", min: 0, max: 1, step: 0.01, group: AP },
+  ...ARMOUR_PARAMS,
   ...PEN_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", L, B, SND] };

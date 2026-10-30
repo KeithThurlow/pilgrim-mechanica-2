@@ -263,6 +263,8 @@ export function effectiveStats(item: Item): Record<string, number> {
 export interface ResolvedValues {
   walkSpeed: number; sprintSpeed: number; accel: number; strideBase: number; stridePerSpeed: number; impact: number; turnRate: number;
   hull: number; torsoTurnRate: number;
+  /** The hull's armour (src/game/armour.ts). */
+  armour: number;
   dashCharges: number; dashRecharge: number; boostFuel: number;
   ammoPerGun: number;
   /** The shared gun sliders, from the first fitted gun (each gun also has its own in `guns`). */
@@ -309,13 +311,13 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
 
   const gunFrom = (item: Item, w: Record<string, number>, arc: number, track: number, ammo: number): GunStats => {
     const cls = BASE_BY_ID[item.base]?.cls ?? "minigun";
-    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, proto: shotProtocolsOf(item.socketed) };
+    if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, proto: shotProtocolsOf(item.socketed) };
     // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
     // an unrolled base item runs on the weapon sliders (own: null).
     const own = item.seed ? w : null, light = item.size === "L";
-    if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, cls, own, light };
-    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, cls, own, light };
-    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, cls, own, light };
+    if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, ap: w.ap, cls, own, light };
+    if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, ap: w.ap, cls, own, light };
+    return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, ap: w.ap, cls, own, light };
   };
   // A side's gun: its hull weapon, or the weapon its arm holds (the arm's arc plus the weapon's, the arm's tracking
   // times the weapon's handling).
@@ -344,7 +346,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   for (const s of SLOTS) { const x = lo[s] ? effectiveStats(lo[s]!).salvage : undefined; if (x !== undefined) salvage += x; }
   const values: ResolvedValues = {
     walkSpeed: legs.walkSpeed, sprintSpeed: legs.sprintSpeed, accel: legs.accel, strideBase: legs.strideBase, stridePerSpeed: legs.stridePerSpeed, impact: legs.impact, turnRate: legs.turnRate,
-    hull: hull.hull, torsoTurnRate: hull.torsoTurnRate,
+    hull: hull.hull, torsoTurnRate: hull.torsoTurnRate, armour: hull.armour ?? 0,
     dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
     ammoPerGun: first?.ammo ?? bare.bareAmmo,
     fireRate: first?.fireRate ?? D.fireRate, spinUp: first?.spinUp ?? D.spinUp, spread: first?.spread ?? D.spread, range: first?.range ?? D.range,
@@ -394,7 +396,7 @@ export function summary(r: Resolved): SummaryLine[] {
   const out = [
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
-    line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
+    line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
   ];
@@ -406,7 +408,8 @@ export function summary(r: Resolved): SummaryLine[] {
       line(`${name}spin`, `${name} spin-up (s)`, g?.spinUp ?? null, -1, 2),
       line(`${name}spread`, `${name} spread (°)`, g?.spread ?? null, -1, 2),
       line(`${name}range`, `${name} range (m)`, g?.range ?? null, 1, 0),
-      line(`${name}pierce`, `${name} pierce`, g?.pierce ?? null, 1, 0),
+      line(`${name}pierce`, `${name} penetration`, g?.pierce ?? null, 1, 0),
+      line(`${name}ap`, `${name} armour pierce`, g?.ap ?? null, 1, 2),
       line(`${name}arc`, `${name} arc (°)`, g?.arc ?? null, 1, 0),
       line(`${name}track`, `${name} tracking`, g?.track ?? null, 1, 1),
       line(`${name}ammo`, `${name} rounds`, g?.ammo ?? null, 1, 0),

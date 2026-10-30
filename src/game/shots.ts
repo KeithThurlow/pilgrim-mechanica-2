@@ -20,7 +20,8 @@
 // register id; the mechs' own spread is still drawn with Math.random in mechUnit before the command is made.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import type { Hittable } from "./battlefield";
+import type { Hittable, SplashOpts } from "./battlefield";
+import { UNSET_PIERCE } from "./armour";
 import type { HitSurface } from "../fx/minigun";
 import type { Ground } from "../mech/walker";
 import { rayGround } from "../world/raycast";
@@ -93,6 +94,8 @@ export interface ShotCmd {
   proto?: ShotProtocols;
   /** The gun's time between rounds (s): fire-rate copies spread over it (else protoRateGap). */
   interval?: number;
+  /** Armour pierce 0..1 of every round and child (src/game/armour.ts; none: armour-ignoring). */
+  pierce?: number;
 }
 
 /** How a shot looks (cosmetic, local, never sent). Copied in. */
@@ -180,6 +183,8 @@ export class Shots {
   readonly seed = new Uint32Array(CAP);
   /** Ignited rounds: burn time (s) and damage per second (0: plain). */
   readonly burnT = new Float32Array(CAP); readonly burnD = new Float32Array(CAP);
+  /** Armour pierce (src/game/armour.ts; 1 for a command that names none). */
+  readonly ap = new Float32Array(CAP);
   readonly id = new Float64Array(CAP); readonly family = new Float64Array(CAP);
   /** The look of each row's command (cosmetic, by family). */
   private look: (ShotLook | null)[] = new Array(CAP).fill(null);
@@ -205,6 +210,7 @@ export class Shots {
   private filter: Filter = { all: FLAG.Hittable };
   private near: number[] = [];
   private sheetF: SheetFire = { half: 0, height: 0, pen: 0 };
+  private splashO: SplashOpts = {};
   private aimV = { x: 0, y: 0, z: 0 };
 
   constructor(readonly world: ShotWorld) {}
@@ -236,6 +242,7 @@ export class Shots {
         if (i < 0) return family;
         this.wait[i] = r * gap;
         this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0;
+        this.ap[i] = c.pierce ?? UNSET_PIERCE;
         this.splash[i] = splash; this.splashShare[i] = share;
         this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
         let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 ? F_FIRST : 0);
@@ -270,7 +277,7 @@ export class Shots {
     const l = Math.hypot(dx, dy, dz) || 1;
     this.ox[i] = x; this.oy[i] = y; this.oz[i] = z; this.dx[i] = dx / l; this.dy[i] = dy / l; this.dz[i] = dz / l;
     this.range[i] = range; this.damage[i] = damage; this.wait[i] = 0; this.splash[i] = 0; this.splashShare[i] = 0;
-    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0; this.burnT[i] = 0; this.burnD[i] = 0;
+    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0; this.burnT[i] = 0; this.burnD[i] = 0; this.ap[i] = UNSET_PIERCE;
     this.seed[i] = seed; this.id[i] = this.nextId++; this.family[i] = family; this.look[i] = look;
     return i;
   }
@@ -304,7 +311,7 @@ export class Shots {
   private move(a: number, b: number) {
     for (const arr of [this.ox, this.oy, this.oz, this.dx, this.dy, this.dz, this.range, this.damage, this.wait, this.splash, this.splashShare,
       this.half, this.height, this.line, this.pen, this.knock, this.ax, this.ay, this.az, this.team, this.gen, this.kind, this.ric, this.chain,
-      this.flags, this.seed, this.burnT, this.burnD, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
+      this.flags, this.seed, this.burnT, this.burnD, this.ap, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
     this.look[b] = this.look[a];
   }
 
@@ -332,7 +339,7 @@ export class Shots {
       const sf = this.sheetF;
       sf.half = this.half[i]; sf.height = this.height[i]; sf.pen = this.pen[i];
       sf.line = Number.isNaN(this.line[i]) ? undefined : this.line[i];
-      sf.flat = (f & F_FLAT) !== 0; sf.knock = this.knock[i] || undefined;
+      sf.flat = (f & F_FLAT) !== 0; sf.knock = this.knock[i] || undefined; sf.pierce = this.ap[i];
       sf.aim = f & F_AIM ? Object.assign(this.aimV, { x: this.ax[i], y: this.ay[i], z: this.az[i] }) : null;
       const sheet = makeSheet(w.field, o, d, range, sf, v);
       const shot = resolveSheet(w.field, w.targets, w.wrecks, team, sheet, damage, sf, d, v, true, undefined, w.register);
@@ -361,7 +368,7 @@ export class Shots {
         const dist = this.nearD;
         near.hitRay(o, d, dist + 1e-3);
         this.pt.copy(o).addScaledVector(d, dist);
-        near.damage(damage, this.pt, d);
+        near.damage(damage, this.pt, d, this.ap[i]);
         this.event("hit", i, w.targets.indexOf(near), -1, damage, this.pt.x, this.pt.y, this.pt.z);
         this.stats.hits++;
         this.setAlight(i, near, -1, this.pt.x, this.pt.y, this.pt.z);
@@ -373,7 +380,8 @@ export class Shots {
     // Splash: everything of theirs near where it ended (the swarms cull their own units through the register).
     if (this.splash[i] > 0 && this.splashShare[i] > 0) {
       let count = 0;
-      for (const t of w.targets) if (t.alive && t.team !== team && t.splash) count += t.splash(end, this.splash[i], damage * this.splashShare[i], d);
+      this.splashO.pierce = this.ap[i];
+      for (const t of w.targets) if (t.alive && t.team !== team && t.splash) count += t.splash(end, this.splash[i], damage * this.splashShare[i], d, this.splashO);
       if (count) this.event("splash", i, -1, -1, damage * this.splashShare[i], end.x, end.y, end.z, count);
     }
     const look = this.look[i]!;
@@ -397,7 +405,7 @@ export class Shots {
       const j = this.row(this.family[i], K_RICOCHET, gen + 1, team, end.x + normal.x * 0.15, end.y + normal.y * 0.15, end.z + normal.z * 0.15, rx, ry, rz,
         v.protoRicochetRange, damage * v.protoRicochetKeep, look, hash(this.seed[i] + 7));
       if (j >= 0) {
-        this.ric[j] = this.ric[i] - 1; this.chain[j] = 0; this.flags[j] = f & F_TRACER;
+        this.ric[j] = this.ric[i] - 1; this.chain[j] = 0; this.flags[j] = f & F_TRACER; this.ap[j] = this.ap[i];
         this.splash[j] = this.splash[i]; this.splashShare[j] = this.splashShare[i];
         this.event("ricochet", i, -1, -1, this.damage[j], end.x, end.y, end.z);
       }
@@ -482,7 +490,7 @@ export class Shots {
     const j = this.row(this.family[i], K_CHAIN, this.gen[i] + 1, this.team[i], sx, sy, sz, tx, ty, tz,
       Math.hypot(tx, ty, tz) + 2, damage * v.protoChainKeep, look, hash(this.seed[i] + 13));
     if (j < 0) return;
-    this.chain[j] = this.chain[i] - 1; this.ric[j] = 0; this.flags[j] = f & F_TRACER;
+    this.chain[j] = this.chain[i] - 1; this.ric[j] = 0; this.flags[j] = f & F_TRACER; this.ap[j] = this.ap[i];
     this.event("chain", i, -1, -1, this.damage[j], reg.x[best], reg.y[best], reg.z[best]);
   }
 

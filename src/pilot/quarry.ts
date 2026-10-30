@@ -13,7 +13,7 @@ import type { PilotSim, PilotValues } from "./pilot";
 
 export const QUARRY_DEFAULTS = {
   pilotLure: 1.6,
-  pilotHurt: 1,
+  pilotHurt: 0.67,
   pilotNotice: 0.5,
 };
 export type QuarryValues = typeof QUARRY_DEFAULTS;

@@ -49,7 +49,7 @@ export const ROBOT_DEFAULTS = {
   robotLatchRing: 1.05,
   robotLatchLow: 1,
   robotLatchHigh: 4,
-  robotBiteDamage: 0.8,
+  robotBiteDamage: 1.4,
   robotBiteInterval: 0.4,
   robotShakeSpeed: 4.5,
   robotShakeTime: 2.5,
@@ -62,13 +62,13 @@ export const ROBOT_DEFAULTS = {
   robotShootSlack: 6,
   robotShotInterval: 1.1,
   robotShotSpread: 5,
-  robotShotDamage: 1.2,
+  robotShotDamage: 1.8,
   // Medium cutters.
   robotMidShare: 0.15,
   robotMidSize: 2.2,
   robotMidHeight: 1.5,
   robotMidSizeJitter: 0.1,
-  robotMidHp: 90,
+  robotMidHp: 220,
   robotMidSpeed: 3.5,
   robotMidAccel: 2.5,
   robotMidTurn: 140,
@@ -84,13 +84,13 @@ export const ROBOT_DEFAULTS = {
   robotMidShotInterval: 2,
   robotMidShotWindup: 0.65,
   robotMidShotSpread: 3,
-  robotMidShotDamage: 7,
+  robotMidShotDamage: 10,
   robotMidCutRange: 4,
   robotMidCutWindup: 0.7,
   robotMidLungeSpeed: 7,
   robotMidLungeTime: 0.3,
   robotMidCutReach: 1.6,
-  robotMidCutDamage: 12,
+  robotMidCutDamage: 18,
   robotMidCutRecover: 0.7,
   robotMidSplash: 0.35,
   // Big excavators.
@@ -98,7 +98,7 @@ export const ROBOT_DEFAULTS = {
   robotBigSize: 4,
   robotBigHeight: 10,
   robotBigSizeJitter: 0.1,
-  robotBigHp: 500,
+  robotBigHp: 1800,
   robotBigSpeed: 3,
   robotBigAccel: 1.5,
   robotBigTurn: 45,
@@ -116,7 +116,11 @@ export const ROBOT_DEFAULTS = {
   robotFootDamage: 0.3,
   // Blasts (rockets, missiles, mortar and autocannon shells; 2026-10-26): measured to the nearest part, by its share.
   robotMidBlast: 1,
-  robotBigBlast: 0.5,
+  robotBigBlast: 0.8,
+  // Armour (docs/proposal-balance.md, Keith 2026-10-31): flat per hit, cut by the hit's pierce (src/game/armour.ts).
+  robotArmour: 0,
+  robotMidArmour: 3,
+  robotBigArmour: 10,
   robotMidLegHit: 0.2,
   robotBigArc: 12,
   robotBigBurst: 2,
@@ -129,7 +133,7 @@ export const ROBOT_DEFAULTS = {
   robotBigLobRadius: 3.5,
   robotBigLobLead: 0.7,
   robotBigLobScatter: 2,
-  robotBigShotDamage: 30,
+  robotBigShotDamage: 45,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -222,7 +226,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigSize", label: "Chassis size (m)", min: 1, max: 10, step: 0.05, group: G2 },
   { key: "robotBigHeight", label: "Chassis height (m)", min: 4, max: 20, step: 0.1, group: G2, tip: "How high the excavator carries its chassis; the arm legs scale with it" },
   { key: "robotBigSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G2 },
-  { key: "robotBigHp", label: "Health", min: 10, max: 3000, step: 10, group: G2 },
+  { key: "robotBigHp", label: "Health", min: 10, max: 8000, step: 10, group: G2 },
   { key: "robotBigSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: G2 },
   { key: "robotBigAccel", label: "Acceleration (1/s)", min: 0.2, max: 10, step: 0.1, group: G2 },
   { key: "robotBigTurn", label: "Turn rate (°/s)", min: 5, max: 360, step: 1, group: G2 },
@@ -239,6 +243,9 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigLegHit", label: "Big: arm hit radius (m)", min: 0, max: 1.5, step: 0.01, group: GH, tip: "Rounds hit the arm legs (boom, stick, bucket) within this; the bucket 1.6× it" },
   { key: "robotMidBlast", label: "Medium: blasts count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Share of an explosive's blast (rocket, missile, mortar or autocannon shell) a medium one takes, measured to its nearest part (body full, legs and feet their share)" },
   { key: "robotBigBlast", label: "Big: blasts count (×)", min: 0, max: 2, step: 0.05, group: GH, tip: "Share of an explosive's blast a big one takes, measured to its nearest part: a blast at its feet hurts its buckets and arms, one up at the chassis the body (rounds' splash still doesn't hurt big ones)" },
+  { key: "robotArmour", label: "Small: armour", min: 0, max: 30, step: 0.5, group: GH, tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share" },
+  { key: "robotMidArmour", label: "Medium: armour", min: 0, max: 30, step: 0.5, group: GH, tip: "A cutter: miniguns lose a third of each round to it" },
+  { key: "robotBigArmour", label: "Big: armour", min: 0, max: 40, step: 0.5, group: GH, tip: "An excavator: small rounds keep little of each hit; rails, rockets and autocannon shells barely notice" },
   { key: "robotMidLegHit", label: "Medium: leg hit radius (m)", min: 0, max: 0.8, step: 0.01, group: GH, tip: "Rounds hit a medium one's legs within this (0: legs let rounds through)" },
   { key: "robotBigArc", label: "Fires within (°)", min: 1, max: 90, step: 1, group: G2, tip: "Only fires when turned this close to the mech" },
   { key: "robotBigBurst", label: "Charges per volley", min: 1, max: 10, step: 1, group: G2 },
@@ -1216,6 +1223,8 @@ export class RobotSwarm {
     this.hitLeg = best >= 0 && bestPart !== PART_BODY;
     return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg, part: this.hitPart };
   }
+  /** Flat armour of robot i (by its kind: the sliders), for src/game/armour.ts. */
+  armourOf(i: number) { const k = this.kind[i], v = this.v; return k === SMALL ? v.robotArmour : k === MID ? v.robotMidArmour : v.robotBigArmour; }
   /** Damage share of a round into a part (PART_*): legs and feet take less than the body (sliders). */
   partShare(part: number) { return part === PART_LEG ? this.v.robotLegDamage : part === PART_FOOT ? this.v.robotFootDamage : 1; }
   private lw3: V3 = { x: 0, y: 0, z: 0 };

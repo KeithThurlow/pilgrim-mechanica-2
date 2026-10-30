@@ -26,6 +26,8 @@ export interface SheetFire {
   flat?: boolean;
   /** Throw light bodies along the line at this speed (m/s; the rail). */
   knock?: number;
+  /** Armour pierce 0..1 of each hit (src/game/armour.ts; none: armour-ignoring). */
+  pierce?: number;
 }
 
 /** What a sheet shot did: the bodies (in order), where it ended and on what. */
@@ -169,7 +171,7 @@ export function resolveSheet(field: Ground, targets: readonly Hittable[], steel:
       if (h.ray) { fanO.set(h.ray.ox, h.ray.oy, h.ray.oz); fanD.set(h.ray.dx, h.ray.dy, h.ray.dz); h.target.hitRay(fanO, fanD, h.ray.dist + 1e-3); }
       else h.target.pick?.(h.key);
       const dmg = damage * st.share;
-      h.target.damage(dmg, at, dir);
+      h.target.damage(dmg, at, dir, f.pierce);
       if (f.knock) h.target.knock?.(at, dir, f.knock);
       dealt += dmg;
     }

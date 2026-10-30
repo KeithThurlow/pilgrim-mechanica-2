@@ -42,6 +42,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(problems(lo).length === 0, `default loadout has problems: ${problems(lo).join("; ")}`);
   const r = resolve(lo);
   const today: Record<string, number> = {
+    armour: MECH_DEFAULTS.armour,
     ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DASH_DEFAULTS,
     hull: MECH_DEFAULTS.hull, roundDamage: MECH_DEFAULTS.roundDamage, roundPierce: MECH_DEFAULTS.roundPierce,
     mechRadar: RADAR_DEFAULTS.mechRadar, gearSalvage: 1,

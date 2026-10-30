@@ -57,14 +57,17 @@ import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
 import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
 import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
-import type { Battlefield, Hittable } from "./battlefield";
+import type { Battlefield, Hittable, SplashOpts } from "./battlefield";
+import { armourHit } from "./armour";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
-  hull: 1500,
-  roundDamage: 9,
+  hull: 3000,
+  armour: 8,
+  roundDamage: 12,
+  roundAp: 0.1,
   roundPierce: 2,
   roundPen: 1,
   roundPenCurve: 1.75,
@@ -82,7 +85,9 @@ export const MECH_PARAMS: Param[] = [
   ...DASH_PARAMS,
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
-  { key: "hull", label: "Hull (hit points)", min: 50, max: 5000, step: 10, group: "Mech health" },
+  { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
+  { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
+  { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },
   { key: "roundDamage", label: "Minigun round damage", min: 0, max: 60, step: 0.5, group: "Mech health", tip: "What each of the player's rounds takes off whatever it hits" },
   { key: "roundPen", label: "Hull minigun penetration (m)", min: 0, max: 6, step: 0.05, group: "Rounds", tip: "Each round's penetration budget in metres of steel equivalent (src/game/sheet.ts): bodies and dune lips cost their chord × their density (Penetration group)" },
   { key: "roundPierce", label: "Item pierce read as the hull's", min: 0.5, max: 6, step: 0.5, group: "Rounds", tip: "An item's pierce stat (until items carry penetration in metres) is read as penetration = hull minigun penetration × (pierce / this) ^ curve: a held light minigun (pierce 1) gets about 0.3 m" },
@@ -122,6 +127,8 @@ export class MechUnit implements Hittable {
   paint: number | null = null;
   /** Hull for this mech instead of the shared slider (bandit mechs). */
   hullOverride: number | null = null;
+  /** Armour for this mech instead of the shared slider (bandit mechs). */
+  armourOverride: number | null = null;
   /** Damage scale on this mech's own rounds (bandit mechs hit softer than the player). */
   damageScale = 1;
   /** Called on each footfall with where and how hard (stomps for infantry, later). */
@@ -367,9 +374,11 @@ export class MechUnit implements Hittable {
       // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
       const special = this.weapons?.rounds?.(s) ?? null;
       const proto = special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
+      // Armour pierce: the gun's own (an item's), else the slider; special rounds add theirs (armour-piercing, later).
+      const ap = Math.min(1, (own?.ap ?? v.roundAp) + (special?.ap ?? 0));
       this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto, hot: !!special }
-        : { voice: "other", hitScale: 0.7, proto: special ? proto : undefined, hot: !!special });
+        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto, hot: !!special, pierce: ap }
+        : { voice: "other", hitScale: 0.7, proto: special ? proto : undefined, hot: !!special, pierce: ap });
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);
@@ -405,18 +414,22 @@ export class MechUnit implements Hittable {
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
   /** A blast at a point: hurt if it reaches the hull's capsule, full at the centre, half at the edge. */
-  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts) {
     if (!this.alive) return 0;
     const p = this.sim.pelvis;
     const y = Math.min(Math.max(at.y, p.y - 2.4), p.y + 1.6);
     const d = Math.max(0, Math.hypot(at.x - p.x, at.y - y, at.z - p.z) - this.v.hitRadius);
     if (d > radius) return 0;
-    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir);
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir, o?.pierce);
     return 1;
   }
 
-  damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3) {
+  /** Flat armour per hit (src/game/armour.ts): the hull's. */
+  armourOf() { return this.armourOverride ?? this.v.armour; }
+
+  damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
+    amount = armourHit(amount, this.armourOf(), pierce);
     if (this.dash.shoving) amount *= this.v.dashDamageCut;
     this.health -= amount;
     this.hurt += amount;

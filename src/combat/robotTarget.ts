@@ -14,6 +14,7 @@ import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT,
 import { BIG_BODY_H, MID_BODY_H, WALK_LEGS, type V3 } from "./robotLegs";
 import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
+import { armourHit } from "../game/armour";
 
 export class RobotTarget implements Hittable, Owner {
   readonly name = "robots";
@@ -136,7 +137,7 @@ export class RobotTarget implements Hittable, Owner {
       if (best <= 0) continue;
       // Blasts throw wrecks away from the blast; rounds along their flight.
       const dx = blast ? sw.px[i] - at.x : dir.x, dz = blast ? sw.pz[i] - at.z : dir.z;
-      if (sw.damage(i, damage * kk * best, dx, dz)) this.kills++;
+      if (sw.damage(i, armourHit(damage * kk * best, sw.armourOf(i), o?.pierce), dx, dz)) this.kills++;
       n++;
     }
     return n;
@@ -185,11 +186,15 @@ export class RobotTarget implements Hittable, Owner {
   }
 
   /** The round's damage, scaled by the part it struck (body full, legs and feet a share). */
-  damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3) {
+  damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (this.last < 0) return;
     this.partHits[this.lastPart]++;
-    if (this.swarm.damage(this.last, amount * this.swarm.partShare(this.lastPart), dir.x, dir.z)) this.kills++;
+    const sw = this.swarm;
+    if (sw.damage(this.last, armourHit(amount * sw.partShare(this.lastPart), sw.armourOf(this.last), pierce), dir.x, dir.z)) this.kills++;
   }
+
+  /** The armour of the robot last struck (0 with none). */
+  armourOf() { return this.last < 0 ? 0 : this.swarm.armourOf(this.last); }
 }
 
 /** Distance from a point to the segment a-b. */

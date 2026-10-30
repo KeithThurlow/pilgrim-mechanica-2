@@ -9,7 +9,7 @@ import type { Vec3 } from "./painter";
 interface Ground { height(x: number, z: number): number }
 
 /** What an item can change. */
-export interface RocketStats { damage: number; blast: number; speed: number; cooldown: number }
+export interface RocketStats { damage: number; blast: number; speed: number; cooldown: number; ap?: number }
 
 export interface Rocket {
   pos: THREE.Vector3;
@@ -23,6 +23,8 @@ export interface Rocket {
   blast: number;
   team: number;
   live: boolean;
+  /** Armour pierce of its hit and blast (src/game/armour.ts). */
+  ap?: number;
 }
 
 /** Why a rocket went off: it reached its point, or something got in the way first. */

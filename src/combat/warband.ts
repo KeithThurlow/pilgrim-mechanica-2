@@ -17,6 +17,7 @@ import type { DeathPhysics, Dead } from "../physics/deaths";
 import { BusCrew, BUS_DEFAULTS, BUS_PARAMS } from "./partyBus";
 import type { InfantrySwarm } from "./infantry";
 import { BusMusic } from "../audio/busMusic";
+import { armourHit } from "../game/armour";
 
 /**
  * What the band goes for: the player's mech, or the pilot on foot (src/pilot/quarry.ts Prey has this shape): alive,
@@ -38,16 +39,16 @@ export const WARBAND_DEFAULTS = {
   gunRange: 42,
   gunTurn: 120,
   techRate: 7,
-  techDamage: 1.2,
+  techDamage: 1.8,
   techSpread: 3.5,
   truckRate: 2.2,
-  truckDamage: 6,
+  truckDamage: 9,
   truckSpread: 2,
   sixRate: 1.5,
-  sixDamage: 12,
+  sixDamage: 18,
   sixSpread: 1.5,
   turretRate: 0.3,
-  turretDamage: 35,
+  turretDamage: 52,
   turretSpread: 0.8,
   turretTurn: 30,
   turretShellSpeed: 22,
@@ -59,7 +60,15 @@ export const WARBAND_DEFAULTS = {
   sixHull: 650,
   rigHull: 1400,
   turretHull: 1100,
-  banditMechHull: 650,
+  // Armour (docs/proposal-balance.md, Keith 2026-10-31): flat per hit, cut by the hit's pierce (src/game/armour.ts).
+  techArmour: 2,
+  truckArmour: 4,
+  sixArmour: 6,
+  rigArmour: 8,
+  turretArmour: 12,
+  busArmour: 5,
+  banditMechArmour: 6,
+  banditMechHull: 1800,
   banditMechDamage: 0.2,
   banditMechRange: 26,
   fleeAt: 0.25,
@@ -122,6 +131,13 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "sixHull", label: "Six-wheeler: hit points", min: 10, max: 5000, step: 10, group: "Raider health" },
   { key: "rigHull", label: "War Rig: hit points", min: 10, max: 8000, step: 10, group: "Raider health" },
   { key: "turretHull", label: "Turret truck: hit points", min: 10, max: 8000, step: 10, group: "Raider health" },
+  { key: "techArmour", label: "Technical: armour", min: 0, max: 40, step: 0.5, group: "Raider health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share" },
+  { key: "truckArmour", label: "Gun truck: armour", min: 0, max: 40, step: 0.5, group: "Raider health" },
+  { key: "sixArmour", label: "Six-wheeler: armour", min: 0, max: 40, step: 0.5, group: "Raider health" },
+  { key: "rigArmour", label: "War Rig: armour", min: 0, max: 40, step: 0.5, group: "Raider health" },
+  { key: "turretArmour", label: "Turret truck: armour", min: 0, max: 40, step: 0.5, group: "Raider health", tip: "The war band's heavy: bring rails, rockets or autocannon (a tank has 4 more)" },
+  { key: "busArmour", label: "Party bus: armour", min: 0, max: 40, step: 0.5, group: "Raider health" },
+  { key: "banditMechArmour", label: "Bandit mech: armour", min: 0, max: 40, step: 0.5, group: "Raider health" },
   { key: "banditMechHull", label: "Bandit mech: hit points", min: 50, max: 5000, step: 10, group: "Raider health" },
   { key: "banditMechDamage", label: "Bandit mech: damage ×", min: 0, max: 2, step: 0.01, group: "Raider guns", tip: "Their miniguns' rounds against yours" },
   { key: "banditMechRange", label: "Bandit mech: holds off (m)", min: 8, max: 60, step: 1, group: "War band" },
@@ -187,6 +203,8 @@ export class Raider implements Hittable {
   alive = true;
   hp: number;
   maxHp: number;
+  /** Flat armour per hit (src/game/armour.ts), set from the sliders when it spawns. */
+  armour: number;
   mode: Mode = "circle";
   /** +1 circles one way, -1 the other. */
   dirSign = Math.random() < 0.5 ? 1 : -1;
@@ -222,6 +240,9 @@ export class Raider implements Hittable {
     const hull: Record<CarKind, number> = { technical: w.techHull, gunTruck: w.truckHull, sixWheeler: w.sixHull, warRig: w.rigHull,
       tank: w.turretHull * 1.6, turretTruck: w.turretHull, partyBus: w.busHull };
     this.maxHp = this.hp = hull[kind];
+    const arm: Record<CarKind, number> = { technical: w.techArmour, gunTruck: w.truckArmour, sixWheeler: w.sixArmour, warRig: w.rigArmour,
+      tank: w.turretArmour + 4, turretTruck: w.turretArmour, partyBus: w.busArmour };
+    this.armour = arm[kind];
     this.radius = kind === "partyBus" ? w.busRing + (Math.random() - 0.5) * w.circleSpread : w.circleRadius + (Math.random() - 0.5) * w.circleSpread + (this.shape.clear - 9);
     for (let i = 0; i < this.body.turretCount; i++) this.turrets.push({ yaw: 0, pitch: 0, fireClock: Math.random(), hasLos: true, losClock: Math.random() * 0.25, slot: slot() });
     this.wheelAcc = new Array(this.sim.wheels.length).fill(0);
@@ -240,10 +261,12 @@ export class Raider implements Hittable {
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
 
-  damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3) {
+  armourOf() { return this.armour; }
+
+  damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
     if (dir) this.hitDir.set(dir.x, 0, dir.z).normalize();
-    this.hp -= amount;
+    this.hp -= armourHit(amount, this.armour, pierce);
     if (this.hp <= 0) { this.alive = false; this.hp = 0; this.deadFor = 0; this.body.setWrecked(true); }
   }
 }
@@ -309,6 +332,7 @@ export class Warband {
       if (!m) break;
       const a = a0 + 0.4 + i * 0.3, d = v.spawnDistance * 0.6;
       m.hullOverride = v.banditMechHull;
+      m.armourOverride = v.banditMechArmour;
       m.damageScale = v.banditMechDamage;
       m.reset(target.x + Math.sin(a) * d, target.z + Math.cos(a) * d, a + Math.PI);
       this.mechs.push(m);

@@ -17,7 +17,7 @@ export const UPPER_DEFAULTS = {
   spinDown: 1.4,
   spinRpm: 900,
   fireFrom: 0.65,
-  fireRate: 16,
+  fireRate: 12,
   spread: 3,
   range: 45,
   recoil: 0.03,
@@ -109,6 +109,8 @@ export interface GunStats {
   spread: number;
   range: number;
   pierce: number;
+  /** Armour pierce 0..1 (src/game/armour.ts): the share of a target's armour each round ignores. */
+  ap?: number;
   /** What kind of gun (default minigun): a rail cannon charges on the trigger instead of spinning up and never fires
    *  rounds here (src/weapons/arsenal.ts fires it); an autocannon fires on this clock but its rounds are shells. */
   cls?: GunClass;
