@@ -69,7 +69,7 @@ export const WARBAND_DEFAULTS = {
   busArmour: 5,
   banditMechArmour: 6,
   banditMechHull: 1800,
-  banditMechDamage: 0.2,
+  banditMechDamage: 1,
   banditMechRange: 26,
   fleeAt: 0.25,
   spawnDistance: 110,

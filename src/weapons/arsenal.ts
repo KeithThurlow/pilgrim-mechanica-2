@@ -467,10 +467,10 @@ export class Arsenal implements MechWeapons {
     return h ? h.f : -1;
   };
 
-  /** n rockets at once (a Splitter's 3), fanned across the aim protoFan° apart round the launcher. */
+  /** n rockets at once (a Splitter's 3), fanned across the aim protoRocketFan° apart round the launcher. */
   private fireRockets(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats, n: number) {
     if (n <= 1) { this.fireRocket(from, cur, st); return; }
-    const fan = (((this.bf.v as { protoFan?: number }).protoFan ?? 6) * Math.PI) / 180;
+    const fan = (((this.bf.v as { protoRocketFan?: number }).protoRocketFan ?? 3) * Math.PI) / 180;
     for (let k = 0; k < n; k++) {
       const a = (k - (n - 1) / 2) * fan, cs = Math.cos(a), sn = Math.sin(a);
       const dx = cur.x - from.x, dz = cur.z - from.z;

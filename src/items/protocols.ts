@@ -40,8 +40,8 @@ export interface Protocol {
 
 export const PROTOCOLS: Protocol[] = [
   // Damage: worth more the more armour there is (each hit keeps more over the armour), so its niche is heavies.
-  { id: "overpressure", name: "Overpressure", text: "+15% damage, 40% slower spin-up, 15% slower reload", fits: ["ballistic", "rocket"], rarity: "rare", drop: 1,
-    mods: [{ stat: "damage", mul: 1.15, scope: "item" }, { stat: "spinUp", mul: 1.4, scope: "item" }, { stat: "reload", mul: 1.15, scope: "item" }] },
+  { id: "overpressure", name: "Overpressure", text: "+10% damage (more through armour), 40% slower spin-up", fits: ["ballistic", "rocket"], rarity: "rare", drop: 1,
+    mods: [{ stat: "damage", mul: 1.1, scope: "item" }, { stat: "spinUp", mul: 1.4, scope: "item" }] },
   { id: "shredder", name: "Shredder", text: "Penetration +2, −10% damage", fits: ["minigun"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "pierce", add: 2, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
   { id: "choke", name: "Choke", text: "−40% spread, −15% rounds/s", fits: ["minigun"], rarity: "uncommon", drop: 1,
@@ -61,13 +61,13 @@ export const PROTOCOLS: Protocol[] = [
     mods: [{ stat: "damage", mul: 0.6, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 } },
   { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −12% damage, −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
     mods: [{ stat: "damage", mul: 0.88, scope: "item" }, { stat: "range", mul: 0.85, scope: "item" }], shot: { area: 1.6 } },
-  { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit (half damage), −10% damage", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
-    mods: [{ stat: "damage", mul: 0.9, scope: "item" }], shot: { ricochet: 1 } },
-  { id: "arcLink", name: "Arc link", text: "Hits jump on to 2 more enemies (60%, then 36%), −30% damage", fits: ["minigun"], rarity: "epic", drop: 0.4,
-    mods: [{ stat: "damage", mul: 0.7, scope: "item" }], shot: { chain: 2 } },
+  { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit (half damage), −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
+    mods: [{ stat: "range", mul: 0.85, scope: "item" }], shot: { ricochet: 1 } },
+  { id: "arcLink", name: "Arc link", text: "Hits jump on to 2 more enemies (60%, then 36%), −15% damage", fits: ["minigun"], rarity: "epic", drop: 0.4,
+    mods: [{ stat: "damage", mul: 0.85, scope: "item" }], shot: { chain: 2 } },
   // Magazines (Keith 2026-10-31): reload speed and cost are stats to build round.
-  { id: "quickLoader", name: "Quick loader", text: "Reloads 35% faster, −15% magazine", fits: ["minigun", "autocannon", "rocket"], rarity: "uncommon", drop: 1,
-    mods: [{ stat: "reload", mul: 0.65, scope: "item" }, { stat: "magazine", mul: 0.85, scope: "item" }] },
+  { id: "quickLoader", name: "Quick loader", text: "Reloads 30% faster, −15% magazine", fits: ["minigun", "autocannon", "rocket"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "reload", mul: 0.7, scope: "item" }, { stat: "magazine", mul: 0.85, scope: "item" }] },
   { id: "caseless", name: "Caseless rounds", text: "Each round takes 40% less of the magazine, −15% range, +20% spread", fits: ["minigun", "autocannon"], rarity: "rare", drop: 0.8,
     mods: [{ stat: "range", mul: 0.85, scope: "item" }, { stat: "spread", mul: 1.2, scope: "item" }], cost: 0.6 },
   { id: "extendedFeed", name: "Extended feed", text: "+50% magazine bonus, −3% walk speed", fits: ["ammo"], rarity: "rare", drop: 0.8,

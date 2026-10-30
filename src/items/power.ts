@@ -3,11 +3,13 @@
 //   Power: 100 × the mean over the item's stats of (its value with Protocols / the base's value), flipped for
 //   lower-is-better stats, so a Common level 1 item with middling rolls is about 100 and better rolls, higher levels
 //   and Protocols raise it. A Protocol item: 40 + 20 per rarity tier.
-//   DPS: guns damage × rounds/s (× the Protocols' split and rate); launchers and rails damage × rockets or shells per
-//   volley / (cooldown + charge). Area damage (blast, splash, chains) isn't counted.
+//   DPS (src/items/dps.ts, the one formula the balance sheet uses too, 2026-10-31): damage × rounds per shot ×
+//   sustained shots/s over the magazine and reload; with its Protocols, their split, rate, cost, chains and ricochets
+//   (best case). Area damage (blast, splash) isn't counted.
 import { BASE_BY_ID, STATS } from "./bases";
 import { tierOf } from "./rarity";
-import { shotProtocolsOf, PROTOCOL_BY_ID } from "./protocols";
+import { PROTOCOL_BY_ID } from "./protocols";
+import { itemDpsPair, itemCadence } from "./dps";
 import { effectiveStats } from "./loadout";
 import type { Item } from "./item";
 
@@ -26,14 +28,18 @@ export function itemPower(item: Item): number {
   return n ? Math.round((100 * sum) / n) : 0;
 }
 
-/** Damage per second for a weapon, null for anything that isn't one. */
+/** Damage per second for a weapon with its Protocols (src/items/dps.ts), null for anything that isn't one. */
 export function itemDps(item: Item): number | null {
-  const s = effectiveStats(item);
-  if (s.damage === undefined) return null;
-  const shot = shotProtocolsOf(item.socketed);
-  if (s.fireRate !== undefined) return s.damage * s.fireRate * (shot?.split ?? 1) * (shot?.rate ?? 1);
-  const per = s.rockets ?? s.shells ?? 1, cycle = (s.cooldown ?? 1) + (s.charge ?? 0);
-  return (s.damage * per) / Math.max(0.05, cycle);
+  return itemDpsPair(item)?.withProtocols ?? null;
+}
+
+/** "144 dps" for a weapon, "144 dps · 173 with Protocols" when its Protocols change it; "" for anything else. */
+export function dpsText(item: Item): string {
+  const p = itemDpsPair(item);
+  if (!p) return "";
+  const a = Math.round(p.base), b = Math.round(p.withProtocols), bonus = itemCadence(item)?.bonus ?? 0;
+  const extra = bonus > 0 ? ` (+${Math.round(bonus * 100)}% per hit that chains or bounces on)` : "";
+  return item.socketed.length && (a !== b || extra) ? `${a} dps · ${b} with Protocols${extra}` : `${a} dps`;
 }
 
 /**

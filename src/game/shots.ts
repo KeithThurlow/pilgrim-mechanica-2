@@ -47,6 +47,7 @@ export interface ShotProtocols {
 
 export const SHOT_DEFAULTS = {
   protoFan: 6,
+  protoRocketFan: 3,
   protoRateGap: 0.06,
   protoSplash: 0.6,
   protoSplashShare: 0.4,
@@ -63,6 +64,7 @@ export type ShotValues = typeof SHOT_DEFAULTS;
 const G = "Protocols", GP = "Performance";
 export const SHOT_PARAMS: Param[] = [
   { key: "protoFan", label: "Split: degrees between rounds", min: 0, max: 30, step: 0.5, group: G, tip: "A split shot's rounds fan out across the aim this far apart" },
+  { key: "protoRocketFan", label: "Split: degrees between rockets", min: 0, max: 30, step: 0.5, group: G, tip: "A split rocket's rockets fan out this far apart (their blasts overlap: wider covers more of a crowd)" },
   { key: "protoRateGap", label: "Fire rate: copies over (s)", min: 0, max: 0.5, step: 0.005, group: G, tip: "A fire-rate Protocol's extra copies of a round follow it, spread over this long (a gun that doesn't say its own interval)" },
   { key: "protoSplash", label: "Area: splash on a plain round (m)", min: 0, max: 4, step: 0.05, group: G, tip: "An area Protocol on a round with no splash of its own gives it this much, times the Protocol" },
   { key: "protoSplashShare", label: "Area: splash share of damage", min: 0, max: 1, step: 0.01, group: G },

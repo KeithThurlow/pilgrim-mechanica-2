@@ -13,7 +13,7 @@ import type { LootSound } from "../audio/lootSound";
 import type { Item } from "../items/item";
 import { RARITY, tierOf } from "../items/rarity";
 import { levelOf } from "../items/level";
-import { itemPower, itemDps, versusFitted } from "../items/power";
+import { itemPower, itemDps, dpsText, versusFitted } from "../items/power";
 import { itemName } from "./drops";
 import { LOCK } from "./expeditionHud";
 
@@ -36,8 +36,8 @@ const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt
 
 /** "Name · Lv 7 · P 112 · 340 dps" for an item. */
 export function itemLine(it: Item): string {
-  const dps = itemDps(it);
-  return `${esc(itemName(it))} · Lv ${levelOf(it)} · P ${itemPower(it)}${dps !== null ? ` · ${Math.round(dps)} dps` : ""}`;
+  const dps = dpsText(it);
+  return `${esc(itemName(it))} · Lv ${levelOf(it)} · P ${itemPower(it)}${dps ? ` · ${dps}` : ""}`;
 }
 
 interface Line { loot: Loot; age: number }
@@ -108,7 +108,7 @@ export class LootHud {
     this.card.style.boxShadow = `0 0 ${6 + 4 * tierOf(it.rarity)}px ${col}88`;
     this.card.innerHTML = `<div style="color:${col};font-size:15px">${esc(itemName(it))}</div>`
       + `<div style="color:${col};font-size:11px;letter-spacing:0.08em">${RARITY[it.rarity].name.toUpperCase()} · LEVEL ${levelOf(it)}</div>`
-      + `<div>Power ${p}${dps !== null ? ` · ${Math.round(dps)} dps` : ""}</div><div style="font-size:12px">${cmp}</div>`;
+      + `<div>Power ${p}${dps !== null ? ` · ${dpsText(it)}` : ""}</div><div style="font-size:12px">${cmp}</div>`;
     this.cardT = this.v.cardShow;
   }
 

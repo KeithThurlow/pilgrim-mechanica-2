@@ -370,11 +370,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(!!socketProblem(gun, choke), "a third Protocol into two sockets");
   must(!!socketProblem(gun, coolant), "a power Protocol fit a gun");
   for (const p of PROTOCOLS) must(BASES.some((b) => p.fits.some((t) => b.tags.includes(t))), `Protocol ${p.id} fits nothing`);
-  // Stats multiply (Keith 2026-10-31: PoE2-style, multiplicative): Overpressure x1.15 and Shredder x0.9 on damage, Shredder +2 pierce, Overpressure x1.4 spin-up.
+  // Stats multiply (Keith 2026-10-31: PoE2-style, multiplicative): Overpressure x1.1 and Shredder x0.9 on damage, Shredder +2 pierce, Overpressure x1.4 spin-up.
   const lo = defaultLoadout();
   fit(lo, "mountL", gun);
   const g = resolve(lo).guns.left!;
-  must(close(g.damage, gun.stats.damage * 1.15 * 0.9), `Protocol damage doesn't add up (${g.damage})`);
+  must(close(g.damage, gun.stats.damage * 1.1 * 0.9), `Protocol damage doesn't add up (${g.damage})`);
   must(g.pierce === Math.round(gun.stats.pierce + 2), "Shredder's pierce doesn't add up");
   must(close(g.spinUp, gun.stats.spinUp * 1.4), "Overpressure's spin-up doesn't add up");
   const back = unsocket(gun, 0);
