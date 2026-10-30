@@ -113,7 +113,35 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   const light = mk("mg-light", "l1"), heavy = mk("mg-heavy", "h1"), med = mk("mg-medium", "m1");
   const armA = mk("arm-rampart", "a1"), armB = mk("arm-rampart", "a2"), missiles = mk("sh-missiles", "s1");
   must(!!fitProblem(lo, "heldL", light), "a held weapon fitted with a hull weapon on that mount");
-  must(!!fitProblem(lo, "shoulderL", missiles), "a shoulder weapon fitted with a hull weapon on that mount");
+  // Shoulders sit on the hull top whatever the mount holds (Keith 2026-10-30): no arm needed.
+  must(!fitProblem(lo, "shoulderL", missiles) && !fitProblem(lo, "shoulderR", missiles), "a shoulder weapon refused with a hull weapon on that mount");
+  for (const id of ["sh-beltfeed", "sh-incendiary", "sh-capacitor", "sh-rpg", "sh-mortar", "sh-linemortar"]) {
+    must(!fitProblem(lo, "shoulderL", mk(id)) && !fitProblem(lo, "shoulderR", mk(id)), `${id} refused on a shoulder over a hull gun`);
+    must(id === "sh-rpg" || id === "sh-mortar" || id === "sh-linemortar" ? !fitProblem(lo, "pack", mk(id)) : !!fitProblem(lo, "pack", mk(id)), `${id}: only launchers go on the back`);
+  }
+  must(BASE_BY_ID["sh-beltfeed"].family === "feed" && BASE_BY_ID["sh-incendiary"].family === "feed" && BASE_BY_ID["sh-capacitor"].family === "power" && BASE_BY_ID["sh-missiles"].family === "launcher", "shoulder families are wrong");
+  {
+    // The default: miniguns on both hull mounts, the missile pod on key 1, the belt feed on key 2.
+    const d = resolve(lo);
+    must(lo.shoulderL?.base === "sh-missiles" && lo.shoulderR?.base === "sh-beltfeed", "the default mech doesn't carry the missile pod (key 1) and the belt feed (key 2)");
+    must(JSON.stringify(d.shoulders.map((x) => [x.key, x.weapon, x.family])) === JSON.stringify([[1, "missiles", "launcher"], [2, "beltfeed", "feed"]]), "the default shoulders don't resolve to pod on 1 and feed on 2");
+    must(d.parts.mountL === "gun" && d.parts.mountR === "gun", "the default mech's hull guns went");
+  }
+  {
+    // A hull gun doesn't bounce its side's shoulder gear, and a swap of the gun leaves it.
+    const t = defaultLoadout();
+    fit(t, "mountR", mk("rail-medium", "rm1"));
+    must(t.shoulderR?.base === "sh-beltfeed", "a new hull gun bounced the shoulder feed");
+    const off = fit(t, "mountR", mk("arm-rampart", "ar1"));
+    must(t.shoulderR?.base === "sh-beltfeed" && !off.some((i) => i.base === "sh-beltfeed"), "an arm in place of a hull gun bounced the shoulder feed");
+    must(problems(t).length === 0, `shoulder over an arm has problems: ${problems(t).join("; ")}`);
+  }
+  {
+    // Old saves: a v2 save with no shoulder items (and one with an old shoulder on an arm) still loads untouched.
+    const d0 = defaultLoadout(); d0.shoulderL = null; d0.shoulderR = null;
+    const st0 = readBay(JSON.parse(JSON.stringify(bayToJson({ loadout: d0, stash: { items: [], capacity: Infinity }, cargo: { items: [], capacity: Infinity }, seed: 5 } as never))));
+    must(!!st0 && !st0.loadout.shoulderL && !st0.loadout.shoulderR && problems(st0.loadout).length === 0 && resolve(st0.loadout).shoulders.length === 0, "a saved bay without shoulder gear didn't load as it was");
+  }
   must(!!fitProblem(lo, "heldR", heavy), "a two-hander fitted with hull weapons on both mounts");
   must(!!fitProblem(lo, "heldL", med), "a hull weapon was held");
   must(!!fitProblem(lo, "mountL", light), "a Light weapon fitted as a hull weapon");
@@ -124,7 +152,6 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   const off = fit(lo, "mountL", armA);
   must(off.length === 1 && off[0].id === "default-mg-medium-L", "an arm in place of a hull weapon didn't hand back the hull weapon");
   must(!fitProblem(lo, "heldL", light) && !fitProblem(lo, "shoulderL", missiles), "a held or shoulder weapon refused with an arm on that mount");
-  must(!!fitProblem(lo, "shoulderR", missiles), "a shoulder weapon fitted on the right with a hull weapon there");
   fit(lo, "heldL", light);
   fit(lo, "shoulderL", missiles);
   const g = resolve(lo).guns.left!;
@@ -137,30 +164,30 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(problems(lo).length === 0, `mixed build has problems: ${problems(lo).join("; ")}`);
   const mix = resolve(lo);
   must(!!mix.guns.left && !!mix.guns.right && mix.parts.mountL === "arm" && mix.parts.mountR === "gun", "the mixed build doesn't fire from both sides or shows the wrong mounts");
-  must(JSON.stringify(mix.shoulders.map((x) => [x.key, x.weapon, x.mount])) === JSON.stringify([[1, "missiles", "shoulderL"]]), "the left shoulder weapon isn't on key 1");
+  must(JSON.stringify(mix.shoulders.map((x) => [x.key, x.weapon, x.mount])) === JSON.stringify([[1, "missiles", "shoulderL"], [2, "beltfeed", "shoulderR"]]), "the shoulder gear isn't on keys 1 and 2");
   const mirror = loadoutFor({ left: "rpg", right: "minigun", k1: "none", k2: "missiles", k3: "pack" });
   const mr = resolve(mirror);
-  must(problems(mirror).length === 0 && mr.guns.left?.cls === "rpg" && mirror.mountR?.kind === "arm" && mirror.heldR?.base === "mg-light" && mr.shoulders[0]?.key === 2,
-    `the quick pick's mixed build (hull rocket left, arm + light minigun + missiles right) came out wrong: ${problems(mirror).join("; ")}`);
-  // The picker shows what's fitted (Keith 2026-10-26: the left rail cannon came out a light rail under missiles on key
-  // 1, still lit as the rail cannon), on both sides: the latest choice wins.
+  must(problems(mirror).length === 0 && mr.guns.left?.cls === "rpg" && mirror.mountR?.kind === "weapon" && mirror.shoulderR?.base === "sh-missiles" && !mirror.shoulderL && mr.shoulders[0]?.key === 2,
+    `the quick pick's mixed build (hull rocket left, hull minigun + missiles on key 2) came out wrong: ${problems(mirror).join("; ")}`);
+  const lightPick = loadoutFor({ left: "lightmg", right: "minigun", k1: "beltfeed", k2: "none", k3: "pack" });
+  must(problems(lightPick).length === 0 && lightPick.mountL?.kind === "arm" && lightPick.heldL?.base === "mg-light" && lightPick.shoulderL?.base === "sh-beltfeed", "the quick pick's light minigun on an arm with a feed on key 1 came out wrong");
+  // The picker shows what's fitted, on both sides. Shoulders no longer turn a hull gun into a hand gun (Keith 2026-10-30):
+  // the rail cannon keeps its hull mount under any shoulder pick; the light rail is an arm either way.
   const RAIL: Record<string, string> = { rail: "rail-medium", lightrail: "rail-light" };
-  for (const [side, key, mount, held] of [["left", "k1", "mountL", "heldL"], ["right", "k2", "mountR", "heldR"]] as const) {
+  for (const [side, key, mount, held, shoulder] of [["left", "k1", "mountL", "heldL", "shoulderL"], ["right", "k2", "mountR", "heldR", "shoulderR"]] as const) {
     const pk = { left: "minigun", right: "minigun", k1: "missiles", k2: "missiles", k3: "pack" } as Pick;
     choose(pk, side, "rail");
     const a = loadoutFor(pk);
-    must(pk[side] === "rail" && pk[key] === "none" && a[mount]?.base === RAIL.rail, `picking the ${side} rail cannon with a shoulder weapon on ${key} didn't fit the rail cannon`);
-    choose(pk, key, "missiles");
-    const b = loadoutFor(pk);
-    must(pk[side] === "lightrail" && b[mount]?.kind === "arm" && b[held]?.base === RAIL.lightrail, `a shoulder weapon on ${key} didn't turn the ${side} rail cannon into the light rail it fits`);
+    must(pk[side] === "rail" && pk[key] === "missiles" && a[mount]?.base === RAIL.rail && a[shoulder]?.base === "sh-missiles", `picking the ${side} rail cannon under a shoulder weapon on ${key} didn't keep both`);
     choose(pk, side, "lightrail");
-    must(pk[key] === "missiles" && loadoutFor(pk)[held]?.base === RAIL.lightrail, `the ${side} light rail dropped the shoulder weapon on ${key}`);
+    const b = loadoutFor(pk);
+    must(pk[key] === "missiles" && b[mount]?.kind === "arm" && b[held]?.base === RAIL.lightrail && b[shoulder]?.base === "sh-missiles", `the ${side} light rail dropped the shoulder weapon on ${key}`);
     const saved = cleanPick({ left: "rail", right: "rail", k1: "missiles", k2: "missiles", k3: "pack" });
-    must(saved[side] === "lightrail", `a saved ${side} rail cannon under a shoulder weapon still shows as the rail cannon`);
+    must(saved[side] === "rail", `a saved ${side} rail cannon under a shoulder weapon was changed`);
   }
-  // Cascade the other way: a hull weapon back on the left bounces the arm, the held weapon and the shoulder weapon.
+  // Cascade the other way: a hull weapon back on the left bounces the arm and the held weapon, but not the shoulder gear.
   const off2 = fit(lo, "mountL", med);
-  must(["a1", "l1", "s1"].every((id) => off2.some((i) => i.id === id)) && !lo.heldL && !lo.shoulderL, "a hull weapon in place of an arm didn't bounce the arm, held and shoulder weapons");
+  must(["a1", "l1"].every((id) => off2.some((i) => i.id === id)) && !lo.heldL && lo.shoulderL === missiles && !off2.some((i) => i.id === "s1"), "a hull weapon in place of an arm didn't bounce the arm and held weapon only");
   // Two-handed: one arm isn't enough; both arms take it in both hands.
   fit(lo, "mountL", armA);
   must(!!fitProblem(lo, "heldR", heavy) && !!fitProblem(lo, "heldL", heavy), "a two-hander fitted with one arm");
@@ -182,7 +209,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   // Unfit an arm: its held and shoulder weapons come off with it.
   fit(lo, "shoulderL", missiles);
   const off6 = unfit(lo, "mountL");
-  must(off6.length === 3 && !lo.heldL && !lo.shoulderL, "taking an arm off didn't take its held and shoulder weapons");
+  must(off6.length === 2 && !lo.heldL && lo.shoulderL === missiles, "taking an arm off didn't take its held weapon only");
   must(unfit(lo, "legs").length === 0 && !!lo.legs, "legs came off");
   // Auto-fit: a new arm gets the rarest one-handed weapon on offer.
   const pool: Item[] = [rollItem(5, L, { base: "mg-light", rarity: "common" }), rollItem(6, L, { base: "rail-light", rarity: "epic" }), rollItem(7, L, { base: "mg-heavy", rarity: "legendary" })];
@@ -302,7 +329,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     // One unknown base dropped; the default drums gained a right-hand twin; the default mast added.
     must(after === before - 1 + 1 + 1, `items lost or made up in the migration (${before} before, ${after} after)`);
     must(lo.mountL?.base === "mg-medium" && lo.mountR?.id === armR.id && lo.heldR?.id === handR.id && lo.shoulderR?.id === shR.id, "the v1 arm mounts, hands and shoulders didn't land on the new slots");
-    must(!lo.shoulderL && st.stash.items.some((i) => i.id === shL.id), "a v1 shoulder weapon on a side with a hull weapon didn't go to the stash");
+    must(lo.shoulderL?.id === shL.id, "a v1 shoulder weapon on a side with a hull weapon didn't stay on its shoulder (shoulders need no arm now)");
     must(lo.waistL?.base === "waist-drums" && lo.waistR?.base === "waist-drums" && lo.waistL.kind === "waist", "the v1 back drums didn't become waist drums on both sides");
     must(st.stash.items.some((i) => i.id === fullBack.id && i.base === "waist-fulldrums" && i.kind === "waist"), "a stashed v1 drum wasn't renamed to a waist item");
     must(!!lo.sensor && problems(lo).length === 0, `the migrated loadout has problems: ${problems(lo).join("; ")}`);

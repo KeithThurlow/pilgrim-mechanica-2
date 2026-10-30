@@ -47,6 +47,8 @@ import { rayCapsule, roundPenFor, MECH_DEFAULTS } from "../src/game/mechUnit";
 import type { Hittable } from "../src/game/battlefield";
 import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
+import { GearSim, gearStats } from "../src/weapons/gear";
+import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { makeItem, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
 
 const problems: string[] = [];
@@ -300,7 +302,7 @@ const dt = 1 / 120;
   const arms = defaultLoadout();
   fit(arms, "mountL", makeItem("arm-rampart", "common", "aL")); fit(arms, "mountR", makeItem("arm-rampart", "common", "aR"));
   for (const id of ["sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"]) {
-    must(!!fitProblem(lo, "shoulderL", makeItem(id)), `${id} fit a shoulder on a side with a hull weapon (no arm)`);
+    must(!fitProblem(lo, "shoulderL", makeItem(id)), `${id} refused a shoulder on a side with a hull weapon (shoulders need no arm, Keith 2026-10-30)`);
     must(!fitProblem(arms, "shoulderL", makeItem(id)) && !fitProblem(arms, "shoulderR", makeItem(id)) && !fitProblem(lo, "pack", makeItem(id)), `${id} doesn't fit an arm's shoulder or the pack mount`);
     must(!!fitProblem(lo, "mountL", makeItem(id)) && !!fitProblem(arms, "heldL", makeItem(id)), `${id} fit a hull mount or a hand`);
   }
@@ -313,8 +315,8 @@ const dt = 1 / 120;
   const r = resolve(lo);
   must(r.guns.right?.cls === "rail" && !r.guns.right.light && r.guns.right.own === null, "hull rail cannon didn't resolve as a Medium rail on the sliders");
   must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "held rail cannon didn't resolve as a Light rail");
-  must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [3, "linemortar"]]) && r.parts.drums && !r.parts.pack,
-    `shoulder weapons didn't resolve to keys 1 and 3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}), the drums went or the pack still shows`);
+  must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "beltfeed"], [3, "linemortar"]]) && r.parts.drums && !r.parts.pack,
+    `shoulder weapons didn't resolve to keys 1, 2 (the default belt feed) and 3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}), the drums went or the pack still shows`);
   // An arm on the right too (the hull rail bounces), then its shoulder on key 2.
   const off = fit(lo, "mountR", makeItem("arm-rampart", "common", "aR2"));
   must(off.some((i) => i.base === "rail-medium"), "an arm didn't bounce the hull weapon");
@@ -322,12 +324,12 @@ const dt = 1 / 120;
   must(JSON.stringify(resolve(lo).shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "mortar"], [3, "linemortar"]]), "shoulder weapons didn't resolve to keys 1-3");
   const rolled = rollItem(77, LOOT_DEFAULTS, { base: "ac-medium", rarity: "epic" });
   const off2 = fit(lo, "mountR", rolled);
-  must(off2.some((i) => i.base === "sh-mortar") && !lo.shoulderR, "a hull weapon didn't bounce that side's shoulder weapon");
+  must(!off2.some((i) => i.base === "sh-mortar") && lo.shoulderR?.base === "sh-mortar", "a hull weapon bounced that side's shoulder weapon (it should stay)");
   const r2 = resolve(lo);
   must(r2.guns.right?.cls === "autocannon" && r2.guns.right.own?.shellSpeed === rolled.stats.shellSpeed, "a rolled autocannon's own stats didn't come through");
-  // The default mech still has no new weapons.
+  // The default mech still has no new gun classes; its shoulders are the missile pod (1) and the belt feed (2).
   const d = resolve(defaultLoadout());
-  must(!d.guns.left?.cls && !d.guns.right?.cls && d.shoulders.length === 0 && d.parts.drums, "the default loadout changed");
+  must(!d.guns.left?.cls && !d.guns.right?.cls && d.shoulders.map((x) => x.weapon).join() === "missiles,beltfeed" && d.parts.drums, "the default loadout changed");
   // A rail-class gun only aims in the upper-body sim: it never spins or fires rounds.
   const up = new UpperSim({ ...UPPER_DEFAULTS });
   up.reset(0);
@@ -541,6 +543,84 @@ const dt = 1 / 120;
     must(s.lost(0) === 0, "a round's splash hurt an excavator");
   }
   console.log("explosives vs robots from 25 m (health taken: one shot or volley / the shots listed):\n  " + rows.join("\n  "));
+}
+
+// ---- Shoulder gear (Keith 2026-10-30): feeds boost only their own side; overdrive lasts then cools; incendiary rounds; capacitor ----
+{
+  const belt = gearStats("beltfeed", null, V);
+  const g = new GearSim(belt);
+  must(g.rateMul === 1 + V.beltRate && !g.overdriving, "a belt feed's passive isn't its slider before the key");
+  // Fire rounds per side with the right gun fed by the belt feed: count a window before, during and after the overdrive.
+  const up = new UpperSim({ ...UPPER_DEFAULTS });
+  up.reset(0); up.resupply();
+  const count = (secs: number) => {
+    const n = { L: 0, R: 0 };
+    for (let i = 0; i < Math.round(secs / dt); i++) {
+      g.update(dt);
+      up.guns[1].rateMul = g.rateMul; up.guns[1].spinCut = belt.spin;
+      for (const sd of up.update(dt, 0, { x: 0, y: 4, z: 0 }, { x: 0, y: 0, z: 20 }, true)) { if (sd === 1) n.L++; else n.R++; }
+      for (const gu of up.guns) gu.ammo = 99999;
+    }
+    return n;
+  };
+  const spin = count(2.5); // spin up and settle with the passive only
+  const base = count(3);
+  // The guns' clocks differ by rateSplit (left faster), so the right is the left times the passive times (1 - split) / (1 + split).
+  const want = (1 + V.beltRate) * (1 - UPPER_DEFAULTS.rateSplit) / (1 + UPPER_DEFAULTS.rateSplit);
+  must(Math.abs(base.R / base.L - want) < 0.06, `the passive: right ${base.R} vs left ${base.L} rounds in 3 s (want ${want.toFixed(2)}x)`);
+  must(g.press() && g.overdriving && !g.press(), "the key didn't start the overdrive once, or fired again during the cooldown");
+  const od = count(belt.time - 0.1);
+  const rateOd = od.R / (belt.time - 0.1), rateBase = base.R / 3;
+  must(rateOd > rateBase * (1 + belt.boost) / (1 + V.beltRate) * 0.9, `the overdrive's rate ${rateOd.toFixed(1)}/s vs ${rateBase.toFixed(1)}/s before (want x${((1 + belt.boost) / (1 + V.beltRate)).toFixed(2)})`);
+  must(od.L / (belt.time - 0.1) < (base.L / 3) * 1.1, "the overdrive raised the other side's fire rate");
+  count(0.3 + 0.1); // past the overdrive's end
+  must(!g.overdriving && g.cool > 0, "the overdrive didn't end after its time (or the cooldown didn't run)");
+  const after = count(3);
+  must(Math.abs(after.R / 3 - rateBase) < rateBase * 0.12 + 1, `after the overdrive the right gun fires ${(after.R / 3).toFixed(1)}/s, was ${rateBase.toFixed(1)}/s`);
+  count(belt.cooldown - belt.time - 6.5 + 0.2);
+  must(g.cool > 0 || g.press(), "the key never came back");
+  void spin;
+  // Cooldown counted from the press: ready again after cooldown seconds, not before.
+  const g2 = new GearSim(belt);
+  g2.press();
+  g2.update(belt.cooldown - 0.05);
+  must(!g2.press(), "the overdrive key came back before its cooldown");
+  g2.update(0.1);
+  must(g2.press() && g2.presses === 2, "the overdrive key didn't come back after its cooldown");
+
+  // Incendiary: the key loads ignited rounds for its time; the spec is what the shot carries.
+  const inc = new GearSim(gearStats("incendiary", null, V));
+  must(inc.rounds === null && inc.rateMul === 1 + V.incRate, "the incendiary feed has rounds loaded before its key");
+  inc.press();
+  must(!!inc.rounds && inc.rounds.burnTime === V.burnTime && inc.rounds.burnDps === V.burnDps && !inc.overdriving, "the incendiary key didn't load ignited rounds (or it overdrove)");
+  inc.update(V.incTime + 0.01);
+  must(inc.rounds === null, "ignited rounds stayed loaded past their time");
+
+  // Capacitor: the key refills bars at once, the nearest full first; the passive refills faster.
+  const cap = gearStats("capacitor", null, V);
+  const dash = new Dash({ ...DASH_DEFAULTS });
+  dash.bars = [1, 0.4, 0, 0];
+  const before = dash.energy;
+  const cg = new GearSim(cap);
+  must(cg.press(), "the capacitor's key didn't fire");
+  dash.refillNow(cap.bars);
+  must(dash.bars[1] === 1 && dash.bars[2] === 0 && Math.abs(dash.energy - (before + 0.6)) < 1e-9, `a one-bar discharge left bars ${dash.bars.map((b) => b.toFixed(2)).join(" ")}`);
+  dash.refillNow(9);
+  must(dash.bars.every((b) => b === 1), "a big discharge didn't fill every bar");
+  const slow = new Dash({ ...DASH_DEFAULTS }), fast = new Dash({ ...DASH_DEFAULTS });
+  slow.bars = [0, 0, 0, 0]; fast.bars = [0, 0, 0, 0]; fast.refillMul = 1 + cap.refill;
+  for (let i = 0; i < 120 * 6; i++) { slow.update(dt); fast.update(dt); }
+  must(Math.abs(fast.energy / slow.energy - (1 + cap.refill)) < 0.05, `the capacitor's refill: ${fast.energy.toFixed(2)} vs ${slow.energy.toFixed(2)} bars after 6 s (want x${1 + cap.refill})`);
+
+  // Rolled gear: rarer rolls differ (wilder), every stat inside its range, and the key always refills at least a bar.
+  for (const id of ["sh-beltfeed", "sh-incendiary", "sh-capacitor"]) {
+    const a = rollItem(31, LOOT_DEFAULTS, { base: id, rarity: "legendary" }), c = rollItem(31, LOOT_DEFAULTS, { base: id, rarity: "common" });
+    must(JSON.stringify(a.stats) !== JSON.stringify(c.stats), `${id}: a legendary rolled the same numbers as a common`);
+    must(Object.values(a.stats).every((x) => x > 0) && (id !== "sh-capacitor" || a.stats.dischargeBars >= 1), `${id}: a roll has a zero stat`);
+    must(a.tags.includes(id === "sh-capacitor" ? "energy" : "kinetic") && (id === "sh-capacitor" || a.tags.includes("hose")), `${id}: missing its passive-tree tags`);
+  }
+  const rolled = rollItem(40, LOOT_DEFAULTS, { base: "sh-beltfeed", rarity: "epic" });
+  must(gearStats("beltfeed", rolled.stats, V).boost === rolled.stats.boost, "a rolled belt feed doesn't run on its own numbers");
 }
 
 console.log(`weapons: salvo ${V.salvoRockets} rockets over ${V.salvoLength} m, rail ${V.railDamage} with ${V.railPen} m penetration, mortar ring ${V.mortarRing} m, autocannon ${V.acSpeed} m/s`);

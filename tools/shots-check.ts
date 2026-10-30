@@ -5,6 +5,8 @@
 // - A chain hops to different bodies, never one it already hit, and only within its reach.
 // - A sheet round goes through bodies in a line while its penetration lasts (through the register's culling).
 // - Damage applied equals the damage in the hit events.
+// - An ignited round (Keith 2026-10-30) sets what it hits burning: damage over time for its burn time, renewed by a new
+//   ignited hit, ended by the target's death; a plain round never does.
 // Run: npm test (or npx tsx tools/shots-check.ts).
 import * as THREE from "three/webgpu";
 import { Shots, SHOT_DEFAULTS, type ShotEvent } from "../src/game/shots";
@@ -13,6 +15,7 @@ import { listOwner } from "../src/game/registerOwners";
 import { PEN_DEFAULTS } from "../src/game/sheet";
 import type { Hittable } from "../src/game/battlefield";
 import { shotProtocolsOf } from "../src/items/protocols";
+import { Burns } from "../src/game/burn";
 
 const problems: string[] = [];
 const flat = { height: () => 0, normal: (_x: number, _z: number, out: number[] = [0, 1, 0]) => { out[0] = 0; out[1] = 1; out[2] = 0; return out; } };
@@ -32,12 +35,12 @@ class Ball implements Hittable {
   damage(a: number) { this.taken += a; this.hits++; if (this.taken >= 1e9) this.alive = false; }
 }
 
-function world(balls: Ball[], v = { ...PEN_DEFAULTS, ...SHOT_DEFAULTS }) {
+function world(balls: Ball[], v = { ...PEN_DEFAULTS, ...SHOT_DEFAULTS }, ignite?: ConstructorParameters<typeof Shots>[0]["ignite"]) {
   const register = new Register();
   register.add(listOwner("balls", () => balls, (reg, b, i, serial) =>
     reg.put(i, serial, KIND.Unit, b.team, FLAG.Hittable | FLAG.Detectable, b.x, b.y, b.z, b.r, 0, 0, 0, b.r)));
   register.rebuild();
-  return new Shots({ field: flat as never, targets: balls, wrecks: null, register, v });
+  return new Shots({ field: flat as never, targets: balls, wrecks: null, register, v, ignite });
 }
 const look = { slot: 0 };
 const fire = (s: Shots, dx: number, dz: number, extra: object = {}, y = 1, dy = 0) =>
@@ -122,6 +125,45 @@ const dealt = (s: Shots) => s.events.filter((e) => e.kind === "hit").reduce((a, 
   if (balls[0].hits !== 1 || balls[1].hits !== 1) problems.push(`sheet with 2 m penetration: hits ${balls[0].hits}/${balls[1].hits} (want 1/1)`);
   const total = balls.reduce((a, b) => a + b.taken, 0);
   if (Math.abs(total - dealt(s)) > 1e-6) problems.push(`sheet: damage applied ${total.toFixed(2)} but the events say ${dealt(s).toFixed(2)}`);
+}
+
+// ---- Ignited rounds: burn for their time, renew, stop on death, never from a plain round ----
+{
+  const balls = [new Ball(0, 1, 10), new Ball(5, 1, 10)];
+  const burns = new Burns({ burnTick: 0.25, burnMax: 8 });
+  const s = world(balls, undefined, (t, k, time, dps, x, y, z) => burns.ignite(t, k, time, dps, x, y, z));
+  fire(s, 0, 1);
+  s.step(1 / 30);
+  if (burns.list.length !== 0 || s.events.some((e) => e.kind === "ignite")) problems.push("a plain round set its target burning");
+  balls[0].taken = 0;
+  fire(s, 0, 1, { proto: { burn: { time: 3, dps: 12 } } });
+  s.step(1 / 30);
+  if (burns.list.length !== 1 || !s.events.some((e) => e.kind === "ignite" && e.target === 0)) problems.push("an ignited round didn't set its target burning (one ignite event)");
+  if (balls[0].taken !== 10) problems.push(`the ignited round itself did ${balls[0].taken} (want 10)`);
+  let t = 0;
+  while (t < 1.5) { burns.step(1 / 30); t += 1 / 30; }
+  const mid = balls[0].taken - 10;
+  if (Math.abs(mid - 12 * 1.5) > 12 * 0.25 + 0.1) problems.push(`burning for 1.5 s did ${mid.toFixed(1)} (want about 18)`);
+  // A new ignited hit renews it: burning runs on to 1.5 s + 3 s.
+  fire(s, 0, 1, { proto: { burn: { time: 3, dps: 12 } } });
+  s.step(1 / 30);
+  while (t < 4.4) { burns.step(1 / 30); t += 1 / 30; }
+  if (burns.list.length !== 1) problems.push("a renewed burn ended on the old time");
+  while (t < 6) { burns.step(1 / 30); t += 1 / 30; }
+  if (burns.list.length !== 0) problems.push("a burn didn't end after its time");
+  const total = balls[0].taken - 20;
+  if (Math.abs(total - 12 * 4.5) > 12 * 0.5) problems.push(`a renewed burn did ${total.toFixed(1)} in all (want about 54, 4.5 s at 12/s)`);
+  const after = balls[0].taken;
+  for (let i = 0; i < 60; i++) burns.step(1 / 30);
+  if (balls[0].taken !== after) problems.push("a target kept taking burn damage after it ended");
+  // A target that dies stops burning at once.
+  fire(s, 0, 1, { proto: { burn: { time: 3, dps: 12 } } });
+  s.step(1 / 30);
+  balls[0].alive = false;
+  burns.step(0.5);
+  if (burns.list.length !== 0) problems.push("a dead target kept burning");
+  // The other ball, never hit, never burned.
+  if (balls[1].taken !== 0) problems.push("a ball off the line took burn damage");
 }
 
 // ---- Protocol items put their behaviour on the rounds ----
