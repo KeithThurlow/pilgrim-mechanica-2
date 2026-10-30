@@ -115,7 +115,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
-  the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (these Protocols on every round of yours). Walker lab
+  the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced) or `?proto=splitter,overclock,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
   takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed

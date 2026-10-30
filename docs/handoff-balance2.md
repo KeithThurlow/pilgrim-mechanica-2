@@ -1,26 +1,29 @@
 # Handoff: balance pass 2 (wip/balance2)
 
-Brief: `docs/proposal-balance.md` (its "Answers (Keith 2026-10-31)" win), steps 1-6 from the coordinator.
+Brief: `docs/proposal-balance.md` (its "Answers (Keith 2026-10-31)" win), steps 1-6 from the coordinator. **All six
+built; full `npm test` passes. Never run in a browser.** Delete this note when the branch merges.
 
-Done:
-1. Armour and pierce: `src/game/armour.ts` (armourHit, floor slider `armourFloor` 0.15 in the weapons topic's Armour
-   group). `Hittable.damage(amount, at, dir, pierce?)`, `SplashOpts.pierce`, `ShotCmd/FireOptions.pierce` (shots rows
-   carry `ap`, children inherit), `SheetFire.pierce`, `Shell.pierce`, `Battlefield.blast(..., pierce)`. Adapters take
-   their own armour: RobotTarget (robotArmour 0 / robotMidArmour 3 / robotBigArmour 10), Raider (tech 2, truck 4, six 6,
-   rig 8, turret 12, tank +4, bus 5), MechUnit (hull item `armour`: Rampart 8, Siege 12, Salvager 5; bandit mech 6 by
-   `armourOverride`), Dummy (`dummyArmour` 0), RangeCar (`carArmour` 4). Hits with no pierce (bites, saws, stomps,
-   raider guns, burns) ignore armour. Weapon pierce: item stat `ap` (spread 0) and sliders `railAp` 0.9, `railLightAp`
-   0.8, `acAp` 0.5, `rpgAp` 0.6, `swarmAp` 0.3, `mortarAp` 0.4, `salvoAp` 0.3, minigun `roundAp` 0.1 (items: light 0,
-   medium 0.1, heavy 0.25).
-2. Level-1 values (section 8) live; hulls ×2 (3000 / 4200 / 2400, bandit mech 1800) instead of ×0.5 mech-on-mech;
-   robot damage ×1.5-1.75 and raider guns ×1.5 so a pack still kills a standing mech in ~30 s (pilotHurt 0.67 keeps the
-   pilot as he was). One level curve: `levelGrowth` 0.075 (damage, hull; no rate), robots spawned in the convoy lab get
-   `levelPower(1 + depth/levelMetres)` on hp and damage (`SwarmCamps.power`, `enemyLevels` 0/1).
+Done (state.md "Balance (armour, magazines, Protocols)" has the summary):
+1. Armour and pierce: `src/game/armour.ts` (armourHit, `armourFloor` 0.15 in the weapons topic's Armour group).
+   `Hittable.damage(amount, at, dir, pierce?)`, `SplashOpts.pierce`, `ShotCmd/FireOptions.pierce` (shot rows carry `ap`,
+   children inherit), `SheetFire.pierce`, `Shell.pierce`, `Battlefield.blast(..., pierce)`. Adapters take their own
+   armour: RobotTarget (0/3/10), Raider (tech 2, truck 4, six 6, rig 8, turret 12, tank +4, bus 5), MechUnit (hull item
+   `armour` 8/12/5, bandit mech 6 by `armourOverride`), Dummy (`dummyArmour`), RangeCar (`carArmour` 4). No pierce =
+   armour-ignoring (bites, saws, stomps, raider guns, burns). Weapon pierce: item stat `ap` + sliders (`railAp` …).
+2. Level-1 values live; hulls ×2; robot damage ×1.5-1.75, raider guns ×1.5, `pilotHurt` 0.67, `banditMechDamage` 1.
+   Level curve `levelGrowth` 0.075, `levelPower`, robots by area level (`SwarmCamps.power`, `enemyLevels`).
+3. Protocols multiply (`src/items/protocols.ts`), new Quick loader and Caseless rounds, splitter on rockets
+   (`protoRocketFan`). The sheet prints each one's niche (within a magazine) and sustained multiplier.
+4. Magazines (`src/weapons/magazine.ts`, `Gun.mag` in `src/mech/upper.ts`, hull RPG on its side's gun record, shoulder
+   rocket `Shoulder.mag`), stats `magazine`, `reload`, `magBonus`, `reloadSpeed`; waist Autoloader; energy hook
+   (`WeaponCost.energy`, `GunStats.energy`, `Protocol.draw`). HUD: `src/ui/reloadHud.ts`.
+5. `src/items/dps.ts` (cadenceOf, itemDpsPair) → `power.ts dpsText` on the bay card/rows and the pickup card.
+6. `src/ui/healthBars.ts` (instanced quads, `Hittable.bars`), in combatLab (every combat lab, duel) and the convoy lab.
 
-Left, in order: 3 Protocols (multiplicative, ×1.2-1.3 niche each), 4 magazines and reloads (+HUD ring), 5 item DPS
-preview (one shared function with the sheet), 6 enemy health bars; then the balance sheet on the live values,
-`tools/balance-check.ts` (armour floor, pierce, magazine, split cost, stacking), state.md, decisions.md, delete
-`docs/handoff-balance.md`.
+Checks: `tools/balance-check.ts` (new), `tools/balance-sheet.ts --check` in npm test; robot-danger, weapons, loadout
+checks moved to the new values.
 
-Known: old saved items keep their old rolls (`?fresh` in the loadout lab); raiders and bandits don't scale with area
-level yet (robots only); bandit infantry rifles unchanged.
+Rough edges for Keith: split on the shoulder rocket (magazine 3) loses sustained DPS under the cost rule; minigun pairs
+take ~45 s on an excavator (armour 10; ~21 s with the default missile pod); raiders and bandits don't scale with area
+level; old saved items keep their old rolls (drums read their old rounds as +50%); Choke shows no gain in the model (its
+niche, far small targets, isn't a target set); `Sheet.dealt` readouts are before armour.

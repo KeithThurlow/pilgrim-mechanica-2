@@ -5,13 +5,11 @@ damage versus velocity versus AoE versus the ability for things to split, the ki
 anything else you can think of." And: armour must matter (low-damage, low-penetration weapons worth less against
 armoured targets, high-penetration ones worth more).
 
-**Status: proposal. No live value has changed** (rule 9). The tool `tools/balance-sheet.ts` measures today's values and
-the proposal's side by side:
+**Status: built 2026-10-31 (balance pass 2, with the Answers at the end; see state.md and `docs/decisions.md`).** Sections 1-2 are the audit from before it. The tool `tools/balance-sheet.ts` measures the live values:
 
 ```
-npx tsx tools/balance-sheet.ts             today
-npx tsx tools/balance-sheet.ts --proposed  the values below
-npx tsx tools/balance-sheet.ts --check     exit 1 if a weapon is over 130% of its budget (not in npm test yet)
+npx tsx tools/balance-sheet.ts             the live values (with Protocol niches, magazines, armour)
+npx tsx tools/balance-sheet.ts --check     exit 1 if a weapon is over 130% of its budget or a Protocol's niche is outside ×1.1-1.5 (in npm test)
 ```
 
 It reads the live tables (`src/items/bases.ts`, `src/weapons/tuning.ts`, `src/mech/upper.ts`, `src/game/mechUnit.ts`,
