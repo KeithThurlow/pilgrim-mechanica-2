@@ -3,8 +3,8 @@
 // parts, the Medium minigun, the stand-in power pack and the ammo drums hold today's mech values exactly, so the
 // default loadout runs the mech as it was (tools/loadout-check.ts holds them to it).
 // The mounts (Keith 2026-10-26): each hull mount takes a hull weapon (Medium) or an arm, which holds a held weapon
-// (Light, or a Heavy two-hander across both arms) plus a shoulder weapon; a sensor, a pack (or a back weapon) and the
-// waist mounts left and right. The hull item says which mounts it offers (`Base.mounts`).
+// (Light, or a Heavy two-hander across both arms); a shoulder slot per side on the hull top whatever the mount holds
+// (Keith 2026-10-30: launchers, feeds, power); a sensor, a pack (or a back launcher) and the waist mounts left and right. The hull item says which mounts it offers (`Base.mounts`).
 import { WALKER_DEFAULTS } from "../mech/walkerTuning";
 import { LEG_TYPES } from "../mech/legTypes";
 import { UPPER_DEFAULTS } from "../mech/upper";

@@ -2,12 +2,12 @@
 // targeting. A line and a column of plywood cutouts, a row of steel posts (one sliding), trucks driving a slow loop to
 // lead, a dune across the range with cutouts behind it for the mortars. The picker fits items through the loadout (so
 // this is the mech the bay builds). Controls (Keith 2026-10-25): left click fires the left side's weapon, right click
-// the right side's (both can be held); shoulder weapons on keys 1-3: hold to paint, release to fire. The HUD shows which button
+// the right side's (both can be held); launchers on keys 1-3: hold to paint, release to fire; feeds and power (belt feed, incendiary feed, capacitor bank) on keys 1-2: press for the overdrive, ignited rounds or discharge. The HUD shows which button
 // or key fires what and its cooldown, damage per second on the range, what the last shot of each weapon did, and what
 // the blasts' craters cost.
 //
-// URL flags (for shots): ?left=, ?right= (minigun|rail|lightmg|lightrail|autocannon|rpg; a side with a shoulder pick
-// becomes an arm), ?k1=, ?k2= (none|rpg|missiles|mortar|linemortar), ?k3= (pack|none|rpg|missiles|mortar|linemortar:
+// URL flags (for shots): ?left=, ?right= (minigun|rail|lightmg|lightrail|autocannon|rpg; the Light ones are an arm
+// with that gun in its hand), ?k1=, ?k2= (none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor: shoulders sit on the hull top whatever the gun), ?k3= (pack|none|rpg|missiles|mortar|linemortar:
 // a back weapon in place of the pack), ?hold=N:x,z (hold key N aimed there), ?lmb=x,z / ?rmb=x,z (hold a mouse button
 // aimed there), ?aim=x,z, ?fireat=N (let go after N frames, aim held after), ?lockcar (both guns on the first truck,
 // locked), ?start=x,z (where the mech stands), ?manual (no demo).
@@ -56,8 +56,8 @@ const { V, player, bf, app } = lab;
 const params = app.params;
 
 // ---- The weapon picker: fits items through the loadout, so the mech is what the bay would build ----
-// The mounts (Keith 2026-10-26): a shoulder weapon rides on an arm, so key 1's missile pod makes the left side an arm
-// holding a light minigun; the right keeps the hull rocket launcher; the big mortar is the back weapon on key 3.
+// The mounts (Keith 2026-10-30): shoulders need no arm, so key 1's missile pod sits over the left hull minigun; the
+// right keeps the hull rocket launcher; the big mortar is the back weapon on key 3.
 const pick: Pick = { left: "minigun", right: "rpg", k1: "missiles", k2: "none", k3: "mortar" };
 try { Object.assign(pick, JSON.parse(localStorage.getItem(KEY) || "{}")); cleanPick(pick); } catch { /* no saved pick */ }
 if (pickFromParams(pick, params)) cleanPick(pick);

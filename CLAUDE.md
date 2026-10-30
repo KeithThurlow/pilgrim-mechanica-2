@@ -125,13 +125,13 @@ desert look direction. What came from where: `docs/decisions.md`.
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar`
-  (a side given a shoulder weapon becomes an arm with a light gun), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
+  (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
   weapon in place of the pack), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
 - Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's (both can
-  be held); keys 1-3 hold to paint a shoulder weapon, release to fire; hold F to hop out of the mech, hold F by it to get
+  be held); keys 1-3 hold to paint a shoulder launcher, release to fire; keys 1-2 on a feed or power item are a press (belt feed: overdrive, incendiary feed: ignited rounds, capacitor bank: discharge a bar; Keith 2026-10-30); hold F to hop out of the mech, hold F by it to get
   back in (Keith 2026-10-26; F no longer fires).
 - Pilot (every combat lab and the convoy lab): `?onfoot` (start on foot beside the mech), `?holdf=seconds` (F held
   from the start, for shots of getting out).
@@ -151,7 +151,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   Pilot: `?onfoot` starts on foot beside the mech parked in the lead bay (with `?out`, `?far`, `?nearcamp` or `?field`, on
   the sand beside it instead), `?pilotat=N,x,z` (on car N at local x, z) or `?pilotat=bN,t` (on footbridge N, t of the
   way across), `?bay` (bay screen open). On foot E at a bay terminal opens the bay screen; B anywhere.
-  Weapons as in the combat labs (only while driving the mech); a fresh convoy bay fits miniguns, missile pod and big mortar,
+  Weapons as in the combat labs (only while driving the mech); a fresh convoy bay fits miniguns on both hull mounts, the missile pod on key 1, a belt feed on key 2 and the power pack,
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
@@ -204,7 +204,7 @@ src/expedition/         the loop: expedition (states, at-risk list, bank), fuel,
                         and packs as the robot swarm); radarDraw, radarSound, threatMarks (edge-of-screen marks),
                         expeditionHud
 src/weapons/            the new weapons, each with its own targeting: tuning (sliders), painter (strip, ring, laser) + painterDraw,
-                        salvo (line rockets), rail, mortar, autocannon (pure sims), arsenal (a mech's weapons on the battlefield)
+                        salvo (line rockets), rail, mortar, autocannon (pure sims), gear (shoulder feeds and power: overdrive, ignited rounds, discharge; pure), arsenal (a mech's weapons on the battlefield)
                         + arsenalDraw, models (each kind's model: the library's via modelSwap, boxes as the fallback),
                         projectileDraw, weaponSound, ribbon (ground-hugging marks).
                         Models: library (by id: GLB at public/models/weapons/<id>.glb, else a code stand-in), catalog, parts,
@@ -226,7 +226,7 @@ docs/                   design.md (the game), decisions.md (log)
   out to 55° at 80 m.
   Judge looks and readability from that camera first; close views are for detail.
 - Controls: twin-stick. WASD moves the legs (relative to the screen), the mouse aims the torso and guns, left click
-  fires the left side's weapon and right click the right side's (Keith 2026-10-25), keys 1-4 the shoulder weapons.
+  fires the left side's weapon and right click the right side's (Keith 2026-10-25), keys 1-4 the shoulder gear (every hull has two shoulders, keys 1 and 2, whatever its hull mounts hold).
   Hold F to hop out (the mech kneels; at the convoy, parked in a bay) and hold F within 3 m of it to get back in
   (Keith 2026-10-26); on foot WASD walks the pilot, Shift runs, E uses a bay terminal or strips salvage by hand.
 - Models: parts that ride sim bones are baked to rest-pose world space and hung under pivots on their joints;

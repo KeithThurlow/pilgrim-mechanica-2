@@ -1,4 +1,4 @@
-# Proposal: shoulder mounts on every mech, with three kinds of shoulder gear (not built; waiting for Keith)
+# Proposal: shoulder mounts on every mech, with three kinds of shoulder gear (approved by Keith 2026-10-30; built on wip/shoulders)
 
 Keith 2026-10-30: a hull gun takes away that side's shoulder, so the convoy's default mech (a minigun on each hull
 mount) has no keyed weapons at all. Shoulder weapons are the powerful, keyed moments (rockets, bombards). He'd like

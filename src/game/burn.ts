@@ -62,7 +62,7 @@ export class Burns {
       b.left -= dt; b.acc += dt;
       while (b.acc >= tick && b.target.alive) {
         b.acc -= tick;
-        b.target.pick?.(b.key);
+        if (b.key >= 0) b.target.pick?.(b.key);
         const dmg = b.dps * tick;
         b.target.damage(dmg, this.at.set(b.x, b.y, b.z), UP);
         this.total += dmg;
