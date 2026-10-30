@@ -55,3 +55,11 @@ Miniguns on both hull mounts, a **missile pod** on the left shoulder (key 1) and
 1. **Two shoulders on every hull** for now, or should the hull decide the count already?
 2. **A key on feeds and power** (overdrive, discharge), or purely passive?
 3. **Default mech:** missile pod plus belt feed, or two launchers?
+
+## Answers (Keith 2026-10-30)
+
+- **Every shoulder item has an ability on its key.** Two shoulders on every hull for now; rockets or whatever fits.
+- **Feeds:** a passive boost plus a key that overdrives the weapon, or loads special rounds into it, e.g. **ignited
+  (incendiary) munitions**. So feeds come in variants by what their key does: overdrive (fire rate), incendiary
+  (rounds set targets burning for a few seconds), and room for more (armour-piercing, explosive) later.
+- Default mech: not answered; Claude's suggestion stands (missile pod left, belt feed right).
