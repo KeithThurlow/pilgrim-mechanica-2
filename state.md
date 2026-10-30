@@ -181,6 +181,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Balance pass (Keith's answers 2026-10-31, `docs/proposal-balance.md` Answers): agent building on `wip/balance2` (handoff `docs/handoff-balance2.md`).
 - Balance (agent, `wip/balance`, 2026-10-30): proposal `docs/proposal-balance.md` and `tools/balance-sheet.ts` (`--proposed`, `--check`) done, waiting for Keith; no live value changed. Handoff `docs/handoff-balance.md`.
 - Shoulder gear merged 2026-10-30, never run in a browser: Keith to try weapons lab `?k1=missiles&k2=beltfeed`, `?k2=incendiary`, `?k1=capacitor`; convoy lab `?fresh`. Rough: stand-in models, orange tracers and burn flames never rendered; flames stay at the last hit; rivals roll launchers only.
 - Robot danger, turret trucks and the party bus merged 2026-10-29, never run in a browser: Keith to try robots lab, war band lab, convoy lab `?warband` (or `?warband=8`). Rough: war band randomness other than the bus is still `Math.random`; the bus's bandits belong to no camp so always go for the player; the stress lab fields no buses.

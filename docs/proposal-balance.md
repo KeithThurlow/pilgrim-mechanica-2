@@ -260,3 +260,25 @@ The tool's `--proposed` prints all of this; `P_WEAPON`, `P_TARGET` and `P_PROTO`
 4. Additive Protocol stacking with a ×2 cap for a full legendary?
 5. One level curve shared with enemy hp and damage by depth, with depth still adding counts?
 6. Should the item card show the rated eDPS (from this model) instead of raw damage × rate?
+
+## Answers (Keith 2026-10-31)
+
+- **Protocols are multipliers, PoE2 style, and they stack multiplicatively.** Each one is worth roughly ×1.2-1.3 in
+  its niche, with a downside. Example: split shot on rockets gives three rockets at 0.4 each, about ×1.2 total
+  damage (more against crowds, less against one target). Fork and chain work the same way: a modest total gain plus
+  a downside. **No ×2 cap: runaway builds are part of the fun**; players find broken builds and we balance later if
+  needed. (This replaces section 6's additive stacking and cap.)
+- **Cost is the main downside, by weapon type:**
+  - **Munitions** (guns, launchers) have a magazine and a reload. A Protocol that adds shots (split, more rate)
+    uses the magazine faster, so you reach the reload sooner. Some Protocols reduce cost (fewer rounds per shot).
+    Reload speed becomes a stat players can build around: a Protocol, gear or a tree node.
+  - **Energy weapons** (lasers and the like, later) draw from an energy meter; Protocols raise or lower the draw.
+  - (Keith 2026-10-27's "no munitions resource" stays: no ammo to carry or buy, only magazines and reloads.)
+- **Item DPS previews:** an item shows its base DPS, and its DPS with its Protocols. The player judges sockets and
+  potential themselves.
+- **Mech on mech:** Keith takes Claude's recommendation: raise every hull rather than a ×0.5 rule for mech weapons,
+  so one rule covers every attacker.
+- **Kill times** of 12-20 s are fine **only with enemy health bars**, so the player sees progress. Health bars come
+  with this pass.
+- Not answered, so the proposal stands: the armour model (excavator armour 10, Claude's lean, rather than 8), the
+  one shared level curve.
