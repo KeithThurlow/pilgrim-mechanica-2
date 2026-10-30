@@ -23,7 +23,8 @@ import { levelMul } from "../src/items/level";
 import { itemDps } from "../src/items/power";
 import type { Item } from "../src/items/item";
 
-const args = process.argv.slice(2);
+const proc = (globalThis as unknown as { process: { argv: string[]; exit(c: number): never } }).process;
+const args = proc.argv.slice(2);
 const PROPOSED = args.includes("--proposed");
 const CHECK = args.includes("--check");
 
@@ -343,7 +344,7 @@ function protoOf(id: string): Proto {
 }
 /** Proposed Protocol prices (docs/proposal-balance.md, "Modifiers"). */
 const P_PROTO: Record<string, Partial<Proto>> = {
-  splitter: { dmgK: 0.43 }, overclock: { dmgK: 0.6 }, arcLink: { dmgK: 0.75 }, ricochet: { dmgK: 0.95 }, overpressure: { dmgK: 1.25 },
+  splitter: { dmgK: 0.43 }, overclock: { dmgK: 0.6 }, arcLink: { dmgK: 0.75 }, ricochet: { dmgK: 0.95 }, overpressure: { dmgK: 1.25 }, wideBore: { dmgK: 0.88 },
 };
 function protos(): Proto[] {
   const ids = ["overpressure", "shredder", "splitter", "overclock", "wideBore", "ricochet", "arcLink"];
@@ -461,12 +462,28 @@ for (const w of W_) {
   console.log(`AP rounds on the Medium minigun vs excavator at armour 12: ×${(eDps(mg, t, ap) / Math.max(1e-6, eDps(mg, t))).toFixed(2)}`);
 }
 
+// 5b. Velocity: the share of a shell's damage that lands on the rival mech (35 m, juking) by shell speed and blast radius.
+{
+  const rv = T_.find((t) => t.id === "rival")!, rk = W_.find((x) => x.kind === "rocket")!;
+  console.log("\n-- Velocity: expected % of a shell's damage on the rival at 35 m, by shell speed (m/s) and blast radius (m; 0: a direct-hit shell) --");
+  const speeds = [20, 40, 55, 75, 120, 1e9];
+  console.log(pad("blast", 8) + speeds.map((v) => lp(v > 1e8 ? "inst" : v, 7)).join(""));
+  for (const r of [0, 1, 2, 4.5, 7]) {
+    console.log(pad(r, 8) + speeds.map((v) => {
+      const w: W = { ...rk, kind: r === 0 ? "cannon" : "rocket", speed: v, radius: r, share: r === 0 ? 0 : 1, dmg: 100, n: 1, sheetHalf: r === 0 ? 0.4 : 0, ap: 0 };
+      return lp(`${f0(volleySingle(w, { ...rv, armour: 0 }))}%`, 7);
+    }).join(""));
+  }
+}
+
+// Camp size × by depth (camps.ts campSizeFar 2.5 at full depth 2 km, danger capped at 1.5): depth = (level-1)·100 m.
+const packMul = (n: number) => { const d = (n - 1) * 100, dg = Math.min(1.5, Math.max(0, (d - 150) / (2000 - 150))); return 1 + (2.5 - 1) * dg; };
 // 6. Level and depth: what an item's DPS and an enemy pack's total HP do as you go deeper.
 console.log("\n-- Level growth (today: levelGrowth " + LOOT_DEFAULTS.levelGrowth + "; drop level = 1 + depth/100 m) --");
-console.log(pad("level", 8) + lp("dmg×", 7) + lp("rate×", 7) + lp("DPS×", 7) + lp("hull×", 7) + "   proposal: one power curve P(n)=1.06^(n-1) for item DPS and enemy hp/damage");
+console.log(pad("level", 8) + lp("dmg×", 7) + lp("rate×", 7) + lp("DPS×", 7) + lp("hull×", 7) + "   pack hp× (camp size by depth)   proposal P(n)=1+0.075(n-1): item DPS, enemy hp and damage");
 for (const n of [1, 6, 11, 21, 41, 60]) {
   const d = levelMul("damage", n, LOOT_DEFAULTS.levelGrowth), r = levelMul("fireRate", n, LOOT_DEFAULTS.levelGrowth), h = levelMul("hull", n, LOOT_DEFAULTS.levelGrowth);
-  console.log(pad(n, 8) + lp(d.toFixed(2), 7) + lp(r.toFixed(2), 7) + lp((d * r).toFixed(2), 7) + lp(h.toFixed(2), 7) + `   P=${Math.pow(1.06, n - 1).toFixed(2)}`);
+  console.log(pad(n, 8) + lp(d.toFixed(2), 7) + lp(r.toFixed(2), 7) + lp((d * r).toFixed(2), 7) + lp(h.toFixed(2), 7) + lp(packMul(n).toFixed(2), 14) + `   P=${(1 + 0.075 * (n - 1)).toFixed(2)}`);
 }
 
 // 7. The player mech under fire: incoming DPS and seconds to live on a 1500 hull.
@@ -483,4 +500,4 @@ const rows: [string, number][] = [
 for (const [n, d] of rows) console.log(pad(n, 50) + lp(f0(d), 6) + " dps" + lp(f1(hull / d), 8) + " s");
 
 if (over.length) console.log(`\nOver 130% of budget at level 1: ${over.join("; ")}`);
-if (CHECK && over.length) process.exit(1);
+if (CHECK && over.length) proc.exit(1);
