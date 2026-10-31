@@ -3,7 +3,9 @@
 // nearest robot eye gets a real red spot, headlights land ahead of a vehicle on the ground, the headlamp's shadow map
 // is not drawn in the day. Prints the cost of a night update with a big swarm and a column of trucks. Light clustering
 // (2026-10-31): close short lights merge into one, far ones stay apart, the curve and soft cap hold, a full rocket
-// barrage never takes more real lights than the pools, and a noon barrage lights nothing.
+// barrage never takes more real lights than the pools, and a noon barrage lights nothing. Gun streams (2026-10-31): a
+// firing gun makes a tube and its requests, the pool holds under heavy fire, noon shows only the faint core, the tube
+// fades soon after letting go; more but weaker tracer lights; the tracer fill.
 import * as THREE from "three/webgpu";
 import { NightLights } from "../src/world/nightLights";
 import { LOOK_DEFAULTS } from "../src/world/look";
