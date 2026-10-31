@@ -184,6 +184,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Part generation pipeline (Keith 2026-10-31): proposal `docs/proposal-partgen.md` (concept image, TripoSplat splat lane vs Pixal3D/TRELLIS.2 mesh lane, Blender game prep, armoury lab hook); waiting on Keith's go and a Remote Control session on his PC.
 - Walk off the convoy: no rails on the mech bays' long sides (Keith 2026-10-31): merged 2026-10-31; Keith to try convoy lab `?manual&aboard` (walk, Shift or Space off a side), `?aboard&walkoff=dash`.
 - Rival aim: tight tracking, then an aim snapshot before rail and autocannon shots (Keith 2026-10-31): merged 2026-10-31; Keith to try `labs/duel/?rival=3&rivalfit=mountR:rail-medium&rivallevel=recruit|veteran|ace`, `?set=aiSnapshot:0.3`.
 - Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): merged 2026-10-31 (dash 7.5 m, back under the stick 0.08 s after the burst; a sprint needs Space held past 0.325 s); Keith to try walker lab `?manual&flat`, duel lab `?manual`, bandits lab `?manual`.
