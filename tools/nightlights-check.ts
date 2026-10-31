@@ -10,7 +10,8 @@ import { LOOK_DEFAULTS } from "../src/world/look";
 import { skyAt } from "../src/world/daynight";
 import { CarBody } from "../src/vehicles/carBody";
 import { CarSim, carValues } from "../src/vehicles/car";
-import { LAMP_ROBOT, type LampEmit } from "../src/world/lamps";
+import { LAMP_ROBOT, FAM_PLAYER, FAM_BANDIT, FAM_ROBOT, type LampEmit } from "../src/world/lamps";
+import { ROBOT_DEFAULTS } from "../src/combat/robots";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { clusterLights, clusterPower, type ClusterOpts, type LightCluster, type LightReq } from "../src/world/lightCluster";
 
@@ -162,6 +163,69 @@ for (let i = 0; i < 300; i++) {
   const t0 = performance.now(); lights.update(1 / 60, mid, focus); tB += performance.now() - t0; frames++;
 }
 console.log(`barrage at midnight: ${st.requests} light requests -> ${st.clusters} merged -> ${st.real} real points (+ spots, headlamp: ${litNow} real lights); ${bc.glows} glows, ${bc.pools} pools, ${bc.beams} beams; night update ${(tB / frames).toFixed(2)} ms with the 300 eyes and 20 trucks`);
+
+// Enemy fire (Keith 2026-10-31): a war band and a robot pack shooting back at midnight (gun flashes, shells in flight,
+// blasts, the shells' landing rings, a line telegraph) clusters like the player's and never exceeds the pools.
+{
+  const builds = lights.builds;
+  const fight = (t: number) => {
+    for (let i = 0; i < 40; i++) { const a = i * 0.9, d = 15 + (i * 3.7 + t * 9) % 35; lights.gun(Math.sin(a) * d, 2, Math.cos(a) * d, i % 4 ? 0.35 : 1.3, i % 2 ? FAM_BANDIT : FAM_ROBOT); }
+    for (let i = 0; i < 14; i++) { const a = i * 0.45, d = 20 + i * 2; lights.rocket(Math.sin(a) * d, 6, Math.cos(a) * d, 0, -0.3, -1, 0.8, i % 2 ? FAM_BANDIT : FAM_ROBOT); }
+    for (let i = 0; i < 14; i++) lights.telegraph((i - 7) * 4, 0, 10 + (i % 3) * 6, 3.5, (t * 2 + i / 14) % 1, i % 2 ? FAM_BANDIT : FAM_ROBOT);
+    lights.telegraphLine(-20, 30, 20, 34, 3, 0.5, FAM_PLAYER);
+  };
+  for (let i = 0; i < 12; i++) lights.flash((i - 6) * 5, 1, 25, 3, i % 2 ? FAM_BANDIT : FAM_ROBOT);
+  fight(0);
+  lights.update(1 / 60, mid, focus);
+  const es = { ...lights.stats }, eLit = real().length;
+  if (es.requests < 80) fail(`enemy fire: only ${es.requests} light requests`);
+  if (es.clusters >= es.requests / 2) fail(`enemy fire: ${es.requests} requests merged only to ${es.clusters}`);
+  if (es.real > V.nightLightCap) fail(`enemy fire: ${es.real} real points (pool ${V.nightLightCap})`);
+  if (eLit > V.nightLightCap + V.nightSpotCap + 1) fail(`enemy fire: ${eLit} real lights over the caps`);
+  for (let i = 0; i < 120; i++) { fight(i / 60); lights.update(1 / 60, mid, focus); if (real().length > V.nightLightCap + V.nightSpotCap + 1) { fail("enemy fire: over the caps mid-fight"); break; } }
+  if (lights.builds !== builds) fail(`enemy fire rebuilt the pools (${lights.builds - builds} builds)`);
+  console.log(`enemy fire at midnight: ${es.requests} light requests -> ${es.clusters} merged -> ${es.real} real points; ${eLit} real lights in all`);
+}
+
+// Colour-coded: one lone flash of each side lights its own colour (robots red, bandits red-orange, the player's warm).
+{
+  const tint = (fam: number) => {
+    const L = new NightLights({ ...V });
+    L.ground = FLAT;
+    new THREE.Scene().add(L.group);
+    L.gun(0, 2, 10, 1, fam);
+    L.update(1 / 60, mid, focus);
+    const l = L.group.children.find((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0) as THREE.PointLight | undefined;
+    return l ? l.color : null;
+  };
+  const r = tint(FAM_ROBOT), b = tint(FAM_BANDIT), p = tint(FAM_PLAYER);
+  if (!r || !b || !p) fail("a lone gun flash got no real light");
+  else {
+    const gr = (c: THREE.Color) => c.g / Math.max(1e-3, c.r);
+    if (gr(r) > 0.12) fail(`robot fire isn't red (g/r ${gr(r).toFixed(2)})`);
+    if (!(gr(b) > gr(r) && gr(b) < gr(p))) fail(`bandit fire doesn't sit between robot red and the player's warm (g/r ${gr(r).toFixed(2)} < ${gr(b).toFixed(2)} < ${gr(p).toFixed(2)})`);
+    console.log(`fire colours (g/r): robots ${gr(r).toFixed(2)}, bandits ${gr(b).toFixed(2)}, player ${gr(p).toFixed(2)}`);
+  }
+}
+
+// The excavator beam's charge (held light, high priority) wins a real light over a field of blasts and deck lamps
+// nearer the camera; the same light at blast priority does not.
+{
+  const charged = (prio: number) => {
+    const L = new NightLights({ ...V });
+    L.ground = FLAT;
+    const sc = new THREE.Scene(); sc.add(L.group);
+    const decks = Array.from({ length: 12 }, (_, i) => { const o = new THREE.Object3D(); o.position.set((i - 6) * 3, 3, 4); sc.add(o); return o; });
+    L.addLamps(() => decks);
+    for (let i = 0; i < 30; i++) L.flash((i % 6 - 3) * 10, 1, 5 + Math.floor(i / 6) * 10, 2.5);
+    const u = 0.5, R = ROBOT_DEFAULTS, grow = Math.pow(u, R.robotBeamGrowth);
+    L.hold(0, 10, 28, R.robotBeamLight * (0.12 + 0.88 * grow), 10 + 16 * grow, 0xff2a14, prio);
+    L.update(1 / 60, mid, focus);
+    return L.group.children.some((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0 && o.position.distanceTo(new THREE.Vector3(0, 10, 28)) < 0.5);
+  };
+  if (!charged(ROBOT_DEFAULTS.robotBeamPrio)) fail("a charging beam didn't get a real light over the blasts and deck lamps");
+  if (charged(1)) fail("the beam's charge got a real light without its priority (the test field isn't full)");
+}
 
 // By day (no day flash): a barrage makes no lights and no pools.
 {

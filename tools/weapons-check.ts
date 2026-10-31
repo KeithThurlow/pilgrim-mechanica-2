@@ -135,6 +135,24 @@ const dt = 1 / 120;
     must(range.dummies[0].kvz > 0, "a cutout on the line wasn't thrown back");
   }
 
+  // An excavator's beam (Keith 2026-10-31) as src/game/robotBeam.ts resolves it: a robot-team sheet down the line's
+  // low part, flat to the aim, a budget nothing uses up: every body on the line burnt at full, none off it.
+  {
+    const range = new DummyRange({ ...DUMMY_DEFAULTS }, [
+      { x: 0, z: 10 }, { x: 0.4, z: 20, light: true }, { x: -0.3, z: 32 }, { x: 4.5, z: 18, light: true }, { x: -5, z: 26 },
+    ]);
+    range.update(0, flat);
+    const from = new THREE.Vector3(0, 4, 0), end = { x: 0, y: 0, z: 40 };
+    const d = new THREE.Vector3(end.x - from.x, end.y - from.y, end.z - from.z).normalize();
+    const f: SheetFire = { half: ROBOT_DEFAULTS.robotBeamWidth / 2, height: ROBOT_DEFAULTS.robotBeamReach, pen: 1e4, flat: true, aim: end, pierce: ROBOT_DEFAULTS.robotBeamPierce };
+    const sheet = makeSheet(flat, from, d, 40, f, V);
+    const shot = resolveSheet(flat, range.dummies, null, 3, sheet, ROBOT_DEFAULTS.robotBeamDamage, f, d, V);
+    const hitSet = new Set(shot.result.steps.map((s) => s.hit.target));
+    must([0, 1, 2].every((i) => hitSet.has(range.dummies[i])), `the beam missed a body on its line (${shot.result.steps.length} hits)`);
+    must([3, 4].every((i) => !hitSet.has(range.dummies[i])), "the beam burnt a body off its line");
+    must(shot.result.steps.every((s) => s.share > 0.99), "the beam lost strength through bodies (it should go through)");
+  }
+
   // The rail through a line of mixed robots: small scrappers, a cutter and an excavator (its body 10 m up) all hit,
   // the excavator by its body; a line past its body but through its legs hits a leg.
   {

@@ -62,7 +62,7 @@ export const NIGHT_LIGHT_DEFAULTS = {
   muzzleLight: 500,
   muzzleTime: 0.1,
   // Enemy fire (Keith 2026-10-31: enemy attacks light up too, colour-coded)
-  enemyHue: 10,
+  enemyHue: 18,
   enemyLight: 1.2,
   robotFireHue: 354,
   robotFireLight: 1.3,
@@ -481,8 +481,10 @@ export class NightLights implements ShortLights {
     // Family colours and strengths from the sliders.
     const hue = (h: number) => (((h % 360) + 360) % 360) / 360;
     this.famFire[FAM_PLAYER].copy(BLAST_COL); this.famMuzzle[FAM_PLAYER].copy(MUZZLE_COL); this.famTele[FAM_PLAYER].setHex(0xff5a2a);
-    this.famFire[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.55); this.famMuzzle[FAM_BANDIT].setHSL(hue(v.enemyHue + 8), 1, 0.66); this.famTele[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.5);
-    this.famFire[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.5); this.famMuzzle[FAM_ROBOT].setHSL(hue(v.robotFireHue + 6), 1, 0.62); this.famTele[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.48);
+    // The hue sliders pick colours as they look (sRGB), not in linear.
+    const SRGB = THREE.SRGBColorSpace;
+    this.famFire[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.55, SRGB); this.famMuzzle[FAM_BANDIT].setHSL(hue(v.enemyHue + 4), 1, 0.6, SRGB); this.famTele[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.5, SRGB);
+    this.famFire[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.5, SRGB); this.famMuzzle[FAM_ROBOT].setHSL(hue(v.robotFireHue + 2), 1, 0.56, SRGB); this.famTele[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.48, SRGB);
     this.famK[FAM_PLAYER] = 1; this.famK[FAM_BANDIT] = v.enemyLight; this.famK[FAM_ROBOT] = v.robotFireLight;
     const fam = (f: number) => (f === FAM_BANDIT || f === FAM_ROBOT ? f : FAM_PLAYER);
     const F = v.lightFar;
