@@ -670,7 +670,7 @@ export class Arsenal implements MechWeapons {
     for (let k = 0; k < 4; k++) bf.dust.smoke(at.x, at.y + 0.3, at.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.3, 0.8, 0.7, 0.75);
     bf.sfx.play("brap", at, 0.9, 0.8, true);
     // A small blast wave (src/fx/blastWaves.ts), a ground ring when it hit the sand.
-    bf.waves.post("cannon", at.x, at.y + 0.3, at.z, Math.max(1.2, splash), { ground: !t, fam: this.fam });
+    bf.waves?.post("cannon", at.x, at.y + 0.3, at.z, Math.max(1.2, splash), { ground: !t, fam: this.fam });
   }
 
   /** A rocket, missile or shell's blast: the battlefield's one blast entry point (crater queued, dust, sound, splash). */
