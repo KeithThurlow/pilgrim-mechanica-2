@@ -18,6 +18,13 @@
 // posts them each frame), rocket launches and blasts ask for a real point light; the ones close together merge into
 // one brighter light (src/world/lightCluster.ts) and the biggest, nearest clusters get the pool's points; the rest are
 // faked on the ground. Each rocket also gets a faked glow, exhaust flare and light on the sand.
+//
+// Enemy fire and telegraphs (Keith 2026-10-31: "lights being a large part of how the game works"): the same path
+// (src/world/lamps.ts ShortLights) takes every side's fire, colour-coded by family (the player's warm orange, bandits
+// red-orange, robots red; sliders in Enemy fire lights): gun muzzle flashes, shells in flight, launches, blasts. Held
+// lights (an excavator's beam charging) carry a priority over blasts; telegraphs on the ground (shell rings, painted
+// strips, the beam's line) glow on the sand and bid for a real light, brighter as they come down. Bodies that ask
+// each frame set userData.shortLights (found by the same scan).
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { LampDraw } from "../fx/lampDraw";

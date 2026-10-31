@@ -4,6 +4,10 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Enemy fire colour-coded by side: the player's warm orange (unchanged), bandits and war bands red-orange (hue 18), robots red (hue 354), chosen in sRGB; strength ×1.2 / ×1.3 of the player's | Claude | Claude | Sliders in Enemy fire lights. Only the lights are coded; the telegraph rings keep their one colour. |
+| 2026-10-31 | Excavator beam values: 2.2 s charge, aim locks at 0.6 of it (0.9 s to step clear: 5 m at a walk), 1.6 m wide, 150 damage (pierce 0.8) to everything of another team on the line's low part (5 m up), 12-50 m, every 11 s (first after 2.4-5.6 s at range), no volley during the charge | Claude | Claude | Excavator in reach 37.5 dps (target ≤ 40); a pack of 30 kills a standing mech in 29 s. |
+| 2026-10-31 | The beam hits bandits and their vehicles too (a robots-on-bandits fight), resolved as a sheet whose budget nothing uses up; other robots are its own team | Claude | Claude | Keith: "say yes ... only if cheap": one sheet per beam. |
+| 2026-10-31 | A charging beam's light outranks blasts (priority 6) and every lamp; telegraphs bid at 1.5, brightening with their flight (curve 2) | Claude | Claude | `robotBeamPrio`, `telePrio`, `teleRamp`. |
 | 2026-10-31 | Lights are a large part of how the game works: visual effects should reward the player; enemy attacks light up too (their shots, launches and blasts, and their telegraphs as warnings) | Keith | Keith | Direction. Agent on `wip/enemylights`. |
 | 2026-10-31 | Excavators (the tall walkers) get a charging beam: it glows brighter and brighter, then releases along a line; the glow is the warning to get out of the way. Some targets light up on the ground | Keith | Keith | Agent on `wip/enemylights`. |
 | 2026-10-31 | A split shot costs one magazine round (a round or missile that splits into fragments), not one per fragment; fire-rate copies still count | Keith | Keith | Reverses the balance pass's rule; `magRounds` in `src/weapons/magazine.ts`. |
