@@ -27,7 +27,7 @@ export const WALKER_DEFAULTS = {
   // Grip by speed (Keith 2026-10-31: "as the velocity of the mech reduces, the traction returns"): full (walkStop) up to
   // the Shift run + gripFullOver, the sprint's (boundGrip × g) at the legs' top, gripCurve between.
   gripFullOver: 0,
-  gripCurve: 1,
+  gripCurve: 2,
   gripLetGoOver: 0,
   // Gait
   strideBase: 2.6,

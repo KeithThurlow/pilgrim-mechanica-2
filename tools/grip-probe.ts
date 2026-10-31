@@ -7,7 +7,7 @@ import { LEG_TYPES } from "../src/mech/legTypes";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { Bound, BOUND_DEFAULTS } from "../src/mech/bound";
 
-const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values };
+const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...JSON.parse((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.GRIP_SET ?? "{}") };
 const flat = { height: () => 0, normal: (_x: number, _z: number, o: number[] = [0, 0, 0]) => { o[0] = 0; o[1] = 1; o[2] = 0; return o; } };
 const dt = 1 / 120;
 type Cmd = { x: number; z: number; space: boolean };
@@ -59,6 +59,13 @@ for (const at of [0.3, 0.5, 0.65]) table(`dash ahead (tap), stick right from ${a
 table("sprint 2.5 s, let go with the stick right:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : right), 2.5, 2));
 table("sprint 2.5 s, let go, stick ahead 0.3 s then right:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : t < 2.8 ? ahead : right), 2.8, 2));
 table("sprint 2.5 s, let go and the stick off:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : { x: 0, z: 0, space: false }), 2.5, 2));
+{
+  // The run-on: let go of Space with the stick held ahead: time and ground until the walk's speed.
+  const r = gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : ahead), 2.5, 4);
+  const i = r.findIndex((x) => x.speed <= 6.05);
+  const m = r.slice(0, i < 0 ? r.length : i).reduce((a, x) => a + x.speed * dt, 0);
+  console.log(`run-on, let go with the stick ahead: from ${r[0].speed.toFixed(1)} m/s to the walk in ${i < 0 ? "never" : (i * dt).toFixed(2) + " s"}, ${m.toFixed(1)} m`);
+}
 // During the sprint: held, the stick turned right after 2 s (sideways pull = speed × the run line's turn rate).
 {
   const s = new WalkerSim(v, flat as never); s.reset(0, 0, 0);
