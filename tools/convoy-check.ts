@@ -22,7 +22,8 @@ import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS, type Platform } from "../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS } from "../src/convoy/crane";
 import { CraneCarry, CARRY_DEFAULTS } from "../src/convoy/carry";
-import { DECK_DEFAULTS, deckLayout, walkToSpot } from "../src/convoy/deck";
+import { DECK_DEFAULTS, deckLayout, walkToSpot, MECH_PUSH_R } from "../src/convoy/deck";
+import { Expedition, EXPEDITION_DEFAULTS } from "../src/expedition/expedition";
 import { TRAIN_DEFAULTS, bridgeSpans, REACH_MAX, REACH_MIN, type Span } from "../src/convoy/train";
 import { TRACK_DEFAULTS, trackPods, treadAt, treadLength } from "../src/convoy/tracks";
 import { PIPE_DEFAULTS, generatePipes } from "../src/convoy/pipes";
@@ -64,7 +65,7 @@ function tick(w: World, cmd: MoveCommand) {
   if (c) {
     w.sim.update(DT, c);
     w.carry.keep(w.sim);
-    if (!w.carry.ground.onDeck) for (const p of w.convoy.platforms) { const o = p.pushOut(w.sim.pos.x, w.sim.pos.z, 2); if (o) { w.sim.pos.x = o.x; w.sim.pos.z = o.z; } }
+    if (!w.carry.ground.onDeck && w.carry.state !== "falling") for (const p of w.convoy.platforms) { const o = p.pushOut(w.sim.pos.x, w.sim.pos.z, MECH_PUSH_R); if (o) { w.sim.pos.x = o.x; w.sim.pos.z = o.z; } }
   }
 }
 
@@ -461,8 +462,9 @@ function pickUp(w: World, label = "") {
     tick(w, c);
     watch();
   }
-  // Walk hard into the rail on each side, and off the back.
+  // Walk hard into the rail on each side and off the back, with the old rails (deckOpenSides 0; open sides: 7c).
   for (const dir of [[1, 0], [-1, 0], [0, -1]]) {
+    w.V.deckOpenSides = 0;
     for (let i = 0; i < 120 * 6; i++, t += DT) {
       tick(w, { x: p.left.x * dir[0] + p.fwd.x * dir[1], z: p.left.z * dir[0] + p.fwd.z * dir[1], sprint: true });
       watch();
@@ -618,6 +620,65 @@ for (const speed of [ROUTE_DEFAULTS.convoySpeed, 4, 6]) {
   for (let i = 0; i < 120 * 4; i++) tick(w, walkToSpot(w.sim, p, 0, -2, 0.5));
   console.log(`  crane called after ${t.toFixed(1)} s on the pad · stepped off: ${w.carry.state}, aborts ${w.carry.aborts}`);
   if (w.carry.state !== "aboard" || w.carry.aborts < 1 || w.carry.attached) fail(`stepping off the pad didn't cancel (state ${w.carry.state})`);
+}
+
+// 7c. Walking off (Keith 2026-10-31: no rails on the bay's long sides): from the set-down pad straight off each side at
+// a walk, a run, a dash and a sprint (from the far side), the mech leaves the deck carrying the deck's velocity, falls and lands on the sand clear of
+// the tracks within 3 s, no foot through the sand, legs in reach; the expedition starts once; the crane isn't armed.
+for (const mode of ["walk", "run", "dash", "sprint"] as const) for (const side of [1, -1] as const) {
+  const w = world();
+  for (let i = 0; i < 240; i++) w.convoy.update(DT);
+  for (const c of w.cranes) { c.place(); c.calm(); }
+  w.carry.putAboard(w.sim);
+  // The sprint runs up from the far side (a dash alone from the middle is off the side before the sprint takes over).
+  if (mode === "sprint") for (let i = 0; i < 120 * 8; i++) { const c = walkToSpot(w.sim, w.convoy.bay, -6 * side, 2, 0.4); if (!c.x && !c.z) break; tick(w, c); }
+  const exp = new Expedition({ ...EXPEDITION_DEFAULTS });
+  let launches = 0;
+  const p = w.convoy.bay, r0 = w.sim.stats.overreach;
+  let t = 0, offAt = NaN, landAt = NaN, minFeet = Infinity, nan = false, dashed = false;
+  let v0 = { along: 0, out: 0, up: 0 }, offX = 0;
+  const seen: string[] = [];
+  for (; t < 20 && !(Number.isFinite(landAt) && t - landAt > (mode === "sprint" ? 4 : 2)); t += DT) {
+    const c: MoveCommand = { x: p.left.x * side, z: p.left.z * side, sprint: mode === "run" };
+    if ((mode === "dash" || mode === "sprint") && !dashed && t > 0.3 && w.sim.canDash) { w.sim.dash(c.x, c.z); dashed = true; }
+    // The sprint: Space held on through the dash (as src/mech/bound.ts sets it), until the feet are on the sand.
+    if (mode === "sprint") { w.sim.bound = dashed && !Number.isFinite(landAt); w.sim.boundTopNow = w.V.boundTop; }
+    const before = w.carry.state;
+    tick(w, Number.isFinite(landAt) ? still : c);
+    if (exp.follow(w.carry.state, w.carry.attached, true) === "launched") launches++;
+    if (seen[seen.length - 1] !== w.carry.state) seen.push(w.carry.state);
+    if (before !== "falling" && w.carry.state === "falling") {
+      offAt = t;
+      const f = w.carry.fall;
+      v0 = { along: f.vx * p.fwd.x + f.vz * p.fwd.z, out: ((f.vx - p.vel.x) * p.left.x + (f.vz - p.vel.z) * p.left.z) * side, up: f.vy };
+      offX = p.toLocal(w.sim.pos.x, w.sim.pos.z).x * side;
+    }
+    if (w.carry.state === "falling") minFeet = Math.min(minFeet, ...w.sim.feet.map((f) => f.pos.y - w.field.height(f.pos.x, f.pos.z)));
+    if (!Number.isFinite(landAt) && w.carry.state === "landing") landAt = t;
+    if (!Number.isFinite(w.sim.pelvis.x + w.sim.pelvis.y + w.sim.pelvis.z)) { nan = true; break; }
+  }
+  const tag = `walk off ${side > 0 ? "left" : "right"} at a ${mode}`;
+  const l = p.toLocal(w.sim.pos.x, w.sim.pos.z), hips = w.sim.pelvis.y - w.field.height(w.sim.pos.x, w.sim.pos.z);
+  let worstFoot = 0;
+  for (const f of w.sim.feet) if (!f.swinging) worstFoot = Math.max(worstFoot, Math.abs(f.planted.y - w.field.height(f.planted.x, f.planted.z)));
+  const over = w.sim.stats.overreach - r0, fall = landAt - offAt;
+  console.log(`-- ${tag}: ${seen.join(" > ")} · off at ${offX.toFixed(1)} m out after ${offAt.toFixed(1)} s · leaving at ${v0.along.toFixed(1)} m/s along (convoy ${p.speed.toFixed(1)}), ${v0.out.toFixed(1)} m/s out · fell ${fall.toFixed(2)} s, hit at ${w.carry.lastLanding.speed.toFixed(1)} m/s · ${(l.x * side).toFixed(1)} m beside · lowest foot ${minFeet.toFixed(2)} m · hips ${hips.toFixed(2)} m · overreach ${over} · expedition launches ${launches}`);
+  if (nan) { fail(`${tag}: non-finite`); continue; }
+  if (!Number.isFinite(offAt)) { fail(`${tag}: never left the deck (state ${w.carry.state})`); continue; }
+  if (!Number.isFinite(landAt) || fall > 3) fail(`${tag}: didn't land within 3 s (${fall.toFixed(2)} s, state ${w.carry.state})`);
+  if (Math.abs(v0.along - p.speed) > 2) fail(`${tag}: left at ${v0.along.toFixed(1)} m/s along, not carrying the convoy's ${p.speed.toFixed(1)}`);
+  if (v0.out < w.V.deckStepOff - 0.01) fail(`${tag}: pushed off at only ${v0.out.toFixed(1)} m/s`);
+  if (minFeet < -0.05) fail(`${tag}: feet ${(-minFeet).toFixed(2)} m into the sand while falling`);
+  if (worstFoot > 0.05) fail(`${tag}: planted feet ${worstFoot.toFixed(2)} m off the sand after landing`);
+  if (Math.abs(hips - w.V.hipHeight) > 0.4) fail(`${tag}: hips ${hips.toFixed(2)} m over the sand 2 s (sprint: 4 s) after landing`);
+  if (over > 60) fail(`${tag}: legs overreached ${over} frames`);
+  for (const q of w.convoy.platforms) if (q.pushOut(w.sim.pos.x, w.sim.pos.z, 1.5)) fail(`${tag}: landed in the ${q.spec.name}'s footprint`);
+  if (launches !== 1 || exp.state !== "out") fail(`${tag}: expedition launched ${launches} times (state ${exp.state})`);
+  if (w.carry.walkOffs !== 1 || w.carry.deploys !== 0) fail(`${tag}: walk-offs ${w.carry.walkOffs}, crane deploys ${w.carry.deploys}`);
+  if (seen.includes("pickup") || seen.includes("lifting") || w.carry.attached) fail(`${tag}: the crane came straight back for it`);
+  if (w.carry.nearest(w.sim).d < w.V.craneRange + 2 && w.carry.armed) fail(`${tag}: the crane re-armed while the mech was still in its range`);
+  if (w.carry.ground.onDeck) fail(`${tag}: still on the deck ground`);
+  if ((w.carry.state as string) !== "walking") fail(`${tag}: control didn't come back (state ${w.carry.state})`);
 }
 
 // 8. The swing: an empty cradle slewed hard swings, stays bounded and dies down; carried through a whole pick-up and

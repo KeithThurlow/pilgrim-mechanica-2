@@ -769,8 +769,9 @@ app.onTick((rawDt) => {
       if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
       else player.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
     }
-    // The sprint only on the sand: the decks and the crane's states keep the mech at a walk.
-    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange");
+    // The sprint on the sand, and on the deck when its sides are open (Keith 2026-10-31: sprint off the side); the crane's
+    // states keep the mech at a walk.
+    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange" || (carry.state === "aboard" && V.deckOpenSides > 0.5));
     player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
     // (Not while falling: a mech that walked off a side starts inside the footprint and flies clear of it by itself.)

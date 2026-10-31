@@ -14,7 +14,7 @@ import type { Ground, WalkerSim } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
 import type { Platform, PlatformSpec } from "./platform";
 import { landingXs, landingLayout, stairBox, LANDING_IN, LANDING_HALF } from "./train";
-import { outside, keepInside, sideSpan } from "./outline";
+import { outside, keepInside } from "./outline";
 
 export const DECK_DEFAULTS = {
   deckMechRadius: 1.5,
@@ -217,13 +217,14 @@ export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneM
 }
 
 /**
- * Has the mech walked off a long side? The side (+1 left, -1 right) once its middle is deckEdgeOver past that edge
- * (along the straight stretch; the corner cuts and the ends still keep it on), else 0.
+ * Has the mech walked off a long side? The side (+1 left, -1 right) once its middle is deckEdgeOver past that edge's
+ * line, else 0.
  */
 export function offSide(sim: WalkerSim, p: Platform, v: DeckValues): 1 | -1 | 0 {
   if (v.deckOpenSides <= 0.5) return 0;
-  const l = p.toLocal(sim.pos.x, sim.pos.z), o = p.outline, [z0, z1] = sideSpan(o);
-  if (l.z < z0 || l.z > z1 || Math.abs(l.x) < o.halfW + v.deckEdgeOver) return 0;
+  // (Anywhere along the length: the corner cuts slide a mech pushed into them out to the side line, and off there.)
+  const l = p.toLocal(sim.pos.x, sim.pos.z), o = p.outline;
+  if (Math.abs(l.z) > o.halfL || Math.abs(l.x) < o.halfW + v.deckEdgeOver) return 0;
   return l.x > 0 ? 1 : -1;
 }
 
