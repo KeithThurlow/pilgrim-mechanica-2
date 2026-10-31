@@ -127,6 +127,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
+- Parts lab: `?part=<id>` (a generated part from `public/models/gen/index.json`), `?cam=game|close`, `?zoom=metres`. Make parts with
+  `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
 - Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod` (rocketpod: an arm holding the missile pod: hold to channel its clip of 8), `?barrage` (rocket
@@ -225,7 +227,8 @@ src/weapons/            the new weapons, each with its own targeting: tuning (sl
                         Rampart), demo; kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins)
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
-tools/                  *-check.ts headless checks, shots.mjs screenshots
+tools/                  *-check.ts headless checks, shots.mjs screenshots; partgen/ (generated parts: ComfyUI client, splat to mesh,
+                        game prep, kinds read from the Rampart; output in public/models/gen/)
 docs/                   design.md (the game), decisions.md (log)
 ```
 
