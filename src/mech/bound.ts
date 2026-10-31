@@ -1,7 +1,8 @@
 // The sprint's input and kit (Keith 2026-10-26; docs/proposal-bound.md). Pure: no input reading, no drawing.
-// Space pressed dashes at once (src/mech/dash.ts); keep holding (dashHoldRun) and the dash's push-off flows straight into
-// the sprint's run, which builds toward the legs' top speed while held (the gait itself is the walker's, `bound`).
-// Let go and it lands out of its stride and runs on, skidding off what the run can't hold.
+// Space pressed dashes at once (src/mech/dash.ts); still held when the dash's burst stops holding its speed (the walker's
+// dashHoldEnd: the decision point, Keith 2026-10-31) and the burst flows straight into the sprint's run, which builds toward the legs' top speed while held (the gait itself is the walker's, `bound`).
+// Let go before then and the dash is a discrete move: a hard stop onto the stick (walker dashStop), no sprint let-go.
+// Let go of the sprint and it lands out of its stride and runs on, skidding off what the run can't hold.
 // Energy (Keith 2026-10-27): the sprint only ever comes out of a held dash, and drains the energy bars (src/mech/dash.ts:
 // the dash took a full one, the sprint takes the rest slowly); out of energy, it ends. Without a full bar there's no
 // dash, so no sprint (boundTap is no longer used). Weapons are off the moment the sprint runs (sprintGunsAfter 0;
@@ -21,7 +22,6 @@ import type { Dash } from "./dash";
 
 export const BOUND_DEFAULTS = {
   boundTap: 0.2,
-  dashHoldRun: 0.15,
   boostTop: 8,
   boostGlide: 0,
   boostBurn: 0.25,
@@ -39,7 +39,6 @@ export type BoundValues = typeof BOUND_DEFAULTS;
 
 const G = "Sprint kit";
 export const BOUND_PARAMS: Param[] = [
-  { key: "dashHoldRun", label: "Held this long, the dash becomes the run (s)", min: 0.03, max: 0.5, step: 0.01, group: G, tip: "Space still down this long into a dash: its push-off flows into the sprint instead of a slide" },
   { key: "boostTop", label: "Booster: top speed + (m/s)", min: 0, max: 12, step: 0.5, group: G, tip: "With a booster pack fitted (a booster tank above 0, Dash group), while its tank lasts" },
   { key: "boostGlide", label: "Booster: glide (share of gravity)", min: 0, max: 0.9, step: 0.01, group: G, tip: "Falling out of a leap this much slower: more hang time off crests" },
   { key: "boostBurn", label: "Booster: tank burn sprinting (s/s)", min: 0, max: 2, step: 0.01, group: G },
@@ -72,7 +71,9 @@ export class Bound {
     this.heldFor = held ? this.heldFor + dt : 0;
     // Held through a dash (Keith 2026-10-26 18:28: a long press becomes a run, not a sliding dash), while there's energy:
     // the run takes the dash's speed (src/mech/walker.ts); the sprint drains the bars as it goes.
-    let want = held && (this.on || (sim.dashing && this.heldFor >= v.dashHoldRun));
+    // The decision at the burst's hold end (2026-10-31; was 0.15 s into the dash): Space still down then, the sprint; let
+    // go by then, the tapped dash's hard stop. Held since the press (a fresh press is a fresh dash).
+    let want = held && (this.on || (sim.inDash && sim.dashClock >= 0 && sim.dashClock + dt >= sim.dashHoldEnd && this.heldFor >= sim.dashClock - 0.05));
     if (want && !dash.drain(dt)) want = false;
     if (want && !this.on) dash.cut();
     this.on = want;

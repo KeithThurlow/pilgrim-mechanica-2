@@ -44,7 +44,7 @@ note covers what those don't: how the coordinating works, what's waiting on Keit
 ## Awaiting Keith's play (built 2026-10-28 to 31, mostly never run in a browser)
 
 Movement and feel (played, good: "massive improvement"): responsive walk, crisp dash, grip by speed, lean,
-trample ("awesome"). In flight: the dash exit (`wip/dashexit`, merge it first).
+trample ("awesome"). The dash exit (7.5 m burst, hard stop, sprint only when Space is held past 0.325 s) merged last and is unplayed.
 
 Not yet played or only glanced at:
 - Duel lab: rival levels (`?rivallevel=`), `?rivalup=N`, dodge as a chance, steady painted aim, rail vs dash rule.

@@ -70,6 +70,11 @@ export function dashBurst(t: number, carried: number, to: number, v: WalkerValue
   if (e < 0) return peak;
   return e < v.dashStop ? peak + (to - peak) * smooth(0, v.dashStop, e) : to;
 }
+/**
+ * Seconds from the press until the burst's hold ends: the decision point (Keith 2026-10-31). Space still down then, the
+ * sprint carries on from the peak; let go by then, the hard stop onto the stick (dashStop).
+ */
+export function dashHoldEnd(v: WalkerValues) { return Math.max(0.005, v.dashRise) + v.dashHold; }
 /** Seconds from the press until the burst is down at its end speed. */
 export function dashBurstEnd(v: WalkerValues) { return Math.max(0.005, v.dashRise) + v.dashHold + v.dashStop; }
 /** Share of the speed across the dash still left: gone over the burst's rise (the planted feet take it out). */
