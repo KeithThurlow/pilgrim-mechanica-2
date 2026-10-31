@@ -333,8 +333,9 @@ export class RivalAi {
     const ml = Math.hypot(mx, mz);
     if (ml > 1e-3) { cmd.move.x = mx / Math.max(1, ml); cmd.move.z = mz / Math.max(1, ml); }
 
-    // A reckless rival dashes in to press a foe that's out of dashes (keeping its reserve).
-    if (!cmd.dash && this.state === "press" && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + 10 && sees && this.r() < v.aiAggression * dt * 0.8) {
+    // A reckless rival dashes in to press a foe that's out of dashes (keeping its reserve); never with its own rail
+    // charging (Keith 2026-10-31: a dash drops the charge).
+    if (!cmd.dash && !this.railCharging(s) && this.state === "press" && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + 10 && sees && this.r() < v.aiAggression * dt * 0.8) {
       cmd.dash = { x: ux + tx * 0.6, z: uz + tz * 0.6 };
     }
 
@@ -367,6 +368,9 @@ export class RivalAi {
     this.fire(view, cmd, dist, acquired, dt);
     return cmd;
   }
+
+  /** One of its own rails is charging (a dash would drop the charge). */
+  private railCharging(s: DuelSelf) { return s.weapons.some((w) => w.charge > 0.05 && s.kit[w.i]?.kind === "rail"); }
 
   /** Threats it has noticed that cover where it is: walk or dash out. Returns a move to override with, or null. */
   private dodge(view: DuelView, cmd: MechCommand): { x: number; z: number } | null {
@@ -418,8 +422,10 @@ export class RivalAi {
     if (!best) { this.evade = this.evade && this.evade.until > now ? this.evade : null; return this.evade; }
     const walkT = best.need / Math.max(1, s.walkSpeed * 0.8) + 0.15;
     const mem = this.seen.get(best.id)!;
-    // Out of time to walk: dash (if it chose to for this one and has a charge), else walk and hope.
-    if (best.t < walkT && mem.dash && s.canDash && s.dashCharges > 0 && !s.dashing) {
+    // Out of time to walk: dash (if it chose to for this one and has a charge), else walk and hope. With its own rail
+    // charging (Keith 2026-10-31: a dash drops it) it keeps the charge against a foe's rail (that dash is a gamble on the
+    // timing) and only throws it away for a hit it can't walk out of.
+    if (best.t < walkT && mem.dash && s.canDash && s.dashCharges > 0 && !s.dashing && !(best.rail && this.railCharging(s))) {
       cmd.dash = { x: best.x, z: best.z };
       mem.dash = false; // one dash per threat
       this.stats.dodgeDashes++;

@@ -241,8 +241,11 @@ export class Arsenal implements MechWeapons {
       const side: 1 | -1 = i === 0 ? 1 : -1;
       const g = u.upper.guns[i];
       const held = alive && triggerOf(trigger, i) && g.enabled;
-      // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired.
-      if (u.gunsOff && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
+      // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired. So in a dash (Keith
+      // 2026-10-31, rail balance: no dash while a rail is charging or charged; the dash wins and the charge is lost), and
+      // no charge builds until the dash is over.
+      const noRail = u.gunsOff || u.sim.inDash;
+      if (noRail && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
       // The rail's coils light in turn from the breech as it charges (the box stand-in's rings; the library model's
@@ -274,9 +277,10 @@ export class Arsenal implements MechWeapons {
       }
       if (s.kind !== "rail") { clearPaint(s.paint); return; }
       const st = this.railStats(s);
-      if (held && !s.rail.holding && s.rail.cooldown <= 0 && !s.whined) { s.whined = true; bf.sfx.playSound("railCharge", u.sim.pelvis, 1, 1 / Math.max(0.3, st.charge)); }
-      if (!held) s.whined = false;
-      const fired = s.rail.update(dt, held, st);
+      const railHeld = held && !noRail;
+      if (railHeld && !s.rail.holding && s.rail.cooldown <= 0 && !s.whined) { s.whined = true; bf.sfx.playSound("railCharge", u.sim.pelvis, 1, 1 / Math.max(0.3, st.charge)); }
+      if (!railHeld) s.whined = false;
+      const fired = s.rail.update(dt, railHeld, st);
       const muzzle = this.muzzleOf(s, side, this.tmp);
       const { d, aim } = this.railAim(side, muzzle);
       // The preview: a thin precise line on the sand out to where the slug would stop, and a charge meter at the

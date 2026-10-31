@@ -281,6 +281,8 @@ export class WalkerSim {
   private boostTo = 0;
   /** In the dash's push-off and slide. */
   get dashing() { return this.dashMove !== null; }
+  /** In a dash at all: its steps or the rest of its burst (Keith 2026-10-31: no rail charge through it). */
+  get inDash() { return this.dashMove !== null || this.burst; }
   /** Hips turned toward the dash (radians, eased). */
   private hipOpen = 0;
   /** Body position at the start of this step (planted feet slide by what it moved). */
@@ -1695,7 +1697,7 @@ export class WalkerSim {
         const dx = f.planted.x - jx, dz = f.planted.z - jz, d = Math.hypot(dx, dz);
         if (d <= H) continue;
         f.planted.x = jx + (dx / d) * H; f.planted.z = jz + (dz / d) * H;
-        f.planted.y = this.ground.height(f.planted.x, f.planted.z) - this.sink(f.planted.x, f.planted.z);
+        this.groundAt(f.planted, f.plantedUp);
         this.stats.toeDrag++;
       }
     }

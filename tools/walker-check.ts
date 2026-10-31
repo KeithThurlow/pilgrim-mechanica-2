@@ -508,7 +508,7 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
         const g = field.height(f.pos.x, f.pos.z);
         deepest = Math.max(deepest, g - f.pos.y);
         const P = f.pose;
-        if (Math.min(P.toe.y - field.height(P.toe.x, P.toe.z), P.toeHinge.y - field.height(P.toeHinge.x, P.toeHinge.z)) < -d - 0.03) toes++;
+        if (Math.min(P.toe.y - field.height(P.toe.x, P.toe.z), P.toeHinge.y - field.height(P.toeHinge.x, P.toeHinge.z)) < -d - 0.03) { toes++; console.log("DBG", s, i, "dashing", mech.sim.dashing, "running", mech.sim.running, "inDash", mech.sim.inDash, "swing", f.swinging, "u", f.u.toFixed(2), "air", mech.sim.airborne, "spd", mech.sim.speed.toFixed(1)); }
         if (!f.swinging && !mech.sim.airborne && f.stanceT < 0.5) { plantedErr = Math.max(plantedErr, Math.abs(field.height(f.planted.x, f.planted.z) - f.planted.y - d)); n++; }
       }
     }
