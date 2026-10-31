@@ -342,6 +342,17 @@ export class WalkerSim {
   crouch = 0;
   leanPitch = 0;
   leanRoll = 0;
+  /**
+   * The lean into a change of velocity (Keith 2026-10-31), looks only: a spring (world x, z; radians, the top toward +x /
+   * +z) kicked by the body's acceleration. orient() tips the hips and hull by it; nothing in the sim reads it.
+   */
+  accLean = { x: 0, z: 0, vx: 0, vz: 0 };
+  private accVel = { x: 0, z: 0 };
+  private accPrev = new Vector3();
+  private accFresh = true;
+  /** This frame's lean into a change of velocity as body pitch (nose down +) and roll (left side up +), radians. */
+  accPitch = 0;
+  accRoll = 0;
   private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n3: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
@@ -349,16 +360,18 @@ export class WalkerSim {
   }
 
   /** Body pitch (nose down +) and roll (left side up +), radians: for an upper body riding on the hips. */
-  get bodyPitch() { return this.pitch.x; }
-  get bodyRoll() { return this.roll.x + this.turnRoll + this.dashRoll; }
+  get bodyPitch() { return this.pitch.x + this.accPitch; }
+  get bodyRoll() { return this.roll.x + this.turnRoll + this.dashRoll + this.accRoll; }
   /** The hull's roll: what of the hip roll it doesn't level out, plus all of the lean into a turn or a dash (Keith 2026-10-27: the shoulders lean too). */
-  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll + this.dashRoll; }
+  get hullRoll() { return this.roll.x * (1 - this.v.shoulderLevel) + this.turnRoll + this.dashRoll + this.accRoll; }
 
   reset(x: number, z: number, heading: number) {
     this.airborne = false; this.airVel.set(0, 0, 0); this.squatState = null; this.stagger = 0; this.skid.set(0, 0, 0);
     this.idleLeft = 0; this.idleK = 0; this.stillT = 0; this.idleNext = NaN;
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
+    this.accLean.x = this.accLean.z = this.accLean.vx = this.accLean.vz = 0; this.accVel.x = this.accVel.z = 0; this.accFresh = true;
+    this.accPitch = this.accRoll = 0;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
     this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstBraking = false; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
     this.pos.set(x, 0, z);
@@ -394,7 +407,7 @@ export class WalkerSim {
     const c = Math.cos(dyaw), s = Math.sin(dyaw);
     const turn = (p: Vector3) => { const x = p.x, z = p.z; p.x = x * c + z * s; p.z = z * c - x * s; };
     const move = (p: Vector3) => { p.x -= px; p.z -= pz; turn(p); p.x += px + dx; p.y += dy; p.z += pz + dz; };
-    move(this.pos); move(this.pelvis);
+    move(this.pos); move(this.pelvis); move(this.accPrev);
     turn(this.vel); turn(this.airVel); turn(this.skid);
     this.airY += dy;
     this.heading = wrap(this.heading + dyaw);
@@ -481,6 +494,7 @@ export class WalkerSim {
     this.slip.set(0, 0, 0);
     this.tuckPose();
     this.turnLean(dt);
+    this.accelLean(dt);
     this.plantPitch = 0;
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
     // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
@@ -1958,15 +1972,58 @@ export class WalkerSim {
    * toward the inside of it (turnLeanShift), as if the body leaned over its feet.
    */
   private orient(pelvisYaw: number) {
-    const v = this.v, tr = this.turnRoll + this.dashRoll;
-    const pitch = this.pitch.x + this.plantPitch;
-    this.pelvisQ.setFromEuler(this.t.e.set(pitch, pelvisYaw, this.roll.x + tr, "YXZ"));
-    this.hullQ.setFromEuler(this.t.e.set(pitch, this.heading, this.roll.x * (1 - v.shoulderLevel) + tr, "YXZ"));
+    const v = this.v;
+    // The lean into a change of velocity, in the body's frame: the hips go a share of the way with it (tipped about the
+    // feet) and drop a little.
+    const fw0 = forwardOf(this.heading, this.t.f), lf0 = leftOf(this.heading, this.t.l), L = this.accLean;
+    this.accPitch = L.x * fw0.x + L.z * fw0.z;
+    this.accRoll = -(L.x * lf0.x + L.z * lf0.z);
+    const mag = Math.hypot(L.x, L.z);
+    if (mag > 1e-5) {
+      const sh = v.hipHeight * v.leanShift * Math.sin(mag) / mag;
+      this.pelvis.x += L.x * sh; this.pelvis.z += L.z * sh;
+      // (Not in the dash's steps: they crouch themselves.)
+      if (!this.dashMove) this.pelvis.y -= v.leanCrouch * Math.min(1, mag / Math.max(1e-3, v.leanMax * D2R));
+    }
+    // Rolled about the hips' middle (the turn's roll below goes about the outside hip).
+    const tr = this.turnRoll + this.dashRoll, ar = tr + this.accRoll;
+    const pitch = this.pitch.x + this.plantPitch + this.accPitch;
+    this.pelvisQ.setFromEuler(this.t.e.set(pitch, pelvisYaw, this.roll.x + ar, "YXZ"));
+    this.hullQ.setFromEuler(this.t.e.set(pitch, this.heading, this.roll.x * (1 - v.shoulderLevel) + ar, "YXZ"));
     if (tr !== 0) {
       // Rolled about the outside hip, so the outside leg reaches no further than upright and the inside one folds.
       const H = v.hipHeight * v.turnLeanShift, l = leftOf(this.heading, this.t.l);
       this.pelvis.addScaledVector(l, -Math.sin(tr) * H);
       this.pelvis.y -= H * (1 - Math.cos(tr)) + v.hipWidth * Math.abs(Math.sin(tr));
+    }
+  }
+
+  /**
+   * The lean into a change of velocity (Keith 2026-10-31: "lean into it briefly when it changes direction"): the body's
+   * velocity, read off its travel between steps (smoothed over leanSmooth), drives a damped spring through its
+   * acceleration (lean'' = k (leanPerAccel·a − lean) − c lean'), so a sudden change kicks a brief lean toward the new way
+   * and a held acceleration holds a small one. Capped at leanMax. Looks only.
+   */
+  private accelLean(dt: number) {
+    const v = this.v, L = this.accLean;
+    const dx = this.pos.x - this.accPrev.x, dz = this.pos.z - this.accPrev.z;
+    this.accPrev.copy(this.pos);
+    // A jump (a reset, a crane setting it down) isn't motion.
+    if (this.accFresh || dx * dx + dz * dz > 1) { this.accFresh = false; this.accVel.x = this.accVel.z = 0; return; }
+    const k = Math.min(1, dt / Math.max(dt, v.leanSmooth));
+    const nvx = this.accVel.x + (dx / dt - this.accVel.x) * k, nvz = this.accVel.z + (dz / dt - this.accVel.z) * k;
+    const ax = (nvx - this.accVel.x) / dt, az = (nvz - this.accVel.z) / dt;
+    this.accVel.x = nvx; this.accVel.z = nvz;
+    const K = v.leanStiff, C = 2 * v.leanDamp * Math.sqrt(K), g = v.leanPerAccel * D2R * (this.dashMove ? v.leanInDash : 1);
+    // Semi-implicit Euler at the sim's step.
+    L.vx += (K * (g * ax - L.x) - C * L.vx) * dt; L.vz += (K * (g * az - L.z) - C * L.vz) * dt;
+    L.x += L.vx * dt; L.z += L.vz * dt;
+    const max = v.leanMax * D2R, m = Math.hypot(L.x, L.z);
+    if (m > max) {
+      L.x *= max / m; L.z *= max / m;
+      // Pressed against the cap: lose the speed outward.
+      const out = (L.vx * L.x + L.vz * L.z) / max;
+      if (out > 0) { L.vx -= out * L.x / max; L.vz -= out * L.z / max; }
     }
   }
 

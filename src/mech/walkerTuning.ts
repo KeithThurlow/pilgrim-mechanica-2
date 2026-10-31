@@ -61,6 +61,16 @@ export const WALKER_DEFAULTS = {
   crunchRoll: 4,
   shoulderLevel: 0.8,
   speedLean: 1.5,
+  // Lean into a change of velocity (Keith 2026-10-31: "lean into it briefly when it changes direction, to communicate the
+  // speed or momentum change"): looks only, the hull and hips tilt toward the acceleration on a spring, the feet stay put.
+  leanPerAccel: 0.14,
+  leanMax: 10,
+  leanInDash: 0.6,
+  leanStiff: 260,
+  leanDamp: 0.6,
+  leanSmooth: 0.02,
+  leanCrouch: 0.1,
+  leanShift: 0.25,
   // Terrain
   slopePitch: 0.35,
   footTiltMax: 28,
@@ -202,7 +212,7 @@ export const WALKER_DEFAULTS = {
   // The burst (Keith 2026-10-31: "doesn't feel fast enough in its start and stop. Tighten that up"): the speed by time
   // from the press; the steps only pose the legs under it (src/mech/dashSteps.ts dashBurst).
   dashSpeedOut: 20,
-  dashRise: 0.07,
+  dashRise: 0.045,
   dashHold: 0.42,
   dashStop: 0.15,
   dashBrake: 80,
@@ -292,6 +302,14 @@ export const WALKER_PARAMS: Param[] = [
   { key: "crunchRoll", label: "Hip roll (°)", min: 0, max: 15, step: 0.1, group: "Body", tip: "The pelvis rolls onto the loaded leg (AT-ST hips)" },
   { key: "shoulderLevel", label: "Hull stays level", min: 0, max: 1, step: 0.01, group: "Body", tip: "The hull counters the hip roll: 1 = perfectly level cab" },
   { key: "speedLean", label: "Lean into acceleration (°)", min: 0, max: 8, step: 0.1, group: "Body" },
+  { key: "leanPerAccel", label: "Lean per m/s² (°)", min: 0, max: 0.5, step: 0.005, group: "Lean", tip: "The lean a steady acceleration holds; a sudden change of velocity (a dash's start or stop, a reversal) kicks the lean spring by this times the change, so it leans in and springs back" },
+  { key: "leanMax", label: "Max lean (°)", min: 0, max: 30, step: 0.5, group: "Lean" },
+  { key: "leanInDash", label: "Share in the dash's steps", min: 0, max: 1, step: 0.01, group: "Lean", tip: "The dash's steps lean into it themselves (Dash: lean into the dash); this much of the quick lean on top" },
+  { key: "leanStiff", label: "Spring stiffness (1/s²)", min: 20, max: 1500, step: 5, group: "Lean", tip: "Higher: a quicker, shorter lean (260: in by about 0.08 s, back by about 0.3 s)" },
+  { key: "leanDamp", label: "Spring damping (ratio)", min: 0.1, max: 2, step: 0.01, group: "Lean", tip: "1 = no overshoot; lower rocks past upright on the way back" },
+  { key: "leanSmooth", label: "Velocity smoothing (s)", min: 0, max: 0.2, step: 0.005, group: "Lean", tip: "Irons the footfalls' small pushes out of the velocity the lean reads" },
+  { key: "leanCrouch", label: "Crouch at max lean (m)", min: 0, max: 0.5, step: 0.01, group: "Lean", tip: "The hips drop this much at the max lean, less with less" },
+  { key: "leanShift", label: "Hips go with the lean", min: 0, max: 1, step: 0.01, group: "Lean", tip: "Share of the lean that moves the hips over the feet (1: tipped about the feet; 0: about the hips)" },
 
   { key: "slopePitch", label: "Pitch with slope", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "How much the body tips with the ground; 0 = always level" },
   { key: "footTiltMax", label: "Foot tilt limit (°)", min: 0, max: 45, step: 1, group: "Terrain", tip: "Feet lie flat on slopes up to this angle" },
