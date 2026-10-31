@@ -72,11 +72,14 @@ export function halfWidthAt(o: Outline, z: number) {
 /** The straight stretch of the sides (z from, to), clear of the corner cuts. */
 export function sideSpan(o: Outline): [number, number] { return [-o.halfL + o.rear[1], o.halfL - o.front[1]]; }
 
-/** A circle of radius r at (x, z) kept inside the outline: returns the clamped spot. */
-export function keepInside(o: Outline, x: number, z: number, r: number) {
+/** A long side edge (straight along z, the outward normal across)? */
+export const isSide = (e: Edge) => Math.abs(e.nz) < 1e-6;
+
+/** A circle of radius r at (x, z) kept inside the outline: returns the clamped spot. `open` sides aren't kept to. */
+export function keepInside(o: Outline, x: number, z: number, r: number, open = false) {
   for (let it = 0; it < 4; it++) {
     let worst: Edge | null = null, wd = 0;
-    for (const e of o.edges) { const d = e.nx * x + e.nz * z - (e.d - r); if (d > wd) { wd = d; worst = e; } }
+    for (const e of o.edges) { if (open && isSide(e)) continue; const d = e.nx * x + e.nz * z - (e.d - r); if (d > wd) { wd = d; worst = e; } }
     if (!worst) break;
     x -= worst.nx * wd; z -= worst.nz * wd;
   }

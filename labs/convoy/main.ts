@@ -47,7 +47,7 @@ import { ConvoyRoute, ROUTE_DEFAULTS, ROUTE_PARAMS } from "../../src/convoy/rout
 import { Convoy, PLATFORM_DEFAULTS, PLATFORM_PARAMS } from "../../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS, CRANE_PARAMS } from "../../src/convoy/crane";
 import { CraneCarry, CARRY_DEFAULTS, CARRY_PARAMS } from "../../src/convoy/carry";
-import { DECK_DEFAULTS, DECK_PARAMS, deckLayout, walkToSpot } from "../../src/convoy/deck";
+import { DECK_DEFAULTS, DECK_PARAMS, deckLayout, walkToSpot, MECH_PUSH_R } from "../../src/convoy/deck";
 import { PlatformBody } from "../../src/convoy/platformBody";
 import { CraneBody } from "../../src/convoy/craneBody";
 import { TRAIN_DEFAULTS, TRAIN_PARAMS, bridgeSpans, type Span } from "../../src/convoy/train";
@@ -497,7 +497,7 @@ const panel = tweakPanel({
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
     { id: "defence", label: "Defences", groups: ["Defences"] },
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
-    { id: "deck", label: "Deck", groups: ["Deck"] },
+    { id: "deck", label: "Deck", groups: ["Deck", "Walk off"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
@@ -591,6 +591,7 @@ let clock = 0;
 
 // Demo: walk in beside the bay, picked up, walk to a parking bay and park, stand, walk to a launch pad (sides
 // alternate), launched, walk off out of range, come back.
+const walkOffDemo = params.has("walkoff") ? (params.get("walkoff") || "walk") : null;
 const demo = { stage: "park" as "park" | "launch", wait: 0, awayFor: 0, leaving: false, side: 1 as 1 | -1 };
 function demoCmd(dt: number): MoveCommand {
   const p = carry.platform, still = { x: 0, z: 0, sprint: false };
@@ -606,6 +607,12 @@ function demoCmd(dt: number): MoveCommand {
       const b = spots.find((s) => s.kind === "park" && Math.sign(s.x) === demo.side)!;
       const c = walkToSpot(sim, p, b.x, b.z, 0.5);
       if (c.x === 0 && c.z === 0) { demo.wait += dt; if (demo.wait > 0.8 && carry.togglePark(sim)) demo.wait = 0; }
+      return c;
+    }
+    // ?walkoff: straight off the side at a walk (?walkoff=dash: dashing off) instead of the crane's launch pad.
+    if (walkOffDemo) {
+      const c = { x: p.left.x * demo.side, z: p.left.z * demo.side, sprint: false };
+      if (walkOffDemo === "dash" && Math.abs(p.toLocal(sim.pos.x, sim.pos.z).x) > 3) player.tryDash(c.x, c.z);
       return c;
     }
     const pad = spots.find((s) => s.kind === "launch" && s.side === demo.side)!;
@@ -762,13 +769,15 @@ app.onTick((rawDt) => {
       if (stick.lengthSq() > 0.01) player.tryDash(stick.x, stick.z);
       else player.tryDash(Math.sin(sim.heading), Math.cos(sim.heading));
     }
-    // The sprint only on the sand: the decks and the crane's states keep the mech at a walk.
-    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange");
+    // The sprint on the sand, and on the deck when its sides are open (Keith 2026-10-31: sprint off the side); the crane's
+    // states keep the mech at a walk.
+    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange" || (carry.state === "aboard" && V.deckOpenSides > 0.5));
     player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
-    if (!carry.ground.onDeck && V.convoyPush > 0.5) {
-      for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, 2); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
-      const o = convoy.plough.pushOut(sim.pos.x, sim.pos.z, 2);
+    // (Not while falling: a mech that walked off a side starts inside the footprint and flies clear of it by itself.)
+    if (!carry.ground.onDeck && carry.state !== "falling" && V.convoyPush > 0.5) {
+      for (const p of convoy.platforms) { const o = p.pushOut(sim.pos.x, sim.pos.z, MECH_PUSH_R); if (o) { sim.pos.x = o.x; sim.pos.z = o.z; } }
+      const o = convoy.plough.pushOut(sim.pos.x, sim.pos.z, MECH_PUSH_R);
       if (o) { sim.pos.x = o.x; sim.pos.z = o.z; }
     }
   } else {
