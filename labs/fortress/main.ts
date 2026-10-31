@@ -49,6 +49,9 @@ let place!: PoiPlacement;
 let drawn: PoiDraw | null = null;
 let forts: Fortresses | null = null;
 let hubs: Hubs | null = null;
+/** The gate the demo is shooting (up here: the demo runs while the lab is still loading). */
+let demoGate: GateState | null = null;
+let swarms: SwarmCamps | null = null;
 let salvageDraw: SalvageDraw | null = null;
 
 const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>({
@@ -130,9 +133,10 @@ bf.register.add(F.target);
   w.onEvent = (e) => { if (e.type === "warlordDown") { warlordKills++; lab.shake(0.8); } };
 }
 // A hub's fabricators, building robots into a swarm of their own (no camps here).
-const swarms = new SwarmCamps(V, field, bf, lab.app.scene, new CampField(V), player, () => false);
-bf.register.add(swarms.target);
-hubs = new Hubs(V, field, bf, lab.app.scene, walls, swarms, () => [place]);
+swarms = new SwarmCamps(V, field, bf, lab.app.scene, new CampField(V), player, () => false);
+const S = swarms;
+bf.register.add(S.target);
+hubs = new Hubs(V, field, bf, lab.app.scene, walls, S, () => [place]);
 const H = hubs;
 let fabsDown = 0, batches = 0;
 H.onEvent = (e) => { if (e.type === "fabDown") { fabsDown++; lab.shake(0.6); } if (e.type === "hubBatch") batches++; };
@@ -156,8 +160,8 @@ function restart() {
 function startPose() {
   // Everything back up, then the gates the flags ask for down before the garrison and the gates stream in.
   F.reset();
-  H.reset();
-  swarms.reset();
+  hubs?.reset();
+  swarms?.reset();
   const L = walls.layout(place), rings = L.rings;
   const ringN = params.has("ring") ? Math.max(0, Math.min(rings.length - 1, Number(params.get("ring")))) : -1;
   if (params.get("gates") === "open") for (const r of rings) for (const g of r.gates) walls.down.add(g.id);
@@ -165,7 +169,7 @@ function startPose() {
   lab.streamer.rebuildAll();
   player.reset(0, 0, 0);
   F.update(0, false);
-  H.update(0, false, player.sim.pelvis);
+  hubs?.update(0, false, player.sim.pelvis);
   if (ringN >= 0) {
     // Just inside the first gate of ring N, facing in.
     const g = rings[ringN].gates[0], d = rings[ringN].r - rings[ringN].top - rings[ringN].face - 6;
@@ -181,7 +185,6 @@ buildIt();
 startPose();
 
 /** Shoot the nearest standing gate from about 30 m, both guns; once it's down, walk through toward the centre. */
-let demoGate: GateState | null = null;
 function gateDemo() {
   if (!forts) return null;
   const p = player.sim.pelvis;
@@ -207,7 +210,8 @@ function gateDemo() {
 
 /** The hub: shoot the nearest standing fabricator from about 35 m off. */
 function fabDemo() {
-  const p = player.sim.pelvis;
+  const p = player.sim.pelvis, H = hubs;
+  if (!H) return null;
   let f: FabState | null = null, bd = Infinity;
   for (const s of H.fabs.list) if (!s.down) { const d = Math.hypot(s.fab.x - p.x, s.fab.z - p.z); if (d < bd) { bd = d; f = s; } }
   if (!f) return { cmd: { x: 0, z: 0, sprint: false }, aim: null, trigger: false };
@@ -235,15 +239,15 @@ lab.onFrame((dt) => {
   F.sw.dodge(contact.threats(arsenal, bf.shells, V));
   contact.infantry(F.sw, F.target);
   F.update(dt, player.alive, lab.prey(p.x, p.z));
-  contact.robots(swarms.sw, swarms.target);
-  swarms.update(dt, player.alive, lab.prey(p.x, p.z));
+  contact.robots(S.sw, S.target);
+  S.update(dt, player.alive, lab.prey(p.x, p.z));
   H.update(dt, player.alive, p);
   const f = F.live.get(place.id);
   const yards = f ? f.yards.map((y, k) => `${["outer", "inner", "keep"][f.yards.length === 2 && k === 1 ? 2 : k]} ${F.aliveIn(place.id, k)} ${y.state}`).join(" · ") : "not streamed";
   const gates = F.gates.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ");
   if (KIND === "hub") {
     const h = H.live.get(place.id);
-    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · swarm ${swarms.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
+    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
     return;
   }
   lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
