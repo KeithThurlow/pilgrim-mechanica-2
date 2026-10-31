@@ -90,6 +90,8 @@ export class BanditField {
 
   private chanceOf(k: PoiKind): number {
     const v = this.v;
+    // Fortresses and hubs hold their own garrisons (src/pois/fortress.ts), never a plain camp.
+    if (k === "fortress" || k === "hub") return 0;
     return k === "outcrop" ? v.banditRock : k === "supplyPod" ? v.banditPod : k === "wreckPart" ? v.banditWreck : k === "debrisField" ? v.banditDebris : v.banditConvoy;
   }
 
