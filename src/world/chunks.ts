@@ -85,6 +85,22 @@ export class TerrainStreamer {
     return { pos: g.getAttribute("position").array as Float32Array, nor: g.getAttribute("normal").array as Float32Array };
   }
 
+  /**
+   * A loaded, up-to-date chunk vertex at coarse world index (i, j) (chunk grid units): height, normal and colour into
+   * out (h, nx, ny, nz, r, g, b), as that chunk draws it. False when no such chunk is loaded or it waits on a rebuild.
+   * The detail patch copies its edge grid from here instead of sampling the ground again (src/world/groundWindow.ts).
+   */
+  vertexAt(i: number, j: number, out: Float32Array): boolean {
+    const n = Math.round(this.v.segments), cx = Math.floor(i / n), cz = Math.floor(j / n);
+    const key = cx + "," + cz, c = this.chunks.get(key);
+    if (!c || this.dirty.has(key)) return false;
+    const v = (j - cz * n) * (n + 1) + (i - cx * n), g = c.mesh.geometry;
+    const pos = g.getAttribute("position").array, nor = g.getAttribute("normal").array, col = g.getAttribute("color").array;
+    out[0] = pos[v * 3 + 1]; out[1] = nor[v * 3]; out[2] = nor[v * 3 + 1]; out[3] = nor[v * 3 + 2];
+    out[4] = col[v * 3]; out[5] = col[v * 3 + 1]; out[6] = col[v * 3 + 2];
+    return true;
+  }
+
   constructor(private field: DuneField, public v: StreamValues) {
     // Sand surface in the shader, per pixel (the vertex colours carry only the broad dune shading): soft mottling,
     // sparse dark specks and faint ripples across the wind. Nothing per vertex, so no triangles show.
