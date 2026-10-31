@@ -184,7 +184,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## In progress
 
 - Trample and bandit dive rolls (Keith 2026-10-31): agent on `wip/trample`.
-- Rival dodge chance and steady line mortar aim (Keith 2026-10-31): done on `wip/rivaldodge`, awaiting merge; handoff `docs/handoff-rivaldodge.md`. Keith to try `labs/duel/?rival=3&rivalfit=pack:sh-linemortar` at `&rivallevel=recruit|veteran|ace`.
+- Rival dodge chance and steady line mortar aim (Keith 2026-10-31): merged 2026-10-31. Keith to try `labs/duel/?rival=3&rivalfit=pack:sh-linemortar` at `&rivallevel=recruit|veteran|ace`.
 - Dash start a touch faster, lean into direction changes (Keith 2026-10-31): agent on `wip/dashlean`.
 - Line mortar as a ~600 m2 band, mortar flight 2.2 s, rival strength and `?rivalup=N` (Keith 2026-10-31): merged 2026-10-31; Keith to try weapons lab `?k1=linemortar` vs `?k1=mortar`, duel lab `?rival=3&rivalup=5`.
 - Grip returns with speed after a sprint, dash or landing (Keith 2026-10-31): merged 2026-10-31; Keith to try walker lab `?manual&flat`, duel lab `?manual`, `?set=gripCurve:1|4`. Open: the dash's 0.42 s held line still has no steering.
