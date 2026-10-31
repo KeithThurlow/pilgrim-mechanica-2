@@ -183,6 +183,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   (8-16 s a frame here), not played.
 
 ## In progress
+- **Repair kits, health HUD, heal zones** (thread agent, since 2026-10-31): proposal `docs/proposal-repair.md` waiting on Keith; nothing built yet.
 
 - Walk off the convoy: no rails on the mech bays' long sides (Keith 2026-10-31): merged 2026-10-31; Keith to try convoy lab `?manual&aboard` (walk, Shift or Space off a side), `?aboard&walkoff=dash`.
 - Rival aim: tight tracking, then an aim snapshot before rail and autocannon shots (Keith 2026-10-31): merged 2026-10-31; Keith to try `labs/duel/?rival=3&rivalfit=mountR:rail-medium&rivallevel=recruit|veteran|ace`, `?set=aiSnapshot:0.3`.
