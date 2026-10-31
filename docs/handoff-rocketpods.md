@@ -17,7 +17,7 @@ missiles; arm missiles should channel like the shoulder battery.
 - Check: tools/rocketclip-check.ts (in npm test). Balance sheet lists the arm pod.
 
 ## Left
-- state.md, decisions.md, CLAUDE.md flags; full npm test; a game-camera shot if a renderer is available.
+- Nothing in code. Full npm test passes. Not seen rendered (no browser here): Keith to look at the clip models and the arm pod placement.
 
 ## Test
 Robots lab `?barrage&time=22`, `?barrage=arms`; weapons lab `?right=rocketpod`, `?left=rpg`.
