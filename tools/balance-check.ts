@@ -11,7 +11,7 @@ import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { newMag, magTake, magStep, magReady, sustainedRate } from "../src/weapons/magazine";
 import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
 import { makeItem, protocolItem } from "../src/items/generate";
-import { PROTOCOL_BY_ID, shotProtocolsOf } from "../src/items/protocols";
+import { PROTOCOLS, PROTOCOL_BY_ID, shotProtocolsOf, shotCostOf } from "../src/items/protocols";
 import { effectiveStats } from "../src/items/loadout";
 import { itemDpsPair, itemCadence } from "../src/items/dps";
 import { levelPower } from "../src/items/level";
@@ -99,6 +99,24 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   must(first === 30, `a 30-round gun with split 3 fired ${first} shots before its reload (want 30: splits are free)`);
   must(first > 0 && times[first] - times[first - 1] >= 0.95, "the reload gap was shorter than the reload");
   must(sim.guns[1].mag.reloads >= 1, "the gun's magazine never reloaded");
+}
+// Munitions are deliberate (Keith 2026-11-01): only a Protocol's declared `cost` uses extra; Splitter never does.
+{
+  must(shotCostOf([{ base: "splitter" }]) === 1, "Splitter costs extra munitions");
+  must(shotCostOf([{ base: "doubleShot" }]) === 2 && shotCostOf([{ base: "overclock" }]) === 2, "Double shot and Overclock don't cost 2 a shot");
+  for (const p of PROTOCOLS) if ((p.cost ?? 1) > 1 && !/munitions/.test(p.text)) fails.push(`${p.name} costs extra munitions but its card doesn't say so`);
+  const sim = new UpperSim({ ...UPPER_DEFAULTS });
+  sim.reset(0);
+  sim.guns[0].enabled = false;
+  sim.guns[1].stats = { fireRate: 20, spinUp: 0.1, ammo: 30, reload: 1, arc: 30, track: 12, damage: 4.8, spread: 3, range: 45, pierce: 2, proto: { multi: 2 }, cost: 2 };
+  sim.resupply();
+  const times: number[] = [];
+  for (let i = 0; i < 120 * 3; i++) for (const _s of sim.update(1 / 120, 0, { x: 0, y: 4.3, z: 0 }, { x: 0, y: 0, z: 20 }, true)) times.push(i / 120);
+  const first = times.findIndex((t, k) => k > 0 && t - times[k - 1] > 0.5);
+  must(first === 15, `a 30-round gun on Double shot fired ${first} shots before its reload (want 15: two rounds a shot)`);
+  const it = makeItem("mg-medium", "rare");
+  it.socketed.push(protocolItem(PROTOCOL_BY_ID.doubleShot, 1));
+  must(itemCadence(it)!.rounds === 2 && itemCadence(it)!.cost === 2, "Double shot's card doesn't show two rounds at twice the cost");
 }
 
 // ---- Protocols multiply; the card follows ----

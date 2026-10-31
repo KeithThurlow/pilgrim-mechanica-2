@@ -12,6 +12,8 @@ const COL = { ok: "#cfe9df", amber: "#ffb347", red: "#ff6a4a", dim: "#9a958c" };
 
 export interface HudFrame {
   exp: Expedition;
+  /** Fuel in play (fuelOn); off, the HUD shows the way home without it. */
+  fuelOn?: boolean;
   fuelLeft: number;
   fuelShare: number;
   /** Home estimate (s), Infinity if unreachable; null aboard. */
@@ -40,6 +42,8 @@ export class ExpeditionHud {
   private info = document.createElement("div");
   /** Where the loot panel goes (it draws itself). */
   readonly lootSlot = document.createElement("div");
+  /** Where the contract panel goes (src/quests/questHud.ts draws itself into it). */
+  readonly questSlot = document.createElement("div");
   private top = document.createElement("div");
   private promptEl = document.createElement("div");
   private noteEl = document.createElement("div");
@@ -59,7 +63,7 @@ export class ExpeditionHud {
       background: "rgba(10, 14, 14, 0.62)", padding: "8px 10px", borderRadius: "6px", minWidth: "190px", fontVariantNumeric: "tabular-nums",
     } as CSSStyleDeclaration);
     // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
-    this.col.append(this.info, this.lootSlot);
+    this.col.append(this.questSlot, this.info, this.lootSlot);
     this.root.append(radar, this.col);
     document.body.appendChild(this.root);
 
@@ -96,18 +100,20 @@ export class ExpeditionHud {
     this.col.style.boxShadow = f.warn && e.state === "out" ? `inset 3px 0 0 ${warnCol}` : "none";
     this.col.style.background = f.warn === 2 && e.state === "out" ? "rgba(48, 10, 6, 0.72)" : "rgba(10, 14, 14, 0.62)";
     const lines: string[] = [];
+    const fuelOn = f.fuelOn !== false;
     const state = e.state === "out" ? `OUT ${clock(e.outFor)}` : e.state === "aboard" ? "ABOARD" : e.state === "lost" ? "MECH DESTROYED" : "RECOVERY";
     lines.push(`<div style="letter-spacing:0.08em;color:${e.state === "out" ? COL.amber : COL.ok}">${state}</div>`);
     if (e.state === "out") {
       const home = f.eta === null ? "--:--" : clock(f.eta);
-      lines.push(`<div style="font-size:17px;color:${warnCol};opacity:${blink}">Home ${home} · Fuel ${clock(f.fuelLeft)}</div>`);
+      lines.push(`<div style="font-size:17px;color:${warnCol};opacity:${blink}">Home ${home}${fuelOn ? ` · Fuel ${clock(f.fuelLeft)}` : ""}</div>`);
       // The warnings stay on the walk; the sprint is the faster, thirstier way back.
-      if (f.sprint) lines.push(`<div style="font-size:11px;color:${f.sprint.fuel > f.fuelLeft ? COL.red : COL.dim}">sprint home ${clock(f.sprint.eta)}, burns ${clock(f.sprint.fuel)}</div>`);
+      if (f.sprint && !fuelOn) lines.push(`<div style="font-size:11px;color:${COL.dim}">sprint home ${clock(f.sprint.eta)}</div>`);
+      else if (f.sprint) lines.push(`<div style="font-size:11px;color:${f.sprint.fuel > f.fuelLeft ? COL.red : COL.dim}">sprint home ${clock(f.sprint.eta)}, burns ${clock(f.sprint.fuel)}</div>`);
       if (f.warn === 2) lines.push(`<div style="color:${COL.red};font-size:11px;letter-spacing:0.08em">HEAD BACK NOW</div>`);
       else if (f.warn === 1) lines.push(`<div style="color:${COL.amber};font-size:11px;letter-spacing:0.08em">FUEL GETTING SHORT</div>`);
-    } else lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
+    } else if (fuelOn) lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
     const w = Math.round(Math.max(0, Math.min(1, f.fuelShare)) * 100);
-    lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
+    if (fuelOn) lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
     if (f.pad) {
       const p = f.pad, col = p.state !== "idle" ? "#8fd0ff" : p.quote.reason === "locked" ? COL.dim : p.quote.ok ? COL.ok : COL.red;

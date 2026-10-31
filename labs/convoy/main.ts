@@ -16,7 +16,7 @@
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
-// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you).
+// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { energyHud } from "../../src/ui/energyBar";
@@ -36,6 +36,8 @@ import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../../src/
 import type { MoveCommand } from "../../src/mech/walker";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody, mechLegType } from "../../src/mech/rampart";
+import { QUEST_FLAGS } from "../../src/quests/questLoop";
+import type { Lair } from "../../src/quests/hvt";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
 import { DENT_DEFAULTS, DENT_PARAMS } from "../../src/fx/dents";
 import { MINIGUN_FX_DEFAULTS, MINIGUN_FX_PARAMS } from "../../src/fx/minigun";
@@ -192,7 +194,7 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat });
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1) });
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
 function homeAboard() {
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
@@ -215,6 +217,11 @@ const shaker = new CameraShake();
 const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 // The bandits may dive out of the mech's telegraphed shots (Keith 2026-10-31, src/game/bodyContact.ts).
 loop.threatSource = { arsenal, wv: V };
+// High value targets get their own Rampart (loaded on the first summon) and see the player's weapons for dodging.
+loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource });
+let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
+// For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
+(window as unknown as { __quests: unknown }).__quests = loop.quests;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -382,7 +389,7 @@ function restart() {
     carry.grab(sim);
   }
   // Expedition starts: out in the field (?out, ?far), short of fuel, with scrap at risk.
-  if (params.has("out") || params.has("far") || params.has("lowfuel") || params.has("depth") || itemDrops.length) {
+  if (params.has("out") || params.has("far") || params.has("lowfuel") || params.has("depth") || params.has("quest") || itemDrops.length) {
     const side = params.has("depth") ? Number(params.get("depth")) || 1000 : params.has("far") ? 850 : 280, ahead = params.has("far") ? 120 : 60;
     const w = p.toWorld(side, 0, ahead);
     player.reset(w.x, w.z, p.heading + Math.PI / 2);
@@ -428,6 +435,19 @@ function restart() {
       }
     }
   }
+  // ?fortress[=metres] / ?hub[=metres]: out on the sand that far (150 m by default) from the nearest bandit fortress or
+  // manufacturing hub, facing it.
+  for (const kind of ["fortress", "hub"] as const) {
+    if (!params.has(kind)) continue;
+    const R = 9000;
+    const f = loop.sites.poisIn(p.x - R, p.z - R, p.x + R, p.z + R).filter((q) => q.kind === kind)
+      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+    if (!f) { console.warn(`no ${kind} within ${R} m`); continue; }
+    const d = Math.hypot(f.x - p.x, f.z - p.z) || 1, back = Number(params.get(kind)) || 150;
+    const x = f.x - ((f.x - p.x) / d) * back, z = f.z - ((f.z - p.z) / d) * back;
+    player.reset(x, z, Math.atan2(f.x - x, f.z - z));
+    carry.armed = true;
+  }
   // ?warband[=N]: a war band column (N vehicles, 6 by default: with a party bus and a turret truck at the back)
   // hunting the mech from a few hundred metres off.
   if (params.has("warband")) {
@@ -436,18 +456,44 @@ function restart() {
     loop.columns.place(x, z, Math.max(1, Number(params.get("warband")) || 6), m.x, m.z, 0.7);
     carry.armed = true;
   }
+  // ?hvt[=metres|now]: out on the sand that close (60 m) to the nearest high value target's lair, one kill short of
+  // drawing it out (now: it's already coming).
+  if (params.has("hvt")) {
+    const q = loop.quests, arg = params.get("hvt") ?? "";
+    const lairs = [
+      ...loop.camps.campsNear(p.x, p.z, 4000).map((c) => q.lairs.at({ id: c.id, x: c.x, z: c.z, faction: "robot" })),
+      ...loop.bandits.campsNear(p.x, p.z, 4000).map((c) => q.lairs.at({ id: c.id, x: c.x, z: c.z, faction: "bandit" })),
+    ].filter((l) => !!l && route.corridor(l.x, l.z) <= 0).sort((a, b) => Math.hypot(a!.x - p.x, a!.z - p.z) - Math.hypot(b!.x - p.x, b!.z - p.z));
+    const l = lairs[0];
+    if (l) {
+      const back = Number(arg) || 60, d = Math.hypot(l.x - p.x, l.z - p.z) || 1;
+      const x = l.x - ((l.x - p.x) / d) * back, z = l.z - ((l.z - p.z) / d) * back;
+      player.reset(x, z, Math.atan2(l.x - x, l.z - z));
+      carry.armed = true;
+      l.kills = Math.max(0, l.need - 1);
+      hvtNow = arg === "now" ? l : null;
+      hvtLair = l;
+    }
+  }
   loop.exp.launch();
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (hvtNow) { loop.quests.killed(hvtNow.cull, hvtNow.x, hvtNow.z); hvtNow = null; }
+  // ?hvt with ?quest=bounty: the bounty is on that lair.
+  // ?quest=salvage|cull|bounty|tow|pods: that contract taken at the start (out on the sand).
+  const questKind = params.get("quest");
+  if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
+  hvtLair = null;
+  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
   for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
-  if (params.has("lowfuel")) loop.fuel.left = Number(params.get("lowfuel")) || 150;
+  // ?lowfuel turns fuel on (it is off by default, Keith 2026-11-01) and leaves little in the pack.
+  if (params.has("lowfuel")) { V.fuelOn = 1; loop.fuel.left = Number(params.get("lowfuel")) || 150; }
   if (carry.state !== "walking") loop.exp.state = "aboard";
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -531,11 +577,15 @@ selector = new Selector(app, {
     { topic: "light", label: "Night lamps", objects: () => look.lights.selectables() },
     { topic: "pois", label: "POIs", objects: () => loop.sites.meshes() },
     { topic: "extraction", label: "Extraction pads", objects: () => loop.padDraw.objects() },
+    { topic: "quests", label: "Contracts: beacons, hulk, pods", objects: () => (loop.quests.draw ? loop.quests.draw.group.children : []) },
+    { topic: "quests", label: "High value target", objects: () => loop.quests.hvt.objects() },
     { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },
     { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
+    { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
+    { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
     { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },
@@ -701,6 +751,8 @@ app.onTick((rawDt) => {
   // Weapons work only out on the sand (not on the deck, hanging or parked).
   // Clamped in the pickup's cradle: no driving, no guns.
   if (loop.padCall.clamped) { cmd = { x: 0, z: 0, sprint: false }; trigger = false; }
+  // Towing a hulk (src/quests/tow.ts): slower, no sprint, no dash.
+  if (loop.quests.noSprint) { const k = loop.quests.moveScale; cmd = { x: cmd.x * k, z: cmd.z * k, sprint: false }; dashPressed = false; }
   if (sel.active || (carry.state !== "walking" && carry.state !== "inRange")) { trigger = false; held = [false, false, false, false]; }
   player.keys = held;
   player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
@@ -771,7 +823,7 @@ app.onTick((rawDt) => {
     }
     // The sprint on the sand, and on the deck when its sides are open (Keith 2026-10-31: sprint off the side); the crane's
     // states keep the mech at a walk.
-    player.dashHold = spaceDown && !auto && free && (carry.state === "walking" || carry.state === "inRange" || (carry.state === "aboard" && V.deckOpenSides > 0.5));
+    player.dashHold = spaceDown && !auto && free && !loop.quests.noSprint && (carry.state === "walking" || carry.state === "inRange" || (carry.state === "aboard" && V.deckOpenSides > 0.5));
     player.step(dt, out, aim, trigger, shotAt ?? aim);
     carry.keep(sim);
     // (Not while falling: a mech that walked off a side starts inside the footprint and flies clear of it by itself.)
@@ -836,13 +888,14 @@ app.onTick((rawDt) => {
   app.hud.set("weapons", arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
   loop.update(dt, {
-    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
+    eHeld, qHeld, jHeld: keys.has("KeyJ"), demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
     pilot: foot.mount.onFoot ? {
       onFoot: true, alive: foot.sim.alive, x: fp.x, z: fp.z, prey: (x, z) => foot.quarry.pick(x, z), notice: V.pilotNotice,
       reach: V.pilotReach, rate: V.pilotStripRate, noise: V.pilotStripNoise,
     } : undefined,
   });
   app.hud.set("expedition", loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
+  app.hud.set("contracts", loop.quests.line);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
   if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }

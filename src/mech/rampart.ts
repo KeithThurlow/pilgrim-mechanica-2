@@ -18,6 +18,7 @@ import type { Aim } from "./upper";
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
+import { AVAILABLE_LOOKS } from "../items/item";
 
 /**
  * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
@@ -35,6 +36,67 @@ export const MOUNT_STANDIN = {
 const DEFAULT_SENSOR = { id: "sensor-visor", style: "head" as SensorStyle };
 
 const loader = new GLTFLoader();
+
+/** A mech model as parts: each mesh baked to rest-pose world space by name, and the joint empties' positions. */
+interface Src { geo: Record<string, THREE.BufferGeometry>; rest: Record<string, THREE.Vector3> }
+/** The part looks a loadout can show (legs and hulls with a model; src/items/item.ts AVAILABLE_LOOKS). */
+const PART_LOOKS = AVAILABLE_LOOKS;
+const scenes = new Map<string, Promise<THREE.Object3D>>();
+const srcs = new Map<string, Promise<Src>>();
+const loaded = new Map<string, Src>();
+/** A GLB's scene, fetched and parsed once per page. */
+function loadScene(url: string) {
+  let p = scenes.get(url);
+  if (!p) {
+    p = new Promise<THREE.Object3D>((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej));
+    scenes.set(url, p);
+  }
+  return p;
+}
+const lookFile = (id: string) => (id === "rampart" ? "rampart.glb" : `mechs/${id}.glb`);
+function loadSrc(id: string, base: string): Promise<Src> {
+  const key = base + lookFile(id);
+  let p = srcs.get(key);
+  if (!p) {
+    p = loadScene(key).then((scene) => {
+      scene.updateMatrixWorld(true);
+      const src: Src = { geo: {}, rest: {} };
+      scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) src.geo[m.name] = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        else if (o !== scene) src.rest[o.name] = o.getWorldPosition(new THREE.Vector3());
+      });
+      loaded.set(key, src);
+      return src;
+    });
+    srcs.set(key, p);
+  }
+  return p;
+}
+/** A look's parts if already loaded (RampartBody.load loads every part look). */
+const srcNow = (id: string, base: string) => loaded.get(base + lookFile(id)) ?? null;
+
+const frame = (origin: THREE.Vector3, q = new THREE.Quaternion()) => new THREE.Matrix4().compose(origin, q, new THREE.Vector3(1, 1, 1));
+function clearMeshes(g: THREE.Object3D) {
+  for (const c of [...g.children]) if ((c as THREE.Mesh).isMesh) { g.remove(c); (c as THREE.Mesh).geometry.dispose(); }
+}
+/**
+ * How far forward a hull's nose and how high its roof reach (hull frame, metres) where the sensor sockets sit: the
+ * nose ahead of the head socket's height, the roof over the cluster socket. The Rampart's are RAMPART_SURFACES.
+ */
+function torsoSurfaces(g: THREE.BufferGeometry) {
+  const p = g.attributes.position, S = MOUNT_STANDIN;
+  let top = -Infinity, front = -Infinity;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    if (Math.abs(x) > 0.45) continue;
+    if (Math.abs(z - S.sensorTop[2]) < 0.45) top = Math.max(top, y);
+    if (Math.abs(y - S.sensorFront[1]) < 0.4) front = Math.max(front, z);
+  }
+  return { top: isFinite(top) ? top : RAMPART_SURFACES.top, front: isFinite(front) ? front : RAMPART_SURFACES.front };
+}
+/** torsoSurfaces of rampart.glb (measured 2026-10-31). */
+const RAMPART_SURFACES = { top: 2.302, front: 1.365 };
 
 /**
  * A Rampart variant picked with `?mech=<id>` in any lab: loads public/models/mechs/<id>.glb (same parts and joint
@@ -119,7 +181,8 @@ export class RampartBody {
   readonly root = new THREE.Group();
   private pelvis = new THREE.Group();
   private hull = new THREE.Group();
-  private torso: THREE.Object3D | null = null;
+  /** The torso mesh's holder (the fitted hull's mesh goes in it). */
+  private torso = new THREE.Group();
   private back: THREE.Object3D | null = null;
   private drums: THREE.Object3D[] = [];
   private pack: THREE.Object3D | null = null;
@@ -143,7 +206,17 @@ export class RampartBody {
   private waists: { side: 1 | -1; g: THREE.Group }[] = [];
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
-  private rest: Record<string, THREE.Vector3> = {};
+  /** Rest-pose joints of the fitted legs' model and the fitted hull's model (world space, metres). */
+  private legRest: Record<string, THREE.Vector3> = {};
+  private hullRest: Record<string, THREE.Vector3> = {};
+  private legsLook = "rampart";
+  private hullLook = "rampart";
+  /** Where the part models load from; fixed: a ?mech= variant (whole, its parts don't swap). */
+  private base = "/models/";
+  private fixed = false;
+  /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
+  private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
+  private lastParts: BodyParts | null = null;
   private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3() };
 
   private constructor() { this.root.name = "rampart"; }
@@ -151,20 +224,25 @@ export class RampartBody {
   static async load(look: ToonLook, base = "/models/"): Promise<RampartBody> {
     const body = new RampartBody();
     const id = mechVariant();
-    const [mech, drumR, drumL] = await Promise.all(
-      [id ? `mechs/${id}.glb` : "rampart.glb", "ammo-drum-half.glb", "ammo-drum-half-left.glb"].map((f) =>
-        new Promise<{ scene: THREE.Object3D }>((res, rej) => loader.load(base + f, res, undefined, rej))),
-    );
-    body.build(mech.scene, drumR.scene, drumL.scene, look);
+    // The whole variant with ?mech=, else the Rampart; the part looks (src/items/item.ts AVAILABLE_LOOKS) load too so a
+    // fitted Stilt or Siege swaps in at once (each file is fetched and parsed once per page, shared by every body).
+    const own = id ?? "rampart";
+    const [src, drumR, drumL] = await Promise.all([
+      loadSrc(own, base), loadScene(base + "ammo-drum-half.glb"), loadScene(base + "ammo-drum-half-left.glb"),
+      ...(id ? [] : PART_LOOKS.map((l) => loadSrc(l, base))),
+    ]) as [Src, THREE.Object3D, THREE.Object3D];
+    body.base = base;
+    body.fixed = !!id;
+    body.build(src, drumR, drumL, look);
     return body;
   }
 
   /**
-   * Leg proportions measured from the model's joints: apply these to the walker tuning so the IK fits the parts.
+   * Leg proportions measured from the fitted legs' joints: apply these to the walker tuning so the IK fits the parts.
    * Stance width is not taken from the model: its rest pose stands far wider than it walks.
    */
   legValues(): Partial<WalkerValues> {
-    const r = this.rest;
+    const r = this.legRest;
     const hip = r.Thigh_L, knee = r.Shin_L, hock = r.Cannon_L, foot = r.Foot_L;
     return {
       hipHeight: hip.y, hipWidth: hip.x,
@@ -174,96 +252,83 @@ export class RampartBody {
     };
   }
 
-  private build(scene: THREE.Object3D, drumR: THREE.Object3D, drumL: THREE.Object3D, look: ToonLook) {
-    scene.updateMatrixWorld(true);
-    const geo: Record<string, THREE.BufferGeometry> = {};
-    scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) geo[m.name] = m.geometry.clone().applyMatrix4(m.matrixWorld);
-      else if (o !== scene) this.rest[o.name] = o.getWorldPosition(new THREE.Vector3());
-    });
-    const r = this.rest;
-    for (const s of ["L", "R"]) if (!r["Thigh_" + s]) throw new Error("rampart.glb: missing joint empties");
-    const pelvisRest = new THREE.Vector3(0, r.Thigh_L.y, 0);
-    const waistRest = r.Waist;
+  /** The legs and hull looks on show (a look is a model in public/models: "rampart" or a variant id). */
+  get looks() { return { legs: this.legsLook, hull: this.hullLook }; }
 
-    const mesh = (g: THREE.BufferGeometry, name: string, parent: THREE.Object3D, restFrame: THREE.Matrix4) => {
-      const m = new THREE.Mesh(g.clone().applyMatrix4(restFrame.clone().invert()), undefined);
-      m.name = name;
-      look.apply(m);
-      parent.add(m);
-      return m;
-    };
-    const frame = (origin: THREE.Vector3, q = new THREE.Quaternion()) => new THREE.Matrix4().compose(origin, q, new THREE.Vector3(1, 1, 1));
+  /**
+   * Show the fitted legs' and hull's models (Keith 2026-10-31: the mech changes as parts are fitted). Legs come from
+   * one model (pelvis, legs, feet), the hull from another (torso; the guns, shoulders, back kit and sensor sockets
+   * move to its shoulders and surfaces). Looks not loaded yet, or a body fixed by ?mech=, stay as they are.
+   * True when the legs changed (their proportions: legValues()).
+   */
+  setLooks(legs: string, hull: string): boolean {
+    if (this.fixed) return false;
+    const L = srcNow(legs, this.base), H = srcNow(hull, this.base);
+    let legsChanged = false;
+    if (L && legs !== this.legsLook) { this.fitLegs(L, legs); legsChanged = true; }
+    if (H && hull !== this.hullLook) this.fitHull(H, hull);
+    return legsChanged;
+  }
 
+  private mesh(g: THREE.BufferGeometry, name: string, parent: THREE.Object3D, restFrame: THREE.Matrix4) {
+    const m = new THREE.Mesh(g.clone().applyMatrix4(restFrame.clone().invert()), undefined);
+    m.name = name;
+    this.look!.apply(m);
+    parent.add(m);
+    return m;
+  }
+
+  private build(src: Src, drumR: THREE.Object3D, drumL: THREE.Object3D, look: ToonLook) {
+    this.look = look;
+    const own = mechVariant() ?? "rampart";
     // Pelvis and hull (the torso rides on the waist; pods on its shoulders).
     this.root.add(this.pelvis, this.hull);
-    mesh(geo.Part_Pelvis, "pelvis", this.pelvis, frame(pelvisRest));
-    const hullFrame = frame(waistRest);
-    this.torso = mesh(geo.Part_Torso, "torso", this.hull, hullFrame);
-
-    // Legs: thigh hip->knee, shin knee->hock, cannon hock->foot point, foot on the ground under the foot point.
-    const side = new THREE.Vector3(1, 0, 0);
-    for (const s of ["L", "R"] as const) {
-      const hip = r["Thigh_" + s], knee = r["Shin_" + s], hock = r["Cannon_" + s], fp = r["Foot_" + s];
-      const bone = (name: string, a: THREE.Vector3, b: THREE.Vector3): Bone => {
-        const pivot = new THREE.Group();
-        this.root.add(pivot);
-        mesh(geo[`Part_${name}_${s}`], `${name}_${s}`, pivot, frame(a, boneQuat(a, b, side, new THREE.Quaternion())));
-        return { pivot, restLen: a.distanceTo(b) };
-      };
-      // Foot: split at the toe hinge into the heel block and the toes, so the toes bend at the ball of the foot.
-      const foot = new THREE.Group();
+    this.torso.name = "torso";
+    this.hull.add(this.torso);
+    for (let i = 0; i < 2; i++) {
+      const bone = (): Bone => { const pivot = new THREE.Group(); this.root.add(pivot); return { pivot, restLen: 1 }; };
+      const foot = new THREE.Group(), toe = new THREE.Group();
       this.root.add(foot);
-      const hingeZ = LEG_TYPES[mechLegType()].values.toeHinge ?? 0.14;
-      const [heelGeo, toeGeo] = splitAtZ(geo[`Part_Foot_${s}`], fp.z + hingeZ);
-      mesh(heelGeo, `Foot_${s}`, foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
-      const toe = new THREE.Group();
-      toe.position.set(0, 0, hingeZ);
       foot.add(toe);
-      mesh(toeGeo, `Toes_${s}`, toe, frame(new THREE.Vector3(fp.x, 0, fp.z + hingeZ)));
-      this.legs.push({ thigh: bone("Thigh", hip, knee), shin: bone("Shin", knee, hock), cannon: bone("Cannon", hock, fp), foot, toe });
+      this.legs.push({ thigh: bone(), shin: bone(), cannon: bone(), foot, toe });
     }
 
-    // Miniguns on both shoulders: the right pod as modelled, and its mirror on the left.
+    // Miniguns on both shoulders: the right pod as modelled (the Rampart's, or the ?mech= variant's), its mirror on the
+    // left. Built about the pod model's own shoulder; fitHull puts each on the fitted hull's shoulder.
+    const r = src.rest, geo = src.geo;
     const podR = geo.Part_Pod_R, spinR = geo.Part_PodSpin_R;
     for (const sd of [1, -1] as const) {
       const flip = (v: THREE.Vector3) => new THREE.Vector3(v.x * -sd, v.y, v.z); // right-side points -> this side
       const shoulder = flip(r.UpperArm_R), axis = flip(r.PodSpin_R), axisFwd = flip(r.PodSpinFwd_R);
       const yawPitch = new THREE.Group();
-      yawPitch.position.copy(shoulder).sub(waistRest);
       this.hull.add(yawPitch);
       const kick = new THREE.Group();
       yawPitch.add(kick);
-      const podFrame = frame(shoulder);
-      mesh(sd === -1 ? podR : mirrored(podR), `pod_${sd}`, kick, podFrame);
+      this.mesh(sd === -1 ? podR : mirrored(podR), `pod_${sd}`, kick, frame(shoulder));
       // Barrel cluster spins about its own axis (along +Z in the rest pose).
       const spin = new THREE.Group();
       spin.position.copy(axis).sub(shoulder);
       spin.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisFwd.clone().sub(axis).normalize());
       kick.add(spin);
-      mesh(sd === -1 ? spinR : mirrored(spinR), `spin_${sd}`, spin, new THREE.Matrix4().compose(axis, spin.quaternion, new THREE.Vector3(1, 1, 1)));
+      this.mesh(sd === -1 ? spinR : mirrored(spinR), `spin_${sd}`, spin, new THREE.Matrix4().compose(axis, spin.quaternion, new THREE.Vector3(1, 1, 1)));
       const muzzle = new THREE.Object3D(); muzzle.position.copy(flip(r.PodMuzzle0_R)).sub(shoulder); kick.add(muzzle);
       const eject = new THREE.Object3D(); eject.position.copy(flip(r.PodEject_R)).sub(shoulder); kick.add(eject);
       // Stand-in arm (shown when the mount holds an arm): an upper arm hanging from the shoulder, a forearm under the gun.
       const arm = armUpper(look, sd), forearm = armFore(look);
-      arm.position.copy(yawPitch.position);
       arm.visible = forearm.visible = false;
       this.hull.add(arm);
       yawPitch.add(forearm);
-      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: yawPitch.position.clone(), arm, forearm });
+      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: new THREE.Vector3(), arm, forearm });
       // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
       const sm = new THREE.Group();
-      sm.position.copy(shoulder).sub(waistRest).add(new THREE.Vector3(Math.sign(shoulder.x || sd) * 0.1, 0.75, -0.35));
       this.hull.add(sm);
       this.shoulderMounts.push({ side: sd, g: sm });
     }
 
-    // Back: a half-width ammo drum per gun, a power pack raised above them (placed and painted per variant).
+    // Back: a half-width ammo drum per gun, a power pack raised above them (placed per hull, painted per ?mech= variant).
     const variant = MECH_VARIANTS[mechVariant() ?? ""];
     const back = new THREE.Group();
     this.back = back;
-    back.position.set(...(variant?.backAt ?? RAMPART_BACK));
     this.hull.add(back);
     for (const [drum, x] of [[drumR, -0.5], [drumL, 0.5]] as const) {
       // The waist socket on this side (+X is the mech's left): the drum hangs in it.
@@ -290,15 +355,74 @@ export class RampartBody {
     this.backTop.position.set(0, 1.75, -0.1);
     back.add(this.backTop);
     // The sensor sockets: a head on the nose, a cluster on top; the default loadout's sensor until one is fitted.
-    this.look = look;
     this.sensorFront.name = "Sensor_Front";
     this.sensorTop.name = "Sensor_Top";
-    this.sensorFront.position.set(...MOUNT_STANDIN.sensorFront);
-    this.sensorTop.position.set(...MOUNT_STANDIN.sensorTop);
     this.hull.add(this.sensorFront, this.sensorTop);
+    this.fitLegs(src, own);
+    this.fitHull(src, own);
     this.setSensor(DEFAULT_SENSOR.id, DEFAULT_SENSOR.style);
   }
 
+  /** The pelvis, legs and feet from a model (meshes swapped inside the same pivots, so selection and poses carry on). */
+  private fitLegs(src: Src, id: string) {
+    const r = src.rest, geo = src.geo;
+    for (const s of ["L", "R"]) if (!r["Thigh_" + s]) throw new Error(`${id}: missing joint empties`);
+    this.legsLook = id;
+    this.legRest = r;
+    clearMeshes(this.pelvis);
+    this.mesh(geo.Part_Pelvis, "pelvis", this.pelvis, frame(new THREE.Vector3(0, r.Thigh_L.y, 0)));
+    // Legs: thigh hip->knee, shin knee->hock, cannon hock->foot point, foot on the ground under the foot point.
+    const side = new THREE.Vector3(1, 0, 0);
+    const hingeZ = (LEG_TYPES[id] ?? LEG_TYPES.rampart).values.toeHinge ?? 0.14;
+    (["L", "R"] as const).forEach((s, i) => {
+      const L = this.legs[i];
+      const hip = r["Thigh_" + s], knee = r["Shin_" + s], hock = r["Cannon_" + s], fp = r["Foot_" + s];
+      const bone = (b: Bone, name: string, a: THREE.Vector3, c: THREE.Vector3) => {
+        clearMeshes(b.pivot);
+        this.mesh(geo[`Part_${name}_${s}`], `${name}_${s}`, b.pivot, frame(a, boneQuat(a, c, side, new THREE.Quaternion())));
+        b.restLen = a.distanceTo(c);
+      };
+      bone(L.thigh, "Thigh", hip, knee); bone(L.shin, "Shin", knee, hock); bone(L.cannon, "Cannon", hock, fp);
+      // Foot: split at the toe hinge into the heel block and the toes, so the toes bend at the ball of the foot.
+      clearMeshes(L.foot); clearMeshes(L.toe);
+      const [heelGeo, toeGeo] = splitAtZ(geo[`Part_Foot_${s}`], fp.z + hingeZ);
+      this.mesh(heelGeo, `Foot_${s}`, L.foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
+      L.toe.position.set(0, 0, hingeZ);
+      this.mesh(toeGeo, `Toes_${s}`, L.toe, frame(new THREE.Vector3(fp.x, 0, fp.z + hingeZ)));
+    });
+    this.repaint();
+  }
+
+  /** The torso from a model; the guns, arms, shoulder mounts, back kit and sensor sockets move to its places. */
+  private fitHull(src: Src, id: string) {
+    const r = src.rest;
+    this.hullLook = id;
+    this.hullRest = r;
+    const waist = r.Waist;
+    clearMeshes(this.torso);
+    const torso = this.mesh(src.geo.Part_Torso, "torso", this.torso, frame(waist));
+    for (const p of this.pods) {
+      const shoulder = (p.side === 1 ? r.UpperArm_L : r.UpperArm_R).clone().sub(waist);
+      p.home.copy(shoulder);
+      p.arm.position.copy(shoulder);
+      const sm = this.shoulderMounts.find((m) => m.side === p.side)!.g;
+      sm.position.copy(shoulder).add(new THREE.Vector3(Math.sign(shoulder.x || p.side) * 0.1, 0.75, -0.35));
+    }
+    this.back!.position.set(...(MECH_VARIANTS[id]?.backAt ?? RAMPART_BACK));
+    // Sensor sockets: the Rampart's places, moved by how far this hull's nose and roof sit from the Rampart's.
+    const s = torsoSurfaces(torso.geometry), S = MOUNT_STANDIN;
+    this.frontAt.set(S.sensorFront[0], S.sensorFront[1], S.sensorFront[2] + s.front - RAMPART_SURFACES.front);
+    this.sensorTop.position.set(S.sensorTop[0], S.sensorTop[1] + s.top - RAMPART_SURFACES.top, S.sensorTop[2]);
+    this.sensorFront.position.copy(this.frontAt);
+    if (this.lastParts) this.showParts(this.lastParts);
+    this.repaint();
+  }
+
+  /** New meshes take the mech's current paint. */
+  private repaint() {
+    this.paints = null;
+    if (this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
+  }
   /** Fit a sensor's model by base id (null: none): the code stand-in at once, its GLB in its place if one loads. */
   setSensor(id: string | null, style?: SensorStyle) {
     if (id === this.sensorId) return;
@@ -315,8 +439,7 @@ export class RampartBody {
     this.head.reset();
     if (m) (this.sensorStyle === "head" ? this.sensorFront : this.sensorTop).add(m.root);
     // New meshes take the mech's current paint.
-    this.paints = null;
-    if (this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
+    this.repaint();
   }
 
   /**
@@ -329,7 +452,7 @@ export class RampartBody {
     // Size and height of a fitted head (sliders); a cluster on top keeps its own size.
     if (this.sensorStyle === "head") {
       m.root.scale.setScalar(v.headSize);
-      this.sensorFront.position.set(MOUNT_STANDIN.sensorFront[0], MOUNT_STANDIN.sensorFront[1] - v.headDrop, MOUNT_STANDIN.sensorFront[2] + v.headForward);
+      this.sensorFront.position.set(this.frontAt.x, this.frontAt.y - v.headDrop, this.frontAt.z + v.headForward);
     }
     const sweep = this.sensorId ? BASE_BY_ID[this.sensorId]?.sensor?.sweep ?? 0 : 0;
     let local: { x: number; y: number; z: number } | null = null, behind = 0;
@@ -357,6 +480,7 @@ export class RampartBody {
 
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
   showParts(parts: BodyParts) {
+    this.lastParts = parts;
     const S = MOUNT_STANDIN;
     for (const p of this.pods) {
       const L = p.side === 1, arm = (L ? parts.mountL : parts.mountR) === "arm";
@@ -435,7 +559,8 @@ export class RampartBody {
     // Leaning back (upper.lean) when the guns need more raise than they have.
     t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + upper.shake * Math.sin(performance.now() * 0.09), sim.hullRoll, "YXZ");
     this.hull.quaternion.setFromEuler(t.e);
-    t.v.copy(this.rest.Waist).sub(new THREE.Vector3(0, this.rest.Thigh_L.y, 0)).applyQuaternion(sim.pelvisQ);
+    // The hull stands as high above the hips as on its own model.
+    t.v.copy(this.hullRest.Waist).sub(new THREE.Vector3(0, this.hullRest.Thigh_L.y, 0)).applyQuaternion(sim.pelvisQ);
     this.hull.position.copy(sim.pelvis).add(t.v);
 
     sim.feet.forEach((f, i) => this.poseLeg(this.legs[i], f.pose, left));
@@ -467,7 +592,7 @@ export class RampartBody {
   regions() {
     const legs = this.legs.flatMap((L) => [L.thigh.pivot, L.shin.pivot, L.cannon.pivot, L.foot]);
     const gun = (side: 1 | -1) => [this.pods.find((p) => p.side === side)!.yawPitch];
-    return { legs, hull: [this.pelvis, this.torso!], gunLeft: gun(1), gunRight: gun(-1), back: [this.back!], sensor: [this.sensorFront, this.sensorTop] };
+    return { legs, hull: [this.pelvis, this.torso], gunLeft: gun(1), gunRight: gun(-1), back: [this.back!], sensor: [this.sensorFront, this.sensorTop] };
   }
 
   /** World position of a gun's muzzle (side +1 left, -1 right). */
@@ -481,7 +606,7 @@ export class RampartBody {
   }
   /** World position of the line between the shoulders, for aiming. */
   shoulderLine(out = new THREE.Vector3()) {
-    return out.copy(this.rest.UpperArm_L).sub(this.rest.Waist).setX(0).applyQuaternion(this.hull.quaternion).add(this.hull.position);
+    return out.copy(this.hullRest.UpperArm_L).sub(this.hullRest.Waist).setX(0).applyQuaternion(this.hull.quaternion).add(this.hull.position);
   }
 }
 

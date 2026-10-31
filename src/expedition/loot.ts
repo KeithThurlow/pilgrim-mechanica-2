@@ -18,15 +18,19 @@ import { DropsDraw, DROP_FX_DEFAULTS, DROP_FX_PARAMS } from "./dropsDraw";
 import { ScrapClumps, CLUMP_DEFAULTS, CLUMP_PARAMS } from "./scrapClumps";
 import { LootHud, LOOT_HUD_DEFAULTS, LOOT_HUD_PARAMS } from "./lootHud";
 import { LootSound, LOOT_SOUND_DEFAULTS, LOOT_SOUND_PARAMS } from "../audio/lootSound";
+import { robotThreat } from "./threat";
 
 export const FIELD_LOOT_DEFAULTS = {
   ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
   bigHaul: 40, streakGap: 0.4,
+  dropHearFull: 50, dropHearMax: 160,
 };
 export type FieldLootValues = typeof FIELD_LOOT_DEFAULTS;
 export const FIELD_LOOT_PARAMS: Param[] = [
   ...DROP_PARAMS, ...DROP_FX_PARAMS, ...CLUMP_PARAMS, ...LOOT_HUD_PARAMS, ...LOOT_SOUND_PARAMS,
   { key: "bigHaul", label: "A big haul is (scrap)", min: 5, max: 500, step: 5, group: "Loot", tip: "A stripped spot worth this much ends its clumps on a bigger chime" },
+  { key: "dropHearFull", label: "Drop sound: full volume within (m)", min: 0, max: 300, step: 5, group: "Loot", tip: "Keith 2026-10-31: drops far off were heard from the convoy. Closer to you than this, a drop's riff plays in full" },
+  { key: "dropHearMax", label: "Drop sound: silent past (m)", min: 10, max: 1000, step: 5, group: "Loot", tip: "Fades out between the two; a drop further off than this makes no sound" },
   { key: "streakGap", label: "Clink streak breaks after (s)", min: 0.05, max: 2, step: 0.05, group: "Loot", tip: "Clumps landing closer together than this climb the scale" },
 ];
 
@@ -36,6 +40,15 @@ export interface LootFrame {
   mech: { x: number; y: number; z: number; grabs: boolean };
   /** The pilot on foot (alive), else null: clumps fly to him and he grabs drops. */
   pilot: { x: number; y: number; z: number } | null;
+}
+
+/** How loud a drop this far (m) from you plays: 1 within dropHearFull, easing to 0 at dropHearMax. */
+export function dropHearing(v: { dropHearFull: number; dropHearMax: number }, dist: number): number {
+  const a = Math.max(0, v.dropHearFull), b = Math.max(a + 1, v.dropHearMax);
+  if (dist <= a) return 1;
+  if (dist >= b) return 0;
+  const t = 1 - (dist - a) / (b - a);
+  return t * t * (3 - 2 * t);
 }
 
 export class FieldLoot {
@@ -74,7 +87,7 @@ export class FieldLoot {
       prev?.(i, nx, nz, speed);
       if (this.exp.state !== "out") return;
       const x = sw.px[i], z = sw.pz[i];
-      this.drops.fromKill(`${i}.${sw.gen[i]}`, sw.kind[i], x, z, this.at(x, z));
+      this.drops.fromKill(`${i}.${sw.gen[i]}`, robotThreat(sw.kind[i], sw.v), x, z, this.at(x, z));
     };
   }
 
@@ -98,8 +111,13 @@ export class FieldLoot {
     if (f.pilot) c.push({ x: f.pilot.x, z: f.pilot.z, by: "pilot" });
     else if (f.mech.grabs) c.push({ x: f.mech.x, z: f.mech.z, by: "mech" });
     this.drops.update(c, this.exp.state === "out");
+    const ear = f.pilot ?? f.mech;
     for (const ev of this.drops.events) {
-      if (ev.type === "dropped") { this.draw.add(ev.drop); this.sound.drop(tierOf(ev.drop.item.rarity)); }
+      if (ev.type === "dropped") {
+        this.draw.add(ev.drop);
+        const g = dropHearing(this.v, Math.hypot(ev.drop.x - ear.x, ev.drop.z - ear.z));
+        if (g > 0) this.sound.drop(tierOf(ev.drop.item.rarity), g);
+      }
       else if (ev.type === "picked") {
         this.draw.picked(ev.drop.id);
         this.exp.add({ kind: "item", item: ev.drop.item, label: itemName(ev.drop.item) });
@@ -107,8 +125,7 @@ export class FieldLoot {
       } else this.draw.remove(ev.id);
     }
     this.drops.events.length = 0;
-    const to = f.pilot ?? f.mech;
-    this.clumps.update(dt, to.x, to.y, to.z);
+    this.clumps.update(dt, ear.x, ear.y, ear.z);
     this.draw.update(dt);
     if (this.exp.events.some((e) => e.type === "lost")) this.clumps.clear();
     this.hud.events(this.exp.events, this.exp);
