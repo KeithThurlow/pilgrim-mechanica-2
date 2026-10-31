@@ -28,6 +28,8 @@ export interface WeaponModel {
   laserFrom?: THREE.Object3D | null;
   /** Glow_n points along a library model (the rail's coils, breech to muzzle): the draw lights them in turn. */
   glowPoints?: THREE.Object3D[];
+  /** A clip-fed launcher's magazine (src/weapons/clip.ts): the model shows its loaded tubes and the clip swap. */
+  clip?: import("./magazine").Mag | null;
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;
@@ -110,7 +112,7 @@ function rpgModel(look: ToonLook): WeaponModel {
   return m;
 }
 
-/** Rocket pod (an arm's, Light): a short box with a 2 x 2 face of tubes, fired in turn. */
+/** Arm missile pod (Light; the fallback while its model builds): a short box with a 2 x 2 face of tubes, fired in turn. */
 function rpgLightModel(look: ToonLook): WeaponModel {
   const { m, recoil, add, glow, muzzle } = kit("rpgLight", look);
   add(recoil, box, OLIVE, [0.5, 0.5, 1.3], [0, 0, 0.7]);

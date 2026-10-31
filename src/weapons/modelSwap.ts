@@ -8,16 +8,18 @@ import type { ToonLook } from "../look/toon";
 import type { LauncherKind, WeaponModel as ArsenalModel } from "./models";
 import { createWeapon, entry, isLoaded, loadDef, preloadWeapons, type WeaponModel } from "./library";
 import { WeaponLook, WEAPON_LOOK_DEFAULTS } from "./weaponLook";
+import { clipPose } from "./clip";
 
 /** Which library model each arsenal kind draws as (scale on top of its fit; tilt raises a pod's face, degrees). */
 export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; tilt?: number }> = {
   rail: { id: "rail-cannon-hull" },
   railLight: { id: "rail-cannon-hull", scale: 0.75 },
   autocannon: { id: "autocannon-hull" },
-  rpg: { id: "rocket-launcher-hull" },
-  // The old Rampart's arm rocket pod (Unity kit, 2x2 tubes), built at the old mech's scale: grown to sit in the hand.
-  rpgLight: { id: "missile-pod-l", scale: 2.4 },
-  shoulderRpg: { id: "rocket-launcher-shoulder" },
+  // Clip-fed rockets (Keith 2026-10-31, src/weapons/build/rockets.ts; were rocket-launcher-hull/-shoulder and the old
+  // Rampart's missile-pod-l at x2.4).
+  rpg: { id: "rocket-pod-hull" },
+  rpgLight: { id: "missile-pod-arm" },
+  shoulderRpg: { id: "rocket-pod-shoulder" },
   missiles: { id: "missile-pod-h", tilt: 30 },
   mortar: { id: "mortar-heavy" },
   linemortar: { id: "mortar-line" },
@@ -80,11 +82,19 @@ export function libraryModel(kind: LauncherKind, toon: ToonLook, side: "left" | 
       const info = (renderer as unknown as { info: { render: { frame: number } } }).info.render.frame;
       if (info !== frameStamp) { frameStamp = info; weaponLookFor(toon).update(camera as THREE.PerspectiveCamera, renderer.domElement.clientHeight); }
       const kick = w.recoil.position.length();
+      const mag = out.clip;
+      if (mag && w.tubes) {
+        // A clip-fed launcher: its tubes from the magazine, the clip swap from the reload (src/weapons/clip.ts).
+        const n = w.tubes, c = clipPose(mag, n);
+        for (let i = 0; i < n; i++) w.setMissile(i, 0, i >= n - c.loaded);
+        w.set("Clip", c.drop);
+        if (w.parts.Clip) w.parts.Clip.visible = c.shown;
+      }
       if (kick > lastKick + 0.03) {
         // A shot: heat, the loaded rocket gone, the next missile out, a rack tube recoils.
         w.setHeat(w.heat + 0.25);
         sinceKick = 0;
-        if (w.tubes) { w.setMissile(shot % w.tubes, 1, false); shot++; reload = 1.6; }
+        if (w.tubes && !mag) { w.setMissile(shot % w.tubes, 1, false); shot++; reload = 1.6; }
         if (w.has(`Tube_${shot % 8}`)) { w.setTube(shot % 8, 1); shot++; }
       }
       lastKick = kick;
@@ -94,7 +104,7 @@ export function libraryModel(kind: LauncherKind, toon: ToonLook, side: "left" | 
       // Pods open while firing; everything reloads after a quiet spell.
       w.setDoors(sinceKick < 2.5 ? 1 : Math.max(0, 1 - (sinceKick - 2.5) * 2));
       w.setLid(Math.max(0, 1 - sinceKick * 3));
-      if (reload > 0 && (reload -= dt) <= 0 && w.tubes) { for (let i = 0; i < w.tubes; i++) w.setMissile(i, 0, true); shot = 0; }
+      if (reload > 0 && (reload -= dt) <= 0 && w.tubes && !mag) { for (let i = 0; i < w.tubes; i++) w.setMissile(i, 0, true); shot = 0; }
       w.setLamp(0.3 + lampProxy.opacity * 1.4);
     };
   };

@@ -9,6 +9,7 @@
 import type { ModelDef, HeatRule } from "./parts";
 import { barrelHeat } from "./parts";
 import { missileProjectile } from "./build/projectiles";
+import { rocketPodHull, rocketPodShoulder, missilePodArm, rocketThin } from "./build/rockets";
 import { mortarHeavy, mortarLine, mortarShellProjectile } from "./build/mortar";
 import { railCannonHull, railCannon2h } from "./build/rail";
 import { autocannonHull, cannonHull } from "./build/guns";
@@ -64,6 +65,10 @@ const ROWS: Row[] = [
   // W1 is the desktop agent's (Blender GLBs, 2026-10-25): no stand-in; the left one is the right one mirrored.
   ["rocket-launcher-hull", "RocketLauncher", "Hull", "RPG launcher (hull)", "hull", true, { note: "desktop GLB (asset list W1)" }],
   ["rocket-launcher-shoulder", "RocketLauncher", "Shoulder", "RPG launcher (shoulder)", "shoulder", true, { note: "desktop GLB (asset list W1)" }],
+  // Clip-fed rockets (Keith 2026-10-31): the clip of tubes drops out and a full one rises in on a reload.
+  ["rocket-pod-hull", "RocketLauncher", "Pod", "Rocket pod, clip of 4 (hull)", "hull", true, { build: rocketPodHull }],
+  ["rocket-pod-shoulder", "RocketLauncher", "PodShoulder", "Rocket pod, clip of 3 (shoulder)", "shoulder", true, { build: rocketPodShoulder }],
+  ["missile-pod-arm", "MissilePod", "Arm", "Missile pod, clip of 8 (arm)", "forearm", true, { build: missilePodArm }],
   ["mortar-heavy", "Mortar", "H", "Heavy mortar (shoulder)", "shoulder", true, { build: mortarHeavy, fit: 0.85 }],
   ["mortar-line", "LineMortar", "M", "Line mortar rack (shoulder)", "shoulder", true, { build: mortarLine, fit: 0.85 }],
   ["rail-cannon-hull", "RailCannon", "Hull", "Rail cannon (hull)", "hull", true, { build: railCannonHull }],
@@ -73,6 +78,7 @@ const ROWS: Row[] = [
   ["plasma-cannon-hull", "PlasmaCannon", "Hull", "Plasma cannon (hull)", "hull", true, { build: plasmaCannonHull }],
   ["laser-projector-hull", "LaserProjector", "Hull", "Laser projector (hull)", "hull", true, { build: laserProjectorHull }],
   ["rocket", "Projectile", "Rocket", "Rocket (projectile)", "projectile", false, { note: "desktop GLB (asset list W1)" }],
+  ["rocket-thin", "Projectile", "RocketThin", "Rocket, slim (projectile)", "projectile", false, { build: () => rocketThin() }],
   ["missile", "Projectile", "Missile", "Missile (projectile)", "projectile", false, { build: () => missileProjectile() }],
   ["mortar-shell", "Projectile", "MortarShell", "Mortar shell (projectile)", "projectile", false, { build: () => mortarShellProjectile() }],
 ];
