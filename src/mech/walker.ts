@@ -28,7 +28,7 @@
 // that can't reach the ground hangs while the mech drops the rest.
 import { Vector3, Quaternion, Euler, Matrix4 } from "three";
 import type { WalkerValues } from "./walkerTuning";
-import { dashAcross, dashBeats, dashBurst, dashBurstEnd, dashDip, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
+import { dashAcross, dashBeats, dashBurst, dashBurstEnd, dashDip, dashHoldEnd, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
 
 export interface Ground {
   height(x: number, z: number): number;
@@ -252,6 +252,8 @@ export class WalkerSim {
   private dashMove: {
     t: number; kind: DashKind; dx: number; dz: number; yaw: number; side: number; I: Foot; O: Foot; B: DashBeats;
     h0: number; turn: number; pre: number; carried: number; ax: number; az: number; slope: number; covered: number;
+    /** The hold's bend toward the stick so far (radians off dx, dz; dashBend). */
+    bend: number;
     iSw: DashSwing | null; oSw: DashSwing | null; iDown: boolean; oSet: boolean; oUp: boolean;
     /** Backpedalling first (a dash against the way it's going): steps taken, the stepping foot's swing, seconds in. */
     pedal: { n: number; sw: DashSwing | null; foot: Foot | null; t: number; since: number } | null;
@@ -275,6 +277,10 @@ export class WalkerSim {
   private burstCps = 0;
   /** The burst just ended by itself: the walk takes the feet as they are (runEnd). */
   private burstDone = false;
+  /** In the tapped dash's hard stop, and the line it stops from (radians). */
+  private burstStopping = false;
+  private burstFromV = new Vector3();
+  private burstK0 = 0;
   /** The speed the burst ends at (the stick's walk). */
   private burstTo = 0;
   /** Held into the sprint: the run kicks up to this speed (m/s) at once, then it's spent (0). */
@@ -283,6 +289,41 @@ export class WalkerSim {
   get dashing() { return this.dashMove !== null; }
   /** In a dash at all: its steps or the rest of its burst (Keith 2026-10-31: no rail charge through it). */
   get inDash() { return this.dashMove !== null || this.burst; }
+  /** Seconds since the dash was pressed (its steps or the rest of its burst); -1 out of a dash. */
+  get dashClock() { return this.dashMove ? this.dashMove.t : this.burst ? this.burstT : -1; }
+  /** The burst's hold ends this long after the press: Space still down then, the sprint; else the hard stop. */
+  get dashHoldEnd() { return dashHoldEnd(this.v); }
+
+  /**
+   * A tapped dash's hard stop (Keith 2026-10-31: "more grip at the dash so you can exit out of it easier... allow more
+   * deceleration if the player isn't going to continue it into a sprint"): from the burst's held velocity (px, pz)
+   * straight to the stick's walk velocity, its way as well as its speed, over dashStop from the hold's end (e seconds
+   * in). Not the sprint's let-go grip curve: the walk has it at full grip as soon as it's done.
+   */
+  private dashStopVel(e: number, px: number, pz: number, cmd: MoveCommand) {
+    const k = smooth(0, Math.max(0.01, this.v.dashStop), e), w = this.dashStick(cmd);
+    return { x: px + (w.x - px) * k, z: pz + (w.z - pz) * k };
+  }
+  /** The stick's walk velocity (the Shift run's with Shift), what a tapped dash stops onto. */
+  private dashStick(cmd: MoveCommand) {
+    const v = this.v, mag = Math.min(1, Math.hypot(cmd.x, cmd.z)), l = Math.hypot(cmd.x, cmd.z);
+    const w = mag > 0.05 ? (mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed)) / l : 0;
+    return { x: cmd.x * w, z: cmd.z * w };
+  }
+
+  /**
+   * The hold's bend (2026-10-31, decided: some steering, mostly committed): the line turns toward the stick at dashBend
+   * m/s² sideways at this speed; a stick pulled back against it (more than 100° off) doesn't bend it (that brakes).
+   * Returns the turn this step (radians).
+   */
+  private dashBendStep(dt: number, line: number, speed: number, cmd: MoveCommand) {
+    const v = this.v;
+    if (v.dashBend <= 0 || Math.hypot(cmd.x, cmd.z) < 0.3) return 0;
+    const err = wrap(Math.atan2(cmd.x, cmd.z) - line);
+    if (Math.abs(err) > 100 * D2R) return 0;
+    const m = (v.dashBend / Math.max(5, speed)) * dt;
+    return clamp(err, -m, m);
+  }
   /** Hips turned toward the dash (radians, eased). */
   private hipOpen = 0;
   /** Body position at the start of this step (planted feet slide by what it moved). */
@@ -848,6 +889,35 @@ export class WalkerSim {
       // The slope along it, both ways: further downhill, shorter up (Keith 2026-10-25: slides work better downhill).
       this.burstSlope -= G * Math.sin(Math.atan(this.grade)) * dt;
       if (back) this.burstBraking = true;
+      const hold = dashHoldEnd(v);
+      // Let go by the hold's end: the hard stop, straight onto the stick (dashStopVel), with the run's gait under it.
+      // (Braked against the stick first, it stops from what's left.) From the velocity it had as the stop began here,
+      // the share of the stop already done (handed over mid-stop by the steps) taken as read, so it carries on smoothly.
+      if (this.burstT >= hold) {
+        const k = smooth(0, Math.max(0.01, v.dashStop), this.burstT - hold);
+        if (!this.burstStopping) { this.burstStopping = true; this.burstFromV.set(this.vel.x, 0, this.vel.z); this.burstK0 = Math.min(0.99, k - 1e-6); }
+        const kk = clamp((k - this.burstK0) / (1 - this.burstK0), 0, 1), w = this.dashStick(cmd), f = this.burstFromV;
+        const out = this.faceScrub(f.x + (w.x - f.x) * kk, f.z + (w.z - f.z) * kk, Math.min(1, v.wallScrub * dt), false);
+        const prev = this.boundSpeed;
+        // The course goes with the velocity (the walk takes it from course × speed when the burst ends), not the line.
+        const sp = Math.hypot(out.x, out.z);
+        if (sp > 0.3) this.course = Math.atan2(out.x, out.z);
+        this.vel.set(out.x, 0, out.z);
+        this.boundSpeed = this.speed = Math.hypot(out.x, out.z);
+        this.burstTo = floor;
+        this.accelSmooth += ((this.boundSpeed - prev) / dt - this.accelSmooth) * Math.min(1, dt * 6);
+        this.pos.x += out.x * dt; this.pos.z += out.z * dt;
+        // Whatever of it runs across the legs, the planted feet slide with (the body turns onto the stick after, walking).
+        const fw = forwardOf(this.heading, this.t.f), al = out.x * fw.x + out.z * fw.z;
+        this.slip.set(out.x - fw.x * al, 0, out.z - fw.z * al);
+        this.footSlip = this.slip.length();
+        this.turnSpeed = 0;
+        const feetOk = this.feet.every((f) => !f.swinging || f.u < 0.35) || this.burstT > dashBurstEnd(v) + 0.3;
+        if (feetOk && this.burstT >= dashBurstEnd(v)) { this.burst = false; this.burstDone = true; }
+        return;
+      }
+      // Holding its speed: the line bends toward the stick a little (dashBend), the body with it.
+      if (!this.burstBraking) { const b = this.dashBendStep(dt, this.course, this.boundSpeed, cmd); this.course = wrap(this.course + b); this.heading = wrap(this.heading + b); }
       if (this.burstBraking) this.boundSpeed -= v.dashBrake * dt;
       else this.boundSpeed = Math.max(0, dashBurst(this.burstT, this.burstFrom, floor, v) + this.burstSlope);
       this.burstTo = floor;
@@ -1519,7 +1589,7 @@ export class WalkerSim {
     const carried = mx * dx + mz * dz;
     this.dashMove = {
       t: 0, kind, dx, dz, yaw, side, I, O, B, h0: this.heading, turn, pre: kind === "burst" ? 0 : dashPreTurn(turn, v),
-      carried, ax: mx - carried * dx, az: mz - carried * dz, slope: 0, covered,
+      carried, ax: mx - carried * dx, az: mz - carried * dz, slope: 0, covered, bend: 0,
       iSw: null, oSw: null, iDown: false, oSet: !O.swinging, oUp: false, pedal: null,
     };
     for (const f of this.feet) { f.hang = false; f.short = false; f.bState = 0; }
@@ -1567,8 +1637,16 @@ export class WalkerSim {
     dm.covered += this.speed * dt;
     // The burst by time from the press (the steps pose the legs under it); held (Space), it keeps its peak for the sprint.
     const to = this.bound ? Math.max(dm.carried, v.dashSpeedOut) : Math.min(mag, Math.max(0, cmd.x * dm.dx + cmd.z * dm.dz)) * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
-    const along = Math.max(0, dashBurst(t, dm.carried, to, v) + dm.slope), k = dashAcross(t, v);
-    const out = this.faceScrub(dm.dx * along + dm.ax * k, dm.dz * along + dm.az * k, Math.min(1, v.wallScrub * dt), false);
+    // Held at its peak until the hold's end; then held into the sprint it carries on, let go it stops hard onto the stick.
+    const hold = dashHoldEnd(v);
+    const along = Math.max(0, dashBurst(Math.min(t, hold), dm.carried, to, v) + dm.slope), k = dashAcross(t, v);
+    if (t < hold) dm.bend += this.dashBendStep(dt, Math.atan2(dm.dx, dm.dz) + dm.bend, along, cmd);
+    const cb = Math.cos(dm.bend), sb = Math.sin(dm.bend);
+    // dx, dz turned by the bend (heading 0 faces +Z, angles from atan2(x, z)).
+    const lx = dm.dx * cb + dm.dz * sb, lz = dm.dz * cb - dm.dx * sb;
+    let wx = lx * along + dm.ax * k, wz = lz * along + dm.az * k;
+    if (!this.bound && t >= hold) { const w = this.dashStopVel(t - hold, wx, wz, cmd); wx = w.x; wz = w.z; }
+    const out = this.faceScrub(wx, wz, Math.min(1, v.wallScrub * dt), false);
     this.vel.set(out.x, 0, out.z);
     this.speed = Math.hypot(out.x, out.z);
     this.pos.addScaledVector(this.vel, dt);
@@ -1887,9 +1965,9 @@ export class WalkerSim {
     this.burst = !this.bound;
     this.boundSpeed = clamp(s, Math.min(s, v.walkSpeed), Math.max(v.sprintSpeed, v.dashIntoRun));
     // Let go, the rest of the burst runs on by time (runSteer); held, the sprint starts from the peak (at most dashIntoRun).
-    this.burstT = dm.t; this.burstFrom = dm.carried; this.burstSlope = dm.slope; this.burstBraking = false; this.burstTo = v.walkSpeed;
+    this.burstT = dm.t; this.burstFrom = dm.carried; this.burstSlope = dm.slope; this.burstBraking = false; this.burstStopping = false; this.burstTo = v.walkSpeed;
     this.boostTo = this.bound ? Math.min(v.dashSpeedOut, Math.max(v.sprintSpeed, v.dashIntoRun)) : 0;
-    this.course = wrap(this.heading + clamp(wrap(dm.yaw - this.heading), -v.boundDriftMax * D2R, v.boundDriftMax * D2R));
+    this.course = wrap(this.heading + clamp(wrap(dm.yaw + dm.bend - this.heading), -v.boundDriftMax * D2R, v.boundDriftMax * D2R));
     this.skid.set(0, 0, 0);
     this.running = true;
     this.speed = this.boundSpeed;

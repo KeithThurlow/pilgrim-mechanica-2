@@ -213,8 +213,12 @@ export const WALKER_DEFAULTS = {
   // from the press; the steps only pose the legs under it (src/mech/dashSteps.ts dashBurst).
   dashSpeedOut: 20,
   dashRise: 0.045,
-  dashHold: 0.42,
-  dashStop: 0.15,
+  // A tapped dash (Keith 2026-10-31: "drifty afterwards... make the dash a little shorter, and allow more deceleration if
+  // the player isn't going to continue it into a sprint"): held 0.28 s (was 0.42), then a hard stop straight onto the
+  // stick's walk in 0.1 s (was 0.15, along the line only); the hold bends toward the stick at dashBend.
+  dashHold: 0.28,
+  dashStop: 0.1,
+  dashBend: 12,
   dashBrake: 80,
   dashPedalSteps: 0,
   dashPedalFrom: 2,
@@ -420,8 +424,9 @@ export const WALKER_PARAMS: Param[] = [
   { key: "dashLeanSide", label: "Steps: lean into the dash (°)", min: 0, max: 35, step: 0.5, group: "Dash", tip: "Hips and shoulders, rolled about the outside hip" },
   { key: "dashSpeedOut", label: "Burst: speed (m/s)", min: 6, max: 40, step: 0.25, group: "Dash", tip: "Reached 'up to speed in' after the press, whatever the feet are doing; held into the sprint, the sprint takes it from the hand-over (up to its cap)" },
   { key: "dashRise", label: "Burst: up to speed in (s)", min: 0.01, max: 0.5, step: 0.005, group: "Dash", tip: "From the press; hardest at the start" },
-  { key: "dashHold", label: "Burst: holds the speed for (s)", min: 0, max: 2, step: 0.01, group: "Dash", tip: "With the rise and the stop this sets the distance (about 12 m: 20 m/s held 0.42 s)" },
-  { key: "dashStop", label: "Burst: back to the walk in (s)", min: 0.03, max: 1, step: 0.01, group: "Dash", tip: "Down to the stick's walking speed (to a stand with the stick let go); then the walk has it" },
+  { key: "dashHold", label: "Burst: holds the speed for (s)", min: 0, max: 2, step: 0.01, group: "Dash", tip: "With the rise and the stop this sets the distance (about 7.5 m: 20 m/s held 0.28 s). Space still down when it ends: the sprint carries on from it; let go by then: the hard stop" },
+  { key: "dashStop", label: "Burst: hard stop onto the stick in (s)", min: 0.03, max: 1, step: 0.01, group: "Dash", tip: "A tapped dash: from the burst straight to the stick's walk velocity (its way too, not only along the dash; to a stand with the stick let go), then the walk at full grip. Not the sprint's let-go curve" },
+  { key: "dashBend", label: "Burst: bends toward the stick (m/s² sideways)", min: 0, max: 60, step: 0.5, group: "Dash", tip: "While it holds its speed the line turns toward the stick at this pull (12 at 20 m/s: about 8° over the hold); 0: a dead straight line. Mostly committed" },
   { key: "dashPedalSteps", label: "Backpedal: steps at least", min: 0, max: 4, step: 1, group: "Dash", tip: "A dash against the way it's going backpedals first (braking), then side-steps round; 0: no backpedal" },
   { key: "dashPedalFrom", label: "Backpedal: when going against the dash faster than (m/s)", min: 0, max: 10, step: 0.25, group: "Dash", tip: "Also every cutback (past the cutback angle)" },
   { key: "dashPedalStep", label: "Backpedal: each step takes (s)", min: 0.08, max: 0.4, step: 0.005, group: "Dash" },

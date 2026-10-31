@@ -26,7 +26,8 @@ let worstFoot = 0, nan = 0, frames = 0;
 const covered: number[] = [];
 // Ground a dash covers the way it was sent, the steps and the short sprint after them (Keith 2026-10-27: "a burst of
 // speed for a distance of like 25-30m"): about dashRun, within this share.
-const DASH_RUN = 12; // m (Keith 2026-10-27: a standard dash about 12 m; 2026-10-31 the burst: dashSpeedOut held dashHold)
+const DASH_RUN = 7.5; // m (Keith 2026-10-27: a standard dash about 12 m; 2026-10-31 the burst: dashSpeedOut held dashHold;
+// 2026-10-31 later, "make the dash a little shorter": held 0.28 s then the hard stop, about 7.5 m)
 const DASH_RUN_OFF = 0.4; // the dunes' slopes stretch and shorten it
 
 function step(cmd: { x: number; z: number; sprint: boolean }) {
@@ -101,7 +102,9 @@ function onSlope(dirZ: number) {
 const up = onSlope(1), down = onSlope(-1);
 // 1.15 since the dash became footwork and a short sprint (2026-10-27): the old glide that carried far downhill is gone.
 // Since the burst by time (2026-10-31): only gravity along the slope over its half second, about half a metre each way.
-if (!(down > up + 0.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
+// Since the tapped dash's hard stop (2026-10-31, Keith: shorter, "more deceleration"): gravity acts over the 0.3 s hold
+// only, the stop lands on the stick whatever the slope: about 0.1 m each way, so only the sign is asserted.
+if (!(down > up + 0.1)) problems.push(`downhill dash ${down.toFixed(1)} m not longer than uphill ${up.toFixed(1)} m`);
 
 // Walls (Keith 2026-10-26: dashing at a steep wall flung the mech so high it died landing): running at a 40-60° face
 // 2 or 8 m high and dashing at its foot (the shove's peak hits the face), the hips never rise more than WALL_RISE over
