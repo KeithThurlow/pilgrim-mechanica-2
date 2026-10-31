@@ -448,8 +448,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
 // ---- Looks ----
 for (const b of BASES) {
   must((LOOKS as readonly string[]).includes(b.look), `${b.id}: unknown look ${b.look}`);
-  must(lookFor(makeItem(b.id)) === "rampart", `${b.id}: no model for its look and no Rampart fallback`);
+  const shown = lookFor(makeItem(b.id));
+  must(shown === b.look || shown === "rampart", `${b.id}: no model for its look and no Rampart fallback`);
 }
+// Legs that show their own model have its walk (LEG_TYPES) to match its proportions (models: mechlooks-check).
+for (const b of BASES) if (b.kind === "legs" && lookFor(makeItem(b.id)) !== "rampart") must(!!LEG_TYPES[b.look], `${b.id}: shows ${b.look} legs but LEG_TYPES has no entry`);
 
 // ---- Gun hooks in the upper-body sim ----
 {

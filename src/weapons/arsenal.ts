@@ -33,7 +33,7 @@ import { CLIP_SEAT, nextTube, reloadShare } from "./clip";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
 import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
-import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, magRounds, type Mag } from "./magazine";
+import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
 
@@ -287,13 +287,12 @@ export class Arsenal implements MechWeapons {
         if (s.model && s.model.clip !== g.mag) s.model.clip = g.mag;
         this.clipSwap(s, g.mag, held || pressed, dt, u.sim.pelvis);
         if (s.light) { this.stepChannel(s, side, g.mag, held, dt); return; }
-        const n = shotRounds(s.proto?.split);
         if ((held || pressed) && s.cool <= 0 && u.cursor) {
           const tube = nextTube(g.mag);
-          if (magTake(g.mag, magRounds(s.proto?.split), s.cost)) {
+          if (magTake(g.mag, 1, s.cost)) {
             const st = this.rpgStats(s.own, false, s.light);
             s.cool = st.cooldown;
-            this.fireRockets(this.muzzleOf(s, side, this.tmp, tube), u.cursor, st, n);
+            this.fireRockets(this.muzzleOf(s, side, this.tmp, tube), u.cursor, st, s.proto);
             if (s.model) s.model.recoil.position.z = -0.35;
           }
         }
@@ -378,10 +377,10 @@ export class Arsenal implements MechWeapons {
     } else clearPaint(p);
     if (s.channel && s.cool <= 0 && cur) {
       const tube = nextTube(mag);
-      if (magTake(mag, magRounds(s.proto?.split), s.cost)) {
+      if (magTake(mag, 1, s.cost)) {
         const st = this.rpgStats(s.own, false, true);
         s.cool = st.cooldown;
-        const n = shotRounds(s.proto?.split), picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
+        const n = shotRounds(s.proto?.split, 1, s.proto?.multi), picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         for (let k = 0; k < n; k++) s.swarm.launchOne(channelAim(cur.x, cur.z, s.swarm.fired, v.podReach, picks, u.lock), st.damage, st.blast, tube, bf.field);
         if (s.model) s.model.recoil.position.z = -0.12;
         // The clip's last missile out: the walk picks up again (it reloads, not channels).
@@ -492,12 +491,12 @@ export class Arsenal implements MechWeapons {
       } else if (sh.weapon === "missiles") {
         const picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         if (sh.swarm.fire(sh.at.x, sh.at.z, this.swarmStats(sh.own), picks, bf.field)) this.onFire?.("missiles");
-      } else if (sh.cool <= 0 && cur && magTake(sh.mag, magRounds(sh.proto?.split), sh.cost ?? 1)) {
+      } else if (sh.cool <= 0 && cur && magTake(sh.mag, 1, sh.cost ?? 1)) {
         const st = this.rpgStats(sh.own, true);
         sh.cool = st.cooldown;
         // Tube by tube out of the clip.
         const from = this.shoulderMuzzle(sh, Math.max(0, Math.ceil(sh.mag.size - sh.mag.left - 1e-6) - 1), new THREE.Vector3());
-        this.fireRockets(from, cur, st, shotRounds(sh.proto?.split));
+        this.fireRockets(from, cur, st, sh.proto);
         if (sh.model) sh.model.recoil.position.z = -0.3;
       }
       clearPaint(p);
@@ -564,7 +563,13 @@ export class Arsenal implements MechWeapons {
     const spread = (st.spread * Math.PI) / 180;
     const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
-    this.shells.fire(u.team, m, d, st, this.v.acPen).ap = st.ap;
+    // A Double shot puts its copies side by side, protoPairGap metres apart across the barrel (one muzzle's effects).
+    const pairs = Math.max(1, Math.round(s.proto?.multi ?? 1)), gap = (this.bf.v as { protoPairGap?: number }).protoPairGap ?? 0.5;
+    const hl = Math.hypot(d.x, d.z) || 1, px = d.z / hl, pz = -d.x / hl;
+    for (let k = 0; k < pairs; k++) {
+      const off = (k - (pairs - 1) / 2) * gap;
+      this.shells.fire(u.team, pairs > 1 ? new THREE.Vector3(m.x + px * off, m.y, m.z + pz * off) : m, d, st, this.v.acPen).ap = st.ap;
+    }
     // Its stream's tube light pulses with each shell, out to the lock or the cursor (Keith 2026-10-31; cosmetic).
     const aimAt = lock ?? u.cursor, reach = aimAt ? Math.min(st.range, Math.hypot(aimAt.x - m.x, aimAt.z - m.z)) : st.range;
     this.bf.nightLights?.stream(m.x, m.y, m.z, m.x + d.x * reach, m.y + d.y * reach, m.z + d.z * reach, st.damage * (1 + (st.ap ?? 0)), this.fam, false, true);
@@ -593,15 +598,24 @@ export class Arsenal implements MechWeapons {
     return h ? h.f : -1;
   };
 
-  /** n rockets at once (a Splitter's 3), fanned across the aim protoRocketFan° apart round the launcher. */
-  private fireRockets(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats, n: number) {
-    if (n <= 1) { this.fireRocket(from, cur, st); return; }
-    const fan = (((this.bf.v as { protoRocketFan?: number }).protoRocketFan ?? 3) * Math.PI) / 180;
-    for (let k = 0; k < n; k++) {
-      const a = (k - (n - 1) / 2) * fan, cs = Math.cos(a), sn = Math.sin(a);
-      const dx = cur.x - from.x, dz = cur.z - from.z;
-      const x = from.x + dx * cs + dz * sn, z = from.z - dx * sn + dz * cs;
-      this.fireRocket(from, new THREE.Vector3(x, this.bf.field.height(x, z), z), st, k > 0);
+  /**
+   * A rocket shot with its Protocols: a Splitter's 3 fan across the aim protoRocketFan° apart round the launcher; a
+   * Double shot's copies fly side by side, protoPairGap metres apart at the launcher and at the aim point.
+   */
+  private fireRockets(from: THREE.Vector3, cur: THREE.Vector3, st: RocketStats, proto: ShotProtocols | undefined) {
+    const n = Math.max(1, Math.round(proto?.split ?? 1)), pairs = Math.max(1, Math.round(proto?.multi ?? 1));
+    if (n <= 1 && pairs <= 1) { this.fireRocket(from, cur, st); return; }
+    const bv = this.bf.v as { protoRocketFan?: number; protoPairGap?: number };
+    const fan = ((bv.protoRocketFan ?? 3) * Math.PI) / 180, gap = bv.protoPairGap ?? 0.5;
+    const dx = cur.x - from.x, dz = cur.z - from.z, l = Math.hypot(dx, dz) || 1, px = dz / l, pz = -dx / l;
+    for (let m = 0; m < pairs; m++) {
+      const off = (m - (pairs - 1) / 2) * gap;
+      const f = new THREE.Vector3(from.x + px * off, from.y, from.z + pz * off);
+      for (let k = 0; k < n; k++) {
+        const a = (k - (n - 1) / 2) * fan, cs = Math.cos(a), sn = Math.sin(a);
+        const x = f.x + dx * cs + dz * sn, z = f.z - dx * sn + dz * cs;
+        this.fireRocket(f, new THREE.Vector3(x, this.bf.field.height(x, z), z), st, k > 0 || m > 0);
+      }
     }
   }
 

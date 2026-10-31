@@ -2,9 +2,11 @@
 // from a magazine and reload once it's empty. No ammo to carry or buy (Keith 2026-10-27 stands): the reload is the cost.
 // Pure; host-owned state of the mech that fires (rule 12: the player's own weapon state, like its aim).
 //
-// The rule: a trigger's shot takes its rounds × the gun's round cost (1, cut by `cost` Protocols such as Caseless
-// rounds) from the magazine. A split shot is one round that splits into fragments (or a missile into sub-missiles), so
-// it costs one (Keith 2026-10-31: splits must not drain the magazine); an overclocked tick's extra copies still count. A shot fires whole while any round is left (the last one may overdraw the magazine); at empty the
+// The rule (Keith 2026-10-31, then 2026-11-01: extra munitions only where a Protocol says so): a trigger's shot takes
+// one round × the gun's round cost from the magazine. The cost is the product of its Protocols' `cost` (src/items/
+// protocols.ts): Double shot and Overclock declare 2 (they fire more rounds), Caseless rounds 0.6; everything else 1.
+// A Protocol's behaviour never adds cost by itself: a split shot is one round that splits into fragments (or a missile
+// into sub-missiles), so Splitter costs nothing extra. A shot fires whole while any round is left (the last one may overdraw the magazine); at empty the
 // gun reloads for its reload time (cut by reload speed: a Quick loader, an Autoloader on the waist, a tree node
 // later), then the magazine is full again. The volley launchers (missile pod, mortars) are a magazine of one volley:
 // their cooldown is their reload.
@@ -37,10 +39,9 @@ export const newMag = (size: number, reload: number): Mag => ({ size: Math.max(1
 /** Can it fire now (a round left, not reloading)? */
 export const magReady = (m: Mag) => m.left > 0 && m.reloading <= 0;
 
-/** Rounds a shot puts out: split rounds × fire-rate copies (a launcher's rockets). */
-/** Magazine rounds a shot takes: fire-rate copies only; a split shot is one round that splits (Keith 2026-10-31). */
-export const magRounds = (_split = 1, rate = 1) => Math.max(1, Math.round(rate));
-export const shotRounds = (split = 1, rate = 1) => Math.max(1, Math.round(split)) * Math.max(1, Math.round(rate));
+/** Rounds a shot puts out: split rounds × fire-rate copies × side-by-side copies (a launcher's rockets). The magazine
+ * pays none of these by itself: only the Protocols' declared `cost` (above). */
+export const shotRounds = (split = 1, rate = 1, multi = 1) => Math.max(1, Math.round(split)) * Math.max(1, Math.round(rate)) * Math.max(1, Math.round(multi));
 
 /**
  * Take a shot of `rounds` at `cost` each: false (and nothing taken) if it can't fire; else the rounds leave the

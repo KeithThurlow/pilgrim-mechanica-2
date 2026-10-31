@@ -134,7 +134,7 @@ export interface GunStats {
 }
 
 export type GunClass = "minigun" | "rail" | "autocannon" | "rpg";
-import { newMag, magFill, magResize, magReady, magStep, magTake, magRounds, type Mag } from "../weapons/magazine";
+import { newMag, magFill, magResize, magReady, magStep, magTake, type Mag } from "../weapons/magazine";
 
 /** One trigger for both guns, or one per gun (Keith 2026-10-25: left click the left side, right click the right). */
 export type Trigger = boolean | readonly [boolean, boolean];
@@ -268,9 +268,9 @@ export class UpperSim {
       g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && magReady(g.mag);
       if (g.firing) {
         g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
-        // Each tick's shot takes its fire-rate copies from the magazine; split fragments are free (magazine.ts).
-        const rounds = magRounds(own?.proto?.split, own?.proto?.rate), cost = own?.cost ?? 1;
-        while (g.clock >= 1 && magTake(g.mag, rounds, cost)) {
+        // Each tick's shot takes one round × the Protocols' declared cost (Overclock, Double shot 2; magazine.ts).
+        const cost = own?.cost ?? 1;
+        while (g.clock >= 1 && magTake(g.mag, 1, cost)) {
           g.clock -= 1;
           g.kick = Math.min(v.recoilMax, g.kick + v.recoil);
           this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
