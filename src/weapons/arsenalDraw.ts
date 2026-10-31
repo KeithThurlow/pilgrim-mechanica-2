@@ -12,10 +12,11 @@ import type { Paint, Vec3 } from "./painter";
 import { ProjectileMeshes } from "./projectileDraw";
 import { PainterDraw } from "./painterDraw";
 import { Ribbon, glowMaterial } from "./ribbon";
+import type { NightLights } from "../world/nightLights";
 
 interface Ground { height(x: number, z: number): number }
 
-const MAX_ROCKETS = 64, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
+const MAX_ROCKETS = 160, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
 const LASER = 0xff3a2a;
 
 export class ArsenalDraw {
@@ -39,9 +40,10 @@ export class ArsenalDraw {
   private d = new THREE.Vector3();
   private t = 0;
   /** The library's rocket, missile and mortar-shell models, once loaded (the boxes and slugs stand in until then). */
-  private proj = new ProjectileMeshes(64);
+  private proj = new ProjectileMeshes(MAX_ROCKETS);
 
-  constructor(private arsenal: Arsenal, private ground: Ground) {
+  /** The night lights rockets ask for light (cosmetic), when the lab has a look. */
+  constructor(private arsenal: Arsenal, private ground: Ground, private lights: (() => NightLights | null) | null = null) {
     const body = new THREE.CylinderGeometry(0.11, 0.13, 1, 8).rotateX(Math.PI / 2);
     this.rockets = new THREE.InstancedMesh(body, new THREE.MeshStandardMaterial({ color: 0x3e3c35, roughness: 0.6 }), MAX_ROCKETS);
     this.flares = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 10, 8), glowMaterial(0xffb060, true), MAX_ROCKETS);
@@ -92,12 +94,15 @@ export class ArsenalDraw {
     let n = 0, ns = 0;
     const proj = this.proj;
     proj.begin();
+    const lights = this.lights?.() ?? null;
     const rocket = (pos: Vec3, prev: Vec3, k: number, kind: "rocket" | "missile" = "rocket") => {
       if (n >= MAX_ROCKETS) return;
       this.p.set(pos.x, pos.y, pos.z);
       this.d.set(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
       if (this.d.lengthSq() < 1e-8) this.d.set(0, 1, 0);
       this.q.setFromUnitVectors(Z, this.d.normalize());
+      // Its light (src/world/nightLights.ts: a glow, an exhaust flare, a real light merged with its neighbours).
+      lights?.rocket(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.6, a.fam);
       // The modelled rocket or missile when it's loaded (the box body hidden at zero scale), the flare either way.
       const modelled = proj.ready(kind);
       if (modelled) proj.add(kind, this.p, this.d, kind === "rocket" ? 1 : 1.2);
@@ -123,10 +128,20 @@ export class ArsenalDraw {
       // Line mortar shells: the modelled shell along its flight once loaded (was a long hot slug).
       for (const r of sh.line.rockets) if (r.live && r.launched) {
         const dir = { x: r.pos.x - r.prev.x, y: r.pos.y - r.prev.y, z: r.pos.z - r.prev.z };
+        lights?.rocket(r.pos.x, r.pos.y, r.pos.z, dir.x, dir.y, dir.z, 0.7, a.fam);
         if (proj.ready("mortar-shell")) proj.add("mortar-shell", r.pos, dir, 1.3); else slug(r.pos, dir, 1.2);
       }
     }
-    for (const sh of a.shells.list) if (sh.live) slug(sh.pos, sh.vel, 1);
+    for (const sh of a.shells.list) if (sh.live) { slug(sh.pos, sh.vel, 1); lights?.rocket(sh.pos.x, sh.pos.y, sh.pos.z, sh.vel.x, sh.vel.y, sh.vel.z, 0.3, a.fam); }
+    // Painted strips and rings glow on the sand and light it at night (Keith 2026-10-31: lit telegraphs): brighter
+    // when ready, and a fired strip (the line mortar's walk) at full while its rockets come down.
+    if (lights) paints.forEach((p, i) => {
+      if (!p.on) return;
+      const fired = i >= 2 && (i - 2) % 2 === 1;
+      const u = fired ? 1 : p.ready ? 0.55 : 0.15;
+      if (p.strip) lights.telegraphLine(p.strip.ax, p.strip.az, p.strip.bx, p.strip.bz, p.strip.width, u * (p.strip ? Math.max(0.3, p.charge) : 1), a.fam);
+      if (p.ring) lights.telegraph(p.ring.x, this.ground.height(p.ring.x, p.ring.z), p.ring.z, p.ring.r, u, a.fam);
+    });
     proj.end();
     this.rockets.count = this.flares.count = n;
     this.slugs.count = ns;
@@ -211,6 +226,11 @@ export class ArsenalDraw {
         (b.streak.material as THREE.MeshBasicMaterial).opacity = streak;
         (b.core.material as THREE.MeshBasicMaterial).opacity = Math.min(1, streak * 1.5);
         b.streak.visible = b.core.visible = true;
+        // The streak lights its line for a moment, by its charge (Keith 2026-10-31: tracers show power).
+        if (lights) for (let k = 0; k < 4; k++) {
+          const t = (k + 0.5) / 4;
+          lights.hold(f.x + (to.x - f.x) * t, f.y + (to.y - f.y) * t, f.z + (to.z - f.z) * t, lights.v.railLight * shot.power * streak / 4, lights.v.tracerRange * 1.6, RAIL_GLOW, 1.5);
+        }
       }
       const flash = Math.max(0, 1 - shot.age / 0.12);
       if (flash > 0 && v.railBlast > 0) {

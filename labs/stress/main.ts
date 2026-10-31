@@ -71,7 +71,7 @@ const lab = await combatLab({
   params: [...STRESS_PARAMS, ...WORST_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS],
   topics: [
     { id: "stress", label: "Stress", groups: [G, GB, GR, "Stress worst case"] },
-    { id: "robots", label: "Robots", groups: ["Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones"] },
+    { id: "robots", label: "Robots", groups: ["Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam"] },
     { id: "bandits", label: "Bandits", groups: ["Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] },
     { id: "raiders", label: "Raiders", groups: ["Raider driving", "Raider guns", "Raider health", "Raider wrecks"] },
   ],

@@ -22,10 +22,15 @@ function run(v: V, spawn: (sw: RobotSwarm, t: { x: number; z: number }) => void,
   t.y = field.height(t.x, t.z) + 3;
   spawn(sw, t);
   let dmg = 0, first = -1, time = 0, dead = -1;
-  const by = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0 };
+  const by = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0 };
   const pending: { at: number; x: number; z: number }[] = [];
   sw.onLob = (_i, _fx, _fy, _fz, x, z, flight) => { pending.push({ at: time + flight, x, z }); };
   const hit = (d: number, k: keyof typeof by) => { dmg += d; by[k] += d; if (first < 0) first = time; };
+  // The excavator's beam: the sim's own rule (within half its width plus the mech's radius of the line's low part).
+  sw.onBeam = (e) => {
+    const b = { ex: e.from.x, ey: e.from.y, ez: e.from.z, sx: e.start.x, sy: e.start.y, sz: e.start.z, x1: e.end.x, y1: e.end.y, z1: e.end.z };
+    if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) hit(e.damage, "beam");
+  };
   for (let s = 0; s < seconds * 120; s++) {
     time = s * dt;
     sw.update(dt, t, (fx, fy, fz, tx, ty, tz, kind) => {
@@ -69,7 +74,7 @@ function solo(v0: V, kind: number, shooter: boolean) {
 /** A pack of 30 at the default mix from 45 m: seconds until it has done a standing mech's hull in. */
 function pack(v: V) {
   const times: number[] = [];
-  const share = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0 };
+  const share = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0 };
   for (const seed of [2, 4, 6, 8, 10, 12]) {
     const r = run(v, (sw, t) => sw.spawn(30, t.x + 45, t.z, 6), 120, seed, 120);
     times.push(r.dead < 0 ? 120 : r.dead);
@@ -109,6 +114,46 @@ const HK = HULL / 1500;
 if (dps.biter < 1.5 * HK || dps.biter > 3 * HK) fail(`a scrapper biter deals ${f(dps.biter)} dps (want about 2 per 1500 hull: ${f(2 * HK)})`);
 if (p.median < 10) fail(`a pack of 30 destroys a standing mech in ${f(p.median)} s (< 10): too quick to react`);
 if (p.median > 30) fail(`a pack of 30 takes ${f(p.median)} s to destroy a standing mech (> 30): not dangerous`);
+
+// The excavator's beam (Keith 2026-10-31): dodgeable. One excavator at range, volleys off, the beam alone. A mech that
+// side-steps at walking pace once the aim locks is never burnt; one that stands still is burnt by every beam.
+function beamDuel(dodge: boolean, seed: number) {
+  const v = { ...V0, robotBigShare: 1, robotMidShare: 0, robotBigBurst: 1, robotBigShotDamage: 0, robotBeamFirst: 1, robotBeamCooldown: 5 };
+  const sw = new RobotSwarm(v, field, seed);
+  const t = { x: 300 + seed * 37, y: 0, z: -200, radius: HIT_R };
+  t.y = field.height(t.x, t.z) + 3;
+  sw.spawn(1, t.x + 26, t.z + 6, 0);
+  let hits = 0, fired = 0, side = 0;
+  sw.onBeam = (e) => {
+    fired++;
+    const b = { ex: e.from.x, ey: e.from.y, ez: e.from.z, sx: e.start.x, sy: e.start.y, sz: e.start.z, x1: e.end.x, y1: e.end.y, z1: e.end.z };
+    if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) hits++;
+  };
+  const lockAt = v.robotBeamCharge * v.robotBeamLock, WALK = 6;
+  for (let s = 0; s < 40 * 120; s++) {
+    sw.update(dt, t, () => {});
+    // Once locked, step sideways (across the line from the robot) until the burn is over.
+    const bt = sw.beamT[0];
+    if (dodge && bt >= lockAt) {
+      if (side === 0) side = (s & 1) ? 1 : -1;
+      const ax = t.x - sw.px[0], az = t.z - sw.pz[0], L = Math.hypot(ax, az) || 1;
+      t.x += (-az / L) * side * WALK * dt; t.z += (ax / L) * side * WALK * dt;
+      t.y = field.height(t.x, t.z) + 3;
+    } else side = 0;
+  }
+  return { hits, fired };
+}
+let dodged = 0, stood = 0, firedD = 0, firedS = 0;
+for (const seed of [1, 7, 11]) {
+  const a = beamDuel(true, seed), b = beamDuel(false, seed);
+  dodged += a.hits; firedD += a.fired; stood += b.hits; firedS += b.fired;
+}
+console.log(`beam: ${V0.robotBeamDamage} damage, ${V0.robotBeamCharge} s charge (aim locks at ${f(V0.robotBeamCharge * V0.robotBeamLock)} s), ${V0.robotBeamWidth} m wide, every ${V0.robotBeamCooldown} s; side-stepping after the lock: burnt by ${dodged} of ${firedD}; standing: ${stood} of ${firedS}`);
+if (firedD < 6 || firedS < 6) fail(`too few beams fired in the duel (${firedD}, ${firedS})`);
+if (dodged > 0) fail(`a mech side-stepping after the lock was still burnt ${dodged} times: not dodgeable`);
+if (stood < firedS) fail(`a standing mech was missed by ${firedS - stood} of ${firedS} beams`);
+const sideStep = (V0.robotBeamCharge * (1 - V0.robotBeamLock)) * 6;
+if (sideStep < V0.robotBeamWidth / 2 + HIT_R + 1) fail(`after the lock a walking mech covers only ${f(sideStep)} m: too little to clear the beam`);
 void DEAD;
 if (failed) throw new Error("robot danger check failed");
 console.log("robot danger check passed");

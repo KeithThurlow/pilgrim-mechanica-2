@@ -115,6 +115,9 @@ export interface ShotLook {
   ally?: boolean;
   /** Ignited rounds: the tracer glows orange-red. */
   hot?: boolean;
+  /** Its side (team) and power (damage × (1 + pierce)), for the tracer's light (src/world/nightLights.ts). */
+  team?: number;
+  power?: number;
 }
 
 /** What happened (plain data, host-made; what the host would send). */
@@ -267,7 +270,7 @@ export class Shots {
 
   /** One look per command, shared by its rows (the caller's vectors are reused, so they're copied). */
   private copyLook(l: ShotLook): ShotLook {
-    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own, hot: l.hot,
+    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own, hot: l.hot, team: l.team, power: l.power,
       eject: l.eject ? l.eject.clone() : null, outboard: l.outboard ? l.outboard.clone() : null };
   }
 

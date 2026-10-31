@@ -7,7 +7,7 @@ import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadou
 import { makeItem, protocolItem } from "./generate";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 
-export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher" } as const;
+export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Rocket pod (arm)" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank" } as const;
 export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
 export type SidePick = keyof typeof SIDE;
@@ -26,6 +26,9 @@ const OLD: Record<string, string> = { drums: "pack" };
 /** Overrides from URL flags (?left=, ?right=, ?k1=, ?k2=, ?k3=); true if any was given. */
 export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
   let any = false;
+  // ?barrage (Keith 2026-10-31: lots of rockets at night): rockets everywhere, the single flags below still override.
+  const barrage = params.get("barrage");
+  if (barrage !== null) { Object.assign(pick, barragePick(barrage === "arms" ? "arms" : "hull")); any = true; }
   for (const [row, , opts] of ROWS) {
     let q = params.get(row);
     if (q && OLD[q]) q = OLD[q];
@@ -35,6 +38,16 @@ export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
   const ids = (params.get("proto") ?? "").split(",").filter((x) => x && !x.includes(":") && PROTOCOL_BY_ID[x]);
   if (ids.length) pick.protos = ids;
   return any;
+}
+
+/**
+ * The rocket barrage (Keith 2026-10-31): a rocket launcher on each hull mount ("hull") or an arm holding a rocket pod
+ * on each ("arms"), the shoulder rocket on key 1, missile pods on key 2 and on the back (key 3, in place of the pack).
+ * Add ?proto=splitter to split every rocket.
+ */
+export function barragePick(mode: "hull" | "arms"): Pick {
+  const side: SidePick = mode === "arms" ? "rocketpod" : "rpg";
+  return { left: side, right: side, k1: "rpg", k2: "missiles", k3: "missiles" };
 }
 
 /** Fix up a saved pick from before the mounts. */
@@ -51,7 +64,7 @@ export function choose(pick: Pick, row: keyof Pick, id: string): Pick {
 }
 
 const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium" };
-const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light" };
+const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light", rocketpod: "rpg-light" };
 const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar", beltfeed: "sh-beltfeed", incendiary: "sh-incendiary", capacitor: "sh-capacitor" };
 
 export function loadoutFor(p: Pick): Loadout {

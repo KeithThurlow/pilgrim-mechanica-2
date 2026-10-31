@@ -50,6 +50,7 @@ import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { GearSim, gearStats } from "../src/weapons/gear";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { makeItem, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
+import { loadoutFor, barragePick } from "../src/items/weaponPick";
 
 const problems: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
@@ -132,6 +133,24 @@ const dt = 1 / 120;
     must(shot.result.steps.every((s, i) => i === 0 || (s.hit.along > shot.result.steps[i - 1].hit.along && s.share <= shot.result.steps[i - 1].share)), "rail hits not in order or damage rising");
     must(shot.result.steps[0].share === 1 && shot.result.steps[3].share < 1, "the first body didn't take full damage, or the last took full");
     must(range.dummies[0].kvz > 0, "a cutout on the line wasn't thrown back");
+  }
+
+  // An excavator's beam (Keith 2026-10-31) as src/game/robotBeam.ts resolves it: a robot-team sheet down the line's
+  // low part, flat to the aim, a budget nothing uses up: every body on the line burnt at full, none off it.
+  {
+    const range = new DummyRange({ ...DUMMY_DEFAULTS }, [
+      { x: 0, z: 10 }, { x: 0.4, z: 20, light: true }, { x: -0.3, z: 32 }, { x: 4.5, z: 18, light: true }, { x: -5, z: 26 },
+    ]);
+    range.update(0, flat);
+    const from = new THREE.Vector3(0, 4, 0), end = { x: 0, y: 0, z: 40 };
+    const d = new THREE.Vector3(end.x - from.x, end.y - from.y, end.z - from.z).normalize();
+    const f: SheetFire = { half: ROBOT_DEFAULTS.robotBeamWidth / 2, height: ROBOT_DEFAULTS.robotBeamReach, pen: 1e4, flat: true, aim: end, pierce: ROBOT_DEFAULTS.robotBeamPierce };
+    const sheet = makeSheet(flat, from, d, 40, f, V);
+    const shot = resolveSheet(flat, range.dummies, null, 3, sheet, ROBOT_DEFAULTS.robotBeamDamage, f, d, V);
+    const hitSet = new Set(shot.result.steps.map((s) => s.hit.target));
+    must([0, 1, 2].every((i) => hitSet.has(range.dummies[i])), `the beam missed a body on its line (${shot.result.steps.length} hits)`);
+    must([3, 4].every((i) => !hitSet.has(range.dummies[i])), "the beam burnt a body off its line");
+    must(shot.result.steps.every((s) => s.share > 0.99), "the beam lost strength through bodies (it should go through)");
   }
 
   // The rail through a line of mixed robots: small scrappers, a cutter and an excavator (its body 10 m up) all hit,
@@ -317,6 +336,14 @@ const dt = 1 / 120;
   must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "held rail cannon didn't resolve as a Light rail");
   must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "beltfeed"], [3, "linemortar"]]) && r.parts.drums && !r.parts.pack,
     `shoulder weapons didn't resolve to keys 1, 2 (the default belt feed) and 3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}), the drums went or the pack still shows`);
+  // The rocket barrage (?barrage, ?barrage=arms; Keith 2026-10-31): rockets on both sides and all three keys.
+  must(!!fitProblem(lo, "mountR", makeItem("rpg-light")), "an arm rocket pod fit a hull mount");
+  for (const mode of ["hull", "arms"] as const) {
+    const b = resolve(loadoutFor(barragePick(mode)));
+    const sides = [b.guns.left, b.guns.right];
+    must(sides.every((g) => g?.cls === "rpg" && !!g.light === (mode === "arms")), `barrage (${mode}): the sides aren't ${mode === "arms" ? "held rocket pods" : "hull rocket launchers"}`);
+    must(JSON.stringify(b.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "rpg"], [2, "missiles"], [3, "missiles"]]), `barrage (${mode}): keys 1-3 aren't rocket, missiles, missiles`);
+  }
   // An arm on the right too (the hull rail bounces), then its shoulder on key 2.
   const off = fit(lo, "mountR", makeItem("arm-rampart", "common", "aR2"));
   must(off.some((i) => i.base === "rail-medium"), "an arm didn't bounce the hull weapon");

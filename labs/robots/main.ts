@@ -19,6 +19,7 @@ import type { Aim, Trigger } from "../../src/mech/upper";
 import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
+import { fireRobotBeam } from "../../src/game/robotBeam";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -51,7 +52,7 @@ const lab = await combatLab({
   defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS },
   demo: (t, dt) => script?.(t, dt) ?? null,
   params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: hit parts"] }],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
@@ -74,6 +75,11 @@ swarm = sw;
 {
   const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
   if (pickFromParams(pick, params0)) { applyLoadout(player, resolve(loadoutFor(pick), V)); lab.refresh(); }
+}
+// ?swarm=N: a big swarm (N on the field, in packs of 60 every 1.5 s), e.g. ?swarm=300&barrage&time=22.
+if (params0.has("swarm")) {
+  V.robotSwarmSize = Number(params0.get("swarm")) || 300;
+  V.robotGroupSize = 60; V.robotGroupEvery = 1.5;
 }
 const robotLine = params0.has("robotline");
 if (robotLine) {
@@ -119,6 +125,16 @@ sw.onLob = (_i, fx, fy, fz, x, z, flight) => {
   if (!player.alive) return;
   bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
 };
+// Big ones' beams (Keith 2026-10-31): burnt down the line on the battlefield (the mech, the pilot, anything of
+// another team on it), a scorch and a crack.
+sw.onBeam = (e) => { if (player.alive) fireRobotBeam(bf, e, V.robotBeamReach); };
+// ?beam: no packs, two excavators stopped at range either side of the mech, about to charge (and again every cooldown).
+if (params0.has("beam")) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos;
+  sw.spawn(1, p.x - 16, p.z + 18, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 0.3; });
+  sw.spawn(1, p.x + 18, p.z + 14, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 2.5; });
+}
 const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
 lab.app.scene.add(tear.group);
 
@@ -188,7 +204,7 @@ lab.onFrame((dt) => {
   }
   draw!.update(dt);
   tear.update(dt);
-  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
   const rl = lab.arsenal.last;
   if (rl.railHits !== undefined) lab.hud("rail", `last rail slug: ${rl.railHits} bodies, ${Math.round(rl.rail ?? 0)} damage${rl.railGround ? " · stopped in a dune" : ""}`);
 });

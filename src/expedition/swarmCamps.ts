@@ -10,6 +10,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
 import { RobotsDraw } from "../combat/robotsDraw";
+import { fireRobotBeam } from "../game/robotBeam";
 import { RobotTarget } from "../combat/robotTarget";
 import { RobotTearFx, type RobotTearValues } from "../combat/robotTearFx";
 import type { Battlefield } from "../game/battlefield";
@@ -71,6 +72,8 @@ export class SwarmCamps {
       if (!player.alive && !this.sw.hasT[i]) return;
       bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, v.robotBigLobArc, v.robotBigLobRadius, v.robotBigShotDamage * this.sw.power[i]);
     };
+    // Beams burn down the line: the mech, the pilot, bandits in a robots-on-bandits fight (Keith 2026-10-31).
+    this.sw.onBeam = (e) => { if (player.alive || this.sw.hasT[e.robot]) fireRobotBeam(bf, e, v.robotBeamReach); };
     // The mech's stomps crush small ones; a dash throws clingers off.
     player.onStomp = (x, z, k) => this.sw.stomp(x, z, 2.6 * Math.min(1.5, k));
   }

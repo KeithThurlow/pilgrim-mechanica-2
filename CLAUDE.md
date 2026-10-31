@@ -116,7 +116,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
   the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced) or `?proto=splitter,overclock,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
-  takes `?biome=` too. Robots lab: `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  takes `?biome=` too. Robots lab: `?beam` (no packs; two excavators stopped either side of the mech, about to charge
+  their beams), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
@@ -125,7 +126,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg`, `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod` (rocketpod: an arm holding a rocket pod), `?barrage` (rocket
+  launchers on both hull mounts, the shoulder rocket on key 1, missile pods on keys 2 and 3; `?barrage=arms`: arm rocket pods
+  instead; works wherever `?left=` does: robots, weapons, duel, convoy labs; add `&proto=splitter&time=22` for the night show), `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
   (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
   weapon in place of the pack), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
