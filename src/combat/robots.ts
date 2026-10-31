@@ -134,6 +134,28 @@ export const ROBOT_DEFAULTS = {
   robotBigLobLead: 0.7,
   robotBigLobScatter: 2,
   robotBigShotDamage: 45,
+  // The charging beam (Keith 2026-10-31): a second attack beside the volley. The aim tracks the mech, locks partway
+  // through the charge (a side step after the lock takes you clear), then a beam burns down the line.
+  robotBeamOn: 1,
+  robotBeamCharge: 2.2,
+  robotBeamLock: 0.6,
+  robotBeamWidth: 1.6,
+  robotBeamLength: 70,
+  robotBeamReach: 5,
+  robotBeamDamage: 150,
+  robotBeamPierce: 0.8,
+  robotBeamCooldown: 11,
+  robotBeamFirst: 4,
+  robotBeamNear: 12,
+  robotBeamFar: 50,
+  robotBeamBurn: 0.45,
+  robotBeamGlow: 2.4,
+  robotBeamGrowth: 1.6,
+  robotBeamLine: 0.9,
+  robotBeamLight: 1600,
+  robotBeamPrio: 6,
+  robotBeamFlash: 3500,
+  robotBeamScorch: 3,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -150,6 +172,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
+const GB = "Robots: beam";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
@@ -259,6 +282,26 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigLobLead", label: "Lead on the mech's walk (×)", min: 0, max: 1.5, step: 0.05, group: G2, tip: "Aims where the mech will be after this share of the flight at its current velocity: 0 aims where it is, 1 full lead" },
   { key: "robotBigLobScatter", label: "Scatter (m)", min: 0, max: 10, step: 0.1, group: G2 },
   { key: "robotBigShotDamage", label: "Charge damage", min: 0, max: 100, step: 0.5, group: G2, tip: "For the lab: what a big one's charge does at the blast's centre" },
+  { key: "robotBeamOn", label: "Beam on", min: 0, max: 1, step: 1, group: GB, tip: "Excavators charge a beam now and then beside their volleys" },
+  { key: "robotBeamCharge", label: "Charge time (s)", min: 0.5, max: 5, step: 0.05, group: GB, tip: "From the first glow to the beam" },
+  { key: "robotBeamLock", label: "Aim locks at (share)", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the charge the aim follows the mech for; then it holds, and a side step takes you clear" },
+  { key: "robotBeamWidth", label: "Width (m)", min: 0.2, max: 6, step: 0.05, group: GB },
+  { key: "robotBeamLength", label: "Length (m)", min: 10, max: 150, step: 1, group: GB, tip: "It stops sooner where it meets the ground" },
+  { key: "robotBeamReach", label: "Burns up to (m above ground)", min: 1, max: 15, step: 0.5, group: GB, tip: "The line comes down from the emitter; the part this low burns what's under it" },
+  { key: "robotBeamDamage", label: "Damage", min: 0, max: 600, step: 5, group: GB, tip: "To everything on the line (it goes through)" },
+  { key: "robotBeamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GB },
+  { key: "robotBeamCooldown", label: "Cooldown (s)", min: 2, max: 40, step: 0.5, group: GB },
+  { key: "robotBeamFirst", label: "First beam after (s)", min: 0, max: 20, step: 0.5, group: GB, tip: "Once stopped at range (spread per robot)" },
+  { key: "robotBeamNear", label: "Beams from (m)", min: 0, max: 60, step: 1, group: GB },
+  { key: "robotBeamFar", label: "Beams out to (m)", min: 5, max: 120, step: 1, group: GB },
+  { key: "robotBeamBurn", label: "Burn shown (s)", min: 0.05, max: 2, step: 0.05, group: GB },
+  { key: "robotBeamGlow", label: "Emitter glow at full (m)", min: 0, max: 8, step: 0.1, group: GB },
+  { key: "robotBeamGrowth", label: "Glow growth curve", min: 0.3, max: 4, step: 0.1, group: GB, tip: "1: grows evenly; higher: stays small, then swells at the end" },
+  { key: "robotBeamLine", label: "Ground line brightness", min: 0, max: 1, step: 0.01, group: GB, tip: "The warning line on the ground along the beam's path" },
+  { key: "robotBeamLight", label: "Charge light", min: 0, max: 6000, step: 50, group: GB, tip: "At night: the emitter's real light at full charge" },
+  { key: "robotBeamPrio", label: "Charge light priority", min: 1, max: 20, step: 0.5, group: GB, tip: "How far ahead of blasts and rockets a charging emitter is for the real lights" },
+  { key: "robotBeamFlash", label: "Beam flash", min: 0, max: 15000, step: 100, group: GB },
+  { key: "robotBeamScorch", label: "Scorch glows for (s)", min: 0, max: 10, step: 0.1, group: GB },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
   { key: "robotStompReach", label: "Stomp knocks off below (m)", min: 0, max: 6, step: 0.1, group: G3, tip: "Latched ones lower than this near the foot are knocked off" },
@@ -302,6 +345,19 @@ export type RobotBiteFn = (i: number, damage: number) => void;
 /** A medium one's saw strike landing: robot, damage, where the saw's edge meets the mech. */
 export type RobotCutFn = (i: number, damage: number, x: number, y: number, z: number) => void;
 
+/**
+ * An excavator's beam going off (plain data, rule 12): the robot (slot and serial), the emitter, where the line first
+ * comes within the burn reach of the ground (start) and where it ends (the ground or its length), its full width, damage
+ * and armour pierce. Whoever hosts resolves it against what's on the line (src/game/robotBeam.ts).
+ */
+export interface RobotBeamEvent {
+  robot: number; id: number;
+  from: V3; start: V3; end: V3;
+  width: number; damage: number; pierce: number;
+}
+/** A beam's line: emitter, the low part's start, the end (world). */
+export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
+
 /** True while a robot is off the ground on purpose (leaping, latched, flung). */
 export const isAirborne = (s: number) => s === LEAP || s === LATCHED || s === FLUNG;
 
@@ -341,6 +397,17 @@ export class RobotSwarm {
   onLob: ((i: number, fx: number, fy: number, fz: number, x: number, z: number, flight: number) => void) | null = null;
   /** Charges lobbed since construction. */
   lobs = 0;
+  /**
+   * The beam (big ones): -1 idle; else seconds since the charge began (charging up to robotBeamCharge, then the burn
+   * shown for robotBeamBurn). The aim (bax, bay, baz) follows the target until the lock, then holds.
+   */
+  readonly beamT = new Float32Array(ROBOT_MAX).fill(-1);
+  readonly beamClock = new Float32Array(ROBOT_MAX);
+  readonly bax = new Float32Array(ROBOT_MAX); readonly bay = new Float32Array(ROBOT_MAX); readonly baz = new Float32Array(ROBOT_MAX);
+  /** A big one's beam going off (resolve it against what's on the line). */
+  onBeam: ((e: RobotBeamEvent) => void) | null = null;
+  /** Beams started and fired since construction. */
+  beamCharges = 0; beams = 0;
   private aim: RobotTarget = { x: 0, y: 0, z: 0, radius: 2 };
   /** Latch spot taken while leaping or latched (-1 none). */
   readonly slot = new Int16Array(ROBOT_MAX).fill(-1);
@@ -495,9 +562,12 @@ export class RobotSwarm {
       this.shooter[i] = big ? 0 : mid ? (this.rand() >= v.robotMidCutterShare ? 1 : 0) : this.rand() < v.robotShooterShare ? 1 : 0;
       this.slot[i] = -1;
       this.fireClock[i] = 0; this.burstLeft[i] = 0; this.shake[i] = 0; this.cutClock[i] = 0;
+      this.beamT[i] = -1;
       this.speedK[i] = 1 + (this.rand() * 2 - 1) * v.robotSpeedJitter;
       this.gripK[i] = 1 + (this.rand() * 2 - 1) * v.robotGrip;
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
+      // First beam spread per robot by its look seed (no extra draws: the seeded sequence stays as it was).
+      this.beamClock[i] = v.robotBeamFirst * (0.6 + 0.8 * this.seed[i]);
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
       this.count++;
@@ -665,6 +735,7 @@ export class RobotSwarm {
     if (this.state[i] === LATCHED) this.latchN--;
     if (s === LATCHED) this.latchN++;
     if (s !== LEAP && s !== LATCHED) this.freeLatch(i);
+    if (s >= DOWN) this.beamT[i] = -1;
     this.state[i] = s; this.stateTime[i] = 0;
   }
 
@@ -776,6 +847,8 @@ export class RobotSwarm {
         if (stateTime[i] >= w + L + v.robotMidCutRecover) { st = RUN; this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
       } else if (mid && this.cutClock[i] <= 0 && dist - target.radius < v.robotMidCutRange) {
         st = CUT;
+      } else if (big && this.beamT[i] >= 0) {
+        st = FIRE; // a charge runs to its end
       } else if (big) {
         const stop = v.robotBigNear + this.range[i] * Math.max(0, v.robotBigFar - v.robotBigNear);
         if (st === RUN && dist <= stop) st = FIRE;
@@ -824,7 +897,7 @@ export class RobotSwarm {
           wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
         }
       } else if (st === FIRE) {
-        face = Math.atan2(ux, uz);
+        face = big && this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
         const near = big ? v.robotBigNear : mid ? v.robotMidNear : v.robotShootNear;
         if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
       } else if (st === CUT) {
@@ -909,7 +982,16 @@ export class RobotSwarm {
         let dh = Math.atan2(ux, uz) - this.heading[i];
         dh = Math.abs(Math.atan2(Math.sin(dh), Math.cos(dh)));
         this.fireClock[i] -= dt;
-        if (big) {
+        if (big && this.beamT[i] >= 0) {
+          this.chargeBeam(i, dt, target);
+          this.tell[i] = 0;
+        } else if (big && v.robotBeamOn > 0.5 && (this.beamClock[i] -= dt) <= 0 && this.burstLeft[i] === 0
+          && dist >= v.robotBeamNear && dist <= v.robotBeamFar && dh < v.robotBigArc * DEG) {
+          // The beam: the charge begins, the aim on the target for now.
+          this.beamT[i] = 0; this.beamCharges++;
+          this.bax[i] = target.x; this.bay[i] = target.y; this.baz[i] = target.z;
+          this.tell[i] = 0;
+        } else if (big) {
           // Volleys of lobbed charges that land on a marked ring (telegraphed: dash out of it), after a tell.
           if (this.fireClock[i] <= 0 && dh < v.robotBigArc * DEG) {
             if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotBigBurst));
@@ -1127,6 +1209,71 @@ export class RobotSwarm {
     const x = t.x + this.tvx * lead + Math.cos(a) * r, z = t.z + this.tvz * lead + Math.sin(a) * r;
     this.lobs++; this.shots++;
     this.onLob?.(i, fx, fy, fz, x, z, flight);
+  }
+
+  /** The beam's emitter: the gun under a big one's chassis (world; the drawer glows the same spot). */
+  beamFrom(i: number, out: V3): V3 {
+    const h = this.heading[i], S = this.size[i];
+    out.x = this.px[i] + Math.sin(h) * S * 0.45; out.z = this.pz[i] + Math.cos(h) * S * 0.45; out.y = this.hubY[i] - S * BIG_BODY_H * 0.3;
+    return out;
+  }
+
+  private bf3: V3 = { x: 0, y: 0, z: 0 };
+  /**
+   * The beam's line now: from the emitter through the aim, on until it meets the ground or runs out of length; the
+   * low part (within robotBeamReach of the ground) starts at s. Marched in 1 m steps (a few charging robots at most).
+   */
+  beamLine(i: number, out: BeamLine): BeamLine {
+    const v = this.v, e = this.beamFrom(i, this.bf3);
+    let dx = this.bax[i] - e.x, dy = this.bay[i] - e.y, dz = this.baz[i] - e.z;
+    const L = Math.hypot(dx, dy, dz) || 1;
+    dx /= L; dy /= L; dz /= L;
+    out.ex = e.x; out.ey = e.y; out.ez = e.z;
+    let start = -1, t = 0;
+    const max = v.robotBeamLength;
+    for (; t < max; t += 1) {
+      const x = e.x + dx * t, y = e.y + dy * t, z = e.z + dz * t, up = y - this.ground.height(x, z);
+      if (start < 0 && up < v.robotBeamReach) start = t;
+      if (up <= 0) break;
+    }
+    t = Math.min(t, max);
+    if (start < 0 || start > t) start = t;
+    out.sx = e.x + dx * start; out.sy = e.y + dy * start; out.sz = e.z + dz * start;
+    out.x1 = e.x + dx * t; out.y1 = e.y + dy * t; out.z1 = e.z + dz * t;
+    return out;
+  }
+
+  /**
+   * Does a beam burning down this line reach a body at (x, z) of this radius? The rule (also the headless checks'):
+   * within half the width plus its radius of the line's low part, on the ground plan.
+   */
+  static beamReaches(b: BeamLine, width: number, x: number, z: number, radius: number): boolean {
+    const ax = b.sx, az = b.sz, dx = b.x1 - ax, dz = b.z1 - az, L2 = dx * dx + dz * dz;
+    const k = L2 > 1e-6 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)) : 0;
+    return Math.hypot(x - ax - dx * k, z - az - dz * k) < width / 2 + radius;
+  }
+
+  private bl: BeamLine = { ex: 0, ey: 0, ez: 0, sx: 0, sy: 0, sz: 0, x1: 0, y1: 0, z1: 0 };
+  /** A charge in progress: track, lock, fire, burn, cool down. */
+  private chargeBeam(i: number, dt: number, t: RobotTarget) {
+    const v = this.v, C = v.robotBeamCharge, was = this.beamT[i];
+    const now = (this.beamT[i] = was + dt);
+    if (now < C * v.robotBeamLock) { this.bax[i] = t.x; this.bay[i] = t.y; this.baz[i] = t.z; }
+    if (was < C && now >= C) {
+      const b = this.beamLine(i, this.bl);
+      this.beams++;
+      this.onBeam?.({
+        robot: i, id: this.uid[i],
+        from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
+        width: v.robotBeamWidth, damage: v.robotBeamDamage * this.power[i], pierce: v.robotBeamPierce,
+      });
+    }
+    if (now >= C + v.robotBeamBurn) {
+      this.beamT[i] = -1;
+      this.beamClock[i] = v.robotBeamCooldown * (0.85 + 0.3 * this.rand());
+      // A beat before the next volley's tell.
+      this.fireClock[i] = Math.max(this.fireClock[i], v.robotBigWindup + 0.5);
+    }
   }
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */
