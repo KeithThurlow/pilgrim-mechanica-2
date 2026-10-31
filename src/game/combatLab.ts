@@ -167,7 +167,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const player = new MechUnit(bf, V, body, toon, 1, 0, true);
   bf.targets.push(player);
   bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
-  // ?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2 puts these Protocols on every round of yours (src/game/shots.ts),
+  // ?proto=split:3,rate:2,multi:2,area:1.5,ricochet:1,chain:2 puts these Protocols on every round of yours (src/game/shots.ts),
   // over whatever the fitted guns carry: for seeing them without socketing items.
   // (Entries without a colon are Protocol ids, priced, socketed into the picked weapons: src/items/weaponPick.ts.)
   if (params.get("proto")?.includes(":")) {
