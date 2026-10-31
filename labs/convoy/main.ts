@@ -147,7 +147,7 @@ function patchSome(budgetMs: number) {
 const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
 // Ruts and prints as dents on a fine patch (Keith 2026-10-25).
-bf.useDents(app.renderer, streamer);
+if (!app.params.has("norender")) bf.useDents(app.renderer, streamer);
 scene.add(bf.group);
 
 // The convoy, its cranes (one per mech bay: the lead's and the rear one's), and their stand-in bodies.
