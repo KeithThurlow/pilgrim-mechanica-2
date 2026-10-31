@@ -227,6 +227,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Next candidates (ask Keith which)
 
+- **Grenade launchers (Keith 2026-10-31):** a new weapon, blasts between rockets (4.5 m) and mortars (14 m); lobbed, bouncing or timed.
 - **Performance: crater and dent spikes (Keith 2026-10-27, a todo for another agent).** From Keith's stress runs (state.md In progress, reports/2026-10-27T02-04-36-stress.md): spread crater refits (true-ground reshapes after blasts) over several frames, since at co-op scale they cost 3.8 ms avg / 21 ms spikes at 100% and 14 / 31 at 150%; and take dent stamping off the critical path (~11 ms spikes at every load). Also worth a look: cap and fade old bodies (1000-1500 pile up), fewer robot draw calls, spread terrain chunk builds (22 ms spikes when new ground streams in), and the stress lab's "of which allies" counter (reads 0).
 - **Combat labs (Keith 2026-10-24)**, `docs/proposal-combat-labs.md`: war band, bandit swarm and robot swarm built.
 - **The convoy, its cranes and escort**: plan in `docs/proposal-convoy.md` (route, a flattened corridor in the height
@@ -246,6 +247,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-31 · Mortar blasts doubled (Keith)
+`mortarBlast` 7 → 14 m (slider max 30) in `src/weapons/tuning.ts`; the weapons check's bucket-share test now uses a fixed 7 m blast. Checked: balance sheet (big mortar still under budget: 44% average, best against cutters), full npm test. Who: coordinator.
+
 ### 2026-10-31 · Blast waves on every explosion (Keith's call, agent on `wip/blastwave`)
 Keith: "all explosions should have a blast wave / distortion effect by default, and then we can expand it for specific kinds".
 `src/fx/blastWaves.ts` (pure manager: kinds, profiles, merging, caps, heat puffs), `src/fx/blastWavesDraw.ts` (screen-space

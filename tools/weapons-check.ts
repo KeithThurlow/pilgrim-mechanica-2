@@ -559,7 +559,7 @@ const dt = 1 / 120;
     must(off > 3, `the excavator's foot is under its body (${off.toFixed(1)} m out)`);
     must(got >= 0.1, `a big mortar shell at an excavator's foot (${off.toFixed(1)} m from its centre) took ${(got * 100).toFixed(0)}% (want 10%)`);
     // The share by part: on the bucket, a foot's share of the blast, not the body's.
-    const sh = s.rt.splashShare(i, foot.x, 0, foot.z, V.mortarBlast);
+    const sh = s.rt.splashShare(i, foot.x, 0, foot.z, 7); // a 7 m blast: the big mortar (14 m) also reaches the body, as it should
     must(Math.abs(sh - ROBOT_DEFAULTS.robotFootDamage) < 0.25 && sh < 1, `a blast on an excavator's bucket counted ${sh.toFixed(2)} (want about the foot share ${ROBOT_DEFAULTS.robotFootDamage})`);
     const up = s.rt.splashShare(i, 0, s.sw.hubY[i], 25, V.mortarBlast);
     must(up === 1, `a blast on an excavator's chassis counted ${up.toFixed(2)} (want 1)`);

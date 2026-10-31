@@ -57,7 +57,7 @@ export const WEAPON_DEFAULTS = {
   // Big mortar (one huge shell over the hills)
   mortarShells: 1,
   mortarRing: 1.5,
-  mortarBlast: 7,
+  mortarBlast: 14,
   mortarDamage: 650,
   mortarFlight: 3,
   mortarArc: 22,
@@ -214,7 +214,7 @@ export const WEAPON_PARAMS: Param[] = [
 
   { key: "mortarShells", label: "Shells per volley", min: 1, max: 8, step: 1, group: M },
   { key: "mortarRing", label: "Ring radius (m)", min: 0.5, max: 12, step: 0.1, group: M, tip: "The shells land inside this ring round the aim point" },
-  { key: "mortarBlast", label: "Blast radius (m)", min: 0.5, max: 15, step: 0.1, group: M },
+  { key: "mortarBlast", label: "Blast radius (m)", min: 0.5, max: 30, step: 0.1, group: M },
   { key: "mortarDamage", label: "Damage per shell", min: 0, max: 3000, step: 5, group: M },
   { key: "mortarFlight", label: "Flight time (s)", min: 0.5, max: 5, step: 0.05, group: M },
   { key: "mortarArc", label: "Arc height (m)", min: 2, max: 40, step: 0.5, group: M, tip: "Raised by itself where a dune is in the way" },

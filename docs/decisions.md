@@ -4,6 +4,9 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Mortar blasts double (7 → 14 m radius): mortars are among the largest area weapons | Keith | Keith | `mortarBlast` in `src/weapons/tuning.ts`. |
+| 2026-10-31 | Grenade launchers: a new weapon whose blasts sit between rockets (4.5 m) and mortars (14 m) | Keith | Keith | To build. |
+| 2026-10-31 | Rail balance: no dash while the rail charges or is charged; dashing cancels the charge | Keith | Keith | Agent on `wip/dashsnap`. |
 | 2026-10-31 | The dash must start and stop faster now the walk is responsive (the sprint stays as it is) | Keith | Keith | Agent on `wip/dashsnap`. |
 | 2026-10-31 | Gun streams light up much more: more tracers, and a continuous "tube" of light along the stream rather than a light every 5th tracer | Keith | Keith | Agent on `wip/tubelight`. |
 | 2026-10-31 | Every explosion has a blast wave by default, extended per kind (Keith: "all explosions should have a blast wave / distortion effect by default, and then we can expand it for specific kinds of explosions too") | Keith | Keith | `src/fx/blastWaves.ts`; Light topic, groups Blast waves, Blast waves by kind, Heat shimmer. |
