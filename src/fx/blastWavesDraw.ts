@@ -59,7 +59,7 @@ export class BlastWavesDraw {
     const A = instancedBufferAttribute<"vec4">(this.A), B = instancedBufferAttribute<"vec4">(this.B);
     const aspect = this.uAspect;
 
-    const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false, fog: false });
     mat.vertexNode = Fn(() => {
       const p = positionGeometry;
       // Half the patch in screen heights: the ring's reach plus its thickness, or the puff's size.
