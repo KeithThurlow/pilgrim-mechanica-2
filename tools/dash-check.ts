@@ -334,6 +334,73 @@ const TAP_BACK = 1.0;
   console.log(`energy: two bars sprint ${two.sprintFor.toFixed(2)} s after the dash, then end with ${two.endE.toFixed(2)} left · one bar sprints ${one.sprintFor.toFixed(2)} s · refilled while sprinting: ${two.rose}`);
 }
 
+// Grip comes back as the mech slows (Keith 2026-10-31: "as the velocity of the mech reduces, the traction returns"):
+// after a dash and after letting go of a sprint (stick turned across, or let go), the lateral response (how fast the
+// motion off the stick is taken away, over 0.05 s windows) only rises while the speed falls, with no flat low-grip
+// stretch, and is full (the walk's brake) by the walk's speed. The sprint's own grip at the legs' top is unchanged.
+{
+  const GRIP_TOL = 1.5, FLAT_FOR = 0.2, FULL_BY = 1.3;
+  const trace = (script: (t: number) => { x: number; z: number; space: boolean }, mark: number) => {
+    const s9 = new WalkerSim(v, flatG); s9.reset(0, 0, 0);
+    const d9 = new Dash({ ...DASH_DEFAULTS }), b9 = new Bound({ ...BOUND_DEFAULTS });
+    for (let i = 0; i < 240; i++) s9.update(dt, { x: 0, z: 1, sprint: false });
+    let space = false, prev = 0;
+    const rows: { t: number; speed: number; across: number; resp: number; inDash: boolean }[] = [];
+    for (let t = 0; t < mark + 2; t += dt) {
+      const c = script(t);
+      if (c.space && !space && d9.start(0, 1)) s9.dash(d9.dirX, d9.dirZ);
+      space = c.space;
+      b9.update(dt, c.space, s9, d9); d9.update(dt, 0); s9.push.set(0, 0, 0);
+      const was = s9.inDash;
+      s9.update(dt, { x: c.x, z: c.z, sprint: false });
+      if (was && !s9.inDash && !b9.on) d9.cut();
+      const mx = s9.vel.x + s9.skid.x, mz = s9.vel.z + s9.skid.z, l = Math.hypot(c.x, c.z);
+      const across = l < 0.05 ? Math.hypot(mx, mz) : Math.abs((mx * -c.z + mz * c.x) / l);
+      if (t > mark + dt) rows.push({ t: t - mark, speed: Math.hypot(mx, mz), across, resp: (prev - across) / dt, inDash: s9.inDash });
+      prev = across;
+    }
+    return { rows, full: s9.gripAt(0) };
+  };
+  const cases: [string, (t: number) => { x: number; z: number; space: boolean }, number][] = [
+    ["sprint let go, stick across", (t) => (t < 2.5 ? { x: 0, z: 1, space: true } : { x: 1, z: 0, space: false }), 2.5],
+    ["sprint let go, stick off", (t) => (t < 2.5 ? { x: 0, z: 1, space: true } : { x: 0, z: 0, space: false }), 2.5],
+    ["sprint let go, stick across 0.3 s later", (t) => (t < 2.5 ? { x: 0, z: 1, space: true } : t < 2.8 ? { x: 0, z: 1, space: false } : { x: 1, z: 0, space: false }), 2.8],
+    ["dash tapped, stick across as it stops", (t) => (t < 0.08 ? { x: 0, z: 1, space: true } : t < 0.5 ? { x: 0, z: 1, space: false } : { x: 1, z: 0, space: false }), 0.5],
+    ["dash tapped, stick across after it", (t) => (t < 0.08 ? { x: 0, z: 1, space: true } : t < 0.65 ? { x: 0, z: 1, space: false } : { x: 1, z: 0, space: false }), 0.65],
+  ];
+  const W = Math.round(0.05 / dt), msgs: string[] = [];
+  for (const [name, script, mark] of cases) {
+    const { rows, full } = trace(script, mark);
+    let last = -Infinity, flatFrom = -1, flatWorst = 0, fullAt = -1, drops = 0, lowest = Infinity, seen = 0;
+    for (let i = 0; i + W <= rows.length; i += W) {
+      const w = rows.slice(i, i + W);
+      if (w.some((r) => r.inDash) || w[W - 1].across < 1) { if (w[0].across < 1) break; continue; }
+      const r = w.reduce((a, x) => a + x.resp, 0) / W;
+      lowest = Math.min(lowest, r);
+      seen++;
+      if (r < last - GRIP_TOL) drops++;
+      // A flat stretch: under 90% of full and barely changing.
+      if (r < full * 0.9 && Math.abs(r - last) < 0.5) { if (flatFrom < 0) flatFrom = w[0].t; flatWorst = Math.max(flatWorst, w[W - 1].t - flatFrom); } else flatFrom = -1;
+      if (r >= full * 0.95 && fullAt < 0) fullAt = w[0].t;
+      last = r;
+    }
+    // Nothing left across the stick once the dash was over: nothing slid at all.
+    if (!seen) fullAt = 0;
+    if (drops) problems.push(`${name}: lateral grip fell ${drops}× as the speed fell`);
+    if (flatWorst > FLAT_FOR) problems.push(`${name}: a flat low-grip stretch of ${flatWorst.toFixed(2)} s`);
+    if (fullAt < 0 || fullAt > FULL_BY) problems.push(`${name}: full grip ${fullAt < 0 ? "never" : `only ${fullAt.toFixed(2)} s`} after`);
+    msgs.push(`${name} ${lowest === Infinity ? "-" : lowest.toFixed(0)}→full ${fullAt < 0 ? "never" : fullAt.toFixed(2) + " s"}`);
+  }
+  // Grip by speed: never rises with speed; the walk's brake to the Shift run, the sprint's at the legs' top (sprinting).
+  const g = new WalkerSim(v, flatG);
+  let rises = 0;
+  for (let s = 0; s < 30; s += 0.25) { if (g.gripAt(s + 0.25, true) > g.gripAt(s, true) + 1e-9 || g.gripAt(s + 0.25, false) > g.gripAt(s, false) + 1e-9) rises++; }
+  const runTop = g.gripAt(v.boundTop, true), want = v.boundGrip * 9.81;
+  if (rises) problems.push(`grip rose with speed at ${rises} points`);
+  if (Math.abs(runTop - want) > 0.1) problems.push(`the sprint's grip at its top is ${runTop.toFixed(2)} m/s² (want ${want.toFixed(2)}, the drift as it was)`);
+  console.log(`grip returns with speed: ${msgs.join(" · ")} · sprint at top ${runTop.toFixed(1)} m/s² (= boundGrip × g)`);
+}
+
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);

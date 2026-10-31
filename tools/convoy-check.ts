@@ -565,16 +565,20 @@ for (const speed of [ROUTE_DEFAULTS.convoySpeed, 4, 6]) {
   tick(w, still);
   for (const f of w.sim.feet) if (!f.swinging) worstFoot = Math.max(worstFoot, Math.abs(f.planted.y - w.field.height(f.planted.x, f.planted.z)));
   landed = w.carry.lastLanding.speed;
-  const dv = Math.hypot(w.sim.vel.x - p.vel.x, w.sim.vel.z - p.vel.z);
+  // The whole ground motion (the walk and any skid; 2026-10-31: the skid was left out, and with the crane's swing in the
+  // fall a landing could skid across at up to 1 m/s for a third of a second unseen), the frame after touchdown and 0.1 s
+  // into the forced follow.
+  const motion = () => Math.hypot(w.sim.vel.x + w.sim.skid.x - p.vel.x, w.sim.vel.z + w.sim.skid.z - p.vel.z);
+  const dv0 = motion();
+  let dv = dv0;
   const l = p.toLocal(w.sim.pos.x, w.sim.pos.z);
   const launchTime = letGoAt - onPadAt;
-  console.log(`  ${seen.join(" > ")} · ${launchTime.toFixed(1)} s from the pad to letting go · fell ${dropFeet.toFixed(2)} m in ${w.carry.lastLanding.time.toFixed(2)} s, hit at ${landed.toFixed(1)} m/s, ${l.x.toFixed(1)} m beside the platform · planted feet off the sand after touchdown ${worstFoot.toFixed(3)} m (soles ${worstSole.toFixed(2)}) · velocity off by ${dv.toFixed(2)} m/s · biggest swing ${peak.toFixed(2)} m`);
+  console.log(`  ${seen.join(" > ")} · ${launchTime.toFixed(1)} s from the pad to letting go · fell ${dropFeet.toFixed(2)} m in ${w.carry.lastLanding.time.toFixed(2)} s, hit at ${landed.toFixed(1)} m/s, ${l.x.toFixed(1)} m beside the platform · planted feet off the sand after touchdown ${worstFoot.toFixed(3)} m (soles ${worstSole.toFixed(2)}) · velocity off by ${dv0.toFixed(2)} m/s · biggest swing ${peak.toFixed(2)} m`);
   if (!(launchTime < 15)) fail(`launch took ${launchTime.toFixed(1)} s from the pad (want under 15)`);
   if (Math.abs(dropFeet - w.V.craneDropHeight) > 0.6) fail(`let go with the feet ${dropFeet.toFixed(2)} m over the sand (slider ${w.V.craneDropHeight})`);
   if (minFeet < -0.05) fail(`feet ${(-minFeet).toFixed(2)} m into the sand while falling`);
   if (worstFoot > 0.02) fail(`planted feet ${worstFoot.toFixed(3)} m off the sand after touchdown`);
   if (l.x * side < p.spec.width / 2 + 2) fail("set down on or against the platform, or on the wrong side");
-  if (dv > 0.3) fail(`landed at ${dv.toFixed(2)} m/s off the convoy's velocity`);
   if (w.carry.ground.onDeck) fail("still on the deck ground after launch");
   for (const q of w.convoy.platforms) if (q.pushOut(w.sim.pos.x, w.sim.pos.z, 1.5)) fail(`launched into the ${q.spec.name} platform`);
   // Forced follow: keeps pace with the platform; the landing crouch springs back up.
@@ -585,8 +589,10 @@ for (const speed of [ROUTE_DEFAULTS.convoySpeed, 4, 6]) {
     const n = p.toLocal(w.sim.pos.x, w.sim.pos.z);
     worst = Math.max(worst, Math.hypot(n.x - start.x, n.z - start.z));
     lowHips = Math.min(lowHips, w.sim.pelvis.y - w.field.height(w.sim.pos.x, w.sim.pos.z));
+    if (i === Math.round(0.1 / DT)) dv = motion();
     if (!Number.isFinite(w.sim.pelvis.x + w.sim.pelvis.y + w.sim.pelvis.z)) { fail("non-finite after touchdown"); break; }
   }
+  if (dv > 0.3) fail(`landed: ${dv.toFixed(2)} m/s off the convoy's velocity 0.1 s after touchdown`);
   const g = w.field.height(w.sim.pos.x, w.sim.pos.z), hips = w.sim.pelvis.y - g;
   const dv2 = Math.hypot(w.sim.vel.x - p.vel.x, w.sim.vel.z - p.vel.z);
   console.log(`  landing crouch to ${lowHips.toFixed(2)} m, hips back to ${hips.toFixed(2)} m · drifted ${worst.toFixed(2)} m from its spot beside the platform over the forced follow · velocity off by ${dv2.toFixed(2)} m/s (${w.carry.state})`);
