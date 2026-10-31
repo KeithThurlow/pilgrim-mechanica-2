@@ -11,7 +11,7 @@
 // their levels exist and stay empty until a kind is listed for them.
 import type { Param } from "../core/tweaks";
 
-export type PoiKind = "outcrop" | "wreckPart" | "supplyPod" | "debrisField" | "deadConvoy";
+export type PoiKind = "outcrop" | "wreckPart" | "supplyPod" | "debrisField" | "deadConvoy" | "fortress" | "hub";
 export type Tier = 1 | 2 | 3 | 4 | 5;
 
 /** Biome weights at a point (desert, rocky desolation, shallows); src/world/biomes.ts provides them when it lands. */
@@ -40,6 +40,10 @@ export const POI_KINDS: Record<PoiKind, PoiKindDef> = {
   supplyPod: { kind: "supplyPod", label: "Supply pod", tier: 1, biome: { desert: 1, rocky: 0.8, shallows: 0.7 }, footprint: 9 },
   debrisField: { kind: "debrisField", label: "Debris field", tier: 2, biome: { desert: 1, rocky: 0.9, shallows: 0.7 }, footprint: 30, padKey: "debrisPad" },
   deadConvoy: { kind: "deadConvoy", label: "Dead convoy", tier: 2, biome: { desert: 1.2, rocky: 0.5, shallows: 0.3 }, footprint: 28, padKey: "convoyPad", padHalfKey: "convoyPadHalf" },
+  // Tier 5 (Keith 2026-10-31, docs/proposal-fortresses.md): where the bandits and war bands gather, and where the robots
+  // are built. Footprints cover their pads (the walls stand inside).
+  fortress: { kind: "fortress", label: "Bandit fortress", tier: 5, biome: { desert: 1.2, rocky: 0.8, shallows: 0 }, footprint: 112, padKey: "fortPad" },
+  hub: { kind: "hub", label: "Manufacturing hub", tier: 5, biome: { desert: 0.6, rocky: 1.5, shallows: 0 }, footprint: 75, padKey: "hubPad" },
 };
 export const POI_KIND_LIST = Object.keys(POI_KINDS) as PoiKind[];
 
@@ -67,6 +71,9 @@ export const POI_DEFAULTS = {
   debrisPad: 20,
   convoyPad: 8,
   convoyPadHalf: 18,
+  fortPad: 104,
+  hubPad: 68,
+  siegeClear: 900,
 };
 export type PoiValues = typeof POI_DEFAULTS;
 
@@ -80,6 +87,7 @@ export const POI_PARAMS: Param[] = [
   { key: "poiTries", label: "Flat-ground tries", min: 1, max: 16, step: 1, group: G, tip: "Spots tried in each cell; the flattest wins (so POIs favour the flats between dunes)", onRelease: true },
   { key: "tier1Weight", label: "Tier 1 (glance) weight", min: 0, max: 3, step: 0.05, group: G, onRelease: true },
   { key: "tier2Weight", label: "Tier 2 (stop) weight", min: 0, max: 3, step: 0.05, group: G, onRelease: true },
+  { key: "siegeClear", label: "Fortresses and hubs none within (m) of the start", min: 0, max: 4000, step: 10, group: G, tip: "Added to the start's own clear circle", onRelease: true },
   { key: "padBlend", label: "Pad edge blend (m)", min: 4, max: 40, step: 0.5, group: P, tip: "Width of the slope from a pad back up (or down) to the dunes", onRelease: true },
   { key: "padRough", label: "Pad roughness", min: 0, max: 1, step: 0.01, group: P, tip: "Share of the small bumps left on a pad", onRelease: true },
 ];
@@ -236,7 +244,7 @@ export class PoiField {
     const d = POI_KINDS[kind];
     const reach = d.footprint + v.padBlend;
     // Keep clear of hand-placed areas and of bigger POIs on coarser levels.
-    for (const c of this.keepClear) if (Math.hypot(bx - c.x, bz - c.z) < c.r + reach) return null;
+    for (const c of this.keepClear) if (Math.hypot(bx - c.x, bz - c.z) < c.r + reach + (d.tier === 5 ? v.siegeClear : 0)) return null;
     for (let l = 0; l < level; l++) {
       const Cl = this.cellSize(l), ci = Math.floor(bx / Cl), cj = Math.floor(bz / Cl);
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {

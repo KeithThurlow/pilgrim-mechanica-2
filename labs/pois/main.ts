@@ -11,6 +11,7 @@ import { combatLab, type CombatLab } from "../../src/game/combatLab";
 import { POI_DEFAULTS, POI_PARAMS, POI_KINDS, POI_KIND_LIST, PoiField, hash4, type PoiKind, type PoiPlacement } from "../../src/world/pois";
 import { PoiPads, rawGround } from "../../src/world/poiPads";
 import { addModifier } from "../../src/world/modifiers";
+import { SiegeWalls } from "../../src/pois/fortressGround";
 import { SITE_DEFAULTS, SITE_PARAMS, buildSite, kindGroup } from "../../src/pois/kinds";
 import { PoiDraw } from "../../src/pois/poiDraw";
 import { SalvageSim, SALVAGE_DEFAULTS, SALVAGE_PARAMS, type SpotState } from "../../src/pois/salvage";
@@ -30,6 +31,7 @@ const SHOW_CLEAR = 190;
 
 let poiField!: PoiField;
 let pads!: PoiPads;
+let walls!: SiegeWalls;
 let raw!: ReturnType<typeof rawGround>;
 const drawn = new Map<string, PoiDraw>();
 let salvageDraw: SalvageDraw | null = null;
@@ -62,6 +64,8 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     placeShowcase();
     pads = new PoiPads(poiField);
     addModifier(field, pads);
+    walls = new SiegeWalls(poiField, V);
+    addModifier(field, walls);
   },
   demo: (_t, dt) => demo(dt),
   onChange: (k) => {
@@ -76,8 +80,10 @@ function isDuneKey(k: string) { return ["seed", "windAngle", "spacing", "height"
 function placeShowcase() {
   const V = poiField.v as typeof LAB_DEFAULTS;
   poiField.extra.length = 0;
-  POI_KIND_LIST.forEach((k, i) => {
-    const a = (i / POI_KIND_LIST.length) * Math.PI * 2 + 0.35;
+  // Fortresses and hubs are too big for the ring (their own lab: labs/fortress/); the map shows the generated ones.
+  const kinds = POI_KIND_LIST.filter((k) => POI_KINDS[k].tier < 5);
+  kinds.forEach((k, i) => {
+    const a = (i / kinds.length) * Math.PI * 2 + 0.35;
     const r = V.showRing + (POI_KINDS[k].tier === 2 ? 25 : 0);
     poiField.extra.push(poiField.placeAt(`show:${k}`, k, Math.sin(a) * r, Math.cos(a) * r, a + Math.PI / 2, hash4(V.poiSeed, i, 77, 5)));
   });
@@ -131,6 +137,7 @@ function rebuildAll() {
   poiField.reset();
   placeShowcase();
   pads.reindex();
+  walls.reset();
   lab.streamer.rebuildAll();
   for (const id of [...drawn.keys()]) dropSite(id);
   memory.clear();
