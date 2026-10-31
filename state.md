@@ -183,6 +183,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Rocket pods: clip-fed, believable rockets and launchers, channelled arm missiles (Keith 2026-10-31): agent on `wip/rocketpods`.
 - Snappier dash (Keith 2026-10-31): agent on `wip/dashsnap`.
 - Tracers and a tube of light along gun streams (Keith 2026-10-31): agent on `wip/tubelight`.
 - Responsive walking (Keith 2026-10-31): merged 2026-10-31, Keith to play (duel lab `?manual`, walker lab `?manual`).

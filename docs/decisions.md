@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Rocket pods fire far too often and look like giant cruise missiles: rockets come from a visible clip with a real reload, rockets look like rockets and launchers like launchers; arm missile pods work like the shoulder missile battery, a channelled salvo | Keith | Keith | Agent on `wip/rocketpods`. |
 | 2026-10-31 | Mortar blasts double (7 → 14 m radius): mortars are among the largest area weapons | Keith | Keith | `mortarBlast` in `src/weapons/tuning.ts`. |
 | 2026-10-31 | Grenade launchers: a new weapon whose blasts sit between rockets (4.5 m) and mortars (14 m) | Keith | Keith | To build. |
 | 2026-10-31 | Rail balance: no dash while the rail charges or is charged; dashing cancels the charge | Keith | Keith | Agent on `wip/dashsnap`. |
