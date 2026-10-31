@@ -4,6 +4,11 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | The dash's speed is a burst by time, not built by the footwork: 20 m/s in 0.07 s, held 0.42 s, down to the walk in 0.15 s (about 11 m, was 12); the steps run faster (0.19 s) and only pose the legs under it | Keith | Claude | Values; Keith asked for a crisp start and stop. `dashBurst`. |
+| 2026-10-31 | A tapped dash holds its line (no drift: drift is the sprint's) and stops to the stick's share along it, then the walk turns it under the stick | Keith | Claude | Fixes the stuck run (the old short sprint never ended with the stick off its line). |
+| 2026-10-31 | No backpedal before a reverse dash by default (`dashPedalSteps` 0): it held the burst up to 0.5 s; the slider brings it back | Claude | Claude | Reverses part of Keith's 2026-10-27 backpedal ask for the start-speed ask; flag for Keith. |
+| 2026-10-31 | A tapped dash doesn't leave the ground off crests (at 20 m/s a slip face's crest threw it 15 m); the held sprint still leaps | Claude | Claude | |
+| 2026-10-31 | No dash while a rail is charging or charged: the dash goes and the charge is lost, and no charge builds until the dash is over; the rival keeps its own charge rather than dashing across a foe's rail | Keith | Keith | Rival logic by Claude. |
 | 2026-10-31 | The dash must start and stop faster now the walk is responsive (the sprint stays as it is) | Keith | Keith | Agent on `wip/dashsnap`. |
 | 2026-10-31 | Gun streams light up much more: more tracers, and a continuous "tube" of light along the stream rather than a light every 5th tracer | Keith | Keith | Agent on `wip/tubelight`. |
 | 2026-10-31 | Every explosion has a blast wave by default, extended per kind (Keith: "all explosions should have a blast wave / distortion effect by default, and then we can expand it for specific kinds of explosions too") | Keith | Keith | `src/fx/blastWaves.ts`; Light topic, groups Blast waves, Blast waves by kind, Heat shimmer. |
