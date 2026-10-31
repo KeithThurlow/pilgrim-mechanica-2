@@ -7,7 +7,7 @@
 // shadows (small map, short reach). The pools go to the lamps that matter most this frame: blast flashes first, then
 // by kind and nearness to the focus (robot eyes, convoy floods, headlights; deck lamps and cab windows for the points).
 //
-// Every other lamp is faked, all of them in three draw calls (src/fx/lampDraw.ts): a glow on the lamp head, a soft
+// Every other lamp is faked, all of them in four draw calls (src/fx/lampDraw.ts): a glow on the lamp head, a soft
 // pool where its beam lands and a faint beam cone. Lamps are declared on the bodies (src/world/lamps.ts) and found by
 // a scan of the scene every half second: vehicles, the convoy's cars and plough, the robot swarm.
 //
@@ -25,9 +25,16 @@
 // lights (an excavator's beam charging) carry a priority over blasts; telegraphs on the ground (shell rings, painted
 // strips, the beam's line) glow on the sand and bid for a real light, brighter as they come down. Bodies that ask
 // each frame set userData.shortLights (found by the same scan).
+//
+// Gun streams (Keith 2026-10-31: "a tube light that goes out along there"; "more but weaker" tracer lights): every
+// direct-fire gun's rounds feed a stream (src/fx/gunStreams.ts), drawn as a glowing core line from the muzzle to where
+// the rounds land, a soft lit strip on the sand under it and a few points along it bidding for real lights (merged with
+// the rest). Brightness by rounds/s × power, colour by family; faint by day (the core only), strong at night. Most drawn
+// tracers carry a light too, each weaker so a stream's total stays about the same.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { LampDraw } from "../fx/lampDraw";
+import { GunStreams, type GunStream } from "../fx/gunStreams";
 import { clusterLights, type LightCluster, type LightReq } from "./lightCluster";
 import {
   LAMP_HEAD, LAMP_FLOOD, LAMP_ROBOT, LAMP_RUNNING, LAMP_CAB, LAMP_TAIL, LAMP_MECH, LAMP_KINDS,
@@ -80,15 +87,32 @@ export const NIGHT_LIGHT_DEFAULTS = {
   telePool: 0.55,
   teleRamp: 2,
   telePrio: 1.5,
-  // Tracers (Keith 2026-10-31: tracers light up to show a round's power; not a light per tracer)
-  tracerShare: 0.2,
-  tracerLight: 160,
+  // Tracers (Keith 2026-10-31: tracers light up to show a round's power; later the same day: "more but weaker lights")
+  tracerShare: 1,
+  tracerLight: 240,
+  tracerSplit: 3,
   tracerPower: 0.6,
   tracerRef: 12,
   tracerSpeed: 220,
   tracerRange: 9,
   tracerGlow: 0.9,
   railLight: 2400,
+  // Gun streams (Keith 2026-10-31: a tube of light along each gun's stream)
+  streamOn: 1,
+  streamRef: 160,
+  streamCurve: 0.45,
+  streamMax: 2.5,
+  streamCore: 1.1,
+  streamCoreWidth: 0.4,
+  streamDay: 0.2,
+  streamGround: 0.45,
+  streamGroundWidth: 1.6,
+  streamPoints: 2,
+  streamLight: 360,
+  streamRange: 10,
+  streamHue: 30,
+  streamTau: 0.18,
+  streamPulseTau: 0.1,
   // Vehicle lights
   vehReach: 16,
   vehAngle: 16,
@@ -120,8 +144,10 @@ export const NIGHT_LIGHT_DEFAULTS = {
 export type NightLightValues = typeof NIGHT_LIGHT_DEFAULTS;
 
 const G = "Night lights", GV = "Vehicle lights", GR = "Robot lights", GC = "Convoy lights", GE = "Enemy fire lights", GT = "Telegraph lights";
+/** Tube lights along gun streams and the tracers' lights (the minigun's tracer fill joins it, src/fx/minigun.ts). */
+export const GS = "Gun streams";
 /** The slider groups the night lights add to a Light topic. */
-export const NIGHT_LIGHT_GROUPS = [G, GE, GT, GV, GR, GC];
+export const NIGHT_LIGHT_GROUPS = [G, GS, GE, GT, GV, GR, GC];
 export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "nightLightCap", label: "Point lights", min: 0, max: 16, step: 1, group: G, tip: "Real point lights for deck lamps, cab windows and blasts (each costs every lit pixel a little; changing it recompiles once)" },
   { key: "nightSpotCap", label: "Spot lights", min: 0, max: 12, step: 1, group: G, tip: "Real spot lights for the nearest robot eyes, floods and headlights (the rest are faked)" },
@@ -167,14 +193,31 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "teleRamp", label: "Brightens as it lands (curve)", min: 0.2, max: 5, step: 0.1, group: GT, tip: "1: brightens evenly over the flight; higher: stays dim, then flares at the end" },
   { key: "telePrio", label: "Telegraph light priority", min: 0.2, max: 10, step: 0.1, group: GT, tip: "How much more a telegraph wants a real light than a blast of the same power" },
 
-  { key: "tracerShare", label: "Tracer light share", min: 0, max: 1, step: 0.01, group: GE, tip: "Every 1/share-th drawn tracer of a side carries a moving light (merged with its neighbours into a band along the stream)" },
-  { key: "tracerLight", label: "Tracer light", min: 0, max: 2000, step: 10, group: GE, tip: "A lit tracer's light at the reference round's power" },
-  { key: "tracerPower", label: "Tracer strength by power (curve)", min: 0, max: 2, step: 0.05, group: GE, tip: "Light × (power / reference)^this: 0 every round alike, 1 in proportion to damage × (1 + pierce)" },
-  { key: "tracerRef", label: "Tracer reference power", min: 1, max: 200, step: 1, group: GE, tip: "Damage × (1 + pierce) of a round that lights at 'Tracer light'" },
-  { key: "tracerSpeed", label: "Tracer light speed (m/s)", min: 40, max: 600, step: 5, group: GE, tip: "How fast a lit tracer's light runs down its line (match the tracers)" },
-  { key: "tracerRange", label: "Tracer light reach (m)", min: 2, max: 30, step: 0.5, group: GE },
-  { key: "tracerGlow", label: "Tracer glow size (m)", min: 0, max: 4, step: 0.05, group: GE, tip: "The faked glow a lit tracer carries (incendiary rounds glow orange)" },
   { key: "railLight", label: "Rail slug light", min: 0, max: 10000, step: 50, group: GE, tip: "A rail slug's streak lights its whole line for a moment (× its charge)" },
+
+  { key: "streamOn", label: "Tube light on", min: 0, max: 1, step: 1, group: GS, tip: "A line of light along each firing gun's stream, a lit strip on the sand under it, a few real lights along it" },
+  { key: "streamRef", label: "Full at rounds/s × power", min: 10, max: 1000, step: 5, group: GS, tip: "A stream of this many rounds a second × damage × (1 + pierce) lights at full (one minigun about 160)" },
+  { key: "streamCurve", label: "Brightness by fire (curve)", min: 0, max: 1.5, step: 0.05, group: GS, tip: "(rate × power / full)^this: 0 every gun alike, 1 in proportion" },
+  { key: "streamMax", label: "Brightest (× full)", min: 0.5, max: 6, step: 0.1, group: GS, tip: "Overdrive and heavy guns stop growing here" },
+  { key: "streamCore", label: "Core brightness", min: 0, max: 4, step: 0.05, group: GS },
+  { key: "streamCoreWidth", label: "Core width (m)", min: 0.05, max: 2, step: 0.05, group: GS },
+  { key: "streamDay", label: "By day (× night)", min: 0, max: 1, step: 0.01, group: GS, tip: "The core's share by day (the strip and the real lights are night only)" },
+  { key: "streamGround", label: "Strip on the ground", min: 0, max: 3, step: 0.05, group: GS, tip: "The faked light the stream throws on the sand under it, brightest where it lands" },
+  { key: "streamGroundWidth", label: "Strip width (m)", min: 0.3, max: 6, step: 0.1, group: GS, tip: "Half-width under a low stream (wider and fainter under a high one)" },
+  { key: "streamPoints", label: "Real lights along it", min: 0, max: 3, step: 1, group: GS, tip: "Points along each stream bidding for real lights (merged with the rest; the pool is never exceeded)" },
+  { key: "streamLight", label: "Stream light (total)", min: 0, max: 3000, step: 10, group: GS, tip: "At full, shared among its points" },
+  { key: "streamRange", label: "Stream light reach (m)", min: 2, max: 30, step: 0.5, group: GS },
+  { key: "streamHue", label: "Your stream hue (°)", min: 0, max: 60, step: 1, group: GS, tip: "The player's side (0 red, 30 orange); ignited rounds turn it orange-red, bandits and robots use their fire hues" },
+  { key: "streamTau", label: "Swell and fade (s)", min: 0.03, max: 1, step: 0.01, group: GS, tip: "How fast a stream lights when the trigger goes down and dies away after (gone within about 4 × this)" },
+  { key: "streamPulseTau", label: "Autocannon pulse (s)", min: 0.02, max: 0.5, step: 0.01, group: GS, tip: "The same for a pulsing gun: each shell flares the line" },
+  { key: "tracerShare", label: "Tracer light share", min: 0, max: 1, step: 0.01, group: GS, tip: "Share of drawn tracers carrying a moving light (Keith: more but weaker; they merge into bands along the stream)" },
+  { key: "tracerLight", label: "Tracer light (stream total)", min: 0, max: 2000, step: 10, group: GS, tip: "A stream's lit tracers together at the reference power: each gets this / (share × 'split over')" },
+  { key: "tracerSplit", label: "Split over (tracers)", min: 1, max: 10, step: 0.5, group: GS, tip: "About how many tracers a stream has in flight at share 1" },
+  { key: "tracerPower", label: "Tracer strength by power (curve)", min: 0, max: 2, step: 0.05, group: GS, tip: "Light × (power / reference)^this: 0 every round alike, 1 in proportion to damage × (1 + pierce)" },
+  { key: "tracerRef", label: "Tracer reference power", min: 1, max: 200, step: 1, group: GS, tip: "Damage × (1 + pierce) of a round that lights at 'Tracer light'" },
+  { key: "tracerSpeed", label: "Tracer light speed (m/s)", min: 40, max: 600, step: 5, group: GS, tip: "How fast a lit tracer's light runs down its line (match the tracers)" },
+  { key: "tracerRange", label: "Tracer light reach (m)", min: 2, max: 30, step: 0.5, group: GS },
+  { key: "tracerGlow", label: "Tracer glow size (m)", min: 0, max: 4, step: 0.05, group: GS, tip: "The faked glow a lit tracer carries (incendiary rounds glow orange)" },
 
   { key: "vehReach", label: "Headlights land at (m)", min: 4, max: 40, step: 0.5, group: GV },
   { key: "vehAngle", label: "Headlight cone (°)", min: 5, max: 60, step: 1, group: GV },
@@ -283,6 +326,9 @@ export class NightLights implements ShortLights {
   /** Per side: drawn tracers counted, so every Nth carries a light. */
   private tracerCount = [0, 0, 0];
   private shortSources: { o: THREE.Object3D; fn: ShortLightSource }[] = [];
+  /** Gun streams (tube lights). */
+  readonly streams = new GunStreams();
+  private streamCol = new THREE.Color();
   /** Colours by family (refreshed each frame from the hue sliders): rockets and blasts, launches and guns, telegraphs. */
   private famFire = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
   private famMuzzle = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
@@ -361,6 +407,67 @@ export class NightLights implements ShortLights {
     a[o] = x0; a[o + 1] = y0; a[o + 2] = z0; a[o + 3] = x1; a[o + 4] = y1; a[o + 5] = z1;
     a[o + 6] = 0; a[o + 7] = Math.max(0.05, L / Math.max(1, v.tracerSpeed)); a[o + 8] = Math.min(6, k) * this.famK[f] * (hot ? 1.4 : 1);
     a[o + 9] = c.r; a[o + 10] = c.g; a[o + 11] = c.b; a[o + 12] = 0;
+  }
+  /** A round of a gun's stream from the muzzle to where it lands (pulse: a gun that fires in slow beats, the autocannon). */
+  stream(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, power: number, fam: LightFamily = FAM_PLAYER, hot = false, pulse = false) {
+    if (this.v.streamOn <= 0) return;
+    const f = fam === FAM_BANDIT || fam === FAM_ROBOT ? fam : FAM_PLAYER;
+    this.streams.round(x0, y0, z0, x1, y1, z1, power, f, hot, pulse);
+  }
+  /** A stream's brightness: 0 .. streamMax (× its family's strength), 1 at the reference fire. */
+  streamBright(s: GunStream) {
+    const v = this.v, I = this.streams.intensity(s) / Math.max(1, v.streamRef);
+    return Math.min(v.streamMax, Math.pow(Math.max(0, I), v.streamCurve)) * this.famK[s.fam] * s.env;
+  }
+
+  /**
+   * Draw the gun streams: a core line (by day a share of it), at night a lit strip on the sand and points along it
+   * into the light requests (req null: none; k their share of full strength).
+   */
+  private drawStreams(n: number, req: ((x: number, y: number, z: number, power: number, range: number, c: THREE.Color) => void) | null, k: number) {
+    const v = this.v, S = this.streams, F = v.lightFar;
+    if (v.streamOn <= 0 || !S.n) return;
+    const day = n + v.streamDay * (1 - n);
+    const col = this.streamCol;
+    for (let i = 0; i < S.n; i++) {
+      const s = S.list[i], B = this.streamBright(s);
+      if (B <= 0.003) continue;
+      const mx = (s.x0 + s.x1) / 2, mz = (s.z0 + s.z1) / 2, d = Math.hypot(mx - this.focus.x, mz - this.focus.z);
+      if (d > F) continue;
+      const fade = d < F * 0.7 ? 1 : 1 - (d - F * 0.7) / (F * 0.3);
+      if (s.fam === FAM_PLAYER) col.setHSL((((v.streamHue % 360) + 360) % 360) / 360, 1, 0.55, THREE.SRGBColorSpace);
+      else col.copy(this.famFire[s.fam]);
+      if (s.hot > 0.01) col.lerp(HOT_COL, Math.min(1, s.hot));
+      const L = GunStreams.length(s);
+      // The core: thicker with fire, never thinner than half.
+      const a = day * fade * v.streamCore * Math.min(1.5, B);
+      if (a > 0.002) this.draw.line(s.x0, s.y0, s.z0, s.x1, s.y1, s.z1, v.streamCoreWidth * Math.min(1.6, Math.max(0.5, Math.sqrt(B))), col.r * a, col.g * a, col.b * a);
+      if (n <= 0) continue;
+      // The strip on the sand: pieces along the line, wider and fainter where the stream runs high, brightest where it lands.
+      // (A faint stream, a lone bandit shot, gets the landing glow only: the pools stay few under a swarm's fire.)
+      if (v.streamGround > 0) {
+        const m = n * B * v.streamGround < 0.12 ? 0 : Math.max(1, Math.min(5, Math.ceil(L / 9))), seg = L / Math.max(1, m);
+        const hl = Math.hypot(s.dx, s.dz) || 1;
+        for (let j = 0; j <= m; j++) {
+          const end = j === m, t = end ? 1 : (j + 0.5) / m;
+          const x = s.x0 + (s.x1 - s.x0) * t, y = s.y0 + (s.y1 - s.y0) * t, z = s.z0 + (s.z1 - s.z0) * t;
+          const gy = this.groundAt(x, z), h = Math.max(0, y - gy);
+          if (h > 25) continue;
+          const g = (n * fade * v.streamGround * Math.min(2, B) * (end ? 1.4 : 1)) / (1 + h * 0.12);
+          const w = v.streamGroundWidth * (1 + h * 0.15) * (end ? 1.4 : 1);
+          this.draw.pool(x, gy, z, 0, 1, 0, s.dx / hl, s.dz / hl, w, end ? w : seg * 0.6 + w * 0.3, col.r * g, col.g * g, col.b * g);
+        }
+      }
+      // Points along it for the real lights (merged with everything else, so the pool is never exceeded).
+      const p = Math.round(v.streamPoints);
+      if (req && p > 0 && v.streamLight > 0 && k > 0) {
+        const pw = (v.streamLight * Math.min(2, B) * k) / p, R = Math.max(v.streamRange, (L / p) * 0.7);
+        for (let j = 0; j < p; j++) {
+          const t = (j + 0.5) / p;
+          req(s.x0 + (s.x1 - s.x0) * t, s.y0 + (s.y1 - s.y0) * t, s.z0 + (s.z1 - s.z0) * t, pw, R, col);
+        }
+      }
+    }
   }
   /** Lit tracers in flight (for checks). */
   get tracersLive() { return this.nTracer; }
@@ -527,6 +634,18 @@ export class NightLights implements ShortLights {
     }
   }
 
+  /** Family colours and strengths from the sliders. */
+  private familyColours() {
+    const v = this.v;
+    const hue = (h: number) => (((h % 360) + 360) % 360) / 360;
+    this.famFire[FAM_PLAYER].copy(BLAST_COL); this.famMuzzle[FAM_PLAYER].copy(MUZZLE_COL); this.famTele[FAM_PLAYER].setHex(0xff5a2a);
+    // The hue sliders pick colours as they look (sRGB), not in linear.
+    const SRGB = THREE.SRGBColorSpace;
+    this.famFire[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.55, SRGB); this.famMuzzle[FAM_BANDIT].setHSL(hue(v.enemyHue + 4), 1, 0.6, SRGB); this.famTele[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.5, SRGB);
+    this.famFire[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.5, SRGB); this.famMuzzle[FAM_ROBOT].setHSL(hue(v.robotFireHue + 2), 1, 0.56, SRGB); this.famTele[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.48, SRGB);
+    this.famK[FAM_PLAYER] = 1; this.famK[FAM_BANDIT] = v.enemyLight; this.famK[FAM_ROBOT] = v.robotFireLight;
+  }
+
   /**
    * The short lights this frame as requests (k: their share of full strength, n: night for the faked parts), each
    * rocket's faked glow, exhaust flare and light on the sand, then merged into clusters. Returns the cluster count.
@@ -539,14 +658,7 @@ export class NightLights implements ShortLights {
       const q = this.reqs[nr++];
       q.x = x; q.y = y; q.z = z; q.power = power; q.range = range; q.r = c.r; q.g = c.g; q.b = c.b; q.prio = prio;
     };
-    // Family colours and strengths from the sliders.
-    const hue = (h: number) => (((h % 360) + 360) % 360) / 360;
-    this.famFire[FAM_PLAYER].copy(BLAST_COL); this.famMuzzle[FAM_PLAYER].copy(MUZZLE_COL); this.famTele[FAM_PLAYER].setHex(0xff5a2a);
-    // The hue sliders pick colours as they look (sRGB), not in linear.
-    const SRGB = THREE.SRGBColorSpace;
-    this.famFire[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.55, SRGB); this.famMuzzle[FAM_BANDIT].setHSL(hue(v.enemyHue + 4), 1, 0.6, SRGB); this.famTele[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.5, SRGB);
-    this.famFire[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.5, SRGB); this.famMuzzle[FAM_ROBOT].setHSL(hue(v.robotFireHue + 2), 1, 0.56, SRGB); this.famTele[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.48, SRGB);
-    this.famK[FAM_PLAYER] = 1; this.famK[FAM_BANDIT] = v.enemyLight; this.famK[FAM_ROBOT] = v.robotFireLight;
+    this.familyColours();
     const fam = (f: number) => (f === FAM_BANDIT || f === FAM_ROBOT ? f : FAM_PLAYER);
     const F = v.lightFar;
     /** Faked parts fade toward the far edge (and are night only). */
@@ -579,16 +691,17 @@ export class NightLights implements ShortLights {
         const A = fadeAt(x, z) * b * v.telePool;
         if (A > 0) this.draw.pool(x, y, z, 0, 1, 0, ta[o + 5], ta[o + 6], w * 1.25, l * 1.1 + w * 0.25, c.r * A, c.g * A, c.b * A);
       }
-      // Lit tracers: a light running down each line; neighbours in a stream merge into one band of light.
-      const tr = this.tracers;
+      // Lit tracers: a light running down each line; neighbours in a stream merge into one band of light. More lit
+      // tracers each light less (Keith 2026-10-31: "more but weaker"), so a stream's total stays about the same.
+      const tr = this.tracers, split = 1 / Math.max(1, v.tracerShare * v.tracerSplit);
       for (let i = 0; i < this.nTracer; i++) {
         const o = i * TRS, u = Math.min(1, tr[o + 6] / tr[o + 7]);
         const x = tr[o] + (tr[o + 3] - tr[o]) * u, y = tr[o + 1] + (tr[o + 4] - tr[o + 1]) * u, z = tr[o + 2] + (tr[o + 5] - tr[o + 2]) * u;
         this.hc.setRGB(tr[o + 9], tr[o + 10], tr[o + 11]);
-        req(x, y, z, v.tracerLight * tr[o + 8] * k, v.tracerRange * Math.min(2, Math.sqrt(tr[o + 8])), this.hc);
+        req(x, y, z, v.tracerLight * split * tr[o + 8] * k, v.tracerRange * Math.min(2, Math.sqrt(tr[o + 8])), this.hc);
         const A = fadeAt(x, z);
         if (A > 0 && v.tracerGlow > 0) {
-          const g = A * Math.min(2, tr[o + 8]);
+          const g = A * Math.min(2, tr[o + 8]) * Math.sqrt(split);
           this.draw.glow(x, y, z, v.tracerGlow * Math.min(2, Math.sqrt(tr[o + 8])), tr[o + 9] * g, tr[o + 10] * g, tr[o + 11] * g);
         }
       }
@@ -620,6 +733,8 @@ export class NightLights implements ShortLights {
         }
       }
     }
+    // Gun streams: their cores, strips and points (the points only while short lights are on).
+    this.drawStreams(n, k > 0 ? req : null, k);
     this.nRocket = 0; this.nHold = 0; this.nTele = 0;
     this.stats.requests = nr;
     return clusterLights(this.reqs, nr, { radius: v.clusterRadius, curve: v.clusterCurve, cap: v.clusterCap, grow: v.clusterGrow }, this.clusters);
@@ -645,6 +760,8 @@ export class NightLights implements ShortLights {
       this.nTracer = w;
     }
     this.flashes = this.flashes.filter((f) => f.t < f.T);
+    this.streams.o.tau = v.streamTau; this.streams.o.pulseTau = v.streamPulseTau;
+    this.streams.step(dt);
     const n = (this.n = Math.max(0, Math.min(1, (night - v.nightLightsFrom) / Math.max(0.01, 1 - v.nightLightsFrom))));
     this.draw.begin(this.camera);
     this.nWant = 0;
@@ -652,7 +769,10 @@ export class NightLights implements ShortLights {
     const shortK = n + (v.dayFlash > 0 ? v.dayFlash * (1 - n) : 0);
     const busy = this.flashes.length > 0 || this.nRocket > 0 || this.nHold > 0 || this.nTele > 0 || this.nTracer > 0;
     if (n <= 0 && !this.made && !(shortK > 0 && busy)) {
-      this.lit = 0; this.nRocket = this.nHold = this.nTele = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0; this.draw.end(); return;
+      this.lit = 0; this.nRocket = this.nHold = this.nTele = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0;
+      // By day the streams still show their core (faint, streamDay), in their family's colours.
+      if (this.streams.n) { this.familyColours(); this.drawStreams(0, null, 0); }
+      this.draw.end(); return;
     }
     if (!this.made || this.pool.length !== Math.round(v.nightLightCap) || this.spots.length !== Math.round(v.nightSpotCap)) this.build();
     // Bodies that ask for short lights each frame (the excavators' beams), before they're merged.

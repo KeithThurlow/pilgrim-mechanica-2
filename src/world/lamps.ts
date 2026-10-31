@@ -57,6 +57,11 @@ export interface ShortLights {
   rocket(x: number, y: number, z: number, dx: number, dy: number, dz: number, k?: number, fam?: LightFamily): void;
   /** A drawn tracer: a share of them carry a light down their line, brighter with power (damage × (1 + pierce)), hot rounds orange. */
   tracer(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, power: number, fam?: LightFamily, hot?: boolean, always?: boolean): void;
+  /**
+   * A round of a gun's stream (Keith 2026-10-31: a tube of light along it): rounds from one muzzle feed one stream,
+   * lit by rounds/s × power (damage × (1 + pierce)); pulse: a gun firing in slow beats (the autocannon), each one a flare.
+   */
+  stream(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, power: number, fam?: LightFamily, hot?: boolean, pulse?: boolean): void;
   /** A light held this frame: power, reach (m), colour (hex), priority for the real lights (1 like a blast), glow size (m, faked). */
   hold(x: number, y: number, z: number, power: number, range: number, color: number, prio?: number, glow?: number): void;
   /** A round telegraph on the ground at (x, y, z) (y the ground), radius r, u 0..1 how near it is to landing. */

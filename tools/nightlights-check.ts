@@ -3,7 +3,9 @@
 // nearest robot eye gets a real red spot, headlights land ahead of a vehicle on the ground, the headlamp's shadow map
 // is not drawn in the day. Prints the cost of a night update with a big swarm and a column of trucks. Light clustering
 // (2026-10-31): close short lights merge into one, far ones stay apart, the curve and soft cap hold, a full rocket
-// barrage never takes more real lights than the pools, and a noon barrage lights nothing.
+// barrage never takes more real lights than the pools, and a noon barrage lights nothing. Gun streams (2026-10-31): a
+// firing gun makes a tube and its requests, the pool holds under heavy fire, noon shows only the faint core, the tube
+// fades soon after letting go; more but weaker tracer lights; the tracer fill.
 import * as THREE from "three/webgpu";
 import { NightLights } from "../src/world/nightLights";
 import { LOOK_DEFAULTS } from "../src/world/look";
@@ -13,6 +15,8 @@ import { CarSim, carValues } from "../src/vehicles/car";
 import { LAMP_ROBOT, FAM_PLAYER, FAM_BANDIT, FAM_ROBOT, type LampEmit } from "../src/world/lamps";
 import { ROBOT_DEFAULTS } from "../src/combat/robots";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import { MinigunFx, MINIGUN_FX_DEFAULTS } from "../src/fx/minigun";
+import type { GpuTracers } from "../src/fx/gpuTracers";
 import { clusterLights, clusterPower, type ClusterOpts, type LightCluster, type LightReq } from "../src/world/lightCluster";
 
 let fails = 0;
@@ -271,6 +275,121 @@ console.log(`barrage at midnight: ${st.requests} light requests -> ${st.clusters
   const bl = M.group.children.find((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0) as THREE.PointLight | undefined;
   if (pl && bl && bl.intensity < pl.intensity * 4) fail(`a blast (${bl.intensity.toFixed(0)}) isn't much brighter than a rocket (${pl.intensity.toFixed(0)})`);
   if (pl && bl) console.log(`rocket light: missile 12 m up ${pl.intensity.toFixed(0)} cd to ${pl.distance.toFixed(1)} m; blast ${bl.intensity.toFixed(0)} cd to ${bl.distance.toFixed(1)} m`);
+}
+
+// Gun streams (Keith 2026-10-31: a tube of light along each gun's stream; more but weaker tracer lights). A gun firing
+// as the game does (a stream round and a tracer per round): a tube line, a strip on the sand, points among the requests;
+// two overdriven miniguns plus enemy fire never take more real lights than the pool; at noon only the faint core
+// (no pools, glows, real lights); the tube fades within 4 tau of letting go; more lit tracers each light less.
+{
+  /** Fire `frames` frames: two player miniguns at `rate` rounds/s each, `bandits` bandit guns, `robots` robot guns. */
+  const fire = (L: NightLights, frames: number, night: number, rate: number, bandits = 0, robots = 0, t0 = 0) => {
+    const P = 12 * 1.1, dt = 1 / 60;
+    let acc = 0, ms = 0;
+    for (let fr = 0; fr < frames; fr++) {
+      acc += rate * dt;
+      while (acc >= 1) {
+        acc--;
+        for (const g of [-1, 1]) {
+          const x0 = g * 1.4, tx = g * 0.5 + Math.sin(fr * 0.7) * 1.2;
+          L.tracer(x0, 3.4, 0, tx, 0.3, 38, P, FAM_PLAYER); L.stream(x0, 3.4, 0, tx, 0.3, 38, P, FAM_PLAYER);
+        }
+      }
+      for (let b = 0; b < bandits; b++) if ((fr + b) % 6 === 0) {
+        const x = 40 * Math.sin(b), z = 40 + 20 * Math.cos(b);
+        L.tracer(x, 2, z, 0, 2, 0, 4, FAM_BANDIT); L.stream(x, 2, z, 0, 2, 0, 4, FAM_BANDIT);
+      }
+      for (let r = 0; r < robots; r++) if ((fr + r) % 20 === 0) {
+        const x = -30 + (r % 10) * 6, z = 25 + Math.floor(r / 10) * 5;
+        L.tracer(x, 1, z, 0, 2.5, 0, 1.8, FAM_ROBOT); L.stream(x, 1, z, 0, 2.5, 0, 1.8, FAM_ROBOT);
+      }
+      const t = performance.now();
+      L.update(dt, night, focus);
+      ms += performance.now() - t;
+      void t0;
+    }
+    return ms / frames;
+  };
+  const mk = (over: Partial<typeof V> = {}) => { const L = new NightLights({ ...V, ...over }); L.ground = FLAT; new THREE.Scene().add(L.group); return L; };
+
+  // One pair of miniguns at night.
+  const A = mk();
+  fire(A, 40, mid, 12);
+  const ca = A.draw.counts;
+  if (A.streams.n !== 2) fail(`streams: two miniguns made ${A.streams.n} streams`);
+  if (ca.lines < 2) fail(`streams: ${ca.lines} tube lines drawn for two firing guns`);
+  if (ca.pools < 4) fail(`streams: only ${ca.pools} pools (want the strips on the sand)`);
+  const bA = A.streams.n ? A.streamBright(A.streams.list[0]) : 0;
+  if (!(bA > 0.6 && bA < 1.6)) fail(`streams: a minigun at 12 rounds/s lights at ${bA.toFixed(2)} of full (want about 1)`);
+  if (A.stats.real < 1) fail("streams: a firing pair at night got no real light");
+  console.log(`streams: two miniguns at 12/s -> ${A.streams.n} streams at ${bA.toFixed(2)}, ${ca.lines} lines, ${ca.pools} pools, ${A.stats.requests} requests -> ${A.stats.clusters} clusters -> ${A.stats.real} real`);
+
+  // Overdriven (30 rounds/s each) with 30 bandit guns and 60 robot guns: the pool is never exceeded.
+  const B = mk();
+  let maxReal = 0, maxReq = 0, maxCl = 0, maxPools = 0, maxLines = 0, cost = 0;
+  for (let k = 0; k < 6; k++) {
+    cost += fire(B, 10, mid, 30, 30, 60) / 6;
+    maxReal = Math.max(maxReal, B.stats.real); maxReq = Math.max(maxReq, B.stats.requests); maxCl = Math.max(maxCl, B.stats.clusters);
+    maxPools = Math.max(maxPools, B.draw.counts.pools); maxLines = Math.max(maxLines, B.draw.counts.lines);
+  }
+  if (maxReal > V.nightLightCap) fail(`streams: ${maxReal} real points under fire (pool ${V.nightLightCap})`);
+  const bOver = B.streamBright(B.streams.list.find((s) => s.fam === FAM_PLAYER)!);
+  if (!(bOver > bA * 1.2 && bOver <= V.streamMax)) fail(`streams: overdrive lights at ${bOver.toFixed(2)} vs ${bA.toFixed(2)} (want brighter, at most ${V.streamMax})`);
+  console.log(`streams under fire (2 overdriven miniguns, 30 bandit guns, 60 robot guns): ${B.streams.n} streams, ${maxLines} lines, ${maxPools} pools, ${maxReq} requests -> ${maxCl} clusters -> ${maxReal} real; overdrive ${bOver.toFixed(2)}; night update ${cost.toFixed(3)} ms`);
+
+  // Let go: the tube fades within 4 tau.
+  let frames = 0;
+  while (B.streams.n > 0 && frames < 300) { B.update(1 / 60, mid, focus); frames++; }
+  const limit = Math.ceil((4 * V.streamTau) * 60) + 2;
+  if (frames > limit) fail(`streams: the tube took ${frames} frames to go after letting go (want <= ${limit})`);
+  if (B.draw.counts.lines) fail(`streams: ${B.draw.counts.lines} tube lines left after letting go`);
+
+  // Noon: the core only, faint; no pools, glows, beams or real lights, no pool build.
+  const D = mk();
+  fire(D, 30, 0, 12);
+  const cd = D.draw.counts;
+  if (cd.pools || cd.glows || cd.beams || D.lit || D.builds) fail(`streams at noon: ${cd.pools} pools, ${cd.glows} glows, ${cd.beams} beams, ${D.lit} lit, ${D.builds} builds (want none)`);
+  if (V.streamDay > 0 && cd.lines !== 2) fail(`streams at noon: ${cd.lines} faint cores (want 2)`);
+  const coreSum = (L: NightLights) => { const a = L.draw.lines.instanceColor!.array as Float32Array; let s = 0; for (let i = 0; i < L.draw.counts.lines * 3; i++) s += a[i]; return s; };
+  const dayCore = coreSum(D), nightCore = coreSum(A);
+  if (dayCore > nightCore * (V.streamDay + 0.02)) fail(`streams at noon: core ${dayCore.toFixed(2)} vs night ${nightCore.toFixed(2)} (want at most ${V.streamDay} of it)`);
+  const off = mk({ streamOn: 0 });
+  fire(off, 20, mid, 12);
+  if (off.streams.n || off.draw.counts.lines) fail("streams: drawn with the tube off");
+
+  // More but weaker: at share 1 each lit tracer is weaker than at 0.2, and there are more of them.
+  const lone = (share: number) => {
+    const L = mk({ tracerShare: share, streamOn: 0, clusterRadius: 0 });
+    for (let i = 0; i < 10; i++) L.tracer(i * 20, 3, 0, i * 20, 3, 60, 13.2, FAM_PLAYER);
+    L.update(1 / 60, mid, focus);
+    const p = L.group.children.filter((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0).map((o) => (o as THREE.PointLight).intensity);
+    return { n: L.tracersLive, each: p.length ? Math.max(...p) : 0 };
+  };
+  const few = lone(0.2), many = lone(1);
+  if (!(many.n > few.n && many.each < few.each * 0.6)) fail(`tracer lights: share 1 gives ${many.n} at ${many.each.toFixed(0)}, share 0.2 ${few.n} at ${few.each.toFixed(0)} (want more and weaker)`);
+  console.log(`tracer lights: share 0.2 -> ${few.n} lit at ${few.each.toFixed(0)} cd; share 1 -> ${many.n} lit at ${many.each.toFixed(0)} cd; tube gone ${frames} frames after letting go; noon core ${(dayCore / Math.max(1e-6, nightCore)).toFixed(2)} of night`);
+}
+
+// Tracer fill (Keith 2026-10-31: tracers "nowhere near enough for the bullets"): a steady gun at 12 rounds/s draws
+// 1 + tracerFill tracers a round, leaving inside the gap to its next round; a swarm sharing slots round-robin gets none.
+{
+  const sets: number[] = [];
+  const fx = new MinigunFx(FLAT, { ...MINIGUN_FX_DEFAULTS });
+  fx.gpuTracers = { set: (_i: number, _a: unknown, _b: unknown, t: number) => { sets.push(t); }, update: () => {} } as unknown as GpuTracers;
+  const m = new THREE.Vector3(1, 3, 0), d = new THREE.Vector3(0, 0, 1), hit = new THREE.Vector3(1, 0, 38);
+  let now = 0, rounds = 0;
+  for (let fr = 0; fr < 120; fr++) {
+    if (fr % 5 === 0) { fx.shot(0, m, d, hit, null, null, "sand", undefined, 1, 1, true); rounds++; }
+    fx.update(1 / 60); now += 1 / 60;
+  }
+  const want = (rounds - 1) * MINIGUN_FX_DEFAULTS.tracerFill;
+  if (fx.fillDrawn !== want) fail(`tracer fill: ${fx.fillDrawn} extra tracers for ${rounds} rounds (want ${want})`);
+  const late = sets.some((t, i) => i > 0 && t > now + 0.1);
+  if (late) fail("tracer fill: a fill tracer leaves after the next round is due");
+  const before = fx.fillDrawn;
+  for (let fr = 0; fr < 60; fr++) { fx.shot(3, m.set((fr % 9) * 4, 1, 20), d, hit, null, null); fx.update(1 / 60); }
+  if (fx.fillDrawn !== before) fail(`tracer fill: ${fx.fillDrawn - before} extra tracers on a slot shared by guns metres apart`);
+  console.log(`tracer fill: ${rounds} rounds -> ${rounds + fx.fillDrawn} tracers drawn (${MINIGUN_FX_DEFAULTS.tracerFill} extra a round); shared slots none`);
 }
 
 // By day (no day flash): a barrage makes no lights and no pools.
