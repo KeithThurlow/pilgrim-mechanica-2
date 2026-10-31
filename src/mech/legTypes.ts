@@ -73,3 +73,21 @@ export const LEG_TYPES: Record<string, LegType> = {
     },
   },
 };
+
+/** Every value a leg type sets (the variants' and the Rampart's): what changes with the fitted legs. */
+export const LEG_SHAPE_KEYS: readonly (keyof WalkerValues)[] = [...new Set(
+  Object.values(LEG_TYPES).flatMap((t) => Object.keys(t.values)),
+)] as (keyof WalkerValues)[];
+
+/**
+ * The walk of fitted legs (Keith 2026-10-31: the mech changes with its parts): the leg type's values, and for a value
+ * it doesn't set, what the legs it replaces had (`from`), so nothing of one leg type's walk stays on another's.
+ */
+export function legShape(id: string, from: Partial<WalkerValues>): Partial<WalkerValues> {
+  const t = LEG_TYPES[id]?.values ?? {}, out: Partial<WalkerValues> = {};
+  for (const k of LEG_SHAPE_KEYS) {
+    const x = t[k] ?? from[k];
+    if (x !== undefined) (out as Record<string, number>)[k] = x as number;
+  }
+  return out;
+}

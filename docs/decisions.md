@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | The mech shows what is fitted, starting with legs and hulls (placeholder quality is fine) | Keith | Keith | Agent on `wip/part-looks`. |
+| 2026-10-31 | Parts mix per model: legs (pelvis, legs, feet) from the legs item's variant, the torso from the hull's; guns, arms, shoulders, back kit and sensors move to the fitted hull; the pods stay the Rampart minigun (the weapon decides, not the hull); fitted legs bring their walk (LEG_TYPES) under the item's stats; `?mech=` keeps showing a whole variant | Claude | Claude | `src/mech/rampart.ts` setLooks, `src/game/loadoutApply.ts`. |
 | 2026-11-01 | Fuel turned off for now: a `fuelOn` toggle (off), not deleted, so it can come back | Keith | Keith | Off: no burn, warnings, out-of-fuel recovery or HUD line; `?set=fuelOn:1` or `?lowfuel` turns it on. |
 | 2026-11-01 | Extra munitions are deliberate: some Protocols (a double shot) use more, a splitting one doesn't | Keith | Keith | Built as: a Protocol's declared `cost` is the only thing that changes ammo use; Splitter 1, Overclock 2, new Double shot 2. |
 | 2026-11-01 | Double shot: two minigun rounds side by side at 70% damage for 2 rounds a shot (×1.40 within a magazine on swarms, ×1.17 sustained); minigun only, since on the autocannon it doubled crowd kills (×2) | Claude | Claude | Values are sliders/data in `src/items/protocols.ts`; Overclock (×1.20, ×1.00 sustained) is now weaker than it, a retune candidate. |
