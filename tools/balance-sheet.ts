@@ -96,7 +96,7 @@ const withProtos = (base: string, ids: string[]): Item => {
   for (const id of ids) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
   return it;
 };
-const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "rail-light", "rail-medium", "ac-medium", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
+const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)
 interface T {
@@ -337,7 +337,7 @@ for (const [name, hp, t] of ttkRows) {
 // 4. Protocols: × each one gives its weapon against every set; its niche is the best. Cards show base → with.
 console.log("\n-- Protocols (multiply; Keith 2026-10-31): × the plain weapon's eDPS per target set within a magazine; niche = best set;");
 console.log("   sust = the niche × over magazines and reloads (the cost of extra rounds); card = the item card's DPS, base → with --");
-const HOSTS = ["mg-medium", "ac-medium", "rpg-medium", "sh-rpg"];
+const HOSTS = ["mg-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg"];
 console.log(pad("host + Protocol", 34) + T_.map((t) => lp(t.id, 10)).join("") + lp("niche", 9) + lp("", 10) + lp("sust", 7) + "   card");
 for (const host of HOSTS) {
   const plain = W_.find((x) => x.id === host)!, base = T_.map((t) => eDps(plain, t, true)), baseS = T_.map((t) => eDps(plain, t));

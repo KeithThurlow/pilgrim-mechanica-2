@@ -376,6 +376,8 @@ export class Arsenal implements MechWeapons {
         const n = shotRounds(s.proto?.split), picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
         for (let k = 0; k < n; k++) s.swarm.launchOne(channelAim(cur.x, cur.z, s.swarm.fired, v.podReach, picks, u.lock), st.damage, st.blast, tube, bf.field);
         if (s.model) s.model.recoil.position.z = -0.12;
+        // The clip's last missile out: the walk picks up again (it reloads, not channels).
+        s.channel = magReady(mag);
       }
     }
     s.swarm.update(dt, bf.field, (i, out) => { const m = this.muzzleOf(s, side, this.tmp, i); out.x = m.x; out.y = m.y; out.z = m.z; }, (key) => this.findTarget(key), (m) => {
