@@ -79,6 +79,9 @@ export interface DuelOptions {
   starts?: [{ x: number; z: number; heading: number }, { x: number; z: number; heading: number }];
   /** Hull for both (a drill keeps them alive). */
   hull?: number;
+  /** Per-mech AI values (e.g. a level for the rival, index 1) over `ai`, and a hull multiplier each. */
+  aiEach?: [Partial<typeof RIVAL_AI_DEFAULTS> | undefined, Partial<typeof RIVAL_AI_DEFAULTS> | undefined];
+  hullMul?: [number, number];
   /** Cover drifts (default the lab's). */
   cover?: number;
 }
@@ -95,9 +98,9 @@ export function runDuel(o: DuelOptions): DuelResult {
   const base = () => ({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...DASH_DEFAULTS, ...BOUND_DEFAULTS, hull: MECH_DEFAULTS.hull });
   const mechs = [new DuelMech(base(), field, o.loadouts?.[0] ?? rollRivalLoadout(o.seedA, LOOT_DEFAULTS)), new DuelMech(base(), field, o.loadouts?.[1] ?? rollRivalLoadout(o.seedB, LOOT_DEFAULTS))];
   const starts = o.starts ?? [{ x: 0, z: -gv.duelStart, heading: 0 }, { x: 0, z: gv.duelStart, heading: Math.PI }];
-  mechs.forEach((m, i) => { m.sim.reset(starts[i].x, starts[i].z, starts[i].heading); if (o.hull) m.hull = m.health = o.hull; });
+  mechs.forEach((m, i) => { m.sim.reset(starts[i].x, starts[i].z, starts[i].heading); if (o.hull) m.hull = m.health = o.hull; if (o.hullMul) m.hull = m.health = Math.round(m.hull * o.hullMul[i]); });
   const aiv = { ...RIVAL_AI_DEFAULTS, ...o.ai };
-  const ais = [new RivalAi(aiv, (o.aiSeed ?? 1) * 2 + 1), new RivalAi(aiv, (o.aiSeed ?? 1) * 2 + 2)];
+  const ais = [new RivalAi({ ...aiv, ...o.aiEach?.[0] }, (o.aiSeed ?? 1) * 2 + 1), new RivalAi({ ...aiv, ...o.aiEach?.[1] }, (o.aiSeed ?? 1) * 2 + 2)];
   const r = rng((o.aiSeed ?? 1) * 104729 + o.seedA * 31 + o.seedB);
   const score = new DuelScore();
   score.start(0);

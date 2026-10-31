@@ -12,17 +12,17 @@ import type { Hittable } from "../game/battlefield";
 export interface BarEntry { key: unknown; x: number; y: number; z: number; hp: number; max: number; armour: number; width: number; always: boolean }
 
 export const BAR_DEFAULTS = {
-  barShow: 1,
-  barFade: 4,
-  barHeight: 0.32,
-  barScale: 1,
+  hpBarShow: 1,
+  hpBarFade: 4,
+  hpBarHeight: 0.32,
+  hpBarScale: 1,
 };
 export type BarValues = typeof BAR_DEFAULTS;
 export const BAR_PARAMS: Param[] = [
-  { key: "barShow", label: "Enemy health bars (0/1)", min: 0, max: 1, step: 1, group: "Health bars" },
-  { key: "barFade", label: "Bar shows after a hit for (s)", min: 0.5, max: 20, step: 0.5, group: "Health bars", tip: "Then fades; the big ones (excavators, turret trucks, the party bus, enemy mechs) always show theirs" },
-  { key: "barHeight", label: "Bar height (m)", min: 0.05, max: 1.5, step: 0.01, group: "Health bars" },
-  { key: "barScale", label: "Bar width ×", min: 0.3, max: 3, step: 0.05, group: "Health bars" },
+  { key: "hpBarShow", label: "Enemy health bars (0/1)", min: 0, max: 1, step: 1, group: "Health bars" },
+  { key: "hpBarFade", label: "Bar shows after a hit for (s)", min: 0.5, max: 20, step: 0.5, group: "Health bars", tip: "Then fades; the big ones (excavators, turret trucks, the party bus, enemy mechs) always show theirs" },
+  { key: "hpBarHeight", label: "Bar height (m)", min: 0.05, max: 1.5, step: 0.01, group: "Health bars" },
+  { key: "hpBarScale", label: "Bar width ×", min: 0.3, max: 3, step: 0.05, group: "Health bars" },
 ];
 
 const CAP = 400;
@@ -52,7 +52,7 @@ export class HealthBars {
     const v = this.v;
     this.t += dt; this.frame++;
     this.list.length = 0;
-    if (v.barShow > 0) for (const t of this.targets()) if (t.team !== this.team && t.bars) t.bars(this.list);
+    if (v.hpBarShow > 0) for (const t of this.targets()) if (t.team !== this.team && t.bars) t.bars(this.list);
     const q = this.camera.quaternion;
     this.right.set(1, 0, 0).applyQuaternion(q);
     let n = 0;
@@ -63,11 +63,11 @@ export class HealthBars {
       if (b.hp < st.hp - 1e-3) st.at = this.t;
       st.hp = b.hp; st.frame = this.frame;
       const age = this.t - st.at;
-      if (!b.always && (age > v.barFade || b.hp >= b.max)) continue;
+      if (!b.always && (age > v.hpBarFade || b.hp >= b.max)) continue;
       if (n + 3 > CAP * 3) break;
       // Shrink away over the last half second of its fade.
-      const k = b.always ? 1 : Math.min(1, (v.barFade - age) / 0.5);
-      const W = b.width * v.barScale, H = v.barHeight * k, f = Math.max(0, Math.min(1, b.hp / Math.max(1, b.max)));
+      const k = b.always ? 1 : Math.min(1, (v.hpBarFade - age) / 0.5);
+      const W = b.width * v.hpBarScale, H = v.hpBarHeight * k, f = Math.max(0, Math.min(1, b.hp / Math.max(1, b.max)));
       this.put(n++, b.x, b.y, b.z, 0, W + H * 0.5, H * 1.6, q, BACK);
       this.put(n++, b.x, b.y, b.z, -W / 2 + (W * f) / 2, W * f, H, q, f < 0.3 ? LOW : FILL);
       if (b.armour > 0) {
