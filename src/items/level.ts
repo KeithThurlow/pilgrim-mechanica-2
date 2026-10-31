@@ -17,7 +17,7 @@ export const LEVEL_WEIGHT: Record<string, number> = {
   blast: 0.15, splash: 0.15, range: 0.1, magazine: 0.25,
   // Parts that aren't weapons keep growing at about their old pace (4% × their old weight), so every item still rises with
   // level; a weapon's rate, cooldown, charge and spin-up never do.
-  walkSpeed: 0.13, sprintSpeed: 0.13, accel: 0.27, torsoTurnRate: 0.27, track: 0.27, handling: 0.27, impact: 0.27, dashRecharge: 0.27, lockAssist: 0.27, trackAssist: 0.27, magBonus: 0.5, reloadSpeed: 0.5, refill: 0.5, feedRate: 0.25,
+  crush: 0.5, walkSpeed: 0.13, sprintSpeed: 0.13, accel: 0.27, torsoTurnRate: 0.27, track: 0.27, handling: 0.27, impact: 0.27, dashRecharge: 0.27, lockAssist: 0.27, trackAssist: 0.27, magBonus: 0.5, reloadSpeed: 0.5, refill: 0.5, feedRate: 0.25,
 };
 
 /** The power curve's multiplier at a level (items' damage and hull; enemies' health and damage at an area level). */

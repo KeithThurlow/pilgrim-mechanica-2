@@ -13,6 +13,7 @@
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
+import { closingSpeed, trampleFling, trampleHurt, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
   type V3, type WalkSpec,
@@ -331,6 +332,8 @@ export const isWalker = (kind: number) => kind !== SMALL;
 const RANK = [0, 2, 1];
 
 const DEG = Math.PI / 180;
+/** A scrapper's body radius for the trample (m). */
+const SMALL_BODY = 0.6;
 const HASH_SIZE = 4096, HASH_MASK = HASH_SIZE - 1;
 const SLOTS_MAX = 64;
 
@@ -1415,6 +1418,36 @@ export class RobotSwarm {
     if (this.hp[i] > 0) return false;
     this.kill(i, dirX, dirZ);
     return true;
+  }
+
+  /**
+   * The mech's body running into small ones on the ground (Keith 2026-10-31: scrappers are trampled like bandits,
+   * src/combat/trample.ts): damage by the closing speed through hurt (the caller's hit adapter), survivors knocked
+   * down and flung along. Walkers (cutters, excavators) are left alone. Returns how many it touched.
+   */
+  trample(b: MechBody, tv: TrampleValues, hurt: (i: number, damage: number, dx: number, dz: number) => boolean, out: TrampleHit[] | null = null): number {
+    const R = b.reach + SMALL_BODY;
+    let n = 0;
+    for (let i = 0; i < this.hi; i++) {
+      const s = this.state[i];
+      if (this.kind[i] !== SMALL || s >= DOWN || s === LATCHED || s === LEAP || s === FLUNG) continue;
+      const dx = this.px[i] - b.x, dz = this.pz[i] - b.z;
+      if (dx * dx + dz * dz >= R * R) continue;
+      const c = closingSpeed(b, this.px[i], this.pz[i], this.vx[i], this.vz[i]);
+      if (c.closing < tv.trampleDown) continue;
+      n++;
+      const sp = Math.hypot(b.vx, b.vz) || 1, ox = b.vx / sp + c.nx, oz = b.vz / sp + c.nz, ol = Math.hypot(ox, oz) || 1;
+      const fx = ox / ol, fz = oz / ol, fling = trampleFling(c.closing, tv), dmg = trampleHurt(c.closing, tv, b.crush);
+      const x = this.px[i], z = this.pz[i];
+      const killed = dmg > 0 && hurt(i, dmg, fx, fz);
+      if (!killed) {
+        this.setState(i, DOWN);
+        this.fallYaw[i] = Math.atan2(fx, fz);
+        this.vx[i] = fx * fling; this.vz[i] = fz * fling;
+      }
+      out?.push({ kind: "robot", id: this.uid[i], damage: dmg, closing: c.closing, killed, x, z });
+    }
+    return n;
   }
 
   /**

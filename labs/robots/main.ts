@@ -10,6 +10,7 @@ import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMALL } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
+import { BodyContact } from "../../src/game/bodyContact";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
@@ -58,6 +59,8 @@ const lab = await combatLab({
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
 });
 const { V, bf, player, field } = lab;
+// The mech's body tramples scrappers (Keith 2026-10-31, src/game/bodyContact.ts).
+const contact = new BodyContact(player, bf);
 const sw = new RobotSwarm(V, field);
 sw.lookGround = bf.lookGround;
 // A dash throws clingers off and bowls over small ones in the way.
@@ -204,7 +207,9 @@ lab.onFrame((dt) => {
   }
   draw!.update(dt);
   tear.update(dt);
-  lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+  contact.step(dt);
+  contact.robots(sw, target);
+  lab.hud("robots", `trampled ${contact.kills} · robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
   const rl = lab.arsenal.last;
   if (rl.railHits !== undefined) lab.hud("rail", `last rail slug: ${rl.railHits} bodies, ${Math.round(rl.rail ?? 0)} damage${rl.railGround ? " · stopped in a dune" : ""}`);
 });

@@ -88,17 +88,21 @@ for (const [name, clip] of Object.entries(h.clips)) {
   console.log(`${name.padEnd(8)} ${String(clip.frames).padStart(3)} frames, ${clip.speed.toFixed(2)} m/s: lowest point ${minFoot.toFixed(3)}..${maxFoot.toFixed(3)} m, ` +
     `max jump ${jump.toFixed(3)} m/frame, worst edge ×${worstEdge.toFixed(2)} (${(share * 100).toFixed(2)}% past 0.4..2.2), rifle bend ${(rifleBend * 1000).toFixed(1)} mm, ` +
     `normals match faces ${(out * 100).toFixed(0)}%, rifle forward ${aimFwd.toFixed(2)}`);
-  must(minFoot > -0.06, `${name}: a foot ${minFoot.toFixed(3)} m through the ground`);
-  must(maxFoot < 0.1, `${name}: both feet ${maxFoot.toFixed(3)} m off the ground`);
-  must(jump < 0.4, `${name}: a vertex jumps ${jump.toFixed(2)} m in one frame`);
+  // The dive roll (Keith 2026-10-31) leaves the ground in the dive and tucks the shoulder into the sand as it rolls:
+  // looser bounds, and a fast tumble moves vertices further per frame.
+  const roll = name === "roll";
+  must(minFoot > (roll ? -0.25 : -0.06), `${name}: a foot ${minFoot.toFixed(3)} m through the ground`);
+  must(maxFoot < (roll ? 0.4 : 0.1), `${name}: both feet ${maxFoot.toFixed(3)} m off the ground`);
+  must(jump < (roll ? 0.6 : 0.4), `${name}: a vertex jumps ${jump.toFixed(2)} m in one frame`);
   must(share < 0.005, `${name}: ${(share * 100).toFixed(2)}% of edges stretched or crushed`);
   must(rifleBend < 0.005, `${name}: the rifle bends ${(rifleBend * 1000).toFixed(1)} mm`);
   must(out > 0.9, `${name}: only ${(out * 100).toFixed(0)}% of normals match their faces`);
-  if (name !== "sprint" && name !== "flinch") must(aimFwd > 0.5, `${name}: the rifle points ${aimFwd.toFixed(2)} along +Z`);
+  if (name !== "sprint" && name !== "flinch" && name !== "roll") must(aimFwd > 0.5, `${name}: the rifle points ${aimFwd.toFixed(2)} along +Z`);
 }
 
 // Playback: rows wrap inside the clip, crossfades finish, the cycle phase carries between moving loops.
-const clips: AnimClip[] = VAT_CLIPS.map((n) => ({ ...h.clips[n], cycle: n !== "aim" && n !== "flinch" }));
+const clips: AnimClip[] = VAT_CLIPS.map((n) => ({ ...h.clips[n], cycle: n !== "aim" && n !== "flinch" && n !== "roll" }));
+must(!!h.clips.roll && h.clips.roll.frames > 20 && !h.clips.roll.loop, "the dive roll clip is missing from the bake");
 const anim = new BanditAnim(clips, 4), rows = new Float32Array(8);
 const run = VAT_CLIPS.indexOf("run"), sprint = VAT_CLIPS.indexOf("sprint"), aim = VAT_CLIPS.indexOf("aim"), flinch = VAT_CLIPS.indexOf("flinch");
 anim.reset(0, run, 0);

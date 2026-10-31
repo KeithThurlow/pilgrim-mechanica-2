@@ -17,6 +17,7 @@ import { BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
 import { MechUnit } from "../../src/game/mechUnit";
 import type { RampartBody } from "../../src/mech/rampart";
 import { Warband, WARBAND_DEFAULTS, WARBAND_PARAMS } from "../../src/combat/warband";
+import { BodyContact } from "../../src/game/bodyContact";
 
 const RED = 0xc4523f;
 // The bus's bandits on foot: their rounds, how many draw a tracer, how far a stomp reaches.
@@ -35,7 +36,7 @@ const lab = await combatLab({
   params: [...WARBAND_PARAMS, ...RIDER_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
     { id: "raiders", label: "Raiders", groups: ["War band", "Raider driving", "Raider guns", "Raider health", "Raider wrecks"] },
-    { id: "bus", label: "Party bus", groups: ["Party bus", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] },
+    { id: "bus", label: "Party bus", groups: ["Party bus", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
   ],
   selectables: [{
     topic: "raiders", label: "Raiders",
@@ -47,7 +48,9 @@ const lab = await combatLab({
   actions: [{ label: "Next band", onClick: () => warband?.spawn(lab.player.sim.pelvis) }],
   report: () => ({ band: warband?.waves ?? 0 }),
 });
-const { V, bf, toon, player } = lab;
+const { V, bf, toon, player, arsenal } = lab;
+// The mech's body: tramples the bus's bandits, rams the vehicles (both hurt); bandits may dive out (Keith 2026-10-31).
+const contact = new BodyContact(player, bf);
 
 // Bandit mechs: red Ramparts, loaded ahead so a band can field them at once.
 const spare: MechUnit[] = [];
@@ -94,7 +97,7 @@ lab.onFrame((dt) => {
   for (let i = 0; i < riders.hi; i++) if (riders.state[i] < DEAD) { rx += riders.px[i]; rz += riders.pz[i]; rn++; }
   const prey = rn ? lab.prey(rx / rn, rz / rn) : lab.prey(player.sim.pos.x, player.sim.pos.z);
   const p = prey.at;
-  riders.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : 3 }, (fx, fy, fz, tx, ty, tz) => {
+  riders.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz) => {
     if (!prey.alive) return;
     from.set(fx, fy, fz);
     if (!bf.canSee(from, p)) return;
@@ -103,9 +106,13 @@ lab.onFrame((dt) => {
     if (drawn) slot = slot >= 19 ? 2 : slot + 1;
     bf.fire(slot, 2, from, dir, V.fireRange + 5, V.banditDamage, drawn ? { flashScale: 0.35, voice: "other", hitScale: 0.3 } : { tracer: false, voice: "none" });
   });
+  contact.step(dt);
+  riders.dodge(contact.threats(arsenal, bf.shells, V));
+  contact.infantry(riders, riderTarget);
+  contact.vehicles(wb.raiders, dt);
   riderDraw!.update(dt);
   const live = wb.raiders.filter((r) => r.alive).length;
   const buses = wb.raiders.filter((r) => r.kind === "partyBus");
   const busText = buses.map((b) => `${b.alive ? Math.round(b.hp) + " hp" : "wrecked"}, ${b.crew!.alive(riders)} of its ${b.crew!.dropped} out`).join("; ");
-  lab.hud("band", `band ${wb.waves} · raiders ${live} live, ${wb.raiders.length - live} wrecked · bandit mechs ${wb.mechs.filter((m) => m.alive).length}${buses.length ? ` · party bus: ${busText}` : ""} · on foot ${riders.count}`);
+  lab.hud("band", `band ${wb.waves} · raiders ${live} live, ${wb.raiders.length - live} wrecked · bandit mechs ${wb.mechs.filter((m) => m.alive).length}${buses.length ? ` · party bus: ${busText}` : ""} · on foot ${riders.count} · trampled ${contact.kills}, rams ${contact.rams}`);
 });

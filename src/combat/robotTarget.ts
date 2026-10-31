@@ -186,6 +186,13 @@ export class RobotTarget implements Hittable, Owner {
     return best;
   }
 
+  /** The mech's body (trample): robot i takes amount (no armour: it's crushed), thrown along (dirX, dirZ). */
+  crush(i: number, amount: number, dirX: number, dirZ: number): boolean {
+    const k = this.swarm.damage(i, amount, dirX, dirZ);
+    if (k) this.kills++;
+    return k;
+  }
+
   /** The round's damage, scaled by the part it struck (body full, legs and feet a share). */
   damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (this.last < 0) return;

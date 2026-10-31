@@ -105,7 +105,7 @@ export class InfantryDraw {
       const h = vat.header;
       const clips: AnimClip[] = VAT_CLIPS.map((name, k) => {
         this.clipId[name] = k;
-        return { ...h.clips[name], cycle: name !== "aim" && name !== "flinch" };
+        return { ...h.clips[name], cycle: name !== "aim" && name !== "flinch" && name !== "roll" };
       });
       this.anim = new BanditAnim(clips, INFANTRY_MAX);
       const ref = h.clothRef;
@@ -163,6 +163,13 @@ export class InfantryDraw {
         y += tilt * 0.18;
       } else if (vat) {
         this.q.setFromAxisAngle(this.ay, sw.heading[i]);
+      } else if (sw.diveT[i] > 0) {
+        // Boxes: a stand-in roll, one somersault over the dive, tucked low.
+        const k = 1 - sw.diveT[i] / Math.max(0.05, v.diveTime);
+        this.q.setFromAxisAngle(this.ay, sw.heading[i]);
+        this.qa.setFromAxisAngle(this.ax, k * Math.PI * 2);
+        this.q.multiply(this.qa);
+        y += 0.5 - Math.cos(k * Math.PI * 2) * 0.5 - Math.sin(k * Math.PI) * 0.4;
       } else {
         // Run cycle: bob, lean into the run, sway side to side.
         this.phase[i] += (speed / STRIDE) * Math.PI * dt;
@@ -212,6 +219,12 @@ export class InfantryDraw {
       return Math.sign(r || 1) * Math.min(RATE_MAX, Math.max(RATE_MIN, Math.abs(r))) * k;
     };
     if (st === DOWN || st === DEAD) { anim.play(i, anim.clip[i], 0); return; } // pose held while toppled
+    // A dive roll (Keith 2026-10-31): the baked Mixamo roll, sped up to fit the dive.
+    if (sw.diveT[i] > 0) {
+      const rate = Math.min(3, clips[id.roll].duration / Math.max(0.2, sw.v.diveTime));
+      anim.play(i, id.roll, rate, anim.clip[i] !== id.roll);
+      return;
+    }
     if (anim.clip[i] === id.flinch && anim.left(i) > 0 && speed < FLINCH_MAX_SPEED) { anim.play(i, id.flinch, k); return; }
     if (hit && speed < FLINCH_MAX_SPEED) { anim.play(i, id.flinch, k, true); return; }
     if (st === FLEEING) { anim.play(i, id.sprint, matched(id.sprint, speed)); return; }

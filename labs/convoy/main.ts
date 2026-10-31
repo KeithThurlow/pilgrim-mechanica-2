@@ -213,6 +213,8 @@ const enemies = enemiesOf(player.team);
 // The player's weapons as in the combat labs (src/game/playerAim.ts): the arsenal, camera shake, blasts.
 const shaker = new CameraShake();
 const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
+// The bandits may dive out of the mech's telegraphed shots (Keith 2026-10-31, src/game/bodyContact.ts).
+loop.threatSource = { arsenal, wv: V };
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -498,7 +500,7 @@ const panel = tweakPanel({
     { id: "deck", label: "Deck", groups: ["Deck"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
