@@ -300,6 +300,8 @@ export class MechUnit implements Hittable {
     // Sprinting a while (sprintGunsAfter), the weapons are off (src/mech/bound.ts): no trigger, and the torso, guns and
     // head face the line of travel (turned that share into a drift) with the hull leaning forward by speed.
     const want = { trigger, aim };
+    // The legs know where the guns aim (walking far round from it, they step backwards).
+    const move: MoveCommand = { ...cmd };
     for (let i = 0; i < sub; i++) {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);
@@ -317,7 +319,9 @@ export class MechUnit implements Hittable {
       sim.leanPitch = this.kneelPitch;
       sim.leanRoll = 0;
       const wasDashing = sim.dashing;
-      sim.update(dt / sub, cmd);
+      // Where the guns are aimed (none: the legs always turn to the travel; a torso with nothing to aim at follows them).
+      move.face = cmd.face ?? (aim ? Math.atan2(aim.x - sim.pos.x, aim.z - sim.pos.z) : undefined);
+      sim.update(dt / sub, move);
       // Its steps done, the shove and its glide are over too (the run or the walk has the speed).
       if (wasDashing && !sim.dashing) dash.cut();
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);

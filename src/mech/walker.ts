@@ -38,6 +38,8 @@ export interface Ground {
 /** Desired move direction in world x/z; length 0..1 is the stick amount. */
 export interface MoveCommand {
   x: number; z: number; sprint: boolean;
+  /** The torso's yaw (radians, heading convention), if there is one: walking far round from it, the legs step backwards. */
+  face?: number;
   /** A pilot sits in it: standing still a while, the legs flex now and then (the idle). */
   idle?: boolean;
 }
@@ -309,6 +311,9 @@ export class WalkerSim {
   private roll = new Spring(120, 22);
   private pitch = new Spring(60, 15);
   private accelSmooth = 0;
+  /** Walking: stepping backwards (the travel far round from the torso), and the speed along the legs last step. */
+  backing = false;
+  private walkAlong = 0;
   /** Ground rise per metre along the heading (+ uphill), smoothed. */
   grade = 0;
   /**
@@ -342,6 +347,7 @@ export class WalkerSim {
     this.heading = heading;
     this.speed = 0;
     this.vel.set(0, 0, 0);
+    this.backing = false; this.walkAlong = 0;
     this.phase = 0.05;
     const f = forwardOf(heading), l = leftOf(heading);
     for (const ft of this.feet) {
@@ -482,38 +488,7 @@ export class WalkerSim {
     if (this.running) this.runSteer(dt, cmd);
     else if (this.dashMove) this.dashSteer(dt);
     else {
-    // Grade along the heading: slows the walk uphill; shapes the stance downhill (aim, body).
-    {
-      const fw = forwardOf(this.heading, this.t.f);
-      const hA = this.ground.height(this.pos.x + fw.x * 2, this.pos.z + fw.z * 2);
-      const hB = this.ground.height(this.pos.x - fw.x * 2, this.pos.z - fw.z * 2);
-      this.grade += ((hA - hB) / 4 - this.grade) * Math.min(1, dt * 4);
-    }
-    // Heading swings toward the stick at a capped rate, and the walk slows through the turn (and uphill).
-    const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
-    let want = 0;
-    if (mag > 0.05) {
-      const err = wrap(Math.atan2(cmd.x, cmd.z) - this.heading);
-      const max = v.turnRate * D2R * dt;
-      const dh = clamp(err, -max, max);
-      this.heading = wrap(this.heading + dh);
-      this.turnSpeed = dh / dt;
-      want = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed) * (1 - v.turnSlow * Math.min(1, Math.abs(err) / (Math.PI / 2)));
-      want *= 1 - v.uphillSlow * smooth(0, 0.35, this.grade);
-    } else this.turnSpeed = 0;
-    const prev = this.speed;
-    const rate = want > this.speed ? v.accel : v.decel;
-    this.speed += clamp(want - this.speed, -rate * dt, rate * dt);
-    // Walking into a wall: the legs can't take it up a face steeper than wallStop (the walk is along the heading, so a
-    // wall only slows it; turning away frees it).
-    if (this.speed > 0.05) {
-      const fw0 = forwardOf(this.heading, this.t.f);
-      const out = this.faceScrub(fw0.x * this.speed, fw0.z * this.speed, Math.min(1, v.wallScrub * dt), false);
-      this.speed = Math.max(0, out.x * fw0.x + out.z * fw0.z);
-    }
-    this.accelSmooth += ((this.speed - prev) / dt - this.accelSmooth) * Math.min(1, dt * 6);
-    forwardOf(this.heading, this.vel).multiplyScalar(this.speed);
-    this.pos.addScaledVector(this.vel, dt);
+      this.walkSteer(dt, cmd);
     }
     // Landing skid: dies off at landFriction.
     const sk = this.skid.length();
@@ -570,7 +545,12 @@ export class WalkerSim {
     else if (this.speed < 0.08) { cps = 0; if (!this.squatState) this.settle(d); }
     // A planted leg near full stretch (sharp turns, steep ground) hurries the steps instead of overreaching. Running,
     // eased (it used to flick the cadence between one and two and a half times as the legs stretched, Keith 21:54).
-    const hurry = 1 + 1.5 * smooth(0.9, 1, this.stretch());
+    const st = this.stretch();
+    let hurry = 1 + 1.5 * smooth(0.9, 1, st);
+    // Walking, a planted foot left across the centre line (the legs swung round over it, or a quick sidestep) hurries
+    // the steps too, so the legs uncross quickly (2026-10-31, twin-stick walk).
+    // So does a stretched planted leg while the body moves off the way the legs walk (a hard turn or a sidestep).
+    if (!this.running) hurry += v.crossHurry * smooth(0, 0.4, this.crossed()) + v.turnHurry * smooth(0.8, 0.9, st) * this.offLegs();
     // Only while the run is on: blending back to the walk after letting go, a trailing leg steps in full at once (Keith
     // 2026-10-27: eased, it trailed out of reach and the hips dropped into the splits).
     this.hurry = this.running ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
@@ -614,6 +594,77 @@ export class WalkerSim {
     this.body(dt, d);
     this.pose();
     this.trackSlides(dt);
+  }
+
+  /**
+   * The walk, twin-stick (Keith 2026-10-31: "you need to actually move in the direction you press. Turn times are making
+   * it feel bad"): the body's velocity goes where the stick points, along it at walkAccel and braking the rest at
+   * walkStop (both scaled by the legs' weight), so a strafe or a reversal answers within a fraction of a second. The legs
+   * turn after it at legTurnRate and never hold it back; with the torso's yaw in the command (`face`) and the travel
+   * more than backArc from it, they keep facing the torso and step backwards. The sprint keeps its vehicle-like turning
+   * (runSteer, boundStep).
+   */
+  private walkSteer(dt: number, cmd: MoveCommand) {
+    const v = this.v;
+    const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
+    // Grade along the way of travel (the heading standing still): slows the walk uphill; shapes the stance downhill.
+    {
+      const s = Math.hypot(this.vel.x, this.vel.z);
+      const gx = s > 0.5 ? this.vel.x / s : Math.sin(this.heading), gz = s > 0.5 ? this.vel.z / s : Math.cos(this.heading);
+      const hA = this.ground.height(this.pos.x + gx * 2, this.pos.z + gz * 2);
+      const hB = this.ground.height(this.pos.x - gx * 2, this.pos.z - gz * 2);
+      this.grade += ((hA - hB) / 4 - this.grade) * Math.min(1, dt * 4);
+    }
+    // The legs' weight: their speed-up stat against the Rampart's 4 m/s², to the power walkWeight (0: all legs alike).
+    const wk = Math.pow(clamp(v.accel / 4, 0.2, 3), v.walkWeight);
+    const up = v.walkAccel * wk * dt, brake = v.walkStop * wk * dt;
+    // Speed past the walk's (handed on by the sprint or a dash) rolls off gently with the stick held on, as it always has;
+    // let go, the walk stops as quickly as ever.
+    const over = cmd.sprint ? v.sprintSpeed : v.walkSpeed, overBrake = v.overBrake * dt;
+    let ux = 0, uz = 0, top = 0;
+    if (mag > 0.05) {
+      ux = cmd.x / Math.hypot(cmd.x, cmd.z); uz = cmd.z / Math.hypot(cmd.x, cmd.z);
+      const travel = Math.atan2(ux, uz);
+      // Stepping backwards: the travel far round from the torso (with a little hysteresis).
+      if (cmd.face !== undefined && v.backArc > 0) {
+        const off = Math.abs(wrap(travel - cmd.face)) / D2R;
+        this.backing = this.backing ? off > v.backArc - 8 : off > v.backArc + 8;
+      } else this.backing = false;
+      top = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed) * (this.backing ? v.backSpeed : 1);
+      top *= 1 - v.uphillSlow * smooth(0, 0.35, this.grade);
+      // The legs turn toward the way of travel (or face away from it, stepping back): they follow, never gate.
+      const legsWant = this.backing ? wrap(travel + Math.PI) : travel;
+      const err = wrap(legsWant - this.heading), max = v.legTurnRate * D2R * dt;
+      const dh = clamp(err, -max, max);
+      this.heading = wrap(this.heading + dh);
+      this.turnSpeed = dh / dt;
+      // A share of speed lost while the legs are far off the way they're walking (0 by default: weight in the look).
+      top *= 1 - v.turnSlow * Math.min(1, Math.abs(err) / Math.PI);
+    } else this.turnSpeed = 0;
+    // Along the stick toward top (braking first if going the other way), the rest of the velocity braked away.
+    const vx = this.vel.x, vz = this.vel.z;
+    if (top > 0) {
+      let along = vx * ux + vz * uz;
+      const px = vx - along * ux, pz = vz - along * uz, pl = Math.hypot(px, pz);
+      along += along < 0 ? Math.min(-along, brake) + (along + brake > 0 ? Math.min(top, (along + brake) * up / brake) : 0)
+        : along < top ? Math.min(top - along, up) : -Math.min(along - top, along > over ? overBrake : brake);
+      const pk = pl > 1e-6 ? Math.max(0, pl - brake) / pl : 0;
+      this.vel.set(ux * along + px * pk, 0, uz * along + pz * pk);
+    } else {
+      const s = Math.hypot(vx, vz);
+      this.vel.multiplyScalar(s > 1e-6 ? Math.max(0, s - brake) / s : 0);
+    }
+    // Walking into a wall: the legs can't take it up a face steeper than wallStop (turning away frees it).
+    if (this.vel.lengthSq() > 0.0025) {
+      const out = this.faceScrub(this.vel.x, this.vel.z, Math.min(1, v.wallScrub * dt), false);
+      this.vel.set(out.x, 0, out.z);
+    }
+    this.speed = Math.hypot(this.vel.x, this.vel.z);
+    // Lean with the speed along the legs (back stepping backwards) and its change.
+    const fw = forwardOf(this.heading, this.t.f), along = this.vel.x * fw.x + this.vel.z * fw.z;
+    this.accelSmooth += ((along - this.walkAlong) / dt - this.accelSmooth) * Math.min(1, dt * 6);
+    this.walkAlong = along;
+    this.pos.addScaledVector(this.vel, dt);
   }
 
   /**
@@ -1856,6 +1907,25 @@ export class WalkerSim {
     return Math.sqrt(dx * dx + dy * dy + dz * dz) / reach;
   }
 
+  /**
+   * Walking, how far the body is moving off the way the legs walk (0 straight along them, 1 well across, as in a hard
+   * turn or a sidestep), or the legs swinging round fast.
+   */
+  private offLegs() {
+    const s = Math.hypot(this.vel.x, this.vel.z);
+    const legs = this.backing ? this.heading + Math.PI : this.heading;
+    const off = s > 0.5 ? Math.abs(wrap(Math.atan2(this.vel.x, this.vel.z) - legs)) : 0;
+    return Math.max(smooth(0.35, 1, off), smooth(1, 4, Math.abs(this.turnSpeed)));
+  }
+
+  /** How far (m) the worst planted foot sits across the body's centre line, on the other leg's side (0: none). */
+  private crossed() {
+    const l = leftOf(this.heading, this.t.l);
+    let m = 0;
+    for (const f of this.feet) if (!f.swinging) m = Math.max(m, -((f.planted.x - this.pos.x) * l.x + (f.planted.z - this.pos.z) * l.z) * f.side);
+    return m;
+  }
+
   /** How close the most stretched planted leg is to full reach (1 = straight). */
   private stretch() {
     const reach = this.v.femur + this.v.shin + this.v.cannon * 0.8;
@@ -1966,7 +2036,16 @@ export class WalkerSim {
     let ahead = d * S * (0.5 - v.stanceBack) * smooth(0, 0.6, this.speed);
     ahead += (v.runPlant - ahead) * this.gaitK;
     ahead *= 1 - v.downhillPlant * smooth(0, 0.35, -this.grade);
-    f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(fw, ahead).addScaledVector(lf, f.side * this.spread());
+    // Walking, the feet land ahead along the way of travel (a sidestep or a backstep too), on their own side of the legs.
+    if (!this.running && this.speed > 0.3) this.t.b.set(this.vel.x / this.speed, 0, this.vel.z / this.speed);
+    else this.t.b.copy(fw);
+    f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(this.t.b, ahead).addScaledVector(lf, f.side * this.spread());
+    // Walking, never across the other leg: the landing spot stays on its own side of where the body will be.
+    if (!this.running) {
+      const cx = this.pos.x + this.vel.x * remain, cz = this.pos.z + this.vel.z * remain;
+      const across = ((f.target.x - cx) * lf.x + (f.target.z - cz) * lf.z) * f.side, minAcross = this.spread() * 0.6;
+      if (across < minAcross) { f.target.x += lf.x * f.side * (minAcross - across); f.target.z += lf.z * f.side * (minAcross - across); }
+    }
     this.groundAt(f.target, f.targetUp);
     f.targetYaw = h + f.side * v.toeOut * D2R;
     // Downhill past the leg's reach (Keith 2026-10-26 18:28: no yanking the legs to the ground): the foot reaches as far
@@ -2208,7 +2287,9 @@ export class WalkerSim {
     const fw = forwardOf(this.heading, this.t.f);
     const slope = Math.atan(this.grade);
     const pitchShare = slope < 0 ? v.slopePitch * v.downhillLevel : v.slopePitch;
-    const walkLean = (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(this.speed / Math.max(0.1, v.walkSpeed), 0, 1.6)) * D2R;
+    // Walking, the lean goes with the speed along the legs (back, stepping backwards; none, sidestepping).
+    const fwdSp = this.running || this.dashMove ? this.speed : this.vel.x * fw.x + this.vel.z * fw.z;
+    const walkLean = (clamp(this.accelSmooth / 3, -1, 1) * v.speedLean + v.moveLean * clamp(fwdSp / Math.max(0.1, v.walkSpeed), -1, 1.6)) * D2R;
     const runLean = v.boundLean * D2R * (0.35 + 0.65 * this.speedShare());
     this.pitch.step(-slope * pitchShare + walkLean + (runLean - walkLean) * rk + v.landPitch * D2R * Math.max(0, this.squat) / Math.max(0.1, v.landSquatMax) + this.leanPitch + this.dashPitch, dt);
 
