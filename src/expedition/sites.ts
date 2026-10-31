@@ -10,6 +10,7 @@ import { POI_DEFAULTS, POI_KINDS, PoiField, type PoiPlacement } from "../world/p
 import { PoiPads, rawGround } from "../world/poiPads";
 import { addModifier } from "../world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../pois/kinds";
+import { SiegeWalls, isSiege } from "../pois/fortressGround";
 import type { PoiSite } from "../pois/site";
 import { PoiDraw } from "../pois/poiDraw";
 import { SalvageSim, SALVAGE_DEFAULTS, type SpotState } from "../pois/salvage";
@@ -27,6 +28,8 @@ export const SITES_PARAMS: Param[] = [
 export class FieldSites {
   readonly pois: PoiField;
   readonly pads: PoiPads;
+  /** Fortress and hub walls in the ground (gates down kept in walls.down). */
+  readonly walls: SiegeWalls;
   readonly salvage: SalvageSim;
   readonly fx: SalvageDraw;
   private raw: ReturnType<typeof rawGround>;
@@ -49,6 +52,9 @@ export class FieldSites {
     this.pois = new PoiField(v, this.raw);
     this.pads = new PoiPads(this.pois);
     addModifier(field, this.pads);
+    this.walls = new SiegeWalls(this.pois, v);
+    addModifier(field, this.walls);
+    this.walls.skip = (p) => this.blocked(p.x, p.z) || this.edgeBlocked(p);
     this.salvage = new SalvageSim(v);
     this.fx = new SalvageDraw(this.salvage, bf, v);
     scene.add(this.fx.group);
@@ -68,6 +74,7 @@ export class FieldSites {
     this.extra.clear();
     this.raw.refresh();
     this.pois.reset();
+    this.walls.reset();
     for (const id of [...this.drawn.keys()]) this.drop(id);
     this.memory.clear();
     this.syncT = 0;
@@ -75,9 +82,16 @@ export class FieldSites {
 
   /** Generated POIs in a box, without the ones the road has taken. */
   poisIn(x0: number, z0: number, x1: number, z1: number): PoiPlacement[] {
-    const out = this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z));
+    const out = this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z) && !(isSiege(p) && this.edgeBlocked(p)));
     for (const s of this.extra.values()) { const p = s.place; if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1) out.push(p); }
     return out;
+  }
+
+  /** A fortress or hub the road runs into anywhere round its pad's edge (not only at its centre). */
+  private edgeBlocked(p: PoiPlacement) {
+    const r = p.pad ? p.pad.r + p.pad.blend : p.reach;
+    for (let k = 0; k < 12; k++) if (this.blocked(p.x + Math.sin(k * 0.5236) * r, p.z + Math.cos(k * 0.5236) * r)) return true;
+    return false;
   }
 
   /** A site made on the sand (a clash's wreckage): from now on it is a POI with spots to strip. */
