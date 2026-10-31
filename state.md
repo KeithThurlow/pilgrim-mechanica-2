@@ -264,6 +264,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-10-31 · Proposal: generated parts pipeline (Keith, thread agent on `wip/partgen`)
+- `docs/proposal-partgen.md`: models checked, a splat lane and a direct-mesh lane for a bake-off, Blender game prep, checks. No code yet.
 ### 2026-10-31 · Walk off the convoy: no rails on the mech bays' long sides (Keith, agent on `wip/walkoff`)
 - The mech walks, runs, dashes or sprints off a bay's side onto the sand, carrying the deck's speed, and lands as from a crane drop (stomp, dust, crater, shake); the expedition starts the same way; crane pick-up, parking and the launch pads unchanged; the pilot keeps the edge; the sprint now works on an open deck. Files: `src/convoy/deck.ts`, `carry.ts`, `outline.ts`, `platformBody.ts`, `labs/convoy/main.ts` (`?walkoff[=dash]`), `tools/convoy-check.ts` (7c).
 - Checked: convoy-check 7c, each side: walk off after 1.5 s at 6 m/s out, falls 0.84 s, hits at 9.6 m/s, lands 13.3 m beside; run 8.5 m/s out, 0.72 s; dash 14.7 m/s out, 0.53 s, hits 13 m/s; sprint 19.5 m/s out; all leave at the convoy's 3.3 m/s along, no foot below the sand, overreach 0, expedition launched once, crane not straight back. Full `npm test`.
