@@ -66,6 +66,8 @@ import type { Battlefield, Hittable, SplashOpts } from "./battlefield";
 import { armourHit } from "./armour";
 import { TRAMPLE_DEFAULTS, TRAMPLE_PARAMS } from "../combat/trample";
 import { RepairKits, REPAIR_DEFAULTS, REPAIR_PARAMS, type KitRefusal } from "./repair";
+import { Abilities, ABILITY_DEFAULTS, ABILITY_PARAMS } from "../abilities/abilities";
+import type { HealTarget } from "../abilities/zones";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
@@ -73,6 +75,7 @@ export const MECH_DEFAULTS = {
   ...BOUND_DEFAULTS,
   ...TRAMPLE_DEFAULTS,
   ...REPAIR_DEFAULTS,
+  ...ABILITY_DEFAULTS,
   /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
   trample: 1,
   crush: 1,
@@ -99,6 +102,7 @@ export const MECH_PARAMS: Param[] = [
   ...BOUND_PARAMS,
   ...TRAMPLE_PARAMS,
   ...REPAIR_PARAMS,
+  ...ABILITY_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
   { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
   { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },
@@ -142,6 +146,10 @@ export class MechUnit implements Hittable {
   readonly hits: { dx: number; dz: number; amount: number }[] = [];
   /** Repair kits carried (src/game/repair.ts): Q uses one (the useKit command). */
   readonly kits: RepairKits;
+  /** Timed abilities from the hull and pack (src/abilities/abilities.ts): keys 3 and 4. */
+  readonly abilities: Abilities;
+  /** Stable id for heal zones and peers ("player" for the local one; allies and enemies their own). */
+  uid = "mech";
   /** Paint colour (null: the model's own). */
   paint: number | null = null;
   /** Hull for this mech instead of the shared slider (bandit mechs). */
@@ -214,6 +222,7 @@ export class MechUnit implements Hittable {
     this.upper = new UpperSim(v);
     this.health = v.hull;
     this.kits = new RepairKits(v);
+    this.abilities = new Abilities(v);
     const sim = this.sim, dust = bf.dust;
     sim.onFootfall = (f, k) => {
       // In the shallows: a splash and rings instead of a print and dust.
@@ -319,6 +328,9 @@ export class MechUnit implements Hittable {
     // Dead: the weapons still fly what is already in the air, with every trigger let go.
     if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); return; }
     this.heal(this.kits.step(dt));
+    this.abilities.step(dt);
+    // Braced by the Field weld: rooted where it stands.
+    if (this.abilities.braced > 0) cmd = { ...cmd, x: 0, z: 0, sprint: false };
     const { sim, upper, body, v } = this;
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
@@ -481,10 +493,20 @@ export class MechUnit implements Hittable {
     return add;
   }
 
+  /** This mech as a heal zone sees it (src/abilities/zones.ts). */
+  healTarget(): HealTarget {
+    const self = this;
+    return {
+      get id() { return self.uid; }, get team() { return self.team; }, get x() { return self.sim.pelvis.x; }, get z() { return self.sim.pelvis.z; },
+      get alive() { return self.alive; }, get max() { return self.maxHealth; }, heal: (n) => self.heal(n),
+    };
+  }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
     amount = armourHit(amount, this.armourOf(), pierce);
     if (this.dash.shoving) amount *= this.v.dashDamageCut;
+    amount *= this.abilities.damageScale;
     this.health -= amount;
     this.hurt += amount;
     void at;

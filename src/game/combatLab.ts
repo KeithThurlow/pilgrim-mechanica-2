@@ -50,6 +50,8 @@ import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../pilot/
 import type { Prey } from "../pilot/quarry";
 import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../ui/vitalsHud";
 import { KitControl, addRepairSounds } from "./repairUse";
+import { AbilityControl } from "../abilities/abilityUse";
+import { ABILITY_TOPIC } from "../abilities/abilities";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
@@ -114,6 +116,8 @@ export interface CombatLab<E extends object> {
   arsenal: Arsenal;
   /** Shake the camera (decays by itself). */
   shake: (k: number) => void;
+  /** Abilities and heal zones (src/abilities/abilityUse.ts): add allies for zones to heal. */
+  abilities: AbilityControl;
   /** Set by a lab to split the frame into stages (src/core/costs.ts): the shell marks its own; a lab's onFrame marks
    * what it adds. The averaged line shows in the HUD. */
   costs: Costs | null;
@@ -224,6 +228,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
+      ABILITY_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
       { id: "legs", label: "Legs", groups: ["Move", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
@@ -246,6 +251,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   selector = new Selector(app, {
     items: [
       { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
+      { topic: "abilities", label: "Heal zones", objects: () => abilityCtl.draw.meshes() },
       { topic: "legs", label: "Legs", objects: () => regions.legs },
       { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
@@ -266,6 +272,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // Your vitals (src/ui/vitalsHud.ts) and repair kits on Q (src/game/repairUse.ts; Keith 2026-10-31).
   const vitals = vitalsHud(V);
   const kitCtl = new KitControl(player, foot, bf.sfx);
+  // Abilities from the hull and pack on keys 3 and 4, and their heal zones (src/abilities/).
+  player.uid = "player";
+  const abilityCtl = new AbilityControl(player, foot, scene, (x, z) => field.height(x, z), bf.sfx);
   addRepairSounds(bf.sfx, () => V.kitSound);
   foot.showHealth = false;
   let kitPrompt = "";
@@ -294,6 +303,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const frames: ((dt: number) => void)[] = [];
 
   const lab: CombatLab<E> = {
+    abilities: abilityCtl,
     app, V, field, bf, toon, player, deaths,
     enemies,
     onFrame: (fn) => frames.push(fn),
@@ -384,6 +394,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("input + lock");
     player.step(dt, cmd, aim, trigger, shotAt ?? aim);
     kitPrompt = kitCtl.update(dt, keys.has("KeyQ"), auto);
+    abilityCtl.update(dt, keys.has("Digit3") && !sel.active, keys.has("Digit4") && !sel.active, auto);
     // Lab only: rebuilt with a full set of kits.
     if (!player.alive && player.deadFor > V.respawn) { player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading); player.kits.restock(V.kitMax); }
     // The pilot: hold F to get out (anywhere the mech stands, not mid-dash) and back in; WASD walks him on foot.
@@ -400,7 +411,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths physics");
     deadDraw.update();
     cst?.mark("deaths draw");
-    vitals.update(rawDt, kitCtl.view(), player.hits, camera, player.sim.pelvis);
+    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
     if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.

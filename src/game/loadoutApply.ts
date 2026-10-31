@@ -24,6 +24,7 @@ export function applyLoadout(unit: MechUnit, r: Resolved) {
   unit.body.showParts?.({ gunLeft: !!r.guns.left, gunRight: !!r.guns.right, ...r.parts });
   // The new weapons (src/weapons): their stand-in models and sims, if the unit carries an arsenal.
   unit.weapons?.configure?.(r);
+  unit.abilities.fit(r.abilities ?? []);
   // Fitted at the bay: full drums, full hull, dash charges topped up to the new pack.
   unit.upper.resupply();
   if (unit.alive) unit.health = unit.maxHealth;

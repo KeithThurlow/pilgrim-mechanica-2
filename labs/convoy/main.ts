@@ -89,6 +89,8 @@ import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { convoyShop } from "../../src/ui/convoyShop";
 import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../../src/ui/vitalsHud";
 import { KitControl, addRepairSounds } from "../../src/game/repairUse";
+import { AbilityControl } from "../../src/abilities/abilityUse";
+import { ABILITY_TOPIC } from "../../src/abilities/abilities";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag, addTo } from "../../src/items/cargo";
@@ -250,6 +252,9 @@ const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
 // Your vitals and repair kits on Q (src/ui/vitalsHud.ts, src/game/repairUse.ts; Keith 2026-10-31).
 const vitals = vitalsHud(V);
 const kitCtl = new KitControl(player, foot, bf.sfx);
+// Abilities on keys 3 and 4 and their heal zones (src/abilities/); a zone on a deck sits on the deck.
+player.uid = "player";
+const abilityCtl = new AbilityControl(player, foot, scene, (x, z) => walkable.floorBelow(x, z, sim.pelvis.y + 2).y, bf.sfx);
 addRepairSounds(bf.sfx, () => V.kitSound);
 foot.showHealth = false;
 /** Was the crane armed when the pilot got out on the sand (it mustn't come for the empty mech; restored on getting in). */
@@ -506,6 +511,7 @@ const panel = tweakPanel({
   topics: [
     PILOT_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
+    ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
@@ -808,6 +814,7 @@ app.onTick((rawDt) => {
 
   // Getting out and in: the mount, the field kneel or the bay's park, the crane kept off an empty mech on the sand.
   const kitPrompt = kitCtl.update(dt, keys.has("KeyQ") && !bay.isOpen, auto);
+  abilityCtl.update(dt, keys.has("Digit3") && !bay.isOpen, keys.has("Digit4") && !bay.isOpen, auto);
   const termPrompt = term ? `Press <b>E</b>: bay terminal (fit parts, stash)${bay.isOpen ? " · open" : ""}` : "";
   const prompt = [termPrompt, kitPrompt].filter(Boolean).join("<br>");
   foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut, knelt: aboardNow ? carry.settled : undefined, prompt, walkHere: false, pushOut: ways.pushOut.bind(ways) });
@@ -880,7 +887,7 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
-  vitals.update(dt, kitCtl.view(), player.hits, camera, sim.pelvis);
+  vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");

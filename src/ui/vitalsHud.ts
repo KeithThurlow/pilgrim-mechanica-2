@@ -40,7 +40,9 @@ export interface VitalsView {
   pilot?: { hp: number; max: number } | null;
   /** A short note beside the kits (why Q did nothing, a patch in progress). */
   note?: string;
-  /** Abilities (later): name, key, 0..1 ready (1 = ready), active. */
+  /** Being repaired by a zone right now: the bar glows. */
+  healing?: boolean;
+  /** Abilities: name, key, 0..1 ready (1 = ready), active. */
   abilities?: { key: string; name: string; ready: number; active: boolean }[];
 }
 
@@ -118,6 +120,7 @@ export class VitalsHud {
     const col = share > 0.5 ? COL.hull : share > 0.25 ? COL.mid : COL.low;
     this.fill.style.width = `${share * 100}%`;
     this.fill.style.background = col;
+    this.fill.style.boxShadow = view.healing || view.kitProgress !== null ? "0 0 8px 2px rgba(127, 240, 200, 0.85)" : "none";
     this.ghostEl.style.width = `${this.ghost * 100}%`;
     const name = onFoot ? "Pilot" : view.alive ? "Hull" : "Destroyed";
     this.label.innerHTML = `<span>${name}</span><span>${Math.max(0, Math.round(hp))} / ${Math.round(max)}${onFoot ? "" : ` &nbsp;<span style="opacity:.75">⛨ ${Math.round(view.armour)}</span>`}</span>`;
