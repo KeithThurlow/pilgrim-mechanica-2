@@ -418,6 +418,7 @@ export class Arsenal implements MechWeapons {
       this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp);
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
+      bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5);
       if (sh.model) sh.model.recoil.position.z = -0.05;
     }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
@@ -488,6 +489,7 @@ export class Arsenal implements MechWeapons {
     const bf = this.bf;
     this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st).ap = st.ap;
     if (quiet) return;
+    bf.nightLights?.launch(from.x, from.y, from.z, 1);
     this.onFire?.("rpg");
     bf.sfx.playSound("rocket", from, 1, 0.8);
     for (let k = 0; k < 5; k++) bf.dust.smoke(from.x, from.y, from.z, (Math.random() - 0.5) * 2, 0.5 + Math.random(), (Math.random() - 0.5) * 2, 0.4, 0.9, 0.7, 0.35);

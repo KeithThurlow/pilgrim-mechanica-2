@@ -155,7 +155,7 @@ export function fitArsenal(bf: Battlefield, player: MechUnit, v: MechUnit["v"] &
   const arsenal = new Arsenal(bf, player, v, toon, () => list.get());
   arsenal.findTarget = (key) => list.find(key);
   player.weapons = arsenal;
-  const draw = new ArsenalDraw(arsenal, bf.field);
+  const draw = new ArsenalDraw(arsenal, bf.field, () => bf.nightLights);
   scene.add(draw.group);
   arsenal.onShake = shake.add;
   bf.onBlast = (at, radius) => {

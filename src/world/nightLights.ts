@@ -16,6 +16,7 @@
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { LampDraw } from "../fx/lampDraw";
+import { clusterLights, type LightCluster, type LightReq } from "./lightCluster";
 import {
   LAMP_HEAD, LAMP_FLOOD, LAMP_ROBOT, LAMP_RUNNING, LAMP_CAB, LAMP_TAIL, LAMP_MECH, LAMP_KINDS,
   type LampKind, type LampSpot, type LampSource, type LampEmit,
@@ -39,6 +40,21 @@ export const NIGHT_LIGHT_DEFAULTS = {
   blastLightTime: 0.45,
   nightLightsFrom: 0.15,
   lightFar: 160,
+  // Rockets and clustering (Keith 2026-10-31)
+  clusterRadius: 8,
+  clusterCurve: 0.5,
+  clusterCap: 4000,
+  clusterGrow: 0.6,
+  flashPool: 0.5,
+  dayFlash: 0,
+  rocketLight: 120,
+  rocketRange: 10,
+  rocketHue: 30,
+  rocketGlow: 1.6,
+  rocketFlare: 2.8,
+  rocketPool: 0.45,
+  muzzleLight: 500,
+  muzzleTime: 0.1,
   // Vehicle lights
   vehReach: 16,
   vehAngle: 16,
@@ -90,6 +106,20 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "blastLightTime", label: "Blast flash time (s)", min: 0.05, max: 2, step: 0.05, group: G },
   { key: "nightLightsFrom", label: "On from night amount", min: 0, max: 1, step: 0.01, group: G, tip: "Lights fade in from this much night (0 day .. 1 full night)" },
   { key: "lightFar", label: "Faked lamps out to (m)", min: 40, max: 400, step: 5, group: G, tip: "Glows, pools and beams fade out toward this distance from the focus" },
+  { key: "clusterRadius", label: "Merge lights within (m)", min: 0, max: 30, step: 0.5, group: G, tip: "Blasts, launches and rockets this close together share one real light (0: never merge)" },
+  { key: "clusterCurve", label: "Merged brightness curve", min: 0, max: 1, step: 0.05, group: G, tip: "0.5: a merged light grows as the square root of how many it holds; 1: the plain sum; 0: only the brightest" },
+  { key: "clusterCap", label: "Merged brightness cap", min: 200, max: 20000, step: 100, group: G, tip: "A soft ceiling: a merged light eases toward it and never reaches it" },
+  { key: "clusterGrow", label: "Merged reach growth", min: 0, max: 1, step: 0.05, group: G, tip: "How much a merged light's reach grows with its brightness" },
+  { key: "flashPool", label: "Faked flash on the ground", min: 0, max: 2, step: 0.05, group: G, tip: "Merged lights left without a real light still light the ground (faked)" },
+  { key: "dayFlash", label: "Blast flash by day", min: 0, max: 1, step: 0.01, group: G, tip: "Share of the night flash blasts and rockets get in daylight (above 0 makes the real lights by day: one shader rebuild and their cost all day)" },
+  { key: "rocketLight", label: "Rocket light", min: 0, max: 1000, step: 5, group: G, tip: "Each rocket and missile in flight asks for a real light this strong (merged with its neighbours)" },
+  { key: "rocketRange", label: "Rocket light reach (m)", min: 2, max: 40, step: 0.5, group: G },
+  { key: "rocketHue", label: "Rocket light hue (°)", min: 0, max: 60, step: 1, group: G, tip: "0 red, 30 orange, 55 yellow" },
+  { key: "rocketGlow", label: "Rocket glow size (m)", min: 0, max: 5, step: 0.05, group: G },
+  { key: "rocketFlare", label: "Rocket exhaust flare (m)", min: 0, max: 10, step: 0.1, group: G },
+  { key: "rocketPool", label: "Rocket light on the ground", min: 0, max: 2, step: 0.01, group: G, tip: "The faked glow a rocket throws on the sand under it" },
+  { key: "muzzleLight", label: "Launch flash", min: 0, max: 3000, step: 10, group: G, tip: "A rocket leaving its tube" },
+  { key: "muzzleTime", label: "Launch flash time (s)", min: 0.02, max: 0.5, step: 0.01, group: G },
 
   { key: "vehReach", label: "Headlights land at (m)", min: 4, max: 40, step: 0.5, group: GV },
   { key: "vehAngle", label: "Headlight cone (°)", min: 5, max: 60, step: 1, group: GV },
@@ -132,7 +162,11 @@ PRIO[LAMP_HEAD] = 1.2; PRIO[LAMP_FLOOD] = 2; PRIO[LAMP_ROBOT] = 3; PRIO[LAMP_RUN
 interface KindLook { reach: number; tanHalf: number; angle: number; glow: number; pool: number; beam: number; real: number; spot: boolean; r: number; g: number; b: number }
 
 interface Lamp { list: () => Iterable<THREE.Object3D>; color: number; k: number }
-interface Flash { x: number; y: number; z: number; r: number; t: number; T: number }
+/** A short light: a blast (r its radius) or a launch flash (muzzle: r its size share). */
+interface Flash { x: number; y: number; z: number; r: number; t: number; T: number; muzzle: boolean }
+/** Rockets asked for this frame: x, y, z, dx, dy, dz (flight direction), k (size) each. */
+const ROCKET_MAX = 256, RS = 7;
+const BLAST_COL = new THREE.Color(0xffa860), MUZZLE_COL = new THREE.Color(0xffc27a);
 /** A lamp wanting a real light this frame. */
 interface Want { score: number; kind: LampKind; x: number; y: number; z: number; tx: number; ty: number; tz: number; dist: number; k: number; color: number; range: number }
 
@@ -171,8 +205,16 @@ export class NightLights {
   private focus = new THREE.Vector3();
   private n = 0;
   private emitFn: LampEmit;
+  private rockets = new Float32Array(ROCKET_MAX * RS);
+  private nRocket = 0;
+  private reqs: LightReq[] = [];
+  private clusters: LightCluster[] = [];
+  private clusterOrder: LightCluster[] = [];
+  private rocketCol = new THREE.Color();
   /** How many real lights were lit last frame (for the HUD). */
   lit = 0;
+  /** Last frame's short lights: requests (rockets, blasts, launches), the clusters they merged into, and how many got a real light. */
+  readonly stats = { requests: 0, clusters: 0, real: 0 };
   /** How many times the real-light pools were made (only when their size sliders change). */
   builds = 0;
 
@@ -189,8 +231,19 @@ export class NightLights {
   track(root: THREE.Object3D | null) { this.tracked = root; this.rescan = 0; }
   /** A blast at (x, y, z) of this radius lights the ground for a moment. */
   flash(x: number, y: number, z: number, radius: number) {
-    if (this.flashes.length > 24) this.flashes.shift();
-    this.flashes.push({ x, y, z, r: radius, t: 0, T: this.v.blastLightTime });
+    if (this.flashes.length > 96) this.flashes.shift();
+    this.flashes.push({ x, y, z, r: radius, t: 0, T: this.v.blastLightTime, muzzle: false });
+  }
+  /** A rocket leaving its tube (k: its size, 1 a launcher's rocket). */
+  launch(x: number, y: number, z: number, k = 1) {
+    if (this.flashes.length > 96) this.flashes.shift();
+    this.flashes.push({ x, y, z, r: k, t: 0, T: this.v.muzzleTime, muzzle: true });
+  }
+  /** A rocket or missile in flight this frame, flying along (dx, dy, dz) (k: its size, 1 a launcher's rocket). Cleared each update. */
+  rocket(x: number, y: number, z: number, dx: number, dy: number, dz: number, k = 1) {
+    if (this.nRocket >= ROCKET_MAX) return;
+    const a = this.rockets, i = this.nRocket++ * RS;
+    a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = dx; a[i + 4] = dy; a[i + 5] = dz; a[i + 6] = k;
   }
   /** The real lights in use: points, spots and the headlamp (for checks). */
   get pools() { return { points: this.pool.length, spots: this.spots.length, headlamp: this.spot }; }
@@ -336,6 +389,50 @@ export class NightLights {
     }
   }
 
+  /**
+   * The short lights this frame as requests (k: their share of full strength, n: night for the faked parts), each
+   * rocket's faked glow, exhaust flare and light on the sand, then merged into clusters. Returns the cluster count.
+   */
+  private shortLights(k: number, n: number): number {
+    const v = this.v;
+    let nr = 0;
+    const req = (x: number, y: number, z: number, power: number, range: number, c: THREE.Color) => {
+      if (nr >= this.reqs.length) this.reqs.push({ x: 0, y: 0, z: 0, power: 0, range: 0, r: 0, g: 0, b: 0 });
+      const q = this.reqs[nr++];
+      q.x = x; q.y = y; q.z = z; q.power = power; q.range = range; q.r = c.r; q.g = c.g; q.b = c.b;
+    };
+    if (k > 0) {
+      for (const f of this.flashes) {
+        const e = 1 - f.t / f.T, ee = e * e * k;
+        if (f.muzzle) req(f.x, f.y, f.z, v.muzzleLight * f.r * ee, 5 + 4 * f.r, MUZZLE_COL);
+        else req(f.x, f.y, f.z, v.blastLight * (f.r / 2.5) * ee, f.r * 5 + 6, BLAST_COL);
+      }
+      const col = this.rocketCol.setHSL(v.rocketHue / 360, 1, 0.6), F = v.lightFar, a = this.rockets;
+      for (let i = 0; i < this.nRocket; i++) {
+        const o = i * RS, x = a[o], y = a[o + 1], z = a[o + 2], s = a[o + 6];
+        req(x, y, z, v.rocketLight * s * k, v.rocketRange * Math.sqrt(s), col);
+        // Faked, at night only: a glow on the rocket, a flare back along its flight, a soft light on the sand under it.
+        const d = Math.hypot(x - this.focus.x, z - this.focus.z);
+        if (n <= 0 || d > F) continue;
+        const A = n * (d < F * 0.7 ? 1 : 1 - (d - F * 0.7) / (F * 0.3));
+        const r = col.r * A, g = col.g * A, b = col.b * A;
+        this.draw.glow(x, y, z, v.rocketGlow * s, r, g, b);
+        const dl = Math.hypot(a[o + 3], a[o + 4], a[o + 5]) || 1, L = v.rocketFlare * s / dl;
+        if (L > 0) this.draw.beam(x, y, z, x - a[o + 3] * L, y - a[o + 4] * L, z - a[o + 5] * L, 0.22 * v.rocketFlare * s, r, g, b);
+        if (v.rocketPool > 0) {
+          const gy = this.groundAt(x, z), h = Math.max(0, y - gy);
+          if (h < 30) {
+            const rad = (1.5 + h * 0.4) * Math.sqrt(s), p = v.rocketPool / (1 + h * 0.12);
+            this.draw.pool(x, gy, z, 0, 1, 0, a[o + 3], a[o + 5], rad, rad, r * p, g * p, b * p);
+          }
+        }
+      }
+    }
+    this.nRocket = 0;
+    this.stats.requests = nr;
+    return clusterLights(this.reqs, nr, { radius: v.clusterRadius, curve: v.clusterCurve, cap: v.clusterCap, grow: v.clusterGrow }, this.clusters);
+  }
+
   /** night: 0 day .. 1 full night (from the look). focus: where the camera looks, for picking the nearest lamps. */
   update(dt: number, night: number, focus: THREE.Vector3) {
     const v = this.v;
@@ -346,7 +443,12 @@ export class NightLights {
     const n = (this.n = Math.max(0, Math.min(1, (night - v.nightLightsFrom) / Math.max(0.01, 1 - v.nightLightsFrom))));
     this.draw.begin(this.camera);
     this.nWant = 0;
-    if (n <= 0 && !this.made) { this.lit = 0; this.draw.end(); return; }
+    // Short lights (blasts, launches, rockets) by day: a share of their night light, only if the slider asks for it.
+    const shortK = n + (v.dayFlash > 0 ? v.dayFlash * (1 - n) : 0);
+    const busy = this.flashes.length > 0 || this.nRocket > 0;
+    if (n <= 0 && !this.made && !(shortK > 0 && busy)) {
+      this.lit = 0; this.nRocket = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0; this.draw.end(); return;
+    }
     if (!this.made || this.pool.length !== Math.round(v.nightLightCap) || this.spots.length !== Math.round(v.nightSpotCap)) this.build();
 
     // Faked lamps (and their bids for the real ones), only at night.
@@ -358,17 +460,32 @@ export class NightLights {
       for (const s of this.sources) if (NightLights.shown(s.o)) s.fn(this.emitFn, this.time, this.v);
     }
 
-    // Points: blast flashes first (brightest first), then deck lamps and cab windows nearest the focus.
+    // Points: the short lights first (blasts, launches, rockets, merged where they bunch up; the brightest and nearest
+    // first; the rest faked on the ground), then deck lamps and cab windows nearest the focus.
     let used = 0;
-    const flashes = [...this.flashes].sort((a, b) => b.r * (1 - b.t / b.T) - a.r * (1 - a.t / a.T));
-    for (const f of flashes) {
-      if (used >= this.pool.length) break;
-      const l = this.pool[used++], k = 1 - f.t / f.T;
-      l.position.set(f.x, f.y, f.z);
-      l.color.setHex(0xffa860);
-      l.distance = f.r * 5 + 6;
-      l.intensity = v.blastLight * (f.r / 2.5) * k * k * n;
+    const nc = this.shortLights(shortK, n);
+    const cl = this.clusterOrder; cl.length = 0;
+    for (let j = 0; j < nc; j++) {
+      const c = this.clusters[j];
+      c.score = c.power / (1 + Math.hypot(c.x - focus.x, c.z - focus.z) / 30);
+      cl.push(c);
     }
+    cl.sort((a, b) => b.score - a.score);
+    for (const c of cl) {
+      if (used < this.pool.length) {
+        const l = this.pool[used++];
+        l.position.set(c.x, c.y, c.z);
+        l.color.setRGB(c.r, c.g, c.b);
+        l.distance = c.range;
+        l.intensity = c.power;
+      } else if (n > 0 && v.flashPool > 0) {
+        const gy = this.groundAt(c.x, c.z), h = Math.max(0, c.y - gy);
+        const k = v.flashPool * Math.min(1.5, c.power / Math.max(1, v.blastLight)) / (1 + h * 0.15);
+        const rad = c.range * 0.45;
+        this.draw.pool(c.x, gy, c.z, 0, 1, 0, 1, 0, rad, rad, c.r * k, c.g * k, c.b * k);
+      }
+    }
+    this.stats.clusters = nc; this.stats.real = used;
     if (n > 0 && used < this.pool.length) {
       for (const L of this.lamps) for (const o of L.list()) {
         o.getWorldPosition(this.p);

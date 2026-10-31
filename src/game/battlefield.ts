@@ -447,6 +447,8 @@ export class Battlefield {
 
   /** The look last seen in update(): blasts light the ground through its night lights. */
   private look: DesertLook | null = null;
+  /** The night lights (rockets, launches and blasts ask them for light; cosmetic), once a look has been seen. */
+  get nightLights() { return this.look?.lights ?? null; }
 
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.look = look;
