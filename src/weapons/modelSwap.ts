@@ -15,6 +15,8 @@ export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; til
   railLight: { id: "rail-cannon-hull", scale: 0.75 },
   autocannon: { id: "autocannon-hull" },
   rpg: { id: "rocket-launcher-hull" },
+  // The old Rampart's arm rocket pod (Unity kit, 2x2 tubes), built at the old mech's scale: grown to sit in the hand.
+  rpgLight: { id: "missile-pod-l", scale: 2.4 },
   shoulderRpg: { id: "rocket-launcher-shoulder" },
   missiles: { id: "missile-pod-h", tilt: 30 },
   mortar: { id: "mortar-heavy" },

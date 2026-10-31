@@ -50,6 +50,7 @@ import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { GearSim, gearStats } from "../src/weapons/gear";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { makeItem, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
+import { loadoutFor, barragePick } from "../src/items/weaponPick";
 
 const problems: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
@@ -317,6 +318,14 @@ const dt = 1 / 120;
   must(r.guns.left?.cls === "rail" && !!r.guns.left.light, "held rail cannon didn't resolve as a Light rail");
   must(JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "missiles"], [2, "beltfeed"], [3, "linemortar"]]) && r.parts.drums && !r.parts.pack,
     `shoulder weapons didn't resolve to keys 1, 2 (the default belt feed) and 3 (${JSON.stringify(r.shoulders.map((x) => [x.key, x.weapon]))}), the drums went or the pack still shows`);
+  // The rocket barrage (?barrage, ?barrage=arms; Keith 2026-10-31): rockets on both sides and all three keys.
+  must(!!fitProblem(lo, "mountR", makeItem("rpg-light")), "an arm rocket pod fit a hull mount");
+  for (const mode of ["hull", "arms"] as const) {
+    const b = resolve(loadoutFor(barragePick(mode)));
+    const sides = [b.guns.left, b.guns.right];
+    must(sides.every((g) => g?.cls === "rpg" && !!g.light === (mode === "arms")), `barrage (${mode}): the sides aren't ${mode === "arms" ? "held rocket pods" : "hull rocket launchers"}`);
+    must(JSON.stringify(b.shoulders.map((x) => [x.key, x.weapon])) === JSON.stringify([[1, "rpg"], [2, "missiles"], [3, "missiles"]]), `barrage (${mode}): keys 1-3 aren't rocket, missiles, missiles`);
+  }
   // An arm on the right too (the hull rail bounces), then its shoulder on key 2.
   const off = fit(lo, "mountR", makeItem("arm-rampart", "common", "aR2"));
   must(off.some((i) => i.base === "rail-medium"), "an arm didn't bounce the hull weapon");

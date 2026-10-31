@@ -66,6 +66,8 @@ interface Side {
   /** Its Protocols' behaviour (a rocket launcher's split) and what each round costs from the magazine. */
   proto: ShotProtocols | undefined;
   cost: number;
+  /** A rocket pod: the next tube to fire from. */
+  tube: number;
 }
 
 /** A shoulder weapon on its key. */
@@ -125,7 +127,7 @@ export class Arsenal implements MechWeapons {
     /** Targets the snap, the swarm and the leads can see (the lab's candidates). */
     public candidates: () => TargetCandidate[] = () => []) {
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1 });
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0 });
     this.sides = [side(), side()];
     addWeaponSounds(bf.sfx, v);
   }
@@ -138,7 +140,7 @@ export class Arsenal implements MechWeapons {
     this.sides.forEach((s, i) => {
       const g = guns[i];
       const kind: SideKind = !g ? null : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
-      const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? "rpg" : null;
+      const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
@@ -205,10 +207,12 @@ export class Arsenal implements MechWeapons {
     const v = this.v;
     return o ? { damage: o.damage, speed: o.shellSpeed, splash: o.splash, range: o.range, spread: o.spread, ap: o.ap ?? v.acAp } : { damage: v.acDamage, speed: v.acSpeed, splash: v.acSplash, range: v.acRange, spread: v.acSpread, ap: v.acAp };
   }
-  rpgStats(o: Record<string, number> | null, shoulder: boolean): RocketStats {
+  /** light: an arm's rocket pod (its own sliders). */
+  rpgStats(o: Record<string, number> | null, shoulder: boolean, light = false): RocketStats {
     const v = this.v;
-    return o ? { damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown, ap: o.ap ?? v.rpgAp }
-      : { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
+    if (o) return { damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown, ap: o.ap ?? v.rpgAp };
+    if (light) return { damage: v.rpgDamage * v.podDamage, blast: v.podBlast, speed: v.rpgSpeed, cooldown: v.podCooldown, ap: v.rpgAp };
+    return { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
   }
   swarmStats(o: Record<string, number> | null): SwarmStats {
     const v = this.v;
@@ -251,12 +255,13 @@ export class Arsenal implements MechWeapons {
       if (s.kind === "rpg") {
         // Fires at the ground under the cursor while held, a rocket every cooldown out of its magazine (this side's,
         // in the gun record: the HUD reads it there), then reloads (a click fires one).
-        if (!s.own) magResize(g.mag, v.rpgMag, v.rpgReload);
+        if (!s.own) magResize(g.mag, s.light ? v.podMag : v.rpgMag, s.light ? v.podReload : v.rpgReload);
         const n = shotRounds(s.proto?.split);
         if ((held || pressed) && s.cool <= 0 && u.cursor && magTake(g.mag, magRounds(s.proto?.split), s.cost)) {
-          const st = this.rpgStats(s.own, false);
+          const st = this.rpgStats(s.own, false, s.light);
           s.cool = st.cooldown;
-          this.fireRockets(this.muzzleOf(s, side, this.tmp), u.cursor, st, n);
+          // A pod fires its tubes in turn.
+          this.fireRockets(this.muzzleOf(s, side, this.tmp, s.tube++), u.cursor, st, n);
           if (s.model) s.model.recoil.position.z = -0.35;
         }
         clearPaint(s.paint);
@@ -413,6 +418,7 @@ export class Arsenal implements MechWeapons {
       this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp);
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
+      bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5);
       if (sh.model) sh.model.recoil.position.z = -0.05;
     }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
@@ -483,6 +489,7 @@ export class Arsenal implements MechWeapons {
     const bf = this.bf;
     this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st).ap = st.ap;
     if (quiet) return;
+    bf.nightLights?.launch(from.x, from.y, from.z, 1);
     this.onFire?.("rpg");
     bf.sfx.playSound("rocket", from, 1, 0.8);
     for (let k = 0; k < 5; k++) bf.dust.smoke(from.x, from.y, from.z, (Math.random() - 0.5) * 2, 0.5 + Math.random(), (Math.random() - 0.5) * 2, 0.4, 0.9, 0.7, 0.35);
@@ -664,8 +671,9 @@ export class Arsenal implements MechWeapons {
     this.bf.blast(this.unit.team, at.clone(), radius, damage, ap);
   }
 
-  private muzzleOf(s: Side, side: 1 | -1, out: THREE.Vector3) {
-    return s.model?.muzzles[0] ? s.model.muzzles[0].getWorldPosition(out) : this.unit.body.muzzle(side, out);
+  private muzzleOf(s: Side, side: 1 | -1, out: THREE.Vector3, tube = 0) {
+    const m = s.model?.muzzles;
+    return m?.length ? m[tube % m.length].getWorldPosition(out) : this.unit.body.muzzle(side, out);
   }
 
   /** Tube i of a shoulder weapon, or over the hull. */

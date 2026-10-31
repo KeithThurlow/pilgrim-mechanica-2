@@ -9,7 +9,7 @@ import { libraryModel } from "./modelSwap";
 
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
-export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
+export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
 export type ModelKind = LauncherKind | GearKind;
 const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor"];
 
@@ -107,6 +107,19 @@ function rpgModel(look: ToonLook): WeaponModel {
   glow(recoil, box, HOT, [0.08, 0.06, 0.03], [0.36, 0.42, 1.0]);
   add(recoil, cyl, HOT, [0.3, 0.3, 0.3], [0, 0.05, 2.7], ALONG);
   muzzle(recoil, [0, 0.05, 3.0]);
+  return m;
+}
+
+/** Rocket pod (an arm's, Light): a short box with a 2 x 2 face of tubes, fired in turn. */
+function rpgLightModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("rpgLight", look);
+  add(recoil, box, OLIVE, [0.5, 0.5, 1.3], [0, 0, 0.7]);
+  add(recoil, box, DARK, [0.44, 0.44, 0.06], [0, 0, 1.36]);
+  for (const [x, y] of [[0.11, 0.11], [-0.11, 0.11], [0.11, -0.11], [-0.11, -0.11]]) {
+    add(recoil, cyl, STEEL, [0.15, 0.1, 0.15], [x, y, 1.38], ALONG);
+    muzzle(recoil, [x, y, 1.45]);
+  }
+  glow(recoil, box, HOT, [0.06, 0.05, 0.03], [0.2, 0.22, 1.37]);
   return m;
 }
 
@@ -214,6 +227,7 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   railLight: (l) => railModel("railLight", l),
   autocannon: autocannonModel,
   rpg: rpgModel,
+  rpgLight: rpgLightModel,
   shoulderRpg: shoulderRpgModel,
   missiles: missilesModel,
   mortar: mortarModel,

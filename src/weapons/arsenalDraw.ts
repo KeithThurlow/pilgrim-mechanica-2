@@ -12,10 +12,11 @@ import type { Paint, Vec3 } from "./painter";
 import { ProjectileMeshes } from "./projectileDraw";
 import { PainterDraw } from "./painterDraw";
 import { Ribbon, glowMaterial } from "./ribbon";
+import type { NightLights } from "../world/nightLights";
 
 interface Ground { height(x: number, z: number): number }
 
-const MAX_ROCKETS = 64, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
+const MAX_ROCKETS = 160, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
 const LASER = 0xff3a2a;
 
 export class ArsenalDraw {
@@ -39,9 +40,10 @@ export class ArsenalDraw {
   private d = new THREE.Vector3();
   private t = 0;
   /** The library's rocket, missile and mortar-shell models, once loaded (the boxes and slugs stand in until then). */
-  private proj = new ProjectileMeshes(64);
+  private proj = new ProjectileMeshes(MAX_ROCKETS);
 
-  constructor(private arsenal: Arsenal, private ground: Ground) {
+  /** The night lights rockets ask for light (cosmetic), when the lab has a look. */
+  constructor(private arsenal: Arsenal, private ground: Ground, private lights: (() => NightLights | null) | null = null) {
     const body = new THREE.CylinderGeometry(0.11, 0.13, 1, 8).rotateX(Math.PI / 2);
     this.rockets = new THREE.InstancedMesh(body, new THREE.MeshStandardMaterial({ color: 0x3e3c35, roughness: 0.6 }), MAX_ROCKETS);
     this.flares = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 10, 8), glowMaterial(0xffb060, true), MAX_ROCKETS);
@@ -92,12 +94,15 @@ export class ArsenalDraw {
     let n = 0, ns = 0;
     const proj = this.proj;
     proj.begin();
+    const lights = this.lights?.() ?? null;
     const rocket = (pos: Vec3, prev: Vec3, k: number, kind: "rocket" | "missile" = "rocket") => {
       if (n >= MAX_ROCKETS) return;
       this.p.set(pos.x, pos.y, pos.z);
       this.d.set(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
       if (this.d.lengthSq() < 1e-8) this.d.set(0, 1, 0);
       this.q.setFromUnitVectors(Z, this.d.normalize());
+      // Its light (src/world/nightLights.ts: a glow, an exhaust flare, a real light merged with its neighbours).
+      lights?.rocket(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.6);
       // The modelled rocket or missile when it's loaded (the box body hidden at zero scale), the flare either way.
       const modelled = proj.ready(kind);
       if (modelled) proj.add(kind, this.p, this.d, kind === "rocket" ? 1 : 1.2);

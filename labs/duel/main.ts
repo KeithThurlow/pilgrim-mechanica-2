@@ -92,7 +92,7 @@ const foeCandidate = () => ({ x: player.sim.pelvis.x, y: player.sim.pelvis.y + 0
 rivalArsenal = new Arsenal(bf, rival, RV, toon, () => (player.alive ? [foeCandidate()] : []));
 rivalArsenal.findTarget = (key) => (key === "foe" && player.alive ? foeCandidate() : null);
 rival.weapons = rivalArsenal;
-const rivalDraw = new ArsenalDraw(rivalArsenal, field);
+const rivalDraw = new ArsenalDraw(rivalArsenal, field, () => bf.nightLights);
 app.scene.add(rivalDraw.group);
 const ai: RivalAi = new RivalAi(V, 1);
 const ids = new ThreatIds();
