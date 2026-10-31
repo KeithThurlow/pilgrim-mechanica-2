@@ -34,6 +34,8 @@ import { resolve, LOADOUT_DEFAULTS, type Loadout } from "../../src/items/loadout
 import { ROWS, choose, cleanPick, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { loadBay } from "../../src/ui/bay";
 import type { Param } from "../../src/core/tweaks";
+import { LEG_SHAPE_KEYS } from "../../src/mech/legTypes";
+import { lookFor } from "../../src/items/item";
 
 const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, rivalUp: 0, duelAutoRestart: 3.5 };
 const DUEL_PARAMS: Param[] = [
@@ -72,7 +74,8 @@ const lab = await combatLab({
       lab.field.update(); lab.craters.invalidate(); lab.streamer.rebuildAll();
       wrecks?.rebuild(lab.field, wreckSpots(ground!.spots, V));
     } else if (k === "rivalHull" || k === "rivalUp") fitRival();
-    else if (!RESOLVED.has(k)) (RV as Record<string, number>)[k] = (V as Record<string, number>)[k];
+    // (The rival's own legs keep their walk: a leg slider tunes it only while it walks on Rampart legs too.)
+    else if (!RESOLVED.has(k) && !(rivalOwnLegs() && (LEG_SHAPE_KEYS as readonly string[]).includes(k))) (RV as Record<string, number>)[k] = (V as Record<string, number>)[k];
   },
 });
 const { V, bf, player, app, field, toon } = lab;
@@ -104,6 +107,8 @@ const fitSpec = params.get("rivalfit") ?? "";
 let fitNotes: string[] = [];
 
 let playerLo: Loadout | null = null;
+/** The rival walks on its own legs' model (not the Rampart's). */
+const rivalOwnLegs = () => !!rivalLo?.legs && lookFor(rivalLo.legs) !== "rampart";
 let rivalLevel = 1;
 function fitRival() {
   rivalLevel = Math.max(1, (playerLo ? loadoutLevel(playerLo) : 1) + Math.round(V.rivalUp));

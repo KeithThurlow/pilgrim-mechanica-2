@@ -31,6 +31,10 @@ export interface MechBody {
   paint(look: ToonLook, color: number | null): void;
   /** Show or hide fitted parts (a loadout with an empty side, no drums or no pack). */
   showParts?(parts: BodyParts): void;
+  /** Show the fitted legs' and hull's models (looks: "rampart" or a variant id); true when the legs changed, and
+   *  legValues() then gives their proportions for the walker (src/mech/rampart.ts). */
+  setLooks?(legs: string, hull: string): boolean;
+  legValues?(): Partial<WalkerValues>;
   /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
