@@ -37,5 +37,5 @@ export interface VatHeader {
 }
 
 /** Clips the drawer asks for by name. */
-export const VAT_CLIPS = ["run", "sprint", "runFire", "walkFire", "aim", "flinch"] as const;
+export const VAT_CLIPS = ["run", "sprint", "runFire", "walkFire", "aim", "flinch", "roll"] as const;
 export type VatClipName = (typeof VAT_CLIPS)[number];

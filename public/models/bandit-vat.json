@@ -2,7 +2,7 @@
  "version": 1,
  "vertices": 1409,
  "triangles": 2272,
- "frames": 134,
+ "frames": 206,
  "height": 1.829,
  "clothRef": [
   0.4503,
@@ -57,14 +57,22 @@
    "loop": false,
    "speed": 0,
    "duration": 0.4333
+  },
+  "roll": {
+   "start": 134,
+   "frames": 72,
+   "fps": 30,
+   "loop": false,
+   "speed": 1.95,
+   "duration": 2.3667
   }
  },
  "offsets": {
   "pos": 0,
-  "normal": 1510448,
-  "colour": 1888060,
-  "index": 1910604,
-  "rest": 1924236
+  "normal": 2322032,
+  "colour": 2902540,
+  "index": 2925084,
+  "rest": 2938716
  },
- "source": "Vanguard by T. Choonyung (Mixamo), 11376 tris thinned; clips: Stances/Rifle_Idle_Aim.fbx, Rifle/Rifle_Run_F.fbx, Locomotion/Sprint_F.fbx, Rifle/Rifle_Run_F_Firing_A.fbx, Rifle/Rifle_Walk_F_Firing.fbx, Reactions/Hit_Flinch.fbx"
+ "source": "Vanguard by T. Choonyung (Mixamo), 11376 tris thinned; clips: Stances/Rifle_Idle_Aim.fbx, Rifle/Rifle_Run_F.fbx, Locomotion/Sprint_F.fbx, Rifle/Rifle_Run_F_Firing_A.fbx, Rifle/Rifle_Walk_F_Firing.fbx, Reactions/Hit_Flinch.fbx, Dodge/Roll_F.fbx"
 }
