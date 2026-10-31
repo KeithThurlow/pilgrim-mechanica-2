@@ -1,0 +1,21 @@
+{
+  "id": "sample-wreck",
+  "kind": "wreck",
+  "lane": "a",
+  "seed": 1,
+  "front": "+z",
+  "up": "+y",
+  "trisIn": 191774,
+  "tris": [
+    25000,
+    8000,
+    2500
+  ],
+  "size": [
+    7.000000000000001,
+    3.4589750376413093,
+    4.793922733948472
+  ],
+  "made": "2026-10-31T19:53:11.176Z",
+  "from": "shots/partgen/sample-blob.ply"
+}

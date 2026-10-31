@@ -130,6 +130,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
+- Parts lab: `?part=<id>` (a generated part from `public/models/gen/index.json`), `?cam=game|close`, `?zoom=metres`. Make parts with
+  `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
 - Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod` (rocketpod: an arm holding the missile pod: hold to channel its clip of 8), `?barrage` (rocket
@@ -164,7 +166,10 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
-  `?bank=N` (N scrap banked), `?raid` (a raid at once).
+  `?bank=N` (N scrap banked), `?raid` (a raid at once). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
+  with that contract taken), `?hvt[=metres|now]` (that close, 60 m, to the nearest high value target's lair, one kill short of
+  drawing it out; `now`: it's coming; with `?quest=bounty` the bounty is on it); J takes the newest offer, hold J drops one,
+  hold E by a downed Rampart hooks it (again to drop); `window.__quests` in the console.
 
 ## Layout
 
@@ -210,6 +215,8 @@ src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHu
 src/abilities/          abilities (timed abilities from hulls and packs), zones (heal zones, pure) + zonesDraw; glue: abilityUse
 src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
                         target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
+src/quests/             contracts (pure board), hvt (lairs, summoning), tow (cable, pods); glue: hvtMech (the HVT's rival
+                        mech), questLoop (into the expedition); drawing: questDraw, questHud
 src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown
                         areas), threats (roaming packs, raids, distant blasts); glue: loop, sites (POIs + salvage), fortresses (gates and
                         garrisons), swarmCamps (camps
@@ -224,7 +231,8 @@ src/weapons/            the new weapons, each with its own targeting: tuning (sl
                         Rampart), demo; kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins)
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
-tools/                  *-check.ts headless checks, shots.mjs screenshots
+tools/                  *-check.ts headless checks, shots.mjs screenshots; partgen/ (generated parts: ComfyUI client, splat to mesh,
+                        game prep, kinds read from the Rampart; output in public/models/gen/)
 docs/                   design.md (the game), decisions.md (log)
 ```
 
