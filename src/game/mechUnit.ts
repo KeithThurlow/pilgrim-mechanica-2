@@ -51,6 +51,8 @@ export interface MechWeapons {
   configure?(r: import("../items/loadout").Resolved): void;
   /** Special rounds loaded into this side's gun now (the incendiary feed's key, src/weapons/gear.ts), or null. */
   rounds?(side: 1 | -1): import("../weapons/gear").RoundSpec | null;
+  /** Share of the walk's speed now (a channelling arm missile pod slows it; 1: none). */
+  moveMul?(): number;
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
@@ -302,6 +304,9 @@ export class MechUnit implements Hittable {
     const want = { trigger, aim };
     // The legs know where the guns aim (walking far round from it, they step backwards).
     const move: MoveCommand = { ...cmd };
+    // A weapon that slows the walk while it fires (the arm missile pod's channel): a shorter stick, not while sprinting.
+    const slow = cmd.sprint ? 1 : this.weapons?.moveMul?.() ?? 1;
+    if (slow < 1) { const k = slow / Math.max(1, Math.hypot(move.x, move.z)); move.x *= k; move.z *= k; }
     for (let i = 0; i < sub; i++) {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);

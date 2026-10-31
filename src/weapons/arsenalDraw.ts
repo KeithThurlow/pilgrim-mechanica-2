@@ -107,11 +107,14 @@ export class ArsenalDraw {
       a.waves?.exhaust(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.7);
       // The modelled rocket or missile when it's loaded (the box body hidden at zero scale), the flare either way.
       const modelled = proj.ready(kind);
-      if (modelled) proj.add(kind, this.p, this.d, kind === "rocket" ? 1 : 1.2);
-      this.m.compose(this.p, this.q, modelled ? this.s.set(0, 0, 0) : this.s.set(k, k, k * 1.2));
+      // Rockets (Keith 2026-10-31): a slim 1 m rocket at rocketLength with a small hot flare at its tail, not a cruise
+      // missile; missiles as they were (Keith likes the shoulder battery).
+      const isRocket = kind === "rocket", len = isRocket ? v.rocketLength : 0.84;
+      if (modelled) proj.add(kind, this.p, this.d, isRocket ? v.rocketLength : 1.2);
+      this.m.compose(this.p, this.q, modelled ? this.s.set(0, 0, 0) : isRocket ? this.s.set(0.16, 0.16, len) : this.s.set(k, k, k * 1.2));
       this.rockets.setMatrixAt(n, this.m);
-      this.p.addScaledVector(this.d, -0.6 * k);
-      const f = (0.55 + Math.random() * 0.25) * k;
+      this.p.addScaledVector(this.d, isRocket ? -(len * 0.5 + 0.15) : -0.6 * k);
+      const f = (0.55 + Math.random() * 0.25) * (isRocket ? 1.6 * v.rocketFlare : k);
       this.m.compose(this.p, this.q, this.s.set(f, f, f * 1.8));
       this.flares.setMatrixAt(n, this.m);
       n++;
@@ -125,6 +128,8 @@ export class ArsenalDraw {
       this.slugs.setMatrixAt(ns++, this.m);
     };
     for (const r of a.rockets.list) if (r.live) rocket(r.pos, r.prev, 1.6);
+    // The arm missile pods' channelled missiles.
+    for (const sd of a.sides) for (const m of sd.swarm.missiles) if (m.live && m.launched) rocket(m.pos, m.prev, 0.9, "missile");
     for (const sh of a.shoulders) {
       for (const m of sh.swarm.missiles) if (m.live && m.launched) rocket(m.pos, m.prev, 0.9, "missile");
       // Line mortar shells: the modelled shell along its flight once loaded (was a long hot slug).

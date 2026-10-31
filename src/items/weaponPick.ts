@@ -7,7 +7,7 @@ import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadou
 import { makeItem, protocolItem } from "./generate";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 
-export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Rocket pod (arm)" } as const;
+export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Missile pod (arm)" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank" } as const;
 export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
 export type SidePick = keyof typeof SIDE;

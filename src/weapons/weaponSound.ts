@@ -5,7 +5,7 @@ import { Synth, rng } from "../audio/synth";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon";
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -22,5 +22,9 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("blast", variants(4, 44, (r) => S.scale(S.mix(S.thump(0.7, 110 + r() * 30, 30, 1.1), S.noise(r, 0.6, 700 + r() * 300, 0.75, 0.002),
     S.delay(S.lowPass(S.crackle(r, 0.5, 0.6), 1600), 0.04), S.delay(S.noise(r, 0.9, 260, 0.4, 0.05), 0.06)), 0.85)), () => v.blastLevel);
   sfx.addSound("mortar", variants(2, 45, (r) => S.mix(S.thump(0.3, 150, 55, 1.0), S.noise(r, 0.25, 1100, 0.5, 0.001), S.clang(r, 0.12, 0.12))), () => v.mortarLevel);
+  // A rocket clip's swap (Keith 2026-10-31: a reload you can hear): the empty clip unlatching and dropping (a clank and a
+  // short servo slide), then the full one seating (a heavy clunk with a latch tick).
+  sfx.addSound("clipOut", variants(2, 47, (r) => S.mix(S.clang(r, 0.1, 0.35), S.servo(0.25, 900, 500, 0.06), S.delay(S.thump(0.12, 140, 70, 0.35), 0.18))), () => v.rocketLevel * 0.9);
+  sfx.addSound("clipIn", variants(2, 48, (r) => S.mix(S.servo(0.3, 400, 1000, 0.05), S.delay(S.thump(0.18, 120, 50, 0.9), 0.28), S.delay(S.clang(r, 0.08, 0.4), 0.29), S.delay(S.tick(r, 0.02, 0.5), 0.36))), () => v.rocketLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }

@@ -37,13 +37,43 @@ export function swarmAims(cx: number, cz: number, n: number, radius: number, ene
   return out;
 }
 
+/**
+ * The aim of a channelled missile (the arm pod, Keith 2026-10-31): the lock when the cursor is on it; else the enemies
+ * within reach of the cursor, nearest first, one each in turn (shot counts the clip's missiles); else a scatter over
+ * the reach round the cursor.
+ */
+export function channelAim(cx: number, cz: number, shot: number, radius: number, enemies: readonly Pick[],
+  lock: { x: number; y?: number; z: number; r: number; foot?: number; key: unknown } | null): { x: number; y?: number; z: number; key: unknown } {
+  if (lock && Math.hypot(cx - lock.x, cz - lock.z) <= Math.max(lock.r, lock.foot ?? 0) + 0.5) return { x: lock.x, y: lock.y, z: lock.z, key: lock.key };
+  const near = enemies.filter((e) => Math.hypot(e.x - cx, e.z - cz) <= radius).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
+  if (near.length) { const e = near[shot % near.length]; return { x: e.x, y: e.y, z: e.z, key: e.key }; }
+  const r = radius * 0.7 * Math.sqrt(((shot * 0.618034) % 1) * 0.9 + 0.1), a = shot * 2.399963;
+  return { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, key: null };
+}
+
 export class SwarmSim {
   missiles: Missile[] = [];
   cooldown = 0;
   clock = 0;
   fired = 0;
 
+  /** Where the climb's control point sits along the aim (m): behind for the shoulder's up-and-over, ahead for an arm's. */
+  ahead = -2;
+
   constructor(public v: WeaponValues) {}
+
+  /**
+   * One missile now, from tube `tube`, at an aim (the arm pod's channel, Keith 2026-10-31: no cooldown here; the
+   * caller spaces them and spends the clip).
+   */
+  launchOne(aim: { x: number; y?: number; z: number; key: unknown }, damage: number, blast: number, tube: number, ground: Ground) {
+    if (this.missiles.length > 32) this.missiles = this.missiles.filter((m) => m.live);
+    this.fired++;
+    this.missiles.push({
+      index: tube, u: 0.5, p0: v3(), p1: v3(), p2: v3(), p3: v3(aim.x, aim.y ?? ground.height(aim.x, aim.z), aim.z),
+      launchAt: this.clock, landAt: 0, launched: false, live: true, pos: v3(), prev: v3(), damage, blast, key: aim.key,
+    });
+  }
 
   get ready() { return this.cooldown <= 0; }
   get flying() { return this.missiles.some((m) => m.live); }
@@ -84,7 +114,7 @@ export class SwarmSim {
         const fan = ((m.index % 5) - 2) * v.swarmFan;
         const tx = m.p3.x - m.p0.x, tz = m.p3.z - m.p0.z, flat = Math.hypot(tx, tz) || 1;
         const lx = tz / flat, lz = -tx / flat;
-        m.p1 = v3(m.p0.x + lx * fan - (tx / flat) * 2, m.p0.y + v.swarmRise, m.p0.z + lz * fan - (tz / flat) * 2);
+        m.p1 = v3(m.p0.x + lx * fan + (tx / flat) * this.ahead, m.p0.y + v.swarmRise, m.p0.z + lz * fan + (tz / flat) * this.ahead);
         const len = flat + v.swarmRise * 2;
         m.launchAt = this.clock;
         m.landAt = this.clock + len / Math.max(1, v.swarmSpeed);

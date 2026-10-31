@@ -28,11 +28,12 @@ import { MortarSim, mortarAim, mortarHeight, lobArc, lobPoint, type MortarStats 
 import { CannonShells, leadPoint, type CannonStats, type Shell } from "./autocannon";
 import { Rockets, rocketAim, type RocketStats } from "./rocket";
 import { splashBlast, firstBody } from "../game/splash";
-import { SwarmSim, type SwarmStats } from "./swarm";
+import { SwarmSim, channelAim, type SwarmStats } from "./swarm";
+import { CLIP_SEAT, nextTube, reloadShare } from "./clip";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
 import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
-import { newMag, magReady, magResize, magStep, magTake, shotRounds, magRounds, type Mag } from "./magazine";
+import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, magRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
 
@@ -70,6 +71,14 @@ interface Side {
   cost: number;
   /** A rocket pod: the next tube to fire from. */
   tube: number;
+  /** Clip-fed (rockets, the arm missile pod): seconds off the trigger with rounds spent (the top-up swap), and the
+   *  reload's share last frame (its sounds). */
+  idle: number;
+  seat: number;
+  /** The arm missile pod (Light rpg): its missiles, the values they fly by, and whether it's channelling now. */
+  swarm: SwarmSim;
+  sv: WeaponValues;
+  channel: boolean;
 }
 
 /** A shoulder weapon on its key. */
@@ -90,6 +99,9 @@ export interface Shoulder {
   cool: number;
   /** RPG: its magazine (src/weapons/magazine.ts); the volley launchers' cooldown is their reload. */
   mag: Mag;
+  /** RPG: the clip swap (seconds idle with rounds spent, the reload's share last frame). */
+  idle: number;
+  seat: number;
   proto?: ShotProtocols;
   cost?: number;
   line: SalvoSim;
@@ -132,7 +144,7 @@ export class Arsenal implements MechWeapons {
     public candidates: () => TargetCandidate[] = () => []) {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0 });
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false });
     this.sides = [side(), side()];
     addWeaponSounds(bf.sfx, v);
   }
@@ -150,7 +162,9 @@ export class Arsenal implements MechWeapons {
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
-      s.rail.charge = 0; s.rail.holding = false; s.cool = 0;
+      s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
+      // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
+      if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
     for (const sh of this.shoulders) sh.model?.root.removeFromParent();
     this.shoulders = r.shoulders.map((x) => {
@@ -159,7 +173,8 @@ export class Arsenal implements MechWeapons {
       if (model && body.mount) body.mount(x.mount).add(model.root);
       const gear = x.family === "launcher" ? null : new GearSim(gearStats(x.weapon, x.own, this.v));
       const mag = newMag(x.own?.magazine ?? this.v.rpgShoulderMag, x.own?.reload ?? this.v.rpgShoulderReload);
-      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
+      if (model) model.clip = x.weapon === "rpg" ? mag : null;
+      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
     // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
     // sliders stay live), a capacitor's faster refill.
@@ -258,16 +273,22 @@ export class Arsenal implements MechWeapons {
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
       if (s.kind === "rpg") {
-        // Fires at the ground under the cursor while held, a rocket every cooldown out of its magazine (this side's,
-        // in the gun record: the HUD reads it there), then reloads (a click fires one).
+        // Clip-fed (Keith 2026-10-31): held, the clip ripples out a rocket every cooldown at the ground under the cursor,
+        // tube by tube (this side's magazine, in the gun record: the HUD reads it there; a click fires one), then the
+        // clip is swapped. The arm's missile pod channels instead (stepChannel).
         if (!s.own) magResize(g.mag, s.light ? v.podMag : v.rpgMag, s.light ? v.podReload : v.rpgReload);
+        if (s.model && s.model.clip !== g.mag) s.model.clip = g.mag;
+        this.clipSwap(s, g.mag, held || pressed, dt, u.sim.pelvis);
+        if (s.light) { this.stepChannel(s, side, g.mag, held, dt); return; }
         const n = shotRounds(s.proto?.split);
-        if ((held || pressed) && s.cool <= 0 && u.cursor && magTake(g.mag, magRounds(s.proto?.split), s.cost)) {
-          const st = this.rpgStats(s.own, false, s.light);
-          s.cool = st.cooldown;
-          // A pod fires its tubes in turn.
-          this.fireRockets(this.muzzleOf(s, side, this.tmp, s.tube++), u.cursor, st, n);
-          if (s.model) s.model.recoil.position.z = -0.35;
+        if ((held || pressed) && s.cool <= 0 && u.cursor) {
+          const tube = nextTube(g.mag);
+          if (magTake(g.mag, magRounds(s.proto?.split), s.cost)) {
+            const st = this.rpgStats(s.own, false, s.light);
+            s.cool = st.cooldown;
+            this.fireRockets(this.muzzleOf(s, side, this.tmp, tube), u.cursor, st, n);
+            if (s.model) s.model.recoil.position.z = -0.35;
+          }
         }
         clearPaint(s.paint);
         return;
@@ -315,6 +336,62 @@ export class Arsenal implements MechWeapons {
     if (v.rpgSmoke > 0) for (const r of this.rockets.list) if (r.live) this.trail(r.prev, r.pos, 0.3 * v.rpgSmoke, 4);
   }
 
+  /**
+   * A clip's swap (Keith 2026-10-31: a reload you can see and hear): a part-used clip off the trigger for rocketTopUp s
+   * is swapped too; the empty clip drops with a clank, the full one seats with a clunk (src/weapons/clip.ts).
+   */
+  private clipSwap(c: { idle: number; seat: number }, m: Mag, firing: boolean, dt: number, at: Vec3) {
+    const v = this.v;
+    if (firing || m.reloading > 0 || m.left >= m.size) c.idle = 0;
+    else if (v.rocketTopUp > 0 && (c.idle += dt) >= v.rocketTopUp) { magReload(m); c.idle = 0; }
+    const p = reloadShare(m), sfx = this.bf.sfx, pos = this.tmp2.set(at.x, at.y, at.z);
+    if (p >= 0 && c.seat < 0) sfx.playSound("clipOut", pos, 0.8, 0.9 + Math.random() * 0.2);
+    if (p >= CLIP_SEAT && c.seat >= 0 && c.seat < CLIP_SEAT) { sfx.playSound("clipIn", pos, 1, 0.9 + Math.random() * 0.15); this.onShake?.(0.03); }
+    c.seat = p;
+  }
+
+  /**
+   * The arm missile pod (Keith 2026-10-31: "missiles on arms ... should work like [the shoulder battery], almost like a
+   * channelling weapon"): held, a missile leaves the next tube every cooldown at what's under the cursor (the lock, or
+   * the enemies within podReach shared in turn, or a scatter), for as long as it's held and the clip lasts; let go, it
+   * stops. The walk slows while it channels (moveMul).
+   */
+  private stepChannel(s: Side, side: 1 | -1, mag: Mag, held: boolean, dt: number) {
+    const u = this.unit, v = this.v, bf = this.bf;
+    Object.assign(s.sv, v, { swarmRise: v.podRise, swarmSpeed: v.podSpeed, swarmDrop: v.podDrop, swarmFan: 0.6 });
+    s.swarm.v = s.sv; s.swarm.ahead = 4;
+    const cur = u.cursor, p = s.paint;
+    s.channel = held && !!cur && magReady(mag);
+    if (held && cur) {
+      // Its reach on the sand round the cursor while held (no beam: it isn't painting).
+      p.on = true; p.held += dt; p.charge = 1; p.beamScale = 0; p.tint = null; p.strip = null; p.arc.length = 0;
+      p.ring = { x: cur.x, z: cur.z, r: Math.max(1, v.podReach) }; p.ready = magReady(mag);
+      p.beamFrom = { x: cur.x, y: cur.y, z: cur.z }; p.beamTo = p.beamFrom;
+    } else clearPaint(p);
+    if (s.channel && s.cool <= 0 && cur) {
+      const tube = nextTube(mag);
+      if (magTake(mag, magRounds(s.proto?.split), s.cost)) {
+        const st = this.rpgStats(s.own, false, true);
+        s.cool = st.cooldown;
+        const n = shotRounds(s.proto?.split), picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
+        for (let k = 0; k < n; k++) s.swarm.launchOne(channelAim(cur.x, cur.z, s.swarm.fired, v.podReach, picks, u.lock), st.damage, st.blast, tube, bf.field);
+        if (s.model) s.model.recoil.position.z = -0.12;
+      }
+    }
+    s.swarm.update(dt, bf.field, (i, out) => { const m = this.muzzleOf(s, side, this.tmp, i); out.x = m.x; out.y = m.y; out.z = m.z; }, (key) => this.findTarget(key), (m) => {
+      this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, s.own?.ap ?? v.rpgAp, "missile");
+    }, (m) => {
+      this.onFire?.("rpg");
+      bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.7, 1.15 + Math.random() * 0.2);
+      bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5, this.fam);
+      bf.dust.smoke(m.p0.x, m.p0.y, m.p0.z, (Math.random() - 0.5) * 1.5, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 1.5, 0.3, 0.8, 0.7, 0.3);
+    }, this.bodyHit);
+    for (const m of s.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.14 * v.rpgSmoke, 2);
+  }
+
+  /** Walking speed share now: the arm missile pod slows the walk while it channels. */
+  moveMul() { return this.sides.some((s) => s.channel) ? 1 - this.v.podSlow : 1; }
+
   /** A feed or power key: a press (not paint-and-release) fires it if it's off cooldown. */
   private stepGear(sh: Shoulder, dt: number, down: boolean) {
     const gear = sh.gear!, u = this.unit, bf = this.bf;
@@ -338,6 +415,7 @@ export class Arsenal implements MechWeapons {
     sh.cool = Math.max(0, sh.cool - dt);
     if (sh.weapon === "rpg" && !sh.own) magResize(sh.mag, v.rpgShoulderMag, v.rpgShoulderReload);
     magStep(sh.mag, dt);
+    if (sh.weapon === "rpg") this.clipSwap(sh, sh.mag, held || sh.held, dt, u.sim.pelvis);
     const p = sh.paint;
     const launch = this.shoulderMuzzle(sh, 0, this.tmp2);
     const cur = u.cursor;
@@ -385,7 +463,9 @@ export class Arsenal implements MechWeapons {
       } else if (sh.cool <= 0 && cur && magTake(sh.mag, magRounds(sh.proto?.split), sh.cost ?? 1)) {
         const st = this.rpgStats(sh.own, true);
         sh.cool = st.cooldown;
-        this.fireRockets(launch.clone(), cur, st, shotRounds(sh.proto?.split));
+        // Tube by tube out of the clip.
+        const from = this.shoulderMuzzle(sh, Math.max(0, Math.ceil(sh.mag.size - sh.mag.left - 1e-6) - 1), new THREE.Vector3());
+        this.fireRockets(from, cur, st, shotRounds(sh.proto?.split));
         if (sh.model) sh.model.recoil.position.z = -0.3;
       }
       clearPaint(p);

@@ -45,7 +45,8 @@ export class ProjectileMeshes {
 
   constructor(private max = 64) {
     for (const kind of ["rocket", "missile", "mortar-shell"] as ProjectileKind[]) {
-      loadDef(kind).then((def) => {
+      // Rockets draw the slim code rocket (Keith 2026-10-31: rocket.glb read as a cruise missile from the game camera).
+      loadDef(kind === "rocket" ? "rocket-thin" : kind).then((def) => {
         const mesh = new THREE.InstancedMesh(bake(def), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 }), this.max);
         mesh.frustumCulled = false;
         mesh.castShadow = true;
