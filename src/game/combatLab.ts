@@ -436,23 +436,23 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     bf.update(dt, camera, look);
     arsenalDraw.update();
     cst?.mark("weapons draw");
-    app.hud.set("weapons", arsenal.controls().join(" · "));
+    app.hud.set("weapons", () => arsenal.controls().join(" · "));
     const ds = bf.dentStats;
-    app.hud.set("dents", ds.dug ? `blast dents: ${bf.dentQueue.length} queued · last frame ${ds.frameMs.toFixed(1)} ms (${ds.frameDents} dug) · worst ${ds.worstMs.toFixed(1)} ms · one dent ${ds.lastMs.toFixed(1)} ms · ${ds.dug} dug, ${ds.merged} merged` : "");
+    app.hud.set("dents", () => ds.dug ? `blast dents: ${bf.dentQueue.length} queued · last frame ${ds.frameMs.toFixed(1)} ms (${ds.frameDents} dug) · worst ${ds.worstMs.toFixed(1)} ms · one dent ${ds.lastMs.toFixed(1)} ms · ${ds.dug} dug, ${ds.merged} merged` : "");
 
     const hull = Math.max(0, Math.round(player.health));
     const bar = "█".repeat(Math.round((hull / player.maxHealth) * 20)).padEnd(20, "·");
     app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : `, killed (back in the mech in ${Math.max(0, V.respawn - foot.deadFor).toFixed(1)} s)`} · health ${Math.round(foot.sim.health)}/${V.pilotHealth} · ${foot.toMech.toFixed(1)} m from the mech`);
-    app.hud.set("hull", `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
-    app.hud.set("deaths", `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
+    app.hud.set("hull", () => `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
+    app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     energyHud().update(player.dash, foot.driving);
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
-    if (cst) app.hud.set("costs", cst.end());
+    cst?.end(app.hud);
     const fl = bf.fx.last;
-    app.hud.set("fx", bf.fx.on ? `effects budget: ${fl.asked} asked · ${fl.full} yours at full · ${fl.thinned} thinned · ${fl.merged} hits merged · ${fl.spawned} dust puffs · pressure ${fl.pressure.toFixed(2)}` : "effects budget off");
+    app.hud.set("fx", () => bf.fx.on ? `effects budget: ${fl.asked} asked · ${fl.full} yours at full · ${fl.thinned} thinned · ${fl.merged} hits merged · ${fl.spawned} dust puffs · pressure ${fl.pressure.toFixed(2)}` : "effects budget off");
     const sprint = player.bound.on ? ` · sprint ${player.sim.speed.toFixed(1)} m/s` : " · hold Space to sprint";
-    app.hud.set("guns", `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
+    app.hud.set("guns", () => `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
   });
   return lab;
 }

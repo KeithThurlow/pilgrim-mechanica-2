@@ -20,6 +20,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .hud .ok { color: var(--ok); } .hud .warn { color: var(--warn); } .hud .bad { color: var(--bad); }
 .hud .dim { color: var(--muted); }
 .hud b { font-weight: 600; }
+.hud .hud-toggle { pointer-events: auto; cursor: pointer; user-select: none; }
+.hud .hud-toggle:hover { color: var(--fg); }
 
 .panel {
   position: fixed; right: 10px; top: 10px; width: 320px; max-height: calc(100% - 20px);

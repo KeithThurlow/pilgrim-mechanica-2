@@ -73,9 +73,12 @@ export async function createApp(container: HTMLElement): Promise<App> {
     hud.frame(raw * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles, t1 - t0, t2 - t1);
   });
 
-  return {
+  const app: App = {
     renderer, scene, camera, hud, backend, params, last,
     onTick: (fn) => ticks.push(fn),
     capture: () => new Promise<string>((res) => captures.push(res)),
   };
+  // For agents' probes in a headless browser (scene contents, triangle counts): window.__app.
+  (window as unknown as { __app: App }).__app = app;
+  return app;
 }
