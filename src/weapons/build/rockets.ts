@@ -104,7 +104,8 @@ function clipLauncher(sd: 1 | -1, seed: number, o: ClipOpts): ModelDef {
   } else {
     // The grip block the hand closes on, under the clip's back half (the root: the side's pivot in the grip).
     prism(P, v(0, cy - hh - 0.02, o.z0 + 0.15), v(0, cy - hh - 0.02, o.z0 + 0.45), octRing(0.09, 0.08, 0.03), "dark");
-    B.socket("Mount", v(0, 0, o.z0 + 0.3));
+    // A little outboard of the grip, so the pod clears the hull as the arm swings in.
+    B.socket("Mount", v(-B.sd * 0.1, 0, o.z0 + 0.3));
   }
   return B.def();
 }
@@ -114,7 +115,7 @@ export const rocketPodHull = (sd: 1 | -1 = -1) => clipLauncher(sd, 21, { cols: 2
 /** Shoulder rocket: a 1 x 3 clip on a cradle. */
 export const rocketPodShoulder = (sd: 1 | -1 = -1) => clipLauncher(sd, 22, { cols: 3, rows: 1, bore: 0.12, pitch: 0.33, len: 1.6, z0: -0.6, hang: "shoulder", drop: 1.2 });
 /** Arm missile pod: a 2 x 4 clip of small missiles in the hand. */
-export const missilePodArm = (sd: 1 | -1 = -1) => clipLauncher(sd, 23, { cols: 4, rows: 2, bore: 0.075, pitch: 0.2, len: 1.25, z0: -0.35, hang: "arm", drop: 1.1 });
+export const missilePodArm = (sd: 1 | -1 = -1) => clipLauncher(sd, 23, { cols: 4, rows: 2, bore: 0.065, pitch: 0.17, len: 1.25, z0: -0.35, hang: "arm", drop: 1.1 });
 
 /** The rocket in flight (Keith 2026-10-31: a rocket, not a giant cruise missile): slim, 1 m long, four tail fins. */
 export function rocketThin(): ModelDef {
