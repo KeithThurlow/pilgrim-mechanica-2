@@ -46,8 +46,9 @@ export interface Item {
  * (proposal: Stilt, Turret, Railgun, Siege, Salvager, Rocket, Wildcat); until then every look draws as the Rampart.
  */
 export const LOOKS = ["rampart", "rampart-stilt", "rampart-turret", "rampart-railgun", "rampart-siege", "rampart-salvager", "rampart-rocket", "rampart-wildcat"] as const;
-/** Looks with a model in this repo. */
-export const AVAILABLE_LOOKS: readonly string[] = ["rampart"];
+/** Looks with a model in this repo that a fitted part shows (Keith 2026-10-31: legs and hulls change the mech's
+ *  model; public/models/rampart.glb or public/models/mechs/<look>.glb). */
+export const AVAILABLE_LOOKS: readonly string[] = ["rampart", "rampart-stilt", "rampart-siege", "rampart-salvager"];
 
 /** The model variant to draw an item with: its own look if that model exists, else the Rampart. */
 export function lookFor(item: Item): string {

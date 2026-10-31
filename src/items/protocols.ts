@@ -7,9 +7,11 @@
 // Pricing (Keith 2026-10-31, docs/proposal-balance.md Answers): PoE2-style multipliers that stack MULTIPLICATIVELY
 // with no cap (runaway builds are part of the fun). Each is worth about ×1.2-1.3 in its niche, with a downside: split
 // is 3 rounds at 0.4 each (×1.2 total, more against crowds, ×0.4 on one target), fire rate ×2 at 0.6, a chain's hops
-// paid for by the first hit. The main downside of the shot-adding ones is cost: every round leaves the magazine
-// (src/weapons/magazine.ts: a split shot of 3 costs 3, an overclocked tick 2), so the reload comes sooner; `cost`
-// Protocols cut it. tools/balance-sheet.ts prints each one's multiplier against every target set (its niche is the best).
+// paid for by the first hit.
+// Munitions (Keith 2026-11-01): extra magazine use is deliberate, declared per Protocol as `cost`, never implied by
+// its behaviour. Double shot (two rounds side by side) and Overclock (twice the rounds) cost 2 per shot, so the reload
+// comes sooner; Splitter costs nothing extra (one round that splits); Caseless rounds cut it to 0.6. Costs multiply
+// over sockets (src/weapons/magazine.ts). tools/balance-sheet.ts prints each one's multiplier against every target set (its niche is the best).
 import type { Rarity } from "./rarity";
 import type { ShotProtocols } from "../game/shots";
 
@@ -31,7 +33,8 @@ export interface Protocol {
   mods: StatMod[];
   /** What it does to the gun's rounds (combined over sockets: split, rate and area multiply; ricochet and chain add). */
   shot?: ShotProtocols;
-  /** Magazine rounds each round fired costs × (below 1: fewer rounds per shot). Multiplies over sockets. */
+  /** Extra munitions, declared (Keith 2026-11-01): magazine rounds each shot takes × (2: twice the munitions; below 1:
+   * fewer). The only way a Protocol changes ammo use. Multiplies over sockets. */
   cost?: number;
   /** Energy weapons (later, Keith 2026-10-31): the energy each shot draws ×. A data hook: nothing reads it yet. */
   draw?: number;
@@ -55,10 +58,12 @@ export const PROTOCOLS: Protocol[] = [
   { id: "plating", name: "Extra plating", text: "+20% hull, 15% slower torso", fits: ["hull"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "hull", mul: 1.2, scope: "item" }, { stat: "torsoTurnRate", mul: 0.85, scope: "item" }] },
   // Behaviour Protocols on the rounds (src/game/shots.ts; rockets in src/weapons/arsenal.ts), each with its price.
-  { id: "splitter", name: "Splitter", text: "Each shot splits into 3 at 40% damage (×1.2, more on crowds); costs 3 rounds", fits: ["minigun", "rocket"], rarity: "rare", drop: 0.7,
+  { id: "splitter", name: "Splitter", text: "Each shot splits into 3 at 40% damage (×1.2, more on crowds); no extra munitions", fits: ["minigun", "rocket"], rarity: "rare", drop: 0.7,
     mods: [{ stat: "damage", mul: 0.4, scope: "item" }], shot: { split: 3 } },
-  { id: "overclock", name: "Overclock", text: "Twice the rounds at 60% damage, +40% spread; empties the magazine twice as fast", fits: ["minigun"], rarity: "rare", drop: 0.7,
-    mods: [{ stat: "damage", mul: 0.6, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 } },
+  { id: "overclock", name: "Overclock", text: "Twice the rounds at 60% damage, +40% spread; uses twice the munitions", fits: ["minigun"], rarity: "rare", drop: 0.7,
+    mods: [{ stat: "damage", mul: 0.6, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 }, cost: 2 },
+  { id: "doubleShot", name: "Double shot", text: "Fires two rounds side by side at 70% damage; uses twice the munitions", fits: ["minigun"], rarity: "rare", drop: 0.7,
+    mods: [{ stat: "damage", mul: 0.7, scope: "item" }], shot: { multi: 2 }, cost: 2 },
   { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −12% damage, −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
     mods: [{ stat: "damage", mul: 0.88, scope: "item" }, { stat: "range", mul: 0.85, scope: "item" }], shot: { area: 1.6 } },
   { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit (half damage), −15% range", fits: ["minigun"], rarity: "uncommon", drop: 0.9,
@@ -76,7 +81,7 @@ export const PROTOCOLS: Protocol[] = [
 
 export const PROTOCOL_BY_ID: Record<string, Protocol> = Object.fromEntries(PROTOCOLS.map((p) => [p.id, p]));
 
-/** What an item's socketed Protocols do to its rounds (undefined: nothing). Split, rate and area multiply. */
+/** What an item's socketed Protocols do to its rounds (undefined: nothing). Split, rate, multi and area multiply. */
 export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProtocols | undefined {
   let p: ShotProtocols | undefined;
   for (const pi of socketed) {
@@ -85,6 +90,7 @@ export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProt
     p ??= {};
     if (s.split) p.split = (p.split ?? 1) * s.split;
     if (s.rate) p.rate = (p.rate ?? 1) * s.rate;
+    if (s.multi) p.multi = (p.multi ?? 1) * s.multi;
     if (s.area) p.area = (p.area ?? 1) * s.area;
     if (s.ricochet) p.ricochet = (p.ricochet ?? 0) + s.ricochet;
     if (s.chain) p.chain = (p.chain ?? 0) + s.chain;
@@ -92,7 +98,7 @@ export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProt
   return p;
 }
 
-/** Magazine rounds per round fired (1 plain; cost Protocols multiply). */
+/** Magazine rounds per shot (1 plain; the Protocols' declared costs multiply). */
 export function shotCostOf(socketed: readonly { base: string }[]): number {
   let k = 1;
   for (const pi of socketed) k *= PROTOCOL_BY_ID[pi.base]?.cost ?? 1;

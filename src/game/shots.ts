@@ -35,6 +35,8 @@ export interface ShotProtocols {
   split?: number;
   /** Fire rate ×: each round is fired this many times, the copies spread over one gun interval. */
   rate?: number;
+  /** Side-by-side copies (Double shot): each round is fired this many times at once, protoPairGap metres apart. */
+  multi?: number;
   /** Splash radius × (a round with no splash of its own gets protoSplash). */
   area?: number;
   /** Bounces off what it hits (ground, steel or a body), on at protoRicochetKeep of the damage. */
@@ -49,6 +51,7 @@ export const SHOT_DEFAULTS = {
   protoFan: 6,
   protoRocketFan: 3,
   protoRateGap: 0.06,
+  protoPairGap: 0.5,
   protoSplash: 0.6,
   protoSplashShare: 0.4,
   protoRicochetKeep: 0.5,
@@ -65,6 +68,7 @@ const G = "Protocols", GP = "Performance";
 export const SHOT_PARAMS: Param[] = [
   { key: "protoFan", label: "Split: degrees between rounds", min: 0, max: 30, step: 0.5, group: G, tip: "A split shot's rounds fan out across the aim this far apart" },
   { key: "protoRocketFan", label: "Split: degrees between rockets", min: 0, max: 30, step: 0.5, group: G, tip: "A split rocket's rockets fan out this far apart (their blasts overlap: wider covers more of a crowd)" },
+  { key: "protoPairGap", label: "Double shot: metres apart", min: 0, max: 2, step: 0.05, group: G, tip: "A Double shot's rounds (and rockets and shells) fly side by side this far apart" },
   { key: "protoRateGap", label: "Fire rate: copies over (s)", min: 0, max: 0.5, step: 0.005, group: G, tip: "A fire-rate Protocol's extra copies of a round follow it, spread over this long (a gun that doesn't say its own interval)" },
   { key: "protoSplash", label: "Area: splash on a plain round (m)", min: 0, max: 4, step: 0.05, group: G, tip: "An area Protocol on a round with no splash of its own gives it this much, times the Protocol" },
   { key: "protoSplashShare", label: "Area: splash share of damage", min: 0, max: 1, step: 0.01, group: G },
@@ -229,7 +233,7 @@ export class Shots {
     const family = this.nextId;
     const seed = (c.seed ?? hash(this.seq++)) >>> 0;
     this.stats.cmds++;
-    const split = Math.max(1, Math.round(pr?.split ?? 1)), rate = Math.max(1, Math.round(pr?.rate ?? 1));
+    const split = Math.max(1, Math.round(pr?.split ?? 1)), rate = Math.max(1, Math.round(pr?.rate ?? 1)), multi = Math.max(1, Math.round(pr?.multi ?? 1));
     let splash = c.splash ?? 0, share = c.splashShare ?? 0;
     const area = pr?.area ?? 1;
     if (area > 1 || splash > 0) { if (splash <= 0) { splash = v.protoSplash; share = v.protoSplashShare; } splash *= area; }
@@ -237,32 +241,37 @@ export class Shots {
     const gap = (c.interval ?? v.protoRateGap) / rate;
     const s0 = new Uint32Array([seed]);
     const fan = (v.protoFan * Math.PI) / 180;
-    for (let r = 0; r < rate; r++) {
-      for (let s = 0; s < split; s++) {
-        // Fan the split rounds across the aim; a rate copy jitters a little (seeded) so it isn't the same line.
-        const yaw = (s - (split - 1) / 2) * fan + (r > 0 ? (rnd(s0, 0) - 0.5) * 0.04 : 0);
-        const cs = Math.cos(yaw), sn = Math.sin(yaw);
-        const dxr = c.dir.x * cs + c.dir.z * sn, dzr = -c.dir.x * sn + c.dir.z * cs;
-        const i = this.row(family, K_ROUND, 0, c.team, c.origin.x, c.origin.y, c.origin.z, dxr, c.dir.y, dzr, c.range, c.damage, lk, hash(seed + r * 977 + s * 131));
-        if (i < 0) return family;
-        this.wait[i] = r * gap;
-        this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0;
-        this.ap[i] = c.pierce ?? UNSET_PIERCE;
-        this.splash[i] = splash; this.splashShare[i] = share;
-        this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
-        let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 ? F_FIRST : 0);
-        if (c.sheet) {
-          f |= F_SHEET | (c.sheet.flat ? F_FLAT : 0);
-          this.half[i] = c.sheet.half; this.height[i] = c.sheet.height; this.pen[i] = c.sheet.pen;
-          this.line[i] = c.sheet.line ?? NaN; this.knock[i] = c.sheet.knock ?? 0;
-          if (c.sheet.aim) {
-            f |= F_AIM;
-            // A split round's aim point turns with it (round the muzzle), so its sheet lies along its own line.
-            const ax = c.sheet.aim.x - c.origin.x, az = c.sheet.aim.z - c.origin.z;
-            this.ax[i] = c.origin.x + ax * cs + az * sn; this.ay[i] = c.sheet.aim.y; this.az[i] = c.origin.z - ax * sn + az * cs;
+    // Side-by-side copies sit across the aim (perpendicular in plan), protoPairGap apart.
+    const hl = Math.hypot(c.dir.x, c.dir.z) || 1, px = c.dir.z / hl, pz = -c.dir.x / hl;
+    for (let m = 0; m < multi; m++) {
+      const off = (m - (multi - 1) / 2) * v.protoPairGap, ox = c.origin.x + px * off, oz = c.origin.z + pz * off;
+      for (let r = 0; r < rate; r++) {
+        for (let s = 0; s < split; s++) {
+          // Fan the split rounds across the aim; a rate copy jitters a little (seeded) so it isn't the same line.
+          const yaw = (s - (split - 1) / 2) * fan + (r > 0 ? (rnd(s0, 0) - 0.5) * 0.04 : 0);
+          const cs = Math.cos(yaw), sn = Math.sin(yaw);
+          const dxr = c.dir.x * cs + c.dir.z * sn, dzr = -c.dir.x * sn + c.dir.z * cs;
+          const i = this.row(family, K_ROUND, 0, c.team, ox, c.origin.y, oz, dxr, c.dir.y, dzr, c.range, c.damage, lk, hash(seed + r * 977 + s * 131 + m * 7919));
+          if (i < 0) return family;
+          this.wait[i] = r * gap;
+          this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0;
+          this.ap[i] = c.pierce ?? UNSET_PIERCE;
+          this.splash[i] = splash; this.splashShare[i] = share;
+          this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
+          let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 && m === 0 ? F_FIRST : 0);
+          if (c.sheet) {
+            f |= F_SHEET | (c.sheet.flat ? F_FLAT : 0);
+            this.half[i] = c.sheet.half; this.height[i] = c.sheet.height; this.pen[i] = c.sheet.pen;
+            this.line[i] = c.sheet.line ?? NaN; this.knock[i] = c.sheet.knock ?? 0;
+            if (c.sheet.aim) {
+              f |= F_AIM;
+              // A split round's aim point turns with it (round the muzzle), so its sheet lies along its own line.
+              const ax = c.sheet.aim.x - c.origin.x, az = c.sheet.aim.z - c.origin.z;
+              this.ax[i] = ox + ax * cs + az * sn; this.ay[i] = c.sheet.aim.y; this.az[i] = oz - ax * sn + az * cs;
+            }
           }
+          this.flags[i] = f;
         }
-        this.flags[i] = f;
       }
     }
     return family;

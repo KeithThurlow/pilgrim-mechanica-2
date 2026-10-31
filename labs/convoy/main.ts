@@ -487,7 +487,8 @@ function restart() {
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
   for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
-  if (params.has("lowfuel")) loop.fuel.left = Number(params.get("lowfuel")) || 150;
+  // ?lowfuel turns fuel on (it is off by default, Keith 2026-11-01) and leaves little in the pack.
+  if (params.has("lowfuel")) { V.fuelOn = 1; loop.fuel.left = Number(params.get("lowfuel")) || 150; }
   if (carry.state !== "walking") loop.exp.state = "aboard";
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).

@@ -5,9 +5,12 @@
 // (so time against fuel is the choice: about 1.6x the fuel per metre for 2.3x the speed); stripping salvage (the
 // cutters) fuelStrip per s on top. It never goes below
 // zero; at zero the expedition forces a recovery (Keith 2026-10-25: out of fuel is mission failure).
+// Off for now (Keith 2026-11-01: "turn off or disable fuel at the moment"): `fuelOn` 0 and the expedition loop
+// (loop.ts) neither burns it, nor warns, nor recovers on empty, and the HUD hides it. Fuel on 1 brings it all back.
 import type { Param } from "../core/tweaks";
 
 export const FUEL_DEFAULTS = {
+  fuelOn: 0,
   fuelMinutes: 14,
   fuelIdle: 0.08,
   fuelSprint: 2.5,
@@ -22,6 +25,7 @@ export type FuelValues = typeof FUEL_DEFAULTS;
 
 const G = "Fuel";
 export const FUEL_PARAMS: Param[] = [
+  { key: "fuelOn", label: "Fuel on (1) / off (0)", min: 0, max: 1, step: 1, group: G, tip: "Off (Keith 2026-11-01): no burn, no warnings, no out-of-fuel recovery, no fuel on the HUD. ?lowfuel turns it on" },
   { key: "fuelMinutes", label: "Pack fuel (min of walking)", min: 2, max: 40, step: 0.5, group: G, tip: "A full power pack, in minutes of walking at walk speed (better packs and tanks later)" },
   { key: "fuelIdle", label: "Standing burn (× walking)", min: 0, max: 1, step: 0.01, group: G, tip: "Burn standing still: almost nothing" },
   { key: "fuelSprint", label: "Sprint burn (× walking)", min: 1, max: 6, step: 0.05, group: G, tip: "Burn at sprint speed (in between it climbs from walking's 1)" },
