@@ -183,6 +183,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Snappier dash (Keith 2026-10-31): agent on `wip/dashsnap`.
+- Tracers and a tube of light along gun streams (Keith 2026-10-31): agent on `wip/tubelight`.
 - Responsive walking (Keith 2026-10-31): merged 2026-10-31, Keith to play (duel lab `?manual`, walker lab `?manual`).
 - Blast waves on every explosion merged 2026-10-31, never compiled on a GPU: Keith to try robots lab `?barrage&proto=splitter`, `?swarm=300&barrage&time=22`, `?beam`; weapons lab `?k1=mortar`; off with `?set=waveOn:0`.
 - Enemy lights, the excavator charging beam and lit telegraphs (Keith 2026-10-31, merged 2026-10-31; built on `wip/rocketlights`), never run in a browser: Keith to try robots lab `?beam&time=22` (and `?beam` by day), robots lab `?time=22`, convoy lab `?time=22&warband`. Also robots lab `?swarm=300&barrage&time=22&proto=splitter` (rocket and tracer light). Rough: beam look, line and scorch never seen; night lights lag the projectiles by a frame (the look updates before the weapons post); enemy telegraph rings keep one colour (only their light is colour-coded); the beam's sound is two low cracks (no charging whine).
