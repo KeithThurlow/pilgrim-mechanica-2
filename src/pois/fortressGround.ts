@@ -51,6 +51,53 @@ export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<st
   return best;
 }
 
+/**
+ * Would a step on foot from (x0, z0) to (x1, z1) climb a wall? Any step rising on the walls at more than half a metre per
+ * metre (the faces are far steeper; only their very toe is gentler). Walking a wall's top or dropping off it is fine.
+ */
+export function fenced(L: Layout, x0: number, z0: number, x1: number, z1: number, down: ReadonlySet<string>) {
+  const rise = wallHeight(L, x1, z1, down) - wallHeight(L, x0, z0, down);
+  return rise > 0.002 && rise > 0.5 * Math.hypot(x1 - x0, z1 - z0);
+}
+
+/** Which side of the walls a point is: 0 outside them all, k + 1 in yard k (inside ring k, outside ring k + 1). */
+export function regionOf(L: Layout, x: number, z: number) {
+  const d = Math.hypot(x - L.x, z - L.z);
+  let n = 0;
+  for (const r of L.rings) if (d < r.r) n++;
+  return n;
+}
+
+/**
+ * The next point to walk to on foot from (x, z) toward (tx, tz) when walls are in between (pure): round the yard to
+ * the nearest open gate in the next ring to cross, then through it. Null when they're on the same side (go straight)
+ * or no gate in that ring is open (stay put).
+ */
+export function routeVia(L: Layout, x: number, z: number, tx: number, tz: number, down: ReadonlySet<string>): { x: number; z: number } | null {
+  const a = regionOf(L, x, z), b = regionOf(L, tx, tz);
+  if (a === b) return null;
+  const k = b < a ? a - 1 : a, ring = L.rings[k], out = b < a ? 1 : -1;
+  const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz), am = Math.atan2(dx, dz);
+  let best: Gate | null = null, bestA = Infinity;
+  for (const g of ring.gates) {
+    if (g.barred && !down.has(g.id)) continue;
+    const da = Math.abs(wrap(g.a - am));
+    if (da < bestA) { bestA = da; best = g; }
+  }
+  if (!best) return null;
+  const da = wrap(best.a - am), arc = Math.abs(da) * ring.r;
+  const span = ring.top + ring.face + 6;
+  if (arc < best.w / 2 - 1) {
+    // In line with the gap: through it, to the far side.
+    const r = ring.r + out * span;
+    return { x: L.x + Math.sin(best.a) * r, z: L.z + Math.cos(best.a) * r };
+  }
+  // Round the yard toward it, a step at a time (so the way never cuts across the next ring in), on this side of it.
+  const step = Math.max(-0.7, Math.min(0.7, da));
+  const r = out > 0 ? Math.min(ring.r - span, Math.max(d, ring.r - span - 10)) : Math.max(ring.r + span, d);
+  return { x: L.x + Math.sin(am + step) * r, z: L.z + Math.cos(am + step) * r };
+}
+
 /** A box round a gate (x0, z0, x1, z1) to rebuild the ground over when it goes down. */
 export function gateBox(g: Gate, margin = 6): [number, number, number, number] {
   const r = g.w / 2 + margin;

@@ -28,6 +28,8 @@ const LAB_PARAMS = [
   { key: "drawRadius", label: "Draw POIs within (m)", min: 200, max: 3000, step: 50, group: "POI map", tip: "Generated POIs this close to the mech are built and drawn" },
 ];
 const SHOW_CLEAR = 190;
+/** The kinds in the showcase ring (fortresses and hubs have their own lab: labs/fortress/). */
+const SHOW_KINDS = POI_KIND_LIST.filter((k) => POI_KINDS[k].tier < 5);
 
 let poiField!: PoiField;
 let pads!: PoiPads;
@@ -56,7 +58,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     { label: "Map (M)", onClick: () => map?.toggle(), active: () => !!map?.open },
     { label: "Restock", onClick: () => restock() },
   ],
-  report: () => ({ scrap: salvage.scrap, focus: POI_KIND_LIST[focus] }),
+  report: () => ({ scrap: salvage.scrap, focus: SHOW_KINDS[focus] }),
   setup: (field, V) => {
     raw = rawGround(field);
     poiField = new PoiField(V, raw);
@@ -81,7 +83,7 @@ function placeShowcase() {
   const V = poiField.v as typeof LAB_DEFAULTS;
   poiField.extra.length = 0;
   // Fortresses and hubs are too big for the ring (their own lab: labs/fortress/); the map shows the generated ones.
-  const kinds = POI_KIND_LIST.filter((k) => POI_KINDS[k].tier < 5);
+  const kinds = SHOW_KINDS;
   kinds.forEach((k, i) => {
     const a = (i / kinds.length) * Math.PI * 2 + 0.35;
     const r = V.showRing + (POI_KINDS[k].tier === 2 ? 25 : 0);
@@ -151,10 +153,10 @@ function restock() {
 }
 
 // ---- the picker: the mech beside a kind ----
-let focus = Math.max(0, POI_KIND_LIST.indexOf((params.get("kind") ?? "") as PoiKind));
+let focus = Math.max(0, SHOW_KINDS.indexOf((params.get("kind") ?? "") as PoiKind));
 function focusPlace() { return poiField.extra[focus]; }
 function focusKind(i: number, teleport: boolean) {
-  focus = ((i % POI_KIND_LIST.length) + POI_KIND_LIST.length) % POI_KIND_LIST.length;
+  focus = ((i % SHOW_KINDS.length) + SHOW_KINDS.length) % SHOW_KINDS.length;
   target = null;
   if (!teleport) return;
   const p = focusPlace();
@@ -230,5 +232,5 @@ lab.onFrame((dt) => {
   map!.draw(p.x, p.z, p.x, p.z, player.sim.heading);
   const left = salvage.left(focusPlace().id);
   const banked = salvage.sections.filter((s) => s.banked).length;
-  lab.hud("pois", `POIs drawn ${drawn.size} · focus ${POI_KINDS[POI_KIND_LIST[focus]].label} (${left} scrap left) · sections banked ${banked} · noise pulses ${noises}`);
+  lab.hud("pois", `POIs drawn ${drawn.size} · focus ${POI_KINDS[SHOW_KINDS[focus]].label} (${left} scrap left) · sections banked ${banked} · noise pulses ${noises}`);
 });

@@ -160,6 +160,12 @@ export class InfantrySwarm {
   readonly frozen = new Uint8Array(INFANTRY_MAX);
   /** Calm: walks to its target spot and stands there, never shooting or afraid (a patrol, or the way home to the camp). */
   readonly calm = new Uint8Array(INFANTRY_MAX);
+  /** Calm but hurrying (a fortress's garrison on its way round to a gate): walks to its target spot at a run. */
+  readonly hurry = new Uint8Array(INFANTRY_MAX);
+  /** Holding a post (a fortress's sentries and garrison): fights from where it stands, never walks off it. */
+  readonly hold = new Uint8Array(INFANTRY_MAX);
+  /** Ground nobody on foot may step onto (a fortress's walls): true blocks the step from (x0, z0) to (x1, z1). */
+  fence: ((x0: number, z0: number, x1: number, z1: number) => boolean) | null = null;
   /** Its own target instead of the one update() is given (a fight with another faction, a patrol point): set with
    *  setTarget(), cleared by clearTarget(). */
   readonly hasT = new Uint8Array(INFANTRY_MAX);
@@ -240,7 +246,7 @@ export class InfantrySwarm {
       this.range[i] = this.rand();
       this.flank[i] = this.rand() * 2 - 1;
       this.slope[i] = 0; this.fallYaw[i] = 0;
-      this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0;
+      this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0; this.hold[i] = 0; this.hurry[i] = 0;
       this.diveT[i] = 0; this.evadeT[i] = 0; this.rolledFor[i] = 0; this.trampleCd[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
@@ -254,7 +260,7 @@ export class InfantrySwarm {
   remove(i: number) {
     if (this.state[i] === EMPTY) return;
     if (this.state[i] < DEAD) this.count--;
-    this.state[i] = EMPTY; this.frozen[i] = 0; this.hasT[i] = 0; this.calm[i] = 0;
+    this.state[i] = EMPTY; this.frozen[i] = 0; this.hasT[i] = 0; this.calm[i] = 0; this.hold[i] = 0; this.hurry[i] = 0;
   }
 
   /** Give bandit i its own target (position, aim height, radius); calm: walk there and stand instead of fighting. */
@@ -362,9 +368,10 @@ export class InfantrySwarm {
       } else if (st !== FLEEING && this.fear[i] > brave && !calm) st = FLEEING;
       else if (st === FLEEING && stateTime[i] > v.minFlee && this.fear[i] < brave * v.rallyAt && dist > v.rallyDist) st = ADVANCE;
       const stop = v.bandNear + this.range[i] * Math.max(0, v.bandFar - v.bandNear);
+      const held = this.hold[i] === 1 && !calm, inRange = held && dist < v.fireRange;
       if (calm) { if (st === FIRING) st = ADVANCE; }
-      else if (st === ADVANCE && dist <= stop) st = FIRING;
-      else if (st === FIRING && dist > stop + v.bandSlack) st = ADVANCE;
+      else if (st === ADVANCE && (dist <= stop || inRange)) st = FIRING;
+      else if (st === FIRING && dist > stop + v.bandSlack && !inRange) st = ADVANCE;
       if (st !== s) {
         state[i] = st; stateTime[i] = 0;
         if (st === FIRING) { this.fireClock[i] = v.aimTime * (0.5 + this.rand()); this.burstLeft[i] = 0; }
@@ -378,7 +385,7 @@ export class InfantrySwarm {
         // Fan out round the mech on the way in; straight at it once close.
         const fa = this.flank[i] * v.flankAngle * DEG * Math.min(1, dist / 60);
         const c = Math.cos(fa), sn = Math.sin(fa);
-        const spd = v.runSpeed * this.speedK[i] * hill * (calm ? v.banditPatrol : 1);
+        const spd = v.runSpeed * this.speedK[i] * hill * (calm && !this.hurry[i] ? v.banditPatrol : 1);
         // Calm ones (a patrol point, the way home) walk straight to the spot and stand there.
         if (calm) { if (dist > 1.2) { wx = ux * spd; wz = uz * spd; } }
         else { wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd; }
@@ -391,6 +398,7 @@ export class InfantrySwarm {
         const c = Math.cos(fa), sn = Math.sin(fa);
         wx = -(ux * c - uz * sn) * spd; wz = -(uz * c + ux * sn) * spd;
       }
+      if (held) { wx = 0; wz = 0; }
       // Out of the way of something coming down (dodge()): run out of its footprint, whatever else it was doing.
       const diving = this.diveT[i] > 0 && st < DOWN;
       if (this.evadeT[i] > 0 && st < DOWN) {
@@ -464,6 +472,7 @@ export class InfantrySwarm {
       if (d < m) {
         if (d > 1e-5) { x = target.x + (dx / d) * m; z = target.z + (dz / d) * m; } else { x = target.x + m; }
       }
+      if (this.fence && this.fence(ox, oz, x, z)) { x = ox; z = oz; vx[i] = 0; vz[i] = 0; }
       px[i] = x; pz[i] = z;
       const y = this.ground.height(x, z);
       py[i] = y;
