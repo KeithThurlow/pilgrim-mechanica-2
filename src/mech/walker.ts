@@ -2249,7 +2249,9 @@ export class WalkerSim {
     }
     // Walking (Keith 2026-10-27: the walk looked bad with the foot flattened), only the toe tips are kept out of the sand,
     // just touching it; the sprint also eases the foot's pitch and keeps both clear by toeClear.
-    this.toesClear(f, Math.sin(Math.PI * clamp(f.u, 0, 1)), this.sprintK > 0, this.sprintK);
+    // Walking too, just after lift-off (2026-10-31): the heel-rolled plate eases its pitch so the ball never digs in on a
+    // curved dune as the foot leaves (1-2 frames, up to 2 cm past the sink).
+    this.toesClear(f, Math.sin(Math.PI * clamp(f.u, 0, 1)), this.sprintK > 0 || f.u < 0.15, this.sprintK);
   }
 
   /**
