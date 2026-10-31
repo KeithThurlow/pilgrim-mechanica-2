@@ -16,7 +16,7 @@
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
-// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you).
+// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { energyHud } from "../../src/ui/energyBar";
@@ -192,7 +192,7 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat });
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1) });
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
 function homeAboard() {
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
@@ -428,6 +428,19 @@ function restart() {
       }
     }
   }
+  // ?fortress[=metres] / ?hub[=metres]: out on the sand that far (150 m by default) from the nearest bandit fortress or
+  // manufacturing hub, facing it.
+  for (const kind of ["fortress", "hub"] as const) {
+    if (!params.has(kind)) continue;
+    const R = 9000;
+    const f = loop.sites.poisIn(p.x - R, p.z - R, p.x + R, p.z + R).filter((q) => q.kind === kind)
+      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+    if (!f) { console.warn(`no ${kind} within ${R} m`); continue; }
+    const d = Math.hypot(f.x - p.x, f.z - p.z) || 1, back = Number(params.get(kind)) || 150;
+    const x = f.x - ((f.x - p.x) / d) * back, z = f.z - ((f.z - p.z) / d) * back;
+    player.reset(x, z, Math.atan2(f.x - x, f.z - z));
+    carry.armed = true;
+  }
   // ?warband[=N]: a war band column (N vehicles, 6 by default: with a party bus and a turret truck at the back)
   // hunting the mech from a few hundred metres off.
   if (params.has("warband")) {
@@ -437,7 +450,7 @@ function restart() {
     carry.armed = true;
   }
   loop.exp.launch();
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
@@ -447,7 +460,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -536,6 +549,8 @@ selector = new Selector(app, {
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
+    { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
+    { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
     { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },

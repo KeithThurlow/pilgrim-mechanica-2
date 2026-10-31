@@ -12,6 +12,7 @@ export const MAP_PARAMS: Param[] = [
 
 export const KIND_COLOUR: Record<PoiKind, string> = {
   outcrop: "#b9a184", wreckPart: "#e0dccf", supplyPod: "#ffb347", debrisField: "#7fc3c9", deadConvoy: "#e2694a",
+  fortress: "#ff3b30", hub: "#5ac8fa",
 };
 
 const RES = 240;
