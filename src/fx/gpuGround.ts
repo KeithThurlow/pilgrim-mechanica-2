@@ -14,7 +14,7 @@ export function groundAt(g: GpuGroundSource, x: F, z: F, fallback: F): THREE.Nod
   const fx = x.div(g.step), fz = z.div(g.step);
   const ix = floor(fx), iz = floor(fz);
   const tx = fx.sub(ix), tz = fz.sub(iz);
-  const M = g.cells.add(1);
+  const M = g.wrap;
   // Wrapped storage index (offset half a cell so float rounding can't land on the next one), as the patch does.
   const w = (i: F) => int(floor(mod(i.add(0.5), M)));
   const a = textureLoad(g.tex, ivec2(w(ix), w(iz))), b = textureLoad(g.tex, ivec2(w(ix.add(1)), w(iz)));

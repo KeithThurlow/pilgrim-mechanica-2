@@ -9,6 +9,8 @@ import { DentGrid, relaxRates, bermRatio, texelWorld, SURFACE_IDS, SET_RATES, ty
 import { DENT_DEFAULTS } from "../src/fx/dents";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { GroundWindow } from "../src/world/groundWindow";
+import { TerrainStreamer, STREAM_DEFAULTS } from "../src/world/chunks";
+import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
 
 let fails = 0;
 const ok = (cond: boolean, msg: string) => { console.log(`${cond ? "ok  " : "FAIL"} ${msg}`); if (!cond) fails++; };
@@ -171,6 +173,49 @@ const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; 
   ok(worstCoarse < 1e-4, `coarse grid is the chunks' vertices (worst ${worstCoarse.toExponential(1)} m)`);
   ok(p99 < 0.02, `between vertices within 2 cm: 99% under ${(p99 * 100).toFixed(2)} cm, worst ${(max * 100).toFixed(2)} cm (the chunks' 1 m grid: worst ${(chunkErr * 100).toFixed(1)} cm)`);
   console.log(`     window ${w.nf + 1}² fine + ${w.mc}² coarse samples; full fill ${fullMs.toFixed(0)} ms; scrolling ${(ms / Math.max(1, rows)).toFixed(2)} ms per 1 m row or column (${w.nf + 1} fine + ${w.mc} coarse samples)`);
+}
+
+// 7. Never draws ground it hasn't filled (Keith 2026-10-31: walking north the top of the patch showed rows from the far
+// side of the window): scrolling with almost no budget, with and without the lead, every drawn sample is the ground's.
+// Then beside the convoy's plough, the lead fills ahead so nothing is filled at the last moment, and the coarse grid
+// copied from the chunks stays theirs.
+{
+  const field = new DuneField({ ...TERRAIN_DEFAULTS });
+  for (const pad of [0, 6]) {
+    const w = new GroundWindow(field, 64, 0.25, 1, pad);
+    w.follow(5, 7);
+    let worst = 0;
+    for (let s = 0; s < 240; s++) {
+      w.follow(5 + s * 0.04, 7 + s * 0.2, 0.01);
+      for (let j = w.gz * w.sub; j <= (w.gz + w.nc) * w.sub; j += 7) for (let i = w.gx * w.sub; i <= (w.gx + w.nc) * w.sub; i += 5)
+        worst = Math.max(worst, Math.abs(w.fineAt(i, j) - field.height(i * w.fine, j * w.fine)));
+      for (let j = w.gz; j <= w.gz + w.nc; j += 3) for (let i = w.gx; i <= w.gx + w.nc; i += 3)
+        worst = Math.max(worst, Math.abs(w.chunkHeightAt(i * w.step, j * w.step) - field.height(i * w.step, j * w.step)));
+    }
+    ok(worst < 1e-4, `lead ${pad} m, scrolling north at 12 m/s on no budget: every drawn sample filled (worst ${worst.toExponential(1)} m)`);
+  }
+  const V = { ...TERRAIN_DEFAULTS, ...ROUTE_DEFAULTS, ...STREAM_DEFAULTS, radius: 2 };
+  const rf = new DuneField(V), route = new ConvoyRoute(V, 0, 0);
+  rf.modifier = route;
+  const st = new TerrainStreamer(rf, V);
+  const w = new GroundWindow(rf, 96, 0.25, 1, 6);
+  w.coarseSource = (i, j, o) => st.vertexAt(i, j, o);
+  st.onRebuild.push((b) => w.invalidate(b));
+  route.onChange = (a, b, c, d) => { st.patchArea(a, b, c, d); };
+  st.fill(8, -20);
+  let late = 0, worstC = 0, ms = 0;
+  const o = new Float32Array(7);
+  for (let f = 0; f < 600; f++) {
+    route.update(1 / 60);
+    const z = -20 + f * 0.1;
+    st.fill(8, z); w.follow(8, z, DENT_DEFAULTS.patchBudget);
+    ms += w.stats.ms;
+    if (w.stats.viewSamples) late++;
+    for (let j = w.gz; j <= w.gz + w.nc; j += 2) for (let i = w.gx; i <= w.gx + w.nc; i += 2)
+      if (st.vertexAt(i, j, o)) worstC = Math.max(worstC, Math.abs(w.chunkHeightAt(i * w.step, j * w.step) - o[0]));
+  }
+  ok(late === 0, `walking north at 6 m/s beside the plough: no rows filled at the last moment (${late} frames)`);
+  ok(worstC < 1e-4, `the patch's coarse grid is the chunks' own beside the plough (worst ${worstC.toExponential(1)} m); fill ${(ms / 600).toFixed(2)} ms a frame`);
 }
 
 console.log(fails ? `${fails} FAILED` : "dents ok");

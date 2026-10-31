@@ -26,17 +26,21 @@ export class DetailPatch {
   private uFine0 = uniform(new THREE.Vector2());
   private uCoarse0 = uniform(new THREE.Vector2());
   private uEdge = uniform(4);
+  /** The focus (world x, z) and the half width the edge blend is measured from, so it glides with the focus. */
+  private uFocus = uniform(new THREE.Vector2());
+  private uHalf = uniform(1);
   private uScale = uniform(1);
   private uDark = uniform(0.2);
   private pending: ([number, number, number, number] | null)[] = [];
   readonly stats = { vertices: 0, triangles: 0, texBytes: 0, uploadsThisFrame: 0 };
   /**
    * The ground under the window for GPU effects (src/fx/gpuGround.ts): the chunks' own grid (height, normal) as a
-   * texture, the window's first coarse index, the coarse step (m), cells across, and whether it's filled (1) yet.
+   * texture, the window's first coarse index, the coarse step (m), cells across, the storage size it wraps at (cells
+   * plus the lead), and whether it's filled (1) yet.
    */
   readonly gpuGround = {
     tex: texture(new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType)),
-    origin: uniform(new THREE.Vector2()), step: uniform(1), cells: uniform(4), ready: uniform(0),
+    origin: uniform(new THREE.Vector2()), step: uniform(1), cells: uniform(4), wrap: uniform(5), ready: uniform(0),
   };
 
   constructor(readonly field: DuneField, readonly streamer: TerrainStreamer, readonly dents: DentLayer, public v: DentValues) {
@@ -48,12 +52,18 @@ export class DetailPatch {
 
   private step() { return this.streamer.v.chunkSize / Math.max(1, Math.round(this.streamer.v.segments)); }
   private coverage() { return Math.max(8, this.v.dentCoverage - 4 * this.step()); }
-  private makeWindow() { return new GroundWindow(this.field, this.coverage(), this.v.patchSpacing, this.step()); }
+  /** Coarse cells sampled ahead of the drawn patch on every side, so ground is ready before it comes into view. */
+  private lead() { return Math.max(0, Math.round((this.v.patchLead ?? 6) / this.step())); }
+  private makeWindow() {
+    const w = new GroundWindow(this.field, this.coverage(), this.v.patchSpacing, this.step(), this.lead());
+    w.coarseSource = (i, j, out) => this.streamer.vertexAt(i, j, out);
+    return w;
+  }
 
   /** (Re)make the mesh and textures for the current window size and spacing. */
   private build() {
     const w = this.win;
-    this.key = `${w.step}|${w.sub}|${w.nc}`;
+    this.key = `${w.step}|${w.sub}|${w.nc}|${w.pad}`;
     if (this.mesh) { this.group.remove(this.mesh); this.mesh.geometry.dispose(); }
     for (const t of [this.fineTex, this.coarseTex, this.colourTex]) t?.dispose();
     const tex = (data: Float32Array, n: number, fmt: THREE.PixelFormat) => {
@@ -71,6 +81,7 @@ export class DetailPatch {
     this.gpuGround.tex.value = this.coarseTex;
     this.gpuGround.step.value = w.step;
     this.gpuGround.cells.value = w.nc;
+    this.gpuGround.wrap.value = w.mc;
 
     // A grid of (nf + 1)² vertices whose positions are just their grid indices; the shader places them.
     const n = w.nf, row = n + 1;
@@ -144,10 +155,12 @@ export class DetailPatch {
       const ca = textureLoad(coarseT, A), cb = textureLoad(coarseT, B), cc = textureLoad(coarseT, C);
       const coarse = ca.mul(wa).add(cb.mul(wb)).add(cc.mul(wc));
       const col = textureLoad(colT, A).xyz.mul(wa).add(textureLoad(colT, B).xyz.mul(wb)).add(textureLoad(colT, C).xyz.mul(wc));
-      // Ease to the chunks over the edge band.
-      const edgeD = min(min(li, float(NF).sub(li)), min(lj, float(NF).sub(lj))).mul(F);
-      const wgt = smoothstep(0, this.uEdge, edgeD);
+      // Ease to the chunks over the edge band, measured from the focus itself rather than the window's grid, so the
+      // band glides as the focus moves instead of stepping a whole chunk cell at a time (it shimmered at the far edge).
       const x = gi.mul(F), z = gj.mul(F);
+      const off = abs(vec2(x, z).sub(this.uFocus));
+      const edgeD = min(this.uHalf.sub(max(off.x, off.y)), min(min(li, float(NF).sub(li)), min(lj, float(NF).sub(lj))).mul(F));
+      const wgt = smoothstep(0, this.uEdge, edgeD);
       const p = vec2(x, z);
       // The dents, low-passed to what the lattice can carry (a 3 x 3 binomial one vertex apart).
       let acc: THREE.Node<"float"> = float(0);
@@ -204,6 +217,9 @@ export class DetailPatch {
       this.stats.uploadsThisFrame = 1;
     }
     this.uFine0.value.set(w.gx * w.sub, w.gz * w.sub);
+    // Inside the drawn window wherever the focus is in its centre cell (it's within half a cell of the centre).
+    this.uFocus.value.set(fx, fz);
+    this.uHalf.value = (w.nc / 2 - 0.5) * w.step;
     this.uCoarse0.value.set(w.gx, w.gz);
     this.gpuGround.origin.value.set(w.gx, w.gz);
     this.gpuGround.ready.value = w.ready ? 1 : 0;
@@ -214,6 +230,6 @@ export class DetailPatch {
 
   private makeWindowIfChanged(): GroundWindow | null {
     const st = this.step(), sh = GroundWindow.shape(this.coverage(), this.v.patchSpacing, st);
-    return `${st}|${sh.sub}|${sh.nc}` === this.key ? null : this.makeWindow();
+    return `${st}|${sh.sub}|${sh.nc}|${this.lead()}` === this.key ? null : this.makeWindow();
   }
 }
