@@ -227,6 +227,52 @@ console.log(`barrage at midnight: ${st.requests} light requests -> ${st.clusters
   if (charged(1)) fail("the beam's charge got a real light without its priority (the test field isn't full)");
 }
 
+// Tracers (Keith 2026-10-31): two miniguns hosing (40 rounds/s each) and a bandit stream: only a share carry lights,
+// a stream's lit tracers merge into a few bands, the pools are never exceeded; a heavier round lights brighter.
+{
+  const L = new NightLights({ ...V });
+  L.ground = FLAT;
+  new THREE.Scene().add(L.group);
+  let maxLive = 0, maxReal = 0, maxReq = 0, maxCl = 0, sent = 0;
+  for (let fr = 0; fr < 60; fr++) {
+    for (let r = 0; r < 2; r++) for (let g = -1; g <= 1; g += 2) { L.tracer(g * 1.5, 3, 0, g * 3 + (fr % 7), 0.5, 45, 9, FAM_PLAYER); sent++; }
+    L.tracer(30, 2, 40, 0, 2, 0, 6, FAM_BANDIT);
+    L.update(1 / 60, mid, focus);
+    maxLive = Math.max(maxLive, L.tracersLive); maxReal = Math.max(maxReal, L.stats.real);
+    maxReq = Math.max(maxReq, L.stats.requests); maxCl = Math.max(maxCl, L.stats.clusters);
+  }
+  if (maxLive === 0) fail("tracers: none lit");
+  if (maxLive > sent * V.tracerShare) fail(`tracers: ${maxLive} lit at once of ${sent} sent (share ${V.tracerShare})`);
+  if (maxReal > V.nightLightCap) fail(`tracers: ${maxReal} real points (pool ${V.nightLightCap})`);
+  if (maxCl >= maxReq) fail(`tracers: ${maxReq} requests never merged (${maxCl} clusters)`);
+  const bright = (power: number) => {
+    const M = new NightLights({ ...V }); M.ground = FLAT; new THREE.Scene().add(M.group);
+    M.tracer(0, 3, 0, 0, 3, 60, power, FAM_PLAYER, false, true);
+    M.update(1 / 60, mid, focus);
+    return Math.max(0, ...M.group.children.filter((o) => (o as THREE.PointLight).isPointLight).map((o) => (o as THREE.PointLight).intensity));
+  };
+  const light = bright(9), heavy = bright(450);
+  if (!(heavy > light * 2)) fail(`tracers: a rail-class round (${heavy.toFixed(0)}) not much brighter than a minigun round (${light.toFixed(0)})`);
+  console.log(`tracers: ${sent} sent in 1 s -> at most ${maxLive} lit at once, ${maxReq} requests -> ${maxCl} clusters, ${maxReal} real points; light ${light.toFixed(0)} vs heavy ${heavy.toFixed(0)}`);
+}
+
+// Rockets light the ground under them (2026-10-31, Keith: they glowed but lit nothing): a missile 12 m up gets a real
+// light that reaches the sand; a blast is far brighter than a rocket.
+{
+  const L = new NightLights({ ...V }); L.ground = FLAT; new THREE.Scene().add(L.group);
+  L.rocket(0, 12, 20, 0, 0, 1, 0.6);
+  L.update(1 / 60, mid, focus);
+  const pl = L.group.children.find((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0) as THREE.PointLight | undefined;
+  if (!pl) fail("a lone missile got no real light");
+  else if (pl.distance < 12 * 1.3) fail(`a missile 12 m up lights only ${pl.distance.toFixed(1)} m around it: the sand under it stays dark`);
+  const M = new NightLights({ ...V }); M.ground = FLAT; new THREE.Scene().add(M.group);
+  M.flash(0, 1, 20, 2.5);
+  M.update(1 / 60, mid, focus);
+  const bl = M.group.children.find((o) => (o as THREE.PointLight).isPointLight && (o as THREE.PointLight).intensity > 0) as THREE.PointLight | undefined;
+  if (pl && bl && bl.intensity < pl.intensity * 4) fail(`a blast (${bl.intensity.toFixed(0)}) isn't much brighter than a rocket (${pl.intensity.toFixed(0)})`);
+  if (pl && bl) console.log(`rocket light: missile 12 m up ${pl.intensity.toFixed(0)} cd to ${pl.distance.toFixed(1)} m; blast ${bl.intensity.toFixed(0)} cd to ${bl.distance.toFixed(1)} m`);
+}
+
 // By day (no day flash): a barrage makes no lights and no pools.
 {
   const dayL = new NightLights({ ...V });

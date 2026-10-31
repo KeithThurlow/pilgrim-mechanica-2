@@ -226,6 +226,11 @@ export class ArsenalDraw {
         (b.streak.material as THREE.MeshBasicMaterial).opacity = streak;
         (b.core.material as THREE.MeshBasicMaterial).opacity = Math.min(1, streak * 1.5);
         b.streak.visible = b.core.visible = true;
+        // The streak lights its line for a moment, by its charge (Keith 2026-10-31: tracers show power).
+        if (lights) for (let k = 0; k < 4; k++) {
+          const t = (k + 0.5) / 4;
+          lights.hold(f.x + (to.x - f.x) * t, f.y + (to.y - f.y) * t, f.z + (to.z - f.z) * t, lights.v.railLight * shot.power * streak / 4, lights.v.tracerRange * 1.6, RAIL_GLOW, 1.5);
+        }
       }
       const flash = Math.max(0, 1 - shot.age / 0.12);
       if (flash > 0 && v.railBlast > 0) {

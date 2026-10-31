@@ -10,7 +10,10 @@ player." Built on `wip/rocketlights` (merged in: `src/world/lightCluster.ts`, `N
 - `tools/robot-danger-check.ts`: beam counted in DPS and the pack; beam duel (side-step after lock never burnt,
   standing always burnt).
 
-## Left, in order
+## Also done
+All of the list below, plus tracer lights, the rocket light fix (values in state.md), robots lab `?swarm=N`.
+
+## Was left (now done)
 1. Night lights: families (player / bandit / robot) on rocket/launch/flash, gun flashes, `hold()` with priority,
    `telegraph()` / `telegraphLine()`; LampSource gets the NightLights as a 4th arg.
 2. Battlefield: enemy muzzle flashes in `fire()`, shells lit in flight + their rings, blasts by team.

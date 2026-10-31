@@ -239,7 +239,8 @@ export class Battlefield {
     }
     return this.shots.fire(
       { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
-      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot });
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot,
+        team, power: damage * (1 + Math.max(0, o.pierce ?? 0)) });
   }
 
   /** Burning targets: damage over time, and a few embers and a thread of dark smoke at each (cosmetic, local). */
@@ -269,6 +270,8 @@ export class Battlefield {
       // Only a command's first round flashes, throws brass and sounds; split rounds and children ride along quietly.
       this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
         dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own, !!L.ally, !!L.hot);
+      // Tracers light up (a share of them, merged into bands along the streams; brighter with power, hot ones orange).
+      if (L.tracer !== false) this.look?.lights.tracer(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, famOfTeam(L.team ?? 1), !!L.hot);
       if (!dr.first) continue;
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);

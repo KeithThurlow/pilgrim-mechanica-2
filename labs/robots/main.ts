@@ -76,6 +76,11 @@ swarm = sw;
   const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
   if (pickFromParams(pick, params0)) { applyLoadout(player, resolve(loadoutFor(pick), V)); lab.refresh(); }
 }
+// ?swarm=N: a big swarm (N on the field, in packs of 60 every 1.5 s), e.g. ?swarm=300&barrage&time=22.
+if (params0.has("swarm")) {
+  V.robotSwarmSize = Number(params0.get("swarm")) || 300;
+  V.robotGroupSize = 60; V.robotGroupEvery = 1.5;
+}
 const robotLine = params0.has("robotline");
 if (robotLine) {
   V.robotSwarmSize = 0;

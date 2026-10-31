@@ -36,7 +36,7 @@ import {
 } from "./lamps";
 
 export const NIGHT_LIGHT_DEFAULTS = {
-  nightLightCap: 6,
+  nightLightCap: 8,
   nightSpotCap: 4,
   lampStrength: 22,
   lampRange: 14,
@@ -49,23 +49,23 @@ export const NIGHT_LIGHT_DEFAULTS = {
   headlampShadowMap: 1024,
   headlampShadowNear: 0.6,
   headlampBeam: 0.06,
-  blastLight: 900,
-  blastLightTime: 0.45,
+  blastLight: 2600,
+  blastLightTime: 0.6,
   nightLightsFrom: 0.15,
   lightFar: 160,
   // Rockets and clustering (Keith 2026-10-31)
   clusterRadius: 8,
   clusterCurve: 0.5,
-  clusterCap: 4000,
+  clusterCap: 12000,
   clusterGrow: 0.6,
-  flashPool: 0.5,
+  flashPool: 1.2,
   dayFlash: 0,
-  rocketLight: 120,
-  rocketRange: 10,
+  rocketLight: 420,
+  rocketRange: 22,
   rocketHue: 30,
   rocketGlow: 1.6,
   rocketFlare: 2.8,
-  rocketPool: 0.45,
+  rocketPool: 1.1,
   muzzleLight: 500,
   muzzleTime: 0.1,
   // Enemy fire (Keith 2026-10-31: enemy attacks light up too, colour-coded)
@@ -80,6 +80,15 @@ export const NIGHT_LIGHT_DEFAULTS = {
   telePool: 0.55,
   teleRamp: 2,
   telePrio: 1.5,
+  // Tracers (Keith 2026-10-31: tracers light up to show a round's power; not a light per tracer)
+  tracerShare: 0.2,
+  tracerLight: 160,
+  tracerPower: 0.6,
+  tracerRef: 12,
+  tracerSpeed: 220,
+  tracerRange: 9,
+  tracerGlow: 0.9,
+  railLight: 2400,
   // Vehicle lights
   vehReach: 16,
   vehAngle: 16,
@@ -158,6 +167,15 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "teleRamp", label: "Brightens as it lands (curve)", min: 0.2, max: 5, step: 0.1, group: GT, tip: "1: brightens evenly over the flight; higher: stays dim, then flares at the end" },
   { key: "telePrio", label: "Telegraph light priority", min: 0.2, max: 10, step: 0.1, group: GT, tip: "How much more a telegraph wants a real light than a blast of the same power" },
 
+  { key: "tracerShare", label: "Tracer light share", min: 0, max: 1, step: 0.01, group: GE, tip: "Every 1/share-th drawn tracer of a side carries a moving light (merged with its neighbours into a band along the stream)" },
+  { key: "tracerLight", label: "Tracer light", min: 0, max: 2000, step: 10, group: GE, tip: "A lit tracer's light at the reference round's power" },
+  { key: "tracerPower", label: "Tracer strength by power (curve)", min: 0, max: 2, step: 0.05, group: GE, tip: "Light × (power / reference)^this: 0 every round alike, 1 in proportion to damage × (1 + pierce)" },
+  { key: "tracerRef", label: "Tracer reference power", min: 1, max: 200, step: 1, group: GE, tip: "Damage × (1 + pierce) of a round that lights at 'Tracer light'" },
+  { key: "tracerSpeed", label: "Tracer light speed (m/s)", min: 40, max: 600, step: 5, group: GE, tip: "How fast a lit tracer's light runs down its line (match the tracers)" },
+  { key: "tracerRange", label: "Tracer light reach (m)", min: 2, max: 30, step: 0.5, group: GE },
+  { key: "tracerGlow", label: "Tracer glow size (m)", min: 0, max: 4, step: 0.05, group: GE, tip: "The faked glow a lit tracer carries (incendiary rounds glow orange)" },
+  { key: "railLight", label: "Rail slug light", min: 0, max: 10000, step: 50, group: GE, tip: "A rail slug's streak lights its whole line for a moment (× its charge)" },
+
   { key: "vehReach", label: "Headlights land at (m)", min: 4, max: 40, step: 0.5, group: GV },
   { key: "vehAngle", label: "Headlight cone (°)", min: 5, max: 60, step: 1, group: GV },
   { key: "vehGlow", label: "Headlight glow size (m)", min: 0, max: 3, step: 0.05, group: GV },
@@ -208,6 +226,9 @@ const ROCKET_MAX = 256, RS = 8;
 const HOLD_MAX = 64, HS = 10;
 /** Telegraphs this frame: x, y, z (on the ground), half width, half length, along (hx, hz), u (0..1 to landing), family. */
 const TELE_MAX = 128, TS = 9;
+/** Lit tracers running down their lines: from, to, t, T (flight), power, r, g, b. */
+const TRACER_MAX = 160, TRS = 13;
+const HOT_COL = new THREE.Color(0xff6a18), PLAYER_TRACER = new THREE.Color(0xffd890);
 const BLAST_COL = new THREE.Color(0xffa860), MUZZLE_COL = new THREE.Color(0xffc27a);
 /** A lamp wanting a real light this frame. */
 interface Want { score: number; kind: LampKind; x: number; y: number; z: number; tx: number; ty: number; tz: number; dist: number; k: number; color: number; range: number }
@@ -257,6 +278,10 @@ export class NightLights implements ShortLights {
   private nHold = 0;
   private teles = new Float32Array(TELE_MAX * TS);
   private nTele = 0;
+  private tracers = new Float32Array(TRACER_MAX * TRS);
+  private nTracer = 0;
+  /** Per side: drawn tracers counted, so every Nth carries a light. */
+  private tracerCount = [0, 0, 0];
   private shortSources: { o: THREE.Object3D; fn: ShortLightSource }[] = [];
   /** Colours by family (refreshed each frame from the hue sliders): rockets and blasts, launches and guns, telegraphs. */
   private famFire = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
@@ -311,6 +336,35 @@ export class NightLights implements ShortLights {
     const c = this.hc.setHex(color), a = this.holds, i = this.nHold++ * HS;
     a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = power; a[i + 4] = range; a[i + 5] = c.r; a[i + 6] = c.g; a[i + 7] = c.b; a[i + 8] = prio; a[i + 9] = glow;
   }
+  /**
+   * A drawn tracer from (x0..) to (x1..): every 1/tracerShare-th of a side's carries a light running down its line,
+   * brighter with its power (damage × (1 + pierce)); incendiary (hot) rounds orange. always: light it whatever the share.
+   */
+  tracer(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, power: number, fam: LightFamily = FAM_PLAYER, hot = false, always = false) {
+    const v = this.v, f = fam === FAM_BANDIT || fam === FAM_ROBOT ? fam : FAM_PLAYER;
+    if (!always) {
+      if (v.tracerShare <= 0) return;
+      const every = Math.max(1, Math.round(1 / v.tracerShare));
+      if (this.tracerCount[f]++ % every !== 0) return;
+    }
+    let i: number;
+    if (this.nTracer < TRACER_MAX) i = this.nTracer++;
+    else { // full: replace the one furthest along
+      let best = 0, bt = -1;
+      for (let j = 0; j < this.nTracer; j++) { const u = this.tracers[j * TRS + 6] / Math.max(1e-3, this.tracers[j * TRS + 7]); if (u > bt) { bt = u; best = j; } }
+      i = best;
+    }
+    const L = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+    const c = hot ? HOT_COL : f === FAM_PLAYER ? PLAYER_TRACER : this.famMuzzle[f];
+    const k = Math.pow(Math.max(0.05, power / Math.max(1, v.tracerRef)), v.tracerPower);
+    const a = this.tracers, o = i * TRS;
+    a[o] = x0; a[o + 1] = y0; a[o + 2] = z0; a[o + 3] = x1; a[o + 4] = y1; a[o + 5] = z1;
+    a[o + 6] = 0; a[o + 7] = Math.max(0.05, L / Math.max(1, v.tracerSpeed)); a[o + 8] = Math.min(6, k) * this.famK[f] * (hot ? 1.4 : 1);
+    a[o + 9] = c.r; a[o + 10] = c.g; a[o + 11] = c.b; a[o + 12] = 0;
+  }
+  /** Lit tracers in flight (for checks). */
+  get tracersLive() { return this.nTracer; }
+
   private tele(x: number, y: number, z: number, w: number, l: number, hx: number, hz: number, u: number, fam: LightFamily) {
     if (this.nTele >= TELE_MAX) return;
     const a = this.teles, i = this.nTele++ * TS;
@@ -525,12 +579,28 @@ export class NightLights implements ShortLights {
         const A = fadeAt(x, z) * b * v.telePool;
         if (A > 0) this.draw.pool(x, y, z, 0, 1, 0, ta[o + 5], ta[o + 6], w * 1.25, l * 1.1 + w * 0.25, c.r * A, c.g * A, c.b * A);
       }
+      // Lit tracers: a light running down each line; neighbours in a stream merge into one band of light.
+      const tr = this.tracers;
+      for (let i = 0; i < this.nTracer; i++) {
+        const o = i * TRS, u = Math.min(1, tr[o + 6] / tr[o + 7]);
+        const x = tr[o] + (tr[o + 3] - tr[o]) * u, y = tr[o + 1] + (tr[o + 4] - tr[o + 1]) * u, z = tr[o + 2] + (tr[o + 5] - tr[o + 2]) * u;
+        this.hc.setRGB(tr[o + 9], tr[o + 10], tr[o + 11]);
+        req(x, y, z, v.tracerLight * tr[o + 8] * k, v.tracerRange * Math.min(2, Math.sqrt(tr[o + 8])), this.hc);
+        const A = fadeAt(x, z);
+        if (A > 0 && v.tracerGlow > 0) {
+          const g = A * Math.min(2, tr[o + 8]);
+          this.draw.glow(x, y, z, v.tracerGlow * Math.min(2, Math.sqrt(tr[o + 8])), tr[o + 9] * g, tr[o + 10] * g, tr[o + 11] * g);
+        }
+      }
       this.rocketCol.setHSL(v.rocketHue / 360, 1, 0.6);
       const a = this.rockets;
       for (let i = 0; i < this.nRocket; i++) {
         const o = i * RS, x = a[o], y = a[o + 1], z = a[o + 2], s = a[o + 6], fm = fam(a[o + 7]);
         const col = fm === FAM_PLAYER ? this.rocketCol : this.famFire[fm];
-        req(x, y, z, v.rocketLight * s * k * this.famK[fm], v.rocketRange * Math.sqrt(s), col);
+        // Reach enough to come down onto the sand and the units under a high missile (2026-10-31: Keith saw rockets
+        // glow but light nothing: 120 cd cut off at 10 m never reached the ground under them).
+        const up = Math.max(0, y - this.groundAt(x, z));
+        req(x, y, z, v.rocketLight * s * k * this.famK[fm], Math.max(v.rocketRange * Math.sqrt(s), up * 1.6 + 8), col);
         // Faked, at night only: a glow on the rocket, a flare back along its flight, a soft light on the sand under it.
         const d = Math.hypot(x - this.focus.x, z - this.focus.z);
         if (n <= 0 || d > F) continue;
@@ -542,8 +612,10 @@ export class NightLights implements ShortLights {
         if (v.rocketPool > 0) {
           const gy = this.groundAt(x, z), h = Math.max(0, y - gy);
           if (h < 30) {
-            const rad = (1.5 + h * 0.4) * Math.sqrt(s), p = v.rocketPool / (1 + h * 0.12);
-            this.draw.pool(x, gy, z, 0, 1, 0, a[o + 3], a[o + 5], rad, rad, r * p, g * p, b * p);
+            // Under it and trailing behind it along its flight (lit by the exhaust).
+            const rad = (2.5 + h * 0.45) * Math.sqrt(s), p = v.rocketPool / (1 + h * 0.06);
+            const hl = Math.hypot(a[o + 3], a[o + 5]) || 1, bx = -a[o + 3] / hl, bz = -a[o + 5] / hl;
+            this.draw.pool(x + bx * rad * 0.6, gy, z + bz * rad * 0.6, 0, 1, 0, a[o + 3], a[o + 5], rad, rad * 1.9, r * p, g * p, b * p);
           }
         }
       }
@@ -559,13 +631,26 @@ export class NightLights implements ShortLights {
     this.time += dt;
     this.focus.copy(focus);
     for (const f of this.flashes) f.t += dt;
+    // Lit tracers run on; the ones at the end of their line drop out.
+    {
+      const a = this.tracers;
+      let w = 0;
+      for (let i = 0; i < this.nTracer; i++) {
+        const o = i * TRS;
+        a[o + 6] += dt;
+        if (a[o + 6] > a[o + 7]) continue;
+        if (w !== i) a.copyWithin(w * TRS, o, o + TRS);
+        w++;
+      }
+      this.nTracer = w;
+    }
     this.flashes = this.flashes.filter((f) => f.t < f.T);
     const n = (this.n = Math.max(0, Math.min(1, (night - v.nightLightsFrom) / Math.max(0.01, 1 - v.nightLightsFrom))));
     this.draw.begin(this.camera);
     this.nWant = 0;
     // Short lights (blasts, launches, rockets) by day: a share of their night light, only if the slider asks for it.
     const shortK = n + (v.dayFlash > 0 ? v.dayFlash * (1 - n) : 0);
-    const busy = this.flashes.length > 0 || this.nRocket > 0 || this.nHold > 0 || this.nTele > 0;
+    const busy = this.flashes.length > 0 || this.nRocket > 0 || this.nHold > 0 || this.nTele > 0 || this.nTracer > 0;
     if (n <= 0 && !this.made && !(shortK > 0 && busy)) {
       this.lit = 0; this.nRocket = this.nHold = this.nTele = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0; this.draw.end(); return;
     }
@@ -603,7 +688,7 @@ export class NightLights implements ShortLights {
         l.intensity = c.power;
       } else if (n > 0 && v.flashPool > 0) {
         const gy = this.groundAt(c.x, c.z), h = Math.max(0, c.y - gy);
-        const k = v.flashPool * Math.min(1.5, c.power / Math.max(1, v.blastLight)) / (1 + h * 0.15);
+        const k = v.flashPool * Math.min(2, c.power / 1000) / (1 + h * 0.1);
         const rad = c.range * 0.45;
         this.draw.pool(c.x, gy, c.z, 0, 1, 0, 1, 0, rad, rad, c.r * k, c.g * k, c.b * k);
       }
