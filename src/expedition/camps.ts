@@ -10,15 +10,17 @@ import { DEPTH_GROUP, scaled, type DangerFn } from "./depth";
 export const CAMP_DEFAULTS = {
   campSeed: 7,
   campCell: 520,
-  campChance: 0.6,
-  campMin: 8,
-  campMax: 36,
+  campChance: 0.45,
+  campMin: 6,
+  campMax: 24,
   campGuess: 0.4,
   campClear: 260,
   campChanceFar: 1.5,
-  campSizeFar: 2.5,
-  campMidFar: 0.3,
+  campSizeFar: 2,
+  campMidFar: 0.4,
   campBigFar: 0.12,
+  campBigMin: 2,
+  campBigRadar: 8,
   fogCell: 1100,
   fogChance: 0.3,
   fogMin: 180,
@@ -39,6 +41,8 @@ export const CAMP_PARAMS: Param[] = [
   { key: "campSizeFar", label: "Camp size × at full depth", min: 1, max: 6, step: 0.05, group: DEPTH_GROUP, onRelease: true },
   { key: "campMidFar", label: "Cutters added to camps at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP, tip: "Added to the robot lab's cutter share", onRelease: true },
   { key: "campBigFar", label: "Excavators added to camps at full depth (share)", min: 0, max: 0.5, step: 0.005, group: DEPTH_GROUP, onRelease: true },
+  { key: "campBigMin", label: "Excavators sure in a camp at full depth", min: 0, max: 6, step: 0.25, group: DEPTH_GROUP, tip: "A camp holds at least floor(danger × this) excavators (2: one from danger 0.5, about 620 m out; two at full depth; three past it). Deep camps: fewer scrappers, a walker you can see", onRelease: true },
+  { key: "campBigRadar", label: "Radar counts an excavator as (robots)", min: 1, max: 30, step: 1, group: G, tip: "Camps with excavators read hotter on the convoy radar", onRelease: true },
   { key: "fogCell", label: "Cell size (m)", min: 300, max: 4000, step: 10, group: F, onRelease: true },
   { key: "fogChance", label: "Chance per cell", min: 0, max: 1, step: 0.01, group: F, onRelease: true },
   { key: "fogMin", label: "Smallest radius (m)", min: 30, max: 1000, step: 5, group: F, onRelease: true },
@@ -59,6 +63,8 @@ export interface Camp {
   danger: number;
   /** Shares of cutters and excavators added to the robot lab's mix. */
   mid: number; big: number;
+  /** Excavators it holds at least (depth; campBigMin). */
+  bigs: number;
 }
 
 export interface Unknown { id: string; x: number; z: number; r: number }
@@ -132,8 +138,10 @@ export class CampField {
     const lo = Math.min(v.campMin, v.campMax), hi = Math.max(v.campMin, v.campMax);
     // Sizes lean small: most camps a handful, a few big; deeper ones are bigger.
     const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * scaled(v.campSizeFar, d)));
-    const guess = Math.max(1, size * (1 + (r() * 2 - 1) * v.campGuess));
-    return { id: `camp:${i}:${j}`, x, z, size, guess, radius: 6 + Math.sqrt(size) * 2.5, seed: hash4(v.campSeed, i, j, 97), danger: d, mid: v.campMidFar * d, big: v.campBigFar * d };
+    const bigs = Math.min(size, Math.floor(v.campBigMin * d));
+    // The radar reads heat: an excavator glows like campBigRadar robots.
+    const guess = Math.max(1, (size + bigs * (v.campBigRadar - 1)) * (1 + (r() * 2 - 1) * v.campGuess));
+    return { id: `camp:${i}:${j}`, x, z, size, guess, radius: 6 + Math.sqrt(size) * 2.5, seed: hash4(v.campSeed, i, j, 97), danger: d, mid: v.campMidFar * d, big: v.campBigFar * d, bigs };
   }
 
   private placeFog(i: number, j: number): Unknown | null {

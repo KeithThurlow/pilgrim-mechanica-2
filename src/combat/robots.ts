@@ -364,6 +364,9 @@ export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: 
 /** True while a robot is off the ground on purpose (leaping, latched, flung). */
 export const isAirborne = (s: number) => s === LEAP || s === LATCHED || s === FLUNG;
 
+/** A group's mix: shares of medium and big ones, and at least bigMin big ones (deep camps and raids). */
+export interface RobotShares { mid: number; big: number; bigMin?: number }
+
 export class RobotSwarm {
   readonly px = new Float32Array(ROBOT_MAX); readonly py = new Float32Array(ROBOT_MAX); readonly pz = new Float32Array(ROBOT_MAX);
   readonly vx = new Float32Array(ROBOT_MAX); readonly vy = new Float32Array(ROBOT_MAX); readonly vz = new Float32Array(ROBOT_MAX);
@@ -523,12 +526,12 @@ export class RobotSwarm {
   }
 
   private kindPlan: number[] = [];
-  /** Kinds for a group of n: shares of big and medium ones spread evenly through it, the rest small. */
-  private planKinds(n: number, shares?: { mid: number; big: number }): number[] {
+  /** Kinds for a group of n: shares of big and medium ones spread evenly through it (at least bigMin big), the rest small. */
+  private planKinds(n: number, shares?: RobotShares): number[] {
     const v = this.v, plan = this.kindPlan;
     plan.length = n; plan.fill(SMALL);
     const bigS = shares?.big ?? v.robotBigShare, midS = shares?.mid ?? v.robotMidShare;
-    const bigN = Math.min(n, Math.round(n * bigS)), midN = Math.min(n - bigN, Math.round(n * midS));
+    const bigN = Math.min(n, Math.max(Math.round(n * bigS), Math.floor(shares?.bigMin ?? 0))), midN = Math.min(n - bigN, Math.round(n * midS));
     const place = (count: number, kind: number, off: number) => {
       for (let j = 0; j < count; j++) {
         let k = Math.min(n - 1, Math.floor(((j + off) * n) / count));
@@ -541,7 +544,7 @@ export class RobotSwarm {
   }
 
   /** n robots around (cx, cz) within radius; shares of them medium and big (the sliders', or these). Returns the slots used. */
-  spawn(n: number, cx: number, cz: number, radius: number, shares?: { mid: number; big: number }, power = 1): number[] {
+  spawn(n: number, cx: number, cz: number, radius: number, shares?: RobotShares, power = 1): number[] {
     const v = this.v, plan = this.planKinds(n, shares), made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();

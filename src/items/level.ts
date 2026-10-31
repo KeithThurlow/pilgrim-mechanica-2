@@ -11,9 +11,11 @@ import type { Item } from "./item";
  * section 6): one power curve for items and enemies, P(n) = 1 + levelGrowth × (n − 1), on an item's damage (so its
  * DPS) and hull; a weapon's rate, cooldowns and spin-up don't change with level (its feel stays put); utility stats
  * and the other parts' stats grow by part of it (about their old 4%-a-level pace).
+ * Rescaling (Keith 2026-10-31: hull items and item DPS scaled too fast, enemy scaling not noticeable): items and enemies
+ * now have their own growth (LOOT levelGrowth 0.05, enemyGrowth 0.075) and hull grows at 0.6 of the item curve.
  */
 export const LEVEL_WEIGHT: Record<string, number> = {
-  damage: 1, hull: 1, burnDps: 1, armour: 0.5, carry: 0.5, carryBonus: 0.5, radarRange: 0.25, boostFuel: 0.5, salvage: 0.5,
+  damage: 1, hull: 0.6, burnDps: 1, armour: 0.5, carry: 0.5, carryBonus: 0.5, radarRange: 0.25, boostFuel: 0.5, salvage: 0.5,
   blast: 0.15, splash: 0.15, range: 0.1, magazine: 0.25,
   // Parts that aren't weapons keep growing at about their old pace (4% × their old weight), so every item still rises with
   // level; a weapon's rate, cooldown, charge and spin-up never do.

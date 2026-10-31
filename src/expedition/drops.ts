@@ -29,7 +29,7 @@ export const DROP_DEFAULTS = {
   pickupMech: 4.5,
   pickupPilot: 1.8,
   dropForget: 400,
-  levelMetres: 100,
+  levelMetres: 150,
   levelJitter: 1.5,
   levelMax: 60,
 };
@@ -48,7 +48,7 @@ export const DROP_PARAMS: Param[] = [
   { key: "rarityHeat", label: "Rarity lean per heat", min: 0, max: 2, step: 0.05, group: G, tip: "The same for salvage heat (0..1)" },
   { key: "pickupMech", label: "Mech grabs within (m)", min: 1, max: 12, step: 0.1, group: G, tip: "Walk the mech's hips this close to a drop to pick it up" },
   { key: "pickupPilot", label: "Pilot grabs within (m)", min: 0.5, max: 5, step: 0.1, group: G },
-  { key: "levelMetres", label: "Item level per (m of depth)", min: 10, max: 1000, step: 5, group: G, tip: "A drop's level is 1 + its depth from the convoy over this (100: level 11 at 1 km)" },
+  { key: "levelMetres", label: "Item level per (m of depth)", min: 10, max: 1000, step: 5, group: G, tip: "A drop's level is 1 + its depth from the convoy over this (150: level 7.7 at 1 km; was 100). Enemies' area level uses the same" },
   { key: "levelJitter", label: "Item level spread (±)", min: 0, max: 10, step: 0.5, group: G },
   { key: "levelMax", label: "Item level cap", min: 1, max: 200, step: 1, group: G },
   { key: "dropForget", label: "Drops vanish past (m)", min: 50, max: 2000, step: 10, group: G, tip: "A drop left this far behind is gone" },

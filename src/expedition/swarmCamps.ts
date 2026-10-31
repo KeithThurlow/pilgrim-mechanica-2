@@ -8,7 +8,7 @@
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
-import { RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
+import { type RobotShares, RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
 import { RobotsDraw } from "../combat/robotsDraw";
 import { fireRobotBeam } from "../game/robotBeam";
 import { RobotTarget } from "../combat/robotTarget";
@@ -118,7 +118,7 @@ export class SwarmCamps {
       if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
       const n = this.left.get(c.id) ?? c.size;
       if (n <= 0) continue;
-      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big } : undefined, this.power?.(c.x, c.z) ?? 1);
+      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big, bigMin: c.bigs } : undefined, this.power?.(c.x, c.z) ?? 1);
       for (const i of slots) sw.frozen[i] = 1;
       const hurt = this.hurt.get(c.id) ?? 0;
       if (hurt > 0) for (const i of slots) sw.hp[i] *= 1 - hurt;
@@ -200,12 +200,12 @@ export class SwarmCamps {
    * A roaming pack or a raid comes in as robots (src/expedition/threats.ts): n of them round (x, z), awake and
    * hunting; shares of medium and big ones if given. They calm down like a camp when the mech goes aboard.
    */
-  addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt = 0, goal?: { x: number; z: number }) {
+  addGroup(id: string, n: number, x: number, z: number, shares?: RobotShares, hurt = 0, goal?: { x: number; z: number }) {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
     const slots = this.sw.spawn(n, x, z, radius, shares, this.power?.(x, z) ?? 1);
     if (hurt > 0) for (const i of slots) this.sw.hp[i] *= 1 - hurt;
-    const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0 };
+    const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0, bigs: shares?.bigMin ?? 0 };
     const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };
     l.hp = this.hp(l);
     this.live.set(id, l);
