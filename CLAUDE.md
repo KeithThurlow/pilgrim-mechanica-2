@@ -137,7 +137,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   from the start, for shots of getting out).
 - Duel lab: `?rival=seed` (which rival mech; Reroll steps on), `?rivalfit=slot:base[:rarity],...` (fit these over its roll,
   as the loadout lab's `?fit=`), `?left= ?right= ?k1= ?k2= ?k3=` (your weapons, as the weapons lab; else the loadout lab's bay
-  save, else the weapons lab's last pick), `?bay` (use the bay save), plus the combat-lab flags; R restarts the round.
+  save, else the weapons lab's last pick), `?bay` (use the bay save), `?rivallevel=recruit|veteran|ace` (the rival's difficulty preset, Recruit by default; also buttons in the panel), plus the combat-lab flags; R restarts the round.
 - Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, `?worst` (the co-op worst
   case: three AI allies, max-Protocol stand-ins, effects ×4), plus the combat-lab flags.
   Results go to the screen, the console and `window.__stress`.

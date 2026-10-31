@@ -8,9 +8,9 @@
 // - Dodge drills: a scripted shooter fires mortars, line mortars, missile swarms and held rail charges at a rival told
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
-import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand } from "../src/combat/rivalAi";
+import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand } from "../src/combat/rivalAi";
 import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout } from "../src/combat/rivalKit";
-import { runDuel, type DuelOptions } from "../src/combat/duelSim";
+import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
 import { problems, resolve } from "../src/items/loadout";
 import { loadoutFor } from "../src/items/weaponPick";
@@ -18,6 +18,10 @@ import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 
 const fails: string[] = [];
 const must = (ok: boolean, why: string) => { if (!ok) fails.push(why); };
+// The rules checks below run Veteran against Veteran; the level checks at the end
+// use the levels themselves.
+const { rivalHull: _h, ...VET } = RIVAL_LEVELS.veteran;
+const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } });
 
 // ---- The AI only issues commands ----
 {
@@ -161,6 +165,68 @@ for (const k of Object.keys(drills)) {
   must(d.dodged >= d.thr * 0.4, `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
+
+// ---- Aim lag and cover (Keith 2026-10-31: "way too hard and insanely accurate") ----
+{
+  const kit = kitOf(resolve(loadoutFor({ left: "rail", right: "minigun", k1: "none", k2: "none", k3: "pack" })), WEAPON_DEFAULTS);
+  const mk = (n: number, fx: number, fz: number, vx: number, sees: boolean, charge: number): DuelView => ({
+    t: n / 60, cover: [], sees: () => sees, arena: { x: 0, z: 0, r: 200 },
+    self: { x: 0, z: 0, vx: 0, vz: 0, heading: 0, health: 1, dashCharges: 0, canDash: false, dashing: false, walkSpeed: 6, kit, weapons: kit.map((_, i) => ({ i, ready: true, charge })) },
+    foe: { x: fx, y: 3, z: fz, vx, vz: 0, health: 1, dashCharges: 0, alive: true, gunsOff: false, airborne: false, staggered: false, r: 1.7 },
+    threats: [],
+  });
+  const { rivalHull: _r, ...REC } = RIVAL_LEVELS.recruit;
+  // A rail aimed at a standing foe, which then steps sideways at 6 m/s: the line is still near the old spot half a second on.
+  const ai = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC, aiAimError: 0 }, 3);
+  let lock: { x: number } | null = null;
+  for (let n = 0; n < 240; n++) lock = ai.decide(mk(n, 0, 30, 0, true, 0.5), 1 / 60).lock;
+  const settled = lock!.x;
+  for (let n = 240; n < 288; n++) lock = ai.decide(mk(n, (n - 240) / 60 * 6, 30, 6, true, 0.5), 1 / 60).lock;
+  const foeNow = 48 / 60 * 6;
+  must(Math.abs(settled) < 1, `rail line didn't settle on a standing foe (${settled.toFixed(1)} m off)`);
+  must(foeNow - lock!.x > 2.5, `0.8 s into a sidestep the rail line is only ${(foeNow - lock!.x).toFixed(1)} m behind the foe (hit radius 1.7)`);
+  // Cover: the foe out of sight, the aim holds the last spot and nothing but a charged rail's hold fires; after it
+  // shows again it needs aiReacquire before the guns open.
+  const ai2 = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC, aiAimError: 0 }, 4);
+  for (let n = 0; n < 240; n++) ai2.decide(mk(n, 0, 30, 0, true, 0), 1 / 60);
+  let c = ai2.decide(mk(240, 0, 30, 0, true, 0), 1 / 60);
+  let fired = false, drift = 0;
+  for (let n = 241; n < 480; n++) { c = ai2.decide(mk(n, 20, 30, 0, false, 0), 1 / 60); fired ||= c.trigger[0] || c.trigger[1]; drift = Math.max(drift, Math.abs(c.shotAt!.x)); }
+  must(!fired, "the rival fired at a foe it couldn't see");
+  must(drift < 2, `the rival's aim followed a foe behind cover (${drift.toFixed(1)} m)`);
+  let early = false;
+  for (let n = 480; n < 480 + Math.floor(REC.aiReacquire! * 60) - 3; n++) { c = ai2.decide(mk(n, 20, 30, 0, true, 0), 1 / 60); early ||= c.trigger[0] || c.trigger[1]; }
+  must(!early, "the rival fired before re-acquiring a foe stepping out of cover");
+  let late = false;
+  for (let n = 700; n < 760; n++) { c = ai2.decide(mk(n, 20, 30, 0, true, 0), 1 / 60); late ||= c.trigger[0] || c.trigger[1]; }
+  must(late, "the rival never fired once it had re-acquired the foe");
+
+  // Duels against a scripted player who stands or strafes (cover 0): Recruit misses a strafing player most of the time,
+  // still punishes one who stands; Ace hits more; Recruit's time to kill with the default pick is 8-25 s.
+  const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+  const mode = (strafe: boolean) => (i: number, _v: DuelView, t: number): MechCommand | null => { if (i !== 0) return null; const m = idle(); if (strafe) m.move.x = Math.sin(t * 0.5) >= 0 ? 1 : -1; return m; };
+  const taken = (lvl: keyof typeof RIVAL_LEVELS, strafe: boolean) => {
+    let sum = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const r = runDuelRaw({ seedA: 1, seedB: 100 + seed, maxTime: 30, hull: 1e6, cover: 0, aiSeed: seed, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" }), null], aiEach: [undefined, RIVAL_LEVELS[lvl]], script: mode(strafe) });
+      // (the missile swarm homes and is only cut by a dash: left out of the strafing question)
+      sum += Object.entries(r.score.rounds[0].taken).reduce((a, [k, x]) => a + (k === "missiles" ? 0 : x), 0) / 8;
+    }
+    return sum;
+  };
+  const stand = RIVAL_LEVEL_IDS.map((l) => taken(l, false)), strafe = RIVAL_LEVEL_IDS.map((l) => taken(l, true));
+  must(stand[0] > 1500, `a Recruit barely hurt a player who stands still (${Math.round(stand[0])} in 30 s)`);
+  must(strafe[0] < stand[0] * 0.4, `a Recruit still hit a strafing player for ${Math.round(strafe[0])} vs ${Math.round(stand[0])} standing`);
+  must(stand[0] < stand[2] && strafe[0] < strafe[2], `levels not ordered (stand ${stand.map(Math.round)} strafe ${strafe.map(Math.round)})`);
+  let wins = 0, tt = 0;
+  for (let seed = 1; seed <= 8; seed++) {
+    const r = runDuelRaw({ seedA: 1, seedB: 100 + seed, maxTime: 90, cover: 0, aiSeed: seed, loadouts: [loadoutFor({ left: "minigun", right: "rpg", k1: "missiles", k2: "none", k3: "mortar" }), null], aiEach: [RIVAL_LEVELS.veteran, RIVAL_LEVELS.recruit], hullMul: [1, RIVAL_LEVELS.recruit.rivalHull] });
+    if (r.winner === 0) { wins++; tt += r.time; }
+  }
+  must(wins >= 6, `a Veteran-proxy player beat the Recruit in only ${wins} of 8`);
+  must(wins > 0 && tt / wins > 8 && tt / wins < 25, `Recruit time to kill ${(tt / Math.max(1, wins)).toFixed(1)} s (want 8-25)`);
+  console.log(`levels (${RIVAL_LEVEL_IDS.join("/")}): damage to a standing player ${stand.map(Math.round)} vs strafing ${strafe.map(Math.round)} per 30 s; Recruit dies in ${(tt / Math.max(1, wins)).toFixed(1)} s (${wins}/8)`);
+}
 
 const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;
 console.log(`duels ${pairs.length}: both damaged in ${both}, ${kills} kills (mean ${(ttk / Math.max(1, kills)).toFixed(1)} s), telegraphed shots dodged ${thr[1]}/${thr[0]} (${pct(thr[1], thr[0])}), worst idle ${worstStuck.toFixed(1)} s`);

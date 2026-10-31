@@ -19,14 +19,20 @@ import { rng } from "../items/generate";
 import { preferredRange, type KitWeapon } from "./rivalKit";
 
 export const RIVAL_AI_DEFAULTS = {
-  aiAggression: 0.6,
-  aiReaction: 0.35,
+  aiAggression: 0.5,
+  aiReaction: 0.6,
   aiAimError: 1.2,
   aiAimDrift: 0.6,
-  aiLead: 0.85,
-  aiDashUse: 0.75,
+  aiAimLag: 0.8,
+  aiAimTurn: 30,
+  aiAimLead: 0.1,
+  aiMoveError: 0.25,
+  aiReacquire: 1.2,
+  aiRailHold: 0.7,
+  aiLead: 0.35,
+  aiDashUse: 0.5,
   aiDashKeep: 1,
-  aiRailDodge: 0.9,
+  aiRailDodge: 0.95,
   aiRange: 0,
   aiRangeBand: 8,
   aiStrafe: 0.7,
@@ -36,9 +42,20 @@ export const RIVAL_AI_DEFAULTS = {
   aiPeek: 2.5,
   aiPaintTime: 0.7,
   aiPressRange: 0.65,
-  aiLockLead: 0.12,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
+
+/**
+ * Rival levels (Keith 2026-10-31: "varying levels of rival capability"): presets over the sliders above plus the hull
+ * share. Recruit is the default; later rival squads pick a level by depth. Ace is about the rival as it was before.
+ */
+export type RivalLevel = "recruit" | "veteran" | "ace";
+export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
+export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
+  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 0.7 },
+  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1 },
+  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.15 },
+};
 
 const G = "Rival AI";
 export const RIVAL_AI_PARAMS: Param[] = [
@@ -46,8 +63,13 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiReaction", label: "Reaction time (s)", min: 0, max: 1.5, step: 0.05, group: G, tip: "Before it notices a new threat in the air, and how far behind the foe's changes of direction its aim runs" },
   { key: "aiAimError", label: "Aim error (m at 30 m)", min: 0, max: 6, step: 0.1, group: G, tip: "A slowly wandering offset on its aim point, growing with range: readable misses, not perfect tracking" },
   { key: "aiAimDrift", label: "Aim error wander (per s)", min: 0.05, max: 3, step: 0.05, group: G },
+  { key: "aiAimLag", label: "Aim lag (s)", min: 0, max: 2, step: 0.05, group: G, tip: "Its aim point chases where it last saw you with this time constant: strafe or dash and it trails behind" },
+  { key: "aiAimTurn", label: "Aim swing speed (deg/s)", min: 5, max: 360, step: 5, group: G, tip: "The fastest its aim line can sweep round it; the rail's line moves no faster" },
+  { key: "aiAimLead", label: "Aim lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much it leads your motion with direct fire and the rail: partial and late, from what it saw a reaction ago" },
+  { key: "aiMoveError", label: "Extra miss per m/s you move across it", min: 0, max: 1, step: 0.05, group: G, tip: "Spread grows with your sideways speed (m of error at 30 m per m/s)" },
+  { key: "aiReacquire", label: "Re-acquire after cover (s)", min: 0, max: 4, step: 0.1, group: G, tip: "Once you break its line of sight it aims at the last spot it saw you and holds fire; it needs this long after seeing you again" },
+  { key: "aiRailHold", label: "Rail holds the full charge (s)", min: 0, max: 2, step: 0.05, group: G, tip: "A fully charged rail waits this long (jittered) before it fires, the line showing where it points" },
   { key: "aiLead", label: "Lead (share of the true lead)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of the foe's motion it leads its rockets, shells and mortars by" },
-  { key: "aiLockLead", label: "Arm lead (s)", min: 0, max: 1, step: 0.05, group: G, tip: "The arms swing this far ahead of a moving foe (as the player's soft lock does)" },
   { key: "aiDashUse", label: "Dash use (share of dodges)", min: 0, max: 1, step: 0.05, group: G, tip: "Share of threats it can't walk out of in time that it dashes out of" },
   { key: "aiDashKeep", label: "Dash charges kept for dodges", min: 0, max: 4, step: 1, group: G, tip: "It won't dash to reposition below this many charges" },
   { key: "aiRailDodge", label: "Dodges a charging rail at (charge)", min: 0.3, max: 1, step: 0.05, group: G, tip: "A rail charging along a line through it: it dashes across once the charge passes this" },
@@ -176,9 +198,18 @@ export class RivalAi {
   private stateFor = 0;
   private strafe = 1;
   private flipIn = 2;
-  /** The foe's velocity as it has noticed it (lags by the reaction time). */
+  /** The foe as it has noticed it (what it saw a reaction time ago; frozen while it can't see you). */
   private fvx = 0;
   private fvz = 0;
+  private hist: { t: number; x: number; z: number; vx: number; vz: number }[] = [];
+  /** The aim point, in polar round the rival: bearing and range, chasing the noticed foe with a lag and a swing limit. */
+  private ab = 0;
+  private ar = 30;
+  private aimInit = false;
+  private seenAt = -1e9;
+  private prevSees = true;
+  private railSince = -1;
+  private railWait = 0;
   /** When each threat was first seen, and the decision made for it (dash or walk). */
   private seen = new Map<number, { t: number; dash: boolean; delay: number; charged: number }>();
   /** Where it has noticed the foe to be (eased toward the truth over the reaction time). */
@@ -210,6 +241,7 @@ export class RivalAi {
   reset() {
     this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
+    this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
   }
 
   private flipTime() { return this.v.aiStrafeFlip * (0.4 + 1.2 * this.r()); }
@@ -219,15 +251,22 @@ export class RivalAi {
     const v = this.v, s = view.self, f = view.foe;
     const cmd: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
     this.stateFor += dt;
-    // What it has noticed of the foe's motion: eased toward the truth over the reaction time.
-    const k = 1 - Math.exp(-dt / Math.max(0.02, v.aiReaction));
-    this.fvx += (f.vx - this.fvx) * k; this.fvz += (f.vz - this.fvz) * k;
-    if (!Number.isFinite(this.fx)) { this.fx = f.x; this.fz = f.z; }
-    this.fx += (f.x - this.fx) * k; this.fz += (f.z - this.fz) * k;
     if (!f.alive) { this.painting = null; return cmd; }
     const dx = f.x - s.x, dz = f.z - s.z, dist = Math.hypot(dx, dz) || 1;
     const ux = dx / dist, uz = dz / dist;
     const sees = view.sees(s.x, s.z, f.x, f.z);
+    // Line of sight broken: it keeps the last spot it saw you, holds fire, and needs aiReacquire after you show again.
+    if (sees && !this.prevSees) this.seenAt = view.t;
+    this.prevSees = sees;
+    const acquired = sees && view.t - this.seenAt >= v.aiReacquire;
+    // What it has noticed of the foe: the position and motion from a reaction time ago (only fed while it can see you).
+    if (acquired) {
+      this.hist.push({ t: view.t, x: f.x, z: f.z, vx: f.vx, vz: f.vz });
+      while (this.hist.length > 1 && this.hist[1].t <= view.t - v.aiReaction) this.hist.shift();
+      const h0 = this.hist[0];
+      if (h0.t <= view.t - v.aiReaction || !Number.isFinite(this.fx)) { this.fx = h0.x; this.fz = h0.z; this.fvx = h0.vx; this.fvz = h0.vz; }
+    } else this.hist.length = 0;
+    if (!Number.isFinite(this.fx)) { this.fx = f.x; this.fz = f.z; this.fvx = f.vx; this.fvz = f.vz; } // round start: it knows where you are
 
     // ---- Which state ----
     const base = v.aiRange > 0 ? v.aiRange : preferredRange(s.kit);
@@ -299,16 +338,24 @@ export class RivalAi {
       cmd.dash = { x: ux + tx * 0.6, z: uz + tz * 0.6 };
     }
 
-    // ---- Aim: lead and a wandering error ----
+    // ---- Aim: it chases what it noticed, with a lag and a swing limit; lead is partial; error grows as you move ----
     this.noiseA += dt * v.aiAimDrift; this.noiseB += dt * v.aiAimDrift * 1.37;
-    const err = v.aiAimError * (dist / 30) * (this.state === "press" ? 0.8 : 1);
+    // Your speed across its line of fire.
+    const across = Math.abs(f.vx * -uz + f.vz * ux);
+    const err = (v.aiAimError + v.aiMoveError * across) * (dist / 30) * (this.state === "press" ? 0.8 : 1);
     const ex = Math.sin(this.noiseA * 2.1) * 0.6 + Math.sin(this.noiseA * 0.77 + 1.3) * 0.4;
     const ez = Math.sin(this.noiseB * 1.7 + 0.4) * 0.6 + Math.sin(this.noiseB * 0.53 + 2.2) * 0.4;
-    // Where it thinks the foe is: its eased sight of it, carried on by the motion it has noticed (exact on a steady
-    // course; a dash or a turn throws it off for about the reaction time).
-    const hx = this.fx + this.fvx * v.aiReaction + ex * err, hz = this.fz + this.fvz * v.aiReaction + ez * err;
+    const tgx = this.fx + this.fvx * v.aiAimLead * 0.5, tgz = this.fz + this.fvz * v.aiAimLead * 0.5;
+    const tb = Math.atan2(tgx - s.x, tgz - s.z), tr = Math.hypot(tgx - s.x, tgz - s.z);
+    if (!this.aimInit) { this.ab = tb; this.ar = tr; this.aimInit = true; }
+    const ka = 1 - Math.exp(-dt / Math.max(0.01, v.aiAimLag));
+    let dB = tb - this.ab; dB -= Math.round(dB / (Math.PI * 2)) * Math.PI * 2;
+    const maxStep = v.aiAimTurn * Math.PI / 180 * dt;
+    this.ab += clamp(dB * ka, -maxStep, maxStep);
+    this.ar += (tr - this.ar) * ka;
+    const hx = s.x + Math.sin(this.ab) * this.ar + ex * err, hz = s.z + Math.cos(this.ab) * this.ar + ez * err;
     cmd.shotAt = { x: hx, y: f.y, z: hz };
-    cmd.aim = { x: hx + this.fvx * v.aiLockLead, y: f.y, z: hz + this.fvz * v.aiLockLead };
+    cmd.aim = { x: hx, y: f.y, z: hz };
     cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: this.fvx * v.aiLead, vz: this.fvz * v.aiLead };
     // The launchers' ground point: led by the flight of what's being fired (the slowest painted one, else rockets).
     const lead = (speed: number, flight = 0) => (speed === Infinity ? 0 : dist / Math.max(1, speed)) + flight;
@@ -317,7 +364,7 @@ export class RivalAi {
     cmd.cursor = { x: hx + this.fvx * lt, y: f.y - 1.5, z: hz + this.fvz * lt };
 
     // ---- Fire ----
-    this.fire(view, cmd, dist, sees, dt);
+    this.fire(view, cmd, dist, acquired, dt);
     return cmd;
   }
 
@@ -433,7 +480,10 @@ export class RivalAi {
       }
       if (k.kind === "rail") {
         // Charge, and let go once full (or a little early when pressing).
-        cmd.trigger[side] = w.charge < (press ? 0.85 : 1) && (w.ready || w.charge > 0);
+        const full = w.charge >= (press ? 0.85 : 1);
+        if (!full) this.railSince = -1;
+        else if (this.railSince < 0) { this.railSince = view.t; this.railWait = v.aiRailHold * (0.6 + this.r() * 0.8); }
+        cmd.trigger[side] = (w.ready || w.charge > 0) && (!full || view.t - this.railSince < this.railWait);
       } else cmd.trigger[side] = w.ready || k.kind === "minigun" || k.kind === "autocannon";
     }
     // Shoulder weapons: one painted at a time, held long enough to read, then released.

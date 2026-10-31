@@ -11,7 +11,7 @@
 // URL flags: ?rival=seed (which rival; Reroll steps to the next), ?rivalfit=slot:base[:rarity],... (fit these over
 // the roll, as the loadout lab's ?fit=), ?left= ?right= ?k1= ?k2= ?k3= (your weapons, as the weapons lab; else the
 // loadout lab's bay save if there is one, else the weapons lab's last pick), ?bay (use the loadout lab's bay save),
-// plus the combat lab flags (?manual ?zoom ?dt ?flat ?time=).
+// ?rivallevel=recruit|veteran|ace (the rival's preset; Recruit by default; buttons in the panel), plus the combat lab flags (?manual ?zoom ?dt ?flat ?time=).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { combatLab } from "../../src/game/combatLab";
@@ -25,7 +25,7 @@ import { addModifier } from "../../src/world/modifiers";
 import { WreckStandIns } from "../../src/world/wrecks";
 import type { RampartBody } from "../../src/mech/rampart";
 import { DuelGround, DUEL_GROUND_DEFAULTS, DUEL_GROUND_PARAMS, lineOfSight, wreckSpots } from "../../src/game/duelGround";
-import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_AI_PARAMS, type MechCommand } from "../../src/combat/rivalAi";
+import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_AI_PARAMS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type MechCommand, type RivalLevel } from "../../src/combat/rivalAi";
 import { applyFitSpec, describeLoadout, kitOf, preferredRange, rollRivalLoadout, type KitWeapon } from "../../src/combat/rivalKit";
 import { ThreatIds, duelView, threatsFrom } from "../../src/combat/duelThreats";
 import { DuelScore, type Side } from "../../src/combat/duelScore";
@@ -35,7 +35,7 @@ import { ROWS, choose, cleanPick, loadoutFor, pickFromParams, type Pick } from "
 import { loadBay } from "../../src/ui/bay";
 import type { Param } from "../../src/core/tweaks";
 
-const DUEL_DEFAULTS = { rivalHull: 1, duelAutoRestart: 3.5 };
+const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, duelAutoRestart: 3.5 };
 const DUEL_PARAMS: Param[] = [
   { key: "rivalHull", label: "Rival hull (× its parts')", min: 0.25, max: 4, step: 0.05, group: "Rival", tip: "Its hull points from the rolled hull item, times this" },
   { key: "duelAutoRestart", label: "Next round after a kill (s, 0: R only)", min: 0, max: 15, step: 0.5, group: "Rival" },
@@ -61,7 +61,7 @@ const lab = await combatLab({
     { topic: "rival", label: "Rival", objects: () => { if (!rivalBody) return []; const r = rivalBody.regions(); return [...r.legs, ...r.hull, ...r.gunLeft, ...r.gunRight, ...(rivalArsenal?.meshes() ?? [])]; } },
     { topic: "arena", label: "Cover", objects: () => wrecks?.meshes ?? [] },
   ],
-  actions: [{ label: "Reroll rival", onClick: () => reroll(1) }, { label: "Restart (R)", onClick: () => startRound() }],
+  actions: [...RIVAL_LEVEL_IDS.map((id) => ({ label: id[0].toUpperCase() + id.slice(1), onClick: () => setLevel(id) })), { label: "Reroll rival", onClick: () => reroll(1) }, { label: "Restart (R)", onClick: () => startRound() }],
   setup: (field, V) => { ground = new DuelGround(V); addModifier(field, ground); },
   wrecks: (field, V) => (wrecks = new WreckStandIns(field, wreckSpots(ground!.spots, V))),
   report: (): Record<string, unknown> => ({ rivalSeed, rivalfit: fitSpec, rivalState: ai.state, ...score.tally() }),
@@ -112,6 +112,15 @@ function fitRival() {
   ai.reset();
   board();
 }
+/** A rival level: its preset over the AI sliders and the hull share (the sliders stay free to change after). */
+function setLevel(id: RivalLevel) {
+  const p = RIVAL_LEVELS[id] as Record<string, number>;
+  for (const k of Object.keys(p)) { (V as Record<string, number>)[k] = p[k]; (RV as Record<string, number>)[k] = p[k]; }
+  lab.refresh();
+  fitRival();
+  noteLevel = id;
+}
+let noteLevel = "recruit";
 function reroll(step: number) {
   rivalSeed = Math.max(1, rivalSeed + step);
   try { localStorage.setItem(RIVAL_KEY, String(rivalSeed)); } catch { /* private window */ }
@@ -289,9 +298,11 @@ lab.onFrame((dt: number) => {
   const sc = box.querySelector<HTMLElement>(".score");
   if (sc) sc.innerHTML = score.lines(clock).join("<br>");
   const st = ai.stats;
-  lab.hud("rival", `rival ${ai.state} · dodges ${st.dodgeDashes} dashed, ${st.dodgeWalks} walked of ${st.threatsSeen} seen · dash ${rival.dash.charges}${last?.keys.some(Boolean) ? " · painting" : ""}`);
+  lab.hud("rival", `rival ${noteLevel} ${ai.state} · dodges ${st.dodgeDashes} dashed, ${st.dodgeWalks} walked of ${st.threatsSeen} seen · dash ${rival.dash.charges}${last?.keys.some(Boolean) ? " · painting" : ""}`);
 });
 
+const urlLevel = params.get("rivallevel");
+if (urlLevel && (RIVAL_LEVEL_IDS as string[]).includes(urlLevel)) setLevel(urlLevel as RivalLevel);
 fitRival();
 refit();
 startRound();
