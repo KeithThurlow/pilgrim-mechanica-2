@@ -100,7 +100,7 @@ export class BodyContact {
     if (!u.alive) return 0;
     let n = 0;
     for (const r of list) {
-      let cd = this.cool.get(r) ?? 0;
+      const cd = this.cool.get(r) ?? 0;
       if (cd > 0) { this.cool.set(r, cd - dt); }
       if (!r.alive) continue;
       const s = r.sim, sh = r.shape, fx = Math.sin(s.heading), fz = Math.cos(s.heading);
