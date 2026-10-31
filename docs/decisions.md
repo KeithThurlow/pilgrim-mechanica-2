@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | No safety rails on the mech launch pad: the mech can walk or run off the side of the convoy (the crane drop-off and pick-up stay) | Keith | Keith | Agent on `wip/walkoff`. |
 | 2026-10-31 | Excavator (tall walker) armour cut by a third, 10 → 6.5, as a first step; probably halved (5) after play | Keith | Keith | `robotBigArmour` in `src/combat/robots.ts`. |
 | 2026-10-31 | Rivals track well while charging high-velocity weapons (the rail first), then snapshot their aim about 0.3 s before firing: the player's grace window to change direction or dash out of the line. The pattern for most high-velocity weapons | Keith | Keith | Agent on `wip/railgrace`. The new dash is great (Keith). |
 | 2026-10-31 | The dash still feels drifty after it: make it shorter and let it decelerate hard when the player isn't carrying on into the sprint; grip-by-speed stays for the sprint | Keith | Keith | Agent on `wip/dashexit`. |
