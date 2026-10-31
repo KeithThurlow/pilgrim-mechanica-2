@@ -28,7 +28,15 @@ export const RIVAL_AI_DEFAULTS = {
   aiAimLead: 0.1,
   aiMoveError: 0.25,
   aiReacquire: 1.2,
-  aiRailHold: 0.7,
+  aiRailReaction: 0.15,
+  aiRailLag: 0.08,
+  aiRailTurn: 180,
+  aiRailLead: 0.9,
+  aiRailError: 0.5,
+  aiSnapshot: 0.6,
+  aiSnapJitter: 0,
+  aiBurstAim: 0.6,
+  aiBurst: 1,
   aiLead: 0.35,
   aiDodgeChance: 0.3,
   aiDashUse: 0.5,
@@ -56,9 +64,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -72,7 +80,15 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiAimLead", label: "Aim lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much it leads your motion with direct fire and the rail: partial and late, from what it saw a reaction ago" },
   { key: "aiMoveError", label: "Extra miss per m/s you move across it", min: 0, max: 1, step: 0.05, group: G, tip: "Spread grows with your sideways speed (m of error at 30 m per m/s)" },
   { key: "aiReacquire", label: "Re-acquire after cover (s)", min: 0, max: 4, step: 0.1, group: G, tip: "Once you break its line of sight it aims at the last spot it saw you and holds fire; it needs this long after seeing you again" },
-  { key: "aiRailHold", label: "Rail holds the full charge (s)", min: 0, max: 2, step: 0.05, group: G, tip: "A fully charged rail waits this long (jittered) before it fires, the line showing where it points" },
+  { key: "aiRailReaction", label: "Fast shots: reaction (s)", min: 0, max: 1, step: 0.01, group: G, tip: "Track then snapshot (Keith 2026-10-31): while a rail charges or an autocannon aims, it tracks you from what it saw this long ago (far tighter than the general reaction time)" },
+  { key: "aiRailLag", label: "Fast shots: aim lag (s)", min: 0, max: 1, step: 0.01, group: G, tip: "Time constant of its aim while charging a rail or aiming a burst" },
+  { key: "aiRailTurn", label: "Fast shots: swing speed (deg/s)", min: 5, max: 600, step: 5, group: G },
+  { key: "aiRailLead", label: "Fast shots: lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "Share of your motion it leads a rail or burst by, out to the moment of the shot" },
+  { key: "aiRailError", label: "Fast shots: aim error (m at 30 m)", min: 0, max: 4, step: 0.05, group: G },
+  { key: "aiSnapshot", label: "Snapshot: aim freezes this long before the shot (s)", min: 0, max: 1.5, step: 0.01, group: G, tip: "The grace: this long before a rail fires (or an autocannon burst opens) its aim stops tracking and freezes on where it would hit, the line turning solid. Change direction or dash out of the line now and it misses" },
+  { key: "aiSnapJitter", label: "Snapshot: random extra hold (s)", min: 0, max: 1, step: 0.01, group: G, tip: "A fully charged rail waits up to this long, frozen, before firing. 0: it fires the instant the charge is full, so the timing is readable" },
+  { key: "aiBurstAim", label: "Autocannon: tracking time before a burst (s)", min: 0, max: 4, step: 0.05, group: G },
+  { key: "aiBurst", label: "Autocannon: burst length (s)", min: 0.2, max: 4, step: 0.05, group: G, tip: "Fired along the frozen line" },
   { key: "aiLead", label: "Lead (share of the true lead)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of the foe's motion it leads its rockets, shells and mortars by" },
   { key: "aiDodgeChance", label: "Dodge chance (per threat)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-10-31: enemies only have a chance to dodge targeted abilities. Each telegraph rolls once (seeded) when it appears: it either reacts (after the reaction time) or carries on as if it never saw it" },
   { key: "aiDashUse", label: "Dash use (share of dodges)", min: 0, max: 1, step: 0.05, group: G, tip: "Share of threats it can't walk out of in time that it dashes out of" },
@@ -216,6 +232,13 @@ export class RivalAi {
   private prevSees = true;
   private railSince = -1;
   private railWait = 0;
+  /** Track then snapshot: the frozen aim point (null: tracking) and, for an autocannon, its burst cycle. */
+  private frozen: { x: number; z: number } | null = null;
+  private acPhase: "aim" | "snap" | "burst" = "aim";
+  private acUntil = 0;
+  private acFireFrom = 0;
+  /** The aim is frozen on the point the shot will go along (the lab draws the rail's line solid). */
+  snapped = false;
   /** When each threat was first seen, and the decision made for it (dash or walk). */
   private seen = new Map<number, { t: number; notice: boolean; dash: boolean; delay: number; charged: number }>();
   /** Where it has noticed the foe to be (eased toward the truth over the reaction time). */
@@ -252,6 +275,7 @@ export class RivalAi {
     this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null; this.paintAt = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
     this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
+    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false;
   }
 
   private flipTime() { return this.v.aiStrafeFlip * (0.4 + 1.2 * this.r()); }
@@ -272,9 +296,10 @@ export class RivalAi {
     // What it has noticed of the foe: the position and motion from a reaction time ago (only fed while it can see you).
     if (acquired) {
       this.hist.push({ t: view.t, x: f.x, z: f.z, vx: f.vx, vz: f.vz });
-      while (this.hist.length > 1 && this.hist[1].t <= view.t - v.aiReaction) this.hist.shift();
-      const h0 = this.hist[0];
-      if (h0.t <= view.t - v.aiReaction || !Number.isFinite(this.fx)) { this.fx = h0.x; this.fz = h0.z; this.fvx = h0.vx; this.fvz = h0.vz; }
+      const maxDelay = Math.max(v.aiReaction, v.aiRailReaction);
+      while (this.hist.length > 1 && this.hist[1].t <= view.t - maxDelay) this.hist.shift();
+      const h0 = this.noticed(view.t, v.aiReaction) ?? this.hist[0];
+      if (this.noticed(view.t, v.aiReaction) || !Number.isFinite(this.fx)) { this.fx = h0.x; this.fz = h0.z; this.fvx = h0.vx; this.fvz = h0.vz; }
     } else this.hist.length = 0;
     if (!Number.isFinite(this.fx)) { this.fx = f.x; this.fz = f.z; this.fvx = f.vx; this.fvz = f.vz; } // round start: it knows where you are
 
@@ -356,18 +381,48 @@ export class RivalAi {
     const err = (v.aiAimError + v.aiMoveError * across) * (dist / 30) * (this.state === "press" ? 0.8 : 1);
     const ex = Math.sin(this.noiseA * 2.1) * 0.6 + Math.sin(this.noiseA * 0.77 + 1.3) * 0.4;
     const ez = Math.sin(this.noiseB * 1.7 + 0.4) * 0.6 + Math.sin(this.noiseB * 0.53 + 2.2) * 0.4;
-    const tgx = this.fx + this.fvx * v.aiAimLead * 0.5, tgz = this.fz + this.fvz * v.aiAimLead * 0.5;
-    const tb = Math.atan2(tgx - s.x, tgz - s.z), tr = Math.hypot(tgx - s.x, tgz - s.z);
+    // Track, then snapshot (Keith 2026-10-31): a rail charging or an autocannon aiming tracks the foe tightly (lead and
+    // swing close to the best), then aiSnapshot s before the shot the aim freezes on where it would hit and the shot goes
+    // along that. Everything else keeps the lag-and-spread aim above.
+    const fast = acquired ? this.fastWeapon(s, dist) : null;
+    if (!fast) { this.frozen = null; this.acPhase = "aim"; this.acUntil = view.t + v.aiBurstAim; }
+    this.snapped = false;
+    let lag = v.aiAimLag, turn = v.aiAimTurn, ox = this.fx + this.fvx * v.aiAimLead * 0.5, oz = this.fz + this.fvz * v.aiAimLead * 0.5, perr = err;
+    if (fast) {
+      const e2 = this.noticed(view.t, v.aiRailReaction) ?? this.hist[0];
+      const flight = fast.kind === "ac" ? dist / Math.max(1, fast.k.speed) : 0;
+      const horizon = v.aiRailReaction + v.aiSnapshot + flight;
+      ox = e2.x + e2.vx * v.aiRailLead * horizon; oz = e2.z + e2.vz * v.aiRailLead * horizon;
+      lag = v.aiRailLag; turn = v.aiRailTurn; perr = v.aiRailError * (dist / 30);
+    }
+    const tb = Math.atan2(ox - s.x, oz - s.z), tr = Math.hypot(ox - s.x, oz - s.z);
     if (!this.aimInit) { this.ab = tb; this.ar = tr; this.aimInit = true; }
-    const ka = 1 - Math.exp(-dt / Math.max(0.01, v.aiAimLag));
+    const ka = 1 - Math.exp(-dt / Math.max(0.01, lag));
     let dB = tb - this.ab; dB -= Math.round(dB / (Math.PI * 2)) * Math.PI * 2;
-    const maxStep = v.aiAimTurn * Math.PI / 180 * dt;
+    const maxStep = turn * Math.PI / 180 * dt;
     this.ab += clamp(dB * ka, -maxStep, maxStep);
     this.ar += (tr - this.ar) * ka;
-    const hx = s.x + Math.sin(this.ab) * this.ar + ex * err, hz = s.z + Math.cos(this.ab) * this.ar + ez * err;
+    let hx = s.x + Math.sin(this.ab) * this.ar + ex * perr, hz = s.z + Math.cos(this.ab) * this.ar + ez * perr;
+    if (fast) {
+      // When does the aim freeze? A rail: the charge has this long left. An autocannon: its tracking time is up.
+      const freezeNow = fast.kind === "rail"
+        ? fast.w.charge > 0.02 && (1 - fast.w.charge) * fast.k.charge <= v.aiSnapshot
+        : this.acPhase !== "aim" || view.t >= this.acUntil;
+      if (fast.kind === "rail" && fast.w.charge <= 0.02) this.frozen = null;
+      if (fast.kind === "ac") {
+        if (this.acPhase === "aim" && view.t >= this.acUntil) { this.acPhase = "snap"; this.acUntil = view.t + v.aiSnapshot; this.acFireFrom = view.t + Math.max(0, v.aiSnapshot - fast.k.spinUp); this.frozen = null; }
+        else if (this.acPhase === "snap" && view.t >= this.acUntil) { this.acPhase = "burst"; this.acUntil = view.t + v.aiBurst; }
+        else if (this.acPhase === "burst" && view.t >= this.acUntil) { this.acPhase = "aim"; this.acUntil = view.t + v.aiBurstAim; this.frozen = null; }
+      }
+      // The snapshot is where it would hit (the prediction itself, not the lagging line): the aim snaps there.
+      if (freezeNow && !this.frozen && (fast.kind === "rail" || this.acPhase !== "aim")) this.frozen = { x: ox + ex * perr, z: oz + ez * perr };
+      if (this.frozen) { hx = this.frozen.x; hz = this.frozen.z; this.snapped = true; }
+      // The weapon leads nothing itself: the lead is in the point.
+      cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: 0, vz: 0 };
+    }
     cmd.shotAt = { x: hx, y: f.y, z: hz };
     cmd.aim = { x: hx, y: f.y, z: hz };
-    cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: this.fvx * v.aiLead, vz: this.fvz * v.aiLead };
+    if (!fast) cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: this.fvx * v.aiLead, vz: this.fvz * v.aiLead };
     // The launchers' ground point: led by the flight of what's being fired (the slowest painted one, else rockets).
     const lead = (speed: number, flight = 0) => (speed === Infinity ? 0 : dist / Math.max(1, speed)) + flight;
     const paintK = this.painting ? s.kit[this.painting.i] : s.kit.find((w) => w.kind === "rpg") ?? null;
@@ -385,6 +440,25 @@ export class RivalAi {
     // ---- Fire ----
     this.fire(view, cmd, dist, acquired, dt);
     return cmd;
+  }
+
+  /** The newest sample of the foe at least `delay` old (null: none that old yet). */
+  private noticed(now: number, delay: number) {
+    let e: (typeof this.hist)[number] | null = null;
+    for (const h of this.hist) { if (h.t <= now - delay) e = h; else break; }
+    return e;
+  }
+
+  /** Which fast direct-fire weapon is in play (a rail ready or charging, else an autocannon), if the foe is in its reach. */
+  private fastWeapon(s: DuelSelf, dist: number) {
+    let ac: { kind: "rail" | "ac"; k: KitWeapon; w: WeaponState } | null = null;
+    for (const w of s.weapons) {
+      const k = s.kit[w.i];
+      if (!("trigger" in k.ctl) || dist >= k.range * 0.95 || dist <= k.minRange) continue;
+      if (k.kind === "rail" && (w.ready || w.charge > 0)) return { kind: "rail" as const, k, w };
+      if (k.kind === "autocannon" && !ac) ac = { kind: "ac", k, w };
+    }
+    return ac;
   }
 
   /** One of its own rails is charging (a dash would drop the charge). */
@@ -507,12 +581,15 @@ export class RivalAi {
         continue;
       }
       if (k.kind === "rail") {
-        // Charge, and let go once full (or a little early when pressing).
-        const full = w.charge >= (press ? 0.85 : 1);
+        // Charge, and let go the moment it is full (aiSnapJitter: after a random extra beat, frozen).
+        const full = w.charge >= 1;
         if (!full) this.railSince = -1;
-        else if (this.railSince < 0) { this.railSince = view.t; this.railWait = v.aiRailHold * (0.6 + this.r() * 0.8); }
+        else if (this.railSince < 0) { this.railSince = view.t; this.railWait = v.aiSnapJitter * this.r(); }
         cmd.trigger[side] = (w.ready || w.charge > 0) && (!full || view.t - this.railSince < this.railWait);
-      } else cmd.trigger[side] = w.ready || k.kind === "minigun" || k.kind === "autocannon";
+      } else if (k.kind === "autocannon") {
+        // Bursts along the frozen line: the trigger goes down in time for the spin-up to end at the snapshot's end.
+        cmd.trigger[side] = this.acPhase === "burst" || (this.acPhase === "snap" && view.t >= this.acFireFrom);
+      } else cmd.trigger[side] = w.ready || k.kind === "minigun";
     }
     // Shoulder weapons: one painted at a time, held long enough to read, then released.
     if (this.painting) {

@@ -278,6 +278,7 @@ lab.onFrame((dt: number) => {
   const view = duelView(t, rival, kit, rivalArsenal!, player, threats, ground!.spots, sees, { x: 0, z: 0, r: V.duelRadius });
   const cmd = rival.alive ? ai.decide(view, dt) : null;
   last = cmd;
+  rivalArsenal!.railSnapped = ai.snapped;
   rival.keys = cmd ? cmd.keys : [false, false, false, false];
   rival.cursor = cmd?.cursor ? cursor.set(cmd.cursor.x, field.height(cmd.cursor.x, cmd.cursor.z), cmd.cursor.z) : null;
   rival.lock = cmd?.lock ?? null;

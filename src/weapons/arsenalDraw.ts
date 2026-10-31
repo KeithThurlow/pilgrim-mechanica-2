@@ -193,6 +193,8 @@ export class ArsenalDraw {
         line.set(s.aimLine, v.beamWidth * 1.1, "ground", this.ground, 0.07);
         line.mat.opacity = 0.35 + 0.55 * c;
         line.mat.color.setHex(c >= v.railMinCharge ? RAIL_GLOW : 0x6c8890);
+        // Frozen for the shot (a rival's snapshot): bright, solid and wider, so "now move" reads.
+        if (a.railSnapped) { line.set(s.aimLine, v.beamWidth * 2.2, "ground", this.ground, 0.07); line.mat.opacity = 1; line.mat.color.setHex(0xffffff); }
       }
       if (s.meterAt && s.rail.holding) {
         // A ring round the reticle: dim behind, filling clockwise from the top of the screen; full flashes white.

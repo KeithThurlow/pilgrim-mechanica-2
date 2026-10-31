@@ -130,6 +130,8 @@ export class Arsenal implements MechWeapons {
   /** Damage of the last rail beam (exact; the lab measures the rest on its targets). */
   last: Record<string, number> = {};
   private clock = 0;
+  /** An AI's aim is frozen for the shot (src/combat/rivalAi.ts, track then snapshot): the rail's line draws solid. Cosmetic. */
+  railSnapped = false;
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
   private dir = new THREE.Vector3();
