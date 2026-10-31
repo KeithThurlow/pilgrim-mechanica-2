@@ -369,7 +369,7 @@ function stubMech(field: DuneField, over: Record<string, number> = {}, surface: 
     field, inWater: () => false, water: null,
     dust: { stomp: () => { count.stomps++; }, kick: (_x: number, _y: number, _z: number, _dx: number, _dz: number, k: number) => { count.kicks++; count.kickK += k; }, slide: () => 0, smoke: noop },
     marks: { print: () => { count.prints++; }, furrow: noop, dig: () => { count.digs++; } },
-    sfx: { play: noop, playSound: noop }, gunAudio: { update: noop },
+    sfx: { play: noop, playSound: noop }, gunAudio: { update: noop, release: noop },
     fire: () => { count.rounds++; },
     // The real sink rule (Battlefield.sinkDepth) on this stand-in; surface: pretend the ground is that.
     v: null as unknown, sinkSurface: surface ? () => surface : null,
