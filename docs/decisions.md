@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Rivals track well while charging high-velocity weapons (the rail first), then snapshot their aim about 0.3 s before firing: the player's grace window to change direction or dash out of the line. The pattern for most high-velocity weapons | Keith | Keith | Agent on `wip/railgrace`. The new dash is great (Keith). |
 | 2026-10-31 | The dash still feels drifty after it: make it shorter and let it decelerate hard when the player isn't carrying on into the sprint; grip-by-speed stays for the sprint | Keith | Keith | Agent on `wip/dashexit`. |
 | 2026-10-31 | Trample-like damage is for small things only (bandits on foot, scrapper robots); vehicles get knockback instead: a mech hitting one shoves it by the mech's speed and the two masses, and both take about the same damage by the closing speed. Big robots and enemy mechs like vehicles if cheap | Keith | Keith | Built for war band vehicles (`src/game/bodyContact.ts`); big robots and enemy mechs left alone for now. |
 | 2026-10-31 | The trample area is a property of the mech, mainly the legs: leg stats `trample` (reach ×) and `crush` (damage ×), rolled with rarity, on the bay card; the sliders are the base they scale | Keith | Keith | Stilt 0.8 / 0.75, Rampart 1 / 1, Siege 1.3 / 1.5 (Claude's numbers); `crush` grows with level (weight 0.5). |

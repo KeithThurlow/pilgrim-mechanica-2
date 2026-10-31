@@ -184,6 +184,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Rival aim: strong tracking, then an aim snapshot ~0.3 s before high-velocity shots (Keith 2026-10-31): agent on `wip/railgrace`.
 - Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): merged 2026-10-31 (dash 7.5 m, back under the stick 0.08 s after the burst; a sprint needs Space held past 0.325 s); Keith to try walker lab `?manual&flat`, duel lab `?manual`, bandits lab `?manual`.
 - Coordinator handoff (Keith 2026-10-31: moving from one long chat into a Claude project): `docs/handoff-coordinator.md` (how to coordinate and merge, what's waiting on Keith's play, open questions, next candidates).
 
