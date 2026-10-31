@@ -2,11 +2,12 @@
 // goes out along there"). Pure and cosmetic: every peer makes its own from the rounds it draws.
 //
 // Rounds from one gun (the same family, a muzzle within `join` metres, flying within `cone` degrees of the stream)
-// feed one stream: a line from the muzzle to where the rounds land. Its strength is the rounds' rate times their power
-// (damage × (1 + pierce)), as a running average with time constant tau: it swells over tau when the trigger goes down
-// and dies away over a few tau after it comes up. A pulsing gun (the autocannon) uses its own, shorter tau, so each
-// shell flares the line. The night lights (src/world/nightLights.ts) draw each stream as a faked tube of light and feed
-// a few points along it into the light clusters.
+// feed one stream: a line from the muzzle to where the rounds land. Its strength is the gun's rate of fire (a running
+// average of the gaps between its rounds) times their power (damage × (1 + pierce)). An envelope switches it on and
+// off: it counts as firing while the next round is due (1.6 gaps, at most `hold` s), swells to full over tau / 2 and
+// fades out over tau once the rounds stop, so a steady gun's tube holds still instead of flickering with each round.
+// A pulsing gun (the autocannon) flares to full on each shell and fades over pulseTau. The night lights
+// (src/world/nightLights.ts) draw each stream as a faked tube of light and feed a few points along it into the clusters.
 
 export interface GunStream {
   /** Muzzle (latest round's). */
@@ -15,8 +16,10 @@ export interface GunStream {
   x1: number; y1: number; z1: number;
   /** Unit direction muzzle -> landing. */
   dx: number; dy: number; dz: number;
-  /** Rounds, decaying with tau: rate ≈ r / tau. */
-  r: number;
+  /** Rounds per second (running average of its gaps). */
+  rate: number;
+  /** 0..1: how lit it is. */
+  env: number;
   /** Running power per round, and how many of the recent rounds were ignited (0..1). */
   power: number;
   hot: number;
@@ -29,21 +32,24 @@ export interface GunStream {
 export const STREAM_MAX = 64;
 
 export interface StreamOpts {
-  /** Running-average time (s) of a steady gun and of a pulsing one. */
+  /** Fade-out time (s; the swell takes half), and a pulsing gun's. */
   tau: number;
   pulseTau: number;
   /** A round joins a stream whose muzzle is this close (m) and whose line is within this many degrees. */
   join: number;
   cone: number;
+  /** Longest a stream counts as firing after a round (s), and the rate a lone round is taken for (rounds/s). */
+  hold: number;
+  loneRate: number;
 }
 
-export const STREAM_OPTS: StreamOpts = { tau: 0.18, pulseTau: 0.1, join: 1.4, cone: 22 };
+export const STREAM_OPTS: StreamOpts = { tau: 0.18, pulseTau: 0.1, join: 1.4, cone: 22, hold: 0.3, loneRate: 4 };
 
 export class GunStreams {
   readonly list: GunStream[] = [];
   n = 0;
-  constructor(public o: StreamOpts = STREAM_OPTS) {
-    for (let i = 0; i < STREAM_MAX; i++) this.list.push({ x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0, dx: 0, dy: 0, dz: 1, r: 0, power: 0, hot: 0, fam: 0, pulse: false, age: 0 });
+  constructor(public o: StreamOpts = { ...STREAM_OPTS }) {
+    for (let i = 0; i < STREAM_MAX; i++) this.list.push({ x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0, dx: 0, dy: 0, dz: 1, rate: 0, env: 0, power: 0, hot: 0, fam: 0, pulse: false, age: 0 });
   }
 
   /** One round from (x0..) landing at (x1..). */
@@ -67,37 +73,48 @@ export class GunStreams {
       s.x1 += (x1 - s.x1) * 0.35; s.y1 += (y1 - s.y1) * 0.35; s.z1 += (z1 - s.z1) * 0.35;
       s.power += (power - s.power) * 0.3;
       s.hot += ((hot ? 1 : 0) - s.hot) * 0.3;
+      // Rounds in the same frame (split rounds, fire-rate copies) add to the rate a little each.
+      if (s.age > 1e-4) s.rate += (1 / Math.max(s.age, 0.01) - s.rate) * 0.3;
+      else s.rate += this.o.loneRate * 0.25;
     } else {
       if (this.n < STREAM_MAX) s = this.list[this.n++];
       else { // full: take the faintest
         let w = 0;
-        for (let i = 1; i < this.n; i++) if (this.list[i].r * this.list[i].power < this.list[w].r * this.list[w].power) w = i;
+        for (let i = 1; i < this.n; i++) if (this.list[i].env * this.list[i].rate * this.list[i].power < this.list[w].env * this.list[w].rate * this.list[w].power) w = i;
         s = this.list[w];
       }
-      s.x1 = x1; s.y1 = y1; s.z1 = z1; s.r = 0; s.power = power; s.hot = hot ? 1 : 0; s.fam = fam; s.pulse = pulse;
+      s.x1 = x1; s.y1 = y1; s.z1 = z1; s.rate = this.o.loneRate; s.env = 0; s.power = power; s.hot = hot ? 1 : 0; s.fam = fam; s.pulse = pulse;
     }
     s.x0 = x0; s.y0 = y0; s.z0 = z0;
     const fx = s.x1 - x0, fy = s.y1 - y0, fz = s.z1 - z0, fl = Math.hypot(fx, fy, fz) || 1;
     s.dx = fx / fl; s.dy = fy / fl; s.dz = fz / fl;
-    s.r += 1; s.age = 0;
+    s.age = 0;
+    if (pulse) s.env = 1;
   }
 
-  /** Decay every stream; drop the ones gone dark. */
+  /** Is it still firing (its next round due)? */
+  firing(s: GunStream) { return s.age < Math.min(this.o.hold, 1.6 / Math.max(0.1, s.rate)); }
+
+  /** Swell, hold or fade every stream; drop the ones gone dark. */
   step(dt: number) {
+    const o = this.o;
     let w = 0;
     for (let i = 0; i < this.n; i++) {
       const s = this.list[i];
-      s.r *= Math.exp(-dt / (s.pulse ? this.o.pulseTau : this.o.tau));
+      const on = !s.pulse && this.firing(s);
+      if (s.pulse) s.env *= Math.exp(-dt / Math.max(0.01, o.pulseTau));
+      else if (on) s.env = Math.min(1, s.env + dt / Math.max(0.005, o.tau * 0.5));
+      else s.env = Math.max(0, s.env - dt / Math.max(0.005, o.tau));
       s.age += dt;
-      if (s.r < 0.02) continue;
+      if (!on && s.env < 0.02) continue;
       if (w !== i) { const t = this.list[w]; this.list[w] = s; this.list[i] = t; }
       w++;
     }
     this.n = w;
   }
 
-  /** Rounds per second × power per round, now. */
-  intensity(s: GunStream) { return (s.r / (s.pulse ? this.o.pulseTau : this.o.tau)) * s.power; }
+  /** Rounds per second × power per round. */
+  intensity(s: GunStream) { return s.rate * s.power; }
   /** Length of its line. */
   static length(s: GunStream) { return Math.hypot(s.x1 - s.x0, s.y1 - s.y0, s.z1 - s.z0); }
 }

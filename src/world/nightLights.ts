@@ -327,7 +327,7 @@ export class NightLights implements ShortLights {
   private tracerCount = [0, 0, 0];
   private shortSources: { o: THREE.Object3D; fn: ShortLightSource }[] = [];
   /** Gun streams (tube lights). */
-  readonly streams = new GunStreams({ tau: 0.18, pulseTau: 0.1, join: 1.4, cone: 22 });
+  readonly streams = new GunStreams();
   private streamCol = new THREE.Color();
   /** Colours by family (refreshed each frame from the hue sliders): rockets and blasts, launches and guns, telegraphs. */
   private famFire = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
@@ -417,7 +417,7 @@ export class NightLights implements ShortLights {
   /** A stream's brightness: 0 .. streamMax (× its family's strength), 1 at the reference fire. */
   streamBright(s: GunStream) {
     const v = this.v, I = this.streams.intensity(s) / Math.max(1, v.streamRef);
-    return Math.min(v.streamMax, Math.pow(Math.max(0, I), v.streamCurve)) * this.famK[s.fam];
+    return Math.min(v.streamMax, Math.pow(Math.max(0, I), v.streamCurve)) * this.famK[s.fam] * s.env;
   }
 
   /**
@@ -444,8 +444,9 @@ export class NightLights implements ShortLights {
       if (a > 0.002) this.draw.line(s.x0, s.y0, s.z0, s.x1, s.y1, s.z1, v.streamCoreWidth * Math.min(1.6, Math.max(0.5, Math.sqrt(B))), col.r * a, col.g * a, col.b * a);
       if (n <= 0) continue;
       // The strip on the sand: pieces along the line, wider and fainter where the stream runs high, brightest where it lands.
+      // (A faint stream, a lone bandit shot, gets the landing glow only: the pools stay few under a swarm's fire.)
       if (v.streamGround > 0) {
-        const m = Math.max(1, Math.min(5, Math.ceil(L / 9))), seg = L / m;
+        const m = n * B * v.streamGround < 0.12 ? 0 : Math.max(1, Math.min(5, Math.ceil(L / 9))), seg = L / Math.max(1, m);
         const hl = Math.hypot(s.dx, s.dz) || 1;
         for (let j = 0; j <= m; j++) {
           const end = j === m, t = end ? 1 : (j + 0.5) / m;

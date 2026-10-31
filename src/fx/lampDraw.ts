@@ -8,7 +8,7 @@
 // Real lights are nightLights.ts's job; this only draws.
 import * as THREE from "three/webgpu";
 
-export const GLOW_MAX = 1024, POOL_MAX = 640, BEAM_MAX = 640, LINE_MAX = 128;
+export const GLOW_MAX = 1024, POOL_MAX = 1024, BEAM_MAX = 640, LINE_MAX = 128;
 
 /** A radial falloff texture (linear values): core 0..1 sharp for glows, soft for pools. */
 function radial(core: number, power: number): THREE.DataTexture {
