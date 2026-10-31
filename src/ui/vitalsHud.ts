@@ -59,6 +59,21 @@ let shared: VitalsHud | null = null;
 /** The one vitals HUD on the page (made on first use). */
 export function vitalsHud(v: VitalsValues) { return (shared ??= new VitalsHud(v)); }
 
+/** Set a style only when it changes: the HUD updates every frame and every write can cost a style recalc. */
+function st(e: HTMLElement, k: string, v: string) {
+  const c = ((e as unknown as { _st?: Record<string, string> })._st ??= {});
+  if (c[k] === v) return;
+  c[k] = v;
+  (e.style as unknown as Record<string, string>)[k] = v;
+}
+/** Set innerHTML only when it changes. */
+function html(e: HTMLElement, h: string) {
+  const o = e as unknown as { _html?: string };
+  if (o._html === h) return;
+  o._html = h;
+  e.innerHTML = h;
+}
+
 export class VitalsHud {
   private root: HTMLDivElement;
   private fill: HTMLDivElement;
@@ -85,6 +100,8 @@ export class VitalsHud {
   /** Low hull crossed this frame (the lab plays the warning). */
   lowNow = false;
   private wasLow = false;
+  /** The arcs canvas has something on it (clear it next frame). */
+  private drawn = false;
 
   constructor(private v: VitalsValues, parent: HTMLElement = document.body) {
     this.root = el("div", { position: "fixed", left: "14px", bottom: "14px", width: "280px", pointerEvents: "none", zIndex: "20", font: "600 12px system-ui, sans-serif", color: "#f3e6d0", textShadow: "0 1px 2px #000" }, parent);
@@ -98,7 +115,7 @@ export class VitalsHud {
     el("span", { marginRight: "4px", color: COL.kit }, this.kitRow).textContent = "Q repair";
     this.noteEl = el("span", { marginLeft: "6px", color: "rgba(243, 230, 208, 0.7)", fontWeight: "500" }, this.kitRow);
     this.abilityRow = el("div", { display: "flex", gap: "6px", marginTop: "6px" }, this.root);
-    this.edge = el("div", { position: "fixed", inset: "0", pointerEvents: "none", opacity: "0", zIndex: "19", boxShadow: "inset 0 0 140px 36px rgba(200, 40, 20, 0.85)" }, parent);
+    this.edge = el("div", { position: "fixed", inset: "0", pointerEvents: "none", opacity: "0", zIndex: "19", willChange: "opacity", boxShadow: "inset 0 0 140px 36px rgba(200, 40, 20, 0.85)" }, parent);
     this.arcs = el("canvas", { position: "fixed", inset: "0", width: "100%", height: "100%", pointerEvents: "none", zIndex: "19" }, parent);
     this.ctx = this.arcs.getContext("2d")!;
   }
@@ -107,7 +124,7 @@ export class VitalsHud {
   update(dt: number, view: VitalsView, hits: { dx: number; dz: number; amount: number }[], camera: THREE.Camera, at: THREE.Vector3, show = true) {
     const v = this.v;
     this.clock += dt;
-    this.root.style.display = show ? "" : "none";
+    st(this.root, "display", show ? "" : "none");
     const onFoot = !!view.pilot;
     const hp = onFoot ? view.pilot!.hp : view.hull, max = Math.max(1, onFoot ? view.pilot!.max : view.max);
     const share = Math.max(0, Math.min(1, hp / max));
@@ -118,17 +135,17 @@ export class VitalsHud {
     if (this.ghost < share) this.ghost = share;
     this.last = share;
     const col = share > 0.5 ? COL.hull : share > 0.25 ? COL.mid : COL.low;
-    this.fill.style.width = `${share * 100}%`;
-    this.fill.style.background = col;
-    this.fill.style.boxShadow = view.healing || view.kitProgress !== null ? "0 0 8px 2px rgba(127, 240, 200, 0.85)" : "none";
-    this.ghostEl.style.width = `${this.ghost * 100}%`;
+    st(this.fill, "width", `${share * 100}%`);
+    st(this.fill, "background", col);
+    st(this.fill, "boxShadow", view.healing || view.kitProgress !== null ? "0 0 8px 2px rgba(127, 240, 200, 0.85)" : "none");
+    st(this.ghostEl, "width", `${this.ghost * 100}%`);
     const name = onFoot ? "Pilot" : view.alive ? "Hull" : "Destroyed";
-    this.label.innerHTML = `<span>${name}</span><span>${Math.max(0, Math.round(hp))} / ${Math.round(max)}${onFoot ? "" : ` &nbsp;<span style="opacity:.75">⛨ ${Math.round(view.armour)}</span>`}</span>`;
-    this.mechRow.style.display = onFoot ? "" : "none";
+    html(this.label, `<span>${name}</span><span>${Math.max(0, Math.round(hp))} / ${Math.round(max)}${onFoot ? "" : ` &nbsp;<span style="opacity:.75">⛨ ${Math.round(view.armour)}</span>`}</span>`);
+    st(this.mechRow, "display", onFoot ? "" : "none");
     if (onFoot) {
       const ms = Math.max(0, Math.min(1, view.hull / Math.max(1, view.max)));
-      this.mechFill.style.width = `${ms * 100}%`;
-      this.mechFill.style.background = ms > 0.5 ? COL.hull : ms > 0.25 ? COL.mid : COL.low;
+      st(this.mechFill, "width", `${ms * 100}%`);
+      st(this.mechFill, "background", ms > 0.5 ? COL.hull : ms > 0.25 ? COL.mid : COL.low);
     }
     // Kit pips: full, the one at work (filling), empty.
     while (this.pips.length < view.kitMax) {
@@ -138,17 +155,18 @@ export class VitalsHud {
       this.pips.push({ box, fill });
     }
     this.pips.forEach((p, i) => {
-      p.box.style.display = i < view.kitMax ? "" : "none";
+      st(p.box, "display", i < view.kitMax ? "" : "none");
       const working = view.kitProgress !== null && i === view.kits;
       const h = i < view.kits ? 1 : working ? 1 - view.kitProgress! : 0;
-      p.fill.style.height = `${h * 100}%`;
-      p.fill.style.opacity = i < view.kits ? (view.kitReady ? "1" : "0.55") : "0.8";
+      st(p.fill, "height", `${h * 100}%`);
+      st(p.fill, "opacity", i < view.kits ? (view.kitReady ? "1" : "0.55") : "0.8");
     });
-    this.noteEl.textContent = view.note ?? (view.kits === 0 ? "none left" : "");
+    const note = view.note ?? (view.kits === 0 ? "none left" : "");
+    if (this.noteEl.textContent !== note) this.noteEl.textContent = note;
     // Abilities (none yet in most labs).
     const ab = view.abilities ?? [];
-    this.abilityRow.style.display = ab.length ? "flex" : "none";
-    this.abilityRow.innerHTML = ab.map((a) => `<div style="padding:2px 6px;border:1px solid ${COL.line};border-radius:3px;background:linear-gradient(90deg, rgba(127,214,200,${a.ready >= 1 ? 0.45 : 0.18}) ${a.ready * 100}%, ${COL.back} ${a.ready * 100}%);${a.active ? "outline:1px solid #7fd6c8" : ""}">${a.key} ${a.name}</div>`).join("");
+    st(this.abilityRow, "display", ab.length ? "flex" : "none");
+    html(this.abilityRow, ab.map((a) => `<div style="padding:2px 6px;border:1px solid ${COL.line};border-radius:3px;background:linear-gradient(90deg, rgba(127,214,200,${a.ready >= 1 ? 0.45 : 0.18}) ${a.ready * 100}%, ${COL.back} ${a.ready * 100}%);${a.active ? "outline:1px solid #7fd6c8" : ""}">${a.key} ${a.name}</div>`).join(""));
 
     // The red edge: a flash per hit, faint and pulsing at low hull (not on a wreck).
     const low = view.alive && share < v.lowHull;
@@ -156,10 +174,10 @@ export class VitalsHud {
     this.wasLow = low;
     this.flash = Math.max(0, Math.min(1.2, this.flash) - dt * 2.2);
     const pulse = low ? 0.22 + 0.12 * Math.sin(this.clock * 6) : 0;
-    this.edge.style.opacity = String(show ? Math.min(0.9, this.flash + pulse) : 0);
+    st(this.edge, "opacity", show ? Math.min(0.9, this.flash + pulse).toFixed(2) : "0");
 
     // Hit arcs: each new hit's direction on the screen round the mech.
-    const W = this.arcs.clientWidth, H = this.arcs.clientHeight;
+    const W = innerWidth, H = innerHeight; // the canvas fills the window (reading its size would force a layout)
     for (const h of hits) {
       this.p.copy(at).project(camera);
       this.q.set(at.x + h.dx * 6, at.y, at.z + h.dz * 6).project(camera);
@@ -168,9 +186,13 @@ export class VitalsHud {
     }
     hits.length = 0;
     if (this.arcs.width !== W || this.arcs.height !== H) { this.arcs.width = W; this.arcs.height = H; }
+    // Clear and draw only while there are arcs: an idle full-screen canvas costs nothing to composite, a redrawn one
+    // is a full-screen upload every frame (perf pass 2026-10-31).
     const c = this.ctx;
-    c.clearRect(0, 0, W, H);
+    if (this.drawn) { c.clearRect(0, 0, W, H); this.drawn = false; }
     if (!show) { this.live.length = 0; return; }
+    if (!this.live.length) return;
+    this.drawn = true;
     this.p.copy(at).project(camera);
     const cx = (this.p.x * 0.5 + 0.5) * W, cy = (-this.p.y * 0.5 + 0.5) * H;
     c.lineCap = "round";
