@@ -22,17 +22,27 @@ export class Costs {
     this.t = now;
   }
 
-  /** Close the frame. Returns the averaged line, refreshed every half second. */
-  end(): string {
+  /** The last averages (ms per frame), dearest first, refreshed every half second. */
+  avg: [string, number][] = [];
+
+  /**
+   * Close the frame. Returns the averaged line, refreshed every half second. With a HUD, hands it the stages instead
+   * (the top three show by default, the rest in its details and dump, this frame's in its spike log).
+   */
+  end(hud?: { stages(avg: [string, number][] | null, frame: Map<string, number>): void }): string {
     this.frames++;
     const now = performance.now();
+    let fresh = false;
     if (now - this.windowStart >= 500) {
-      const parts = [...this.sums].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / this.frames).toFixed(1)}`);
+      fresh = true;
+      this.avg = [...this.sums].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v / this.frames] as [string, number]);
+      const parts = this.avg.map(([k, v]) => `${k} ${v.toFixed(1)}`);
       this.shown = parts.length ? `cpu ms: ${parts.join(" · ")}` : "";
       this.sums.clear();
       this.frames = 0;
       this.windowStart = now;
     }
+    hud?.stages(fresh ? this.avg : null, this.frame);
     return this.shown;
   }
 }

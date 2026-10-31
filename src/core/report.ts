@@ -45,7 +45,7 @@ export function installReport(app: App, lab: string, values: Values, context?: (
     box.style.visibility = "";
     const report = {
       text: note, lab, url: location.href, image,
-      hud: (document.querySelector(".hud") as HTMLElement | null)?.innerText ?? "",
+      hud: (window as unknown as { __hud?: () => string }).__hud?.() ?? (document.querySelector(".hud") as HTMLElement | null)?.innerText ?? "",
       camera: { position: app.camera.position.toArray().map((v) => +v.toFixed(2)), fov: app.camera.fov },
       context: context?.() ?? {},
       values,
