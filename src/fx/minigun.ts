@@ -14,6 +14,7 @@ export const MINIGUN_FX_DEFAULTS = {
   tracerSpeed: 220,
   tracerLength: 1.2,
   tracerEvery: 1,
+  tracerFill: 2,
   flashSize: 1,
   flashLight: 40,
   hitDust: 2.1,
@@ -31,6 +32,7 @@ export const MINIGUN_FX_PARAMS: Param[] = [
   { key: "tracerSpeed", label: "Tracer speed (m/s)", min: 40, max: 600, step: 5, group: "Minigun FX" },
   { key: "tracerLength", label: "Tracer length (m)", min: 0.3, max: 8, step: 0.1, group: "Minigun FX" },
   { key: "tracerEvery", label: "Tracer every Nth round", min: 1, max: 5, step: 1, group: "Minigun FX" },
+  { key: "tracerFill", label: "Extra tracers per round", min: 0, max: 4, step: 1, group: "Gun streams", tip: "A steady gun draws this many more tracers between its rounds, so the stream reads like a real minigun (drawing only; GPU tracers)" },
   { key: "flashSize", label: "Muzzle flash size", min: 0, max: 3, step: 0.05, group: "Minigun FX" },
   { key: "flashLight", label: "Flash light", min: 0, max: 200, step: 1, group: "Minigun FX" },
   { key: "hitDust", label: "Hit size", min: 0, max: 3, step: 0.05, group: "Minigun FX", tip: "Scales every hit effect" },
@@ -100,6 +102,10 @@ export class MinigunFx {
   gpuTracers: GpuTracers | null = null;
   private clock = 0;
   private tracerNext = 0;
+  /** When each gun slot last fired (for the tracer fill), and how many fill tracers were drawn (for checks). */
+  private lastShot = new Float64Array(FLASHES).fill(-1);
+  private lastMuzzle = Array.from({ length: FLASHES }, () => new THREE.Vector3(1e9, 0, 0));
+  fillDrawn = 0;
   /** GPU casings: when each lands (for its tonk), worked out when it's thrown. */
   private landings: { t: number; at: THREE.Vector3 }[] = [];
   private tracerMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, toneMapped: false });
@@ -180,6 +186,25 @@ export class MinigunFx {
     // Ignited rounds glow orange-red (the GPU tracers by the shown flag's value, the CPU ones by a second material).
     if (this.gpuT) { this.gpuTracers!.set(ti, muzzle, hit, this.clock, shown, hot); if (t.mesh) t.mesh.visible = false; }
     else if (t.mesh) { t.mesh.visible = shown; t.mesh.material = hot ? this.hotMat : this.tracerMat; }
+    // Tracer fill (Keith 2026-10-31: "tracers go out nowhere near enough for the bullets"): a steady gun's round brings
+    // extra tracers along the same line, leaving in the gap before its next round, so the stream reads like a real
+    // minigun's. Drawing only (GPU tracers: a slot each, nothing per frame); they time no impact.
+    if (gun >= 0 && shown && this.gpuT) {
+      // The same gun: its slot fired within 0.2 s from a muzzle close by (swarms share slots round-robin: no fill).
+      const g = Math.min(FLASHES - 1, gun), gap = this.clock - this.lastShot[g], lm = this.lastMuzzle[g];
+      const same = lm.distanceToSquared(muzzle) < 2.25;
+      this.lastShot[g] = this.clock; lm.copy(muzzle);
+      const fill = Math.round(this.v.tracerFill);
+      if (fill > 0 && same && gap > 0.005 && gap < 0.2) {
+        for (let k = 1; k <= fill; k++) {
+          let fi = this.tracerNext;
+          for (let n = 0; n < ROUNDS_IN_FLIGHT && this.tracers[fi].live; n++) fi = (fi + 1) % ROUNDS_IN_FLIGHT;
+          this.tracerNext = (fi + 1) % ROUNDS_IN_FLIGHT;
+          this.gpuTracers!.set(fi, muzzle, hit, this.clock + (gap * k) / (fill + 1), true, hot);
+          this.fillDrawn++;
+        }
+      }
+    }
 
     if (!eject || !outboard) return;
     const vel = this.s.copy(outboard).multiplyScalar(this.v.casingKick * (0.7 + Math.random() * 0.6)).add(new THREE.Vector3((Math.random() - 0.5), 1.8 + Math.random(), (Math.random() - 0.5) - 0.8));

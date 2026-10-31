@@ -1,13 +1,14 @@
-// Faked lamp light (Keith 2026-10-29: more lights at night without the frame cost): three instanced additive meshes,
+// Faked lamp light (Keith 2026-10-29: more lights at night without the frame cost): four instanced additive meshes,
 // one draw call each however many lamps there are. Cosmetic.
 // - glows: soft camera-facing sprites on the lamp heads;
 // - pools: soft ellipses on the ground (or deck) where a beam lands, stretched by how low the beam comes in;
-// - beams: faint open cones from the lamp to its pool, brightest at the lamp, fading to nothing where they land.
+// - beams: faint open cones from the lamp to its pool, brightest at the lamp, fading to nothing where they land;
+// - lines: glowing ribbons along a segment, turned to face the camera round their axis (gun streams' tubes).
 // Unfogged (fog would add the haze colour to every quad), so far lamps are faded by the caller instead.
 // Real lights are nightLights.ts's job; this only draws.
 import * as THREE from "three/webgpu";
 
-export const GLOW_MAX = 1024, POOL_MAX = 640, BEAM_MAX = 640;
+export const GLOW_MAX = 1024, POOL_MAX = 640, BEAM_MAX = 640, LINE_MAX = 128;
 
 /** A radial falloff texture (linear values): core 0..1 sharp for glows, soft for pools. */
 function radial(core: number, power: number): THREE.DataTexture {
@@ -17,6 +18,22 @@ function radial(core: number, power: number): THREE.DataTexture {
     const halo = Math.pow(1 - r, power), c = core > 0 ? Math.exp(-(r * r) / (core * core)) : 0;
     const v = Math.round(255 * Math.min(1, halo * 0.6 + c));
     data.set([v, v, v, 255], (j * N + i) * 4);
+  }
+  const t = new THREE.DataTexture(data, N, N);
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
+/** A tube's cross-section (u: a bright core in a soft halo) with its ends faded (v: 0 at the muzzle, 1 at the far end). */
+function tubeTexture(): THREE.DataTexture {
+  const N = 64, data = new Uint8Array(N * N * 4);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = (i + 0.5) / N * 2 - 1, v = (j + 0.5) / N;
+    const across = Math.exp(-(x * x) / 0.012) + 0.45 * Math.pow(Math.max(0, 1 - Math.abs(x)), 2.2);
+    const ends = Math.min(1, v / 0.06) * Math.min(1, (1 - v) / 0.12);
+    const c = Math.round(255 * Math.min(1, across * ends));
+    data.set([c, c, c, 255], (j * N + i) * 4);
   }
   const t = new THREE.DataTexture(data, N, N);
   t.magFilter = t.minFilter = THREE.LinearFilter;
@@ -62,7 +79,8 @@ export class LampDraw {
   readonly glows: THREE.InstancedMesh;
   readonly pools: THREE.InstancedMesh;
   readonly beams: THREE.InstancedMesh;
-  private nG = 0; private nP = 0; private nB = 0;
+  readonly lines: THREE.InstancedMesh;
+  private nG = 0; private nP = 0; private nB = 0; private nL = 0;
   private m = new THREE.Matrix4();
   private x = new THREE.Vector3(); private y = new THREE.Vector3(); private z = new THREE.Vector3();
   private p = new THREE.Vector3(); private s = new THREE.Vector3();
@@ -74,13 +92,18 @@ export class LampDraw {
     this.glows = instanced(new THREE.PlaneGeometry(1, 1), additive(radial(0.12, 2.2)), GLOW_MAX, "lamp glows");
     this.pools = instanced(pool, additive(radial(0, 1.6)), POOL_MAX, "lamp pools");
     this.beams = instanced(coneGeometry(), additive(null, true, THREE.DoubleSide), BEAM_MAX, "lamp beams");
-    this.pools.renderOrder = 1; this.beams.renderOrder = 2; this.glows.renderOrder = 3;
-    this.group.add(this.pools, this.beams, this.glows);
+    // A unit ribbon: x across (-0.5..0.5), z along (0..1), its texture's v along it.
+    const line = new THREE.PlaneGeometry(1, 1); line.rotateX(-Math.PI / 2); line.translate(0, 0, 0.5);
+    const uv = line.attributes.uv, lp = line.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, lp.getZ(i));
+    this.lines = instanced(line, additive(tubeTexture(), false, THREE.DoubleSide), LINE_MAX, "lamp lines");
+    this.pools.renderOrder = 1; this.beams.renderOrder = 2; this.lines.renderOrder = 3; this.glows.renderOrder = 4;
+    this.group.add(this.pools, this.beams, this.lines, this.glows);
   }
 
   /** Start a frame: sprites face this camera (or a fixed high view without one). */
   begin(camera: THREE.Camera | null) {
-    this.nG = this.nP = this.nB = 0;
+    this.nG = this.nP = this.nB = this.nL = 0;
     if (camera) { camera.getWorldQuaternion(this.camQ); camera.getWorldPosition(this.camP); }
     else { this.camQ.setFromEuler(new THREE.Euler(-0.87, 0, 0)); this.camP.set(0, 1e4, 1e4); }
   }
@@ -129,6 +152,24 @@ export class LampDraw {
     this.put(this.beams, this.nB++, r, g, b);
   }
 
+  /** A glowing line from (x0..) to (x1..), this wide, facing the camera round its axis. */
+  line(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, width: number, r: number, g: number, b: number) {
+    if (this.nL >= LINE_MAX || width <= 0) return;
+    this.z.set(x1 - x0, y1 - y0, z1 - z0);
+    const len = this.z.length();
+    if (len < 0.05) return;
+    this.s.copy(this.z).divideScalar(len);
+    // Across: square to the line and to the way to the camera (from its middle).
+    this.y.set(this.camP.x - (x0 + x1) / 2, this.camP.y - (y0 + y1) / 2, this.camP.z - (z0 + z1) / 2);
+    this.x.crossVectors(this.s, this.y);
+    if (this.x.lengthSq() < 1e-8) this.x.set(1, 0, 0).cross(this.s);
+    this.x.normalize();
+    this.y.crossVectors(this.s, this.x).normalize();
+    this.m.makeBasis(this.x.multiplyScalar(width), this.y, this.z);
+    this.m.setPosition(x0, y0, z0);
+    this.put(this.lines, this.nL++, r, g, b);
+  }
+
   private put(mesh: THREE.InstancedMesh, i: number, r: number, g: number, b: number) {
     mesh.setMatrixAt(i, this.m);
     const a = mesh.instanceColor!.array as Float32Array;
@@ -137,12 +178,12 @@ export class LampDraw {
 
   /** End a frame: upload what was drawn. */
   end() {
-    for (const [mesh, n] of [[this.glows, this.nG], [this.pools, this.nP], [this.beams, this.nB]] as const) {
+    for (const [mesh, n] of [[this.glows, this.nG], [this.pools, this.nP], [this.beams, this.nB], [this.lines, this.nL]] as const) {
       const was = mesh.count;
       mesh.count = n;
       if (n || was) { mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor!.needsUpdate = true; }
     }
   }
 
-  get counts() { return { glows: this.nG, pools: this.nP, beams: this.nB }; }
+  get counts() { return { glows: this.nG, pools: this.nP, beams: this.nB, lines: this.nL }; }
 }

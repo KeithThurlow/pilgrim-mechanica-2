@@ -279,7 +279,12 @@ export class Battlefield {
       this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
         dr.surface, dr.normal, L.flashScale ?? 1, L.hitScale ?? 1, !!L.own, !!L.ally, !!L.hot);
       // Tracers light up (a share of them, merged into bands along the streams; brighter with power, hot ones orange).
-      if (L.tracer !== false) this.look?.lights.tracer(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, famOfTeam(L.team ?? 1), !!L.hot);
+      // and every drawn round feeds its gun's stream, a tube of light from the muzzle to where it lands (Keith 2026-10-31).
+      if (L.tracer !== false && this.look) {
+        const lt = this.look.lights, fam = famOfTeam(L.team ?? 1);
+        lt.tracer(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, fam, !!L.hot);
+        lt.stream(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, fam, !!L.hot);
+      }
       if (!dr.first) continue;
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);

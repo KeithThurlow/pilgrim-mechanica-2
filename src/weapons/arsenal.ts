@@ -453,6 +453,9 @@ export class Arsenal implements MechWeapons {
     const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
     this.shells.fire(u.team, m, d, st, this.v.acPen).ap = st.ap;
+    // Its stream's tube light pulses with each shell, out to the lock or the cursor (Keith 2026-10-31; cosmetic).
+    const aimAt = lock ?? u.cursor, reach = aimAt ? Math.min(st.range, Math.hypot(aimAt.x - m.x, aimAt.z - m.z)) : st.range;
+    this.bf.nightLights?.stream(m.x, m.y, m.z, m.x + d.x * reach, m.y + d.y * reach, m.z + d.z * reach, st.damage * (1 + (st.ap ?? 0)), this.fam, false, true);
     this.onFire?.("autocannon");
     this.bf.sfx.playSound("cannon", m, 1);
     this.bf.dust.smoke(m.x, m.y, m.z, d.x * 3, d.y * 3 + 0.5, d.z * 3, 0.3, 0.6, 0.6, 0.4);
