@@ -23,6 +23,7 @@ export const WALKER_DEFAULTS = {
   turnSlow: 0,
   crossHurry: 4,
   turnHurry: 2,
+  overBrake: 6,
   // Gait
   strideBase: 2.6,
   stridePerSpeed: 0.45,
@@ -249,6 +250,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "backSpeed", label: "Walk: backstep speed", min: 0.3, max: 1, step: 0.01, group: "Move", tip: "Share of walk speed stepping backwards" },
   { key: "crossHurry", label: "Walk: uncross hurry", min: 0, max: 4, step: 0.1, group: "Move", tip: "Extra step rate while a planted foot is across the centre line (after a hard turn), so the legs uncross quickly" },
   { key: "turnHurry", label: "Walk: turn hurry", min: 0, max: 6, step: 0.1, group: "Move", tip: "Extra step rate while a planted leg is stretched and the body moves off the way the legs walk (hard turns, sidesteps), so the feet keep up" },
+  { key: "overBrake", label: "Walk: roll off overspeed (m/s²)", min: 1, max: 40, step: 0.5, group: "Move", tip: "With the stick held on, speed past the walk's (handed on by the sprint or a dash) rolls off at this (the old walk's slow-down), so the run-on keeps its feel; let go and the walk brakes" },
   { key: "turnSlow", label: "Walk: slow while legs turn", min: 0, max: 1, step: 0.01, group: "Move", tip: "Share of speed lost while the legs face far off the travel (0: the turn never holds the walk back)" },
 
   { key: "strideBase", label: "Stride at rest (m)", min: 0.5, max: 6, step: 0.05, group: "Gait", tip: "Length of a full cycle (two steps) near zero speed" },

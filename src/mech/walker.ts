@@ -618,6 +618,9 @@ export class WalkerSim {
     // The legs' weight: their speed-up stat against the Rampart's 4 m/s², to the power walkWeight (0: all legs alike).
     const wk = Math.pow(clamp(v.accel / 4, 0.2, 3), v.walkWeight);
     const up = v.walkAccel * wk * dt, brake = v.walkStop * wk * dt;
+    // Speed past the walk's (handed on by the sprint or a dash) rolls off gently with the stick held on, as it always has;
+    // let go, the walk stops as quickly as ever.
+    const over = cmd.sprint ? v.sprintSpeed : v.walkSpeed, overBrake = v.overBrake * dt;
     let ux = 0, uz = 0, top = 0;
     if (mag > 0.05) {
       ux = cmd.x / Math.hypot(cmd.x, cmd.z); uz = cmd.z / Math.hypot(cmd.x, cmd.z);
@@ -644,7 +647,7 @@ export class WalkerSim {
       let along = vx * ux + vz * uz;
       const px = vx - along * ux, pz = vz - along * uz, pl = Math.hypot(px, pz);
       along += along < 0 ? Math.min(-along, brake) + (along + brake > 0 ? Math.min(top, (along + brake) * up / brake) : 0)
-        : along < top ? Math.min(top - along, up) : -Math.min(along - top, brake);
+        : along < top ? Math.min(top - along, up) : -Math.min(along - top, along > over ? overBrake : brake);
       const pk = pl > 1e-6 ? Math.max(0, pl - brake) / pl : 0;
       this.vel.set(ux * along + px * pk, 0, uz * along + pz * pk);
     } else {
