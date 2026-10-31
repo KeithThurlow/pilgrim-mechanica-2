@@ -189,7 +189,7 @@ const panel = tweakPanel({
   topics: [
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
-    { id: "hull", label: "Hull", groups: ["Body", "Torso & guns", "Sensor head"] },
+    { id: "hull", label: "Hull", groups: ["Body", "Lean", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },
     { id: "hits", label: "Hits", groups: ["Minigun hits", "Dust: sources", "Ground dents", "Minigun FX", "Effects", "Sound"] },
     { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
