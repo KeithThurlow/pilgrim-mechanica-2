@@ -136,6 +136,8 @@ export interface Base {
   /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Shoulder items: which shoulder weapon. */
   cls?: GunClass;
   shoulder?: ShoulderWeapon;
+  /** Hulls and packs: a timed ability (src/abilities/abilities.ts; Keith 2026-10-31): a pack's on key 3, a hull's on key 4. */
+  ability?: import("../abilities/abilities").AbilityId;
   /** Shoulder items: launcher, feed or power (Keith 2026-10-30). */
   family?: ShoulderFamily;
   /** Feeds: the special round their key loads (none: the key overdrives the gun's fire rate). */
@@ -173,12 +175,12 @@ export const BASES: Base[] = [
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), armour: s(HULL_ARMOUR, 0.1), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
   },
   {
-    id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
+    id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
     // Armoured all over the front: sensors only up on top.
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(4200, 0.08), armour: s(12, 0.1), torsoTurnRate: s(110, 0.08) },
   },
   {
-    id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1,
+    id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1, ability: "nanite",
     // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon; a head at the
     // front to see what it strips, no top mount (the crane rail runs over it).
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2400, 0.08), armour: s(5, 0.1), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
@@ -301,6 +303,12 @@ export const BASES: Base[] = [
   {
     id: "pack-capacitor", name: "Capacitor pack", kind: "pack", tags: ["power"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.8,
     stats: { dashCharges: s(6, 0.15), dashRecharge: s(3.1, 0.1) },
+  },
+  // A medic pack (Keith 2026-10-31: healers for co-op): fewer energy bars than the stand-in, and the Repair beacon on
+  // key 3 (thrown at the cursor: a zone that repairs everyone friendly inside).
+  {
+    id: "pack-medic", name: "Medic pack", kind: "pack", tags: ["power", "repair"], weight: 2.0, makers: ["Stratford-Aegis"], look: "rampart", drop: 0.7, ability: "beacon",
+    stats: { dashCharges: s(3, 0.15), dashRecharge: s(DASH_DEFAULTS.dashRecharge * 1.15, 0.1) },
   },
   // A booster pack (Keith 2026-10-25: a boost item to slide around on): hold Space after a dash to keep thrusting.
   {
