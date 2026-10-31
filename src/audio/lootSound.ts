@@ -210,10 +210,10 @@ export class LootSound {
 
   // ---- item drops and pickups: the guitar ----
 
-  /** An item landed on the sand: tier 0 (Common) to 4 (Legendary). */
-  drop(tier: number) {
-    if (!this.ok) return;
-    this.riff(tier, this.ctx.currentTime, false);
+  /** An item landed on the sand: tier 0 (Common) to 4 (Legendary); gain 0..1 (quieter far off). */
+  drop(tier: number, gain = 1) {
+    if (!this.ok || gain <= 0) return;
+    this.riff(tier, this.ctx.currentTime, false, gain);
   }
 
   /** Picked an item up: the same voice, shorter. */
@@ -222,8 +222,8 @@ export class LootSound {
     this.riff(tier, this.ctx.currentTime, true);
   }
 
-  private riff(tier: number, t: number, short: boolean) {
-    const vol = this.tierVol(tier) * (short ? 0.75 : 1);
+  private riff(tier: number, t: number, short: boolean, gain = 1) {
+    const vol = this.tierVol(tier) * (short ? 0.75 : 1) * gain;
     if (vol <= 0) return;
     if (tier <= 0) { this.chug(this.amp(vol), t, E2, short ? 0.12 : 0.2); return; }
     if (tier === 1) {
