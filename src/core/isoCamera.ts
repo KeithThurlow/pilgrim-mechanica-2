@@ -14,6 +14,8 @@ export const ISO_DEFAULTS = {
   camFollow: 6,
   camYaw: 0,
   camFov: 40,
+  // ARPG framing (Keith 2026-10-31): the mech sits higher on screen, more view south than north. Share of the camera distance.
+  camSouth: 0.12,
   // At speed (Keith 2026-10-26, the sprint): look ahead along the motion and pull out a little, so a fast mech doesn't
   // sit at the screen's edge with nothing to see coming.
   camLead: 0.6,
@@ -33,6 +35,7 @@ export const ISO_PARAMS: Param[] = [
   { key: "camFarDist", label: "Zoomed out distance (m)", min: 20, max: 300, step: 1, group: "Camera" },
   { key: "camFollow", label: "Follow speed", min: 0.5, max: 30, step: 0.5, group: "Camera" },
   { key: "camYaw", label: "Facing (°)", min: -180, max: 180, step: 1, group: "Camera", tip: "0 = looking north (+Z); W always moves up the screen" },
+  { key: "camSouth", label: "Mech higher on screen (share of distance)", min: 0, max: 0.4, step: 0.01, group: "Camera", tip: "Shifts the view south so the mech sits higher: more view behind it, less ahead. 0 = centred" },
   { key: "camFov", label: "Field of view (°)", min: 15, max: 75, step: 1, group: "Camera" },
   { key: "camLead", label: "Look ahead at speed (s of travel)", min: 0, max: 2, step: 0.05, group: "Camera", tip: "Moving faster than the start speed below, the view centres this many seconds ahead along the motion" },
   { key: "camLeadMax", label: "Look ahead at most (m)", min: 0, max: 40, step: 0.5, group: "Camera" },
@@ -100,9 +103,11 @@ export class IsoCamera {
     this.lead.y += (mz * k - this.lead.y) * ease;
     this.speedDist += (over * v.camSpeedZoom - this.speedDist) * ease;
     const dist = this.dist + this.speedDist;
-    const fx = this.focus.x + this.lead.x, fz = this.focus.z + this.lead.y;
-    const pitch = THREE.MathUtils.degToRad(this.pitchAt(dist));
     const yaw = THREE.MathUtils.degToRad(this.v.camYaw);
+    // Look at a point toward the screen's bottom edge, so the followed thing sits higher on screen.
+    const drop = v.camSouth * dist;
+    const fx = this.focus.x + this.lead.x - Math.sin(yaw) * drop, fz = this.focus.z + this.lead.y - Math.cos(yaw) * drop;
+    const pitch = THREE.MathUtils.degToRad(this.pitchAt(dist));
     // Camera sits behind the focus (opposite the facing) and above it.
     this.camera.position.set(
       fx - Math.sin(yaw) * Math.cos(pitch) * dist,

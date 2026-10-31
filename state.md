@@ -279,6 +279,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-31 · Camera framing: mech sits higher on screen (Keith asked; Claude)
+- `camSouth` slider (Camera group, default 0.12 of the view distance) shifts the look point south so there is more view behind the mech and less ahead (`src/core/isoCamera.ts`). 0 = old centred view. Typecheck only; Keith to tune by eye.
 ### 2026-10-31 · Fortress warlord, war bands out of fortresses, hubs that build robots (Keith asked; Claude's defaults, agent on `wip/fortress`)
 - Warlord in the keep (`src/expedition/warlord.ts`, wired in `fortresses.ts` and `loop.ts` `attachWarlord`), war band column on a fortress's first alarm (`loop.ts` `fortCalls`), hub fabricators as targets that build robot batches (`src/pois/fabricators.ts`, `fabricatorsDraw.ts`, `src/expedition/hubs.ts`), packs and raids leaning to the nearest working hub (`threats.ts` `from`). Fabricator towers moved out of the hub's merged props (plinths stay).
 - Checked: `tools/fortress-check.ts` gains hubs (asleep: none; awake: 7 batches in 120 s, capped at 28; 4 fabricators down in 628 rounds of 20; one hubDead, no more batches; the bearing leans to it and stops when dead). Full `npm test` passes; fortress lab (`?kind=hub`, `?ring=2`) and convoy `?hub` load with no errors headless (looks not seen).
