@@ -558,6 +558,7 @@ selector = new Selector(app, {
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
+    { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
