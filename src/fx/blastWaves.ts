@@ -61,6 +61,7 @@ export const BLAST_WAVE_DEFAULTS = {
   waveMergeDist: 0.8,
   waveMergeTime: 0.12,
   waveMergeGrow: 0.35,
+  waveMergeCap: 2.5,
   waveMax: 24,
   wavePerFrame: 6,
   waveTrail: 1,
@@ -96,6 +97,7 @@ export const BLAST_WAVE_PARAMS: Param[] = [
   { key: "waveMergeDist", label: "Merge distance (× reach)", min: 0, max: 2, step: 0.01, group: G, tip: "Waves this close (and within the merge time) become one bigger wave; 0 never merges" },
   { key: "waveMergeTime", label: "Merge time (s)", min: 0, max: 0.5, step: 0.01, group: G },
   { key: "waveMergeGrow", label: "Merged wave growth", min: 0, max: 1, step: 0.01, group: G, tip: "How much a wave grows per wave it swallows (as the square root of their strength)" },
+  { key: "waveMergeCap", label: "Biggest merged wave (×)", min: 1, max: 6, step: 0.05, group: G, tip: "A merged wave's reach and bend stop at this many times its biggest member's" },
   { key: "waveMax", label: "Most live waves", min: 1, max: 64, step: 1, group: G },
   { key: "wavePerFrame", label: "Most new waves a frame", min: 1, max: 32, step: 1, group: G, tip: "More than this in one frame fold into the nearest" },
   ...WAVE_KIND_LIST.map((k): Param => ({ key: WAVE_KINDS[k].key, label: `${WAVE_KINDS[k].label} (×)`, min: 0, max: 3, step: 0.01, group: GK })),
@@ -129,6 +131,8 @@ export interface Wave {
   ground: boolean; groundReach: number; fam: number;
   /** The slower second ring of a big shell (merges only with other second rings). */
   ring2: boolean;
+  /** Its reach and bend as first posted (merges grow it to waveMergeCap times these at most). */
+  reach0: number; strength0: number;
 }
 
 /** A puff of bent air (exhaust, heat over a blast, the beam): noisy, fading, drifting up. */
@@ -172,11 +176,11 @@ export class BlastWaves {
     const life = v.waveLife * p.life;
     const ground = o.ground ?? true, fam = o.fam ?? 0;
     const groundReach = v.waveGroundSize * radius * p.size * k;
-    this.add({ x, y, z, reach, strength, t: 0, life, thick: v.waveThick, n: 1, frame: this.frame, ground, groundReach, fam, ring2: false });
+    this.add({ x, y, z, reach, strength, t: 0, life, thick: v.waveThick, n: 1, frame: this.frame, ground, groundReach, fam, ring2: false, reach0: reach, strength0: strength });
     if (p.ring2 && v.waveRing2 > 0) {
       // The slower second ring starts with the first and runs out a little further, later.
       const slow = Math.max(0.2, v.waveRing2Slow);
-      this.add({ x, y, z, reach: reach * 1.25, strength: strength * v.waveRing2, t: -0.04, life: life / slow, thick: v.waveThick * 1.4, n: 1, frame: this.frame, ground: false, groundReach: 0, fam, ring2: true });
+      this.add({ x, y, z, reach: reach * 1.25, strength: strength * v.waveRing2, t: -0.04, life: life / slow, thick: v.waveThick * 1.4, n: 1, frame: this.frame, ground: false, groundReach: 0, fam, ring2: true, reach0: reach * 1.25, strength0: strength * v.waveRing2 });
     }
     if (p.heat && v.waveHeat > 0 && v.waveHeatStrength > 0) {
       const s = Math.max(1.5, radius * 0.9 * p.size);
@@ -217,8 +221,11 @@ export class BlastWaves {
     a.x += (b.x - a.x) * (wb / ws); a.y += (b.y - a.y) * (wb / ws); a.z += (b.z - a.z) * (wb / ws);
     const s = Math.sqrt(ws);
     const grow = 1 + v.waveMergeGrow * (s / Math.max(1e-6, Math.max(a.strength, b.strength)) - 1);
-    a.reach = Math.max(a.reach, b.reach) * grow;
-    a.strength = Math.min(s, Math.max(a.strength, b.strength) * 2);
+    // Never past waveMergeCap times the bigger first post: a barrage folding into one wave doesn't grow it forever.
+    const cap = Math.max(1, v.waveMergeCap);
+    a.reach0 = Math.max(a.reach0, b.reach0); a.strength0 = Math.max(a.strength0, b.strength0);
+    a.reach = Math.min(Math.max(a.reach, b.reach) * grow, a.reach0 * cap);
+    a.strength = Math.min(s, a.strength0 * cap);
     a.life = Math.max(a.life, b.life);
     a.ground = a.ground || b.ground;
     a.groundReach = Math.max(a.groundReach, b.groundReach) * (b.ground ? grow : 1);
@@ -234,7 +241,7 @@ export class BlastWaves {
 
   /**
    * A rocket, missile or shell in flight this frame at (x, y, z) moving along (dx, dy, dz) (k its size): leaves exhaust
-   * puffs behind it at the trail rate (shared across everything in flight, so a barrage leaves fewer per rocket).
+   * puffs behind it at the trail rate, fewer as the puffs fill up to their cap (so a barrage leaves fewer per rocket).
    */
   exhaust(x: number, y: number, z: number, dx: number, dy: number, dz: number, k = 1) {
     const v = this.v;
