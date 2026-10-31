@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parts lab</title>
+  <style>
+    .picker { position: fixed; left: 10px; bottom: 44px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(100% - 360px); }
+    .picker select { background: #1f2226; color: #e8e4dc; border: 1px solid #30343b; border-radius: 4px; padding: 5px 6px; font: 13px system-ui, sans-serif; max-width: 100%; }
+    .picker .info { font: 12px ui-monospace, Consolas, monospace; color: #c9c3b6; background: rgba(15, 16, 18, 0.7); padding: 4px 8px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div class="picker"><select id="part"></select><span class="info" id="info"></span></div>
+  <div class="help">[ and ] step through the generated parts · C: game or close camera · scroll to zoom · drag to orbit (close) · hold V and click something to tune it</div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

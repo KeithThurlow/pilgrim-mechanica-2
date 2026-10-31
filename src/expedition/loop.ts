@@ -50,17 +50,21 @@ import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type Threat
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
+import { banditThreat } from "./threat";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
 import { BodyContact } from "../game/bodyContact";
 import type { Arsenal } from "../weapons/arsenal";
 import type { WeaponValues } from "../weapons/tuning";
 import type { Raider } from "../combat/warband";
+import { mechOwner } from "../game/registerOwners";
+import { QuestLoop, QUEST_DEFAULTS, QUEST_PARAMS, QUEST_GROUPS } from "../quests/questLoop";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS, ...PAD_DEFAULTS, ...UNLOCK_DEFAULTS,
   ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS,
+  ...QUEST_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
   ...HUB_LIFE_DEFAULTS,
 };
@@ -69,12 +73,14 @@ export const LOOP_PARAMS: Param[] = [
   ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
   ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
+  ...QUEST_PARAMS,
   ...FORT_LIFE_PARAMS,
   ...HUB_LIFE_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
   { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "quests", label: "Contracts and HVTs", groups: QUEST_GROUPS },
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
@@ -101,7 +107,7 @@ export interface LoopOptions {
   /** The ground changed over a box (a fortress gate went down): rebuild the terrain meshes there. */
   groundChanged?: (x0: number, z0: number, x1: number, z1: number) => void;
 }
-export interface LoopInput { night?: number; eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
+export interface LoopInput { night?: number; eHeld: boolean; qHeld: boolean; jHeld?: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -139,6 +145,8 @@ export class ExpeditionLoop {
   readonly hud: ExpeditionHud;
   /** Scrap clumps, item drops, the loot panel and its sounds (loot.ts). */
   readonly loot: FieldLoot;
+  /** Contracts and high value targets (src/quests/questLoop.ts). */
+  readonly quests: QuestLoop;
   /** The sensor's seekers (src/expedition/seekers.ts): the lab sets the modes from the loadout and cycles them. */
   readonly seeker = new Seeker();
   private sound: RadarSound;
@@ -229,15 +237,15 @@ export class ExpeditionLoop {
     ]);
     this.forts = new Fortresses(v, field, bf, scene, this.sites.walls, player, opts.vat ?? null,
       (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1), opts.groundChanged ?? (() => {}));
-    this.forts.onKill = (i, gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`f${i}.${gen}`, 0, x, z, this.dropCtx(x, z)); };
+    this.forts.onKill = (i, gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`f${i}.${gen}`, 0, x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
     this.forts.onAlert = (poi) => {
       this.sound.alarm();
       // The war bands that gather there send a column out after the first alarm (once per fortress per expedition).
       if (v.fortReinforce > 0 && !this.fortCalls.has(poi)) this.fortCalls.set(poi, v.fortReinforceAfter);
     };
     this.forts.onGate = (e) => { if (e.type === "gateDown") this.hud.note("Gate down", "#ffb347", 3); };
-    this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, 0, x, z, this.dropCtx(x, z)); };
-    this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); };
+    this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, banditThreat(v), x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
+    this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); this.quests?.stripped(s.poi); };
     this.sites.onNoise = (x, z, r) => { this.swarms.noise(x, z, r); this.banditCamps.noise(x, z, r); this.forts.noise(x, z, r); this.columns.noise(x, z, r); };
     this.sites.salvage.danger = this.depth.danger;
     this.sites.salvage.onHeat = (what) => this.heatAnswer(what);
@@ -250,6 +258,13 @@ export class ExpeditionLoop {
     this.sound = new RadarSound(bf.sfx.ctx);
     this.dashes = player.dash.dashes;
     this.loot.watch(this.swarms.sw);
+    this.quests = new QuestLoop(v as never, {
+      exp: this.exp, hud: this.hud, sites: this.sites, camps: this.camps, bandits: this.bandits, drops: this.loot.drops,
+      dropCtx: (x, z) => this.dropCtx(x, z), depth: (x, z) => this.depth.depth(x, z),
+      lead: () => { const b = convoy.bays[0]; return { x: b.x, z: b.z }; },
+      blocked: (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150),
+    }, bf, scene, field, player);
+    this.quests.watch(this.swarms.sw);
     // Nothing turns up on the road or within 150 m of the train.
     this.threats = new ThreatField(v, 17, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     // Manufacturing hubs build robots into the swarm while awake; packs and raids lean to the nearest working one.
@@ -295,6 +310,7 @@ export class ExpeditionLoop {
     reg.add(this.forts.target);
     reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
     reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) });
+    reg.add(mechOwner("hvt", () => this.quests.hvt.list()));
   }
 
   /** Start over where the lab put the convoy (POIs kept clear of the start; camps too). */
@@ -313,6 +329,7 @@ export class ExpeditionLoop {
     this.skirmish.reset();
     this.threats.reset();
     this.blasts.length = 0;
+    this.quests.reset();
     this.sites.keepClear(x, z, 190);
     this.fuel.refill();
     this.exp.state = "aboard";
@@ -359,7 +376,7 @@ export class ExpeditionLoop {
     if (foot && !pl!.alive && exp.state === "out") exp.pilotKilled();
     // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
     const onSand = carry.state === "walking" || carry.state === "inRange";
-    const holding = (inp.demo ? this.demoHold : inp.eHeld) && exp.state === "out" && player.alive && onSand && (!foot || pl!.alive);
+    const holding = (inp.demo ? this.demoHold : inp.eHeld && !this.quests.usesE) && exp.state === "out" && player.alive && onSand && (!foot || pl!.alive);
     if (foot) this.sites.update(dt, pl!.x, pl!.z, holding, this.camera, pl!);
     else this.sites.update(dt, p.x, p.z, holding, this.camera);
     inp.mark?.("POIs and salvage");
@@ -395,11 +412,13 @@ export class ExpeditionLoop {
     this.updateThreats(dt, hunting, inp.canvas, foot && pl!.alive ? { x: pl!.x, z: pl!.z } : null);
     inp.mark?.("packs and raids");
 
-    // Fuel: burns only out in the field.
+    // Fuel: burns only out in the field, and only while it's on (fuelOn; off for now, Keith 2026-11-01).
+    const fuelOn = v.fuelOn > 0;
     const dash = player.dash;
-    if (dash.dashes > this.dashes && exp.state === "out") fuel.dash();
+    if (fuelOn && dash.dashes > this.dashes && exp.state === "out") fuel.dash();
     this.dashes = dash.dashes;
-    if (exp.state === "out" && player.alive) {
+    if (!fuelOn) fuel.refill();
+    else if (exp.state === "out" && player.alive) {
       const speed = Math.hypot(sim.vel.x, sim.vel.z) + (dash.phase === "glide" ? 0 : Math.hypot(dash.vx, dash.vz));
       fuel.burn(dt, { speed, walkSpeed: v.walkSpeed, sprintSpeed: v.sprintSpeed, bounding: player.bound.on, stripping: !!this.sites.salvage.active });
     } else if (exp.state === "aboard" && !SAND.has(carry.state)) fuel.refill();
@@ -408,7 +427,7 @@ export class ExpeditionLoop {
     inp.mark?.("extraction pads");
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
-    const ev = exp.update(dt, inp.qHeld && !inp.demo && player.alive, fuel.empty);
+    const ev = exp.update(dt, inp.qHeld && !inp.demo && player.alive, fuelOn && fuel.empty);
     if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
 
     // The way home: the return point and the warning.
@@ -421,7 +440,7 @@ export class ExpeditionLoop {
       returnPoint(v, this.route, this.tracks, p.x, p.z, v.boundTop * 0.9, v.convoySpeed, v.craneRange, this.homeSprint);
     }
     const eta = this.home.reachable ? this.home.eta : Infinity;
-    const warn = exp.state === "out" ? fuelWarning(v, fuel.left, eta) : 0;
+    const warn = exp.state === "out" && fuelOn ? fuelWarning(v, fuel.left, eta) : 0;
     inp.mark?.("way home");
     if (warn === 2 && this.warn < 2) this.sound.warn();
     this.warn = warn;
@@ -432,6 +451,7 @@ export class ExpeditionLoop {
     w.mech.x = p.x; w.mech.z = p.z;
     w.convoy = this.convoy.platforms.map((q) => ({ x: q.x, z: q.z, length: q.spec.length, width: q.spec.width, heading: q.heading }));
     w.home = exp.state === "out" ? { x: this.home.x, z: this.home.z } : null;
+    w.quests = this.quests.radar;
     if (this.slowT <= 0) {
       this.slowT = 0.25;
       const R = v.convoyRadar * 1.1;
@@ -472,13 +492,13 @@ export class ExpeditionLoop {
 
     // HUD.
     const s = this.sites.salvage;
-    let prompt = this.padPrompt();
+    let prompt = this.padPrompt() || (exp.state === "out" && onSand ? this.quests.prompt : "");
     if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
     this.hud.update(dt, {
-      exp, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
+      exp, fuelOn, fuelLeft: fuel.left, fuelShare: fuel.share, eta: exp.state === "out" ? eta : null, warn, prompt,
       sprint: exp.state === "out" && this.homeSprint.reachable
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive,
@@ -486,6 +506,12 @@ export class ExpeditionLoop {
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
+    // Contracts and HVTs (before the loot panel drains the expedition's events: they deliver and fail on them).
+    this.quests.update(dt, {
+      out: exp.state === "out", onSand, eHeld: inp.eHeld && !inp.demo, jHeld: !!inp.jHeld && !inp.demo,
+      mech: { x: p.x, z: p.z, alive: player.alive }, pilot: foot && pl!.alive ? { x: pl!.x, z: pl!.z } : null, expEvents: exp.events,
+    });
+    inp.mark?.("contracts");
     // Loot: drops picked up, clumps flying in, the loot panel (after the HUD, which holds its slot).
     const pa = foot && pl!.alive ? pl! : null;
     this.loot.update(dt, {
@@ -671,6 +697,7 @@ export class ExpeditionLoop {
         color: raid ? "#ff7a5a" : coming ? "#ffb347" : "#e8d6b0", strength: raid || coming ? 1 : 1 - d / (v.plumeRange * 1.2) });
     }
     for (const b of this.blasts) marks.push({ id: b.id, x: b.x, y: field.height(b.x, b.z) + 3, z: b.z, text: "BLAST", color: "#ffd27a", strength: 1 - b.t / 6 });
+    for (const m of this.quests.marks) marks.push(m);
     this.marks.update(this.camera, canvas, marks, p);
   }
 
@@ -728,6 +755,6 @@ export class ExpeditionLoop {
   /** Debug line for the frame HUD. */
   get line() {
     const e = this.exp, sw = this.swarms;
-    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${Math.round(this.fuel.left)} s · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
+    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
 }
