@@ -268,7 +268,7 @@ const TURN_BY = 0.5;
 // it, so with the stick off the dash's line it never ended. Now: tapped (Space down 0.08 s) with full bars, from standing,
 // walking and the Shift run, the stick any way against the dash or let go, within TAP_BACK seconds it's out of the run
 // gait, not dashing, and no faster than the stick's walk (or Shift run).
-const TAP_BACK = 1.2;
+const TAP_BACK = 1.0;
 {
   let worst = 0, worstAt = "";
   for (const pace of ["stand", "walk", "run"] as const) for (const [ddx, ddz] of [[0, 1], [1, 0], [0.7, -0.7], [-1, 0]] as const)
@@ -286,15 +286,17 @@ const TAP_BACK = 1.2;
       const was = s9.dashing;
       s9.update(dt, { x: sx, z: sz, sprint });
       if (was && !s9.dashing) d9.cut();
-      const top = Math.hypot(sx, sz) * (sprint ? v.sprintSpeed : v.walkSpeed) + 0.5;
-      const ok = !s9.dashing && !s9.running && !s9.bounding && Math.hypot(s9.vel.x, s9.vel.z) <= top;
+      // Keith 2026-10-31 (drift): and moving as the stick asks, no slide left (velocity and skid within 0.75 m/s of it).
+      const sp = sprint ? v.sprintSpeed : v.walkSpeed, sl = Math.hypot(sx, sz) || 1;
+      const off = Math.hypot(s9.vel.x + s9.skid.x - (sx / sl) * Math.min(1, sl) * sp, s9.vel.z + s9.skid.z - (sz / sl) * Math.min(1, sl) * sp);
+      const ok = !s9.dashing && !s9.running && !s9.bounding && off < 0.75;
       if (ok && back < 0) back = t; else if (!ok) back = -1;
     }
     const what = `${pace}, dash ${ddx},${ddz}, stick ${sn}`;
     if (back < 0 || back > TAP_BACK) problems.push(`tapped dash (${what}): ${back < 0 ? "still running or dashing at 3 s" : `back to the walk after ${back.toFixed(2)} s`}`);
     if ((back < 0 ? 99 : back) > worst) { worst = back < 0 ? 99 : back; worstAt = what; }
   }
-  console.log(`tapped dash with full bars: out of the run, walking at the stick's pace within ${worst.toFixed(2)} s (${worstAt})`);
+  console.log(`tapped dash with full bars: out of the run, moving as the stick asks (no slide) within ${worst.toFixed(2)} s (${worstAt})`);
 }
 
 // The sprint on energy (Keith 2026-10-27): it only comes out of a held dash and drains the bars (the dash took one, the

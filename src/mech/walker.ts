@@ -792,7 +792,8 @@ export class WalkerSim {
     if (this.burst) {
       const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
       const back = mag > 0.3 && (cmd.x * Math.sin(this.course) + cmd.z * Math.cos(this.course)) / mag < -0.3;
-      const floor = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
+      // Down to the stick's walk along the dash's line (none across it: the walk then turns it under the stick at once).
+      const floor = Math.min(mag, Math.max(0, cmd.x * Math.sin(this.course) + cmd.z * Math.cos(this.course))) * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
       this.boostTo = 0;
       this.burstT += dt;
       // The slope along it, both ways: further downhill, shorter up (Keith 2026-10-25: slides work better downhill).
@@ -818,7 +819,9 @@ export class WalkerSim {
     const grip = (v.boundGrip * G) / Math.max(1, this.boundSpeed);
     const rc = Math.min(v.turnRate * D2R, grip), rh = Math.min(v.turnRate * D2R, grip * (1 + v.boundYaw));
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
-    if (mag > 0.05) {
+    // A tapped dash's burst holds its line (Keith 2026-10-31: drift is the sprint's; turned into a drift the old burst
+    // never ended); the walk turns it under the stick the moment it's over.
+    if (mag > 0.05 && !this.burst) {
       const err = wrap(Math.atan2(cmd.x, cmd.z) - this.heading), m = rh * dt;
       const dh = clamp(err, -m, m);
       this.heading = wrap(this.heading + dh);
@@ -1513,7 +1516,7 @@ export class WalkerSim {
     dm.slope -= G * this.grade * dt;
     dm.covered += this.speed * dt;
     // The burst by time from the press (the steps pose the legs under it); held (Space), it keeps its peak for the sprint.
-    const to = this.bound ? Math.max(dm.carried, v.dashSpeedOut) : mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
+    const to = this.bound ? Math.max(dm.carried, v.dashSpeedOut) : Math.min(mag, Math.max(0, cmd.x * dm.dx + cmd.z * dm.dz)) * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
     const along = Math.max(0, dashBurst(t, dm.carried, to, v) + dm.slope), k = dashAcross(t, v);
     const out = this.faceScrub(dm.dx * along + dm.ax * k, dm.dz * along + dm.az * k, Math.min(1, v.wallScrub * dt), false);
     this.vel.set(out.x, 0, out.z);
