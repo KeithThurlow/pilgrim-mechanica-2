@@ -323,12 +323,13 @@ export class MechUnit implements Hittable {
       sim.crouch = this.kneel;
       sim.leanPitch = this.kneelPitch;
       sim.leanRoll = 0;
-      const wasDashing = sim.dashing;
+      const wasDashing = sim.inDash;
       // Where the guns are aimed (none: the legs always turn to the travel; a torso with nothing to aim at follows them).
       move.face = cmd.face ?? (aim ? Math.atan2(aim.x - sim.pos.x, aim.z - sim.pos.z) : undefined);
       sim.update(dt / sub, move);
-      // Its steps done, the shove and its glide are over too (the run or the walk has the speed).
-      if (wasDashing && !sim.dashing) dash.cut();
+      // Its steps and burst done (2026-10-31: the burst, not just the steps), the shove is over too: it times the damage
+      // cut and the crowd shove through the whole burst.
+      if (wasDashing && !sim.inDash) dash.cut();
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);
     }
     body.update(sim, upper);

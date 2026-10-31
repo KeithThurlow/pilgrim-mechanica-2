@@ -8,7 +8,7 @@
 // - Dodge drills: a scripted shooter fires mortars, line mortars, missile swarms and held rail charges at a rival told
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
-import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand } from "../src/combat/rivalAi";
+import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand, type Threat } from "../src/combat/rivalAi";
 import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout } from "../src/combat/rivalKit";
 import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
@@ -200,6 +200,40 @@ must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of $
   let late = false;
   for (let n = 700; n < 760; n++) { c = ai2.decide(mk(n, 20, 30, 0, true, 0), 1 / 60); late ||= c.trigger[0] || c.trigger[1]; }
   must(late, "the rival never fired once it had re-acquired the foe");
+
+  // Rails and the dash (Keith 2026-10-31): a dash drops the dasher's own rail charge and none builds through it; the
+  // rival won't throw its own charge away on a gamble (dashing across a foe's rail), but still does with nothing charging.
+  {
+    const railLine: Threat = { id: 7, kind: "line", ax: 0, az: 30, x: 0, z: -30, r: 1, t: Infinity, rail: true, charge: 1 };
+    const mk2 = (n: number, charge: number): DuelView => ({
+      t: n / 60, cover: [], sees: () => true, arena: { x: 0, z: 0, r: 200 },
+      self: { x: 0, z: 0, vx: 0, vz: 0, heading: 0, health: 1, dashCharges: 4, canDash: true, dashing: false, walkSpeed: 6, kit, weapons: kit.map((_, i) => ({ i, ready: true, charge })) },
+      foe: { x: 0, y: 3, z: 30, vx: 0, vz: 0, health: 1, dashCharges: 0, alive: true, gunsOff: false, airborne: false, staggered: false, r: 1.7 },
+      threats: [railLine],
+    });
+    const dashes = (charge: number) => { const a = new RivalAi({ ...RIVAL_AI_DEFAULTS, aiDashUse: 1, aiAggression: 0 }, 5); let n = 0; for (let k = 0; k < 180; k++) if (a.decide(mk2(k, charge), 1 / 60).dash) n++; return n; };
+    const free = dashes(0), keeping = dashes(0.6);
+    must(free > 0, "rail: with nothing charging the rival never dashed across a charged rail's line");
+    must(keeping === 0, `rail: the rival dashed ${keeping} times with its own rail charging (it would lose the charge)`);
+    // Headless duel: the shooter holds its rail and dashes 0.8 s in; through the dash its charge is 0 and stays 0.
+    let before = 0, during = 0, after = 0, dashedAt = -1;
+    const script = (i: number, vw: DuelView, t: number): MechCommand | null => {
+      if (i !== 0) return null;
+      const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: { x: 0, y: 3, z: 30, r: 1.7, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+      c.trigger[0] = true;
+      const w = vw.self.weapons[vw.self.kit.findIndex((k) => k.kind === "rail")];
+      if (t < 0.8) before = Math.max(before, w.charge);
+      else if (dashedAt < 0) { c.dash = { x: 1, z: 0 }; dashedAt = t; }
+      else if (vw.self.dashing && t < dashedAt + 0.5) during = Math.max(during, w.charge);
+      else if (t > dashedAt + 2) after = Math.max(after, w.charge);
+      return c;
+    };
+    runDuelRaw({ seedA: 1, seedB: 2, maxTime: 4, hull: 1e6, cover: 0, loadouts: [loadoutFor({ left: "rail", right: "minigun", k1: "none", k2: "none", k3: "pack" }), null], script });
+    must(before > 0.3, `rail: the scripted rail never charged (${before.toFixed(2)})`);
+    must(during === 0, `rail: a charge of ${during.toFixed(2)} survived or built during a dash`);
+    must(after > 0, "rail: the trigger still held, the rail never charged again after the dash");
+    console.log(`rail vs dash: the rival dashed across a foe's rail ${free}× with nothing charging, ${keeping}× with its own charging · a dash dropped a ${before.toFixed(2)} charge (${during.toFixed(2)} through it, ${after.toFixed(2)} after)`);
+  }
 
   // Duels against a scripted player who stands or strafes (cover 0): Recruit misses a strafing player most of the time,
   // still punishes one who stands; Ace hits more; Recruit's time to kill with the default pick is 8-25 s.

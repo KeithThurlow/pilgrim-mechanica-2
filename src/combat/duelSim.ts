@@ -196,7 +196,9 @@ export function runDuel(o: DuelOptions): DuelResult {
             }
           }
         } else if (k.kind === "rail") {
-          if (held) {
+          // In a dash: the charge is dropped and none builds (Keith 2026-10-31, as src/weapons/arsenal.ts).
+          if (m.sim.inDash) { g.holding = false; g.charge = 0; }
+          else if (held) {
             if (g.cool <= 0) { if (!g.holding) g.railFrom = null; g.holding = true; g.charge = Math.min(1, g.charge + dt / Math.max(0.05, k.charge)); }
             if (cmd.lock) g.railFrom = { x: cmd.lock.x, z: cmd.lock.z };
           } else if (g.holding) {
@@ -272,9 +274,9 @@ export function runDuel(o: DuelOptions): DuelResult {
         m.dash.update(dt / 2);
         m.sim.push.set(0, 0, 0);
         m.sim.crouch = 0;
-        const was = m.sim.dashing;
+        const was = m.sim.inDash;
         m.sim.update(dt / 2, cmd.move);
-        if (was && !m.sim.dashing) m.dash.cut();
+        if (was && !m.sim.inDash) m.dash.cut();
       }
       if (!Number.isFinite(m.sim.pos.x + m.sim.pos.z + m.sim.pelvis.y)) res.nan = true;
       m.hist.push({ x: m.sim.pos.x, z: m.sim.pos.z });

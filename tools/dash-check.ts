@@ -26,13 +26,17 @@ let worstFoot = 0, nan = 0, frames = 0;
 const covered: number[] = [];
 // Ground a dash covers the way it was sent, the steps and the short sprint after them (Keith 2026-10-27: "a burst of
 // speed for a distance of like 25-30m"): about dashRun, within this share.
+const DASH_RUN = 12; // m (Keith 2026-10-27: a standard dash about 12 m; 2026-10-31 the burst: dashSpeedOut held dashHold)
 const DASH_RUN_OFF = 0.4; // the dunes' slopes stretch and shorten it
 
 function step(cmd: { x: number; z: number; sprint: boolean }) {
   dash.update(dt);
-  sim.push.set(dash.vx, 0, dash.vz);
-  sim.crouch = dash.crouch;
+  // As MechUnit drives it (2026-10-31): WalkerSim.dash starts the steps, the old shove moves nothing, and the steps
+  // ending end it (the harness used to push the shove in, which carried a mech launched off a crest for metres).
+  sim.push.set(0, 0, 0);
+  const was = sim.dashing;
   sim.update(dt, cmd);
+  if (was && !sim.dashing) dash.cut();
   frames++;
   for (const f of sim.feet) {
     if (!Number.isFinite(f.pos.x + f.pos.y + f.pos.z + f.pose.knee.x)) nan++;
@@ -46,14 +50,15 @@ for (const [dx, dz, walking] of dirs) {
   for (let i = 0; i < 120 * 4; i++) step({ x: walking ? 0 : 0, z: walking ? 1 : 0, sprint: false }); // let charges come back
   const x0 = sim.pos.x, z0 = sim.pos.z;
   if (!dash.start(dx, dz)) problems.push(`a dash didn't start with ${dash.charges} charges`);
+  else sim.dash(dash.dirX, dash.dirZ);
   const l = Math.hypot(dx, dz);
   // The steps and the short sprint after them (the stick held the way of the dash, as a player does), until the walk.
   let t = 0;
-  do { step({ x: dx / l, z: dz / l, sprint: false }); t += dt; } while ((sim.dashing || sim.running || t < 0.1) && t < 4);
+  do { step({ x: dx / l, z: dz / l, sprint: false }); t += dt; } while ((sim.dashing || sim.running || sim.airborne || t < 0.1) && t < 4);
   while (dash.active) step({ x: 0, z: 0, sprint: false });
   const along = ((sim.pos.x - x0) * dx + (sim.pos.z - z0) * dz) / l;
   covered.push(along);
-  if (Math.abs(along - v.dashRun) > v.dashRun * DASH_RUN_OFF) problems.push(`a dash covered ${along.toFixed(1)} m the way it was sent (about ${v.dashRun})`);
+  if (Math.abs(along - DASH_RUN) > DASH_RUN * DASH_RUN_OFF) problems.push(`a dash covered ${along.toFixed(1)} m the way it was sent (about ${DASH_RUN})`);
 }
 // Energy (Keith 2026-10-27): each charge is a bar. A dash needs a full bar and empties exactly one; with none full there's
 // no dash; nothing refills for dashRegenDelay after use, then the bar nearest full refills at one bar per dashRecharge.
@@ -61,7 +66,7 @@ for (let i = 0; i < 120 * 10; i++) step({ x: 0, z: 0, sprint: false });
 let went = 0;
 for (let k = 0; k < 4; k++) {
   const e0 = dash.energy;
-  if (dash.start(1, 0)) { went++; if (Math.abs(e0 - dash.energy - 1) > 1e-6) problems.push(`a dash took ${(e0 - dash.energy).toFixed(2)} bars (want 1)`); }
+  if (dash.start(1, 0)) { sim.dash(1, 0); went++; if (Math.abs(e0 - dash.energy - 1) > 1e-6) problems.push(`a dash took ${(e0 - dash.energy).toFixed(2)} bars (want 1)`); }
   for (let i = 0; i < 120 * dv.dashGap + 2; i++) step({ x: 0, z: 0, sprint: false });
 }
 if (went !== dv.dashCharges) problems.push(`${went} dashes went from ${dv.dashCharges} full bars`);
@@ -83,11 +88,11 @@ function onSlope(dirZ: number) {
   const d2 = new Dash({ ...DASH_DEFAULTS });
   for (let i = 0; i < 60; i++) s2.update(dt, { x: 0, z: 0, sprint: false });
   const z0 = s2.pos.z;
-  d2.start(0, dirZ);
+  d2.start(0, dirZ); s2.dash(0, dirZ);
   let t = 0;
   while ((d2.active || t < 0.1) && t < 20) {
     d2.update(dt, d2.dirZ > 0 ? g : -g);
-    s2.push.set(d2.vx, 0, d2.vz); s2.crouch = d2.crouch;
+    s2.push.set(0, 0, 0); s2.crouch = d2.crouch;
     s2.update(dt, { x: 0, z: 0, sprint: false });
     t += dt;
   }
@@ -95,7 +100,8 @@ function onSlope(dirZ: number) {
 }
 const up = onSlope(1), down = onSlope(-1);
 // 1.15 since the dash became footwork and a short sprint (2026-10-27): the old glide that carried far downhill is gone.
-if (!(down > up * 1.15)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
+// Since the burst by time (2026-10-31): only gravity along the slope over its half second, about half a metre each way.
+if (!(down > up + 0.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
 
 // Walls (Keith 2026-10-26: dashing at a steep wall flung the mech so high it died landing): running at a 40-60° face
 // 2 or 8 m high and dashing at its foot (the shove's peak hits the face), the hips never rise more than WALL_RISE over
@@ -112,10 +118,10 @@ for (const H of [2, 8]) for (const deg of [40, 50, 60]) for (const before of [0.
   let rise = 0, worst = 0, went = false;
   s3.onLand = (l) => { worst = Math.max(worst, l.impact); };
   for (let i = 0; i < 120 * 8; i++) {
-    if (!went && s3.pos.z > 30 - before) went = d3.start(0, 1);
+    if (!went && s3.pos.z > 30 - before) { went = d3.start(0, 1); if (went) s3.dash(0, 1); }
     const gz = (h(0, s3.pos.z + 2) - h(0, s3.pos.z - 2)) / 4;
     d3.update(dt, gz);
-    s3.push.set(d3.vx, 0, d3.vz); s3.crouch = d3.crouch;
+    s3.push.set(0, 0, 0); s3.crouch = d3.crouch;
     s3.update(dt, { x: 0, z: 1, sprint: true });
     rise = Math.max(rise, s3.pelvis.y - h(0, s3.pos.z) - v.hipHeight);
     if (!Number.isFinite(s3.pelvis.y)) { problems.push(`NaN dashing into a ${deg}° wall`); break; }
@@ -142,11 +148,11 @@ for (const walking of [true, false]) for (let ph = 0; ph < 8; ph++) for (const [
   const cmd = { x: 0, z: walking ? 1 : 0, sprint: false };
   // Walk (or stand) into the cycle, a different share of a step each time.
   for (let i = 0; i < 240 + ph * 9; i++) s4.update(dt, cmd);
-  d4.start(ddx, ddz);
+  d4.start(ddx, ddz); s4.dash(ddx, ddz);
   let t = 0, glideEnd = -1, back = -1, worst = 0;
   while (t < 4) {
     d4.update(dt, 0);
-    s4.push.set(d4.vx, 0, d4.vz); s4.crouch = d4.crouch;
+    s4.push.set(0, 0, 0); s4.crouch = d4.crouch;
     s4.update(dt, cmd);
     t += dt;
     const [a, b] = s4.feet;
@@ -172,14 +178,14 @@ console.log(`dash from ${dashes} points in the step and directions: feet at most
   const d5 = new Dash({ ...DASH_DEFAULTS });
   const b5 = new Bound({ ...BOUND_DEFAULTS });
   for (let i = 0; i < 240; i++) s5.update(dt, { x: 0, z: 1, sprint: false });
-  d5.start(0, 1);
+  d5.start(0, 1); s5.dash(0, 1);
   let t = 0, runAt = -1, fastest = 0, worst = 0;
   const falls: number[] = [];
   s5.onFootfall = (f) => { if (runAt >= 0) falls.push(f.side); };
   while (t < 3) {
     b5.update(dt, true, s5, d5);
     d5.update(dt, 0);
-    s5.push.set(d5.vx, 0, d5.vz); s5.crouch = d5.crouch;
+    s5.push.set(0, 0, 0); s5.crouch = d5.crouch;
     s5.update(dt, { x: 0, z: 1, sprint: false });
     t += dt;
     if (runAt < 0 && s5.running) { runAt = t; fastest = s5.boundSpeed; }
@@ -207,12 +213,12 @@ const HIP_DROP = 1.1, FACE = 10, HAND_BY = 1.3; // a cutback backpedals first
     const d6 = new Dash({ ...DASH_DEFAULTS });
     const move = { x: 0, z: pace === "stand" ? 0 : 1, sprint: pace === "run" };
     for (let i = 0; i < 300 + ph * 11; i++) s6.update(dt, move);
-    d6.start(ddx, ddz);
+    d6.start(ddx, ddz); s6.dash(ddx, ddz);
     const l = Math.hypot(ddx, ddz), go = { x: ddx / l, z: ddz / l, sprint: pace === "run" };
     let t = 0, both = 0, low = 9, hand = -1, face = 0;
     while (t < 2.5) {
       d6.update(dt, 0);
-      s6.push.set(d6.vx, 0, d6.vz);
+      s6.push.set(0, 0, 0);
       const was = s6.dashing;
       s6.update(dt, go);
       t += dt;
@@ -257,6 +263,42 @@ const TURN_BY = 0.5;
   console.log(`dash back mid-dash (up to ${fast.toFixed(1)} m/s): the new way within ${worstTurn.toFixed(2)} s, hips at least ${low.toFixed(2)} m`);
 }
 
+// A tap is only a dash (Keith 2026-10-31: "it kind of starts me running and I get almost stuck in a run animation...
+// when I have a full dodge bar"). Cause: the old short sprint re-boosted to its peak whenever a drift scrubbed speed off
+// it, so with the stick off the dash's line it never ended. Now: tapped (Space down 0.08 s) with full bars, from standing,
+// walking and the Shift run, the stick any way against the dash or let go, within TAP_BACK seconds it's out of the run
+// gait, not dashing, and no faster than the stick's walk (or Shift run).
+const TAP_BACK = 1.0;
+{
+  let worst = 0, worstAt = "";
+  for (const pace of ["stand", "walk", "run"] as const) for (const [ddx, ddz] of [[0, 1], [1, 0], [0.7, -0.7], [-1, 0]] as const)
+  for (const [sx, sz, sn] of [[0, 1, "ahead"], [1, 0, "left"], [-1, 0, "right"], [0, -1, "back"], [0, 0, "none"], [0.7, 0.7, "diag"]] as const) {
+    const s9 = new WalkerSim(v, flatG);
+    s9.reset(0, 0, 0);
+    const d9 = new Dash({ ...DASH_DEFAULTS }), b9 = new Bound({ ...BOUND_DEFAULTS });
+    const sprint = pace === "run";
+    for (let i = 0; i < 240; i++) s9.update(dt, { x: 0, z: pace === "stand" ? 0 : 1, sprint });
+    if (d9.start(ddx, ddz)) s9.dash(d9.dirX, d9.dirZ);
+    let t = 0, back = -1;
+    for (; t < 3; t += dt) {
+      b9.update(dt, t < 0.08, s9, d9); d9.update(dt, 0);
+      s9.push.set(0, 0, 0);
+      const was = s9.dashing;
+      s9.update(dt, { x: sx, z: sz, sprint });
+      if (was && !s9.dashing) d9.cut();
+      // Keith 2026-10-31 (drift): and moving as the stick asks, no slide left (velocity and skid within 0.75 m/s of it).
+      const sp = sprint ? v.sprintSpeed : v.walkSpeed, sl = Math.hypot(sx, sz) || 1;
+      const off = Math.hypot(s9.vel.x + s9.skid.x - (sx / sl) * Math.min(1, sl) * sp, s9.vel.z + s9.skid.z - (sz / sl) * Math.min(1, sl) * sp);
+      const ok = !s9.dashing && !s9.running && !s9.bounding && off < 0.75;
+      if (ok && back < 0) back = t; else if (!ok) back = -1;
+    }
+    const what = `${pace}, dash ${ddx},${ddz}, stick ${sn}`;
+    if (back < 0 || back > TAP_BACK) problems.push(`tapped dash (${what}): ${back < 0 ? "still running or dashing at 3 s" : `back to the walk after ${back.toFixed(2)} s`}`);
+    if ((back < 0 ? 99 : back) > worst) { worst = back < 0 ? 99 : back; worstAt = what; }
+  }
+  console.log(`tapped dash with full bars: out of the run, moving as the stick asks (no slide) within ${worst.toFixed(2)} s (${worstAt})`);
+}
+
 // The sprint on energy (Keith 2026-10-27): it only comes out of a held dash and drains the bars (the dash took one, the
 // sprint the rest at sprintDrain), ends when they're empty, refills nothing while it runs; with only one bar, a held dash
 // can't sprint. Weapons: the dash fires; off the moment the sprint runs (sprintGunsAfter 0).
@@ -297,6 +339,6 @@ if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);
 if (misses > 0.15) problems.push(`legs out of reach ${(misses * 100).toFixed(1)}% of frames`);
 console.log(`dash on a 14° slope: up ${up.toFixed(1)} m, down ${down.toFixed(1)} m · into walls, hips over standing at most: ${wallRises.join(", ")}`);
-console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (about ${v.dashRun}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${chargesMsg}`);
+console.log(`dash: covered ${covered.map((c) => c.toFixed(1)).join(", ")} m the way it was sent (about ${DASH_RUN}) · skidding feet within ${worstFoot.toFixed(3)} m of the sand · reach misses ${(misses * 100).toFixed(2)}% · charges ${chargesMsg}`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("dash check failed"); }
 console.log("dash check passed");

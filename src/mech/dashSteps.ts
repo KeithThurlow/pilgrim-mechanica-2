@@ -7,8 +7,9 @@
 //   step      the inside foot plants out toward the dash and takes the weight; the hips turn on toward the dash
 //   through   the outside leg comes through in front along the dash and plants as a running stride: the hand-over
 //
-// Then the run gait carries on along the dash: held (Space), into the sprint; let go, for dashBurst seconds rolling off
-// at dashRolloff, then back to the walk. Side steps between dashForwardMax and dashCutMin off the line of travel;
+// The speed is a burst by time from the press (dashBurst), whatever the feet are doing: up to the peak in dashRise,
+// held dashHold, down to the walk in dashStop. The run gait carries on along the dash after the through-step: held
+// (Space), into the sprint; let go, until the burst is down, then the walk. Side steps between dashForwardMax and dashCutMin off the line of travel;
 // closer to it a burst (two driving strides, no turn), further a cutback (the hips swing round, a little slower).
 // Ownership: the player's own movement (a command), like the walk.
 import type { WalkerValues } from "./walkerTuning";
@@ -57,20 +58,22 @@ export function dashTurn(h: number, yaw: number, side: number) {
 }
 
 /**
- * Speed along the dash (m/s): what it carried along it, the load biting a little off it, then building over the push to
- * dashKick by the inside plant and dashStepsTop by the through-step (never below what it carried). The boost to
- * dashSpeedOut comes on at the through-step, in the run (Keith 2026-10-27: 25-30 m/s; faster than this the feet can't
- * stay under the body through the steps).
+ * Speed along the dash (m/s), by time from the press (Keith 2026-10-31: "Dash doesn't feel fast enough in its start and
+ * stop"): a burst, not something the steps build up. From what it carried along the dash up to dashSpeedOut over
+ * dashRise (hardest at the press), held for dashHold, then down to `to` (the stick's walk speed along it) over dashStop.
+ * The steps only pose the legs under it; held, the sprint takes it from the hand-over.
  */
-export function dashAlong(t: number, carried: number, B: DashBeats, v: WalkerValues) {
-  const out = Math.max(carried, Math.min(v.dashSpeedOut, v.dashStepsTop)), kick = Math.max(carried, Math.min(out, v.dashKick));
-  if (t < B.load) return carried * (1 - 0.25 * smooth(0, B.load, t));
-  const c = carried * 0.75;
-  if (t < B.step) return c + (kick - c) * smooth(B.load, B.step, t);
-  return kick + (out - kick) * smooth(B.step, B.through, t);
+export function dashBurst(t: number, carried: number, to: number, v: WalkerValues) {
+  const peak = Math.max(carried, v.dashSpeedOut), rise = Math.max(0.005, v.dashRise);
+  if (t < rise) { const x = t / rise; return carried + (peak - carried) * (1 - (1 - x) * (1 - x)); }
+  const e = t - rise - v.dashHold;
+  if (e < 0) return peak;
+  return e < v.dashStop ? peak + (to - peak) * smooth(0, v.dashStop, e) : to;
 }
-/** Share of the speed across the dash still left: the planted feet take it out by the inside plant. */
-export function dashAcross(t: number, B: DashBeats) { return 1 - smooth(0, B.step, t); }
+/** Seconds from the press until the burst is down at its end speed. */
+export function dashBurstEnd(v: WalkerValues) { return Math.max(0.005, v.dashRise) + v.dashHold + v.dashStop; }
+/** Share of the speed across the dash still left: gone over the burst's rise (the planted feet take it out). */
+export function dashAcross(t: number, v: WalkerValues) { return 1 - smooth(0, Math.max(0.02, v.dashRise), t); }
 
 /** The hips' height change (m): up as the weight comes off, down into the crouch, back up by the through-step. */
 export function dashDip(t: number, B: DashBeats, v: WalkerValues) {
