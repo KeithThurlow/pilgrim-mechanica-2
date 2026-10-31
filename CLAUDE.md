@@ -161,7 +161,10 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
-  `?bank=N` (N scrap banked), `?raid` (a raid at once).
+  `?bank=N` (N scrap banked), `?raid` (a raid at once). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
+  with that contract taken), `?hvt[=metres|now]` (that close, 60 m, to the nearest high value target's lair, one kill short of
+  drawing it out; `now`: it's coming; with `?quest=bounty` the bounty is on it); J takes the newest offer, hold J drops one,
+  hold E by a downed Rampart hooks it (again to drop); `window.__quests` in the console.
 
 ## Layout
 
@@ -206,6 +209,8 @@ src/items/              item, bases (the part and weapon table), rarity, protoco
 src/ui/                 bay (the bay screen: fit parts, sockets, loot)
 src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
                         target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
+src/quests/             contracts (pure board), hvt (lairs, summoning), tow (cable, pods); glue: hvtMech (the HVT's rival
+                        mech), questLoop (into the expedition); drawing: questDraw, questHud
 src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown
                         areas), threats (roaming packs, raids, distant blasts); glue: loop, sites (POIs + salvage), fortresses (gates and
                         garrisons), swarmCamps (camps
