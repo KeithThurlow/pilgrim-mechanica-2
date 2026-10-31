@@ -87,6 +87,8 @@ import { ConvoyWalkways, WALKWAY_DEFAULTS, WALKWAY_PARAMS, platformFrame, deckPl
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src/pilot/onFoot";
 import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { convoyShop } from "../../src/ui/convoyShop";
+import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../../src/ui/vitalsHud";
+import { KitControl, addRepairSounds } from "../../src/game/repairUse";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag, addTo } from "../../src/items/cargo";
@@ -103,14 +105,14 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ON_FOOT_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
+  ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
@@ -245,6 +247,11 @@ const walkable = new Walkable(field);
 const ways = new ConvoyWalkways(convoy, walkable, V);
 ways.update();
 const foot = await OnFoot.create(V, walkable, player, iso, bf, scene);
+// Your vitals and repair kits on Q (src/ui/vitalsHud.ts, src/game/repairUse.ts; Keith 2026-10-31).
+const vitals = vitalsHud(V);
+const kitCtl = new KitControl(player, foot, bf.sfx);
+addRepairSounds(bf.sfx, () => V.kitSound);
+foot.showHealth = false;
 /** Was the crane armed when the pilot got out on the sand (it mustn't come for the empty mech; restored on getting in). */
 let armedWhenOut = true;
 // The bay screen (src/ui/bay.ts): opened at a bay terminal on foot (E), B anywhere as a lab shortcut.
@@ -294,7 +301,15 @@ for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeke
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
 // The convoy's unlock shop: beside the bay screen at the terminal (U shows it on its own). Radar range and crane speed
 // scale the sliders' values (kept as `base`, so a slider moved by hand is still the base).
-const shop = convoyShop({ unlocks: loop.unlocks, tuning: V, bank: loop.exp.bank, onChange: () => { applyUnlocks(); persist(); } });
+const shop = convoyShop({
+  unlocks: loop.unlocks, tuning: V, bank: loop.exp.bank, onChange: () => { applyUnlocks(); persist(); },
+  // Repair kits (Keith 2026-10-31): they never refill by themselves; bought here, found in salvage.
+  supplies: [{
+    label: "Repair kit", tip: "Q in the mech: repairs part of the hull over a moment. On foot, hold Q beside the mech.",
+    have: () => player.kits.count, max: () => V.kitMax, price: () => V.kitPrice,
+    buy: () => { if (player.kits.count >= V.kitMax || loop.exp.bank.scrap < V.kitPrice) return false; loop.exp.bank.scrap -= V.kitPrice; player.kits.restock(1); return true; },
+  }],
+});
 addEventListener("keydown", (e) => { if (e.code === "KeyU" && !e.repeat) shop.toggle(); });
 const UNLOCK_RADAR_KEYS = ["convoyRadar"] as const;
 const UNLOCK_CRANE_KEYS = ["craneSlew", "craneSlewAccel", "craneLuff", "craneLuffAccel", "craneHoist", "craneHoistAccel"] as const;
@@ -490,6 +505,7 @@ const panel = tweakPanel({
   ],
   topics: [
     PILOT_TOPIC,
+    { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
@@ -791,7 +807,9 @@ app.onTick((rawDt) => {
   costs.mark("mech");
 
   // Getting out and in: the mount, the field kneel or the bay's park, the crane kept off an empty mech on the sand.
-  const prompt = term ? `Press <b>E</b>: bay terminal (fit parts, stash)${bay.isOpen ? " · open" : ""}` : "";
+  const kitPrompt = kitCtl.update(dt, keys.has("KeyQ") && !bay.isOpen, auto);
+  const termPrompt = term ? `Press <b>E</b>: bay terminal (fit parts, stash)${bay.isOpen ? " · open" : ""}` : "";
+  const prompt = [termPrompt, kitPrompt].filter(Boolean).join("<br>");
   foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut, knelt: aboardNow ? carry.settled : undefined, prompt, walkHere: false, pushOut: ways.pushOut.bind(ways) });
   if (foot.event === "kneel" && carry.state === "aboard") carry.togglePark(sim);
   if (foot.event === "kneel" && onSandNow) armedWhenOut = carry.armed;
@@ -862,6 +880,8 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
+  vitals.update(dt, kitCtl.view(), player.hits, camera, sim.pelvis);
+  if (vitals.lowNow) kitCtl.warn();
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   app.hud.set("dash", `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);

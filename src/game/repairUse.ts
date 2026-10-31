@@ -28,6 +28,7 @@ export class KitControl {
   private note = "";
   private noteFor = 0;
   private wasQ = false;
+  private lastCount = -1;
   private at = new THREE.Vector3();
 
   constructor(private player: MechUnit, private foot: OnFoot, private sfx: Sfx | null) {}
@@ -54,6 +55,10 @@ export class KitControl {
         if (near && qHeld && why && why !== "working") prompt = `Can't patch: ${WHY[why]}`;
       }
     } else this.hand = 0;
+    // A kit found or bought: say so beside the pips.
+    const n = player.kits.count;
+    if (this.lastCount >= 0 && n > this.lastCount) { this.note = `+${n - this.lastCount} repair kit`; this.noteFor = 1.8; }
+    this.lastCount = n;
     // Sounds from the mech's kit events.
     for (const e of player.kits.events) {
       if (!this.sfx) break;

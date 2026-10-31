@@ -10,7 +10,11 @@ export interface ShopOptions {
   bank: { scrap: number };
   /** Something was bought: apply the effects and save. */
   onChange: () => void;
+  /** Supplies bought one at a time (repair kits, Keith 2026-10-31): shown above the unlocks. */
+  supplies?: Supply[];
 }
+
+export interface Supply { label: string; tip: string; have: () => number; max: () => number; price: () => number; buy: () => boolean }
 
 export function convoyShop(o: ShopOptions) {
   const root = document.createElement("div");
@@ -28,6 +32,21 @@ export function convoyShop(o: ShopOptions) {
     head.style.cssText = "display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px";
     head.innerHTML = `<b style="letter-spacing:0.08em">CONVOY UNLOCKS</b><span style="color:#ffd27a;font-variant-numeric:tabular-nums">${Math.floor(o.bank.scrap)} scrap</span>`;
     root.appendChild(head);
+    for (const sp of o.supplies ?? []) {
+      const have = sp.have(), max = sp.max(), price = sp.price();
+      const row = document.createElement("div");
+      row.style.cssText = "padding:6px 0;border-top:1px solid #2c3836";
+      row.innerHTML = `<div><b>${sp.label}</b> <span style="color:#9a958c">${have}/${max} carried</span></div><div style="font-size:11px;color:#9a958c">${sp.tip}</div>`;
+      const btn = document.createElement("button");
+      btn.style.cssText = "margin-top:4px;padding:3px 10px;border-radius:5px;border:1px solid #5d746d;background:#1f2b28;color:#dfeae4;cursor:pointer";
+      const can = have < max && o.bank.scrap >= price;
+      btn.textContent = have >= max ? "Full" : `Buy for ${price}`;
+      btn.disabled = !can;
+      btn.style.opacity = can ? "1" : "0.5";
+      btn.onclick = () => { if (sp.buy()) { o.onChange(); render(); } };
+      row.appendChild(btn);
+      root.appendChild(row);
+    }
     for (const u of UNLOCKS) {
       const lvl = o.unlocks.level(u.id), max = o.unlocks.maxLevel(u.id), price = o.unlocks.nextPrice(o.tuning, u.id);
       const row = document.createElement("div");

@@ -155,6 +155,8 @@ export class ExpeditionLoop {
   private demoGoal: { x: number; z: number; id: string } | null = null;
   /** Spots stripped (all runs), and the count when the demo picked its POI. */
   private stripped = 0;
+  /** Repair kits found in salvage (all runs). */
+  kitsFound = 0;
   private demoFrom = 0;
   demoHold = false;
   demoAim: Aim | null = null;
@@ -211,7 +213,11 @@ export class ExpeditionLoop {
       (x, z, r, out) => this.bands.abstractGroups(x, z, r, out),
     ]);
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, 0, x, z, this.dropCtx(x, z)); };
-    this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); };
+    this.sites.onLoot = (label, scrap, s) => {
+      this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap);
+      // Now and then a repair kit in the wreck (Keith 2026-10-31), by a hash of the spot (the same spot always does).
+      if (kitRoll(s.id) < this.player.v.kitSalvage && this.player.kits.restock(1)) this.kitsFound++;
+    };
     this.sites.onNoise = (x, z, r) => { this.swarms.noise(x, z, r); this.banditCamps.noise(x, z, r); this.columns.noise(x, z, r); };
     this.sites.salvage.danger = this.depth.danger;
     this.sites.salvage.onHeat = (what) => this.heatAnswer(what);
@@ -656,4 +662,11 @@ export class ExpeditionLoop {
     const e = this.exp, sw = this.swarms;
     return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${Math.round(this.fuel.left)} s · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
+}
+
+/** 0..1 from a spot's id (FNV-1a): whether stripping it finds a repair kit. */
+function kitRoll(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 100000) / 100000;
 }
