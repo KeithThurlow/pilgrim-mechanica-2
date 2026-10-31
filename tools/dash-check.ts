@@ -100,7 +100,8 @@ function onSlope(dirZ: number) {
 }
 const up = onSlope(1), down = onSlope(-1);
 // 1.15 since the dash became footwork and a short sprint (2026-10-27): the old glide that carried far downhill is gone.
-if (!(down > up * 1.15)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
+// Since the burst by time (2026-10-31): only gravity along the slope over its half second, about half a metre each way.
+if (!(down > up + 0.3)) problems.push(`downhill dash ${down.toFixed(1)} m not clearly longer than uphill ${up.toFixed(1)} m`);
 
 // Walls (Keith 2026-10-26: dashing at a steep wall flung the mech so high it died landing): running at a 40-60° face
 // 2 or 8 m high and dashing at its foot (the shove's peak hits the face), the hips never rise more than WALL_RISE over
@@ -260,6 +261,40 @@ const TURN_BY = 0.5;
   }
   if (low < v.hipHeight - HIP_DROP) problems.push(`dashing back mid-dash: hips down to ${low.toFixed(2)} m`);
   console.log(`dash back mid-dash (up to ${fast.toFixed(1)} m/s): the new way within ${worstTurn.toFixed(2)} s, hips at least ${low.toFixed(2)} m`);
+}
+
+// A tap is only a dash (Keith 2026-10-31: "it kind of starts me running and I get almost stuck in a run animation...
+// when I have a full dodge bar"). Cause: the old short sprint re-boosted to its peak whenever a drift scrubbed speed off
+// it, so with the stick off the dash's line it never ended. Now: tapped (Space down 0.08 s) with full bars, from standing,
+// walking and the Shift run, the stick any way against the dash or let go, within TAP_BACK seconds it's out of the run
+// gait, not dashing, and no faster than the stick's walk (or Shift run).
+const TAP_BACK = 1.2;
+{
+  let worst = 0, worstAt = "";
+  for (const pace of ["stand", "walk", "run"] as const) for (const [ddx, ddz] of [[0, 1], [1, 0], [0.7, -0.7], [-1, 0]] as const)
+  for (const [sx, sz, sn] of [[0, 1, "ahead"], [1, 0, "left"], [-1, 0, "right"], [0, -1, "back"], [0, 0, "none"], [0.7, 0.7, "diag"]] as const) {
+    const s9 = new WalkerSim(v, flatG);
+    s9.reset(0, 0, 0);
+    const d9 = new Dash({ ...DASH_DEFAULTS }), b9 = new Bound({ ...BOUND_DEFAULTS });
+    const sprint = pace === "run";
+    for (let i = 0; i < 240; i++) s9.update(dt, { x: 0, z: pace === "stand" ? 0 : 1, sprint });
+    if (d9.start(ddx, ddz)) s9.dash(d9.dirX, d9.dirZ);
+    let t = 0, back = -1;
+    for (; t < 3; t += dt) {
+      b9.update(dt, t < 0.08, s9, d9); d9.update(dt, 0);
+      s9.push.set(0, 0, 0);
+      const was = s9.dashing;
+      s9.update(dt, { x: sx, z: sz, sprint });
+      if (was && !s9.dashing) d9.cut();
+      const top = Math.hypot(sx, sz) * (sprint ? v.sprintSpeed : v.walkSpeed) + 0.5;
+      const ok = !s9.dashing && !s9.running && !s9.bounding && Math.hypot(s9.vel.x, s9.vel.z) <= top;
+      if (ok && back < 0) back = t; else if (!ok) back = -1;
+    }
+    const what = `${pace}, dash ${ddx},${ddz}, stick ${sn}`;
+    if (back < 0 || back > TAP_BACK) problems.push(`tapped dash (${what}): ${back < 0 ? "still running or dashing at 3 s" : `back to the walk after ${back.toFixed(2)} s`}`);
+    if ((back < 0 ? 99 : back) > worst) { worst = back < 0 ? 99 : back; worstAt = what; }
+  }
+  console.log(`tapped dash with full bars: out of the run, walking at the stick's pace within ${worst.toFixed(2)} s (${worstAt})`);
 }
 
 // The sprint on energy (Keith 2026-10-27): it only comes out of a held dash and drains the bars (the dash took one, the

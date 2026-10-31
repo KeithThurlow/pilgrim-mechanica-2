@@ -201,7 +201,7 @@ export const WALKER_DEFAULTS = {
   dashHold: 0.42,
   dashStop: 0.15,
   dashBrake: 80,
-  dashPedalSteps: 2,
+  dashPedalSteps: 0,
   dashPedalFrom: 2,
   dashPedalStep: 0.16,
   dashPedalSpeed: 5,
