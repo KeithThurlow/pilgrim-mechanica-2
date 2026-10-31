@@ -24,6 +24,11 @@ export const WALKER_DEFAULTS = {
   crossHurry: 4,
   turnHurry: 2,
   overBrake: 6,
+  // Grip by speed (Keith 2026-10-31: "as the velocity of the mech reduces, the traction returns"): full (walkStop) up to
+  // the Shift run + gripFullOver, the sprint's (boundGrip × g) at the legs' top, gripCurve between.
+  gripFullOver: 0,
+  gripCurve: 1,
+  gripLetGoOver: 0,
   // Gait
   strideBase: 2.6,
   stridePerSpeed: 0.45,
@@ -251,6 +256,9 @@ export const WALKER_PARAMS: Param[] = [
   { key: "crossHurry", label: "Walk: uncross hurry", min: 0, max: 4, step: 0.1, group: "Move", tip: "Extra step rate while a planted foot is across the centre line (after a hard turn), so the legs uncross quickly" },
   { key: "turnHurry", label: "Walk: turn hurry", min: 0, max: 6, step: 0.1, group: "Move", tip: "Extra step rate while a planted leg is stretched and the body moves off the way the legs walk (hard turns, sidesteps), so the feet keep up" },
   { key: "overBrake", label: "Walk: roll off overspeed (m/s²)", min: 1, max: 40, step: 0.5, group: "Move", tip: "With the stick held on, speed past the walk's (handed on by the sprint or a dash) rolls off at this (the old walk's slow-down), so the run-on keeps its feel; let go and the walk brakes" },
+  { key: "gripFullOver", label: "Grip: full up to the Shift run + (m/s)", min: -4, max: 6, step: 0.1, group: "Move", tip: "Keith 2026-10-31: traction returns as the mech slows. Sideways grip (how fast motion off the stick is taken away) is the walk's brake up to the Shift run's speed plus this, falls to the sprint's grip (Sprint: grip × g) at the legs' top speed, and comes back smoothly as the speed falls: after a sprint, a dash or a landing there's no low-grip window by time" },
+  { key: "gripCurve", label: "Grip: curve over speed", min: 0.3, max: 4, step: 0.05, group: "Move", tip: "How grip falls from full to the sprint's between those speeds: 1 straight; above 1 it drops sooner (slippier for longer as the mech slows), below 1 it holds on longer" },
+  { key: "gripLetGoOver", label: "Grip: let go, sprint's grip only at the burst + (m/s)", min: -10, max: 20, step: 0.5, group: "Move", tip: "Sprinting, grip is the sprint's at the legs' top and past it (the drift as it was). Let go of Space and the curve stretches out to the dash burst's speed plus this, so the grip starts coming back at once however fast the mech is still going, instead of sitting at the sprint's until it slows under the legs' top" },
   { key: "turnSlow", label: "Walk: slow while legs turn", min: 0, max: 1, step: 0.01, group: "Move", tip: "Share of speed lost while the legs face far off the travel (0: the turn never holds the walk back)" },
 
   { key: "strideBase", label: "Stride at rest (m)", min: 0.5, max: 6, step: 0.05, group: "Gait", tip: "Length of a full cycle (two steps) near zero speed" },
@@ -331,7 +339,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "landStagger", label: "Stagger (s)", min: 0, max: 3, step: 0.05, group: "Landing" },
   { key: "landHurt", label: "Hurts from (m/s)", min: 3, max: 30, step: 0.1, group: "Landing", tip: "Hitting harder than this damages the mech" },
   { key: "landDamage", label: "Damage per m/s over", min: 0, max: 300, step: 1, group: "Landing" },
-  { key: "landFriction", label: "Landing skid friction (m/s²)", min: 0.5, max: 40, step: 0.5, group: "Landing", tip: "Speed the legs can't run on with (sideways, or past the run) skids the planted feet along and dies off at this rate" },
+  { key: "landFriction", label: "Skid: least grip (m/s²)", min: 0.5, max: 40, step: 0.5, group: "Landing", tip: "Speed the legs can't run on with (past the Shift run, after a landing, a sprint or a dash) skids the planted feet along; it's taken off at the grip by speed (Move: Grip), never less than this. Was a fixed rate, a flat low-grip window (Keith 2026-10-31)" },
   { key: "landShake", label: "Camera shake at a 3 m drop (m)", min: 0, max: 2, step: 0.05, group: "Landing", tip: "Scaled by how hard it lands (labs that shake the camera)" },
   { key: "toeClear", label: "Toes clear the ground in swing (m)", min: 0, max: 0.5, step: 0.01, group: "Feet", tip: "Mid-swing the ball of the foot and the toe tips stay this far over the ground (less toward lift-off and landing): the foot eases its toes-down tilt and the toes bend up instead of dragging" },
   { key: "toeCurl", label: "Toe curl in swing (°)", min: -40, max: 80, step: 1, group: "Feet", tip: "How far the toes curl under as the leg is pulled through (negative bends them up)" },

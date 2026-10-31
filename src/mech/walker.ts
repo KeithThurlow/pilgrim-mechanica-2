@@ -302,8 +302,13 @@ export class WalkerSim {
   airLead = 1;
   /** Seconds of stagger left after a hard landing: the stick does nothing. */
   stagger = 0;
-  /** Sliding the legs can't step out of (after a landing): skids the planted feet, dies off at landFriction. */
+  /**
+   * Motion the legs can't step with (past the Shift run's speed after a sprint, a dash or a landing): skids the planted
+   * feet; taken off at the grip for the speed (gripAt), steered with the walk.
+   */
   skid = new Vector3();
+  /** The walk steered the skid this step (it isn't also taken off in update). */
+  private skidSteered = false;
   /** The last touchdown (null before the first). */
   lastLanding: Landing | null = null;
   /** Called on each touchdown. */
@@ -498,15 +503,16 @@ export class WalkerSim {
     // A dash's shove (from outside, src/mech/dash.ts) starting: the steps.
     if (!this.dashMove && !this.running && this.push.lengthSq() > 4) this.dashBegin(this.push.x, this.push.z);
 
+    this.skidSteered = false;
     if (this.running) this.runSteer(dt, cmd);
     else if (this.dashMove) this.dashSteer(dt, cmd);
     else {
       this.walkSteer(dt, cmd);
     }
-    // Landing skid: dies off at landFriction.
+    // A skid the walk didn't steer this step (it takes skids off at the grip for the speed): dies off at that grip.
     const sk = this.skid.length();
     if (sk > 1e-4) {
-      this.skid.multiplyScalar(Math.max(0, sk - v.landFriction * dt) / sk);
+      if (!this.skidSteered) this.skid.multiplyScalar(Math.max(0, sk - this.gripAt(sk + this.speed) * dt) / sk);
       // A skid into a wall dies against it.
       this.faceScrub(this.skid.x, this.skid.z, Math.min(1, v.wallScrub * dt), false);
       this.skid.x = this.t.a.x; this.skid.z = this.t.a.z;
@@ -623,6 +629,23 @@ export class WalkerSim {
    * more than backArc from it, they keep facing the torso and step backwards. The sprint keeps its vehicle-like turning
    * (runSteer, boundStep).
    */
+  /**
+   * Sideways grip at this ground speed (m/s²; Keith 2026-10-31: "as the velocity of the mech reduces, the traction
+   * returns"): the walk's brake (walkStop × the legs' weight) up to the Shift run + gripFullOver, the sprint's (boundGrip ×
+   * g) at the legs' top and past it while sprinting (the drift as it was), gripCurve between; let go (the walk steering a
+   * skid), the sprint's grip only at the burst's speed + gripLetGoOver, so grip comes back from the moment Space is let
+   * go however fast it's going; never under landFriction. A function of speed only: no window by time after a dash, a
+   * sprint or a landing.
+   */
+  gripAt(speed: number, sprinting = this.running) {
+    const v = this.v;
+    const full = v.walkStop * Math.pow(clamp(v.accel / 4, 0.2, 3), v.walkWeight), run = v.boundGrip * G;
+    const s0 = Math.max(v.walkSpeed, v.sprintSpeed) + v.gripFullOver;
+    const s1 = Math.max(s0 + 0.5, sprinting ? v.boundTop : Math.max(v.boundTop, v.dashSpeedOut) + v.gripLetGoOver);
+    const k = clamp((speed - s0) / (s1 - s0), 0, 1);
+    return Math.max(v.landFriction, run + (Math.max(full, run) - run) * Math.pow(1 - k, v.gripCurve));
+  }
+
   private walkSteer(dt: number, cmd: MoveCommand) {
     const v = this.v;
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
@@ -636,7 +659,11 @@ export class WalkerSim {
     }
     // The legs' weight: their speed-up stat against the Rampart's 4 m/s², to the power walkWeight (0: all legs alike).
     const wk = Math.pow(clamp(v.accel / 4, 0.2, 3), v.walkWeight);
-    const up = v.walkAccel * wk * dt, brake = v.walkStop * wk * dt;
+    // The whole ground motion (the walk's and any skid the legs can't step with: after a sprint, a dash, a landing) is
+    // steered as one, braked off the stick at the grip for its speed (2026-10-31: the skid used to die at a fixed 3 m/s²,
+    // a flat low-grip window after every sprint), then split again below.
+    const vx = this.vel.x + this.skid.x, vz = this.vel.z + this.skid.z;
+    const up = v.walkAccel * wk * dt, brake = this.gripAt(Math.hypot(vx, vz)) * dt;
     // Speed past the walk's (handed on by the sprint or a dash) rolls off gently with the stick held on, as it always has;
     // let go, the walk stops as quickly as ever.
     const over = cmd.sprint ? v.sprintSpeed : v.walkSpeed, overBrake = v.overBrake * dt;
@@ -661,7 +688,6 @@ export class WalkerSim {
       top *= 1 - v.turnSlow * Math.min(1, Math.abs(err) / Math.PI);
     } else this.turnSpeed = 0;
     // Along the stick toward top (braking first if going the other way), the rest of the velocity braked away.
-    const vx = this.vel.x, vz = this.vel.z;
     if (top > 0) {
       let along = vx * ux + vz * uz;
       const px = vx - along * ux, pz = vz - along * uz, pl = Math.hypot(px, pz);
@@ -671,7 +697,15 @@ export class WalkerSim {
       this.vel.set(ux * along + px * pk, 0, uz * along + pz * pk);
     } else {
       const s = Math.hypot(vx, vz);
-      this.vel.multiplyScalar(s > 1e-6 ? Math.max(0, s - brake) / s : 0);
+      this.vel.set(vx, 0, vz).multiplyScalar(s > 1e-6 ? Math.max(0, s - brake) / s : 0);
+    }
+    // What the walk's legs can step with (up to the Shift run's speed) is the walk; the rest skids the planted feet
+    // (moved in update) until the grip has taken it off.
+    {
+      const s = Math.hypot(this.vel.x, this.vel.z), cap = Math.max(v.walkSpeed, v.sprintSpeed);
+      if (s > cap) { this.skid.copy(this.vel).multiplyScalar(1 - cap / s); this.vel.multiplyScalar(cap / s); }
+      else this.skid.set(0, 0, 0);
+      this.skidSteered = true;
     }
     // Walking into a wall: the legs can't take it up a face steeper than wallStop (turning away frees it).
     if (this.vel.lengthSq() > 0.0025) {
@@ -816,7 +850,8 @@ export class WalkerSim {
       if (this.boundSpeed > top) this.boundSpeed = Math.max(top, this.boundSpeed - g);
       if (this.boostTo > 0) this.boostTo = this.grade > 0.4 ? 0 : Math.max(0, this.boostTo - g); // no boost up a steep face
     }
-    const grip = (v.boundGrip * G) / Math.max(1, this.boundSpeed);
+    // The sprint's grip at the legs' top and past it; more as the run slows (gripAt), so traction returns with no window.
+    const grip = this.gripAt(this.boundSpeed) / Math.max(1, this.boundSpeed);
     const rc = Math.min(v.turnRate * D2R, grip), rh = Math.min(v.turnRate * D2R, grip * (1 + v.boundYaw));
     const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
     // A tapped dash's burst holds its line (Keith 2026-10-31: drift is the sprint's; turned into a drift the old burst
@@ -1113,7 +1148,7 @@ export class WalkerSim {
    * so harder while the feet are down), the body may turn boundYaw faster into a drift; never past the walk's turn rate.
    */
   private boundTurnRates() {
-    const v = this.v, grip = (v.boundGrip * G) / Math.max(1, this.boundSpeed);
+    const v = this.v, grip = this.gripAt(this.boundSpeed) / Math.max(1, this.boundSpeed);
     const stance = clamp(v.boundStanceLen * (1 + v.boundStagger) / Math.max(4, this.boundSpeed), 0.05, 0.5);
     const flight = (2 * v.boundHop) / G;
     const course = Math.min(v.turnRate * D2R, grip * (stance + flight) / stance);
