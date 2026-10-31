@@ -31,3 +31,36 @@ export interface LampSpot {
 export type LampEmit = (kind: LampKind, x: number, y: number, z: number, ax: number, ay: number, az: number, ground: boolean, reach: number, k: number) => void;
 /** Called each night frame with the emitter, the time and the night-light values (sweeps and the like). */
 export type LampSource = (emit: LampEmit, time: number, values: { readonly [k: string]: number }) => void;
+
+/**
+ * Whose fire a short light is (Keith 2026-10-31: enemy attacks light up too, colour-coded so hostile fire reads): the
+ * player's side (warm orange), bandits and war bands (hot red-orange), robots (red). Hues and strengths are sliders.
+ */
+export const FAM_PLAYER = 0, FAM_BANDIT = 1, FAM_ROBOT = 2;
+export type LightFamily = number;
+/** A battlefield team to its light family (src/game/factions.ts TEAM: raiders 2, robots 3; the rest the player's). */
+export const famOfTeam = (team: number): LightFamily => (team === 2 ? FAM_BANDIT : team === 3 ? FAM_ROBOT : FAM_PLAYER);
+
+/**
+ * The one request path for short and sustained lights (src/world/nightLights.ts): asked for each frame (or once for
+ * flashes), merged where they bunch up (src/world/lightCluster.ts), the biggest clusters get the real lights, the rest
+ * are faked on the ground. Cosmetic.
+ */
+export interface ShortLights {
+  /** A blast of this radius. */
+  flash(x: number, y: number, z: number, radius: number, fam?: LightFamily): void;
+  /** A rocket or shell leaving its tube (k its size, 1 a launcher's rocket). */
+  launch(x: number, y: number, z: number, k?: number, fam?: LightFamily): void;
+  /** A gun's muzzle flash (small; k its size). */
+  gun(x: number, y: number, z: number, k?: number, fam?: LightFamily): void;
+  /** A rocket, missile or shell in flight this frame along (dx, dy, dz) (k its size). */
+  rocket(x: number, y: number, z: number, dx: number, dy: number, dz: number, k?: number, fam?: LightFamily): void;
+  /** A light held this frame: power, reach (m), colour (hex), priority for the real lights (1 like a blast), glow size (m, faked). */
+  hold(x: number, y: number, z: number, power: number, range: number, color: number, prio?: number, glow?: number): void;
+  /** A round telegraph on the ground at (x, y, z) (y the ground), radius r, u 0..1 how near it is to landing. */
+  telegraph(x: number, y: number, z: number, r: number, u: number, fam?: LightFamily): void;
+  /** A strip telegraph on the ground from (x0, z0) to (x1, z1), this wide, u 0..1 how near it is to landing. */
+  telegraphLine(x0: number, z0: number, x1: number, z1: number, width: number, u: number, fam?: LightFamily): void;
+}
+/** Bodies that ask for short lights each frame set `object.userData.shortLights = (lights, time) => ...`. */
+export type ShortLightSource = (lights: ShortLights, time: number) => void;

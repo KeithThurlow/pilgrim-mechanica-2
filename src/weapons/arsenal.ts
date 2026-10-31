@@ -33,6 +33,7 @@ import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
 import { newMag, magReady, magResize, magStep, magTake, shotRounds, magRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
+import { famOfTeam } from "../world/lamps";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | null;
 
@@ -122,10 +123,13 @@ export class Arsenal implements MechWeapons {
   private prevTrig: [boolean, boolean] = [false, false];
   /** Where a target is now, by its key (a missile's), or null once it's gone: the register's lookup by id. */
   findTarget!: (key: unknown) => { x: number; y?: number; z: number } | null;
+  /** Whose fire this is, for its lights' colour (src/world/lamps.ts; a rival's rockets light red-orange). */
+  readonly fam: number;
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues, private look: ToonLook,
     /** Targets the snap, the swarm and the leads can see (the lab's candidates). */
     public candidates: () => TargetCandidate[] = () => []) {
+    this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
     const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0 });
     this.sides = [side(), side()];
@@ -418,7 +422,7 @@ export class Arsenal implements MechWeapons {
       this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp);
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
-      bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5);
+      bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5, this.fam);
       if (sh.model) sh.model.recoil.position.z = -0.05;
     }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
@@ -489,7 +493,7 @@ export class Arsenal implements MechWeapons {
     const bf = this.bf;
     this.rockets.fire(this.unit.team, from, this.rpgPoint(from, cur), st).ap = st.ap;
     if (quiet) return;
-    bf.nightLights?.launch(from.x, from.y, from.z, 1);
+    bf.nightLights?.launch(from.x, from.y, from.z, 1, this.fam);
     this.onFire?.("rpg");
     bf.sfx.playSound("rocket", from, 1, 0.8);
     for (let k = 0; k < 5; k++) bf.dust.smoke(from.x, from.y, from.z, (Math.random() - 0.5) * 2, 0.5 + Math.random(), (Math.random() - 0.5) * 2, 0.4, 0.9, 0.7, 0.35);

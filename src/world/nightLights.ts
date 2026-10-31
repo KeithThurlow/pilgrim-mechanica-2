@@ -24,7 +24,8 @@ import { LampDraw } from "../fx/lampDraw";
 import { clusterLights, type LightCluster, type LightReq } from "./lightCluster";
 import {
   LAMP_HEAD, LAMP_FLOOD, LAMP_ROBOT, LAMP_RUNNING, LAMP_CAB, LAMP_TAIL, LAMP_MECH, LAMP_KINDS,
-  type LampKind, type LampSpot, type LampSource, type LampEmit,
+  FAM_PLAYER, FAM_BANDIT, FAM_ROBOT,
+  type LampKind, type LampSpot, type LampSource, type LampEmit, type LightFamily, type ShortLights, type ShortLightSource,
 } from "./lamps";
 
 export const NIGHT_LIGHT_DEFAULTS = {
@@ -60,6 +61,18 @@ export const NIGHT_LIGHT_DEFAULTS = {
   rocketPool: 0.45,
   muzzleLight: 500,
   muzzleTime: 0.1,
+  // Enemy fire (Keith 2026-10-31: enemy attacks light up too, colour-coded)
+  enemyHue: 10,
+  enemyLight: 1.2,
+  robotFireHue: 354,
+  robotFireLight: 1.3,
+  gunFlashLight: 180,
+  gunFlashTime: 0.07,
+  // Telegraphs on the ground (rings, strips, the beam's line): they glow and light the sand, brighter as they land
+  teleLight: 260,
+  telePool: 0.55,
+  teleRamp: 2,
+  telePrio: 1.5,
   // Vehicle lights
   vehReach: 16,
   vehAngle: 16,
@@ -90,9 +103,9 @@ export const NIGHT_LIGHT_DEFAULTS = {
 };
 export type NightLightValues = typeof NIGHT_LIGHT_DEFAULTS;
 
-const G = "Night lights", GV = "Vehicle lights", GR = "Robot lights", GC = "Convoy lights";
+const G = "Night lights", GV = "Vehicle lights", GR = "Robot lights", GC = "Convoy lights", GE = "Enemy fire lights", GT = "Telegraph lights";
 /** The slider groups the night lights add to a Light topic. */
-export const NIGHT_LIGHT_GROUPS = [G, GV, GR, GC];
+export const NIGHT_LIGHT_GROUPS = [G, GE, GT, GV, GR, GC];
 export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "nightLightCap", label: "Point lights", min: 0, max: 16, step: 1, group: G, tip: "Real point lights for deck lamps, cab windows and blasts (each costs every lit pixel a little; changing it recompiles once)" },
   { key: "nightSpotCap", label: "Spot lights", min: 0, max: 12, step: 1, group: G, tip: "Real spot lights for the nearest robot eyes, floods and headlights (the rest are faked)" },
@@ -125,6 +138,18 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "rocketPool", label: "Rocket light on the ground", min: 0, max: 2, step: 0.01, group: G, tip: "The faked glow a rocket throws on the sand under it" },
   { key: "muzzleLight", label: "Launch flash", min: 0, max: 3000, step: 10, group: G, tip: "A rocket leaving its tube" },
   { key: "muzzleTime", label: "Launch flash time (s)", min: 0.02, max: 0.5, step: 0.01, group: G },
+
+  { key: "enemyHue", label: "Bandit fire hue (°)", min: 0, max: 60, step: 1, group: GE, tip: "Bandit and war band rockets, shells, muzzle flashes and blasts (0 red, 30 orange; the player's are 'Rocket light hue')" },
+  { key: "enemyLight", label: "Bandit fire strength (×)", min: 0, max: 4, step: 0.05, group: GE },
+  { key: "robotFireHue", label: "Robot fire hue (°)", min: 300, max: 380, step: 1, group: GE, tip: "Robot slugs, charges and blasts (360 red; below it toward magenta, above toward orange)" },
+  { key: "robotFireLight", label: "Robot fire strength (×)", min: 0, max: 4, step: 0.05, group: GE },
+  { key: "gunFlashLight", label: "Gun muzzle flash", min: 0, max: 1500, step: 10, group: GE, tip: "Raider guns, bandit rifles, robot slugs: a small flash of light per drawn round" },
+  { key: "gunFlashTime", label: "Gun flash time (s)", min: 0.02, max: 0.3, step: 0.01, group: GE },
+
+  { key: "teleLight", label: "Telegraph light", min: 0, max: 2000, step: 10, group: GT, tip: "A ring or strip about to land asks for a real light this strong (merged with its neighbours)" },
+  { key: "telePool", label: "Telegraph glow on the ground", min: 0, max: 3, step: 0.05, group: GT, tip: "The faked light a telegraph throws on the sand" },
+  { key: "teleRamp", label: "Brightens as it lands (curve)", min: 0.2, max: 5, step: 0.1, group: GT, tip: "1: brightens evenly over the flight; higher: stays dim, then flares at the end" },
+  { key: "telePrio", label: "Telegraph light priority", min: 0.2, max: 10, step: 0.1, group: GT, tip: "How much more a telegraph wants a real light than a blast of the same power" },
 
   { key: "vehReach", label: "Headlights land at (m)", min: 4, max: 40, step: 0.5, group: GV },
   { key: "vehAngle", label: "Headlight cone (°)", min: 5, max: 60, step: 1, group: GV },
@@ -167,10 +192,15 @@ PRIO[LAMP_HEAD] = 1.2; PRIO[LAMP_FLOOD] = 2; PRIO[LAMP_ROBOT] = 3; PRIO[LAMP_RUN
 interface KindLook { reach: number; tanHalf: number; angle: number; glow: number; pool: number; beam: number; real: number; spot: boolean; r: number; g: number; b: number }
 
 interface Lamp { list: () => Iterable<THREE.Object3D>; color: number; k: number }
-/** A short light: a blast (r its radius) or a launch flash (muzzle: r its size share). */
-interface Flash { x: number; y: number; z: number; r: number; t: number; T: number; muzzle: boolean }
-/** Rockets asked for this frame: x, y, z, dx, dy, dz (flight direction), k (size) each. */
-const ROCKET_MAX = 256, RS = 7;
+/** A short light: a blast (kind 0, r its radius), a launch flash (1) or a gun's muzzle flash (2) (r its size share). */
+interface Flash { x: number; y: number; z: number; r: number; t: number; T: number; kind: number; fam: LightFamily }
+const F_BLAST = 0, F_LAUNCH = 1, F_GUN = 2, FLASH_MAX = 160;
+/** Rockets asked for this frame: x, y, z, dx, dy, dz (flight direction), k (size), family each. */
+const ROCKET_MAX = 256, RS = 8;
+/** Held lights this frame: x, y, z, power, range, r, g, b, prio, glow. */
+const HOLD_MAX = 64, HS = 10;
+/** Telegraphs this frame: x, y, z (on the ground), half width, half length, along (hx, hz), u (0..1 to landing), family. */
+const TELE_MAX = 128, TS = 9;
 const BLAST_COL = new THREE.Color(0xffa860), MUZZLE_COL = new THREE.Color(0xffc27a);
 /** A lamp wanting a real light this frame. */
 interface Want { score: number; kind: LampKind; x: number; y: number; z: number; tx: number; ty: number; tz: number; dist: number; k: number; color: number; range: number }
@@ -179,7 +209,7 @@ const byScore = (a: Want, b: Want) => b.score - a.score;
 
 export interface LightGround { height(x: number, z: number): number; normal?(x: number, z: number, out?: number[]): number[] }
 
-export class NightLights {
+export class NightLights implements ShortLights {
   readonly group = new THREE.Group();
   /** The faked lamps (glows, pools, beams); its glows are what hold-V picks. */
   readonly draw = new LampDraw();
@@ -216,6 +246,19 @@ export class NightLights {
   private clusters: LightCluster[] = [];
   private clusterOrder: LightCluster[] = [];
   private rocketCol = new THREE.Color();
+  private holds = new Float32Array(HOLD_MAX * HS);
+  private nHold = 0;
+  private teles = new Float32Array(TELE_MAX * TS);
+  private nTele = 0;
+  private shortSources: { o: THREE.Object3D; fn: ShortLightSource }[] = [];
+  /** Colours by family (refreshed each frame from the hue sliders): rockets and blasts, launches and guns, telegraphs. */
+  private famFire = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
+  private famMuzzle = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
+  private famTele = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
+  private famK = [1, 1, 1];
+  private hc = new THREE.Color();
+  /** The request path as the bodies see it (src/world/lamps.ts ShortLights). */
+  readonly short: ShortLights;
   /** How many real lights were lit last frame (for the HUD). */
   lit = 0;
   /** Last frame's short lights: requests (rockets, blasts, launches), the clusters they merged into, and how many got a real light. */
@@ -228,27 +271,55 @@ export class NightLights {
     this.group.add(this.draw.group);
     for (let i = 0; i < LAMP_KINDS; i++) this.kinds.push({ reach: 0, tanHalf: 0, angle: 0, glow: 0, pool: 0, beam: 0, real: 0, spot: true, r: 0, g: 0, b: 0 });
     this.emitFn = (kind, x, y, z, ax, ay, az, ground, reach, k) => this.emitWorld(kind, x, y, z, ax, ay, az, ground, reach, k);
+    this.short = this;
   }
 
   /** Lamps riding these objects (their world positions each frame, the list asked again each frame), e.g. the convoy's deck lamps. */
   addLamps(list: () => Iterable<THREE.Object3D>, color = 0xffd9a0, k = 1) { this.lamps.push({ list, color, k }); }
   /** The mech whose sensor head lamps become a headlamp (re-found each second: the sensor can be swapped). */
   track(root: THREE.Object3D | null) { this.tracked = root; this.rescan = 0; }
-  /** A blast at (x, y, z) of this radius lights the ground for a moment. */
-  flash(x: number, y: number, z: number, radius: number) {
-    if (this.flashes.length > 96) this.flashes.shift();
-    this.flashes.push({ x, y, z, r: radius, t: 0, T: this.v.blastLightTime, muzzle: false });
+  private addFlash(x: number, y: number, z: number, r: number, T: number, kind: number, fam: LightFamily) {
+    if (this.flashes.length >= FLASH_MAX) {
+      // Full: drop the faintest gun flash, else the oldest.
+      const j = this.flashes.findIndex((f) => f.kind === F_GUN);
+      this.flashes.splice(j >= 0 ? j : 0, 1);
+    }
+    this.flashes.push({ x, y, z, r, t: 0, T, kind, fam });
   }
-  /** A rocket leaving its tube (k: its size, 1 a launcher's rocket). */
-  launch(x: number, y: number, z: number, k = 1) {
-    if (this.flashes.length > 96) this.flashes.shift();
-    this.flashes.push({ x, y, z, r: k, t: 0, T: this.v.muzzleTime, muzzle: true });
-  }
-  /** A rocket or missile in flight this frame, flying along (dx, dy, dz) (k: its size, 1 a launcher's rocket). Cleared each update. */
-  rocket(x: number, y: number, z: number, dx: number, dy: number, dz: number, k = 1) {
+  /** A blast at (x, y, z) of this radius lights the ground for a moment (fam: whose fire, for its colour). */
+  flash(x: number, y: number, z: number, radius: number, fam: LightFamily = FAM_PLAYER) { this.addFlash(x, y, z, radius, this.v.blastLightTime, F_BLAST, fam); }
+  /** A rocket or shell leaving its tube (k: its size, 1 a launcher's rocket). */
+  launch(x: number, y: number, z: number, k = 1, fam: LightFamily = FAM_PLAYER) { this.addFlash(x, y, z, k, this.v.muzzleTime, F_LAUNCH, fam); }
+  /** A gun's muzzle flash (raider guns, bandit rifles, robot slugs; k its size, 1 a heavy gun). */
+  gun(x: number, y: number, z: number, k = 1, fam: LightFamily = FAM_PLAYER) { this.addFlash(x, y, z, k, this.v.gunFlashTime, F_GUN, fam); }
+  /** A rocket, missile or shell in flight this frame, flying along (dx, dy, dz) (k: its size, 1 a launcher's rocket). Cleared each update. */
+  rocket(x: number, y: number, z: number, dx: number, dy: number, dz: number, k = 1, fam: LightFamily = FAM_PLAYER) {
     if (this.nRocket >= ROCKET_MAX) return;
     const a = this.rockets, i = this.nRocket++ * RS;
-    a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = dx; a[i + 4] = dy; a[i + 5] = dz; a[i + 6] = k;
+    a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = dx; a[i + 4] = dy; a[i + 5] = dz; a[i + 6] = k; a[i + 7] = fam;
+  }
+  /** A light held this frame (a charging emitter): power, reach, colour, priority over blasts (1 alike), faked glow size. */
+  hold(x: number, y: number, z: number, power: number, range: number, color: number, prio = 1, glow = 0) {
+    if (this.nHold >= HOLD_MAX || power <= 0) return;
+    const c = this.hc.setHex(color), a = this.holds, i = this.nHold++ * HS;
+    a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = power; a[i + 4] = range; a[i + 5] = c.r; a[i + 6] = c.g; a[i + 7] = c.b; a[i + 8] = prio; a[i + 9] = glow;
+  }
+  private tele(x: number, y: number, z: number, w: number, l: number, hx: number, hz: number, u: number, fam: LightFamily) {
+    if (this.nTele >= TELE_MAX) return;
+    const a = this.teles, i = this.nTele++ * TS;
+    a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = w; a[i + 4] = l; a[i + 5] = hx; a[i + 6] = hz; a[i + 7] = Math.max(0, Math.min(1, u)); a[i + 8] = fam;
+  }
+  /** A ring telegraph on the ground (y the ground's height), radius r, u 0..1 how near it is to landing. */
+  telegraph(x: number, y: number, z: number, r: number, u: number, fam: LightFamily = FAM_PLAYER) { this.tele(x, y, z, r, r, 1, 0, u, fam); }
+  /** A strip telegraph from (x0, z0) to (x1, z1), this wide, u 0..1 how near it is to landing (lit in pieces of 12 m at most). */
+  telegraphLine(x0: number, z0: number, x1: number, z1: number, width: number, u: number, fam: LightFamily = FAM_PLAYER) {
+    const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz);
+    if (L < 0.1) return;
+    const n = Math.min(8, Math.ceil(L / 12)), seg = L / n;
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, x = x0 + dx * t, z = z0 + dz * t;
+      this.tele(x, this.groundAt(x, z), z, width / 2, seg / 2, dx / L, dz / L, u, fam);
+    }
   }
   /** The real lights in use: points, spots and the headlamp (for checks). */
   get pools() { return { points: this.pool.length, spots: this.spots.length, headlamp: this.spot }; }
@@ -290,12 +361,13 @@ export class NightLights {
 
   /** Find every body carrying lamps (userData.lamps) and every lamp source (userData.lampSource) in the scene. */
   private scan() {
-    this.bodies = []; this.sources = [];
+    this.bodies = []; this.sources = []; this.shortSources = [];
     let root: THREE.Object3D = this.group;
     while (root.parent) root = root.parent;
     root.traverse((o) => {
       if (o.userData.lamps) this.bodies.push(o);
       if (o.userData.lampSource) this.sources.push({ o, fn: o.userData.lampSource as LampSource });
+      if (o.userData.shortLights) this.shortSources.push({ o, fn: o.userData.shortLights as ShortLightSource });
     });
   }
 
@@ -401,21 +473,55 @@ export class NightLights {
   private shortLights(k: number, n: number): number {
     const v = this.v;
     let nr = 0;
-    const req = (x: number, y: number, z: number, power: number, range: number, c: THREE.Color) => {
-      if (nr >= this.reqs.length) this.reqs.push({ x: 0, y: 0, z: 0, power: 0, range: 0, r: 0, g: 0, b: 0 });
+    const req = (x: number, y: number, z: number, power: number, range: number, c: { r: number; g: number; b: number }, prio = 1) => {
+      if (nr >= this.reqs.length) this.reqs.push({ x: 0, y: 0, z: 0, power: 0, range: 0, r: 0, g: 0, b: 0, prio: 1 });
       const q = this.reqs[nr++];
-      q.x = x; q.y = y; q.z = z; q.power = power; q.range = range; q.r = c.r; q.g = c.g; q.b = c.b;
+      q.x = x; q.y = y; q.z = z; q.power = power; q.range = range; q.r = c.r; q.g = c.g; q.b = c.b; q.prio = prio;
+    };
+    // Family colours and strengths from the sliders.
+    const hue = (h: number) => (((h % 360) + 360) % 360) / 360;
+    this.famFire[FAM_PLAYER].copy(BLAST_COL); this.famMuzzle[FAM_PLAYER].copy(MUZZLE_COL); this.famTele[FAM_PLAYER].setHex(0xff5a2a);
+    this.famFire[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.55); this.famMuzzle[FAM_BANDIT].setHSL(hue(v.enemyHue + 8), 1, 0.66); this.famTele[FAM_BANDIT].setHSL(hue(v.enemyHue), 1, 0.5);
+    this.famFire[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.5); this.famMuzzle[FAM_ROBOT].setHSL(hue(v.robotFireHue + 6), 1, 0.62); this.famTele[FAM_ROBOT].setHSL(hue(v.robotFireHue), 1, 0.48);
+    this.famK[FAM_PLAYER] = 1; this.famK[FAM_BANDIT] = v.enemyLight; this.famK[FAM_ROBOT] = v.robotFireLight;
+    const fam = (f: number) => (f === FAM_BANDIT || f === FAM_ROBOT ? f : FAM_PLAYER);
+    const F = v.lightFar;
+    /** Faked parts fade toward the far edge (and are night only). */
+    const fadeAt = (x: number, z: number) => {
+      const d = Math.hypot(x - this.focus.x, z - this.focus.z);
+      return n <= 0 || d > F ? 0 : n * (d < F * 0.7 ? 1 : 1 - (d - F * 0.7) / (F * 0.3));
     };
     if (k > 0) {
       for (const f of this.flashes) {
-        const e = 1 - f.t / f.T, ee = e * e * k;
-        if (f.muzzle) req(f.x, f.y, f.z, v.muzzleLight * f.r * ee, 5 + 4 * f.r, MUZZLE_COL);
-        else req(f.x, f.y, f.z, v.blastLight * (f.r / 2.5) * ee, f.r * 5 + 6, BLAST_COL);
+        const e = 1 - f.t / f.T, ee = e * e * k, fm = fam(f.fam), K = this.famK[fm];
+        if (f.kind === F_LAUNCH) req(f.x, f.y, f.z, v.muzzleLight * f.r * ee * K, 5 + 4 * f.r, this.famMuzzle[fm]);
+        else if (f.kind === F_GUN) req(f.x, f.y, f.z, v.gunFlashLight * f.r * ee * K, 4 + 3 * f.r, this.famMuzzle[fm]);
+        else req(f.x, f.y, f.z, v.blastLight * (f.r / 2.5) * ee * K, f.r * 5 + 6, this.famFire[fm]);
       }
-      const col = this.rocketCol.setHSL(v.rocketHue / 360, 1, 0.6), F = v.lightFar, a = this.rockets;
+      // Held lights (a charging emitter), with their own priority and a faked glow.
+      const hd = this.holds;
+      for (let i = 0; i < this.nHold; i++) {
+        const o = i * HS, x = hd[o], y = hd[o + 1], z = hd[o + 2];
+        this.hc.setRGB(hd[o + 5], hd[o + 6], hd[o + 7]);
+        req(x, y, z, hd[o + 3] * k, hd[o + 4], this.hc, hd[o + 8]);
+        const A = fadeAt(x, z);
+        if (A > 0 && hd[o + 9] > 0) this.draw.glow(x, y, z, hd[o + 9], hd[o + 5] * A, hd[o + 6] * A, hd[o + 7] * A);
+      }
+      // Telegraphs: a glow on the sand (faked) and a bid for a real light, both brightening as they come down.
+      const ta = this.teles;
+      for (let i = 0; i < this.nTele; i++) {
+        const o = i * TS, x = ta[o], y = ta[o + 1], z = ta[o + 2], w = ta[o + 3], l = ta[o + 4], c = this.famTele[fam(ta[o + 8])];
+        const b = 0.25 + 0.75 * Math.pow(ta[o + 7], v.teleRamp), size = Math.sqrt(Math.max(1, w * l) / 9);
+        req(x, y + 1.2, z, v.teleLight * b * k * Math.min(2, size), Math.max(w, l) * 1.6 + 4, c, v.telePrio);
+        const A = fadeAt(x, z) * b * v.telePool;
+        if (A > 0) this.draw.pool(x, y, z, 0, 1, 0, ta[o + 5], ta[o + 6], w * 1.25, l * 1.1 + w * 0.25, c.r * A, c.g * A, c.b * A);
+      }
+      this.rocketCol.setHSL(v.rocketHue / 360, 1, 0.6);
+      const a = this.rockets;
       for (let i = 0; i < this.nRocket; i++) {
-        const o = i * RS, x = a[o], y = a[o + 1], z = a[o + 2], s = a[o + 6];
-        req(x, y, z, v.rocketLight * s * k, v.rocketRange * Math.sqrt(s), col);
+        const o = i * RS, x = a[o], y = a[o + 1], z = a[o + 2], s = a[o + 6], fm = fam(a[o + 7]);
+        const col = fm === FAM_PLAYER ? this.rocketCol : this.famFire[fm];
+        req(x, y, z, v.rocketLight * s * k * this.famK[fm], v.rocketRange * Math.sqrt(s), col);
         // Faked, at night only: a glow on the rocket, a flare back along its flight, a soft light on the sand under it.
         const d = Math.hypot(x - this.focus.x, z - this.focus.z);
         if (n <= 0 || d > F) continue;
@@ -433,7 +539,7 @@ export class NightLights {
         }
       }
     }
-    this.nRocket = 0;
+    this.nRocket = 0; this.nHold = 0; this.nTele = 0;
     this.stats.requests = nr;
     return clusterLights(this.reqs, nr, { radius: v.clusterRadius, curve: v.clusterCurve, cap: v.clusterCap, grow: v.clusterGrow }, this.clusters);
   }
@@ -450,19 +556,21 @@ export class NightLights {
     this.nWant = 0;
     // Short lights (blasts, launches, rockets) by day: a share of their night light, only if the slider asks for it.
     const shortK = n + (v.dayFlash > 0 ? v.dayFlash * (1 - n) : 0);
-    const busy = this.flashes.length > 0 || this.nRocket > 0;
+    const busy = this.flashes.length > 0 || this.nRocket > 0 || this.nHold > 0 || this.nTele > 0;
     if (n <= 0 && !this.made && !(shortK > 0 && busy)) {
-      this.lit = 0; this.nRocket = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0; this.draw.end(); return;
+      this.lit = 0; this.nRocket = this.nHold = this.nTele = 0; this.stats.requests = this.stats.clusters = this.stats.real = 0; this.draw.end(); return;
     }
     if (!this.made || this.pool.length !== Math.round(v.nightLightCap) || this.spots.length !== Math.round(v.nightSpotCap)) this.build();
+    // Bodies that ask for short lights each frame (the excavators' beams), before they're merged.
+    this.scanAt -= dt;
+    if (this.scanAt <= 0) { this.scan(); this.scanAt = 0.5; }
+    if (shortK > 0) for (const s of this.shortSources) if (NightLights.shown(s.o)) s.fn(this.short, this.time);
 
     // Short lights first, so a big swarm's lamps never crowd the rockets' glows out of the faked-light buffers.
     const nc = this.shortLights(shortK, n);
     // Faked lamps (and their bids for the real ones), only at night.
     if (n > 0) {
       this.refreshKinds();
-      this.scanAt -= dt;
-      if (this.scanAt <= 0) { this.scan(); this.scanAt = 0.5; }
       for (const o of this.bodies) this.bodyLamps(o);
       for (const s of this.sources) if (NightLights.shown(s.o)) s.fn(this.emitFn, this.time, this.v);
     }
@@ -473,7 +581,7 @@ export class NightLights {
     const cl = this.clusterOrder; cl.length = 0;
     for (let j = 0; j < nc; j++) {
       const c = this.clusters[j];
-      c.score = c.power / (1 + Math.hypot(c.x - focus.x, c.z - focus.z) / 30);
+      c.score = c.power * c.prio / (1 + Math.hypot(c.x - focus.x, c.z - focus.z) / 30);
       cl.push(c);
     }
     cl.sort((a, b) => b.score - a.score);

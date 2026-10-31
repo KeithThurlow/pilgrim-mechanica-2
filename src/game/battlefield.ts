@@ -35,6 +35,7 @@ import { splashBlast, firstBody } from "./splash";
 import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
+import { famOfTeam } from "../world/lamps";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -231,6 +232,11 @@ export class Battlefield {
    * chain it. Returns the shot's id.
    */
   fire(slot: number, team: number, muzzle: THREE.Vector3, d: THREE.Vector3, range: number, damage: number, o: FireOptions = {}): number {
+    // Every drawn round but the player's own (its miniguns carry their own lights) flashes a little light at the muzzle,
+    // in its side's colour (Keith 2026-10-31: enemy fire lights up; cosmetic).
+    if (o.voice !== "player" && o.tracer !== false && (o.flashScale ?? 1) > 0) {
+      this.look?.lights.gun(muzzle.x + d.x * 0.4, muzzle.y + d.y * 0.4, muzzle.z + d.z * 0.4, Math.min(2, o.flashScale ?? 1), famOfTeam(team));
+    }
     return this.shots.fire(
       { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
       { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot });
@@ -332,6 +338,7 @@ export class Battlefield {
   lob(team: number, from: THREE.Vector3, x: number, z: number, flight: number, arc: number, radius: number, damage: number, y?: number): Shell {
     const to = this.hit.set(x, y ?? this.field.height(x, z), z);
     this.sfx.play("brap", from, 1.3, 0.45, false);
+    this.look?.lights.launch(from.x, from.y, from.z, Math.min(1.5, Math.max(0.5, radius / 3)), famOfTeam(team));
     return this.shells.lob(team, from, to, flight, arc, radius, damage);
   }
 
@@ -402,7 +409,7 @@ export class Battlefield {
     const k = Math.max(0.5, s.radius / 3);
     this.onBlast?.(p, radius);
     // At night a blast lights the ground for a moment (cosmetic: src/world/nightLights.ts).
-    this.look?.lights.flash(p.x, p.y + 1, p.z, radius);
+    this.look?.lights.flash(p.x, p.y + 1, p.z, radius, famOfTeam(team));
     // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
     // An air burst (on a tall robot's chassis or legs) doesn't dig or mark the ground (blastGroundReach × radius up).
     const low = p.y - this.field.height(p.x, p.z) < s.radius * ((this.v as { blastGroundReach?: number }).blastGroundReach ?? 0.5);
@@ -450,6 +457,22 @@ export class Battlefield {
   /** The night lights (rockets, launches and blasts ask them for light; cosmetic), once a look has been seen. */
   get nightLights() { return this.look?.lights ?? null; }
 
+  /**
+   * Shells in flight glow and light the sand under them, and their landing rings glow brighter as they come down, in
+   * their side's colour (Keith 2026-10-31; cosmetic, through the night lights' one request path).
+   */
+  private lightShells(look: DesertLook) {
+    const L = look.lights;
+    for (const s of this.shells.list) {
+      if (!s.live) continue;
+      const u = Math.min(1, s.t / s.flight), fam = famOfTeam(s.team), F = s.flight;
+      // The arc's way along (the shells rise 4·arc·u(1-u) over the straight line).
+      const dx = (s.to.x - s.from.x) / F, dz = (s.to.z - s.from.z) / F, dy = (s.to.y - s.from.y) / F + (s.arc * 4 * (1 - 2 * u)) / F;
+      L.rocket(s.pos.x, s.pos.y, s.pos.z, dx, dy, dz, 0.8, fam);
+      L.telegraph(s.to.x, this.field.height(s.to.x, s.to.z), s.to.z, s.radius, u, fam);
+    }
+  }
+
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.look = look;
     // One armour rule for every hit (src/game/armour.ts): its floor from the lab's slider.
@@ -472,6 +495,7 @@ export class Battlefield {
     c?.mark("dents");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
+    this.lightShells(look);
     this.resolveShots(dt);
     this.stepBurns(dt);
     c?.mark("shots");

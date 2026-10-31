@@ -13,6 +13,8 @@ export interface LightReq {
   range: number;
   /** Colour (linear). */
   r: number; g: number; b: number;
+  /** How much it wants a real light over others of its power (1 a blast; the beam's charge more). Default 1. */
+  prio?: number;
 }
 
 export interface LightCluster extends LightReq {
@@ -25,6 +27,8 @@ export interface LightCluster extends LightReq {
   sx: number; sy: number; sz: number;
   /** Free for the caller (the night lights rank clusters by it). */
   score: number;
+  /** The highest priority among its members. */
+  prio: number;
 }
 
 export interface ClusterOpts {
@@ -64,11 +68,13 @@ export function clusterLights(reqs: LightReq[], count: number, o: ClusterOpts, o
       if (dx * dx + dy * dy + dz * dz <= R2) { c = k; break; }
     }
     if (!c) {
-      if (nc >= out.length) out.push({ x: 0, y: 0, z: 0, power: 0, range: 0, r: 0, g: 0, b: 0, n: 0, sum: 0, peak: 0, sx: 0, sy: 0, sz: 0, score: 0 });
+      if (nc >= out.length) out.push({ x: 0, y: 0, z: 0, power: 0, range: 0, r: 0, g: 0, b: 0, n: 0, sum: 0, peak: 0, sx: 0, sy: 0, sz: 0, score: 0, prio: 1 });
       c = out[nc++];
       c.sx = q.x; c.sy = q.y; c.sz = q.z; c.peak = q.power;
-      c.x = c.y = c.z = c.r = c.g = c.b = c.sum = c.range = 0; c.n = 0;
+      c.x = c.y = c.z = c.r = c.g = c.b = c.sum = c.range = 0; c.n = 0; c.prio = 0;
     }
+    const pr = q.prio ?? 1;
+    if (pr > c.prio) c.prio = pr;
     const p = q.power;
     c.x += q.x * p; c.y += q.y * p; c.z += q.z * p;
     c.r += q.r * p; c.g += q.g * p; c.b += q.b * p;

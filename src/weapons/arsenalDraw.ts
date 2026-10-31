@@ -102,7 +102,7 @@ export class ArsenalDraw {
       if (this.d.lengthSq() < 1e-8) this.d.set(0, 1, 0);
       this.q.setFromUnitVectors(Z, this.d.normalize());
       // Its light (src/world/nightLights.ts: a glow, an exhaust flare, a real light merged with its neighbours).
-      lights?.rocket(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.6);
+      lights?.rocket(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.6, a.fam);
       // The modelled rocket or missile when it's loaded (the box body hidden at zero scale), the flare either way.
       const modelled = proj.ready(kind);
       if (modelled) proj.add(kind, this.p, this.d, kind === "rocket" ? 1 : 1.2);
@@ -128,10 +128,20 @@ export class ArsenalDraw {
       // Line mortar shells: the modelled shell along its flight once loaded (was a long hot slug).
       for (const r of sh.line.rockets) if (r.live && r.launched) {
         const dir = { x: r.pos.x - r.prev.x, y: r.pos.y - r.prev.y, z: r.pos.z - r.prev.z };
+        lights?.rocket(r.pos.x, r.pos.y, r.pos.z, dir.x, dir.y, dir.z, 0.7, a.fam);
         if (proj.ready("mortar-shell")) proj.add("mortar-shell", r.pos, dir, 1.3); else slug(r.pos, dir, 1.2);
       }
     }
-    for (const sh of a.shells.list) if (sh.live) slug(sh.pos, sh.vel, 1);
+    for (const sh of a.shells.list) if (sh.live) { slug(sh.pos, sh.vel, 1); lights?.rocket(sh.pos.x, sh.pos.y, sh.pos.z, sh.vel.x, sh.vel.y, sh.vel.z, 0.3, a.fam); }
+    // Painted strips and rings glow on the sand and light it at night (Keith 2026-10-31: lit telegraphs): brighter
+    // when ready, and a fired strip (the line mortar's walk) at full while its rockets come down.
+    if (lights) paints.forEach((p, i) => {
+      if (!p.on) return;
+      const fired = i >= 2 && (i - 2) % 2 === 1;
+      const u = fired ? 1 : p.ready ? 0.55 : 0.15;
+      if (p.strip) lights.telegraphLine(p.strip.ax, p.strip.az, p.strip.bx, p.strip.bz, p.strip.width, u * (p.strip ? Math.max(0.3, p.charge) : 1), a.fam);
+      if (p.ring) lights.telegraph(p.ring.x, this.ground.height(p.ring.x, p.ring.z), p.ring.z, p.ring.r, u, a.fam);
+    });
     proj.end();
     this.rockets.count = this.flares.count = n;
     this.slugs.count = ns;
