@@ -121,6 +121,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
+- Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
+  (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
+  convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
@@ -180,7 +183,7 @@ src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule
                         minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings), blastWaves + blastWavesDraw
                         (a blast wave on every explosion: screen bend, ground ring, heat shimmer)
-src/game/               battlefield (shared combat stage), sheet + sheetFire (direct fire as a vertical sheet with a penetration
+src/game/               battlefield (shared combat stage), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
@@ -200,7 +203,8 @@ src/combat/             warband (raider vehicles and bandit mechs) + partyBus (t
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
-src/ui/                 bay (the bay screen: fit parts, sockets, loot)
+src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHud (hull bar, kits, red edge, hit arcs)
+src/abilities/          abilities (timed abilities from hulls and packs), zones (heal zones, pure) + zonesDraw; glue: abilityUse
 src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
                         target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
 src/expedition/         the loop: expedition (states, at-risk list, bank), fuel, returnPoint, radar, camps (swarm camps, unknown

@@ -111,3 +111,9 @@ adds one optional field to `bases.ts` and one new pack; no model work.
 2. OK to move recall from hold Q to hold X?
 3. Kits bought with scrap (40) and found in salvage, carry 3, kept if the mech is lost. Right?
 4. Abilities heal you at 60% and allies at full: does that split sound right for solo play?
+
+## Answers (Keith 2026-10-31) and what was built
+
+- Second consumable: skipped for now. Recall: moved to hold X. Kit, HUD and zones: build them, pick defaults, ask later.
+- Built as above, with the defaults listed. Not built yet: hold-V on the HUD itself (it's DOM, not in the 3D pick), the
+  kit's weld shimmer on the hull model, zones healing convoy turrets and escorts, co-op ally bars.
