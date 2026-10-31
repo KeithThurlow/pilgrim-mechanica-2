@@ -184,6 +184,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Fuel off and declared munitions (Keith 2026-11-01): PR from `claude/project-thread-k5btw3`; Keith to try convoy lab `?out` (no fuel on the HUD), `?out&set=fuelOn:1`, robots lab `?proto=doubleShot`, `?proto=splitter` (the reload ring shouldn't come sooner).
 - Walk off the convoy: no rails on the mech bays' long sides (Keith 2026-10-31): merged 2026-10-31; Keith to try convoy lab `?manual&aboard` (walk, Shift or Space off a side), `?aboard&walkoff=dash`.
 - Rival aim: tight tracking, then an aim snapshot before rail and autocannon shots (Keith 2026-10-31): merged 2026-10-31; Keith to try `labs/duel/?rival=3&rivalfit=mountR:rail-medium&rivallevel=recruit|veteran|ace`, `?set=aiSnapshot:0.3`.
 - Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): merged 2026-10-31 (dash 7.5 m, back under the stick 0.08 s after the burst; a sprint needs Space held past 0.325 s); Keith to try walker lab `?manual&flat`, duel lab `?manual`, bandits lab `?manual`.
@@ -263,6 +264,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Fuel off for now; extra munitions only where a Protocol says so (Keith, agent on `claude/project-thread-k5btw3`)
+- **Fuel off** (`fuelOn` 0, a slider in the Fuel group): the expedition loop doesn't burn, warn or force a recovery on empty, and the HUD shows Home without Fuel; `?set=fuelOn:1` brings it all back, `?lowfuel` turns it on. Main files `src/expedition/fuel.ts`, `loop.ts`, `expeditionHud.ts`, `labs/convoy/main.ts`
+- **Munitions are declared**: a shot takes one round × its Protocols' `cost` (multiplied over sockets); behaviour (split, rate) no longer adds cost by itself (`magRounds` gone). Splitter: no extra munitions (card text fixed). Overclock: `cost` 2 (same as before, now explicit). New **Double shot** (minigun, rare): two rounds side by side (`multi` 2, `protoPairGap` 0.5 m slider in Protocols) at 70% damage, costs 2 a shot: ×1.40 on swarms within a magazine, ×1.17 sustained, card 115 → 134. The rocket and autocannon paths fire `multi` side by side too (`?proto=multi:2`), but Double shot only fits the minigun (on the autocannon it was ×2 on swarms). Main files `src/items/protocols.ts`, `src/weapons/magazine.ts`, `src/game/shots.ts`, `src/weapons/arsenal.ts`, `src/mech/upper.ts`, `src/items/dps.ts`, `tools/balance-sheet.ts`
+- Checked: balance-check (Splitter costs 1, Double shot and Overclock 2, a 30-round gun on Double shot fires 15 shots before its reload, the card shows 2 rounds at cost 2, every extra-munitions Protocol says so on its card); balance sheet in band; full `npm test` passes. Never run in a browser
 ### 2026-10-31 · Walk off the convoy: no rails on the mech bays' long sides (Keith, agent on `wip/walkoff`)
 - The mech walks, runs, dashes or sprints off a bay's side onto the sand, carrying the deck's speed, and lands as from a crane drop (stomp, dust, crater, shake); the expedition starts the same way; crane pick-up, parking and the launch pads unchanged; the pilot keeps the edge; the sprint now works on an open deck. Files: `src/convoy/deck.ts`, `carry.ts`, `outline.ts`, `platformBody.ts`, `labs/convoy/main.ts` (`?walkoff[=dash]`), `tools/convoy-check.ts` (7c).
 - Checked: convoy-check 7c, each side: walk off after 1.5 s at 6 m/s out, falls 0.84 s, hits at 9.6 m/s, lands 13.3 m beside; run 8.5 m/s out, 0.72 s; dash 14.7 m/s out, 0.53 s, hits 13 m/s; sprint 19.5 m/s out; all leave at the convoy's 3.3 m/s along, no foot below the sand, overreach 0, expedition launched once, crane not straight back. Full `npm test`.

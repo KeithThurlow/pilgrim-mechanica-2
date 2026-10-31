@@ -4,13 +4,13 @@
 //
 //   DPS = damage per round × rounds per shot × sustained shots per second
 //
-// Sustained shots per second count the magazine and its reload (src/weapons/magazine.ts sustainedRate): a split shot
-// of 3 costs 3 rounds, so it reaches the reload sooner. What depends on what's there isn't counted: area (splash,
+// Sustained shots per second count the magazine and its reload (src/weapons/magazine.ts sustainedRate): a shot takes
+// one round × its Protocols' declared cost (Double shot and Overclock 2, so they reach the reload sooner; a split is free). What depends on what's there isn't counted: area (splash,
 // blasts), and chains and ricochets (their extra share when they find a target is `bonus`, shown as a note).
 import { BASE_BY_ID } from "./bases";
 import { effectiveStats } from "./loadout";
 import { shotCostOf, shotProtocolsOf } from "./protocols";
-import { sustainedRate, shotRounds, magRounds } from "../weapons/magazine";
+import { sustainedRate, shotRounds } from "../weapons/magazine";
 import type { ShotProtocols } from "../game/shots";
 import type { Item } from "./item";
 
@@ -38,8 +38,8 @@ export interface Cadence {
 export function cadenceOf(s: Record<string, number>, shot?: ShotProtocols, cost = 1): Cadence | null {
   if (s.damage === undefined) return null;
   let rounds: number, magUse: number, gap: number;
-  if (s.fireRate !== undefined) { rounds = shotRounds(shot?.split, shot?.rate); magUse = magRounds(shot?.split, shot?.rate); gap = 1 / Math.max(0.01, s.fireRate); }
-  else { const volley = s.rockets ?? s.shells ?? 1; rounds = volley * shotRounds(shot?.split); magUse = volley * magRounds(shot?.split); gap = Math.max(0.05, (s.cooldown ?? 1) + (s.charge ?? 0)); }
+  if (s.fireRate !== undefined) { rounds = shotRounds(shot?.split, shot?.rate, shot?.multi); magUse = 1; gap = 1 / Math.max(0.01, s.fireRate); }
+  else { const volley = s.rockets ?? s.shells ?? 1; rounds = volley * shotRounds(shot?.split, 1, shot?.multi); magUse = volley; gap = Math.max(0.05, (s.cooldown ?? 1) + (s.charge ?? 0)); }
   const magazine = s.magazine ?? 0, reload = s.reload ?? 0;
   const rate = 1 / gap;
   const sustained = magazine > 0 ? sustainedRate(magazine, magUse, cost, gap, reload) : rate;

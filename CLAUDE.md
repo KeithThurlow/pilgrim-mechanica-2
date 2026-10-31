@@ -115,7 +115,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
-  the mech), `?proto=split:3,rate:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced) or `?proto=splitter,overclock,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
+  the mech), `?proto=split:3,rate:2,multi:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced; multi: side by side) or `?proto=splitter,overclock,doubleShot,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
   takes `?biome=` too. Robots lab: `?beam` (no packs; two excavators stopped either side of the mech, about to charge
   their beams), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
@@ -147,7 +147,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Convoy lab: `?manual`, `?aboard` (start on the deck; the mech can walk, run, dash or sprint off a mech bay's side), `?walkoff[=dash]` (the demo walks or dashes off the side instead of using the launch pad), `?deploy` (start launching), `?park` (start parked), `?hang`
   (start hanging from the crane, about to lift), `?drop` (just after the crane lets go), `?threat` (a marker circling the train for the turrets), `?crest[=m]` (the plough's blade that far short of the biggest cut ahead), `?zoom`, `?dt`, `?flat`, `?watch=N` (camera on car N, 0 the lead; `plough` the plough;
   `gapN` the gap ahead of car N; `eN` escort N); E parks in a bay, G launches from anywhere. Expedition: `?out` (start out in
-  the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (little fuel left), `?loot=N`
+  the field, 280 m off, scrap at risk), `?far` (850 m out, mech radar), `?lowfuel[=seconds]` (fuel on, little left; fuel is off by default, `?set=fuelOn:1`), `?loot=N`
   (N scrap at risk), `?nearcamp[=metres]` (just outside the nearest swarm camp, or that close), `?banditcamp[=metres]` (the same for the nearest bandit camp), `?clash` (330 m from a bandit camp with a robot pack walking into it, out of view), `?warband[=N]` (a war band column of N vehicles, 6 by default with a party bus and a turret truck, 260 m ahead hunting the mech); E strips salvage on the sand, hold Q recovers, Tab cycles the sensor's seeker,
   `?seek=scrap|wreck|rare|legendary`. Loot: `?drop=rarity[,level]` (start out on the sand, an item of that rarity dropped ahead of the mech every few
   seconds; `?drop=all[,level]` one of each rarity in turn; a bare `?drop` is still the crane's drop), `?items=N` (N items at risk).

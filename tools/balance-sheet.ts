@@ -141,6 +141,8 @@ const fall = (x: number, r: number) => (x > r ? 0 : 1 - (0.5 * x) / Math.max(1e-
 const inRange = (w: W, t: T) => w.range >= t.dist;
 const split = (w: W) => Math.max(1, Math.round(w.shot.split ?? 1));
 const rate = (w: W) => Math.max(1, Math.round(w.shot.rate ?? 1));
+/** Double shot's side-by-side copies (0.5 m apart: every copy lands where the one would). */
+const multi = (w: W) => Math.max(1, Math.round(w.shot.multi ?? 1));
 const fanAt = (d: number, rocket = false) => d * Math.tan(((rocket ? SHOT_DEFAULTS.protoRocketFan : SHOT_DEFAULTS.protoFan) * Math.PI) / 180);
 
 /** Aim error σ (m, each axis) at the target for a projectile: lead error from the target's juke over the flight. */
@@ -171,7 +173,7 @@ function volleySingle(w: W, t: T): number {
   if (w.kind === "gun") {
     const p = hitscanP(w, t);
     const rounds = offs.filter((o) => Math.abs(o) < t.r + w.sheetHalf).length;
-    return p * rounds * rate(w) * thru(w.dmg * t.directK, A, ap);
+    return p * rounds * rate(w) * multi(w) * thru(w.dmg * t.directK, A, ap);
   }
   if (w.kind === "rail") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * thru(w.dmg * t.directK, A, ap);
   // Projectiles and blasts: Monte Carlo over the aim error.
@@ -193,7 +195,7 @@ function volleySingle(w: W, t: T): number {
     }
     for (const o of offs) sum += thru(w.dmg * t.blastK * fall(Math.max(0, Math.hypot(ex + o, ez) - t.r), w.radius), A, ap) * w.n;
   }
-  return sum / REF.mc;
+  return (sum / REF.mc) * multi(w);
 }
 
 /** HP removed from a swarm by an area of radius r and damage d at its centre (a ring integral at density rho, each
@@ -233,10 +235,10 @@ function volleySwarm(w: W, t: T): number {
     let chain = 0, k = 1;
     for (let i = 0; i < (sh.chain ?? 0); i++) { k *= SHOT_DEFAULTS.protoChainKeep; chain += k; }
     per += cap(d) * chain + cap(d * SHOT_DEFAULTS.protoRicochetKeep) * (sh.ricochet ? 0.6 : 0);
-    return per * split(w) * rate(w);
+    return per * split(w) * rate(w) * multi(w);
   }
   if (w.kind === "rail") return line(w.dmg, w.pen, w.sheetHalf);
-  if (w.kind === "cannon") return line(w.dmg, w.pen, w.sheetHalf) + ringHp(w.dmg * w.share, w.radius, t, ap, true);
+  if (w.kind === "cannon") return (line(w.dmg, w.pen, w.sheetHalf) + ringHp(w.dmg * w.share, w.radius, t, ap, true)) * multi(w);
   if (w.kind === "line") {
     const L = Math.min(w.stripLength, 2 * Rc);
     return Math.min(sw.n, L * 2 * w.radius * sw.rho) * cap(w.dmg);
