@@ -125,7 +125,7 @@ export class ExpeditionHud {
     if (f.seek) lines.push(`<div style="color:${SEEK};margin-top:4px">◇ ${f.seek}</div>`);
     if (f.canRecall) {
       const k = Math.round(e.recall * 100);
-      lines.push(`<div style="color:${COL.dim};font-weight:500;margin-top:4px">Hold Q: call recovery (loot lost)</div>`);
+      lines.push(`<div style="color:${COL.dim};font-weight:500;margin-top:4px">Hold X: call recovery (loot lost)</div>`);
       if (k > 0) lines.push(`<div style="height:4px;background:#ffffff1c;border-radius:2px;margin-top:2px"><div style="height:100%;width:${k}%;background:${COL.red};border-radius:2px"></div></div>`);
     }
     this.info.innerHTML = lines.join("");

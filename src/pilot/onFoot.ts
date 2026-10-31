@@ -128,6 +128,8 @@ export class OnFoot {
   }
 
   /** The pilot's flat distance to the mech's middle. */
+  /** The pilot HUD's own health bar (off where the vitals HUD shows the pilot, src/ui/vitalsHud.ts). */
+  showHealth = true;
   get toMech() { const m = this.mech.sim.pos, p = this.sim.pos; return Math.hypot(p.x - m.x, p.z - m.z); }
 
   /** One walking step (call at the lab's fixed rate, after moving surfaces moved). */
@@ -197,7 +199,7 @@ export class OnFoot {
       else if (m.why) text = `<span class="bad">${m.why}</span>`;
     }
     if (f.prompt && sim.alive) text = text ? `${text}<br>${f.prompt}` : f.prompt;
-    this.hud.set(ring, text, m.onFoot ? sim.health / Math.max(1, v.pilotHealth) : null, m.onFoot ? sim.hurt / 15 : 0);
+    this.hud.set(ring, text, m.onFoot && this.showHealth ? sim.health / Math.max(1, v.pilotHealth) : null, m.onFoot ? sim.hurt / 15 : 0);
   }
 
   /** The first side the pilot can step out to: left, right, behind, ahead of the mech (on the level it stands on). */

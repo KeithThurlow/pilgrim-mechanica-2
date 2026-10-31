@@ -89,7 +89,7 @@ export interface LoopPilot {
 }
 /** Optional extras for the loop: the bandit bake (boxes if null). */
 export interface LoopOptions { vat?: BanditVatData | null }
-export interface LoopInput { night?: number; eHeld: boolean; qHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
+export interface LoopInput { night?: number; eHeld: boolean; recallHeld: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -347,7 +347,7 @@ export class ExpeditionLoop {
     inp.mark?.("extraction pads");
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
-    const ev = exp.update(dt, inp.qHeld && !inp.demo && player.alive, fuel.empty);
+    const ev = exp.update(dt, inp.recallHeld && !inp.demo && player.alive, fuel.empty);
     if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
 
     // The way home: the return point and the warning.

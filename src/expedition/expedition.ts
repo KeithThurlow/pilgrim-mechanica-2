@@ -23,7 +23,7 @@ export type ExpeditionValues = typeof EXPEDITION_DEFAULTS;
 
 const G = "Expedition";
 export const EXPEDITION_PARAMS: Param[] = [
-  { key: "recallHold", label: "Hold to call recovery (s)", min: 0.2, max: 5, step: 0.1, group: G, tip: "Hold Q this long out in the field: recovered, at-risk loot lost" },
+  { key: "recallHold", label: "Hold to call recovery (s)", min: 0.2, max: 5, step: 0.1, group: G, tip: "Hold X this long out in the field (Keith 2026-10-31: Q is the repair kit): recovered, at-risk loot lost" },
   { key: "recoverFade", label: "Recovery fade (s)", min: 0.2, max: 5, step: 0.1, group: G, tip: "Fade out, back aboard, fade in (instant recovery for now)" },
   { key: "lostWait", label: "Wreck shown for (s)", min: 0, max: 10, step: 0.5, group: G, tip: "A destroyed mech lies there this long before the fade" },
   { key: "bankShow", label: "Banked shown for (s)", min: 0.5, max: 15, step: 0.5, group: G },

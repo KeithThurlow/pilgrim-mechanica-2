@@ -65,12 +65,14 @@ import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable, SplashOpts } from "./battlefield";
 import { armourHit } from "./armour";
 import { TRAMPLE_DEFAULTS, TRAMPLE_PARAMS } from "../combat/trample";
+import { RepairKits, REPAIR_DEFAULTS, REPAIR_PARAMS, type KitRefusal } from "./repair";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
   ...TRAMPLE_DEFAULTS,
+  ...REPAIR_DEFAULTS,
   /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
   trample: 1,
   crush: 1,
@@ -96,6 +98,7 @@ export const MECH_PARAMS: Param[] = [
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
   ...TRAMPLE_PARAMS,
+  ...REPAIR_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
   { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
   { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },
@@ -134,6 +137,11 @@ export class MechUnit implements Hittable {
   deadFor = 0;
   /** Recent damage taken per second (for a HUD flash). */
   hurt = 0;
+  /** Recent hits for the HUD's hit arcs: where each came from (unit x, z on the ground) and how much it took. Newest
+   *  last, at most 8; the HUD drains it. */
+  readonly hits: { dx: number; dz: number; amount: number }[] = [];
+  /** Repair kits carried (src/game/repair.ts): Q uses one (the useKit command). */
+  readonly kits: RepairKits;
   /** Paint colour (null: the model's own). */
   paint: number | null = null;
   /** Hull for this mech instead of the shared slider (bandit mechs). */
@@ -205,6 +213,7 @@ export class MechUnit implements Hittable {
     this.bound = new Bound(v);
     this.upper = new UpperSim(v);
     this.health = v.hull;
+    this.kits = new RepairKits(v);
     const sim = this.sim, dust = bf.dust;
     sim.onFootfall = (f, k) => {
       // In the shallows: a splash and rings instead of a print and dust.
@@ -309,6 +318,7 @@ export class MechUnit implements Hittable {
     this.wasPiloted = this.piloted;
     // Dead: the weapons still fly what is already in the air, with every trigger let go.
     if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); return; }
+    this.heal(this.kits.step(dt));
     const { sim, upper, body, v } = this;
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
@@ -459,13 +469,34 @@ export class MechUnit implements Hittable {
     out.push({ key: this, x: p.x, y: p.y + 3.4, z: p.z, hp: this.health, max: this.maxHealth, armour: this.armourOf(), width: 3.6, always: true });
   }
 
+  /** The useKit command (Q): start a repair kit; why not, or null when it started. */
+  useKit(): KitRefusal | null { return this.kits.use(this.health, this.maxHealth, this.alive); }
+
+  /** Repair: up to the max hull, never on a wreck. Returns what it added. */
+  heal(amount: number) {
+    if (!this.alive || amount <= 0) return 0;
+    const add = Math.min(amount, this.maxHealth - this.health);
+    if (add <= 0) return 0;
+    this.health += add;
+    return add;
+  }
+
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
     amount = armourHit(amount, this.armourOf(), pierce);
     if (this.dash.shoving) amount *= this.v.dashDamageCut;
     this.health -= amount;
     this.hurt += amount;
-    void at; void dir;
+    void at;
+    // Where it came from: against the round's travel (a blast's push points away from it too).
+    const l = Math.hypot(dir.x, dir.z);
+    if (l > 1e-4) {
+      const last = this.hits[this.hits.length - 1];
+      const dx = -dir.x / l, dz = -dir.z / l;
+      // Rounds from one gun in one step merge into one arc.
+      if (last && last.dx * dx + last.dz * dz > 0.97) last.amount += amount;
+      else { this.hits.push({ dx, dz, amount }); if (this.hits.length > 8) this.hits.shift(); }
+    }
     if (this.health <= 0) this.destroy();
   }
 
@@ -481,6 +512,7 @@ export class MechUnit implements Hittable {
     this.alive = false;
     this.health = 0;
     this.deadFor = 0;
+    this.kits.cut();
     this.goCold();
     this.body.paint(this.look, WRECK);
     // A burst of dark smoke and sand where it went down.

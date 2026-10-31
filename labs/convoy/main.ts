@@ -8,7 +8,7 @@
 // between them high enough to walk under, crawler tracks on the big ones leaving ruts and dust, pipe runs, vehicles
 // tied down on the motor pool and escorts driving alongside.
 // The expedition loop (docs/proposal-expedition.md) runs on top: POIs and swarm camps out in the sand, E strips
-// salvage onto the at-risk list, the crane's pick-up banks it, hold Q (or running out of fuel) recovers the mech and
+// salvage onto the at-risk list, the crane's pick-up banks it, hold X (or running out of fuel) recovers the mech and
 // loses it, a destroyed mech loses it too; the radar (big in the convoy's range, the mech's own past it), the arrow
 // home to the return point, fuel and the home estimate (src/expedition/).
 // Flags: ?manual (no demo), ?aboard (start on the deck), ?deploy (start on the deck and launch at once), ?park (start
@@ -314,15 +314,15 @@ let auto = !params.has("manual") && !params.has("onfoot") && !params.has("pad");
 // weapons; only while driving the mech (F is hold to hop out and back in, Keith 2026-10-26).
 const buttons = new MouseButtons(canvas, () => { auto = false; });
 let deployAsked = false, parkAsked = false;
-// E held strips salvage out on the sand (E pressed still parks aboard); Q held calls a recovery.
-let eHeld = false, qHeld = false;
+// E held strips salvage out on the sand (E pressed still parks aboard); X held calls a recovery (Keith 2026-10-31: Q is the repair kit).
+let eHeld = false, xHeld = false;
 addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.code === "KeyE") { eHeld = true; auto = false; }
-  if (e.code === "KeyQ") { qHeld = true; auto = false; }
+  if (e.code === "KeyX") { xHeld = true; auto = false; }
 });
-addEventListener("keyup", (e) => { if (e.code === "KeyE") eHeld = false; if (e.code === "KeyQ") qHeld = false; });
-addEventListener("blur", () => { eHeld = false; qHeld = false; });
+addEventListener("keyup", (e) => { if (e.code === "KeyE") eHeld = false; if (e.code === "KeyX") xHeld = false; });
+addEventListener("blur", () => { eHeld = false; xHeld = false; });
 // Space: dash the way WASD points (Keith 2026-10-25: the dash in every lab), on charges; keep holding to carry on into
 // the sprint out on the sand (Keith 2026-10-26).
 let dashPressed = false, spaceDown = false;
@@ -836,7 +836,7 @@ app.onTick((rawDt) => {
   app.hud.set("weapons", arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
   loop.update(dt, {
-    eHeld, qHeld, demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
+    eHeld, recallHeld: xHeld, demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
     pilot: foot.mount.onFoot ? {
       onFoot: true, alive: foot.sim.alive, x: fp.x, z: fp.z, prey: (x, z) => foot.quarry.pick(x, z), notice: V.pilotNotice,
       reach: V.pilotReach, rate: V.pilotStripRate, noise: V.pilotStripNoise,
