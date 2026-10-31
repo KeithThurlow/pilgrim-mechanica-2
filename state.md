@@ -184,6 +184,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): agent on `wip/dashexit`.
 - Trample, rams, leg trample stats and bandit dive rolls (Keith 2026-10-31): merged 2026-10-31, never run in a browser; Keith to try bandits lab `?manual` (Space into a crowd; `&set=diveChance:1`), convoy lab `?banditcamp`, `?warband` (ram a technical).
 - Rival dodge chance and steady line mortar aim (Keith 2026-10-31): merged 2026-10-31. Keith to try `labs/duel/?rival=3&rivalfit=pack:sh-linemortar` at `&rivallevel=recruit|veteran|ace`.
 - Dash rise 0.045 s and the lean into velocity changes (Keith 2026-10-31): merged 2026-10-31; Keith to try walker lab `?manual&flat` (`&cam=side`), duel lab `?manual`; `?set=leanPerAccel:0.25` more, `leanMax:0` off.

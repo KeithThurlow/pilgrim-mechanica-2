@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | The dash still feels drifty after it: make it shorter and let it decelerate hard when the player isn't carrying on into the sprint; grip-by-speed stays for the sprint | Keith | Keith | Agent on `wip/dashexit`. |
 | 2026-10-31 | Trample-like damage is for small things only (bandits on foot, scrapper robots); vehicles get knockback instead: a mech hitting one shoves it by the mech's speed and the two masses, and both take about the same damage by the closing speed. Big robots and enemy mechs like vehicles if cheap | Keith | Keith | Built for war band vehicles (`src/game/bodyContact.ts`); big robots and enemy mechs left alone for now. |
 | 2026-10-31 | The trample area is a property of the mech, mainly the legs: leg stats `trample` (reach ×) and `crush` (damage ×), rolled with rarity, on the bay card; the sliders are the base they scale | Keith | Keith | Stilt 0.8 / 0.75, Rampart 1 / 1, Siege 1.3 / 1.5 (Claude's numbers); `crush` grows with level (weight 0.5). |
 | 2026-10-31 | Trample damage reads the whole speed of the mech relative to the bandit (a glancing sprint still kills); contact needs it closing at 2.5 m/s+; curve 15 × ((v − 3) / 8)² (walk 6: 2, run 8.5: 7, sprint 14: 28 against 12 hp) | Claude | Claude | `src/combat/trample.ts`; the body's reach 3 m × the legs. |
