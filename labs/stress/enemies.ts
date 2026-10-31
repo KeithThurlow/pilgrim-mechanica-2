@@ -16,6 +16,7 @@ import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { Warband, type WarbandValues } from "../../src/combat/warband";
 import { robotRagdoll, BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
+import { fireRobotBeam } from "../../src/game/robotBeam";
 
 export interface StressValues {
   stressSpawnFrom: number;
@@ -60,6 +61,7 @@ export class StressRobots {
     sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
     const lobFrom = new THREE.Vector3();
     sw.onLob = (_i, fx, fy, fz, x, z, flight) => bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
+    sw.onBeam = (e) => fireRobotBeam(bf, e, V.robotBeamReach);
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
     lab.app.scene.add(this.tear.group);
     void player;

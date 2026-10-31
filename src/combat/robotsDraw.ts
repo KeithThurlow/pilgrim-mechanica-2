@@ -18,6 +18,7 @@ import {
   YELLOW, YELLOW_DIRTY, GREY, DARK, BLACK, CHROME,
 } from "./robotShapes";
 import { LAMP_ROBOT, type LampEmit } from "../world/lamps";
+import { RobotBeamDraw } from "./robotBeamDraw";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
 const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5;
@@ -89,7 +90,12 @@ export class RobotsDraw {
   private eyeN = 0;
   private h3: V3 = { x: 0, y: 0, z: 0 }; private k3: V3 = { x: 0, y: 0, z: 0 }; private t3: V3 = { x: 0, y: 0, z: 0 }; private f3: V3 = { x: 0, y: 0, z: 0 };
 
+  /** The excavators' charging beams (Keith 2026-10-31). */
+  readonly beamDraw: RobotBeamDraw;
+
   constructor(private swarm: RobotSwarm) {
+    this.beamDraw = new RobotBeamDraw(swarm);
+    this.group.add(this.beamDraw.group);
     const paint = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.25, flatShading: true });
     const lamp = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const pool = (geo: THREE.BufferGeometry, n: number, mat: THREE.Material = paint, shadow = true) => {
@@ -141,6 +147,7 @@ export class RobotsDraw {
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
     for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.saws, this.buckets, this.beams, this.pipes, this.knuckles, this.lamps]) p.finish();
+    this.beamDraw.update(dt);
   }
 
   /** One small scrapper. */
