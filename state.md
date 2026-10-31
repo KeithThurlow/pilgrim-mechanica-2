@@ -262,6 +262,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-31 · Excavator armour 10 → 6.5 (Keith)
+A third off as a first step (Keith: probably halve it later). `robotBigArmour` in `src/combat/robots.ts`; balance-check's floor test now uses a 5-damage round. Checked: balance, robot-danger, robots, weapons checks, `balance-sheet --check`, full npm test. Who: coordinator.
+
 ### 2026-10-31 · Tapped dash: shorter, hard stop onto the stick; the sprint decided at the hold's end (Keith, agent on `wip/dashexit`)
 - Keith: "As soon as you dash, it feels drifty afterwards... Maybe make the dash a little shorter, and allow more deceleration if the player isn't going to continue it into a sprint." Found: a press of 0.15 s or more already became a sprint, and letting go of that ran the sprint's let-go curve (16.9 m on along the dash, 1.4 s to come under the stick for a 0.2 s press). Now the decision is at the burst's hold end (0.325 s): held, the sprint as before; let go, `dashHold` 0.28 s (was 0.42) then a hard stop in `dashStop` 0.1 s (was 0.15) to the stick's walk velocity as a vector; the hold bends toward the stick (`dashBend` 12 m/s², new slider, Dash group). Distance 7.5 m (was 10.9); under the stick 0.08 s after the hold ends (was 0.29-0.33); 0.41 s from the press for any tap length (was 0.80-1.51 s); slid on along the dash after release 1.4-5.7 m (was 9.1-16.9).
 - Main files: `src/mech/walker.ts` (`runSteer` burst stop, `dashSteer`, `dashStick`, `dashBendStep`, `dashClock`), `src/mech/dashSteps.ts` (`dashHoldEnd`), `src/mech/bound.ts` (decision; `dashHoldRun` gone), `walkerTuning.ts`, `tools/dash-probe.ts` (exit numbers, press length → sprint), `tools/dash-check.ts` (dash about 7.5 m; downhill > uphill by 0.1 m, was 0.3: gravity acts over the 0.3 s hold only).

@@ -37,7 +37,7 @@ for (const d of [1, 5, 12, 50, 450]) for (const A of [0, 3, 8, 10, 20, 100]) {
 must(close(armourHit(12, 8, 0.1, F), 12 - 8 * 0.9), "a minigun round on a mech's hull isn't 12 − 8 × 0.9");
 must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) paid armour");
 
-// ---- Through an adapter: a cutter (armour 3) and an excavator (10) take a round and a blast by the rule ----
+// ---- Through an adapter: a cutter (armour 3) and an excavator (6.5) take a round and a blast by the rule ----
 {
   const field = new DuneField({ ...TERRAIN_DEFAULTS });
   const v = { ...ROBOT_DEFAULTS };
@@ -51,7 +51,7 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   const hit = (i: number, d: number, ap?: number) => { const h0 = sw.hp[i]; t.pick(i * 4 + PART_BODY); t.damage(d, at, dir, ap); return Math.round((h0 - sw.hp[i]) * 1000) / 1000; };
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   must(hit(c, 12, 0.1) === r3(12 - v.robotMidArmour * 0.9), `a minigun round on a cutter took ${hit(c, 12, 0.1)} (want 12 − 3 × 0.9)`);
-  must(hit(e, 9, 0) === r3(F * 9), "a light minigun round on an excavator didn't fall to the floor");
+  must(hit(e, 5, 0) === r3(F * 5), "a 5-damage round on an excavator (armour 6.5) didn't fall to the floor");
   must(hit(e, 450, 0.9) === r3(450 - v.robotBigArmour * 0.1), "a rail slug on an excavator lost more than its pierce allows");
   must(hit(e, 50, undefined) === 50, "a hit with no pierce paid the excavator's armour");
   // A blast at the excavator's body: its share, then armour by the blast's pierce.

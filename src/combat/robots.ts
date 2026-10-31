@@ -121,7 +121,7 @@ export const ROBOT_DEFAULTS = {
   // Armour (docs/proposal-balance.md, Keith 2026-10-31): flat per hit, cut by the hit's pierce (src/game/armour.ts).
   robotArmour: 0,
   robotMidArmour: 3,
-  robotBigArmour: 10,
+  robotBigArmour: 6.5,
   robotMidLegHit: 0.2,
   robotBigArc: 12,
   robotBigBurst: 2,

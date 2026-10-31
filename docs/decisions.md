@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Excavator (tall walker) armour cut by a third, 10 → 6.5, as a first step; probably halved (5) after play | Keith | Keith | `robotBigArmour` in `src/combat/robots.ts`. |
 | 2026-10-31 | Rivals track well while charging high-velocity weapons (the rail first), then snapshot their aim about 0.3 s before firing: the player's grace window to change direction or dash out of the line. The pattern for most high-velocity weapons | Keith | Keith | Agent on `wip/railgrace`. The new dash is great (Keith). |
 | 2026-10-31 | The dash still feels drifty after it: make it shorter and let it decelerate hard when the player isn't carrying on into the sprint; grip-by-speed stays for the sprint | Keith | Keith | Agent on `wip/dashexit`. |
 | 2026-10-31 | Trample-like damage is for small things only (bandits on foot, scrapper robots); vehicles get knockback instead: a mech hitting one shoves it by the mech's speed and the two masses, and both take about the same damage by the closing speed. Big robots and enemy mechs like vehicles if cheap | Keith | Keith | Built for war band vehicles (`src/game/bodyContact.ts`); big robots and enemy mechs left alone for now. |
