@@ -4,6 +4,11 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | A repair kit (the health potion) on Q that never refills by itself | Keith | Keith | `src/game/repair.ts`. |
+| 2026-10-31 | Recovery moves from hold Q to hold X, so Q is the kit | Claude | Keith | |
+| 2026-10-31 | The second consumable (energy potion) is skipped for now; decide later | Keith | Keith | Options in `docs/proposal-repair.md` §3. |
+| 2026-10-31 | Hulls and packs can carry a timed ability that puts down heal zones, toward co-op healers | Keith | Keith | `src/abilities/`. |
+| 2026-10-31 | Defaults picked for the repair work (Keith: pick defaults, ask later): kit 35% over 2 s, carry 3, 40 scrap, 12% per salvage spot, kept when the mech is lost; pack ability on key 3, hull ability on key 4 (drones would move); zones heal the owner at 60% and allies at full, 2 stack; Medic pack Repair beacon, Salvager Nanite field, Siege Field weld | Claude | Claude | Open for Keith in the merge note. |
 | 2026-10-31 | Generated parts: two lanes for a bake-off, lane A TripoSplat (image → splat, meshed on the CPU from the Gaussians' opacity field with surface nets) and lane B Pixal3D / TRELLIS.2 (image → textured mesh), both through ComfyUI's API; splats stay an in-between step (the no-splats decision) | Keith | Keith | `docs/proposal-partgen.md`; Keith 2026-10-31: pick defaults, open questions later. |
 | 2026-10-31 | Game prep for generated parts is TypeScript (meshoptimizer vendored with three), not Blender: testable in the cloud, one less install; textures become vertex colours (the toon look reads vertex colour); sizes come from the Rampart's meshes | Claude | Claude | `tools/partgen/prep.ts`, `kinds.ts`. |
 | 2026-10-31 | High value targets: mini-boss mechs out in the world, summoned by killing enough enemies of a type in their area; quests or targets that pop up (go to a place for scrap, eliminate a target, tow a mech back, recover escape pods: the lore for how we're recovered); no NPC quest givers yet | Keith | Keith | `docs/proposal-quests.md`, `src/quests/`. Fortresses and manufacturing hubs are a separate thread. |

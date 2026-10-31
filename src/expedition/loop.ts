@@ -107,7 +107,7 @@ export interface LoopOptions {
   /** The ground changed over a box (a fortress gate went down): rebuild the terrain meshes there. */
   groundChanged?: (x0: number, z0: number, x1: number, z1: number) => void;
 }
-export interface LoopInput { night?: number; eHeld: boolean; qHeld: boolean; jHeld?: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
+export interface LoopInput { night?: number; eHeld: boolean; recallHeld: boolean; jHeld?: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
 
 export class ExpeditionLoop {
   readonly exp: Expedition;
@@ -180,6 +180,8 @@ export class ExpeditionLoop {
   private demoGoal: { x: number; z: number; id: string } | null = null;
   /** Spots stripped (all runs), and the count when the demo picked its POI. */
   private stripped = 0;
+  /** Repair kits found in salvage (all runs). */
+  kitsFound = 0;
   private demoFrom = 0;
   demoHold = false;
   demoAim: Aim | null = null;
@@ -245,7 +247,11 @@ export class ExpeditionLoop {
     };
     this.forts.onGate = (e) => { if (e.type === "gateDown") this.hud.note("Gate down", "#ffb347", 3); };
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, banditThreat(v), x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
-    this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); this.quests?.stripped(s.poi); };
+    this.sites.onLoot = (label, scrap, s) => {
+      this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); this.quests?.stripped(s.poi);
+      // Now and then a repair kit in the wreck (Keith 2026-10-31), by a hash of the spot (the same spot always does).
+      if (kitRoll(s.id) < this.player.v.kitSalvage && this.player.kits.restock(1)) this.kitsFound++;
+    };
     this.sites.onNoise = (x, z, r) => { this.swarms.noise(x, z, r); this.banditCamps.noise(x, z, r); this.forts.noise(x, z, r); this.columns.noise(x, z, r); };
     this.sites.salvage.danger = this.depth.danger;
     this.sites.salvage.onHeat = (what) => this.heatAnswer(what);
@@ -427,7 +433,7 @@ export class ExpeditionLoop {
     inp.mark?.("extraction pads");
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
-    const ev = exp.update(dt, inp.qHeld && !inp.demo && player.alive, fuelOn && fuel.empty);
+    const ev = exp.update(dt, inp.recallHeld && !inp.demo && player.alive, fuelOn && fuel.empty);
     if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
 
     // The way home: the return point and the warning.
@@ -757,4 +763,11 @@ export class ExpeditionLoop {
     const e = this.exp, sw = this.swarms;
     return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
+}
+
+/** 0..1 from a spot's id (FNV-1a): whether stripping it finds a repair kit. */
+function kitRoll(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 100000) / 100000;
 }

@@ -300,6 +300,8 @@ export interface Resolved {
   shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null; proto?: import("../game/shots").ShotProtocols; cost?: number }[];
   /** The sensor's seeker modes (empty without a sensor). */
   seekers: SeekerMode[];
+  /** Timed abilities (src/abilities/abilities.ts): the pack's on key 3, the hull's on key 4. */
+  abilities: { key: 3 | 4; id: import("../abilities/abilities").AbilityId }[];
   /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
   cargoCapacity: number;
   /** Everything fitted (t). */
@@ -397,6 +399,10 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
       return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null, proto: shotProtocolsOf(it.socketed), cost: shotCostOf(it.socketed) }] : [];
     }),
     seekers: lo.sensor?.seekers ? [...lo.sensor.seekers] : [],
+    abilities: ([["pack", 3], ["hull", 4]] as const).flatMap(([slot, key]) => {
+      const a = lo[slot] ? BASE_BY_ID[lo[slot]!.base]?.ability : undefined;
+      return a && (slot !== "pack" || lo.pack?.kind === "pack") ? [{ key, id: a }] : [];
+    }),
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0) + racks,
     weight: SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0),
   };

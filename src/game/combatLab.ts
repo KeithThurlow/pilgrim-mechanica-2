@@ -48,14 +48,18 @@ import { Walkable } from "../world/walkable";
 import type { WreckStandIns } from "../world/wrecks";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../pilot/onFoot";
 import type { Prey } from "../pilot/quarry";
+import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../ui/vitalsHud";
+import { KitControl, addRepairSounds } from "./repairUse";
+import { AbilityControl } from "../abilities/abilityUse";
+import { ABILITY_TOPIC } from "../abilities/abilities";
 
 export const BASE_DEFAULTS = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
-  ...BAR_DEFAULTS, ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
+  ...BAR_DEFAULTS, ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, ...VITALS_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -112,6 +116,8 @@ export interface CombatLab<E extends object> {
   arsenal: Arsenal;
   /** Shake the camera (decays by itself). */
   shake: (k: number) => void;
+  /** Abilities and heal zones (src/abilities/abilityUse.ts): add allies for zones to heal. */
+  abilities: AbilityControl;
   /** Set by a lab to split the frame into stages (src/core/costs.ts): the shell marks its own; a lab's onFrame marks
    * what it adds. The averaged line shows in the HUD. */
   costs: Costs | null;
@@ -221,6 +227,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     topics: [
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+      { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
+      ABILITY_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
       { id: "legs", label: "Legs", groups: ["Move", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Death physics"] },
@@ -243,6 +251,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   selector = new Selector(app, {
     items: [
       { topic: "pilot", label: "Pilot", objects: () => foot.body.meshes() },
+      { topic: "abilities", label: "Heal zones", objects: () => abilityCtl.draw.meshes() },
       { topic: "legs", label: "Legs", objects: () => regions.legs },
       { topic: "weapons", label: "Weapons", objects: () => arsenal.meshes() },
       { topic: "mech", label: "Your mech", objects: () => [...regions.hull, ...regions.gunLeft, ...regions.gunRight] },
@@ -260,9 +269,15 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   panel.refresh();
 
   const softAim = new SoftAim(scene, camera, canvas, field);
-  const hurtEl = document.createElement("div");
-  hurtEl.className = "hurt";
-  document.body.appendChild(hurtEl);
+  // Your vitals (src/ui/vitalsHud.ts) and repair kits on Q (src/game/repairUse.ts; Keith 2026-10-31).
+  const vitals = vitalsHud(V);
+  const kitCtl = new KitControl(player, foot, bf.sfx);
+  // Abilities from the hull and pack on keys 3 and 4, and their heal zones (src/abilities/).
+  player.uid = "player";
+  const abilityCtl = new AbilityControl(player, foot, scene, (x, z) => field.height(x, z), bf.sfx);
+  addRepairSounds(bf.sfx, () => V.kitSound);
+  foot.showHealth = false;
+  let kitPrompt = "";
 
   field.update();
   player.reset(0, 0, 0);
@@ -288,6 +303,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const frames: ((dt: number) => void)[] = [];
 
   const lab: CombatLab<E> = {
+    abilities: abilityCtl,
     app, V, field, bf, toon, player, deaths,
     enemies,
     onFrame: (fn) => frames.push(fn),
@@ -377,9 +393,12 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     player.dashHold = spaceDown && !auto && driving;
     cst?.mark("input + lock");
     player.step(dt, cmd, aim, trigger, shotAt ?? aim);
-    if (!player.alive && player.deadFor > V.respawn) player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading);
+    kitPrompt = kitCtl.update(dt, keys.has("KeyQ"), auto);
+    abilityCtl.update(dt, keys.has("Digit3") && !sel.active, keys.has("Digit4") && !sel.active, auto);
+    // Lab only: rebuilt with a full set of kits.
+    if (!player.alive && player.deadFor > V.respawn) { player.reset(player.sim.pos.x, player.sim.pos.z, player.sim.heading); player.kits.restock(V.kitMax); }
     // The pilot: hold F to get out (anywhere the mech stands, not mid-dash) and back in; WASD walks him on foot.
-    foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, blockOut: player.dash.active ? "mid-dash" : player.bound.on ? "mid-sprint" : null });
+    foot.update(dt, { hold: fHeld && !auto, stick, run: keys.sprint, prompt: kitPrompt || undefined, blockOut: player.dash.active ? "mid-dash" : player.bound.on ? "mid-sprint" : null });
     // Lab only: a killed pilot is back in the mech after the rebuild time.
     if (!foot.sim.alive && foot.deadFor > V.respawn) foot.reset();
     cst?.mark("mech + weapons");
@@ -392,7 +411,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths physics");
     deadDraw.update();
     cst?.mark("deaths draw");
-    hurtEl.style.opacity = String(Math.min(0.9, player.hurt / 60));
+    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
+    if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
     softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
