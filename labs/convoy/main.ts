@@ -919,7 +919,7 @@ app.onTick((rawDt) => {
   costs.mark("light");
   bf.update(dt, camera, look);
   arsenalDraw.update();
-  app.hud.set("weapons", arsenal.controls().join(" · "));
+  app.hud.set("weapons", () => arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
   loop.update(dt, {
     eHeld, recallHeld: xHeld, jHeld: keys.has("KeyJ"), demo: auto, mark: (st) => costs.mark(st), canvas, night: look.night,
@@ -928,7 +928,7 @@ app.onTick((rawDt) => {
       reach: V.pilotReach, rate: V.pilotStripRate, noise: V.pilotStripNoise,
     } : undefined,
   });
-  app.hud.set("expedition", loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
+  app.hud.set("expedition", () => loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
   app.hud.set("contracts", loop.quests.line);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
@@ -940,20 +940,20 @@ app.onTick((rawDt) => {
     loop.loot.force(d.rarity, sim.pelvis.x, sim.pelvis.z, sim.heading, d.level);
     dropT = d.rarity === "legendary" ? 4 : 2.5;
   }
-  app.hud.set("costs", costs.end());
+  costs.end(app.hud);
 
   const p = convoy.bay;
-  app.hud.set("convoy", `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
+  app.hud.set("convoy", () => `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
   const pl = convoy.plough;
-  app.hud.set("plough", `plough: cut ${pl.cut.toFixed(0)} m² at the blade · moving ${pl.rate.left.toFixed(0)} / ${pl.rate.right.toFixed(0)} m³/s left / right (load ${(ploughFx.load[0] * 100).toFixed(0)}% / ${(ploughFx.load[1] * 100).toFixed(0)}%) · patched ${patchVerts} vertices in ${patchMs.toFixed(2)} ms, ${patchQueue.length} boxes waiting · wake stations ${route.wake.computed}`);
+  app.hud.set("plough", () => `plough: cut ${pl.cut.toFixed(0)} m² at the blade · moving ${pl.rate.left.toFixed(0)} / ${pl.rate.right.toFixed(0)} m³/s left / right (load ${(ploughFx.load[0] * 100).toFixed(0)}% / ${(ploughFx.load[1] * 100).toFixed(0)}%) · patched ${patchVerts} vertices in ${patchMs.toFixed(2)} ms, ${patchQueue.length} boxes waiting · wake stations ${route.wake.computed}`);
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
-  app.hud.set("mech", `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
+  app.hud.set("mech", () => `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
   vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
-  app.hud.set("dash", `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
+  app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
-  app.hud.set("crane", `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
+  app.hud.set("crane", () => `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });
