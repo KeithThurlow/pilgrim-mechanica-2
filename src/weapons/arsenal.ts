@@ -248,6 +248,8 @@ export class Arsenal implements MechWeapons {
     for (const r of this.railShots) r.age += dt;
     while (this.railShots.length && this.railShots[0].age > v.railTrail + 0.2) this.railShots.shift();
     const alive = u.alive;
+    // A dead owner is cold whatever called it (a held rail would fire on release, a painted shot too).
+    if (!alive) this.stop();
     // The faint targeting laser: brighter as the sun goes down.
     const night = Math.min(1, Math.max(0, (0.35 - bf.sunDir.y) / 0.4));
     const laserK = v.laserDay + (v.laserNight - v.laserDay) * night;
@@ -393,6 +395,28 @@ export class Arsenal implements MechWeapons {
       bf.dust.smoke(m.p0.x, m.p0.y, m.p0.z, (Math.random() - 0.5) * 1.5, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 1.5, 0.3, 0.8, 0.7, 0.3);
     }, this.bodyHit);
     for (const m of s.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.14 * v.rpgSmoke, 2);
+  }
+
+  /**
+   * Weapons cold (Keith 2026-10-31: effects stuck after a mech died mid-fire): the owner died, got out, or the round
+   * started over. Every trigger and key is let go WITHOUT firing (a held rail would otherwise fire on release, a painted
+   * shoulder shot too), and everything a held weapon was showing is dropped: the rail's charge, aim line, meter and coil
+   * glow, painter strips and rings, lasers, the arm pod's channel, feed and power effects. Rounds already flying go on.
+   */
+  stop() {
+    for (const s of this.sides) {
+      s.rail.holding = false; s.rail.charge = 0; s.whined = false;
+      s.aimLine.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
+      clearPaint(s.paint);
+      for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.15 : 0.9;
+    }
+    this.prevTrig[0] = this.prevTrig[1] = false;
+    for (const sh of this.shoulders) {
+      sh.held = false; sh.strip = null; sh.laser.on = false;
+      clearPaint(sh.paint);
+      if (sh.gear) { sh.gear.left = 0; sh.held = false; }
+    }
+    for (const g of this.unit.upper.guns) { g.rateMul = 1; }
   }
 
   /** Walking speed share now: the arm missile pod slows the walk while it channels. */
