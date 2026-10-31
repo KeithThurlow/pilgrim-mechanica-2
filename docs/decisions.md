@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Snapshot defaults: Recruit 0.6 s, Veteran 0.55 s, Ace 0.35 s (not 0.4/0.3/0.22): the medium rail sheet is 2.3 m a side and a mech reverses slowly, so shorter windows made a reversal useless at any level; the rival leads 0.9-1.0 of the true lead, sees 0.08-0.15 s late while charging; the autocannon gets bursts along a frozen line | Claude | Claude | Agent on `wip/railgrace`. Keith can set `aiSnapshot` per level; 0.3 s is a dash-only window. |
 | 2026-10-31 | No safety rails on the mech launch pad: the mech can walk or run off the side of the convoy (the crane drop-off and pick-up stay) | Keith | Keith | Agent on `wip/walkoff`. |
 | 2026-10-31 | Excavator (tall walker) armour cut by a third, 10 → 6.5, as a first step; probably halved (5) after play | Keith | Keith | `robotBigArmour` in `src/combat/robots.ts`. |
 | 2026-10-31 | Rivals track well while charging high-velocity weapons (the rail first), then snapshot their aim about 0.3 s before firing: the player's grace window to change direction or dash out of the line. The pattern for most high-velocity weapons | Keith | Keith | Agent on `wip/railgrace`. The new dash is great (Keith). |

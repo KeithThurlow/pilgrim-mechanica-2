@@ -61,6 +61,8 @@ export interface DuelResult {
   dashes: [number, number];
   /** Threatened / dodged by weapon kind (both sides). */
   byKind: Record<string, [number, number]>;
+  /** Rail slugs fired and slugs that hurt, by shooter. */
+  rail: [[number, number], [number, number]];
   /** Worst stretch (s) where a mech neither moved 3 m nor fired. */
   stuckWorst: number;
   nan: boolean;
@@ -84,6 +86,8 @@ export interface DuelOptions {
   hullMul?: [number, number];
   /** Called with every command each frame (a check watching the painted spot). */
   onCmd?: (i: number, cmd: MechCommand, t: number) => void;
+  /** Dash charges refilled every frame for this mech (a drill's dodger: every shot gets a dash). */
+  freeDash?: [boolean, boolean];
   /** Cover drifts (default the lab's). */
   cover?: number;
 }
@@ -108,7 +112,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   score.start(0);
   const flying: Flying[] = [];
   let nextId = 1;
-  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], byKind: {}, stuckWorst: 0, nan: false, states: [] };
+  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
   const dt = 1 / 60, maxT = o.maxTime ?? 90;
   let t = 0;
   const lastAct = [0, 0], lastPos = mechs.map((m) => ({ x: m.sim.pos.x, z: m.sim.pos.z }));
@@ -214,6 +218,7 @@ export function runDuel(o: DuelOptions): DuelResult {
               const was = f.hist[Math.max(0, f.hist.length - 24)] ?? { x: f.sim.pos.x, z: f.sim.pos.z };
               const would = seg(was.x, was.z) < HIT_R + W.railSheetHalf;
               const hit = see && seg(f.sim.pos.x, f.sim.pos.z) < HIT_R + W.railSheetHalf ? hurt(1 - i, "rail", k.damage * power) : 0;
+              res.rail[i][0]++; if (hit) res.rail[i][1]++;
               if (would) tally(1 - i, "rail", !hit);
             }
           }
@@ -272,6 +277,7 @@ export function runDuel(o: DuelOptions): DuelResult {
     if (o.onCmd) cmds.forEach((c, i) => o.onCmd!(i, c, t));
     mechs.forEach((m, i) => {
       const cmd = cmds[i];
+      if (o.freeDash?.[i]) m.dash.charges = Math.round(m.v.dashCharges);
       if (cmd.dash && m.sim.canDash && m.dash.start(cmd.dash.x, cmd.dash.z)) { m.sim.dash(m.dash.dirX, m.dash.dirZ); res.dashes[i]++; }
       for (let s = 0; s < 2; s++) {
         m.dash.update(dt / 2);
