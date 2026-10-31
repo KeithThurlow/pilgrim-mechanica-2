@@ -53,6 +53,9 @@ export interface MechWeapons {
   rounds?(side: 1 | -1): import("../weapons/gear").RoundSpec | null;
   /** Share of the walk's speed now (a channelling arm missile pod slows it; 1: none). */
   moveMul?(): number;
+  /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
+   *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
+  stop?(): void;
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
@@ -283,6 +286,8 @@ export class MechUnit implements Hittable {
     this.health = this.maxHealth;
     this.alive = true;
     this.deadFor = 0;
+    this.goCold();
+    this.bf.nightLights?.streams.clear();
     this.body.paint(this.look, this.paint);
   }
 
@@ -293,7 +298,11 @@ export class MechUnit implements Hittable {
     // A pilot in: the legs may flex now and then while it stands (the walker's idle).
     if (this.piloted && !cmd.idle) cmd = { ...cmd, idle: true };
     this.hurt = Math.max(0, this.hurt - dt * 400);
-    if (!this.alive) { this.deadFor += dt; return; }
+    // Out of the mech: the weapons go cold (nothing held keeps charging or painting; Keith 2026-10-31).
+    if (this.wasPiloted && !this.piloted) this.goCold();
+    this.wasPiloted = this.piloted;
+    // Dead: the weapons still fly what is already in the air, with every trigger let go.
+    if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); return; }
     const { sim, upper, body, v } = this;
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
@@ -394,7 +403,7 @@ export class MechUnit implements Hittable {
     this.weapons?.step(dt, aim, trigger);
     if (this.player && body.armed) {
       const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
-      this.bf.gunAudio.update(dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
+      this.bf.gunAudio.update(this, dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
     }
   }
 
@@ -454,10 +463,19 @@ export class MechUnit implements Hittable {
     if (this.health <= 0) this.destroy();
   }
 
+  private wasPiloted = false;
+  /** Weapons cold: triggers released without firing, charges, paints, lasers and feed effects dropped, the gun loops faded out. */
+  goCold() {
+    this.weapons?.stop?.();
+    for (const g of this.upper.guns) g.firing = false;
+    this.bf.gunAudio.release(this);
+  }
+
   private destroy() {
     this.alive = false;
     this.health = 0;
     this.deadFor = 0;
+    this.goCold();
     this.body.paint(this.look, WRECK);
     // A burst of dark smoke and sand where it went down.
     const p = this.sim.pelvis, dust = this.bf.dust;

@@ -12,32 +12,60 @@ import type { Gun } from "../mech/upper";
 const BRAP_INTERVAL = 0.05, BRAP_STACK = 4, BRAP_STACK_GAIN = 0.04;
 const SPIN_UP_CLIP = 1.1; // seconds: the spin-up sound is built for this spin-up time
 
+/** What the voices need of the sound player (the real Sfx, or a stand-in in the headless check). */
+export type GunSfx = Pick<Sfx, "running" | "play" | "startLoop" | "setLoop" | "stopLoop"> & { v: { growlDetune: number }; ctx: { currentTime: number } };
+
+/** One mech's guns: a growl loop each, and the trigger edges for the spin sounds. */
+interface Voice { loops: (Loop | null)[]; wasTrigger: boolean[]; level: number[]; quiet: number }
+/** A voice nobody has updated for this long (its mech died, hopped out, was removed) is released (s). */
+export const VOICE_TTL = 0.25;
+
 export class MinigunAudio {
-  private loops: (Loop | null)[] = [];
-  private wasTrigger: boolean[] = [];
-  private loopLevel: number[] = [];
+  /** One voice per mech (Keith 2026-10-31): the loops used to be shared by index, so a mech that stopped updating left
+   *  its growl running at the last level for good. Now a mech that dies calls release(), and tick() releases any that
+   *  goes quiet by itself; the sound player's own watchdog (sfx.ts) is the last net under both. */
+  private voices = new Map<object, Voice>();
   private pending = 0;
   private lastBrap = -1;
 
-  constructor(private sfx: Sfx) {}
+  constructor(private sfx: GunSfx) {}
 
-  /** Each frame, with each gun and its muzzle in world space (same order). */
-  update(dt: number, trigger: boolean, guns: readonly Gun[], muzzles: THREE.Vector3[]) {
+  /** Live growl loops (checks and readouts). */
+  get liveLoops() { let n = 0; for (const v of this.voices.values()) for (const l of v.loops) if (l) n++; return n; }
+
+  /** Each frame, for one mech (owner) with each gun and its muzzle in world space (same order). */
+  update(owner: object, dt: number, trigger: boolean, guns: readonly Gun[], muzzles: THREE.Vector3[]) {
     const sfx = this.sfx;
-    if (!sfx.running) { guns.forEach((_, i) => (this.wasTrigger[i] = trigger)); return; }
+    let vo = this.voices.get(owner);
+    if (!vo) this.voices.set(owner, vo = { loops: [], wasTrigger: [], level: [], quiet: 0 });
+    vo.quiet = 0;
+    if (!sfx.running) { guns.forEach((_, i) => (vo.wasTrigger[i] = trigger)); return; }
     const detune = sfx.v.growlDetune / 100;
     guns.forEach((g, i) => {
       // Two guns can't share one same-instant gate, or the second gun's spin-up would be swallowed.
-      if (trigger && !this.wasTrigger[i] && g.spin < 0.95) sfx.play("spinUp", muzzles[i], 1, SPIN_UP_CLIP / Math.max(0.2, g.spinUpTime), false);
-      if (!trigger && this.wasTrigger[i] && g.spin > 0.2) sfx.play("spinDown", muzzles[i], 1, 1 + (i ? -0.04 : 0.04), false);
-      this.wasTrigger[i] = trigger;
+      if (trigger && !vo.wasTrigger[i] && g.spin < 0.95) sfx.play("spinUp", muzzles[i], 1, SPIN_UP_CLIP / Math.max(0.2, g.spinUpTime), false);
+      if (!trigger && vo.wasTrigger[i] && g.spin > 0.2) sfx.play("spinDown", muzzles[i], 1, 1 + (i ? -0.04 : 0.04), false);
+      vo.wasTrigger[i] = trigger;
 
-      this.loops[i] ??= sfx.startLoop("growl", i * 0.37 + 0.11);
+      vo.loops[i] ??= sfx.startLoop("growl", i * 0.37 + 0.11);
       const want = g.firing ? 0.6 + 0.4 * g.spin : 0;
-      this.loopLevel[i] = (this.loopLevel[i] ?? 0) + (want - (this.loopLevel[i] ?? 0)) * Math.min(1, dt * (g.firing ? 30 : 12));
+      vo.level[i] = (vo.level[i] ?? 0) + (want - (vo.level[i] ?? 0)) * Math.min(1, dt * (g.firing ? 30 : 12));
       const pitch = (0.7 + 0.35 * g.spin) * (1 + (g.side === 1 ? -0.5 : 0.5) * detune);
-      sfx.setLoop(this.loops[i]!, muzzles[i], this.loopLevel[i], pitch);
+      sfx.setLoop(vo.loops[i]!, muzzles[i], vo.level[i], pitch);
     });
+  }
+
+  /** The owner is gone, dead, out of its mech or starting over: its loops fade out now. */
+  release(owner: object) {
+    const vo = this.voices.get(owner);
+    if (!vo) return;
+    for (const l of vo.loops) if (l) this.sfx.stopLoop(l);
+    this.voices.delete(owner);
+  }
+
+  /** Every frame: voices that were not updated for VOICE_TTL are released. */
+  tick(dt: number) {
+    for (const [owner, vo] of this.voices) if ((vo.quiet += dt) > VOICE_TTL) this.release(owner);
   }
 
   /** One round's spit from its own gun (not gated against the other gun's rounds). */

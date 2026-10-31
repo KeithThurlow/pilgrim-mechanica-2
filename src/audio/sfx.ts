@@ -5,6 +5,7 @@
 import * as THREE from "three/webgpu";
 import { Synth, rng, grindRecipe } from "./synth";
 import type { Param } from "../core/tweaks";
+import { LoopWatch } from "./loopWatch";
 
 export type SfxKind = "spit" | "spinUp" | "spinDown" | "growl" | "brap" | "dirtHit" | "metalHit" | "casing" | "grind";
 
@@ -51,6 +52,8 @@ export class Sfx {
   private playing = new Map<SfxKind, AudioBufferSourceNode[]>();
   private last = new Map<SfxKind, number>();
   private tmp = new THREE.Vector3();
+  /** Every running loop and when it was last set: one nobody refreshes for 0.3 s fades out and stops (loopWatch.ts). */
+  private watch = new LoopWatch<Loop>(0.3);
 
   constructor(public v: SfxValues, private camera: THREE.Camera) {
     this.ctx = new AudioContext();
@@ -133,19 +136,25 @@ export class Sfx {
     const p = this.ctx.createStereoPanner();
     src.connect(g).connect(p).connect(this.master);
     src.start(0, offset * src.buffer.duration);
-    return new Loop(src, g, p);
+    const loop = new Loop(src, g, p);
+    this.watch.touch(loop, this.ctx.currentTime);
+    return loop;
   }
 
   setLoop(loop: Loop, at: THREE.Vector3, volume: number, pitch: number, kind: SfxKind = "growl") {
     const t = this.ctx.currentTime;
     const pan = this.panFor(at) ?? 0;
+    this.watch.touch(loop, t);
     loop.gain.gain.setTargetAtTime(volume * (this.v[LEVEL[kind]] as number), t, 0.02);
     loop.src.playbackRate.setTargetAtTime(Math.max(0.05, pitch), t, 0.03);
     loop.pan.pan.setTargetAtTime(pan, t, 0.05);
   }
 
   /** Call each frame (master level follows the slider). */
-  update() { this.master.gain.value = this.v.masterVolume; }
+  update() {
+    this.master.gain.value = this.v.masterVolume;
+    for (const l of this.watch.sweep(this.ctx.currentTime)) this.stopLoop(l);
+  }
 
   private extra = new Map<string, { buffers: AudioBuffer[]; level: () => number; playing: AudioBufferSourceNode[] }>();
   /** The sample rate sounds are generated at (for addSound's recipes). */
@@ -189,16 +198,30 @@ export class Sfx {
     const p = this.ctx.createStereoPanner();
     src.connect(g).connect(p).connect(this.master);
     src.start(0, offset * src.buffer.duration);
-    return new Loop(src, g, p);
+    const loop = new Loop(src, g, p);
+    this.watch.touch(loop, this.ctx.currentTime);
+    return loop;
   }
 
   /** Level, pitch and pan of a sound loop (volume times the sound's own level). */
   setSoundLoop(loop: Loop, name: string, at: THREE.Vector3, volume: number, pitch = 1) {
     const t = this.ctx.currentTime, e = this.extra.get(name);
+    this.watch.touch(loop, t);
     loop.gain.gain.setTargetAtTime(volume * (e ? e.level() : 1), t, 0.05);
     loop.src.playbackRate.setTargetAtTime(Math.max(0.05, pitch), t, 0.05);
     loop.pan.pan.setTargetAtTime(this.panFor(at) ?? 0, t, 0.05);
   }
 
-  stopLoop(loop: Loop) { try { loop.src.stop(); } catch { /* already stopped */ } loop.src.disconnect(); }
+  /** End a loop with a short fade (so it doesn't click); safe to call twice. */
+  stopLoop(loop: Loop, fade = 0.06) {
+    this.watch.drop(loop);
+    const t = this.ctx.currentTime;
+    try {
+      loop.gain.gain.cancelScheduledValues(t);
+      loop.gain.gain.setValueAtTime(loop.gain.gain.value, t);
+      loop.gain.gain.linearRampToValueAtTime(0, t + fade);
+      loop.src.stop(t + fade + 0.01);
+    } catch { /* already stopped */ }
+    loop.src.onended = () => loop.src.disconnect();
+  }
 }

@@ -502,6 +502,7 @@ export class Battlefield {
     this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
     const c = this.costs;
     this.sfx.update();
+    this.gunAudio.tick(dt);
     if (this.dents && this.patch) {
       // The dents and the patch follow the camera focus (the sun's shadow box is centred on it).
       const f = look.sun.target.position;

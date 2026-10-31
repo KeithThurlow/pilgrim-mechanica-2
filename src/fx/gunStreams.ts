@@ -92,6 +92,9 @@ export class GunStreams {
     if (pulse) s.env = 1;
   }
 
+  /** Drop every stream at once (a round starting over). */
+  clear() { this.n = 0; }
+
   /** Is it still firing (its next round due)? */
   firing(s: GunStream) { return s.age < Math.min(this.o.hold, 1.6 / Math.max(0.1, s.rate)); }
 
