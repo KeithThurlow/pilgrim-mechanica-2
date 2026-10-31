@@ -21,6 +21,7 @@ import { BanditField, BANDIT_DEFAULTS, BANDIT_PARAMS, BANDIT_GROUPS } from "./ba
 import { WarColumns, COLUMN_DEFAULTS, COLUMN_PARAMS } from "./warColumns";
 import { BanditCamps, WarBands } from "./humans";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "./fortresses";
+import { Warlord } from "./warlord";
 import { Skirmishes, packSource, aftermathSite, clashDrops } from "./fights";
 import { FACTION_DEFAULTS, FACTION_PARAMS, FACTION_GROUPS, Relations, FightDirector, type FightGroup } from "../game/factions";
 import type { Register } from "../game/register";
@@ -74,7 +75,7 @@ export const LOOP_TOPICS = [
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
-  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Manufacturing hub: layout", "Manufacturing hub: salvage"] },
+  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage"] },
   { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
@@ -110,6 +111,8 @@ export class ExpeditionLoop {
   /** The raider faction (Keith 2026-10-28): bandit camps (settled) and war band columns (roaming), and how the factions meet. */
   readonly bandits: BanditField;
   readonly banditCamps: BanditCamps;
+  /** Fortresses whose alarm has gone: seconds until their war band rolls out (negative: sent). */
+  private fortCalls = new Map<string, number>();
   /** Bandit fortresses: their gates and garrisons (fortresses.ts). */
   readonly forts: Fortresses;
   readonly columns: WarColumns;
@@ -223,7 +226,11 @@ export class ExpeditionLoop {
     this.forts = new Fortresses(v, field, bf, scene, this.sites.walls, player, opts.vat ?? null,
       (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1), opts.groundChanged ?? (() => {}));
     this.forts.onKill = (i, gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`f${i}.${gen}`, 0, x, z, this.dropCtx(x, z)); };
-    this.forts.onAlert = () => this.sound.alarm();
+    this.forts.onAlert = (poi) => {
+      this.sound.alarm();
+      // The war bands that gather there send a column out after the first alarm (once per fortress per expedition).
+      if (v.fortReinforce > 0 && !this.fortCalls.has(poi)) this.fortCalls.set(poi, v.fortReinforceAfter);
+    };
     this.forts.onGate = (e) => { if (e.type === "gateDown") this.hud.note("Gate down", "#ffb347", 3); };
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, 0, x, z, this.dropCtx(x, z)); };
     this.sites.onLoot = (label, scrap, s) => { this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); };
@@ -247,6 +254,23 @@ export class ExpeditionLoop {
   private field: DuneField;
   private bf: Battlefield;
 
+  /**
+   * Hand the fortresses their warlord (a red Rampart the lab has loaded; the loop can't wait for a model). Killed, it
+   * drops warlordDrops items rolled as if from deep, hot ground.
+   */
+  attachWarlord(unit: MechUnit, scene: THREE.Object3D) {
+    const w = new Warlord(this.v, this.bf, scene, unit);
+    this.forts.warlord = w;
+    w.onEvent = (e) => {
+      if (e.type !== "warlordDown") return;
+      this.hud.note("Warlord down", "#ffb347", 4);
+      if (this.exp.state !== "out") return;
+      const c = this.dropCtx(e.x, e.z);
+      for (let k = 0; k < Math.round(this.v.warlordDrops); k++)
+        this.loot.drops.roll(`warlord:${e.poi}:${k}`, 1, e.x + Math.sin(k * 2.4) * 3, e.z + Math.cos(k * 2.4) * 3, { ...c, danger: Math.min(1, c.danger + 0.5), heat: 1 });
+    };
+  }
+
   /** Where a drop rolls (loot rolls by depth and salvage heat). */
   private dropCtx(x: number, z: number) {
     return { danger: this.depth.liveDanger(x, z), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth: this.depth.liveDepth(x, z) };
@@ -257,6 +281,7 @@ export class ExpeditionLoop {
     reg.add(this.swarms.target);
     reg.add(this.banditCamps.target);
     reg.add(this.forts.target);
+    reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
     reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) });
   }
 
@@ -269,6 +294,7 @@ export class ExpeditionLoop {
     this.swarms.reset();
     this.banditCamps.reset();
     this.forts.reset();
+    this.fortCalls.clear();
     this.bands.reset();
     this.columns.reset();
     this.skirmish.reset();
@@ -528,6 +554,18 @@ export class ExpeditionLoop {
     const m = pilot ?? sim.pelvis;
     this.banditCamps.update(dt, hunting, prey, pilot);
     this.forts.update(dt, hunting, prey);
+    for (const [poi, t] of this.fortCalls) {
+      if (t < 0) continue;
+      const left = t - dt;
+      this.fortCalls.set(poi, left);
+      const f = this.forts.live.get(poi);
+      if (left > 0 || !f || !hunting) { if (!f) this.fortCalls.set(poi, -1); continue; }
+      // Out of the fortress on the mech's side, a little round from it, hunting the mech.
+      const a = Math.atan2(m.x - f.L.x, m.z - f.L.z) + 0.9, R = f.L.reach + 30;
+      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.depth.liveDanger(f.L.x, f.L.z));
+      this.hud.note("War band out of the fortress", "#ff7ad0", 4);
+      this.fortCalls.set(poi, -1);
+    }
     const evs = this.columns.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud });
     for (const e of evs) { this.bands.bring(e.col); this.hud.note(`War band · ${e.col.kinds.length} vehicles`, "#ff7ad0", 4); this.sound.alarm(); }
     this.bands.update(dt, prey ?? player, hunting, m);

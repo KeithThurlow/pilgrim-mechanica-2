@@ -186,6 +186,12 @@ export class ThreatField {
   }
 
   /** Somewhere on a ring round (x, z) clear of the avoid test (null if none found). */
+  /**
+   * Where robots come from (Keith 2026-10-31): the bearing from (x, z) to the nearest manufacturing hub still working,
+   * or undefined. Packs, raids and heat pulls then mostly arrive from that side (half the tries lean to it).
+   */
+  from: ((x: number, z: number) => number | undefined) | null = null;
+
   private ring(x: number, z: number, r0: number, r1: number, bearing?: number): { x: number; z: number; a: number } | null {
     for (let k = 0; k < 12; k++) {
       const a = bearing !== undefined && k < 6 ? bearing + (this.rand() - 0.5) * 0.8 : this.rand() * Math.PI * 2;
@@ -227,7 +233,7 @@ export class ThreatField {
       if (d < bd) { bd = d; best = p; }
     }
     if (!best) {
-      const at = this.ring(m.x, m.z, this.v.heatPullFrom, this.v.heatPullFrom * 1.2);
+      const at = this.ring(m.x, m.z, this.v.heatPullFrom, this.v.heatPullFrom * 1.2, this.from?.(m.x, m.z));
       if (!at) return null;
       best = this.add("scout", at.x, at.z, Math.round((this.v.roamMin + this.v.roamMax) / 2), "hunt", at.a + Math.PI, this.v.roamHuntSpeed);
     }
@@ -250,7 +256,7 @@ export class ThreatField {
   /** Salvage heat past its second threshold: a small raid aimed at the mech (the raid event, or null). */
   heatRaid(m: MechNow): ThreatEvent | null {
     const v = this.v, dg = m.danger ?? this.danger;
-    const at = this.ring(m.x, m.z, v.heatRaidFrom, v.heatRaidFrom * 1.15);
+    const at = this.ring(m.x, m.z, v.heatRaidFrom, v.heatRaidFrom * 1.15, this.from?.(m.x, m.z));
     if (!at) return null;
     const p = this.add("raid", at.x, at.z, Math.max(1, Math.round(v.heatRaidSize * scaled(v.raidSizeFar, dg))), "hunt", at.a + Math.PI, v.raidSpeed);
     p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg;
@@ -276,7 +282,7 @@ export class ThreatField {
     const dg = m.danger ?? 0;
     this.danger = dg;
     for (; roamers < Math.round(v.roamPacks * scaled(v.roamPacksFar, dg)); roamers++) {
-      const at = this.ring(m.x, m.z, v.roamFrom, Math.max(v.roamFrom, v.roamTo));
+      const at = this.ring(m.x, m.z, v.roamFrom, Math.max(v.roamFrom, v.roamTo), this.from?.(m.x, m.z));
       if (!at) break;
       const lo = Math.min(v.roamMin, v.roamMax), hi = Math.max(v.roamMin, v.roamMax);
       const pk = this.add("pack", at.x, at.z, Math.round((lo + (hi - lo) * this.rand() * this.rand()) * scaled(v.roamSizeFar, dg)), "roam", this.rand() * Math.PI * 2, v.roamSpeed);
@@ -298,7 +304,7 @@ export class ThreatField {
         this.raidT -= dt * scaled(v.raidFreqFar, dg);
         if (this.raidT <= 0) {
           this.raidT = v.raidEvery * (1 + (this.rand() * 2 - 1) * v.raidJitter);
-          const at = this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15);
+          const at = this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15, this.from?.(m.x, m.z));
           if (at) {
             const p = this.add("raid", at.x, at.z, Math.round(v.raidSize * scaled(v.raidSizeFar, dg)), "hunt", at.a + Math.PI, v.raidSpeed);
             p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg;

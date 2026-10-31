@@ -20,6 +20,8 @@ import { SalvageDraw, SALVAGE_FX_DEFAULTS, SALVAGE_FX_PARAMS } from "../../src/p
 import { SalvageHud } from "../../src/pois/salvageHud";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "../../src/expedition/fortresses";
 import type { GateState } from "../../src/pois/gates";
+import { Warlord } from "../../src/expedition/warlord";
+import { MechUnit } from "../../src/game/mechUnit";
 import { INFANTRY_DEFAULTS, INFANTRY_PARAMS } from "../../src/combat/infantry";
 import { BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -48,7 +50,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
   defaults: LAB_DEFAULTS,
   params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Pads"] },
     { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
@@ -108,9 +110,20 @@ forts = new Fortresses(V, field, bf, lab.app.scene, walls, player, vat, () => [p
   (x0, z0, x1, z1) => lab.streamer.rebuildArea(x0, z0, x1, z1));
 const F = forts;
 bf.register.add(F.target);
+// The keep's warlord: a dark red Rampart (src/expedition/warlord.ts); killed, a burst of drops (the lab just notes it).
+{
+  const wb = await lab.loadRampart();
+  const wl = new MechUnit(bf, V, wb, lab.toon, 2, 20, false);
+  wl.paint = 0x8e2a1e;
+  wb.paint(lab.toon, 0x8e2a1e);
+  const w = new Warlord(V, bf, lab.app.scene, wl);
+  F.warlord = w;
+  bf.register.add(w);
+  w.onEvent = (e) => { if (e.type === "warlordDown") { warlordKills++; lab.shake(0.8); } };
+}
 const contact = new BodyContact(player, bf);
 player.onDash = (x, z, dx, dz) => { F.dashed(x, z, dx, dz, V.dashShoveRadius, V.dashShove, V.dashShoveDamage); };
-let downs = 0;
+let downs = 0, warlordKills = 0;
 F.onGate = (e) => { if (e.type === "gateDown") { downs++; lab.shake(0.6); } };
 
 function rebuild() {
@@ -195,5 +208,5 @@ lab.onFrame((dt) => {
   const f = F.live.get(place.id);
   const yards = f ? f.yards.map((y, k) => `${["outer", "inner", "keep"][f.yards.length === 2 && k === 1 ? 2 : k]} ${F.aliveIn(place.id, k)} ${y.state}`).join(" · ") : "not streamed";
   const gates = F.gates.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ");
-  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · scrap ${salvage.scrap} · shift+R: put it back up`);
+  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
 });

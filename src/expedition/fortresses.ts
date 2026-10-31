@@ -29,9 +29,11 @@ import { fenced, gateBox, regionOf, routeVia, wallHeight, type SiegeWalls } from
 import type { Layout } from "../pois/fortress";
 import { Gates, GATE_DEFAULTS, GATE_PARAMS, type GateEvent, type GateValues, type GateState } from "../pois/gates";
 import { GatesDraw } from "../pois/gatesDraw";
+import { WARLORD_DEFAULTS, WARLORD_PARAMS, type Warlord } from "./warlord";
 
 export const FORT_LIFE_DEFAULTS = {
   ...GATE_DEFAULTS,
+  ...WARLORD_DEFAULTS,
   fortGuardsOuter: 22,
   fortGuardsInner: 16,
   fortGuardsKeep: 10,
@@ -42,6 +44,8 @@ export const FORT_LIFE_DEFAULTS = {
   fortWake: 110,
   fortGiveUp: 420,
   fortSally: 60,
+  fortReinforce: 4,
+  fortReinforceAfter: 20,
   fortHear: 1,
   fortHurt: 1.5,
   fortDamage: 0.6,
@@ -51,6 +55,7 @@ export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues;
 const G = "Fortress: garrison";
 export const FORT_LIFE_PARAMS: Param[] = [
   ...GATE_PARAMS,
+  ...WARLORD_PARAMS,
   { key: "fortGuardsOuter", label: "Bandits in the outer yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
   { key: "fortGuardsInner", label: "Bandits in the inner yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
   { key: "fortGuardsKeep", label: "Bandits in the keep", min: 0, max: 120, step: 1, group: G, onRelease: true },
@@ -60,6 +65,8 @@ export const FORT_LIFE_PARAMS: Param[] = [
   { key: "fortWake", label: "Outer yard wakes within (m of its wall)", min: 0, max: 500, step: 5, group: G },
   { key: "fortActive", label: "Stir within (m)", min: 50, max: 1500, step: 10, group: G },
   { key: "fortSally", label: "Comes out after the mech within (m of the wall)", min: 0, max: 400, step: 5, group: G, tip: "An alert yard leaves through an open gate to chase the mech this close outside; further off it holds" },
+  { key: "fortReinforce", label: "War band sent when it's attacked (vehicles)", min: 0, max: 12, step: 1, group: G, tip: "Once per fortress per expedition, a column rolls out from it after the first alarm (0: none)" },
+  { key: "fortReinforceAfter", label: "War band rolls out after (s)", min: 0, max: 180, step: 1, group: G },
   { key: "fortGiveUp", label: "Stand down past (m from the centre)", min: 100, max: 2000, step: 10, group: G },
   { key: "fortHear", label: "Hears stripping (× noise radius)", min: 0, max: 3, step: 0.05, group: G },
   { key: "fortSpawn", label: "Stream in within (m)", min: 200, max: 3000, step: 10, group: G },
@@ -97,6 +104,9 @@ export class Fortresses {
   onKill: ((i: number, gen: number, x: number, z: number) => void) | null = null;
   /** Gate hits and gates down, plain data (after the ground and the yards have taken it). */
   onGate: ((e: GateEvent) => void) | null = null;
+  /** The keep's warlord (a red Rampart the lab loads and hands over; null: no boss). */
+  warlord: Warlord | null = null;
+  private warlordHp = 0;
   /** A yard woke. */
   onAlert: ((poi: string, yard: number) => void) | null = null;
 
@@ -139,6 +149,7 @@ export class Fortresses {
     for (const f of this.live.values()) this.despawn(f, false);
     this.live.clear(); this.kept.clear();
     this.walls.down.clear();
+    this.warlord?.reset();
   }
 
   /** Salvage noise at (x, z) heard within radius: yards in it wake. */
@@ -209,10 +220,11 @@ export class Fortresses {
       }
     }
     this.gatesDraw.update();
-    if (!sw.hi) return;
-    const bf = this.bf;
     const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
     const T = q.at;
+    this.stepWarlord(dt, hunting, q);
+    if (!sw.hi) return;
+    const bf = this.bf;
     sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : this.mechReach }, (fx, fy, fz, tx, ty, tz, i) => {
       const own = sw.hasT[i] === 1;
       if (!own && !q.alive) return;
@@ -224,6 +236,26 @@ export class Fortresses {
       bf.fire(this.slot, TEAM.raiders, from, this.dir, v.fireRange + 5, v.fortDamage, drawn ? { flashScale: 0.35, voice: "other", hitScale: 0.3 } : { tracer: false, voice: "none" });
     });
     this.draw.update(dt);
+  }
+
+  /** The warlord fights when its keep is alerted; hitting it alerts the keep. */
+  private stepWarlord(dt: number, hunting: boolean, q: Prey) {
+    const w = this.warlord, m = w?.unit;
+    if (!w || !m) return;
+    // Stand it in the nearest live keep it hasn't died in.
+    if (!w.poi || !this.live.has(w.poi)) {
+      let best: LiveFort | null = null, bd = Infinity;
+      const P = this.player.sim.pelvis;
+      for (const f of this.live.values()) { const d = Math.hypot(f.L.x - P.x, f.L.z - P.z); if (d < bd && !w.isDead(f.p.id)) { bd = d; best = f; } }
+      if (!best) { if (w.poi) w.leave(); return; }
+      const keep = best.L.rings[best.L.rings.length - 1];
+      w.place(best.p.id, best.L.x, best.L.z, keep.r - keep.top - keep.face, best.p.yaw);
+      this.warlordHp = m.health;
+    }
+    const f = this.live.get(w.poi!)!, keep = f.yards[f.yards.length - 1];
+    if (m.alive && m.health < this.warlordHp - 1e-3) this.alarm(f, keep);
+    this.warlordHp = m.health;
+    w.update(dt, { x: q.at.x, y: q.at.y, z: q.at.z, alive: q.alive }, hunting && keep.state === "alert");
   }
 
   private alarm(f: LiveFort, y: Yard) {
@@ -302,6 +334,7 @@ export class Fortresses {
     if (keep) this.kept.set(f.p.id, { left: f.yards.map((y) => this.alive(y)), hp: new Map(f.gates.map((s) => [s.gate.id, s.hp])) });
     for (const y of f.yards) for (let n = 0; n < y.slots.length; n++) if (this.sw.gen[y.slots[n]] === y.gens[n]) this.sw.remove(y.slots[n]);
     this.gates.removePoi(f.p.id);
+    if (this.warlord?.poi === f.p.id) this.warlord.leave();
     this.live.delete(f.p.id);
   }
 
