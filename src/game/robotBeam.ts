@@ -30,6 +30,9 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number)
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
+  // The release: a blast wave off the emitter and where it strikes (src/fx/blastWaves.ts, the beam kind).
+  bf.waves.post("beam", e.from.x, e.from.y, e.from.z, 2.5, { ground: false, fam: 2 });
+  bf.waves.post("beam", t.x, t.y, t.z, 3, { fam: 2 });
   bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
   bf.sfx.play("brap", from.set(t.x, t.y, t.z), 1.4, 0.5, false);
   return shot.result.steps.length;

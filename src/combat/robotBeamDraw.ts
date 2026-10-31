@@ -7,6 +7,7 @@
 import * as THREE from "three/webgpu";
 import { RobotSwarm, BIG, type BeamLine } from "./robots";
 import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
+import type { BlastWaves } from "../fx/blastWaves";
 import { FAM_ROBOT, type ShortLights } from "../world/lamps";
 
 const SLOTS = 8, SCORCHES = 8, PTS = 48;
@@ -52,6 +53,20 @@ export class RobotBeamDraw {
     }
     // The night lights find this and ask it for its lights each frame.
     this.group.userData.shortLights = (L: ShortLights) => this.lights(L);
+    // Heat shimmer over the emitter while it charges and down the line while it burns (src/fx/blastWavesDraw.ts finds this).
+    this.group.userData.heat = (w: BlastWaves) => this.heat(w);
+  }
+
+  private heat(w: BlastWaves) {
+    const s = w.v.waveBeamHeat, v = this.swarm.v;
+    if (s <= 0) return;
+    for (const { u, line: b } of this.live) {
+      if (u < 1) w.heat(b.ex, b.ey + 0.6, b.ez, 2 + 2 * u, s * (0.3 + 0.7 * Math.pow(u, v.robotBeamGrowth)));
+      else for (let k = 0; k < 3; k++) {
+        const t = Math.random(), x = b.sx + (b.x1 - b.sx) * t, y = b.sy + (b.y1 - b.sy) * t, z = b.sz + (b.z1 - b.sz) * t;
+        w.heat(x, y + 1, z, 3, s);
+      }
+    }
   }
 
   private path(b: { sx: number; sz: number; x1: number; z1: number }): P3[] {

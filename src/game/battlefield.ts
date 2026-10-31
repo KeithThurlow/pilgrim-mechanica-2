@@ -36,6 +36,8 @@ import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
 import { famOfTeam } from "../world/lamps";
+import { BlastWaves, BLAST_WAVE_DEFAULTS, type BlastWaveValues, type WaveKind } from "../fx/blastWaves";
+import { BlastWavesDraw } from "../fx/blastWavesDraw";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -154,6 +156,9 @@ export class Battlefield {
   /** Slow telegraphed shells (lob) and their landing marks. */
   readonly shells = new Shells();
   readonly shellsDraw: ShellsDraw;
+  /** Blast waves on every explosion and heat shimmer behind rockets (Keith 2026-10-31; cosmetic: src/fx/blastWaves.ts). */
+  readonly waves: BlastWaves;
+  readonly wavesDraw: BlastWavesDraw;
   /** Ripples and splashes on the shallows' water (null where the ground has no water). */
   readonly water: WaterFx | null = null;
   private waterDraw: WaterDraw | null = null;
@@ -198,7 +203,10 @@ export class Battlefield {
     const sv = v as BattlefieldValues & Record<string, unknown>;
     for (const [k, val] of Object.entries(SHELL_FX_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.shellsDraw = new ShellsDraw(this.shells, field, v as unknown as ShellFxValues);
-    this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group);
+    for (const [k, val] of Object.entries(BLAST_WAVE_DEFAULTS)) if (!(k in sv)) sv[k] = val;
+    this.waves = new BlastWaves(v as unknown as BlastWaveValues);
+    this.wavesDraw = new BlastWavesDraw(this.waves, field);
+    this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group, this.wavesDraw.group);
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
     this.gunAudio = new MinigunAudio(this.sfx);
@@ -395,7 +403,7 @@ export class Battlefield {
   }
 
   /** A shell bursts where it is: its landing point, or a body it came down on (shellHit). */
-  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage, s.pierce); }
+  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage, s.pierce, s.wave ?? (s.team === 3 ? "volley" : s.team === 2 ? "turret" : "mortar")); }
   /** Shells go off on the first body of another team in their path (a tall robot's chassis or legs). */
   private shellHit = (s: Shell, a: THREE.Vector3, b: THREE.Vector3) => { const h = firstBody(this.targets, s.team, a, b); return h ? h.f : -1; };
 
@@ -407,7 +415,7 @@ export class Battlefield {
    * damage through splash() to everything of another team within radius (full at the centre, half at the edge).
    * Shells burst through here; the player's rockets and mortar shells too (src/weapons).
    */
-  blast(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number) {
+  blast(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number, kind: WaveKind = "default") {
     const s = { team, radius, damage, pierce };
     const k = Math.max(0.5, s.radius / 3);
     this.onBlast?.(p, radius);
@@ -417,6 +425,8 @@ export class Battlefield {
     // An air burst (on a tall robot's chassis or legs) doesn't dig or mark the ground (blastGroundReach × radius up).
     const low = p.y - this.field.height(p.x, p.z) < s.radius * ((this.v as { blastGroundReach?: number }).blastGroundReach ?? 0.5);
     const wet = low && this.inWater(p.x, p.z);
+    // Its blast wave (every explosion has one; its kind picks the profile), with a ground ring when on dry ground.
+    this.waves.post(kind, p.x, p.y + 0.5, p.z, radius, { ground: low && !wet, fam: famOfTeam(team) });
     // The crater is queued (a 12-missile swarm would stall a frame digging them all at once); the effects play now.
     if (low) this.queueDent(p.x, p.z, s.radius);
     if (wet) {
@@ -472,6 +482,7 @@ export class Battlefield {
       // The arc's way along (the shells rise 4·arc·u(1-u) over the straight line).
       const dx = (s.to.x - s.from.x) / F, dz = (s.to.z - s.from.z) / F, dy = (s.to.y - s.from.y) / F + (s.arc * 4 * (1 - 2 * u)) / F;
       L.rocket(s.pos.x, s.pos.y, s.pos.z, dx, dy, dz, 0.8, fam);
+      this.waves.exhaust(s.pos.x, s.pos.y, s.pos.z, dx, dy, dz, 0.7);
       L.telegraph(s.to.x, this.field.height(s.to.x, s.to.z), s.to.z, s.radius, u, fam);
     }
   }
@@ -525,5 +536,10 @@ export class Battlefield {
     this.fx.frame(gpuDust ? gd!.pool.alive : this.dust.alive);
     if (gpuDust) this.dust.alive += gd!.pool.alive;
     c?.mark("dust");
+    // Blast waves and heat shimmer (the frame copy only runs while one is live).
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+      this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600);
+    } else this.waves.update(dt);
+    c?.mark("blast waves");
   }
 }

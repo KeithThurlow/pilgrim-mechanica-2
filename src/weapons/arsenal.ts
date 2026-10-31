@@ -9,6 +9,7 @@
 // faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar (a key paints, release
 // fires), and (Keith 2026-10-30) feeds and power (src/weapons/gear.ts): a press on the key overdrives or loads special
 // rounds into the gun on that side, or refills energy bars; their passives are applied to the guns and the dash.
+import type { WaveKind } from "../fx/blastWaves";
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { MechUnit, MechWeapons } from "../game/mechUnit";
@@ -309,7 +310,7 @@ export class Arsenal implements MechWeapons {
     const steel = bf.wrecks ? (o: THREE.Vector3, d: THREE.Vector3, max: number) => (bf.wrecks!.hit(o, d, max, this.tmp2, this.dir) ? o.distanceTo(this.tmp2) : -1) : null;
     this.rockets.update(dt, bf.field, bf.targets, steel, (r, at, _why, t) => {
       if (t) t.damage(r.damage * 0.5, at, r.dir, r.ap);
-      this.blast(at, r.blast, r.damage, r.ap);
+      this.blast(at, r.blast, r.damage, r.ap, "rocket");
     });
     if (v.rpgSmoke > 0) for (const r of this.rockets.list) if (r.live) this.trail(r.prev, r.pos, 0.3 * v.rpgSmoke, 4);
   }
@@ -398,7 +399,7 @@ export class Arsenal implements MechWeapons {
 
     // Line mortar shells, big mortar shells, missiles.
     sh.line.update(dt, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, (r) => {
-      this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, sh.own?.ap ?? v.salvoAp);
+      this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, sh.own?.ap ?? v.salvoAp, "lineMortar");
     }, (r) => {
       bf.sfx.playSound("mortar", this.tmp.set(r.p0.x, r.p0.y, r.p0.z), 0.7, 1.2 + Math.random() * 0.2);
       bf.dust.smoke(r.p0.x, r.p0.y, r.p0.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.35, 0.9, 0.7, 0.4);
@@ -419,7 +420,7 @@ export class Arsenal implements MechWeapons {
     });
     const track = (key: unknown) => this.findTarget(key);
     sh.swarm.update(dt, bf.field, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, track, (m) => {
-      this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp);
+      this.blast(this.tmp.set(m.pos.x, m.pos.y, m.pos.z), m.blast, m.damage, sh.own?.ap ?? v.swarmAp, "missile");
     }, (m) => {
       bf.sfx.playSound("rocket", this.tmp.set(m.p0.x, m.p0.y, m.p0.z), 0.6, 1.1 + Math.random() * 0.2);
       bf.nightLights?.launch(m.p0.x, m.p0.y, m.p0.z, 0.5, this.fam);
@@ -668,12 +669,16 @@ export class Arsenal implements MechWeapons {
     else { bf.dust.hit(at.x, at.y, at.z, d.x, d.z, 1.8); if (!t) bf.marks.crater(at.x, at.z, 1.3); }
     for (let k = 0; k < 4; k++) bf.dust.smoke(at.x, at.y + 0.3, at.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.3, 0.8, 0.7, 0.75);
     bf.sfx.play("brap", at, 0.9, 0.8, true);
+    // A small blast wave (src/fx/blastWaves.ts), a ground ring when it hit the sand.
+    bf.waves.post("cannon", at.x, at.y + 0.3, at.z, Math.max(1.2, splash), { ground: !t, fam: this.fam });
   }
 
   /** A rocket, missile or shell's blast: the battlefield's one blast entry point (crater queued, dust, sound, splash). */
-  private blast(at: THREE.Vector3, radius: number, damage: number, ap?: number) {
-    this.bf.blast(this.unit.team, at.clone(), radius, damage, ap);
+  private blast(at: THREE.Vector3, radius: number, damage: number, ap: number | undefined, kind: WaveKind) {
+    this.bf.blast(this.unit.team, at.clone(), radius, damage, ap, kind);
   }
+  /** The battlefield's blast waves (the draw leaves heat shimmer behind rockets in flight). */
+  get waves() { return this.bf.waves; }
 
   private muzzleOf(s: Side, side: 1 | -1, out: THREE.Vector3, tube = 0) {
     const m = s.model?.muzzles;

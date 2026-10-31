@@ -600,6 +600,8 @@ export class Warband {
     bf.dust.stomp(p.x, p.y - 0.8, p.z, 2.5 * big);
     bf.marks.crater(p.x, p.z, 6 * big);
     bf.sfx.play("brap", p, 2, 0.55, false);
+    // Its blast wave (src/fx/blastWaves.ts: the vehicle kind, with a second ring and heat over the wreck).
+    bf.waves.post("death", p.x, p.y, p.z, 3.5 * big, { fam: 1 });
     // Thrown by the blast. With the death physics, a real rigid body that can roll over and slide down a dune.
     if (this.deaths) {
       const cv = s.v;
