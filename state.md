@@ -182,6 +182,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Enemy lights and the excavator charging beam (Keith 2026-10-31): agent on `wip/enemylights` (handoff `docs/handoff-enemylights.md`).
 - Balance pass 2 merged 2026-10-31, never run in a browser: Keith to play the duel lab, robots lab, weapons lab `?proto=splitter` (or `overclock,arcLink`, `quickLoader,caseless`), loadout lab. Rough: health bars and the reload ring never seen; split on the shoulder rocket loses sustained DPS (magazine 3); minigun pairs take ~45 s on an excavator (armour 10) without the default missile pod; raiders and bandits don't scale with area level yet; old saved items keep their old rolls (`?fresh`).
 - Shoulder gear merged 2026-10-30, never run in a browser: Keith to try weapons lab `?k1=missiles&k2=beltfeed`, `?k2=incendiary`, `?k1=capacitor`; convoy lab `?fresh`. Rough: stand-in models, orange tracers and burn flames never rendered; flames stay at the last hit; rivals roll launchers only.
 - Robot danger, turret trucks and the party bus merged 2026-10-29, never run in a browser: Keith to try robots lab, war band lab, convoy lab `?warband` (or `?warband=8`). Rough: war band randomness other than the bus is still `Math.random`; the bus's bandits belong to no camp so always go for the player; the stress lab fields no buses.
