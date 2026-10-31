@@ -15,12 +15,16 @@
 // walking along the convoy's heading, then WASD again. Step off the pad before the
 // grip and it's off. The crane's motion is the countdown. After a launch the mech has to leave the range once before
 // the crane will pick it up again.
+// Walking off (Keith 2026-10-31): with open sides the mech can walk, run or dash off a bay's long side. It leaves the
+// deck with its own speed plus the deck's (pushing off at least deckStepOff, and always enough to land clear of the
+// crawler tracks), and falls and lands exactly like a crane drop (falling, then landing; no forced follow): the
+// expedition starts the same way, and the crane has to be re-armed (leave its range) as after a launch.
 import type { Param } from "../core/tweaks";
 import type { WalkerSim, MoveCommand } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
 import type { Platform } from "./platform";
 import type { Crane, CraneValues } from "./crane";
-import { DeckGround, PoseSnap, rideDeck, keepOnDeck, spotAt, type DeckValues, type Spot } from "./deck";
+import { DeckGround, PoseSnap, rideDeck, keepOnDeck, spotAt, offSide, MECH_PUSH_R, type DeckValues, type Spot } from "./deck";
 import { hangPose, hangDrop, kneelPose, type Kneel } from "./hold";
 
 export const CARRY_DEFAULTS = {
@@ -91,6 +95,9 @@ export class CraneCarry {
   deploys = 0;
   aborts = 0;
   parks = 0;
+  walkOffs = 0;
+  /** The last time the mech left the deck it walked off (no forced follow after the landing). */
+  walkedOff = false;
   /** The walker's ground: the deck while aboard, the dunes otherwise. Assign it to the walker (done on update). */
   readonly ground: DeckGround;
   /** The spot (deck-local) the mech is on, if any, as of the last update. */
@@ -159,7 +166,7 @@ export class CraneCarry {
       case "parked": return this.phase === "rise" ? "standing up" : "parked · hold F to climb out · E to stand up";
       case "launching": return "on the launch pad: crane coming (step off to cancel)";
       case "deploying": return { lift: "lifted off the deck", swing: "swinging out", hover: "steadying over the sand" }[this.phase as "lift"] ?? "launching";
-      case "falling": return "dropped";
+      case "falling": return this.walkedOff ? "off the side" : "dropped";
       case "landing": return "launched: keep pace";
     }
   }
@@ -225,9 +232,38 @@ export class CraneCarry {
     else this.snap.take(this.platform);
   }
 
-  /** After the walker steps: keep a mech walking on the deck on it. */
+  /** After the walker steps: keep a mech walking on the deck on it, or let it go off an open side. */
   keep(sim: WalkerSim) {
-    if (this.onDeck) keepOnDeck(sim, this.platform, this.v);
+    if (!this.onDeck) return;
+    keepOnDeck(sim, this.platform, this.v);
+    const side = offSide(sim, this.platform, this.v);
+    if (side) this.walkOff(sim, side);
+  }
+
+  /**
+   * Off the side: the walker flies from where it is with its own velocity (relative to the deck) plus the deck's,
+   * the part away from the deck at least deckStepOff and enough to clear the tracks by landing time.
+   */
+  private walkOff(sim: WalkerSim, side: 1 | -1) {
+    const p = this.platform, v = this.v, f = this.fall;
+    const ox = Math.cos(p.heading) * side, oz = -Math.sin(p.heading) * side;
+    const own = sim.airborne ? sim.airVel : sim.vel;
+    let vx = own.x + (sim.airborne ? 0 : sim.skid.x), vz = own.z + (sim.airborne ? 0 : sim.skid.z);
+    const vy = (sim.airborne ? sim.airVel.y : 0) + p.vel.y;
+    // Clear the footprint (tracks plus the push-out radius) by the time the feet reach the sand.
+    const l = p.toLocal(sim.pos.x, sim.pos.z);
+    const clear = p.halfW + MECH_PUSH_R + 0.3 - Math.abs(l.x);
+    const h = Math.max(0.3, this.ground.deckHeight(sim.pos.x, sim.pos.z) - this.field.height(sim.pos.x, sim.pos.z));
+    const t = (vy + Math.sqrt(vy * vy + 2 * 9.81 * h)) / 9.81;
+    const need = Math.max(v.deckStepOff, clear / Math.max(0.2, t));
+    const out = vx * ox + vz * oz;
+    if (out < need) { vx += (need - out) * ox; vz += (need - out) * oz; }
+    this.state = "falling"; this.phase = ""; this.timer = 0; this.armed = false; this.attached = false;
+    this.walkOffs++; this.walkedOff = true;
+    this.ground.onDeck = false;
+    f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
+    f.vx = vx + p.vel.x; f.vy = vy; f.vz = vz + p.vel.z; f.t = 0; f.heading = sim.heading;
+    sim.launch(f.vx, f.vy, f.vz);
   }
 
   /**
@@ -346,7 +382,7 @@ export class CraneCarry {
         f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
         if (sim.airborne) { f.vx = sim.airVel.x; f.vy = sim.airVel.y; f.vz = sim.airVel.z; f.t = sim.airT; }
         else this.touchdown(sim);
-        out = this.follow(sim);
+        out = this.walkedOff ? cmd : this.follow(sim);
         break;
       }
       case "parked": {
@@ -367,7 +403,7 @@ export class CraneCarry {
         this.timer -= dt;
         if (this.nearest(sim).d > v.craneRange + 2) this.armed = true;
         if (this.timer <= 0) this.state = "walking";
-        else out = this.follow(sim);
+        else out = this.walkedOff ? cmd : this.follow(sim);
         break;
     }
     this.ground.onDeck = this.onDeck || this.state === "parked";
@@ -427,7 +463,7 @@ export class CraneCarry {
     const p = this.platform, f = this.fall;
     this.attached = false;
     this.state = "falling"; this.phase = ""; this.armed = false;
-    this.deploys++;
+    this.deploys++; this.walkedOff = false;
     this.ground.onDeck = false;
     f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
     f.vx = p.vel.x; f.vz = p.vel.z; f.vy = Math.min(0, this.crane.cradleVel.y);
@@ -440,7 +476,7 @@ export class CraneCarry {
   /** Feet on the sand (the walker landed itself, squatting by how hard): craneFollow seconds along the convoy. */
   private touchdown(sim: WalkerSim) {
     const v = this.v, l = sim.lastLanding;
-    this.state = "landing"; this.phase = ""; this.timer = v.craneFollow;
+    this.state = "landing"; this.phase = ""; this.timer = this.walkedOff ? 0 : v.craneFollow;
     const speed = l?.impact ?? 0;
     this.lastLanding = { speed, time: l?.airTime ?? this.fall.t };
     this.onTouchdown?.(l?.x ?? sim.pos.x, l?.y ?? this.field.height(sim.pos.x, sim.pos.z), l?.z ?? sim.pos.z, speed);

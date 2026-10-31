@@ -77,7 +77,7 @@ export class PlatformBody {
     const ends = landingEnds(this.all)[this.index];
     const key = [p.deck, v.trackPods, v.trackTop, v.trackHeight, v.trackWidth, v.trackPitch, v.trackPodGap, v.pipeDensity, v.pipeSeed, v.pipeScale,
       v.bridgeCount, v.bridgeRise, ends.nose, ends.tail, v.runningGap,
-      ...(c ? [c.craneSetDown, c.craneMount, c.deckParkX, c.deckParkZ, c.deckLaunchX, c.deckPadRadius] : [])].join("|");
+      ...(c ? [c.craneSetDown, c.craneMount, c.deckParkX, c.deckParkZ, c.deckLaunchX, c.deckPadRadius, c.deckOpenSides] : [])].join("|");
     if (key !== this.built) { this.build(ends); this.built = key; }
     this.m.makeBasis(new THREE.Vector3(p.left.x, p.left.y, p.left.z), new THREE.Vector3(p.up.x, p.up.y, p.up.z), new THREE.Vector3(p.fwd.x, p.fwd.y, p.fwd.z));
     this.m.setPosition(p.x, p.y, p.z);
@@ -124,11 +124,20 @@ export class PlatformBody {
     const railY = [D + RAIL * 0.5, D + RAIL];
     const deployZ = this.carry && kind === "bay" ? bayZ(p, this.carry).crane : null;
     const inset = deckOutline(p.spec, -0.1).pts;
+    // Open sides on a bay (Keith 2026-10-31): no rails along the long sides, only a low kerb and a hazard edge (the pilot
+    // still keeps off the edge, walkways.ts); the mech walks off there (deck.ts).
+    const open = deployZ !== null && this.carry!.deckOpenSides > 0.5;
     for (let i = 1; i < inset.length; i++) {
       const [ax, az] = inset[i], [bx, bz] = inset[(i + 1) % inset.length];
       // The long sides open at the deploy zone.
       const side = Math.abs(ax - bx) < 1e-6;
       const segs: [number, number][] = [[0, 1]];
+      if (side && open) {
+        const len = Math.abs(bz - az), x = ax;
+        k.box([0.12, 0.14, len], [x, D + 0.07, (az + bz) / 2], PAL.steel);
+        for (let z = Math.min(az, bz) + 0.5; z < Math.max(az, bz) - 0.4; z += 1.6) k.box([0.3, 0.03, 0.8], [x - Math.sign(x) * 0.3, D + 0.02, z], PAL.hazard);
+        continue;
+      }
       if (side && deployZ !== null) {
         const t0 = (deployZ - 4 - az) / (bz - az), t1 = (deployZ + 4 - az) / (bz - az);
         const lo = Math.min(t0, t1), hi = Math.max(t0, t1);

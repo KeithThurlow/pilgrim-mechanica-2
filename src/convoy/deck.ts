@@ -7,13 +7,14 @@
 // Ground: while the mech is aboard, the walker's ground is the deck plane (extended a little past the edges so
 // lookups just outside don't see a 3 m drop); otherwise it's the dunes.
 // Keeping on: the mech is a circle that can't leave the deck (rails, along the cut-cornered outline) or pass through
-// the deck furniture. A rear mech bay (crane aft) has the same layout mirrored along its length, the cab still in front.
+// the deck furniture. With open sides (Keith 2026-10-31, deckOpenSides) the long sides have no rails: the mech can walk,
+// run or dash off them (offSide; carry.ts flies it to the sand); the ends and the corner cuts still keep it on. A rear mech bay (crane aft) has the same layout mirrored along its length, the cab still in front.
 import type { Param } from "../core/tweaks";
 import type { Ground, WalkerSim } from "../mech/walker";
 import type { DuneField } from "../world/terrain";
 import type { Platform, PlatformSpec } from "./platform";
 import { landingXs, landingLayout, stairBox, LANDING_IN, LANDING_HALF } from "./train";
-import { outside, keepInside } from "./outline";
+import { outside, keepInside, sideSpan } from "./outline";
 
 export const DECK_DEFAULTS = {
   deckMechRadius: 1.5,
@@ -22,6 +23,9 @@ export const DECK_DEFAULTS = {
   deckLaunchX: 5.8,
   deckPadRadius: 1.8,
   craneSetDown: 2,
+  deckOpenSides: 1,
+  deckEdgeOver: 0.2,
+  deckStepOff: 2,
 };
 export type DeckValues = typeof DECK_DEFAULTS;
 
@@ -32,7 +36,13 @@ export const DECK_PARAMS: Param[] = [
   { key: "deckLaunchX", label: "Launch pads out (m)", min: 2, max: 7, step: 0.1, group: "Deck", tip: "The launch pads beside the crane, this far out from the centre line" },
   { key: "deckPadRadius", label: "Pad radius (m)", min: 0.8, max: 3, step: 0.05, group: "Deck", tip: "Stand this close to a pad's middle to be on it" },
   { key: "craneSetDown", label: "Set-down pad (m)", min: -16, max: 14, step: 0.5, group: "Deck", tip: "Where the crane sets a picked-up mech on the deck, forward of the middle" },
+  { key: "deckOpenSides", label: "Open sides (walk off)", min: 0, max: 1, step: 1, group: "Walk off", tip: "1: no rails along a mech bay's long sides, the mech walks, runs or dashes off onto the sand (Keith 2026-10-31); 0: kept on as before" },
+  { key: "deckEdgeOver", label: "Step off past edge (m)", min: 0, max: 1.5, step: 0.05, group: "Walk off", tip: "The mech's middle this far past the side edge and it leaves the deck" },
+  { key: "deckStepOff", label: "Least push-off (m/s)", min: 0, max: 8, step: 0.1, group: "Walk off", tip: "Going off, the mech moves out from the deck at least this fast (and always fast enough to land clear of the crawler tracks)" },
 ];
+
+/** How far the mech's middle is kept from a platform's footprint on the sand (the push-out radius, m). */
+export const MECH_PUSH_R = 2;
 
 /** A marked spot on the deck (local left, forward). */
 export interface Spot { x: number; z: number; kind: "park" | "launch" | "setdown"; side?: 1 | -1 }
@@ -169,7 +179,8 @@ export function rideDeck(sim: WalkerSim, p: Platform, was: PoseSnap) {
 export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneMount: number; bridgeCount?: number }) {
   const lay = deckLayout(p, v), r = v.deckMechRadius;
   const l = p.toLocal(sim.pos.x, sim.pos.z);
-  let { x, z } = keepInside(p.outline, l.x, l.z, r);
+  // Open sides (Keith 2026-10-31): only the ends and the corner cuts keep the mech on; the long sides it can leave.
+  let { x, z } = keepInside(p.outline, l.x, l.z, r, v.deckOpenSides > 0.5);
   for (const b of lay.blocks) {
     if (b.r !== undefined) {
       const dx = x - b.x, dz = z - b.z, d = Math.hypot(dx, dz), m = b.r + r;
@@ -203,6 +214,17 @@ export function keepOnDeck(sim: WalkerSim, p: Platform, v: DeckValues & { craneM
   sim.pos.x = p.x + c * x + s * z;
   sim.pos.z = p.z - s * x + c * z;
   return true;
+}
+
+/**
+ * Has the mech walked off a long side? The side (+1 left, -1 right) once its middle is deckEdgeOver past that edge
+ * (along the straight stretch; the corner cuts and the ends still keep it on), else 0.
+ */
+export function offSide(sim: WalkerSim, p: Platform, v: DeckValues): 1 | -1 | 0 {
+  if (v.deckOpenSides <= 0.5) return 0;
+  const l = p.toLocal(sim.pos.x, sim.pos.z), o = p.outline, [z0, z1] = sideSpan(o);
+  if (l.z < z0 || l.z > z1 || Math.abs(l.x) < o.halfW + v.deckEdgeOver) return 0;
+  return l.x > 0 ? 1 : -1;
 }
 
 /** A stick that walks the mech to a deck spot (local x, z), easing off near it; zero once within `stop` m. */
