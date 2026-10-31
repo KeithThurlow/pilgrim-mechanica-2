@@ -16,6 +16,7 @@ import { levelPower } from "../src/items/level";
 import { problems, resolve } from "../src/items/loadout";
 import { loadoutFor } from "../src/items/weaponPick";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
+import { railRates } from "./rail-grace-probe";
 
 const fails: string[] = [];
 const must = (ok: boolean, why: string) => { if (!ok) fails.push(why); };
@@ -244,15 +245,55 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     threats: [],
   });
   const { rivalHull: _r, ...REC } = RIVAL_LEVELS.recruit;
-  // A rail aimed at a standing foe, which then steps sideways at 6 m/s: the line is still near the old spot half a second on.
-  const ai = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC, aiAimError: 0 }, 3);
-  let lock: { x: number } | null = null;
-  for (let n = 0; n < 240; n++) lock = ai.decide(mk(n, 0, 30, 0, true, 0.5), 1 / 60).lock;
-  const settled = lock!.x;
-  for (let n = 240; n < 288; n++) lock = ai.decide(mk(n, (n - 240) / 60 * 6, 30, 6, true, 0.5), 1 / 60).lock;
-  const foeNow = 48 / 60 * 6;
-  must(Math.abs(settled) < 1, `rail line didn't settle on a standing foe (${settled.toFixed(1)} m off)`);
-  must(foeNow - lock!.x > 2.5, `0.8 s into a sidestep the rail line is only ${(foeNow - lock!.x).toFixed(1)} m behind the foe (hit radius 1.7)`);
+  // Track, then snapshot (Keith 2026-10-31): a rail leads a strafing foe while it charges, then freezes aiSnapshot s before
+  // the shot: the line does not follow a change of direction after that, and the trigger goes up the moment it is full.
+  {
+    const snapAi = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC, aiRailError: 0 }, 3);
+    const T = kit.find((k) => k.kind === "rail")!.charge, SNAP = REC.aiSnapshot!;
+    let charge = 0, fx = 0, fvx = 6, lock: { x: number } | null = null, frozenAt = -1, frozenX = 0, moved = 0, upAt = -1, snappedFlag = false, leadErr = 99;
+    for (let n = 0; n < 600; n++) {
+      const t = n / 60;
+      // 2 s of tracking at 6 m/s (charge held at 0 = ready), then the charge builds; the foe reverses 0.2 s after the freeze.
+      if (t >= 2) charge = Math.min(1, charge + 1 / 60 / T);
+      if (frozenAt >= 0 && t - frozenAt > 0.2) fvx = -6;
+      fx += fvx / 60;
+      const view = mk(n, fx, 30, fvx, true, charge);
+      const c = snapAi.decide(view, 1 / 60);
+      lock = c.lock;
+      if (t > 1.9 && t < 2) leadErr = Math.abs(lock!.x - (fx - 6 * REC.aiRailReaction! + 6 * REC.aiRailLead! * (REC.aiRailReaction! + SNAP)));
+      if (snapAi.snapped && frozenAt < 0) { frozenAt = t; frozenX = lock!.x; snappedFlag = true; must(Math.abs((1 - charge) * T - SNAP) < 0.05, `snapshot began with ${((1 - charge) * T).toFixed(2)} s of charge left, want ${SNAP}`); }
+      if (frozenAt >= 0) moved = Math.max(moved, Math.abs(lock!.x - frozenX));
+      if (charge >= 1 && !c.trigger[0] && upAt < 0) upAt = t;
+      if (upAt >= 0) break;
+    }
+    must(snappedFlag, "snapshot: the aim never froze while the rail charged");
+    must(leadErr < 1.5, `snapshot: tracking a 6 m/s foe the rail line was ${leadErr.toFixed(1)} m off the led point`);
+    must(moved === 0, `snapshot: the frozen line moved ${moved.toFixed(2)} m after the freeze`);
+    must(upAt >= 0 && upAt - frozenAt < SNAP + 0.1, `snapshot: the trigger went up ${(upAt - frozenAt).toFixed(2)} s after the freeze, want about ${SNAP} (no extra hold)`);
+  }
+  // The autocannon fires in bursts along a frozen line: the line holds from the freeze through the burst, the trigger waits
+  // for the snapshot to run down, and the cycle repeats.
+  {
+    const acKit = kitOf(resolve(loadoutFor({ left: "autocannon", right: "minigun", k1: "none", k2: "none", k3: "pack" })), WEAPON_DEFAULTS);
+    const mkA = (n: number, fx: number): DuelView => ({ ...mk(n, fx, 30, 6, true, 0), self: { ...mk(n, fx, 30, 6, true, 0).self, kit: acKit, weapons: acKit.map((_, i) => ({ i, ready: true, charge: 0 })) } });
+    const a2 = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC }, 9);
+    let wasSnap = false, fx = 0, bursts = 0, shooting = false, freezeAt = -1, firstShot = -1, held = 0, lockMove = 0, lx = 0;
+    for (let n = 0; n < 60 * 8; n++) {
+      fx += 0.1;
+      const c = a2.decide(mkA(n, fx), 1 / 60), t = n / 60;
+      if (a2.snapped && !wasSnap) { lx = c.lock!.x; if (freezeAt < 0) freezeAt = t; }
+      if (a2.snapped) lockMove = Math.max(lockMove, Math.abs(c.lock!.x - lx));
+      wasSnap = a2.snapped;
+      const trig = c.trigger[0];
+      if (trig && !shooting) { bursts++; if (bursts === 1) firstShot = t; }
+      if (trig) held += 1 / 60;
+      shooting = trig;
+    }
+    must(bursts >= 2, `autocannon: only ${bursts} bursts in 8 s`);
+    must(freezeAt >= 0 && firstShot - freezeAt >= REC.aiSnapshot! - acKit[0].spinUp - 0.1, `autocannon: the trigger went down ${(firstShot - freezeAt).toFixed(2)} s after the freeze, want ${(REC.aiSnapshot! - acKit[0].spinUp).toFixed(2)} (the spin-up fills the rest)`);
+    must(lockMove === 0, `autocannon: the frozen line moved ${lockMove.toFixed(2)} m during a snapshot or burst`);
+    console.log(`autocannon (Recruit): ${bursts} bursts in 8 s, ${held.toFixed(1)} s of trigger, trigger down ${(firstShot - freezeAt).toFixed(2)} s after the freeze (spin-up ${acKit[0].spinUp} s)`);
+  }
   // Cover: the foe out of sight, the aim holds the last spot and nothing but a charged rail's hold fires; after it
   // shows again it needs aiReacquire before the guns open.
   const ai2 = new RivalAi({ ...RIVAL_AI_DEFAULTS, ...REC, aiAimError: 0 }, 4);
@@ -317,7 +358,7 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
   };
   const stand = RIVAL_LEVEL_IDS.map((l) => taken(l, false)), strafe = RIVAL_LEVEL_IDS.map((l) => taken(l, true));
   must(stand[0] > 1500, `a Recruit barely hurt a player who stands still (${Math.round(stand[0])} in 30 s)`);
-  must(strafe[0] < stand[0] * 0.4, `a Recruit still hit a strafing player for ${Math.round(strafe[0])} vs ${Math.round(stand[0])} standing`);
+  must(strafe[0] < stand[0] * 0.8, `a Recruit hit a strafing player for ${Math.round(strafe[0])} vs ${Math.round(stand[0])} standing (a straight strafe is read, not dodged)`);
   must(stand[0] < stand[2] && strafe[0] < strafe[2], `levels not ordered (stand ${stand.map(Math.round)} strafe ${strafe.map(Math.round)})`);
   let wins = 0, tt = 0;
   for (let seed = 1; seed <= 8; seed++) {
@@ -326,6 +367,32 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
   }
   must(wins >= 6, `a Veteran-proxy player beat the Recruit in only ${wins} of 8`);
   must(wins > 0 && tt / wins > 8 && tt / wins < 25, `Recruit time to kill ${(tt / Math.max(1, wins)).toFixed(1)} s (want 8-25)`);
+  // Per level: the same Veteran-proxy player against each rival, time to kill it and the damage the player took.
+  const perLevel = RIVAL_LEVEL_IDS.map((lvl) => {
+    let w = 0, t2 = 0, dmg = 0, ran = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const r = runDuelRaw({ seedA: 1, seedB: 100 + seed, maxTime: 90, cover: 0, aiSeed: seed, loadouts: [loadoutFor({ left: "minigun", right: "rpg", k1: "missiles", k2: "none", k3: "mortar" }), null], aiEach: [RIVAL_LEVELS.veteran, RIVAL_LEVELS[lvl]], hullMul: [1, RIVAL_LEVELS[lvl].rivalHull] });
+      if (r.winner === 0) { w++; t2 += r.time; }
+      dmg += Object.values(r.score.rounds[0].taken).reduce((x, y) => x + y, 0); ran++;
+    }
+    return `${lvl}: kill ${w ? (t2 / w).toFixed(1) : "-"} s (${w}/8), player took ${Math.round(dmg / ran)}`;
+  });
+  console.log("Veteran-proxy player vs each level:", perLevel.join(" · "));
+  // Rail hit rates (tools/rail-grace-probe.ts): the rival's slugs against a player who stands, strafes in a line, reverses
+  // or dashes 0.15 s after the snapshot starts (a dodger with a dash charge for every shot).
+  {
+    const rows: string[] = [];
+    for (const lvl of RIVAL_LEVEL_IDS) {
+      const r: Record<string, number> = {};
+      for (const m of ["stand", "strafe", "reverse", "dash"] as const) r[m] = railRates(lvl, m, 4, 0.15).rate;
+      rows.push(`${lvl} stand ${Math.round(100 * r.stand)}% strafe ${Math.round(100 * r.strafe)}% reverse ${Math.round(100 * r.reverse)}% dash ${Math.round(100 * r.dash)}%`);
+      must(r.stand >= 0.95, `${lvl}: rail hit only ${Math.round(100 * r.stand)}% of a standing player`);
+      must(r.strafe >= 0.7, `${lvl}: rail hit only ${Math.round(100 * r.strafe)}% of a player strafing in a line`);
+      must(r.dash <= (lvl === "ace" ? 0.3 : 0.15), `${lvl}: rail still hit ${Math.round(100 * r.dash)}% of a player who dashed at the snapshot`);
+      if (lvl === "recruit") must(r.reverse <= 0.35, `${lvl}: rail still hit ${Math.round(100 * r.reverse)}% of a player who reversed at the snapshot`);
+    }
+    console.log("rail hit rate (stand / strafe in a line / reverse / dash at the snapshot):", rows.join(" · "));
+  }
   console.log(`levels (${RIVAL_LEVEL_IDS.join("/")}): damage to a standing player ${stand.map(Math.round)} vs strafing ${strafe.map(Math.round)} per 30 s; Recruit dies in ${(tt / Math.max(1, wins)).toFixed(1)} s (${wins}/8)`);
 }
 
