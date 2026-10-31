@@ -40,6 +40,8 @@ export class ExpeditionHud {
   private info = document.createElement("div");
   /** Where the loot panel goes (it draws itself). */
   readonly lootSlot = document.createElement("div");
+  /** Where the contract panel goes (src/quests/questHud.ts draws itself into it). */
+  readonly questSlot = document.createElement("div");
   private top = document.createElement("div");
   private promptEl = document.createElement("div");
   private noteEl = document.createElement("div");
@@ -59,7 +61,7 @@ export class ExpeditionHud {
       background: "rgba(10, 14, 14, 0.62)", padding: "8px 10px", borderRadius: "6px", minWidth: "190px", fontVariantNumeric: "tabular-nums",
     } as CSSStyleDeclaration);
     // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
-    this.col.append(this.info, this.lootSlot);
+    this.col.append(this.questSlot, this.info, this.lootSlot);
     this.root.append(radar, this.col);
     document.body.appendChild(this.root);
 
