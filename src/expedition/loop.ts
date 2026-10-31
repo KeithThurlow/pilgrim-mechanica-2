@@ -21,6 +21,8 @@ import { BanditField, BANDIT_DEFAULTS, BANDIT_PARAMS, BANDIT_GROUPS } from "./ba
 import { WarColumns, COLUMN_DEFAULTS, COLUMN_PARAMS } from "./warColumns";
 import { BanditCamps, WarBands } from "./humans";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "./fortresses";
+import { Hubs, HUB_LIFE_DEFAULTS, HUB_LIFE_PARAMS } from "./hubs";
+import { Warlord } from "./warlord";
 import { Skirmishes, packSource, aftermathSite, clashDrops } from "./fights";
 import { FACTION_DEFAULTS, FACTION_PARAMS, FACTION_GROUPS, Relations, FightDirector, type FightGroup } from "../game/factions";
 import type { Register } from "../game/register";
@@ -64,6 +66,7 @@ export const LOOP_DEFAULTS = {
   ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS,
   ...QUEST_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
+  ...HUB_LIFE_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
@@ -72,6 +75,7 @@ export const LOOP_PARAMS: Param[] = [
   ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
   ...QUEST_PARAMS,
   ...FORT_LIFE_PARAMS,
+  ...HUB_LIFE_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
@@ -80,7 +84,7 @@ export const LOOP_TOPICS = [
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
-  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Manufacturing hub: layout", "Manufacturing hub: salvage"] },
+  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production"] },
   { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
@@ -116,8 +120,11 @@ export class ExpeditionLoop {
   /** The raider faction (Keith 2026-10-28): bandit camps (settled) and war band columns (roaming), and how the factions meet. */
   readonly bandits: BanditField;
   readonly banditCamps: BanditCamps;
+  /** Fortresses whose alarm has gone: seconds until their war band rolls out (negative: sent). */
+  private fortCalls = new Map<string, number>();
   /** Bandit fortresses: their gates and garrisons (fortresses.ts). */
   readonly forts: Fortresses;
+  readonly hubs: Hubs;
   readonly columns: WarColumns;
   readonly bands: WarBands;
   /** The mech's body against bandits, scrappers and vehicles (src/game/bodyContact.ts). */
@@ -233,7 +240,11 @@ export class ExpeditionLoop {
     this.forts = new Fortresses(v, field, bf, scene, this.sites.walls, player, opts.vat ?? null,
       (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1), opts.groundChanged ?? (() => {}));
     this.forts.onKill = (i, gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`f${i}.${gen}`, 0, x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
-    this.forts.onAlert = () => this.sound.alarm();
+    this.forts.onAlert = (poi) => {
+      this.sound.alarm();
+      // The war bands that gather there send a column out after the first alarm (once per fortress per expedition).
+      if (v.fortReinforce > 0 && !this.fortCalls.has(poi)) this.fortCalls.set(poi, v.fortReinforceAfter);
+    };
     this.forts.onGate = (e) => { if (e.type === "gateDown") this.hud.note("Gate down", "#ffb347", 3); };
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, banditThreat(v), x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
     this.sites.onLoot = (label, scrap, s) => {
@@ -262,11 +273,36 @@ export class ExpeditionLoop {
     this.quests.watch(this.swarms.sw);
     // Nothing turns up on the road or within 150 m of the train.
     this.threats = new ThreatField(v, 17, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
+    // Manufacturing hubs build robots into the swarm while awake; packs and raids lean to the nearest working one.
+    this.hubs = new Hubs(v, field, bf, scene, this.sites.walls, this.swarms, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1));
+    this.hubs.onEvent = (e) => {
+      if (e.type === "hubWoke") { this.hud.note("Manufacturing hub waking up", "#5ac8fa", 3); this.sound.alarm(); }
+      else if (e.type === "fabDown") this.hud.note("Fabricator down", "#ffb347", 3);
+      else if (e.type === "hubDead") this.hud.note("Hub silenced: no more robots from there", "#5ac8fa", 4);
+    };
+    this.threats.from = (x, z) => this.hubs.bearing(x, z);
     this.field = field;
     this.bf = bf;
   }
   private field: DuneField;
   private bf: Battlefield;
+
+  /**
+   * Hand the fortresses their warlord (a red Rampart the lab has loaded; the loop can't wait for a model). Killed, it
+   * drops warlordDrops items rolled as if from deep, hot ground.
+   */
+  attachWarlord(unit: MechUnit, scene: THREE.Object3D) {
+    const w = new Warlord(this.v, this.bf, scene, unit);
+    this.forts.warlord = w;
+    w.onEvent = (e) => {
+      if (e.type !== "warlordDown") return;
+      this.hud.note("Warlord down", "#ffb347", 4);
+      if (this.exp.state !== "out") return;
+      const c = this.dropCtx(e.x, e.z);
+      for (let k = 0; k < Math.round(this.v.warlordDrops); k++)
+        this.loot.drops.roll(`warlord:${e.poi}:${k}`, 1, e.x + Math.sin(k * 2.4) * 3, e.z + Math.cos(k * 2.4) * 3, { ...c, danger: Math.min(1, c.danger + 0.5), heat: 1 });
+    };
+  }
 
   /** Where a drop rolls (loot rolls by depth and salvage heat). */
   private dropCtx(x: number, z: number) {
@@ -278,6 +314,7 @@ export class ExpeditionLoop {
     reg.add(this.swarms.target);
     reg.add(this.banditCamps.target);
     reg.add(this.forts.target);
+    reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
     reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) });
     reg.add(mechOwner("hvt", () => this.quests.hvt.list()));
   }
@@ -291,6 +328,8 @@ export class ExpeditionLoop {
     this.swarms.reset();
     this.banditCamps.reset();
     this.forts.reset();
+    this.fortCalls.clear();
+    this.hubs.reset();
     this.bands.reset();
     this.columns.reset();
     this.skirmish.reset();
@@ -305,7 +344,7 @@ export class ExpeditionLoop {
   }
 
   /** Placement sliders changed. */
-  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
+  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.hubs.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
@@ -356,6 +395,7 @@ export class ExpeditionLoop {
       if (n) { mx = sx / n; mz = sz / n; }
     }
     const hunting = exp.state === "out" && player.alive && SAND.has(carry.state) && (!foot || pl!.alive);
+    this.hubs.update(dt, hunting, foot && pl ? pl : p);
     this.swarms.update(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     inp.mark?.("swarm camps");
     this.updateHumans(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
@@ -560,6 +600,18 @@ export class ExpeditionLoop {
     const m = pilot ?? sim.pelvis;
     this.banditCamps.update(dt, hunting, prey, pilot);
     this.forts.update(dt, hunting, prey);
+    for (const [poi, t] of this.fortCalls) {
+      if (t < 0) continue;
+      const left = t - dt;
+      this.fortCalls.set(poi, left);
+      const f = this.forts.live.get(poi);
+      if (left > 0 || !f || !hunting) { if (!f) this.fortCalls.set(poi, -1); continue; }
+      // Out of the fortress on the mech's side, a little round from it, hunting the mech.
+      const a = Math.atan2(m.x - f.L.x, m.z - f.L.z) + 0.9, R = f.L.reach + 30;
+      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.depth.liveDanger(f.L.x, f.L.z));
+      this.hud.note("War band out of the fortress", "#ff7ad0", 4);
+      this.fortCalls.set(poi, -1);
+    }
     const evs = this.columns.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud });
     for (const e of evs) { this.bands.bring(e.col); this.hud.note(`War band · ${e.col.kinds.length} vehicles`, "#ff7ad0", 4); this.sound.alarm(); }
     this.bands.update(dt, prey ?? player, hunting, m);
@@ -709,7 +761,7 @@ export class ExpeditionLoop {
   /** Debug line for the frame HUD. */
   get line() {
     const e = this.exp, sw = this.swarms;
-    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
+    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
 }
 

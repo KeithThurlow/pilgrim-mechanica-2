@@ -74,13 +74,12 @@ export function buildHub(p: PoiPlacement, v: HubValues): PoiSite {
     if (b.r() < 0.6) b.prop("box", lx, lz, ring.h - 0.8, [b.range(3, 5), b.range(1.2, 2), b.range(1.5, 2.5)], b.one(["dark", "steel", "burnt"] as const), a - p.yaw + b.jit(0.3), b.jit(0.2), b.jit(0.2));
     else b.prop("rock", lx, lz, ring.h - 1.5, [b.range(2.5, 4), b.range(1.5, 2.5), b.range(2.5, 4)], "rockDark", b.r() * 6.28);
   }
-  // The fabricators: tall housings with a hazard band and a stack, a section each.
+  // The fabricators' plinths and their strip spots, a section each.
   for (const f of L.fabs) {
     const [lx, lz] = at(f.a, v.hubFabR);
     const sec = b.section("fabricator");
-    b.prop("box", lx, lz, v.hubFabH * 0.5, [6, v.hubFabH, 6], "dark", f.a - p.yaw, 0, 0);
-    b.prop("box", lx, lz, v.hubFabH * 0.62, [6.3, 1, 6.3], "hazard", f.a - p.yaw, 0, 0);
-    b.prop("cyl", lx, lz, v.hubFabH + 2.5, [1, 5, 1], "steel", 0, 0, 0);
+    // The tower itself is a target, drawn apart so it can fall (src/pois/fabricators.ts, fabricatorsDraw.ts); a plinth here.
+    b.prop("box", lx, lz, 0.3, [8, 0.6, 8], "steel", f.a - p.yaw, 0, 0);
     const [sx, sz] = at(f.a, v.hubFabR - 4.5);
     b.spot(sec, sx, sz, 1.5, v.hubFabValue, v.hubFabTime, "fabricator");
   }

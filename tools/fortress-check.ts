@@ -10,7 +10,9 @@
 // - gates as targets: a round at a gate strikes its slab short of the sand, one along the wall misses, rounds and blasts
 //   wear it down (armour off each hit), and at zero it's down: one gateDown event, never another hit;
 // - the fence: bandits in a yard sent for a mech outside never cross or climb its wall while the gates stand, and once
-//   a gate is down some come out through it; sentries posted on a wall top hold it (the swarm's hold).
+//   a gate is down some come out through it; sentries posted on a wall top hold it (the swarm's hold);
+// - hubs: asleep they build nothing; awake each standing fabricator sends batches, never past the cap alive; a round
+//   at a fabricator hits it, shot down it builds nothing, all down the hub is dead (one hubDead) and packs stop leaning to it.
 // Run: npm test (or npx tsx tools/fortress-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { POI_DEFAULTS, PoiField, type PoiPlacement } from "../src/world/pois";
@@ -25,6 +27,8 @@ import { LEG_TYPES } from "../src/mech/legTypes";
 import * as THREE from "three/webgpu";
 import { Gates, GATE_DEFAULTS, type GateEvent } from "../src/pois/gates";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD } from "../src/combat/infantry";
+import { Hubs, HUB_LIFE_DEFAULTS, type HubEvent } from "../src/expedition/hubs";
+import type { Battlefield } from "../src/game/battlefield";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 40) console.log("  FAIL " + s); problems.push(s); };
@@ -276,6 +280,45 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   w.walls.down.clear();
   if (through < 36) fail(`with a gate down only ${through} of 40 came round and out through it in 60 s`);
   console.log(`fence: 40 bandits held in the yard for 30 s (${out} out, ${climbed} on the wall), sentries kept to the wall's top (moved up to ${sentryMoved.toFixed(2)} m) · a gate down: ${through} of 40 came round and out through it${worstWait ? ` (all out by ${worstWait.toFixed(0)} s)` : ""}`);
+}
+
+// ---- 6. hubs build robots ----
+{
+  const hub = sieges.find((p) => p.kind === "hub")!;
+  const groups = new Map<string, number>();
+  const sink = { addGroup: (id: string, n: number) => { groups.set(id, n); }, group: (id: string) => (groups.has(id) ? { n: groups.get(id)! } : null) };
+  const HV = { ...HUB_LIFE_DEFAULTS, hubFabH: V.hubFabH };
+  const bf = { targets: [] as unknown[] } as unknown as Battlefield;
+  const H = new Hubs(HV, w.field, bf, new THREE.Scene(), w.walls, sink, (x0, z0, x1, z1) => w.pois.poisIn(x0, z0, x1, z1));
+  const ev: HubEvent[] = [];
+  H.onEvent = (e) => ev.push(e);
+  const far = { x: hub.x + 400, z: hub.z }, near = { x: hub.x + 120, z: hub.z };
+  for (let t = 0; t < 60; t += 0.1) H.update(0.1, true, far);
+  if (groups.size) fail(`an asleep hub built ${groups.size} batches`);
+  const nf = H.fabs.list.length;
+  if (nf !== Math.round(V.hubFabs)) fail(`a hub streamed in ${nf} fabricators (expected ${V.hubFabs})`);
+  for (let t = 0; t < 120; t += 0.1) H.update(0.1, true, near);
+  let alive = 0; for (const n of groups.values()) alive += n;
+  if (!groups.size) fail("an awake hub built nothing in 120 s");
+  if (alive > HV.hubCap) fail(`an awake hub has ${alive} robots out (cap ${HV.hubCap})`);
+  const built = groups.size;
+  // Kill the robots, shoot the fabricators down one by one.
+  groups.clear();
+  const b = H.bearing(hub.x + 900, hub.z);
+  if (b === undefined || Math.abs(Math.atan2(Math.sin(b + Math.PI / 2), Math.cos(b + Math.PI / 2))) > 0.05) fail(`packs east of a hub don't lean west to it (bearing ${b})`);
+  let rounds = 0;
+  for (const s of H.fabs.list) {
+    const o = new THREE.Vector3(hub.x + (s.fab.x - hub.x) * 0.2, s.floor + 4, hub.z + (s.fab.z - hub.z) * 0.2);
+    const d = new THREE.Vector3(s.fab.x - o.x, 0, s.fab.z - o.z).normalize();
+    while (!s.down && rounds < 20000) { if (H.fabs.hitRay(o, d, 200) < 0) { fail("a round at a fabricator missed it"); break; } H.fabs.damage(20, o, d, 0); rounds++; }
+  }
+  for (let t = 0; t < 120; t += 0.1) H.update(0.1, true, near);
+  if (groups.size) fail(`a dead hub built ${groups.size} batches`);
+  const deads = ev.filter((e) => e.type === "hubDead").length;
+  if (deads !== 1 || !H.isDead(hub.id)) fail(`hubDead fired ${deads} times`);
+  const b2 = H.bearing(hub.x + 900, hub.z);
+  if (b2 !== undefined && b !== undefined && Math.abs(b2 - b) < 1e-6) fail("packs still lean to a dead hub");
+  console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches`);
 }
 
 if (problems.length) { console.log(`FAIL ${problems.length} problem(s)`); throw new Error("fortress check failed"); }

@@ -199,6 +199,14 @@ const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1) });
+// The fortresses' warlord: a red Rampart loaded now so a keep can field it at once (src/expedition/warlord.ts).
+{
+  const wb = await RampartBody.load(toon);
+  const wl = new MechUnit(bf, V, wb, toon, 2, 20, false);
+  wl.paint = 0x8e2a1e;
+  wb.paint(toon, 0x8e2a1e);
+  loop.attachWarlord(wl, scene);
+}
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
 function homeAboard() {
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
@@ -607,6 +615,7 @@ selector = new Selector(app, {
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
+    { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },

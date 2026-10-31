@@ -20,10 +20,18 @@ import { SalvageDraw, SALVAGE_FX_DEFAULTS, SALVAGE_FX_PARAMS } from "../../src/p
 import { SalvageHud } from "../../src/pois/salvageHud";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "../../src/expedition/fortresses";
 import type { GateState } from "../../src/pois/gates";
+import { Warlord } from "../../src/expedition/warlord";
+import { MechUnit } from "../../src/game/mechUnit";
 import { INFANTRY_DEFAULTS, INFANTRY_PARAMS } from "../../src/combat/infantry";
 import { BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { BodyContact } from "../../src/game/bodyContact";
+import { Hubs, HUB_LIFE_DEFAULTS, HUB_LIFE_PARAMS } from "../../src/expedition/hubs";
+import type { FabState } from "../../src/pois/fabricators";
+import { SwarmCamps, SWARM_CAMP_DEFAULTS } from "../../src/expedition/swarmCamps";
+import { CampField, CAMP_DEFAULTS } from "../../src/expedition/camps";
+import { ROBOT_DEFAULTS } from "../../src/combat/robots";
+import { ROBOT_TEAR_DEFAULTS } from "../../src/combat/robotTearFx";
 
 const params = new URLSearchParams(location.search);
 const KIND: PoiKind = params.get("kind") === "hub" ? "hub" : "fortress";
@@ -31,7 +39,7 @@ const SEED = Number(params.get("seed") ?? 3) >>> 0;
 /** The fortress's centre: straight ahead, its outer wall a little past the wake distance. */
 const CZ = 250;
 
-const LAB_DEFAULTS = { ...POI_DEFAULTS, ...SITE_DEFAULTS, ...SALVAGE_DEFAULTS, ...SALVAGE_FX_DEFAULTS, ...FORT_LIFE_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS };
+const LAB_DEFAULTS = { ...POI_DEFAULTS, ...SITE_DEFAULTS, ...SALVAGE_DEFAULTS, ...SALVAGE_FX_DEFAULTS, ...FORT_LIFE_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...HUB_LIFE_DEFAULTS, ...SWARM_CAMP_DEFAULTS, ...CAMP_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, campChance: 0 };
 const LAYOUT_KEYS = new Set([...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...POI_PARAMS].map((p) => p.key));
 
 let pois!: PoiField;
@@ -40,21 +48,26 @@ let pads!: PoiPads;
 let place!: PoiPlacement;
 let drawn: PoiDraw | null = null;
 let forts: Fortresses | null = null;
+let hubs: Hubs | null = null;
+/** The gate the demo is shooting (up here: the demo runs while the lab is still loading). */
+let demoGate: GateState | null = null;
+let swarms: SwarmCamps | null = null;
 let salvageDraw: SalvageDraw | null = null;
 
 const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>({
   id: "fortress-lab",
   title: KIND === "hub" ? "Manufacturing hub" : "Bandit fortress",
   defaults: LAB_DEFAULTS,
-  params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
+  params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...HUB_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Pads"] },
-    { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Pads"] },
+    { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
   ],
   selectables: [
     { topic: KIND === "hub" ? "hub" : "fortress", label: KIND === "hub" ? "Hub walls and towers" : "Walls and yards", objects: () => drawn?.meshes ?? [] },
+    { topic: "hub", label: "Fabricators", objects: () => hubs?.draw.meshes() ?? [] },
     { topic: "fortress", label: "Gates", objects: () => forts?.gatesDraw.meshes() ?? [] },
     { topic: "bandits", label: "Garrison", objects: () => forts ? [forts.draw.group] : [] },
     { topic: "salvage", label: "Salvage spots", objects: () => salvageDraw?.objects() ?? [] },
@@ -108,9 +121,28 @@ forts = new Fortresses(V, field, bf, lab.app.scene, walls, player, vat, () => [p
   (x0, z0, x1, z1) => lab.streamer.rebuildArea(x0, z0, x1, z1));
 const F = forts;
 bf.register.add(F.target);
+// The keep's warlord: a dark red Rampart (src/expedition/warlord.ts); killed, a burst of drops (the lab just notes it).
+{
+  const wb = await lab.loadRampart();
+  const wl = new MechUnit(bf, V, wb, lab.toon, 2, 20, false);
+  wl.paint = 0x8e2a1e;
+  wb.paint(lab.toon, 0x8e2a1e);
+  const w = new Warlord(V, bf, lab.app.scene, wl);
+  F.warlord = w;
+  bf.register.add(w);
+  w.onEvent = (e) => { if (e.type === "warlordDown") { warlordKills++; lab.shake(0.8); } };
+}
+// A hub's fabricators, building robots into a swarm of their own (no camps here).
+swarms = new SwarmCamps(V, field, bf, lab.app.scene, new CampField(V), player, () => false);
+const S = swarms;
+bf.register.add(S.target);
+hubs = new Hubs(V, field, bf, lab.app.scene, walls, S, () => [place]);
+const H = hubs;
+let fabsDown = 0, batches = 0;
+H.onEvent = (e) => { if (e.type === "fabDown") { fabsDown++; lab.shake(0.6); } if (e.type === "hubBatch") batches++; };
 const contact = new BodyContact(player, bf);
 player.onDash = (x, z, dx, dz) => { F.dashed(x, z, dx, dz, V.dashShoveRadius, V.dashShove, V.dashShoveDamage); };
-let downs = 0;
+let downs = 0, warlordKills = 0;
 F.onGate = (e) => { if (e.type === "gateDown") { downs++; lab.shake(0.6); } };
 
 function rebuild() {
@@ -128,6 +160,8 @@ function restart() {
 function startPose() {
   // Everything back up, then the gates the flags ask for down before the garrison and the gates stream in.
   F.reset();
+  hubs?.reset();
+  swarms?.reset();
   const L = walls.layout(place), rings = L.rings;
   const ringN = params.has("ring") ? Math.max(0, Math.min(rings.length - 1, Number(params.get("ring")))) : -1;
   if (params.get("gates") === "open") for (const r of rings) for (const g of r.gates) walls.down.add(g.id);
@@ -135,6 +169,7 @@ function startPose() {
   lab.streamer.rebuildAll();
   player.reset(0, 0, 0);
   F.update(0, false);
+  hubs?.update(0, false, player.sim.pelvis);
   if (ringN >= 0) {
     // Just inside the first gate of ring N, facing in.
     const g = rings[ringN].gates[0], d = rings[ringN].r - rings[ringN].top - rings[ringN].face - 6;
@@ -150,10 +185,10 @@ buildIt();
 startPose();
 
 /** Shoot the nearest standing gate from about 30 m, both guns; once it's down, walk through toward the centre. */
-let demoGate: GateState | null = null;
 function gateDemo() {
   if (!forts) return null;
   const p = player.sim.pelvis;
+  if (KIND === "hub") return fabDemo();
   if (!demoGate || demoGate.down) {
     demoGate = null;
     let bd = Infinity;
@@ -171,6 +206,18 @@ function gateDemo() {
   const dx = sx - p.x, dz = sz - p.z, d = Math.hypot(dx, dz);
   const cmd = d > 3 ? { x: dx / d, z: dz / d, sprint: false } : { x: 0, z: 0, sprint: false };
   return { cmd, aim: { x: g.gate.x, y: g.floor + g.ring.h * 0.45, z: g.gate.z }, trigger: [d < 12, d < 12] as const };
+}
+
+/** The hub: shoot the nearest standing fabricator from about 35 m off. */
+function fabDemo() {
+  const p = player.sim.pelvis, H = hubs;
+  if (!H) return null;
+  let f: FabState | null = null, bd = Infinity;
+  for (const s of H.fabs.list) if (!s.down) { const d = Math.hypot(s.fab.x - p.x, s.fab.z - p.z); if (d < bd) { bd = d; f = s; } }
+  if (!f) return { cmd: { x: 0, z: 0, sprint: false }, aim: null, trigger: false };
+  const dx = f.fab.x - p.x, dz = f.fab.z - p.z, d = Math.hypot(dx, dz) || 1;
+  const go = Math.max(-1, Math.min(1, (d - 35) / 6));
+  return { cmd: { x: (dx / d) * go, z: (dz / d) * go, sprint: false }, aim: { x: f.fab.x, y: f.floor + V.hubFabH * 0.5, z: f.fab.z }, trigger: [d < 60, d < 60] as const };
 }
 
 addEventListener("keydown", (e) => {
@@ -192,8 +239,16 @@ lab.onFrame((dt) => {
   F.sw.dodge(contact.threats(arsenal, bf.shells, V));
   contact.infantry(F.sw, F.target);
   F.update(dt, player.alive, lab.prey(p.x, p.z));
+  contact.robots(S.sw, S.target);
+  S.update(dt, player.alive, lab.prey(p.x, p.z));
+  H.update(dt, player.alive, p);
   const f = F.live.get(place.id);
   const yards = f ? f.yards.map((y, k) => `${["outer", "inner", "keep"][f.yards.length === 2 && k === 1 ? 2 : k]} ${F.aliveIn(place.id, k)} ${y.state}`).join(" · ") : "not streamed";
   const gates = F.gates.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ");
-  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · scrap ${salvage.scrap} · shift+R: put it back up`);
+  if (KIND === "hub") {
+    const h = H.live.get(place.id);
+    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
+    return;
+  }
+  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
 });
