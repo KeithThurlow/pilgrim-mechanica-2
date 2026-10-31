@@ -103,6 +103,8 @@ export class ArsenalDraw {
       this.q.setFromUnitVectors(Z, this.d.normalize());
       // Its light (src/world/nightLights.ts: a glow, an exhaust flare, a real light merged with its neighbours).
       lights?.rocket(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.6, a.fam);
+      // Bent air behind it (src/fx/blastWaves.ts heat shimmer).
+      a.waves?.exhaust(pos.x, pos.y, pos.z, this.d.x, this.d.y, this.d.z, kind === "rocket" ? 1 : 0.7);
       // The modelled rocket or missile when it's loaded (the box body hidden at zero scale), the flare either way.
       const modelled = proj.ready(kind);
       if (modelled) proj.add(kind, this.p, this.d, kind === "rocket" ? 1 : 1.2);
@@ -129,6 +131,7 @@ export class ArsenalDraw {
       for (const r of sh.line.rockets) if (r.live && r.launched) {
         const dir = { x: r.pos.x - r.prev.x, y: r.pos.y - r.prev.y, z: r.pos.z - r.prev.z };
         lights?.rocket(r.pos.x, r.pos.y, r.pos.z, dir.x, dir.y, dir.z, 0.7, a.fam);
+        a.waves?.exhaust(r.pos.x, r.pos.y, r.pos.z, dir.x, dir.y, dir.z, 0.7);
         if (proj.ready("mortar-shell")) proj.add("mortar-shell", r.pos, dir, 1.3); else slug(r.pos, dir, 1.2);
       }
     }

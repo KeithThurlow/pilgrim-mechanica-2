@@ -178,7 +178,8 @@ src/look/               toon (unit materials, optional cel bands, ink outlines)
 src/audio/              synth (procedural sounds), sfx (player), minigunAudio
 src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule + groundMarks (every mark on the ground),
                         minigun (tracers, flash, hits, casings),
-                        water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings)
+                        water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings), blastWaves + blastWavesDraw
+                        (a blast wave on every explosion: screen bend, ground ring, heat shimmer)
 src/game/               battlefield (shared combat stage), sheet + sheetFire (direct fire as a vertical sheet with a penetration
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat

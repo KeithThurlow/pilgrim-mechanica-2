@@ -539,6 +539,7 @@ export class ExpeditionLoop {
         bf.dust.stomp(e.x, y, e.z, 6);
         bf.dust.smoke(e.x, y + 2, e.z, 0, 4, 0, 8, 6, 1, 0.8);
         bf.sfx.playSound("blast", new THREE.Vector3(e.x, y, e.z), 0.9, 0.7);
+        bf.waves?.post("default", e.x, y + 1, e.z, 6);
         this.blasts.push({ id: `blast:${this.blastSeq++}`, x: e.x, z: e.z, t: 0 });
       }
     }
