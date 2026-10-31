@@ -28,7 +28,7 @@
 // that can't reach the ground hangs while the mech drops the rest.
 import { Vector3, Quaternion, Euler, Matrix4 } from "three";
 import type { WalkerValues } from "./walkerTuning";
-import { dashAcross, dashAlong, dashBeats, dashDip, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
+import { dashAcross, dashBeats, dashBurst, dashBurstEnd, dashDip, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
 
 export interface Ground {
   height(x: number, z: number): number;
@@ -263,10 +263,21 @@ export class WalkerSim {
   private dashRoll = 0;
   private dashPitch = 0;
   private dashDipNow = 0;
-  /** Let go after a dash: its short sprint (the run along it), holding the peak for burstHold more metres, then rolling off. */
+  /** Let go after a dash: the rest of its burst on the run gait (dashBurst by burstT), then the walk. */
   private burst = false;
-  private burstHold = 0;
-  /** The dash's boost: the run kicks up to this speed (m/s) at dashBoostAccel, then it's spent (0). */
+  /** Seconds since the dash's burst began, the speed it began from along it, the slope's share since (m/s). */
+  private burstT = 0;
+  private burstFrom = 0;
+  private burstSlope = 0;
+  /** The stick pulled against the burst: braking at dashBrake rather than following it. */
+  private burstBraking = false;
+  /** The run's cadence before the burst's stop began (the steps keep it through the stop). */
+  private burstCps = 0;
+  /** The burst just ended by itself: the walk takes the feet as they are (runEnd). */
+  private burstDone = false;
+  /** The speed the burst ends at (the stick's walk). */
+  private burstTo = 0;
+  /** Held into the sprint: the run kicks up to this speed (m/s) at once, then it's spent (0). */
   private boostTo = 0;
   /** In the dash's push-off and slide. */
   get dashing() { return this.dashMove !== null; }
@@ -342,7 +353,7 @@ export class WalkerSim {
     this.bStance = null; this.bLeap = false; this.boundSpeed = 0; this.course = heading; this.footSlip = 0; this.pushPrev.set(0, 0, 0);
     this.turnRoll = 0; this.courseRate = 0; this.lastCourse = NaN;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
-    this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstHold = 0; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
+    this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstBraking = false; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -486,7 +497,7 @@ export class WalkerSim {
     if (!this.dashMove && !this.running && this.push.lengthSq() > 4) this.dashBegin(this.push.x, this.push.z);
 
     if (this.running) this.runSteer(dt, cmd);
-    else if (this.dashMove) this.dashSteer(dt);
+    else if (this.dashMove) this.dashSteer(dt, cmd);
     else {
       this.walkSteer(dt, cmd);
     }
@@ -518,7 +529,9 @@ export class WalkerSim {
     if (this.slip.lengthSq() > 1e-8) {
       for (const f of this.feet) if (!f.swinging) { f.planted.addScaledVector(this.slip, dt); this.groundAt(f.planted, f.plantedUp); }
     }
-    if (this.leaves()) { this.stats.airFrames++; this.fly(dt, cmd); this.pose(); this.trackSlides(dt); return; }
+    // A tapped dash's burst hugs the ground (2026-10-31: at 20 m/s over a slip face's crest it leapt 15 m from a tap);
+    // the sprint (held) still leaps off crests.
+    if (!(this.dashMove && !this.bound) && !this.burst && this.leaves()) { this.stats.airFrames++; this.fly(dt, cmd); this.pose(); this.trackSlides(dt); return; }
     if (this.dashMove) { this.dashFeet(dt); this.body(dt, this.dutyNow); this.pose(); this.trackSlides(dt); return; }
 
     this.idleTick(dt, cmd);
@@ -553,8 +566,12 @@ export class WalkerSim {
     if (!this.running) hurry += v.crossHurry * smooth(0, 0.4, this.crossed()) + v.turnHurry * smooth(0.8, 0.9, st) * this.offLegs();
     // Only while the run is on: blending back to the walk after letting go, a trailing leg steps in full at once (Keith
     // 2026-10-27: eased, it trailed out of reach and the hips dropped into the splits).
-    this.hurry = this.running ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
-    cps *= 1 + (this.hurry - 1) * (this.running ? v.runHurry : 1);
+    // A dash's burst stopping hard (2026-10-31): the steps keep the cadence they had at speed and hurry in full, so the
+    // feet keep up with the body slowing under them rather than a planted leg trailing out of reach (hips into the splits).
+    const stopping = this.running && this.burst && this.burstT > v.dashRise + v.dashHold;
+    if (stopping) cps = Math.max(cps, this.burstCps); else this.burstCps = cps;
+    this.hurry = this.running && !stopping ? this.hurry + (hurry - this.hurry) * Math.min(1, dt * 4) : hurry;
+    cps *= 1 + (this.hurry - 1) * (this.running && !stopping ? v.runHurry : 1);
     this.cpsNow = cps;
     this.phase = (this.phase + cps * dt) % 1;
 
@@ -721,6 +738,16 @@ export class WalkerSim {
     this.skid.set(vx - this.vel.x, 0, vz - this.vel.z);
     this.boundSpeed = 0;
     this.running = false;
+    // A dash's burst ending (2026-10-31): a foot early in its swing carries on as the walk's swing from where it is (the
+    // phase from it), re-aimed for the walk, rather than the phase from the planted foot landing it at once metres off.
+    const sw = this.burstDone ? this.feet.find((f) => f.swinging && !f.hang) : undefined;
+    this.burstDone = false;
+    if (sw) {
+      const d = this.dutyNow = this.duty();
+      this.phase = (((d + sw.u * (1 - d) - sw.offset) % 1) + 1) % 1;
+      this.aim(sw);
+      return;
+    }
     this.walkPhaseFromFeet(fw);
   }
 
@@ -757,24 +784,28 @@ export class WalkerSim {
     const prev = this.boundSpeed;
     this.grade += (this.gradeAlong(Math.sin(this.course), Math.cos(this.course), 2) - this.grade) * Math.min(1, dt * 4);
     const top = this.boundTop(this.grade);
-    // A dash's short sprint (Keith 2026-10-27: "a burst of speed for a distance of like 25-30m and the player can slow it
-    // down prematurely by pulling... in the opposite direction"): up to the peak (the boost), held for burstHold metres,
-    // rolled off (dashRolloff), braked hard (dashBrake) with the stick against it; it ends at the walk's pace (or what
-    // the stick asks). Held into the sprint, the boost, then the sprint eases to its top.
+    // A dash let go (Keith 2026-10-27: the player can slow it "by pulling... in the opposite direction"; 2026-10-31: a
+    // crisp burst): the rest of the burst by time (dashBurst: held, then down to the stick's walk in dashStop), braked
+    // hard (dashBrake) with the stick against it; then the walk. Held into the sprint, the sprint eases to its top.
     if (this.burst) {
       const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
       const back = mag > 0.3 && (cmd.x * Math.sin(this.course) + cmd.z * Math.cos(this.course)) / mag < -0.3;
-      if (back) { this.boostTo = 0; this.burstHold = 0; this.boundSpeed -= v.dashBrake * dt; }
-      else if (this.boostTo > this.boundSpeed) this.boundSpeed = Math.min(this.boostTo, this.boundSpeed + v.dashBoostAccel * dt);
-      else if (this.burstHold > 0) { this.boostTo = 0; this.burstHold -= this.boundSpeed * dt; }
-      else { this.boostTo = 0; this.boundSpeed -= v.dashRolloff * dt; }
-      // The slope along it, both ways: further downhill, shorter up (Keith 2026-10-25: slides work better downhill).
-      if (this.grade < 0) this.boundSpeed -= G * Math.sin(Math.atan(this.grade)) * dt;
       const floor = mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
-      if (this.boostTo <= 0 && this.boundSpeed <= Math.max(floor, 3)) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.boostTo = 0; }
+      this.boostTo = 0;
+      this.burstT += dt;
+      // The slope along it, both ways: further downhill, shorter up (Keith 2026-10-25: slides work better downhill).
+      this.burstSlope -= G * Math.sin(Math.atan(this.grade)) * dt;
+      if (back) this.burstBraking = true;
+      if (this.burstBraking) this.boundSpeed -= v.dashBrake * dt;
+      else this.boundSpeed = Math.max(0, dashBurst(this.burstT, this.burstFrom, floor, v) + this.burstSlope);
+      this.burstTo = floor;
+      const down = this.burstBraking || this.burstT >= v.dashRise + v.dashHold;
+      // Handed to the walk only with no foot late in its swing (else the walk's phase lands it at once, metres off, and
+      // the hips drop after it); the speed is at the walk's by then, so the wait isn't felt.
+      const feetOk = this.feet.every((f) => !f.swinging || f.u < 0.35) || this.burstT > dashBurstEnd(v) + 0.3;
+      if (feetOk && (this.burstT >= dashBurstEnd(v) || (down && this.boundSpeed <= Math.max(floor, 3)))) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.burstDone = true; }
     } else if (this.boostTo > this.boundSpeed) {
-      this.boundSpeed = Math.min(this.boostTo, this.boundSpeed + v.dashBoostAccel * dt);
-      if (this.boundSpeed >= this.boostTo) this.boostTo = 0;
+      this.boundSpeed = this.boostTo; this.boostTo = 0;
     } else { this.boostTo = 0; this.boundSpeed += (top - this.boundSpeed) * Math.min(1, v.boundBuild * dt); }
     // Faster than the legs' top (a dash's boost) up a slope: gravity takes it off (Keith 2026-10-26: no flinging off ramps).
     if ((this.boundSpeed > top || this.boostTo > 0) && this.grade > 0) {
@@ -1467,9 +1498,10 @@ export class WalkerSim {
   }
 
   /** The body through the steps: the hips turn onto the dash, the speed comes round onto it, the lean and the crouch. */
-  private dashSteer(dt: number) {
+  private dashSteer(dt: number, cmd: MoveCommand) {
     const v = this.v, dm = this.dashMove!, B = dm.B;
     if (dm.pedal) { this.pedalSteer(dt); return; }
+    const mag = Math.min(1, Math.hypot(cmd.x, cmd.z));
     dm.t += dt;
     const t = dm.t;
     const h = wrap(dashYaw(t, dm.h0, dm.pre, dm.turn, B));
@@ -1478,7 +1510,9 @@ export class WalkerSim {
     this.grade += (this.gradeAlong(dm.dx, dm.dz, 2) - this.grade) * Math.min(1, dt * 4);
     dm.slope -= G * this.grade * dt;
     dm.covered += this.speed * dt;
-    const along = dashAlong(t, dm.carried, B, v) + dm.slope, k = dashAcross(t, B);
+    // The burst by time from the press (the steps pose the legs under it); held (Space), it keeps its peak for the sprint.
+    const to = this.bound ? Math.max(dm.carried, v.dashSpeedOut) : mag * (cmd.sprint ? v.sprintSpeed : v.walkSpeed);
+    const along = Math.max(0, dashBurst(t, dm.carried, to, v) + dm.slope), k = dashAcross(t, v);
     const out = this.faceScrub(dm.dx * along + dm.ax * k, dm.dz * along + dm.az * k, Math.min(1, v.wallScrub * dt), false);
     this.vel.set(out.x, 0, out.z);
     this.speed = Math.hypot(out.x, out.z);
@@ -1649,6 +1683,22 @@ export class WalkerSim {
   private dashFeet(dt: number) {
     const v = this.v, dm = this.dashMove!, B = dm.B, t = dm.t, { I, O } = dm;
     if (dm.pedal) { this.pedalFeet(dt); return; }
+    // The burst outruns the beats (2026-10-31: full speed in 0.07 s): a planted foot the body has left at full stretch
+    // skids after it on its toes rather than pulling the hips down into the splits.
+    // Its reach measured with the hips no lower than the dash's crouch (+ a little), so it is the foot that gives, not them.
+    {
+      const R = v.legReachMax * (v.femur + v.shin + v.cannon), hy = v.hipHeight - v.dashDip - 0.25 - v.ankleHeight;
+      const H = Math.sqrt(Math.max(0.25, R * R - hy * hy)), lf = leftOf(this.heading, this.t.l);
+      for (const f of this.feet) {
+        if (f.swinging || f.hang) continue;
+        const jx = this.pos.x + lf.x * f.side * v.hipWidth, jz = this.pos.z + lf.z * f.side * v.hipWidth;
+        const dx = f.planted.x - jx, dz = f.planted.z - jz, d = Math.hypot(dx, dz);
+        if (d <= H) continue;
+        f.planted.x = jx + (dx / d) * H; f.planted.z = jz + (dz / d) * H;
+        f.planted.y = this.ground.height(f.planted.x, f.planted.z) - this.sink(f.planted.x, f.planted.z);
+        this.stats.toeDrag++;
+      }
+    }
     // The beats give way to the legs: a planted leg at full stretch can't push any longer (moving fast, the body passes
     // its foot before the beat comes), so the next foot comes down now, or the stretched one lifts if the other is down.
     if (!O.swinging && !dm.oUp && this.legStretch(O) > 0.95) {
@@ -1763,13 +1813,13 @@ export class WalkerSim {
 
   /**
    * The through-step is down: the run takes over along the dash. Held, the sprint; let go, a short sprint (dashBurst,
-   * rolling off at dashRolloff) and then the walk. The outside foot has just planted; the inside one is late in its stance.
+   * the rest of the burst by time) and then the walk. The outside foot has just planted; the inside one is late in its stance.
    */
   private dashHandOver() {
     const v = this.v, dm = this.dashMove!;
     this.dashMove = null;
     const s = Math.hypot(this.vel.x, this.vel.z);
-    if (!this.bound && v.dashRun <= 0) {
+    if (!this.bound && dm.t >= dashBurstEnd(v)) {
       // Straight back to the walk with the speed the legs walk with; the rest skids off.
       for (const f of this.feet) if (f.swinging) this.plantFoot(f, f.pos.x, f.pos.z);
       const fw = forwardOf(this.heading, this.t.f);
@@ -1781,12 +1831,9 @@ export class WalkerSim {
     }
     this.burst = !this.bound;
     this.boundSpeed = clamp(s, Math.min(s, v.walkSpeed), Math.max(v.sprintSpeed, v.dashIntoRun));
-    // The boost: up to the peak from this footfall; let go, held there until the whole dash has covered about dashRun with
-    // the boost and the roll-off down to the walk's pace.
-    const peak = this.boostTo = Math.min(v.dashSpeedOut, Math.max(v.sprintSpeed, v.dashIntoRun));
-    const boostRun = Math.max(0, peak * peak - this.boundSpeed * this.boundSpeed) / (2 * Math.max(1, v.dashBoostAccel));
-    const rollRun = Math.max(0, peak * peak - v.walkSpeed * v.walkSpeed) / (2 * Math.max(0.5, v.dashRolloff));
-    this.burstHold = Math.max(0, v.dashRun - dm.covered - boostRun - rollRun);
+    // Let go, the rest of the burst runs on by time (runSteer); held, the sprint starts from the peak (at most dashIntoRun).
+    this.burstT = dm.t; this.burstFrom = dm.carried; this.burstSlope = dm.slope; this.burstBraking = false; this.burstTo = v.walkSpeed;
+    this.boostTo = this.bound ? Math.min(v.dashSpeedOut, Math.max(v.sprintSpeed, v.dashIntoRun)) : 0;
     this.course = wrap(this.heading + clamp(wrap(dm.yaw - this.heading), -v.boundDriftMax * D2R, v.boundDriftMax * D2R));
     this.skid.set(0, 0, 0);
     this.running = true;
@@ -2039,10 +2086,13 @@ export class WalkerSim {
     // Walking, the feet land ahead along the way of travel (a sidestep or a backstep too), on their own side of the legs.
     if (!this.running && this.speed > 0.3) this.t.b.set(this.vel.x / this.speed, 0, this.vel.z / this.speed);
     else this.t.b.copy(fw);
-    f.target.copy(this.pos).addScaledVector(this.vel, remain).addScaledVector(this.t.b, ahead).addScaledVector(lf, f.side * this.spread());
+    // Where the body will be when it lands: a dash's burst slows hard, so along its own speed curve (2026-10-31: aimed at
+    // the peak's pace the feet landed metres ahead of the stopped body and the hips dropped after them).
+    const go = this.burst && this.speed > 0.3 ? this.burstGo(remain) / this.speed : remain;
+    f.target.copy(this.pos).addScaledVector(this.vel, go).addScaledVector(this.t.b, ahead).addScaledVector(lf, f.side * this.spread());
     // Walking, never across the other leg: the landing spot stays on its own side of where the body will be.
     if (!this.running) {
-      const cx = this.pos.x + this.vel.x * remain, cz = this.pos.z + this.vel.z * remain;
+      const cx = this.pos.x + this.vel.x * go, cz = this.pos.z + this.vel.z * go;
       const across = ((f.target.x - cx) * lf.x + (f.target.z - cz) * lf.z) * f.side, minAcross = this.spread() * 0.6;
       if (across < minAcross) { f.target.x += lf.x * f.side * (minAcross - across); f.target.z += lf.z * f.side * (minAcross - across); }
     }
@@ -2056,11 +2106,19 @@ export class WalkerSim {
     // Running, the hips come down to their running height over the landing spot (the reach cap in body()): a run down a
     // slope lands its feet instead of hanging them in the flight and dropping (Keith 21:54: the run hopped downhill).
     if (this.gaitK > 0.5) hipLow = Math.min(hipLow, f.target.y + this.boundStand());
-    const hx = this.pos.x + this.vel.x * remain + lf.x * f.side * v.hipWidth - f.target.x;
-    const hz = this.pos.z + this.vel.z * remain + lf.z * f.side * v.hipWidth - f.target.z;
+    const hx = this.pos.x + this.vel.x * go + lf.x * f.side * v.hipWidth - f.target.x;
+    const hz = this.pos.z + this.vel.z * go + lf.z * f.side * v.hipWidth - f.target.z;
     const lowest = hipLow - Math.sqrt(Math.max(0, R * R - hx * hx - hz * hz)) - v.ankleHeight;
     f.short = f.target.y < lowest - 0.05;
     if (f.short) { f.target.y = lowest; f.targetUp.copy(UP); }
+  }
+
+  /** Metres a dash's burst goes in the next s seconds along its speed curve (its end speed after; the slope as it is). */
+  private burstGo(s: number) {
+    const v = this.v, n = 8, h = s / n;
+    let d = 0;
+    for (let i = 0; i < n; i++) d += Math.max(0, dashBurst(this.burstT + (i + 0.5) * h, this.burstFrom, this.burstTo, v) + this.burstSlope) * h;
+    return d;
   }
 
   /** How far the legs are sprinting for the walk-or-sprint limits: all the way while Space holds the sprint, else the run share. */
