@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Traction comes back with speed: after a dash or a sprint, grip returns smoothly as the mech slows, instead of a flat period of low traction | Keith | Keith | Agent on `wip/grip`. |
 | 2026-10-31 | The dash's speed is a burst by time, not built by the footwork: 20 m/s in 0.07 s, held 0.42 s, down to the walk in 0.15 s (about 11 m, was 12); the steps run faster (0.19 s) and only pose the legs under it | Keith | Claude | Values; Keith asked for a crisp start and stop. `dashBurst`. |
 | 2026-10-31 | A tapped dash holds its line (no drift: drift is the sprint's) and stops to the stick's share along it, then the walk turns it under the stick | Keith | Claude | Fixes the stuck run (the old short sprint never ended with the stick off its line). |
 | 2026-10-31 | No backpedal before a reverse dash by default (`dashPedalSteps` 0): it held the burst up to 0.5 s; the slider brings it back | Claude | Claude | Reverses part of Keith's 2026-10-27 backpedal ask for the start-speed ask; flag for Keith. |
