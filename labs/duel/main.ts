@@ -11,7 +11,7 @@
 // URL flags: ?rival=seed (which rival; Reroll steps to the next), ?rivalfit=slot:base[:rarity],... (fit these over
 // the roll, as the loadout lab's ?fit=), ?left= ?right= ?k1= ?k2= ?k3= (your weapons, as the weapons lab; else the
 // loadout lab's bay save if there is one, else the weapons lab's last pick), ?bay (use the loadout lab's bay save),
-// ?rivallevel=recruit|veteran|ace (the rival's preset; Recruit by default; buttons in the panel), plus the combat lab flags (?manual ?zoom ?dt ?flat ?time=).
+// ?rivallevel=recruit|veteran|ace (the rival's preset; Recruit by default; buttons in the panel), ?rivalup=N (its items roll N levels above yours), plus the combat lab flags (?manual ?zoom ?dt ?flat ?time=).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { combatLab } from "../../src/game/combatLab";
@@ -26,7 +26,7 @@ import { WreckStandIns } from "../../src/world/wrecks";
 import type { RampartBody } from "../../src/mech/rampart";
 import { DuelGround, DUEL_GROUND_DEFAULTS, DUEL_GROUND_PARAMS, lineOfSight, wreckSpots } from "../../src/game/duelGround";
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_AI_PARAMS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type MechCommand, type RivalLevel } from "../../src/combat/rivalAi";
-import { applyFitSpec, describeLoadout, kitOf, preferredRange, rollRivalLoadout, type KitWeapon } from "../../src/combat/rivalKit";
+import { applyFitSpec, describeLoadout, kitOf, loadoutDps, loadoutLevel, preferredRange, rollRivalLoadout, type KitWeapon } from "../../src/combat/rivalKit";
 import { ThreatIds, duelView, threatsFrom } from "../../src/combat/duelThreats";
 import { DuelScore, type Side } from "../../src/combat/duelScore";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
@@ -35,9 +35,10 @@ import { ROWS, choose, cleanPick, loadoutFor, pickFromParams, type Pick } from "
 import { loadBay } from "../../src/ui/bay";
 import type { Param } from "../../src/core/tweaks";
 
-const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, duelAutoRestart: 3.5 };
+const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, rivalUp: 0, duelAutoRestart: 3.5 };
 const DUEL_PARAMS: Param[] = [
   { key: "rivalHull", label: "Rival hull (× its parts')", min: 0.25, max: 4, step: 0.05, group: "Rival", tip: "Its hull points from the rolled hull item, times this" },
+  { key: "rivalUp", label: "Rival item level vs yours (+/-)", min: -10, max: 40, step: 1, group: "Rival", tip: "The rival rolls every item this many levels above (or below) the mean level of yours, on the shared curve (power = 1 + 0.075 x (level - 1) on damage and hull). ?rivalup=N" },
   { key: "duelAutoRestart", label: "Next round after a kill (s, 0: R only)", min: 0, max: 15, step: 0.5, group: "Rival" },
 ];
 /** Rival military: one clean uniform colour (the bandits are red). */
@@ -70,7 +71,7 @@ const lab = await combatLab({
       ground!.rebuild();
       lab.field.update(); lab.craters.invalidate(); lab.streamer.rebuildAll();
       wrecks?.rebuild(lab.field, wreckSpots(ground!.spots, V));
-    } else if (k === "rivalHull") fitRival();
+    } else if (k === "rivalHull" || k === "rivalUp") fitRival();
     else if (!RESOLVED.has(k)) (RV as Record<string, number>)[k] = (V as Record<string, number>)[k];
   },
 });
@@ -102,9 +103,12 @@ let rivalSeed: number = Math.max(1, Math.round(Number(params.get("rival")) || 0)
 const fitSpec = params.get("rivalfit") ?? "";
 let fitNotes: string[] = [];
 
+let playerLo: Loadout | null = null;
+let rivalLevel = 1;
 function fitRival() {
-  rivalLo = rollRivalLoadout(rivalSeed, V);
-  fitNotes = fitSpec ? applyFitSpec(rivalLo, fitSpec, V, rivalSeed) : [];
+  rivalLevel = Math.max(1, (playerLo ? loadoutLevel(playerLo) : 1) + Math.round(V.rivalUp));
+  rivalLo = rollRivalLoadout(rivalSeed, V, { level: rivalLevel });
+  fitNotes = fitSpec ? applyFitSpec(rivalLo, fitSpec, V, rivalSeed, rivalLevel) : [];
   const r = resolve(rivalLo, V);
   rival.hullOverride = Math.round(r.values.hull * V.rivalHull);
   applyLoadout(rival, r);
@@ -136,7 +140,9 @@ if (urlPick) cleanPick(pick);
 const bayLo = loadBay(BAY_KEY)?.loadout ?? null;
 let useBay = !!bayLo && (params.has("bay") || !urlPick);
 function refit() {
-  applyLoadout(player, resolve(useBay && bayLo ? bayLo : loadoutFor(pick), V));
+  playerLo = useBay && bayLo ? bayLo : loadoutFor(pick);
+  applyLoadout(player, resolve(playerLo, V));
+  if (rivalLo) fitRival();
   // The rival's tuning follows the shared sliders the loadout doesn't set.
   lab.refresh();
   for (const b of pickButtons) b.el.classList.toggle("on", !useBay && (pick as unknown as Record<string, string>)[b.row] === b.id);
@@ -210,7 +216,7 @@ const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cann
 function board() {
   if (!rivalLo) return;
   const ctl = (k: KitWeapon) => ("trigger" in k.ctl ? (k.ctl.trigger === 0 ? "L" : "R") : `key ${k.ctl.key}`);
-  box.innerHTML = `<div class="row"><b>Rival ${rivalSeed}</b><button data-a="prev">◀</button><button data-a="next">Reroll ▶</button></div>`
+  box.innerHTML = `<div class="row"><b>Rival ${rivalSeed}</b> <span class="muted">level ${rivalLevel} (you ${playerLo ? loadoutLevel(playerLo) : 1}${V.rivalUp ? (V.rivalUp > 0 ? " +" : " ") + Math.round(V.rivalUp) : ""}) · DPS ${Math.round(loadoutDps(rivalLo))} vs yours ${playerLo ? Math.round(loadoutDps(playerLo)) : 0}</span><button data-a="prev">◀</button><button data-a="next">Reroll ▶</button></div>`
     + `<div class="muted">${kit.map((k) => `${ctl(k)} ${KIND_NAME[k.kind]}`).join(" · ")} · likes ${Math.round(V.aiRange || preferredRange(kit))} m · hull ${rival.maxHealth}</div>`
     + `<ul>${describeLoadout(rivalLo).map((l) => `<li>${l}</li>`).join("")}</ul>`
     + (fitNotes.length ? `<div class="muted">?rivalfit: ${fitNotes.join("; ")}</div>` : "")
@@ -301,8 +307,10 @@ lab.onFrame((dt: number) => {
   lab.hud("rival", `rival ${noteLevel} ${ai.state} · dodges ${st.dodgeDashes} dashed, ${st.dodgeWalks} walked of ${st.threatsSeen} seen · dash ${rival.dash.charges}${last?.keys.some(Boolean) ? " · painting" : ""}`);
 });
 
+const urlUp = params.get("rivalup");
+if (urlUp !== null && Number.isFinite(Number(urlUp))) { V.rivalUp = Math.round(Number(urlUp)); lab.refresh(); }
 const urlLevel = params.get("rivallevel");
 if (urlLevel && (RIVAL_LEVEL_IDS as string[]).includes(urlLevel)) setLevel(urlLevel as RivalLevel);
-fitRival();
 refit();
+fitRival();
 startRound();

@@ -47,14 +47,16 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
 /**
  * Rival levels (Keith 2026-10-31: "varying levels of rival capability"): presets over the sliders above plus the hull
- * share. Recruit is the default; later rival squads pick a level by depth. Ace is about the rival as it was before.
+ * share. Recruit is the default and (Keith 2026-10-31: "definitely not strong enough") its hull and gear are on par with the player's default mech
+ * (hull x1; it stays easy by its aim lag, reaction and lead, which is what makes it fair). Veteran and Ace add hull on top. A rival
+ * can also roll its items N levels above the player's (the duel lab's rivalUp).
  */
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 0.7 },
-  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1 },
-  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.15 },
+  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";

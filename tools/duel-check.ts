@@ -9,9 +9,10 @@
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand, type Threat } from "../src/combat/rivalAi";
-import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout } from "../src/combat/rivalKit";
+import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
 import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
+import { levelPower } from "../src/items/level";
 import { problems, resolve } from "../src/items/loadout";
 import { loadoutFor } from "../src/items/weaponPick";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
@@ -260,6 +261,26 @@ must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of $
   must(wins >= 6, `a Veteran-proxy player beat the Recruit in only ${wins} of 8`);
   must(wins > 0 && tt / wins > 8 && tt / wins < 25, `Recruit time to kill ${(tt / Math.max(1, wins)).toFixed(1)} s (want 8-25)`);
   console.log(`levels (${RIVAL_LEVEL_IDS.join("/")}): damage to a standing player ${stand.map(Math.round)} vs strafing ${strafe.map(Math.round)} per 30 s; Recruit dies in ${(tt / Math.max(1, wins)).toFixed(1)} s (${wins}/8)`);
+}
+
+
+// ---- Rival item level (Keith 2026-10-31: ?rivalup=N rolls its items N levels above the player's, on the shared curve) ----
+{
+  const up = 5, g = LOOT_DEFAULTS.levelGrowth ?? 0.075, k = levelPower(1 + up, g) / levelPower(1, g);
+  must(Math.abs(k - 1.375) < 1e-9, `the shared curve isn't 1 + 0.075 x (level - 1) (${k})`);
+  for (const seed of [1, 3, 7]) {
+    const a = rollRivalLoadout(seed, LOOT_DEFAULTS), b = rollRivalLoadout(seed, LOOT_DEFAULTS, { level: 1 + up });
+    must(loadoutLevel(a) === 1 && loadoutLevel(b) === 1 + up, `seed ${seed}: loadout levels ${loadoutLevel(a)} / ${loadoutLevel(b)}`);
+    const ha = resolve(a).values.hull, hb = resolve(b).values.hull;
+    must(Math.abs(hb / ha - k) < 0.02, `seed ${seed}: hull x${(hb / ha).toFixed(3)} at +${up} levels, want x${k.toFixed(3)}`);
+    const da = loadoutDps(a), db = loadoutDps(b);
+    must(da > 0 && db / da > k - 0.03 && db / da < k * 1.1, `seed ${seed}: DPS x${(db / da).toFixed(3)} at +${up} levels, want x${k.toFixed(3)} (a bit more where a magazine grows too)`);
+    must(a.legs?.base === b.legs?.base && a.hull?.rarity === b.hull?.rarity, `seed ${seed}: the level changed which parts rolled`);
+  }
+  const a = rollRivalLoadout(3, LOOT_DEFAULTS), b = rollRivalLoadout(3, LOOT_DEFAULTS, { level: 6 });
+  console.log(`rivalup +5 (seed 3): hull ${Math.round(resolve(a).values.hull)} -> ${Math.round(resolve(b).values.hull)}, DPS ${Math.round(loadoutDps(a))} -> ${Math.round(loadoutDps(b))} (x${k.toFixed(3)})`);
+  must(RIVAL_LEVELS.recruit.rivalHull === 1, "Recruit's hull isn't on par with the player's (x1)");
+  must(RIVAL_LEVELS.recruit.rivalHull < RIVAL_LEVELS.veteran.rivalHull && RIVAL_LEVELS.veteran.rivalHull < RIVAL_LEVELS.ace.rivalHull, "rival hull shares aren't ordered by level");
 }
 
 const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;

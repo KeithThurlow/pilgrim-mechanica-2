@@ -8,6 +8,7 @@ import { rng, rollItem, type LootValues } from "../items/generate";
 import { RARITIES, type Rarity } from "../items/rarity";
 import { emptyLoadout, fit, fitProblem, hullMount, MOUNTS, SIDES, SLOTS, type Loadout, type Resolved, type SlotId } from "../items/loadout";
 import { itemName } from "../items/bayState";
+import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
 
 export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg";
@@ -102,10 +103,15 @@ const ofKind = (kind: string, size?: string) => BASES.filter((b) => b.kind === k
  * hull mount a hull weapon or an arm with a held weapon (and often a shoulder weapon), sometimes a two-hander across
  * both arms, a power pack or a back weapon, ammo drums. Every item rolls its rarity and stats (src/items/generate.ts).
  */
-export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rarity } = {}): Loadout {
+/**
+ * `o.level`: the item level every part rolls at (Keith 2026-10-31: a rival N levels above the player; the shared curve
+ * src/items/level.ts scales damage and hull by 1 + levelGrowth x (level - 1)). The same seed rolls the same bases, rarities
+ * and spreads at any level, so only the level moves the numbers.
+ */
+export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rarity; level?: number } = {}): Loadout {
   const r = rng(seed * 7919 + 13);
   let k = 0;
-  const roll = (base: string) => rollItem((seed * 1000 + ++k) >>> 0, v, { base, rarity: o.rarity });
+  const roll = (base: string) => rollItem((seed * 1000 + ++k) >>> 0, v, { base, rarity: o.rarity, level: o.level });
   const lo = emptyLoadout();
   const put = (slot: SlotId, base: string) => {
     const it = roll(base);
@@ -133,18 +139,31 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
 }
 
 /** `?rivalfit=slot:base[:rarity],...`: fit these rolled items over the rolled loadout, in order (bad ones skipped). */
-export function applyFitSpec(lo: Loadout, spec: string, v: LootValues, seed: number): string[] {
+export function applyFitSpec(lo: Loadout, spec: string, v: LootValues, seed: number, level = 1): string[] {
   const notes: string[] = [];
   let n = 0;
   for (const part of spec.split(",").filter(Boolean)) {
     const [slot, base, rarity] = part.split(":") as [SlotId, string, string | undefined];
     if (!SLOTS.includes(slot) || !BASE_BY_ID[base]) { notes.push(`${part}: no such slot or base`); continue; }
-    const it = rollItem((seed * 31 + ++n) >>> 0, v, { base, rarity: RARITIES.includes(rarity as Rarity) ? (rarity as Rarity) : "common" });
+    const it = rollItem((seed * 31 + ++n) >>> 0, v, { base, rarity: RARITIES.includes(rarity as Rarity) ? (rarity as Rarity) : "common", level });
     const why = fitProblem(lo, slot, it);
     if (why) { notes.push(`${part}: ${why}`); continue; }
     fit(lo, slot, it);
   }
   return notes;
+}
+
+/** The item level of a loadout: the mean level of what is fitted, rounded (1 for a fresh one). */
+export function loadoutLevel(lo: Loadout): number {
+  const items = SLOTS.map((s) => lo[s]).filter((x): x is NonNullable<typeof x> => !!x);
+  return items.length ? Math.max(1, Math.round(items.reduce((a, it) => a + (it.level ?? 1), 0) / items.length)) : 1;
+}
+
+/** Summed card DPS (damage x rounds x sustained shots/s, Protocols not counted) of every weapon and launcher fitted. */
+export function loadoutDps(lo: Loadout): number {
+  let sum = 0;
+  for (const s of SLOTS) { const it = lo[s]; if (it) sum += itemDpsPair(it)?.base ?? 0; }
+  return sum;
 }
 
 /** One line per fitted slot: "Left hull mount: Rail cannon (epic)". */
