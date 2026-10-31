@@ -88,7 +88,7 @@ function wOf(item: Item): W {
   if (cls === "rpg") return { ...common, kind: "rocket", n: 1, cycle: common.cycle + (sh ? REF.paint / Math.max(1, s.magazine ?? 1) : 0), latency: sh ? REF.paint : 0, radius: s.blast, share: 1, pen: 0, spread: 0, speed: s.shellSpeed, range: WD.rpgRange, sheetHalf: 0, scatter: 0.5 };
   if (cls === "missiles") return { ...common, kind: "missiles", n: s.rockets, cycle: common.cycle + REF.paint, latency: REF.paint + 1, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.swarmSpeed, range: 70, sheetHalf: 0, scatter: WD.swarmFan * 0.5 };
   if (cls === "mortar") return { ...common, kind: "mortar", n: WD.mortarShells, cycle: common.cycle + REF.paint, latency: REF.paint + WD.mortarFlight, radius: s.blast, share: 1, pen: 0, spread: 0, speed: Infinity, flight: WD.mortarFlight, range: WD.mortarMaxRange, sheetHalf: 0, scatter: WD.mortarRing * 0.5 };
-  return { ...common, kind: "line", n: s.shells, cycle: common.cycle + REF.paint, latency: REF.paint + 1.2, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.salvoSpeed, range: WD.salvoMaxRange, sheetHalf: 0, scatter: WD.salvoScatter, stripLength: s.stripLength };
+  return { ...common, kind: "line", n: s.shells, cycle: common.cycle + REF.paint, latency: REF.paint + 0.9, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.salvoSpeed, range: WD.salvoMaxRange, sheetHalf: 0, scatter: WD.salvoScatter, stripLength: s.stripLength };
 }
 
 const withProtos = (base: string, ids: string[]): Item => {

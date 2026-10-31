@@ -234,7 +234,7 @@ export function runDuel(o: DuelOptions): DuelResult {
         // The line mortar: a strip from the mech's side of the cursor, out along the line to it.
         const dx = c.x - m.sim.pos.x, dz = c.z - m.sim.pos.z, l = Math.hypot(dx, dz) || 1, L = W.salvoLength;
         const ax = c.x - dx / l * L / 2, az = c.z - dz / l * L / 2;
-        launch(i, k, "linemortar", { x: c.x + dx / l * L / 2, z: c.z + dz / l * L / 2 }, { ax, az, r: W.salvoWidth / 2 + k.blast * 0.5, parts: k.count, partsLeft: k.count, spacing: W.salvoLandGap, land: Math.hypot(ax - m.sim.pos.x, az - m.sim.pos.z) / k.speed + 0.8, length: L });
+        launch(i, k, "linemortar", { x: c.x + dx / l * L / 2, z: c.z + dz / l * L / 2 }, { ax, az, r: k.blast, parts: k.count, partsLeft: k.count, spacing: W.salvoLandGap, land: Math.hypot(ax - m.sim.pos.x, az - m.sim.pos.z) / k.speed + 0.8, length: L });
       }
     });
   }

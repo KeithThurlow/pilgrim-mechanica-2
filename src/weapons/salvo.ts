@@ -48,7 +48,7 @@ function rng(seed: number) {
  * end at least salvoMinRange from the mech and its far end at most salvoMaxRange. With targets (`near`), the strip
  * turns and slides toward the line through those near it, by salvoSnap.
  */
-export function planStrip(from: Spot, cursor: Spot, length: number, v: WeaponValues, near: readonly Spot[] = []): Strip {
+export function planStrip(from: Spot, cursor: Spot, length: number, v: WeaponValues, near: readonly Spot[] = [], width = v.salvoWidth): Strip {
   let dx = cursor.x - from.x, dz = cursor.z - from.z;
   let d = Math.hypot(dx, dz);
   if (d < 1e-3) { dx = 0; dz = 1; d = 1; }
@@ -58,7 +58,7 @@ export function planStrip(from: Spot, cursor: Spot, length: number, v: WeaponVal
   d = Math.min(hi, Math.max(lo, d));
   let cx = from.x + dx * d, cz = from.z + dz * d;
   let ux = dx, uz = dz;
-  const raw: Strip = { ax: cx - ux * half, az: cz - uz * half, bx: cx + ux * half, bz: cz + uz * half, width: v.salvoWidth };
+  const raw: Strip = { ax: cx - ux * half, az: cz - uz * half, bx: cx + ux * half, bz: cz + uz * half, width };
   // Snap: the targets near the strip, their centre and the line they make.
   const hits = near.filter((p) => inStrip(raw, p.x, p.z, v.salvoSnapReach));
   if (hits.length && v.salvoSnap > 0) {
@@ -83,7 +83,7 @@ export function planStrip(from: Spot, cursor: Spot, length: number, v: WeaponVal
     }
     cx += (mx - cx) * k; cz += (mz - cz) * k;
   }
-  let s: Strip = { ax: cx - ux * half, az: cz - uz * half, bx: cx + ux * half, bz: cz + uz * half, width: v.salvoWidth };
+  let s: Strip = { ax: cx - ux * half, az: cz - uz * half, bx: cx + ux * half, bz: cz + uz * half, width };
   // The near end is the one nearer the mech (after a snap broadside, either could be).
   if (Math.hypot(s.bx - from.x, s.bz - from.z) < Math.hypot(s.ax - from.x, s.az - from.z)) s = { ax: s.bx, az: s.bz, bx: s.ax, bz: s.az, width: s.width };
   // Keep the near end off the mech.

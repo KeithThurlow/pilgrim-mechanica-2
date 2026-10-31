@@ -62,10 +62,10 @@ const dt = 1 / 120;
 // ---- Salvo: the strip, its impacts in order, coverage, the snap, the cooldown ----
 {
   const from = { x: 0, z: 0 };
-  const s = planStrip(from, { x: 10, z: 30 }, V.salvoLength, V);
+  const s = planStrip(from, { x: 8, z: 36 }, V.salvoLength, V);
   must(Math.abs(stripLength(s) - V.salvoLength) < 1e-6, "strip isn't its length");
   const mid = { x: (s.ax + s.bx) / 2, z: (s.az + s.bz) / 2 };
-  must(Math.hypot(mid.x - 10, mid.z - 30) < 1e-6, "strip isn't centred on the cursor");
+  must(Math.hypot(mid.x - 8, mid.z - 36) < 1e-6, "strip isn't centred on the cursor");
   must(Math.hypot(s.ax, s.az) < Math.hypot(s.bx, s.bz), "near end isn't the nearer");
   const close = planStrip(from, { x: 0, z: 3 }, V.salvoLength, V);
   must(Math.hypot(close.ax, close.az) >= V.salvoMinRange - 1e-6, "strip's near end came closer than its minimum");
@@ -83,6 +83,29 @@ const dt = 1 / 120;
   must(landed.every((l, i) => i === 0 || (l.u > landed[i - 1].u && l.t > landed[i - 1].t)), "impacts didn't walk up the strip in order");
   const gap = stripGap(s, landed.map((l) => ({ x: l.x, z: l.z, r: V.salvoBlast })));
   must(gap <= 0, `a ${gap.toFixed(2)} m gap in the blasts along the strip`);
+  // Keith 2026-10-31: the line mortar covers about the big mortar's area (pi r^2) as a long band, and the painted strip is
+  // the real damage band. Painted area = length x width; real area = the union of the blasts (grid sample).
+  const mortarArea = Math.PI * V.mortarBlast ** 2;
+  const painted = V.salvoLength * V.salvoWidth;
+  must(Math.abs(painted - mortarArea) / mortarArea <= 0.1, `line mortar's strip is ${painted.toFixed(0)} m2, not within 10% of the mortar's ${mortarArea.toFixed(0)} m2`);
+  must(Math.abs(V.salvoWidth - 2 * V.salvoBlast) < 0.5, "the painted width isn't two blast radii (the telegraph would lie)");
+  let inside = 0, cells = 0;
+  const cell = 0.5;
+  for (let x = s.ax - 15; x < s.bx + 15; x += cell) for (let z = Math.min(s.az, s.bz) - 15; z < Math.max(s.az, s.bz) + 15; z += cell) {
+    cells++;
+    if (landed.some((l) => Math.hypot(l.x - x, l.z - z) <= V.salvoBlast)) inside++;
+  }
+  const real = inside * cell * cell;
+  must(Math.abs(real - mortarArea) / mortarArea <= 0.15, `line mortar's real blast area ${real.toFixed(0)} m2 isn't within 15% of the mortar's ${mortarArea.toFixed(0)} m2`);
+  const lastT = landed[landed.length - 1].t, firstT = landed[0].t;
+  // First shell's flight against the same salvo at the old shell speed (34 m/s; the path is the same, so time scales with speed).
+  const oldSim = new SalvoSim({ ...V, salvoSpeed: 34 });
+  oldSim.fire(s, st, flat);
+  let oldFirst = 0, to = 0;
+  while (to < 8 && !oldFirst) { to += dt; oldSim.update(dt, launch, () => { if (!oldFirst) oldFirst = to; }); }
+  must(firstT <= oldFirst * 0.8, `line mortar's first shell lands at ${firstT.toFixed(2)} s, not ~25% under the old ${oldFirst.toFixed(2)} s`);
+  must(V.mortarFlight <= 3 * 0.8 && V.mortarFlight >= 1.5, `mortar flight ${V.mortarFlight} s isn't cut ~25% from 3 s`);
+  console.log(`line mortar: painted ${painted.toFixed(0)} m2, blast union ${real.toFixed(0)} m2 (mortar ${mortarArea.toFixed(0)}), first shell ${firstT.toFixed(2)} s (was ${oldFirst.toFixed(2)}), last ${lastT.toFixed(2)} s, mortar flight ${V.mortarFlight} s`);
   // The cooldown: not ready just before it ends, ready just after.
   const cd = new SalvoSim(V);
   cd.fire(s, st, flat);

@@ -434,7 +434,7 @@ export class Arsenal implements MechWeapons {
       p.strip = null; p.ring = null; p.arc.length = 0;
       if (sh.weapon === "linemortar") {
         const st = this.lineStats(sh.own);
-        sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates());
+        sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates(), st.blast * v.salvoWidth / Math.max(0.1, v.salvoBlast));
         p.strip = sh.strip; p.ready = sh.line.ready;
         p.beamTo = { x: cur.x, y: bf.field.height(cur.x, cur.z) + 0.1, z: cur.z };
       } else if (sh.weapon === "mortar") {
