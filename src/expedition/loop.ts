@@ -142,6 +142,10 @@ export class ExpeditionLoop {
   clashes = 0;
   readonly zoom: RadarZoom;
   readonly radar: RadarDraw;
+  /** Time since the scope last redrew (it redraws at radarHz). */
+  private radarDt = 1;
+  /** Road points last seen (the sites forget which sieges the road blocks when it grows). */
+  private roadSeen = -1;
   readonly hud: ExpeditionHud;
   /** Scrap clumps, item drops, the loot panel and its sounds (loot.ts). */
   readonly loot: FieldLoot;
@@ -368,6 +372,7 @@ export class ExpeditionLoop {
   }
 
   update(dt: number, inp: LoopInput) {
+    if (this.route.count !== this.roadSeen) { this.roadSeen = this.route.count; this.sites.roadGrew(); }
     const { exp, fuel, carry, player, v, bf } = this, sim = player.sim, p = sim.pelvis;
     // Launched (on the sand), picked up (the crane has it: banked), or destroyed out there.
     const happened = exp.follow(carry.state, carry.attached, player.alive);
@@ -490,10 +495,15 @@ export class ExpeditionLoop {
     if (zev) this.sound.zoom(zev === "out");
     const range = this.zoom.range;
     const mode = range > Math.sqrt(v.mechRadar * v.convoyRadar) ? "convoy" : "mech";
-    const pic = radarPicture(v, w, mode);
     const sm = this.seeker.mode, seek = sm ? seekNearest(sm, v, w) : null;
-    pic.seek = seek;
-    this.radar.draw(dt, pic, range, (v.camYaw * Math.PI) / 180, sim.heading, warn);
+    // The scope redraws at radarHz (perf pass 2026-10-31): its picture and drawing are the dear part.
+    this.radarDt += dt;
+    if (this.radarDt >= 1 / Math.max(1, v.radarHz)) {
+      const pic = radarPicture(v, w, mode);
+      pic.seek = seek;
+      this.radar.draw(this.radarDt, pic, range, (v.camYaw * Math.PI) / 180, sim.heading, warn);
+      this.radarDt = 0;
+    }
     inp.mark?.("radar draw");
 
     // HUD.

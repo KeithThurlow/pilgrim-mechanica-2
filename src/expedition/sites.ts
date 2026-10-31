@@ -33,6 +33,7 @@ export class FieldSites {
   readonly salvage: SalvageSim;
   readonly fx: SalvageDraw;
   private raw: ReturnType<typeof rawGround>;
+  private skipMemo = new Map<string, boolean>();
   private drawn = new Map<string, PoiDraw>();
   private memory = new Map<string, { progress: number; done: boolean }>();
   /** Sites made on the sand by what happens there (the wrecks a clash leaves): kept, built and drawn like any POI. */
@@ -54,7 +55,13 @@ export class FieldSites {
     addModifier(field, this.pads);
     this.walls = new SiegeWalls(this.pois, v);
     addModifier(field, this.walls);
-    this.walls.skip = (p) => this.blocked(p.x, p.z) || this.edgeBlocked(p);
+    // Asked for every ground sample near a fortress or hub (perf pass 2026-10-31: 13 road lookups per sample made a chunk
+    // there cost 30+ ms), so remembered per placement until the road grows (roadGrew) or the sites rebuild.
+    this.walls.skip = (p) => {
+      let b = this.skipMemo.get(p.id);
+      if (b === undefined) { b = this.blocked(p.x, p.z) || this.edgeBlocked(p); this.skipMemo.set(p.id, b); }
+      return b;
+    };
     this.salvage = new SalvageSim(v);
     this.fx = new SalvageDraw(this.salvage, bf, v);
     scene.add(this.fx.group);
@@ -70,7 +77,11 @@ export class FieldSites {
   keepClear(x: number, z: number, r: number) { this.pois.keepClear = [{ x, z, r }]; this.rebuild(); }
 
   /** Placement or dune values changed: start over (stripped spots forgotten). */
+  /** The road has new points: forget which fortresses and hubs it runs into. */
+  roadGrew() { this.skipMemo.clear(); }
+
   rebuild() {
+    this.skipMemo.clear();
     this.extra.clear();
     this.raw.refresh();
     this.pois.reset();
