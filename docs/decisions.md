@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Walking must move where you press at once: no turn-time lag on the walk; turn rates stay for the sprint, where the mech acts like a vehicle | Keith | Keith | Agent on `wip/responsive`. |
+| 2026-10-31 | The rival is far too hard and too accurate: aim lag (the rail especially), dodgeable, rewards moving and cover; rival difficulty levels; its health bar no wider than the mech | Keith | Keith | Agent on `wip/rivalfix`. |
 | 2026-10-31 | Every explosion has a blast wave / screen distortion by default, expandable per explosion kind (bigger, longer, coloured, heat shimmer for exhausts and beams) | Keith | Keith | Queued after `wip/enemylights` (same effect files). |
 | 2026-10-31 | Lights are a large part of how the game works: visual effects should reward the player; enemy attacks light up too (their shots, launches and blasts, and their telegraphs as warnings) | Keith | Keith | Direction. Agent on `wip/enemylights`. |
 | 2026-10-31 | Excavators (the tall walkers) get a charging beam: it glows brighter and brighter, then releases along a line; the glow is the warning to get out of the way. Some targets light up on the ground | Keith | Keith | Agent on `wip/enemylights`. |

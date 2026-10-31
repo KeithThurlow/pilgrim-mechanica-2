@@ -182,6 +182,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Responsive walking (Keith 2026-10-31): agent on `wip/responsive`.
+- Rival too hard, aim lag, difficulty levels, health bar size (Keith 2026-10-31): agent on `wip/rivalfix`.
 - Blast waves on every explosion (Keith 2026-10-31): queued; starts when `wip/enemylights` merges.
 - Enemy lights and the excavator charging beam (Keith 2026-10-31): agent on `wip/enemylights` (handoff `docs/handoff-enemylights.md`).
 - Balance pass 2 merged 2026-10-31, never run in a browser: Keith to play the duel lab, robots lab, weapons lab `?proto=splitter` (or `overclock,arcLink`, `quickLoader,caseless`), loadout lab. Rough: health bars and the reload ring never seen; split on the shoulder rocket loses sustained DPS (magazine 3); minigun pairs take ~45 s on an excavator (armour 10) without the default missile pod; raiders and bandits don't scale with area level yet; old saved items keep their old rolls (`?fresh`).
