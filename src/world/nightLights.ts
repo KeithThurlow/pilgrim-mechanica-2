@@ -12,7 +12,12 @@
 // a scan of the scene every half second: vehicles, the convoy's cars and plough, the robot swarm.
 //
 // Everything fades in with the night (0 at noon: no lamps drawn, the pools at 0, the headlamp's shadow map not drawn).
-// Muzzle flashes carry their own lights (src/fx/minigun.ts).
+// The minigun's muzzle flashes carry their own lights (src/fx/minigun.ts).
+//
+// Short lights (Keith 2026-10-31: a rocket barrage at night): every rocket and missile in flight (src/weapons/arsenalDraw.ts
+// posts them each frame), rocket launches and blasts ask for a real point light; the ones close together merge into
+// one brighter light (src/world/lightCluster.ts) and the biggest, nearest clusters get the pool's points; the rest are
+// faked on the ground. Each rocket also gets a faked glow, exhaust flare and light on the sand.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { LampDraw } from "../fx/lampDraw";
@@ -451,6 +456,8 @@ export class NightLights {
     }
     if (!this.made || this.pool.length !== Math.round(v.nightLightCap) || this.spots.length !== Math.round(v.nightSpotCap)) this.build();
 
+    // Short lights first, so a big swarm's lamps never crowd the rockets' glows out of the faked-light buffers.
+    const nc = this.shortLights(shortK, n);
     // Faked lamps (and their bids for the real ones), only at night.
     if (n > 0) {
       this.refreshKinds();
@@ -463,7 +470,6 @@ export class NightLights {
     // Points: the short lights first (blasts, launches, rockets, merged where they bunch up; the brightest and nearest
     // first; the rest faked on the ground), then deck lamps and cab windows nearest the focus.
     let used = 0;
-    const nc = this.shortLights(shortK, n);
     const cl = this.clusterOrder; cl.length = 0;
     for (let j = 0; j < nc; j++) {
       const c = this.clusters[j];
