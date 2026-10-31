@@ -49,6 +49,10 @@ import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
+import { BodyContact } from "../game/bodyContact";
+import type { Arsenal } from "../weapons/arsenal";
+import type { WeaponValues } from "../weapons/tuning";
+import type { Raider } from "../combat/warband";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
@@ -69,7 +73,7 @@ export const LOOP_TOPICS = [
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
-  { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
+  { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
 ];
 
@@ -100,6 +104,11 @@ export class ExpeditionLoop {
   readonly banditCamps: BanditCamps;
   readonly columns: WarColumns;
   readonly bands: WarBands;
+  /** The mech's body against bandits, scrappers and vehicles (src/game/bodyContact.ts). */
+  readonly contact: BodyContact;
+  /** The player's weapons, for the bandits' dive rolls out of telegraphed shots (the convoy lab sets it). */
+  threatSource: { arsenal: Arsenal; wv: WeaponValues } | null = null;
+  private raiderList: Raider[] = [];
   readonly relations: Relations;
   readonly director: FightDirector;
   readonly skirmish: Skirmishes;
@@ -191,6 +200,7 @@ export class ExpeditionLoop {
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.columns.danger = this.depth.danger;
     this.bands = new WarBands(v, bf, scene, this.columns);
+    this.contact = new BodyContact(player, bf);
     this.bands.riders = this.banditCamps.sw;
     this.relations = new Relations(v);
     this.director = new FightDirector(v, this.relations);
@@ -279,7 +289,7 @@ export class ExpeditionLoop {
   }
 
   update(dt: number, inp: LoopInput) {
-    const { exp, fuel, carry, player, v } = this, sim = player.sim, p = sim.pelvis;
+    const { exp, fuel, carry, player, v, bf } = this, sim = player.sim, p = sim.pelvis;
     // Launched (on the sand), picked up (the crane has it: banked), or destroyed out there.
     const happened = exp.follow(carry.state, carry.attached, player.alive);
     if (happened === "launched") { fuel.refill(); this.demoGoal = null; this.demoFrom = this.stripped; }
@@ -310,6 +320,17 @@ export class ExpeditionLoop {
     inp.mark?.("swarm camps");
     this.updateHumans(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     inp.mark?.("raiders and fights");
+    // The mech's body (Keith 2026-10-31): tramples bandits and scrappers, rams war band vehicles; bandits may dive out
+    // of a charge or a telegraphed shot. Only while it walks the sand (not hanging from the crane or parked).
+    const body = this.contact.step(dt);
+    this.banditCamps.mechReach = body.reach;
+    if (SAND.has(carry.state) && player.alive) {
+      const a = this.threatSource;
+      this.banditCamps.sw.dodge(this.contact.threats(a?.arsenal ?? null, bf.shells, a?.wv ?? null));
+      this.contact.infantry(this.banditCamps.sw, this.banditCamps.target);
+      this.contact.robots(this.swarms.sw, this.swarms.target);
+      this.contact.vehicles(this.bands.raiders(this.raiderList), dt);
+    }
     this.updateThreats(dt, hunting, inp.canvas, foot && pl!.alive ? { x: pl!.x, z: pl!.z } : null);
     inp.mark?.("packs and raids");
 

@@ -64,11 +64,16 @@ import type { DustValues } from "../fx/dust";
 import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable, SplashOpts } from "./battlefield";
 import { armourHit } from "./armour";
+import { TRAMPLE_DEFAULTS, TRAMPLE_PARAMS } from "../combat/trample";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
+  ...TRAMPLE_DEFAULTS,
+  /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
+  trample: 1,
+  crush: 1,
   hull: 3000,
   armour: 8,
   roundDamage: 12,
@@ -90,6 +95,7 @@ export const MECH_PARAMS: Param[] = [
   ...DASH_PARAMS,
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
+  ...TRAMPLE_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
   { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
   { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },

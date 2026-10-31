@@ -7,6 +7,7 @@
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
+import { closingSpeed, pairChance, threatOut, trampleFling, trampleHurt, type GroundThreat, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 
 export const INFANTRY_DEFAULTS = {
   runSpeed: 4.5,
@@ -54,6 +55,12 @@ export const INFANTRY_DEFAULTS = {
   sinkTime: 2,
   banditHeight: 1.8,
   banditRadius: 0.35,
+  diveChance: 0.33,
+  diveNotice: 1.6,
+  diveSpeed: 4.2,
+  diveTime: 1.1,
+  diveMargin: 0.8,
+  evadeSpeed: 1.2,
 };
 export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
@@ -103,6 +110,12 @@ export const INFANTRY_PARAMS: Param[] = [
   { key: "bodyFriction", label: "Body slide friction", min: 0.5, max: 20, step: 0.1, group: "Bandits: stomp & bodies" },
   { key: "bodyLife", label: "Bodies stay (s)", min: 1, max: 60, step: 0.5, group: "Bandits: stomp & bodies" },
   { key: "sinkTime", label: "Sink at the end (s)", min: 0.1, max: 10, step: 0.1, group: "Bandits: stomp & bodies" },
+  { key: "diveChance", label: "Dodge chance", min: 0, max: 1, step: 0.01, group: "Bandits: dodge", tip: "Keith 2026-10-31: each bandit in the way of a charge or a telegraphed shot has this chance (seeded, one roll per bandit per threat) to dive out; the rest don't react" },
+  { key: "diveNotice", label: "Notices it (s before it lands)", min: 0, max: 5, step: 0.05, group: "Bandits: dodge", tip: "A ring or strip landing later than this is ignored for now; a charge is always seen" },
+  { key: "diveSpeed", label: "Dive speed (m/s)", min: 0.5, max: 12, step: 0.1, group: "Bandits: dodge" },
+  { key: "diveTime", label: "Dive lasts (s)", min: 0.2, max: 2.5, step: 0.05, group: "Bandits: dodge", tip: "The roll clip plays sped up to fit" },
+  { key: "diveMargin", label: "Clears the edge by (m)", min: 0, max: 4, step: 0.05, group: "Bandits: dodge" },
+  { key: "evadeSpeed", label: "Runs out at (× run speed)", min: 0.5, max: 2.5, step: 0.05, group: "Bandits: dodge", tip: "After the roll, still inside, it sprints out of the footprint" },
 ];
 
 export const INFANTRY_MAX = 1024;
@@ -111,6 +124,8 @@ export const ADVANCE = 0, FIRING = 1, FLEEING = 2, DOWN = 3, DEAD = 4;
 export const EMPTY = 255;
 
 const DEG = Math.PI / 180;
+/** The hard keep-out round the target past its radius (m): the soft keepOut steers them off further. */
+const BODY_SKIN = 0.05;
 const HASH_SIZE = 4096, HASH_MASK = HASH_SIZE - 1;
 const EVENTS_MAX = 2048;
 
@@ -168,9 +183,23 @@ export class InfantrySwarm {
   private evX = new Float32Array(EVENTS_MAX); private evZ = new Float32Array(EVENTS_MAX);
   private evN = 0;
   private rs: number;
+  /** The swarm's seed (dodge decisions hash it with each bandit's uid and the threat's id). */
+  readonly seedN: number;
+  /** Dive roll: seconds left (0: not rolling), its flat way; evading: seconds left of running out, its way. */
+  readonly diveT = new Float32Array(INFANTRY_MAX);
+  readonly diveX = new Float32Array(INFANTRY_MAX); readonly diveZ = new Float32Array(INFANTRY_MAX);
+  readonly evadeT = new Float32Array(INFANTRY_MAX);
+  readonly outX = new Float32Array(INFANTRY_MAX); readonly outZ = new Float32Array(INFANTRY_MAX);
+  /** The last threat id this bandit rolled for (one roll per threat). */
+  readonly rolledFor = new Int32Array(INFANTRY_MAX);
+  /** Dive rolls started since construction (checks, HUD). */
+  dives = 0;
+  /** Seconds before the mech's body can hurt this one again (trample). */
+  readonly trampleCd = new Float32Array(INFANTRY_MAX);
 
   constructor(public v: InfantryValues, private ground: Ground, seed = 1) {
     this.rs = (seed >>> 0) || 1;
+    this.seedN = this.rs;
   }
 
   /** Seeded random 0..1 (mulberry32). */
@@ -212,6 +241,7 @@ export class InfantrySwarm {
       this.flank[i] = this.rand() * 2 - 1;
       this.slope[i] = 0; this.fallYaw[i] = 0;
       this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0;
+      this.diveT[i] = 0; this.evadeT[i] = 0; this.rolledFor[i] = 0; this.trampleCd[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
@@ -301,6 +331,9 @@ export class InfantrySwarm {
       if (s === EMPTY) continue;
       if (this.frozen[i] && s < DOWN) continue;
       stateTime[i] += dt;
+      if (this.trampleCd[i] > 0) this.trampleCd[i] -= dt;
+      if (this.evadeT[i] > 0) this.evadeT[i] -= dt;
+      if (this.diveT[i] > 0 && (this.diveT[i] -= dt) <= 0) this.diveT[i] = 0;
 
       if (s === DEAD) {
         if (stateTime[i] >= v.bodyLife) { state[i] = EMPTY; continue; }
@@ -358,6 +391,12 @@ export class InfantrySwarm {
         const c = Math.cos(fa), sn = Math.sin(fa);
         wx = -(ux * c - uz * sn) * spd; wz = -(uz * c + ux * sn) * spd;
       }
+      // Out of the way of something coming down (dodge()): run out of its footprint, whatever else it was doing.
+      const diving = this.diveT[i] > 0 && st < DOWN;
+      if (this.evadeT[i] > 0 && st < DOWN) {
+        const spd = v.runSpeed * v.evadeSpeed * this.speedK[i] * hill;
+        wx = this.outX[i] * spd; wz = this.outZ[i] * spd; face = NaN;
+      }
 
       if (st === DOWN) {
         const f = Math.max(0, 1 - v.bodyFriction * dt);
@@ -389,6 +428,8 @@ export class InfantrySwarm {
           if (into > 0) { wx -= ux * into; wz -= uz * into; }
         }
         vx[i] += (wx - vx[i]) * steer; vz[i] += (wz - vz[i]) * steer;
+        // A dive roll goes its own way at its own speed (the roll clip faces it).
+        if (diving) { vx[i] = this.diveX[i] * v.diveSpeed; vz[i] = this.diveZ[i] * v.diveSpeed; face = Math.atan2(this.diveX[i], this.diveZ[i]); }
         // Facing: where it runs, or at the mech when shooting.
         const speed2 = vx[i] * vx[i] + vz[i] * vz[i];
         if (Number.isNaN(face) && speed2 > 0.25) face = Math.atan2(vx[i], vz[i]);
@@ -400,7 +441,7 @@ export class InfantrySwarm {
       }
 
       // Guns.
-      if (st === FIRING && dist < v.fireRange) {
+      if (st === FIRING && dist < v.fireRange && !diving && this.evadeT[i] <= 0) {
         this.fireClock[i] -= dt;
         if (this.fireClock[i] <= 0) {
           if (this.burstLeft[i] === 0) this.burstLeft[i] = v.burstRounds;
@@ -418,7 +459,8 @@ export class InfantrySwarm {
       const target = this.targetOf(i, base), calm = this.calm[i] === 1;
       const ox = px[i], oz = pz[i], oy = py[i];
       let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
-      const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = calm ? 0 : target.radius + v.keepOut;
+      // Never inside the mech's body (keepOut is a soft steer above, so the body can reach them: trample).
+      const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = calm ? 0 : target.radius + BODY_SKIN;
       if (d < m) {
         if (d > 1e-5) { x = target.x + (dx / d) * m; z = target.z + (dz / d) * m; } else { x = target.x + m; }
       }
@@ -516,11 +558,11 @@ export class InfantrySwarm {
   }
 
   /** Damage a live bandit; returns true if this killed it. Death throws the body along (dirX, dirZ). */
-  damage(i: number, amount: number, dirX: number, dirZ: number): boolean {
+  damage(i: number, amount: number, dirX: number, dirZ: number, throwSpeed = this.v.deathThrow): boolean {
     if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
     this.hp[i] -= amount;
     if (this.hp[i] > 0) return false;
-    this.kill(i, dirX, dirZ, this.v.deathThrow);
+    this.kill(i, dirX, dirZ, throwSpeed);
     return true;
   }
 
@@ -542,6 +584,69 @@ export class InfantrySwarm {
       this.fear[i] += this.v.fearPerDeath;
     }
     return n;
+  }
+
+  /**
+   * The mech's body running into them (Keith 2026-10-31, src/combat/trample.ts): every bandit (standing or down)
+   * within its reach takes damage by the closing speed through hurt(i, damage, dirX, dirZ) (the caller's hit adapter:
+   * InfantryTarget, so kills count) and is knocked down and flung along the mech's way; a slow body only nudges.
+   * Hits go into out as plain data. Returns how many it touched.
+   */
+  trample(b: MechBody, tv: TrampleValues, hurt: (i: number, damage: number, dx: number, dz: number, fling: number) => boolean, out: TrampleHit[] | null = null): number {
+    const v = this.v, R = b.reach + v.banditRadius;
+    let n = 0;
+    for (let i = 0; i < this.hi; i++) {
+      const s = this.state[i];
+      if (s >= DEAD || this.trampleCd[i] > 0) continue;
+      const dx = this.px[i] - b.x, dz = this.pz[i] - b.z;
+      if (dx * dx + dz * dz >= R * R) continue;
+      const c = closingSpeed(b, this.px[i], this.pz[i], this.vx[i], this.vz[i]);
+      if (c.closing < tv.trampleDown) continue;
+      n++;
+      this.trampleCd[i] = 0.35;
+      // Flung along the mech's way and out to its side.
+      const sp = Math.hypot(b.vx, b.vz) || 1, ox = b.vx / sp + c.nx, oz = b.vz / sp + c.nz, ol = Math.hypot(ox, oz) || 1;
+      const fx = ox / ol, fz = oz / ol, fling = trampleFling(c.rel, tv);
+      const dmg = trampleHurt(c.rel, tv, b.crush);
+      const x = this.px[i], z = this.pz[i];
+      const killed = dmg > 0 && hurt(i, dmg, fx, fz, fling);
+      if (!killed) {
+        this.state[i] = DOWN; this.stateTime[i] = 0; this.diveT[i] = 0; this.evadeT[i] = 0;
+        this.fallYaw[i] = Math.atan2(fx, fz);
+        this.vx[i] = fx * fling; this.vz[i] = fz * fling;
+        this.fear[i] += v.fearPerDeath;
+      }
+      out?.push({ kind: "bandit", id: this.uid[i], damage: dmg, closing: c.rel, killed, x, z });
+    }
+    return n;
+  }
+
+  /**
+   * Threats on the ground (the player's rings and strips, the charging mech's line): each standing bandit inside
+   * one decides once, seeded by its uid and the threat's id, whether it noticed (diveChance); those that did dive roll
+   * out of it (once per threat) and run on out while still inside. Rings and strips are only seen within diveNotice
+   * of landing. Keith 2026-10-31: "enemies only have a chance to dive roll out of / dodge your targeted abilities".
+   */
+  dodge(threats: readonly GroundThreat[]): void {
+    if (!threats.length) return;
+    const v = this.v, m = v.diveMargin + v.banditRadius;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DOWN || this.frozen[i]) continue;
+      for (const t of threats) {
+        if (t.t > v.diveNotice) continue;
+        const o = threatOut(t, this.px[i], this.pz[i], m);
+        if (!o.inside) continue;
+        if (pairChance(this.seedN, this.uid[i], t.id) >= v.diveChance) continue;
+        this.evadeT[i] = 0.25; this.outX[i] = o.ox; this.outZ[i] = o.oz;
+        if (this.rolledFor[i] !== t.id && this.diveT[i] <= 0) {
+          this.rolledFor[i] = t.id;
+          this.diveT[i] = v.diveTime; this.diveX[i] = o.ox; this.diveZ[i] = o.oz;
+          this.heading[i] = Math.atan2(o.ox, o.oz);
+          this.dives++;
+        }
+        break;
+      }
+    }
   }
 
   stomp(x: number, z: number, radius: number): void {

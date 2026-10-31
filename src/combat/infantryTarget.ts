@@ -66,6 +66,13 @@ export class InfantryTarget implements Hittable, Owner {
     return n;
   }
 
+  /** The mech's body (trample): bandit i takes amount, thrown along (dirX, dirZ) at speed if it dies. */
+  crush(i: number, amount: number, dirX: number, dirZ: number, speed: number): boolean {
+    const k = this.swarm.damage(i, amount, dirX, dirZ, speed);
+    if (k) this.kills++;
+    return k;
+  }
+
   damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3) {
     if (this.last < 0) return;
     if (this.swarm.damage(this.last, amount, dir.x, dir.z)) this.kills++;

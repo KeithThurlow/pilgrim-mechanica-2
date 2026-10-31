@@ -26,6 +26,8 @@ const CLIPS: Record<VatClipName, { file: string; fps: number; loop: boolean; rif
   walkFire: { file: "Rifle/Rifle_Walk_F_Firing.fbx", fps: 24, loop: true, rifle: true },
   aim: { file: "Stances/Rifle_Idle_Aim.fbx", fps: 12, loop: true, rifle: true },
   flinch: { file: "Reactions/Hit_Flinch.fbx", fps: 30, loop: false, rifle: false },
+  // The dive roll (Keith 2026-10-31): the old project's Mixamo forward roll (Dodge/Roll_F.fbx, stored in its LFS).
+  roll: { file: "Dodge/Roll_F.fbx", fps: 30, loop: false, rifle: false },
 };
 
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -142,7 +144,7 @@ function gripFrame(out: THREE.Matrix4, twoHands: boolean) {
 
 let row = 0;
 // Bake the aim stance first: its first frame gives the rifle's place in the hand for the one-handed clips.
-const order: VatClipName[] = ["aim", "run", "sprint", "runFire", "walkFire", "flinch"];
+const order: VatClipName[] = ["aim", "run", "sprint", "runFire", "walkFire", "flinch", "roll"];
 for (const name of order) {
   const cfg = CLIPS[name];
   const { root: croot } = loadFbx(CLIPS_DIR + cfg.file);

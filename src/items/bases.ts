@@ -44,6 +44,8 @@ export const STATS: Record<string, StatInfo> = {
   strideBase: { label: "Stride (m)", better: 1, decimals: 2 },
   stridePerSpeed: { label: "Stride per m/s", better: 1, decimals: 2 },
   impact: { label: "Stomp", better: 1, decimals: 2 },
+  trample: { label: "Trample reach ×", better: 1, decimals: 2 },
+  crush: { label: "Trample damage ×", better: 1, decimals: 2 },
   turnRate: { label: "Turn rate (°/s)", better: 1, decimals: 0 },
   carry: { label: "Carries (t)", better: 1, decimals: 1 },
   hull: { label: "Hull points", better: 1, decimals: 0 },
@@ -155,15 +157,15 @@ export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
   {
     id: "legs-rampart", name: "Rampart legs", kind: "legs", tags: ["legs"], weight: 6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { walkSpeed: s(W.walkSpeed, 0.06), sprintSpeed: s(W.sprintSpeed, 0.06), accel: s(W.accel, 0.1), strideBase: s(W.strideBase, 0.04), stridePerSpeed: s(W.stridePerSpeed, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), carry: s(12, 0.1) },
+    stats: { walkSpeed: s(W.walkSpeed, 0.06), sprintSpeed: s(W.sprintSpeed, 0.06), accel: s(W.accel, 0.1), strideBase: s(W.strideBase, 0.04), stridePerSpeed: s(W.stridePerSpeed, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), carry: s(12, 0.1), trample: s(1, 0.06), crush: s(1, 0.1) },
   },
   {
     id: "legs-stilt", name: "Stilt legs", kind: "legs", tags: ["legs"], weight: 4.5, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 1,
-    stats: { walkSpeed: s(7.2, 0.06), sprintSpeed: s(10, 0.06), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), carry: s(8, 0.1) },
+    stats: { walkSpeed: s(7.2, 0.06), sprintSpeed: s(10, 0.06), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), carry: s(8, 0.1), trample: s(0.8, 0.06), crush: s(0.75, 0.1) },
   },
   {
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), carry: s(18, 0.1) },
+    stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), carry: s(18, 0.1), trample: s(1.3, 0.06), crush: s(1.5, 0.1) },
   },
   // Hulls: hull points, torso turn, mounts.
   {

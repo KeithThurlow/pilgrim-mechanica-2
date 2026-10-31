@@ -45,7 +45,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     armour: MECH_DEFAULTS.armour,
     ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DASH_DEFAULTS,
     hull: MECH_DEFAULTS.hull, roundDamage: MECH_DEFAULTS.roundDamage, roundPierce: MECH_DEFAULTS.roundPierce,
-    mechRadar: RADAR_DEFAULTS.mechRadar, gearSalvage: 1,
+    mechRadar: RADAR_DEFAULTS.mechRadar, gearSalvage: 1, trample: MECH_DEFAULTS.trample, crush: MECH_DEFAULTS.crush,
     // The default visor head's small lock help (Keith 2026-10-26: hulls have heads; the one value that's new).
     sensorLock: makeItem("sensor-visor").stats.lockAssist,
   } as Record<string, number>;

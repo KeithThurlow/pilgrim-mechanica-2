@@ -72,7 +72,7 @@ const lab = await combatLab({
   topics: [
     { id: "stress", label: "Stress", groups: [G, GB, GR, "Stress worst case"] },
     { id: "robots", label: "Robots", groups: ["Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam"] },
-    { id: "bandits", label: "Bandits", groups: ["Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] },
+    { id: "bandits", label: "Bandits", groups: ["Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "raiders", label: "Raiders", groups: ["Raider driving", "Raider guns", "Raider health", "Raider wrecks"] },
   ],
   selectables: [

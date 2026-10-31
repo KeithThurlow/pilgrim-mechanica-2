@@ -19,7 +19,7 @@ import { InfantrySwarm, DEAD, DOWN, type InfantryValues } from "../combat/infant
 import { InfantryDraw, type BanditLookValues } from "../combat/infantryDraw";
 import type { BanditVatData } from "../combat/banditVat";
 import { InfantryTarget } from "../combat/infantryTarget";
-import { Warband, type WarbandValues, type WarTarget } from "../combat/warband";
+import { Warband, type Raider, type WarbandValues, type WarTarget } from "../combat/warband";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
 import type { Prey } from "../pilot/quarry";
@@ -175,7 +175,7 @@ export class BanditCamps {
     const bf = this.bf;
     const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
     const T = q.at;
-    sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : 3 }, (fx, fy, fz, tx, ty, tz, i) => {
+    sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : this.mechReach }, (fx, fy, fz, tx, ty, tz, i) => {
       const own = sw.hasT[i] === 1;
       if (!own && !q.alive) return;
       const from = this.from.set(fx, fy, fz);
@@ -243,6 +243,9 @@ export class BanditCamps {
   }
 
   /** A dash through them. */
+  /** The mech's body reach (the trample's): bandits are held off its body by this, so a charge reaches them. */
+  mechReach = 3;
+
   dashed(x: number, z: number, dx: number, dz: number, radius: number, speed: number, damage: number) {
     return this.sw.shove(x, z, radius, dx, dz, speed, damage);
   }
@@ -302,6 +305,8 @@ export class WarBands {
 
   get count() { let n = 0; for (const l of this.live.values()) n += l.wb.raiders.filter((r) => r.alive).length; return n; }
   get columnsLive() { return this.live.size; }
+  /** Every vehicle of every band on the field (rams: src/game/bodyContact.ts). */
+  raiders(out: Raider[] = []): Raider[] { out.length = 0; for (const l of this.live.values()) for (const r of l.wb.raiders) out.push(r); return out; }
 
   /** Register owner: every live band's vehicles (ids unique across the bands). */
   publish(reg: Parameters<Warband["publish"]>[0]) { for (const l of this.live.values()) l.wb.publish(reg); }

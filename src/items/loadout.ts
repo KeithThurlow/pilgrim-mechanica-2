@@ -265,6 +265,8 @@ export function effectiveStats(item: Item): Record<string, number> {
 /** The values a loadout gives the mech: keys of the walker, upper-body, mech, dash, radar and salvage tuning. */
 export interface ResolvedValues {
   walkSpeed: number; sprintSpeed: number; accel: number; strideBase: number; stridePerSpeed: number; impact: number; turnRate: number;
+  /** The legs' trample reach and damage, × the Trample sliders (src/combat/trample.ts; Keith 2026-10-31). */
+  trample: number; crush: number;
   hull: number; torsoTurnRate: number;
   /** The hull's armour (src/game/armour.ts). */
   armour: number;
@@ -364,6 +366,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   for (const s of SLOTS) { const x = lo[s] ? effectiveStats(lo[s]!).salvage : undefined; if (x !== undefined) salvage += x; }
   const values: ResolvedValues = {
     walkSpeed: legs.walkSpeed, sprintSpeed: legs.sprintSpeed, accel: legs.accel, strideBase: legs.strideBase, stridePerSpeed: legs.stridePerSpeed, impact: legs.impact, turnRate: legs.turnRate,
+    trample: legs.trample ?? 1, crush: legs.crush ?? 1,
     hull: hull.hull, torsoTurnRate: hull.torsoTurnRate, armour: hull.armour ?? 0,
     dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
     ammoPerGun: first?.ammo ?? BASE_STATS("mg-medium").magazine,
@@ -415,6 +418,7 @@ export function summary(r: Resolved): SummaryLine[] {
   const out = [
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
+    line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),
     line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),

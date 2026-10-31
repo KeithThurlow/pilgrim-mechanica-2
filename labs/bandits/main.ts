@@ -11,6 +11,7 @@ import { InfantryDraw, BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS, CLOTH } from ".
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
+import { BodyContact } from "../../src/game/bodyContact";
 
 const WAVE_DEFAULTS = {
   swarmSize: 300,
@@ -52,12 +53,12 @@ const lab = await combatLab({
   title: "Bandit swarm",
   defaults: { ...INFANTRY_DEFAULTS, ...WAVE_DEFAULTS, ...BANDIT_LOOK_DEFAULTS },
   params: [...WAVE_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
-  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandit rockets", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: look"] }],
+  topics: [{ id: "bandits", label: "Bandits", groups: ["Bandit waves", "Bandits", "Bandits: guns", "Bandit rockets", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] }],
   selectables: [{ topic: "bandits", label: "Bandits", objects: () => (draw ? [draw.mesh] : []) }],
   actions: [{ label: "Group now", onClick: () => spawnGroup() }],
   report: () => ({ bandits: swarm?.count ?? 0 }),
 });
-const { V, bf, player, field } = lab;
+const { V, bf, player, field, arsenal } = lab;
 const sw = new InfantrySwarm(V, field);
 // A dash ploughs through them.
 player.onDash = (x, z, dx, dz) => { if (sw.shove(x, z, V.dashShoveRadius, dx, dz, V.dashShove, V.dashShoveDamage)) bf.sfx.play("brap", player.sim.pelvis, 0.6, 0.6, false); };
@@ -68,6 +69,8 @@ draw = new InfantryDraw(sw, V, vat);
 lab.app.scene.add(draw.group);
 const target = new InfantryTarget(sw, 2);
 bf.targets.push(target);
+// The mech's body tramples them, and they may dive out of a charge or a telegraphed shot (Keith 2026-10-31).
+const contact = new BodyContact(player, bf);
 player.onStomp = (x, z, k) => sw.stomp(x, z, V.stompReach * Math.min(1.5, k));
 // Deaths go to the physics as ragdolls (Keith 2026-10-24), in the bandit's cloth colour.
 sw.hideDead = true;
@@ -97,7 +100,7 @@ lab.onFrame((dt) => {
   const prey = n ? lab.prey(cx / n, cz / n) : lab.prey(player.sim.pos.x, player.sim.pos.z);
   const p = prey.at;
   for (let i = 0; i < rocketClock.length; i++) rocketClock[i] -= dt;
-  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : 3 }, (fx, fy, fz, tx, ty, tz, i) => {
+  sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz, i) => {
     if (!prey.alive) return;
     from.set(fx, fy, fz);
     // Only with a clear line: no shooting through the dunes.
@@ -126,6 +129,9 @@ lab.onFrame((dt) => {
       if (bf.inWater(sw.px[i], sw.pz[i])) bf.water.ripple(sw.px[i], sw.pz[i], 0.3, 0.8);
     }
   }
+  contact.step(dt);
+  sw.dodge(contact.threats(arsenal, bf.shells, V));
+  contact.infantry(sw, target);
   draw!.update(dt);
-  lab.hud("bandits", `bandits ${sw.count} up · killed ${target.kills} · rounds at you ${sw.shots}`);
+  lab.hud("bandits", `bandits ${sw.count} up · killed ${target.kills} (trampled ${contact.kills}) · dives ${sw.dives} · rounds at you ${sw.shots}`);
 });
