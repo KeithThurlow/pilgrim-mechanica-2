@@ -130,10 +130,11 @@ export class QuestLoop {
   get moveScale() { return this.tow.slow; }
   get noSprint() { return this.tow.on; }
 
-  /** Offer a contract of a kind now (lab flags); accepted at once when `take`. */
-  force(kind: ContractKind, take = true) {
+  /** Offer a contract of a kind now (lab flags); accepted at once when `take`; a bounty on `lair` if given. */
+  force(kind: ContractKind, take = true, lair?: Lair | null) {
     this.src.from = this.w.lead();
-    const c = this.board.offer(this.src, kind);
+    const src = lair ? { ...this.src, lair: () => ({ id: lair.id, x: lair.x, z: lair.z, radius: this.v.hvtRadius, name: lair.name }) } : this.src;
+    const c = this.board.offer(src, kind);
     if (c && take) this.board.accept(c.id);
     return c;
   }

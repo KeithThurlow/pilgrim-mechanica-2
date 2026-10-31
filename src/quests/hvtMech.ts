@@ -49,6 +49,8 @@ export class HvtMech {
   level = 1;
   /** It died this frame (the glue reads and clears it). */
   died = false;
+  /** Alive as of the last step (whatever kills it, inside its step or not, is seen on the next). */
+  private wasAlive = false;
 
   constructor(private bf: Battlefield, private scene: THREE.Scene, v: Values, private player: MechUnit) {
     this.rv = { ...v, ...RIVAL_AI_DEFAULTS, ...(RIVAL_LEVELS.veteran as Partial<RivalAiValues>) } as Values & RivalAiValues;
@@ -102,6 +104,7 @@ export class HvtMech {
     this.lair = lair;
     this.t = 0;
     this.died = false;
+    this.wasAlive = true;
     this.body!.root.visible = true;
     if (!this.bf.targets.includes(unit)) this.bf.targets.push(unit);
     return true;
@@ -125,7 +128,7 @@ export class HvtMech {
     const u = this.unit, lair = this.lair;
     if (!u || !lair) return;
     this.t += dt;
-    const was = u.alive, p = this.player, v = this.rv;
+    const p = this.player, v = this.rv;
     let cmd = null;
     if (u.alive && p.alive) {
       const ts = this.setup?.threat();
@@ -143,7 +146,8 @@ export class HvtMech {
     if (cmd?.dash) u.tryDash(cmd.dash.x, cmd.dash.z);
     u.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
     this.draw!.update();
-    if (was && !u.alive) this.died = true;
+    if (this.wasAlive && !u.alive) this.died = true;
+    this.wasAlive = u.alive;
   }
 
   /** Its meshes (hold-V). */

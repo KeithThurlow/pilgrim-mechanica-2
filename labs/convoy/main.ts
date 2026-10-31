@@ -219,7 +219,9 @@ const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, en
 loop.threatSource = { arsenal, wv: V };
 // High value targets get their own Rampart (loaded on the first summon) and see the player's weapons for dodging.
 loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource });
-let hvtNow: Lair | null = null;
+let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
+// For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
+(window as unknown as { __quests: unknown }).__quests = loop.quests;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -457,13 +459,16 @@ function restart() {
       carry.armed = true;
       l.kills = Math.max(0, l.need - 1);
       hvtNow = arg === "now" ? l : null;
+      hvtLair = l;
     }
   }
   loop.exp.launch();
   if (hvtNow) { loop.quests.killed(hvtNow.cull, hvtNow.x, hvtNow.z); hvtNow = null; }
+  // ?hvt with ?quest=bounty: the bounty is on that lair.
   // ?quest=salvage|cull|bounty|tow|pods: that contract taken at the start (out on the sand).
   const questKind = params.get("quest");
-  if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number]);
+  if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
+  hvtLair = null;
   if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
@@ -874,6 +879,7 @@ app.onTick((rawDt) => {
     } : undefined,
   });
   app.hud.set("expedition", loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
+  app.hud.set("contracts", loop.quests.line);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
   if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }
