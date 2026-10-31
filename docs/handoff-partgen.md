@@ -21,7 +21,7 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
 1. Check the PC: GPU and VRAM, ComfyUI version (0.34+ for the native TRELLIS.2 / Pixal3D nodes), image models.
 2. Install TripoSplat (ComfyUI template) and the Pixal3D / TRELLIS.2 weights (template `3d_pixal3d_trellis2_image_to_model`).
 3. Build `tools/partgen/workflows/concept.json`, `lane-a.json`, `lane-b.json` (Export (API), title the nodes), commit.
-4. Bake-off: `npx tsx tools/partgen/run.ts --kind hull|shoulder|wreck --seed 1..3 --lane both`; find each lane's
+4. Bake-off: `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck --seed 1..3 --lane both`; find each lane's
    `--front/--up` (generators differ), commit the parts, Keith picks a lane in `labs/parts/`.
 5. Then: legs (cut at the joints), and hooking parts into the loadout (the "show equipped hulls" thread owns the swap).
 
