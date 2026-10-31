@@ -17,7 +17,8 @@ export const LOOT_DEFAULTS = {
   weightLegendary: 2,
   protocolShare: 0.2,
   sensorRangePerTier: 0.1,
-  levelGrowth: 0.075,
+  levelGrowth: 0.05,
+  enemyGrowth: 0.075,
   enemyLevels: 1,
 };
 export type LootValues = typeof LOOT_DEFAULTS;
@@ -32,8 +33,9 @@ export const LOOT_PARAMS: Param[] = [
   { key: "weightEpic", label: "Epic weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightLegendary", label: "Legendary weight", min: 0, max: 100, step: 1, group: G },
   { key: "sensorRangePerTier", label: "Sensor range per rarity tier", min: 0, max: 0.5, step: 0.01, group: G, tip: "Each tier above Common reaches this share further on a sensor's radar range (rarer sensors also carry one more seeker mode per tier)" },
-  { key: "levelGrowth", label: "Power per level (items and enemies)", min: 0, max: 0.3, step: 0.005, group: G, tip: "One curve for both sides (docs/proposal-balance.md): an item's damage and hull grow by this share per level above 1 (P(n) = 1 + this × (n − 1); a few utility stats by part of it, rate and feel not at all); enemies at an area's level (1 + depth / item level per m) get the same on health and damage" },
-  { key: "enemyLevels", label: "Enemies grow with area level (0/1)", min: 0, max: 1, step: 1, group: G, tip: "1: robots spawned out deep take P(area level) on health and damage, so kill times hold at level; 0: every robot at level 1" },
+  { key: "levelGrowth", label: "Item power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "An item's damage and hull grow by this share per level above 1 (P(n) = 1 + this × (n − 1); hull by 0.6 of it, a few utility stats by part of it, rate and feel not at all). 0.05 (Keith 2026-10-31: items scaled too fast; was 0.075): a level-7 drop from 850 m out hits 1.3× a level-1 one" },
+  { key: "enemyGrowth", label: "Enemy power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "Robots spawned at an area's level (1 + depth / item level per m) take 1 + this × (level − 1) on health and damage. Above the item curve, so going deeper is harder even with the loot found there (0.075: 1.43× at 850 m against the items' 1.3×)" },
+  { key: "enemyLevels", label: "Enemies grow with area level (0/1)", min: 0, max: 1, step: 1, group: G, tip: "1: robots spawned out deep take the enemy power curve on health and damage; 0: every robot at level 1" },
   { key: "protocolShare", label: "Protocols in random loot", min: 0, max: 1, step: 0.01, group: G, tip: "Share of random rolls that come up a Protocol instead of a part or weapon" },
 ];
 

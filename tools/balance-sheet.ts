@@ -372,7 +372,7 @@ console.log(pad("item", 20) + lp("ap", 6) + [0, 3, 8, 10, 12].map((a) => lp(`arm
 for (const w of W_) console.log(pad(w.name, 20) + lp(w.ap.toFixed(2), 6) + [0, 3, 8, 10, 12].map((a) => lp(`${f0((100 * thru(w.dmg, a, w.ap)) / w.dmg)}%`, 9)).join(""));
 
 // 6. Level: one curve for items and enemies (src/items/level.ts).
-console.log(`\n-- Level: P(n) = 1 + ${LOOT_DEFAULTS.levelGrowth} × (n − 1) on item damage and hull, and on robots' hp and damage at the area's level (1 + depth / 100 m) --`);
+console.log(`\n-- Level: P(n) = 1 + ${LOOT_DEFAULTS.levelGrowth} × (n − 1) on item damage and hull, and enemies on their own curve (${LOOT_DEFAULTS.enemyGrowth}) at the area's level (1 + depth / 150 m) --`);
 console.log([1, 6, 11, 21, 41, 60].map((n) => `L${n} ×${levelPower(n, LOOT_DEFAULTS.levelGrowth).toFixed(2)}`).join("  ") + "   (time to kill holds at level; deeper camps are bigger, not tougher per robot)");
 
 // 7. The player mech under fire.
