@@ -1,8 +1,12 @@
-// Item drops out in the field (pure; host-owned: what drops, where, and who picked it up). A stripped salvage spot,
-// or a robot killed (by size), can drop one item from the loot rolls (src/items/generate.ts). Every roll is seeded
+// Item drops out in the field (pure; host-owned: what drops, where, and who picked it up). A stripped salvage spot
+// can drop one item from the loot rolls (src/items/generate.ts); a killed enemy drops by its threat (health × DPS,
+// src/expedition/threat.ts; Keith 2026-10-31): x = (threat / threatRef)^threatCurve is how many items it drops on
+// average (dropPerThreat × x, capped at dropMaxItems; the whole part always drops, the rest is a chance), and its
+// rarity leans by rarityThreat × x on top of depth and heat. At the defaults: scrapper 2.5%, bandit 1.5%, cutter 21%,
+// excavator one item plus a 69% chance of a second, leaned rarer. Every roll is seeded
 // from the world seed and the thing's stable id (the spot's id, the robot's slot and generation), so every peer gets
 // the same drop. Rarity leans better with depth (the danger 0..1+ from src/expedition/depth.ts) and salvage heat
-// (0..1): each tier's weight is multiplied by e^(tier × (rarityDepth × danger + rarityHeat × heat)).
+// (0..1): each tier's weight is multiplied by e^(tier × (rarityDepth × danger + rarityHeat × heat + rarityThreat × x)).
 // A drop lies on the sand until a collector (the mech, or the pilot on foot) walks within reach of it, then it is
 // "picked" (the glue puts it on the at-risk list); left further than dropForget behind it is "forgotten".
 // What happens is plain-data events (rule 12), drained by the glue each frame.
@@ -15,9 +19,11 @@ import { PROTOCOL_BY_ID } from "../items/protocols";
 
 export const DROP_DEFAULTS = {
   dropSpot: 0.3,
-  dropSmall: 0.03,
-  dropMid: 0.15,
-  dropBig: 0.6,
+  threatRef: 30000,
+  threatCurve: 0.55,
+  dropPerThreat: 1,
+  dropMaxItems: 2,
+  rarityThreat: 0.4,
   rarityDepth: 0.5,
   rarityHeat: 0.4,
   pickupMech: 4.5,
@@ -33,9 +39,11 @@ export const LOOT_GROUP = "Loot";
 const G = LOOT_GROUP;
 export const DROP_PARAMS: Param[] = [
   { key: "dropSpot", label: "Item drop: stripped spot", min: 0, max: 1, step: 0.01, group: G, tip: "Chance a stripped salvage spot drops an item beside it" },
-  { key: "dropSmall", label: "Item drop: small robot", min: 0, max: 1, step: 0.005, group: G },
-  { key: "dropMid", label: "Item drop: medium robot", min: 0, max: 1, step: 0.01, group: G },
-  { key: "dropBig", label: "Item drop: big robot", min: 0, max: 1, step: 0.01, group: G },
+  { key: "threatRef", label: "Kill drops: one item at threat", min: 100, max: 200000, step: 100, group: G, tip: "Threat is health × DPS (scrapper ~38, bandit ~15, cutter ~1700, excavator ~78000). An enemy this dangerous drops one item on average" },
+  { key: "threatCurve", label: "Kill drops: threat curve", min: 0.1, max: 1.5, step: 0.05, group: G, tip: "Items = (threat / the above)^this. Low flattens the gap (swarms drop more, walkers less); 1 is straight proportional" },
+  { key: "dropPerThreat", label: "Kill drops: items ×", min: 0, max: 5, step: 0.05, group: G, tip: "Scales every kill's drops" },
+  { key: "dropMaxItems", label: "Kill drops: most items from one kill", min: 1, max: 6, step: 1, group: G },
+  { key: "rarityThreat", label: "Rarity lean per threat", min: 0, max: 2, step: 0.05, group: G, tip: "Each tier's weight × e^(tier × this × (threat / ref)^curve): the excavator's drops lean rarer" },
   { key: "rarityDepth", label: "Rarity lean per depth", min: 0, max: 2, step: 0.05, group: G, tip: "Each rarity tier's weight × e^(tier × this × danger): deeper out, rarer drops" },
   { key: "rarityHeat", label: "Rarity lean per heat", min: 0, max: 2, step: 0.05, group: G, tip: "The same for salvage heat (0..1)" },
   { key: "pickupMech", label: "Mech grabs within (m)", min: 1, max: 12, step: 0.1, group: G, tip: "Walk the mech's hips this close to a drop to pick it up" },
@@ -53,6 +61,10 @@ export type DropEvent =
   | { type: "forgotten"; id: string };
 /** Where a drop rolls: danger 0..1+ (depth.ts dangerOf), salvage heat 0..1, depth in metres (convoyDepth). */
 export interface DropContext { danger: number; heat: number; depth: number }
+/** A kill's drop size: (threat / threatRef)^threatCurve (1: one item on average before dropPerThreat). */
+export function threatScale(v: DropValues, threat: number): number {
+  return Math.pow(Math.max(0, threat) / Math.max(1, v.threatRef), Math.max(0.01, v.threatCurve));
+}
 export interface Collector { x: number; z: number; by: "mech" | "pilot" }
 
 /** FNV-1a of a string, mixed with a seed. */
@@ -63,15 +75,15 @@ export function hashKey(seed: number, key: string): number {
 }
 
 /** The rarity weights leaned by depth and heat (the loot rolls' weights as the base). */
-export function rarityWeights(v: DropValues & LootValues, danger: number, heat: number): number[] {
+export function rarityWeights(v: DropValues & LootValues, danger: number, heat: number, extra = 0): number[] {
   const base = [v.weightCommon, v.weightUncommon, v.weightRare, v.weightEpic, v.weightLegendary];
-  const lean = v.rarityDepth * Math.max(0, danger) + v.rarityHeat * Math.max(0, Math.min(1, heat));
+  const lean = v.rarityDepth * Math.max(0, danger) + v.rarityHeat * Math.max(0, Math.min(1, heat)) + Math.max(0, extra);
   return base.map((w, k) => Math.max(0, w) * Math.exp(k * lean));
 }
 
 /** A rarity from the leaned weights. */
-export function rollRarity(r: () => number, v: DropValues & LootValues, danger: number, heat: number): Rarity {
-  const w = rarityWeights(v, danger, heat);
+export function rollRarity(r: () => number, v: DropValues & LootValues, danger: number, heat: number, extra = 0): Rarity {
+  const w = rarityWeights(v, danger, heat, extra);
   let t = r() * w.reduce((a, b) => a + b, 0);
   for (let k = 0; k < w.length; k++) { t -= w[k]; if (t < 0) return RARITIES[k]; }
   return "common";
@@ -92,13 +104,13 @@ export class DropField {
 
   reset() { this.drops.length = 0; this.rolled.clear(); this.events.length = 0; }
 
-  /** Roll a drop for a stable key at (x, z) with this chance; null if nothing drops. */
-  roll(key: string, chance: number, x: number, z: number, at: DropContext, force?: { rarity?: Rarity; level?: number }): Drop | null {
+  /** Roll a drop for a stable key at (x, z) with this chance; null if nothing drops. lean: extra rarity lean. */
+  roll(key: string, chance: number, x: number, z: number, at: DropContext, force?: { rarity?: Rarity; level?: number }, lean = 0): Drop | null {
     if (this.rolled.has(key)) return null;
     this.rolled.add(key);
     const seed = hashKey(this.seed, key), r = rng(seed);
     if (r() >= chance) return null;
-    const rarity = force?.rarity ?? rollRarity(r, this.v, at.danger, at.heat);
+    const rarity = force?.rarity ?? rollRarity(r, this.v, at.danger, at.heat, lean);
     const level = force?.level ?? this.levelAt(r, at.depth);
     const item = !force && r() < this.v.protocolShare ? rollProtocol(seed) : rollItem(seed, this.v, { rarity, level });
     // Beside the spot rather than inside the wreck.
@@ -120,10 +132,20 @@ export class DropField {
     return this.roll(`spot:${spotId}`, this.v.dropSpot, x, z, at);
   }
 
-  /** A robot killed: size 0 small, 1 big, 2 medium (src/combat/robots.ts SMALL/BIG/MID); key: its slot and generation. */
-  fromKill(key: string, size: number, x: number, z: number, at: DropContext) {
-    const chance = size === 1 ? this.v.dropBig : size === 2 ? this.v.dropMid : this.v.dropSmall;
-    return this.roll(`kill:${key}`, chance, x, z, at);
+  /** How many items a kill this threatening drops on average (dropPerThreat × threatScale, capped). */
+  killItems(threat: number): number {
+    return Math.min(Math.max(1, Math.round(this.v.dropMaxItems)), Math.max(0, this.v.dropPerThreat) * threatScale(this.v, threat));
+  }
+
+  /** An enemy killed (threat: health × DPS, src/expedition/threat.ts); key: its slot and generation. Returns the drops. */
+  fromKill(key: string, threat: number, x: number, z: number, at: DropContext): Drop[] {
+    const n = this.killItems(threat), whole = Math.floor(n), lean = this.v.rarityThreat * Math.min(3, threatScale(this.v, threat));
+    const out: Drop[] = [];
+    for (let k = 0; k < Math.ceil(n); k++) {
+      const d = this.roll(k ? `kill:${key}#${k}` : `kill:${key}`, k < whole ? 1 : n - whole, x, z, at, undefined, lean);
+      if (d) out.push(d);
+    }
+    return out;
   }
 
   /**

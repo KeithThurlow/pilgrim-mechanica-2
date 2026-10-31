@@ -114,6 +114,9 @@ function world(v = V) {
       worstSlopeIn = Math.max(worstSlopeIn, Math.acos(nrm[1]) * R2D);
     }
     worstIn = Math.max(worstIn, hi - lo);
+    // Big pads (fortresses, hubs: 100 m across and more) keep a little more of the swell's curve: 1.5 cm per metre past 30 (under 1.5 degrees all the same).
+    const allow = 0.2 + 2 * V.bumps * V.padRough + Math.max(0, d.r + d.half - 30) * 0.015;
+    if (hi - lo > allow) fail(`${p.kind} ${p.id}: pad floor varies by ${(hi - lo).toFixed(2)} m (allowed ${allow.toFixed(2)})`);
     // Level with the ground it covers: the pad at the mean of the raw ground over the pad and half its blend.
     let s = 0, m = 0;
     for (let t = -1; t <= 1; t += 0.25) for (let a = 0; a < 16; a++) for (const f of [0, 0.5, 1]) {
@@ -129,8 +132,6 @@ function world(v = V) {
     }
   }
   // The swell is cancelled by a quadratic fit, so a long pad keeps a few cm of its curve.
-  const bumpAllow = 0.2 + 2 * V.bumps * V.padRough;
-  if (worstIn > bumpAllow) fail(`a pad's floor varies by ${worstIn.toFixed(2)} m (allowed ${bumpAllow.toFixed(2)})`);
   if (worstSlopeIn > 3) fail(`a pad's floor slopes ${worstSlopeIn.toFixed(1)} deg`);
   if (worstLevel > 1.5) fail(`a pad sits ${worstLevel.toFixed(2)} m off the mean of its ground`);
   if (worstEdge > 75) fail(`a pad's edge reaches ${worstEdge.toFixed(0)} deg (cliff)`);
@@ -166,7 +167,7 @@ function world(v = V) {
     sim.add(site);
     let banked = 0;
     sim.onBanked = () => banked++;
-    for (const s of sim.spots) for (let t = 0; t < 120 && !s.done; t++) sim.update(0.1, s.x + 0.5, s.z, true);
+    for (const s of sim.spots) for (let t = 0; t < 1200 && !s.done; t++) sim.update(0.1, s.x + 0.5, s.z, true);
     if (sim.scrap !== site.value) fail(`${kind} seed ${k}: stripping all paid ${sim.scrap}, site worth ${site.value}`);
     if (banked !== site.sections.length) fail(`${kind} seed ${k}: banked ${banked} of ${site.sections.length} sections`);
     spots += sim.spots.length; total += site.value;

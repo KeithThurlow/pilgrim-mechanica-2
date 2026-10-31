@@ -51,7 +51,9 @@ import { WarColumns, COLUMN_DEFAULTS } from "../src/expedition/warColumns";
 import { Skirmishes, aftermathSite, clashDrops } from "../src/expedition/fights";
 import { FACTION_DEFAULTS, FACTION, TEAM, Relations, FightDirector, type AbstractGroup } from "../src/game/factions";
 import { RobotGroup, BanditGroup } from "../src/game/fightGroups";
-import { RobotSwarm, ROBOT_DEFAULTS, DEAD as ROBOT_DEAD } from "../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, DEAD as ROBOT_DEAD, SMALL as R_SMALL, MID as R_MID, BIG as R_BIG } from "../src/combat/robots";
+import { robotThreat, banditThreat } from "../src/expedition/threat";
+import { dropHearing, FIELD_LOOT_DEFAULTS } from "../src/expedition/loot";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD as BANDIT_DEAD } from "../src/combat/infantry";
 import { Register } from "../src/game/register";
 import { PadField, PadCaller, PAD_DEFAULTS, padFee, padWait, padQuote, type Pad, type PadEvent, type PadNow } from "../src/expedition/pads";
@@ -598,6 +600,37 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
   console.log(`loot: level 20 over level 1: power up on ${powerUp}/60 items, DPS up on ${dpsUp}/${weapons} weapons`);
   if (powerUp < 60) fail(`loot: power didn't rise with level on ${60 - powerUp} items`);
   if (!weapons || dpsUp < weapons) fail(`loot: DPS didn't rise with level on ${weapons - dpsUp} weapons`);
+  // Kills drop by threat (health × DPS, Keith 2026-10-31): swarm things rarely, walkers reliably and rarer.
+  {
+    const kinds = [
+      { name: "scrapper", t: robotThreat(R_SMALL, ROBOT_DEFAULTS) },
+      { name: "bandit", t: banditThreat({ ...INFANTRY_DEFAULTS, ...BANDIT_DEFAULTS }) },
+      { name: "cutter", t: robotThreat(R_MID, ROBOT_DEFAULTS) },
+      { name: "excavator", t: robotThreat(R_BIG, ROBOT_DEFAULTS) },
+    ];
+    const N = 4000, rates: Record<string, { per: number; tier: number; none: number }> = {};
+    for (const k of kinds) {
+      const f = new DropField(LV, 21);
+      let items = 0, tiers = 0, gear = 0, none = 0;
+      for (let i = 0; i < N; i++) {
+        const ds = f.fromKill(`${k.name}${i}`, k.t, 0, 0, here);
+        if (!ds.length) none++;
+        items += ds.length;
+        for (const d of ds) if (d.item.kind !== "protocol") { tiers += tierOf(d.item.rarity); gear++; }
+      }
+      rates[k.name] = { per: items / N, tier: gear ? tiers / gear : 0, none: none / N };
+    }
+    console.log(`loot by threat: ${kinds.map((k) => `${k.name} ${k.t.toFixed(0)} → ${rates[k.name].per.toFixed(3)} items/kill (tier ${rates[k.name].tier.toFixed(2)})`).join(", ")}`);
+    const r = rates;
+    if (!(r.scrapper.per < 0.05 && r.bandit.per < 0.05)) fail("loot: swarm kills drop too often");
+    if (!(r.cutter.per > r.scrapper.per * 4)) fail("loot: a cutter isn't much likelier to drop than a scrapper");
+    if (r.excavator.none > 0) fail("loot: an excavator kill dropped nothing");
+    if (!(r.excavator.tier > r.scrapper.tier + 0.2)) fail("loot: excavator drops don't lean rarer");
+    if (r.excavator.per > LV.dropMaxItems) fail("loot: a kill dropped more than the cap");
+    // Drop sounds fade with distance and stop far off.
+    const H = FIELD_LOOT_DEFAULTS;
+    if (dropHearing(H, 10) !== 1 || dropHearing(H, H.dropHearMax + 1) !== 0 || !(dropHearing(H, (H.dropHearFull + H.dropHearMax) / 2) < 1)) fail("loot: drop sounds don't fade with distance");
+  }
   // A walked-over item joins the at-risk list; banking moves everything; a loss empties the list.
   const e = new Expedition({ ...EXPEDITION_DEFAULTS });
   const f = new DropField(LV, 9);
