@@ -183,7 +183,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Line mortar as a ~600 m2 band, mortar flight 2.2 s, rival strength and `?rivalup=N` (Keith 2026-10-31): agent on `wip/linemortar`, handoff `docs/handoff-linemortar.md`. Done in code and checks; Keith to try weapons lab `?k1=linemortar` vs `?k1=mortar`, duel lab `?rival=3&rivalup=5`.
+- Line mortar as a ~600 m2 band, mortar flight 2.2 s, rival strength and `?rivalup=N` (Keith 2026-10-31): merged 2026-10-31; Keith to try weapons lab `?k1=linemortar` vs `?k1=mortar`, duel lab `?rival=3&rivalup=5`.
 - Grip returns with speed after a dash or sprint (Keith 2026-10-31): agent on `wip/grip`.
 - Rocket pods: clip-fed, believable rockets and launchers, channelled arm missiles (Keith 2026-10-31): merged 2026-10-31, never run in a browser: Keith to try robots lab `?barrage&time=22`, `?barrage=arms`; weapons lab `?right=rocketpod`.
 - Snappier dash, the tap that stuck in the run, the drift after a dash, rails vs the dash (Keith 2026-10-31): merged 2026-10-31, Keith to try duel lab `?manual` (`&left=rail` for the rail rule), walker lab `?manual&flat`; `?set=dashPedalSteps:2` brings the backpedal back.
