@@ -665,8 +665,9 @@ export class WalkerSim {
     const vx = this.vel.x + this.skid.x, vz = this.vel.z + this.skid.z;
     const up = v.walkAccel * wk * dt, brake = this.gripAt(Math.hypot(vx, vz)) * dt;
     // Speed past the walk's (handed on by the sprint or a dash) rolls off gently with the stick held on, as it always has;
-    // let go, the walk stops as quickly as ever.
-    const over = cmd.sprint ? v.sprintSpeed : v.walkSpeed, overBrake = v.overBrake * dt;
+    // let go, the walk stops as quickly as ever. Past what the legs can step with (cap) it's the feet sliding: taken off
+    // at the grip for the speed, so it too comes back as the mech slows.
+    const over = cmd.sprint ? v.sprintSpeed : v.walkSpeed, overBrake = v.overBrake * dt, cap = Math.max(v.walkSpeed, v.sprintSpeed);
     let ux = 0, uz = 0, top = 0;
     if (mag > 0.05) {
       ux = cmd.x / Math.hypot(cmd.x, cmd.z); uz = cmd.z / Math.hypot(cmd.x, cmd.z);
@@ -692,7 +693,7 @@ export class WalkerSim {
       let along = vx * ux + vz * uz;
       const px = vx - along * ux, pz = vz - along * uz, pl = Math.hypot(px, pz);
       along += along < 0 ? Math.min(-along, brake) + (along + brake > 0 ? Math.min(top, (along + brake) * up / brake) : 0)
-        : along < top ? Math.min(top - along, up) : -Math.min(along - top, along > over ? overBrake : brake);
+        : along < top ? Math.min(top - along, up) : -Math.min(along - top, along > cap ? Math.max(brake, overBrake) : along > over ? overBrake : brake);
       const pk = pl > 1e-6 ? Math.max(0, pl - brake) / pl : 0;
       this.vel.set(ux * along + px * pk, 0, uz * along + pz * pk);
     } else {
@@ -702,7 +703,7 @@ export class WalkerSim {
     // What the walk's legs can step with (up to the Shift run's speed) is the walk; the rest skids the planted feet
     // (moved in update) until the grip has taken it off.
     {
-      const s = Math.hypot(this.vel.x, this.vel.z), cap = Math.max(v.walkSpeed, v.sprintSpeed);
+      const s = Math.hypot(this.vel.x, this.vel.z);
       if (s > cap) { this.skid.copy(this.vel).multiplyScalar(1 - cap / s); this.vel.multiplyScalar(cap / s); }
       else this.skid.set(0, 0, 0);
       this.skidSteered = true;
