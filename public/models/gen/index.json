@@ -1,0 +1,14 @@
+[
+  {
+    "id": "sample-hull",
+    "kind": "hull",
+    "lane": "a",
+    "label": "sample: a made-up splat (box with a barrel)"
+  },
+  {
+    "id": "sample-wreck",
+    "kind": "wreck",
+    "lane": "a",
+    "label": "sample: a made-up splat (blob)"
+  }
+]

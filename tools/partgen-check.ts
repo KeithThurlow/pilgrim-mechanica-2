@@ -6,7 +6,7 @@
 //   3. Lane B: a textured GLB (as Pixal3D / TRELLIS.2 write) turns its texture into vertex colours.
 //   4. Every generated part in public/models/gen/ (index.json) passes the same rules for its kind.
 // Run: npx tsx tools/partgen-check.ts
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { readGlb, writeGlb } from "./partgen/glb";
 import { loadKinds, type Kind } from "./partgen/kinds";
@@ -56,13 +56,13 @@ function stats(m: { pos: Float32Array; index: Uint32Array }) {
   return { lo, hi, vol, manifold: two / Math.max(1, edges.size), tris: m.index.length / 3 };
 }
 
-function checkPart(label: string, glb: Uint8Array, kind: Kind) {
+function checkPart(label: string, glb: Uint8Array, kind: Kind, lod = 0) {
   const g = readGlb(glb);
   const m = g.meshes.find((x) => x.name === kind.part);
   ok(!!m, `${label}: has mesh ${kind.part}`);
   if (!m) return;
   const s = stats(m);
-  ok(s.tris <= kind.tris * 1.05 && s.tris >= 4, `${label}: ${s.tris} tris within budget ${kind.tris}`);
+  ok(s.tris <= kind.tris[lod] * 1.05 && s.tris >= 4, `${label}: ${s.tris} tris within budget ${kind.tris[lod]}`);
   ok(!!m.col, `${label}: vertex colours`);
   ok(Math.abs(s.lo[1]) < 1e-3, `${label}: base at y 0 (${s.lo[1].toFixed(4)})`);
   const size = [0, 1, 2].map((c) => s.hi[c] - s.lo[c]);
@@ -72,12 +72,14 @@ function checkPart(label: string, glb: Uint8Array, kind: Kind) {
   for (const k of Object.keys(kind.sockets)) ok(g.empties.has(k), `${label}: socket ${k}`);
 }
 
-const kinds = loadKinds("public/models/rampart.glb");
+const kinds = loadKinds();
 console.log(`kinds from the Rampart: ${Object.values(kinds).map((k) => `${k.id} ${k.box.map((v) => v.toFixed(2)).join("×")} m`).join(", ")}`);
 
 // 1. Lane A
 const t0 = performance.now();
-const splat = readPly(writePly(testSplat()));
+const testPly = writePly(testSplat());
+if (process.argv.includes("--write-sample")) { mkdirSync("shots/partgen", { recursive: true }); writeFileSync("shots/partgen/sample.ply", testPly); }
+const splat = readPly(testPly);
 const mesh = splatToMesh(splat, { ...SPLAT_MESH_DEFAULTS, resolution: 96 });
 const ms = performance.now() - t0;
 const sa = stats(mesh);
@@ -91,14 +93,16 @@ for (let v = 0; v < mesh.col.length / 3; v++) if (mesh.col[v * 3] > 0.6 && mesh.
 ok(reds > 20, `lane A: the red stripe survives (${reds} red vertices)`);
 
 // 2. Prep
-const run = async (m: Mesh, k: Kind) => {
-  const p = await prepare(m, k, { front: "+z", up: "+y" });
+const run = async (m: Mesh, k: Kind, lod: 0 | 1 | 2 = 0) => {
+  const p = await prepare(m, k, { front: "+z", up: "+y", lod });
   return writeGlb([p.part], p.sockets, { kind: k.id });
 };
 const a1 = await run(mesh, kinds.hull), a2 = await run(mesh, kinds.hull);
 checkPart("hull from lane A", a1, kinds.hull);
 ok(a1.length === a2.length && a1.every((b, i) => b === a2[i]), "prep: same input, same bytes");
 checkPart("shoulder from lane A", await run(mesh, kinds.shoulder), kinds.shoulder);
+checkPart("hull weapon from lane A", await run(mesh, kinds.hullweapon), kinds.hullweapon);
+for (const lod of [1, 2] as const) checkPart(`hull from lane A, lod${lod}`, await run(mesh, kinds.hull, lod), kinds.hull, lod);
 
 // 3. Lane B: a textured cube, left half red, right half blue in the texture.
 function texturedCube(): Uint8Array {
@@ -153,7 +157,7 @@ if (existsSync(indexPath)) {
   for (const e of list) {
     const k = kinds[e.kind];
     ok(!!k, `${e.id}: known kind ${e.kind}`);
-    if (k) checkPart(e.id, new Uint8Array(readFileSync(`public/models/gen/${e.id}.glb`)), k);
+    if (k) for (const lod of [0, 1, 2]) checkPart(`${e.id}${lod ? ` lod${lod}` : ""}`, new Uint8Array(readFileSync(`public/models/gen/${e.id}${lod ? `-lod${lod}` : ""}.glb`)), k, lod);
   }
   console.log(`${list.length} generated parts checked`);
 } else console.log("no generated parts yet (public/models/gen/index.json)");

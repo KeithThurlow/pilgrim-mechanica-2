@@ -32,7 +32,7 @@ prompt (part kind + style)  ─►  concept image (ComfyUI)  ─►  background 
                      ▼
   game prep (Blender headless, tools/partgen/prep.py; the part kind's template says what it needs)
     1. orient and scale: fit to the kind's bounding box (a stilt shin is ~2.4 m), front +Z
-    2. remesh + decimate to the kind's tri budget (shin 2-4k, hull 6-10k)
+    2. remesh + decimate to the kind's budgets from docs/asset-list.md (hull 6,500 / 2,200 / 700, hull mount 5,000 / 1,700 / 550, ...)
     3. bake base colour and AO to vertex colours (the toon look reads vertex colour, not maps); drop the maps
     4. cut into `Part_*` pieces and add joint empties at the template's sockets (hip, knee, hock, foot point)
     5. export public/models/gen/<kind>-<seed>.glb + a json sidecar (prompt, seeds, model versions, lane)
@@ -68,6 +68,9 @@ because they're cut at the joints; hulls, shoulder pods and wrecks are single pi
 - Which GPU and how much VRAM? (TRELLIS.2 at full resolution wants a lot; the int8 weights help.)
 - Which image model is in your ComfyUI, and do you have a style reference (old renders, the Rampart) to condition on?
 - The splat model from your other thread: if it isn't TripoSplat, give me the name and I'll swap it into lane A.
+
+Built 2026-10-31 (game prep in TypeScript, not Blender; see state.md). Budgets and socket names follow
+`docs/asset-list.md`.
 
 Sources: ComfyUI blog "trellis2 and pixal3d are now native"; docs.comfy.org/tutorials/3d/trellis2; ScriptByAI on
 TripoSplat (2026-06-09); MILo, arXiv 2506.24096v2.

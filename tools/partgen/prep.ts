@@ -3,6 +3,7 @@
 // kind's box (uniform scale, centred, base at y 0), weld and simplify to the kind's triangle budget with
 // meshoptimizer (colour kept as an attribute), colours into vertex colours (textures dropped: the toon look reads
 // vertex colour), smooth normals, then the kind's sockets as empties. Pure: same input, same part.
+/// <reference path="./meshopt.d.ts" />
 import { MeshoptSimplifier } from "three/addons/libs/meshopt_simplifier.module.js";
 import { sample, type Glb, type OutPart } from "./glb";
 import type { Kind, V3 } from "./kinds";
@@ -12,7 +13,8 @@ export type Axis = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
 export interface PrepOptions {
   front: Axis;   // the source's front, turned to +Z
   up: Axis;      // the source's up, turned to +Y
-  tris?: number; // override the kind's budget
+  lod?: 0 | 1 | 2; // which of the kind's budgets (full, simpler, simplest)
+  tris?: number;   // override the budget
 }
 
 /** Flatten a GLB's meshes into one coloured mesh (texture or vertex colour times the material's factor). */
@@ -96,7 +98,7 @@ export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Pr
 
   // Weld at a millimetre, then simplify to budget keeping colour.
   const w = weld({ pos, col: src.col, index: src.index }, 1e-3);
-  const trisIn = w.index.length / 3, budget = o.tris ?? kind.tris;
+  const trisIn = w.index.length / 3, budget = o.tris ?? kind.tris[o.lod ?? 0];
   await MeshoptSimplifier.ready;
   let index = w.index;
   if (trisIn > budget) {
@@ -115,6 +117,10 @@ export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Pr
     I[i] = used[v];
   }
   const fp = new Float32Array(P);
+  // Simplifying can lift the lowest point a few mm: set it back on y 0.
+  let minY = Infinity;
+  for (let i = 1; i < fp.length; i += 3) minY = Math.min(minY, fp[i]);
+  for (let i = 1; i < fp.length; i += 3) fp[i] -= minY;
   // Inside out (some exporters wind clockwise)? Flip, so the outline shell and back-face culling work.
   let vol = 0;
   for (let t = 0; t < I.length; t += 3) {
