@@ -20,8 +20,8 @@ export const THREAT_DEFAULTS = {
   roamFrom: 260,
   roamTo: 520,
   roamDrop: 1000,
-  roamMin: 8,
-  roamMax: 20,
+  roamMin: 6,
+  roamMax: 16,
   roamSpeed: 2,
   roamHuntSpeed: 4,
   roamHear: 200,
@@ -32,7 +32,7 @@ export const THREAT_DEFAULTS = {
   raidEvery: 120,
   raidJitter: 0.35,
   raidFirst: 75,
-  raidSize: 26,
+  raidSize: 20,
   raidFrom: 340,
   raidSpeed: 6,
   raidMidShare: 0.3,
@@ -50,6 +50,8 @@ export const THREAT_DEFAULTS = {
   raidBigFar: 0.12,
   packMidFar: 0.3,
   packBigFar: 0.1,
+  raidBigMin: 2,
+  packBigMin: 1.5,
   raidDeepAt: 0.5,
   raidDeepFirst: 30,
   // Salvage heat answers (src/pois/salvage.ts): the pack pulled in, the small raid aimed at the stripper.
@@ -68,6 +70,8 @@ export const THREAT_PARAMS: Param[] = [
   { key: "raidMidFar", label: "Cutters added to raids at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP },
   { key: "raidBigFar", label: "Excavators added to raids at full depth (share)", min: 0, max: 0.5, step: 0.005, group: DEPTH_GROUP },
   { key: "packMidFar", label: "Cutters added to packs at full depth (share)", min: 0, max: 1, step: 0.01, group: DEPTH_GROUP },
+  { key: "raidBigMin", label: "Excavators sure in a raid at full depth", min: 0, max: 6, step: 0.25, group: DEPTH_GROUP, tip: "A raid brings at least floor(danger × this) excavators (2: one from danger 0.5, about 620 m out; two at full depth)" },
+  { key: "packBigMin", label: "Excavators sure in a roaming pack at full depth", min: 0, max: 6, step: 0.25, group: DEPTH_GROUP, tip: "The same for roaming packs (1.5: one from danger 0.67, about 800 m out)" },
   { key: "packBigFar", label: "Excavators added to packs at full depth (share)", min: 0, max: 0.5, step: 0.005, group: DEPTH_GROUP },
   { key: "raidDeepAt", label: "Deep raid clock at danger", min: 0, max: 1.5, step: 0.05, group: DEPTH_GROUP, tip: "Going out past this danger shortens the wait for the next raid" },
   { key: "raidDeepFirst", label: "…to at most (s)", min: 0, max: 300, step: 5, group: DEPTH_GROUP },
@@ -120,6 +124,8 @@ export interface Pack {
   tx: number; tz: number;
   /** Cutter and excavator shares added to the robot mix (depth). */
   mid: number; big: number;
+  /** Excavators it brings at least (depth). */
+  bigMin?: number;
   /** Pulled in by salvage heat: keeps hunting however far it is. */
   pulled?: boolean;
   /** Heading for this place instead of the mech (a pack drawn to another faction's camp). */
@@ -259,7 +265,7 @@ export class ThreatField {
     const at = this.ring(m.x, m.z, v.heatRaidFrom, v.heatRaidFrom * 1.15, this.from?.(m.x, m.z));
     if (!at) return null;
     const p = this.add("raid", at.x, at.z, Math.max(1, Math.round(v.heatRaidSize * scaled(v.raidSizeFar, dg))), "hunt", at.a + Math.PI, v.raidSpeed);
-    p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg;
+    p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg; p.bigMin = Math.floor(v.raidBigMin * dg);
     return { type: "raid", pack: p, bearing: at.a };
   }
 
@@ -286,7 +292,7 @@ export class ThreatField {
       if (!at) break;
       const lo = Math.min(v.roamMin, v.roamMax), hi = Math.max(v.roamMin, v.roamMax);
       const pk = this.add("pack", at.x, at.z, Math.round((lo + (hi - lo) * this.rand() * this.rand()) * scaled(v.roamSizeFar, dg)), "roam", this.rand() * Math.PI * 2, v.roamSpeed);
-      pk.mid = v.packMidFar * dg; pk.big = v.packBigFar * dg;
+      pk.mid = v.packMidFar * dg; pk.big = v.packBigFar * dg; pk.bigMin = Math.floor(v.packBigMin * dg);
     }
     if (m.out) {
       // The first fight: a scout pack just outside the engage range, if nothing has come yet.
@@ -307,7 +313,7 @@ export class ThreatField {
           const at = this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15, this.from?.(m.x, m.z));
           if (at) {
             const p = this.add("raid", at.x, at.z, Math.round(v.raidSize * scaled(v.raidSizeFar, dg)), "hunt", at.a + Math.PI, v.raidSpeed);
-            p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg;
+            p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg; p.bigMin = Math.floor(v.raidBigMin * dg);
             out.push({ type: "raid", pack: p, bearing: at.a });
           }
         }

@@ -219,7 +219,7 @@ export class ExpeditionLoop {
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
-    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.levelGrowth) : 1);
+    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
     this.bandits = new BanditField(v, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1).filter((q) => !q.id.startsWith("clash:")));
     this.bandits.danger = this.depth.danger;
@@ -655,8 +655,8 @@ export class ExpeditionLoop {
       if (e.type === "engage") {
         const q = e.pack;
         const raid = q.kind === "raid";
-        swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: v.raidMidShare + q.mid, big: v.raidBigShare + q.big }
-          : q.mid > 0 || q.big > 0 ? { mid: v.robotMidShare + q.mid, big: v.robotBigShare + q.big } : undefined, q.hurt ?? 0, q.goal);
+        swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: v.raidMidShare + q.mid, big: v.raidBigShare + q.big, bigMin: q.bigMin }
+          : q.mid > 0 || q.big > 0 || q.bigMin ? { mid: v.robotMidShare + q.mid, big: v.robotBigShare + q.big, bigMin: q.bigMin } : undefined, q.hurt ?? 0, q.goal);
       } else if (e.type === "raid") {
         this.hud.note(`Raid coming · ${e.pack.n} robots · ${Math.round(Math.hypot(e.pack.x - p.x, e.pack.z - p.z))} m`, "#ff9a7a", 4);
         this.sound.alarm();

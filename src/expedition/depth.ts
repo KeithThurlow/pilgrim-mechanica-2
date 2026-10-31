@@ -4,7 +4,7 @@
 // it (ConvoyRoute.ahead). The road is a fixed property of the world, so a place has the same depth at any clock time.
 // Only the stretch from DEPTH_BEHIND behind the convoy's head to DEPTH_AHEAD ahead of it is searched; the road is
 // planned and laid as the convoy rolls, so a place's depth is final once it is inside that window.
-// Danger is depth turned into a smooth 0..depthCap factor (0 until depthStart, 1 at depthFull) that camps, packs,
+// Danger is depth turned into a smooth 0..depthCap factor (0 until depthStart, 1 at depthFull, rising fastest early) that camps, packs,
 // raids and scrap read; the ring is its label for the HUD and the radar. The per-depth multipliers live next to the
 // system they scale (camps.ts, threats.ts, salvage.ts), all in the "Depth" slider group.
 import type { Param } from "../core/tweaks";
@@ -13,7 +13,7 @@ import type { ConvoyRoute } from "../convoy/route";
 export const DEPTH_GROUP = "Depth";
 export const DEPTH_DEFAULTS = {
   depthNear: 400, depthOut: 1000, depthDeep: 2000,
-  depthStart: 150, depthFull: 2000, depthCap: 1.5,
+  depthStart: 100, depthFull: 1500, depthCurve: 0.6, depthCap: 1.5,
   depthRings: 1,
   depthLive: 1,
   depthTrain: 130,
@@ -25,6 +25,7 @@ export const DEPTH_PARAMS: Param[] = [
   { key: "depthDeep", label: "Deep ring to (m); Far beyond", min: 500, max: 6000, step: 10, group: DEPTH_GROUP },
   { key: "depthStart", label: "Danger starts at (m)", min: 0, max: 1000, step: 10, group: DEPTH_GROUP, tip: "Inside this the sand is as it was before depth (danger 0)" },
   { key: "depthFull", label: "Danger 1 at (m)", min: 300, max: 6000, step: 10, group: DEPTH_GROUP, tip: "Every 'at full depth' multiplier below applies in full here" },
+  { key: "depthCurve", label: "Danger curve (1 straight, <1 sooner)", min: 0.2, max: 2, step: 0.05, group: DEPTH_GROUP, tip: "Danger = (share of the way to full depth)^this. Below 1 the first few hundred metres already feel it (0.6: danger 0.4 at 400 m, 0.7 at 850 m, 1 at 1500 m); 1 is a straight line" },
   { key: "depthCap", label: "Danger tops out at", min: 1, max: 3, step: 0.05, group: DEPTH_GROUP, tip: "Past full depth the multipliers keep growing, up to this many times the full effect" },
   { key: "depthRings", label: "Rings on the convoy radar (0/1)", min: 0, max: 1, step: 1, group: DEPTH_GROUP },
   { key: "depthLive", label: "Live depth from convoy (0-1)", min: 0, max: 1, step: 0.05, group: DEPTH_GROUP, tip: "For what happens live (roaming packs, raids, the salvage heat's answer): 1 measures depth from the convoy as it is now, 0 from the road. Camps and scrap are placed in the world, so they always use the road" },
@@ -74,10 +75,14 @@ export function convoyDepth(route: ConvoyRoute, x: number, z: number, trainLen =
   return Math.hypot(x - b.x - bx * t, z - b.z - bz * t);
 }
 
-/** Danger from a depth: 0 until depthStart, 1 at depthFull, on past it up to depthCap. */
+/**
+ * Danger from a depth: 0 until depthStart, 1 at depthFull, on past it up to depthCap, bent by depthCurve (Keith
+ * 2026-10-31: scaling wasn't noticeable; with a straight line most play, within ~800 m of the road, sat under 0.35).
+ */
 export function dangerOf(v: DepthValues, depth: number): number {
   const span = Math.max(1, v.depthFull - v.depthStart);
-  return Math.max(0, Math.min(v.depthCap, (depth - v.depthStart) / span));
+  const t = Math.max(0, (depth - v.depthStart) / span);
+  return Math.min(v.depthCap, Math.pow(t, Math.max(0.05, v.depthCurve ?? 1)));
 }
 
 export function ringOf(v: DepthValues, depth: number): Ring {
