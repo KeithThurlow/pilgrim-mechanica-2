@@ -30,6 +30,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiReacquire: 1.2,
   aiRailHold: 0.7,
   aiLead: 0.35,
+  aiDodgeChance: 0.3,
   aiDashUse: 0.5,
   aiDashKeep: 1,
   aiRailDodge: 0.95,
@@ -41,6 +42,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiCover: 0.6,
   aiPeek: 2.5,
   aiPaintTime: 0.7,
+  aiPaintSlew: 3,
   aiPressRange: 0.65,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
@@ -54,9 +56,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailHold: 0.7, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailHold: 0.3, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailHold: 0.1, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -72,6 +74,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiReacquire", label: "Re-acquire after cover (s)", min: 0, max: 4, step: 0.1, group: G, tip: "Once you break its line of sight it aims at the last spot it saw you and holds fire; it needs this long after seeing you again" },
   { key: "aiRailHold", label: "Rail holds the full charge (s)", min: 0, max: 2, step: 0.05, group: G, tip: "A fully charged rail waits this long (jittered) before it fires, the line showing where it points" },
   { key: "aiLead", label: "Lead (share of the true lead)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of the foe's motion it leads its rockets, shells and mortars by" },
+  { key: "aiDodgeChance", label: "Dodge chance (per threat)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-10-31: enemies only have a chance to dodge targeted abilities. Each telegraph rolls once (seeded) when it appears: it either reacts (after the reaction time) or carries on as if it never saw it" },
   { key: "aiDashUse", label: "Dash use (share of dodges)", min: 0, max: 1, step: 0.05, group: G, tip: "Share of threats it can't walk out of in time that it dashes out of" },
   { key: "aiDashKeep", label: "Dash charges kept for dodges", min: 0, max: 4, step: 1, group: G, tip: "It won't dash to reposition below this many charges" },
   { key: "aiRailDodge", label: "Dodges a charging rail at (charge)", min: 0.3, max: 1, step: 0.05, group: G, tip: "A rail charging along a line through it: it dashes across once the charge passes this" },
@@ -83,6 +86,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiCover", label: "Uses cover (0 never)", min: 0, max: 1, step: 0.05, group: G },
   { key: "aiPeek", label: "Peeks out of cover for (s)", min: 0.5, max: 8, step: 0.25, group: G },
   { key: "aiPaintTime", label: "Holds a shoulder paint (s)", min: 0.1, max: 3, step: 0.05, group: G, tip: "Its mortar rings and strips show this long before they fire: the player's chance to read them" },
+  { key: "aiPaintSlew", label: "Painted spot creeps at (m/s)", min: 0, max: 20, step: 0.5, group: G, tip: "It commits to a spot when it starts painting a shoulder weapon (your position plus lead then); the strip or ring then moves toward where you are no faster than this (0: stays put)" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -178,7 +182,7 @@ export interface MechCommand {
 export type RivalState = "engage" | "press" | "cover" | "retreat";
 
 /** What it did, for the HUD and the checks. */
-export interface RivalStats { dodgeDashes: number; dodgeWalks: number; threatsSeen: number; states: Record<RivalState, number> }
+export interface RivalStats { dodgeDashes: number; dodgeWalks: number; threatsSeen: number; threatsNoticed: number; states: Record<RivalState, number> }
 
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
@@ -195,7 +199,7 @@ export class RivalAi {
   state: RivalState = "engage";
   /** Why it's in that state (HUD). */
   note = "";
-  stats: RivalStats = { dodgeDashes: 0, dodgeWalks: 0, threatsSeen: 0, states: { engage: 0, press: 0, cover: 0, retreat: 0 } };
+  stats: RivalStats = { dodgeDashes: 0, dodgeWalks: 0, threatsSeen: 0, threatsNoticed: 0, states: { engage: 0, press: 0, cover: 0, retreat: 0 } };
   private r: () => number;
   private stateFor = 0;
   private strafe = 1;
@@ -213,7 +217,7 @@ export class RivalAi {
   private railSince = -1;
   private railWait = 0;
   /** When each threat was first seen, and the decision made for it (dash or walk). */
-  private seen = new Map<number, { t: number; dash: boolean; delay: number; charged: number }>();
+  private seen = new Map<number, { t: number; notice: boolean; dash: boolean; delay: number; charged: number }>();
   /** Where it has noticed the foe to be (eased toward the truth over the reaction time). */
   private fx = NaN;
   private fz = NaN;
@@ -224,6 +228,10 @@ export class RivalAi {
   private unstick: { x: number; z: number; until: number } | null = null;
   /** The shoulder weapon being painted (kit index), since when and for how long. */
   private painting: { i: number; since: number; hold: number } | null = null;
+  /** Where the painted shoulder weapon points: committed at the start of the paint, then creeping (aiPaintSlew). */
+  private hx = 0;
+  private hz = 0;
+  private paintAt: { x: number; z: number } | null = null;
   private shoulderIn = 2;
   /** Cover: the spot it's going for, and the peek timer. */
   private coverAt: { x: number; z: number } | null = null;
@@ -241,7 +249,7 @@ export class RivalAi {
   }
 
   reset() {
-    this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null;
+    this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null; this.paintAt = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
     this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
   }
@@ -253,7 +261,7 @@ export class RivalAi {
     const v = this.v, s = view.self, f = view.foe;
     const cmd: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
     this.stateFor += dt;
-    if (!f.alive) { this.painting = null; return cmd; }
+    if (!f.alive) { this.painting = null; this.paintAt = null; return cmd; }
     const dx = f.x - s.x, dz = f.z - s.z, dist = Math.hypot(dx, dz) || 1;
     const ux = dx / dist, uz = dz / dist;
     const sees = view.sees(s.x, s.z, f.x, f.z);
@@ -364,7 +372,15 @@ export class RivalAi {
     const lead = (speed: number, flight = 0) => (speed === Infinity ? 0 : dist / Math.max(1, speed)) + flight;
     const paintK = this.painting ? s.kit[this.painting.i] : s.kit.find((w) => w.kind === "rpg") ?? null;
     const lt = paintK ? lead(paintK.speed, paintK.flight) * v.aiLead : 0;
-    cmd.cursor = { x: hx + this.fvx * lt, y: f.y - 1.5, z: hz + this.fvz * lt };
+    this.hx = hx; this.hz = hz;
+    const wantX = hx + this.fvx * lt, wantZ = hz + this.fvz * lt;
+    if (this.painting) {
+      // Painting: the spot was committed when the paint began; it creeps toward the new aim, never jumps.
+      const pa = this.paintAt ?? (this.paintAt = { x: wantX, z: wantZ });
+      const ddx = wantX - pa.x, ddz = wantZ - pa.z, dd = Math.hypot(ddx, ddz), step = Math.min(dd, v.aiPaintSlew * dt);
+      if (dd > 1e-6) { pa.x += ddx / dd * step; pa.z += ddz / dd * step; }
+      cmd.cursor = { x: pa.x, y: f.y - 1.5, z: pa.z };
+    } else { this.paintAt = null; cmd.cursor = { x: wantX, y: f.y - 1.5, z: wantZ }; }
 
     // ---- Fire ----
     this.fire(view, cmd, dist, acquired, dt);
@@ -382,8 +398,12 @@ export class RivalAi {
     let best: { x: number; z: number; urgency: number; need: number; t: number; id: number; rail: boolean } | null = null;
     for (const th of view.threats) {
       let mem = this.seen.get(th.id);
-      if (!mem) { mem = { t: now, dash: this.r() < v.aiDashUse, delay: this.r() * 1.0, charged: -1 }; this.seen.set(th.id, mem); this.stats.threatsSeen++; }
-      if (now - mem.t < v.aiReaction) continue;
+      if (!mem) {
+        // One seeded roll per threat, when it first appears: does it notice and react at all?
+        mem = { t: now, notice: this.r() < v.aiDodgeChance, dash: this.r() < v.aiDashUse, delay: this.r() * 1.0, charged: -1 };
+        this.seen.set(th.id, mem); this.stats.threatsSeen++; if (mem.notice) this.stats.threatsNoticed++;
+      }
+      if (!mem.notice || now - mem.t < v.aiReaction) continue;
       // Homing: brace with a dash across the foe's line just as it comes down.
       if (th.homing) {
         if (th.t < 0.3 && mem.dash && s.canDash && s.dashCharges > 0 && !s.dashing) {
@@ -517,6 +537,10 @@ export class RivalAi {
     this.painting = { i: pick.i, since: view.t, hold };
     const k = s.kit[pick.i];
     if ("key" in k.ctl) cmd.keys[k.ctl.key - 1] = true;
-    void f;
+    // Commit the aim now: the foe's noticed position plus its lead for this weapon's flight, held (see decide).
+    const lt = (k.speed === Infinity ? 0 : dist / Math.max(1, k.speed)) + (k.flight ?? 0);
+    const px = this.hx + this.fvx * lt * v.aiLead, pz = this.hz + this.fvz * lt * v.aiLead;
+    this.paintAt = { x: px, z: pz };
+    cmd.cursor = { x: px, y: f.y - 1.5, z: pz };
   }
 }

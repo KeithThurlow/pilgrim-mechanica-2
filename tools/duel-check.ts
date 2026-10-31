@@ -104,7 +104,7 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
 }
 
 // ---- Dodge drills: a scripted shooter 40 m off, the rival told to stand (no strafing, any range, no cover) ----
-const STAND = { aiStrafe: 0, aiRangeBand: 90, aiCover: 0, aiRetreatAt: 0, aiAggression: 0 };
+const STAND = { aiDodgeChance: 1, aiStrafe: 0, aiRangeBand: 90, aiCover: 0, aiRetreatAt: 0, aiAggression: 0 };
 /** The shooter: stands, aims at the rival where it is (no lead), holds key 3 for 0.7 s whenever it's ready, or charges
  *  its left rail and holds the full charge a varying while before letting go. */
 function shooter(kind: "shoulder" | "rail") {
@@ -166,6 +166,73 @@ for (const k of Object.keys(drills)) {
   must(d.dodged >= d.thr * 0.4, `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
+
+const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+
+// ---- Dodging is a per-threat roll (Keith 2026-10-31: "enemies should only have a chance to dodge your targeted abilities") ----
+// The same drills at each level's own chance: the share of telegraphs it noticed sits near the chance, and the share it
+// got out of is no more than that.
+const lvlShare: Record<string, { chance: number; seen: number; noticed: number; thr: number; dodged: number }> = {};
+for (const lvl of RIVAL_LEVEL_IDS) {
+  const L = RIVAL_LEVELS[lvl], acc = { chance: L.aiDodgeChance!, seen: 0, noticed: 0, thr: 0, dodged: 0 };
+  for (const [name, pick] of Object.entries(KITS)) {
+    if (name === "rail" || name === "missiles") continue;
+    const { rivalHull: _rh, ...lv } = L;
+    for (const aiSeed of [1, 2, 3, 4, 5]) {
+    const o: DuelOptions = {
+      aiSeed, seedA: 1, seedB: 2, maxTime: 90, hull: 1e6, ai: { ...STAND, ...lv }, script: shooter("shoulder"), cover: 0,
+      loadouts: [loadoutFor(pick), loadoutFor({ left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" })],
+      starts: [{ x: 0, z: -20, heading: 0 }, { x: 0, z: 20, heading: Math.PI }],
+    };
+    const r = runDuelRaw(o);
+    acc.seen += r.ai![1].stats.threatsSeen; acc.noticed += r.ai![1].stats.threatsNoticed; acc.thr += r.threatened[1]; acc.dodged += r.dodged[1];
+    }
+  }
+  lvlShare[lvl] = acc;
+  const share = acc.noticed / Math.max(1, acc.seen);
+  must(acc.seen >= 100, `${lvl}: only ${acc.seen} telegraphs seen in the dodge-chance drills`);
+  must(Math.abs(share - acc.chance) < 0.15, `${lvl}: noticed ${Math.round(share * 100)}% of telegraphs, chance ${acc.chance}`);
+  must(acc.dodged <= acc.thr * (acc.chance + 0.15), `${lvl}: dodged ${acc.dodged}/${acc.thr}, more than its chance ${acc.chance} allows`);
+}
+must(lvlShare.recruit.dodged / Math.max(1, lvlShare.recruit.thr) < lvlShare.ace.dodged / Math.max(1, lvlShare.ace.thr), "Recruit dodges as much as the Ace");
+
+// ---- The painted spot (Keith 2026-10-31: a line mortar's strip flicked all over while it painted) ----
+// While a shoulder key is held the cursor never jumps (> N m a frame) and every paint ends in one release.
+{
+  const MAXJUMP = 0.5; // m per frame (aiPaintSlew x dt is ~0.05)
+  const worst: Record<string, string> = {};
+  for (const [name, pick] of Object.entries(KITS)) {
+    if (name === "rail") continue;
+    let prev: { x: number; z: number } | null = null, held = false, downs = 0, ups = 0, jump = 0, paintStarts = 0;
+    for (const lvl of RIVAL_LEVEL_IDS) {
+      for (let seed = 1; seed <= 3; seed++) {
+        prev = null; held = false;
+        const { rivalHull: _rh2, ...lv } = RIVAL_LEVELS[lvl];
+        runDuelRaw({
+          seedA: 1, seedB: 100 + seed, maxTime: 60, hull: 1e6, cover: 0, aiSeed: seed, ai: lv,
+          loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" }), loadoutFor(pick)],
+          // the foe jinks hard, the worst case for a spot that re-aims
+          script: (i, _v, t) => { if (i !== 0) return null; const m = idle(); m.move.x = Math.sin(t * 1.3) >= 0 ? 1 : -1; m.move.z = Math.cos(t * 0.7) >= 0 ? 1 : -1; return m; },
+          onCmd: (i, c) => {
+            if (i !== 1) return;
+            const k = c.keys[2] || c.keys[0] || c.keys[1];
+            if (k && !held) { downs++; paintStarts++; }
+            if (!k && held) ups++;
+            if (k && held && prev && c.cursor) jump = Math.max(jump, Math.hypot(c.cursor.x - prev.x, c.cursor.z - prev.z));
+            held = !!k; prev = k && c.cursor ? { x: c.cursor.x, z: c.cursor.z } : null;
+          },
+        });
+        if (held) ups++; // the round ended mid-paint
+      }
+    }
+    worst[name] = `${paintStarts} paints, worst jump ${jump.toFixed(2)} m/frame`;
+    must(paintStarts >= 3, `${name}: only ${paintStarts} paints in the jink drill`);
+    must(jump < MAXJUMP, `${name}: the painted spot jumped ${jump.toFixed(2)} m in a frame while held`);
+    must(downs === ups, `${name}: ${downs} paints began but ${ups} released`);
+  }
+  console.log("painted spot (jinking foe, 3 levels x 3 seeds):", Object.entries(worst).map(([k, v]) => `${k} ${v}`).join(" · "));
+}
+console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):", Object.entries(lvlShare).map(([k, a]) => `${k} ${a.chance}: ${a.noticed}/${a.seen} ${a.dodged}/${a.thr}`).join(" · "));
 
 // ---- Aim lag and cover (Keith 2026-10-31: "way too hard and insanely accurate") ----
 {
@@ -238,7 +305,6 @@ must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of $
 
   // Duels against a scripted player who stands or strafes (cover 0): Recruit misses a strafing player most of the time,
   // still punishes one who stands; Ace hits more; Recruit's time to kill with the default pick is 8-25 s.
-  const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
   const mode = (strafe: boolean) => (i: number, _v: DuelView, t: number): MechCommand | null => { if (i !== 0) return null; const m = idle(); if (strafe) m.move.x = Math.sin(t * 0.5) >= 0 ? 1 : -1; return m; };
   const taken = (lvl: keyof typeof RIVAL_LEVELS, strafe: boolean) => {
     let sum = 0;

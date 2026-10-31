@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-10-31 | Rival dodging is one seeded roll per telegraph when it first appears (`aiDodgeChance`: Recruit 0.3, Veteran 0.5, Ace 0.75), then the reaction time; failed roll = it carries on as if it hadn't seen it. A painted shoulder weapon commits to a spot (foe's noticed position + lead at that moment) and the spot creeps toward the aim at `aiPaintSlew` (3 m/s), never jumps | Claude | Claude | Chances are the brief's suggestion, for Keith to retune. Agent on `wip/rivaldodge`. |
 | 2026-10-31 | Enemies only have a chance to dodge your targeted abilities, not always | Keith | Keith | Rival on `wip/rivaldodge`; bandits on `wip/trample`. |
 | 2026-10-31 | The mech's body does damage: sprint, dash and plain impact trample humans; bandits try to dive-roll out of the way about a third of the time, with the old project's dodge roll animation | Keith | Keith | Agent on `wip/trample`. |
 | 2026-10-31 | The dash's first moment a touch faster; the mech leans briefly into a change of direction to show the momentum | Keith | Keith | Agent on `wip/dashlean`. |

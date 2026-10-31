@@ -82,6 +82,8 @@ export interface DuelOptions {
   /** Per-mech AI values (e.g. a level for the rival, index 1) over `ai`, and a hull multiplier each. */
   aiEach?: [Partial<typeof RIVAL_AI_DEFAULTS> | undefined, Partial<typeof RIVAL_AI_DEFAULTS> | undefined];
   hullMul?: [number, number];
+  /** Called with every command each frame (a check watching the painted spot). */
+  onCmd?: (i: number, cmd: MechCommand, t: number) => void;
   /** Cover drifts (default the lab's). */
   cover?: number;
 }
@@ -267,6 +269,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   while (t < maxT && mechs.every((m) => m.alive)) {
     t += dt;
     const cmds = mechs.map((_, i) => { const vw = view(i); return o.script?.(i, vw, t) ?? ais[i].decide(vw, dt); });
+    if (o.onCmd) cmds.forEach((c, i) => o.onCmd!(i, c, t));
     mechs.forEach((m, i) => {
       const cmd = cmds[i];
       if (cmd.dash && m.sim.canDash && m.dash.start(cmd.dash.x, cmd.dash.z)) { m.sim.dash(m.dash.dirX, m.dash.dirZ); res.dashes[i]++; }
