@@ -28,7 +28,7 @@ export const TRAMPLE_DEFAULTS = {
   ramMechMass: 40,
   ramBounce: 0.2,
   ramFrom: 2,
-  ramDamage: 60,
+  ramDamage: 15,
   ramMechShare: 1,
 };
 export type TrampleValues = typeof TRAMPLE_DEFAULTS;
@@ -48,7 +48,7 @@ export const TRAMPLE_PARAMS: Param[] = [
   { key: "ramMechMass", label: "Ram: mech mass (t)", min: 5, max: 120, step: 1, group: G },
   { key: "ramBounce", label: "Ram: bounce (0-1)", min: 0, max: 1, step: 0.01, group: G },
   { key: "ramFrom", label: "Ram: hurts from (m/s)", min: 0, max: 10, step: 0.1, group: G },
-  { key: "ramDamage", label: "Ram: damage per m/s", min: 0, max: 400, step: 5, group: G, tip: "To both, past the floor (a sprint into a truck: about 10 m/s, 500 each)" },
+  { key: "ramDamage", label: "Ram: damage per m/s", min: 0, max: 400, step: 5, group: G, tip: "To both, past the floor (a sprint into a truck at 14 m/s: 180 each; a technical has 140, a gun truck 380, the mech 3000)" },
   { key: "ramMechShare", label: "Ram: mech's share (×)", min: 0, max: 2, step: 0.05, group: G, tip: "1: both take the same" },
 ];
 
@@ -75,14 +75,15 @@ export interface TrampleHit { kind: "bandit" | "robot" | "vehicle"; id: number |
 
 /**
  * Closing speed of the mech on a thing at (px, pz) moving (ovx, ovz): the part of their relative velocity along the
- * line from the mech to it (0 when moving apart).
+ * line from the mech to it (0 when moving apart; it gates contact), and the whole relative speed (rel: what hurts, so a
+ * glancing sprint still kills).
  */
-export function closingSpeed(b: MechBody, px: number, pz: number, ovx: number, ovz: number): { closing: number; nx: number; nz: number; d: number } {
+export function closingSpeed(b: MechBody, px: number, pz: number, ovx: number, ovz: number): { closing: number; rel: number; nx: number; nz: number; d: number } {
   const dx = px - b.x, dz = pz - b.z, d = Math.hypot(dx, dz);
   const sp = Math.hypot(b.vx, b.vz);
   const nx = d > 1e-5 ? dx / d : sp > 1e-5 ? b.vx / sp : 1, nz = d > 1e-5 ? dz / d : sp > 1e-5 ? b.vz / sp : 0;
   const closing = Math.max(0, (b.vx - ovx) * nx + (b.vz - ovz) * nz);
-  return { closing, nx, nz, d };
+  return { closing, rel: closing > 0 ? Math.hypot(b.vx - ovx, b.vz - ovz) : 0, nx, nz, d };
 }
 
 /**

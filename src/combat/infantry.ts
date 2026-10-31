@@ -606,8 +606,8 @@ export class InfantrySwarm {
       this.trampleCd[i] = 0.35;
       // Flung along the mech's way and out to its side.
       const sp = Math.hypot(b.vx, b.vz) || 1, ox = b.vx / sp + c.nx, oz = b.vz / sp + c.nz, ol = Math.hypot(ox, oz) || 1;
-      const fx = ox / ol, fz = oz / ol, fling = trampleFling(c.closing, tv);
-      const dmg = trampleHurt(c.closing, tv, b.crush);
+      const fx = ox / ol, fz = oz / ol, fling = trampleFling(c.rel, tv);
+      const dmg = trampleHurt(c.rel, tv, b.crush);
       const x = this.px[i], z = this.pz[i];
       const killed = dmg > 0 && hurt(i, dmg, fx, fz, fling);
       if (!killed) {
@@ -616,7 +616,7 @@ export class InfantrySwarm {
         this.vx[i] = fx * fling; this.vz[i] = fz * fling;
         this.fear[i] += v.fearPerDeath;
       }
-      out?.push({ kind: "bandit", id: this.uid[i], damage: dmg, closing: c.closing, killed, x, z });
+      out?.push({ kind: "bandit", id: this.uid[i], damage: dmg, closing: c.rel, killed, x, z });
     }
     return n;
   }
