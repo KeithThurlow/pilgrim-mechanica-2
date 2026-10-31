@@ -5,7 +5,8 @@
 //
 // Flags: ?kind=fortress|hub, ?seed=N (the layout), ?ring=N (start in yard N with the gates out to it down),
 // ?gates=open (every gate down from the start), ?near (start just outside the outer wall), plus the combat-lab flags
-// (?manual, ?zoom, ?dt, ?flat, ?left= ?right= ?k1-3= for the weapons). R puts it all back up.
+// (?manual, ?zoom, ?dt, ?flat, ?left= ?right= ?k1-3= for the weapons). Shift+R puts it all back up. The demo (until you
+// take over) shoots the nearest gate down from 30 m and walks in.
 import "../../src/core/lab.css";
 import { combatLab, type CombatLab } from "../../src/game/combatLab";
 import { POI_DEFAULTS, POI_PARAMS, PoiField, type PoiKind, type PoiPlacement } from "../../src/world/pois";
@@ -18,6 +19,7 @@ import { SalvageSim, SALVAGE_DEFAULTS, SALVAGE_PARAMS } from "../../src/pois/sal
 import { SalvageDraw, SALVAGE_FX_DEFAULTS, SALVAGE_FX_PARAMS } from "../../src/pois/salvageDraw";
 import { SalvageHud } from "../../src/pois/salvageHud";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "../../src/expedition/fortresses";
+import type { GateState } from "../../src/pois/gates";
 import { INFANTRY_DEFAULTS, INFANTRY_PARAMS } from "../../src/combat/infantry";
 import { BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -57,7 +59,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     { topic: "bandits", label: "Garrison", objects: () => forts ? [forts.draw.group] : [] },
     { topic: "salvage", label: "Salvage spots", objects: () => salvageDraw?.objects() ?? [] },
   ],
-  actions: [{ label: "Put it back up (R)", onClick: () => restart() }],
+  actions: [{ label: "Put it back up (Shift+R)", onClick: () => restart() }],
   report: () => ({ kind: KIND, seed: SEED, scrap: salvage.scrap, gatesDown: [...walls.down] }),
   setup: (field, V) => {
     // Only the hand-placed one: nothing generated (the chances off on the field's own copy).
@@ -69,6 +71,8 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     placeIt(V);
   },
   onChange: (k) => { if (LAYOUT_KEYS.has(k)) rebuild(); },
+  // The demo: stand off the nearest standing gate and shoot it down, then walk in through the gap (null: the shared demo).
+  demo: () => gateDemo(),
 });
 const { V, field, bf, player, arsenal } = lab;
 
@@ -110,14 +114,11 @@ let downs = 0;
 F.onGate = (e) => { if (e.type === "gateDown") { downs++; lab.shake(0.6); } };
 
 function rebuild() {
-  F.reset();
   placeIt(V);
-  lab.streamer.rebuildAll();
   buildIt();
+  startPose();
 }
 function restart() {
-  F.reset();
-  lab.streamer.rebuildAll();
   for (const s of salvage.spots) { s.progress = 0; s.done = false; }
   for (const sec of salvage.sections) sec.banked = false;
   startPose();
@@ -125,11 +126,15 @@ function restart() {
 
 /** Where the mech starts: ?ring=N inside yard N (gates out to it down), ?near at the outer wall, else well outside. */
 function startPose() {
+  // Everything back up, then the gates the flags ask for down before the garrison and the gates stream in.
+  F.reset();
   const L = walls.layout(place), rings = L.rings;
   const ringN = params.has("ring") ? Math.max(0, Math.min(rings.length - 1, Number(params.get("ring")))) : -1;
   if (params.get("gates") === "open") for (const r of rings) for (const g of r.gates) walls.down.add(g.id);
   for (let k = 0; k < ringN + 1 && k < rings.length; k++) for (const g of rings[k].gates) walls.down.add(g.id);
-  if (walls.down.size) lab.streamer.rebuildAll();
+  lab.streamer.rebuildAll();
+  player.reset(0, 0, 0);
+  F.update(0, false);
   if (ringN >= 0) {
     // Just inside the first gate of ring N, facing in.
     const g = rings[ringN].gates[0], d = rings[ringN].r - rings[ringN].top - rings[ringN].face - 6;
@@ -142,9 +147,31 @@ function startPose() {
 }
 
 buildIt();
-// The gates' state is the fortress glue's: let it see the fortress once before placing the mech.
-F.update(0, false);
 startPose();
+
+/** Shoot the nearest standing gate from about 30 m, both guns; once it's down, walk through toward the centre. */
+let demoGate: GateState | null = null;
+function gateDemo() {
+  if (!forts) return null;
+  const p = player.sim.pelvis;
+  if (!demoGate || demoGate.down) {
+    demoGate = null;
+    let bd = Infinity;
+    for (const s of forts.gates.list) if (!s.down) { const d = Math.hypot(s.gate.x - p.x, s.gate.z - p.z); if (d < bd) { bd = d; demoGate = s; } }
+    if (demoGate && bd > 120) demoGate = null;
+  }
+  const g = demoGate;
+  if (!g) {
+    const dx = place.x - p.x, dz = place.z - p.z, d = Math.hypot(dx, dz) || 1;
+    return { cmd: { x: dx / d, z: dz / d, sprint: false }, aim: null, trigger: false };
+  }
+  // Stand on the gate's outer side (the side the mech is on), 30 m off.
+  const ux = Math.sin(g.gate.a), uz = Math.cos(g.gate.a), side = Math.sign((p.x - g.gate.x) * ux + (p.z - g.gate.z) * uz) || 1;
+  const sx = g.gate.x + ux * side * 30, sz = g.gate.z + uz * side * 30;
+  const dx = sx - p.x, dz = sz - p.z, d = Math.hypot(dx, dz);
+  const cmd = d > 3 ? { x: dx / d, z: dz / d, sprint: false } : { x: 0, z: 0, sprint: false };
+  return { cmd, aim: { x: g.gate.x, y: g.floor + g.ring.h * 0.45, z: g.gate.z }, trigger: [d < 12, d < 12] as const };
+}
 
 addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
