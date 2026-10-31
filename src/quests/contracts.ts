@@ -212,6 +212,8 @@ export class ContractBoard {
       const d = dist(l.x, l.z);
       return { ...base, x: l.x, z: l.z, label: l.name, site: l.id, radius: l.radius, need: 1, reward: pay(v.rewardBounty, v.rewardBountyM, d), dist: d };
     }
+    // One hulk on the sand at a time (the cable has one end).
+    if (kind === "tow" && this.list.some((c) => c.kind === "tow" && (c.state === "offered" || c.state === "active"))) return null;
     const o = src.open(r, lo, hi);
     if (!o) return null;
     const d = dist(o.x, o.z);

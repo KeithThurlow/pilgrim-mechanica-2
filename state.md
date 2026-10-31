@@ -185,7 +185,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Contracts and high value targets (Keith 2026-10-31, this thread's agent on `claude/project-thread-mqlfl1`, also `wip/quests`): step 1 built, PR open; Keith to try convoy lab `?quest=tow|pods|salvage|cull|bounty&manual`, `?hvt&manual` (one kill short), `?hvt=now&quest=bounty&manual`. Proposal and Keith's questions: `docs/proposal-quests.md`. Rough: never seen on a GPU; HVTs only fight the mech (not the pilot on foot); every kill counts (robots killed by bandits too); the hulk is a box stand-in.
+- Contracts and high value targets (Keith 2026-10-31, this thread's agent on `claude/project-thread-mqlfl1`, also `wip/quests`): step 1 built, PR #4, ready to merge; open questions and the test checklist at the end of `docs/proposal-quests.md`; Keith to try convoy lab `?quest=tow|pods|salvage|cull|bounty&manual`, `?hvt&manual` (one kill short), `?hvt=now&quest=bounty&manual`. Proposal and Keith's questions: `docs/proposal-quests.md`. Rough: never seen on a GPU; HVTs only fight the mech (not the pilot on foot); every kill counts (robots killed by bandits too); the hulk is a box stand-in.
 - Walk off the convoy: no rails on the mech bays' long sides (Keith 2026-10-31): merged 2026-10-31; Keith to try convoy lab `?manual&aboard` (walk, Shift or Space off a side), `?aboard&walkoff=dash`.
 - Rival aim: tight tracking, then an aim snapshot before rail and autocannon shots (Keith 2026-10-31): merged 2026-10-31; Keith to try `labs/duel/?rival=3&rivalfit=mountR:rail-medium&rivallevel=recruit|veteran|ace`, `?set=aiSnapshot:0.3`.
 - Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): merged 2026-10-31 (dash 7.5 m, back under the stick 0.08 s after the burst; a sprint needs Space held past 0.325 s); Keith to try walker lab `?manual&flat`, duel lab `?manual`, bandits lab `?manual`.
@@ -265,6 +265,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-10-31 · Contracts: one tow at a time, open questions and test checklist (Keith, this thread's agent)
+- Keith: pick defaults and merge, questions later. No second tow is offered while one is open (one cable); `docs/proposal-quests.md` now lists the defaults as open questions plus a test checklist. Checked: quests-check (new case), full `npm test`.
+
 ### 2026-10-31 · Contracts (quests) and high value targets, step 1 (Keith, this thread's agent on `claude/project-thread-mqlfl1`)
 - Keith: high value targets (mini-boss mechs summoned by killing enough of a kind in their area) and pop-up quests: go somewhere for scrap, eliminate a target, tow a mech back, recover escape pods. Built as proposed in `docs/proposal-quests.md`: `src/quests/` (contracts, hvt, tow pure; hvtMech, questDraw, questHud, questLoop glue), wired into `src/expedition/loop.ts` (kills, stripped spots, banking and losses, radar diamonds in `radar.ts`/`radarDraw.ts`, edge marks, the panel slot in `expeditionHud.ts`) and `labs/convoy/main.ts` (J, the tow slowdown, `?quest=`, `?hvt=`, `window.__quests`).
 - Checked: `tools/quests-check.ts` (seeded offers and lairs, kill counting by kind and radius, one summon, leash reset, one at a time, pay once and where, tow and pods delivered only on the bank and failed on a loss, cable never past 9 m or under the sand, pod reach). Headless Chromium (WebGL, software): no console errors with `?quest=tow`, `?hvt=now`; the HVT spawned (level 9 at 488 m, hull 7099), killed through `window.__quests` it dropped, spent its lair and paid the bounty (283 at risk). Full `npm test`.

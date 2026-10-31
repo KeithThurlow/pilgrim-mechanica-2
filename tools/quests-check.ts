@@ -35,6 +35,10 @@ must(offers(11) !== offers(12), "a different seed offered the same contracts");
   const kinds = new Set(b.list.map((c) => c.kind));
   must(kinds.size === 5, `40 offers covered only ${[...kinds].join(", ")}`);
   for (const c of b.list) must(c.reward > 0 && c.dist >= 300, `${c.kind} offer with reward ${c.reward} at ${Math.round(c.dist)} m`);
+  // Never two tows at once (one cable).
+  const b3 = new ContractBoard({ ...CONTRACT_DEFAULTS, contractsMax: 99 });
+  b3.offer(src, "tow");
+  for (let k = 0; k < 20; k++) { const c = b3.offer(src); must(!c || c.kind !== "tow", "a second tow was offered while one was open"); }
   // A kind with no place to go falls back to another.
   const none: OfferSources = { ...src, poi: () => null, camp: () => null, lair: () => null };
   const b2 = new ContractBoard(CONTRACT_DEFAULTS);

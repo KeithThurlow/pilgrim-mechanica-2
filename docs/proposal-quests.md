@@ -94,8 +94,21 @@ Host owned: the board, lairs, kill counts, the HVT, the tow and pods. Offers and
 - **Bring back your own wreck:** a lost mech's hulk stays out there as a tow job for the next run (keeps the fitted
   items' story).
 
-## Questions for Keith
+## Open questions for Keith (defaults chosen, Keith 2026-10-31: "make it work once it's merged, feed questions back later")
 
-1. J to accept and hold J to drop, or contracts only from a convoy terminal (bay screen) once NPCs exist?
-2. Bonus scrap only, or should contracts also pay items or a progression currency later?
-3. HVTs: mechs only, or also champion robots (a huge excavator "foreman" at manufacturing hubs)?
+1. J to accept and hold J to drop (default), or contracts only from a convoy terminal once NPCs exist?
+2. Bonus scrap only (default), or should contracts also pay items or a progression currency later?
+3. HVTs: mechs only (default), or also champion robots (a huge excavator "foreman" at manufacturing hubs)?
+4. Every kill in a lair's or cull's circle counts, including robots killed by bandits (default), or only the player's?
+5. HVTs fight only the mech; with the pilot on foot it keeps shooting the empty mech. Should it hunt the pilot?
+6. HVT strength: Veteran brain, area level + 3, hull ×2 (about 7,100 hull at 500 m out). Too tough or right for a mini boss?
+7. One tow at a time (default); should a lost run leave your own mech's hulk out there as a tow job?
+
+## Test checklist (convoy lab)
+
+- `?quest=tow&manual`: walk to the gold pillar, hold E by the hulk, tow it to the crane: "delivered, banked".
+- `?quest=pods&manual`: walk over the 3 pods, get picked up: paid into the bank. Try `&onfoot` to collect on foot.
+- `?quest=salvage&manual` and `?quest=cull&manual`: finish them, the bonus shows on the at-risk list.
+- `?hvt&manual`: kill one more robot or bandit near the camp: warning, then the black mech walks in (red pillar).
+- `?hvt=now&quest=bounty&manual`: kill it: three drops, bounty at risk.
+- Out normally (`?out&manual`): an offer pops after ~8 s; J takes it, hold J drops it.
