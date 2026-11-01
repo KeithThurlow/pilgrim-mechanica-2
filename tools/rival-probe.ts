@@ -1,6 +1,6 @@
 // Probe: damage the rival deals to a player who stands / strafes / dashes about, and the time to kill it, per level.
 // Run: npx tsx tools/rival-probe.ts
-import { runDuel } from "../src/combat/duelSim";
+import { runDuel, DUEL_HULL_MUL } from "../src/combat/duelSim";
 import { RIVAL_LEVELS, RIVAL_LEVEL_IDS, type MechCommand, type DuelView } from "../src/combat/rivalAi";
 import { loadoutFor } from "../src/items/weaponPick";
 
@@ -27,7 +27,7 @@ for (const lvl of RIVAL_LEVEL_IDS) {
     if (r.winner === 0) { wins++; tt += r.time; }
     left += Object.values(r.score.rounds[0].taken).reduce((a, b) => a + b, 0);
   }
-  console.log(lvl, `player wins ${wins}/${N}, mean kill time ${(tt / Math.max(1, wins)).toFixed(1)} s, mean damage taken ${Math.round(left / N)} of 3000`);
+  console.log(lvl, `player wins ${wins}/${N}, mean kill time ${(tt / Math.max(1, wins)).toFixed(1)} s, mean damage taken ${Math.round(left / N)} of ${Math.round(3000 * DUEL_HULL_MUL)}`);
 }
 for (const lvl of RIVAL_LEVEL_IDS) {
   const out: string[] = [];
