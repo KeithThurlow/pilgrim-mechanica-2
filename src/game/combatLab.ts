@@ -221,6 +221,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     auto = false;
   });
   addEventListener("keyup", (e) => { if (e.code === "Space") spaceDown = false; });
+  // Tab: the target lock on what's under the cursor, or let go (src/game/targetLock.ts; Keith 2026-11-01).
+  let lockPressed = false;
+  addEventListener("keydown", (e) => {
+    if (e.code !== "Tab" || e.repeat || typing(e)) return;
+    e.preventDefault();
+    lockPressed = true;
+    auto = false;
+  });
   addEventListener("blur", () => { spaceDown = false; });
 
   const shapeKeys = new Set([...TERRAIN_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS].filter((p) => p.onRelease).map((p) => p.key).concat(["chunkSize", "segments"]));
@@ -333,6 +341,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   (globalThis as unknown as { __lab: unknown }).__lab = lab;
   let lastDemo: { aim: Aim | null; trigger: Trigger } = { aim: null, trigger: false };
   (lab as unknown as { demoState: () => unknown }).demoState = () => lastDemo;
+  (lab as unknown as { aimState: () => unknown }).aimState = () => ({ lock: lock?.how ?? null, held: softAim.held.id, mark: softAim.lockMark.visible, onTarget: player.upper.onTarget, gunsOff: player.gunsOff });
 
   /** Demo: slow loops, aim at the nearest enemy, fire when it's in range. */
   function demo(t: number): { cmd: MoveCommand; aim: Aim | null; trigger: boolean } {
@@ -369,6 +378,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let aim: Aim | null = null;
     let trigger: Trigger = false;
     let cursor: Aim | null = null;
+    let pointer: Aim | null = null;
     let shotAt: Aim | null = null;
     // Shoulder weapon keys 1-4: hold to paint, release to fire.
     let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
@@ -380,12 +390,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     else if (driving) {
       if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
       // Soft lock: the guns take the enemy under the cursor ray, else the one nearest the line of fire, led by its
-      // motion; the rounds fly straight at the target itself (shotAt).
-      ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, bf.register, enemies, player.sim.pos, V));
+      // motion; the rounds fly straight at the target itself (shotAt). Tab holds it (the target lock).
+      ({ cursor, pointer, aim, shotAt, lock } = softAim.pick(buttons.mouse, bf.register, enemies, player.sim.pos, V, lockPressed));
       trigger = [buttons.left, buttons.right];
       held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
       if (held.some(Boolean)) auto = false;
     }
+    lockPressed = false;
+    if (!driving) softAim.release();
     if (sel.active) { trigger = false; held = [false, false, false, false]; }
     player.keys = held;
     player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
@@ -425,7 +437,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
-    softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
+    softAim.draw(driving ? pointer ?? cursor : null, lock ?? (demoLock ? { target: demoLock, how: "cursor" } : null), player.upper.onTarget && !player.gunsOff);
     // Each gun's magazine and reload round the cursor (src/ui/reloadHud.ts); enemies' health bars.
     reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
     healthBars.update(dt);
