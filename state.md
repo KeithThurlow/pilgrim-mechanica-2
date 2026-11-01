@@ -294,6 +294,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Duel lab rival number box (Keith; Claude on `claude/project-thread-ugaadx`)
+- Keith: Reroll's position shifted with the rival's item list. Fixed `Rival #` number box (top left; type or arrows) in `labs/duel/main.ts`; ◀/Reroll stay. Checked: typecheck, `npm test`.
 ### 2026-11-01 · Mechs and vehicles are solid (Keith; Claude on `claude/project-thread-y2l41b`)
 - Keith: "I can just walk straight through this mech", wants collisions for mechs and vehicles with a sizable pillbox so placement matters in sword fights.
 - `src/game/solids.ts` (pure: stadium overlap, share rule, the registry on `bf.solids`, ticked in `bf.update`); `WalkerSim.shove` (body and feet move together, motion into the other stripped); `MechUnit` and the war band's `Raider` resolve after they step. Sliders: Your mech › Body collisions (`solidsOn`, `bodyRadius`, `mechShove`).
