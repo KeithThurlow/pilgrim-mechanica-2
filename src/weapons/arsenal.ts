@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
+import { SwordSim, cutDamage, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -274,7 +274,7 @@ export class Arsenal implements MechWeapons {
   }
   swordStats(s: Side): SwordStats {
     const v = this.v, o = s.own;
-    return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave }
+    return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave, parry: o.parry ?? 1, heft: o.heft ?? 1 }
       : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave };
   }
   swarmStats(o: Record<string, number> | null): SwarmStats {
@@ -527,6 +527,8 @@ export class Arsenal implements MechWeapons {
       const ws = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
       const len = st.reach * v.swordLength;
       ms.blade.scale.z = Math.max(0.3, len / ws - 0.46);
+      // A heavier sword is a thicker, broader blade (the buster), a lighter one slimmer.
+      ms.blade.scale.x = ms.blade.scale.y = st.heft ?? 1;
       ms.edge.opacity = sw.cutting ? 1 : 0.35;
     }
   }
@@ -554,7 +556,7 @@ export class Arsenal implements MechWeapons {
       this.onFire?.("melee");
       // A mech facing the cut with a free sword blocks it (Keith 2026-11-01): less damage and knock, the blade stalls.
       const met = t.parry?.(u.sim.pos.x, u.sim.pos.z) ?? { take: 1 }, take = met.take, blocked = take < 1;
-      t.damage(st.damage * u.damageScale * take, at, kd, st.ap);
+      t.damage(cutDamage(st, v, s.sword.span) * u.damageScale * take, at, kd, st.ap);
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       if (met.parried) {
         // The blades met (Keith 2026-11-01): a clash of sparks and light, a bend in the air, a loud ching; my blade

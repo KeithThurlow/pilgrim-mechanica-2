@@ -26,7 +26,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(1);
   let t = 0, cutT = 0, first: number | null = null, last = 0, pressed = true;
   const clips: SwordClip[] = [];
-  while (t < 2 * V.swordPace) {
+  while (t < 3 * V.swordPace) {
     const sweep = sw.update(dt, pressed, st, V);
     pressed = false; t += dt;
     if (clips[clips.length - 1] !== sw.clip) clips.push(sw.clip);
@@ -198,9 +198,14 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 // ---- The parry (Keith 2026-11-01): a sword driving or cutting meets a cut and recoils; a swing leaves an opening ----
 {
   const sw = new SwordSim(1);
-  sw.update(dt, true, st, V);
-  for (let i = 0; i < 10; i++) sw.update(dt, true, st, V);
-  must(sw.clip === "A" && sw.swinging && !sw.free, "a sword in its drive isn't swinging (can't parry)");
+  sw.update(dt, true, st, V, 0);
+  for (let i = 0; i < 10; i++) sw.update(dt, true, st, V, 0);
+  must(sw.clip === "A" && sw.swinging && !sw.free, "a close cut in its drive can't parry");
+  // A full sweep parries only right at its cut: a much shorter window than a close cut's.
+  const win = (span: number) => { const q = new SwordSim(1); let open = 0; q.update(dt, true, st, V, span); for (let i = 0; i < 600 && (q.clip === "A"); i++) { q.update(dt, false, st, V, span); if (q.swinging) open += dt; } return open; };
+  const wn = win(0), wf = win(1);
+  console.log(`  parry window: close ${wn.toFixed(2)} s, full sweep ${wf.toFixed(2)} s`);
+  must(wn > wf * 1.8, `a close cut's parry window (${wn.toFixed(2)} s) isn't much wider than a sweep's (${wf.toFixed(2)} s)`);
   sw.recoil(V);
   must(sw.clip === "K" && !sw.swinging, "a parried sword didn't recoil");
   let n = 0; while (sw.clip !== "guard" && n++ < 600) sw.update(dt, false, st, V);

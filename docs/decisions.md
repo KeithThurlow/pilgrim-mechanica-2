@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Sword line: Short sword (fast, light, wide parry window, armour stops more), Breaker (mid, katana-like), Buster sword (slow, thick, heavy damage, near armour-ignoring, narrow parry window); close cuts lighter and quicker to parry, full sweeps heavier with longer recovery; a block takes 22% | Keith | Keith | Multipliers Claude's, Keith to tune (the Sword block sliders and the bases table). |
 | 2026-11-01 | Swords parry: two cuts meeting knock both blades back, 10% of the damage lands; a swing leaves an opening before it can block; close cuts quicker and far sweeps slower | Keith | Keith | Values Claude's: parry take 0.1, recoil 0.5 s, block again after half the recovery, close × 0.6, far × 1.4, damage kept at 450. Open: should a weak sword parry a strong one (parry ignores the weapons for now). |
 | 2026-11-01 | Sword block sounds like a ringing ching; sword hits like heavy steel crashing (a container crushed), no pitched thump | Keith | Keith | Built from struck-steel partials (`Synth.metal`); recipes Claude's. |
 | 2026-11-01 | Sword swings 30% slower for weight; blocks get their own distinct sound | Keith | Keith | `swordPace` 1.3 on every move; the block plays a dark clang plus a whoosh as it comes up, and no hit crunch. |
