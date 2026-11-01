@@ -12,9 +12,12 @@ import type { RobotBeamEvent, RobotPulseEvent } from "../combat/robots";
 
 const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
+/** Where each beam (by robot id) struck on its last tick, so a sweep's red-hot trail joins up. Cosmetic. */
+const lastStrike = new Map<number, { x: number; z: number }>();
 
 /** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
-export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0): number {
+export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0,
+  heat = (bf.v as { heatBeam?: number }).heatBeam ?? 0): number {
   const s = e.start, t = e.end;
   from.set(s.x, s.y, s.z);
   dir.set(t.x - s.x, t.y - s.y, t.z - s.z);
@@ -30,6 +33,12 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.marks.furrow(s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width * 0.8, 0);
     bf.dust.stomp(t.x, t.y, t.z, 0.6);
     if (dig > 0 && (e.tick & 1) === 0) bf.queueDent(t.x, t.z, (e.width * dig) / Math.max(0.05, (bf.v as { craterRadiusShare?: number }).craterRadiusShare ?? 0.7));
+    // Red-hot sand: the strike dragged from where the last tick struck to here, and the last few metres of the line.
+    const hk = heat * (e.heat ?? 1), dtk = Math.max(0.02, (bf.v as { robotBeamTick?: number }).robotBeamTick ?? 0.1);
+    const was = lastStrike.get(e.id);
+    if (was) burnBeam(bf, was.x, was.z, t.x, t.z, e.width, hk, dtk);
+    burnBeam(bf, s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width, hk, dtk);
+    lastStrike.set(e.id, { x: t.x, z: t.z });
     return shot.result.steps.length;
   }
   // A furrow burnt along the sand in pieces, dust thrown up along it, and a crack at the emitter and where it strikes.
@@ -42,6 +51,9 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
+  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts); the sweep's ticks drag it on.
+  burnBeam(bf, s.x, s.z, t.x, t.z, e.width, heat * (e.heat ?? 1));
+  lastStrike.set(e.id, { x: t.x, z: t.z });
   // The trench: craters down the low part of the line, one per width or so (queued, so a long line doesn't stall).
   if (dig > 0) {
     const r = e.width * dig, step = Math.max(1, r * 1.2), m = Math.min(60, Math.floor(flat / step));
@@ -53,6 +65,17 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
   bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
   bf.sfx.play("brap", from.set(t.x, t.y, t.z), 1.4, 0.5, false);
   return shot.result.steps.length;
+}
+
+/**
+ * Red-hot sand along a beam's line on the ground, `heat` degrees (the hotter the weapon, the longer it glows), a hotter
+ * spot where it strikes. dt > 0: the beam held there for dt (a beam that sweeps calls this every tick).
+ */
+export function burnBeam(bf: Battlefield, x0: number, z0: number, x1: number, z1: number, width: number, heat: number, dt = 0) {
+  const h = bf.heat;
+  if (!h || heat <= 0) return;
+  h.line(x0, z0, x1, z1, width * 0.45, heat, dt);
+  h.spot(x1, z1, width * 0.8, heat * 1.1, dt);
 }
 
 /**

@@ -907,6 +907,8 @@ export class Arsenal implements MechWeapons {
       const g = field.height(to.x, to.z);
       bf.dust.hit(to.x, g, to.z, dir.x, dir.z, 2.5 + power);
       bf.marks.crater(to.x, to.z, 2 + power);
+      // The slug's energy dumped into the sand: a red-hot splash, hotter with the charge (src/fx/groundHeat.ts).
+      bf.heat?.spot(to.x, to.z, 0.5 + 0.4 * power, ((bf.v as { heatRail?: number }).heatRail ?? 0) * (0.5 + 0.5 * power));
     }
     // The muzzle: a big blast of smoke and sand, sparks off the rails, the kick and shake.
     const b = v.railBlast * (0.6 + 0.4 * power);
