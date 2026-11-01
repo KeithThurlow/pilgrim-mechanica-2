@@ -93,12 +93,14 @@ import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src
 import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { convoyShop } from "../../src/ui/convoyShop";
 import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../../src/ui/vitalsHud";
+import { DOLL_DEFAULTS, DOLL_PARAMS, mechDollHud, partsFromHull } from "../../src/ui/mechDoll";
+import { inventoryScreen } from "../../src/ui/inventory";
 import { KitControl, addRepairSounds } from "../../src/game/repairUse";
 import { AbilityControl } from "../../src/abilities/abilityUse";
 import { ABILITY_TOPIC } from "../../src/abilities/abilities";
-import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS } from "../../src/items/loadout";
+import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, type SlotId } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
-import { newBag, addTo } from "../../src/items/cargo";
+import { newBag, addTo, bagWeight } from "../../src/items/cargo";
 import { rollLoot } from "../../src/items/generate";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { itemName } from "../../src/expedition/drops";
@@ -112,14 +114,14 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
+  ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
@@ -317,6 +319,7 @@ function persist() {
 function refit() {
   const r = resolve(bayState.loadout, V);
   bayState.cargo.capacity = r.cargoCapacity;
+  loop.exp.capacity = V.cargoLimit ? r.cargoCapacity : Infinity;
   applyLoadout(player, r);
   // The sensor's seekers (its radar range already went into V.mechRadar through the loadout's values).
   loop.seeker.setModes(r.seekers);
@@ -330,6 +333,18 @@ addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.pr
 // ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
 for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeker.mode !== params.get("seek"); i++) loop.seeker.cycle();
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
+// The inventory with the mech doll (Keith 2026-11-01): I anywhere, or a click on the HUD doll at the bottom right. Out in
+// the field its cargo is the at-risk list (with the cargo limit); aboard, the bay's cargo list rides out at the launch.
+const inventory = inventoryScreen({ state: bayState, tuning: V, exp: loop.exp, onChange: () => { refit(); panel.refresh(); }, openBay: () => bay.open() });
+const doll = mechDollHud(V, () => inventory.toggle());
+/** The bay's cargo list goes out with the mech: it joins the at-risk list at the launch; once out, it's off the list. */
+function syncCarry() {
+  if (loop.exp.state === "aboard") loop.exp.carryOut = bayState.cargo.items.map((item) => ({ kind: "item" as const, item, label: itemName(item) }));
+  else if (bayState.cargo.items.length && bayState.cargo.items.some((i) => loop.exp.atRisk.some((l) => l.kind === "item" && l.item === i))) {
+    bayState.cargo.items = bayState.cargo.items.filter((i) => !loop.exp.atRisk.some((l) => l.kind === "item" && l.item === i));
+    persist();
+  }
+}
 // The convoy's unlock shop: beside the bay screen at the terminal (U shows it on its own). Radar range and crane speed
 // scale the sliders' values (kept as `base`, so a slider moved by hand is still the base).
 const shop = convoyShop({
@@ -524,6 +539,7 @@ function restart() {
       hvtLair = l;
     }
   }
+  syncCarry();
   loop.exp.launch();
   if (hvtNow) { loop.quests.killed(hvtNow.cull, hvtNow.x, hvtNow.z); hvtNow = null; }
   // ?hvt with ?quest=bounty: the bounty is on that lair.
@@ -564,6 +580,8 @@ function restart() {
     }
   }
   if (params.has("bay")) bay.open();
+  // ?inv[=slot]: the inventory open (on that slot).
+  if (params.has("inv")) { inventory.open(); const sl = params.get("inv") as SlotId; if ((SLOTS as readonly string[]).includes(sl)) inventory.select(sl); }
 }
 
 const roadKeys = new Set(["routeHalfWidth", "trainLanes", "trainLaneSide", "routeBlend", "routeLift", "routeRough", ...WAKE_PARAMS.filter((p) => p.onRelease).map((p) => p.key)]);
@@ -585,7 +603,7 @@ const panel = tweakPanel({
   ],
   topics: [
     PILOT_TOPIC,
-    { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
+    { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
     ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
@@ -978,6 +996,17 @@ app.onTick((rawDt) => {
   energyHud().update(player.dash, foot.driving);
   vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();
+  // The mech doll (one hull pool for now: every part shows the hull's share) and the cargo under it.
+  syncCarry();
+  loop.exp.capacity = V.cargoLimit ? bayState.cargo.capacity : Infinity;
+  inventory.update(dt);
+  const lo = bayState.loadout, isOut = loop.exp.state === "out";
+  doll.update(dt, {
+    parts: partsFromHull(player.health / Math.max(1, player.maxHealth), { sensor: !!lo.sensor, pack: !!lo.pack, armL: !!lo.mountL, armR: !!lo.mountR }),
+    cargo: isOut ? { load: loop.exp.load, capacity: loop.exp.capacity, scrap: loop.exp.scrapAtRisk, items: loop.exp.itemsAtRisk, warn: V.cargoWarn }
+      : { load: bagWeight(bayState.cargo), capacity: V.cargoLimit ? bayState.cargo.capacity : Infinity, scrap: 0, items: bayState.cargo.items.length, warn: V.cargoWarn },
+    onFoot: !foot.driving,
+  });
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
   app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);

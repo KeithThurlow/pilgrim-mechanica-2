@@ -18,6 +18,7 @@ import {
   unsocket, defaultLoadout, bestHeld, hullMount, isTwoHander, isArm, isHullWeapon,
   type SlotId, type LoadoutValues, type SummaryLine,
 } from "../items/loadout";
+import { fitWithHeld } from "../items/fitting";
 import { bagWeight, loseCargo, moveItem, takeFrom } from "../items/cargo";
 import { bayToJson, itemName, readBay, type BayState } from "../items/bayState";
 export { itemName, type BayState };
@@ -80,17 +81,11 @@ export function bayScreen(o: BayOptions) {
 
   function fitItem(it: Item) {
     if (fitProblem(st.loadout, slot, it)) return;
-    takeFrom(bagOf(it), it.id);
-    toStash(fit(st.loadout, slot, it));
+    const r = fitWithHeld(st.loadout, slot, it, pool());
+    for (const u of r.used) takeFrom(bagOf(u), u.id);
+    toStash(r.off);
     hover = null;
-    // An arm on its own holds nothing (Keith 2026-10-25: swapping the minigun for an arm left an empty mount): put the
-    // best held weapon from stash or cargo in its hand, or go to the held slot so the next pick is obvious.
-    if (isMountSlot(slot) && it.kind === "arm") {
-      const side: MountSide = slot === "mountL" ? "L" : "R";
-      const best = bestHeld(st.loadout, side, pool());
-      if (best) { takeFrom(bagOf(best), best.id); toStash(fit(st.loadout, MOUNTS[side].held, best)); }
-      else if (!st.loadout[MOUNTS[side].held]) { slot = MOUNTS[side].held; choice = null; }
-    }
+    if (r.emptyHeld) { slot = r.emptyHeld; choice = null; }
     changed();
   }
 

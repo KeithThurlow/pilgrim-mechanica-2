@@ -15,25 +15,31 @@ import { DummiesDraw } from "../../src/game/dummiesDraw";
 import { LOOT_DEFAULTS, LOOT_PARAMS, rollItem, rollLoot, rollProtocol } from "../../src/items/generate";
 import { LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, defaultLoadout, fit, fitProblem, resolve, type SlotId } from "../../src/items/loadout";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
-import { newBag } from "../../src/items/cargo";
+import { newBag, bagWeight } from "../../src/items/cargo";
+import { inventoryScreen } from "../../src/ui/inventory";
+import { DOLL_DEFAULTS, DOLL_PARAMS, mechDollHud, partsFromHull } from "../../src/ui/mechDoll";
 import { bayScreen, loadBay, saveBay, itemName, type BayState } from "../../src/ui/bay";
 
 const KEY = "pm2:loadout-lab:bay";
 let range: DummyRange | null = null;
 let draw: DummiesDraw | null = null;
 let bay: ReturnType<typeof bayScreen> | null = null;
+let inv: ReturnType<typeof inventoryScreen> | null = null;
 
 const lab = await combatLab({
   id: "loadout-lab",
   title: "Loadout",
-  defaults: { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...DUMMY_DEFAULTS },
-  params: [...LOOT_PARAMS, ...LOADOUT_PARAMS, ...DUMMY_PARAMS],
+  defaults: { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...DUMMY_DEFAULTS, ...DOLL_DEFAULTS },
+  params: [...LOOT_PARAMS, ...LOADOUT_PARAMS, ...DUMMY_PARAMS, ...DOLL_PARAMS],
   topics: [
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Mech doll"] },
     { id: "dummies", label: "Targets", groups: ["Target dummies"] },
   ],
   selectables: [{ topic: "dummies", label: "Target dummies", objects: () => draw?.meshes() ?? [] }],
-  actions: [{ label: "Bay (B)", onClick: () => (bay?.isOpen ? bay.close() : bay?.open()), active: () => !!bay?.isOpen }],
+  actions: [
+    { label: "Bay (B)", onClick: () => (bay?.isOpen ? bay.close() : bay?.open()), active: () => !!bay?.isOpen },
+    { label: "Inventory (I)", onClick: () => inv?.toggle(), active: () => !!inv?.isOpen },
+  ],
   report: () => ({ loadout: Object.fromEntries(SLOTS.map((s) => [s, st.loadout[s] ? `${itemName(st.loadout[s]!)} (${st.loadout[s]!.rarity})` : null])), stash: st.stash.items.length, cargo: st.cargo.items.length }),
   onChange: (k) => {
     if (k in DUMMY_DEFAULTS && k !== "dpsWindow") { range?.build(); draw?.rebuild(); }
@@ -66,6 +72,10 @@ function refit() {
 refit();
 
 bay = bayScreen({ state: st, tuning: V, onChange: refit });
+// The inventory with the mech doll (Keith 2026-11-01): I, or a click on the doll at the bottom right. No expedition
+// here: its cargo is the bay's cargo list. ?inv[=slot] opens it (on that slot).
+inv = inventoryScreen({ state: st, tuning: V, onChange: refit, openBay: () => bay!.open() });
+const doll = mechDollHud(V, () => inv!.toggle());
 const openBtn = document.createElement("button");
 openBtn.type = "button";
 openBtn.className = "bay-open-btn";
@@ -87,6 +97,12 @@ if (params.has("bay")) {
   bay.open();
   const slot = (params.get("bay") || "mountR") as SlotId;
   bay.select(SLOTS.includes(slot) ? slot : "mountR", params.has("hover") ? Number(params.get("hover")) : -1, params.get("choice") === "arm" ? "arm" : params.get("choice") === "hull" ? "hullWeapon" : null);
+}
+
+if (params.has("inv")) {
+  inv.open();
+  const s = params.get("inv") as SlotId;
+  if (SLOTS.includes(s)) inv.select(s);
 }
 
 // ---- Target dummies ----
@@ -113,6 +129,12 @@ lab.onFrame((dt) => {
   rng.update(dt, lab.field);
   dd.update();
   const r = resolve(st.loadout, V);
+  inv!.update(dt);
+  const lo = st.loadout;
+  doll.update(dt, {
+    parts: partsFromHull(player.health / Math.max(1, player.maxHealth), { sensor: !!lo.sensor, pack: !!lo.pack, armL: !!lo.mountL, armR: !!lo.mountR }),
+    cargo: { load: bagWeight(st.cargo), capacity: r.cargoCapacity, scrap: 0, items: st.cargo.items.length, warn: 0.85 },
+  });
   const g = player.upper.guns;
   lab.hud("loadout", `damage/s ${Math.round(rng.dps())} · dummies down ${rng.kills} · guns ${g[0].enabled ? "L" : "-"}${g[1].enabled ? "R" : "-"} · fitted ${r.weight.toFixed(1)} t · cargo ${st.cargo.items.length} · B: bay`);
 });
