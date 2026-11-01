@@ -27,23 +27,56 @@ export class Synth {
   }
 
   /**
-   * Struck steel (Keith 2026-11-01, the sword): n inharmonic partials rolled between base and base × spread, each with its
-   * own decay (higher ones die faster), no pitch sweep, on a hard noise strike. Low base and long: a big sheet or
-   * container booming; high base: a blade's ring.
+   * A struck body as listed modes (Keith 2026-11-01, measured off his reference clip): each mode is [hz, dB, dB/s decay]
+   * with its own level and decay rate, rising over `attack` s. `glide` bends every mode's pitch toward hz × glide over
+   * the sound (a heavy plate bending down); `chokeAt` s on, every mode dies `choke` dB/s faster (a damped slam rather
+   * than a ring). `detune` adds a beating partner to each mode that far off in pitch (a share), for a rougher clang.
    */
-  metal(r: Rng, len: number, base: number, gain: number, n = 8, spread = 6) {
-    const s = new Float32Array(this.n(len));
-    const parts = Array.from({ length: n }, (_, p) => {
-      const hz = base * (p === 0 ? 1 : 1 + r() * (spread - 1)), amp = (0.4 + r() * 0.6) / (1 + p * 0.35);
-      return { w: 2 * Math.PI * hz / this.rate, amp, dec: (4 + r() * 4) * (1 + (hz / base - 1) * 0.35) / len, ph: r() * Math.PI * 2 };
-    });
+  ring(r: Rng, len: number, modes: [number, number, number][], gain: number, o: { attack?: number; glide?: number; chokeAt?: number; choke?: number; detune?: number; jitter?: number } = {}) {
+    const s = new Float32Array(this.n(len)), k = Math.LN10 / 20, at = Math.max(0.0005, o.attack ?? 0.002);
+    const glide = o.glide ?? 1, chokeAt = o.chokeAt ?? 1e9, choke = (o.choke ?? 0) * k, jit = o.jitter ?? 0.02;
+    const parts: { hz: number; amp: number; dec: number; ph: number }[] = [];
+    for (const [hz, db, dbps] of modes) {
+      const f = hz * (1 + (r() * 2 - 1) * jit), amp = Math.pow(10, db / 20);
+      parts.push({ hz: f, amp, dec: Math.abs(dbps) * k, ph: r() * Math.PI * 2 });
+      if (o.detune) parts.push({ hz: f * (1 + o.detune * (0.5 + r())), amp: amp * 0.6, dec: Math.abs(dbps) * k * 1.2, ph: r() * Math.PI * 2 });
+    }
     let norm = 0;
     for (const p of parts) norm += p.amp;
+    // Phasors and per-sample decay factors rather than sin and exp per sample (load time); the pitch bend's step is
+    // refreshed every 64 samples.
+    const n = parts.length, re = new Float64Array(n), im = new Float64Array(n), cw = new Float64Array(n), sw = new Float64Array(n), amp = new Float64Array(n), dk = new Float64Array(n);
+    for (let j = 0; j < n; j++) { re[j] = Math.cos(parts[j].ph); im[j] = Math.sin(parts[j].ph); amp[j] = parts[j].amp / norm; dk[j] = Math.exp(-parts[j].dec / this.rate); }
+    const ck = Math.exp(-choke / this.rate), at1 = 1 / (at * this.rate), chokeI = chokeAt * this.rate;
+    for (let i = 0; i < s.length; i++) {
+      if ((i & 63) === 0) {
+        const bend = 1 + (glide - 1) * Math.min(1, i / s.length);
+        for (let j = 0; j < n; j++) { const w = (2 * Math.PI * parts[j].hz * bend) / this.rate; cw[j] = Math.cos(w); sw[j] = Math.sin(w); }
+      }
+      const c = i > chokeI ? ck : 1;
+      let v = 0;
+      for (let j = 0; j < n; j++) {
+        const x = re[j] * cw[j] - im[j] * sw[j];
+        im[j] = re[j] * sw[j] + im[j] * cw[j];
+        re[j] = x;
+        v += im[j] * amp[j];
+        amp[j] *= dk[j] * c;
+      }
+      s[i] = v * gain * Math.min(1, i * at1);
+    }
+    return s;
+  }
+
+  /** Band-passed noise (between lo and hi Hz) rising over `attack` s and dying at `dbps` dB/s: a crack or a hiss of steel. */
+  band(r: Rng, len: number, lo: number, hi: number, gain: number, attack: number, dbps: number) {
+    const s = new Float32Array(this.n(len)), aHi = 1 - Math.exp((-2 * Math.PI * hi) / this.rate), aLo = 1 - Math.exp((-2 * Math.PI * lo) / this.rate);
+    const dec = Math.abs(dbps) * (Math.LN10 / 20);
+    let a = 0, b = 0;
     for (let i = 0; i < s.length; i++) {
       const t = i / this.rate;
-      let v = 0;
-      for (const p of parts) v += Math.sin(p.w * i + p.ph) * p.amp * Math.exp(-p.dec * t);
-      s[i] = (v / norm) * gain * Math.min(1, t / 0.0008);
+      a += aHi * (r() * 2 - 1 - a);
+      b += aLo * (a - b);
+      s[i] = (a - b) * 2.4 * gain * Math.min(1, t / Math.max(0.0005, attack)) * Math.exp(-dec * t);
     }
     return s;
   }
