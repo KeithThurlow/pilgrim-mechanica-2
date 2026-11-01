@@ -224,6 +224,9 @@ export function runDuel(o: DuelOptions): DuelResult {
           }
         } else if (k.kind === "rpg") {
           if (held && g.cool <= 0 && cmd.cursor && dist < k.range) { g.cool = k.cooldown; launch(i, k, "rocket", cmd.cursor); }
+        } else if (k.kind === "sword") {
+          // A cut every cooldown while held; it lands when the foe is within the blade's reach (the arc is wide).
+          if (held && g.cool <= 0) { g.cool = k.cooldown; m.fired++; lastAct[i] = t; if (dist < k.range) hurt(1 - i, "sword", k.damage); }
         }
         return;
       }

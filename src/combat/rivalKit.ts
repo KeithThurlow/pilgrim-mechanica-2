@@ -11,7 +11,7 @@ import { itemName } from "../items/bayState";
 import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
 
-export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg";
+export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword";
 /** Which control fires it: a trigger side (0 left, 1 right) or a shoulder key (1-3). */
 export type KitControl = { trigger: 0 | 1 } | { key: 1 | 2 | 3 };
 
@@ -42,7 +42,7 @@ export interface KitWeapon {
 }
 
 /** The range each kind likes (m), capped at 80% of its reach. */
-export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42 };
+export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4 };
 
 /** What a resolved loadout carries, as the AI and the headless duel see it. */
 export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
@@ -62,6 +62,10 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     } else if (g.cls === "autocannon") {
       out.push(w(ctl, "autocannon", o ? { range: o.range, damage: o.damage, speed: o.shellSpeed, blast: o.splash, rate: g.fireRate, spread: o.spread, spinUp: g.spinUp }
         : { range: v.acRange, damage: v.acDamage, speed: v.acSpeed, blast: v.acSplash, rate: v.acRate, spread: v.acSpread, spinUp: g.spinUp }));
+    } else if (g.cls === "melee") {
+      // The sword (Keith 2026-11-01: rivals may carry one, and then get in your face): its reach from the hull is the
+      // blade's from the hand plus the arm's (about 2.3 m); a cut about every 0.6 s held.
+      out.push(w(ctl, "sword", { range: (o?.reach ?? v.swordReach) + 2.3, damage: o?.damage ?? v.swordDamage, cooldown: 0.6 }));
     } else if (g.cls === "rpg") {
       out.push(w(ctl, "rpg", o ? { range: v.rpgRange, damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown }
         : { range: v.rpgRange, damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: v.rpgCooldown }));
@@ -78,11 +82,16 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
   return out;
 }
 
-/** The range a kit likes (m): the mean of its weapons' (the trigger guns count double: they do most of the work). */
-export function preferredRange(kit: readonly KitWeapon[]): number {
+/**
+ * The range a kit likes (m): the mean of its weapons' (the trigger guns count double: they do most of the work). A kit
+ * with a sword is pulled in toward the sword's (`swordPull` of the way: it wants to be in your face).
+ */
+export function preferredRange(kit: readonly KitWeapon[], swordPull = 0.85): number {
   let s = 0, n = 0;
-  for (const k of kit) { const wt = "trigger" in k.ctl ? 2 : 1; s += k.ideal * wt; n += wt; }
-  return n ? s / n : 35;
+  for (const k of kit) { if (k.kind === "sword") continue; const wt = "trigger" in k.ctl ? 2 : 1; s += k.ideal * wt; n += wt; }
+  const mean = n ? s / n : 35;
+  const sword = kit.find((k) => k.kind === "sword");
+  return sword ? mean + (sword.ideal - mean) * swordPull : mean;
 }
 
 // ---- Rolling a rival ----
