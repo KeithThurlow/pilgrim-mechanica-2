@@ -7,7 +7,7 @@
 import type * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
-import type { RobotSwarm } from "../combat/robots";
+import { MID, QUAD_WEAPON, QUAD_DROP, type RobotSwarm } from "../combat/robots";
 import type { Expedition } from "./expedition";
 import type { SpotState } from "../pois/salvage";
 import type { Rarity } from "../items/rarity";
@@ -98,6 +98,8 @@ export class FieldLoot {
       if (this.exp.state !== "out") return;
       const x = sw.px[i], z = sw.pz[i];
       this.drops.fromKill(`${i}.${sw.gen[i]}`, robotThreat(sw.kind[i], sw.v), x, z, this.at(x, z));
+      // A weapon quad drops its weapon (Keith 2026-11-01) now and then, on top of the usual roll.
+      if (sw.kind[i] === MID && sw.variant[i] === QUAD_WEAPON) this.drops.roll(`gun:${i}.${sw.gen[i]}`, sw.v.robotQuadDrop, x, z, this.at(x, z), { base: QUAD_DROP[sw.weapon[i]] });
     };
   }
 

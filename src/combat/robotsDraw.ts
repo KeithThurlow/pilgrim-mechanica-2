@@ -10,13 +10,13 @@
 // raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take every leg from the sim (planted,
 // stepping) through RobotSwarm.legPose.
 import * as THREE from "three/webgpu";
-import { RobotSwarm, ROBOT_MAX, BIG, MID, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
+import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
   HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_X, MID_SAW_Y, MID_SAW_Z,
   MID_SAW_R, MID_BODY_H, BIG_BODY_H, solveKnee, type V3,
 } from "./robotLegs";
 import {
-  smallBodyGeometry, midBodyGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
+  smallBodyGeometry, midBodyGeometry, quadBodyGeometry, quadWeaponGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
   WHITE, WHITE_DIM, JOINT, DARK, CHROME, ROBOT_PALETTE,
 } from "./robotShapes";
 import { LAMP_ROBOT, LAMP_ROBOT_GLOW, type LampEmit } from "../world/lamps";
@@ -78,7 +78,7 @@ const hash01 = (x: number) => { const h = Math.sin(x) * 43758.5453; return h - M
 
 export class RobotsDraw {
   readonly group = new THREE.Group();
-  private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool;
+  private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool; private quadBodies: Pool; private quadGuns: Pool[];
   private saws: Pool; private buckets: Pool; private beams: Pool; private limbs: Pool; private pipes: Pool; private cables: Pool; private knuckles: Pool; private lamps: Pool;
   private roll = new Float32Array(ROBOT_MAX);
   private sawA = new Float32Array(ROBOT_MAX);
@@ -115,6 +115,8 @@ export class RobotsDraw {
     };
     this.smallBodies = pool(smallBodyGeometry(), ROBOT_MAX);
     this.midBodies = pool(midBodyGeometry(), ROBOT_MAX);
+    this.quadBodies = pool(quadBodyGeometry(), 512);
+    this.quadGuns = [0, 1, 2, 3].map((w) => pool(quadWeaponGeometry(w), 256));
     this.bigBodies = pool(bigBodyGeometry(), 256);
     this.saws = pool(sawGeometry(), ROBOT_MAX, lamp, false);
     this.buckets = pool(bucketGeometry(), 256 * WALK_LEGS);
@@ -176,7 +178,7 @@ export class RobotsDraw {
       const k = sw.kind[i];
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
-    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
+    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
     this.beamDraw.update(dt);
   }
 
@@ -285,20 +287,49 @@ export class RobotsDraw {
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
     c.copy(this.white).multiplyScalar(0.9 + sw.seed[i] * 0.12); if (dead) c.multiplyScalar(0.4);
+    if (sw.variant[i] === QUAD_WEAPON) this.quadTop(i, m, c, alarm, dead);
+    else this.smallQuadTop(i, m, c, q, p, S, spin, alarm, dead);
+    this.midLegs(i, p, S, h, y, dead);
+  }
+
+  /** A weapon quad's drum and weapons, red eyes, the laser's or rail's lens glowing blue as it charges. */
+  private quadTop(i: number, m: THREE.Matrix4, c: THREE.Color, alarm: boolean, dead: boolean) {
+    const sw = this.swarm, st = sw.state[i], w = sw.weapon[i];
+    this.quadBodies.put(m, c);
+    this.quadGuns[w].put(m, c);
+    const flash = (alarm || sw.tell[i] === 1) && Math.sin(this.time * 24) > -0.2, eyeY = MID_BODY_H * 0.33;
+    const lampC = dead ? OFF : flash ? ALARM : EYE_RED;
+    this.lamp(m, 0.05, eyeY, 0.372, 0.04, 0.022, 0.01, lampC);
+    this.lamp(m, -0.05, eyeY, 0.372, 0.04, 0.022, 0.01, lampC);
+    if (st === RUN || st === FIRE) this.eye(i, m, 0, eyeY, 0.39, st === FIRE, false);
+    if (w === Q_LASER || w === Q_RAIL) {
+      const bt = sw.beamT[i], u = bt >= 0 ? Math.min(1, bt / Math.max(0.05, sw.beamSpec(i).charge)) : 0;
+      this.beacon.copy(lin(BLUE_DIM)).lerp(lin(BLUE), 0.25 + 0.75 * u);
+      const r = 0.05 + 0.04 * u;
+      this.lamp(m, -0.4, MID_BODY_H * 0.06, w === Q_LASER ? 0.62 : 0.6, r, r, 0.02, dead ? OFF : this.beacon);
+    }
+  }
+
+  /** A small quad's shell, its blue cutter (brighter as it spins up), red eyes in the visor, a red tip on the mast. */
+  private smallQuadTop(i: number, m: THREE.Matrix4, c: THREE.Color, q: THREE.Quaternion, p: THREE.Vector3, S: number, spin: number, alarm: boolean, dead: boolean) {
+    const sw = this.swarm, st = sw.state[i], { qa, s } = this;
     this.midBodies.put(m, c);
-    // Cutter: a blue disc, brighter as it spins up.
     this.qb.copy(q).multiply(qa.setFromAxisAngle(this.ax, this.sawA[i]));
     this.local(this.tmp, p, MID_SAW_X * S, MID_SAW_Y * S, MID_SAW_Z * S);
     this.m2.compose(this.tmp, this.qb, s.setScalar(S * MID_SAW_R));
     if (dead) c.copy(lin(OFF)); else c.copy(lin(BLUE_DIM)).lerp(lin(BLUE), Math.min(1, 0.35 + spin / 70));
     this.saws.put(this.m2, c);
-    // Eyes: two red lenses in the head's visor, flashing while it winds up; a red tip on the mast.
-    const eyeY = MID_BODY_H * 0.26, lampC = dead ? OFF : alarm ? ALARM : EYE_RED;
-    this.lamp(m, 0.05, eyeY, 0.512, 0.04, 0.025, 0.012, lampC);
-    this.lamp(m, -0.05, eyeY, 0.512, 0.04, 0.025, 0.012, lampC);
-    if (st === RUN || st === FIRE || st === CUT) this.eye(i, m, 0, eyeY, 0.53, st !== RUN, false);
+    const eyeY = MID_BODY_H * 0.32, lampC = dead ? OFF : alarm ? ALARM : EYE_RED;
+    this.lamp(m, 0.07, eyeY, 0.37, 0.05, 0.025, 0.012, lampC);
+    this.lamp(m, -0.07, eyeY, 0.37, 0.05, 0.025, 0.012, lampC);
+    if (st === RUN || st === FIRE || st === CUT) this.eye(i, m, 0, eyeY, 0.39, st !== RUN, false);
     const blink = Math.sin(this.time * 4 + sw.seed[i] * 20) > 0.6;
-    this.lamp(m, -0.08, MID_BODY_H * 0.4 + 0.2, -0.05, 0.025, 0.025, 0.025, dead ? OFF : alarm || blink ? ALARM : EYE_RED);
+    this.lamp(m, 0.17, MID_BODY_H * 0.7 + 0.34, -0.16, 0.022, 0.022, 0.022, dead ? OFF : alarm || blink ? ALARM : EYE_RED);
+  }
+
+  /** A medium walker's four legs (white thighs, dark shins, pistons), cables to the front knees, hoses hanging. */
+  private midLegs(i: number, p: THREE.Vector3, S: number, h: number, y: number, dead: boolean) {
+    const sw = this.swarm, { c } = this;
     // Legs.
     const { hip, knee, foot } = this;
     for (let k = 0; k < WALK_LEGS; k++) {

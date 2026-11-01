@@ -134,9 +134,10 @@ sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 
 // Big ones lob charges through the battlefield's shells: a ring on the sand where each lands, filling as it comes
 // down, so a dash takes the mech out of it.
 const lobFrom = new THREE.Vector3();
-sw.onLob = (_i, fx, fy, fz, x, z, flight) => {
+sw.onLob = (i, fx, fy, fz, x, z, flight) => {
   if (!player.alive) return;
-  bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
+  const l = sw.lobOf(i);
+  bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage);
 };
 // Big ones' beams (Keith 2026-10-31): burnt down the line on the battlefield (the mech, the pilot, anything of
 // another team on it), a scorch and a crack.
@@ -159,8 +160,15 @@ if (params0.has("pulse")) {
 if (params0.has("lineup")) {
   V.robotSwarmSize = 0;
   const p = player.sim.pos;
-  const put = (dx: number, dz: number, mid: number, big: number) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big })) sw.frozen[i] = 1; };
+  const put = (dx: number, dz: number, mid: number, big: number, quad = 0, weapon = 0) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big, quad, weapon })) sw.frozen[i] = 1; };
   put(-4, 9, 0, 0); put(-2.5, 10, 0, 0); put(1, 10, 1, 0); put(10, 16, 0, 1);
+  for (let w = 0; w < 4; w++) put(-12 + w * 5, 17, 1, 0, 1, w);
+}
+// ?quads: no packs, one weapon quad of each weapon (minigun, rockets, laser, rail) coming in from ahead.
+if (params0.has("quads")) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos;
+  for (let w = 0; w < 4; w++) sw.spawn(1, p.x - 15 + w * 10, p.z + 34, 0, { mid: 1, big: 0, quad: 1, weapon: w });
 }
 const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
 lab.app.scene.add(tear.group);
@@ -196,14 +204,14 @@ lab.onFrame((dt) => {
   lastPrey = prey.kind;
   const p = prey.at;
   sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.radius, vx: prey.sim.vel.x, vz: prey.sim.vel.z, latchLow: prey.latchLow, latchHigh: prey.latchHigh },
-    (fx, fy, fz, tx, ty, tz, kind) => {
+    (fx, fy, fz, tx, ty, tz, kind, ri) => {
       if (!prey.alive) return;
       from.set(fx, fy, fz);
       if (!bf.canSee(from, p)) return;
       dir.set(tx - fx, ty - fy, tz - fz).normalize();
       const drawn = kind !== SMALL || Math.random() < V.robotTracerShare;
       if (drawn) slot = slot >= 19 ? 2 : slot + 1;
-      const damage = kind === BIG ? V.robotBigShotDamage : kind === MID ? V.robotMidShotDamage : V.robotShotDamage;
+      const damage = sw.shotDamage(ri);
       const look = SHOT[kind];
       bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, damage,
         drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
