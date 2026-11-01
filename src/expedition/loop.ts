@@ -88,7 +88,7 @@ export const LOOP_TOPICS = [
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
-  { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
+  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Cargo", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
@@ -279,6 +279,9 @@ export class ExpeditionLoop {
     this.hud = new ExpeditionHud(this.radar.canvas);
     // Loot rolls by where it drops: the live depth (level, danger: rarity) and the salvage heat (rarity).
     this.loot = new FieldLoot(v, scene, field, bf.sfx.ctx, this.hud.lootSlot, this.exp, (x, z) => this.dropCtx(x, z));
+    // Cargo limit (Keith 2026-11-01): a full cargo says so, and a spot whose pay doesn't fit won't strip.
+    this.loot.onFull = (t) => this.hud.note(t, "#ffb347", 3);
+    this.sites.salvage.canStrip = (sp) => this.exp.state !== "out" || this.exp.fits({ kind: "scrap", amount: this.sites.salvage.pay(sp), label: "" });
     this.sound = new RadarSound(bf.sfx.ctx);
     this.dashes = player.dash.dashes;
     this.loot.watch(this.swarms.sw);
@@ -534,6 +537,7 @@ export class ExpeditionLoop {
     let prompt = this.padPrompt() || (exp.state === "out" && onSand ? this.quests.prompt : "");
     if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
+      else if (s.blocked) prompt = `Cargo full: ${s.blocked.label} pays ${s.pay(s.blocked)} scrap (${(s.pay(s.blocked) * exp.scrapWeight).toFixed(1)} t), ${Math.max(0, exp.room).toFixed(1)} t free · I: drop something`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
     this.hud.update(dt, {

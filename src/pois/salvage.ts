@@ -69,6 +69,10 @@ export class SalvageSim {
   /** A noise from stripping: where, and how far it carries (m). */
   onNoise: ((x: number, z: number, radius: number) => void) | null = null;
   onDone: ((s: SpotState) => void) | null = null;
+  /** May this spot be stripped now (the glue: does its pay fit the cargo); null: always. */
+  canStrip: ((s: SpotState) => boolean) | null = null;
+  /** The spot in reach that canStrip refused this step, else null. */
+  blocked: SpotState | null = null;
   onBanked: ((s: SectionState) => void) | null = null;
 
   constructor(public v: SalvageValues) {}
@@ -116,7 +120,10 @@ export class SalvageSim {
     // Keep stripping the same spot while it stays in reach; else the nearest.
     const keep = this.active && !this.active.done && Math.hypot(this.active.x - x, this.active.z - z) <= reach ? this.active : null;
     this.inReach = keep ?? this.nearest(x, z, reach);
-    this.active = holding ? this.inReach : null;
+    // The cargo has no room for what the spot pays (Keith 2026-11-01): it won't strip until something is dropped.
+    const ok = !this.inReach || !this.canStrip || this.canStrip(this.inReach);
+    this.blocked = ok ? null : this.inReach;
+    this.active = holding && ok ? this.inReach : null;
     const s = this.active, v = this.v;
     if (!s) {
       this.noiseT = 0;

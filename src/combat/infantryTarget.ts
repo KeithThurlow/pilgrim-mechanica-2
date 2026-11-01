@@ -5,19 +5,23 @@ import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { DOWN, type InfantrySwarm } from "./infantry";
-import { inBand, sheetCircle, type Sheet, type SheetHit } from "../game/sheet";
+import { inBand, sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
 
 export class InfantryTarget implements Hittable, Owner {
-  readonly name = "bandits";
-  readonly surface: HitSurface = "flesh";
+  readonly name: string;
+  readonly surface: HitSurface;
+  private pen: PenMaterial;
   alive = true;
   kills = 0;
   private last = -1;
   /** The register's candidates for each hit test (null until added to a register: every bandit is tested). */
   readonly cull = new SwarmCull();
 
-  constructor(private swarm: InfantrySwarm, readonly team: number) {}
+  /** look: what the swarm is made of (the humanoid robots, src/combat/droids.ts: metal that stops rounds like a cutter). */
+  constructor(private swarm: InfantrySwarm, readonly team: number, look: { name: string; surface: HitSurface; material: PenMaterial } = { name: "bandits", surface: "flesh", material: "flesh" }) {
+    this.name = look.name; this.surface = look.surface; this.pen = look.material;
+  }
 
   publish(reg: Register) { this.swarm.publish(reg, this.team); }
   attach(reg: Register, owner: number) { this.cull.attach(reg, owner); }
@@ -43,7 +47,7 @@ export class InfantryTarget implements Hittable, Owner {
       if (!c) continue;
       const x = s.ox + s.dx * c.along, z = s.oz + s.dz * c.along;
       if (!inBand(s, c.along, x, z, sw.py[i], sw.py[i] + H)) continue;
-      out.push({ target: this, key: i, along: c.along, chord: c.chord, material: "flesh", x, y: sw.py[i] + H * 0.6, z });
+      out.push({ target: this, key: i, along: c.along, chord: c.chord, material: this.pen, x, y: sw.py[i] + H * 0.6, z });
     }
   }
 
