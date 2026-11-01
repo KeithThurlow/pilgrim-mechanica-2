@@ -55,6 +55,13 @@ export const RIVAL_AI_DEFAULTS = {
   aiSwordPull: 0.95,
   aiSwordStrafe: 0.3,
   aiSwordFrom: 5,
+  aiAimSweep: 8,
+  aiSwordReaction: 0.25,
+  aiSwordLag: 0.15,
+  aiSwordTurn: 150,
+  aiSwordLead: 0.6,
+  aiSwordFace: 35,
+  aiSwordTrackFrom: 14,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -67,9 +74,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiReaction: 0.6, aiAimLag: 0.8, aiAimTurn: 30, aiAimLead: 0.1, aiAimError: 1.2, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiReaction: 0.35, aiAimLag: 0.3, aiAimTurn: 70, aiAimLead: 0.5, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 140, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -109,6 +116,13 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiSwordPull", label: "With a sword: range pulled in", min: 0, max: 1, step: 0.05, group: G, tip: "A rival carrying a sword fights this far of the way from its guns' range in to the sword's (Keith 2026-11-01: in your face); it also dashes in from its usual fight" },
   { key: "aiSwordStrafe", label: "With a sword: circling ×", min: 0, max: 1, step: 0.05, group: G, tip: "A sword rival circles this much of its usual strafe, coming straight on (and sprints in while far)" },
   { key: "aiSwordFrom", label: "With a sword: swings from (m past its reach)", min: 0, max: 15, step: 0.5, group: G, tip: "It starts a cut this far outside the blade's reach: the sword's lunge carries it in" },
+  { key: "aiAimSweep", label: "Aim sweep floor (m/s across)", min: 0, max: 40, step: 0.5, group: G, tip: "Keith 2026-11-01 (rivals lost you up close): the aim line also sweeps at least this fast across at your range, so a foe circling close is followed like one far off. The swing speed above rules at range" },
+  { key: "aiSwordReaction", label: "Up close with a sword: reaction (s)", min: 0, max: 1, step: 0.01, group: G, tip: "Keith 2026-11-01: a sword rival in blade range tracks you this tightly (its torso's own turn speed is the real limit), never freezing for a gun's snapshot" },
+  { key: "aiSwordLag", label: "Up close with a sword: aim lag (s)", min: 0, max: 1, step: 0.01, group: G },
+  { key: "aiSwordTurn", label: "Up close with a sword: swing speed (deg/s)", min: 20, max: 600, step: 5, group: G },
+  { key: "aiSwordLead", label: "Up close with a sword: lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of your motion over its reaction and lag it leads the cut and the lunge by" },
+  { key: "aiSwordFace", label: "Swings only when facing you within (deg)", min: 5, max: 180, step: 5, group: G, tip: "It holds the cut until its torso is turned this close to you, so swings land instead of cutting air behind it" },
+  { key: "aiSwordTrackFrom", label: "With a sword: tight tracking from (m past its swing range)", min: 0, max: 40, step: 1, group: G, tip: "Keith 2026-11-01 (rival 25, minigun and sword, hesitated on its minigun and lost you): a sword rival keeps its torso on you this far out from where it starts a cut, its gun firing along that aim" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -125,6 +139,8 @@ export interface WeaponState {
 
 export interface DuelSelf {
   x: number; z: number; vx: number; vz: number; heading: number;
+  /** The torso's yaw (radians), where the weapons face; absent (the headless duel), its aim is taken as its facing. */
+  torso?: number;
   /** Hull share 0..1. */
   health: number;
   dashCharges: number;
@@ -245,6 +261,8 @@ export class RivalAi {
   private acFireFrom = 0;
   /** The aim is frozen on the point the shot will go along (the lab draws the rail's line solid). */
   snapped = false;
+  /** A sword rival in blade range (Keith 2026-11-01): tight tracking, no snapshots, guns fire along its aim. */
+  melee = false;
   /** When each threat was first seen, and the decision made for it (dash or walk). */
   private seen = new Map<number, { t: number; notice: boolean; dash: boolean; delay: number; charged: number }>();
   /** Where it has noticed the foe to be (eased toward the truth over the reaction time). */
@@ -302,7 +320,7 @@ export class RivalAi {
     // What it has noticed of the foe: the position and motion from a reaction time ago (only fed while it can see you).
     if (acquired) {
       this.hist.push({ t: view.t, x: f.x, z: f.z, vx: f.vx, vz: f.vz });
-      const maxDelay = Math.max(v.aiReaction, v.aiRailReaction);
+      const maxDelay = Math.max(v.aiReaction, v.aiRailReaction, v.aiSwordReaction);
       while (this.hist.length > 1 && this.hist[1].t <= view.t - maxDelay) this.hist.shift();
       const h0 = this.noticed(view.t, v.aiReaction) ?? this.hist[0];
       if (this.noticed(view.t, v.aiReaction) || !Number.isFinite(this.fx)) { this.fx = h0.x; this.fz = h0.z; this.fvx = h0.vx; this.fvz = h0.vz; }
@@ -396,10 +414,21 @@ export class RivalAi {
     // Track, then snapshot (Keith 2026-10-31): a rail charging or an autocannon aiming tracks the foe tightly (lead and
     // swing close to the best), then aiSnapshot s before the shot the aim freezes on where it would hit and the shot goes
     // along that. Everything else keeps the lag-and-spread aim above.
-    const fast = acquired ? this.fastWeapon(s, dist) : null;
+    // Up close with a sword (Keith 2026-11-01: "as soon as it's firing a gun and then starts sweeping its sword, it just
+    // loses track"): a gun's snapshot froze the aim, and the slow swing speed couldn't follow a foe circling at 6 m. In
+    // blade range it tracks tightly instead (its torso's turn speed is the limit) and every gun fires along that aim.
+    const swordK = s.kit.find((k) => k.kind === "sword");
+    this.melee = acquired && !!swordK && dist < swordK.range + v.aiSwordFrom + v.aiSwordTrackFrom;
+    const fast = acquired && !this.melee ? this.fastWeapon(s, dist) : null;
     if (!fast) { this.frozen = null; this.acPhase = "aim"; this.acUntil = view.t + v.aiBurstAim; }
     this.snapped = false;
     let lag = v.aiAimLag, turn = v.aiAimTurn, ox = this.fx + this.fvx * v.aiAimLead * 0.5, oz = this.fz + this.fvz * v.aiAimLead * 0.5, perr = err;
+    if (this.melee) {
+      const e3 = this.noticed(view.t, v.aiSwordReaction) ?? this.hist[0];
+      const ahead = (v.aiSwordReaction + v.aiSwordLag) * v.aiSwordLead;
+      ox = e3.x + e3.vx * ahead; oz = e3.z + e3.vz * ahead;
+      lag = v.aiSwordLag; turn = v.aiSwordTurn;
+    }
     if (fast) {
       const e2 = this.noticed(view.t, v.aiRailReaction) ?? this.hist[0];
       const flight = fast.kind === "ac" ? dist / Math.max(1, fast.k.speed) : 0;
@@ -411,7 +440,8 @@ export class RivalAi {
     if (!this.aimInit) { this.ab = tb; this.ar = tr; this.aimInit = true; }
     const ka = 1 - Math.exp(-dt / Math.max(0.01, lag));
     let dB = tb - this.ab; dB -= Math.round(dB / (Math.PI * 2)) * Math.PI * 2;
-    const maxStep = turn * Math.PI / 180 * dt;
+    // The swing limit: its degrees a second, or the sweep floor across at the aim's range, whichever is faster.
+    const maxStep = Math.max(turn * Math.PI / 180, v.aiAimSweep / Math.max(2, this.ar)) * dt;
     this.ab += clamp(dB * ka, -maxStep, maxStep);
     this.ar += (tr - this.ar) * ka;
     let hx = s.x + Math.sin(this.ab) * this.ar + ex * perr, hz = s.z + Math.cos(this.ab) * this.ar + ez * perr;
@@ -599,7 +629,13 @@ export class RivalAi {
         else if (this.railSince < 0) { this.railSince = view.t; this.railWait = v.aiSnapJitter * this.r(); }
         cmd.trigger[side] = (w.ready || w.charge > 0) && (!full || view.t - this.railSince < this.railWait);
       } else if (k.kind === "sword") {
-        // Swing while the foe is in the blade's reach (the lunge closes the last metres).
+        // Swing while the foe is in the blade's reach (the lunge closes the last metres), once its torso has come round
+        // to face where it's aiming (Keith 2026-11-01: cuts into the air behind it read as the AI losing you).
+        const a = cmd.aim!, want = Math.atan2(a.x - s.x, a.z - s.z);
+        let off = (s.torso ?? this.ab) - want; off -= Math.round(off / (Math.PI * 2)) * Math.PI * 2;
+        cmd.trigger[side] = Math.abs(off) <= v.aiSwordFace * Math.PI / 180;
+      } else if (k.kind === "autocannon" && this.melee) {
+        // Up close it fires along its tracking aim, no snapshot.
         cmd.trigger[side] = true;
       } else if (k.kind === "autocannon") {
         // Bursts along the frozen line: the trigger goes down in time for the spin-up to end at the snapshot's end.
