@@ -21,6 +21,9 @@ import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { fireRobotBeam } from "../../src/game/robotBeam";
+import { DROID_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
+import { DroidFight } from "../../src/game/droidFight";
+import { loadBanditVat } from "../../src/combat/banditVat";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -29,6 +32,7 @@ const WAVE_DEFAULTS = {
   robotSpawnFrom: 100,
   robotTracerShare: 0.5,
   robotStompReach: 2.6,
+  robotDroids: 3,
 };
 const WAVE_PARAMS: Param[] = [
   { key: "robotSwarmSize", label: "Robots on the field", min: 0, max: 1000, step: 10, group: "Robot waves", tip: "Packs keep coming until this many are up" },
@@ -36,6 +40,7 @@ const WAVE_PARAMS: Param[] = [
   { key: "robotGroupEvery", label: "A pack every (s)", min: 0.2, max: 30, step: 0.1, group: "Robot waves" },
   { key: "robotSpawnFrom", label: "They come from (m)", min: 30, max: 250, step: 5, group: "Robot waves" },
   { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Medium ones' slugs always show (big ones lob charges)" },
+  { key: "robotDroids", label: "Humanoid robots per pack", min: 0, max: 20, step: 1, group: "Robot waves", tip: "Keith 2026-11-01: the middle tier on the human rig walks in with each pack (Humanoid robots topic; their own lab: labs/droids)" },
   { key: "robotStompReach", label: "Stomp reach (m)", min: 0, max: 6, step: 0.1, group: "Robot waves", tip: "A footfall knocks off clingers and crushes small ones this close" },
 ];
 
@@ -47,18 +52,23 @@ const params0 = new URLSearchParams(location.search);
 type DemoOut = { cmd: MoveCommand; aim: Aim | null; trigger: Trigger };
 let script: ((t: number, dt: number) => DemoOut) | null = null;
 let draw: RobotsDraw | null = null;
+let droidMesh: THREE.Object3D | null = null;
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS },
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_DEFAULTS },
   demo: (t, dt) => script?.(t, dt) ?? null,
-  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }],
-  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }],
+  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }],
+  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => (droidMesh ? [droidMesh] : []) }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
 });
 const { V, bf, player, field } = lab;
+// Humanoid robots (the middle tier on the human rig) walk in with each pack.
+const droids = new DroidFight(bf, lab.app.scene, V, field, await loadBanditVat().catch(() => null), lab.deaths);
+droidMesh = droids.draw.mesh;
+lab.onFrame((dt) => { droids.update(dt, lab.prey(player.sim.pos.x, player.sim.pos.z)); if (droids.count) lab.hud("droids", `humanoid robots ${droids.count} up · killed ${droids.target.kills}`); });
 // The mech's body tramples scrappers (Keith 2026-10-31, src/game/bodyContact.ts).
 const contact = new BodyContact(player, bf);
 const sw = new RobotSwarm(V, field);
@@ -145,6 +155,7 @@ function spawnPack() {
   const a = Math.random() * Math.PI * 2;
   const p = player.sim.pos;
   sw.spawn(Math.round(V.robotGroupSize), p.x + Math.sin(a) * V.robotSpawnFrom, p.z + Math.cos(a) * V.robotSpawnFrom, 5 + Math.sqrt(V.robotGroupSize));
+  if (V.robotDroids >= 1 && !params0.has("robotline") && !params0.has("beam")) droids.spawn(Math.round(V.robotDroids), p.x + Math.sin(a) * (V.robotSpawnFrom + 8), p.z + Math.cos(a) * (V.robotSpawnFrom + 8));
 }
 
 const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
