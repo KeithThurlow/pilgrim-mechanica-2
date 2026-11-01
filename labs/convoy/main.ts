@@ -430,7 +430,7 @@ function restart() {
   if (params.has("aboard") || params.has("deploy") || params.has("park")) carry.putAboard(sim);
   if (params.has("heli")) {
     carry.putAboard(sim, cranes[0], airlift.padLocal());
-    if (loop.exp.bank.scrap < 500) loop.exp.bank.scrap = 500;
+    if (!params.has("bank") && loop.exp.bank.scrap < 500) loop.exp.bank.scrap = 500;
   }
   if (params.has("deploy")) carry.deploy(sim, 1);
   if (params.has("park")) {
