@@ -61,9 +61,10 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
   prefer lane B if that shows.
 - De-lighting only takes out one broad light plus ambient; hard cast shadows in a concept image would survive.
 - Shoulder and wreck parts aren't put on the Rampart yet, only on the stand.
-- TripoSplat aligns each object to its own frame, not the camera's: lane A's front (+x) was confirmed on the cannon
-  only. The hull and launcher agree with lane B on their long axis, but one could still sit back to front; if so,
-  rerun it with `--front -x`.
+- TripoSplat aligns each object to its own frame, not the camera's, so lane A's front differs per part. 2026-11-01 check
+  (each lane A part's height + width profile along Z against lane B's): hull and cannon match at `--front +x` (0.99, 0.95);
+  the launcher matched only flipped, so shoulder-a-1 is re-prepped at `--front -x` (now 0.64, flipped -0.42). Test this
+  on every lane A rerun rather than assume +x.
 - Lane A's lod1 can come in under budget (the hull's 2054 of 2200; the shoulder full level 1754 of 2000): the splat
   meshing's resolution step is coarse at small budgets.
 - Lane B's time varies (54-154 s) with what else is on the GPU; ComfyUI's cache reruns only the decimator onward for

@@ -267,6 +267,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## Changes
 
 ### 2026-11-01 · Generated parts: first bake-off on Keith's PC (thread agent on `wip/partgen`)
+- 2026-11-01: lane A launcher (shoulder-a-1) was back to front; re-prepped from its splat at `--front -x`. Found by
+  comparing each lane A part's profile along Z with lane B's (hull and cannon already matched). Files
+  `public/models/gen/shoulder-a-1*`, `docs/handoff-partgen.md`. Thread agent.
 - Workflows `tools/partgen/workflows/{concept,lane-a,lane-b}.json`: FLUX.2 Klein 4B concepts, TripoSplat (lane A), Pixal3D kept at its 512 stage, remeshed and decimated per level, base colour only (lane B). Concept prompts name only the part (Klein runs at cfg 1 and ignores "no legs"). `--yaw deg[,snap]` in prep for the camera-aligned lane B. Axes: lane A `--front +x --up -y`, lane B `--front +z --up +y --yaw 45,snap`.
 - Parts: hull, hullweapon and shoulder in lanes A and B, seed 1, in `public/models/gen/`. Timings: concept ~9 s, lane A ~35 s, lane B 80-150 s for all three levels.
 - Checked: partgen-check (new: yaw snap); the cannon's barrel faces +Z and stands upright in both lanes in the parts lab.
