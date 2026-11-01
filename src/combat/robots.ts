@@ -173,7 +173,7 @@ export const ROBOT_DEFAULTS = {
   robotBeamOn: 1,
   robotBeamCharge: 2.2,
   robotBeamLock: 0.6,
-  robotBeamWidth: 1.6,
+  robotBeamWidth: 0.8,
   robotBeamLength: 70,
   robotBeamReach: 5,
   robotBeamDamage: 150,
@@ -191,6 +191,10 @@ export const ROBOT_DEFAULTS = {
   robotBeamFlash: 3500,
   robotBeamScorch: 3,
   robotBeamDig: 0.5,
+  robotBeamSweep: 1.8,
+  robotBeamDrag: 4.5,
+  robotBeamTick: 0.1,
+  robotBeamHeat: 1,
   // The terraform pulse (Keith 2026-11-01: "a beam attack that blasted the ground and then exploded out around them
   // and encouraged the player to get away"): a big one with the mech close stops, fires its blue beam straight down
   // into the sand under it, and the ground erupts outward: a crater, damage, and a shove away from it.
@@ -336,7 +340,11 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBeamWidth", label: "Width (m)", min: 0.2, max: 6, step: 0.05, group: GB },
   { key: "robotBeamLength", label: "Length (m)", min: 10, max: 150, step: 1, group: GB, tip: "It stops sooner where it meets the ground" },
   { key: "robotBeamReach", label: "Burns up to (m above ground)", min: 1, max: 15, step: 0.5, group: GB, tip: "The line comes down from the emitter; the part this low burns what's under it" },
-  { key: "robotBeamDamage", label: "Damage", min: 0, max: 600, step: 5, group: GB, tip: "To everything on the line (it goes through)" },
+  { key: "robotBeamDamage", label: "Damage", min: 0, max: 600, step: 5, group: GB, tip: "To everything on the line (it goes through), if held in it for the whole sweep" },
+  { key: "robotBeamSweep", label: "Fires for (s)", min: 0, max: 5, step: 0.05, group: GB, tip: "Keith 2026-11-01: the beam keeps firing this long, dragging across the sand toward the mech (0: one flash)" },
+  { key: "robotBeamDrag", label: "Drags toward you at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "How fast the beam's strike chases the mech while it fires; under walking pace (6), so walking away keeps clear and standing still is caught" },
+  { key: "robotBeamTick", label: "Burn tick (s)", min: 0.02, max: 0.5, step: 0.01, group: GB, tip: "How often a firing beam burns what's under it (the damage is shared over the sweep)" },
+  { key: "robotBeamHeat", label: "Heat", min: 0, max: 2, step: 0.05, group: GB, tip: "Carried on each beam event for whatever heats the sand (red-hot trails); the quads' lasers and rails send it too" },
   { key: "robotBeamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GB },
   { key: "robotBeamCooldown", label: "Cooldown (s)", min: 2, max: 40, step: 0.5, group: GB },
   { key: "robotBeamFirst", label: "First beam after (s)", min: 0, max: 20, step: 0.5, group: GB, tip: "Once stopped at range (spread per robot)" },
@@ -443,6 +451,12 @@ export interface RobotBeamEvent {
   robot: number; id: number;
   from: V3; start: V3; end: V3;
   width: number; damage: number; pierce: number;
+  /**
+   * Keith 2026-11-01: a big walker's beam keeps firing and drags toward the mech, so one beam is a run of events: tick 0
+   * the release, then one per robotBeamTick while it sweeps (damage is that tick's share). Weapon quads' lasers and
+   * rails are one tick. heat (robotBeamHeat) is the hook for heated sand along e.end's path.
+   */
+  tick: number; heat: number;
 }
 /**
  * A big one's terraform pulse going off (plain data, rule 12): the robot, the emitter, the point on the ground under it
@@ -1497,21 +1511,41 @@ export class RobotSwarm {
   }
 
   private bl: BeamLine = { ex: 0, ey: 0, ez: 0, sx: 0, sy: 0, sz: 0, x1: 0, y1: 0, z1: 0 };
-  /** A charge in progress: track, lock, fire, burn, cool down. */
+  /** How long robot i's beam keeps firing once released (s): a big one's sweep; a weapon quad's laser or rail is one flash. */
+  beamSweep(i: number): number { return this.kind[i] === MID ? 0 : Math.max(0, this.v.robotBeamSweep); }
+
+  /**
+   * A charge in progress: track, lock, fire, sweep, burn, cool down. While a big one's beam fires (robotBeamSweep) its
+   * strike drags across the ground toward the target at robotBeamDrag, burning a tick at a time.
+   */
   private chargeBeam(i: number, dt: number, t: RobotTarget) {
     const v = this.v, spec = this.beamSpec(i), C = spec.charge, was = this.beamT[i];
-    const now = (this.beamT[i] = was + dt);
+    const now = (this.beamT[i] = was + dt), D = this.beamSweep(i);
     if (now < C * v.robotBeamLock) { this.bax[i] = t.x; this.bay[i] = t.y; this.baz[i] = t.z; }
-    if (was < C && now >= C) {
-      const b = this.beamLine(i, this.bl);
-      this.beams++;
-      this.onBeam?.({
-        robot: i, id: this.uid[i],
-        from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
-        width: spec.width, damage: spec.damage, pierce: v.robotBeamPierce,
-      });
+    else if (was >= C && was < C + D && v.robotBeamDrag > 0) {
+      // The drag: the aim slides along the ground toward the target, keeping its height above the sand.
+      const dx = t.x - this.bax[i], dz = t.z - this.baz[i], L = Math.hypot(dx, dz), step = Math.min(L, v.robotBeamDrag * dt);
+      if (L > 1e-4) {
+        const up = this.bay[i] - this.ground.height(this.bax[i], this.baz[i]);
+        this.bax[i] += (dx / L) * step; this.baz[i] += (dz / L) * step;
+        this.bay[i] = this.ground.height(this.bax[i], this.baz[i]) + up;
+      }
     }
-    if (now >= C + v.robotBeamBurn) {
+    if (now >= C && was < C + D + 1e-6) {
+      // Ticks: the release at C, then every robotBeamTick until the sweep ends.
+      const T = Math.max(0.02, v.robotBeamTick), n = D > 0 ? Math.max(1, Math.round(D / T)) : 1;
+      const k0 = was < C ? -1 : Math.floor((was - C) / T), k1 = Math.min(n - 1, Math.floor((now - C) / T));
+      for (let k = Math.max(0, k0 + 1); k <= k1; k++) {
+        const b = this.beamLine(i, this.bl);
+        if (k === 0) this.beams++;
+        this.onBeam?.({
+          robot: i, id: this.uid[i],
+          from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
+          width: spec.width, damage: spec.damage / n, pierce: v.robotBeamPierce, tick: k, heat: v.robotBeamHeat,
+        });
+      }
+    }
+    if (now >= C + D + v.robotBeamBurn) {
       this.beamT[i] = -1;
       this.beamClock[i] = spec.cooldown * (0.85 + 0.3 * this.rand());
       // A beat before the next volley's tell.

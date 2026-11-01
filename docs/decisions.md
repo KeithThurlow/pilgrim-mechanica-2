@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Big walker beam narrower, charges up, fires about twice as long and drags toward the player so they must keep moving | Keith | Keith | `robotBeamSweep`, `robotBeamDrag`. |
+| 2026-11-01 | Beam sweep values (Claude, Keith to tune): 0.8 m wide, fires 1.8 s, drags at 4.5 m/s (under walking pace 6, so walking away keeps clear), damage shared over 0.1 s ticks; quads' lasers and rails stay one flash | Claude | Claude | Sliders in Robots: beam. |
 | 2026-11-01 | Items are scrapped for their scrap value only at the convoy (the stash), never in the field; scrap from wrecks stays the field resource | Keith | Keith | Two-click Scrap button in the inventory on the convoy. |
 | 2026-11-01 | Inventory sorts by DPS, weight, scrap value (and rarity, power, value per tonne, level); DPS shown is sustained, reload counted, with the burst on the card | Keith | Keith (sorts); Claude (extra sorts, showing both DPS figures) | `src/items/sort.ts`. |
 | 2026-11-01 | Item scrap value: 10 × 2.5^rarity tier × (1 + 0.08 per level over 1) × (1 + 0.1 per tonne), plus Protocols; shown and sorted only | Claude | Claude | Sliders in Item value. **Open for Keith:** should items be scrapped or sold for this at the convoy (or in the field, to save weight)? |

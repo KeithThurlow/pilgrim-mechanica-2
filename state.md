@@ -291,6 +291,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Big walker beam: narrower, sweeps and drags toward the mech (Keith; Claude)
+- Keith: narrower, charged up, then it fires about twice as long and drags toward the player so they keep moving. `robotBeamWidth` 0.8 (was 1.6); new `robotBeamSweep` 1.8 s (fires that long), `robotBeamDrag` 4.5 m/s (the strike slides toward the mech along the sand, under walking pace), `robotBeamTick` 0.1 s (damage shared over the ticks), `robotBeamHeat` 1 (group Robots: beam). One beam is now a run of `onBeam` events: `tick` 0 the release (full furrow, trench, crack, sound), later ticks burn the line for their share and scorch, dust and dent only where it strikes. `heat` on each event is the hook for the red-hot sand. Weapon quads' lasers and rails stay one flash.
+- Draw (`robotBeamDraw.ts`): a thin flickering thread of the beam from the lock that thickens to the release; the beam holds full and flickers through the sweep with a ring on the sand where it strikes, then fades.
+- Files: `robots.ts` (`chargeBeam`, `beamSweep`), `robotBeam.ts`, `robotBeamDraw.ts`, `strider.ts` (event fields), `tools/robot-danger-check.ts` (walk on: 0/12 burnt, step 6 m and stop: 12/12 caught at half damage, stand: 12/12 full), `tools/balance-sheet.ts`. Full `npm test` passes.
+
 ### 2026-11-01 · Striders: minigun hits fixed, and out in the expedition (Keith's feedback; Claude on `claude/project-thread-fv5cu6`)
 - Hits: the generic sheet fan (3 rays 0.35 m apart, ~4 m up) slipped between the strider's thin legs and under its disc: 0 of 13 minigun lines aimed within 1.5 m of the disc hit. `StriderTarget.sheet`/`pick` (disc footprint, else the nearest limb, as the robots): 13/13. Soft lock aims at the disc (body radius 1.5 m). `src/combat/striderTarget.ts`.
 - The lab glue split into `src/combat/striderField.ts` (shared) and `striderLab.ts`; `src/expedition/striderCamps.ts` brings striders with big camps, packs and raids (wired in `src/expedition/loop.ts`; camera shake from `labs/convoy/main.ts`).

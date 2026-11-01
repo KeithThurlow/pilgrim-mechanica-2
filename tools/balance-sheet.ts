@@ -385,7 +385,7 @@ const rows: [string, number][] = [
   ["3 cutters (half shoot, half cut)", 1.5 * (RB.robotMidShotDamage / RB.robotMidShotInterval) * 0.6 + 1.5 * RB.robotMidCutDamage / (RB.robotMidCutWindup + RB.robotMidLungeTime + RB.robotMidCutRecover)],
   ["1 excavator (lobs)", (RB.robotBigBurst * RB.robotBigShotDamage) / (RB.robotBigBurst * RB.robotBigRoundInterval + RB.robotBigPause) * 0.5],
   // The charging beam (2026-10-31): through armour by its pierce; half of them dodged (a side step after the lock).
-  ["1 excavator (beam, half dodged)", thru(RB.robotBeamDamage, arm, RB.robotBeamPierce) / (RB.robotBeamCooldown + RB.robotBeamCharge + RB.robotBeamBurn) * 0.5],
+  ["1 excavator (beam, half dodged)", thru(RB.robotBeamDamage, arm, RB.robotBeamPierce) / (RB.robotBeamCooldown + RB.robotBeamCharge + RB.robotBeamSweep + RB.robotBeamBurn) * 0.5],
   ["War band (5 tech, 2 truck, 1 six, 1 turret)", (5 * WB.techRate * WB.techDamage + 2 * WB.truckRate * WB.truckDamage + WB.sixRate * WB.sixDamage + WB.turretRate * WB.turretDamage) * 0.5],
   ["Bandit mech (2 miniguns, through armour)", mg(2, WB.banditMechDamage)],
   ["Rival mech (2 miniguns, through armour)", mg(2, 1)],

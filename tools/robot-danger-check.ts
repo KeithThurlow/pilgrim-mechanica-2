@@ -116,43 +116,55 @@ if (dps.biter < 1.5 * HK || dps.biter > 3 * HK) fail(`a scrapper biter deals ${f
 if (p.median < 10) fail(`a pack of 30 destroys a standing mech in ${f(p.median)} s (< 10): too quick to react`);
 if (p.median > 30) fail(`a pack of 30 takes ${f(p.median)} s to destroy a standing mech (> 30): not dangerous`);
 
-// The excavator's beam (Keith 2026-10-31): dodgeable. One excavator at range, volleys off, the beam alone. A mech that
-// side-steps at walking pace once the aim locks is never burnt; one that stands still is burnt by every beam.
-function beamDuel(dodge: boolean, seed: number) {
+// The big walker's beam (Keith 2026-10-31: dodgeable; 2026-11-01: it keeps firing and drags toward the mech, so the mech
+// has to keep moving). One walker at range, volleys off, the beam alone. A mech that walks across the line once the aim
+// locks and keeps walking is never burnt; one that steps aside and stops is caught by the drag; one that stands still
+// takes the whole beam.
+function beamDuel(mode: "walk" | "step" | "stand", seed: number) {
   const v = { ...V0, robotBigShare: 1, robotMidShare: 0, robotBigBurst: 1, robotBigShotDamage: 0, robotBeamFirst: 1, robotBeamCooldown: 5 };
   const sw = new RobotSwarm(v, field, seed);
   const t = { x: 300 + seed * 37, y: 0, z: -200, radius: HIT_R };
   t.y = field.height(t.x, t.z) + 3;
   sw.spawn(1, t.x + 26, t.z + 6, 0);
-  let hits = 0, fired = 0, side = 0;
+  let fired = 0, side = 0, moved = 0, dmg = 0, caught = 0, burnt = false, ticks = 0, dragged = 0;
+  let firstEnd: { x: number; z: number } | null = null;
   sw.onBeam = (e) => {
-    fired++;
+    if (e.tick === 0) { fired++; burnt = false; firstEnd = { x: e.end.x, z: e.end.z }; } else ticks++;
+    if (firstEnd) dragged = Math.max(dragged, Math.hypot(e.end.x - firstEnd.x, e.end.z - firstEnd.z));
     const b = { ex: e.from.x, ey: e.from.y, ez: e.from.z, sx: e.start.x, sy: e.start.y, sz: e.start.z, x1: e.end.x, y1: e.end.y, z1: e.end.z };
-    if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) hits++;
+    if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) { dmg += e.damage; if (!burnt) { burnt = true; caught++; } }
   };
   const lockAt = v.robotBeamCharge * v.robotBeamLock, WALK = 6;
   for (let s = 0; s < 40 * 120; s++) {
     sw.update(dt, t, () => {});
-    // Once locked, step sideways (across the line from the robot) until the burn is over.
+    // Once locked, step sideways (across the line from the robot): on until the beam is done, or 6 m and stop.
     const bt = sw.beamT[0];
-    if (dodge && bt >= lockAt) {
-      if (side === 0) side = (s & 1) ? 1 : -1;
-      const ax = t.x - sw.px[0], az = t.z - sw.pz[0], L = Math.hypot(ax, az) || 1;
-      t.x += (-az / L) * side * WALK * dt; t.z += (ax / L) * side * WALK * dt;
-      t.y = field.height(t.x, t.z) + 3;
+    if (mode !== "stand" && bt >= lockAt) {
+      if (side === 0) { side = (s & 1) ? 1 : -1; moved = 0; }
+      if (mode === "walk" || moved < 6) {
+        const ax = t.x - sw.px[0], az = t.z - sw.pz[0], L = Math.hypot(ax, az) || 1;
+        t.x += (-az / L) * side * WALK * dt; t.z += (ax / L) * side * WALK * dt; moved += WALK * dt;
+        t.y = field.height(t.x, t.z) + 3;
+      }
     } else side = 0;
   }
-  return { hits, fired };
+  return { caught, fired, dmg, ticks, dragged };
 }
-let dodged = 0, stood = 0, firedD = 0, firedS = 0;
-for (const seed of [1, 7, 11]) {
-  const a = beamDuel(true, seed), b = beamDuel(false, seed);
-  dodged += a.hits; firedD += a.fired; stood += b.hits; firedS += b.fired;
+const duel = { walk: { caught: 0, fired: 0, dmg: 0 }, step: { caught: 0, fired: 0, dmg: 0 }, stand: { caught: 0, fired: 0, dmg: 0 } };
+let dragMax = 0, tickN = 0;
+for (const seed of [1, 7, 11]) for (const m of ["walk", "step", "stand"] as const) {
+  const r = beamDuel(m, seed);
+  duel[m].caught += r.caught; duel[m].fired += r.fired; duel[m].dmg += r.dmg;
+  if (m === "walk") { dragMax = Math.max(dragMax, r.dragged); tickN = r.fired ? r.ticks / r.fired : 0; }
 }
-console.log(`beam: ${V0.robotBeamDamage} damage, ${V0.robotBeamCharge} s charge (aim locks at ${f(V0.robotBeamCharge * V0.robotBeamLock)} s), ${V0.robotBeamWidth} m wide, every ${V0.robotBeamCooldown} s; side-stepping after the lock: burnt by ${dodged} of ${firedD}; standing: ${stood} of ${firedS}`);
-if (firedD < 6 || firedS < 6) fail(`too few beams fired in the duel (${firedD}, ${firedS})`);
-if (dodged > 0) fail(`a mech side-stepping after the lock was still burnt ${dodged} times: not dodgeable`);
-if (stood < firedS) fail(`a standing mech was missed by ${firedS - stood} of ${firedS} beams`);
+const per = (m: keyof typeof duel) => duel[m].dmg / Math.max(1, duel[m].fired);
+console.log(`beam: ${V0.robotBeamDamage} damage over a ${V0.robotBeamSweep} s sweep (${f(tickN + 1)} ticks, dragged up to ${f(dragMax)} m at ${V0.robotBeamDrag} m/s), ${V0.robotBeamCharge} s charge (aim locks at ${f(V0.robotBeamCharge * V0.robotBeamLock)} s), ${V0.robotBeamWidth} m wide, every ${V0.robotBeamCooldown} s; walking on after the lock: burnt by ${duel.walk.caught} of ${duel.walk.fired}; stepping 6 m and stopping: ${duel.step.caught} of ${duel.step.fired} (${f(per("step"))} each); standing: ${duel.stand.caught} of ${duel.stand.fired} (${f(per("stand"))} each)`);
+for (const m of ["walk", "step", "stand"] as const) if (duel[m].fired < 6) fail(`too few beams fired in the duel (${m}: ${duel[m].fired})`);
+if (duel.walk.caught > 0) fail(`a mech walking on after the lock was still burnt ${duel.walk.caught} times: not dodgeable`);
+if (duel.stand.caught < duel.stand.fired) fail(`a standing mech was missed by ${duel.stand.fired - duel.stand.caught} of ${duel.stand.fired} beams`);
+if (per("stand") < V0.robotBeamDamage * 0.9) fail(`a standing mech took ${f(per("stand"))} of a beam's ${V0.robotBeamDamage}: the sweep should burn it all the way`);
+if (duel.step.caught < duel.step.fired * 0.8) fail(`stepping aside and stopping escaped ${duel.step.fired - duel.step.caught} of ${duel.step.fired} beams: the drag doesn't make you keep moving`);
+if (V0.robotBeamDrag >= 6) fail(`the beam drags at ${V0.robotBeamDrag} m/s: at or over walking pace, walking away can't keep clear`);
 const sideStep = (V0.robotBeamCharge * (1 - V0.robotBeamLock)) * 6;
 if (sideStep < V0.robotBeamWidth / 2 + HIT_R + 1) fail(`after the lock a walking mech covers only ${f(sideStep)} m: too little to clear the beam`);
 // The terraform pulse (Keith 2026-11-01): a big walker with the mech close beams the ground under it and blasts outward.
