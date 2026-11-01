@@ -6,8 +6,8 @@
 //   swarm's red eyes, drawn instanced).
 
 /** Lamp kinds: each has its own colour and sliders (nightLights.ts). */
-export const LAMP_HEAD = 0, LAMP_FLOOD = 1, LAMP_ROBOT = 2, LAMP_RUNNING = 3, LAMP_CAB = 4, LAMP_TAIL = 5, LAMP_MECH = 6;
-export const LAMP_KINDS = 7;
+export const LAMP_HEAD = 0, LAMP_FLOOD = 1, LAMP_ROBOT = 2, LAMP_RUNNING = 3, LAMP_CAB = 4, LAMP_TAIL = 5, LAMP_MECH = 6, LAMP_ROBOT_GLOW = 7;
+export const LAMP_KINDS = 8;
 export type LampKind = number;
 
 /** A lamp fixed on a body (local frame of the object carrying it). */
