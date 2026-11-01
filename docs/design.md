@@ -77,14 +77,14 @@ to add more:
 | # | Type | What it is | Rig and look | Weapons | State |
 | --- | --- | --- | --- | --- | --- |
 | 1 | **Crabs** (scuttlers) | The swarm: tiny, low, many. Leap on and latch. | Code geometry: a mite with a cylindrical abdomen, a small head, four thin legs (`robotShapes.ts`) | Bites; a share shoot | Built (the small robots) |
-| 2 | **Small quads** | A size up from the crabs and taller: a white body high on four armoured legs, a blue visor, an antenna ("small quad.png") | Code geometry on the walker legs | Light guns or a cutter | Next |
-| 3 | **Weapon quads** | Larger again, almost mech-like: a cylindrical turret body on four legs with weapons on its sides ("medium quad bots with weapons.png"). They drop their weapons as loot | Code geometry; the player's weapon models and effects reused | Miniguns, rocket launchers, lasers, rail guns | Next |
+| 2 | **Small quads** | A size up from the crabs and taller: a white body high on four armoured legs, a blue visor, an antenna ("small quad.png") | Code geometry on the walker legs (the medium walkers) | A slug gun or a blue cutter | Built (the mediums' `QUAD_SMALL`) |
+| 3 | **Weapon quads** | Larger again, almost mech-like: a cylindrical turret body on four legs with weapons on its sides ("medium quad bots with weapons.png"). They drop their weapons as loot | Code geometry; the player's weapon models and effects reused | Miniguns, rocket launchers, lasers, rail guns | Built (`QUAD_WEAPON`, `robotQuadShare` of the mediums; the laser drops a light rail until the player has a laser) |
 | 4 | **Mech quads** (striders) | Really large, wiry and mech-like | The mech rig (WalkerSim) scaled up | Big guns | In its own thread |
 | 5 | **Humanoids** | A few variants, the middle ground among the walkers | The human rig (the Vanguard bake) | Varied | In its own thread |
 | 6 | **Terraforming walkers** | The towers: thorax and abdomen 15 m up on four long legs (Keith's tall beam-walker ref) | Code geometry (`robotShapes.ts`) | Lobbed charges, a blue line beam that digs a trench, a blue pulse straight down that craters the ground and shoves you away | Built (the big robots) |
 
-The medium cutters (crab-like walkers with a blue cutter disc) sit between 1 and 2 today; they fold into the small
-quads or the weapon quads when those are built.
+Small quads and weapon quads are both the sim's medium walkers (`variant`), so they share its legs, hits by part and
+ragdolls; a new size is a variant with its own body, values and guns.
 
 ## Open questions
 

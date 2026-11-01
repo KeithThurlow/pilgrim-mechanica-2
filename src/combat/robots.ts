@@ -95,6 +95,37 @@ export const ROBOT_DEFAULTS = {
   robotMidCutDamage: 18,
   robotMidCutRecover: 0.7,
   robotMidSplash: 0.35,
+  // Weapon quads (Keith 2026-11-01, the roster's third size): a share of the medium walkers come bigger, a cylinder
+  // turret on four legs with a weapon on each side (minigun, rockets, laser or rail), always holding at range; they drop
+  // their weapon.
+  robotQuadShare: 0.3,
+  robotQuadSize: 3.6,
+  robotQuadHp: 700,
+  robotQuadSpeed: 3,
+  robotQuadNear: 14,
+  robotQuadFar: 26,
+  robotQuadWindup: 0.6,
+  robotQuadMiniBurst: 14,
+  robotQuadMiniRate: 0.07,
+  robotQuadMiniDamage: 3,
+  robotQuadMiniSpread: 2.5,
+  robotQuadMiniPause: 2.6,
+  robotQuadRockets: 4,
+  robotQuadRocketRate: 0.2,
+  robotQuadRocketDamage: 28,
+  robotQuadRocketRadius: 2.5,
+  robotQuadRocketArc: 3.5,
+  robotQuadRocketSpeed: 24,
+  robotQuadRocketPause: 4.5,
+  robotQuadLaserCharge: 1.1,
+  robotQuadLaserWidth: 0.7,
+  robotQuadLaserDamage: 45,
+  robotQuadLaserCooldown: 3.5,
+  robotQuadRailCharge: 1.6,
+  robotQuadRailWidth: 0.45,
+  robotQuadRailDamage: 95,
+  robotQuadRailCooldown: 5,
+  robotQuadDrop: 0.5,
   // Big excavators.
   robotBigShare: 0.035,
   robotBigSize: 4,
@@ -188,7 +219,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
-const GB = "Robots: beam", GP = "Robots: terraform pulse";
+const GB = "Robots: beam", GP = "Robots: terraform pulse", GQ = "Robots: weapon quads";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
@@ -319,6 +350,34 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBeamFlash", label: "Beam flash", min: 0, max: 15000, step: 100, group: GB },
   { key: "robotBeamScorch", label: "Scorch glows for (s)", min: 0, max: 10, step: 0.1, group: GB },
   { key: "robotBeamDig", label: "Digs a trench (× width)", min: 0, max: 2, step: 0.05, group: GB, tip: "Craters down the beam's line, this share of its width each (0: no dig)" },
+  { key: "robotQuadShare", label: "Share of mediums", min: 0, max: 1, step: 0.01, group: GQ, tip: "Medium walkers that come as weapon quads (the rest are small quads)" },
+  { key: "robotQuadSize", label: "Size (m)", min: 1, max: 8, step: 0.05, group: GQ, tip: "Height grows with it" },
+  { key: "robotQuadHp", label: "Health", min: 50, max: 4000, step: 10, group: GQ },
+  { key: "robotQuadSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: GQ },
+  { key: "robotQuadNear", label: "Hold from (m)", min: 3, max: 60, step: 0.5, group: GQ },
+  { key: "robotQuadFar", label: "Hold up to (m)", min: 4, max: 80, step: 0.5, group: GQ },
+  { key: "robotQuadWindup", label: "Tell before firing (s)", min: 0, max: 3, step: 0.05, group: GQ, tip: "Eyes flash and it braces before a burst or volley" },
+  { key: "robotQuadMiniBurst", label: "Minigun: rounds a burst", min: 1, max: 60, step: 1, group: GQ },
+  { key: "robotQuadMiniRate", label: "Minigun: round every (s)", min: 0.02, max: 0.5, step: 0.005, group: GQ },
+  { key: "robotQuadMiniDamage", label: "Minigun: damage a round", min: 0, max: 40, step: 0.5, group: GQ },
+  { key: "robotQuadMiniSpread", label: "Minigun: spread (°)", min: 0, max: 15, step: 0.1, group: GQ },
+  { key: "robotQuadMiniPause", label: "Minigun: pause (s)", min: 0.2, max: 10, step: 0.1, group: GQ },
+  { key: "robotQuadRockets", label: "Rockets: a volley", min: 1, max: 12, step: 1, group: GQ },
+  { key: "robotQuadRocketRate", label: "Rockets: one every (s)", min: 0.05, max: 1, step: 0.01, group: GQ },
+  { key: "robotQuadRocketDamage", label: "Rockets: damage", min: 0, max: 200, step: 1, group: GQ },
+  { key: "robotQuadRocketRadius", label: "Rockets: blast (m)", min: 0.5, max: 8, step: 0.1, group: GQ },
+  { key: "robotQuadRocketArc", label: "Rockets: arc (m)", min: 0, max: 15, step: 0.1, group: GQ },
+  { key: "robotQuadRocketSpeed", label: "Rockets: speed (m/s)", min: 5, max: 60, step: 0.5, group: GQ },
+  { key: "robotQuadRocketPause", label: "Rockets: pause (s)", min: 0.5, max: 15, step: 0.1, group: GQ },
+  { key: "robotQuadLaserCharge", label: "Laser: charge (s)", min: 0.2, max: 4, step: 0.05, group: GQ, tip: "Aim follows for the beam's lock share, then holds" },
+  { key: "robotQuadLaserWidth", label: "Laser: width (m)", min: 0.1, max: 3, step: 0.05, group: GQ },
+  { key: "robotQuadLaserDamage", label: "Laser: damage", min: 0, max: 300, step: 1, group: GQ },
+  { key: "robotQuadLaserCooldown", label: "Laser: cooldown (s)", min: 0.5, max: 20, step: 0.1, group: GQ },
+  { key: "robotQuadRailCharge", label: "Rail: charge (s)", min: 0.2, max: 5, step: 0.05, group: GQ },
+  { key: "robotQuadRailWidth", label: "Rail: width (m)", min: 0.1, max: 3, step: 0.05, group: GQ },
+  { key: "robotQuadRailDamage", label: "Rail: damage", min: 0, max: 400, step: 1, group: GQ },
+  { key: "robotQuadRailCooldown", label: "Rail: cooldown (s)", min: 0.5, max: 20, step: 0.1, group: GQ },
+  { key: "robotQuadDrop", label: "Drops its weapon (chance)", min: 0, max: 1, step: 0.01, group: GQ, tip: "Out on an expedition, a killed weapon quad drops its weapon as loot (as well as the usual roll)" },
   { key: "robotPulseOn", label: "Pulse on", min: 0, max: 1, step: 1, group: GP, tip: "Big ones with the mech close fire straight down and blast the ground outward" },
   { key: "robotPulseRange", label: "Pulses when mech within (m)", min: 2, max: 40, step: 0.5, group: GP, tip: "Distance on the ground from its body" },
   { key: "robotPulseCharge", label: "Charge time (s)", min: 0.3, max: 5, step: 0.05, group: GP, tip: "The beam into the sand and the ring on it, before the blast" },
@@ -401,7 +460,15 @@ export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: 
 export const isAirborne = (s: number) => s === LEAP || s === LATCHED || s === FLUNG;
 
 /** A group's mix: shares of medium and big ones, and at least bigMin big ones (deep camps and raids). */
-export interface RobotShares { mid: number; big: number; bigMin?: number }
+export interface RobotShares { mid: number; big: number; bigMin?: number; quad?: number; weapon?: number }
+
+/** Medium walker variants: the small quad (the cutter and slug shooter) and the weapon quad. */
+export const QUAD_SMALL = 0, QUAD_WEAPON = 1;
+/** A weapon quad's weapon. */
+export const Q_MINI = 0, Q_ROCKETS = 1, Q_LASER = 2, Q_RAIL = 3;
+export const QUAD_WEAPONS = ["minigun", "rockets", "laser", "rail"] as const;
+/** The item base a weapon quad drops for its weapon (the laser has no player weapon yet: it drops the light rail). */
+export const QUAD_DROP = ["mg-light", "rpg-light", "rail-light", "rail-light"] as const;
 
 export class RobotSwarm {
   readonly px = new Float32Array(ROBOT_MAX); readonly py = new Float32Array(ROBOT_MAX); readonly pz = new Float32Array(ROBOT_MAX);
@@ -428,6 +495,9 @@ export class RobotSwarm {
   readonly slope = new Float32Array(ROBOT_MAX);
   /** Small ones that shoot instead of leaping; medium ones that hold at range and shoot instead of closing to saw. */
   readonly shooter = new Uint8Array(ROBOT_MAX);
+  /** Medium walkers: QUAD_SMALL or QUAD_WEAPON; weapon quads' weapon (Q_*). */
+  readonly variant = new Uint8Array(ROBOT_MAX);
+  readonly weapon = new Uint8Array(ROBOT_MAX);
   /** Medium ones: time until the saw can attack again. */
   readonly cutClock = new Float32Array(ROBOT_MAX);
   /** 1 while an attack is telegraphed (a medium one's shot or saw wind-up, a big one's volley): lamps red, rearing. */
@@ -605,14 +675,18 @@ export class RobotSwarm {
       this.heading[i] = Math.atan2(cx - x, cz - z) + Math.PI + (this.rand() - 0.5);
       this.kind[i] = kind;
       const jit = (j: number) => 1 + (this.rand() * 2 - 1) * j;
-      this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
+      // Weapon quads: a share of the mediums, with a weapon (shares?.quad and shares?.weapon force them).
+      const qs = shares?.quad ?? v.robotQuadShare, quad = mid && qs > 0 && (qs >= 1 || this.rand() < qs);
+      this.variant[i] = quad ? QUAD_WEAPON : QUAD_SMALL;
+      this.weapon[i] = quad ? (shares?.weapon ?? Math.min(3, Math.floor(this.rand() * 4))) : 0;
+      this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : quad ? v.robotQuadSize * jit(v.robotMidSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
       this.size[i] *= sizeK;
-      this.hp[i] = (big ? v.robotBigHp : mid ? v.robotMidHp : v.robotHp) * power;
+      this.hp[i] = (big ? v.robotBigHp : quad ? v.robotQuadHp : mid ? v.robotMidHp : v.robotHp) * power;
       this.maxHp[i] = this.hp[i]; this.power[i] = power;
       this.state[i] = RUN; this.stateTime[i] = 0;
       this.gait[i] = this.rand() * Math.PI * 2;
       this.tumble[i] = 0; this.spin[i] = 0; this.fallYaw[i] = 0; this.slope[i] = 0;
-      this.shooter[i] = big ? 0 : mid ? (this.rand() >= v.robotMidCutterShare ? 1 : 0) : this.rand() < v.robotShooterShare ? 1 : 0;
+      this.shooter[i] = big ? 0 : quad ? 1 : mid ? (this.rand() >= v.robotMidCutterShare ? 1 : 0) : this.rand() < v.robotShooterShare ? 1 : 0;
       this.slot[i] = -1;
       this.fireClock[i] = 0; this.burstLeft[i] = 0; this.shake[i] = 0; this.cutClock[i] = 0;
       this.beamT[i] = -1; this.pulseT[i] = -1;
@@ -620,7 +694,7 @@ export class RobotSwarm {
       this.gripK[i] = 1 + (this.rand() * 2 - 1) * v.robotGrip;
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
       // First beam spread per robot by its look seed (no extra draws: the seeded sequence stays as it was).
-      this.beamClock[i] = v.robotBeamFirst * (0.6 + 0.8 * this.seed[i]);
+      this.beamClock[i] = (quad ? 1.5 : v.robotBeamFirst) * (0.6 + 0.8 * this.seed[i]);
       this.pulseClock[i] = v.robotPulseFirst * (0.6 + 0.8 * this.seed[i]);
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
@@ -900,7 +974,7 @@ export class RobotSwarm {
           }
         }
         if (stateTime[i] >= w + L + v.robotMidCutRecover) { st = RUN; this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
-      } else if (mid && this.cutClock[i] <= 0 && dist - target.radius < v.robotMidCutRange) {
+      } else if (mid && this.variant[i] === QUAD_SMALL && this.cutClock[i] <= 0 && dist - target.radius < v.robotMidCutRange) {
         st = CUT;
       } else if (big && (this.beamT[i] >= 0 || this.pulseT[i] >= 0)) {
         st = FIRE; // a charge runs to its end
@@ -911,9 +985,12 @@ export class RobotSwarm {
         const stop = v.robotBigNear + this.range[i] * Math.max(0, v.robotBigFar - v.robotBigNear);
         if (st === RUN && dist <= stop) st = FIRE;
         else if (st === FIRE && dist > stop + v.robotBigSlack) st = RUN;
+      } else if (mid && this.beamT[i] >= 0) {
+        st = FIRE; // a weapon quad's laser or rail charge runs to its end
       } else if (mid) {
-        // Holders stop at mid range and fire; cutters walk right in.
-        const stop = v.robotMidNear + this.range[i] * Math.max(0, v.robotMidFar - v.robotMidNear);
+        // Holders stop at mid range and fire; cutters walk right in. Weapon quads hold further out.
+        const q = this.variant[i] === QUAD_WEAPON, near = q ? v.robotQuadNear : v.robotMidNear, far = q ? v.robotQuadFar : v.robotMidFar;
+        const stop = near + this.range[i] * Math.max(0, far - near);
         if (!this.shooter[i]) st = RUN;
         else if (st === RUN && dist <= stop) st = FIRE;
         else if (st === FIRE && dist > stop + v.robotMidSlack) st = RUN;
@@ -935,7 +1012,7 @@ export class RobotSwarm {
       this.tell[i] = st === CUT && stateTime[i] < v.robotMidCutWindup + v.robotMidLungeTime ? 1 : 0;
       const hill = Math.max(0.3, Math.min(1 + v.robotDownhill, 1 - this.slope[i] * v.robotUphill));
       if (st === RUN) {
-        const spd = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * this.speedK[i] * hill;
+        const spd = (big ? v.robotBigSpeed : mid ? this.midSpeed(i) : v.robotRunSpeed) * this.speedK[i] * hill;
         if (!walker && !own && !this.shooter[i] && full && dist < keep + v.robotWaitDist * 1.4 + 2) {
           // Every spot is taken: circle the mech, waiting for one to come free.
           // A band, not a ring, so the waiting pack doesn't pile up on one circle.
@@ -955,10 +1032,10 @@ export class RobotSwarm {
           wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
         }
       } else if (st === FIRE) {
-        face = big && this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
-        const near = big ? v.robotBigNear : mid ? v.robotMidNear : v.robotShootNear;
+        face = this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
+        const near = big ? v.robotBigNear : mid ? (this.variant[i] === QUAD_WEAPON ? v.robotQuadNear : v.robotMidNear) : v.robotShootNear;
         if (big && this.pulseT[i] >= 0) { /* planted for the pulse */ }
-        else if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
+        else if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? this.midSpeed(i) : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
       } else if (st === CUT) {
         // It tracks the mech through the wind-up, then lunges where the mech was: a dash in time takes you clear.
         const t = stateTime[i], w = v.robotMidCutWindup;
@@ -1067,6 +1144,8 @@ export class RobotSwarm {
             this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotBigRoundInterval : v.robotBigPause * (0.7 + 0.6 * this.rand());
           }
           this.tell[i] = this.burstLeft[i] > 0 || this.fireClock[i] <= v.robotBigWindup ? 1 : 0;
+        } else if (mid && this.variant[i] === QUAD_WEAPON) {
+          this.quadGuns(i, dt, target, dh, onShot);
         } else if (mid) {
           // The tell: the aim fixes on where the mech is, lamps flash and it rears back; then the slug goes there.
           if (this.burstLeft[i] === 0 && this.fireClock[i] <= v.robotMidShotWindup) {
@@ -1272,19 +1351,92 @@ export class RobotSwarm {
    * (robotBigLobLead) at its walk velocity, scattered a little; flight time from the distance and the charge's speed.
    */
   private lob(i: number, t: RobotTarget) {
-    const v = this.v, h = this.heading[i], S = this.size[i];
-    const fx = this.px[i] + Math.sin(h) * S * 0.75, fz = this.pz[i] + Math.cos(h) * S * 0.75, fy = this.hubY[i] - S * BIG_BODY_H * 0.3;
+    const v = this.v, h = this.heading[i], S = this.size[i], quad = this.kind[i] === MID;
+    // A weapon quad's rockets leave its left pod, the side alternating with each.
+    const side = quad ? (this.burstLeft[i] & 1 ? 1 : -1) * S * 0.36 : 0, fwd = quad ? S * 0.2 : S * 0.75;
+    const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
+    const fy = quad ? this.hubY[i] + S * 0.1 : this.hubY[i] - S * BIG_BODY_H * 0.3;
     const d0 = Math.hypot(t.x - fx, t.z - fz);
-    const flight = Math.max(0.6, d0 / Math.max(1, v.robotBigLobSpeed));
+    const flight = Math.max(0.6, d0 / Math.max(1, quad ? v.robotQuadRocketSpeed : v.robotBigLobSpeed));
     const lead = v.robotBigLobLead * flight, r = v.robotBigLobScatter * Math.sqrt(this.rand()), a = this.rand() * Math.PI * 2;
     const x = t.x + this.tvx * lead + Math.cos(a) * r, z = t.z + this.tvz * lead + Math.sin(a) * r;
     this.lobs++; this.shots++;
     this.onLob?.(i, fx, fy, fz, x, z, flight);
   }
 
-  /** The beam's emitter: the lens under a big one's thorax, at its front (world; the drawer glows the same spot). */
+  /** A medium walker's walk speed (weapon quads have their own). */
+  private midSpeed(i: number) { return this.variant[i] === QUAD_WEAPON ? this.v.robotQuadSpeed : this.v.robotMidSpeed; }
+
+  /** Damage of robot i's hitscan round (for whoever resolves onShot). */
+  shotDamage(i: number): number {
+    const v = this.v, k = this.kind[i];
+    const d = k === BIG ? v.robotBigShotDamage : k === MID ? (this.variant[i] === QUAD_WEAPON ? v.robotQuadMiniDamage : v.robotMidShotDamage) : v.robotShotDamage;
+    return d * this.power[i];
+  }
+
+  /** Robot i's lobbed shell (for whoever resolves onLob): arc (m), blast radius (m), damage. */
+  lobOf(i: number): { arc: number; radius: number; damage: number } {
+    const v = this.v, q = this.kind[i] === MID, o = this.lobOut;
+    o.arc = q ? v.robotQuadRocketArc : v.robotBigLobArc; o.radius = q ? v.robotQuadRocketRadius : v.robotBigLobRadius;
+    o.damage = (q ? v.robotQuadRocketDamage : v.robotBigShotDamage) * this.power[i];
+    return o;
+  }
+  private lobOut = { arc: 0, radius: 0, damage: 0 };
+
+  /** Robot i's beam: charge (s), width (m), damage, cooldown (s). A big one's or a weapon quad's laser or rail. */
+  beamSpec(i: number): { charge: number; width: number; damage: number; cooldown: number } {
+    const v = this.v, o = this.beamOut;
+    if (this.kind[i] === MID) {
+      const rail = this.weapon[i] === Q_RAIL;
+      o.charge = rail ? v.robotQuadRailCharge : v.robotQuadLaserCharge; o.width = rail ? v.robotQuadRailWidth : v.robotQuadLaserWidth;
+      o.damage = (rail ? v.robotQuadRailDamage : v.robotQuadLaserDamage) * this.power[i]; o.cooldown = rail ? v.robotQuadRailCooldown : v.robotQuadLaserCooldown;
+    } else {
+      o.charge = v.robotBeamCharge; o.width = v.robotBeamWidth; o.damage = v.robotBeamDamage * this.power[i]; o.cooldown = v.robotBeamCooldown;
+    }
+    return o;
+  }
+  private beamOut = { charge: 0, width: 0, damage: 0, cooldown: 0 };
+
+  /**
+   * A weapon quad's guns: a tell (eyes flash, it braces), then a minigun burst from both pods or a rocket volley; or a
+   * laser or rail charge down the beam path (the aim follows, locks, fires).
+   */
+  private quadGuns(i: number, dt: number, target: RobotTarget, dh: number, onShot: RobotShotFn) {
+    const v = this.v, w = this.weapon[i], S = this.size[i];
+    if (w === Q_LASER || w === Q_RAIL) {
+      if (this.beamT[i] >= 0) { this.chargeBeam(i, dt, target); this.tell[i] = 0; return; }
+      if ((this.beamClock[i] -= dt) <= 0 && dh < 20 * DEG) {
+        this.beamT[i] = 0; this.beamCharges++;
+        this.bax[i] = target.x; this.bay[i] = target.y; this.baz[i] = target.z;
+      }
+      this.tell[i] = 0;
+      return;
+    }
+    if (this.fireClock[i] <= 0 && dh < 15 * DEG) {
+      if (w === Q_MINI) {
+        if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotQuadMiniBurst));
+        const side = (this.burstLeft[i] & 1 ? 1 : -1) * S * 0.4;
+        this.fire(i, target, v.robotQuadMiniSpread * DEG, this.hubY[i] + S * 0.06, S * 0.5, MID, onShot, side);
+        this.burstLeft[i]--;
+        this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotQuadMiniRate : v.robotQuadMiniPause * (0.7 + 0.6 * this.rand());
+      } else {
+        if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotQuadRockets));
+        this.lob(i, target);
+        this.burstLeft[i]--;
+        this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotQuadRocketRate : v.robotQuadRocketPause * (0.7 + 0.6 * this.rand());
+      }
+    }
+    this.tell[i] = this.burstLeft[i] > 0 || this.fireClock[i] <= v.robotQuadWindup ? 1 : 0;
+  }
+
+  /** The beam's emitter: the lens under a big one's thorax, at its front; a weapon quad's laser or rail muzzle (world; the drawer glows the same spot). */
   beamFrom(i: number, out: V3): V3 {
     const h = this.heading[i], S = this.size[i];
+    if (this.kind[i] === MID) {
+      const side = -S * 0.4, fwd = S * 0.62;
+      out.x = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side; out.z = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side; out.y = this.hubY[i] + S * 0.06;
+      return out;
+    }
     out.x = this.px[i] + Math.sin(h) * S * 0.2; out.z = this.pz[i] + Math.cos(h) * S * 0.2; out.y = this.hubY[i] - S * (BIG_BODY_H * 0.62 + 0.05);
     return out;
   }
@@ -1346,7 +1498,7 @@ export class RobotSwarm {
   private bl: BeamLine = { ex: 0, ey: 0, ez: 0, sx: 0, sy: 0, sz: 0, x1: 0, y1: 0, z1: 0 };
   /** A charge in progress: track, lock, fire, burn, cool down. */
   private chargeBeam(i: number, dt: number, t: RobotTarget) {
-    const v = this.v, C = v.robotBeamCharge, was = this.beamT[i];
+    const v = this.v, spec = this.beamSpec(i), C = spec.charge, was = this.beamT[i];
     const now = (this.beamT[i] = was + dt);
     if (now < C * v.robotBeamLock) { this.bax[i] = t.x; this.bay[i] = t.y; this.baz[i] = t.z; }
     if (was < C && now >= C) {
@@ -1355,21 +1507,21 @@ export class RobotSwarm {
       this.onBeam?.({
         robot: i, id: this.uid[i],
         from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
-        width: v.robotBeamWidth, damage: v.robotBeamDamage * this.power[i], pierce: v.robotBeamPierce,
+        width: spec.width, damage: spec.damage, pierce: v.robotBeamPierce,
       });
     }
     if (now >= C + v.robotBeamBurn) {
       this.beamT[i] = -1;
-      this.beamClock[i] = v.robotBeamCooldown * (0.85 + 0.3 * this.rand());
+      this.beamClock[i] = spec.cooldown * (0.85 + 0.3 * this.rand());
       // A beat before the next volley's tell.
       this.fireClock[i] = Math.max(this.fireClock[i], v.robotBigWindup + 0.5);
     }
   }
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */
-  private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, kind: number, onShot: RobotShotFn) {
+  private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, kind: number, onShot: RobotShotFn, side = 0) {
     const h = this.heading[i];
-    const fx = this.px[i] + Math.sin(h) * fwd, fz = this.pz[i] + Math.cos(h) * fwd;
+    const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
     let dx = t.x - fx, dy = t.y - fy, dz = t.z - fz;
     const L = Math.hypot(dx, dy, dz) || 1;
     dx /= L; dy /= L; dz /= L;

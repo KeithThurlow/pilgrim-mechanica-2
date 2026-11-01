@@ -112,14 +112,14 @@ export class DropField {
   reset() { this.drops.length = 0; this.rolled.clear(); this.events.length = 0; }
 
   /** Roll a drop for a stable key at (x, z) with this chance; null if nothing drops. lean: extra rarity lean. */
-  roll(key: string, chance: number, x: number, z: number, at: DropContext, force?: { rarity?: Rarity; level?: number }, lean = 0): Drop | null {
+  roll(key: string, chance: number, x: number, z: number, at: DropContext, force?: { rarity?: Rarity; level?: number; base?: string }, lean = 0): Drop | null {
     if (this.rolled.has(key)) return null;
     this.rolled.add(key);
     const seed = hashKey(this.seed, key), r = rng(seed);
     if (r() >= chance) return null;
     const rarity = force?.rarity ?? rollRarity(r, this.v, at.danger, at.heat, lean);
     const level = force?.level ?? this.levelAt(r, at.depth);
-    const item = !force && r() < this.v.protocolShare ? rollProtocol(seed) : rollItem(seed, this.v, { rarity, level });
+    const item = !force && r() < this.v.protocolShare ? rollProtocol(seed) : rollItem(seed, this.v, { rarity, level, base: force?.base });
     // Beside the spot rather than inside the wreck.
     const a = r() * Math.PI * 2, d = 2 + r() * 2.5;
     const drop: Drop = { id: `drop:${key}`, x: x + Math.sin(a) * d, z: z + Math.cos(a) * d, item };

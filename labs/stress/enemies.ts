@@ -60,7 +60,7 @@ export class StressRobots {
     };
     sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
     const lobFrom = new THREE.Vector3();
-    sw.onLob = (_i, fx, fy, fz, x, z, flight) => bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
+    sw.onLob = (i, fx, fy, fz, x, z, flight) => { const l = sw.lobOf(i); bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage); };
     sw.onBeam = (e) => fireRobotBeam(bf, e, V.robotBeamReach);
     sw.onPulse = (e) => fireRobotPulse(bf, e);
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
@@ -79,13 +79,13 @@ export class StressRobots {
     const { V, bf, player } = this.lab, sw = this.sw, p = player.sim.pelvis;
     const SHOT: Record<number, { flash: number; hit: number }> = { [SMALL]: { flash: 0.35, hit: 0.3 }, [MID]: { flash: 0.7, hit: 0.6 }, [BIG]: { flash: 1.2, hit: 1 } };
     sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: 2, vx: player.sim.vel.x, vz: player.sim.vel.z },
-      (fx, fy, fz, tx, ty, tz, kind) => {
+      (fx, fy, fz, tx, ty, tz, kind, ri) => {
         this.from.set(fx, fy, fz);
         if (!bf.canSee(this.from, p)) return;
         this.dir.set(tx - fx, ty - fy, tz - fz).normalize();
         const drawn = kind !== SMALL || Math.random() < V.stressTracerShare;
         if (drawn) this.slot = this.slot >= 19 ? 2 : this.slot + 1;
-        const damage = kind === BIG ? V.robotBigShotDamage : kind === MID ? V.robotMidShotDamage : V.robotShotDamage;
+        const damage = sw.shotDamage(ri);
         bf.fire(this.slot, 3, this.from, this.dir, this.from.distanceTo(p) + 8, damage,
           drawn ? { flashScale: SHOT[kind].flash, voice: "other", hitScale: SHOT[kind].hit } : { tracer: false, voice: "none" });
       },

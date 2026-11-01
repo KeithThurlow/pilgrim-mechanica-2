@@ -12,7 +12,7 @@ import { S_THIGH, S_SHIN, WALK_LEGS, type V3 } from "../src/combat/robotLegs";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
-const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS }, field, 7);
+const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, field, 7);
 const target = { x: 0, y: field.height(0, 0) + 3, z: 0, radius: 2 };
 const dt = 1 / 120;
 let failed = false;
@@ -147,7 +147,7 @@ if (per > 2) fail(`update too slow: ${per.toFixed(3)} ms per step > 2`);
 
 // Kills: rounds of 9 at a standing small, medium and big one, from 12 m off, aimed at the body centre.
 function roundsToKill(kind: number): number {
-  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: kind === BIG ? 1 : 0, robotMidShare: kind === MID ? 1 : 0 }, field, 5);
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: kind === BIG ? 1 : 0, robotMidShare: kind === MID ? 1 : 0 }, field, 5);
   sw.spawn(1, 30, 30, 0);
   if (sw.kind[0] !== kind) { fail(`spawned a ${sw.kind[0]} asking for a ${kind}`); return -1; }
   const far = { x: 400, y: 0, z: 400, radius: 2 };
@@ -171,7 +171,7 @@ function roundsToKill(kind: number): number {
 }
 // A big one's arm leg: a ray across the stick low down, and one through the bucket, hit it as a leg.
 {
-  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 1 }, field, 5);
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1 }, field, 5);
   sw.spawn(1, 30, 30, 0);
   sw.update(dt, { x: 400, y: 0, z: 400, radius: 2 }, () => {});
   sw.legPose(0, 0, hip, knee, tip, foot);
@@ -205,7 +205,7 @@ function roundsToKill(kind: number): number {
 }
 // A medium one's legs stop rounds too (a leg share), and a ray low through a shin's end is its foot.
 {
-  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 1 }, field, 5);
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 0, robotMidShare: 1 }, field, 5);
   sw.spawn(1, 30, 30, 0);
   sw.update(dt, { x: 400, y: 0, z: 400, radius: 2 }, () => {});
   sw.legPose(0, 0, hip, knee, tip, foot);
@@ -231,7 +231,7 @@ else {
 // the mech was when the wind-up ended, so a dash (a jump of 9 m here) during either takes the mech clear.
 {
   const tellMid = (cutter: boolean) => {
-    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 1, robotMidCutterShare: cutter ? 1 : 0 }, field, 21);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 0, robotMidShare: 1, robotMidCutterShare: cutter ? 1 : 0 }, field, 21);
     const t = { x: 200, y: field.height(200, 200) + 3, z: 200, radius: 2 };
     sw.spawn(1, cutter ? 207 : 212, 200, 0);
     let tellSeen = 0, dashed = false, hitNear = 0, hitFar = 0, struck = 0;
@@ -260,7 +260,7 @@ else {
 }
 
 // Stomp: let a pack latch on, then stomp right by the mech.
-const lsw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 0, robotShooterShare: 0 }, field, 11);
+const lsw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 0, robotMidShare: 0, robotShooterShare: 0 }, field, 11);
 const lt = { x: 100, y: field.height(100, 100) + 3, z: 100, radius: 2 };
 lsw.spawn(40, 115, 100, 4);
 for (let s = 0; s < 8 * 120 && lsw.latchedCount < 12; s++) lsw.update(dt, lt, () => {});
@@ -280,7 +280,7 @@ if (before === 0) fail("nobody latched for the stomp test");
 else if (before - after === 0) fail("stomp knocked nobody off");
 
 // Shake: latched ones come off a mech running fast.
-const ssw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotBigShare: 0, robotMidShare: 0, robotShooterShare: 0 }, field, 13);
+const ssw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 0, robotMidShare: 0, robotShooterShare: 0 }, field, 13);
 const st = { x: -100, y: field.height(-100, -100) + 3, z: -100, radius: 2 };
 ssw.spawn(30, -112, -100, 3);
 for (let s = 0; s < 8 * 120 && ssw.latchedCount < 8; s++) ssw.update(dt, st, () => {});

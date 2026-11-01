@@ -289,6 +289,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Small quads and weapon quads (Keith's roster; Claude)
+- **Small quads** (`robotShapes.ts` `midBodyGeometry`): the medium walkers now wear Keith's "small quad" look, a rounded white shell high on four legs, a dark visor with red eyes, an antenna; still the cutter and slug shooter.
+- **Weapon quads** (`robots.ts`: `variant`, `weapon`, `quadGuns`, `shotDamage`, `lobOf`, `beamSpec`; group Robots: weapon quads): `robotQuadShare` 0.3 of the mediums come 3.6 m (size) with 700 hp, a drum turret and a weapon each side: minigun bursts (14 × 3 dmg), rocket volleys (4 × 28 dmg, 2.5 m, lobbed through the battlefield's shells), a laser (1.1 s charge, 45) or a rail (1.6 s, 95) down the beam path; hold at 14-26 m, a 0.6 s tell. Out on an expedition one drops its weapon half the time (`QUAD_DROP`, `src/expedition/loot.ts`, `drops.ts` `force.base`). Drawn in `robotsDraw.ts` (`quadBodyGeometry`, `quadWeaponGeometry`), beams in `robotBeamDraw.ts` per robot. Robots lab `?quads`, `?lineup` shows all four.
+- Checked: `robot-danger-check` (each weapon: fires, hurts a standing mech 7.5-18.7 dps, holds at 16-24 m, legs in reach, never saws, drop base exists; pack of 30 still 20.8-29.8 s), `robots-check` and `weapons-check` (with quads off, as before), full `npm test`; one game-camera shot.
+
+
 ### 2026-11-01 · Striders reshaped: mech-sized, long arms (Keith's feedback; Claude on `claude/project-thread-fv5cu6`)
 - Scale 2.8 → 1.7 (head top 16.9 → 8.5 m), a short torso, 3.6 m wide shoulders, 6.2 m arms hanging nearly to the sand, a smaller disc head sat low (`STRIDER_FRAME`, `striderBody.ts`); arm hit capsules and ragdoll parts (`Strider.shoulder`/`hand`); slam 15 → 11 m within 14 m, range 32 m, 4000 hp. Beam and slam kept as they were (Keith liked them).
 - Checked: `tools/strider-check.ts` (now also hands within 2.5 m of the sand), typecheck, full `npm test`, build, one game-camera shot.

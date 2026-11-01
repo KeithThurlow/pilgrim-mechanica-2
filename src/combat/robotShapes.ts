@@ -159,30 +159,75 @@ export function smallBodyGeometry(): THREE.BufferGeometry {
 }
 
 /**
- * Medium walker (× size): long and plainly pointed one way. A big white cylindrical abdomen behind with a dark ring and
- * a vent block on top, a dark hip frame with the four hip housings, a white thorax ahead of it, a squarish sensor head
- * out front with a dark visor (red eyes drawn apart), a slug gun under the head on the left and the cutter arm on the
- * right (its blue disc drawn apart so it can spin), an antenna mast.
+ * Small quad (× size; Keith's "small quad" ref): a rounded white hull high on its four legs, a dark visor band across
+ * the front (red eyes drawn apart), a dark mechanical core and hip housings underneath, a slug gun on the left, the
+ * cutter arm on the right (its blue disc drawn apart so it can spin), an antenna mast at the back.
  */
 export function midBodyGeometry(): THREE.BufferGeometry {
   const k = new Kit(), H = MID_BODY_H;
-  k.add(pod(0.22, 0.62, 12), WHITE, 0, H * 0.18, -0.22, -0.18, 0, 0, 0.04);
-  k.cyl(0.225, 0.04, JOINT, 0, H * 0.2, -0.12, Math.PI / 2 - 0.18, 0, 0, 12);
-  k.box(0.14, 0.06, 0.2, DARK, 0, H * 0.18 + 0.22, -0.26, -0.18, 0, 0);
-  k.box(0.46, 0.09, 0.42, JOINT, 0, -MID_SPEC.hipDrop, 0.04);
+  const shell = [[0, -H * 0.42], [0.25, -H * 0.42], [0.31, -H * 0.2], [0.32, H * 0.1], [0.28, H * 0.4], [0.18, H * 0.62], [0, H * 0.68]].map(([x, y]) => new THREE.Vector2(x, y));
+  k.add(new THREE.LatheGeometry(shell, 12).scale(1, 1, 1.18), WHITE, 0, H * 0.25, -0.02, 0, 0, 0, 0.04);
+  k.add(new THREE.CylinderGeometry(0.325, 0.325, H * 0.22, 12, 1, true, -1.1, 2.2).scale(1, 1, 1.18), GLASS, 0, H * 0.32, -0.02);
+  k.box(0.44, 0.1, 0.44, JOINT, 0, -MID_SPEC.hipDrop, 0);
   for (const a of MID_SPEC.angles) k.box(0.12, 0.12, 0.12, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
-  k.add(pod(0.16, 0.36, 10, 0.4, 0.4), WHITE_DIM, 0, H * 0.12, 0.2, 0.08, 0, 0, 0.04);
-  k.box(0.2, 0.14, 0.16, WHITE, 0, H * 0.22, 0.42);
-  k.box(0.205, 0.045, 0.1, GLASS, 0, H * 0.26, 0.46);
-  k.box(0.12, 0.06, 0.12, JOINT, 0, H * 0.02, 0.36);
-  // Slug gun under the head, left.
-  k.cyl(0.03, 0.3, DARK, 0.14, -0.02, 0.46, Math.PI / 2, 0, 0, 6).box(0.08, 0.08, 0.1, JOINT, 0.14, -0.02, 0.3);
+  k.box(0.18, 0.08, 0.16, JOINT, 0, -H * 0.1, -0.3);
+  // Slug gun under the visor, left.
+  k.cyl(0.028, 0.26, DARK, 0.15, -0.0, 0.42, Math.PI / 2, 0, 0, 6).box(0.08, 0.08, 0.12, JOINT, 0.15, 0, 0.3);
   // Cutter arm, right: a square arm to the disc's hub and a motor block.
   k.box(0.07, 0.07, MID_SAW_Z - 0.28, JOINT, MID_SAW_X, MID_SAW_Y, 0.28 + (MID_SAW_Z - 0.28) / 2);
   k.box(0.1, 0.1, 0.1, DARK, MID_SAW_X + 0.06, MID_SAW_Y, MID_SAW_Z);
-  // Antenna mast.
-  k.cyl(0.01, 0.16, DARK, -0.08, H * 0.4 + 0.12, -0.05, 0, 0, 0, 5);
+  // Antenna mast, back left, a box at its foot.
+  k.box(0.07, 0.06, 0.07, DARK, 0.17, H * 0.7, -0.16).cyl(0.008, 0.34, DARK, 0.17, H * 0.7 + 0.17, -0.16, 0, 0, 0, 5);
   return k.build(-H * 0.6, H * 0.3, 0.12);
+}
+
+/**
+ * Weapon quad body (× size; Keith's "medium quad bots with weapons" ref): a wide white drum of a turret with a capped
+ * top, a dark hip ring and housings below, a squarish sensor block at the front (red eyes drawn apart), short side
+ * arms out to where the weapons hang (quadWeaponGeometry).
+ */
+export function quadBodyGeometry(): THREE.BufferGeometry {
+  const k = new Kit(), H = MID_BODY_H;
+  k.cyl(0.3, H * 0.9, WHITE, 0, H * 0.2, 0, 0, 0, 0, 16);
+  k.cyl(0.305, H * 0.12, JOINT, 0, H * 0.12, 0, 0, 0, 0, 16);
+  k.cyl(0.24, H * 0.14, WHITE_DIM, 0, H * 0.72, 0, 0, 0, 0, 16).cyl(0.1, H * 0.08, JOINT, 0, H * 0.82, 0, 0, 0, 0, 10);
+  k.cyl(0.22, H * 0.4, JOINT, 0, -H * 0.38, 0, 0, 0, 0, 12);
+  for (const a of MID_SPEC.angles) k.box(0.13, 0.13, 0.13, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
+  k.box(0.2, 0.14, 0.14, WHITE, 0, H * 0.3, 0.3).box(0.205, 0.045, 0.08, GLASS, 0, H * 0.33, 0.34);
+  for (const x of [0.32, -0.32]) k.box(0.12, 0.08, 0.1, JOINT, x, H * 0.12, 0.02);
+  return k.build(-H * 0.6, H * 0.4, 0.12);
+}
+
+/** A weapon quad's pair of weapons (× size), by Q_* index: minigun pods, rocket pods, a laser, a rail gun. */
+export function quadWeaponGeometry(w: number): THREE.BufferGeometry {
+  const k = new Kit(), H = MID_BODY_H, y = H * 0.06;
+  const pod = (x: number) => {
+    if (w === 0) {
+      // Minigun: a white housing and a cluster of six barrels.
+      k.box(0.13, 0.13, 0.2, WHITE, x, y, 0.12).box(0.135, 0.04, 0.12, JOINT, x, y + 0.045, 0.12);
+      for (let b = 0; b < 6; b++) { const a = (b / 6) * Math.PI * 2; k.cyl(0.012, 0.3, DARK, x + Math.cos(a) * 0.032, y + Math.sin(a) * 0.032, 0.36, Math.PI / 2, 0, 0, 5); }
+      k.cyl(0.05, 0.03, JOINT, x, y, 0.44, Math.PI / 2, 0, 0, 8);
+    } else if (w === 1) {
+      // Rockets: a box pod, four dark tubes in its face.
+      k.box(0.17, 0.17, 0.26, WHITE, x, y + 0.02, 0.14).box(0.175, 0.03, 0.27, JOINT, x, y - 0.05, 0.14);
+      for (let b = 0; b < 4; b++) k.cyl(0.028, 0.02, DARK, x + (b & 1 ? 0.04 : -0.04), y + 0.02 + (b & 2 ? 0.04 : -0.04), 0.275, Math.PI / 2, 0, 0, 8);
+    }
+  };
+  if (w <= 1) { pod(0.4); pod(-0.4); }
+  else {
+    // The main gun on the right (the beam leaves at x -0.4, z 0.62), a sensor box on the left.
+    k.box(0.14, 0.14, 0.22, WHITE, -0.4, y, 0.1);
+    if (w === 2) {
+      // Laser: a long white barrel with dark rings, the lens at its tip (glows, drawn apart).
+      k.cyl(0.035, 0.42, WHITE_DIM, -0.4, y, 0.4, Math.PI / 2, 0, 0, 8);
+      for (const z of [0.3, 0.42, 0.54]) k.cyl(0.045, 0.025, JOINT, -0.4, y, z, Math.PI / 2, 0, 0, 8);
+    } else {
+      // Rail: two flat dark rails either side of a slot, a white yoke at their root.
+      k.box(0.03, 0.09, 0.46, DARK, -0.36, y, 0.42).box(0.03, 0.09, 0.46, DARK, -0.44, y, 0.42).box(0.12, 0.03, 0.08, WHITE, -0.4, y + 0.06, 0.25);
+    }
+    k.box(0.1, 0.1, 0.12, JOINT, 0.38, y + 0.02, 0.08).cyl(0.03, 0.02, GLASS, 0.38, y + 0.02, 0.145, Math.PI / 2, 0, 0, 8);
+  }
+  return k.build(-1, 1, 0.1);
 }
 
 /** The medium walker's cutter (× size): a toothed disc of radius 1, upright (spins about X), drawn lit in blue. */

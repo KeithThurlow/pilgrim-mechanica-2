@@ -13,7 +13,7 @@ import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
 import type { BlastWaves } from "../fx/blastWaves";
 import { FAM_ROBOT, type ShortLights } from "../world/lamps";
 
-const SLOTS = 8, SCORCHES = 8, PTS = 48;
+const SLOTS = 16, SCORCHES = 8, PTS = 48;
 const HOT = 0x2a8cff, CORE = 0xe0f6ff, LINE = 0x3aa8ff, EMBER = 0x5ab8ff, EMBER_COLD = 0x0a2a60;
 
 interface Slot { glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon }
@@ -81,15 +81,17 @@ export class RobotBeamDraw {
   }
 
   update(dt: number) {
-    const sw = this.swarm, v = sw.v, g = sw.ground, C = v.robotBeamCharge, B = Math.max(0.01, v.robotBeamBurn);
+    const sw = this.swarm, v = sw.v, g = sw.ground, B = Math.max(0.01, v.robotBeamBurn);
     this.time += dt;
     this.live.length = 0;
     let k = 0;
     for (let i = 0; i < sw.hi && i < this.seen.length; i++) {
       const t = sw.beamT[i];
       if (sw.kind[i] === BIG && sw.pulseT[i] >= 0 && k < SLOTS) { this.pulse(this.slots[k++], i); this.seen[i] = -1; continue; }
-      if (sw.kind[i] !== BIG || t < 0) { this.seen[i] = -1; continue; }
+      if (t < 0) { this.seen[i] = -1; continue; }
       if (k >= SLOTS) continue;
+      // Per robot: a big one's beam, or a weapon quad's laser or rail (thinner, a smaller glow).
+      const spec = sw.beamSpec(i), C = spec.charge, W = spec.width, G = v.robotBeamGlow * (sw.kind[i] === BIG ? 1 : 0.3);
       const s = this.slots[k++], b = sw.beamLine(i, { ...this.line });
       s.ring.mesh.visible = false;
       const u = t / C, locked = t >= C * v.robotBeamLock;
@@ -97,14 +99,14 @@ export class RobotBeamDraw {
       // Caught the moment it fired: leave a scorch.
       if (this.seen[i] < C && t >= C) {
         const sc = this.scorches[this.nextScorch++ % SCORCHES];
-        sc.t = 0; sc.sx = b.sx; sc.sz = b.sz; sc.x1 = b.x1; sc.z1 = b.z1; sc.w = v.robotBeamWidth;
-        sc.ribbon.set(this.path(b), v.robotBeamWidth * 1.3, "ground", g, 0.1);
+        sc.t = 0; sc.sx = b.sx; sc.sz = b.sz; sc.x1 = b.x1; sc.z1 = b.z1; sc.w = W;
+        sc.ribbon.set(this.path(b), W * 1.3, "ground", g, 0.1);
       }
       this.seen[i] = t;
       if (t < C) {
         // Charging: the emitter glow grows and heats, flickering faster toward the end.
         const grow = Math.pow(Math.min(1, u), v.robotBeamGrowth), flick = 0.9 + 0.1 * Math.sin(this.time * (20 + 40 * u));
-        const r = Math.max(0.15, v.robotBeamGlow * (0.15 + 0.85 * grow)) * flick;
+        const r = Math.max(0.15, G * (0.15 + 0.85 * grow)) * flick;
         s.glow.position.set(b.ex, b.ey, b.ez); s.glow.scale.setScalar(r * 0.55);
         s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(r * 1.4);
         (s.glow.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.5 * grow;
@@ -113,7 +115,7 @@ export class RobotBeamDraw {
         // The warning line: thin and faint while it tracks; at the lock it widens to the beam and pulses.
         const pts = this.path(b);
         const pulse = locked ? 0.75 + 0.25 * Math.sin(this.time * 26) : 1;
-        s.line.set(pts, locked ? v.robotBeamWidth : 0.25, "ground", g, 0.09);
+        s.line.set(pts, locked ? W : 0.25, "ground", g, 0.09);
         s.line.mat.opacity = v.robotBeamLine * (locked ? 0.35 + 0.35 * u : 0.15 + 0.4 * u) * pulse;
         s.edge.set(pts, locked ? 0.3 : 0.12, "ground", g, 0.11);
         s.edge.mat.opacity = v.robotBeamLine * (0.3 + 0.7 * grow) * pulse;
@@ -121,7 +123,7 @@ export class RobotBeamDraw {
         s.beam.visible = s.core.visible = false;
       } else {
         // The burn: bright, fading over the burn time; the emitter flares with it.
-        const f = Math.max(0, 1 - (t - C) / B), w = v.robotBeamWidth * (0.55 + 0.45 * f);
+        const f = Math.max(0, 1 - (t - C) / B), w = W * (0.55 + 0.45 * f);
         this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
         const len = this.d.length();
         this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
@@ -130,8 +132,8 @@ export class RobotBeamDraw {
           (m.material as THREE.MeshBasicMaterial).opacity = o * f;
           m.visible = true;
         }
-        s.glow.position.set(b.ex, b.ey, b.ez); s.glow.scale.setScalar(v.robotBeamGlow * (0.6 + 0.6 * f));
-        s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(v.robotBeamGlow * (1.2 + 1.2 * f));
+        s.glow.position.set(b.ex, b.ey, b.ez); s.glow.scale.setScalar(G * (0.6 + 0.6 * f));
+        s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(G * (1.2 + 1.2 * f));
         (s.glow.material as THREE.MeshBasicMaterial).opacity = f; (s.halo.material as THREE.MeshBasicMaterial).opacity = 0.6 * f;
         s.glow.visible = s.halo.visible = true;
         s.line.mesh.visible = s.edge.mesh.visible = false;

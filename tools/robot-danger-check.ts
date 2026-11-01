@@ -3,7 +3,8 @@
 // reach (damage per second, one robot at a time), and how long a pack of 30 takes to destroy a standing mech (the
 // mech's hull, MECH_DEFAULTS.hull), then holds the numbers to targets. Standing still is the worst case: every tell is
 // readable and dodgeable (robots-check covers the dodges). Run: npm test (or npx tsx tools/robot-danger-check.ts).
-import { RobotSwarm, ROBOT_DEFAULTS, BIG, MID, SMALL, DEAD } from "../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, BIG, MID, SMALL, DEAD, QUAD_WEAPON, QUAD_WEAPONS, QUAD_DROP } from "../src/combat/robots";
+import { BASE_BY_ID } from "../src/items/bases";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { MECH_DEFAULTS } from "../src/game/mechUnit";
 
@@ -59,7 +60,7 @@ function solo(v0: V, kind: number, shooter: boolean) {
   const v = {
     ...v0,
     robotBigShare: kind === BIG ? 1 : 0, robotMidShare: kind === MID ? 1 : 0,
-    robotShooterShare: shooter ? 1 : 0, robotMidCutterShare: shooter ? 0 : 1,
+    robotShooterShare: shooter ? 1 : 0, robotMidCutterShare: shooter ? 0 : 1, robotQuadShare: 0,
   };
   // Start where it would fight from: excavators and holders at their range, the rest a few metres out.
   const from = kind === BIG ? (v.robotBigNear + v.robotBigFar) / 2 : kind === MID ? (shooter ? (v.robotMidNear + v.robotMidFar) / 2 : 7) : shooter ? 16 : 6;
@@ -190,6 +191,42 @@ console.log(`pulse: ${V0.robotPulseDamage} damage in ${V0.robotPulseRadius} m, $
 if (pFiredF < 3 || pFiredS < 3) fail(`too few pulses fired in the duel (${pFiredF}, ${pFiredS})`);
 if (pFled > 0) fail(`a mech walking away from the pulse's charge was still caught ${pFled} times: not escapable`);
 if (pStood < pFiredS) fail(`a mech standing close was missed by ${pFiredS - pStood} of ${pFiredS} pulses`);
+const P3 = [0, 1, 2, 3].map(() => ({ x: 0, y: 0, z: 0 }));
+// Weapon quads (Keith 2026-11-01): each weapon fires at a standing mech in its hold band, after a tell, and hurts it;
+// the band keeps them out of saw range; each drops a real item base.
+for (let w = 0; w < 4; w++) {
+  const sw = new RobotSwarm({ ...V0 }, field, 21 + w);
+  const t = { x: 300, y: 0, z: -200, radius: HIT_R };
+  t.y = field.height(t.x, t.z) + 3;
+  const [i] = sw.spawn(1, t.x + 6, t.z + 40, 0, { mid: 1, big: 0, quad: 1, weapon: w });
+  let rounds = 0, lobs = 0, beams = 0, dmg = 0, cuts = 0, minD = Infinity, told = false, reachMiss = 0, sag = 0, samples = 0;
+  sw.onLob = (j) => { lobs++; dmg += sw.lobOf(j).damage; };
+  sw.onBeam = (e) => {
+    beams++;
+    const b = { ex: e.from.x, ey: e.from.y, ez: e.from.z, sx: e.start.x, sy: e.start.y, sz: e.start.z, x1: e.end.x, y1: e.end.y, z1: e.end.z };
+    if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) dmg += e.damage;
+  };
+  for (let s = 0; s < 30 * 120; s++) {
+    sw.update(dt, t, (_a, _b, _c, _d, _e, _f, _k, j) => { rounds++; dmg += sw.shotDamage(j); }, () => {}, () => { cuts++; });
+    if (sw.tell[i]) told = true;
+    if (s % 10 === 0 && sw.state[i] < DEAD) {
+      for (let k = 0; k < 4; k++) if (sw.legPose(i, k, P3[0], P3[1], P3[2], P3[3]) > 1.001) reachMiss++;
+      if (sw.hubY[i] - sw.py[i] < sw.heightOf(i) * 0.7) sag++;
+      samples++;
+    }
+    if (s > 15 * 120) minD = Math.min(minD, Math.hypot(sw.px[i] - t.x, sw.pz[i] - t.z));
+  }
+  const name = QUAD_WEAPONS[w];
+  console.log(`weapon quad (${name}): ${rounds} rounds, ${lobs} rockets, ${beams} beams, ${(dmg / 30).toFixed(1)} damage/s to a standing mech, held at ${minD.toFixed(1)} m+`);
+  if (sw.variant[i] !== QUAD_WEAPON || sw.weapon[i] !== w) fail(`spawned quad ${name} came out wrong`);
+  if (dmg <= 0) fail(`the ${name} quad did no damage`);
+  if (cuts > 0) fail(`the ${name} quad used a saw`);
+  if (minD < V0.robotQuadNear - 3) fail(`the ${name} quad came in to ${minD.toFixed(1)} m (holds from ${V0.robotQuadNear})`);
+  if ((w === 0 || w === 1) && !told) fail(`the ${name} quad never showed its tell`);
+  if (reachMiss > samples * 0.04) fail(`the ${name} quad's legs out of reach ${reachMiss} of ${samples * 4} samples`);
+  if (sag) fail(`the ${name} quad's body sagged below 70% of its height ${sag} times`);
+  if (!BASE_BY_ID[QUAD_DROP[w]]) fail(`the ${name} quad drops ${QUAD_DROP[w]}, which isn't an item base`);
+}
 void DEAD;
 if (failed) throw new Error("robot danger check failed");
 console.log("robot danger check passed");

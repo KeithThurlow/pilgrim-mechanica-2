@@ -70,7 +70,8 @@ export class SwarmCamps {
     this.sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, this.sw.kind[i] === BIG ? 0.5 : 0.12);
     this.sw.onLob = (i, fx, fy, fz, x, z, flight) => {
       if (!player.alive && !this.sw.hasT[i]) return;
-      bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, v.robotBigLobArc, v.robotBigLobRadius, v.robotBigShotDamage * this.sw.power[i]);
+      const l = this.sw.lobOf(i);
+      bf.lob(3, this.lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage);
     };
     // Beams burn down the line: the mech, the pilot, bandits in a robots-on-bandits fight (Keith 2026-10-31).
     this.sw.onBeam = (e) => { if (player.alive || this.sw.hasT[e.robot]) fireRobotBeam(bf, e, v.robotBeamReach); };
@@ -176,7 +177,7 @@ export class SwarmCamps {
         this.dir.set(tx - fx, ty - fy, tz - fz).normalize();
         const drawn = kind !== SMALL || Math.random() < 0.5;
         if (drawn) this.slot = this.slot >= 19 ? 2 : this.slot + 1;
-        const damage = (kind === BIG ? v.robotBigShotDamage : kind === MID ? v.robotMidShotDamage : v.robotShotDamage) * sw.power[i];
+        const damage = sw.shotDamage(i);
         const look = kind === BIG ? { flash: 1.2, hit: 1 } : kind === MID ? { flash: 0.7, hit: 0.6 } : { flash: 0.35, hit: 0.3 };
         bf.fire(this.slot, 3, from, this.dir, from.distanceTo(T) + 8, damage,
           drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
