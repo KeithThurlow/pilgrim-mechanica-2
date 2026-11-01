@@ -14,13 +14,13 @@ import { BodyContact } from "../../src/game/bodyContact";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
-import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
+import { ROBOT_RAG } from "../../src/combat/robotShapes";
 import type { MoveCommand } from "../../src/mech/walker";
 import type { Aim, Trigger } from "../../src/mech/upper";
 import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
-import { fireRobotBeam } from "../../src/game/robotBeam";
+import { fireRobotBeam, fireRobotPulse } from "../../src/game/robotBeam";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -111,7 +111,7 @@ player.onStomp = (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k
 // Deaths go to the physics: the body and its leg parts fall apart loosely (small ones fly, walkers fold where they
 // stand, excavators topple from height).
 sw.hideDead = true;
-const RAG = [[0x9a9c9e, 0x4a4d51], [YELLOW, YELLOW_DIRTY], [YELLOW, GREY]];
+const RAG = ROBOT_RAG;
 sw.onDeath = (i, nx, nz, speed) => {
   const kind = sw.kind[i], [body, leg] = RAG[kind];
   const { parts, joints } = robotRagdoll(sw, i, body, leg);
@@ -131,6 +131,7 @@ sw.onLob = (_i, fx, fy, fz, x, z, flight) => {
 // Big ones' beams (Keith 2026-10-31): burnt down the line on the battlefield (the mech, the pilot, anything of
 // another team on it), a scorch and a crack.
 sw.onBeam = (e) => { if (player.alive) fireRobotBeam(bf, e, V.robotBeamReach); };
+sw.onPulse = (e) => { if (player.alive) fireRobotPulse(bf, e, (x, z, r, sp) => player.shoveFrom(x, z, r, sp)); };
 // ?beam: no packs, two excavators stopped at range either side of the mech, about to charge (and again every cooldown).
 if (params0.has("beam")) {
   V.robotSwarmSize = 0;

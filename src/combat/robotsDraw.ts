@@ -1,12 +1,14 @@
 // Draws the robot swarm (robots.ts; shapes from robotLegs.ts, stand-in geometry from robotShapes.ts). Keith
-// 2026-10-24: autonomous terraforming machines in industrial paint. Small scrappers: a low hub with a cutting disc,
-// four legs splayed on the diagonals; medium cutters: a crab chassis with a spinning saw and a scrap bin, four legs
-// with knees up and a ram on each thigh; big excavators: a chassis high up on four excavator arms (boom, stick, rams,
-// hoses) with buckets for feet, casting long shadows.
-// All instanced: bodies per size, saw blades, buckets, box beams (walker leg bones), pipes (small legs, rams, rods,
-// hoses), knuckles at the joints, and lamps. Standing small ones take their feet from the sim's leg pose; latched ones
-// lie flat on the hull, legs gripping and raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take
-// every leg from the sim (planted, stepping) through RobotSwarm.legPose.
+// 2026-11-01: sci-fi walkers in white plate over dark mechanics, red eyes for seeking and blue for weapons, pipes and
+// cables dangling (a procedural sway, no physics). Small scuttlers: mites with a cylindrical abdomen and a little head,
+// four thin legs splayed on the diagonals; medium walkers: a long cylindrical body with a sensor head, white thighs,
+// a spinning blue cutter, hoses hanging; big walkers: a thorax disc and slung abdomen high on four long legs (short
+// thigh to a knee level with the body, a long shin straight down), cables looping from the body to the legs and
+// tendrils hanging under the abdomen, casting long shadows.
+// All instanced: bodies per size, cutters, feet, box beams, limbs (round leg bones), pipes, cables, knuckles, lamps.
+// Standing small ones take their feet from the sim's leg pose; latched ones lie flat on the hull, legs gripping and
+// raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take every leg from the sim (planted,
+// stepping) through RobotSwarm.legPose.
 import * as THREE from "three/webgpu";
 import { RobotSwarm, ROBOT_MAX, BIG, MID, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
@@ -15,14 +17,16 @@ import {
 } from "./robotLegs";
 import {
   smallBodyGeometry, midBodyGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
-  YELLOW, YELLOW_DIRTY, GREY, DARK, BLACK, CHROME,
+  WHITE, WHITE_DIM, JOINT, DARK, CHROME, ROBOT_PALETTE,
 } from "./robotShapes";
 import { LAMP_ROBOT, LAMP_ROBOT_GLOW, type LampEmit } from "../world/lamps";
 import { RobotBeamDraw } from "./robotBeamDraw";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
 const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5;
-const LEG_SMALL = 0x4a4d51, LAMP = 0xfff0c8, AMBER = 0xffa31a, ALARM = 0xff3418, EYE_RED = 0xb01206, RAM = 0x3b3d40;
+const ALARM = 0xff3418, EYE_RED = 0xb01206, RAM = JOINT, OFF = 0x201810, BLUE = ROBOT_PALETTE.beam, BLUE_DIM = 0x0c3a66;
+/** Cables: how far a hanging one sways (× its length), how fast, and how far it trails behind a walk (× length per m/s). */
+const SWAY = 0.1, SWAY_RATE = 1.3, TRAIL = 0.05;
 
 function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, shadow = true): THREE.InstancedMesh {
   const m = new THREE.InstancedMesh(geo, mat, n);
@@ -75,7 +79,7 @@ const hash01 = (x: number) => { const h = Math.sin(x) * 43758.5453; return h - M
 export class RobotsDraw {
   readonly group = new THREE.Group();
   private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool;
-  private saws: Pool; private buckets: Pool; private beams: Pool; private pipes: Pool; private knuckles: Pool; private lamps: Pool;
+  private saws: Pool; private buckets: Pool; private beams: Pool; private limbs: Pool; private pipes: Pool; private cables: Pool; private knuckles: Pool; private lamps: Pool;
   private roll = new Float32Array(ROBOT_MAX);
   private sawA = new Float32Array(ROBOT_MAX);
   private gen = new Uint32Array(ROBOT_MAX);
@@ -85,9 +89,9 @@ export class RobotsDraw {
   private m = new THREE.Matrix4(); private ml = new THREE.Matrix4(); private m2 = new THREE.Matrix4(); private mb = new THREE.Matrix4();
   private c = new THREE.Color(); private beacon = new THREE.Color(); private white = new THREE.Color(1, 1, 1);
   private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3(); private tip = new THREE.Vector3();
-  private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3(); private head = new THREE.Vector3();
+  private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3();
   private va = new THREE.Vector3(); private vb = new THREE.Vector3(); private d1 = new THREE.Vector3(); private d2 = new THREE.Vector3();
-  private n1 = new THREE.Vector3(); private n2 = new THREE.Vector3(); private sp = new THREE.Vector3(); private tg = new THREE.Vector3();
+  private n1 = new THREE.Vector3(); private sp = new THREE.Vector3(); private tg = new THREE.Vector3();
   private bx = new THREE.Vector3(); private by = new THREE.Vector3(); private bz = new THREE.Vector3();
   private ax = new THREE.Vector3(1, 0, 0); private ay = new THREE.Vector3(0, 1, 0); private az = new THREE.Vector3(0, 0, 1);
   private hips = new Float32Array(SMALL_LEGS * 3); private feet = new Float32Array(SMALL_LEGS * 3);
@@ -112,10 +116,12 @@ export class RobotsDraw {
     this.smallBodies = pool(smallBodyGeometry(), ROBOT_MAX);
     this.midBodies = pool(midBodyGeometry(), ROBOT_MAX);
     this.bigBodies = pool(bigBodyGeometry(), 256);
-    this.saws = pool(sawGeometry(), ROBOT_MAX);
+    this.saws = pool(sawGeometry(), ROBOT_MAX, lamp, false);
     this.buckets = pool(bucketGeometry(), 256 * WALK_LEGS);
-    this.beams = pool(beamGeometry(), ROBOT_MAX * 8);
+    this.beams = pool(beamGeometry(), ROBOT_MAX * 2);
+    this.limbs = pool(pipeGeometry(10), ROBOT_MAX * 6);
     this.pipes = pool(pipeGeometry(), ROBOT_MAX * 10);
+    this.cables = pool(pipeGeometry(5), ROBOT_MAX * 12);
     this.knuckles = pool(knuckleGeometry(), ROBOT_MAX * 8);
     this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), ROBOT_MAX * 3, lamp, false);
     // After dark every working robot sweeps a red beam where it looks; the night lights (src/world/nightLights.ts)
@@ -170,7 +176,7 @@ export class RobotsDraw {
       const k = sw.kind[i];
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
-    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.saws, this.buckets, this.beams, this.pipes, this.knuckles, this.lamps]) p.finish();
+    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
     this.beamDraw.update(dt);
   }
 
@@ -225,8 +231,8 @@ export class RobotsDraw {
     if (dead) c.multiplyScalar(0.4); else if (st === DOWN) c.multiplyScalar(0.85);
     this.smallBodies.put(m, c);
     // No searchlight on the small ones (Keith 2026-11-01): a red eye, brighter while attacking.
-    this.lamp(m, 0, HUB_H * 0.2, HUB_R * 0.97, 0.07, 0.045, 0.04, dead ? 0x201810 : st === FIRE ? ALARM : EYE_RED);
-    if (standing) this.eye(i, m, 0, HUB_H * 0.2, HUB_R * 0.97 + 0.03, st === FIRE, false, true);
+    this.lamp(m, 0, HUB_H * 0.22, HUB_R * 0.99, 0.06, 0.03, 0.02, dead ? OFF : st === FIRE ? ALARM : EYE_RED);
+    if (standing) this.eye(i, m, 0, HUB_H * 0.22, HUB_R * 0.99 + 0.03, st === FIRE, false, true);
 
     // Legs: thin pipes, knees up.
     const L1 = S_THIGH * S, L2 = S_SHIN * S;
@@ -249,21 +255,21 @@ export class RobotsDraw {
       // Knees up (off the hub's top side) and out along the leg's spoke.
       this.local(this.bend, null, sa * 0.6, 1, ca * 0.6);
       solveKnee(this.hip, this.foot, L1, L2, this.bend.x, this.bend.y, this.bend.z, this.knee);
-      c.copy(lin(LEG_SMALL)); if (dead) c.multiplyScalar(0.5);
-      this.pipe(this.hip, this.knee, S * 0.075, c);
-      c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.5);
-      this.pipe(this.knee, this.foot, S * 0.055, c);
+      c.copy(lin(WHITE_DIM)); if (dead) c.multiplyScalar(0.5);
+      this.pipe(this.hip, this.knee, S * 0.07, c);
+      c.copy(lin(JOINT)); if (dead) c.multiplyScalar(0.5);
+      this.pipe(this.knee, this.foot, S * 0.045, c);
     }
   }
 
-  /** One medium cutter: chassis, saw, lamps, four crab legs with a ram on each thigh. */
+  /** One medium walker: body, blue cutter, red eyes, four legs (white thighs), hoses hanging. */
   private mid(i: number, dt: number) {
     const sw = this.swarm, v = sw.v;
     const { q, qa, p, s, m, c } = this;
     const st = sw.state[i], dead = st === DEAD, S = sw.size[i], h = sw.heading[i];
     let y = sw.hubY[i];
     if (dead) y = this.collapse(i, y, MID_BODY_H);
-    // The saw attack reads from far off: it rears back with the blade spinning up, then pitches into the lunge.
+    // The cutter attack reads from far off: it rears back with the disc spinning up, then pitches into the lunge.
     let pitch = 0, spin = 9, alarm = false;
     if (st === CUT) {
       const t = sw.stateTime[i], w = Math.max(0.01, v.robotMidCutWindup), L = v.robotMidLungeTime;
@@ -271,127 +277,177 @@ export class RobotsDraw {
       else if (t < w + L) { pitch = 0.16; spin = 70; alarm = true; }
       else { const k = Math.min(1, (t - w - L) / Math.max(0.05, v.robotMidCutRecover)); pitch = 0.16 * (1 - k); spin = 70 * (1 - k) + 9 * k; }
     } else if (st === FIRE && sw.tell[i]) {
-      // Shot tell: rears back, lamps flashing red.
+      // Shot tell: rears back, eyes flashing.
       pitch = -0.14; alarm = Math.sin(this.time * 30) > -0.3;
     } else if (dead) spin = 0;
     this.sawA[i] += spin * dt;
     q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, pitch); q.multiply(qa);
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
-    c.copy(this.white).multiplyScalar(0.85 + sw.seed[i] * 0.2); if (dead) c.multiplyScalar(0.4);
+    c.copy(this.white).multiplyScalar(0.9 + sw.seed[i] * 0.12); if (dead) c.multiplyScalar(0.4);
     this.midBodies.put(m, c);
-    // Blade.
+    // Cutter: a blue disc, brighter as it spins up.
     this.qb.copy(q).multiply(qa.setFromAxisAngle(this.ax, this.sawA[i]));
     this.local(this.tmp, p, MID_SAW_X * S, MID_SAW_Y * S, MID_SAW_Z * S);
     this.m2.compose(this.tmp, this.qb, s.setScalar(S * MID_SAW_R));
-    c.copy(this.white); if (dead) c.multiplyScalar(0.5);
+    if (dead) c.copy(lin(OFF)); else c.copy(lin(BLUE_DIM)).lerp(lin(BLUE), Math.min(1, 0.35 + spin / 70));
     this.saws.put(this.m2, c);
-    // Lamps: two on the cab, a beacon on its mast (red and flashing while it winds up the saw).
-    const cabY = MID_BODY_H * 0.4 + 0.06, lampC = dead ? 0x201810 : alarm ? ALARM : LAMP;
-    this.lamp(m, 0.12, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
-    if (st === RUN || st === FIRE || st === CUT) this.eye(i, m, 0.16, cabY, 0.34, st !== RUN, false);
-    this.lamp(m, 0.2, cabY, 0.315, 0.04, 0.03, 0.02, lampC);
-    const blink = Math.sin(this.time * 6 + sw.seed[i] * 20) > 0;
-    this.lamp(m, 0.16, MID_BODY_H * 0.4 + 0.24, 0.2, 0.05, 0.05, 0.05, dead ? 0x201810 : alarm ? ALARM : blink ? AMBER : 0x6a3a08);
+    // Eyes: two red lenses in the head's visor, flashing while it winds up; a red tip on the mast.
+    const eyeY = MID_BODY_H * 0.26, lampC = dead ? OFF : alarm ? ALARM : EYE_RED;
+    this.lamp(m, 0.05, eyeY, 0.512, 0.04, 0.025, 0.012, lampC);
+    this.lamp(m, -0.05, eyeY, 0.512, 0.04, 0.025, 0.012, lampC);
+    if (st === RUN || st === FIRE || st === CUT) this.eye(i, m, 0, eyeY, 0.53, st !== RUN, false);
+    const blink = Math.sin(this.time * 4 + sw.seed[i] * 20) > 0.6;
+    this.lamp(m, -0.08, MID_BODY_H * 0.4 + 0.2, -0.05, 0.025, 0.025, 0.025, dead ? OFF : alarm || blink ? ALARM : EYE_RED);
     // Legs.
-    const { hip, knee, tip, foot } = this;
+    const { hip, knee, foot } = this;
     for (let k = 0; k < WALK_LEGS; k++) {
       sw.legPose(i, k, this.h3, this.k3, this.t3, this.f3, y);
       hip.set(this.h3.x, this.h3.y, this.h3.z); knee.set(this.k3.x, this.k3.y, this.k3.z); foot.set(this.t3.x, this.t3.y, this.t3.z);
       const a = h + MID_SPEC.angles[k];
       this.sp.set(Math.sin(a), 0, Math.cos(a)); this.tg.set(Math.cos(a), 0, -Math.sin(a));
-      c.copy(lin(YELLOW)); if (dead) c.multiplyScalar(0.45);
-      this.beam(this.beams, hip, knee, S * 0.07, S * 0.09, this.tg, c);
-      c.copy(lin(GREY)); if (dead) c.multiplyScalar(0.45);
-      this.beam(this.beams, knee, foot, S * 0.05, S * 0.065, this.tg, c);
+      c.copy(lin(WHITE)); if (dead) c.multiplyScalar(0.45);
+      this.beam(this.limbs, hip, knee, S * 0.085, S * 0.085, this.tg, c);
+      c.copy(lin(JOINT)); if (dead) c.multiplyScalar(0.45);
+      this.beam(this.limbs, knee, foot, S * 0.05, S * 0.05, this.tg, c);
       c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.5);
-      this.knuckle(knee, S * 0.09, c);
-      // Thigh ram: from the chassis above the hip to the thigh's top side.
+      this.knuckle(knee, S * 0.085, c);
+      // A thin piston from the frame above the hip to the thigh.
       this.d1.subVectors(knee, hip).normalize();
       this.upNormal(this.d1, this.n1);
-      this.va.copy(hip).addScaledVector(this.ay, S * 0.1).addScaledVector(this.sp, -S * 0.04);
-      this.vb.copy(hip).addScaledVector(this.d1, hip.distanceTo(knee) * 0.6).addScaledVector(this.n1, S * 0.06);
-      this.ram(this.va, this.vb, S * 0.032, dead);
-      void tip;
+      this.va.copy(hip).addScaledVector(this.ay, S * 0.09).addScaledVector(this.sp, -S * 0.04);
+      this.vb.copy(hip).addScaledVector(this.d1, hip.distanceTo(knee) * 0.6).addScaledVector(this.n1, S * 0.05);
+      this.ram(this.va, this.vb, S * 0.02, dead);
+      // A cable from the body to each front knee, sagging.
+      if (k === 0 || k === 3) {
+        this.local(this.va, p, Math.sin(MID_SPEC.angles[k]) * 0.18 * S, 0.02 * S, 0.15 * S);
+        this.sag(this.va, knee, S * 0.12, 4, S * 0.022, sw.seed[i] * 9 + k, dead);
+      }
+    }
+    // Two hoses hanging under the abdomen.
+    for (let k = 0; k < 2; k++) {
+      this.local(this.va, p, (k ? -0.08 : 0.08) * S, -0.02 * S, -0.3 * S);
+      this.hang(this.va, S * (0.3 + 0.08 * k), 4, S * 0.022, sw.seed[i] * 13 + k * 3.1, sw.vx[i], sw.vz[i], dead);
     }
   }
 
-  /** One big excavator: chassis, lamps, four arm legs (boom, stick, three rams, a hose, bucket). */
+  /** One big walker: thorax and abdomen, red eye and rim lamps, the blue emitter, four long legs, cables, tendrils. */
   private big(i: number) {
-    const sw = this.swarm;
+    const sw = this.swarm, v = sw.v;
     const { q, qa, p, s, m, c } = this;
     const st = sw.state[i], dead = st === DEAD, S = sw.size[i], h = sw.heading[i], H = sw.heightOf(i);
     let y = sw.hubY[i];
     if (dead) y = this.collapse(i, y, BIG_BODY_H);
-    // Volley tell: the chassis rears back and the gun lamp flashes red; each charge kicks it back further.
+    // Volley tell: the body rears back, each charge kicks it back further. A terraform pulse: it crouches as it charges.
     const tell = st === FIRE && sw.tell[i] === 1;
-    const pitch = tell ? 0.07 + Math.max(0, 0.08 - (sw.v.robotBigRoundInterval - sw.fireClock[i]) * 0.3) * (sw.burstLeft[i] > 0 ? 1 : 0) : 0;
+    const pitch = tell ? 0.07 + Math.max(0, 0.08 - (v.robotBigRoundInterval - sw.fireClock[i]) * 0.3) * (sw.burstLeft[i] > 0 ? 1 : 0) : 0;
+    const pt = sw.pulseT[i], pc = Math.max(0.05, v.robotPulseCharge);
+    const pu = pt >= 0 ? Math.min(1, pt / pc) : 0;
     q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, -pitch); q.multiply(qa);
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
-    c.copy(this.white).multiplyScalar(0.88 + sw.seed[i] * 0.16); if (dead) c.multiplyScalar(0.4);
+    c.copy(this.white).multiplyScalar(0.92 + sw.seed[i] * 0.1); if (dead) c.multiplyScalar(0.4);
     this.bigBodies.put(m, c);
-    // Lamps: two work lights on the cab, one under the gun, a turning beacon.
-    const cabY = BIG_BODY_H * 0.3 + 0.12, off = dead ? 0x201810 : 0;
-    this.lamp(m, 0.14, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
-    if (st === RUN || st === FIRE) this.eye(i, m, 0.2, cabY, 0.4, st === FIRE, true);
-    this.lamp(m, 0.26, cabY, 0.375, 0.04, 0.03, 0.015, off || LAMP);
-    const flash = tell && Math.sin(this.time * 24) > -0.2;
-    this.lamp(m, 0, -BIG_BODY_H * 0.3 - 0.07, 0.42, 0.06, 0.02, 0.04, off || (flash ? ALARM : LAMP));
-    this.lamp(m, 0, -BIG_BODY_H * 0.3, 0.83, 0.07, 0.07, 0.02, off || (flash ? ALARM : 0x301008));
-    const beat = (Math.sin(this.time * 5 + sw.seed[i] * 20) + 1) * 0.5;
-    this.beacon.copy(lin(AMBER)).multiplyScalar(0.35 + 0.65 * beat);
-    this.lamp(m, 0.2, BIG_BODY_H * 0.3 + 0.33, 0.24, 0.045, 0.05, 0.045, off || this.beacon);
-    // Arm legs.
-    const { hip, knee, tip, foot, d1, d2, n1, n2, sp, tg, va, vb } = this;
-    const L1 = BIG_SPEC.L1 * H, L2 = BIG_SPEC.L2 * H, bucketH = BIG_SPEC.toe * H;
+    // The eye in the head's visor, red lamps round the rim, slowly chasing (fast and bright when attacking).
+    const flash = (tell || pt >= 0) && Math.sin(this.time * 24) > -0.2;
+    this.lamp(m, 0, BIG_BODY_H * 0.04, 0.715, 0.1, 0.03, 0.012, dead ? OFF : flash ? ALARM : EYE_RED);
+    if (st === RUN || st === FIRE) this.eye(i, m, 0, BIG_BODY_H * 0.04, 0.74, st === FIRE, true);
+    const chase = this.time * (st === FIRE ? 6 : 1.5) + sw.seed[i] * 10;
+    for (let r = 0; r < 8; r++) {
+      const a = (r / 8) * Math.PI * 2 + Math.PI / 8, lit = Math.cos(a * 2 - chase) > 0.4;
+      this.lamp(m, Math.sin(a) * 0.588, -BIG_BODY_H * 0.02, Math.cos(a) * 0.588, 0.03, 0.02, 0.03, dead ? OFF : lit || flash ? ALARM : EYE_RED);
+    }
+    // The emitter lens under the front: a faint blue, swelling while a beam or pulse charges.
+    const bt = sw.beamT[i], bu = bt >= 0 ? Math.min(1, bt / Math.max(0.05, v.robotBeamCharge)) : 0, charge = Math.max(bu, pu);
+    this.beacon.copy(lin(BLUE_DIM)).lerp(lin(BLUE), 0.3 + 0.7 * charge);
+    const lens = 0.16 + 0.08 * charge;
+    this.lamp(m, 0, -BIG_BODY_H * 0.62 - 0.045, 0.2, lens, 0.02, lens, dead ? OFF : this.beacon);
+    // Legs: a short white thigh to a knee level with the body, a long shin (white sleeve over a dark rod) to the foot.
+    const { hip, knee, tip, foot, d2, sp, tg, va, vb } = this;
+    const footH = BIG_SPEC.toe * H;
     for (let k = 0; k < WALK_LEGS; k++) {
       sw.legPose(i, k, this.h3, this.k3, this.t3, this.f3, y);
       hip.set(this.h3.x, this.h3.y, this.h3.z); knee.set(this.k3.x, this.k3.y, this.k3.z);
       tip.set(this.t3.x, this.t3.y, this.t3.z); foot.set(this.f3.x, this.f3.y, this.f3.z);
       const a = h + BIG_SPEC.angles[k];
       sp.set(Math.sin(a), 0, Math.cos(a)); tg.set(Math.cos(a), 0, -Math.sin(a));
-      d1.subVectors(knee, hip).normalize(); d2.subVectors(tip, knee).normalize();
-      this.upNormal(d1, n1);
-      // The stick's outer side (away from the body), for the bucket ram.
-      n2.crossVectors(tg, d2).normalize(); if (n2.dot(sp) < 0) n2.negate();
+      d2.subVectors(tip, knee);
+      const shin = d2.length(); d2.multiplyScalar(1 / Math.max(1e-4, shin));
       const dim = dead ? 0.45 : 1;
-      // Boom: from the hip up to the elbow, deep in its own plane. Stick: from its head (past the elbow) to the bucket.
-      c.copy(lin(YELLOW)).multiplyScalar(dim);
-      this.beam(this.beams, hip, knee, S * 0.085, S * 0.13, tg, c);
-      this.head.copy(knee).addScaledVector(d2, -0.09 * H);
-      c.copy(lin(YELLOW_DIRTY)).multiplyScalar(dim);
-      this.beam(this.beams, this.head, tip, S * 0.065, S * 0.095, tg, c);
+      c.copy(lin(WHITE)).multiplyScalar(dim);
+      this.beam(this.limbs, hip, knee, S * 0.15, S * 0.15, tg, c);
+      va.copy(knee).addScaledVector(d2, shin * 0.42);
+      this.beam(this.limbs, knee, va, S * 0.12, S * 0.12, tg, c);
+      c.copy(lin(JOINT)).multiplyScalar(dim);
+      this.beam(this.limbs, va, tip, S * 0.065, S * 0.065, tg, c);
+      // Bands: a dark collar where the sleeve ends, a white one low on the rod.
+      vb.copy(va).addScaledVector(d2, -S * 0.05);
+      this.beam(this.limbs, vb, va, S * 0.13, S * 0.13, tg, c);
+      c.copy(lin(WHITE_DIM)).multiplyScalar(dim);
+      va.copy(knee).addScaledVector(d2, shin * 0.78); vb.copy(va).addScaledVector(d2, S * 0.12);
+      this.beam(this.limbs, va, vb, S * 0.085, S * 0.085, tg, c);
       c.copy(lin(DARK)).multiplyScalar(dim);
-      this.knuckle(knee, S * 0.11, c);
-      this.knuckle(tip, S * 0.07, c);
-      // Rams: boom lift under the boom from the chassis; stick ram on top of the boom to the stick's head; bucket ram
-      // down the stick's outside.
-      va.copy(hip).addScaledVector(this.ay, -S * 0.12).addScaledVector(sp, -S * 0.05);
-      vb.copy(hip).addScaledVector(d1, L1 * 0.42).addScaledVector(n1, -S * 0.07);
-      this.ram(va, vb, S * 0.04, dead);
-      va.copy(hip).addScaledVector(d1, L1 * 0.5).addScaledVector(n1, S * 0.08);
-      vb.copy(this.head).addScaledVector(n2, S * 0.03);
-      this.ram(va, vb, S * 0.035, dead);
-      va.copy(knee).addScaledVector(d2, L2 * 0.12).addScaledVector(n2, S * 0.065);
-      vb.copy(tip).addScaledVector(d2, -L2 * 0.1).addScaledVector(n2, S * 0.065);
-      this.ram(va, vb, S * 0.03, dead);
-      // A hose along the boom's top.
-      va.copy(hip).addScaledVector(n1, S * 0.075); vb.copy(knee).addScaledVector(n1, S * 0.06);
-      c.copy(lin(BLACK)); this.pipe(va, vb, S * 0.018, c);
-      // Bucket: hangs from the stick's end, teeth down in the sand, curling as the leg swings over.
-      const f = i * WALK_LEGS + k, t = sw.stepT[f];
-      const curl = t >= 0 ? Math.sin(Math.PI * t) * 0.9 : 0;
+      this.knuckle(knee, S * 0.17, c);
+      this.knuckle(hip, S * 0.12, c);
+      // Two cables looping from under the thorax's rim down to the shin.
+      for (let j = 0; j < 2; j++) {
+        this.local(va, p, Math.sin(BIG_SPEC.angles[k] + (j ? 0.25 : -0.25)) * 0.5 * S, -BIG_BODY_H * 0.3 * S, Math.cos(BIG_SPEC.angles[k] + (j ? 0.25 : -0.25)) * 0.5 * S);
+        vb.copy(knee).addScaledVector(d2, shin * (0.2 + 0.1 * j)).addScaledVector(tg, (j ? 1 : -1) * S * 0.07);
+        this.sag(va, vb, S * (0.35 + 0.15 * j), 6, S * 0.028, sw.seed[i] * 11 + k * 2 + j, dead);
+      }
+      // Foot: a dark pad under the shin.
       this.basis(this.ay, sp.x, sp.z);
-      this.q.multiply(qa.setFromAxisAngle(this.ax, -curl));
-      this.m2.compose(tip, this.q, s.setScalar(bucketH));
+      this.m2.compose(tip, this.q, s.setScalar(footH));
       c.copy(this.white).multiplyScalar(dead ? 0.45 : 0.9 + sw.seed[i] * 0.1);
       this.buckets.put(this.m2, c);
-      // The body's frame for the lamps has been overwritten: restore it for the next leg's use of q (none).
-      void foot;
     }
-    // Leave this.q as the body's (nothing after this reads it, but keep it sane).
+    // Tendrils: five pipes hanging from the abdomen's underside, swaying and trailing the walk.
+    this.q.copy(q);
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      this.local(va, p, Math.sin(a) * 0.14 * S, -BIG_BODY_H * 1.05 * S, -0.5 * S + Math.cos(a) * 0.12 * S);
+      this.hang(va, S * (0.9 + 0.35 * hash01(sw.seed[i] * 17 + k)), 6, S * 0.03, sw.seed[i] * 23 + k * 1.7, sw.vx[i], sw.vz[i], dead);
+    }
     this.q.setFromAxisAngle(this.ay, h);
+  }
+
+  /** A cable hanging from a, len long in n pieces, swaying and trailing behind the body's walk (vx, vz). Cosmetic. */
+  private hang(a: THREE.Vector3, len: number, n: number, dia: number, seed: number, vx: number, vz: number, dead: boolean) {
+    const { c } = this;
+    c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.6);
+    const amp = dead ? 0 : SWAY * len, w = this.time * SWAY_RATE;
+    const tx = Math.max(-0.6, Math.min(0.6, -vx * TRAIL)) * len, tz = Math.max(-0.6, Math.min(0.6, -vz * TRAIL)) * len;
+    this.cp0.copy(a);
+    for (let k = 1; k <= n; k++) {
+      const t = k / n, t2 = t * t;
+      const ox = amp * t2 * Math.sin(w + seed + t * 2.4) + tx * t2, oz = amp * t2 * Math.cos(w * 0.8 + seed * 1.7 + t * 2) + tz * t2;
+      this.cp1.set(a.x + ox, a.y - len * t * (1 - 0.25 * Math.min(1, Math.hypot(ox, oz) / Math.max(1e-3, len))), a.z + oz);
+      this.cable(this.cp0, this.cp1, dia, c);
+      this.cp0.copy(this.cp1);
+    }
+  }
+
+  /** A cable from a to b sagging by sag (m) at its middle in n pieces, swaying a little. Cosmetic. */
+  private sag(a: THREE.Vector3, b: THREE.Vector3, sag: number, n: number, dia: number, seed: number, dead: boolean) {
+    const { c } = this;
+    c.copy(lin(DARK)); if (dead) c.multiplyScalar(0.6);
+    const sway = dead ? 0 : sag * 0.25 * Math.sin(this.time * SWAY_RATE + seed);
+    this.cp0.copy(a);
+    for (let k = 1; k <= n; k++) {
+      const t = k / n, bow = 4 * t * (1 - t);
+      this.cp1.copy(a).lerp(b, t);
+      this.cp1.y -= sag * bow; this.cp1.x += sway * bow; this.cp1.z += sway * bow * 0.6;
+      this.cable(this.cp0, this.cp1, dia, c);
+      this.cp0.copy(this.cp1);
+    }
+  }
+  private cp0 = new THREE.Vector3(); private cp1 = new THREE.Vector3();
+
+  /** A cable piece from a to b. */
+  private cable(a: THREE.Vector3, b: THREE.Vector3, dia: number, c: THREE.Color) {
+    this.tmp.set(0, 1, 0);
+    if (Math.abs(b.y - a.y) > 0.9 * a.distanceTo(b)) this.tmp.set(1, 0, 0);
+    this.beam(this.cables, a, b, dia, dia, this.tmp, c);
   }
 
   /** A dead walker's body height: settling onto its legs over COLLAPSE seconds, sinking at the end. */

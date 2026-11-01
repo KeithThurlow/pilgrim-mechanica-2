@@ -306,6 +306,22 @@ export class MechUnit implements Hittable {
     return true;
   }
 
+  /**
+   * A blast's push (a big walker's terraform pulse): within radius of (x, z) on the ground, the mech is skidded away at
+   * speed (full at the centre, half at the edge) and staggers for a moment. Host: from the pulse event.
+   */
+  shoveFrom(x: number, z: number, radius: number, speed: number) {
+    const sim = this.sim;
+    if (!this.alive || sim.airborne || speed <= 0) return;
+    let dx = sim.pos.x - x, dz = sim.pos.z - z;
+    const d = Math.hypot(dx, dz);
+    if (d > radius) return;
+    if (d < 0.3) { dx = -Math.sin(sim.heading); dz = -Math.cos(sim.heading); } else { dx /= d; dz /= d; }
+    const k = 1 - 0.5 * (d / radius);
+    sim.skid.x += dx * speed * k; sim.skid.z += dz * speed * k;
+    sim.stagger = Math.max(sim.stagger, 0.35 * k);
+  }
+
   get maxHealth() { return this.hullOverride ?? this.v.hull; }
 
   reset(x: number, z: number, heading: number) {

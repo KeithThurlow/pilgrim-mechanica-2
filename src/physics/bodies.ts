@@ -72,8 +72,8 @@ export function robotRagdoll(sw: RobotSwarm, i: number, body: number, leg: numbe
       parts.push(segPart(a, kn, (big ? 0.13 : 0.07) * S, leg, 500), segPart(kn, tp, (big ? 0.1 : 0.055) * S, leg, 500));
       joints.push({ a: 0, b: first, at: a }, { a: first, b: first + 1, at: kn });
       if (big) {
-        // The bucket: a squat block from the stick's end down to the sand.
-        parts.push(segPart(tp, ft, 0.26 * S, 0x4a4840, 700));
+        // The foot: a small pad from the shin's end down to the sand.
+        parts.push(segPart(tp, ft, 0.12 * S, 0x3a3d42, 700));
         joints.push({ a: first + 1, b: first + 2, at: tp });
       }
     }
