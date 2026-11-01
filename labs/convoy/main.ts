@@ -16,7 +16,7 @@
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
-// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
+// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it), ?crusher[=metres] (that close to the nearest salvage site a crusher grazes on); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { hitStop } from "../../src/game/hitStop";
@@ -31,6 +31,9 @@ import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
 import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
+import { CraterLayer, CRATER_DEFAULTS, CRATER_PARAMS } from "../../src/world/craters";
+import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../../src/physics/deaths";
+import { DeadDraw } from "../../src/physics/deadDraw";
 import { DesertLook, LOOK_DEFAULTS, LOOK_PARAMS, LIGHT_GROUPS } from "../../src/world/look";
 import { WALKER_DEFAULTS, WALKER_PARAMS } from "../../src/mech/walkerTuning";
 import { UPPER_DEFAULTS, UPPER_PARAMS, type Aim, type Trigger } from "../../src/mech/upper";
@@ -105,7 +108,7 @@ import { ABILITY_TOPIC } from "../../src/abilities/abilities";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, type SlotId } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag, addTo, bagWeight } from "../../src/items/cargo";
-import { rollLoot } from "../../src/items/generate";
+import { rollLoot, makeItem } from "../../src/items/generate";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { itemName } from "../../src/expedition/drops";
 import { applyLoadout } from "../../src/game/loadoutApply";
@@ -118,7 +121,7 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
@@ -128,7 +131,7 @@ const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
-  ...STREAM_PARAMS, ...LOOK_PARAMS,
+  ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS,
 ];
 
 // World: dunes with the convoy's road in them.
@@ -142,7 +145,8 @@ scene.add(streamer.group);
 // As the plough's blade advances, the ground behind it changes in small boxes: patched in place a few per frame
 // under a time budget (the craters' way), nearest first is not needed as they come in order behind the blade.
 const patchQueue: [number, number, number, number][] = [];
-route.onChange = (x0, z0, x1, z1) => { patchQueue.push([x0, z0, x1, z1]); };
+// Craters re-read their hardness as the road is cut (none on the road), so the patch covers both.
+route.onChange = (x0, z0, x1, z1) => { craters.invalidate(x0, z0, x1, z1); patchQueue.push([x0, z0, x1, z1]); };
 let patchMs = 0, patchVerts = 0;
 function patchSome(budgetMs: number) {
   const t0 = performance.now();
@@ -158,6 +162,21 @@ const bf = new Battlefield(field, V, camera);
 // Ruts and prints as dents on a fine patch (Keith 2026-10-25).
 if (!app.params.has("norender")) bf.useDents(app.renderer, streamer);
 scene.add(bf.group);
+// Blast craters as real ground, as in the combat labs (Keith 2026-11-01: the labs' work in the convoy): the big walkers'
+// pulse and beam trenches, shells and rockets dent the sand (never the road: it is hard). Changed ground is queued and
+// patched once a frame after the battlefield digs (flushGround); the road's own patches go through patchSome.
+const craters = new CraterLayer(V, field);
+field.dents = craters;
+bf.craters = craters;
+// The dead go to the death physics (ragdolls, wrecks; src/physics/deaths.ts), as in the combat labs.
+await initPhysics();
+const deaths = new DeathPhysics(V, field);
+const deadDraw = new DeadDraw(deaths);
+scene.add(deadDraw.group);
+let craterPatches = 0;
+const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(); };
+const flushGround = () => { if (craterPatches) { streamer.flushPatches(); craterPatches = 0; } };
+bf.onGround = groundChanged;
 
 // The convoy, its cranes (one per mech bay: the lead's and the rear one's), and their stand-in bodies.
 const convoy = new Convoy(route, V, field);
@@ -214,7 +233,7 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => streamer.rebuildArea(x0, z0, x1, z1) });
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(); }, deaths });
 // The fortresses' warlord: a red Rampart loaded now so a keep can field it at once (src/expedition/warlord.ts).
 {
   const wb = await RampartBody.load(toon);
@@ -318,6 +337,17 @@ const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "belt
 const kitFlagged = pickFromParams(kit, params);
 const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
 if (kitFlagged) bayState.loadout = loadoutFor(kit);
+// The Breaker sword (Keith 2026-11-01: the labs' work in the convoy): one goes into the stash once, saved or fresh, so it
+// can be fitted to an arm in the bay (B: a held slot) without waiting for a drop.
+{
+  const GIVEN = "pm2:convoy-lab:sword-given";
+  const has = [...Object.values(bayState.loadout), ...bayState.stash.items].some((it) => it?.base === "sword-light");
+  if (!has && (params.has("fresh") || !localStorage.getItem(GIVEN))) {
+    addTo(bayState.stash, makeItem("sword-light", "rare", "starter-sword"));
+    localStorage.setItem(GIVEN, "1");
+    saveBay(BAY_KEY, bayState);
+  }
+}
 // What the convoy has banked and bought comes back from the save; ?unlock=all buys everything, ?bank=N sets the scrap.
 loop.unlocks.load(bayState.unlocks);
 loop.exp.bank.scrap = bayState.scrap ?? 0;
@@ -440,6 +470,7 @@ function restart() {
   escorts.reset();
   guardians.reset();
   for (const c of cranes) c.place();
+  craters.clear();
   streamer.rebuildAll();
   const p = convoy.bay, at = p.toWorld(32, 0, V.craneMount + 25);
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
@@ -489,6 +520,16 @@ function restart() {
       .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
     if (c) {
       const d = Math.hypot(c.x - p.x, c.z - p.z) || 1, back = Number(params.get("nearcamp")) || V.campWake + 15;
+      const x = c.x - ((c.x - p.x) / d) * back, z = c.z - ((c.z - p.z) / d) * back;
+      player.reset(x, z, Math.atan2(c.x - x, c.z - z));
+      carry.armed = true;
+    }
+  }
+  // ?crusher[=metres]: out on the sand that close (45 m) to the nearest salvage site with a crusher grazing on it.
+  if (params.has("crusher")) {
+    const c = loop.crushers.nearestSite(p.x, p.z, 2500);
+    if (c) {
+      const d = Math.hypot(c.x - p.x, c.z - p.z) || 1, back = Number(params.get("crusher")) || 45 + c.reach;
       const x = c.x - ((c.x - p.x) / d) * back, z = c.z - ((c.z - p.z) / d) * back;
       player.reset(x, z, Math.atan2(c.x - x, c.z - z));
       carry.armed = true;
@@ -569,7 +610,7 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
@@ -580,7 +621,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -637,11 +678,11 @@ const panel = tweakPanel({
     { id: "airlift", label: "Helipad airlift", groups: [AIRLIFT_GROUP] },
     { id: "deck", label: "Deck", groups: ["Deck", "Walk off"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
-    { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },
+    { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Craters", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Sound"] },
     { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },
@@ -1004,6 +1045,15 @@ app.onTick((rawDt) => {
   });
   app.hud.set("expedition", () => loop.line + ` · pads ${loop.pads.near(sim.pelvis.x, sim.pelvis.z, 3000).length} within 3 km, pickup ${loop.padCall.state}, bank ${Math.floor(loop.exp.bank.scrap)}, unlocks ${Object.entries(loop.unlocks.levels).map(([k, n]) => k + n).join(" ") || "none"}`);
   app.hud.set("contracts", loop.quests.line);
+  // Craters slump and heal; the ground they changed is patched once; the dead fall.
+  craters.update(dt, groundChanged);
+  flushGround();
+  costs.mark("craters");
+  deaths.follow(sim.pos.x, sim.pos.z);
+  deaths.step(dt);
+  deadDraw.update();
+  costs.mark("deaths");
+  app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving) · craters ${craters.count}`);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
   if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }
