@@ -371,7 +371,7 @@ export class Strider {
       from: { x: e.x, y: e.y, z: e.z },
       start: { x: sx, y: g.height(sx, sz), z: sz },
       end: { x: ex, y: g.height(ex, ez), z: ez },
-      width: v.striderBeamWidth, damage: v.striderBeamDamage, pierce: v.striderBeamPierce,
+      width: v.striderBeamWidth, damage: v.striderBeamDamage, pierce: v.striderBeamPierce, tick: 0, heat: 1,
     };
   }
 
