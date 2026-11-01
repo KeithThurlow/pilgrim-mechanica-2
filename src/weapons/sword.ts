@@ -61,6 +61,11 @@ export const SWORD_DEFAULTS = {
   swordEaseIn: 1.6,
   swordEaseOut: 0.9,
   swordGuardUp: 0,
+  // The waist's follow-through (Keith 2026-11-01, round 7): the torso turns with the cut and carries on past.
+  swordTwist: 24,
+  swordTwistHz: 2.4,
+  swordTwistDamp: 0.5,
+  swordTwistMax: 40,
   swordShoulderOut: 0.35,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
@@ -105,6 +110,10 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordEaseIn", label: "Speed arriving at the cut", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Against the average: high bursts into the cut out of a short drive (Keith: impact); low builds slowly" },
   { key: "swordEaseOut", label: "Speed leaving the cut", min: 0.3, max: 3, step: 0.05, group: GA, tip: "Against the average: low hands more of the speed to a long, slowing follow-through (weight); high carries on fast and stops late" },
   { key: "swordShoulderOut", label: "Arm mounted out from the hull (m)", min: 0, max: 1, step: 0.01, group: GA, tip: "A sword arm's shoulder sits this much further out, to make room for the blade" },
+ { key: "swordTwist", label: "Waist turns with the cut (°)", min: 0, max: 60, step: 1, group: GA, tip: "The torso coils back a little in the drive, turns this far after the blade through the cut and follow-through, and back on the back-cut; 0 off. Drawn only: the guns on the hull turn back by as much, so nothing aims elsewhere" },
+  { key: "swordTwistHz", label: "Waist spring (Hz)", min: 0.5, max: 8, step: 0.1, group: GA, tip: "How fast the waist follows the swing: low lags and swings on (heavy), high snaps" },
+  { key: "swordTwistDamp", label: "Waist damping", min: 0.1, max: 1.5, step: 0.01, group: GA, tip: "Below 1 it overshoots and settles back (weight carrying on); 1 no overshoot" },
+  { key: "swordTwistMax", label: "Waist twist at most (°)", min: 0, max: 90, step: 1, group: GA, tip: "Two swords swinging at once add up to this at most" },
   { key: "swordGuardUp", label: "At rest: hand higher (m)", min: -1, max: 1, step: 0.05, group: GA },
 ];
 
@@ -276,6 +285,32 @@ export function clipPose(c: SwordClip, t: number, side: 1 | -1, shoulder: V, aim
 export function blendPose(a: SwordPose, b: SwordPose, k: number): SwordPose {
   const fwd = norm(lerpV(a.fwd, b.fwd, k));
   return { hand: lerpV(a.hand, b.hand, k), fwd, up: square(fwd, lerpV(a.up, b.up, k)), pole: norm(lerpV(a.pole, b.pole, k)) };
+}
+
+/**
+ * Where the waist wants to be (pure; in shares of swordTwist, + toward the arm's own side): it coils back a little in the
+ * drive, turns after the blade across to the far side through the cut and holds there through the follow-through
+ * (A); the back-cut brings it back past the middle to its own side (B); the returns settle it to 0. The arsenal runs a
+ * spring toward this, which is the lag and the swing on past.
+ */
+export function twistTarget(c: SwordClip, t: number, st: SwordStats, v: SwordValues): number {
+  if (c === "guard") return 0;
+  const { len, cut } = clipKeys(c, st, v);
+  const x = Math.max(0, Math.min(1, t / Math.max(1e-3, len)));
+  const lerp = (a: number, b: number, k: number) => a + (b - a) * smooth(Math.max(0, Math.min(1, k)));
+  if (c === "R") return lerp(-1, 0, x);
+  if (c === "S") return lerp(0.6, 0, x);
+  const [c0, c1] = cut!;
+  if (c === "A") return x < c0 ? lerp(0, 0.3, x / c0) : lerp(0.3, -1, (x - c0) / (c1 - c0));
+  return x < c0 ? -1 : lerp(-1, 0.6, (x - c0) / (c1 - c0));
+}
+
+/** One step of a damped spring (x, v) toward a target: frequency hz, damping ratio z (pure). */
+export function springStep(x: number, vel: number, target: number, hz: number, z: number, dt: number): [number, number] {
+  const w = 2 * Math.PI * hz;
+  const a = w * w * (target - x) - 2 * z * w * vel;
+  const v2 = vel + a * dt;
+  return [x + v2 * dt, v2];
 }
 
 /** A stretch of a cut swept this step: the clip and its times from, to (s). */

@@ -628,6 +628,11 @@ export class RampartBody {
     for (const { mesh, base } of this.paints) look.tint(mesh, color === null ? base : color);
   }
 
+  /** A drawn-only twist of the waist (radians, + the mech's left; the sword's follow-through, Keith 2026-11-01): the
+   *  hull turns, the guns on it turn back by as much, so nothing aims anywhere else. Cosmetic; set by the weapons. */
+  private twist = 0;
+  setTwist(rad: number) { this.twist = rad; }
+
   update(sim: WalkerSim, upper: UpperSim) {
     const t = this.tmp;
     this.torsoYaw = upper.torsoYaw;
@@ -637,7 +642,7 @@ export class RampartBody {
 
     // Hull: on the waist, turned to the torso's aim, pitched with the body, rolled only as much as it isn't kept level.
     // Leaning back (upper.lean) when the guns need more raise than they have.
-    t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + upper.shake * Math.sin(performance.now() * 0.09), sim.hullRoll, "YXZ");
+    t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + this.twist + upper.shake * Math.sin(performance.now() * 0.09), sim.hullRoll, "YXZ");
     this.hull.quaternion.setFromEuler(t.e);
     // The hull stands as high above the hips as on its own model.
     t.v.copy(this.hullRest.Waist).sub(new THREE.Vector3(0, this.hullRest.Thigh_L.y, 0)).applyQuaternion(sim.pelvisQ);
@@ -648,7 +653,7 @@ export class RampartBody {
     for (const p of this.pods) {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
-      p.yawPitch.rotation.set(g.pitch, g.yaw, 0, "YXZ");
+      p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
       p.kick.position.z = -g.kick;
       p.spin.rotation.z = g.spinAngle * -p.side;
     }

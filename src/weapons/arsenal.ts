@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, sweepTimes, swordCuts, clipPose, type SwordStats, type SwordPose } from "./sword";
+import { SwordSim, sweepTimes, swordCuts, clipPose, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -97,6 +97,9 @@ interface Side {
   swishT: number;
   swishAir: number;
   swishLast: THREE.Vector3;
+  /** The waist's twist this sword asks for (radians, + the mech's left) and its spring's speed. */
+  twist: number;
+  twistV: number;
 }
 
 /** A shoulder weapon on its key. */
@@ -174,7 +177,7 @@ export class Arsenal implements MechWeapons {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
     const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
-      sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3() });
+      sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3(), twist: 0, twistV: 0 });
     this.sides = [side(), side()];
     this.sides[1].sword = new SwordSim(-1);
     addWeaponSounds(bf.sfx, v);
@@ -192,11 +195,12 @@ export class Arsenal implements MechWeapons {
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
+      body.setTwist?.(0);
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
-      s.sword.stop(); s.swordHits.clear(); s.swish?.clear();
+      s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
@@ -456,6 +460,17 @@ export class Arsenal implements MechWeapons {
     // A sword arm's shoulder sits further out from the hull, to make room for the blade (Keith 2026-11-01, round 4).
     const shoulder = body.shoulderAt ? body.shoulderAt(sw.side, this.sh) : this.sh.set(sw.side * 1.02, 0.89, 0);
     shoulder.x += sw.side * v.swordShoulderOut;
+    // The waist (Keith 2026-11-01, round 7): a spring toward where the swing wants the torso, so it lags the blade and
+    // swings on past it. Both swords' twists add (dual swords: a cut each way partly cancels), up to swordTwistMax.
+    const D2R = Math.PI / 180;
+    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v) * v.swordTwist * D2R : 0;
+    for (let left = dt; left > 1e-6; left -= 1 / 120) [s.twist, s.twistV] = springStep(s.twist, s.twistV, want, v.swordTwistHz, v.swordTwistDamp, Math.min(left, 1 / 120));
+    let total = 0;
+    for (const o of this.sides) if (o.kind === "melee") total += o.twist;
+    const tmax = v.swordTwistMax * D2R;
+    // Drawn only (Keith 2026-11-01: "without affecting weapon aims"): the hull turns, the guns on it turn back. The
+    // sword's pose is in the drawn hull's frame, so the sword (and its cut) turns with the waist.
+    body.setTwist?.(Math.max(-tmax, Math.min(tmax, total)));
     const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
     const pose = sw.pose(shoulder, aimYaw, st, v);
     const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, out: v.swordShoulderOut };
@@ -573,7 +588,8 @@ export class Arsenal implements MechWeapons {
     for (const s of this.sides) {
       s.rail.holding = false; s.rail.charge = 0; s.whined = false;
       s.aimLine.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
-      s.sword.stop(); s.swish?.clear();
+      s.sword.stop(); s.swish?.clear(); s.twist = s.twistV = 0;
+      this.unit.body.setTwist?.(0);
       clearPaint(s.paint);
       for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.15 : 0.9;
     }

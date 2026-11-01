@@ -6,7 +6,7 @@
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
 // resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, type SwordStats, type SwordClip } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -112,6 +112,18 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   let back = false, prev = 0;
   for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
   must(!back, "the swing ran backwards in time somewhere");
+}
+// ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
+{
+  const wA = st.windup, sA = st.slash;
+  must(twistTarget("A", wA * 0.9, st, V) > 0, "the waist doesn't coil back in the drive");
+  must(Math.abs(twistTarget("A", wA + sA + V.swordFollow, st, V) + 1) < 1e-6, "the waist doesn't end the first cut turned to the far side");
+  must(twistTarget("B", 9, st, V) > 0, "the back-cut doesn't bring the waist back to its own side");
+  must(Math.abs(twistTarget("R", 9, st, V)) < 1e-6 && twistTarget("guard", 0, st, V) === 0, "the waist doesn't settle at rest");
+  // A step to the far side: the spring overshoots (weight carrying on), then settles, and never blows up at 30 fps.
+  let x = 0, vel = 0, peak = 0;
+  for (let i = 0; i < 240; i++) { [x, vel] = springStep(x, vel, -1, V.swordTwistHz, V.swordTwistDamp, 1 / 120); peak = Math.min(peak, x); }
+  must(peak < -1.02 && Math.abs(x + 1) < 0.02, `the waist spring doesn't swing on past and settle (peak ${peak.toFixed(2)}, end ${x.toFixed(2)})`);
 }
 // ---- Cuts: bodies in the arc and reach, once per swing, budget ----
 {
