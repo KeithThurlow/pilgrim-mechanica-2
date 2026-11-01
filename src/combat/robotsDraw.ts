@@ -17,7 +17,7 @@ import {
   QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
 import {
-  smallBodyGeometry, midBodyGeometry, quadBodyGeometry, quadWeaponGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
+  smallBodyGeometry, midBodyGeometry, quadBodyGeometry, quadTurretGeometry, quadWeaponGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
   WHITE, WHITE_DIM, JOINT, DARK, CHROME, ROBOT_PALETTE,
 } from "./robotShapes";
 import { LAMP_ROBOT, LAMP_ROBOT_GLOW, type LampEmit } from "../world/lamps";
@@ -83,7 +83,8 @@ const hash01 = (x: number) => { const h = Math.sin(x) * 43758.5453; return h - M
 
 export class RobotsDraw {
   readonly group = new THREE.Group();
-  private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool; private quadBodies: Pool; private quadGuns: Pool[];
+  private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool; private quadBodies: Pool; private quadTurrets: Pool; private quadGuns: Pool[];
+  private mt = new THREE.Matrix4(); private qt = new THREE.Quaternion();
   private saws: Pool; private buckets: Pool; private beams: Pool; private limbs: Pool; private pipes: Pool; private cables: Pool; private knuckles: Pool; private lamps: Pool;
   private roll = new Float32Array(ROBOT_MAX);
   private sawA = new Float32Array(ROBOT_MAX);
@@ -121,6 +122,7 @@ export class RobotsDraw {
     this.smallBodies = pool(smallBodyGeometry(), ROBOT_MAX);
     this.midBodies = pool(midBodyGeometry(), ROBOT_MAX);
     this.quadBodies = pool(quadBodyGeometry(), 512);
+    this.quadTurrets = pool(quadTurretGeometry(), 512);
     this.quadGuns = [0, 1, 2, 3].map((w) => pool(quadWeaponGeometry(w), 256));
     this.bigBodies = pool(bigBodyGeometry(), 256);
     this.saws = pool(sawGeometry(), ROBOT_MAX, lamp, false);
@@ -183,7 +185,7 @@ export class RobotsDraw {
       const k = sw.kind[i];
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
-    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
+    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, this.quadTurrets, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
     this.beamDraw.update(dt);
   }
 
@@ -292,15 +294,21 @@ export class RobotsDraw {
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
     c.copy(this.white).multiplyScalar(0.9 + sw.seed[i] * 0.12); if (dead) c.multiplyScalar(0.4);
-    if (sw.variant[i] === QUAD_WEAPON) this.quadTop(i, m, c, alarm, dead);
+    if (sw.variant[i] === QUAD_WEAPON) {
+      // The turret on its own yaw (the sim's), pitched with the body.
+      this.qt.setFromAxisAngle(this.ay, sw.turret[i]).multiply(qa);
+      this.mt.compose(p, this.qt, s);
+      this.quadTop(i, m, this.mt, c, alarm, dead);
+    }
     else this.smallQuadTop(i, m, c, q, p, S, spin, alarm, dead);
     this.midLegs(i, p, S, h, y, dead);
   }
 
   /** A weapon quad's drum and weapons, red eyes, the laser's or rail's lens glowing blue as it charges. */
-  private quadTop(i: number, m: THREE.Matrix4, c: THREE.Color, alarm: boolean, dead: boolean) {
+  private quadTop(i: number, body: THREE.Matrix4, m: THREE.Matrix4, c: THREE.Color, alarm: boolean, dead: boolean) {
     const sw = this.swarm, st = sw.state[i], w = sw.weapon[i];
-    this.quadBodies.put(m, c);
+    this.quadBodies.put(body, c);
+    this.quadTurrets.put(m, c);
     this.quadGuns[w].put(m, c);
     const flash = (alarm || sw.tell[i] === 1) && Math.sin(this.time * 24) > -0.2, eyeY = QUAD_TURRET_Y + 0.03;
     const lampC = dead ? OFF : flash ? ALARM : EYE_RED;
