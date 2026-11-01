@@ -17,11 +17,12 @@ import type { Prey } from "../pilot/quarry";
 import type { KeepOut } from "../game/keepOut";
 import { hash4 } from "../world/pois";
 
-export const DROID_CAMP_DEFAULTS = { droidCampShare: 0, droidPackShare: 0, droidCampMax: 8, droidCampMin: 1 };
+export const DROID_CAMP_DEFAULTS = { droidsOn: 0, droidCampShare: 0.2, droidPackShare: 0.25, droidCampMax: 8, droidCampMin: 1 };
 export type DroidCampValues = typeof DROID_CAMP_DEFAULTS;
 const G = "Humanoid robots: in the field";
 export const DROID_CAMP_GROUP = G;
 export const DROID_CAMP_PARAMS: Param[] = [
+  { key: "droidsOn", label: "Humanoids in the field (0 off, 1 on)", min: 0, max: 1, step: 1, group: G, tip: "Keith 2026-11-01: off for now, they feel out of place beside the quads; ?set=droidsOn:1 brings them back" },
   { key: "droidCampShare", label: "Squad per camp (× its robots)", min: 0, max: 1, step: 0.01, group: G, tip: "A camp of 20 robots brings 4 humanoids at 0.2" },
   { key: "droidPackShare", label: "Squad per pack or raid (× its robots)", min: 0, max: 1, step: 0.01, group: G },
   { key: "droidCampMin", label: "At least (per group)", min: 0, max: 10, step: 1, group: G },
@@ -59,6 +60,8 @@ export class DroidCamps {
   /** One frame, after the swarm camps' (so their wake and calm are this frame's). p: the mech. */
   update(dt: number, hunting: boolean, p: { x: number; z: number }, prey: Prey) {
     const v = this.v, sq = this.squads;
+    // Off (Keith 2026-11-01): none come, and any already out go.
+    if (v.droidsOn < 0.5) { if (this.live.size) this.reset(); return; }
     this.seen.clear();
     this.swarms.eachLive((id, x, z, n, awake, roam, radius) => {
       this.seen.add(id);

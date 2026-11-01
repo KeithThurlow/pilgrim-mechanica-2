@@ -24,8 +24,7 @@ const swarms = {
   eachLive(fn: (id: string, x: number, z: number, n: number, awake: boolean, roam: boolean, r: number) => void) { for (const [id, c] of camps) fn(id, c.x, c.z, c.n, c.awake, c.roam, 12); },
   wake(id: string) { woke++; const c = camps.get(id); if (c) c.awake = true; },
 } as unknown as SwarmCamps;
-// Humanoids are off by default (Keith 2026-11-01); the rules are checked at the shares they had.
-const v = { ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS, droidCampShare: 0.2, droidPackShare: 0.25, ...SWARM_CAMP_DEFAULTS };
+const v = { ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS, droidsOn: 1 };
 const dc = new DroidCamps(v, bf, new THREE.Scene(), field, null, swarms);
 const mech = { x: 0, z: 0 };
 const at = new THREE.Vector3(0, 3, 0);
@@ -67,5 +66,12 @@ step(0.5);
 const raid = dc.count - before;
 if (raid !== Math.min(v.droidCampMax, Math.round(26 * v.droidPackShare))) fail(`a raid of 26 brought ${raid}`);
 console.log(`droid camps: camp squad split ${per.join("/")} (trooper/lancer/brute), raid ${raid}, pulses ${fired}`);
+// Off (the default, Keith 2026-11-01): the squads go and none come.
+v.droidsOn = 0;
+step(0.2);
+if (dc.count) fail(`${dc.count} humanoids on the field with them off`);
+camps.set("c2", { x: 0, z: 90, n: 30, awake: false, roam: false });
+step(0.2);
+if (dc.count) fail("a camp brought humanoids with them off");
 if (failed) process.exit(1);
 console.log("droidcamps-check: ok");
