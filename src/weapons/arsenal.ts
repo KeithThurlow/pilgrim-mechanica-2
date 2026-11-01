@@ -114,6 +114,10 @@ export interface Shoulder {
 
 const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const NAMES: Record<string, string> = { rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+/** Short names for the action bar's buttons. */
+const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
+/** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
+export interface KeySlot { key: string; name: string; cool: number; coolMax?: number; left: number; leftMax?: number; aiming: boolean; off: boolean; rounds?: string; reloading?: boolean }
 const newLaser = (): Laser => ({ on: false, from: new THREE.Vector3(), to: new THREE.Vector3(), k: 0 });
 
 export class Arsenal implements MechWeapons {
@@ -826,6 +830,24 @@ export class Arsenal implements MechWeapons {
     // Sprinting with the weapons off (src/mech/bound.ts): SPRINT, then the controls dimmed.
     if (this.unit.gunsOff) return [`<b style="color:#ffb347">SPRINT</b> <span style="opacity:.4">weapons off · ${this.controlList().join(" · ")}</span>`];
     return this.controlList();
+  }
+
+  /**
+   * The shoulder and back keys for the action bar (src/ui/actionBar.ts; Keith 2026-11-01: "weapon abilities on buttons
+   * down the bottom, so we can see cooldowns"): the key, a short name, seconds of cooldown left (the bar keeps the
+   * share), seconds of effect left and its length (overdrive, ignited rounds), rounds left for a clip, aiming.
+   */
+  keySlots(): KeySlot[] {
+    const off = !!this.unit.gunsOff;
+    return this.shoulders.map((sh) => {
+      const name = SHORT[sh.weapon] ?? NAMES[sh.weapon] ?? sh.weapon;
+      if (sh.gear) {
+        const g = sh.gear, st = g.stats;
+        return { key: String(sh.key), name, cool: g.cool, coolMax: st.cooldown, left: g.left, leftMax: st.time, aiming: false, off };
+      }
+      const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
+      return { key: String(sh.key), name, cool: cd, left: 0, aiming: sh.held, off, rounds: sh.weapon === "rpg" ? `${Math.ceil(sh.mag.left)}/${sh.mag.size}` : undefined, reloading: sh.mag.reloading > 0 };
+    });
   }
 
   private controlList(): string[] {

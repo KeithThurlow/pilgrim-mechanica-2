@@ -1,4 +1,5 @@
-// The energy bars (Keith 2026-10-27): one bar per dash charge, stacked at the left edge of the screen, each filling from
+// The energy bars (Keith 2026-10-27): one bar per dash charge, stacked at the left edge of the screen (from 120 px down,
+// the upright hull bar beside them; Keith 2026-11-01), each filling from
 // the bottom. Full: a dash in hand (bright). Part full: refilling, or being drained by the sprint (dim; it pulses while
 // the sprint drains it). Reads a Dash (src/mech/dash.ts); draws nothing else.
 import type { Dash } from "../mech/dash";
@@ -6,6 +7,21 @@ import type { Dash } from "../mech/dash";
 const FULL = "#ffb43a";
 const PART = "rgba(255, 180, 58, 0.55)";
 const BACK = "rgba(20, 16, 10, 0.55)";
+
+let stack: HTMLDivElement | null = null;
+/**
+ * The left edge's stack (Keith 2026-11-01): the energy bars, then the upright hull bar (src/ui/vitalsHud.ts) beside
+ * them, stretched to the bars' height.
+ */
+export function leftStack() {
+  if (stack) return stack;
+  stack = document.createElement("div");
+  Object.assign(stack.style, {
+    position: "fixed", left: "14px", top: "120px", display: "flex", alignItems: "stretch", gap: "8px", pointerEvents: "none", zIndex: "20",
+  } as Partial<CSSStyleDeclaration>);
+  document.body.appendChild(stack);
+  return stack;
+}
 
 let shared: EnergyBar | null = null;
 /** The one set of bars on the page (made on first use). */
@@ -15,12 +31,9 @@ export class EnergyBar {
   private root: HTMLDivElement;
   private bars: { box: HTMLDivElement; fill: HTMLDivElement }[] = [];
 
-  constructor(parent: HTMLElement = document.body) {
+  constructor(parent: HTMLElement = leftStack()) {
     this.root = document.createElement("div");
-    Object.assign(this.root.style, {
-      position: "fixed", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex",
-      flexDirection: "column-reverse", gap: "6px", pointerEvents: "none", zIndex: "20",
-    } as Partial<CSSStyleDeclaration>);
+    Object.assign(this.root.style, { display: "flex", flexDirection: "column-reverse", gap: "6px", order: "0" } as Partial<CSSStyleDeclaration>);
     parent.appendChild(this.root);
   }
 

@@ -60,7 +60,7 @@ export class AbilityControl {
   /** The HUD's ability slots. */
   view() {
     const a = this.player.abilities;
-    return a.slots.map((s) => ({ key: String(s.key), name: ABILITY_NAMES[s.id], ready: a.ready(s), active: s.id === "weld" ? a.braced > 0 : this.zones.zones.some((z) => z.kind === s.id && z.owner === this.player.uid) }));
+    return a.slots.map((s) => ({ key: String(s.key), name: ABILITY_NAMES[s.id], ready: a.ready(s), cool: s.cooldown, coolMax: a.cooldownOf(s.id), active: s.id === "weld" ? a.braced > 0 : this.zones.zones.some((z) => z.kind === s.id && z.owner === this.player.uid) }));
   }
 
   /** Being healed right now (the HUD's bar glows). */

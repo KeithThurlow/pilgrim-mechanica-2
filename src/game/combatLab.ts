@@ -411,7 +411,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths physics");
     deadDraw.update();
     cst?.mark("deaths draw");
-    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
+    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: arsenal.keySlots(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
     if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.

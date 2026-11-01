@@ -55,7 +55,7 @@ export class ExpeditionHud {
 
   constructor(radar: HTMLCanvasElement) {
     Object.assign(this.root.style, {
-      position: "fixed", left: "10px", bottom: "84px", display: "flex", alignItems: "flex-end", gap: "10px",
+      position: "fixed", left: "10px", bottom: "34px", display: "flex", alignItems: "flex-end", gap: "10px",
       pointerEvents: "none", zIndex: "4", font: "600 13px/1.35 system-ui, 'Segoe UI', sans-serif", color: COL.ok,
       textShadow: "0 1px 3px #000d",
     } as CSSStyleDeclaration);
