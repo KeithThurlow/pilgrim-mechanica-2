@@ -107,6 +107,9 @@ export const ROBOT_DEFAULTS = {
   robotQuadNear: 14,
   robotQuadFar: 26,
   robotQuadWindup: 0.6,
+  robotQuadTurretTurn: 150,
+  robotQuadTurretArc: 120,
+  robotQuadBodyTurn: 70,
   robotQuadMiniBurst: 14,
   robotQuadMiniRate: 0.07,
   robotQuadMiniDamage: 3,
@@ -377,6 +380,9 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotQuadNear", label: "Hold from (m)", min: 3, max: 60, step: 0.5, group: GQ },
   { key: "robotQuadFar", label: "Hold up to (m)", min: 4, max: 80, step: 0.5, group: GQ },
   { key: "robotQuadWindup", label: "Tell before firing (s)", min: 0, max: 3, step: 0.05, group: GQ, tip: "Eyes flash and it braces before a burst or volley" },
+  { key: "robotQuadTurretTurn", label: "Turret turns at (°/s)", min: 10, max: 720, step: 5, group: GQ, tip: "Keith 2026-11-01: the turret swivels on its own toward the mech, walking or firing; the guns fire where it points" },
+  { key: "robotQuadBodyTurn", label: "Body turns at (°/s)", min: 10, max: 720, step: 5, group: GQ, tip: "Slower than the turret, so the turret leads when you circle it" },
+  { key: "robotQuadTurretArc", label: "Turret turns up to (° off the body)", min: 0, max: 180, step: 5, group: GQ, tip: "Past this the body has to turn too" },
   { key: "robotQuadMiniBurst", label: "Minigun: rounds a burst", min: 1, max: 60, step: 1, group: GQ },
   { key: "robotQuadMiniRate", label: "Minigun: round every (s)", min: 0.02, max: 0.5, step: 0.005, group: GQ },
   { key: "robotQuadMiniDamage", label: "Minigun: damage a round", min: 0, max: 40, step: 0.5, group: GQ },
@@ -532,6 +538,8 @@ export class RobotSwarm {
   /** Medium walkers: QUAD_SMALL or QUAD_WEAPON; weapon quads' weapon (Q_*). */
   readonly variant = new Uint8Array(ROBOT_MAX);
   readonly weapon = new Uint8Array(ROBOT_MAX);
+  /** A weapon quad's turret yaw (world, heading convention): swivels toward the target on its own; its guns fire along it. */
+  readonly turret = new Float32Array(ROBOT_MAX);
   /** Medium ones: time until the saw can attack again. */
   readonly cutClock = new Float32Array(ROBOT_MAX);
   /** 1 while an attack is telegraphed (a medium one's shot or saw wind-up, a big one's volley): lamps red, rearing. */
@@ -713,6 +721,7 @@ export class RobotSwarm {
       const qs = shares?.quad ?? v.robotQuadShare, quad = mid && qs > 0 && (qs >= 1 || this.rand() < qs);
       this.variant[i] = quad ? QUAD_WEAPON : QUAD_SMALL;
       this.weapon[i] = quad ? (shares?.weapon ?? Math.min(3, Math.floor(this.rand() * 4))) : 0;
+      this.turret[i] = this.heading[i];
       this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : quad ? v.robotQuadSize * jit(v.robotMidSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
       this.size[i] *= sizeK;
       this.hp[i] = (big ? v.robotBigHp : quad ? v.robotQuadHp : mid ? v.robotMidHp : v.robotHp) * power;
@@ -1080,7 +1089,7 @@ export class RobotSwarm {
         }
       }
 
-      const turn = (big ? v.robotBigTurn : mid ? v.robotMidTurn : v.robotTurn) * DEG * dt;
+      const turn = (big ? v.robotBigTurn : mid ? (this.variant[i] === QUAD_WEAPON ? v.robotQuadBodyTurn : v.robotMidTurn) : v.robotTurn) * DEG * dt;
       if (st === DOWN) {
         const f = Math.max(0, 1 - v.robotFriction * dt);
         vx[i] *= f; vz[i] *= f;
@@ -1135,6 +1144,8 @@ export class RobotSwarm {
         // Nobody has to face where it walks: small ones crab on four legs, walkers step any way. A walker keeps its
         // front (saw, gun) turned on the mech; a small one's hub just drifts round unless it's aiming.
         if (walker && Number.isNaN(face)) face = Math.atan2(ux, uz);
+        // A weapon quad walks where it's going and lets its turret keep the guns on the mech (Keith 2026-11-01).
+        if (mid && st === RUN && this.variant[i] === QUAD_WEAPON && Math.hypot(vx[i], vz[i]) > 0.8) face = Math.atan2(vx[i], vz[i]);
         if (!Number.isNaN(face)) {
           let dh = face - this.heading[i];
           dh = Math.atan2(Math.sin(dh), Math.cos(dh));
@@ -1152,9 +1163,20 @@ export class RobotSwarm {
         if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; onBite?.(i, v.robotBiteDamage * this.power[i]); }
       }
 
+      // A weapon quad's turret swivels toward the target on its own, within its arc off the body.
+      const tq = mid && this.variant[i] === QUAD_WEAPON;
+      if (tq) {
+        const want = Math.atan2(ux, uz), h = this.heading[i], arc = v.robotQuadTurretArc * DEG;
+        let off = this.turret[i] - h; off = Math.atan2(Math.sin(off), Math.cos(off));
+        let wo = want - h; wo = Math.atan2(Math.sin(wo), Math.cos(wo));
+        wo = Math.max(-arc, Math.min(arc, wo));
+        const step = v.robotQuadTurretTurn * DEG * dt;
+        off += Math.max(-step, Math.min(step, wo - off));
+        this.turret[i] = h + off;
+      }
       // Guns.
       if (st === FIRE) {
-        let dh = Math.atan2(ux, uz) - this.heading[i];
+        let dh = Math.atan2(ux, uz) - (tq ? this.turret[i] : this.heading[i]);
         dh = Math.abs(Math.atan2(Math.sin(dh), Math.cos(dh)));
         this.fireClock[i] -= dt;
         if (big && this.pulseT[i] >= 0) {
@@ -1385,7 +1407,7 @@ export class RobotSwarm {
    * (robotBigLobLead) at its walk velocity, scattered a little; flight time from the distance and the charge's speed.
    */
   private lob(i: number, t: RobotTarget) {
-    const v = this.v, h = this.heading[i], S = this.size[i], quad = this.kind[i] === MID;
+    const v = this.v, h = this.aimYaw(i), S = this.size[i], quad = this.kind[i] === MID;
     // A weapon quad's rockets leave its left pod, the side alternating with each.
     const side = quad ? (this.burstLeft[i] & 1 ? 1 : -1) * S * QUAD_GUN_X : 0, fwd = quad ? S * 0.2 : S * 0.75;
     const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
@@ -1463,9 +1485,12 @@ export class RobotSwarm {
     this.tell[i] = this.burstLeft[i] > 0 || this.fireClock[i] <= v.robotQuadWindup ? 1 : 0;
   }
 
+  /** Which way robot i's guns point: a weapon quad's turret, else its body. */
+  aimYaw(i: number): number { return this.kind[i] === MID && this.variant[i] === QUAD_WEAPON ? this.turret[i] : this.heading[i]; }
+
   /** The beam's emitter: the lens under a big one's thorax, at its front; a weapon quad's laser or rail muzzle (world; the drawer glows the same spot). */
   beamFrom(i: number, out: V3): V3 {
-    const h = this.heading[i], S = this.size[i];
+    const h = this.aimYaw(i), S = this.size[i];
     if (this.kind[i] === MID) {
       const side = -S * QUAD_GUN_X, fwd = S * 0.62;
       out.x = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side; out.z = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side; out.y = this.hubY[i] + S * QUAD_TURRET_Y;
@@ -1593,7 +1618,7 @@ export class RobotSwarm {
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */
   private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, kind: number, onShot: RobotShotFn, side = 0) {
-    const h = this.heading[i];
+    const h = this.aimYaw(i);
     const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
     let dx = t.x - fx, dy = t.y - fy, dz = t.z - fz;
     const L = Math.hypot(dx, dy, dz) || 1;

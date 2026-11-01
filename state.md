@@ -300,6 +300,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Sword: one rare Breaker sword goes into the convoy bay stash once (saved bays too), to fit on a held slot.
 - Checked: typecheck; headless convoy lab `?norender&dt=0.033&nearcamp=30` for 60 s: no errors, craters 8, bodies 1, craters 0.2 ms and deaths 0.13 ms a frame; full `npm test`.
 
+### 2026-11-01 · Weapon quad turrets swivel on their own (Keith; Claude)
+- The turret (`quadTurretGeometry`, its own instanced pool) turns on `turret[i]` in the sim (host state): toward the mech at `robotQuadTurretTurn` 150°/s, up to `robotQuadTurretArc` 120° off the body. Rounds, rockets, the laser/rail beam and the fire-arc check all go along it (`aimYaw`). The body walks where it's going while running and turns at `robotQuadBodyTurn` 70°/s, so the turret leads when the mech circles it (up to 41° in a circling probe). Cost: one more instanced part per quad.
+- Checked: robot danger check (quad numbers unchanged; turret stays inside its arc), full `npm test`. Files: `robots.ts`, `robotShapes.ts`, `robotsDraw.ts`, `tools/robot-danger-check.ts`.
+
 ### 2026-11-01 · Soft gradient telegraphs: the pulse's time-left ring is back (Keith; Claude)
 - Keith: bring back the ring growing out to the blast's edge (it tells you the time left), drawn soft like the new reach ring; head all telegraphs toward soft gradients. New `SoftRing` in `src/weapons/ribbon.ts`: an additive band on the sand, clear at both edges, brightest near its outer edge (vertex colours). The big walkers' pulse draws its reach and a soft front growing out to it (`robotPulseRing` 0.35); the strider's slam rings use the same (`striderFx.ts`). Checked: typecheck, full `npm test`.
 ### 2026-11-01 · Big beams grow from a thin live beam; the pulse charges a thin beam and blasts with light (Keith; Claude)

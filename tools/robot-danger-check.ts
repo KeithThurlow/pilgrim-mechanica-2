@@ -216,7 +216,7 @@ for (let w = 0; w < 4; w++) {
   const t = { x: 300, y: 0, z: -200, radius: HIT_R };
   t.y = field.height(t.x, t.z) + 3;
   const [i] = sw.spawn(1, t.x + 6, t.z + 40, 0, { mid: 1, big: 0, quad: 1, weapon: w });
-  let rounds = 0, lobs = 0, beams = 0, dmg = 0, cuts = 0, minD = Infinity, told = false, reachMiss = 0, sag = 0, samples = 0;
+  let rounds = 0, lobs = 0, beams = 0, dmg = 0, cuts = 0, minD = Infinity, told = false, reachMiss = 0, sag = 0, samples = 0, offMax = 0, led = 0;
   sw.onLob = (j) => { lobs++; dmg += sw.lobOf(j).damage; };
   sw.onBeam = (e) => {
     beams++;
@@ -230,6 +230,11 @@ for (let w = 0; w < 4; w++) {
       for (let k = 0; k < 4; k++) if (sw.legPose(i, k, P3[0], P3[1], P3[2], P3[3]) > 1.001) reachMiss++;
       if (sw.hubY[i] - sw.py[i] < sw.heightOf(i) * 0.7) sag++;
       samples++;
+      // The turret (Keith 2026-11-01): within its arc off the body, and pointing nearer the mech than the body does.
+      const wrap = (a: number) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+      const want = Math.atan2(t.x - sw.px[i], t.z - sw.pz[i]);
+      offMax = Math.max(offMax, wrap(sw.turret[i] - sw.heading[i]));
+      if (wrap(want - sw.turret[i]) + 0.02 < wrap(want - sw.heading[i])) led++;
     }
     if (s > 15 * 120) minD = Math.min(minD, Math.hypot(sw.px[i] - t.x, sw.pz[i] - t.z));
   }
@@ -242,6 +247,8 @@ for (let w = 0; w < 4; w++) {
   if ((w === 0 || w === 1) && !told) fail(`the ${name} quad never showed its tell`);
   if (reachMiss > samples * 0.04) fail(`the ${name} quad's legs out of reach ${reachMiss} of ${samples * 4} samples`);
   if (sag) fail(`the ${name} quad's body sagged below 70% of its height ${sag} times`);
+  if (offMax > V0.robotQuadTurretArc * Math.PI / 180 + 0.01) fail(`the ${name} quad's turret swung ${(offMax * 180 / Math.PI).toFixed(0)}° off its body (arc ${V0.robotQuadTurretArc})`);
+  if (w === 0) console.log(`  turret: up to ${(offMax * 180 / Math.PI).toFixed(0)}° off the body, ahead of it toward the mech in ${led} of ${samples} samples`);
   if (!BASE_BY_ID[QUAD_DROP[w]]) fail(`the ${name} quad drops ${QUAD_DROP[w]}, which isn't an item base`);
 }
 void DEAD;
