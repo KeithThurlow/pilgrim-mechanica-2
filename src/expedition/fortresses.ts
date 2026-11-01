@@ -26,6 +26,7 @@ import type { Prey } from "../pilot/quarry";
 import { TEAM } from "../game/factions";
 import { hash4, rng, type PoiPlacement } from "../world/pois";
 import { fenced, gateBox, regionOf, routeVia, wallHeight, type SiegeWalls } from "../pois/fortressGround";
+import { ringR, ringSpan } from "../pois/fortress";
 import type { Layout } from "../pois/fortress";
 import { Gates, GATE_DEFAULTS, GATE_PARAMS, type GateEvent, type GateValues, type GateState } from "../pois/gates";
 import { GatesDraw } from "../pois/gatesDraw";
@@ -34,9 +35,13 @@ import { WARLORD_DEFAULTS, WARLORD_PARAMS, type Warlord } from "./warlord";
 export const FORT_LIFE_DEFAULTS = {
   ...GATE_DEFAULTS,
   ...WARLORD_DEFAULTS,
-  fortGuardsOuter: 22,
-  fortGuardsInner: 16,
-  fortGuardsKeep: 10,
+  fortGuardsOuter: 30,
+  fortGuardsInner: 22,
+  fortGuardsKeep: 14,
+  fortAlarmAll: 1,
+  fortTrickle: 4,
+  fortTrickleEvery: 16,
+  fortTrickleMax: 32,
   fortSentries: 0.35,
   fortSpawn: 700,
   fortDrop: 1000,
@@ -48,7 +53,7 @@ export const FORT_LIFE_DEFAULTS = {
   fortReinforceAfter: 20,
   fortHear: 1,
   fortHurt: 1.5,
-  fortDamage: 0.6,
+  fortDamage: 1,
 };
 export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues;
 
@@ -65,6 +70,10 @@ export const FORT_LIFE_PARAMS: Param[] = [
   { key: "fortWake", label: "Outer yard wakes within (m of its wall)", min: 0, max: 500, step: 5, group: G },
   { key: "fortActive", label: "Stir within (m)", min: 50, max: 1500, step: 10, group: G },
   { key: "fortSally", label: "Comes out after the mech within (m of the wall)", min: 0, max: 400, step: 5, group: G, tip: "An alert yard leaves through an open gate to chase the mech this close outside; further off it holds" },
+  { key: "fortAlarmAll", label: "One alarm wakes every yard", min: 0, max: 1, step: 1, group: G, tip: "1: the inner walls' sentries open up as soon as the outer yard fights" },
+  { key: "fortTrickle", label: "Bandits out of the containers per wave", min: 0, max: 20, step: 1, group: G, tip: "While it's alert, fresh bandits climb out of the containers in the yard the mech is in (0: none)" },
+  { key: "fortTrickleEvery", label: "A wave every (s)", min: 2, max: 120, step: 1, group: G },
+  { key: "fortTrickleMax", label: "Waves bring at most (bandits per fortress)", min: 0, max: 200, step: 1, group: G },
   { key: "fortReinforce", label: "War band sent when it's attacked (vehicles)", min: 0, max: 12, step: 1, group: G, tip: "Once per fortress per expedition, a column rolls out from it after the first alarm (0: none)" },
   { key: "fortReinforceAfter", label: "War band rolls out after (s)", min: 0, max: 180, step: 1, group: G },
   { key: "fortGiveUp", label: "Stand down past (m from the centre)", min: 100, max: 2000, step: 10, group: G },
@@ -77,14 +86,14 @@ type YardState = "asleep" | "idle" | "alert";
 interface Yard {
   k: number;
   slots: number[]; gens: number[];
-  sentry: Uint8Array;
+  sentry: number[];
   state: YardState;
   hp: number;
   /** Inner and outer radius of its floor (m from the centre). */
   r0: number; r1: number;
 }
-interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[] }
-interface Kept { left: number[]; hp: Map<string, number> }
+interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[]; wave: number; waved: number }
+interface Kept { left: number[]; hp: Map<string, number>; waved: number }
 
 export class Fortresses {
   readonly sw: InfantrySwarm;
@@ -157,7 +166,8 @@ export class Fortresses {
     const r = radius * this.v.fortHear;
     for (const f of this.live.values()) {
       const d = Math.hypot(x - f.L.x, z - f.L.z);
-      for (const y of f.yards) if (d - y.r1 < r && (y.k === 0 || d < f.L.rings[y.k - 1].r)) this.alarm(f, y);
+      const a = Math.atan2(x - f.L.x, z - f.L.z);
+      for (const y of f.yards) if (d - y.r1 < r && (y.k === 0 || d < ringR(f.L.rings[y.k - 1], a))) this.alarm(f, y);
     }
   }
 
@@ -181,19 +191,21 @@ export class Fortresses {
     }
     // Alarms and behaviour per yard.
     for (const f of this.live.values()) {
-      const d = Math.hypot(p.x - f.L.x, p.z - f.L.z), rings = f.L.rings;
+      const d = Math.hypot(p.x - f.L.x, p.z - f.L.z), rings = f.L.rings, am = Math.atan2(p.x - f.L.x, p.z - f.L.z);
+      const R = (k: number) => ringR(rings[k], am);
+      if (hunting) this.waves(dt, f, am);
       for (const y of f.yards) {
         const hp = this.hp(y);
         if (hp < y.hp - 1e-3) this.alarm(f, y);
         y.hp = hp;
         if (hunting) {
-          if (y.k === 0 && d < rings[0].r + v.fortWake) this.alarm(f, y);
-          if (y.k > 0 && d < y.r1 + rings[y.k].top + rings[y.k].face + 25 && d < rings[y.k - 1].r) this.alarm(f, y);
+          if (y.k === 0 && d < R(0) + v.fortWake) this.alarm(f, y);
+          if (y.k > 0 && d < R(y.k) + 25 && d < R(y.k - 1)) this.alarm(f, y);
         }
         if (y.state === "alert" && (!hunting || d > v.fortGiveUp)) y.state = "idle";
         if (y.state === "asleep" && d < v.fortActive) y.state = "idle";
         else if (y.state === "idle" && d > v.fortActive * 1.3) y.state = "asleep";
-        const mr = regionOf(f.L, p.x, p.z), sallyOk = mr > 0 || d < rings[0].r + v.fortSally;
+        const mr = regionOf(f.L, p.x, p.z), sallyOk = mr > 0 || d < R(0) + v.fortSally;
         for (let n = 0; n < y.slots.length; n++) {
           const i = y.slots[n];
           if (sw.gen[i] !== y.gens[n] || sw.state[i] >= DOWN) continue;
@@ -249,7 +261,7 @@ export class Fortresses {
       for (const f of this.live.values()) { const d = Math.hypot(f.L.x - P.x, f.L.z - P.z); if (d < bd && !w.isDead(f.p.id)) { bd = d; best = f; } }
       if (!best) { if (w.poi) w.leave(); return; }
       const keep = best.L.rings[best.L.rings.length - 1];
-      w.place(best.p.id, best.L.x, best.L.z, keep.r - keep.top - keep.face, best.p.yaw);
+      w.place(best.p.id, best.L.x, best.L.z, keep.r * 0.8 - ringSpan(keep), best.p.yaw);
       this.warlordHp = m.health;
     }
     const f = this.live.get(w.poi!)!, keep = f.yards[f.yards.length - 1];
@@ -262,6 +274,35 @@ export class Fortresses {
     if (y.state === "alert") return;
     y.state = "alert";
     this.onAlert?.(f.p.id, y.k);
+    if (this.v.fortAlarmAll > 0) for (const o of f.yards) this.alarm(f, o);
+  }
+
+  /**
+   * While any yard is alert: every fortTrickleEvery s a wave of bandits climbs out of the containers in the yard the
+   * mech is in (the outer yard while it's outside), up against that yard's outer wall, until fortTrickleMax came.
+   */
+  private waves(dt: number, f: LiveFort, am: number) {
+    const v = this.v, sw = this.sw;
+    if (!f.yards.some((y) => y.state === "alert") || v.fortTrickle <= 0 || f.waved >= v.fortTrickleMax) return;
+    f.wave -= dt;
+    if (f.wave > 0) return;
+    f.wave = v.fortTrickleEvery;
+    const p = this.player.sim.pelvis, k = Math.max(0, Math.min(f.yards.length - 1, regionOf(f.L, p.x, p.z) - 1)), y = f.yards[k];
+    const ring = f.L.rings[k], n = Math.min(Math.round(v.fortTrickle), Math.round(v.fortTrickleMax - f.waved));
+    // Off to one side of the mech (never on top of it), against the yard's outer wall.
+    const r = rng(hash4(f.p.seed, 23, f.waved, 29));
+    const a = am + (r() < 0.5 ? -1 : 1) * (0.35 + 0.5 * r()), d = ringR(ring, a) - ringSpan(ring) - 2;
+    const x = f.L.x + Math.sin(a) * d, z = f.L.z + Math.cos(a) * d;
+    const slots = sw.spawn(n, x, z, 4);
+    for (const i of slots) {
+      sw.py[i] = this.field.height(sw.px[i], sw.pz[i]);
+      sw.hp[i] *= v.fortHurt;
+      sw.hold[i] = 0; sw.frozen[i] = 0;
+      this.postX[i] = sw.px[i]; this.postZ[i] = sw.pz[i];
+      y.slots.push(i); y.gens.push(sw.gen[i]); y.sentry.push(0);
+    }
+    y.hp = this.hp(y);
+    f.waved += slots.length;
   }
 
   private gateEvent(e: GateEvent) {
@@ -283,7 +324,7 @@ export class Fortresses {
     const v = this.v, sw = this.sw, L = this.walls.layout(p);
     const rings = L.rings, kept = this.kept.get(p.id);
     const floor = this.field.height(p.x, p.z) - wallHeight(L, p.x, p.z, this.walls.down);
-    const f: LiveFort = { p, L, floor, yards: [], gates: [] };
+    const f: LiveFort = { p, L, floor, yards: [], gates: [], wave: 0, waved: kept?.waved ?? 0 };
     // Gates.
     for (const ring of rings) for (const g of ring.gates) {
       if (!g.barred) continue;
@@ -297,10 +338,11 @@ export class Fortresses {
     const r = rng(hash4(p.seed, 11, 13, 17));
     for (let k = 0; k < rings.length; k++) {
       const ring = rings[k], next = rings[k + 1];
-      const r1 = ring.r - ring.top - ring.face - 2, r0 = next ? next.r + next.top + next.face + 2 : 3;
+      const r1At = (a: number) => ringR(ring, a) - ringSpan(ring) - 2, r0At = (a: number) => (next ? ringR(next, a) + ringSpan(next) + 2 : 3);
+      const r1 = ring.r - ringSpan(ring) - 2, r0 = next ? next.r + ringSpan(next) + 2 : 3;
       const n = Math.max(0, Math.round(kept?.left[k] ?? counts[k]));
       const slots = n > 0 ? sw.spawn(n, p.x, p.z, 1) : [];
-      const sentry = new Uint8Array(slots.length), ns = Math.round(slots.length * v.fortSentries);
+      const sentry = slots.map(() => 0), ns = Math.round(slots.length * v.fortSentries);
       slots.forEach((i, m) => {
         let x: number, z: number;
         if (m < ns) {
@@ -310,12 +352,17 @@ export class Fortresses {
             a = r() * Math.PI * 2;
             if (!ring.gates.some((g) => Math.abs(Math.atan2(Math.sin(a - g.a), Math.cos(a - g.a))) * ring.r < g.w + 4)) break;
           }
-          const d = ring.r + (r() - 0.5) * ring.top;
+          const d = ringR(ring, a) + (r() - 0.5) * ring.top;
           x = p.x + Math.sin(a) * d; z = p.z + Math.cos(a) * d;
           sentry[m] = 1;
         } else {
-          const a = r() * Math.PI * 2, d = r0 + (r1 - r0) * Math.sqrt(0.1 + 0.9 * r());
-          x = p.x + Math.sin(a) * d; z = p.z + Math.cos(a) * d;
+          // On the yard's floor, off the cover.
+          x = p.x; z = p.z;
+          for (let t = 0; t < 8; t++) {
+            const a = r() * Math.PI * 2, R0 = r0At(a), d = R0 + (r1At(a) - R0) * Math.sqrt(0.1 + 0.9 * r());
+            x = p.x + Math.sin(a) * d; z = p.z + Math.cos(a) * d;
+            if (wallHeight(L, x, z, this.walls.down) < 0.5) break;
+          }
         }
         sw.px[i] = x; sw.pz[i] = z; sw.py[i] = this.field.height(x, z);
         sw.hp[i] *= v.fortHurt;
@@ -331,7 +378,7 @@ export class Fortresses {
   }
 
   private despawn(f: LiveFort, keep: boolean) {
-    if (keep) this.kept.set(f.p.id, { left: f.yards.map((y) => this.alive(y)), hp: new Map(f.gates.map((s) => [s.gate.id, s.hp])) });
+    if (keep) this.kept.set(f.p.id, { left: f.yards.map((y) => this.alive(y)), hp: new Map(f.gates.map((s) => [s.gate.id, s.hp])), waved: f.waved });
     for (const y of f.yards) for (let n = 0; n < y.slots.length; n++) if (this.sw.gen[y.slots[n]] === y.gens[n]) this.sw.remove(y.slots[n]);
     this.gates.removePoi(f.p.id);
     if (this.warlord?.poi === f.p.id) this.warlord.leave();
