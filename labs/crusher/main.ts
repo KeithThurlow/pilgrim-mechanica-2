@@ -10,11 +10,9 @@ import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
-import { Crushers, CRUSHER_DEFAULTS, CRUSHER_PARAMS, SPIN, SUCK, type Crusher, type CrusherFood } from "../../src/combat/crusher";
-import { CrusherBody } from "../../src/combat/crusherBody";
-import { CrusherTarget } from "../../src/combat/crusherTarget";
-import { CrusherFx } from "../../src/combat/crusherFx";
-import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
+import { CRUSHER_DEFAULTS, CRUSHER_PARAMS, SPIN, SUCK, type Crusher, type CrusherFood } from "../../src/combat/crusher";
+import { CrusherField } from "../../src/combat/crusherField";
+import { ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 
 const LAB_DEFAULTS = { crusherCount: 1, crusherFrom: 60, crusherBack: 8, crusherHeaps: 8, crusherHeapBack: 15 };
 const GL = "Crusher lab";
@@ -27,50 +25,34 @@ const LAB_PARAMS: Param[] = [
 ];
 
 const q = new URLSearchParams(location.search);
-const bodies = new Map<number, CrusherBody>();
 // eslint-disable-next-line prefer-const
-let pack: Crushers;
+let cf: CrusherField;
 const lab = await combatLab({
   id: "crusher-lab",
   title: "Crushers",
   defaults: { ...CRUSHER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...LAB_DEFAULTS },
   params: [...LAB_PARAMS, ...CRUSHER_PARAMS, ...ROBOT_TEAR_PARAMS],
   topics: [{ id: "crushers", label: "Crushers", groups: [GL, "Crushers", "Crushers: maw", "Crushers: pincers", "Crushers: eating"] }],
-  selectables: [{ topic: "crushers", label: "Crushers", objects: () => [...bodies.values()].map((b) => b.root) }],
+  selectables: [{ topic: "crushers", label: "Crushers", objects: () => [...cf.bodies.values()].map((b) => b.root) }],
   actions: [{ label: "Crusher now", onClick: () => spawn() }, { label: "Stand them up again", onClick: () => restart() }],
-  report: (): Record<string, unknown> => ({ crushers: pack.alive, sucks: pack.sucks, claws: pack.claws, clawHits: pack.clawHits, ground: Math.round(pack.ground), eaten: pack.eaten, kills: pack.kills }),
+  report: (): Record<string, unknown> => ({ crushers: cf.pack.alive, sucks: cf.pack.sucks, claws: cf.pack.claws, clawHits: cf.pack.clawHits, ground: Math.round(cf.pack.ground), eaten: cf.pack.eaten, kills: cf.pack.kills }),
 });
 const { V, bf, player, field } = lab;
 if (q.has("count")) V.crusherCount = Number(q.get("count")) || 0;
 if (q.has("dist")) V.crusherFrom = Number(q.get("dist")) || V.crusherFrom;
 if (q.has("heaps")) V.crusherHeaps = Number(q.get("heaps")) || 0;
 if (q.has("eat")) V.crusherHunt = 0;
-pack = new Crushers(V, field, 1);
-const target = new CrusherTarget(pack, 3);
-bf.targets.push(target);
-bf.register.add(target);
-const fx = new CrusherFx(field);
-lab.app.scene.add(fx.group);
-const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
-lab.app.scene.add(tear.group);
+cf = new CrusherField(V, bf, lab.app.scene, field, player, lab.shake, 1);
+const pack = cf.pack, target = cf.target;
 let spawnSeed = 1;
 
 function spawn(dist = V.crusherFrom, angle?: number, face?: number): Crusher {
   const a = angle ?? ((spawnSeed++ * 2.39996) % (Math.PI * 2));
   const p = player.sim.pos;
   const x = p.x + Math.sin(a) * dist, z = p.z + Math.cos(a) * dist;
-  const c = pack.spawn(x, z, face ?? Math.atan2(p.x - x, p.z - z));
-  const body = new CrusherBody();
-  bodies.set(c.id, body);
-  lab.app.scene.add(body.root);
-  return c;
+  return cf.spawn(x, z, face ?? Math.atan2(p.x - x, p.z - z));
 }
-function drop(c: Crusher) {
-  pack.remove(c);
-  const b = bodies.get(c.id);
-  if (b) { lab.app.scene.remove(b.root); bodies.delete(c.id); }
-}
-function restart() { for (const c of [...pack.list]) drop(c); backClock = 0; }
+function restart() { for (const c of [...pack.list]) cf.remove(c); backClock = 0; }
 
 // Salvage heaps: what it eats. Seeded places round the start (game state); drawn as piles of steel and rust.
 interface Heap extends CrusherFood { mesh: THREE.Group }
@@ -99,38 +81,13 @@ function addHeap() {
 }
 for (let k = 0; k < V.crusherHeaps; k++) addHeap();
 
-const at = new THREE.Vector3(), dir = new THREE.Vector3(0, -1, 0), mw = { x: 0, y: 0, z: 0 };
+const mw = { x: 0, y: 0, z: 0 };
 let backClock = 0;
-let preyRef = lab.prey(player.sim.pos.x, player.sim.pos.z);
-pack.onEvent = (e) => {
-  if (e.type === "grind") {
-    preyRef.unit.damage(e.damage, at.set(e.x, e.y, e.z), dir, e.pierce);
-    tear.bite(e.x, e.y, e.z, preyRef.at.x, preyRef.at.z);
-    tear.bite(e.x, e.y, e.z, preyRef.at.x, preyRef.at.z);
-    lab.shake(0.2);
-  } else if (e.type === "claw") {
-    if (e.hit) {
-      preyRef.unit.damage(e.damage, at.set(preyRef.at.x, preyRef.at.y, preyRef.at.z), dir, e.pierce);
-      tear.bite(preyRef.at.x, preyRef.at.y, preyRef.at.z, preyRef.at.x, preyRef.at.z);
-      lab.shake(0.45);
-    }
-    bf.dust.stomp(e.x, field.height(e.x, e.z), e.z, 0.6);
-  } else if (e.type === "ate") {
-    const k = heaps.findIndex((h) => h.id === e.food);
-    if (k >= 0) { lab.app.scene.remove(heaps[k].mesh); heaps.splice(k, 1); }
-    tear.bite(e.x, e.y + 1, e.z, e.x, e.z);
-  } else if (e.type === "footfall") {
-    bf.dust.stomp(e.x, e.y, e.z, 0.6);
-    const d = Math.hypot(player.sim.pos.x - e.x, player.sim.pos.z - e.z);
-    if (d < 30) lab.shake(0.06 * (1 - d / 30));
-  } else if (e.type === "down") {
-    bf.blast(3, at.set(e.x, e.y, e.z), 6, 0, 0, "death");
-    backClock = V.crusherBack;
-    const c = pack.list.find((x) => x.id === e.id);
-    // The wreck lies a while, then goes.
-    if (c) setTimeout(() => drop(c), 12000);
-  }
+cf.onAte = (food) => {
+  const k = heaps.findIndex((h) => h.id === food);
+  if (k >= 0) { lab.app.scene.remove(heaps[k].mesh); heaps.splice(k, 1); }
 };
+cf.onDown = () => { backClock = V.crusherBack; };
 
 // ?suck: one 14 m ahead of the mech, facing it, spinning up at once. ?claw: one 7 m off to the side, pincer ready.
 if (q.has("suck")) {
@@ -144,25 +101,14 @@ if (q.has("claw")) {
   (c as unknown as { suckClock: number }).suckClock = 6;
 }
 
-const prey = { x: 0, y: 0, z: 0, vx: 0, vz: 0, alive: true };
 lab.onFrame((dt) => {
   backClock -= dt;
   if (pack.alive < V.crusherCount && backClock <= 0) spawn();
   heapClock -= dt;
   if (heaps.length < V.crusherHeaps && heapClock <= 0) { addHeap(); heapClock = V.crusherHeapBack; }
   const c0 = pack.list[0];
-  preyRef = lab.prey(c0?.x ?? player.sim.pos.x, c0?.z ?? player.sim.pos.z);
-  prey.x = preyRef.at.x; prey.y = preyRef.at.y; prey.z = preyRef.at.z; prey.vx = preyRef.sim.vel.x; prey.vz = preyRef.sim.vel.z; prey.alive = preyRef.alive;
-  pack.update(dt, prey, heaps);
-  // The pull: the mech slides toward the maw (the pilot on foot isn't pulled yet).
-  let px = 0, pz = 0;
-  for (const c of pack.list) { px += c.pullX; pz += c.pullZ; }
-  if ((px || pz) && preyRef.kind === "mech") {
-    const s = player.sim, dx = px * dt, dz = pz * dt;
-    const dy = field.height(s.pos.x + dx, s.pos.z + dz) - field.height(s.pos.x, s.pos.z);
-    s.carry(dx, dy, dz, 0, 0, 0);
-    lab.shake(0.03);
-  }
+  cf.update(dt, lab.prey(c0?.x ?? player.sim.pos.x, c0?.z ?? player.sim.pos.z), heaps);
+  const pull = Math.hypot(cf.pull.x, cf.pull.z);
   // A heap being eaten slides up into the maw and shrinks.
   for (const h of heaps) {
     const c = pack.list.find((x) => x.alive && x.food === h.id);
@@ -172,11 +118,7 @@ lab.onFrame((dt) => {
     h.mesh.scale.setScalar(1 - k * 0.85);
     if (c && k > 0) h.mesh.rotation.y += dt * k * 4;
   }
-  for (const c of pack.list) bodies.get(c.id)?.update(c, dt);
-  fx.update(dt, pack.list);
-  tear.update(dt);
   const c = pack.list[0];
   const mode = c ? ["walking", "spinning up", "sucking", "pincer", "eating", "down"][c.mode] : "none up";
-  const pull = Math.hypot(px, pz);
   lab.hud("crushers", `crushers ${pack.alive} · ${mode}${c ? ` · ${Math.round(c.health)} hp${c.mode === SUCK || pull ? ` · pull ${pull.toFixed(1)} m/s${c.grinding ? " · GRINDING" : ""}` : ""}` : ""} · sucks ${pack.sucks} · snaps ${pack.claws} (${pack.clawHits} hit) · ground ${Math.round(pack.ground)} · heaps eaten ${pack.eaten} · killed ${pack.kills} · hits shell ${target.partHits[0]} leg ${target.partHits[1]} maw ${target.partHits[2]}`);
 });
