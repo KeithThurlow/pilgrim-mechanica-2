@@ -66,7 +66,7 @@ export interface MechWeapons {
   /** Share of the walk's speed now (a channelling arm missile pod slows it; 1: none). */
   moveMul?(): number;
   /** A sword's step into its slash (world m/s), or null (src/weapons/sword.ts). */
-  lunge?(): { x: number; z: number } | null;
+  lunge?(move?: { x: number; z: number }): { x: number; z: number } | null;
   /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
    *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
   stop?(): void;
@@ -387,7 +387,7 @@ export class MechUnit implements Hittable {
       // The walker's steps (src/mech/dashSteps.ts) move the body, crouch and lean it; the shove (dash.ts) only times the
       // damage cut and the crowd shove now.
       sim.push.set(0, 0, 0);
-      const lunge = this.alive && !this.gunsOff ? this.weapons?.lunge?.() : null;
+      const lunge = this.alive && !this.gunsOff ? this.weapons?.lunge?.(cmd) : null;
       if (lunge) sim.push.set(lunge.x, 0, lunge.z);
       sim.crouch = this.kneel;
       sim.leanPitch = this.kneelPitch;

@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, sweepTimes, swordCuts, clipPose, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
+import { SwordSim, lungeIntent, sweepTimes, swordCuts, clipPose, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -563,11 +563,6 @@ export class Arsenal implements MechWeapons {
     }
   }
 
-  /**
-   * The mech steps into a swing (world m/s along the aim), or null: the walker takes it as outside motion. Keith
-   * (2026-11-01): by how far off the target is (the lock, else the cursor): none within swordLungeNear, so a close fight
-   * can kite, growing to the full lunge at swordLungeFar.
-   */
   /** How far off the sword's aim is (Keith 2026-11-01: close cut or full sweep), 0 (within swordCloseWithin) .. 1
    *  (swordFullFrom or farther). */
   private reachShare(): number {
@@ -577,7 +572,14 @@ export class Arsenal implements MechWeapons {
     return Math.max(0, Math.min(1, (d - v.swordCloseWithin) / Math.max(0.1, v.swordFullFrom - v.swordCloseWithin)));
   }
 
-  lunge(): { x: number; z: number } | null {
+  /**
+   * The mech steps into a swing (world m/s along the aim; below 0 back off it), or null: the walker takes it as outside
+   * motion. How far off the target is (the lock, else the cursor): none within swordLungeNear, growing to the full
+   * lunge at swordLungeFar. And the legs' way (Keith 2026-11-01, round 9: "responsive to WSAD ... blend between"):
+   * standing still or walking into the cut the full step; walking across it a share; backing straight off it none, or a
+   * small hop back. A smooth blend on the dot of the walk's way with the aim's, scaled by how hard WASD is held.
+   */
+  lunge(move?: { x: number; z: number }): { x: number; z: number } | null {
     const v = this.v, u = this.unit;
     let k = 0;
     for (const s of this.sides) if (s.kind === "melee") k = Math.max(k, s.sword.lungeK);
@@ -586,7 +588,9 @@ export class Arsenal implements MechWeapons {
     const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
     const far = Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
     if (far <= 0 || d < 1e-3) return null;
-    const sp = v.swordLunge * k * far;
+    const want = lungeIntent(move, dx / d, dz / d, v);
+    if (Math.abs(want) < 1e-3) return null;
+    const sp = v.swordLunge * k * far * want;
     return { x: (dx / d) * sp, z: (dz / d) * sp };
   }
 
