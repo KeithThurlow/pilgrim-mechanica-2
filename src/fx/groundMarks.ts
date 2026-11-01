@@ -3,6 +3,7 @@
 // (The old flat decals were deleted 2026-10-26 once Keith approved the dents.)
 import type { Ground } from "../mech/walker";
 import type { DentLayer, DentValues } from "./dents";
+import type { FootShape } from "./footprint";
 
 export type GroundMarkValues = DentValues;
 
@@ -16,18 +17,25 @@ export class GroundMarks {
   /** Is there a dent layer to mark? */
   get denting(): boolean { return !!this.dents; }
 
-  /** A foot planted at (x, z) facing yaw; strength around 1. On a steep face it also leaves a slide downhill. */
-  print(x: number, z: number, yaw: number, strength: number) {
+  /**
+   * A foot planted at (x, z) facing yaw; strength around 1. On a steep face it also leaves a slide downhill. shape: the
+   * foot's own sole (src/fx/footprint.ts, baked when its model loaded), at `scale` × its model's size; without one, the
+   * plain oval. depth: × the Footprint depth (a light robot presses less than a mech).
+   */
+  print(x: number, z: number, yaw: number, strength: number, shape: FootShape | null = null, scale = 1, depth = 1) {
     if (!this.denting) return;
     const v = this.v, nr = this.ground.normal(x, z, this.nn), steep = 1 - nr[1], s = v.printSize;
-    // The Rampart's foot: about 0.95 m across and 1.35 m long, pressed deeper on steep sand (it slides in).
-    this.dents!.stamp(x, z, 0.45 * s, yaw, 1.42, v.dentPrint * Math.min(1.6, 0.7 + 0.3 * strength) * (1 + steep * 1.5));
+    const dep = v.dentPrint * depth * Math.min(1.6, 0.7 + 0.3 * strength) * (1 + steep * 1.5);
+    // Pressed deeper on steep sand (it slides in).
+    if (shape && v.printShaped > 0.5) this.dents!.stamp(x, z, scale * s, yaw, 1, dep, { shape });
+    // The plain oval: the Rampart's foot, about 0.95 m across and 1.35 m long.
+    else this.dents!.stamp(x, z, 0.45 * s * scale, yaw, 1.42, dep);
     // Only properly steep sand breaks loose.
     if (v.slideOnSlope > 0 && steep > 0.14) {
       // Sand broken loose downhill: a long shallow trough with its sand piled at the bottom.
       const dx = nr[0], dz = nr[2], l = Math.hypot(dx, dz) || 1;
-      const len = (1 + steep * 9) * v.slideOnSlope, r = 0.45 * s;
-      this.dents!.stamp(x + (dx / l) * len * 0.45, z + (dz / l) * len * 0.45, r, Math.atan2(dx, dz), Math.max(1, len / (2 * r)), v.dentPrint * 0.2 * (0.5 + steep), { berm: 1.3, comp: 0.2 });
+      const len = (1 + steep * 9) * v.slideOnSlope, r = 0.45 * s * scale;
+      this.dents!.stamp(x + (dx / l) * len * 0.45, z + (dz / l) * len * 0.45, r, Math.atan2(dx, dz), Math.max(1, len / (2 * r)), v.dentPrint * depth * 0.2 * (0.5 + steep), { berm: 1.3, comp: 0.2 });
     }
   }
 
