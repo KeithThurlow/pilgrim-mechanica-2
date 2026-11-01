@@ -18,6 +18,7 @@ import { closingSpeed, trampleFling, trampleHurt, type MechBody, type TrampleHit
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
   type V3, type WalkSpec,
+  QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
 
 export const ROBOT_DEFAULTS = {
@@ -1353,9 +1354,9 @@ export class RobotSwarm {
   private lob(i: number, t: RobotTarget) {
     const v = this.v, h = this.heading[i], S = this.size[i], quad = this.kind[i] === MID;
     // A weapon quad's rockets leave its left pod, the side alternating with each.
-    const side = quad ? (this.burstLeft[i] & 1 ? 1 : -1) * S * 0.36 : 0, fwd = quad ? S * 0.2 : S * 0.75;
+    const side = quad ? (this.burstLeft[i] & 1 ? 1 : -1) * S * QUAD_GUN_X : 0, fwd = quad ? S * 0.2 : S * 0.75;
     const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
-    const fy = quad ? this.hubY[i] + S * 0.1 : this.hubY[i] - S * BIG_BODY_H * 0.3;
+    const fy = quad ? this.hubY[i] + S * (QUAD_TURRET_Y + 0.04) : this.hubY[i] - S * BIG_BODY_H * 0.3;
     const d0 = Math.hypot(t.x - fx, t.z - fz);
     const flight = Math.max(0.6, d0 / Math.max(1, quad ? v.robotQuadRocketSpeed : v.robotBigLobSpeed));
     const lead = v.robotBigLobLead * flight, r = v.robotBigLobScatter * Math.sqrt(this.rand()), a = this.rand() * Math.PI * 2;
@@ -1415,8 +1416,8 @@ export class RobotSwarm {
     if (this.fireClock[i] <= 0 && dh < 15 * DEG) {
       if (w === Q_MINI) {
         if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotQuadMiniBurst));
-        const side = (this.burstLeft[i] & 1 ? 1 : -1) * S * 0.4;
-        this.fire(i, target, v.robotQuadMiniSpread * DEG, this.hubY[i] + S * 0.06, S * 0.5, MID, onShot, side);
+        const side = (this.burstLeft[i] & 1 ? 1 : -1) * S * QUAD_GUN_X;
+        this.fire(i, target, v.robotQuadMiniSpread * DEG, this.hubY[i] + S * QUAD_TURRET_Y, S * 0.5, MID, onShot, side);
         this.burstLeft[i]--;
         this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotQuadMiniRate : v.robotQuadMiniPause * (0.7 + 0.6 * this.rand());
       } else {
@@ -1433,8 +1434,8 @@ export class RobotSwarm {
   beamFrom(i: number, out: V3): V3 {
     const h = this.heading[i], S = this.size[i];
     if (this.kind[i] === MID) {
-      const side = -S * 0.4, fwd = S * 0.62;
-      out.x = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side; out.z = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side; out.y = this.hubY[i] + S * 0.06;
+      const side = -S * QUAD_GUN_X, fwd = S * 0.62;
+      out.x = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side; out.z = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side; out.y = this.hubY[i] + S * QUAD_TURRET_Y;
       return out;
     }
     out.x = this.px[i] + Math.sin(h) * S * 0.2; out.z = this.pz[i] + Math.cos(h) * S * 0.2; out.y = this.hubY[i] - S * (BIG_BODY_H * 0.62 + 0.05);
@@ -1602,14 +1603,16 @@ export class RobotSwarm {
         }
         continue;
       }
-      const cy = this.hubY[i], qx = ox - this.px[i], qy = oy - cy, qz = oz - this.pz[i];
+      // A weapon quad's turret stands above its thorax: the target is raised and taller.
+      const tall = this.variant[i] === QUAD_WEAPON;
+      const cy = this.hubY[i] + (tall ? S * 0.12 : 0), qx = ox - this.px[i], qy = oy - cy, qz = oz - this.pz[i];
       const R = S * 0.5 * k;
       const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
       if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
       // Standing: flat across the legs, squat in height; clinging or tumbling: a ball.
       const flat = s === RUN || s === FIRE || s === DOWN;
       const t = flat
-        ? rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.45 * k, S * 0.22 * k, S * 0.45 * k)
+        ? rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.45 * k, S * (tall ? 0.32 : 0.22) * k, S * 0.45 * k)
         : rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.34 * k, S * 0.34 * k, S * 0.34 * k);
       if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
     }

@@ -14,6 +14,7 @@ import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LA
 import {
   HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_X, MID_SAW_Y, MID_SAW_Z,
   MID_SAW_R, MID_BODY_H, BIG_BODY_H, solveKnee, type V3,
+  QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
 import {
   smallBodyGeometry, midBodyGeometry, quadBodyGeometry, quadWeaponGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
@@ -297,16 +298,16 @@ export class RobotsDraw {
     const sw = this.swarm, st = sw.state[i], w = sw.weapon[i];
     this.quadBodies.put(m, c);
     this.quadGuns[w].put(m, c);
-    const flash = (alarm || sw.tell[i] === 1) && Math.sin(this.time * 24) > -0.2, eyeY = MID_BODY_H * 0.33;
+    const flash = (alarm || sw.tell[i] === 1) && Math.sin(this.time * 24) > -0.2, eyeY = QUAD_TURRET_Y + 0.03;
     const lampC = dead ? OFF : flash ? ALARM : EYE_RED;
-    this.lamp(m, 0.05, eyeY, 0.372, 0.04, 0.022, 0.01, lampC);
-    this.lamp(m, -0.05, eyeY, 0.372, 0.04, 0.022, 0.01, lampC);
-    if (st === RUN || st === FIRE) this.eye(i, m, 0, eyeY, 0.39, st === FIRE, false);
+    this.lamp(m, 0.045, eyeY, 0.282, 0.04, 0.022, 0.01, lampC);
+    this.lamp(m, -0.045, eyeY, 0.282, 0.04, 0.022, 0.01, lampC);
+    if (st === RUN || st === FIRE) this.eye(i, m, 0, eyeY, 0.3, st === FIRE, false);
     if (w === Q_LASER || w === Q_RAIL) {
       const bt = sw.beamT[i], u = bt >= 0 ? Math.min(1, bt / Math.max(0.05, sw.beamSpec(i).charge)) : 0;
       this.beacon.copy(lin(BLUE_DIM)).lerp(lin(BLUE), 0.25 + 0.75 * u);
       const r = 0.05 + 0.04 * u;
-      this.lamp(m, -0.4, MID_BODY_H * 0.06, w === Q_LASER ? 0.62 : 0.6, r, r, 0.02, dead ? OFF : this.beacon);
+      this.lamp(m, -QUAD_GUN_X, QUAD_TURRET_Y, w === Q_LASER ? 0.62 : 0.6, r, r, 0.02, dead ? OFF : this.beacon);
     }
   }
 

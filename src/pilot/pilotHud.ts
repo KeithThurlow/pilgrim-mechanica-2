@@ -1,7 +1,7 @@
 // The pilot's HUD: a ring that fills while F is held (bottom centre, with what letting it fill will do), a short
 // prompt line (the terminal, salvage, why you can't get out here), and his health while on foot. Plain DOM.
 const CSS = `
-.pilot-hud { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+.pilot-hud { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
   pointer-events: none; font: 13px/1.35 var(--sans, system-ui); color: #f2ede4; text-shadow: 0 1px 2px #000a; }
 .pilot-hud .ring { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font: 600 14px var(--mono, monospace);
   background: conic-gradient(#ffb347 var(--k, 0%), #ffffff22 0); box-shadow: 0 0 0 1px #0006; }
@@ -9,7 +9,7 @@ const CSS = `
 .pilot-hud .text { background: #17191cb3; padding: 5px 9px; border-radius: 4px; max-width: 46ch; }
 .pilot-hud .text b { color: #ffb347; font-weight: 600; }
 .pilot-hud .text .bad { color: #f06a4b; }
-.pilot-life { position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%); width: 180px; height: 7px; border-radius: 4px;
+.pilot-life { position: fixed; left: 50%; bottom: 132px; transform: translateX(-50%); width: 180px; height: 7px; border-radius: 4px;
   background: #0008; box-shadow: 0 0 0 1px #0006; pointer-events: none; overflow: hidden; }
 .pilot-life i { display: block; height: 100%; background: #8fd18a; }
 .pilot-hurt { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px 40px #c0281888; opacity: 0; transition: opacity 0.08s; }
