@@ -62,6 +62,12 @@ export const RIVAL_AI_DEFAULTS = {
   aiSwordLead: 0.6,
   aiSwordFace: 35,
   aiSwordTrackFrom: 14,
+  aiSprintUse: 0.5,
+  aiSprintFrom: 12,
+  aiSprintArc: 70,
+  aiSprintMax: 2.6,
+  aiSprintSwerve: 0.5,
+  aiSprintMirror: 0.6,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -74,9 +80,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -123,6 +129,12 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiSwordLead", label: "Up close with a sword: lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of your motion over its reaction and lag it leads the cut and the lunge by" },
   { key: "aiSwordFace", label: "Swings only when facing you within (deg)", min: 5, max: 180, step: 5, group: G, tip: "It holds the cut until its torso is turned this close to you, so swings land instead of cutting air behind it" },
   { key: "aiSwordTrackFrom", label: "With a sword: tight tracking from (m past its swing range)", min: 0, max: 40, step: 1, group: G, tip: "Keith 2026-11-01 (rival 25, minigun and sword, hesitated on its minigun and lost you): a sword rival keeps its torso on you this far out from where it starts a cut, its gun firing along that aim" },
+  { key: "aiSprintUse", label: "Sprints to reposition (chance per s when far off its range)", min: 0, max: 2, step: 0.05, group: G, tip: "Keith 2026-11-01: rivals sprint (dash, then Space held) to get into position, curving round you on the player's own sprint and drift. Its guns are off and its energy drains while it runs: fewer dodges after, so punish it" },
+  { key: "aiSprintFrom", label: "Sprints when this far off its range (m)", min: 2, max: 40, step: 1, group: G },
+  { key: "aiSprintArc", label: "Sprint: arcs round you by (deg)", min: 0, max: 150, step: 5, group: G, tip: "It aims for a spot at its range this far round you from where it starts, curving there" },
+  { key: "aiSprintMax", label: "Sprint: at most (s)", min: 0.5, max: 6, step: 0.1, group: G },
+  { key: "aiSprintSwerve", label: "Sprint: chance to cut back the other way", min: 0, max: 1, step: 0.05, group: G, tip: "Partway through, it flips to the other side of you: a hard change of direction with the sprint's drift" },
+  { key: "aiSprintMirror", label: "Sprint: answers your sprint (chance)", min: 0, max: 1, step: 0.05, group: G, tip: "When you start sprinting, it may sprint too, to a new angle on you" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -288,6 +300,11 @@ export class RivalAi {
   private blindFor = 0;
   private noiseA = 0;
   private noiseB = 0;
+  /** A sprint to reposition (Keith 2026-11-01): the world bearing round the foe it's going for, which side it curves, since when, when it may cut back. */
+  private sprint: { b: number; side: number; since: number; swerveAt: number; swerve: boolean } | null = null;
+  private foeSprinting = false;
+  /** Sprinting to reposition (HUD, checks). */
+  sprinting = false;
 
   constructor(public v: RivalAiValues, seed = 1) {
     this.r = rng(seed * 2654435761 + 7);
@@ -299,7 +316,7 @@ export class RivalAi {
     this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null; this.paintAt = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
     this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
-    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false;
+    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false; this.sprint = null; this.sprinting = false; this.foeSprinting = false;
   }
 
   private flipTime() { return this.v.aiStrafeFlip * (0.4 + 1.2 * this.r()); }
@@ -393,14 +410,20 @@ export class RivalAi {
 
     // ---- Dodges: over every state ----
     const dodge = this.dodge(view, cmd);
-    if (dodge) { mx = dodge.x; mz = dodge.z; }
+    if (dodge) { mx = dodge.x; mz = dodge.z; this.sprint = null; }
+    else {
+      const run = this.sprintStep(view, dist, range, sword, cmd, dt);
+      if (run) { mx = run.x; mz = run.z; }
+    }
+    this.sprinting = !!this.sprint;
+    if (this.sprint) this.note = "sprinting round you (guns off)";
     const ml = Math.hypot(mx, mz);
     if (ml > 1e-3) { cmd.move.x = mx / Math.max(1, ml); cmd.move.z = mz / Math.max(1, ml); }
 
     // A reckless rival dashes in to press a foe that's out of dashes (keeping its reserve); never with its own rail
     // charging (Keith 2026-10-31: a dash drops the charge).
     // A sword rival (Keith 2026-11-01: "more aggressive at getting in your face") dashes in from its usual fight too.
-    if (!cmd.dash && !this.railCharging(s) && (this.state === "press" || (sword && this.state === "engage")) && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + (sword ? 3 : 10) && sees && this.r() < v.aiAggression * dt * 0.8) {
+    if (!cmd.dash && !this.sprint && !this.railCharging(s) && (this.state === "press" || (sword && this.state === "engage")) && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + (sword ? 3 : 10) && sees && this.r() < v.aiAggression * dt * 0.8) {
       cmd.dash = { x: ux + tx * 0.6, z: uz + tz * 0.6 };
     }
 
@@ -484,6 +507,55 @@ export class RivalAi {
     return cmd;
   }
 
+  /**
+   * Sprint to reposition (Keith 2026-11-01: "if enemy mechs leverage not just dodges, but also a sprint to reposition
+   * themselves ... curving, changing direction"): a dash with Space held after it, through the same sprint and drift
+   * the player's mech has, steered round the foe to a spot at its range `aiSprintArc` further round, sometimes cutting
+   * back the other way partway. Its guns are off and the bars drain while it runs, so it starts only with two bars
+   * spare beyond its dodge reserve. Starts: far off its range (`aiSprintFrom`), or the foe just started sprinting
+   * (`aiSprintMirror`, one roll per foe sprint). Returns the move while sprinting, else null.
+   */
+  private sprintStep(view: DuelView, dist: number, range: number, sword: boolean, cmd: MechCommand, dt: number): { x: number; z: number } | null {
+    const v = this.v, s = view.self, f = view.foe, now = view.t;
+    const foeRun = f.gunsOff && !f.airborne;
+    const mirror = foeRun && !this.foeSprinting && this.r() < v.aiSprintMirror;
+    this.foeSprinting = foeRun;
+    const swordStrike = sword && dist < range + v.aiSwordFrom;
+    if (!this.sprint) {
+      const free = !this.painting && !this.railCharging(s) && s.canDash && !s.dashing && s.dashCharges >= 2 + v.aiDashKeep && this.state !== "cover" && !(sword && dist < range + 2);
+      const far = Math.abs(dist - range) > v.aiSprintFrom && this.r() < v.aiSprintUse * dt;
+      if (!free || !(mirror || far)) return null;
+      const b0 = Math.atan2(s.x - f.x, s.z - f.z), side = this.strafe;
+      this.sprint = { b: b0 + side * v.aiSprintArc * Math.PI / 180, side, since: now, swerveAt: now + 0.6 + this.r() * 0.8, swerve: this.r() < v.aiSprintSwerve };
+    }
+    const sp = this.sprint;
+    // The goal: at its range round the foe, on the bearing it chose (the foe moves; the goal goes with it).
+    const R = this.state === "retreat" ? range : Math.max(sword ? 3 : 8, range);
+    if (sp.swerve && now >= sp.swerveAt) {
+      const bNow = Math.atan2(s.x - f.x, s.z - f.z);
+      sp.side = -sp.side; sp.b = bNow + sp.side * v.aiSprintArc * Math.PI / 180; sp.swerve = false;
+    }
+    const gx = f.x + Math.sin(sp.b) * R, gz = f.z + Math.cos(sp.b) * R;
+    const dx = gx - s.x, dz = gz - s.z, d = Math.hypot(dx, dz) || 1;
+    const ran = now - sp.since;
+    // Done: there, out of time, out of energy, or (a sword) close enough to cut.
+    const stalled = ran > 0.4 && !s.dashing && Math.hypot(s.vx, s.vz) < s.walkSpeed * 0.9;
+    if (d < 5 || ran > v.aiSprintMax || stalled || (swordStrike && ran > 0.5) || (ran > 0.3 && s.dashCharges === 0 && !s.dashing && Math.hypot(s.vx, s.vz) < s.walkSpeed)) { this.sprint = null; return null; }
+    // Curve: head for the goal, bent round the foe on its side while far from it (the walker's sprint turn and drift
+    // make the arc).
+    const ox = s.x - f.x, oz = s.z - f.z, ol = Math.hypot(ox, oz) || 1;
+    const tx = (oz / ol) * sp.side, tz = (-ox / ol) * sp.side;
+    const bend = 0.7 * clamp(d / 20, 0, 1);
+    let mx = dx / d + tx * bend, mz = dz / d + tz * bend;
+    // Don't run through the foe: push out if the line passes inside 6 m of it.
+    if (ol < 8) { mx += ox / ol * (8 - ol) / 4; mz += oz / ol * (8 - ol) / 4; }
+    ({ x: mx, z: mz } = this.avoidCover(view, s.x, s.z, mx, mz));
+    const ml = Math.hypot(mx, mz) || 1;
+    mx /= ml; mz /= ml;
+    if (ran === 0) cmd.dash = { x: mx, z: mz };
+    cmd.dashHold = true;
+    return { x: mx, z: mz };
+  }
   /** The newest sample of the foe at least `delay` old (null: none that old yet). */
   private noticed(now: number, delay: number) {
     let e: (typeof this.hist)[number] | null = null;
@@ -651,7 +723,7 @@ export class RivalAi {
       return;
     }
     this.shoulderIn -= dt * (press ? 2 : 1);
-    if (this.shoulderIn > 0) return;
+    if (this.shoulderIn > 0 || this.sprint) return;
     const ready = s.weapons.filter((w) => {
       const k = s.kit[w.i];
       if (!("key" in k.ctl) || !w.ready || dist > k.range * 0.95 || dist < k.minRange + 2) return false;
