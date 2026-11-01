@@ -291,6 +291,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Scrap items at the convoy only (Keith decided; Claude on `claude/project-thread-8unm49`)
+- Inventory, on the convoy: each stash item has a Scrap ◆N button (two clicks: "Sure?"); its scrap value (`src/items/value.ts`, Protocols included) goes into the bank. Never in the field (Keith: "otherwise everything just gets scrapped and turned into junk"); scrap from wrecks stays the field resource. Convoy lab only (the loadout lab has no bank). `src/ui/inventory.ts` (`bankScrap`), `labs/convoy/main.ts`.
+- Checked: typecheck, full `npm test`, build.
 ### 2026-11-01 · Inventory sorting and item scrap value (Keith asked; Claude on `claude/project-thread-8unm49`)
 - **Sort** (`src/items/sort.ts`, sort bar in `src/ui/inventory.ts`): Rarity, DPS, Power, Scrap value, Value per tonne, Weight, Level; click again to flip; one order for every list, kept in localStorage; the sorted figure is bold on each row.
 - **Scrap value** (`src/items/value.ts`, sliders in "Item value"): 10 × 2.5^tier × (1 + 0.08 per level over 1) × (1 + 0.1 per tonne), plus socketed Protocols; shown on rows and cards. Nothing pays it out yet.
