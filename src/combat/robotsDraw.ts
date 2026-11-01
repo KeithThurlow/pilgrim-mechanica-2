@@ -17,12 +17,12 @@ import {
   smallBodyGeometry, midBodyGeometry, bigBodyGeometry, sawGeometry, bucketGeometry, beamGeometry, pipeGeometry, knuckleGeometry,
   YELLOW, YELLOW_DIRTY, GREY, DARK, BLACK, CHROME,
 } from "./robotShapes";
-import { LAMP_ROBOT, type LampEmit } from "../world/lamps";
+import { LAMP_ROBOT, LAMP_ROBOT_GLOW, type LampEmit } from "../world/lamps";
 import { RobotBeamDraw } from "./robotBeamDraw";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
 const ROLL_RATE = 7, COLLAPSE = 2, SINK = 0.5;
-const LEG_SMALL = 0x4a4d51, LAMP = 0xfff0c8, AMBER = 0xffa31a, ALARM = 0xff3418, RAM = 0x3b3d40;
+const LEG_SMALL = 0x4a4d51, LAMP = 0xfff0c8, AMBER = 0xffa31a, ALARM = 0xff3418, EYE_RED = 0xb01206, RAM = 0x3b3d40;
 
 function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, shadow = true): THREE.InstancedMesh {
   const m = new THREE.InstancedMesh(geo, mat, n);
@@ -66,6 +66,12 @@ class Pool {
   }
 }
 
+/** A scan spot's yaw offset (share of the scan arc, -1..1): alternating sides, a seeded depth. Cosmetic. */
+const scanAt = (seed: number, n: number) => ((n & 1) ? -1 : 1) * (0.25 + 0.75 * hash01(seed * 131.7 + n * 12.9898));
+/** A scan spot's landing in or out (-1..1). */
+const scanNear = (seed: number, n: number) => hash01(seed * 57.3 + n * 78.233) * 2 - 1;
+const hash01 = (x: number) => { const h = Math.sin(x) * 43758.5453; return h - Math.floor(h); };
+
 export class RobotsDraw {
   readonly group = new THREE.Group();
   private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool;
@@ -85,7 +91,7 @@ export class RobotsDraw {
   private bx = new THREE.Vector3(); private by = new THREE.Vector3(); private bz = new THREE.Vector3();
   private ax = new THREE.Vector3(1, 0, 0); private ay = new THREE.Vector3(0, 1, 0); private az = new THREE.Vector3(0, 0, 1);
   private hips = new Float32Array(SMALL_LEGS * 3); private feet = new Float32Array(SMALL_LEGS * 3);
-  /** Red eye lamps this frame (Keith 2026-10-29): x, y, z, heading, seed, flags (1 locked on, +2 big) per robot. */
+  /** Red eye lamps this frame (Keith 2026-10-29): x, y, z, heading, seed, flags (1 locked on, +2 big, +4 glow only) per robot. */
   private eyes = new Float32Array(ROBOT_MAX * 6);
   private eyeN = 0;
   private h3: V3 = { x: 0, y: 0, z: 0 }; private k3: V3 = { x: 0, y: 0, z: 0 }; private t3: V3 = { x: 0, y: 0, z: 0 }; private f3: V3 = { x: 0, y: 0, z: 0 };
@@ -117,22 +123,40 @@ export class RobotsDraw {
     this.group.userData.lampSource = (emit: LampEmit, time: number, v: { readonly [k: string]: number }) => this.emitEyes(emit, time, v);
   }
 
+  /**
+   * The night lamps (Keith 2026-11-01): small robots only glow red, breathing, full while attacking; medium and big
+   * ones scan with a searchlight like a targeting servo: hold on a spot, snap to the next (alternating sides, near and
+   * far, a little overshoot), and snap straight onto the mech while attacking.
+   */
   private emitEyes(emit: LampEmit, time: number, v: { readonly [k: string]: number }) {
-    const e = this.eyes, sweep = ((v.robotSweep ?? 35) * Math.PI) / 180, w = Math.PI * 2 * (v.robotSweepRate ?? 0.3), reach = v.robotReach ?? 9;
+    const e = this.eyes, sweep = ((v.robotSweep ?? 35) * Math.PI) / 180, reach = v.robotReach ?? 9;
+    const hold = Math.max(0.05, v.robotScanHold ?? 0.9), snap = Math.max(0.01, v.robotScanSnap ?? 0.12);
+    const over = v.robotScanOvershoot ?? 1.6, near = v.robotScanNear ?? 0.25;
+    const idle = v.robotSmallIdle ?? 0.6, pulse = v.robotSmallPulse ?? 0.25, pw = Math.PI * 2 * (v.robotSmallPulseRate ?? 0.7);
     for (let j = 0; j < this.eyeN; j++) {
-      const o = j * 6, f = e[o + 5], locked = (f & 1) !== 0, big = (f & 2) !== 0;
-      const yaw = e[o + 3] + (locked ? 0 : sweep * Math.sin(w * time + e[o + 4] * 40));
-      emit(LAMP_ROBOT, e[o], e[o + 1], e[o + 2], Math.sin(yaw), 0, Math.cos(yaw), true, reach * (big ? 1.7 : 1), 1);
+      const o = j * 6, f = e[o + 5], locked = (f & 1) !== 0, big = (f & 2) !== 0, seed = e[o + 4];
+      if ((f & 4) !== 0) {
+        const k = locked ? 1 : idle * (1 - pulse * 0.5 + pulse * 0.5 * Math.sin(pw * time + seed * 40));
+        emit(LAMP_ROBOT_GLOW, e[o], e[o + 1], e[o + 2], 0, 0, 0, false, 0, k);
+        continue;
+      }
+      const R = reach * (big ? 1.7 : 1);
+      if (locked) { emit(LAMP_ROBOT, e[o], e[o + 1], e[o + 2], Math.sin(e[o + 3]), 0, Math.cos(e[o + 3]), true, R, 1); continue; }
+      const per = hold * (0.8 + 0.4 * seed) + snap, t = time + seed * 97, n = Math.floor(t / per), u = t - n * per;
+      const s = Math.min(1, u / snap), q = s - 1, ease = 1 + (over + 1) * q * q * q + over * q * q;
+      const yaw = e[o + 3] + sweep * (scanAt(seed, n - 1) + (scanAt(seed, n) - scanAt(seed, n - 1)) * ease);
+      const rk = 1 + near * (scanNear(seed, n - 1) + (scanNear(seed, n) - scanNear(seed, n - 1)) * ease);
+      emit(LAMP_ROBOT, e[o], e[o + 1], e[o + 2], Math.sin(yaw), 0, Math.cos(yaw), true, R * rk, 1);
     }
   }
 
   /** Note a robot's eye at body-frame point (x, y, z) of frame m. */
-  private eye(i: number, m: THREE.Matrix4, x: number, y: number, z: number, locked: boolean, big: boolean) {
+  private eye(i: number, m: THREE.Matrix4, x: number, y: number, z: number, locked: boolean, big: boolean, glowOnly = false) {
     if (this.eyeN >= ROBOT_MAX) return;
     this.tmp.set(x, y, z).applyMatrix4(m);
     const o = this.eyeN++ * 6, e = this.eyes;
     e[o] = this.tmp.x; e[o + 1] = this.tmp.y; e[o + 2] = this.tmp.z;
-    e[o + 3] = this.swarm.heading[i]; e[o + 4] = this.swarm.seed[i]; e[o + 5] = (locked ? 1 : 0) + (big ? 2 : 0);
+    e[o + 3] = this.swarm.heading[i]; e[o + 4] = this.swarm.seed[i]; e[o + 5] = (locked ? 1 : 0) + (big ? 2 : 0) + (glowOnly ? 4 : 0);
   }
 
   update(dt: number): void {
@@ -200,8 +224,9 @@ export class RobotsDraw {
     c.copy(this.white).multiplyScalar(0.86 + sw.seed[i] * 0.2);
     if (dead) c.multiplyScalar(0.4); else if (st === DOWN) c.multiplyScalar(0.85);
     this.smallBodies.put(m, c);
-    this.lamp(m, 0, HUB_H * 0.2, HUB_R * 0.97, 0.07, 0.045, 0.04, dead ? 0x201810 : st === FIRE ? ALARM : LAMP);
-    if (standing) this.eye(i, m, 0, HUB_H * 0.2, HUB_R * 0.97 + 0.03, st === FIRE, false);
+    // No searchlight on the small ones (Keith 2026-11-01): a red eye, brighter while attacking.
+    this.lamp(m, 0, HUB_H * 0.2, HUB_R * 0.97, 0.07, 0.045, 0.04, dead ? 0x201810 : st === FIRE ? ALARM : EYE_RED);
+    if (standing) this.eye(i, m, 0, HUB_H * 0.2, HUB_R * 0.97 + 0.03, st === FIRE, false, true);
 
     // Legs: thin pipes, knees up.
     const L1 = S_THIGH * S, L2 = S_SHIN * S;
