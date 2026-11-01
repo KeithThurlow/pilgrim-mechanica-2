@@ -133,7 +133,7 @@ export interface GunStats {
   proto?: import("../game/shots").ShotProtocols;
 }
 
-export type GunClass = "minigun" | "rail" | "autocannon" | "rpg";
+export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee";
 import { newMag, magFill, magResize, magReady, magStep, magTake, type Mag } from "../weapons/magazine";
 
 /** One trigger for both guns, or one per gun (Keith 2026-10-25: left click the left side, right click the right). */
@@ -257,8 +257,8 @@ export class UpperSim {
 
       // The magazine reloads in its own time (a rocket launcher on this side spends it in src/weapons).
       magStep(g.mag, dt);
-      // A rail cannon or rocket launcher only aims here: it charges and fires in src/weapons.
-      if (own?.cls === "rail" || own?.cls === "rpg") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
+      // A rail cannon, rocket launcher or sword only aims here: it charges, fires or swings in src/weapons.
+      if (own?.cls === "rail" || own?.cls === "rpg" || own?.cls === "melee") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       const trigger = triggerOf(triggers, g.side === 1 ? 0 : 1);
       g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit) * (1 - g.spinCut);
       g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
