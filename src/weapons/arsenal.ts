@@ -465,7 +465,8 @@ export class Arsenal implements MechWeapons {
     // The waist (Keith 2026-11-01, round 7): a spring toward where the swing wants the torso, so it lags the blade and
     // swings on past it. Both swords' twists add (dual swords: a cut each way partly cancels), up to swordTwistMax.
     const D2R = Math.PI / 180;
-    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v, sw.span) * v.swordTwist * D2R : 0;
+    // A close cut turns the waist less (0.5 ×).
+    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v, sw.span) * v.swordTwist * D2R * (0.5 + 0.5 * sw.span) : 0;
     for (let left = dt; left > 1e-6; left -= 1 / 120) [s.twist, s.twistV] = springStep(s.twist, s.twistV, want, v.swordTwistHz, v.swordTwistDamp, Math.min(left, 1 / 120));
     let total = 0;
     for (const o of this.sides) if (o.kind === "melee") total += o.twist;
@@ -567,12 +568,13 @@ export class Arsenal implements MechWeapons {
    * (2026-11-01): by how far off the target is (the lock, else the cursor): none within swordLungeNear, so a close fight
    * can kite, growing to the full lunge at swordLungeFar.
    */
-  /** How far off the sword's aim is, 0 (within the no-lunge distance) .. 1 (the full-lunge distance or farther). */
+  /** How far off the sword's aim is (Keith 2026-11-01: close cut or full sweep), 0 (within swordCloseWithin) .. 1
+   *  (swordFullFrom or farther). */
   private reachShare(): number {
     const v = this.v, u = this.unit, at = u.lock ?? u.cursor;
     if (!at) return 1;
     const d = Math.hypot(at.x - u.sim.pos.x, at.z - u.sim.pos.z);
-    return Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
+    return Math.max(0, Math.min(1, (d - v.swordCloseWithin) / Math.max(0.1, v.swordFullFrom - v.swordCloseWithin)));
   }
 
   lunge(): { x: number; z: number } | null {
@@ -582,7 +584,7 @@ export class Arsenal implements MechWeapons {
     const at = u.lock ?? u.cursor;
     if (k <= 0 || v.swordLunge <= 0 || !at) return null;
     const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
-    const far = this.reachShare();
+    const far = Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
     if (far <= 0 || d < 1e-3) return null;
     const sp = v.swordLunge * k * far;
     return { x: (dx / d) * sp, z: (dz / d) * sp };

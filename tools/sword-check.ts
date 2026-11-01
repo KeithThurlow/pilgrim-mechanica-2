@@ -97,7 +97,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(fa[1] > 0.6, `side ${side}: at rest the forearm doesn't angle up to the fist`);
     must(bend > 70 && bend < 110, `side ${side}: at rest the elbow is bent to ${bend.toFixed(0)}°, not near a right angle`);
     const under = clipPose("A", lens.A, side, sh, 0, st, V, span);
-    must(under.hand.x * side < 0 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
+    must((under.hand.x - sh.x) * side < -0.8 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
     const cA = clipCut("A", st, V, span)!;
     const mid = clipPose("A", (cA[0] + cA[1]) / 2, side, sh, 0, st, V, span);
     const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, mid.pole);
@@ -116,15 +116,24 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
   must(!back, "the swing ran backwards in time somewhere");
 }
-// ---- Close or far: a close cut is quicker, bent at the elbow mid-cut, and still ends full out ----
+// ---- Close or far: a close cut is quicker and shorter, the elbow bent and the hand in close the whole way ----
 {
   const sh = SH(1), near = clipCut("A", st, V, 0)!, far = clipCut("A", st, V, 1)!;
-  must(near[1] - near[0] < far[1] - far[0] && clipLength("A", st, V, 0) < clipLength("A", st, V, 1), "a close cut isn't quicker than a far one");
-  const d = (p: { hand: { x: number; y: number; z: number } }) => Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z);
-  const mn = d(clipPose("A", (near[0] + near[1]) / 2, 1, sh, 0, st, V, 0)), mf = d(clipPose("A", (far[0] + far[1]) / 2, 1, sh, 0, st, V, 1));
-  const en = d(clipPose("A", near[1], 1, sh, 0, st, V, 0)), ef = d(clipPose("A", far[1], 1, sh, 0, st, V, 1));
-  must(mn < mf - 0.4, `a close cut's hand mid-cut is ${mn.toFixed(2)} m out, not well in from the far cut's ${mf.toFixed(2)}`);
-  must(Math.abs(en - ef) < 0.15, `a close cut doesn't end full out (${en.toFixed(2)} m against ${ef.toFixed(2)})`);
+  must(near[1] - near[0] < (far[1] - far[0]) * 0.6 && clipLength("A", st, V, 0) < clipLength("A", st, V, 1) * 0.6, "a close cut isn't much quicker than the full sweep");
+  for (const c of ["A", "B"] as SwordClip[]) {
+    const cw = clipCut(c, st, V, 0)!;
+    let most = 0, straightest = 0, yaw0 = 0, yaw1 = 0;
+    for (let i = 0; i <= 20; i++) {
+      const p = clipPose(c, cw[0] + ((cw[1] - cw[0]) * i) / 20, 1, sh, 0, st, V, 0);
+      const e = armIk(sh, p.hand, V.swordUpperArm, V.swordForearm, p.pole);
+      const ua = [e.elbow.x - sh.x, e.elbow.y - sh.y, e.elbow.z - sh.z], fa = [e.hand.x - e.elbow.x, e.hand.y - e.elbow.y, e.hand.z - e.elbow.z];
+      straightest = Math.max(straightest, 180 - Math.acos((ua[0] * fa[0] + ua[1] * fa[1] + ua[2] * fa[2]) / (Math.hypot(...ua) * Math.hypot(...fa))) / D2R);
+      most = Math.max(most, Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z));
+      const y = Math.atan2(p.fwd.x, p.fwd.z); if (i === 0) yaw0 = y; if (i === 20) yaw1 = y;
+    }
+    must(straightest < 120 && most < 2.3, `close ${c}: the arm straightened to ${straightest.toFixed(0)}° (hand ${most.toFixed(2)} m out), not kept bent in close`);
+    must(Math.abs(yaw0 - yaw1) / D2R < st.arc * 0.6, `close ${c}: the blade turned ${(Math.abs(yaw0 - yaw1) / D2R).toFixed(0)}°, not a short cut`);
+  }
 }
 // ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
 {
