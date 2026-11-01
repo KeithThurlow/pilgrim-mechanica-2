@@ -1,0 +1,185 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example.png"
+    },
+    "_meta": {
+      "title": "PG_IMAGE"
+    }
+  },
+  "2": {
+    "class_type": "LoadBackgroundRemovalModel",
+    "inputs": {
+      "bg_removal_name": "birefnet.safetensors"
+    },
+    "_meta": {
+      "title": "LoadBackgroundRemovalModel"
+    }
+  },
+  "3": {
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "2",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "RemoveBackground"
+    }
+  },
+  "4": {
+    "class_type": "TripoSplatPreprocessImage",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "mask": [
+        "3",
+        0
+      ],
+      "erode_radius": 1,
+      "size": 1024
+    },
+    "_meta": {
+      "title": "TripoSplatPreprocessImage"
+    }
+  },
+  "5": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "dino_v3_vit_h.safetensors"
+    },
+    "_meta": {
+      "title": "CLIPVisionLoader"
+    }
+  },
+  "6": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "7": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "triposplat_vae_decoder_fp16.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "8": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "triposplat_fp16.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "9": {
+    "class_type": "TripoSplatConditioning",
+    "inputs": {
+      "clip_vision": [
+        "5",
+        0
+      ],
+      "vae": [
+        "6",
+        0
+      ],
+      "image": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "TripoSplatConditioning"
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "8",
+        0
+      ],
+      "positive": [
+        "9",
+        0
+      ],
+      "negative": [
+        "9",
+        1
+      ],
+      "latent_image": [
+        "9",
+        2
+      ],
+      "seed": 1,
+      "steps": 20,
+      "cfg": 3,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "simple",
+      "denoise": 1
+    },
+    "_meta": {
+      "title": "PG_SEED"
+    }
+  },
+  "11": {
+    "class_type": "VAEDecodeTripoSplat",
+    "inputs": {
+      "samples": [
+        "10",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ],
+      "num_gaussians": 262144,
+      "seed": 0
+    },
+    "_meta": {
+      "title": "VAEDecodeTripoSplat"
+    }
+  },
+  "12": {
+    "class_type": "SplatToFile3D",
+    "inputs": {
+      "splat": [
+        "11",
+        0
+      ],
+      "format": "ply"
+    },
+    "_meta": {
+      "title": "SplatToFile3D"
+    }
+  },
+  "13": {
+    "class_type": "SaveGLB",
+    "inputs": {
+      "mesh": [
+        "12",
+        0
+      ],
+      "filename_prefix": "partgen/lane-a"
+    },
+    "_meta": {
+      "title": "SaveGLB"
+    }
+  }
+}
