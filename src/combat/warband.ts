@@ -9,7 +9,7 @@ import type { Param } from "../core/tweaks";
 import { CarSim, CAR_DEFAULTS, CAR_KINDS, axleSpan, type CarKind, type CarValues } from "../vehicles/car";
 import { CarBody } from "../vehicles/carBody";
 import { rayCapsule, capsuleNormal, type MechUnit } from "../game/mechUnit";
-import type { Battlefield, Hittable } from "../game/battlefield";
+import type { Battlefield, Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { KIND, FLAG, ObjectSerials, type Register } from "../game/register";
 import { putMech } from "../game/registerOwners";
@@ -261,6 +261,23 @@ export class Raider implements Hittable {
   }
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.a, this.b, out); }
+
+  /**
+   * A blast or a round's splash: hurt if it reaches the hull's capsule, full at the centre, half at the edge (2026-11-01:
+   * raiders had no splash at all, so a rocket that burst beside a truck did nothing to it). Cover shields it.
+   */
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts) {
+    if (!this.alive) return 0;
+    const s = this.sim, sh = this.shape, fx = Math.sin(s.heading), fz = Math.cos(s.heading), cy = s.pos.y + sh.capY;
+    // Nearest point on the capsule's spine, then less its radius.
+    const t = Math.max(-sh.half, Math.min(sh.half, (at.x - s.pos.x) * fx + (at.z - s.pos.z) * fz));
+    const px = s.pos.x + fx * t, pz = s.pos.z + fz * t;
+    const d = Math.max(0, Math.hypot(at.x - px, at.y - cy, at.z - pz) - sh.radius);
+    if (d > radius) return 0;
+    if (o?.cover?.(px, cy, pz)) return 0;
+    this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir, o?.pierce);
+    return 1;
+  }
 
   armourOf() { return this.armour; }
 

@@ -3,13 +3,13 @@
 // reads it back into the game).
 //
 // Every blast posts a wave from its kind's profile: the default profile (sliders) times the kind's multipliers (code
-// table below) times the kind's own slider. A wave is a ring of bent air running out from the blast, fast then slow, and
-// fading; big shells add a second, slower ring and leave the air shimmering over the spot for a moment. Waves posted
+// table below) times the kind's own slider. A wave is an orb of bent air growing out from the blast to its damage radius, fast then
+// slow, and fading; big shells add a second, slower orb and leave the air shimmering over the spot for a moment. Waves posted
 // close together in space and time merge into one bigger wave (like the night lights' clusters, src/world/lightCluster.ts),
 // and no more than `wavePerFrame` new waves start in a frame nor `waveMax` live at once: the rest fold into the nearest.
 // Heat shimmer: small puffs of bent air left behind rockets, missiles and shells in flight (`exhaust`) and held over hot
 // things (`heat`: the excavator's beam while it charges and burns).
-// Drawing: blastWavesDraw.ts (a screen-space bend of the frame, a quick bright ring on the ground, lit at night).
+// Drawing: blastWavesDraw.ts (a refracting sphere per wave, shimmer quads for the puffs, a flash of light at night).
 import type { Param } from "../core/tweaks";
 
 /** What went off. Each kind has its own profile (WAVE_KINDS) and slider. */
@@ -43,18 +43,17 @@ export const WAVE_KIND_LIST = Object.keys(WAVE_KINDS) as WaveKind[];
 
 export const BLAST_WAVE_DEFAULTS = {
   waveOn: 1,
-  waveSize: 2.2,
-  waveMinSize: 3,
+  waveSize: 1,
+  waveMinSize: 1,
   waveLife: 0.45,
-  waveStrength: 0.45,
-  waveThick: 0.22,
+  waveStrength: 1.5,
+  waveThick: 0.5,
   waveEase: 2.2,
   waveRim: 0.25,
   waveRing2: 0.5,
   waveRing2Slow: 0.55,
   waveHeat: 1.4,
   waveHeatStrength: 0.08,
-  waveGround: 1,
   waveGroundSize: 1.3,
   waveGroundLife: 0.3,
   waveGroundLight: 1,
@@ -80,20 +79,19 @@ const G = "Blast waves", GK = "Blast waves by kind", GH = "Heat shimmer";
 /** The slider groups (a lab's Light topic lists them, via src/world/look.ts LIGHT_GROUPS). */
 export const BLAST_WAVE_GROUPS = [G, GK, GH];
 export const BLAST_WAVE_PARAMS: Param[] = [
-  { key: "waveOn", label: "Blast waves on", min: 0, max: 1, step: 1, group: G, tip: "Off: no screen bend and no ground ring (the pass costs nothing)" },
-  { key: "waveSize", label: "Wave reach (× blast radius)", min: 0.5, max: 6, step: 0.05, group: G },
-  { key: "waveMinSize", label: "Smallest wave reach (m)", min: 0, max: 10, step: 0.1, group: G },
-  { key: "waveLife", label: "Wave time (s)", min: 0.1, max: 1.5, step: 0.01, group: G },
-  { key: "waveStrength", label: "Bend (m)", min: 0, max: 2, step: 0.01, group: G, tip: "How far the ring pushes the picture outward at its start, in metres at the blast" },
-  { key: "waveThick", label: "Ring thickness (× reach)", min: 0.03, max: 0.6, step: 0.01, group: G },
-  { key: "waveEase", label: "Fast then slow", min: 1, max: 5, step: 0.05, group: G, tip: "1: the ring runs out at a steady speed; higher: it bursts out and slows" },
-  { key: "waveRim", label: "Hot rim on the ring", min: 0, max: 1.5, step: 0.01, group: G, tip: "A faint bright edge on the bend" },
-  { key: "waveRing2", label: "Second ring (big shells)", min: 0, max: 1.5, step: 0.01, group: G, tip: "Strength of a slower second ring on mortars, turret shells, excavator volleys, the beam, vehicles; 0 off" },
-  { key: "waveRing2Slow", label: "Second ring speed (×)", min: 0.2, max: 1, step: 0.01, group: G },
-  { key: "waveGround", label: "Ground ring brightness", min: 0, max: 3, step: 0.01, group: G, tip: "A quick bright ring on the sand (blasts on the ground only)" },
-  { key: "waveGroundSize", label: "Ground ring reach (× blast radius)", min: 0.3, max: 4, step: 0.05, group: G },
-  { key: "waveGroundLife", label: "Ground ring time (s)", min: 0.05, max: 1, step: 0.01, group: G },
-  { key: "waveGroundLight", label: "Ground ring light at night", min: 0, max: 3, step: 0.01, group: G },
+  { key: "waveOn", label: "Blast waves on", min: 0, max: 1, step: 1, group: G, tip: "Off: no orbs and no shimmer (the pass costs nothing)" },
+  { key: "waveSize", label: "Orb reach (× blast radius)", min: 0.5, max: 6, step: 0.05, group: G, tip: "1: the orb ends where the damage does (Keith 2026-11-01: what is inside the wave should be hit)" },
+  { key: "waveMinSize", label: "Smallest orb (m)", min: 0, max: 10, step: 0.1, group: G },
+  { key: "waveLife", label: "Orb time (s)", min: 0.1, max: 1.5, step: 0.01, group: G },
+  { key: "waveStrength", label: "Bend (m)", min: 0, max: 2, step: 0.01, group: G, tip: "How far the orb's edge bends the picture at its start, in metres at the blast" },
+  { key: "waveThick", label: "Orb shell thickness", min: 0.03, max: 0.6, step: 0.01, group: G, tip: "Low: only the orb's silhouette bends; high: the bend reaches in towards its middle" },
+  { key: "waveEase", label: "Fast then slow", min: 1, max: 5, step: 0.05, group: G, tip: "1: the orb grows at a steady speed; higher: it bursts out and slows" },
+  { key: "waveRim", label: "Hot rim on the orb", min: 0, max: 1.5, step: 0.01, group: G, tip: "A faint bright edge on the bend" },
+  { key: "waveRing2", label: "Second orb (big shells)", min: 0, max: 1.5, step: 0.01, group: G, tip: "Strength of a slower second orb on mortars, turret shells, excavator volleys, the beam, vehicles; 0 off" },
+  { key: "waveRing2Slow", label: "Second orb speed (×)", min: 0.2, max: 1, step: 0.01, group: G },
+  { key: "waveGroundSize", label: "Night flash reach (× blast radius)", min: 0.3, max: 4, step: 0.05, group: G },
+  { key: "waveGroundLife", label: "Night flash time (s)", min: 0.05, max: 1, step: 0.01, group: G },
+  { key: "waveGroundLight", label: "Night flash light", min: 0, max: 3, step: 0.01, group: G },
   { key: "waveMergeDist", label: "Merge distance (× reach)", min: 0, max: 2, step: 0.01, group: G, tip: "Waves this close (and within the merge time) become one bigger wave; 0 never merges" },
   { key: "waveMergeTime", label: "Merge time (s)", min: 0, max: 0.5, step: 0.01, group: G },
   { key: "waveMergeGrow", label: "Merged wave growth", min: 0, max: 1, step: 0.01, group: G, tip: "How much a wave grows per wave it swallows (as the square root of their strength)" },
@@ -127,7 +125,7 @@ export interface Wave {
   n: number;
   /** Frame it was posted in. */
   frame: number;
-  /** A ground ring with it (blasts on the ground), its reach (m), and the side's light family. */
+  /** On the ground (lights the sand at night), the flash's reach (m), and the side's light family. */
   ground: boolean; groundReach: number; fam: number;
   /** The slower second ring of a big shell (merges only with other second rings). */
   ring2: boolean;
@@ -178,9 +176,9 @@ export class BlastWaves {
     const groundReach = v.waveGroundSize * radius * p.size * k;
     this.add({ x, y, z, reach, strength, t: 0, life, thick: v.waveThick, n: 1, frame: this.frame, ground, groundReach, fam, ring2: false, reach0: reach, strength0: strength });
     if (p.ring2 && v.waveRing2 > 0) {
-      // The slower second ring starts with the first and runs out a little further, later.
+      // The slower second orb starts with the first and reaches the same edge, later.
       const slow = Math.max(0.2, v.waveRing2Slow);
-      this.add({ x, y, z, reach: reach * 1.25, strength: strength * v.waveRing2, t: -0.04, life: life / slow, thick: v.waveThick * 1.4, n: 1, frame: this.frame, ground: false, groundReach: 0, fam, ring2: true, reach0: reach * 1.25, strength0: strength * v.waveRing2 });
+      this.add({ x, y, z, reach, strength: strength * v.waveRing2, t: -0.04, life: life / slow, thick: v.waveThick * 1.4, n: 1, frame: this.frame, ground: false, groundReach: 0, fam, ring2: true, reach0: reach, strength0: strength * v.waveRing2 });
     }
     if (p.heat && v.waveHeat > 0 && v.waveHeatStrength > 0) {
       const s = Math.max(1.5, radius * 0.9 * p.size);
