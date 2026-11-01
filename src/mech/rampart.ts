@@ -15,6 +15,11 @@ import { LEG_TYPES } from "./legTypes";
 import { MECH_VARIANTS, RAMPART_BACK } from "./variants";
 import type { BodyParts, MountSocket } from "../game/mechUnit";
 import type { Aim } from "./upper";
+import { armIk, type SwordPose } from "../weapons/sword";
+
+/** A held weapon's pose driven by its weapon (the sword, src/weapons/sword.ts), hull frame: the hand's place and the
+ *  weapon's axes, the arm's bone lengths, and the way the elbow bends. */
+export interface HeldPose extends SwordPose { upper: number; fore: number; pole: { x: number; y: number; z: number } }
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
@@ -175,6 +180,11 @@ interface PodRig {
   home: THREE.Vector3;
   /** Stand-in arm: the upper arm (fixed to the hull) and the forearm (turns with the aim). */
   arm: THREE.Group; forearm: THREE.Group;
+  /** Where showParts put the gun pivot, and whether it showed the stand-in arm (put back when a held pose ends). */
+  heldAt?: THREE.Vector3; armShown?: boolean;
+  /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
+  held?: boolean;
+  ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh };
 }
 
 export class RampartBody {
@@ -490,6 +500,7 @@ export class RampartBody {
       p.yawPitch.position.copy(p.home);
       if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
       p.kick.scale.setScalar(arm ? S.heldScale : 1);
+      p.heldAt = p.yawPitch.position.clone(); p.armShown = arm;
       p.kick.visible = L ? parts.gunLeft : parts.gunRight;
       p.arm.visible = p.forearm.visible = arm;
     }
@@ -522,6 +533,67 @@ export class RampartBody {
       }
     }
   }
+
+  /**
+   * A weapon drives this side's arm (the sword; null hands it back to the gun's aim): the held weapon's pivot goes to
+   * the pose's hand with its axes, and a two-bone arm reaches from the shoulder to it (the stand-in arm is hidden).
+   * Applied at once and kept until the next call (update leaves a held side alone). Cosmetic.
+   */
+  holdPose(side: 1 | -1, pose: HeldPose | null) {
+    const p = this.pods.find((q) => q.side === side)!;
+    if (!pose) {
+      if (!p.held) return;
+      p.held = false;
+      if (p.heldAt) p.yawPitch.position.copy(p.heldAt);
+      p.arm.visible = p.forearm.visible = !!p.armShown;
+      if (p.ik) p.ik.g.visible = false;
+      return;
+    }
+    p.held = true;
+    const ik = p.ik ?? (p.ik = this.ikArm());
+    ik.g.visible = true;
+    p.arm.visible = p.forearm.visible = false;
+    const r = armIk(p.home, pose.hand, pose.upper, pose.fore, pose.pole);
+    p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
+    const z = new THREE.Vector3(pose.fwd.x, pose.fwd.y, pose.fwd.z), y = new THREE.Vector3(pose.up.x, pose.up.y, pose.up.z);
+    const x = new THREE.Vector3().crossVectors(y, z).normalize();
+    p.yawPitch.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y.crossVectors(z, x), z));
+    p.kick.position.set(0, 0, 0);
+    const e = new THREE.Vector3(r.elbow.x, r.elbow.y, r.elbow.z), h = new THREE.Vector3(r.hand.x, r.hand.y, r.hand.z);
+    const bone = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
+      const d = b.clone().sub(a), len = d.length();
+      m.position.copy(a);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.divideScalar(Math.max(1e-6, len)));
+      m.scale.set(1, len, 1);
+    };
+    bone(ik.upper, p.home, e);
+    bone(ik.fore, e, h);
+    ik.elbow.position.copy(e);
+    ik.hand.position.copy(h);
+    ik.hand.quaternion.copy(p.yawPitch.quaternion);
+  }
+
+  /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
+  private ikArm() {
+    const look = this.look!, g = new THREE.Group();
+    const part = (geo: THREE.BufferGeometry, tint: number) => { const m = new THREE.Mesh(geo); look.apply(m); look.tint(m, tint); g.add(m); return m; };
+    const upper = part(new THREE.BoxGeometry(0.36, 1, 0.4).translate(0, 0.5, 0), 0x6c7546);
+    const fore = part(new THREE.BoxGeometry(0.32, 1, 0.34).translate(0, 0.5, 0), 0xb7a77c);
+    const elbow = part(new THREE.SphereGeometry(0.27, 10, 8), 0x3e3c35);
+    const hand = part(new THREE.BoxGeometry(0.36, 0.34, 0.36), 0x3e3c35);
+    this.hull.add(g);
+    return { g, upper, fore, elbow, hand };
+  }
+
+  /** The hull's frame (hull to world), current now. */
+  hullFrame(out: THREE.Matrix4) {
+    this.hull.updateWorldMatrix(true, false);
+    return out.copy(this.hull.matrixWorld);
+  }
+  /** A side's shoulder in the hull's frame. */
+  shoulderAt(side: 1 | -1, out: THREE.Vector3) { return out.copy(this.pods.find((q) => q.side === side)!.home); }
+  /** The hull itself (things drawn in its frame hang here: the sword's trail). */
+  hullGroup() { return this.hull; }
 
   /** Show or hide a side's minigun pod itself (another weapon's stand-in takes its place on the same pivot). */
   showPod(side: 1 | -1, on: boolean) {
@@ -567,6 +639,7 @@ export class RampartBody {
     sim.feet.forEach((f, i) => this.poseLeg(this.legs[i], f.pose, left));
 
     for (const p of this.pods) {
+      if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
       p.yawPitch.rotation.set(g.pitch, g.yaw, 0, "YXZ");
       p.kick.position.z = -g.kick;

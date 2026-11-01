@@ -36,7 +36,8 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, sweepAngles, swordCuts, type SwordStats } from "./sword";
+import { SwordSim, sweepAngles, swordCuts, swordPose, type SwordStats } from "./sword";
+import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
 import { penDensity, type SheetHit } from "../game/sheet";
 import { hitStop } from "../game/hitStop";
@@ -90,7 +91,7 @@ interface Side {
   swingSeen: number;
   cleave: number;
   bit: boolean;
-  trail: number[];
+  trail: { x: number; y: number; z: number; q: THREE.Quaternion; at: THREE.Vector3 }[];
   trailK: number;
 }
 
@@ -126,7 +127,6 @@ export interface Shoulder {
 }
 
 const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
-const D2R = Math.PI / 180;
 const swordBuf: SheetHit<Hittable>[] = [];
 const NAMES: Record<string, string> = { melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
@@ -153,6 +153,9 @@ export class Arsenal implements MechWeapons {
   railSnapped = false;
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
+  private frame = new THREE.Matrix4();
+  private sh = new THREE.Vector3();
+  private sh2 = new THREE.Vector3();
   private dir = new THREE.Vector3();
   private prevTrig: [boolean, boolean] = [false, false];
   /** Where a target is now, by its key (a missile's), or null once it's gone: the register's lookup by id. */
@@ -181,7 +184,8 @@ export class Arsenal implements MechWeapons {
       const g = guns[i];
       const kind: SideKind = !g ? null : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
       const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
-      if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
+      if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); for (const g of s.model.sword?.trail ?? []) g.mesh.removeFromParent(); s.model = null; }
+      if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
@@ -427,54 +431,67 @@ export class Arsenal implements MechWeapons {
   }
 
   /**
-   * The sword (src/weapons/sword.ts): the swing steps on the trigger; through the slash the blade is a vertical sheet
-   * from the hand out to the reach, tested every few degrees of the stretch it swept this step. Each body it crosses is
-   * hit once per swing (damage, knock along the swing, sparks, a crunch), paying its chord × density out of the swing's
-   * cleave budget; once that's spent the rest of the swing passes over them. The first bite stalls the blade, shakes the
-   * camera and (the local player's own swing) asks for hit stop. The model follows the swing; the mech steps into the
-   * slash (lunge).
+   * The sword (src/weapons/sword.ts): the swing steps on the trigger and sets the arm's pose (swordPose: the hand round
+   * its arc and the blade out along the swing, or at rest over the shoulder; the body reaches a two-bone arm to it).
+   * Through the slash the blade is a vertical sheet from the hand out to the reach, tested every few degrees of the
+   * stretch it swept this step. Each body it crosses is hit once per swing (damage, knock along the swing, sparks, a
+   * crunch), paying its chord × density out of the swing's cleave budget; once that's spent the rest of the swing passes
+   * over them. The first bite stalls the blade, shakes the camera and (the local player's own swing) asks for hit stop.
    */
   private stepSword(s: Side, held: boolean, dt: number) {
-    const u = this.unit, v = this.v, bf = this.bf, sw = s.sword;
+    const u = this.unit, v = this.v, bf = this.bf, sw = s.sword, body = u.body;
     const st = this.swordStats(s);
     const sweep = sw.update(dt, held, st, v.swordComboAt);
     if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
-    // The hand and the way the arm points (the model's pivot; a body without one: beside the hull, along the torso).
-    const hand = this.tmp, along = this.dir;
+    // The hull's frame and this side's shoulder in it (a body without them: a frame on the pelvis along the torso).
+    const frame = this.frame;
+    if (body.hullFrame) body.hullFrame(frame);
+    else frame.compose(this.tmp2.copy(u.sim.pelvis), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), u.upper.torsoYaw), new THREE.Vector3(1, 1, 1));
+    const shoulder = body.shoulderAt ? body.shoulderAt(sw.side, this.sh) : this.sh.set(sw.side * 1.3, 1, 0);
+    const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
+    const poseAt = (angle: number) => swordPose(angle, sw.lift, sw.guard, sw.dir, sw.side, aimYaw, shoulder, v);
+    const pose = poseAt(sw.angle);
+    const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, pole: { x: sw.side * 0.9, y: -1, z: -0.5 } };
+    body.holdPose?.(sw.side, u.alive ? armed : null);
+    // The hand in the world (the arm may have pulled it in to its reach: the model's pivot is where it really is).
+    const hand = this.tmp;
     const m = s.model, ms = m?.sword;
-    let reachScale = 1;
-    if (m && ms) {
-      m.root.getWorldPosition(hand);
-      m.root.getWorldDirection(along);
-      reachScale = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
-    } else {
-      const yaw = u.upper.torsoYaw;
-      hand.set(u.sim.pelvis.x + Math.cos(yaw) * 1.6 * sw.side, u.sim.pelvis.y, u.sim.pelvis.z - Math.sin(yaw) * 1.6 * sw.side);
-      along.set(Math.sin(yaw), 0, Math.cos(yaw));
-    }
-    const baseYaw = Math.atan2(along.x, along.z);
+    if (m) m.root.getWorldPosition(hand); else hand.set(pose.hand.x, pose.hand.y, pose.hand.z).applyMatrix4(frame);
     if (sw.started) bf.sfx.playSound("swordSwing", hand, 0.9, 0.85 + Math.random() * 0.25);
     if (sweep && u.alive) {
+      const fw = this.dir, hw = this.sh2;
       for (const a of sweepAngles(sweep)) {
         if (s.cleave <= 0) break;
-        this.swordSheet(s, hand, baseYaw + a, st, sw.dir);
+        const p = poseAt(a);
+        hw.set(p.hand.x, p.hand.y, p.hand.z).applyMatrix4(frame);
+        fw.set(p.fwd.x, p.fwd.y, p.fwd.z).transformDirection(frame);
+        this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, sw.dir);
       }
     }
-    // The model: the swing's yaw and lift, the blade stretched to the reach, the trail's ghost blades fading behind it.
+    // The model: the blade stretched to the reach, the edge hot in the slash, the trail's ghost blades at its recent
+    // poses (in the hull's frame, fading).
     if (m && ms) {
-      ms.swing.rotation.set(-sw.lift * v.swordLift * D2R, sw.angle, 0);
-      const len = (st.reach * v.swordLength) / reachScale;
-      ms.blade.scale.z = Math.max(0.3, len - 0.48);
+      ms.swing.rotation.set(0, 0, 0);
+      const ws = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
+      const len = st.reach * v.swordLength;
+      ms.blade.scale.z = Math.max(0.3, len / ws - 0.46);
       ms.edge.opacity = sw.phase === "slash" ? 1 : 0.3 + 0.4 * sw.lift;
+      const hull = body.hullGroup?.();
       s.trailK = sw.phase === "slash" ? 1 : Math.max(0, s.trailK - dt * 7);
-      if (sw.phase === "slash") { s.trail.unshift(sw.angle); if (s.trail.length > ms.trail.length) s.trail.length = ms.trail.length; }
-      else if (s.trailK <= 0) s.trail.length = 0;
+      if (sw.phase === "slash") {
+        const q = new THREE.Quaternion();
+        if (m.root.parent?.parent) q.copy(m.root.parent.parent.quaternion);
+        s.trail.unshift({ x: pose.hand.x, y: pose.hand.y, z: pose.hand.z, q, at: m.root.parent?.parent?.position.clone() ?? new THREE.Vector3() });
+        if (s.trail.length > ms.trail.length) s.trail.length = ms.trail.length;
+      } else if (s.trailK <= 0) s.trail.length = 0;
       ms.trail.forEach((g, i) => {
-        const a = s.trail[i];
-        g.mesh.visible = a !== undefined && s.trailK > 0 && v.swordTrail > 0;
+        if (hull && g.mesh.parent !== hull) hull.add(g.mesh);
+        const t = s.trail[i];
+        g.mesh.visible = !!t && !!hull && s.trailK > 0 && v.swordTrail > 0;
         if (!g.mesh.visible) return;
-        g.mesh.rotation.set(0, a, 0);
-        g.mesh.scale.set(1, 0.95, len);
+        g.mesh.position.copy(t.at);
+        g.mesh.quaternion.copy(t.q);
+        g.mesh.scale.set(1, 0.3, len);
         g.mat.opacity = Math.min(1, 0.32 * v.swordTrail * (1 - i / ms.trail.length) * s.trailK);
       });
     }
@@ -515,14 +532,22 @@ export class Arsenal implements MechWeapons {
     }
   }
 
-  /** The mech steps into a slash (world m/s along the aim), or null: the walker takes it as outside motion. */
+  /**
+   * The mech steps into a swing (world m/s along the aim), or null: the walker takes it as outside motion. Keith
+   * (2026-11-01): by how far off the target is (the lock, else the cursor): none within swordLungeNear, so a close fight
+   * can kite, growing to the full lunge at swordLungeFar.
+   */
   lunge(): { x: number; z: number } | null {
-    const v = this.v;
+    const v = this.v, u = this.unit;
     let k = 0;
-    for (const s of this.sides) if (s.kind === "melee" && s.sword.phase === "slash") k = Math.max(k, Math.sin(Math.PI * Math.min(1, s.sword.slashK + 0.15)));
-    if (k <= 0 || v.swordLunge <= 0) return null;
-    const yaw = this.unit.upper.torsoYaw;
-    return { x: Math.sin(yaw) * v.swordLunge * k, z: Math.cos(yaw) * v.swordLunge * k };
+    for (const s of this.sides) if (s.kind === "melee") k = Math.max(k, s.sword.lungeK);
+    const at = u.lock ?? u.cursor;
+    if (k <= 0 || v.swordLunge <= 0 || !at) return null;
+    const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
+    const far = Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
+    if (far <= 0 || d < 1e-3) return null;
+    const sp = v.swordLunge * k * far;
+    return { x: (dx / d) * sp, z: (dz / d) * sp };
   }
 
   /**
