@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Target lock: Tab over an enemy locks it; every shot and sword swing then acts as if the cursor were on it (for pad and touch players, and the sword's distance-based cuts) | Keith | Keith | Defaults Claude's, open for Keith: Tab locks whatever the soft lock shows; Tab again, death, going down, 160 m or hopping out releases; red brackets, turning diamond, ring; convoy lab Tab with nothing to lock still cycles the seeker. Also the soft lock reaches at least 50 m with swords (it only reached sword reach). |
 | 2026-11-01 | Sword block sounds like a ringing ching; sword hits like heavy steel crashing (a container crushed), no pitched thump | Keith | Keith | Built from struck-steel partials (`Synth.metal`); recipes Claude's. |
 | 2026-11-01 | Sword swings 30% slower for weight; blocks get their own distinct sound | Keith | Keith | `swordPace` 1.3 on every move; the block plays a dark clang plus a whoosh as it comes up, and no hit crunch. |
 | 2026-11-01 | The close sword cut is led by the elbow: blade brought down upright in front like a block, carried across, swinging out only at the end as the arm straightens | Keith | Keith | Replaces round 9's draw cut. Values Claude's: upright 68°, lean 28°, out to 62°. A scrub slider shows the poses. |

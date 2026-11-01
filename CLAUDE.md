@@ -153,7 +153,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
 - Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's (both can
   be held); keys 1-3 hold to paint a shoulder launcher, release to fire; keys 1-2 on a feed or power item are a press (belt feed: overdrive, incendiary feed: ignited rounds, capacitor bank: discharge a bar; Keith 2026-10-30); hold F to hop out of the mech, hold F by it to get
-  back in (Keith 2026-10-26; F no longer fires).
+  back in (Keith 2026-10-26; F no longer fires). Tab with an enemy under the cursor locks it (shots and sword act as if the cursor were
+  on it; Tab again lets go; Keith 2026-11-01).
 - Pilot (every combat lab and the convoy lab): `?onfoot` (start on foot beside the mech), `?holdf=seconds` (F held
   from the start, for shots of getting out).
 - Duel lab: `?rival=seed` (which rival mech; Reroll steps on), `?rivalfit=slot:base[:rarity],...` (fit these over its roll,
