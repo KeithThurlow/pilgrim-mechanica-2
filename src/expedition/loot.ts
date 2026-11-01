@@ -13,6 +13,7 @@ import type { SpotState } from "../pois/salvage";
 import type { Rarity } from "../items/rarity";
 import { tierOf } from "../items/rarity";
 import { itemWeight } from "../items/item";
+import { VALUE_DEFAULTS, VALUE_PARAMS } from "../items/value";
 import type { LootValues } from "../items/generate";
 import { DropField, DROP_DEFAULTS, DROP_PARAMS, hashKey, itemName, type Collector, type DropContext } from "./drops";
 import { DropsDraw, DROP_FX_DEFAULTS, DROP_FX_PARAMS } from "./dropsDraw";
@@ -22,14 +23,14 @@ import { LootSound, LOOT_SOUND_DEFAULTS, LOOT_SOUND_PARAMS } from "../audio/loot
 import { robotThreat } from "./threat";
 
 export const FIELD_LOOT_DEFAULTS = {
-  ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
+  ...VALUE_DEFAULTS, ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
   bigHaul: 40, streakGap: 0.4,
   dropHearFull: 50, dropHearMax: 160,
   cargoLimit: 1, scrapWeight: 0.02, cargoWarn: 0.85, cargoFullNote: 3,
 };
 export type FieldLootValues = typeof FIELD_LOOT_DEFAULTS;
 export const FIELD_LOOT_PARAMS: Param[] = [
-  ...DROP_PARAMS, ...DROP_FX_PARAMS, ...CLUMP_PARAMS, ...LOOT_HUD_PARAMS, ...LOOT_SOUND_PARAMS,
+  ...VALUE_PARAMS, ...DROP_PARAMS, ...DROP_FX_PARAMS, ...CLUMP_PARAMS, ...LOOT_HUD_PARAMS, ...LOOT_SOUND_PARAMS,
   { key: "bigHaul", label: "A big haul is (scrap)", min: 5, max: 500, step: 5, group: "Loot", tip: "A stripped spot worth this much ends its clumps on a bigger chime" },
   { key: "dropHearFull", label: "Drop sound: full volume within (m)", min: 0, max: 300, step: 5, group: "Loot", tip: "Keith 2026-10-31: drops far off were heard from the convoy. Closer to you than this, a drop's riff plays in full" },
   { key: "dropHearMax", label: "Drop sound: silent past (m)", min: 10, max: 1000, step: 5, group: "Loot", tip: "Fades out between the two; a drop further off than this makes no sound" },

@@ -17,6 +17,7 @@ import { LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, defaultLoadout, fit, fitProble
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { newBag, bagWeight } from "../../src/items/cargo";
 import { inventoryScreen } from "../../src/ui/inventory";
+import { VALUE_DEFAULTS, VALUE_PARAMS } from "../../src/items/value";
 import { DOLL_DEFAULTS, DOLL_PARAMS, mechDollHud, partsFromHull } from "../../src/ui/mechDoll";
 import { bayScreen, loadBay, saveBay, itemName, type BayState } from "../../src/ui/bay";
 
@@ -29,10 +30,10 @@ let inv: ReturnType<typeof inventoryScreen> | null = null;
 const lab = await combatLab({
   id: "loadout-lab",
   title: "Loadout",
-  defaults: { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...DUMMY_DEFAULTS, ...DOLL_DEFAULTS },
-  params: [...LOOT_PARAMS, ...LOADOUT_PARAMS, ...DUMMY_PARAMS, ...DOLL_PARAMS],
+  defaults: { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...DUMMY_DEFAULTS, ...DOLL_DEFAULTS, ...VALUE_DEFAULTS },
+  params: [...LOOT_PARAMS, ...LOADOUT_PARAMS, ...DUMMY_PARAMS, ...DOLL_PARAMS, ...VALUE_PARAMS],
   topics: [
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Mech doll"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Item value", "Bare mech", "Mech doll"] },
     { id: "dummies", label: "Targets", groups: ["Target dummies"] },
   ],
   selectables: [{ topic: "dummies", label: "Target dummies", objects: () => draw?.meshes() ?? [] }],
