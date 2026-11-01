@@ -1,11 +1,12 @@
 // The mech's sword (Keith 2026-11-01: "a big chonky sword ... wield it with a mech and cleave through things"): a held
 // weapon in an arm (`sword-light`, src/items/bases.ts), on that side's mouse button.
 //
-// The swing (Keith 2026-11-01, after a Mixamo one-hand sword combo): at rest the sword sits over the shoulder, the hand
-// in front of it, fist near vertical. A click: the elbow drives forward and up, then the wrist snaps round and the
-// blade cuts across the front, from outboard to the far side, finishing low under the other shoulder (clip A). Click
+// The swing (Keith 2026-11-01, after a Mixamo one-hand sword combo): at rest the sword lies back over the shoulder
+// toward the pack, the fist up in front of the shoulder and the elbow pointing ahead along the torso. A click: the
+// elbow drives forward and up, then the wrist snaps round and the blade cuts across the front, from outboard to the far side, finishing low under the other shoulder (clip A). Click
 // again (or hold) and it cuts back the other way, rising, ending cocked high over its own shoulder (clip B), from where
-// the next A follows on. No follow-up: after A the elbow drops and the wrist and forearm swing round past the waist
+// the next A follows on. It's heavy (Keith 2026-11-01, round 4): the time through each move eases in from a stop,
+// runs fastest through the cut and eases out to a stop at the far side, so a reversal takes its time. No follow-up: after A the elbow drops and the wrist and forearm swing round past the waist
 // and back up to the shoulder (clip R); after B it settles back to rest (clip S).
 //
 // Each clip is a few keys of the hand (relative to the shoulder, for the left arm; the right mirrors) and the blade's
@@ -25,12 +26,12 @@ export const SWORD_DEFAULTS = {
   swordDamage: 900,
   swordAp: 0.5,
   swordReach: 4.7,
-  swordArc: 150,
-  swordWindup: 0.2,
-  swordSlash: 0.16,
-  swordRecover: 0.32,
-  swordFollow: 0.14,
-  swordComboAt: 0.3,
+  swordArc: 210,
+  swordWindup: 0.34,
+  swordSlash: 0.22,
+  swordRecover: 0.42,
+  swordFollow: 0.36,
+  swordComboAt: 0.7,
   swordBlend: 0.08,
   swordCleave: 4,
   swordHeight: 5,
@@ -50,8 +51,10 @@ export const SWORD_DEFAULTS = {
   swordUpperArm: 1.45,
   swordForearm: 1.45,
   swordDroop: 14,
-  swordSnap: 1.6,
+  swordSnap: 1.8,
+  swordEase: 1.4,
   swordGuardUp: 0,
+  swordShoulderOut: 0.35,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
@@ -61,7 +64,7 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one cut takes this (a rolled sword carries its own)" },
   { key: "swordAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: G },
   { key: "swordReach", label: "Reach from the hand (m)", min: 2, max: 14, step: 0.1, group: G, tip: "The blade's sheet runs from the hand out to this; the model's blade is drawn to match" },
-  { key: "swordArc", label: "Cut arc (°)", min: 30, max: 220, step: 1, group: G, tip: "How far the blade turns through a cut, centred on the aim" },
+  { key: "swordArc", label: "Cut arc (°)", min: 30, max: 270, step: 1, group: G, tip: "How far the blade turns through a cut, centred on the aim" },
   { key: "swordWindup", label: "Drive (s)", min: 0.02, max: 1, step: 0.01, group: G, tip: "From rest: the elbow drives forward and up before the cut (the back-cut's lead-in takes about half)" },
   { key: "swordSlash", label: "Cut (s)", min: 0.04, max: 0.6, step: 0.01, group: G, tip: "The cut itself: the only time it hits" },
   { key: "swordFollow", label: "Follow-through (s)", min: 0.02, max: 0.6, step: 0.01, group: G, tip: "After the cut, on to under the far shoulder (or up over its own)" },
@@ -85,7 +88,9 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordUpperArm", label: "Upper arm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordForearm", label: "Forearm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordDroop", label: "Blade tipped down in the cut (°)", min: -30, max: 60, step: 1, group: GA, tip: "So the tip sweeps low through small enemies" },
-  { key: "swordSnap", label: "Wrist snap", min: 1, max: 4, step: 0.05, group: GA, tip: "How late and fast the blade turns in the cut (the wrist snapping round): 1 even, higher whips more of the turn into the middle" },
+  { key: "swordSnap", label: "Wrist snap", min: 1, max: 3, step: 0.05, group: GA, tip: "The blade's speed in the middle of the cut against its average (the wrist snapping round): 1 even, higher whips more of the turn into the middle" },
+  { key: "swordEase", label: "Speed into and out of the cut", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Weight: each move starts and ends at a stop; this is the speed at the cut's ends against the average. Low: a slow heavy build and a long stop; high: snappier" },
+  { key: "swordShoulderOut", label: "Arm mounted out from the hull (m)", min: 0, max: 1, step: 0.01, group: GA, tip: "A sword arm's shoulder sits this much further out, to make room for the blade" },
   { key: "swordGuardUp", label: "At rest: hand higher (m)", min: -1, max: 1, step: 0.05, group: GA },
 ];
 
@@ -98,7 +103,7 @@ export type SwordClip = "guard" | "A" | "B" | "R" | "S";
 type V = { x: number; y: number; z: number };
 /** A held sword's pose in the hull's frame: where the hand is, the way the blade points, the way its spine faces (the
  *  edge faces the other way). */
-export interface SwordPose { hand: V; fwd: V; up: V }
+export interface SwordPose { hand: V; fwd: V; up: V; pole: V }
 
 const D2R = Math.PI / 180;
 const v3 = (x: number, y: number, z: number): V => ({ x, y, z });
@@ -112,18 +117,42 @@ const square = (fwd: V, up: V): V => {
   return norm(r);
 };
 const smooth = (x: number) => x * x * (3 - 2 * x);
+/** Cubic Hermite through (a, a) and (b, b) with slopes ma, mb, at x in [a, b]. */
+const herm = (x: number, a: number, b: number, ma: number, mb: number) => {
+  const h = b - a, u = (x - a) / h, u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * h * ma + (-2 * u3 + 3 * u2) * b + (u3 - u2) * h * mb;
+};
+/**
+ * The weight (Keith 2026-11-01: "ease into the swing and ease out of it"): time through a move (share x) to the share
+ * the keys are read at. It starts and ends at a stop, meets each cut end at `ease` × the average speed and peaks at
+ * `snap` × in the cut's middle; the cut's ends stay where they are, so the hits keep their times.
+ */
+export function moveWarp(x: number, cut: [number, number] | null, ease: number, snap: number): number {
+  if (x <= 0 || x >= 1) return Math.max(0, Math.min(1, x));
+  if (!cut) return smooth(x);
+  const [c0, c1] = cut, cm = (c0 + c1) / 2;
+  const e = Math.min(3, ease), s = Math.min(3, snap);
+  if (x < c0) return herm(x, 0, c0, 0, e);
+  if (x < cm) return herm(x, c0, cm, e, s);
+  if (x < c1) return herm(x, cm, c1, s, e);
+  return herm(x, c1, 1, e, 0);
+}
 
 /**
  * A key: the hand off the shoulder (left arm: +x outboard), the blade's way (a vector, or a yaw in half-arcs: +1 out
  * along the outboard side of the aim, −1 across to the far side, with a pitch in degrees on top of the droop), and a
  * hint for the spine.
  */
-interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V }
+interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V; pole?: V }
 
 // Hand places off the shoulder, left arm (the Rampart's shoulder sits 1.02 m out, 0.89 m over the waist; its torso
 // spans ±1.2 m across, 1.27 m back to 1.37 m ahead, from 0.33 m under the waist to 2.3 m over it).
-const GUARD: Key = { t: 0, hand: v3(0.43, 0.45, 0.9), fwd: v3(0.3, 0.68, -0.68), up: v3(0.3, -0.9, -0.3) };
-const DRIVE: Key = { t: 0, hand: v3(0.33, 0.9, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1) };
+// Rest (Keith 2026-11-01, round 4): the fist up in front of the shoulder, the elbow pointing ahead (its pole), the
+// blade laid back over the shoulder toward the pack, near in line with the torso.
+const GUARD: Key = { t: 0, hand: v3(0.12, 0.85, 0.5), fwd: v3(-0.12, 0.42, -0.9), up: v3(0.6, -0.4, -0.2), pole: v3(0.15, -0.25, 1) };
+const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
+/** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
+const CUT_POLE = v3(0.9, -1, -0.5);
 const UNDER: Key = { t: 0, hand: v3(-2.05, -0.55, 1.65), fwd: v3(-0.8, -0.45, -0.4), up: v3(0.2, 0.2, -1) };
 const COCK: Key = { t: 0, hand: v3(0.45, 0.95, 1.6), fwd: v3(0.8, 0.55, -0.25), up: v3(-0.2, 0.4, -1) };
 
@@ -141,9 +170,9 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
           { ...DRIVE, t: (w * 0.7) / len },
           // The cut: the hand runs across the front, the blade from out along its own side to across the far one,
           // its edge leading (the spine faces back the way it came).
-          { t: w / len, hand: v3(0.75, 0.55, 2.05), yaw: 1, pitch: 4, up: v3(1, 0, -0.4) },
-          { t: (w + s * 0.5) / len, hand: v3(-0.7, 0.15, 2.45), yaw: 0, pitch: 0, up: v3(1, 0, -0.4) },
-          { t: (w + s) / len, hand: v3(-1.85, -0.2, 2.0), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4) },
+          { t: w / len, hand: v3(1.0, 0.55, 1.95), yaw: 1, pitch: 4, up: v3(1, 0, -0.4) },
+          { t: (w + s * 0.5) / len, hand: v3(-0.6, 0.15, 2.5), yaw: 0, pitch: 0, up: v3(1, 0, -0.4) },
+          { t: (w + s) / len, hand: v3(-2.0, -0.2, 1.95), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4) },
           { ...UNDER, t: 1 },
         ],
       };
@@ -153,9 +182,9 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
       return {
         len, cut: [r / len, (r + s) / len], keys: [
           { ...UNDER, t: 0 },
-          { t: r / len, hand: v3(-1.85, -0.1, 2.0), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4) },
-          { t: (r + s * 0.5) / len, hand: v3(-0.5, 0.4, 2.45), yaw: 0, pitch: 4, up: v3(-1, 0, -0.4) },
-          { t: (r + s) / len, hand: v3(0.75, 0.8, 2.05), yaw: 1, pitch: 14, up: v3(-1, 0.2, 0.4) },
+          { t: r / len, hand: v3(-2.0, -0.1, 1.95), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4) },
+          { t: (r + s * 0.5) / len, hand: v3(-0.45, 0.4, 2.5), yaw: 0, pitch: 4, up: v3(-1, 0, -0.4) },
+          { t: (r + s) / len, hand: v3(1.0, 0.8, 1.95), yaw: 1, pitch: 14, up: v3(-1, 0.2, 0.4) },
           { ...COCK, t: 1 },
         ],
       };
@@ -169,7 +198,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
           { ...UNDER, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
-          { t: 0.82, hand: v3(0.55, -0.05, 1.2), fwd: v3(0.4, 0.35, -0.85), up: v3(0.3, -0.8, -0.3) },
+          { t: 0.82, hand: v3(0.4, 0.3, 1.0), fwd: v3(0.25, 0.4, -0.88), up: v3(0.5, -0.6, -0.3), pole: v3(0.5, -0.6, 0.7) },
           { ...g, t: 1 },
         ],
       };
@@ -201,12 +230,8 @@ function keyAxes(k: Key, st: SwordStats, v: SwordValues): { fwd: V; up: V } {
 export function clipPose(c: SwordClip, t: number, side: 1 | -1, shoulder: V, aimYaw: number, st: SwordStats, v: SwordValues): SwordPose {
   const { len, keys, cut } = clipKeys(c, st, v);
   let x = Math.max(0, Math.min(1, t / Math.max(1e-3, len)));
-  // The wrist snap: time through the cut runs slow, then fast, then slow.
-  if (cut && x > cut[0] && x < cut[1]) {
-    const u = (x - cut[0]) / (cut[1] - cut[0]);
-    const p = v.swordSnap, e = u < 0.5 ? 0.5 * Math.pow(2 * u, p) : 1 - 0.5 * Math.pow(2 * (1 - u), p);
-    x = cut[0] + e * (cut[1] - cut[0]);
-  }
+  // The weight and the wrist snap: from a stop, fastest mid-cut, to a stop.
+  if (c !== "guard") x = moveWarp(x, cut, v.swordEase, v.swordSnap);
   let i = 0;
   while (i < keys.length - 2 && x > keys[i + 1].t) i++;
   const a = keys[i], b = keys[i + 1];
@@ -220,17 +245,18 @@ export function clipPose(c: SwordClip, t: number, side: 1 | -1, shoulder: V, aim
   if (a.yaw !== undefined && b.yaw !== undefined) fwd = keyAxes({ ...a, yaw: a.yaw + (b.yaw - a.yaw) * k, pitch: (a.pitch ?? 0) + ((b.pitch ?? 0) - (a.pitch ?? 0)) * k }, st, v).fwd;
   else fwd = norm(lerpV(A.fwd, B.fwd, smooth(k)));
   const up = square(fwd, lerpV(A.up, B.up, k));
+  const pole = norm(lerpV(a.pole ?? CUT_POLE, b.pole ?? CUT_POLE, smooth(k)));
   // Off the shoulder, mirrored for the right arm, turned by the aim about the hull's vertical.
   const m = (q: V): V => v3(q.x * side, q.y, q.z);
   const turn = (q: V): V => v3(q.x * Math.cos(aimYaw) + q.z * Math.sin(aimYaw), q.y, -q.x * Math.sin(aimYaw) + q.z * Math.cos(aimYaw));
   const h = m(hand);
-  return { hand: turn(v3(shoulder.x + h.x, shoulder.y + h.y, shoulder.z + h.z)), fwd: turn(m(fwd)), up: turn(m(up)) };
+  return { hand: turn(v3(shoulder.x + h.x, shoulder.y + h.y, shoulder.z + h.z)), fwd: turn(m(fwd)), up: turn(m(up)), pole: turn(m(pole)) };
 }
 
 /** Blend two poses (hand straight, axes renormalised). */
 export function blendPose(a: SwordPose, b: SwordPose, k: number): SwordPose {
   const fwd = norm(lerpV(a.fwd, b.fwd, k));
-  return { hand: lerpV(a.hand, b.hand, k), fwd, up: square(fwd, lerpV(a.up, b.up, k)) };
+  return { hand: lerpV(a.hand, b.hand, k), fwd, up: square(fwd, lerpV(a.up, b.up, k)), pole: norm(lerpV(a.pole, b.pole, k)) };
 }
 
 /** A stretch of a cut swept this step: the clip and its times from, to (s). */
