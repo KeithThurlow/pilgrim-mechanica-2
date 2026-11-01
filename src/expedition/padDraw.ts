@@ -1,5 +1,6 @@
 // Drawing for the extraction pads (cosmetic; the rules are pads.ts): a slab with a painted H, landing lights, a
-// beacon mast, and the stand-in quadcopter (boxes) that flies in, hovers, lowers a cradle onto the mech, lifts and
+// beacon mast, and the stand-in quadcopter (boxes) that flies in, hovers about the pad (a ring on the sand under it
+// shows where to stand, filling as you board), lowers a cradle onto the mech, lifts and
 // flies off. Lights are dim by day and come up with the night (DesertLook.night). Pads are built when one comes
 // within drawRange of the mech and dropped when it leaves.
 import * as THREE from "three/webgpu";
@@ -27,6 +28,11 @@ export class PadDraw {
   /** Where the quadcopter is (for the checks and the lab line), when it is drawn. */
   readonly copterAt = new THREE.Vector3();
   private from = new THREE.Vector2(1, 0);
+  /** The boarding ring on the sand under the hovering copter, and its fill. */
+  private boardMat = new THREE.MeshBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: 0.5, depthWrite: false });
+  private fillMat = new THREE.MeshBasicMaterial({ color: 0xbdf0c8, transparent: true, opacity: 0.55, depthWrite: false });
+  private boardRing = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 48).rotateX(-Math.PI / 2), this.boardMat);
+  private boardFill = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), this.fillMat);
   private ropeLen = 5;
 
   constructor(private field: DuneField, scene: THREE.Scene) {
@@ -35,6 +41,9 @@ export class PadDraw {
     this.buildCopter();
     this.copter.visible = false;
     this.group.add(this.copter);
+    this.boardRing.visible = this.boardFill.visible = false;
+    this.boardRing.renderOrder = this.boardFill.renderOrder = 2;
+    this.group.add(this.boardRing, this.boardFill);
   }
 
   private buildCopter() {
@@ -145,14 +154,25 @@ export class PadDraw {
     this.copter.visible = show;
     this.cradle.visible = show;
     for (const r of this.ropes) r.visible = show;
+    const boarding = call.state === "hovering";
+    this.boardRing.visible = this.boardFill.visible = boarding;
     if (!show || !pad) return;
     const pm = this.pads.get(pad.id);
-    const gy = pm ? pm.y : this.field.height(pad.x, pad.z);
+    // Over the ground: the pad on the way in, then wherever the hover has drifted (the sim's hx, hz).
+    const bx = call.state === "waiting" ? pad.x : call.hx, bz = call.state === "waiting" ? pad.z : call.hz;
+    const gy = call.state === "waiting" && pm ? pm.y : this.field.height(bx, bz);
     // Bearing toward the convoy from the pad.
     this.from.set(from.x - pad.x, from.z - pad.z).normalize();
     const hover = 24, land = 12.5, top = mech.y + 0.3;
     let alt: number, dist: number, rope: number;
-    if (call.state === "waiting") {
+    if (call.state === "hovering") {
+      dist = 0; rope = 4;
+      alt = hover + Math.sin(this.time * 0.9) * 0.8;
+      const R = v.padBoardR;
+      this.boardRing.position.set(bx, gy + 0.25, bz); this.boardRing.scale.setScalar(R);
+      this.boardFill.position.set(bx, gy + 0.22, bz); this.boardFill.scale.setScalar(Math.max(0.01, R * call.board));
+      this.boardMat.opacity = call.under ? 0.8 : 0.4 + 0.25 * Math.sin(this.time * 5);
+    } else if (call.state === "waiting") {
       // In from 450 m out and 70 m up, easing to the hover.
       const u = call.approach, e = 1 - (1 - u) * (1 - u);
       dist = 450 * (1 - e); alt = hover + 46 * (1 - e); rope = 4;
@@ -168,11 +188,11 @@ export class PadDraw {
         alt = land + 14 + 30 * s; dist = -900 * s * s; rope = 4;
       }
     }
-    const px = pad.x + this.from.x * dist, pz = pad.z + this.from.y * dist;
+    const px = bx + this.from.x * dist, pz = bz + this.from.y * dist;
     this.copter.position.set(px, gy + alt, pz);
     this.copterAt.copy(this.copter.position);
     // Face along the flight (toward the pad on the way in, toward the convoy on the way out), nose down a touch.
-    const dir = call.state === "waiting" ? -1 : call.lt > v.padLift ? 1 : 0;
+    const dir = call.state === "waiting" ? -1 : call.state === "lifting" && call.lt > v.padLift ? 1 : 0;
     const yaw = dir === 0 ? this.copter.rotation.y : Math.atan2(this.from.x * dir, this.from.y * dir);
     this.copter.rotation.set(dir === 0 ? 0 : 0.12, yaw, 0, "YXZ");
     for (let i = 0; i < this.rotors.length; i++) this.rotors[i].rotation.y = this.time * 40 * (i % 2 ? -1 : 1);

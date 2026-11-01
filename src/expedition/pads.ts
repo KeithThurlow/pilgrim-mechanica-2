@@ -2,8 +2,11 @@
 //   PadField   seeded pads on a grid, a function of position and the road like the camps (none in the Near ring)
 //   padQuote   the fee (padBase + padPerKm x km from the convoy now), the wait (longer further out) and who pays:
 //              carried (at-risk) scrap first; with padBankTopUp the bank covers the rest at padBankMarkup
-//   PadCaller  hold E on a pad -> fee charged -> beacon and wait (leaving cancels, part of the fee refunded) ->
-//              the quadcopter lifts you -> everything at risk is banked. Destroyed while waiting: all lost, fee too.
+//   PadCaller  hold E on a pad -> fee charged -> beacon and wait, free to roam and fight (Keith 2026-11-01: standing on
+//              the pad made the fights bad; hold E on the pad again cancels, part of the fee refunded) -> the quadcopter
+//              arrives and hovers, drifting round the pad -> get under it and stay padBoard seconds (stepping out
+//              drains it) -> it lifts you -> everything at risk is banked. Not boarded within padLoiter: it leaves,
+//              the fee kept. Destroyed while waiting: all lost, fee too.
 // Pads do nothing until the "pickup" unlock is bought (unlocks.ts).
 // Ownership: host (fee, wait, banking, the beacon's effects); the quadcopter's flight is drawing (padDraw.ts).
 // Randomness: seeded (cell hashes), none at run time.
@@ -19,7 +22,6 @@ export const PAD_DEFAULTS = {
   padCell: 700,
   padChanceNear: 0, padChanceOut: 0.25, padChanceDeep: 0.45, padChanceFar: 0.6,
   padRadius: 8,
-  padLeave: 13,
   padBase: 60,
   padPerKm: 80,
   padWaitBase: 30,
@@ -35,6 +37,12 @@ export const PAD_DEFAULTS = {
   padPull: 500,
   padRaid: 1,
   padBeacon: 4,
+  padDrift: 14,
+  padDriftPeriod: 36,
+  padBoardR: 7,
+  padBoard: 4,
+  padBoardDrain: 0.5,
+  padLoiter: 60,
 };
 export type PadValues = typeof PAD_DEFAULTS;
 const G = PAD_GROUP, P = PAD_PLACE_GROUP;
@@ -46,13 +54,12 @@ export const PAD_PARAMS: Param[] = [
   { key: "padChanceDeep", label: "Chance in a Deep cell", min: 0, max: 1, step: 0.05, group: P },
   { key: "padChanceFar", label: "Chance in a Far cell", min: 0, max: 1, step: 0.05, group: P },
   { key: "padRadius", label: "Pad radius (m)", min: 3, max: 20, step: 0.5, group: G, tip: "Stand this close to the middle to call" },
-  { key: "padLeave", label: "Leaving the pad past (m)", min: 4, max: 30, step: 0.5, group: G, tip: "Further than this cancels the call" },
   { key: "padBase", label: "Fee: base (scrap)", min: 0, max: 500, step: 5, group: G },
   { key: "padPerKm", label: "Fee: per km from the convoy (scrap)", min: 0, max: 500, step: 5, group: G },
   { key: "padWaitBase", label: "Wait: base (s)", min: 0, max: 120, step: 1, group: G },
-  { key: "padWaitPerKm", label: "Wait: per km from the convoy (s)", min: 0, max: 60, step: 1, group: G, tip: "Further out, longer to hold the pad" },
+  { key: "padWaitPerKm", label: "Wait: per km from the convoy (s)", min: 0, max: 60, step: 1, group: G, tip: "Further out, longer until it comes" },
   { key: "padWaitMax", label: "Wait: at most (s)", min: 10, max: 400, step: 5, group: G },
-  { key: "padRefund", label: "Refund on cancel (share)", min: 0, max: 1, step: 0.05, group: G, tip: "Leave the pad while waiting: this share of what you paid comes back, to where it came from" },
+  { key: "padRefund", label: "Refund on cancel (share)", min: 0, max: 1, step: 0.05, group: G, tip: "Hold E on the pad again while waiting to cancel: this share of what you paid comes back, to where it came from" },
   { key: "padBankTopUp", label: "Bank may top up the fee (0/1)", min: 0, max: 1, step: 1, group: G, tip: "0: only scrap you carry pays. 1: the convoy's bank covers what you lack, at the markup (Keith: undecided)" },
   { key: "padBankMarkup", label: "Bank top-up costs (×)", min: 1, max: 4, step: 0.05, group: G, tip: "Each scrap the bank covers costs this many from the bank" },
   { key: "padHold", label: "Hold E to call (s)", min: 0.2, max: 5, step: 0.1, group: G },
@@ -62,6 +69,12 @@ export const PAD_PARAMS: Param[] = [
   { key: "padPull", label: "Beacon pulls packs and war bands within (m)", min: 100, max: 1500, step: 10, group: G },
   { key: "padRaid", label: "A raid at half the wait (0/1)", min: 0, max: 1, step: 1, group: G },
   { key: "padBeacon", label: "Beacon shouts every (s)", min: 1, max: 20, step: 0.5, group: G },
+  { key: "padDrift", label: "Hover: drifts round the pad within (m)", min: 0, max: 60, step: 1, group: G, tip: "It hovers about, so you chase it a little (Keith 2026-11-01)" },
+  { key: "padDriftPeriod", label: "Hover: one loop takes (s)", min: 5, max: 120, step: 1, group: G },
+  { key: "padBoardR", label: "Board: under it within (m)", min: 2, max: 20, step: 0.5, group: G, tip: "Ground distance from the copter to the mech (or pilot)" },
+  { key: "padBoard", label: "Board: stay under it (s)", min: 0.5, max: 15, step: 0.5, group: G, tip: "Then the cradle comes down and it lifts you" },
+  { key: "padBoardDrain", label: "Board: drains when out (×)", min: 0, max: 4, step: 0.1, group: G, tip: "Stepping out loses progress this many times slower than it fills (0 keeps it)" },
+  { key: "padLoiter", label: "Hover: waits for you (s)", min: 10, max: 300, step: 5, group: G, tip: "Then it leaves; the fee is not refunded" },
 ];
 
 export interface Pad { id: string; x: number; z: number; ring: Ring; depth: number }
@@ -158,6 +171,8 @@ export type PadEvent =
   | { type: "cancelled"; pad: Pad; refundCarried: number; refundBank: number }
   | { type: "beacon"; pad: Pad; first: boolean }
   | { type: "raid"; pad: Pad }
+  | { type: "arrived"; pad: Pad }
+  | { type: "missed"; pad: Pad }
   | { type: "extracted"; pad: Pad; scrap: number; items: number };
 
 export interface PadNow {
@@ -170,7 +185,7 @@ export interface PadNow {
   convoyM: number;
 }
 
-export type CallState = "idle" | "waiting" | "lifting";
+export type CallState = "idle" | "waiting" | "hovering" | "lifting";
 
 export class PadCaller {
   state: CallState = "idle";
@@ -179,6 +194,13 @@ export class PadCaller {
   hold = 0;
   /** Seconds waited, the wait asked, seconds into the lift. */
   t = 0; wait = 0; lt = 0;
+  /** Seconds hovering, board progress 0..1, the drift's clock (slows while you're under it). */
+  ht = 0; board = 0; private drift = 0;
+  /** Where the copter is over the ground (x, z): the pad until it arrives, then drifting, then over the mech. */
+  hx = 0; hz = 0;
+  /** True while the mech (or pilot) is under it. */
+  under = false;
+  private liftFrom = { x: 0, z: 0 }; private liftTo = { x: 0, z: 0 };
   /** Seconds since the pickup took off (the copter flying away, for drawing); 0 when none. */
   gone = 0;
   /** The pad the pickup left from (for drawing the departure). */
@@ -196,14 +218,15 @@ export class PadCaller {
 
   /** The pickup has the mech: no driving. */
   get clamped() { return this.state === "lifting"; }
-  /** The quadcopter is in sight (last padFlight seconds of the wait, and the lift). */
-  get inSight() { return this.state === "lifting" || (this.state === "waiting" && this.t >= this.wait - this.v.padFlight); }
+  /** The quadcopter is in sight (last padFlight seconds of the wait, the hover and the lift). */
+  get inSight() { return this.state === "lifting" || this.state === "hovering" || (this.state === "waiting" && this.t >= this.wait - this.v.padFlight); }
   /** 0..1 how far the approach has got (while waiting). */
-  get approach() { return this.state === "idle" ? 0 : this.state === "lifting" ? 1 : Math.max(0, Math.min(1, (this.t - (this.wait - this.v.padFlight)) / Math.max(0.1, this.v.padFlight))); }
-  get remaining() { return this.state === "waiting" ? Math.max(0, this.wait - this.t) : 0; }
+  get approach() { return this.state === "idle" ? 0 : this.state !== "waiting" ? 1 : Math.max(0, Math.min(1, (this.t - (this.wait - this.v.padFlight)) / Math.max(0.1, this.v.padFlight))); }
+  get remaining() { return this.state === "waiting" ? Math.max(0, this.wait - this.t) : this.state === "hovering" ? Math.max(0, this.v.padLoiter - this.ht) : 0; }
 
   reset() {
     this.state = "idle"; this.pad = null; this.lastPad = null; this.hold = 0; this.t = 0; this.lt = 0; this.gone = 0; this.paid = null;
+    this.ht = 0; this.board = 0; this.drift = 0; this.under = false;
     this.events.length = 0; this.needRelease = false; this.refusal = ""; this.extractedDone = false;
   }
 
@@ -238,6 +261,8 @@ export class PadCaller {
       e.bank.scrap -= q.bankCost;
       this.paid = q; this.pad = on; this.lastPad = on; this.wait = q.wait; this.t = 0; this.lt = 0; this.gone = 0;
       this.state = "waiting"; this.refusal = ""; this.beaconT = 0; this.raided = false; this.extractedDone = false;
+      this.ht = 0; this.board = 0; this.drift = 0; this.under = false; this.hx = on.x; this.hz = on.z;
+      this.needRelease = true;
       this.events.push({ type: "called", pad: on, quote: q });
       this.events.push({ type: "beacon", pad: on, first: true });
       return;
@@ -245,19 +270,46 @@ export class PadCaller {
     // Waiting or lifting. Anything that ended the run out here (destroyed, recalled) loses the lot, the fee too.
     if (e.state !== "out" && !this.extractedDone) { this.state = "idle"; this.pad = null; this.paid = null; return; }
     const pad = this.pad!;
-    if (this.state === "waiting") {
-      if (Math.hypot(n.x - pad.x, n.z - pad.z) > v.padLeave) { this.cancel(); return; }
-      this.t += dt;
-      this.beaconT += dt;
-      if (this.beaconT >= v.padBeacon) { this.beaconT = 0; this.events.push({ type: "beacon", pad, first: false }); }
-      if (!this.raided && v.padRaid >= 0.5 && this.t >= this.wait * 0.5) { this.raided = true; this.events.push({ type: "raid", pad }); }
-      if (this.t >= this.wait) { this.state = "lifting"; this.lt = 0; }
-      return;
-    }
-    // Lifting: committed. The fade starts at 60%; the pickup flies off after.
-    this.lt += dt;
     this.beaconT += dt;
     if (this.beaconT >= v.padBeacon) { this.beaconT = 0; this.events.push({ type: "beacon", pad, first: false }); }
+    if (this.state === "waiting") {
+      // Free to roam. Hold E on the pad again to cancel.
+      if (!n.eHeld) this.needRelease = false;
+      if (on === pad && n.eHeld && !this.needRelease) {
+        this.hold = Math.min(1, this.hold + dt / Math.max(0.05, v.padHold));
+        if (this.hold >= 1) { this.hold = 0; this.cancel(); return; }
+      } else this.hold = Math.max(0, this.hold - dt * 2);
+      this.t += dt;
+      if (!this.raided && v.padRaid >= 0.5 && this.t >= this.wait * 0.5) { this.raided = true; this.events.push({ type: "raid", pad }); }
+      if (this.t >= this.wait) { this.state = "hovering"; this.ht = 0; this.board = 0; this.drift = 0; this.hold = 0; this.events.push({ type: "arrived", pad }); }
+      return;
+    }
+    if (this.state === "hovering") {
+      this.ht += dt;
+      // It drifts round the pad on a lazy figure of eight, slowing to hold over you while you board.
+      this.under = n.alive && Math.hypot(n.x - this.hx, n.z - this.hz) <= v.padBoardR;
+      this.drift += dt * (this.under ? 0.2 : 1);
+      const w = (2 * Math.PI) / Math.max(1, v.padDriftPeriod), a = w * this.drift;
+      this.hx = pad.x + v.padDrift * Math.sin(a);
+      this.hz = pad.z + v.padDrift * 0.6 * Math.sin(2 * a);
+      if (this.under) this.board = Math.min(1, this.board + dt / Math.max(0.1, v.padBoard));
+      else this.board = Math.max(0, this.board - (dt / Math.max(0.1, v.padBoard)) * v.padBoardDrain);
+      if (this.board >= 1) {
+        this.state = "lifting"; this.lt = 0; this.under = false;
+        this.liftFrom = { x: this.hx, z: this.hz }; this.liftTo = { x: n.x, z: n.z };
+        return;
+      }
+      if (this.ht >= v.padLoiter) {
+        this.events.push({ type: "missed", pad });
+        this.state = "idle"; this.gone = 0.001; this.pad = null; this.paid = null; this.board = 0; this.under = false;
+      }
+      return;
+    }
+    // Lifting: committed. It slides over the mech while the cradle lowers; the fade starts at 60%; it flies off after.
+    this.lt += dt;
+    const u = Math.min(1, this.lt / Math.max(0.1, v.padLift * 0.3)), k = u * u * (3 - 2 * u);
+    this.hx = this.liftFrom.x + (this.liftTo.x - this.liftFrom.x) * k;
+    this.hz = this.liftFrom.z + (this.liftTo.z - this.liftFrom.z) * k;
     if (!this.extractedDone && this.lt >= v.padLift * 0.6) {
       const scrap = e.scrapAtRisk, items = e.itemsAtRisk;
       if (e.extracted()) { this.extractedDone = true; this.events.push({ type: "extracted", pad, scrap, items }); }
@@ -271,7 +323,7 @@ export class PadCaller {
     if (rc > 0) e.add({ kind: "scrap", amount: rc, label: "Fee refund" });
     e.bank.scrap += rb;
     this.events.push({ type: "cancelled", pad: this.pad!, refundCarried: rc, refundBank: rb });
-    this.state = "idle"; this.pad = null; this.paid = null; this.t = 0;
+    this.state = "idle"; this.pad = null; this.paid = null; this.t = 0; this.hold = 0;
     this.needRelease = true;
   }
 }
