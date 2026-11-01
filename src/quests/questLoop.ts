@@ -33,7 +33,10 @@ export const QUEST_PARAMS: Param[] = [
 ];
 export const QUEST_GROUPS = [CONTRACT_GROUP, REWARD_GROUP, TOW_GROUP, HVT_GROUP];
 
-const GOLD = 0xffc04a, RED = 0xff5a3a;
+const RED = 0xff5a3a;
+/** Active mission targets on the radar, the edge marks and the beacons (Keith 2026-11-01: "always a pretty bright green"). */
+export const MISSION_GREEN = "#3dff6e";
+const GREEN = 0x3dff6e;
 
 export interface QuestWorld {
   exp: Expedition;
@@ -79,7 +82,7 @@ export class QuestLoop {
   private placed = new Set<string>();
   private hook = new THREE.Vector3();
   /** Radar diamonds and edge marks (the loop reads them). */
-  readonly radar: { x: number; z: number; color: string }[] = [];
+  readonly radar: { x: number; z: number; color: string; kind?: "contract" | "hvt" }[] = [];
   readonly marks: Mark[] = [];
   /** What E does here this frame (the loop shows it in the top prompt), "" when nothing. */
   prompt = "";
@@ -296,9 +299,9 @@ export class QuestLoop {
     for (const c of board.active) {
       if (c.kind === "tow" && c.carrying) continue;
       const at = c.kind === "tow" && c.id === this.hulkJob ? { x: tow.x, z: tow.z } : c.kind === "bounty" && hvt.lair?.id === c.site && hvt.pos ? hvt.pos : c;
-      beacons.push({ x: at.x, z: at.z, color: GOLD });
-      this.radar.push({ x: at.x, z: at.z, color: "#ffd27a" });
-      this.marks.push({ id: "contract:" + c.id, x: at.x, y: field.height(at.x, at.z) + 3, z: at.z, text: `CONTRACT · ${KIND_NAME[c.kind].toUpperCase()}`, color: "#ffd27a", strength: 1 });
+      beacons.push({ x: at.x, z: at.z, color: GREEN });
+      this.radar.push({ x: at.x, z: at.z, color: MISSION_GREEN, kind: "contract" });
+      this.marks.push({ id: "contract:" + c.id, x: at.x, y: field.height(at.x, at.z) + 3, z: at.z, text: `CONTRACT · ${KIND_NAME[c.kind].toUpperCase()}`, color: MISSION_GREEN, strength: 1 });
       if (c.pods) for (const p of c.pods) if (p) pods.push(p);
     }
     // The lair stirring or its HVT out: a red pillar and diamond.
@@ -306,7 +309,8 @@ export class QuestLoop {
     if (l) {
       const at = hvt.lair && hvt.pos && hvt.unit?.alive ? hvt.pos : l;
       beacons.push({ x: at.x, z: at.z, color: RED });
-      this.radar.push({ x: at.x, z: at.z, color: "#ff6a4a" });
+      // On the radar a target is a target: green like the contracts, marked bigger (the pillar and edge mark stay red).
+      this.radar.push({ x: at.x, z: at.z, color: MISSION_GREEN, kind: "hvt" });
       if (hvt.unit?.alive) this.marks.push({ id: "hvt", x: at.x, y: field.height(at.x, at.z) + 5, z: at.z, text: l.name.toUpperCase(), color: "#ff6a4a", strength: 1 });
     }
     const hulk = this.hulkJob ? { x: tow.x, y: tow.y, z: tow.z, heading: tow.heading } : null;
