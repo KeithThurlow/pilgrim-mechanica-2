@@ -31,7 +31,7 @@ import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
-import { splashBlast, firstBody } from "./splash";
+import { splashBlast, firstBody, blastCover } from "./splash";
 import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
@@ -86,6 +86,9 @@ export interface SplashOpts {
   spare?: boolean;
   /** Armour pierce of what made it (0..1; none: armour-ignoring). Armour is taken per unit on the share it gets. */
   pierce?: number;
+  /** An explosive's cover test (src/game/splash.ts blastCover): true when a dune, wall or wreck stands between the
+   *  blast and this point, so the unit there takes none of it. */
+  cover?: (x: number, y: number, z: number) => boolean;
 }
 
 export interface FireOptions {
@@ -438,7 +441,7 @@ export class Battlefield {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
       this.sfx.play("brap", p, 1.6, 0.5, false);
-      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce);
+      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
       return;
     }
     for (let i = 0; i < 18 * k; i++) {
@@ -451,7 +454,16 @@ export class Battlefield {
     }
     if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
     this.sfx.play("brap", p, 1.8, 0.4, false);
-    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce);
+    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
+  }
+
+  /** A blast's cover test at p (dunes, walls and steel wrecks between it and a unit shield the unit). */
+  private steelRay = (o: THREE.Vector3, d: THREE.Vector3, max: number) => (this.wrecks!.hit(o, d, max, this.steelAt, this.steelN) ? o.distanceTo(this.steelAt) : -1);
+  private steelAt = new THREE.Vector3();
+  private steelN = new THREE.Vector3();
+  private cover(p: THREE.Vector3) {
+    if (((this.v as { blastCover?: number }).blastCover ?? 1) < 0.5) return undefined;
+    return blastCover(this.field, this.wrecks ? this.steelRay : null, p);
   }
 
   /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */

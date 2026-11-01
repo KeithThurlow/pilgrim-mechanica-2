@@ -75,16 +75,16 @@ for (const k of WAVE_KIND_LIST) {
   const cam = new THREE.PerspectiveCamera(45, 16 / 9, 0.5, 2000);
   cam.position.set(0, 30, 26); cam.lookAt(0, 0, 0); cam.updateMatrixWorld();
   d.update(1 / 60, cam, null);
-  ok(!d.bend.visible && !d.stats.copy && d.rings.count === 0, "no waves: the bend pass is off");
+  ok(!d.bend.visible && !d.orbs.visible && !d.stats.copy, "no waves: the bend pass is off");
   w.post("mortar", 0, 0.5, 0, 3);
   d.update(1 / 60, cam, null);
-  ok(d.bend.visible && d.stats.quads >= 2 && d.rings.count === 1, `a mortar blast: ${d.stats.quads} quads (rings and heat), ${d.rings.count} ground ring`);
+  ok(d.orbs.visible && d.stats.orbs === 1 && d.bend.visible && d.stats.quads >= 2, `a mortar blast: ${d.stats.orbs} orb, ${d.stats.quads} heat quads`);
   for (let i = 0; i < 400; i++) d.update(1 / 60, cam, null);
-  ok(!d.bend.visible && !w.active, "after it dies out: the bend pass is off again");
+  ok(!d.bend.visible && !d.orbs.visible && !w.active, "after it dies out: the bend pass is off again");
   // Behind the camera: not drawn.
   w.post("rocket", 0, 0.5, 200, 3);
   d.update(1 / 60, cam, null);
-  ok(d.stats.quads === 0, "a blast behind the camera draws nothing");
+  ok(d.stats.quads === 0 && d.stats.orbs === 0, "a blast behind the camera draws nothing");
   // CPU cost of a full frame: the caps' worth of waves and puffs.
   for (let i = 0; i < 200; i++) w.post("mortar", Math.random() * 40 - 20, 0, Math.random() * 40 - 20, 3);
   for (let i = 0; i < 200; i++) w.puff(Math.random() * 40 - 20, 3, Math.random() * 40 - 20, 1, 0.05, 2);

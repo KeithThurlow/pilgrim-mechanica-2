@@ -148,6 +148,7 @@ export class Dummy implements Hittable {
     const y = Math.min(Math.max(at.y, this.y), this.y + this.height);
     const d = Math.max(0, Math.hypot(dx, at.y - y, dz) - this.radius);
     if (d > radius) return 0;
+    if (o?.cover?.(this.x, this.y + this.height * 0.5, this.z)) return 0;
     this.fallYaw = Math.atan2(dx, dz);
     if (this.light) { const l = Math.hypot(dx, dz) || 1, k = 4 * (1 - d / Math.max(0.01, radius)); this.kvx += (dx / l) * k; this.kvz += (dz / l) * k; }
     this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), undefined, undefined, o?.pierce);

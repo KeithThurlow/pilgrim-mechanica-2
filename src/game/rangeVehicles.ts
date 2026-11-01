@@ -116,6 +116,7 @@ export class RangeCar implements Hittable {
     const p = this.sim.pos;
     const d = Math.max(0, Math.hypot(at.x - p.x, at.z - p.z) - this.half);
     if (d > radius) return 0;
+    if (o?.cover?.(p.x, p.y + 1, p.z)) return 0;
     this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir, o?.pierce);
     return 1;
   }

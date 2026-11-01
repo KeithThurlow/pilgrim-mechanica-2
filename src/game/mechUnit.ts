@@ -471,6 +471,7 @@ export class MechUnit implements Hittable {
     const y = Math.min(Math.max(at.y, p.y - 2.4), p.y + 1.6);
     const d = Math.max(0, Math.hypot(at.x - p.x, at.y - y, at.z - p.z) - this.v.hitRadius);
     if (d > radius) return 0;
+    if (o?.cover?.(p.x, p.y, p.z)) return 0;
     this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)), at, dir, o?.pierce);
     return 1;
   }
