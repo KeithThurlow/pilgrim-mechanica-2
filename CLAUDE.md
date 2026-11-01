@@ -201,7 +201,7 @@ src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule
                         minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings), blastWaves + blastWavesDraw
                         (a blast wave on every explosion: screen bend, ground ring, heat shimmer)
-src/game/               battlefield (shared combat stage), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
+src/game/               battlefield (shared combat stage), solids (mechs and vehicles as solid bodies), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
