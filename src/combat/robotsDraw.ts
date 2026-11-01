@@ -376,7 +376,7 @@ export class RobotsDraw {
       const dim = dead ? 0.45 : 1;
       c.copy(lin(WHITE)).multiplyScalar(dim);
       this.beam(this.limbs, hip, knee, S * 0.15, S * 0.15, tg, c);
-      va.copy(knee).addScaledVector(d2, shin * 0.42);
+      va.copy(knee).addScaledVector(d2, shin * 0.6);
       this.beam(this.limbs, knee, va, S * 0.12, S * 0.12, tg, c);
       c.copy(lin(JOINT)).multiplyScalar(dim);
       this.beam(this.limbs, va, tip, S * 0.065, S * 0.065, tg, c);

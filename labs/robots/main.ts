@@ -139,6 +139,19 @@ if (params0.has("beam")) {
   sw.spawn(1, p.x - 16, p.z + 18, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 0.3; });
   sw.spawn(1, p.x + 18, p.z + 14, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 2.5; });
 }
+// ?pulse: no packs, one big walker 10 m off, about to beam the ground under it (the terraform pulse; again every cooldown).
+if (params0.has("pulse")) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos;
+  sw.spawn(1, p.x + 6, p.z + 8, 0, { mid: 0, big: 1 }).forEach((i) => { sw.pulseClock[i] = 1.5; sw.beamClock[i] = 99; });
+}
+// ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
+if (params0.has("lineup")) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos;
+  const put = (dx: number, dz: number, mid: number, big: number) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big })) sw.frozen[i] = 1; };
+  put(-4, 9, 0, 0); put(-2.5, 10, 0, 0); put(1, 10, 1, 0); put(10, 16, 0, 1);
+}
 const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
 lab.app.scene.add(tear.group);
 

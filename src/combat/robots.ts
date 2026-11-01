@@ -118,7 +118,7 @@ export const ROBOT_DEFAULTS = {
   robotFootDamage: 0.3,
   // Blasts (rockets, missiles, mortar and autocannon shells; 2026-10-26): measured to the nearest part, by its share.
   robotMidBlast: 1,
-  robotBigBlast: 0.8,
+  robotBigBlast: 0.85,
   // Armour (docs/proposal-balance.md, Keith 2026-10-31): flat per hit, cut by the hit's pierce (src/game/armour.ts).
   robotArmour: 0,
   robotMidArmour: 3,
