@@ -36,8 +36,24 @@ export const DROID_DEFAULTS = {
 };
 export type DroidValues = typeof DROID_DEFAULTS;
 
-const G = "Humanoid robots", GG = "Humanoid robots: guns";
-export const DROID_GROUPS = [G, GG];
+/** The variants (Keith 2026-11-01: "humanoid robots in a few variants"; the roster in docs/robots.md): the trooper is
+ *  the base values; the lancer and the brute change a few of them through their own sliders. */
+export const TROOPER = 0, LANCER = 1, BRUTE = 2;
+export const DROID_VARIANT_NAMES = ["trooper", "lancer", "brute"] as const;
+export const DROID_VARIANT_DEFAULTS = {
+  droidLancerShare: 0.2, droidBruteShare: 0.15,
+  droidLancerHeight: 3.7, droidLancerHp: 55, droidLancerDamage: 26, droidLancerRange: 75, droidLancerNear: 30, droidLancerFar: 55,
+  droidLancerLock: 1.6, droidLancerPause: 4.5,
+  droidBruteHeight: 4.3, droidBruteHp: 200, droidBruteDamage: 3, droidBruteBurst: 8, droidBruteSpread: 6, droidBruteNear: 7, droidBruteFar: 14,
+  droidBruteSpeed: 2.6,
+};
+export type DroidVariantValues = typeof DROID_VARIANT_DEFAULTS;
+/** Every humanoid robot value: the base (the trooper) and the variants. */
+export const DROID_ALL_DEFAULTS = { ...DROID_DEFAULTS, ...DROID_VARIANT_DEFAULTS };
+export type DroidAllValues = typeof DROID_ALL_DEFAULTS;
+
+const G = "Humanoid robots", GG = "Humanoid robots: guns", GL = "Humanoid robots: lancer", GB = "Humanoid robots: brute";
+export const DROID_GROUPS = [G, GG, GL, GB];
 export const DROID_PARAMS: Param[] = [
   { key: "droidHeight", label: "Height (m)", min: 1.8, max: 6, step: 0.05, group: G, tip: "Drawn height; the hit cylinder is this tall too" },
   { key: "droidRadius", label: "Hit radius (m)", min: 0.2, max: 1.5, step: 0.01, group: G },
@@ -61,7 +77,43 @@ export const DROID_PARAMS: Param[] = [
   { key: "droidAim", label: "Aim before the first burst (s)", min: 0, max: 4, step: 0.05, group: GG },
   { key: "droidDamage", label: "Damage per pulse", min: 0, max: 40, step: 0.5, group: GG },
   { key: "droidLockShow", label: "Red laser before a burst (s)", min: 0, max: 3, step: 0.05, group: GG, tip: "The seeking laser lies on the target this long before each burst (the tell)" },
+  { key: "droidLancerShare", label: "Lancers in a squad (share)", min: 0, max: 1, step: 0.01, group: GL },
+  { key: "droidBruteShare", label: "Brutes in a squad (share)", min: 0, max: 1, step: 0.01, group: GB },
+  { key: "droidLancerHeight", label: "Height (m)", min: 1.8, max: 6, step: 0.05, group: GL, tip: "The lancer: a tall marksman that holds far back and fires one heavy blue lance after a long red lock" },
+  { key: "droidLancerHp", label: "Health", min: 5, max: 400, step: 1, group: GL },
+  { key: "droidLancerDamage", label: "Lance damage", min: 0, max: 120, step: 1, group: GL },
+  { key: "droidLancerRange", label: "Fire range (m)", min: 10, max: 120, step: 1, group: GL },
+  { key: "droidLancerNear", label: "Firing band near (m)", min: 5, max: 80, step: 1, group: GL },
+  { key: "droidLancerFar", label: "Firing band far (m)", min: 6, max: 110, step: 1, group: GL },
+  { key: "droidLancerLock", label: "Red laser before a lance (s)", min: 0, max: 4, step: 0.05, group: GL },
+  { key: "droidLancerPause", label: "Between lances (s)", min: 0.5, max: 12, step: 0.1, group: GL },
+  { key: "droidBruteHeight", label: "Height (m)", min: 1.8, max: 7, step: 0.05, group: GB, tip: "The brute: a big slow front-liner that closes in and sprays a long wide burst" },
+  { key: "droidBruteHp", label: "Health", min: 5, max: 800, step: 1, group: GB },
+  { key: "droidBruteDamage", label: "Damage per pulse", min: 0, max: 30, step: 0.5, group: GB },
+  { key: "droidBruteBurst", label: "Pulses per burst", min: 1, max: 20, step: 1, group: GB },
+  { key: "droidBruteSpread", label: "Spread (°)", min: 0, max: 20, step: 0.1, group: GB },
+  { key: "droidBruteNear", label: "Firing band near (m)", min: 3, max: 40, step: 0.5, group: GB },
+  { key: "droidBruteFar", label: "Firing band far (m)", min: 4, max: 50, step: 0.5, group: GB },
+  { key: "droidBruteSpeed", label: "Stride speed (m/s)", min: 0.5, max: 8, step: 0.1, group: GB },
 ];
+
+/** Robot numbers for a variant: the trooper's as they are, the others with their own sliders over them. */
+export function droidVariant(v: DroidAllValues, variant: number, out: DroidValues = { ...DROID_DEFAULTS }): DroidValues {
+  for (const k of Object.keys(DROID_DEFAULTS) as (keyof DroidValues)[]) out[k] = v[k];
+  if (variant === LANCER) {
+    out.droidHeight = v.droidLancerHeight; out.droidHp = v.droidLancerHp; out.droidDamage = v.droidLancerDamage;
+    out.droidFireRange = v.droidLancerRange; out.droidBandNear = v.droidLancerNear; out.droidBandFar = v.droidLancerFar;
+    out.droidLockShow = v.droidLancerLock; out.droidPause = v.droidLancerPause; out.droidBurst = 1; out.droidSpread = 0.6;
+    out.droidAim = Math.max(v.droidAim, v.droidLancerLock + 0.2); out.droidSpeed = v.droidSpeed * 0.85; out.droidRadius = v.droidRadius * 0.9;
+  } else if (variant === BRUTE) {
+    out.droidHeight = v.droidBruteHeight; out.droidHp = v.droidBruteHp; out.droidDamage = v.droidBruteDamage;
+    out.droidBurst = v.droidBruteBurst; out.droidSpread = v.droidBruteSpread; out.droidRoundGap = Math.min(v.droidRoundGap, 0.08);
+    out.droidBandNear = v.droidBruteNear; out.droidBandFar = v.droidBruteFar; out.droidSpeed = v.droidBruteSpeed;
+    out.droidRadius = v.droidRadius * 1.5; out.droidGap = v.droidGap * 1.4; out.droidSpacing = v.droidSpacing * 1.3;
+    out.droidDodge = 0; out.droidFireRange = Math.min(v.droidFireRange, 30); out.droidAnimSpeed = v.droidAnimSpeed * 0.85;
+  }
+  return out;
+}
 
 /** The infantry values for robot numbers (morale off: they never flee; stomps don't floor them). */
 export function droidValues(d: DroidValues, out: InfantryValues = { ...INFANTRY_DEFAULTS }): InfantryValues {
@@ -107,4 +159,10 @@ export class DroidSwarm extends InfantrySwarm {
       reg.put(i, this.uid[i], KIND.Unit, team, this.frozen[i] ? flags | FLAG.Asleep : flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
     }
   }
+}
+
+/** The variant of a squad's k-th member (seeded by the squad: the same squad always splits the same way). */
+export function squadVariant(v: DroidAllValues, k: number, seed: number): number {
+  const f = (k * 0.618034 + seed) % 1;
+  return f < v.droidBruteShare ? BRUTE : f < v.droidBruteShare + v.droidLancerShare ? LANCER : TROOPER;
 }

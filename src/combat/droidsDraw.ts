@@ -11,7 +11,7 @@ import type { BanditVatData } from "./banditVat";
 import type { PartSpec, JointSpec } from "../physics/deaths";
 import { BANDIT_PARTS, BANDIT_JOINTS } from "../physics/bodies";
 import { DEAD, EMPTY, FIRING } from "./infantry";
-import type { DroidSwarm } from "./droids";
+import { LANCER, BRUTE, type DroidSwarm } from "./droids";
 
 /** The robots' shared white palette. A copy of ROBOT_PALETTE (robotShapes.ts, the robot restyle); import it from
  *  there once that has merged. */
@@ -24,7 +24,9 @@ export const DROID_PALETTE = {
 const VISOR_IDLE = 0, VISOR_LOCK = 1, VISOR_FIRE = 2, VISOR_OFF = 3;
 const LASERS = 256, BOLTS = 384;
 /** Pulse streak: speed (m/s), length (m), width (m). */
-const BOLT_SPEED = 240, BOLT_LEN = 3.2, BOLT_W = 0.16;
+const BOLT_SPEED = 240, BOLT_LEN = 3.2;
+/** Pulse width by variant (trooper, lancer: a heavy lance, brute: a spray of small ones). */
+const BOLT_W = [0.16, 0.34, 0.11];
 
 export class DroidsDraw {
   readonly group = new THREE.Group();
@@ -40,7 +42,8 @@ export class DroidsDraw {
   private dir = new THREE.Vector3(); private zAxis = new THREE.Vector3(0, 0, 1); private c = new THREE.Color();
   private seek = new THREE.Color(DROID_PALETTE.seek);
 
-  constructor(private sw: DroidSwarm, vat: BanditVatData | null) {
+  /** variant: TROOPER, LANCER or BRUTE (droids.ts): the lancer's seams glow blue, the brute wears darker plate. */
+  constructor(private sw: DroidSwarm, vat: BanditVatData | null, readonly variant = 0) {
     const d = sw.d;
     this.look = { banditLook: 1, banditAnimSpeed: d.droidAnimSpeed, banditFade: 0.25, banditScale: d.droidHeight };
     this.body = new InfantryDraw(sw, this.look, vat);
@@ -67,6 +70,7 @@ export class DroidsDraw {
   /** White plates, seams, dark joints, a red visor: the bake's cloth mask and rest pose pick where each goes. */
   private repaint(mesh: THREE.Mesh, animB: THREE.InstancedBufferAttribute, tints: THREE.Color[]) {
     mesh.name = "humanoid robots";
+    const V = this.variant;
     const P = DROID_PALETTE, col = (h: number) => { const c = new THREE.Color(h); return vec3(c.r, c.g, c.b); };
     // Visor colours by state: idle dim red, locking bright red, firing blue-white, dead off.
     tints[VISOR_IDLE].setHex(P.seek).multiplyScalar(1.2);
@@ -83,13 +87,14 @@ export class DroidsDraw {
     // Panel seams: thin dark bands down the body (rest-pose height), wider gaps on the limbs' joints.
     const band = fract(rest.y.mul(3.4));
     const seam = step(band, float(0.045)).mul(plate);
-    const white = mix(col(P.plateDim), col(P.plate), smoothstep(0.9, 1.6, rest.y).mul(0.6).add(0.4));
+    const white = mix(col(V === BRUTE ? P.joint : P.plateDim), col(V === BRUTE ? P.plateDim : P.plate), smoothstep(0.9, 1.6, rest.y).mul(0.6).add(0.4));
     const base = mix(col(P.joint), white, plate).mul(float(1).sub(seam.mul(0.55)));
     mat.colorNode = base.mul(min(shade, 1.15));
     // The visor: a slit across the front of the head (the bake faces +Z; the head sits about 1.45-1.62 m in its rest pose).
     const visor = smoothstep(1.47, 1.5, rest.y).mul(float(1).sub(smoothstep(1.56, 1.59, rest.y))).mul(smoothstep(0.2, 0.25, rest.z));
     const tint = vec3(uniformArray(tints, "color").element(int(look)) as unknown as THREE.Node<"vec3">);
-    mat.emissiveNode = tint.mul(visor);
+    // The lancer's panel seams carry a faint blue charge.
+    mat.emissiveNode = V === LANCER ? tint.mul(visor).add(col(P.beam).mul(seam.mul(0.8))) : tint.mul(visor);
     mat.roughness = 0.5; mat.metalness = 0.15;
     mat.needsUpdate = true;
   }
@@ -158,7 +163,8 @@ export class DroidsDraw {
       this.p.set(this.bx[k * 3] + dx * a, this.bx[k * 3 + 1] + dy * a, this.bx[k * 3 + 2] + dz * a);
       this.dir.set(dx, dy, dz);
       this.q.setFromUnitVectors(this.zAxis, this.dir);
-      this.s.set(BOLT_W, BOLT_W, e - a);
+      const w = BOLT_W[this.variant] ?? 0.16;
+      this.s.set(w, w, e - a);
       this.m.compose(this.p, this.q, this.s);
       this.bolts.setMatrixAt(nb, this.m);
       this.c.copy(beam).multiplyScalar(3);

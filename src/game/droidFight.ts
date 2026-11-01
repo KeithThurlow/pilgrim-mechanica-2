@@ -6,9 +6,10 @@ import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
 import type { DuneField } from "../world/terrain";
 import type { BanditVatData } from "../combat/banditVat";
-import { DroidSwarm, type DroidValues } from "../combat/droids";
+import { DroidSwarm, droidVariant, squadVariant, TROOPER, LANCER, BRUTE, DROID_VARIANT_NAMES, type DroidAllValues } from "../combat/droids";
 import { DroidsDraw, droidRagdoll } from "../combat/droidsDraw";
 import { InfantryTarget } from "../combat/infantryTarget";
+import { DEAD } from "../combat/infantry";
 import { TEAM } from "./factions";
 import type { Prey } from "../pilot/quarry";
 import type { DeathPhysics } from "../physics/deaths";
@@ -22,13 +23,16 @@ export class DroidFight {
   /** Pulses fired (HUD, checks). */
   pulses = 0;
 
-  constructor(private bf: Battlefield, scene: THREE.Scene, d: DroidValues, field: DuneField, vat: BanditVatData | null, deaths: DeathPhysics | null, seed = 61) {
-    this.sw = new DroidSwarm(d, field, seed);
-    this.draw = new DroidsDraw(this.sw, vat);
+  /** v: the shared values (base and variant sliders); variant: TROOPER, LANCER or BRUTE. register: add the target to
+   *  the battlefield's register now (a lab), or leave it to the caller (the expedition adds its owners in order). */
+  constructor(private bf: Battlefield, scene: THREE.Scene, private v: DroidAllValues, field: DuneField, vat: BanditVatData | null,
+    deaths: DeathPhysics | null, readonly variant = TROOPER, register = true, seed = 61 + variant * 17) {
+    this.sw = new DroidSwarm(droidVariant(v, variant), field, seed);
+    this.draw = new DroidsDraw(this.sw, vat, variant);
     scene.add(this.draw.group);
-    this.target = new InfantryTarget(this.sw, TEAM.robots, { name: "humanoid robots", surface: "metal", material: "cutter" });
+    this.target = new InfantryTarget(this.sw, TEAM.robots, { name: `humanoid robots: ${DROID_VARIANT_NAMES[variant]}`, surface: "metal", material: "cutter" });
     bf.targets.push(this.target);
-    bf.register.add(this.target);
+    if (register) bf.register.add(this.target);
     const sw = this.sw;
     if (deaths) {
       sw.hideDead = true;
@@ -49,6 +53,7 @@ export class DroidFight {
   /** One frame against prey (the mech or the pilot): move, shoot, draw. */
   update(dt: number, prey: Prey) {
     const sw = this.sw, p = prey.at, bf = this.bf;
+    droidVariant(this.v, this.variant, sw.d);
     sw.sync();
     sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.radius }, (fx, fy, fz, tx, ty, tz, i) => {
       if (!prey.alive) return;
@@ -72,4 +77,39 @@ export class DroidFight {
     });
     this.draw.update(dt, prey.alive ? p : null);
   }
+}
+
+/** A member of a squad: which variant's fight, its slot there and the slot's spawn count (a reused slot isn't it). */
+export interface DroidMember { f: number; i: number; gen: number }
+
+/** All three variants on one field (one fight each: one draw each), and squads split between them. */
+export class DroidSquads {
+  readonly fights: DroidFight[];
+  constructor(bf: Battlefield, scene: THREE.Scene, v: DroidAllValues, field: DuneField, vat: BanditVatData | null, deaths: DeathPhysics | null, register = true) {
+    this.fights = [TROOPER, LANCER, BRUTE].map((k) => new DroidFight(bf, scene, v, field, vat, deaths, k, register));
+    this.v = v;
+  }
+  private v: DroidAllValues;
+
+  get count() { let n = 0; for (const f of this.fights) n += f.count; return n; }
+  get kills() { let n = 0; for (const f of this.fights) n += f.target.kills; return n; }
+  get pulses() { let n = 0; for (const f of this.fights) n += f.pulses; return n; }
+  get meshes() { return this.fights.map((f) => f.draw.mesh); }
+  get targets() { return this.fights.map((f) => f.target); }
+
+  /** A squad of n round (x, z), split into variants by the shares (seed: the squad's own split). */
+  spawn(n: number, x: number, z: number, seed = Math.random()): DroidMember[] {
+    const per = [0, 0, 0];
+    for (let k = 0; k < n; k++) per[squadVariant(this.v, k, seed)]++;
+    const out: DroidMember[] = [];
+    per.forEach((m, f) => { if (m > 0) for (const i of this.fights[f].spawn(m, x, z)) out.push({ f, i, gen: this.fights[f].sw.gen[i] }); });
+    return out;
+  }
+
+  /** Is the member still that robot, and standing (not dead, not a reused slot)? */
+  alive(m: DroidMember): boolean { const sw = this.fights[m.f].sw; return sw.gen[m.i] === m.gen && sw.state[m.i] < DEAD; }
+
+  remove(m: DroidMember) { const sw = this.fights[m.f].sw; if (sw.gen[m.i] === m.gen) sw.remove(m.i); }
+
+  update(dt: number, prey: Prey) { for (const f of this.fights) f.update(dt, prey); }
 }
