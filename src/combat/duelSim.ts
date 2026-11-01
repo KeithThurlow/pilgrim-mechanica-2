@@ -181,18 +181,29 @@ export function runDuel(o: DuelOptions): DuelResult {
     m.fired++; lastAct[i] = t;
   }
 
-  // The block (as src/weapons/arsenal.ts parry): a free sword (cooled) aimed within the block arc of the cutter.
-  function blockTake(i: number, from: { x: number; z: number }): number {
+  // The block and the parry (as src/weapons/arsenal.ts parry), off the mech's last aim within the block arc of the
+  // cutter: a sword that cut in the last quarter second meets the blade (the parry: both swords knocked back for the
+  // recoil); else a free sword (cooled) blocks.
+  function blockTake(i: number, from: { x: number; z: number }, cutter?: number): number {
     const m = mechs[i], aim = aimAt[i];
-    const j = m.kit.findIndex((q, jj) => q.kind === "sword" && m.guns[jj].cool <= 0);
-    if (W.swordBlock <= 0 || !aim || j < 0) return 1;
+    if (!aim) return 1;
     let off = Math.atan2(from.x - m.sim.pos.x, from.z - m.sim.pos.z) - Math.atan2(aim.x - m.sim.pos.x, aim.z - m.sim.pos.z);
     off = Math.atan2(Math.sin(off), Math.cos(off));
     if (Math.abs(off) > (W.swordBlockArc / 2) * (Math.PI / 180)) return 1;
+    const p = m.kit.findIndex((q, jj) => q.kind === "sword" && m.guns[jj].cool > q.cooldown - 0.25);
+    if (W.swordParry > 0 && p >= 0) {
+      const back = W.swordParryRecoil + W.swordParryStall;
+      m.guns[p].cool = Math.max(m.guns[p].cool, back);
+      if (cutter !== undefined) { const g = mechs[cutter].guns[cutterGun]; g.cool = Math.max(g.cool, back); }
+      return W.swordParryTake;
+    }
+    const j = m.kit.findIndex((q, jj) => q.kind === "sword" && m.guns[jj].cool <= 0);
+    if (W.swordBlock <= 0 || j < 0) return 1;
     // The block takes the sword up for its time.
     m.guns[j].cool = Math.max(m.guns[j].cool, W.swordBlockTime);
     return W.swordBlockTake;
   }
+  let cutterGun = 0;
 
   function weapons(i: number, cmd: MechCommand) {
     const m = mechs[i], f = mechs[1 - i];
@@ -246,7 +257,7 @@ export function runDuel(o: DuelOptions): DuelResult {
           if (held && g.cool <= 0 && cmd.cursor && dist < k.range) { g.cool = k.cooldown; launch(i, k, "rocket", cmd.cursor); }
         } else if (k.kind === "sword") {
           // A cut every cooldown while held; it lands when the foe is within the blade's reach (the arc is wide).
-          if (held && g.cool <= 0) { g.cool = k.cooldown; m.fired++; lastAct[i] = t; if (dist < k.range) hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos)); }
+          if (held && g.cool <= 0) { g.cool = k.cooldown; m.fired++; lastAct[i] = t; if (dist < k.range) { cutterGun = j; hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos, i)); } }
         }
         return;
       }

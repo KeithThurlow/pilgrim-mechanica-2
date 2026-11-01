@@ -70,8 +70,8 @@ export const SWORD_DEFAULTS = {
   // Close or far (Keith 2026-11-01, round 7): aimed close the cut comes from the elbow, bent, quicker and narrower,
   // reaching full extension only at its end; aimed far (with the lunge) the full straight-arm sweep, slower. Between
   // the lunge's near and far distances it blends.
-  swordNearTime: 0.7,
-  swordFarTime: 1.15,
+  swordNearTime: 0.6,
+  swordFarTime: 1.4,
   swordCloseLean: 28,
   swordCloseUpright: 68,
   swordCloseOut: 62,
@@ -91,10 +91,28 @@ export const SWORD_DEFAULTS = {
   // swings up across the front and takes the cut on its blade.
   swordBlock: 1,
   swordBlockArc: 140,
-  swordBlockTake: 0.35,
+  swordBlockTake: 0.22,
   swordBlockTime: 0.55,
   swordBlockStall: 0.14,
   swordBlockKnock: 0.3,
+  // The parry (Keith 2026-11-01: "if both a player and the enemy swing their sword at the same time, it causes the
+  // attacks to parry"): a cut landing on a mech whose own sword is driving or cutting toward the cutter meets that blade.
+  // After a cut the sword can't block until this share of its return or settle (Keith 2026-11-01: bait a swing, punish
+  // it), so a swing leaves an opening.
+  swordBlockAfter: 0.5,
+  // Close and far cuts trade (Keith 2026-11-01): a close cut hits for less, recovers sooner and parries over a wider
+  // window round the middle of its cut; a full sweep hits harder, recovers longer and parries only right at mid-cut. Blended by the cut's reach.
+  swordNearDamage: 0.7,
+  swordFarDamage: 1.4,
+  swordNearRecover: 0.8,
+  swordFarRecover: 1.25,
+  swordParryNear: 0.3,
+  swordParryFar: 0.08,
+  swordParry: 1,
+  swordParryTake: 0.1,
+  swordParryRecoil: 0.5,
+  swordParryStall: 0.06,
+  swordParryFlash: 1,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
@@ -162,14 +180,26 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordBlockTake", label: "Damage taken through a block", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the cut's damage that still lands when it's blocked" },
   { key: "swordBlockTime", label: "Block lasts (s)", min: 0.2, max: 1.5, step: 0.01, group: GB, tip: "Up, held across the front, and back to rest; cuts landing while it's up are blocked too" },
   { key: "swordBlockStall", label: "Blocked blade stalls (s)", min: 0, max: 0.5, step: 0.01, group: GB, tip: "The cutter's blade stops on the block this long" },
+  { key: "swordBlockAfter", label: "Can block again after (share of recovery)", min: 0, max: 1, step: 0.05, group: GB, tip: "After a cut, through this share of the return or settle the sword can't block: the opening a swing leaves for a punish. 0 blocks at once, 1 only back at rest" },
+  { key: "swordNearDamage", label: "Close cut: damage ×", min: 0.2, max: 2, step: 0.05, group: GB, tip: "A close cut hits for this × the sword's damage; between close and far it blends" },
+  { key: "swordFarDamage", label: "Full sweep: damage ×", min: 0.5, max: 3, step: 0.05, group: GB, tip: "A full sweep hits for this × the sword's damage" },
+  { key: "swordNearRecover", label: "Close cut: recovery ×", min: 0.3, max: 2, step: 0.05, group: GB, tip: "The return or settle after a close cut takes this × its time" },
+  { key: "swordFarRecover", label: "Full sweep: recovery ×", min: 0.5, max: 3, step: 0.05, group: GB, tip: "The return or settle after a full sweep takes this × its time (a longer opening)" },
+  { key: "swordParryNear", label: "Close cut: parries within (s of mid-cut)", min: 0, max: 1, step: 0.01, group: GB, tip: "A close cut meets an incoming blade this long either side of the middle of its cut (× the sword's parry window): quick cuts parry easily" },
+  { key: "swordParryFar", label: "Full sweep: parries within (s of mid-cut)", min: 0, max: 1, step: 0.01, group: GB, tip: "A full sweep only this close to the middle of its cut: big swings rarely parry" },
+  { key: "swordParry", label: "Parry", min: 0, max: 1, step: 1, group: GB, tip: "1: a cut landing while your own sword is driving or cutting toward the cutter meets your blade: both blades recoil; 0 off" },
+  { key: "swordParryTake", label: "Damage taken through a parry", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the cut's damage that still lands when it's parried (0: none)" },
+  { key: "swordParryRecoil", label: "Parry recoil (s)", min: 0.15, max: 1.5, step: 0.01, group: GB, tip: "Both blades are knocked up and back, and return to rest over this long" },
+  { key: "swordParryStall", label: "Parry stall (s)", min: 0, max: 0.4, step: 0.01, group: GB, tip: "Both blades freeze at the clash this long before the recoil" },
+  { key: "swordParryFlash", label: "Parry flash ×", min: 0, max: 3, step: 0.05, group: GB, tip: "Sparks, light and air bend at the clash" },
   { key: "swordBlockKnock", label: "Knock through a block ×", min: 0, max: 1, step: 0.05, group: GB, tip: "The cut's knock on a blocking mech, × this" },
 ];
 
-export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number }
+export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number }
 
-/** P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
+/** K: knocked back off a parry (up and back, back to rest). P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
  *  S the settle after B. */
-export type SwordClip = "guard" | "A" | "B" | "R" | "S" | "P";
+export type SwordClip = "guard" | "A" | "B" | "R" | "S" | "P" | "K";
 
 type V = { x: number; y: number; z: number };
 /** A held sword's pose in the hull's frame: where the hand is, the way the blade points, the way its spine faces (the
@@ -222,6 +252,21 @@ interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V
 // forearm angled up to the fist, ahead of the shoulder at about its height; the blade on the wrist laid back over the
 // shoulder toward the pack (near the triangle's long side), in line with the torso.
 const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.93), up: v3(0.7, -0.6, 0.2), pole: v3(0.05, -1, 0.1) };
+// Rest by sword (Keith 2026-11-01: "slightly different ... resting points"), left arm. The katana (the Breaker): at the
+// side and a little behind, low, the blade pointing forward past the hull, edge down. The buster: up behind the head,
+// laid across both shoulders, angled up and in. The short sword: out at a bent arm's length ahead, the tip pointing
+// out and down at the ground.
+const GUARD_KATANA: Key = { t: 0, hand: v3(0.4, -0.55, -0.2), fwd: v3(0.12, 0.12, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.5) };
+const GUARD_BUSTER: Key = { t: 0, hand: v3(0.25, 1.45, 0.25), fwd: v3(-0.75, 0.55, -0.37), up: v3(0, 0.3, 1), pole: v3(1, -0.4, 0.2) };
+/** The return's last key before each rest (the blade brought round to where that rest picks it up). */
+const PRE_REST: (Key | null)[] = [
+  { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
+  { t: 0.82, hand: v3(0.5, -0.6, 0.6), fwd: v3(0.2, 0.0, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.3) },
+  { t: 0.82, hand: v3(0.5, 0.75, 0.9), fwd: v3(0.3, 0.95, 0.05), up: v3(0, 0.2, 1), pole: v3(1, -0.6, 0.2) },
+  null,
+];
+const GUARD_SHORT: Key = { t: 0, hand: v3(0.4, -0.75, 1.65), fwd: v3(0.4, -0.55, 0.73), up: v3(0, 0.8, 0.6), pole: v3(0.6, -1, -0.2) };
+const guardOf = (stance = 0): Key => [GUARD, GUARD_KATANA, GUARD_BUSTER, GUARD_SHORT][Math.max(0, Math.min(3, Math.round(stance)))];
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
@@ -231,6 +276,8 @@ const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.76, -0.5, -0.4
 // The block (left arm): the hand up ahead of the chest, toward the middle, the blade standing up and leaning in across
 // the front, its edge out toward the cut.
 const BLOCK: Key = { t: 0, hand: v3(-0.2, 0.55, 1.8), fwd: v3(-0.45, 0.85, 0.25), up: v3(0, 0.1, -1), pole: v3(0.8, -1, -0.1) };
+// Knocked back off a parry (left arm): the hand thrown up and in, the blade flung up and back past the shoulder.
+const RECOIL: Key = { t: 0, hand: v3(0.55, 1.15, 1.35), fwd: v3(0.35, 0.88, -0.32), up: v3(0.2, -0.3, -1), pole: v3(0.8, -0.8, 0.2) };
 const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83), up: v3(-0.1, 0.9, -0.5) };
 
 // The close cut (Keith 2026-11-01, round 10: "start with the elbow, bring it across, elbow extends and straightens, and
@@ -273,7 +320,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
   const thru = (n: Near, full: number) => mix(n.at ?? full, full);
   const NA = nearA(v), NB = nearB(v);
   const under = at(UNDER, NEAR_UNDER, 0), cock = at(COCK, NEAR_COCK, 0);
-  const g = { ...GUARD, hand: { ...GUARD.hand, y: GUARD.hand.y + v.swordGuardUp } };
+  const G0 = guardOf(st.stance), g = { ...G0, hand: { ...G0.hand, y: G0.hand.y + v.swordGuardUp } };
   switch (c) {
     case "guard": return { arc, len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
     case "A": {
@@ -308,23 +355,27 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
     case "R": {
       // The elbow drops and the wrist and forearm swing the blade round past the waist (point down ahead, then back
       // along its own hip), and up to the shoulder.
-      const len = st.recover * 1.6 * v.swordPace;
+      const len = st.recover * 1.6 * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
       return {
         arc, len, cut: null, keys: [
           { ...under, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
-          { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
+          ...(PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))] ? [PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))]!] : []),
           { ...g, t: 1 },
         ],
       };
+    }
+    case "K": {
+      const len = v.swordParryRecoil;
+      return { arc, len, cut: null, keys: [{ ...RECOIL, t: 0 }, { ...RECOIL, hand: { ...RECOIL.hand, y: RECOIL.hand.y + 0.1 }, t: 0.25 }, { ...g, t: 1 }] };
     }
     case "P": {
       const len = v.swordBlockTime;
       return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...BLOCK, t: 0.28 }, { ...BLOCK, hand: { ...BLOCK.hand, z: BLOCK.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
     }
     case "S": {
-      const len = st.recover * v.swordPace;
+      const len = st.recover * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
       return { arc, len, cut: null, keys: [{ ...cock, t: 0 }, { ...g, t: 1 }] };
     }
   }
@@ -342,6 +393,12 @@ export function lungeIntent(move: { x: number; z: number } | undefined, ax: numb
   const l = Math.hypot(move!.x, move!.z), c = (move!.x * ax + move!.z * az) / l;
   const f = c >= 0 ? v.swordLungeSide + (v.swordLungeToward - v.swordLungeSide) * c : v.swordLungeSide + (v.swordLungeAway - v.swordLungeSide) * c * c;
   return v.swordLungeStill + (f - v.swordLungeStill) * m;
+}
+
+/** A cut's damage at its reach (span: 0 close .. 1 far): close cuts lighter, full sweeps heavier. */
+export function cutDamage(st: SwordStats, v: SwordValues, span: number) {
+  const k = Math.max(0, Math.min(1, span));
+  return st.damage * (v.swordNearDamage + (v.swordFarDamage - v.swordNearDamage) * k);
 }
 
 /** A clip's length (s) at a reach (span: 0 close .. 1 far). */
@@ -417,7 +474,7 @@ export function blendPose(a: SwordPose, b: SwordPose, k: number): SwordPose {
  * spring toward this, which is the lag and the swing on past.
  */
 export function twistTarget(c: SwordClip, t: number, st: SwordStats, v: SwordValues, span = 1): number {
-  if (c === "guard" || c === "P") return 0;
+  if (c === "guard" || c === "P" || c === "K") return 0;
   const { len, cut } = clipKeys(c, st, v, span);
   const x = Math.max(0, Math.min(1, t / Math.max(1e-3, len)));
   const lerp = (a: number, b: number, k: number) => a + (b - a) * smooth(Math.max(0, Math.min(1, k)));
@@ -469,7 +526,9 @@ export class SwordSim {
   constructor(readonly side: 1 | -1) {}
 
   /** Free to block: at rest or recovering, not in a cut (Keith 2026-11-01). */
-  get free() { return this.clip === "guard" || this.clip === "R" || this.clip === "S"; }
+  get free() { return this.clip === "guard" || ((this.clip === "R" || this.clip === "S") && this.t >= this.lenNow * this.blockAfter); }
+  private lenNow = 1;
+  private blockAfter = 0;
   /** Up in a block now (cuts landing are blocked). */
   get blocking() { return this.clip === "P" && this.t < 0.75 * this.blockLen; }
   private blockLen = 0.55;
@@ -480,6 +539,16 @@ export class SwordSim {
     this.blockLen = v.swordBlockTime; this.queued = false; this.lungeK = 0; this.cutting = false;
     this.go("P", 0);
     return true;
+  }
+
+  /** Swinging at something now (driving in or cutting): a cut landing meets this blade (the parry). */
+  get swinging() { return this.parryOpen; }
+  private parryOpen = false;
+  /** Knocked back off a parry: the cut is over, the blade flung up and back, then to rest. */
+  recoil(v: SwordValues) {
+    this.parryOpen = false; this.queued = false; this.lungeK = 0; this.cutting = false;
+    this.go("K", 0);
+    this.hitch = Math.max(this.hitch, v.swordParryStall);
   }
 
   /** Stall the blade (a body bit it). */
@@ -526,10 +595,17 @@ export class SwordSim {
       this.queued = false;
       if (this.clip === "A") this.go("B", 0);
       else this.go("A", this.driveAt(st, v));
-    } else if ((this.clip === "R" || this.clip === "S" || this.clip === "P") && want) { this.queued = false; this.go("A", 0); }
+    } else if ((this.clip === "R" || this.clip === "S" || this.clip === "P" || (this.clip === "K" && this.t > v.swordParryRecoil * 0.5)) && want) { this.queued = false; this.go("A", 0); }
     const t0 = this.t;
     this.t += dt;
     const L = this.length(st, v), w = this.cutWindow(st, v);
+    // The parry window: around the cut, wider for a close cut and a light sword (st.parry).
+    if ((this.clip === "A" || this.clip === "B") && w) {
+      const k = this.span, pk = st.parry ?? 1;
+      const half = (v.swordParryNear + (v.swordParryFar - v.swordParryNear) * k) * pk;
+      this.parryOpen = Math.abs(this.t - (w[0] + w[1]) / 2) <= half;
+    } else this.parryOpen = false;
+    this.lenNow = L; this.blockAfter = v.swordBlockAfter;
     let sweep: Sweep | null = null;
     this.cutting = !!w && this.t > w[0] && t0 < w[1];
     if (w && this.cutting) {
@@ -544,7 +620,7 @@ export class SwordSim {
       const over = this.t - L;
       if (this.clip === "A") { if (want) { this.queued = false; this.go("B", over); } else this.go("R", over); }
       else if (this.clip === "B") { if (want) { this.queued = false; this.go("A", this.driveAt(st, v)); } else this.go("S", over); }
-      else if (this.clip === "R" || this.clip === "S" || this.clip === "P") this.go("guard", 0);
+      else if (this.clip === "R" || this.clip === "S" || this.clip === "P" || this.clip === "K") this.go("guard", 0);
       else this.t = 0;
     }
     return sweep;

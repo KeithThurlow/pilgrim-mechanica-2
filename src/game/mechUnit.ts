@@ -71,7 +71,7 @@ export interface MechWeapons {
   /** A sword's step into its slash (world m/s), or null (src/weapons/sword.ts). */
   lunge?(move?: { x: number; z: number }): { x: number; z: number } | null;
   /** An enemy's sword cut from (x, z) is landing: a free sword facing it blocks. The share of damage taken (1: none). */
-  parry?(fromX: number, fromZ: number): number;
+  parry?(fromX: number, fromZ: number): import("./battlefield").Parry;
   /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
    *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
   stop?(): void;
@@ -558,8 +558,8 @@ export class MechUnit implements Hittable, Solid {
     };
   }
 
-  parry(fromX: number, fromZ: number): number {
-    return this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ) ?? 1 : 1;
+  parry(fromX: number, fromZ: number): import("./battlefield").Parry {
+    return (this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ) : null) ?? { take: 1 };
   }
 
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
