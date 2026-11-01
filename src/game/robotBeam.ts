@@ -1,16 +1,18 @@
 // An excavator's beam resolved on the battlefield (Keith 2026-10-31; the sim's event in src/combat/robots.ts). Host:
 // the damage. It burns everything of another team along the line's low part, as a sheet with a penetration budget no
 // body uses up (src/game/sheetFire.ts): the mech, the pilot, bandits and their vehicles in a robots-on-bandits fight
-// (other robots are its own team). Cosmetic: a scorched furrow along the sand, dust and a crack.
+// (other robots are its own team). Cosmetic: a scorched furrow along the sand, dust and a crack. Terraforming (Keith
+// 2026-11-01): the beam digs a trench of craters down its line (robotBeamDig), and the big walkers' pulse
+// (fireRobotPulse) blasts a crater under them and shoves the mech away.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
-import type { RobotBeamEvent } from "../combat/robots";
+import type { RobotBeamEvent, RobotPulseEvent } from "../combat/robots";
 
 const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 
 /** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
-export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number): number {
+export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0): number {
   const s = e.start, t = e.end;
   from.set(s.x, s.y, s.z);
   dir.set(t.x - s.x, t.y - s.y, t.z - s.z);
@@ -30,10 +32,33 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number)
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
+  // The trench: craters down the low part of the line, one per width or so (queued, so a long line doesn't stall).
+  if (dig > 0) {
+    const r = e.width * dig, step = Math.max(1, r * 1.2), m = Math.min(60, Math.floor(flat / step));
+    for (let k = 0; k <= m; k++) { const a = m ? k / m : 1; bf.queueDent(s.x + (t.x - s.x) * a, s.z + (t.z - s.z) * a, r / Math.max(0.05, (bf.v as { craterRadiusShare?: number }).craterRadiusShare ?? 0.7)); }
+  }
   // The release: a blast wave off the emitter and where it strikes (src/fx/blastWaves.ts, the beam kind).
   bf.waves?.post("beam", e.from.x, e.from.y, e.from.z, 2.5, { ground: false, fam: 2 });
   bf.waves?.post("beam", t.x, t.y, t.z, 3, { fam: 2 });
   bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
   bf.sfx.play("brap", from.set(t.x, t.y, t.z), 1.4, 0.5, false);
   return shot.result.steps.length;
+}
+
+/**
+ * Resolve a big walker's terraform pulse: a blast on the ground under it (damage to everything of another team, a
+ * crater, dust, the blast wave in the beam's kind) and a shove outward through shove(x, z, radius, speed) for whoever
+ * can be pushed (the player's mech).
+ */
+export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
+  from.set(e.at.x, e.at.y, e.at.z);
+  bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "beam");
+  // A second, wider ring of dust thrown outward.
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2, r = e.radius * 0.6;
+    const x = e.at.x + Math.sin(a) * r, z = e.at.z + Math.cos(a) * r;
+    bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 9, 3 + Math.random() * 3, Math.cos(a) * 9, 1.2, 2.5 + Math.random() * 2, 0.9);
+  }
+  bf.waves?.post("beam", e.from.x, e.from.y, e.from.z, 3, { ground: false, fam: 2 });
+  shove?.(e.at.x, e.at.z, e.radius, e.shove);
 }

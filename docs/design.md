@@ -67,6 +67,25 @@ Keith's pitch, 2026-10-24, written up by Claude. Direction, not final: correct a
 - Salvaging parts from wrecks; the minigun and explosion feel; the procedural walker; the desert style.
 - Not carried over: the maps and terrain (didn't work well), the Unity code.
 
+## Robots: the roster (Keith 2026-11-01)
+
+Sci-fi machines, not construction plant: white plate, mostly cylindrical, squarish dark mechanics, pipes and cables
+dangling (a procedural sway, no physics). Red lights mean seeking, blue means a weapon, and the big ones' blue weapons
+terraform the ground. Refs are on Keith's PC: `pilgrim-mechanica/art-refs/robot-reference/`. Smallest to largest, room
+to add more:
+
+| # | Type | What it is | Rig and look | Weapons | State |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Crabs** (scuttlers) | The swarm: tiny, low, many. Leap on and latch. | Code geometry: a mite with a cylindrical abdomen, a small head, four thin legs (`robotShapes.ts`) | Bites; a share shoot | Built (the small robots) |
+| 2 | **Small quads** | A size up from the crabs and taller: a white body high on four armoured legs, a blue visor, an antenna ("small quad.png") | Code geometry on the walker legs | Light guns or a cutter | Next |
+| 3 | **Weapon quads** | Larger again, almost mech-like: a cylindrical turret body on four legs with weapons on its sides ("medium quad bots with weapons.png"). They drop their weapons as loot | Code geometry; the player's weapon models and effects reused | Miniguns, rocket launchers, lasers, rail guns | Next |
+| 4 | **Mech quads** (striders) | Really large, wiry and mech-like | The mech rig (WalkerSim) scaled up | Big guns | In its own thread |
+| 5 | **Humanoids** | A few variants, the middle ground among the walkers | The human rig (the Vanguard bake) | Varied | In its own thread |
+| 6 | **Terraforming walkers** | The towers: thorax and abdomen 15 m up on four long legs (Keith's tall beam-walker ref) | Code geometry (`robotShapes.ts`) | Lobbed charges, a blue line beam that digs a trench, a blue pulse straight down that craters the ground and shoves you away | Built (the big robots) |
+
+The medium cutters (crab-like walkers with a blue cutter disc) sit between 1 and 2 today; they fold into the small
+quads or the weapon quads when those are built.
+
 ## Open questions
 
 - Salvage on foot, by mech, or both (see Salvage)?

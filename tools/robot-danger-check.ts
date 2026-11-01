@@ -154,6 +154,42 @@ if (dodged > 0) fail(`a mech side-stepping after the lock was still burnt ${dodg
 if (stood < firedS) fail(`a standing mech was missed by ${firedS - stood} of ${firedS} beams`);
 const sideStep = (V0.robotBeamCharge * (1 - V0.robotBeamLock)) * 6;
 if (sideStep < V0.robotBeamWidth / 2 + HIT_R + 1) fail(`after the lock a walking mech covers only ${f(sideStep)} m: too little to clear the beam`);
+// The terraform pulse (Keith 2026-11-01): a big walker with the mech close beams the ground under it and blasts outward.
+// Walking straight away once the charge starts clears the blast; standing close is caught by every pulse.
+function pulseDuel(flee: boolean, seed: number) {
+  const v = { ...V0, robotBigShare: 1, robotMidShare: 0, robotBigShotDamage: 0, robotBeamOn: 0, robotPulseFirst: 0.5, robotPulseCooldown: 4 };
+  const sw = new RobotSwarm(v, field, seed);
+  const t = { x: 300 + seed * 37, y: 0, z: -200, radius: HIT_R };
+  t.y = field.height(t.x, t.z) + 3;
+  const home = { x: t.x, z: t.z };
+  sw.spawn(1, t.x + 8, t.z + 3, 0);
+  let hits = 0, fired = 0, worst = 0;
+  sw.onPulse = (e) => {
+    fired++;
+    const d = Math.hypot(t.x - e.at.x, t.z - e.at.z);
+    if (d < e.radius + t.radius) hits++;
+    worst = Math.max(worst, Math.abs(e.at.y - field.height(e.at.x, e.at.z)));
+  };
+  for (let s = 0; s < 30 * 120; s++) {
+    sw.update(dt, t, () => {});
+    if (sw.pulseT[0] >= 0 && flee) {
+      const ax = t.x - sw.px[0], az = t.z - sw.pz[0], L = Math.hypot(ax, az) || 1;
+      t.x += (ax / L) * 6 * dt; t.z += (az / L) * 6 * dt;
+    } else if (sw.pulseT[0] < 0) { t.x += (home.x - t.x) * Math.min(1, dt * 2); t.z += (home.z - t.z) * Math.min(1, dt * 2); }
+    t.y = field.height(t.x, t.z) + 3;
+  }
+  return { hits, fired, worst };
+}
+let pFled = 0, pStood = 0, pFiredF = 0, pFiredS = 0;
+for (const seed of [2, 5, 9]) {
+  const a = pulseDuel(true, seed), b = pulseDuel(false, seed);
+  pFled += a.hits; pFiredF += a.fired; pStood += b.hits; pFiredS += b.fired;
+  if (a.worst > 0.01 || b.worst > 0.01) fail(`a pulse's centre was off the ground by ${f(Math.max(a.worst, b.worst))} m`);
+}
+console.log(`pulse: ${V0.robotPulseDamage} damage in ${V0.robotPulseRadius} m, ${V0.robotPulseCharge} s charge, within ${V0.robotPulseRange} m; walking away: caught by ${pFled} of ${pFiredF}; standing: ${pStood} of ${pFiredS}`);
+if (pFiredF < 3 || pFiredS < 3) fail(`too few pulses fired in the duel (${pFiredF}, ${pFiredS})`);
+if (pFled > 0) fail(`a mech walking away from the pulse's charge was still caught ${pFled} times: not escapable`);
+if (pStood < pFiredS) fail(`a mech standing close was missed by ${pFiredS - pStood} of ${pFiredS} pulses`);
 void DEAD;
 if (failed) throw new Error("robot danger check failed");
 console.log("robot danger check passed");

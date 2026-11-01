@@ -98,7 +98,7 @@ export const ROBOT_DEFAULTS = {
   // Big excavators.
   robotBigShare: 0.035,
   robotBigSize: 4,
-  robotBigHeight: 10,
+  robotBigHeight: 15,
   robotBigSizeJitter: 0.1,
   robotBigHp: 1800,
   robotBigSpeed: 3,
@@ -118,7 +118,7 @@ export const ROBOT_DEFAULTS = {
   robotFootDamage: 0.3,
   // Blasts (rockets, missiles, mortar and autocannon shells; 2026-10-26): measured to the nearest part, by its share.
   robotMidBlast: 1,
-  robotBigBlast: 0.8,
+  robotBigBlast: 0.85,
   // Armour (docs/proposal-balance.md, Keith 2026-10-31): flat per hit, cut by the hit's pierce (src/game/armour.ts).
   robotArmour: 0,
   robotMidArmour: 3,
@@ -158,6 +158,20 @@ export const ROBOT_DEFAULTS = {
   robotBeamPrio: 6,
   robotBeamFlash: 3500,
   robotBeamScorch: 3,
+  robotBeamDig: 0.5,
+  // The terraform pulse (Keith 2026-11-01: "a beam attack that blasted the ground and then exploded out around them
+  // and encouraged the player to get away"): a big one with the mech close stops, fires its blue beam straight down
+  // into the sand under it, and the ground erupts outward: a crater, damage, and a shove away from it.
+  robotPulseOn: 1,
+  robotPulseRange: 16,
+  robotPulseCharge: 1.8,
+  robotPulseRadius: 14,
+  robotPulseDamage: 70,
+  robotPulsePierce: 0.4,
+  robotPulseShove: 16,
+  robotPulseCooldown: 10,
+  robotPulseFirst: 1.5,
+  robotPulseHold: 0.6,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -174,7 +188,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
-const GB = "Robots: beam";
+const GB = "Robots: beam", GP = "Robots: terraform pulse";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
@@ -304,6 +318,17 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBeamPrio", label: "Charge light priority", min: 1, max: 20, step: 0.5, group: GB, tip: "How far ahead of blasts and rockets a charging emitter is for the real lights" },
   { key: "robotBeamFlash", label: "Beam flash", min: 0, max: 15000, step: 100, group: GB },
   { key: "robotBeamScorch", label: "Scorch glows for (s)", min: 0, max: 10, step: 0.1, group: GB },
+  { key: "robotBeamDig", label: "Digs a trench (× width)", min: 0, max: 2, step: 0.05, group: GB, tip: "Craters down the beam's line, this share of its width each (0: no dig)" },
+  { key: "robotPulseOn", label: "Pulse on", min: 0, max: 1, step: 1, group: GP, tip: "Big ones with the mech close fire straight down and blast the ground outward" },
+  { key: "robotPulseRange", label: "Pulses when mech within (m)", min: 2, max: 40, step: 0.5, group: GP, tip: "Distance on the ground from its body" },
+  { key: "robotPulseCharge", label: "Charge time (s)", min: 0.3, max: 5, step: 0.05, group: GP, tip: "The beam into the sand and the ring on it, before the blast" },
+  { key: "robotPulseRadius", label: "Blast radius (m)", min: 2, max: 30, step: 0.5, group: GP },
+  { key: "robotPulseDamage", label: "Damage", min: 0, max: 400, step: 5, group: GP, tip: "Full at the centre, half at the edge" },
+  { key: "robotPulsePierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GP },
+  { key: "robotPulseShove", label: "Shove (m/s)", min: 0, max: 40, step: 0.5, group: GP, tip: "The mech is pushed away this fast at the centre, half at the edge" },
+  { key: "robotPulseCooldown", label: "Cooldown (s)", min: 1, max: 40, step: 0.5, group: GP },
+  { key: "robotPulseFirst", label: "First pulse after (s)", min: 0, max: 20, step: 0.5, group: GP, tip: "From its arrival (spread per robot)" },
+  { key: "robotPulseHold", label: "Beam shown after (s)", min: 0.05, max: 2, step: 0.05, group: GP },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
   { key: "robotStompReach", label: "Stomp knocks off below (m)", min: 0, max: 6, step: 0.1, group: G3, tip: "Latched ones lower than this near the foot are knocked off" },
@@ -358,6 +383,16 @@ export interface RobotBeamEvent {
   robot: number; id: number;
   from: V3; start: V3; end: V3;
   width: number; damage: number; pierce: number;
+}
+/**
+ * A big one's terraform pulse going off (plain data, rule 12): the robot, the emitter, the point on the ground under it
+ * (the blast's centre), the blast radius, damage, armour pierce and the shove (m/s at the centre). The host resolves it
+ * (src/game/robotBeam.ts fireRobotPulse).
+ */
+export interface RobotPulseEvent {
+  robot: number; id: number;
+  from: V3; at: V3;
+  radius: number; damage: number; pierce: number; shove: number;
 }
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
@@ -415,6 +450,13 @@ export class RobotSwarm {
   onBeam: ((e: RobotBeamEvent) => void) | null = null;
   /** Beams started and fired since construction. */
   beamCharges = 0; beams = 0;
+  /** The terraform pulse (big ones): -1 idle; else seconds since the charge began (up to robotPulseCharge, then shown). */
+  readonly pulseT = new Float32Array(ROBOT_MAX).fill(-1);
+  readonly pulseClock = new Float32Array(ROBOT_MAX);
+  /** A big one's pulse going off (resolve it: blast, crater, shove). */
+  onPulse: ((e: RobotPulseEvent) => void) | null = null;
+  /** Pulses started and fired since construction. */
+  pulseCharges = 0; pulses = 0;
   private aim: RobotTarget = { x: 0, y: 0, z: 0, radius: 2 };
   /** Latch spot taken while leaping or latched (-1 none). */
   readonly slot = new Int16Array(ROBOT_MAX).fill(-1);
@@ -573,12 +615,13 @@ export class RobotSwarm {
       this.shooter[i] = big ? 0 : mid ? (this.rand() >= v.robotMidCutterShare ? 1 : 0) : this.rand() < v.robotShooterShare ? 1 : 0;
       this.slot[i] = -1;
       this.fireClock[i] = 0; this.burstLeft[i] = 0; this.shake[i] = 0; this.cutClock[i] = 0;
-      this.beamT[i] = -1;
+      this.beamT[i] = -1; this.pulseT[i] = -1;
       this.speedK[i] = 1 + (this.rand() * 2 - 1) * v.robotSpeedJitter;
       this.gripK[i] = 1 + (this.rand() * 2 - 1) * v.robotGrip;
       this.range[i] = this.rand(); this.flank[i] = this.rand() * 2 - 1; this.seed[i] = this.rand();
       // First beam spread per robot by its look seed (no extra draws: the seeded sequence stays as it was).
       this.beamClock[i] = v.robotBeamFirst * (0.6 + 0.8 * this.seed[i]);
+      this.pulseClock[i] = v.robotPulseFirst * (0.6 + 0.8 * this.seed[i]);
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
       this.count++;
@@ -746,7 +789,7 @@ export class RobotSwarm {
     if (this.state[i] === LATCHED) this.latchN--;
     if (s === LATCHED) this.latchN++;
     if (s !== LEAP && s !== LATCHED) this.freeLatch(i);
-    if (s >= DOWN) this.beamT[i] = -1;
+    if (s >= DOWN) { this.beamT[i] = -1; this.pulseT[i] = -1; }
     this.state[i] = s; this.stateTime[i] = 0;
   }
 
@@ -839,6 +882,7 @@ export class RobotSwarm {
       const dist = Math.hypot(tx, tz) || 1e-6;
       const ux = tx / dist, uz = tz / dist;
       if (mid) this.cutClock[i] -= dt;
+      if (big) this.pulseClock[i] -= dt;
 
       let st = s;
       if (st === DOWN) {
@@ -858,8 +902,11 @@ export class RobotSwarm {
         if (stateTime[i] >= w + L + v.robotMidCutRecover) { st = RUN; this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
       } else if (mid && this.cutClock[i] <= 0 && dist - target.radius < v.robotMidCutRange) {
         st = CUT;
-      } else if (big && this.beamT[i] >= 0) {
+      } else if (big && (this.beamT[i] >= 0 || this.pulseT[i] >= 0)) {
         st = FIRE; // a charge runs to its end
+      } else if (big && v.robotPulseOn > 0.5 && this.pulseClock[i] <= 0 && this.burstLeft[i] === 0 && dist < v.robotPulseRange) {
+        // Too close: it stops and beams the ground under it.
+        st = FIRE; this.pulseT[i] = 0; this.pulseCharges++;
       } else if (big) {
         const stop = v.robotBigNear + this.range[i] * Math.max(0, v.robotBigFar - v.robotBigNear);
         if (st === RUN && dist <= stop) st = FIRE;
@@ -910,7 +957,8 @@ export class RobotSwarm {
       } else if (st === FIRE) {
         face = big && this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
         const near = big ? v.robotBigNear : mid ? v.robotMidNear : v.robotShootNear;
-        if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
+        if (big && this.pulseT[i] >= 0) { /* planted for the pulse */ }
+        else if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? v.robotMidSpeed : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
       } else if (st === CUT) {
         // It tracks the mech through the wind-up, then lunges where the mech was: a dash in time takes you clear.
         const t = stateTime[i], w = v.robotMidCutWindup;
@@ -998,7 +1046,10 @@ export class RobotSwarm {
         let dh = Math.atan2(ux, uz) - this.heading[i];
         dh = Math.abs(Math.atan2(Math.sin(dh), Math.cos(dh)));
         this.fireClock[i] -= dt;
-        if (big && this.beamT[i] >= 0) {
+        if (big && this.pulseT[i] >= 0) {
+          this.chargePulse(i, dt);
+          this.tell[i] = 0;
+        } else if (big && this.beamT[i] >= 0) {
           this.chargeBeam(i, dt, target);
           this.tell[i] = 0;
         } else if (big && v.robotBeamOn > 0.5 && (this.beamClock[i] -= dt) <= 0 && this.burstLeft[i] === 0
@@ -1114,7 +1165,11 @@ export class RobotSwarm {
           this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
           this.onFootfall?.(i, this.footX[f], this.footY[f], this.footZ[f]);
         } else stepping++;
-      } else sumY += this.footY[f];
+      } else {
+        // A big one's planted feet follow the ground (its own pulse craters the sand under them).
+        if (big) this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
+        sumY += this.footY[f];
+      }
     }
     let worst = -1, worstE = 0;
     for (let k = 0; k < WALK_LEGS; k++) {
@@ -1227,11 +1282,30 @@ export class RobotSwarm {
     this.onLob?.(i, fx, fy, fz, x, z, flight);
   }
 
-  /** The beam's emitter: the gun under a big one's chassis (world; the drawer glows the same spot). */
+  /** The beam's emitter: the lens under a big one's thorax, at its front (world; the drawer glows the same spot). */
   beamFrom(i: number, out: V3): V3 {
     const h = this.heading[i], S = this.size[i];
-    out.x = this.px[i] + Math.sin(h) * S * 0.45; out.z = this.pz[i] + Math.cos(h) * S * 0.45; out.y = this.hubY[i] - S * BIG_BODY_H * 0.3;
+    out.x = this.px[i] + Math.sin(h) * S * 0.2; out.z = this.pz[i] + Math.cos(h) * S * 0.2; out.y = this.hubY[i] - S * (BIG_BODY_H * 0.62 + 0.05);
     return out;
+  }
+
+  /** A pulse in progress: charge (the beam into the sand), blast, show, cool down. */
+  private chargePulse(i: number, dt: number) {
+    const v = this.v, C = v.robotPulseCharge, was = this.pulseT[i];
+    const now = (this.pulseT[i] = was + dt);
+    if (was < C && now >= C) {
+      const e = this.beamFrom(i, this.bf3), gy = this.ground.height(e.x, e.z);
+      this.pulses++;
+      this.onPulse?.({
+        robot: i, id: this.uid[i], from: { x: e.x, y: e.y, z: e.z }, at: { x: e.x, y: gy, z: e.z },
+        radius: v.robotPulseRadius, damage: v.robotPulseDamage * this.power[i], pierce: v.robotPulsePierce, shove: v.robotPulseShove,
+      });
+    }
+    if (now >= C + v.robotPulseHold) {
+      this.pulseT[i] = -1;
+      this.pulseClock[i] = v.robotPulseCooldown * (0.85 + 0.3 * this.rand());
+      this.fireClock[i] = Math.max(this.fireClock[i], v.robotBigWindup + 0.5);
+    }
   }
 
   private bf3: V3 = { x: 0, y: 0, z: 0 };
