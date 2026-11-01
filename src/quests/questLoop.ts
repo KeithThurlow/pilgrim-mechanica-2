@@ -33,7 +33,6 @@ export const QUEST_PARAMS: Param[] = [
 ];
 export const QUEST_GROUPS = [CONTRACT_GROUP, REWARD_GROUP, TOW_GROUP, HVT_GROUP];
 
-const RED = 0xff5a3a;
 /** Active mission targets on the radar, the edge marks and the beacons (Keith 2026-11-01: "always a pretty bright green"). */
 export const MISSION_GREEN = "#3dff6e";
 const GREEN = 0x3dff6e;
@@ -304,14 +303,14 @@ export class QuestLoop {
       this.marks.push({ id: "contract:" + c.id, x: at.x, y: field.height(at.x, at.z) + 3, z: at.z, text: `CONTRACT · ${KIND_NAME[c.kind].toUpperCase()}`, color: MISSION_GREEN, strength: 1 });
       if (c.pods) for (const p of c.pods) if (p) pods.push(p);
     }
-    // The lair stirring or its HVT out: a red pillar and diamond.
+    // The lair stirring or its HVT out: a green pillar and diamond.
     const l = hvt.lair ?? this.lairs.known().find((q) => q.state === "stirring") ?? null;
     if (l) {
       const at = hvt.lair && hvt.pos && hvt.unit?.alive ? hvt.pos : l;
-      beacons.push({ x: at.x, z: at.z, color: RED });
-      // On the radar a target is a target: green like the contracts, marked bigger (the pillar and edge mark stay red).
+      beacons.push({ x: at.x, z: at.z, color: GREEN });
+      // A target is a target: green like the contracts (Keith 2026-11-01), marked bigger on the radar.
       this.radar.push({ x: at.x, z: at.z, color: MISSION_GREEN, kind: "hvt" });
-      if (hvt.unit?.alive) this.marks.push({ id: "hvt", x: at.x, y: field.height(at.x, at.z) + 5, z: at.z, text: l.name.toUpperCase(), color: "#ff6a4a", strength: 1 });
+      if (hvt.unit?.alive) this.marks.push({ id: "hvt", x: at.x, y: field.height(at.x, at.z) + 5, z: at.z, text: l.name.toUpperCase(), color: MISSION_GREEN, strength: 1 });
     }
     const hulk = this.hulkJob ? { x: tow.x, y: tow.y, z: tow.z, heading: tow.heading } : null;
     let hook = null;

@@ -197,17 +197,25 @@ export function quadBodyGeometry(): THREE.BufferGeometry {
   for (const a of MID_SPEC.angles) k.box(0.13, 0.13, 0.13, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
   // Neck: a dark ring the turret turns on.
   k.cyl(0.15, T - H * 0.5, JOINT, 0, (T + H * 0.4) / 2, 0, 0, 0, 0, 12).cyl(0.2, 0.025, DARK, 0, H * 0.5, 0, 0, 0, 0, 14);
-  // Turret: a white drum, a capped top with a dark hatch, a sensor block at the front with its glass slit.
-  k.cyl(0.2, 0.16, WHITE, 0, T, 0, 0, 0, 0, 16).cyl(0.205, 0.03, JOINT, 0, T - 0.06, 0, 0, 0, 0, 16);
-  k.cyl(0.16, 0.03, WHITE_DIM, 0, T + 0.095, 0, 0, 0, 0, 16).box(0.1, 0.02, 0.12, DARK, 0, T + 0.115, -0.04);
-  k.box(0.18, 0.12, 0.14, WHITE, 0, T + 0.01, 0.2).box(0.185, 0.04, 0.08, GLASS, 0, T + 0.03, 0.24);
-  // Trunnions out to the weapons either side.
-  for (const x of [QUAD_GUN_X - 0.1, -(QUAD_GUN_X - 0.1)]) k.box(0.12, 0.07, 0.09, JOINT, x, T, 0.02);
   // Abdomen: a small white pod behind, tipped up, a dark band and a stub joining it to the thorax.
   k.box(0.1, 0.08, 0.14, JOINT, 0, H * 0.05, -0.3, -0.3, 0, 0);
   k.add(pod(0.15, 0.4, 10), WHITE, 0, H * 0.3, -0.5, -0.35, 0, 0, 0.05);
   k.cyl(0.155, 0.04, JOINT, 0, H * 0.25, -0.44, Math.PI / 2 - 0.35, 0, 0, 10);
   k.box(0.06, 0.03, 0.22, DARK, 0, H * 0.3 + 0.15, -0.52, -0.35, 0, 0);
+  return k.build(-H * 0.6, T + 0.12, 0.12);
+}
+
+/**
+ * A weapon quad's turret (× size), drawn apart so it swivels on its own (Keith 2026-11-01): a white drum about the body's
+ * axis, a capped top with a dark hatch, a sensor block at the front with its glass slit (red eyes drawn apart),
+ * trunnions out to the weapons either side (quadWeaponGeometry turns with it).
+ */
+export function quadTurretGeometry(): THREE.BufferGeometry {
+  const k = new Kit(), H = MID_BODY_H, T = QUAD_TURRET_Y;
+  k.cyl(0.2, 0.16, WHITE, 0, T, 0, 0, 0, 0, 16).cyl(0.205, 0.03, JOINT, 0, T - 0.06, 0, 0, 0, 0, 16);
+  k.cyl(0.16, 0.03, WHITE_DIM, 0, T + 0.095, 0, 0, 0, 0, 16).box(0.1, 0.02, 0.12, DARK, 0, T + 0.115, -0.04);
+  k.box(0.18, 0.12, 0.14, WHITE, 0, T + 0.01, 0.2).box(0.185, 0.04, 0.08, GLASS, 0, T + 0.03, 0.24);
+  for (const x of [QUAD_GUN_X - 0.1, -(QUAD_GUN_X - 0.1)]) k.box(0.12, 0.07, 0.09, JOINT, x, T, 0.02);
   return k.build(-H * 0.6, T + 0.12, 0.12);
 }
 
