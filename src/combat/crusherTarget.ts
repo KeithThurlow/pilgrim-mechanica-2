@@ -47,8 +47,8 @@ export class CrusherTarget implements Hittable, Owner {
     let k = 3;
     for (let l = 0; l < 4; l++) {
       c.leg(l, HIP, KNEE, TIP, FOOT);
-      set(k++, HIP.x, HIP.y, HIP.z, KNEE.x, KNEE.y, KNEE.z, 0.07 * W, PART_LEG);
-      set(k++, KNEE.x, KNEE.y, KNEE.z, FOOT.x, FOOT.y, FOOT.z, 0.05 * W, PART_LEG);
+      set(k++, HIP.x, HIP.y, HIP.z, KNEE.x, KNEE.y, KNEE.z, 0.09 * W, PART_LEG);
+      set(k++, KNEE.x, KNEE.y, KNEE.z, FOOT.x, FOOT.y, FOOT.z, 0.065 * W, PART_LEG);
     }
     return caps.slice(0, k);
   }

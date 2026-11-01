@@ -207,15 +207,15 @@ export class CrusherBody {
       c.leg(k, HIP, KNEE, TIP, FOOT);
       VH.set(HIP.x, HIP.y, HIP.z); VK.set(KNEE.x, KNEE.y, KNEE.z); VT.set(TIP.x, TIP.y, TIP.z); VF.set(FOOT.x, FOOT.y, FOOT.z);
       SIDE.set(Math.cos(c.heading), 0, -Math.sin(c.heading));
-      l.hip.position.copy(VH); l.hip.scale.setScalar(W * 0.13);
-      placeBone(l.thigh, VH, VK, SIDE, W * 0.12, W * 0.13);
-      placeBone(l.thighRod, VH, VK, SIDE, W * 0.05, W * 0.18);
-      l.knee.position.copy(VK); l.knee.scale.setScalar(W * 0.12);
-      placeBone(l.shin, VK, VT, SIDE, W * 0.06, W * 0.06);
+      l.hip.position.copy(VH); l.hip.scale.setScalar(W * 0.17);
+      placeBone(l.thigh, VH, VK, SIDE, W * 0.16, W * 0.17);
+      placeBone(l.thighRod, VH, VK, SIDE, W * 0.06, W * 0.22);
+      l.knee.position.copy(VK); l.knee.scale.setScalar(W * 0.15);
+      placeBone(l.shin, VK, VT, SIDE, W * 0.08, W * 0.08);
       MID.lerpVectors(VK, VT, 0.62);
-      placeBone(l.shinSleeve, VK, MID, SIDE, W * 0.1, W * 0.1);
-      l.ankle.position.copy(VT); l.ankle.scale.setScalar(W * 0.06);
-      placeBone(l.spike, VT, VF, SIDE, W * 0.07, W * 0.07);
+      placeBone(l.shinSleeve, VK, MID, SIDE, W * 0.13, W * 0.13);
+      l.ankle.position.copy(VT); l.ankle.scale.setScalar(W * 0.08);
+      placeBone(l.spike, VT, VF, SIDE, W * 0.1, W * 0.1);
     }
     // The maw: the fan spins up, the teeth flare, the throat glows blue as it sucks.
     const spin = c.spin, open = c.alive ? spin : 0;
