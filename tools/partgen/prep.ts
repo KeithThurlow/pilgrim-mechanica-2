@@ -15,6 +15,7 @@ export interface PrepOptions {
   up: Axis;      // the source's up, turned to +Y
   lod?: 0 | 1 | 2; // which of the kind's budgets (full, simpler, simplest)
   tris?: number;   // override the budget
+  delight?: number; // 0..1: take out shading baked into the colours (see delight())
 }
 
 /** Flatten a GLB's meshes into one coloured mesh (texture or vertex colour times the material's factor). */
@@ -65,6 +66,44 @@ function weld(m: Mesh, eps: number): Mesh {
   return { pos: new Float32Array(P), col: new Float32Array(C), index: new Uint32Array(I) };
 }
 
+/**
+ * Take baked lighting out of vertex colours (Keith 2026-11-01: no lighting baked into textures). A splat's colours
+ * (and a texture from an image without PBR) carry the concept image's light: one side bright, the other dark. Fit the
+ * luminance as ambient plus one directional light over the normals (least squares, L ≈ a + b·n), then divide each
+ * colour by its fitted shading over the mean, by `amount`. Broad shading goes; paint, stripes and wear (which don't
+ * follow the normals) stay. Returns the fitted light, for the check.
+ */
+export function delight(col: Float32Array, nrm: Float32Array, amount: number) {
+  const n = col.length / 3;
+  if (amount <= 0 || n < 8) return { a: 0, b: [0, 0, 0] };
+  // Normal equations for [1, nx, ny, nz] · [a, bx, by, bz] = L.
+  const A = new Float64Array(16), y = new Float64Array(4);
+  const lum = new Float32Array(n);
+  for (let v = 0; v < n; v++) {
+    const L = 0.2126 * col[v * 3] + 0.7152 * col[v * 3 + 1] + 0.0722 * col[v * 3 + 2];
+    lum[v] = L;
+    const x = [1, nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]];
+    for (let r = 0; r < 4; r++) { y[r] += x[r] * L; for (let c = 0; c < 4; c++) A[r * 4 + c] += x[r] * x[c]; }
+  }
+  // Solve 4x4 by Gaussian elimination (with a little ridge so a flat part doesn't blow up).
+  for (let r = 0; r < 4; r++) A[r * 4 + r] += 1e-6 * n;
+  const M = Array.from({ length: 4 }, (_, r) => [...A.slice(r * 4, r * 4 + 4), y[r]]);
+  for (let c = 0; c < 4; c++) {
+    let p = c;
+    for (let r = c + 1; r < 4; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < 4; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k < 5; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const a = M[0][4] / M[0][0], b = [M[1][4] / M[1][1], M[2][4] / M[2][2], M[3][4] / M[3][3]];
+  if (!(a > 1e-3)) return { a, b };
+  for (let v = 0; v < n; v++) {
+    const shade = a + b[0] * nrm[v * 3] + b[1] * nrm[v * 3 + 1] + b[2] * nrm[v * 3 + 2];
+    const k = 1 + amount * (Math.min(3, Math.max(0.33, a / Math.max(1e-3, shade))) - 1);
+    for (let c = 0; c < 3; c++) col[v * 3 + c] = Math.min(1, col[v * 3 + c] * k);
+  }
+  return { a, b };
+}
+
 function normals(pos: Float32Array, index: Uint32Array) {
   const n = new Float32Array(pos.length);
   for (let t = 0; t < index.length; t += 3) {
@@ -98,6 +137,7 @@ export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Pr
 
   // Weld at a millimetre, then simplify to budget keeping colour.
   const w = weld({ pos, col: src.col, index: src.index }, 1e-3);
+  if (o.delight) delight(w.col, normals(w.pos, w.index), o.delight);
   const trisIn = w.index.length / 3, budget = o.tris ?? kind.tris[o.lod ?? 0];
   await MeshoptSimplifier.ready;
   let index = w.index;

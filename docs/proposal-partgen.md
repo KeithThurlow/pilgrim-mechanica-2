@@ -16,7 +16,7 @@ Rampart is 34.6k for a whole mech). No generator gives that; the back half of th
 | --- | --- | --- | --- |
 | Concept image | whatever image model is already in Keith's ComfyUI (Flux-class) | one clean part on grey, three-quarter view, house style prompt | as installed |
 | Image → splat | **TripoSplat** (VAST, mid 2026) | open, single image to up to 262k Gaussians, PLY out, ComfyUI template, ~8 GB VRAM | MIT |
-| Image → mesh (direct) | **Pixal3D** (SIGGRAPH 2026, on TRELLIS.2) with **TRELLIS.2** (Microsoft, Dec 2025) as the switch | native ComfyUI nodes since 2026 (template `3d_pixal3d_trellis2_image_to_model`), textured mesh with PBR maps, remesh/decimate/fill-holes nodes built in | TRELLIS.2 MIT; Pixal3D: check before use |
+| Image → mesh (direct) | **Pixal3D** (SIGGRAPH 2026, on TRELLIS.2) with **TRELLIS.2** (Microsoft, Dec 2025) as the switch | native ComfyUI nodes since 2026 (template `3d_pixal3d_trellis2_image_to_model`), textured mesh with PBR maps, remesh/decimate/fill-holes nodes built in | TRELLIS.2 MIT; Pixal3D fine (Keith 2026-11-01) |
 | Splat → mesh | render the splat from ~64 views (colour + depth), then TSDF fusion; **MILo** (TOG 2025) only if TSDF is too soft | MILo and 2DGS/GOF train from images, not from a finished splat, so they'd re-fit from our renders anyway. MILo gives ~10x fewer vertices than 2DGS/GOF | MILo: check |
 
 My recommendation: **run both lanes on the same concept images and let Keith judge the meshes in the armoury lab.**

@@ -25,11 +25,19 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
    `--front/--up` (generators differ), commit the parts, Keith picks a lane in `labs/parts/`.
 5. Then: legs (cut at the joints), and hooking parts into the loadout (the "show equipped hulls" thread owns the swap).
 
+## Keith's calls (2026-11-01)
+
+- No lighting baked into colours: unlit concept prompt, lane B uses only the base colour, lane A is de-lit (`--delight`).
+- Low-res from the start beats dense-then-reduced: each level is meshed at its own budget. In the lane B workflow,
+  title the generator's or remesher's face target `PG_FACES` (and its resolution `PG_RES` if it has one) so the
+  runner sets it per level.
+- Pixal3D's licence is fine.
+
 ## Known rough edges
 
 - Lane A's mesh is as soft as the field: sharp hard-surface edges round off at resolution 160. Raise `--res` or
   prefer lane B if that shows.
-- Lighting baked into a generator's texture becomes paint. The concept prompt asks for flat light; may need de-lighting.
+- De-lighting only takes out one broad light plus ambient; hard cast shadows in a concept image would survive.
 - Shoulder and wreck parts aren't put on the Rampart yet, only on the stand.
 
 ## Test

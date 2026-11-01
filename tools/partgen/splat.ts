@@ -206,3 +206,14 @@ export function dropIslands(m: Mesh, frac: number): Mesh {
   for (let t = 0; t < m.index.length; t += 3) if ((tris.get(find(m.index[t])) ?? 0) >= big * frac) I.push(m.index[t], m.index[t + 1], m.index[t + 2]);
   return { ...m, index: new Uint32Array(I) };
 }
+
+/**
+ * Mesh a splat straight at about a triangle budget (Keith 2026-11-01: meshes made low-res from the start came out
+ * better than high-res ones reduced). Surface nets give triangles in proportion to the grid's resolution squared, so
+ * one coarse probe sets the resolution that lands near `tris` × `over`; prep's simplifier only trims the rest.
+ */
+export function splatToMeshAt(s: Splat, tris: number, o: SplatMeshValues = SPLAT_MESH_DEFAULTS, over = 1.3): Mesh & { resolution: number } {
+  const probe = 48, t0 = splatToMesh(s, { ...o, resolution: probe }).index.length / 3;
+  const resolution = Math.max(16, Math.min(320, Math.round(probe * Math.sqrt((tris * over) / Math.max(1, t0)))));
+  return { ...splatToMesh(s, { ...o, resolution }), resolution };
+}

@@ -10,8 +10,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { readGlb, writeGlb } from "./partgen/glb";
 import { loadKinds, type Kind } from "./partgen/kinds";
-import { glbToMesh, prepare } from "./partgen/prep";
-import { readPly, splatToMesh, writePly, SPLAT_MESH_DEFAULTS, type Mesh, type Splat } from "./partgen/splat";
+import { delight, glbToMesh, prepare } from "./partgen/prep";
+import { readPly, splatToMesh, splatToMeshAt, writePly, SPLAT_MESH_DEFAULTS, type Mesh, type Splat } from "./partgen/splat";
 
 let fails = 0;
 const ok = (cond: boolean, msg: string) => { console.log(`${cond ? "ok  " : "FAIL"} ${msg}`); if (!cond) fails++; };
@@ -91,6 +91,40 @@ ok(sa.hi[2] > 0.95, `lane A: barrel kept (front at z ${sa.hi[2].toFixed(2)})`);
 let reds = 0;
 for (let v = 0; v < mesh.col.length / 3; v++) if (mesh.col[v * 3] > 0.6 && mesh.col[v * 3 + 1] < 0.35) reds++;
 ok(reds > 20, `lane A: the red stripe survives (${reds} red vertices)`);
+
+// Low-res from the start (Keith 2026-11-01): each level meshed near its own budget, not reduced from a dense mesh.
+for (const lod of [0, 2] as const) {
+  const budget = kinds.hull.tris[lod], m = splatToMeshAt(splat, budget), t = m.index.length / 3;
+  ok(t >= budget * 0.8 && t <= budget * 2.5, `lane A at budget: lod${lod} meshed at resolution ${m.resolution} → ${t} tris for a budget of ${budget}`);
+}
+
+// De-lighting (Keith 2026-11-01: no lighting baked in): a sphere lit from one side, grey paint with a red band.
+{
+  const n = 4000, nrm = new Float32Array(n * 3), col = new Float32Array(n * 3), red: boolean[] = [];
+  const L = [0.5, 0.7, 0.5].map((v) => v / Math.hypot(0.5, 0.7, 0.5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), t = i * 2.399963;
+    const nn = [r * Math.cos(t), y, r * Math.sin(t)];
+    nrm.set(nn, i * 3);
+    red.push(Math.abs(y) < 0.12);
+    const albedo = red[i] ? [0.8, 0.15, 0.1] : [0.55, 0.55, 0.5];
+    const shade = 0.35 + 0.65 * (nn[0] * L[0] + nn[1] * L[1] + nn[2] * L[2]) * 0.5 + 0.325;
+    for (let c = 0; c < 3; c++) col[i * 3 + c] = albedo[c] * shade;
+  }
+  const spread = () => {
+    const g: number[] = [];
+    for (let i = 0; i < n; i++) if (!red[i]) g.push(col[i * 3 + 1]);
+    const mean = g.reduce((a, b) => a + b, 0) / g.length;
+    return Math.sqrt(g.reduce((a, b) => a + (b - mean) ** 2, 0) / g.length) / mean;
+  };
+  const before = spread();
+  delight(col, nrm, 1);
+  const after = spread();
+  ok(after < before * 0.2, `delight: shading on the grey paint ${(before * 100).toFixed(1)}% → ${(after * 100).toFixed(1)}% (spread over mean)`);
+  let stillRed = 0, reds = 0;
+  for (let i = 0; i < n; i++) if (red[i]) { reds++; if (col[i * 3] > 2.5 * col[i * 3 + 1]) stillRed++; }
+  ok(stillRed === reds, `delight: the red band stays red (${stillRed} of ${reds})`);
+}
 
 // 2. Prep
 const run = async (m: Mesh, k: Kind, lod: 0 | 1 | 2 = 0) => {

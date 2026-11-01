@@ -266,6 +266,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-01 · Generated parts: no baked lighting, low-res from the start (Keith, thread agent on `wip/partgen`)
+- De-lighting of lane A's colours (`delight()` in `tools/partgen/prep.ts`), an unlit concept prompt, and each level of detail meshed at its own budget (`splatToMeshAt`; lane B per level via a `PG_FACES` node). Pixal3D's licence is fine (Keith).
+- Checked: partgen-check: shading spread on a lit test sphere 28.2% → 1.5%, its red band kept; lane A at budget lands at 1.3-2.4× budget before the last trim; samples regenerated.
+
 ### 2026-10-31 · Generated parts pipeline, parts lab (Keith, thread agent on `wip/partgen`)
 - `tools/partgen/`: ComfyUI client (workflows patched by node title), lane A splat → mesh on the CPU, lane B GLB with texture → vertex colours, game prep (fit to the Rampart's sizes, meshoptimizer to budget, sockets), minimal GLB reader and writer. Game prep is TypeScript, not Blender (no Blender here; one less install on the PC).
 - `labs/parts/`: generated hull swapped onto the Rampart, parts on a stand beside it. Two samples in `public/models/gen/` from made-up splats.

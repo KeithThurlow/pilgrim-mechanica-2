@@ -4,6 +4,8 @@
 //   PG_PROMPT  a text node (CLIPTextEncode or any node with a `text` input): gets the prompt
 //   PG_IMAGE   a LoadImage node: gets the uploaded image
 //   PG_SEED    any node with a `seed` or `noise_seed` input: gets the seed
+//   PG_FACES   the generator's or decimator's face target (its numeric input with "face" in the name): gets the budget
+//   PG_RES     the generator's resolution (its numeric input with "resolution" in the name): gets the resolution
 // Untitled fallbacks: the first CLIPTextEncode not titled negative, every LoadImage, every seed input.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -56,7 +58,7 @@ export class Comfy {
 }
 
 /** Fill a workflow's prompt, image and seed (see the header). */
-export function patch(wf: Workflow, p: { prompt?: string; image?: string; seed?: number }): Workflow {
+export function patch(wf: Workflow, p: { prompt?: string; image?: string; seed?: number; faces?: number; res?: number }): Workflow {
   const w = JSON.parse(JSON.stringify(wf)) as Workflow;
   const nodes = Object.values(w), title = (n: Node) => n._meta?.title ?? "";
   if (p.prompt !== undefined) {
@@ -75,5 +77,14 @@ export function patch(wf: Workflow, p: { prompt?: string; image?: string; seed?:
     const t = nodes.filter((n) => title(n) === "PG_SEED");
     for (const n of t.length ? t : nodes) for (const k of ["seed", "noise_seed"]) if (typeof n.inputs[k] === "number") n.inputs[k] = p.seed;
   }
+  const numeric = (t: string, word: string, v: number | undefined) => {
+    if (v === undefined) return;
+    for (const n of nodes.filter((x) => title(x) === t)) for (const k of Object.keys(n.inputs)) if (k.toLowerCase().includes(word) && typeof n.inputs[k] === "number") n.inputs[k] = v;
+  };
+  numeric("PG_FACES", "face", p.faces);
+  numeric("PG_RES", "resolution", p.res);
   return w;
 }
+
+/** Does the workflow have a node with this title? */
+export const hasTitle = (wf: Workflow, t: string) => Object.values(wf).some((n) => n._meta?.title === t);
