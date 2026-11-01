@@ -76,6 +76,8 @@ export const SWORD_DEFAULTS = {
   swordCloseUpright: 68,
   swordCloseOut: 62,
   swordScrub: 0,
+  // Keith 2026-11-01: every swing about 30% slower, for weight.
+  swordPace: 1.3,
   swordFarArc: 1.1,
   swordCloseWithin: 7.5,
   swordFullFrom: 15,
@@ -146,6 +148,7 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordFarTime", label: "Full sweep: time ×", min: 0.5, max: 2, step: 0.01, group: GA, tip: "The full sweep's: × their time (slower, heavier)" },
   { key: "swordCloseUpright", label: "Close cut: blade upright (°)", min: 0, max: 85, step: 1, group: GA, tip: "Close (Keith 2026-11-01, round 10): the blade comes down in front and is carried across standing up this steep (above level, before the droop), like a block, while the elbow leads it" },
   { key: "swordCloseLean", label: "Close cut: blade lean (°)", min: 0, max: 60, step: 1, group: GA, tip: "While it's carried across, the upright blade leans this far back toward where the cut came from" },
+  { key: "swordPace", label: "Swing time ×", min: 0.5, max: 2.5, step: 0.01, group: GA, tip: "Every sword move (drive, cut, follow-through, return, settle) takes this × its time; above 1 slower and heavier" },
   { key: "swordScrub", label: "Scrub the swing (look)", min: 0, max: 2, step: 0.005, group: GA, tip: "Drag to hold the arm at a point of the swing and step through it: 0 off (the sword works as normal), 0 to 1 the first cut, 1 to 2 the back-cut, close or far by where you aim. No hits while scrubbing" },
   { key: "swordCloseOut", label: "Close cut: swings out to (°)", min: 0, max: 100, step: 1, group: GA, tip: "Only at the end, as the elbow and wrist straighten, the blade swings out level to this far past the aim on the far side" },
   { key: "swordFarArc", label: "Full sweep: arc ×", min: 0.8, max: 1.4, step: 0.01, group: GA, tip: "The full sweep swings round this × the arc" },
@@ -257,7 +260,7 @@ const NEAR_COCK: Near = { hand: v3(0.55, 1.2, 1.45), fwd: v3(0.25, 0.45, 0.86) }
  *  cut .. 1 the full sweep. */
 function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len: number; keys: Key[]; cut: [number, number] | null; arc: number } {
   const k = Math.max(0, Math.min(1, span)), mix = (a: number, b: number) => a + (b - a) * k;
-  const tk = mix(v.swordNearTime, v.swordFarTime), w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk;
+  const tk = mix(v.swordNearTime, v.swordFarTime) * v.swordPace, w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk;
   const arc = st.arc * v.swordFarArc;
   // A key between its close and full forms. A cut key's yaw (half-arcs in the full form) comes out in degrees.
   const at = (key: Key, n: Near, t: number): Key => ({
@@ -305,7 +308,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
     case "R": {
       // The elbow drops and the wrist and forearm swing the blade round past the waist (point down ahead, then back
       // along its own hip), and up to the shoulder.
-      const len = st.recover * 1.6;
+      const len = st.recover * 1.6 * v.swordPace;
       return {
         arc, len, cut: null, keys: [
           { ...under, t: 0 },
@@ -321,7 +324,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
       return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...BLOCK, t: 0.28 }, { ...BLOCK, hand: { ...BLOCK.hand, z: BLOCK.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
     }
     case "S": {
-      const len = st.recover;
+      const len = st.recover * v.swordPace;
       return { arc, len, cut: null, keys: [{ ...cock, t: 0 }, { ...g, t: 1 }] };
     }
   }

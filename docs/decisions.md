@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Sword swings 30% slower for weight; blocks get their own distinct sound | Keith | Keith | `swordPace` 1.3 on every move; the block plays a dark clang plus a whoosh as it comes up, and no hit crunch. |
 | 2026-11-01 | The close sword cut is led by the elbow: blade brought down upright in front like a block, carried across, swinging out only at the end as the arm straightens | Keith | Keith | Replaces round 9's draw cut. Values Claude's: upright 68°, lean 28°, out to 62°. A scrub slider shows the poses. |
 | 2026-11-01 | Swords auto-block: a free sword facing an incoming sword cut swings up and blocks, reduced damage (not none) | Keith | Keith | Values Claude's, Keith to tune: within 140° of the arm's aim, 35% damage and 30% knock through, block 0.55 s, the cutter stalls 0.14 s; only sword cuts are blocked; a click mid-block cuts at once. |
 | 2026-11-01 | The sword's lunge follows WASD as a smooth blend; the close cut is a draw cut (blade across the front, pulled along its length, flick at the end) | Keith | Keith | Values Claude's, Keith to tune: still 1, toward 1.15, across 0.5, straight away −0.3 (a small back hop, on c² so side clicks keep a step); draw 72° off the aim, flick 72°. |

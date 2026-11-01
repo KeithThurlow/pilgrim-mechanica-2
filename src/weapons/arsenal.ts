@@ -558,11 +558,11 @@ export class Arsenal implements MechWeapons {
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       bf.gunFx.sparksAt(at, kd, blocked ? 26 : 10, blocked ? 14 : 9);
       if (blocked) {
-        bf.sfx.playSound("swordBlock", at, 1.2, 0.9 + Math.random() * 0.2);
+        bf.sfx.playSound("swordBlock", at, 1.7, 0.92 + Math.random() * 0.16);
         s.sword.bite(v.swordBlockStall);
       }
       bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
-      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
+      if (!blocked) bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
       if (!s.bit) {
         s.bit = true;
         s.sword.bite(v.swordHitch);
@@ -607,7 +607,10 @@ export class Arsenal implements MechWeapons {
       const score = Math.abs(off) - (s.sword.blocking ? 10 : 0);
       if (Math.abs(off) <= half && score < best) { best = score; pick = s; }
     }
+    const fresh = !pick?.sword.blocking;
     if (!pick || !pick.sword.block(v)) return 1;
+    // The block swinging up (Keith 2026-11-01: "I need a sound for it"): a quick heavy whoosh as the blade comes up.
+    if (fresh) this.bf.sfx.playSound("swordSwing", this.tmp3.set(u.sim.pos.x, u.sim.pelvis.y + 1.5, u.sim.pos.z), 0.9, 1.25);
     return v.swordBlockTake;
   }
 

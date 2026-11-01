@@ -26,7 +26,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(1);
   let t = 0, cutT = 0, first: number | null = null, last = 0, pressed = true;
   const clips: SwordClip[] = [];
-  while (t < 2) {
+  while (t < 2 * V.swordPace) {
     const sweep = sw.update(dt, pressed, st, V);
     pressed = false; t += dt;
     if (clips[clips.length - 1] !== sw.clip) clips.push(sw.clip);
@@ -48,8 +48,8 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(-1);
   const order: SwordClip[] = [];
   let t = 0, seen = 0;
-  while (t < 2.5) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
-  must(order.length >= 4, `held for 2.5 s it cut only ${order.length} times`);
+  while (t < 2.5 * V.swordPace) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
+  must(order.length >= 4, `held for 2.5 s (× pace) it cut only ${order.length} times`);
   must(order.every((c, i) => c === (i % 2 === 0 ? "A" : "B")), `held cuts didn't alternate cut and back-cut: ${order.join(",")}`);
   const b = new SwordSim(1);
   let n = 0;
