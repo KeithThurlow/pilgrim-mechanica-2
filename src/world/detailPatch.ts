@@ -13,6 +13,7 @@ import type { DuneField } from "./terrain";
 import type { TerrainStreamer } from "./chunks";
 import { GroundWindow } from "./groundWindow";
 import type { DentLayer, DentValues } from "../fx/dents";
+import type { GroundHeatTex } from "../fx/groundHeatTex";
 
 export class DetailPatch {
   readonly group = new THREE.Group();
@@ -43,7 +44,7 @@ export class DetailPatch {
     origin: uniform(new THREE.Vector2()), step: uniform(1), cells: uniform(4), wrap: uniform(5), ready: uniform(0),
   };
 
-  constructor(readonly field: DuneField, readonly streamer: TerrainStreamer, readonly dents: DentLayer, public v: DentValues) {
+  constructor(readonly field: DuneField, readonly streamer: TerrainStreamer, readonly dents: DentLayer, public v: DentValues, readonly heat: GroundHeatTex | null = null) {
     this.group.name = "detail patch";
     this.win = this.makeWindow();
     this.build();
@@ -189,7 +190,10 @@ export class DetailPatch {
     const nW = vec3(nb.x.div(ny).sub(gx), 1, nb.z.div(ny).sub(gz)).normalize();
     mat.normalNode = cameraViewMatrix.mul(vec4(nW, 0)).xyz.normalize();
     const comp = texture(dTex, fp.div(dents.uSize)).z.mul(dentFade(fp)).mul(vW);
-    mat.colorNode = vCol.mul(this.streamer.shadeNode).mul(float(1).sub(comp.mul(this.uDark)));
+    const base = vCol.mul(this.streamer.shadeNode).mul(float(1).sub(comp.mul(this.uDark)));
+    // Red-hot sand (src/fx/groundHeat.ts): fused sand darker, hot sand glowing.
+    mat.colorNode = this.heat ? base.mul(this.heat.dark(fp)) : base;
+    if (this.heat) mat.emissiveNode = this.heat.glow(fp).mul(vW);
     return mat;
   }
 

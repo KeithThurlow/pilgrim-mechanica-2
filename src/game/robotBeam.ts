@@ -12,7 +12,8 @@ const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
 
 /** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
-export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0): number {
+export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0,
+  heat = (bf.v as { heatBeam?: number }).heatBeam ?? 0): number {
   const s = e.start, t = e.end;
   from.set(s.x, s.y, s.z);
   dir.set(t.x - s.x, t.y - s.y, t.z - s.z);
@@ -32,6 +33,9 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
+  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts; a sweeping beam would paint each tick
+  // with dt so the sand heats as the beam dwells).
+  burnBeam(bf, s.x, s.z, t.x, t.z, e.width, heat);
   // The trench: craters down the low part of the line, one per width or so (queued, so a long line doesn't stall).
   if (dig > 0) {
     const r = e.width * dig, step = Math.max(1, r * 1.2), m = Math.min(60, Math.floor(flat / step));
@@ -43,6 +47,17 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
   bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
   bf.sfx.play("brap", from.set(t.x, t.y, t.z), 1.4, 0.5, false);
   return shot.result.steps.length;
+}
+
+/**
+ * Red-hot sand along a beam's line on the ground, `heat` degrees (the hotter the weapon, the longer it glows), a hotter
+ * spot where it strikes. dt > 0: the beam held there for dt (a beam that sweeps calls this every tick).
+ */
+export function burnBeam(bf: Battlefield, x0: number, z0: number, x1: number, z1: number, width: number, heat: number, dt = 0) {
+  const h = bf.heat;
+  if (!h || heat <= 0) return;
+  h.line(x0, z0, x1, z1, width * 0.45, heat, dt);
+  h.spot(x1, z1, width * 0.8, heat * 1.1, dt);
 }
 
 /**

@@ -20,6 +20,8 @@ import { DustDraw } from "../fx/dustDraw";
 import { GroundMarks } from "../fx/groundMarks";
 import { DentLayer, DENT_DEFAULTS, type DentValues } from "../fx/dents";
 import { DetailPatch } from "../world/detailPatch";
+import { GroundHeatTex } from "../fx/groundHeatTex";
+import { HEAT_DEFAULTS, type GroundHeat, type HeatValues } from "../fx/groundHeat";
 import type { TerrainStreamer } from "../world/chunks";
 import { ChunkGround } from "../world/chunkGround";
 import type { Ground } from "../mech/walker";
@@ -137,6 +139,10 @@ export class Battlefield {
   /** The GPU dust (from useDents; fxGpuDust picks it over the CPU dust). */
   gpuDust: GpuDust | null = null;
   patch: DetailPatch | null = null;
+  /** Red-hot sand (cosmetic, src/fx/groundHeat.ts; from useDents, drawn by the patch): beams, rail strikes, ignited rounds. */
+  heatTex: GroundHeatTex | null = null;
+  /** The heat layer to paint (null headless). */
+  get heat(): GroundHeat | null { return this.heatTex?.heat ?? null; }
   /**
    * A cheap ground for looks (the streamed chunks' own triangles, src/world/chunkGround.ts): dust and small robots'
    * legs read it. The true field until useDents gives it the streamer.
@@ -207,6 +213,7 @@ export class Battlefield {
     for (const [k, val] of Object.entries(SHELL_FX_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.shellsDraw = new ShellsDraw(this.shells, field, v as unknown as ShellFxValues);
     for (const [k, val] of Object.entries(BLAST_WAVE_DEFAULTS)) if (!(k in sv)) sv[k] = val;
+    for (const [k, val] of Object.entries(HEAT_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.waves = new BlastWaves(v as unknown as BlastWaveValues);
     this.wavesDraw = new BlastWavesDraw(this.waves, field);
     this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group, this.wavesDraw.group);
@@ -288,6 +295,8 @@ export class Battlefield {
         lt.tracer(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, fam, !!L.hot);
         lt.stream(dr.from.x, dr.from.y, dr.from.z, dr.to.x, dr.to.y, dr.to.z, L.power ?? 10, fam, !!L.hot);
       }
+      // Ignited rounds leave a speck of red-hot sand where they land.
+      if (L.hot && dr.surface === "sand") this.heat?.spot(dr.to.x, dr.to.z, 0.3, (this.v as { heatIgnited?: number }).heatIgnited ?? 0);
       if (!dr.first) continue;
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);
@@ -311,7 +320,8 @@ export class Battlefield {
   useDents(renderer: THREE.WebGPURenderer, streamer: TerrainStreamer) {
     const v = this.v as BattlefieldValues & DentValues;
     this.dents = new DentLayer(renderer, this.field, v);
-    this.patch = new DetailPatch(this.field, streamer, this.dents, v);
+    this.heatTex = new GroundHeatTex(v as unknown as HeatValues);
+    this.patch = new DetailPatch(this.field, streamer, this.dents, v, this.heatTex);
     this.marks.dents = this.dents;
     this.group.add(this.patch.group);
     // Perf pass 1: what only draws reads the chunks' triangles instead of the full height function.
@@ -453,6 +463,8 @@ export class Battlefield {
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
     if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
+    // Explosions are barely warm (Keith 2026-11-01): at most a brief dull ember in the middle.
+    if (low) this.heat?.spot(p.x, p.z, Math.max(0.5, s.radius * 0.3), (this.v as { heatBlast?: number }).heatBlast ?? 0);
     this.sfx.play("brap", p, 1.8, 0.4, false);
     splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
   }
@@ -520,6 +532,7 @@ export class Battlefield {
       const f = look.sun.target.position;
       this.dents.update(dt, f.x, f.z);
       this.patch.update(f.x, f.z, true);
+      this.heatTex?.update(dt, f.x, f.z);
     }
     c?.mark("ground dents");
     this.shells.update(dt, (s) => this.burst(s), this.shellHit);
