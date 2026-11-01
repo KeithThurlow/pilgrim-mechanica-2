@@ -102,7 +102,7 @@ export const CRUSHER_PARAMS: Param[] = [
  * The crab's legs (× body width for the hips, × body height for the reach): splayed out to the sides, front and rear
  * pairs, the front left clear for the maw and pincers; long thighs rising to knees well over the carapace.
  */
-export const CRUSHER_SPEC: WalkSpec = { angles: [58, 122, 238, 302].map((d) => (d * Math.PI) / 180), hipR: 0.42, hipDrop: 0.05, footR: 2.0, L1: 1.15, L2: 1.25, toe: 0.04, bendUp: 1.25 };
+export const CRUSHER_SPEC: WalkSpec = { angles: [58, 122, 238, 302].map((d) => (d * Math.PI) / 180), hipR: 0.42, hipDrop: 0.05, footR: 1.7, L1: 0.95, L2: 1.05, toe: 0.04, bendUp: 1.0 };
 const LEGS = 4;
 
 /** Body frame (× body width): the maw's centre ahead of and below the body centre, its radius; the pincers' tips. */
