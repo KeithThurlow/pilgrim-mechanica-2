@@ -72,9 +72,10 @@ export const SWORD_DEFAULTS = {
   // the lunge's near and far distances it blends.
   swordNearTime: 0.7,
   swordFarTime: 1.15,
-  swordDrawAngle: 72,
-  swordDrawFlick: 72,
-  swordDrawLift: 8,
+  swordCloseLean: 28,
+  swordCloseUpright: 68,
+  swordCloseOut: 62,
+  swordScrub: 0,
   swordFarArc: 1.1,
   swordCloseWithin: 7.5,
   swordFullFrom: 15,
@@ -143,9 +144,10 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordFullFrom", label: "Full sweep from (m)", min: 3, max: 40, step: 0.5, group: GA, tip: "Aimed this far or farther: the full straight-arm sweep; in between the two blend" },
   { key: "swordNearTime", label: "Close cut: time ×", min: 0.3, max: 1.5, step: 0.01, group: GA, tip: "The close cut's drive, cut and follow-through take this × their time (quicker)" },
   { key: "swordFarTime", label: "Full sweep: time ×", min: 0.5, max: 2, step: 0.01, group: GA, tip: "The full sweep's: × their time (slower, heavier)" },
-  { key: "swordDrawAngle", label: "Close cut: blade across (°)", min: 20, max: 90, step: 1, group: GA, tip: "The draw cut (Keith 2026-11-01, round 9): the blade lies this far off the aim, across the front, and is pulled along its own length; 90 square across the hull" },
-  { key: "swordDrawFlick", label: "Close cut: flick at the end (°)", min: 0, max: 90, step: 1, group: GA, tip: "At the end of the draw the wrist and elbow turn the blade this far round, once it's free of the target" },
-  { key: "swordDrawLift", label: "Close cut: blade level (°)", min: -20, max: 30, step: 1, group: GA, tip: "Lifts the draw's blade against the droop (the droop tips it down)" },
+  { key: "swordCloseUpright", label: "Close cut: blade upright (°)", min: 0, max: 85, step: 1, group: GA, tip: "Close (Keith 2026-11-01, round 10): the blade comes down in front and is carried across standing up this steep (above level, before the droop), like a block, while the elbow leads it" },
+  { key: "swordCloseLean", label: "Close cut: blade lean (°)", min: 0, max: 60, step: 1, group: GA, tip: "While it's carried across, the upright blade leans this far back toward where the cut came from" },
+  { key: "swordScrub", label: "Scrub the swing (look)", min: 0, max: 2, step: 0.005, group: GA, tip: "Drag to hold the arm at a point of the swing and step through it: 0 off (the sword works as normal), 0 to 1 the first cut, 1 to 2 the back-cut, close or far by where you aim. No hits while scrubbing" },
+  { key: "swordCloseOut", label: "Close cut: swings out to (°)", min: 0, max: 100, step: 1, group: GA, tip: "Only at the end, as the elbow and wrist straighten, the blade swings out level to this far past the aim on the far side" },
   { key: "swordFarArc", label: "Full sweep: arc ×", min: 0.8, max: 1.4, step: 0.01, group: GA, tip: "The full sweep swings round this × the arc" },
   { key: "swordTwist", label: "Waist turns with the cut (°)", min: 0, max: 60, step: 1, group: GA, tip: "The torso coils back a little in the drive, turns this far after the blade through the cut and follow-through, and back on the back-cut; 0 off. Drawn only: the guns on the hull turn back by as much, so nothing aims elsewhere" },
   { key: "swordTwistHz", label: "Waist spring (Hz)", min: 0.5, max: 8, step: 0.1, group: GA, tip: "How fast the waist follows the swing: low lags and swings on (heavy), high snaps" },
@@ -228,26 +230,27 @@ const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.76, -0.5, -0.4
 const BLOCK: Key = { t: 0, hand: v3(-0.2, 0.55, 1.8), fwd: v3(-0.45, 0.85, 0.25), up: v3(0, 0.1, -1), pole: v3(0.8, -1, -0.1) };
 const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83), up: v3(-0.1, 0.9, -0.5) };
 
-// The close cut (Keith 2026-11-01, round 9: "you literally don't have enough length to swing that sword ... you'd end
-// up dragging that sword ... along its tangent"): a draw cut. The elbow stays bent, the hand in near the chest; the
-// blade lies across the front, swordDrawAngle off the aim (trailing back toward where the hand came from), its edge
-// toward the target, and the hand pulls it along its own length across the front. Only once it's through do the
-// wrist and elbow flick it swordDrawFlick round. The back-cut is the same draw the other way, flicked up at the end.
-// Each key's hand, blade and timing blend from these (span 0) to the full sweep's (span 1). A yaw here is in degrees
-// off the aim (+ outboard); `at` the key's share through the cut.
-type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number };
-const NEAR_DRIVE: Near = { hand: v3(0.5, 0.75, 1.35) };
+// The close cut (Keith 2026-11-01, round 10: "start with the elbow, bring it across, elbow extends and straightens, and
+// the sword stays kind of close to perpendicular in front of the hull ... at the end of that, then swings out"): the
+// blade comes down from the shoulder to stand up in front of the hull like a block (swordCloseUpright, leaning back
+// swordCloseLean), and the elbow leads it across, out ahead of the hand, the blade carried rather than swung. Only in
+// the last of the cut does the arm straighten and the wrist let the blade swing out level, swordCloseOut past the aim
+// on the far side. The back-cut is the same the other way, rising: the elbow leads back across, then it swings out and
+// up into the cock. Each key's hand, blade, elbow and timing blend from these (span 0) to the full sweep's (span 1). A
+// yaw here is in degrees off the aim (+ outboard); `at` the key's share through the cut; pole where the elbow points.
+type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V };
+const NEAR_DRIVE: Near = { hand: v3(0.45, 0.85, 1.05), pole: v3(1, 0.1, 0.4) };
 const nearA = (v: SwordValues): [Near, Near, Near] => [
-  { hand: v3(0.85, 0.25, 1.7), yaw: v.swordDrawAngle, pitch: v.swordDrawLift },
-  { hand: v3(-0.6, -0.1, 1.95), yaw: v.swordDrawAngle - v.swordDrawFlick * 0.08, pitch: v.swordDrawLift, at: 0.62 },
-  { hand: v3(-1.5, -0.35, 1.6), yaw: v.swordDrawAngle - v.swordDrawFlick, pitch: v.swordDrawLift - 4 },
+  { hand: v3(0.6, 0.45, 1.45), yaw: v.swordCloseLean, pitch: v.swordCloseUpright, pole: v3(-0.7, -0.5, 0.6) },
+  { hand: v3(-0.35, 0.1, 1.7), yaw: v.swordCloseLean * 0.55, pitch: v.swordCloseUpright - 6, at: 0.66, pole: v3(-1, -0.45, 0.35) },
+  { hand: v3(-1.5, -0.3, 1.65), yaw: -v.swordCloseOut, pitch: 4, pole: v3(0.2, -1, -0.2) },
 ];
 const nearB = (v: SwordValues): [Near, Near, Near] => [
-  { hand: v3(-1.45, -0.4, 1.65), yaw: -v.swordDrawAngle, pitch: v.swordDrawLift },
-  { hand: v3(0.0, 0.1, 2.0), yaw: -v.swordDrawAngle + v.swordDrawFlick * 0.08, pitch: v.swordDrawLift + 2, at: 0.62 },
-  { hand: v3(0.8, 0.6, 1.65), yaw: -v.swordDrawAngle + v.swordDrawFlick, pitch: v.swordDrawLift + 14 },
+  { hand: v3(-1.2, -0.2, 1.55), yaw: -v.swordCloseLean, pitch: v.swordCloseUpright, pole: v3(0.9, -0.5, 0.5) },
+  { hand: v3(0.15, 0.25, 1.75), yaw: -v.swordCloseLean * 0.55, pitch: v.swordCloseUpright - 4, at: 0.66, pole: v3(1, -0.45, 0.35) },
+  { hand: v3(0.85, 0.75, 1.6), yaw: v.swordCloseOut * 0.85, pitch: 22, pole: v3(0.6, -1, 0) },
 ];
-const NEAR_UNDER: Near = { hand: v3(-1.3, -0.65, 1.55), fwd: v3(-0.55, -0.45, 0.7) };
+const NEAR_UNDER: Near = { hand: v3(-1.4, -0.6, 1.5), fwd: v3(-0.85, -0.3, 0.42) };
 const NEAR_COCK: Near = { hand: v3(0.55, 1.2, 1.45), fwd: v3(0.25, 0.45, 0.86) };
 
 /** Clip keys at shares of its length, its cut window (shares) when it has one, and its arc (°). span: 0 the close
@@ -261,6 +264,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
     ...key, t, hand: lerpV(n.hand, key.hand, k), fwd: key.fwd && n.fwd ? norm(lerpV(n.fwd, key.fwd, k)) : key.fwd,
     yaw: key.yaw === undefined ? undefined : mix(n.yaw ?? key.yaw * (arc / 2), key.yaw * (arc / 2)),
     pitch: key.pitch === undefined ? undefined : mix(n.pitch ?? key.pitch, key.pitch),
+    pole: n.pole ? norm(lerpV(n.pole, key.pole ?? CUT_POLE, k)) : key.pole,
   });
   // A cut key's share through the cut, close to full.
   const thru = (n: Near, full: number) => mix(n.at ?? full, full);
