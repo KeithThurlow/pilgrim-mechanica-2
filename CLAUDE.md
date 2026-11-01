@@ -126,6 +126,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Humanoid robots lab: `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; off elsewhere for now (Keith 2026-11-01): `?set=robotDroids:3` brings them into robots-lab packs, `?set=droidsOn:1` into the convoy lab's camps, packs and raids.
 - Strider lab: `?count=N` (striders up at once), `?dist=m` (where they stand up), `?slam` (one 14 m off, slamming at once), `?beam`
   (one at 45 m, its beam charging at once), plus the combat-lab flags. Striders are mech-sized (8.5 m) with long arms.
+- Crusher lab (the heavy crab quad): `?count=N` (up at once), `?dist=m` (where they stand up), `?suck` (one 14 m ahead, spinning up at once), `?claw` (one beside you, pincer ready), `?eat` (it never hunts you: watch it eat the salvage heaps), `?heaps=N`, plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
   convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
@@ -215,6 +216,7 @@ src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs) + partyBus (the bus's drops), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
                         robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx,
+                        crusher (the heavy crab quad: a sucking turbine maw, pincers, eats salvage) + crusherBody, crusherTarget, crusherFx,
                         rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),

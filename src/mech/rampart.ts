@@ -404,6 +404,7 @@ export class RampartBody {
     for (const p of this.pods) {
       const shoulder = (p.side === 1 ? r.UpperArm_L : r.UpperArm_R).clone().sub(waist);
       p.home.copy(shoulder);
+      p.yawPitch.position.copy(shoulder); // a body nobody has fitted (showParts) still hangs its guns at the shoulders
       p.arm.position.copy(shoulder);
       const sm = this.shoulderMounts.find((m) => m.side === p.side)!.g;
       sm.position.copy(shoulder).add(new THREE.Vector3(Math.sign(shoulder.x || p.side) * 0.1, 0.75, -0.35));

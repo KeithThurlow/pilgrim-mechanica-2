@@ -14,7 +14,7 @@
 import "./inventory.css";
 import { STATS } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
-import { RARITY, tierOf } from "../items/rarity";
+import { RARITY } from "../items/rarity";
 import { levelOf } from "../items/level";
 import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
 import { itemWeight, type Item } from "../items/item";
@@ -25,13 +25,16 @@ import {
 import { fitWithHeld } from "../items/fitting";
 import { bagWeight, moveItem, takeFrom } from "../items/cargo";
 import { itemName, type BayState } from "../items/bayState";
+import { itemValue, VALUE_DEFAULTS, type ValueValues } from "../items/value";
+import { sortItems as sortBy, SORT_KEYS, SORT_NAMES, type SortKey } from "../items/sort";
+import { itemCadence } from "../items/dps";
 import type { LootValues } from "../items/generate";
 import type { Expedition } from "../expedition/expedition";
 import { dollSvg, paintPart, DOLL_PARTS, type DollPart } from "./mechDoll";
 
 export interface InventoryOptions {
   state: BayState;
-  tuning: LootValues & LoadoutValues & { cargoWarn?: number };
+  tuning: LootValues & LoadoutValues & Partial<ValueValues> & { cargoWarn?: number };
   /** The expedition, where there is one: out in the field its at-risk list is the cargo. */
   exp?: Expedition | null;
   /** After anything changes (refit the mech, save). */
@@ -76,7 +79,7 @@ function btn(label: string, onClick: () => void, cls = "") {
   return b;
 }
 const fmt = (x: number, d: number) => x.toFixed(d);
-const sortItems = (a: Item, b: Item) => tierOf(b.rarity) - tierOf(a.rarity) || a.kind.localeCompare(b.kind) || itemName(a).localeCompare(itemName(b));
+const SORT_STORE = "pm2:inventory:sort";
 const sum = (xs: readonly Item[]) => xs.reduce((w, i) => w + itemWeight(i), 0);
 
 export function inventoryScreen(o: InventoryOptions) {
@@ -90,6 +93,19 @@ export function inventoryScreen(o: InventoryOptions) {
   let slot: SlotId | null = null;
   let message = "", messageT = 0;
   let sig = "";
+  // Sorting (Keith 2026-11-01): one order for every list, kept between visits.
+  let sortKey: SortKey = "rarity", sortUp = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SORT_STORE) || "null");
+    if (saved && (SORT_KEYS as readonly string[]).includes(saved.key)) { sortKey = saved.key; sortUp = !!saved.up; }
+  } catch { /* storage blocked */ }
+  const vv = (): ValueValues => ({ ...VALUE_DEFAULTS, ...Object.fromEntries(Object.keys(VALUE_DEFAULTS).flatMap((k) => (o.tuning as Record<string, unknown>)[k] === undefined ? [] : [[k, (o.tuning as Record<string, number>)[k]]])) });
+  const sorted = (xs: readonly Item[]) => sortBy(xs, sortKey, sortUp, vv());
+  function setSort(k: SortKey) {
+    if (k === sortKey) sortUp = !sortUp; else { sortKey = k; sortUp = false; }
+    try { localStorage.setItem(SORT_STORE, JSON.stringify({ key: sortKey, up: sortUp })); } catch { /* storage blocked */ }
+    render();
+  }
 
   const field = () => !!o.exp && o.exp.state === "out";
   /** Items on offer to fit: the at-risk items in the field, the stash and the bay's cargo aboard. */
@@ -159,7 +175,11 @@ export function inventoryScreen(o: InventoryOptions) {
     let h = `<div class="inv-tipname" style="color:${col}">${itemName(it)}</div>`
       + `<div class="inv-tipsub" style="color:${col}">${RARITY[it.rarity].name.toUpperCase()} · LEVEL ${levelOf(it)}</div>`
       + `<div class="dim">${size} · ${it.maker} · ${fmt(itemWeight(it), 1)} t</div>`
-      + `<div>Power ${itemPower(it)}${dps ? ` · ${dps}` : ""}</div>`;
+      + `<div>Power ${itemPower(it)}${dps ? ` · ${dps}` : ""} · ◆ ${itemValue(it, vv())} scrap</div>`;
+    // DPS is sustained: the magazine and its reload counted (src/items/dps.ts). The burst is while the magazine lasts.
+    const cad = itemCadence(it);
+    if (cad && cad.magazine > 0) h += `<div class="dim">Sustained, reload counted · burst ${Math.round(cad.damage * cad.rounds * cad.rate)} dps · magazine ${cad.magazine}, reload ${fmt(cad.reload, 1)} s</div>`;
+    else if (cad) h += `<div class="dim">Sustained over its cooldown</div>`;
     if (it.kind === "protocol") h += `<div class="dim">${PROTOCOL_BY_ID[it.base]?.text ?? ""}</div>`;
     const eff = effectiveStats(it);
     for (const k in it.stats) {
@@ -238,10 +258,10 @@ export function inventoryScreen(o: InventoryOptions) {
     head.append(el("b", "", SLOT_NAMES[slot]), el("span", "dim", it ? itemName(it) : "empty"));
     if (it && slot !== "legs" && slot !== "hull") head.append(btn(field() ? "Take off (to cargo)" : "Take off (to stash)", () => takeOff(slot!), "small"));
     col.append(head);
-    const fits = pool().filter((x) => x.kind !== "protocol" && !fitProblem(st.loadout, slot!, x)).sort(sortItems);
+    const fits = pool().filter((x) => x.kind !== "protocol" && !fitProblem(st.loadout, slot!, x)); 
     if (!fits.length) col.append(el("p", "inv-note", field() ? "Nothing in the cargo fits here." : "Nothing in the stash or cargo fits here."));
     const list = el("div", "inv-list");
-    for (const x of fits) list.append(itemRow(x, "fit"));
+    for (const x of sorted(fits)) list.append(itemRow(x, "fit"));
     col.append(list);
     return col;
   }
@@ -251,7 +271,13 @@ export function inventoryScreen(o: InventoryOptions) {
     row.style.borderLeftColor = RARITY[x.rarity].color;
     const name = el("span", "inv-name", itemName(x));
     name.style.color = RARITY[x.rarity].color;
-    row.append(name, el("span", "dim", `Lv ${levelOf(x)} · ${fmt(itemWeight(x), 1)} t`));
+    const d = itemDps(x), val = itemValue(x, vv()), w = itemWeight(x);
+    // Each figure, tagged with the sort it answers; the one the list is sorted by stands out.
+    const meta: [SortKey | null, string][] = [["level", `Lv ${levelOf(x)}`], ["power", `P ${itemPower(x)}`], ["dps", d !== null ? `${Math.round(d)} dps` : ""],
+      ["value", `◆ ${val}`], ["valuePerTonne", sortKey === "valuePerTonne" ? `${Math.round(val / Math.max(0.05, w))} ◆/t` : ""], ["weight", `${fmt(w, 1)} t`]];
+    const metaEl = el("span", "dim");
+    meta.filter(([, t]) => t).forEach(([k, t], i) => metaEl.append(i ? " · " : "", k === sortKey ? el("b", "inv-hot", t) : t));
+    row.append(name, metaEl);
     row.addEventListener("click", () => equip(x));
     if (mode === "cargo") row.append(btn("Drop", () => { hideTip(); if (o.exp!.dropItem(x.id)) render(); }, "small"));
     if (mode === "stash") row.append(btn("→ cargo", () => { if (moveItem(st.stash, st.cargo, x.id)) changed(); else say(`No room in the cargo for ${itemName(x)}.`); }, "small"));
@@ -286,7 +312,7 @@ export function inventoryScreen(o: InventoryOptions) {
         row.append(btn(`Dump ${n}`, () => { e.dumpScrap(n); render(); }, "small"), btn("Dump all", () => { e.dumpScrap(scrap); render(); }, "small"));
         col.append(row);
       }
-      const items = pool().sort(sortItems);
+      const items = sorted(pool());
       if (!items.length && scrap <= 0) col.append(el("p", "inv-note", "Empty."));
       const list = el("div", "inv-list");
       for (const x of items) list.append(itemRow(x, "cargo"));
@@ -298,12 +324,12 @@ export function inventoryScreen(o: InventoryOptions) {
       col.append(...weightBar(bagWeight(st.cargo), cap));
       const list = el("div", "inv-list");
       if (!st.cargo.items.length) list.append(el("p", "inv-note", "Empty. Spare parts sent here ride out at the next launch (at risk)."));
-      for (const x of [...st.cargo.items].sort(sortItems)) list.append(itemRow(x, "bayCargo"));
+      for (const x of sorted(st.cargo.items)) list.append(itemRow(x, "bayCargo"));
       col.append(list);
       col.append(el("h3", "", `Stash · ${st.stash.items.length}`));
       const sl = el("div", "inv-list");
       if (!st.stash.items.length) sl.append(el("p", "inv-note", "Empty."));
-      for (const x of [...st.stash.items].sort(sortItems)) sl.append(itemRow(x, "stash"));
+      for (const x of sorted(st.stash.items)) sl.append(itemRow(x, "stash"));
       col.append(sl);
     }
     return col;
@@ -320,7 +346,10 @@ export function inventoryScreen(o: InventoryOptions) {
     if (o.openBay) btns.append(btn("Bay (B): sockets, loot", () => { close(); o.openBay!(); }, "small"));
     btns.append(btn("Close (I)", () => close(), "small"));
     head.append(btns);
-    const kids: HTMLElement[] = [head];
+    const bar = el("div", "inv-sort");
+    bar.append(el("span", "dim", "Sort:"));
+    for (const k of SORT_KEYS) bar.append(btn(SORT_NAMES[k] + (k === sortKey ? (sortUp ? " ▲" : " ▼") : ""), () => setSort(k), "small chip" + (k === sortKey ? " on" : "")));
+    const kids: HTMLElement[] = [head, bar];
     if (message && messageT > 0) kids.push(el("div", "inv-msg", message));
     const body = el("div", "inv-body");
     const left = el("div", "inv-left");
