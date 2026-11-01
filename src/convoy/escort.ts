@@ -12,8 +12,8 @@
 // It keeps clear of the platforms and the plough at the front (a margin round each footprint), of the other escorts, and of the mech (it aims for
 // a line grazing a clearance round it, and from inside turns out to the side its nose points, as the war band does),
 // and drives round dune faces too steep to climb.
-// TODO(defend): `mode` is the hook for the combat role: "defend" will break station toward threats near the convoy.
-// Nothing reads it yet and nobody shoots.
+// Their guns (Keith 2026-11-01) are src/convoy/guard.ts: they shoot from station; `mode` is still the hook for breaking
+// station toward threats (not built).
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { CarSim, carValues, type CarKind, type CarValues } from "../vehicles/car";
@@ -76,8 +76,8 @@ const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 const wrap = (a: number) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
 /** How far ahead along the route an escort aims (m), plus a second per m/s. */
 const LOOK = 10;
-/** Kinds in turn: mostly light cars and gun trucks, a few six-wheelers, a war rig and a tank. */
-const KINDS: CarKind[] = ["technical", "gunTruck", "sixWheeler", "technical", "gunTruck", "warRig", "technical", "tank", "sixWheeler", "gunTruck", "technical", "gunTruck", "warRig", "technical", "sixWheeler", "tank"];
+/** Kinds in turn: light cars and gun trucks, six-wheelers, a war rig and three tanks in the first twelve (Keith 2026-11-01: tanks defending the convoy). */
+const KINDS: CarKind[] = ["technical", "gunTruck", "tank", "technical", "gunTruck", "warRig", "technical", "tank", "sixWheeler", "gunTruck", "tank", "gunTruck", "warRig", "technical", "sixWheeler", "tank"];
 
 export class Escort {
   readonly sim: CarSim;
@@ -198,12 +198,24 @@ export class EscortGroup {
     e.s = r.s + e.along;
   }
 
+  /** Other mechs on the sand to keep clear of as of the player's (the convoy's guardians, src/convoy/guardians.ts). */
+  mechs: { x: number; z: number }[] = [];
+
   /** One fixed step. mech: the player's mech position (or null when it's aboard or held). */
   update(dt: number, mech: { x: number; z: number } | null) {
     this.t += dt;
     this.sync();
     this.stations();
-    for (const e of this.list) this.drive(e, dt, mech);
+    for (const e of this.list) this.drive(e, dt, this.nearestMech(e, mech));
+  }
+
+  /** The nearest mech to keep clear of: the player's or a guardian. */
+  private nearestMech(e: Escort, mech: { x: number; z: number } | null) {
+    if (!this.mechs.length) return mech;
+    const x = e.sim.pos.x, z = e.sim.pos.z;
+    let best = mech, bd = mech ? Math.hypot(mech.x - x, mech.z - z) : Infinity;
+    for (const m of this.mechs) { const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; best = m; } }
+    return best;
   }
 
   /** Where the escort is along the route and how far out from it: search near its last projection. */

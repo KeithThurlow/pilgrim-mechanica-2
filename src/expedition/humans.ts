@@ -13,6 +13,7 @@
 //   back, the bus's bandits still alive climb back on (taken off the field).
 // Both publish FightGroups so the fight director (src/game/factions.ts) can point them at other factions' groups.
 // Ownership: host state (camps, columns, damage); drawing and sounds are cosmetic.
+import type { KeepOut } from "../game/keepOut";
 import * as THREE from "three/webgpu";
 import type { DuneField } from "../world/terrain";
 import { InfantrySwarm, DEAD, DOWN, type InfantryValues } from "../combat/infantry";
@@ -230,12 +231,12 @@ export class BanditCamps {
   }
 
   /** Alert bandits within r of (x, z), as points (the convoy's turrets). */
-  threats(x: number, z: number, r: number, out: THREE.Vector3[]) {
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
     const sw = this.sw;
     for (const l of this.live.values()) {
       if (l.state !== "alert") continue;
       for (const i of this.own(l)) {
-        if (sw.state[i] >= DOWN || out.length >= 24) continue;
+        if (sw.state[i] >= DOWN || out.length >= max) continue;
         if (Math.hypot(sw.px[i] - x, sw.pz[i] - z) <= r) out.push(new THREE.Vector3(sw.px[i], sw.py[i] + 1.2, sw.pz[i]));
       }
     }
@@ -298,6 +299,8 @@ export class WarBands {
   private abstracts = new Map<string, AbstractGroup>();
   /** Where party buses drop their bandits (the camps' swarm, src/expedition/loop.ts sets it). */
   riders: InfantrySwarm | null = null;
+  /** A place every band steers out of (the convoy's safe zone), handed to each band. */
+  keepOut: KeepOut | null = null;
 
   constructor(readonly v: WarbandValues & ColumnValues & FactionValues, private bf: Battlefield, scene: THREE.Scene, readonly columns: WarColumns) {
     scene.add(this.group);
@@ -340,6 +343,7 @@ export class WarBands {
   update(dt: number, target: WarTarget, hunting: boolean, at: { x: number; z: number }) {
     const v = this.v;
     for (const [id, l] of this.live) {
+      l.wb.keepOut = this.keepOut;
       l.wb.update(dt, target);
       const alive = l.wb.raiders.filter((r) => r.alive);
       const c = l.col;
@@ -380,9 +384,9 @@ export class WarBands {
     return out;
   }
 
-  threats(x: number, z: number, r: number, out: THREE.Vector3[]) {
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
     for (const l of this.live.values()) for (const q of l.wb.raiders) {
-      if (!q.alive || out.length >= 24) continue;
+      if (!q.alive || out.length >= max) continue;
       if (Math.hypot(q.sim.pos.x - x, q.sim.pos.z - z) <= r) out.push(new THREE.Vector3(q.sim.pos.x, q.sim.pos.y + 1, q.sim.pos.z));
     }
     return out;
