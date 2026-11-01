@@ -185,7 +185,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Part generation pipeline (Keith 2026-10-31, thread agent on `wip/partgen`): models installed on Keith's PC and the first bake-off done (hull, hull weapon, shoulder, both lanes). Keith to compare the lanes in `labs/parts/` and pick one (handoff `docs/handoff-partgen.md`).
+- Part generation pipeline: paused by Keith 2026-11-01 (parts still blobs); unmerged on `wip/partgen`, handoff `docs/handoff-partgen.md`.
 - Walk off the convoy: no rails on the mech bays' long sides (Keith 2026-10-31): merged 2026-10-31; Keith to try convoy lab `?manual&aboard` (walk, Shift or Space off a side), `?aboard&walkoff=dash`.
 - Rival aim: tight tracking, then an aim snapshot before rail and autocannon shots (Keith 2026-10-31): merged 2026-10-31; Keith to try `labs/duel/?rival=3&rivalfit=mountR:rail-medium&rivallevel=recruit|veteran|ace`, `?set=aiSnapshot:0.3`.
 - Dash exit: shorter dash, hard stop unless it carries on into the sprint (Keith 2026-10-31): merged 2026-10-31 (dash 7.5 m, back under the stick 0.08 s after the burst; a sprint needs Space held past 0.325 s); Keith to try walker lab `?manual&flat`, duel lab `?manual`, bandits lab `?manual`.
@@ -265,6 +265,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-01 · Part generation paused (Keith)
+- Parts still came out as blobs; work stops unmerged on `wip/partgen`, logged in `docs/decisions.md`.
 
 ### 2026-11-01 · Generated parts: lane B keeps its baked maps (Keith: "puddles of mesh", thread agent on `wip/partgen`)
 - Fault: prep turned lane B's texture into vertex colours on ≤6,500 vertices, and lane B stopped at Pixal3D's 512 stage with a 128 remesh. Keith's own good results are 1,000-triangle meshes with 2048² base colour and normal maps. Now: `prepareTextured` (`tools/partgen/prep.ts`) keeps UVs, normals, base colour and normal map; the GLB writer writes them; the toon look (`src/look/toon.ts`) and setfit keep them. Lane B is Keith's TRELLIS.2 workflow (upsample 1024, remesh 768) decimated to each level's budget with maps baked from the dense surface (`tools/partgen/workflows/build-lane-b.py`); over-budget decimations retried lower (last try plain decimation); `--lane-b x.json` runs another workflow; the baked albedo (about half the concept's brightness) is scaled to the concept's (`matchAlbedo`, `--albedo`). Parts remade: hull-b-1, hullweapon-b-1, shoulder-b-1 (TRELLIS.2) and hullweapon-b-pixal (Pixal3D).

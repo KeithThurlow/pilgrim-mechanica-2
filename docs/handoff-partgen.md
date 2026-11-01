@@ -1,5 +1,7 @@
 # Handoff: generated parts pipeline
 
+**Paused 2026-11-01 (Keith): the parts are still blobs. Unmerged; pick up from here when Keith returns to it.**
+
 Keith 2026-10-31: stand up part and asset generation with a local splat model plus splat-to-mesh. Proposal:
 `docs/proposal-partgen.md`. Branch `wip/partgen` (thread agent).
 
