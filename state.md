@@ -294,6 +294,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **Scrap value** (`src/items/value.ts`, sliders in "Item value"): 10 × 2.5^tier × (1 + 0.08 per level over 1) × (1 + 0.1 per tonne), plus socketed Protocols; shown on rows and cards. Nothing pays it out yet.
 - **DPS** was already sustained (magazine and reload counted, `src/items/dps.ts`); the card now says so and shows the burst too (minigun 115 sustained, 144 burst).
 - Checked: `cargo-check` (every sort both ways keeps all items in order, value grows with rarity and level, DPS below burst), typecheck, full `npm test`, one headless DOM shot.
+
+- 2026-11-01 **Hull miniguns hung under the hull in labs that never fit a loadout** (robots, strider, droids, fortress...): the gun pivots were only moved to the shoulders by `showParts`, so an unfitted body left them at the hull origin. `fitHull` now seats them at the shoulders (`src/mech/rampart.ts`). Checked: `npm test`. Claude (Keith's report).
 ### 2026-11-01 · Humanoid robots off for now (Keith: out of place beside the quads; Claude on `claude/project-thread-hid8gw`)
 - `droidsOn` (new, 0) in `src/expedition/droidCamps.ts` (Humanoid robots: in the field) stops squads coming with camps, packs and raids and clears any out; the robots lab's `robotDroids` 0. The droids lab is unchanged. `?set=droidsOn:1` / `?set=robotDroids:3` bring them back.
 - Checked: typecheck, `droidcamps-check` (now also: off clears them and no camp brings any), `npm test`.
