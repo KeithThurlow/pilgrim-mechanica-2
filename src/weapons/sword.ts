@@ -290,6 +290,12 @@ const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83),
 // yaw here is in degrees off the aim (+ outboard); `at` the key's share through the cut; pole where the elbow points.
 type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V };
 const NEAR_DRIVE: Near = { hand: v3(0.45, 0.85, 1.05), pole: v3(1, 0.1, 0.4) };
+// How each sword enters its cut (Keith 2026-11-01): the buster heaves up high over its shoulder, the blade straight up
+// and back, before it comes down; the short sword snaps out from low at the side, the blade flicked out level.
+const DRIVE_BY: (Key | null)[] = [null, null,
+  { t: 0, hand: v3(0.4, 1.45, 0.95), fwd: v3(0.35, 0.85, -0.4), up: v3(0.2, -0.4, 1), pole: v3(0.9, -0.3, 0.3) },
+  { t: 0, hand: v3(0.85, -0.1, 1.75), fwd: v3(0.95, 0.05, 0.3), up: v3(0, 1, 0.1), pole: v3(0.5, -1, -0.2) }];
+const NEAR_DRIVE_BY: (Near | null)[] = [null, null, { hand: v3(0.4, 1.25, 0.8), pole: v3(1, 0.1, 0.3) }, { hand: v3(0.7, -0.15, 1.5), pole: v3(0.6, -1, 0) }];
 const nearA = (v: SwordValues): [Near, Near, Near] => [
   { hand: v3(0.6, 0.45, 1.45), yaw: v.swordCloseLean, pitch: v.swordCloseUpright, pole: v3(-0.7, -0.5, 0.6) },
   { hand: v3(-0.35, 0.1, 1.7), yaw: v.swordCloseLean * 0.55, pitch: v.swordCloseUpright - 6, at: 0.66, pole: v3(-1, -0.45, 0.35) },
@@ -307,7 +313,7 @@ const NEAR_COCK: Near = { hand: v3(0.55, 1.2, 1.45), fwd: v3(0.25, 0.45, 0.86) }
  *  cut .. 1 the full sweep. */
 function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len: number; keys: Key[]; cut: [number, number] | null; arc: number } {
   const k = Math.max(0, Math.min(1, span)), mix = (a: number, b: number) => a + (b - a) * k;
-  const tk = mix(v.swordNearTime, v.swordFarTime) * v.swordPace, w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk;
+  const tk = mix(v.swordNearTime, v.swordFarTime) * v.swordPace, w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk * Math.max(0.4, Math.min(2.5, st.windup / Math.max(0.01, v.swordWindup)));
   const arc = st.arc * v.swordFarArc;
   // A key between its close and full forms. A cut key's yaw (half-arcs in the full form) comes out in degrees.
   const at = (key: Key, n: Near, t: number): Key => ({
@@ -320,6 +326,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
   const thru = (n: Near, full: number) => mix(n.at ?? full, full);
   const NA = nearA(v), NB = nearB(v);
   const under = at(UNDER, NEAR_UNDER, 0), cock = at(COCK, NEAR_COCK, 0);
+  const si = Math.max(0, Math.min(3, Math.round(st.stance ?? 0)));
   const G0 = guardOf(st.stance), g = { ...G0, hand: { ...G0.hand, y: G0.hand.y + v.swordGuardUp } };
   switch (c) {
     case "guard": return { arc, len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
@@ -328,7 +335,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
       return {
         arc, len, cut: [w / len, (w + s) / len], keys: [
           { ...g, t: 0 },
-          at(DRIVE, NEAR_DRIVE, (w * 0.7) / len),
+          at(DRIVE_BY[si] ?? DRIVE, NEAR_DRIVE_BY[si] ?? NEAR_DRIVE, (w * 0.7) / len),
           // The cut: the arm near straight (the blade at its fullest reach), the hand dipping low across the front and
           // on under the body to the far side, the blade from out along its own side to across the far one, its edge
           // leading (the spine faces back the way it came). Close: all of it in near the chest.

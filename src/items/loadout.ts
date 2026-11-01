@@ -334,7 +334,9 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     if (cls === "minigun") return { fireRate: w.fireRate, spinUp: w.spinUp, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, proto };
     // The new guns (src/weapons): a rail cannon's "rate" is one shot per charge and cooldown (for damage/s readouts);
     // an unrolled base item runs on the weapon sliders (own: null).
-    const own = item.seed ? w : null, light = item.size === "L";
+    // Other swords than the Breaker always run on their own stats (Keith 2026-11-01: "they all just have the same
+    // animation"), so a quick pick of a buster or a short sword is that sword, not the Breaker's sliders.
+    const own = item.seed || (cls === "melee" && item.base !== "sword-light") ? w : null, light = item.size === "L";
     if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, ap: w.ap, cls, own, light, proto };
     // The rail charges on energy-tagged coils but spends nothing yet (the energy hook, later): no magazine.
     // The sword (src/weapons/sword.ts): no magazine; its "rate" is one swing per wind-up, slash and recovery, its range

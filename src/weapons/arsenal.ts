@@ -275,7 +275,7 @@ export class Arsenal implements MechWeapons {
   swordStats(s: Side): SwordStats {
     const v = this.v, o = s.own;
     return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave, parry: o.parry ?? 1, heft: o.heft ?? 1, stance: o.stance ?? 0 }
-      : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave };
+      : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave, parry: 1, heft: 1, stance: 1 };
   }
   swarmStats(o: Record<string, number> | null): SwarmStats {
     const v = this.v;
