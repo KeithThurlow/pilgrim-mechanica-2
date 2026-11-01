@@ -32,7 +32,7 @@ const WAVE_DEFAULTS = {
   robotSpawnFrom: 100,
   robotTracerShare: 0.5,
   robotStompReach: 2.6,
-  robotDroids: 3,
+  robotDroids: 0,
 };
 const WAVE_PARAMS: Param[] = [
   { key: "robotSwarmSize", label: "Robots on the field", min: 0, max: 1000, step: 10, group: "Robot waves", tip: "Packs keep coming until this many are up" },
@@ -40,7 +40,7 @@ const WAVE_PARAMS: Param[] = [
   { key: "robotGroupEvery", label: "A pack every (s)", min: 0.2, max: 30, step: 0.1, group: "Robot waves" },
   { key: "robotSpawnFrom", label: "They come from (m)", min: 30, max: 250, step: 5, group: "Robot waves" },
   { key: "robotTracerShare", label: "Share of rounds drawn", min: 0, max: 1, step: 0.01, group: "Robot waves", tip: "Only this share of the small ones' rounds draw a tracer and sound; the rest still hit. Medium ones' slugs always show (big ones lob charges)" },
-  { key: "robotDroids", label: "Humanoid robots per pack", min: 0, max: 20, step: 1, group: "Robot waves", tip: "Keith 2026-11-01: the middle tier on the human rig walks in with each pack (Humanoid robots topic; their own lab: labs/droids)" },
+  { key: "robotDroids", label: "Humanoid robots per pack", min: 0, max: 20, step: 1, group: "Robot waves", tip: "Off by default (Keith 2026-11-01: out of place beside the quads). The middle tier on the human rig walks in with each pack (Humanoid robots topic; their own lab: labs/droids)" },
   { key: "robotStompReach", label: "Stomp reach (m)", min: 0, max: 6, step: 0.1, group: "Robot waves", tip: "A footfall knocks off clingers and crushes small ones this close" },
 ];
 
