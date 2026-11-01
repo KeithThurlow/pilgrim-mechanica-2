@@ -7,6 +7,10 @@
 import { Vector3 } from "three";
 import { Striders, STRIDER_DEFAULTS, STRIDER_FRAME, striderWalker, type StriderEvent } from "../src/combat/strider";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import { StriderTarget } from "../src/combat/striderTarget";
+import { makeSheet, sheetHits } from "../src/game/sheetFire";
+import { PEN_DEFAULTS } from "../src/game/sheet";
+import { MECH_DEFAULTS } from "../src/game/mechUnit";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
 let failed = false;
@@ -119,6 +123,29 @@ function grab(dodge: boolean) {
   console.log(`  grab: ${g.winds} wind-ups, ${g.strikes} strikes, ${g.tears} tear ticks, ${Math.round(g.damage)} damage in 6 s · dodged: ${d.strikes} strikes`);
   if (g.strikes < 1 || g.tears < 1) fail("no grab landed on a prey standing in reach");
   if (d.winds < 1 || d.strikes > 0) fail("a grab struck a prey that stepped out of reach during the wind-up");
+}
+// Minigun lines (Keith 2026-11-01: "I just can't seem to hit it very well with the miniguns"): from 30 m, lines aimed
+// at the ground under the disc and up to 1.5 m either side all hit it (the disc's footprint is 1.9 m round); lines
+// 4 m off, between the legs or past them, may hit a limb but never the body. Damage lands on the strider hit.
+{
+  const pack = new Striders({ ...STRIDER_DEFAULTS }, field, 1);
+  const s = pack.spawn(0, 30, Math.PI);
+  const prey = { x: 0, y: field.height(0, 0) + 2, z: 0, vx: 0, vz: 0, alive: true };
+  for (let t = 0; t < 3; t += dt) pack.update(dt, prey, () => true);
+  const target = new StriderTarget(pack, 3), c = s.head(), M = MECH_DEFAULTS;
+  let core = 0, coreN = 0, far = 0;
+  for (let off = -4; off <= 4.01; off += 0.25) {
+    const m = new Vector3(off * 0.1, field.height(0, 0) + 3, 0);
+    const aim = new Vector3(c.x + off, field.height(c.x + off, c.z), c.z);
+    const sh = makeSheet(field, m, aim.clone().sub(m).normalize(), 120, { half: M.roundSheetHalf, height: M.roundSheetHeight, pen: M.roundPen, line: M.roundLine, aim }, PEN_DEFAULTS);
+    const hits = sheetHits([target], 0, sh, null);
+    if (Math.abs(off) <= 1.5) { coreN++; if (hits.length) core++; }
+    if (Math.abs(off) >= 4 && hits.some((h) => (h.key & 15) <= 1)) far++;
+    if (off === 0 && hits[0]) { const h0 = s.health; target.pick!(hits[0].key); target.damage(100, new Vector3(), new Vector3()); if (!(s.health < h0)) fail("a sheet hit did no damage"); }
+  }
+  console.log(`  minigun lines: ${core}/${coreN} aimed within 1.5 m of the disc hit · body hits from 4 m off: ${far}`);
+  if (core < coreN) fail(`only ${core}/${coreN} minigun lines at the disc hit`);
+  if (far) fail("a line 4 m off the disc hit the body");
 }
 // Same seed, same run.
 const b = run(3);

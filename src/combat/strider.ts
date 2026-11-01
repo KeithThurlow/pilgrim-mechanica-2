@@ -178,6 +178,8 @@ export class Strider {
   health: number;
   maxHealth: number;
   alive = true;
+  /** Asleep with its camp (src/expedition/striderCamps.ts): stands where it is, not stepped. */
+  frozen = false;
   mode: StriderMode = WALK;
   modeT = 0;
   /** The torso's yaw (world, heading convention) and the head's pitch down (radians). */
@@ -435,7 +437,7 @@ export class Striders {
   get alive() { let n = 0; for (const s of this.list) if (s.alive) n++; return n; }
 
   update(dt: number, prey: StriderPrey | null, sees: (from: Vector3, to: Vector3) => boolean) {
-    for (const s of this.list) s.update(dt, prey, sees, this.emit);
+    for (const s of this.list) if (!s.frozen) s.update(dt, prey, sees, this.emit);
   }
 
   hit(s: Strider, amount: number) { s.hit(amount, this.emit); }
