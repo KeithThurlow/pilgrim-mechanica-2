@@ -100,14 +100,18 @@ export const SWORD_DEFAULTS = {
   // After a cut the sword can't block until this share of its return or settle (Keith 2026-11-01: bait a swing, punish
   // it), so a swing leaves an opening.
   swordBlockAfter: 0.5,
+  swordBlockCool: 1.0,
   // Close and far cuts trade (Keith 2026-11-01): a close cut hits for less, recovers sooner and parries over a wider
   // window round the middle of its cut; a full sweep hits harder, recovers longer and parries only right at mid-cut. Blended by the cut's reach.
   swordNearDamage: 0.7,
   swordFarDamage: 1.4,
   swordNearRecover: 0.8,
   swordFarRecover: 1.25,
-  swordParryNear: 0.3,
-  swordParryFar: 0.08,
+  swordParryNear: 0.12,
+  swordParryFar: 0.04,
+  swordParryMax: 0.3,
+  swordParryMiss: 1.0,
+  swordParryHit: 0.5,
   swordParry: 1,
   swordParryTake: 0.1,
   swordParryRecoil: 0.5,
@@ -181,12 +185,16 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordBlockTime", label: "Block lasts (s)", min: 0.2, max: 1.5, step: 0.01, group: GB, tip: "Up, held across the front, and back to rest; cuts landing while it's up are blocked too" },
   { key: "swordBlockStall", label: "Blocked blade stalls (s)", min: 0, max: 0.5, step: 0.01, group: GB, tip: "The cutter's blade stops on the block this long" },
   { key: "swordBlockAfter", label: "Can block again after (share of recovery)", min: 0, max: 1, step: 0.05, group: GB, tip: "After a cut, through this share of the return or settle the sword can't block: the opening a swing leaves for a punish. 0 blocks at once, 1 only back at rest" },
+  { key: "swordBlockCool", label: "Block cooldown (s)", min: 0, max: 3, step: 0.05, group: GB, tip: "After a block goes up, the sword can't block again for this long (from its start): a quick second cut gets through" },
   { key: "swordNearDamage", label: "Close cut: damage ×", min: 0.2, max: 2, step: 0.05, group: GB, tip: "A close cut hits for this × the sword's damage; between close and far it blends" },
   { key: "swordFarDamage", label: "Full sweep: damage ×", min: 0.5, max: 3, step: 0.05, group: GB, tip: "A full sweep hits for this × the sword's damage" },
   { key: "swordNearRecover", label: "Close cut: recovery ×", min: 0.3, max: 2, step: 0.05, group: GB, tip: "The return or settle after a close cut takes this × its time" },
   { key: "swordFarRecover", label: "Full sweep: recovery ×", min: 0.5, max: 3, step: 0.05, group: GB, tip: "The return or settle after a full sweep takes this × its time (a longer opening)" },
   { key: "swordParryNear", label: "Close cut: parries within (s of mid-cut)", min: 0, max: 1, step: 0.01, group: GB, tip: "A close cut meets an incoming blade this long either side of the middle of its cut (× the sword's parry window): quick cuts parry easily" },
   { key: "swordParryFar", label: "Full sweep: parries within (s of mid-cut)", min: 0, max: 1, step: 0.01, group: GB, tip: "A full sweep only this close to the middle of its cut: big swings rarely parry" },
+  { key: "swordParryMax", label: "Parry window at most (s)", min: 0.05, max: 1, step: 0.01, group: GB, tip: "The whole parry window, either side of mid-cut together, is never longer than this whatever the sword (human reaction is about 0.2-0.25 s)" },
+  { key: "swordParryMiss", label: "Parry cooldown after a miss (s)", min: 0, max: 3, step: 0.05, group: GB, tip: "A swing whose parry window closes without meeting a blade can't parry again for this long: swinging nonstop doesn't parry everything" },
+  { key: "swordParryHit", label: "Parry cooldown after a parry (s)", min: 0, max: 3, step: 0.05, group: GB, tip: "After a parry lands, the sword can't parry again for this long" },
   { key: "swordParry", label: "Parry", min: 0, max: 1, step: 1, group: GB, tip: "1: a cut landing while your own sword is driving or cutting toward the cutter meets your blade: both blades recoil; 0 off" },
   { key: "swordParryTake", label: "Damage taken through a parry", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the cut's damage that still lands when it's parried (0: none)" },
   { key: "swordParryRecoil", label: "Parry recoil (s)", min: 0.15, max: 1.5, step: 0.01, group: GB, tip: "Both blades are knocked up and back, and return to rest over this long" },
@@ -252,21 +260,15 @@ interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V
 // forearm angled up to the fist, ahead of the shoulder at about its height; the blade on the wrist laid back over the
 // shoulder toward the pack (near the triangle's long side), in line with the torso.
 const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.93), up: v3(0.7, -0.6, 0.2), pole: v3(0.05, -1, 0.1) };
-// Rest by sword (Keith 2026-11-01: "slightly different ... resting points"), left arm. The katana (the Breaker): at the
-// side and a little behind, low, the blade pointing forward past the hull, edge down. The buster: up behind the head,
-// laid across both shoulders, angled up and in. The short sword: out at a bent arm's length ahead, the tip pointing
-// out and down at the ground.
-const GUARD_KATANA: Key = { t: 0, hand: v3(0.4, -0.55, -0.2), fwd: v3(0.12, 0.12, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.5) };
-const GUARD_BUSTER: Key = { t: 0, hand: v3(0.25, 1.45, 0.25), fwd: v3(-0.75, 0.55, -0.37), up: v3(0, 0.3, 1), pole: v3(1, -0.4, 0.2) };
-/** The return's last key before each rest (the blade brought round to where that rest picks it up). */
-const PRE_REST: (Key | null)[] = [
-  { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
-  { t: 0.82, hand: v3(0.5, -0.6, 0.6), fwd: v3(0.2, 0.0, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.3) },
-  { t: 0.82, hand: v3(0.5, 0.75, 0.9), fwd: v3(0.3, 0.95, 0.05), up: v3(0, 0.2, 1), pole: v3(1, -0.6, 0.2) },
-  null,
-];
-const GUARD_SHORT: Key = { t: 0, hand: v3(0.4, -0.75, 1.65), fwd: v3(0.4, -0.55, 0.73), up: v3(0, 0.8, 0.6), pole: v3(0.6, -1, -0.2) };
-const guardOf = (stance = 0): Key => [GUARD, GUARD_KATANA, GUARD_BUSTER, GUARD_SHORT][Math.max(0, Math.min(3, Math.round(stance)))];
+// Rest by sword, one entry per stance (0 shoulder, 1 Breaker, 2 buster, 3 short sword), with the return's last key
+// before it (the blade brought round to where the rest picks it up). Keith 2026-11-01: back to the over-the-shoulder
+// rest for every sword while the posing lab is built; each stance keeps its own entry so it can be posed apart again
+// (the per-sword rests tried before are in git at 643c27b).
+const PRE_REST_SHOULDER: Key = { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) };
+const copyKey = (k: Key): Key => ({ ...k, hand: { ...k.hand }, ...(k.fwd ? { fwd: { ...k.fwd } } : {}), up: { ...k.up }, ...(k.pole ? { pole: { ...k.pole } } : {}) });
+export const STANCE_REST: Key[] = [GUARD, copyKey(GUARD), copyKey(GUARD), copyKey(GUARD)];
+const PRE_REST: (Key | null)[] = [PRE_REST_SHOULDER, copyKey(PRE_REST_SHOULDER), copyKey(PRE_REST_SHOULDER), copyKey(PRE_REST_SHOULDER)];
+const guardOf = (stance = 0): Key => STANCE_REST[Math.max(0, Math.min(3, Math.round(stance)))];
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
@@ -290,12 +292,10 @@ const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83),
 // yaw here is in degrees off the aim (+ outboard); `at` the key's share through the cut; pole where the elbow points.
 type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V };
 const NEAR_DRIVE: Near = { hand: v3(0.45, 0.85, 1.05), pole: v3(1, 0.1, 0.4) };
-// How each sword enters its cut (Keith 2026-11-01): the buster heaves up high over its shoulder, the blade straight up
-// and back, before it comes down; the short sword snaps out from low at the side, the blade flicked out level.
-const DRIVE_BY: (Key | null)[] = [null, null,
-  { t: 0, hand: v3(0.4, 1.45, 0.95), fwd: v3(0.35, 0.85, -0.4), up: v3(0.2, -0.4, 1), pole: v3(0.9, -0.3, 0.3) },
-  { t: 0, hand: v3(0.85, -0.1, 1.75), fwd: v3(0.95, 0.05, 0.3), up: v3(0, 1, 0.1), pole: v3(0.5, -1, -0.2) }];
-const NEAR_DRIVE_BY: (Near | null)[] = [null, null, { hand: v3(0.4, 1.25, 0.8), pole: v3(1, 0.1, 0.3) }, { hand: v3(0.7, -0.15, 1.5), pole: v3(0.6, -1, 0) }];
+// How each sword enters its cut, by stance: null takes the shared drive (DRIVE, NEAR_DRIVE). Keith 2026-11-01: every
+// sword back on the shared one for now (the buster's high heave and the short sword's low snap are in git at 643c27b).
+const DRIVE_BY: (Key | null)[] = [null, null, null, null];
+const NEAR_DRIVE_BY: (Near | null)[] = [null, null, null, null];
 const nearA = (v: SwordValues): [Near, Near, Near] => [
   { hand: v3(0.6, 0.45, 1.45), yaw: v.swordCloseLean, pitch: v.swordCloseUpright, pole: v3(-0.7, -0.5, 0.6) },
   { hand: v3(-0.35, 0.1, 1.7), yaw: v.swordCloseLean * 0.55, pitch: v.swordCloseUpright - 6, at: 0.66, pole: v3(-1, -0.45, 0.35) },
@@ -542,7 +542,8 @@ export class SwordSim {
   /** Swing up to block (when free), or keep the block that's up. True when it blocks. */
   block(v: SwordValues): boolean {
     if (this.blocking) return true;
-    if (!this.free) return false;
+    if (!this.free || this.blockCool > 0) return false;
+    this.blockCool = v.swordBlockCool;
     this.blockLen = v.swordBlockTime; this.queued = false; this.lungeK = 0; this.cutting = false;
     this.go("P", 0);
     return true;
@@ -551,6 +552,11 @@ export class SwordSim {
   /** Swinging at something now (driving in or cutting): a cut landing meets this blade (the parry). */
   get swinging() { return this.parryOpen; }
   private parryOpen = false;
+  /** Seconds before it may block again, and parry again (Keith 2026-11-01: not every cut parried or blocked). */
+  blockCool = 0;
+  parryCool = 0;
+  /** This sword parried a cut: knocked back like the cutter, and its parry cools for `swordParryHit`. */
+  parried(v: SwordValues) { this.recoil(v); this.parryCool = v.swordParryHit; }
   /** Knocked back off a parry: the cut is over, the blade flung up and back, then to rest. */
   recoil(v: SwordValues) {
     this.parryOpen = false; this.queued = false; this.lungeK = 0; this.cutting = false;
@@ -588,6 +594,8 @@ export class SwordSim {
     if (held && !this.wasHeld) this.queued = true;
     this.wasHeld = held;
     const want = this.queued || held;
+    this.blockCool = Math.max(0, this.blockCool - dt);
+    this.parryCool = Math.max(0, this.parryCool - dt);
     if (this.hitch > 0) {
       const h = Math.min(this.hitch, dt);
       this.hitch -= h; dt -= h;
@@ -606,12 +614,15 @@ export class SwordSim {
     const t0 = this.t;
     this.t += dt;
     const L = this.length(st, v), w = this.cutWindow(st, v);
-    // The parry window: around the cut, wider for a close cut and a light sword (st.parry).
-    if ((this.clip === "A" || this.clip === "B") && w) {
+    // The parry window: around the cut, wider for a close cut and a light sword (st.parry), never longer than
+    // swordParryMax in all; a window that closes without a parry cools the parry for swordParryMiss.
+    const wasOpen = this.parryOpen;
+    if ((this.clip === "A" || this.clip === "B") && w && this.parryCool <= 0) {
       const k = this.span, pk = st.parry ?? 1;
-      const half = (v.swordParryNear + (v.swordParryFar - v.swordParryNear) * k) * pk;
+      const half = Math.min(v.swordParryMax / 2, (v.swordParryNear + (v.swordParryFar - v.swordParryNear) * k) * pk);
       this.parryOpen = Math.abs(this.t - (w[0] + w[1]) / 2) <= half;
     } else this.parryOpen = false;
+    if (wasOpen && !this.parryOpen) this.parryCool = Math.max(this.parryCool, v.swordParryMiss);
     this.lenNow = L; this.blockAfter = v.swordBlockAfter;
     let sweep: Sweep | null = null;
     this.cutting = !!w && this.t > w[0] && t0 < w[1];
