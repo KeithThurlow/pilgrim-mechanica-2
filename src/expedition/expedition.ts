@@ -11,7 +11,7 @@
 // Fitted gear is never touched here: losing a run loses what was carried, not what the mech wears. Recovery is
 // instant for now (Claude's default): a fade, and the mech is back on the deck.
 import type { Param } from "../core/tweaks";
-import type { Item } from "../items/item";
+import { itemWeight, type Item } from "../items/item";
 
 export const EXPEDITION_DEFAULTS = {
   recallHold: 1.5,
@@ -40,6 +40,8 @@ export type Loot =
  */
 export type ExpEvent =
   | { type: "added"; loot: Loot }
+  /** Left on the sand from the inventory (an item: the glue lays it down as a crate; scrap: dumped, gone). */
+  | { type: "dropped"; loot: Loot }
   | { type: "banked"; lines: Loot[]; scrapBefore: number }
   | { type: "lost"; lines: Loot[]; reason: EndReason };
 
@@ -84,7 +86,64 @@ export class Expedition {
   /** What happened since the last drain (see ExpEvent). */
   readonly events: ExpEvent[] = [];
 
+  /**
+   * Cargo limit (Keith 2026-11-01: "you have to manage what's in your cargo and potentially drop things"): the mech's
+   * cargo capacity in tonnes (the loadout's cargoCapacity; Infinity: no limit) and what one scrap weighs. The at-risk
+   * list is the cargo while out. The glue sets both; pick-ups ask `fits` first, `add` itself never refuses (refunds and
+   * lab starts may go over, which the HUD shows in red).
+   */
+  capacity = Infinity;
+  scrapWeight = 0;
+  /** Loot the mech takes out with it (the bay's cargo list): joins the at-risk list at the launch, without events. */
+  carryOut: Loot[] = [];
+
   constructor(public v: ExpeditionValues) {}
+
+  /** What a line weighs (t). */
+  weightOf(l: Loot) { return l.kind === "item" ? itemWeight(l.item) : l.amount * this.scrapWeight; }
+  /** The cargo's weight now (t). */
+  get load() { let w = 0; for (const l of this.atRisk) w += this.weightOf(l); return w; }
+  /** Tonnes left before the cargo is full (negative when over). */
+  get room() { return this.capacity - this.load; }
+  /** Whether this would fit in the cargo now. */
+  fits(l: Loot) { return this.weightOf(l) <= this.room + 1e-9; }
+  /** How much scrap still fits (Infinity with no limit or weightless scrap). */
+  get scrapRoom() { return this.scrapWeight > 0 ? Math.max(0, Math.floor((this.room + 1e-9) / this.scrapWeight)) : Infinity; }
+
+  /** Take an item out of the cargo (to fit it, or to drop it); null if it isn't carried. */
+  takeItem(id: string): Item | null {
+    const i = this.atRisk.findIndex((l) => l.kind === "item" && l.item.id === id);
+    if (i < 0) return null;
+    const l = this.atRisk.splice(i, 1)[0];
+    return l.kind === "item" ? l.item : null;
+  }
+
+  /** Put an item in the cargo quietly (taken off the mech in the field); refuses if it doesn't fit or not out. */
+  stow(item: Item, label: string) {
+    const l: Loot = { kind: "item", item, label };
+    if (this.state !== "out" || !this.fits(l)) return false;
+    this.atRisk.push(l);
+    return true;
+  }
+
+  /** Drop a carried item on the sand (the glue lays it down as a crate). */
+  dropItem(id: string) {
+    const l = this.atRisk.find((q) => q.kind === "item" && q.item.id === id);
+    if (!l || this.state !== "out") return false;
+    this.takeItem(id);
+    this.events.push({ type: "dropped", loot: { ...l } });
+    return true;
+  }
+
+  /** Dump this much carried scrap (gone: scrap is the cheap thing to leave behind). Returns what was dumped. */
+  dumpScrap(n: number) {
+    if (this.state !== "out") return 0;
+    const k = Math.min(Math.max(0, Math.floor(n)), this.scrapAtRisk);
+    if (k <= 0) return 0;
+    this.spendScrap(k);
+    this.events.push({ type: "dropped", loot: { kind: "scrap", amount: k, label: "Dumped scrap" } });
+    return k;
+  }
 
   get out() { return this.state === "out"; }
   /** Scrap at risk now. */
@@ -97,6 +156,7 @@ export class Expedition {
     this.state = "out";
     this.outFor = 0;
     this.atRisk.length = 0;
+    for (const l of this.carryOut.splice(0)) this.atRisk.push(l);
     this.recall = 0;
     return true;
   }
