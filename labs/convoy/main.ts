@@ -16,7 +16,7 @@
 // marker circling the train for the turrets to track), ?zoom=metres, ?dt=0.033, ?flat, ?watch=N (the camera
 // follows car N, 0 the lead; ?watch=gapN the gap ahead of car N; ?watch=eN escort N); expedition: ?out (start out in the
 // field, 280 m off the convoy, with some scrap at risk), ?far (850 m out, past the range edge), ?lowfuel[=seconds]
-// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
+// (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it), ?crusher[=metres] (that close to the nearest salvage site a crusher grazes on); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { hitStop } from "../../src/game/hitStop";
@@ -494,6 +494,16 @@ function restart() {
       carry.armed = true;
     }
   }
+  // ?crusher[=metres]: out on the sand that close (45 m) to the nearest salvage site with a crusher grazing on it.
+  if (params.has("crusher")) {
+    const c = loop.crushers.nearestSite(p.x, p.z, 2500);
+    if (c) {
+      const d = Math.hypot(c.x - p.x, c.z - p.z) || 1, back = Number(params.get("crusher")) || 45 + c.reach;
+      const x = c.x - ((c.x - p.x) / d) * back, z = c.z - ((c.z - p.z) / d) * back;
+      player.reset(x, z, Math.atan2(c.x - x, c.z - z));
+      carry.armed = true;
+    }
+  }
   // ?banditcamp: out on the sand just outside the wake range of the nearest bandit camp, facing it.
   // ?clash: the same, further back, with a robot pack walking into the camp (neither side in view yet).
   if (params.has("banditcamp") || params.has("clash")) {
@@ -569,7 +579,7 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
@@ -580,7 +590,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
