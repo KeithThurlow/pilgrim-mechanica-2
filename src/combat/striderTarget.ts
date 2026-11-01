@@ -13,7 +13,7 @@ import { KIND, FLAG, ObjectSerials, type Owner, type Register } from "../game/re
 import { STRIDER_FRAME, PART_BODY, PART_LEG, PART_FOOT, type Strider, type Striders } from "./strider";
 
 interface Cap { a: THREE.Vector3; b: THREE.Vector3; r: number; part: number }
-const CAPS = 9;
+const CAPS = 11;
 
 export class StriderTarget implements Hittable, Owner {
   readonly team: number;
@@ -38,7 +38,10 @@ export class StriderTarget implements Hittable, Owner {
     // The disc head: a capsule across it, side to side.
     const h = s.head(A), rx = Math.cos(s.face) * F.headR * 0.62 * S, rz = -Math.sin(s.face) * F.headR * 0.62 * S;
     set(1, B.set(h.x - rx, h.y, h.z - rz), C.set(h.x + rx, h.y, h.z + rz), F.headR * 0.42 * S, PART_BODY);
-    let k = 2;
+    // The long arms: shoulder to hand, a limb's share.
+    set(2, s.shoulder(1, A), s.hand(1, B), 0.12 * S, PART_LEG);
+    set(3, s.shoulder(-1, A), s.hand(-1, B), 0.12 * S, PART_LEG);
+    let k = 4;
     for (const f of sim.feet) {
       const p = f.pose;
       set(k++, A.copy(p.hip).multiplyScalar(S), B.copy(p.knee).multiplyScalar(S), 0.16 * S, PART_LEG);

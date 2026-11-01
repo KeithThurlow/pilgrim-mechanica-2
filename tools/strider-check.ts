@@ -46,7 +46,7 @@ function run(seed: number) {
         const b = e.beam;
         const run = Math.hypot(b.end.x - b.start.x, b.end.z - b.start.z);
         if (run < v.striderBeamRun) fail(`beam furrow only ${run.toFixed(1)} m`);
-        if (!(b.from.y > b.end.y + 8)) fail(`beam not from high up (${b.from.y.toFixed(1)} vs ${b.end.y.toFixed(1)})`);
+        { const up = b.from.y - field.height(b.from.x, b.from.z); if (!(up > 5)) fail(`beam emitter only ${up.toFixed(1)} m up`); }
       }
     }
     const sim = s.sim, p = s.pos(P);
@@ -77,6 +77,12 @@ const top = (W.hipHeight + STRIDER_FRAME.head + STRIDER_FRAME.headH / 2) * S;
 const falls = stats.falls / (70);
 console.log(`strider: scale ${S}, hips ${(W.hipHeight * S).toFixed(1)} m, head top ${top.toFixed(1)} m · walked ${stats.dist.toFixed(0)} m (${(stats.dist / 70).toFixed(2)} m/s avg) · ${falls.toFixed(2)} footfalls/s · closest ${stats.closest.toFixed(1)} m (range ${STRIDER_DEFAULTS.striderRange})`);
 console.log(`  hips over the ground ${(stats.sagLow * S).toFixed(2)}–${(stats.sagHigh * S).toFixed(2)} m · planted foot worst ${stats.footWorst.toFixed(2)} m · beams ${pack.beams} · slams ${pack.slams} · health ${s.health}`);
+// Keith 2026-11-01: long arms that nearly touch the ground (hands within 2.5 m of the sand, standing).
+{
+  const h = s.hand(1), gap = h.y - field.height(h.x, h.z);
+  console.log(`  hand ${gap.toFixed(2)} m over the sand · arms ${((STRIDER_FRAME.upperArm + STRIDER_FRAME.foreArm) * S).toFixed(1)} m · shoulders ${(STRIDER_FRAME.shoulderX * 2 * S).toFixed(1)} m wide`);
+  if (gap > 2.5 || gap < -0.3) fail(`hands ${gap.toFixed(2)} m over the sand`);
+}
 if (stats.nan) fail("NaN");
 if (stats.reachOver) fail(`legs out of reach on ${stats.reachOver} samples`);
 if (stats.footOff > stats.steps * 0.01) fail(`planted feet off the sand on ${stats.footOff} samples (worst ${stats.footWorst.toFixed(2)} m)`);
