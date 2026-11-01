@@ -136,6 +136,8 @@ export class RobotTarget implements Hittable, Owner {
       if (kk <= 0) continue;
       const best = this.splashShare(i, at.x, at.y, at.z, radius);
       if (best <= 0) continue;
+      // Behind a dune, a wall or a wreck from the blast: no share of it.
+      if (o?.cover?.(sw.px[i], sw.hubY[i], sw.pz[i])) continue;
       // Blasts throw wrecks away from the blast; rounds along their flight.
       const dx = blast ? sw.px[i] - at.x : dir.x, dz = blast ? sw.pz[i] - at.z : dir.z;
       if (sw.damage(i, armourHit(damage * kk * best, sw.armourOf(i), o?.pierce), dx, dz)) this.kills++;

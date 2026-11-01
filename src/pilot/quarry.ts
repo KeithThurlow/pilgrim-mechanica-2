@@ -6,7 +6,7 @@
 // Ownership (multiplayer later): the host's (who enemies go for, and damage).
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
-import type { Hittable } from "../game/battlefield";
+import type { Hittable, SplashOpts } from "../game/battlefield";
 import { rayCapsule, type MechUnit } from "../game/mechUnit";
 import type { HitSurface } from "../fx/minigun";
 import type { PilotSim, PilotValues } from "./pilot";
@@ -70,11 +70,12 @@ export class PilotUnit implements Hittable {
     this.onHit?.(k);
   }
 
-  splash(at: THREE.Vector3, radius: number, damage: number) {
+  splash(at: THREE.Vector3, radius: number, damage: number, _dir?: THREE.Vector3, o?: SplashOpts) {
     if (!this.alive) return 0;
     const p = this.sim.pos, y = Math.min(Math.max(at.y, p.y), p.y + this.v.pilotHeight);
     const d = Math.max(0, Math.hypot(at.x - p.x, at.y - y, at.z - p.z) - this.v.pilotRadius);
     if (d > radius) return 0;
+    if (o?.cover?.(p.x, p.y + this.v.pilotHeight * 0.6, p.z)) return 0;
     this.damage(damage * (1 - 0.5 * d / Math.max(0.01, radius)));
     return 1;
   }

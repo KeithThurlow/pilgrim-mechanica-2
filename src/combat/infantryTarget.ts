@@ -2,7 +2,7 @@
 // hit test, and the nearest one hit takes the damage. Also the swarm's owner in the register (src/game/register.ts):
 // once added (bf.register.add(target)) every hit test here tests only the bandits the grid hands back.
 import * as THREE from "three/webgpu";
-import type { Hittable } from "../game/battlefield";
+import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { DOWN, type InfantrySwarm } from "./infantry";
 import { inBand, sheetCircle, type Sheet, type SheetHit } from "../game/sheet";
@@ -47,22 +47,32 @@ export class InfantryTarget implements Hittable, Owner {
     }
   }
 
-  /** Every standing bandit whose body (a vertical line from feet to head) is within radius of the point. */
-  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3) {
+  /**
+   * Every standing bandit whose body (a vertical line from feet to head) is within radius of the point; an explosive's
+   * blast (o.blast) also catches the knocked-down ones lying in it (2026-11-01: a bandit knocked flat by a stomp or a
+   * dash took no rocket: they aren't in the register, so they get their own pass), and spares those behind cover
+   * (o.cover: a dune, wall or wreck between).
+   */
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts) {
     const sw = this.swarm, H = sw.v.banditHeight, r2 = radius * radius;
     let n = 0;
-    const only = this.cull.round(at.x, at.z, radius);
-    for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
-      const i = only ? only[j] : j;
-      if (sw.state[i] >= DOWN) continue;
+    const hit = (i: number, down: boolean) => {
       const dx = sw.px[i] - at.x, dz = sw.pz[i] - at.z;
-      const dy = Math.max(sw.py[i] - at.y, 0, at.y - (sw.py[i] + H));
+      const top = down ? 0.5 : H;
+      const dy = Math.max(sw.py[i] - at.y, 0, at.y - (sw.py[i] + top));
       const d2 = dx * dx + dz * dz + dy * dy;
-      if (d2 > r2) continue;
+      if (d2 > r2) return;
+      if (o?.cover?.(sw.px[i], sw.py[i] + top * 0.6, sw.pz[i])) return;
       // Full share at the centre, half at the edge.
       if (sw.damage(i, damage * (1 - 0.5 * Math.sqrt(d2) / radius), dir.x, dir.z)) this.kills++;
       n++;
+    };
+    const only = this.cull.round(at.x, at.z, radius);
+    for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
+      const i = only ? only[j] : j;
+      if (sw.state[i] < DOWN) hit(i, false);
     }
+    if (o?.blast) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === DOWN) hit(i, true);
     return n;
   }
 
