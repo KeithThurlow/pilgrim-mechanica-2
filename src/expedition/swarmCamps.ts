@@ -240,6 +240,15 @@ export class SwarmCamps {
     return { n, x: c.x, z: c.z, awake: l.awake };
   }
 
+  /** Every camp, pack and raid on the field: id, middle, robots alive, awake, roaming (companions follow these: the
+   *  humanoid squads, src/expedition/droidCamps.ts). */
+  eachLive(fn: (id: string, x: number, z: number, n: number, awake: boolean, roam: boolean, radius: number) => void) {
+    for (const [id, l] of this.live) { const c = this.centre(l); fn(id, c.x, c.z, this.alive(l), l.awake, !!l.roam, l.camp.radius); }
+  }
+
+  /** Wake a camp (one of its companions was shot). */
+  wake(id: string) { const l = this.live.get(id); if (l) l.awake = true; }
+
   /** Take a group off the field (the mech left it far behind); returns how many were still alive. */
   dropGroup(id: string): number {
     const l = this.live.get(id);
