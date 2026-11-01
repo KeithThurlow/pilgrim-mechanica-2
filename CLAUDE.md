@@ -123,6 +123,9 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
+- Humanoid robots lab: `?squad=N` (squad size), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; the robots lab brings 3 with each pack (`?set=robotDroids:N`).
+- Strider lab: `?count=N` (striders up at once), `?dist=m` (where they stand up), `?slam` (one 14 m off, slamming at once), `?beam`
+  (one at 45 m, its beam charging at once), plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
   convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
@@ -130,6 +133,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?gates=open`, `?near` (just outside the outer wall), plus the combat-lab flags; the demo shoots the nearest gate down
   and walks in (with `?kind=hub`, it shoots the fabricators down while they build robots); the keep holds the warlord;
   Shift+R puts it all back up.
+- Inventory (Keith 2026-11-01; convoy and loadout labs): I anywhere (or click the mech doll at the bottom right) opens it; `?inv[=slot]` starts with it open (on that slot). In the field its cargo is the at-risk list, limited by weight (Loot and cargo › Cargo).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
@@ -169,7 +173,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call, then roam; when it hovers in, stand under it 4 s; quick: `&set=padWaitBase:5,padWaitPerKm:0`), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
-  `?bank=N` (N scrap banked), `?raid` (a raid at once), `?siege[=N]` (on the sand beside the convoy, a robot pack of N, 40, coming in: the convoy's turrets, escorts and guardian mechs fight it; `window.__defence` in the console). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
+  `?bank=N` (N scrap banked), `?heli[=metres]` (start on the helipad on the lead bay, bank at least 500 unless `?bank=` says: hold H to call the quadcopter, WASD steers, H drops you; with metres it flies itself that far out to the left and drops), `?raid` (a raid at once), `?siege[=N]` (on the sand beside the convoy, a robot pack of N, 40, coming in: the convoy's turrets, escorts and guardian mechs fight it; `window.__defence` in the console). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
   with that contract taken), `?hvt[=metres|now]` (that close, 60 m, to the nearest high value target's lair, one kill short of
   drawing it out; `now`: it's coming; with `?quest=bounty` the bounty is on it); J takes the newest offer, hold J drops one,
   hold E by a downed Rampart hooks it (again to drop); `window.__quests` in the console.

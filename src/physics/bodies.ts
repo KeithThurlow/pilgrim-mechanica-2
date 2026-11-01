@@ -36,7 +36,7 @@ export const BANDIT_JOINTS: JointSpec[] = [
 
 
 /** A part as a box along a segment from a to b (body frame), thickness t (full width). */
-function segPart(a: number[], b: number[], t: number, color: number, mass?: number): PartSpec {
+export function segPart(a: number[], b: number[], t: number, color: number, mass?: number): PartSpec {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz) || 1e-3;
   // Rotation taking +Y onto the segment.
   const nx = dx / len, ny = dy / len, nz = dz / len;
