@@ -5,6 +5,7 @@
 // splash never hurts it. Host.
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
+import { inBand, sheetCircle, sheetSegment, type Sheet, type SheetHit } from "../game/sheet";
 import type { HitSurface } from "../fx/minigun";
 import type { BarEntry } from "../ui/healthBars";
 import { armourHit } from "../game/armour";
@@ -50,6 +51,57 @@ export class StriderTarget implements Hittable, Owner {
       set(k++, A.copy(p.hock).multiplyScalar(S), B.copy(p.foot).multiplyScalar(S), 0.11 * S, PART_FOOT);
     }
     return c.slice(0, 11);
+  }
+
+  /**
+   * Sheet hits (src/game/sheet.ts), as the robots (Keith 2026-11-01: "I just can't seem to hit it very well with the
+   * miniguns"): the generic fan of 15 rays spaced the sheet's half-width across and ~4 m up slipped between its thin
+   * legs and under or over its disc. One hit per strider: its body when the line crosses the disc's footprint (the hull
+   * hangs over the spine), else the nearest limb bone the line passes within its radius + the sheet's half-width.
+   * Key: strider index × 16 + capsule.
+   */
+  sheet(s: Sheet, out: SheetHit<Hittable>[]) {
+    const list = this.pack.list, F = STRIDER_FRAME;
+    for (let i = 0; i < list.length; i++) {
+      const st = list[i];
+      if (!st.alive) continue;
+      const S = st.S, m = st.up(0, A);
+      // Quick reject: the legs' and arms' reach round the pelvis.
+      const reach = (st.sim.v.hipHeight + 1) * S, qx = m.x - s.ox, qz = m.z - s.oz, c = qx * s.dx + qz * s.dz;
+      if (Math.abs(qx * s.dz - qz * s.dx) > reach + s.half || c < s.from - reach || c > s.len + reach) continue;
+      const caps = this.capsules(st);
+      // The body: the disc's footprint, standing from the waist to the disc's top.
+      const h = caps[1], hx = (h.a.x + h.b.x) / 2, hz = (h.a.z + h.b.z) / 2, hy = (h.a.y + h.b.y) / 2;
+      const b = sheetCircle(s, hx, hz, F.headR * S);
+      if (b && inBand(s, b.along, s.ox + s.dx * b.along, s.oz + s.dz * b.along, caps[0].a.y, hy + F.headH * S)) {
+        out.push({ target: this, key: i * 16 + 1, along: b.along, chord: b.chord, material: "excavator", x: s.ox + s.dx * b.along, y: hy, z: s.oz + s.dz * b.along });
+        continue;
+      }
+      // The limbs: the nearest bone the line crosses.
+      let best: SheetHit<Hittable> | null = null;
+      for (let k = 2; k < 10; k++) {
+        const cp = caps[k], q = sheetSegment(s, cp.a.x, cp.a.y, cp.a.z, cp.b.x, cp.b.y, cp.b.z);
+        if (!q) continue;
+        const R = cp.r + s.half;
+        if (q.across > R) continue;
+        const px = s.ox + s.dx * q.along, pz = s.oz + s.dz * q.along;
+        if (!inBand(s, q.along, px, pz, q.y - cp.r, q.y + cp.r)) continue;
+        if (best && best.along <= q.along) continue;
+        const chord = Math.max(0.2 * cp.r, 2 * Math.sqrt(R * R - q.across * q.across) * (cp.r / R));
+        best = { target: this, key: i * 16 + k, along: Math.max(s.from, q.along - chord / 2), chord, material: "excavator", x: px, y: q.y, z: pz };
+      }
+      if (best) out.push(best);
+    }
+  }
+
+  /** A sheet hit's strider and capsule, for the damage that follows. */
+  pick(key: number) {
+    const s = this.pack.list[key >> 4];
+    if (!s) { this.last.s = null; return; }
+    const c = this.capsules(s)[key & 15];
+    this.last.s = s;
+    this.lastCap.a.copy(c.a); this.lastCap.b.copy(c.b); this.lastCap.r = c.r; this.lastCap.part = c.part;
+    this.last.cap = this.lastCap;
   }
 
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number {
@@ -113,17 +165,17 @@ export class StriderTarget implements Hittable, Owner {
     }
   }
 
-  /** Into the register (the soft lock and the weapons): each standing strider at its chest, its legs' spread as reach. */
+  /** Into the register (the soft lock and the weapons): each standing strider at its disc (the guns' centre mass), the disc's footprint as its body, its legs' spread as reach. */
   publish(reg: Register) {
     const list = this.pack.list;
     for (let k = 0; k < list.length; k++) {
       const s = list[k];
       if (!s.alive) continue;
-      const S = s.S, c = s.up(1.5, A), v = s.vel(B);
+      const S = s.S, c = s.head(A), v = s.vel(B);
       const height = (s.sim.v.hipHeight + STRIDER_FRAME.head) * S;
       reg.publishRef = this;
-      reg.put(k, this.serials.serial(s, reg), KIND.Unit, this.team, FLAG.Hittable | FLAG.Detectable, c.x, c.y, c.z, STRIDER_FRAME.chestR * S * 1.2,
-        S * 1.2, v.x, v.z, height * 0.75);
+      reg.put(k, this.serials.serial(s, reg), KIND.Unit, this.team, FLAG.Hittable | FLAG.Detectable, c.x, c.y, c.z, STRIDER_FRAME.headR * S * 0.8,
+        S * 1.6, v.x, v.z, height * 0.75);
     }
     reg.publishRef = null;
   }
