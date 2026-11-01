@@ -91,7 +91,7 @@ export const MECH_DEFAULTS = {
   roundPen: 1,
   roundPenCurve: 1.75,
   roundSheetHalf: 0.35,
-  roundSheetHeight: 10,
+  roundSheetHeight: 17,
   roundLine: 0.5,
   roundSplash: 1.6,
   roundSplashShare: 0.5,
@@ -115,7 +115,7 @@ export const MECH_PARAMS: Param[] = [
   { key: "roundPierce", label: "Item pierce read as the hull's", min: 0.5, max: 6, step: 0.5, group: "Rounds", tip: "An item's pierce stat (until items carry penetration in metres) is read as penetration = hull minigun penetration × (pierce / this) ^ curve: a held light minigun (pierce 1) gets about 0.3 m" },
   { key: "roundPenCurve", label: "Item pierce → penetration curve", min: 0.5, max: 3, step: 0.05, group: "Rounds" },
   { key: "roundSheetHalf", label: "Round sheet half-width (m)", min: 0, max: 2, step: 0.05, group: "Rounds", tip: "Sheet hits: a round hits anything whose hit circle comes within this of its line on the ground" },
-  { key: "roundSheetHeight", label: "Round sheet height (m)", min: 1, max: 20, step: 0.5, group: "Rounds", tip: "The sheet reaches from under the ground up to this over its floor (the ground under the gun to the ground under the aim): enough for an excavator's chassis" },
+  { key: "roundSheetHeight", label: "Round sheet height (m)", min: 1, max: 20, step: 0.5, group: "Rounds", tip: "The sheet reaches from under the ground up to this over its floor (the ground under the gun to the ground under the aim): enough for a big walker's body (about 15 m up)" },
   { key: "roundLine", label: "Round line over the floor (m)", min: 0, max: 5, step: 0.05, group: "Rounds", tip: "Sand costs a round's penetration where it rises over the round's path: the ray from the muzzle to the aim, never lower than this over the floor (Keith 2026-10-26: rounds went through dunes; the tall sheet's top used to be the line)" },
   { key: "roundSplash", label: "Splash radius (m)", min: 0, max: 5, step: 0.1, group: "Rounds", tip: "Where a round ends (sand or body), swarm units this close take a share: rounds into the sand at their feet still count" },
   { key: "roundSplashShare", label: "Splash damage share", min: 0, max: 1.5, step: 0.05, group: "Rounds", tip: "Share of the round's damage at the centre of the splash (half that at its edge)" },
@@ -304,6 +304,22 @@ export class MechUnit implements Hittable {
     for (const f of this.sim.feet) this.bf.dust.stomp(f.pos.x, f.pos.y, f.pos.z, 1.3, -this.dash.dirX * 4, -this.dash.dirZ * 4);
     this.bf.sfx.play("brap", this.sim.pelvis, 0.9, 0.35, false);
     return true;
+  }
+
+  /**
+   * A blast's push (a big walker's terraform pulse): within radius of (x, z) on the ground, the mech is skidded away at
+   * speed (full at the centre, half at the edge) and staggers for a moment. Host: from the pulse event.
+   */
+  shoveFrom(x: number, z: number, radius: number, speed: number) {
+    const sim = this.sim;
+    if (!this.alive || sim.airborne || speed <= 0) return;
+    let dx = sim.pos.x - x, dz = sim.pos.z - z;
+    const d = Math.hypot(dx, dz);
+    if (d > radius) return;
+    if (d < 0.3) { dx = -Math.sin(sim.heading); dz = -Math.cos(sim.heading); } else { dx /= d; dz /= d; }
+    const k = 1 - 0.5 * (d / radius);
+    sim.skid.x += dx * speed * k; sim.skid.z += dz * speed * k;
+    sim.stagger = Math.max(sim.stagger, 0.35 * k);
   }
 
   get maxHealth() { return this.hullOverride ?? this.v.hull; }

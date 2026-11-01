@@ -1,13 +1,25 @@
-// Stand-in geometry for the robots (Keith 2026-10-24: autonomous terraforming machines that look functional): built
-// in code from boxes and cylinders, vertex-coloured in industrial yellow and grey with wear (grime low down, chipped
-// faces), hazard stripes, hoppers and bins of scrap. Each body is one merged geometry (× its size, origin at the body
-// centre, facing +Z, +X left) drawn instanced; the drawer tints each robot a little. Lamps are drawn apart (lit).
+// Stand-in geometry for the robots, built in code (Keith 2026-11-01, restyled from the yellow construction look:
+// "sci-fi modern tech ... white is the key plate feature, typically cylindrical in shape, mechanical aspects still
+// squarish, pipes and things dangling"). White plates over dark grey mechanical bits; red eyes for seeking, blue for
+// the weapons (lamps and beams are drawn apart, lit). Each body is one merged geometry (× its size, origin at the
+// body centre, facing +Z, +X left) drawn instanced; the drawer tints each robot a little. Dangling cables are drawn
+// by robotsDraw.ts (procedural sway, no physics).
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { HUB_R, HUB_H, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_X, MID_SAW_Y, MID_SAW_R, MID_BODY_H, BIG_BODY_H } from "./robotLegs";
+import { HUB_R, HUB_H, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_X, MID_SAW_Y, MID_BODY_H, BIG_BODY_H } from "./robotLegs";
 
-export const YELLOW = 0xd9a11e, YELLOW_DIRTY = 0xb48a2a, GREY = 0x5f6266, DARK = 0x2e3033, STEEL = 0xa4a8ab, BLACK = 0x1d1d1e;
-export const RUST = 0x7b4a2a, GLASS = 0x18232c, CHROME = 0xcfd3d6;
+/**
+ * The robots' shared palette (also for the humanoid and strider robots in their own files): plate white, a dimmer
+ * plate for panel bands, dark grey joints and mechanics, darker still for vents and lenses, red seeker eyes, the blue
+ * weapon glow and its white-blue core.
+ */
+export const ROBOT_PALETTE = {
+  plate: 0xe8e6e0, plateDim: 0xc8c6c0, joint: 0x3a3d42, dark: 0x22252a, seek: 0xff2a1a, beam: 0x3aa8ff, beamCore: 0xd8f4ff,
+} as const;
+export const WHITE = ROBOT_PALETTE.plate, WHITE_DIM = ROBOT_PALETTE.plateDim, JOINT = ROBOT_PALETTE.joint, DARK = ROBOT_PALETTE.dark;
+export const GLASS = 0x141a20, CHROME = 0xcfd3d6, STEEL = 0x8d9296;
+/** Ragdoll colours per kind (small, medium, big): body, legs. */
+export const ROBOT_RAG: [number, number][] = [[WHITE, JOINT], [WHITE, JOINT], [WHITE, JOINT]];
 
 /** Builds one merged, vertex-coloured geometry from parts. */
 class Kit {
@@ -51,7 +63,7 @@ class Kit {
       // A parallelogram block: slanted sides, the band's own height.
       const g = new THREE.BoxGeometry(step * 1.01, h, t), p = g.getAttribute("position");
       for (let v = 0; v < p.count; v++) p.setX(v, p.getX(v) + (p.getY(v) / h) * step * 0.8);
-      this.add(g, k % 2 ? BLACK : YELLOW, x + lx * c, y, z - lx * s, 0, ry, 0, 0.05);
+      this.add(g, k % 2 ? DARK : WHITE, x + lx * c, y, z - lx * s, 0, ry, 0, 0.05);
     }
     return this;
   }
@@ -66,7 +78,7 @@ class Kit {
 
   /** Scrap heaped in a bin: tilted plates and bars sticking out of the top. */
   scrap(w: number, d: number, n: number, size: number, x: number, y: number, z: number) {
-    const cols = [RUST, STEEL, GREY, YELLOW_DIRTY, RUST, DARK];
+    const cols = [STEEL, JOINT, WHITE_DIM, DARK];
     for (let k = 0; k < n; k++) {
       const a = this.rand(), b = this.rand();
       this.box(size * (0.4 + this.rand()), size * (0.15 + this.rand() * 0.3), size * (0.3 + this.rand() * 0.9), cols[k % cols.length],
@@ -117,121 +129,133 @@ export function pipeGeometry(sides = 6): THREE.BufferGeometry {
 /** A unit box (knuckles, pins). */
 export function knuckleGeometry(): THREE.BufferGeometry { return white(new THREE.BoxGeometry(1, 1, 1)); }
 
+/** A capsule-ish pod along Z: radius r, length len (cap to cap), sides around; centre at the origin. */
+function pod(r: number, len: number, sides = 10, nose = 0.55, tail = 0.45): THREE.BufferGeometry {
+  const h = len / 2;
+  const pts = [[0, -h], [r * 0.55, -h + r * tail * 0.4], [r * 0.92, -h + r * tail], [r, -h + r * tail * 1.6], [r, h - r * nose * 1.6], [r * 0.9, h - r * nose], [r * 0.5, h - r * nose * 0.35], [0, h]]
+    .map(([x, y]) => new THREE.Vector2(x, y));
+  const g = new THREE.LatheGeometry(pts, sides);
+  g.rotateX(Math.PI / 2);
+  return g;
+}
+
 /**
- * Small scrapper (× size): the low grey hub with a yellow top plate, a cutting disc and grinder jaws at the front, a
- * little scrap hopper on the back.
+ * Small scuttler (× size): a mite. A white cylindrical abdomen behind, a narrower thorax over the dark hip block the
+ * legs grip, a small squarish head in front with mandibles (the red eye is drawn apart), a dark spine plate down the
+ * back and two short antennae.
  */
 export function smallBodyGeometry(): THREE.BufferGeometry {
   const R = HUB_R, H = HUB_H, k = new Kit();
-  const pts = [[0, -0.5], [0.72, -0.5], [1, -0.12], [0.96, 0.18], [0.66, 0.44], [0.28, 0.58], [0, 0.6]].map(([r, y]) => new THREE.Vector2(r * R, y * H));
-  k.add(new THREE.LatheGeometry(pts, 8), GREY);
-  k.cyl(R * 0.62, 0.02, YELLOW, 0, H * 0.58, 0.01, 0, 0, 0, 8);
-  // Hopper behind, a scrap or two in it.
-  k.bin(0.13, 0.07, 0.1, DARK, 0, H * 0.62 + 0.02, -0.1, 0.012).scrap(0.1, 0.08, 2, 0.05, 0, H * 0.62 + 0.03, -0.1);
-  // Cutting disc out front (blade upright, along the facing), on a short arm; jaws under it.
-  k.box(0.03, 0.03, 0.08, DARK, 0, 0, R * 0.95);
-  k.cyl(0.09, 0.012, STEEL, 0, 0.01, R * 0.95 + 0.07, 0, 0, Math.PI / 2, 10);
-  k.box(0.04, 0.025, 0.07, DARK, 0.04, -H * 0.4, R * 0.95 + 0.02, 0, 0.4, 0).box(0.04, 0.025, 0.07, DARK, -0.04, -H * 0.4, R * 0.95 + 0.02, 0, -0.4, 0);
-  return k.build(-H * 0.5, H * 0.6, 0.3);
+  k.add(pod(R * 0.62, R * 1.45, 8), WHITE, 0, H * 0.12, -R * 0.42, -0.12, 0, 0, 0.05);
+  k.cyl(R * 0.64, R * 0.1, JOINT, 0, H * 0.12, -R * 0.42, Math.PI / 2, 0, 0, 8);
+  k.box(R * 0.32, R * 0.12, R * 1.0, DARK, 0, H * 0.12 + R * 0.6, -R * 0.45, -0.12, 0, 0);
+  k.add(pod(R * 0.42, R * 0.7, 8, 0.4, 0.4), WHITE_DIM, 0, H * 0.1, R * 0.35, 0, 0, 0, 0.05);
+  k.box(R * 1.0, H * 0.45, R * 0.6, JOINT, 0, -H * 0.15, R * 0.05);
+  k.box(R * 0.5, R * 0.36, R * 0.38, WHITE, 0, H * 0.18, R * 0.8);
+  k.box(R * 0.52, R * 0.08, R * 0.3, DARK, 0, H * 0.22, R * 0.84);
+  k.box(R * 0.1, R * 0.08, R * 0.32, JOINT, R * 0.14, -H * 0.05, R * 1.05, 0, -0.35, 0).box(R * 0.1, R * 0.08, R * 0.32, JOINT, -R * 0.14, -H * 0.05, R * 1.05, 0, 0.35, 0);
+  k.box(R * 0.04, R * 0.04, R * 0.5, DARK, R * 0.12, H * 0.45, R * 1.05, -0.6, -0.3, 0).box(R * 0.04, R * 0.04, R * 0.5, DARK, -R * 0.12, H * 0.45, R * 1.05, -0.6, 0.3, 0);
+  return k.build(-H * 0.6, H * 0.4, 0.12);
 }
 
 /**
- * Medium cutter (× size): a yellow chassis, dark hip housings, a bin of scrap on its back, a small sensor cab, a slug
- * gun on the left, the saw arm on the right with a guard over the blade (the blade is drawn apart so it can spin),
- * hazard stripes along the front bumper.
+ * Medium walker (× size): long and plainly pointed one way. A big white cylindrical abdomen behind with a dark ring and
+ * a vent block on top, a dark hip frame with the four hip housings, a white thorax ahead of it, a squarish sensor head
+ * out front with a dark visor (red eyes drawn apart), a slug gun under the head on the left and the cutter arm on the
+ * right (its blue disc drawn apart so it can spin), an antenna mast.
  */
 export function midBodyGeometry(): THREE.BufferGeometry {
   const k = new Kit(), H = MID_BODY_H;
-  k.box(0.56, H * 0.8, 0.72, YELLOW, 0, 0, 0);
-  k.box(0.5, 0.04, 0.66, DARK, 0, -H * 0.45, 0);
-  for (const a of MID_SPEC.angles) k.box(0.13, 0.12, 0.13, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
-  // Front bumper with hazard stripes.
-  k.box(0.6, 0.07, 0.05, DARK, 0, -H * 0.2, 0.37).stripes(0.58, 0.05, 8, 0, -H * 0.2, 0.397);
-  // Scrap bin on the back.
-  k.bin(0.5, 0.22, 0.4, GREY, 0, H * 0.4 + 0.11, -0.13, 0.022).scrap(0.46, 0.36, 7, 0.14, 0, H * 0.4 + 0.2, -0.13);
-  // Sensor cab front left, glass band.
-  k.box(0.18, 0.12, 0.14, YELLOW_DIRTY, 0.16, H * 0.4 + 0.06, 0.24).box(0.185, 0.04, 0.145, GLASS, 0.16, H * 0.4 + 0.08, 0.242);
-  // Slug gun under the cab.
-  k.cyl(0.035, 0.32, DARK, 0.17, -0.01, 0.46, Math.PI / 2, 0, 0).cyl(0.05, 0.06, BLACK, 0.17, -0.01, 0.3, Math.PI / 2, 0, 0);
-  // Saw arm: a beam to the blade's hub, a motor on it, a guard over the top of the blade.
-  k.box(0.08, 0.08, MID_SAW_Z - 0.3, DARK, MID_SAW_X, MID_SAW_Y, 0.3 + (MID_SAW_Z - 0.3) / 2);
-  k.cyl(0.07, 0.09, GREY, MID_SAW_X + 0.07, MID_SAW_Y, MID_SAW_Z, 0, 0, Math.PI / 2);
-  k.box(0.05, 0.03, MID_SAW_R * 1.5, YELLOW, MID_SAW_X - 0.04, MID_SAW_Y + MID_SAW_R + 0.025, MID_SAW_Z - MID_SAW_R * 0.15);
-  k.box(0.05, MID_SAW_R * 0.7, 0.03, YELLOW, MID_SAW_X - 0.04, MID_SAW_Y + MID_SAW_R * 0.7, MID_SAW_Z - MID_SAW_R * 0.85);
-  // Exhaust stub and a mast for the beacon.
-  k.cyl(0.02, 0.12, BLACK, -0.2, H * 0.4 + 0.06, 0.2).cyl(0.012, 0.1, DARK, 0.16, H * 0.4 + 0.17, 0.2);
-  return k.build(-H * 0.5, H * 0.4, 0.3);
+  k.add(pod(0.22, 0.62, 12), WHITE, 0, H * 0.18, -0.22, -0.18, 0, 0, 0.04);
+  k.cyl(0.225, 0.04, JOINT, 0, H * 0.2, -0.12, Math.PI / 2 - 0.18, 0, 0, 12);
+  k.box(0.14, 0.06, 0.2, DARK, 0, H * 0.18 + 0.22, -0.26, -0.18, 0, 0);
+  k.box(0.46, 0.09, 0.42, JOINT, 0, -MID_SPEC.hipDrop, 0.04);
+  for (const a of MID_SPEC.angles) k.box(0.12, 0.12, 0.12, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
+  k.add(pod(0.16, 0.36, 10, 0.4, 0.4), WHITE_DIM, 0, H * 0.12, 0.2, 0.08, 0, 0, 0.04);
+  k.box(0.2, 0.14, 0.16, WHITE, 0, H * 0.22, 0.42);
+  k.box(0.205, 0.045, 0.1, GLASS, 0, H * 0.26, 0.46);
+  k.box(0.12, 0.06, 0.12, JOINT, 0, H * 0.02, 0.36);
+  // Slug gun under the head, left.
+  k.cyl(0.03, 0.3, DARK, 0.14, -0.02, 0.46, Math.PI / 2, 0, 0, 6).box(0.08, 0.08, 0.1, JOINT, 0.14, -0.02, 0.3);
+  // Cutter arm, right: a square arm to the disc's hub and a motor block.
+  k.box(0.07, 0.07, MID_SAW_Z - 0.28, JOINT, MID_SAW_X, MID_SAW_Y, 0.28 + (MID_SAW_Z - 0.28) / 2);
+  k.box(0.1, 0.1, 0.1, DARK, MID_SAW_X + 0.06, MID_SAW_Y, MID_SAW_Z);
+  // Antenna mast.
+  k.cyl(0.01, 0.16, DARK, -0.08, H * 0.4 + 0.12, -0.05, 0, 0, 0, 5);
+  return k.build(-H * 0.6, H * 0.3, 0.12);
 }
 
-/** The medium cutter's blade (× size): a toothed steel disc of radius 1, upright (spins about X), with a dark hub. */
+/** The medium walker's cutter (× size): a toothed disc of radius 1, upright (spins about X), drawn lit in blue. */
 export function sawGeometry(): THREE.BufferGeometry {
-  const sh = new THREE.Shape(), teeth = 20;
+  const sh = new THREE.Shape(), teeth = 14;
   for (let t = 0; t < teeth; t++) {
     const a0 = (t / teeth) * Math.PI * 2, a1 = ((t + 0.6) / teeth) * Math.PI * 2;
     const p = (r: number, a: number) => [Math.cos(a) * r, Math.sin(a) * r] as const;
-    const [x0, y0] = p(0.9, a0), [x1, y1] = p(1, a1);
+    const [x0, y0] = p(0.82, a0), [x1, y1] = p(1, a1);
     if (t === 0) sh.moveTo(x0, y0); else sh.lineTo(x0, y0);
     sh.lineTo(x1, y1);
   }
   sh.closePath();
-  const disc = new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false, curveSegments: 1 });
-  disc.translate(0, 0, -0.025);
-  const k = new Kit();
-  k.add(disc, STEEL, 0, 0, 0, 0, Math.PI / 2, 0, 0.08);
-  k.cyl(0.25, 0.09, DARK, 0, 0, 0, 0, 0, Math.PI / 2, 8);
-  // Two painted marks so the spin reads.
-  k.box(0.07, 0.5, 0.25, YELLOW, 0, 0.55, 0).box(0.07, 0.5, 0.25, YELLOW, 0, -0.55, 0);
-  return k.build(-1, 1, 0);
+  // A hole in the middle so it reads as a ring of energy.
+  const hole = new THREE.Path();
+  for (let t = 0; t <= 12; t++) { const a = -(t / 12) * Math.PI * 2; if (t === 0) hole.moveTo(Math.cos(a) * 0.45, Math.sin(a) * 0.45); else hole.lineTo(Math.cos(a) * 0.45, Math.sin(a) * 0.45); }
+  sh.holes.push(hole);
+  const disc = new THREE.ExtrudeGeometry(sh, { depth: 0.04, bevelEnabled: false, curveSegments: 1 });
+  disc.translate(0, 0, -0.02);
+  disc.rotateY(Math.PI / 2);
+  disc.deleteAttribute("uv");
+  return disc;
 }
 
 /**
- * Big excavator chassis (× size): a yellow upper frame on a dark slewing ring, hip housings at the four corners for the
- * booms, a cab with glass front left, the engine house behind it, a counterweight striped at the back, an exhaust
- * stack, a beacon mast, and the heavy gun under the front.
+ * Big walker body (× size; Keith's tall beam-walker reference): a wide white thorax disc up top (domed, a dark band
+ * round its rim, a cap and a mast), a sensor head jutting from its front, a dark mechanical core underneath with the
+ * four hip housings, the blue emitter lens under the front (glow drawn apart), and a big white abdomen slung behind and
+ * below, ringed in dark bands, so it reads clearly as thorax and abdomen.
  */
 export function bigBodyGeometry(): THREE.BufferGeometry {
   const k = new Kit(), H = BIG_BODY_H;
-  k.box(0.7, H * 0.6, 0.86, YELLOW, 0, 0, 0);
-  k.cyl(0.34, H * 0.35, DARK, 0, -H * 0.45, 0, 0, 0, 0, 12);
-  k.box(0.5, H * 0.12, 0.5, GREY, 0, -H * 0.66, 0);
+  const R = 0.58;
+  const disc = [[0, -H * 0.38], [R * 0.7, -H * 0.38], [R * 0.95, -H * 0.24], [R, -H * 0.08], [R * 0.97, H * 0.08], [R * 0.8, H * 0.22], [R * 0.45, H * 0.32], [0, H * 0.34]]
+    .map(([x, y]) => new THREE.Vector2(x, y));
+  k.add(new THREE.LatheGeometry(disc, 20), WHITE, 0, 0, 0, 0, 0, 0, 0.04);
+  k.cyl(R * 1.01, H * 0.09, JOINT, 0, -H * 0.02, 0, 0, 0, 0, 20);
+  k.cyl(R * 0.36, H * 0.14, WHITE_DIM, 0, H * 0.38, -0.04, 0, 0, 0, 12);
+  k.cyl(R * 0.38, H * 0.03, JOINT, 0, H * 0.33, -0.04, 0, 0, 0, 12);
+  k.cyl(0.012, 0.28, DARK, -0.1, H * 0.5 + 0.12, -0.1, 0, 0, 0, 5);
+  // Sensor head: a squarish block out the front of the disc, dark visor band.
+  k.box(0.24, 0.13, 0.2, WHITE, 0, H * 0.02, R + 0.04).box(0.245, 0.045, 0.12, GLASS, 0, H * 0.04, R + 0.09);
+  k.box(0.16, 0.06, 0.14, JOINT, 0, -H * 0.18, R - 0.02);
+  // Core underneath: a dark block with the hip housings on its corners, struts to the disc.
+  k.box(0.5, H * 0.3, 0.5, JOINT, 0, -H * 0.5, 0);
   for (const a of BIG_SPEC.angles) {
     const x = Math.sin(a) * BIG_SPEC.hipR, z = Math.cos(a) * BIG_SPEC.hipR;
-    k.box(0.16, 0.14, 0.16, DARK, x, -BIG_SPEC.hipDrop * 0.5, z, 0, a, 0).cyl(0.03, 0.2, STEEL, x, -BIG_SPEC.hipDrop * 0.5, z, 0, a, Math.PI / 2);
+    k.box(0.15, 0.15, 0.15, DARK, x, -BIG_SPEC.hipDrop, z, 0, a, 0).cyl(0.035, 0.22, STEEL, x, -BIG_SPEC.hipDrop, z, 0, a, Math.PI / 2, 6);
   }
-  // Cab front left: yellow shell, a glass band round it, a roof plate.
-  k.box(0.26, 0.2, 0.26, YELLOW, 0.2, H * 0.3 + 0.1, 0.24).box(0.265, 0.075, 0.265, GLASS, 0.2, H * 0.3 + 0.13, 0.242).box(0.28, 0.02, 0.28, DARK, 0.2, H * 0.3 + 0.21, 0.24);
-  // Engine house behind, vents on top.
-  k.box(0.38, 0.17, 0.34, YELLOW_DIRTY, -0.13, H * 0.3 + 0.085, -0.13);
-  for (let v = 0; v < 4; v++) k.box(0.3, 0.012, 0.03, BLACK, -0.13, H * 0.3 + 0.175, -0.24 + v * 0.07);
-  // Counterweight with hazard stripes on its back face.
-  k.box(0.68, 0.16, 0.13, GREY, 0, 0, -0.49).stripes(0.66, 0.08, 10, 0, 0, -0.557, Math.PI);
-  // Front edge stripes and a hand rail on the right.
-  k.stripes(0.66, 0.05, 10, 0, H * 0.18, 0.432);
-  k.box(0.012, 0.012, 0.6, STEEL, -0.33, H * 0.3 + 0.08, 0.05).box(0.012, 0.08, 0.012, STEEL, -0.33, H * 0.3 + 0.04, 0.33).box(0.012, 0.08, 0.012, STEEL, -0.33, H * 0.3 + 0.04, -0.23);
-  // Exhaust stack, beacon mast.
-  k.cyl(0.025, 0.22, BLACK, -0.26, H * 0.3 + 0.26, -0.05).cyl(0.012, 0.1, DARK, 0.2, H * 0.3 + 0.26, 0.24);
-  // The gun: a heavy barrel slung under the front, its breech in a box.
-  k.box(0.16, 0.12, 0.2, DARK, 0, -H * 0.3, 0.4).cyl(0.05, 0.42, DARK, 0, -H * 0.3, 0.6, Math.PI / 2, 0, 0, 8).cyl(0.065, 0.06, BLACK, 0, -H * 0.3, 0.8, Math.PI / 2, 0, 0, 8);
-  return k.build(-H * 0.8, H * 0.5, 0.35);
+  // Emitter housing under the front (the lens glows, drawn apart).
+  k.cyl(0.11, 0.08, DARK, 0, -H * 0.62, 0.2, 0, 0, 0, 12);
+  // Abdomen: slung behind and below, tipped down at the tail.
+  k.add(pod(0.27, 0.9, 14, 0.5, 0.7), WHITE, 0, -H * 0.85, -0.48, -0.55, 0, 0, 0.04);
+  for (const [t, r] of [[0.0, 0.272], [0.2, 0.26]] as const) {
+    const zc = -0.48 + Math.cos(0.55) * (-0.1 - t * 0.6), yc = -H * 0.85 + Math.sin(0.55) * (0.1 + t * 0.6);
+    k.cyl(r, 0.04, JOINT, 0, yc, zc, Math.PI / 2 - 0.55, 0, 0, 14);
+  }
+  k.box(0.1, 0.07, 0.4, DARK, 0, -H * 0.85 + 0.24, -0.5, -0.55, 0, 0);
+  k.box(0.18, 0.12, 0.24, JOINT, 0, -H * 0.6, -0.25, -0.4, 0, 0);
+  return k.build(-H * 2.2, H * 0.3, 0.1);
 }
 
 /**
- * An excavator bucket, the big one's foot (× the bucket's height): pivot at the top (the stick's end) at the origin,
- * hanging down to its teeth at y -1, opening toward -Z (in toward the body, as it digs), its curved back outward
- * (+Z), with side plates, a linkage and teeth.
+ * A big walker's foot (× the foot's height): pivot at the top (the shin's end) at the origin, a dark tapered pad down to
+ * the sand at y -1 with three claws.
  */
 export function bucketGeometry(): THREE.BufferGeometry {
-  const k = new Kit(), W = 1.1;
-  // Curved back: three plates down the outside.
-  k.box(W, 0.36, 0.08, YELLOW_DIRTY, 0, -0.18, 0.22, -0.35, 0, 0);
-  k.box(W, 0.36, 0.08, YELLOW_DIRTY, 0, -0.5, 0.3, 0.05, 0, 0);
-  k.box(W, 0.32, 0.08, YELLOW_DIRTY, 0, -0.8, 0.18, 0.55, 0, 0);
-  // Side plates.
-  k.box(0.05, 0.85, 0.5, YELLOW, W / 2, -0.5, 0.05).box(0.05, 0.85, 0.5, YELLOW, -W / 2, -0.5, 0.05);
-  // Linkage ears at the top.
-  k.box(0.3, 0.2, 0.2, DARK, 0, -0.02, 0.1).cyl(0.06, 0.4, STEEL, 0, 0, 0.05, 0, 0, Math.PI / 2);
-  // Cutting edge and teeth.
-  k.box(W, 0.05, 0.16, DARK, 0, -0.95, -0.02);
-  for (let t = 0; t < 5; t++) k.box(0.08, 0.16, 0.09, STEEL, -W / 2 + 0.12 + t * ((W - 0.24) / 4), -1.0, -0.08, 0.5, 0, 0);
-  return k.build(-1, 0, 0.45);
+  const k = new Kit();
+  k.add(new THREE.CylinderGeometry(0.28, 0.5, 0.7, 8), JOINT, 0, -0.45, 0);
+  k.cyl(0.32, 0.12, DARK, 0, -0.1, 0, 0, 0, 0, 8);
+  for (let t = 0; t < 3; t++) {
+    const a = (t / 3) * Math.PI * 2;
+    k.box(0.16, 0.22, 0.42, DARK, Math.sin(a) * 0.5, -0.9, Math.cos(a) * 0.5, 0.4, a, 0);
+  }
+  return k.build(-1, 0, 0.1);
 }

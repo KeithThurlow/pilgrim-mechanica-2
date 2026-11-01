@@ -12,13 +12,10 @@ import type { PartSpec, JointSpec } from "../physics/deaths";
 import { BANDIT_PARTS, BANDIT_JOINTS } from "../physics/bodies";
 import { DEAD, EMPTY, FIRING } from "./infantry";
 import { LANCER, BRUTE, type DroidSwarm } from "./droids";
+import { ROBOT_PALETTE } from "./robotShapes";
 
-/** The robots' shared white palette. A copy of ROBOT_PALETTE (robotShapes.ts, the robot restyle); import it from
- *  there once that has merged. */
-export const DROID_PALETTE = {
-  plate: 0xe8e6e0, plateDim: 0xc8c6c0, joint: 0x3a3d42, dark: 0x22252a,
-  seek: 0xff2a1a, beam: 0x3aa8ff, beamCore: 0xd8f4ff,
-};
+/** The robots' shared white palette (ROBOT_PALETTE in robotShapes.ts). */
+export const DROID_PALETTE = ROBOT_PALETTE;
 
 /** Visor states (written into the bake's per-instance look slot). */
 const VISOR_IDLE = 0, VISOR_LOCK = 1, VISOR_FIRE = 2, VISOR_OFF = 3;

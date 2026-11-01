@@ -9,14 +9,14 @@ import { RobotSwarm, BIG, MID, SMALL, type RobotValues } from "../../src/combat/
 import { RobotsDraw } from "../../src/combat/robotsDraw";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, type RobotTearValues } from "../../src/combat/robotTearFx";
-import { YELLOW, YELLOW_DIRTY, GREY } from "../../src/combat/robotShapes";
+import { ROBOT_RAG } from "../../src/combat/robotShapes";
 import { InfantrySwarm, INFANTRY_MAX, type InfantryValues } from "../../src/combat/infantry";
 import { InfantryDraw, CLOTH, type BanditLookValues } from "../../src/combat/infantryDraw";
 import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { Warband, type WarbandValues } from "../../src/combat/warband";
 import { robotRagdoll, BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
-import { fireRobotBeam } from "../../src/game/robotBeam";
+import { fireRobotBeam, fireRobotPulse } from "../../src/game/robotBeam";
 
 export interface StressValues {
   stressSpawnFrom: number;
@@ -51,7 +51,7 @@ export class StressRobots {
     bf.targets.push(this.target);
     bf.register.add(this.target);
     sw.hideDead = true;
-    const RAG = [[0x9a9c9e, 0x4a4d51], [YELLOW, YELLOW_DIRTY], [YELLOW, GREY]];
+    const RAG = ROBOT_RAG;
     sw.onDeath = (i, nx, nz, speed) => {
       const kind = sw.kind[i], [body, leg] = RAG[kind];
       const { parts, joints } = robotRagdoll(sw, i, body, leg);
@@ -62,6 +62,7 @@ export class StressRobots {
     const lobFrom = new THREE.Vector3();
     sw.onLob = (_i, fx, fy, fz, x, z, flight) => bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, V.robotBigLobArc, V.robotBigLobRadius, V.robotBigShotDamage);
     sw.onBeam = (e) => fireRobotBeam(bf, e, V.robotBeamReach);
+    sw.onPulse = (e) => fireRobotPulse(bf, e);
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
     lab.app.scene.add(this.tear.group);
     void player;

@@ -4,7 +4,8 @@
 // Small scrappers: a low hub with four legs splayed out on the diagonals like a starfish, scuttling in any direction
 // without turning. Medium cutters: a crab-like chassis on four legs, knees up over the body, a circular saw at the
 // front and a scrap bin on its back. Big excavators: a small chassis high up on four very long legs that are
-// excavator arms (boom, stick and bucket; the bucket is the foot), stepping one at a time.
+// excavator arms (boom, stick and bucket; the bucket is the foot), stepping one at a time. Reshaped 2026-11-01 (Keith):
+// sci-fi walkers in white plate; the big ones tall towers on four long legs (see BIG_SPEC).
 
 /** Small hub (× size): radius, thickness, centre height when standing; hips on the rim, feet out at FOOT_R. */
 export const HUB_R = 0.24, HUB_H = 0.15, HUB_Y = 0.3;
@@ -28,8 +29,12 @@ export interface WalkSpec { angles: number[]; hipR: number; hipDrop: number; foo
 const DEG = Math.PI / 180;
 /** Medium cutters: legs out to the sides like a crab (front and rear pairs), the front left clear for the saw. */
 export const MID_SPEC: WalkSpec = { angles: [55, 125, 235, 305].map((d) => d * DEG), hipR: 0.34, hipDrop: 0.06, footR: 1.25, L1: 0.8, L2: 1.15, toe: 0, bendUp: 0.9 };
-/** Big excavators: an X of four booms off the chassis corners, sticks dropping steeply to buckets planted on the sand. */
-export const BIG_SPEC: WalkSpec = { angles: [45, 135, 225, 315].map((d) => d * DEG), hipR: 0.4, hipDrop: 0.1, footR: 0.82, L1: 0.78, L2: 0.95, toe: 0.13, bendUp: 0.45 };
+/**
+ * Big walkers (Keith 2026-11-01, his tall beam-walker reference: "more War of the Worlds", four legs): a short thigh
+ * out from under the thorax to a knee level with the body, then a very long shin dropping almost straight down to a
+ * small foot. The stance is narrow for the height, so it reads as a tower. (Was the excavator's boom and stick.)
+ */
+export const BIG_SPEC: WalkSpec = { angles: [45, 135, 225, 315].map((d) => d * DEG), hipR: 0.42, hipDrop: 0.08, footR: 0.42, L1: 0.22, L2: 0.95, toe: 0.04, bendUp: 0.6 };
 
 /** Small body (centre to a cutting disc's edge, × size): for the drawer and sparks. */
 export const SMALL_DISC = 0.33;

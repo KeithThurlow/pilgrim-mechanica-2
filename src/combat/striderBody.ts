@@ -11,10 +11,10 @@ import * as THREE from "three/webgpu";
 import type { LegPose } from "../mech/walker";
 import { STRIDER_FRAME, BEAM, SLAM, type Strider } from "./strider";
 import { glowMaterial } from "../weapons/ribbon";
+import { ROBOT_PALETTE } from "./robotShapes";
 
-/** The robots' shared white palette (the robot redesign's ROBOT_PALETTE in robotShapes.ts; the same values until
- *  that lands, then swap the import). */
-export const STRIDER_PALETTE = { plate: 0xe8e6e0, plateDim: 0xc8c6c0, joint: 0x3a3d42, dark: 0x22252a, seek: 0xff2a1a, beam: 0x3aa8ff, beamCore: 0xd8f4ff };
+/** The robots' shared white palette (ROBOT_PALETTE in robotShapes.ts). */
+export const STRIDER_PALETTE = ROBOT_PALETTE;
 
 const P = STRIDER_PALETTE;
 const lit = (color: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
