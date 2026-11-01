@@ -19,7 +19,7 @@ export const RADAR_DEFAULTS = {
   radarZoom: 1,
   radarSweep: 2.4,
   radarGlow: 0.9,
-  radarSize: 240,
+  radarSize: 520,
   radarHz: 30,
   blobBase: 90,
   blobGrow: 22,
@@ -35,7 +35,7 @@ export const RADAR_PARAMS: Param[] = [
   { key: "radarZoom", label: "Zoom time (s)", min: 0.1, max: 4, step: 0.05, group: G },
   { key: "radarSweep", label: "Sweep period (s)", min: 0.5, max: 8, step: 0.1, group: G, tip: "One turn of the sweep; contacts are painted as it passes and fade until the next" },
   { key: "radarGlow", label: "Contact fade (× sweep)", min: 0.2, max: 2, step: 0.05, group: G, tip: "How long a painted contact glows, as a share of the sweep" },
-  { key: "radarSize", label: "Scope size (px)", min: 120, max: 480, step: 5, group: G },
+  { key: "radarSize", label: "Scope size (px)", min: 120, max: 900, step: 5, group: G },
   { key: "radarHz", label: "Scope redraws per second", min: 10, max: 144, step: 1, group: G, tip: "The scope is a 2D canvas drawn on the CPU; 30 looks the same as every frame at a fraction of the cost (perf pass 2026-10-31)" },
   { key: "blobBase", label: "Heat blob size (m)", min: 5, max: 200, step: 1, group: G, tip: "A swarm's heat blob on the convoy radar: this plus the growth below" },
   { key: "blobGrow", label: "Blob growth (m per √robot)", min: 0, max: 60, step: 0.5, group: G },
@@ -67,7 +67,7 @@ export interface RadarWorld {
   /** Extraction pads (known to both scopes) with what a call costs from here (scrap), for the mech scope's label. */
   pads?: { id: string; x: number; z: number; fee: number; live?: boolean }[];
   /** Contract targets and a high value target (src/quests/questLoop.ts): a diamond each, pinned to the rim when off the scope. */
-  quests?: { x: number; z: number; color: string }[];
+  quests?: { x: number; z: number; color: string; kind?: "contract" | "hvt" }[];
 }
 
 export interface Blip { id: string; x: number; z: number; kind: "poi" | "robot" | "pad"; tier: number; size: number; stripped?: boolean; faction?: number; label?: string }
@@ -91,7 +91,9 @@ export interface RadarPicture {
   /** What the active seeker points at (offset from the mech), if anything (src/expedition/seekers.ts). */
   seek?: SeekTarget | null;
   /** Contract and HVT diamonds, offset from the mech, with their distance. */
-  quests?: { x: number; z: number; dist: number; color: string }[];
+  quests?: { x: number; z: number; dist: number; color: string; kind?: "contract" | "hvt" }[];
+  /** The convoy's nearest car, wherever it is (the scope pins a marker to the rim when it's off it). */
+  convoyAt?: { x: number; z: number; dist: number } | null;
 }
 
 /** Distance from the mech to the nearest car of the convoy. */
@@ -143,7 +145,8 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
     pic.blips.push({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "pad", tier: 0, size: 2, label: mode === "mech" ? String(p.fee) : undefined, stripped: p.live });
   }
   // Contracts: shown on both scopes whatever the range (dispatch gave the place).
-  pic.quests = (w.quests ?? []).map((q) => ({ x: q.x - mx, z: q.z - mz, dist: Math.hypot(q.x - mx, q.z - mz), color: q.color }));
+  pic.quests = (w.quests ?? []).map((q) => ({ x: q.x - mx, z: q.z - mz, dist: Math.hypot(q.x - mx, q.z - mz), color: q.color, kind: q.kind }));
+  pic.convoyAt = cc ? { x: cc.x - mx, z: cc.z - mz, dist: cd.d } : null;
   // Moving danger: sized to the scope (the blob sizes are for the convoy's); on the mech's scope, heat out to three
   // times its range glows on the rim the way it lies, fainter with distance.
   const sk = mode === "convoy" ? 1 : Math.max(0.1, (1.5 * range) / v.convoyRadar);
