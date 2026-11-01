@@ -716,7 +716,7 @@ export class Warband {
     const sub = Math.max(1, Math.ceil(dt * 120));
     for (let i = 0; i < sub; i++) s.update(dt / sub, throttle, steer);
     // Out of any mech or vehicle it drove into (src/game/solids.ts).
-    this.bf.solids.resolve(r, dt);
+    this.bf.solids?.resolve(r, dt);
     const moved = s.pos.distanceTo(before);
     // Wheels throw dust and leave ruts.
     s.wheels.forEach((w, i) => {

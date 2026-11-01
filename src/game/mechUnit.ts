@@ -418,7 +418,7 @@ export class MechUnit implements Hittable, Solid {
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);
     }
     // Out of any other mech or vehicle it walked into (src/game/solids.ts), before it's drawn.
-    this.bf.solids.resolve(this, dt, v);
+    this.bf.solids?.resolve(this, dt, v);
     body.update(sim, upper);
     body.aimSensor?.(dt, aim, v);
     // Wading: the body pushes a wake (rings dropped as it moves, overlapping into a V).
