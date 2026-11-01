@@ -293,6 +293,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Duel lab rival number box (Keith; Claude on `claude/project-thread-ugaadx`)
+- Keith: Reroll's position shifted with the rival's item list. Fixed `Rival #` number box (top left; type or arrows) in `labs/duel/main.ts`; ◀/Reroll stay. Checked: typecheck, `npm test`.
 ### 2026-11-01 · Sword auto-block (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: a free sword (not mid-swing) facing an enemy's cut swings up and blocks it; you still take reduced damage. `Hittable.parry(fromX, fromZ)` (battlefield.ts) → `MechUnit.parry` → `Arsenal.parry`: a sword at rest or recovering whose arm faces the cutter within `swordBlockArc` 140° of the torso's aim on that side goes to the new clip P (up across the front, held, back to rest over `swordBlockTime` 0.55 s); cuts landing while it's up are blocked too. A blocked cut does `swordBlockTake` 0.35 of its damage and `swordBlockKnock` 0.3 of its knock, throws more sparks, plays `swordBlock` (a hard knock, short scrape, grind; no ring) and stalls the cutter's blade `swordBlockStall` 0.14 s. A click during a block cuts at once. New slider group Sword block. Player and rivals alike; the headless duel (`duelSim.ts`) blocks the same way off each mech's last aim.
 - `sword.ts` (clip P, `free`, `blocking`, `block`), `arsenal.ts`, `mechUnit.ts`, `battlefield.ts`, `weaponSound.ts`, `tuning.ts`, `duelSim.ts`, `tools/sword-check.ts` (P clear of the hull and in reach; a resting sword blocks, one mid-cut can't, back to rest on time; the blade stands up ahead of the chest). npm test.
