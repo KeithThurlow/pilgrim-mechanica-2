@@ -3,7 +3,9 @@
 // labs' targeting):
 // - MouseButtons: the cursor and both buttons (left click fires the left side, right click the right; Keith 2026-10-25);
 // - SoftAim: the soft lock under the cursor (src/game/targeting.ts, over the battlefield's register) with the lead,
-//   the reticle on the sand and the orange brackets on the lock;
+//   the reticle on the sand and the orange brackets on the lock; and the target lock (Tab, src/game/targetLock.ts),
+//   which holds the aim on one enemy as if the cursor were on it, marked by red brackets, a spinning diamond and a
+//   ring on the sand;
 // - CameraShake: kicks that decay by themselves (shakeDecay);
 // - fitArsenal: the weapons other than the miniguns (src/weapons) on the mech, drawn, with blasts shaking the camera
 //   by size and distance.
@@ -16,7 +18,8 @@ import type { Aim } from "../mech/upper";
 import type { ToonLook } from "../look/toon";
 import type { Battlefield } from "./battlefield";
 import type { MechUnit } from "./mechUnit";
-import { Targeting, type TargetCandidate, type TargetValues, type Lock } from "./targeting";
+import { Targeting, type TargetValues, type Lock } from "./targeting";
+import { TargetLock, type LockChange } from "./targetLock";
 import { EntryList, type Filter, type Register } from "./register";
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
@@ -58,8 +61,13 @@ export class MouseButtons {
 }
 
 export interface AimPick {
-  /** The cursor's point on the sand (+1 m), or null with no mouse over the ground. */
+  /** Where the weapons take the cursor to be: the mouse's point on the sand (+1 m), or under the target lock's target
+   *  while it holds; null with neither. */
   cursor: Aim | null;
+  /** The mouse's own point on the sand (+1 m), where the reticle sits; null with no mouse over the ground. */
+  pointer: Aim | null;
+  /** What the lock command did this tick (on, off, lost: the target died or got away; null: nothing). */
+  change: LockChange;
   /** Where the arms swing: the cursor, or the lock led by its motion. */
   aim: Aim | null;
   /** Where the rounds go: the lock itself (null: the aim). */
@@ -67,12 +75,19 @@ export interface AimPick {
   lock: Lock | null;
 }
 
-/** The soft lock, its lead, and the marks for it: the reticle on the sand and brackets round the lock. */
+/** The soft lock, its lead, the target lock, and the marks for them: the reticle on the sand and brackets round the
+ *  lock (orange, thick enough to read from the game camera), red with a spinning diamond and a ring when held. */
 export class SoftAim {
   readonly targeting = new Targeting();
+  readonly held = new TargetLock();
   readonly reticle: THREE.Mesh;
-  readonly lockMark: THREE.LineSegments;
-  private lockMat: THREE.LineBasicMaterial;
+  readonly lockMark: THREE.Mesh;
+  private lockMat: THREE.MeshBasicMaterial;
+  private heldMark: THREE.Mesh;
+  private heldRing: THREE.Mesh;
+  private heldMat: THREE.MeshBasicMaterial;
+  /** When the held lock came on (performance.now, s), for its snap-in. */
+  private heldAt = -1;
   private ndc = new THREE.Vector2();
   private caster = new THREE.Raycaster();
   private ground = new THREE.Vector3();
@@ -84,27 +99,54 @@ export class SoftAim {
     );
     this.reticle.renderOrder = 10;
     scene.add(this.reticle);
-    this.lockMat = new THREE.LineBasicMaterial({ color: 0xff6a3d, depthTest: false, transparent: true, toneMapped: false });
-    this.lockMark = new THREE.LineSegments(lockBrackets(), this.lockMat);
+    this.lockMat = new THREE.MeshBasicMaterial({ color: 0xff6a3d, depthTest: false, transparent: true, toneMapped: false, side: THREE.DoubleSide });
+    this.lockMark = new THREE.Mesh(lockBrackets(), this.lockMat);
     this.lockMark.renderOrder = 11;
     scene.add(this.lockMark);
+    this.heldMat = new THREE.MeshBasicMaterial({ color: 0xff2a1f, depthTest: false, transparent: true, opacity: 0.95, toneMapped: false, side: THREE.DoubleSide });
+    this.heldMark = new THREE.Mesh(lockDiamond(), this.heldMat);
+    this.heldMark.renderOrder = 12;
+    scene.add(this.heldMark);
+    this.heldRing = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 48).rotateX(-Math.PI / 2), this.heldMat);
+    this.heldRing.renderOrder = 10;
+    scene.add(this.heldRing);
   }
+
+  /** Let go of the target lock (the pilot hopped out, the round restarted). */
+  release() { this.held.release(); }
 
   /**
    * The cursor on the sand, and the enemy the guns take: under the cursor ray (a tall walker by its body, or by its
    * footprint), else the one nearest the line of fire from `from`. A lock is led by its motion (the arms trail their
    * aim as they track, so swing them to where it will be by then); the rounds fly straight at the lock itself.
    */
-  pick(mouse: { x: number; y: number } | null, reg: Register, enemies: Filter, from: THREE.Vector3, v: TargetValues & { range: number }): AimPick {
-    const out: AimPick = { cursor: null, aim: null, shotAt: null, lock: null };
-    if (!mouse || !screenToGround(mouse.x, mouse.y, this.canvas, this.camera, this.field, this.ground)) return out;
-    const g = this.ground;
-    out.cursor = out.aim = { x: g.x, y: g.y + 1, z: g.z };
-    const r = this.canvas.getBoundingClientRect();
-    this.ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
-    this.caster.setFromCamera(this.ndc, this.camera);
-    const ray = this.caster.ray;
-    out.lock = this.targeting.pick(reg, enemies, { rayO: ray.origin, rayD: ray.direction, from, cursor: g, range: v.range }, v);
+  /**
+   * lockCmd: the target lock command this tick (Tab): locks what the soft lock has, or lets go. While the lock holds,
+   * the cursor, aim and shots are its target's whatever the mouse does (and with no mouse at all: a pad or touch later).
+   */
+  pick(mouse: { x: number; y: number } | null, reg: Register, enemies: Filter, from: THREE.Vector3, v: TargetValues & { range: number }, lockCmd = false): AimPick {
+    const out: AimPick = { cursor: null, pointer: null, change: null, aim: null, shotAt: null, lock: null };
+    let soft: Lock | null = null;
+    if (mouse && screenToGround(mouse.x, mouse.y, this.canvas, this.camera, this.field, this.ground)) {
+      const g = this.ground;
+      out.pointer = out.cursor = out.aim = { x: g.x, y: g.y + 1, z: g.z };
+      const r = this.canvas.getBoundingClientRect();
+      this.ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
+      this.caster.setFromCamera(this.ndc, this.camera);
+      const ray = this.caster.ray;
+      soft = this.targeting.pick(reg, enemies, { rayO: ray.origin, rayD: ray.direction, from, cursor: g, range: v.range }, v);
+    }
+    if (lockCmd) out.change = this.held.toggle(soft ? (soft.target.key as number) : null);
+    const held = this.held.resolve(reg, enemies, from, v.lockHold);
+    out.change ||= held.change;
+    if (out.change === "on") this.heldAt = performance.now() / 1000;
+    if (held.view) {
+      const t = held.view;
+      out.lock = { target: t, how: "held" };
+      out.cursor = { x: t.x, y: this.field.height(t.x, t.z) + 1, z: t.z };
+      out.aim = out.cursor;
+      this.targeting.last = t.key;
+    } else out.lock = soft;
     if (out.lock) {
       const t = out.lock.target, L = v.lockLead;
       out.shotAt = { x: t.x, y: t.y, z: t.z };
@@ -113,19 +155,37 @@ export class SoftAim {
     return out;
   }
 
-  /** The reticle where the cursor is (amber while the guns bear and nothing's locked), brackets on the lock. */
-  draw(cursor: Aim | null, lock: TargetCandidate | null, onTarget: boolean) {
-    this.reticle.visible = !!cursor;
-    if (cursor) {
-      this.reticle.position.set(cursor.x, this.field.height(cursor.x, cursor.z) + 0.06, cursor.z);
-      (this.reticle.material as THREE.MeshBasicMaterial).color.setHex(onTarget && !lock ? 0xffb347 : 0x9a958c);
+  /**
+   * The reticle where the mouse is (amber while the guns bear and nothing's locked; faint while the target lock holds),
+   * brackets on the lock: orange while the guns bear, pale when not (still easy to see on sand); held: red brackets,
+   * a diamond turning inside them and a ring on the sand under it, snapping in when the lock comes on.
+   */
+  draw(pointer: Aim | null, lock: Lock | null, onTarget: boolean) {
+    const t = lock?.target ?? null, held = lock?.how === "held";
+    const rm = this.reticle.material as THREE.MeshBasicMaterial;
+    this.reticle.visible = !!pointer;
+    if (pointer) {
+      this.reticle.position.set(pointer.x, this.field.height(pointer.x, pointer.z) + 0.06, pointer.z);
+      rm.color.setHex(onTarget && !t ? 0xffb347 : 0x9a958c);
+      rm.opacity = held ? 0.45 : 0.9;
     }
-    this.lockMark.visible = !!lock;
-    if (lock) {
-      this.lockMark.position.set(lock.x, lock.y, lock.z);
-      this.lockMark.quaternion.copy(this.camera.quaternion);
-      this.lockMark.scale.setScalar(Math.max(1, lock.r * 1.3));
-      this.lockMat.color.setHex(onTarget ? 0xff6a3d : 0xb0a89a);
+    this.lockMark.visible = !!t;
+    this.heldMark.visible = this.heldRing.visible = !!t && held;
+    if (!t) return;
+    const s = Math.max(1, t.r * 1.3);
+    const now = performance.now() / 1000, snap = held ? Math.max(0, 1 - (now - this.heldAt) / 0.18) : 0;
+    this.lockMark.position.set(t.x, t.y, t.z);
+    this.lockMark.quaternion.copy(this.camera.quaternion);
+    this.lockMark.scale.setScalar(s * (1 + snap * 0.8));
+    this.lockMat.color.setHex(held ? 0xff2a1f : onTarget ? 0xff6a3d : 0xffd9a0);
+    this.lockMat.opacity = held || onTarget ? 1 : 0.75;
+    if (held) {
+      this.heldMark.position.copy(this.lockMark.position);
+      this.heldMark.quaternion.copy(this.camera.quaternion);
+      this.heldMark.rotateZ(now * 1.6);
+      this.heldMark.scale.setScalar(s * 0.55 * (1 + snap));
+      this.heldRing.position.set(t.x, this.field.height(t.x, t.z) + 0.08, t.z);
+      this.heldRing.scale.setScalar(Math.max(1.6, (t.foot ?? 0) * 0.5, t.r * 1.4));
     }
   }
 }
@@ -166,11 +226,30 @@ export function fitArsenal(bf: Battlefield, player: MechUnit, v: MechUnit["v"] &
   return { arsenal, draw };
 }
 
-/** Four corner brackets on a unit square (the lock mark). */
-function lockBrackets() {
-  const a = 1, b = 0.45, pts: number[] = [];
-  for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-    pts.push(sx * a, sy * a, 0, sx * (a - b), sy * a, 0, sx * a, sy * a, 0, sx * a, sy * (a - b), 0);
+/** Flat quads (x0, y0, x1, y1 each) as one mesh in the xy plane: marks with real thickness (a line is 1 px in WebGPU,
+ *  too thin to read from the game camera). */
+function quads(rects: number[][]) {
+  const pos: number[] = [], idx: number[] = [];
+  for (const [x0, y0, x1, y1] of rects) {
+    const n = pos.length / 3;
+    pos.push(x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0);
+    idx.push(n, n + 1, n + 2, n, n + 2, n + 3);
   }
-  return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)).setIndex(idx);
+}
+
+/** Four corner brackets on a unit square (the lock mark), each arm `w` thick. */
+function lockBrackets() {
+  const a = 1, b = 0.42, w = 0.085, r: number[][] = [];
+  for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+    r.push([Math.min(sx * a, sx * (a - b)), Math.min(sy * a, sy * (a - w)), Math.max(sx * a, sx * (a - b)), Math.max(sy * a, sy * (a - w))]);
+    r.push([Math.min(sx * a, sx * (a - w)), Math.min(sy * a, sy * (a - b)), Math.max(sx * a, sx * (a - w)), Math.max(sy * a, sy * (a - b))]);
+  }
+  return quads(r);
+}
+
+/** Four short ticks pointing in at the centre, round a unit circle (the held lock's turning diamond). */
+function lockDiamond() {
+  const w = 0.09, r = quads([[-w, 0.55, w, 1], [-w, -1, w, -0.55], [0.55, -w, 1, w], [-1, -w, -0.55, w]]);
+  return r.rotateZ(Math.PI / 4);
 }

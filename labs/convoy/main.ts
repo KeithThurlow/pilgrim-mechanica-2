@@ -376,7 +376,10 @@ refit();
 // The pickup card compares with what is fitted.
 loop.loot.hud.fitted = () => Object.values(bayState.loadout);
 // Tab cycles the sensor's seeker mode (shown on the radar and in the expedition HUD).
-addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.preventDefault(); loop.seeker.cycle(); } });
+// Tab while driving with an enemy under the cursor: the target lock (or let go of it; src/game/targetLock.ts); Tab with
+// nothing to lock still cycles the seeker.
+let tabPressed = false;
+addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen && !e.repeat) { e.preventDefault(); tabPressed = true; } });
 // ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
 for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeker.mode !== params.get("seek"); i++) loop.seeker.cycle();
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); }, onOpen: () => inventory.close() });
@@ -870,7 +873,7 @@ app.onTick((rawDt) => {
   const fHeld = keys.has("KeyF") || clock < holdF;
   if (stick.lengthSq() > 0 || fHeld) auto = false;
   let cmd: MoveCommand = { x: 0, z: 0, sprint: false };
-  let aim: Aim | null = null, cursor: Aim | null = null, shotAt: Aim | null = null;
+  let aim: Aim | null = null, cursor: Aim | null = null, pointer: Aim | null = null, shotAt: Aim | null = null;
   let trigger: Trigger = false;
   let lock: Lock | null = null;
   // Shoulder weapon keys 1-4: hold to paint, release to fire.
@@ -884,10 +887,15 @@ app.onTick((rawDt) => {
     if (stick.lengthSq() > 0) cmd = { x: stick.x, z: stick.z, sprint: keys.sprint };
     // Soft lock as in the combat labs: the enemy under the cursor (a tall walker by its body, or the sand among its
     // feet), else the one nearest the line of fire; led by its motion, the rounds straight at it.
-    ({ cursor, aim, shotAt, lock } = softAim.pick(buttons.mouse, bf.register, enemies, sim.pos, V));
+    let change: string | null = null;
+    ({ cursor, pointer, aim, shotAt, lock, change } = softAim.pick(buttons.mouse, bf.register, enemies, sim.pos, V, tabPressed));
+    if (tabPressed && !change) loop.seeker.cycle();
+    tabPressed = false;
     trigger = [buttons.left, buttons.right];
     held = [keys.has("Digit1"), keys.has("Digit2"), keys.has("Digit3"), keys.has("Digit4")];
   }
+  if (tabPressed) { tabPressed = false; loop.seeker.cycle(); }
+  if (!driving) softAim.release();
   // Weapons work only out on the sand (not on the deck, hanging or parked).
   // Clamped in the pickup's cradle: no driving, no guns.
   if (loop.padCall.clamped) { cmd = { x: 0, z: 0, sprint: false }; trigger = false; }
@@ -1020,7 +1028,7 @@ app.onTick((rawDt) => {
   patchSome(1.5);
   costs.mark("plough patch");
 
-  softAim.draw(driving ? cursor : null, lock?.target ?? null, player.upper.onTarget && !player.gunsOff);
+  softAim.draw(driving ? pointer ?? cursor : null, lock, player.upper.onTarget && !player.gunsOff);
   reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
   healthBars.update(rawDt);
 
@@ -1103,7 +1111,7 @@ app.onTick((rawDt) => {
   });
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
     + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
-  app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
+  app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : lock.how === "held" ? "target (Tab)" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
   app.hud.set("crane", () => `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });

@@ -4,6 +4,7 @@
 // force on random scenes; the soft lock over the register picks what the old list scan picked; ids stay put while
 // robots and bandits move, and a slot reused after a death gets a new id.
 import { Targeting, TARGET_DEFAULTS, enemiesOf, type TargetCandidate, type LockQuery, type TargetValues } from "../src/game/targeting";
+import { TargetLock } from "../src/game/targetLock";
 import { Register, RayHits, KIND, FLAG, MEASURE, kindBit, type Filter } from "../src/game/register";
 import { listOwner } from "../src/game/registerOwners";
 import { UpperSim, UPPER_DEFAULTS } from "../src/mech/upper";
@@ -85,6 +86,41 @@ const c = (x: number, y: number, z: number, r: number, key: string): TargetCandi
   ok(pick(t, [c(0, 1, 80, 0.6, "far")], q(0, 20), v) === null, "nothing out of range");
   ok(pick(t, [c(15, 1, 20, 0.6, "wide")], q(0, 20), v) === null, "nothing far off the line");
   ok(pick(t, [c(0, 1, 20, 0.6, "x")], q(0, 20), { ...v, autoLock: 0 }) === null, "off means off");
+}
+{ // Under the cursor reaches past gun range, out to lockFar (Keith 2026-11-01: a rival standing off at 68 m got no brackets).
+  const t = new Targeting();
+  const l = pick(t, [c(0, 2, 75, 1.7, "rival")], q(0, 75), v);
+  ok(l?.target.key === "rival" && l.how === "cursor", "an enemy under the cursor past gun range is taken");
+  ok(pick(t, [c(0, 2, v.lockFar + 10, 1.7, "beyond")], q(0, v.lockFar + 10), v) === null, "nothing under the cursor past lockFar");
+}
+{ // A sword's range is its reach: the line of fire still reaches lockMin (Keith 2026-11-01: no brackets with swords).
+  const t = new Targeting();
+  const l = pick(t, [c(0.5, 2, 30, 1.7, "rival")], { ...q(0, 20), range: 6 }, v);
+  ok(l?.target.key === "rival" && l.how === "line", "with a sword's short range the line of fire still reaches lockMin");
+  ok(pick(t, [c(0.5, 2, v.lockMin + 8, 1.7, "far")], { ...q(0, 20), range: 6 }, v) === null, "but not past lockMin");
+}
+{ // The target lock (Tab): holds whatever the mouse does, lets go on Tab, a death, going down, or distance.
+  const L = new TargetLock();
+  const t = new Targeting();
+  const at = (x: number, z: number) => [c(x, 2, z, 1.7, "rival"), c(-8, 1, 20, 0.6, "other")];
+  const idOf = (name: string) => { for (let e = 0; e < world.reg.count; e++) if (world.name(world.reg.id[e]) === name) return world.reg.id[e]; return -1; };
+  const soft = pick(t, at(0, 30), q(0, 30), v);
+  ok(L.toggle(null) === null && L.id === null, "Tab with nothing under the cursor locks nothing");
+  ok(L.toggle(idOf(String(soft?.target.key))) === "on", "Tab over an enemy locks it");
+  world.set(at(3, 34));
+  let r = L.resolve(world.reg, ENEMY, from, v.lockHold);
+  ok(r.view !== null && world.name(r.view.key) === "rival" && r.view.x === 3, "the lock follows its target as it moves");
+  world.set(at(3, 34));
+  ok(L.toggle(idOf("other")) === "off" && L.id === null, "Tab again lets go (and doesn't jump to another)");
+  L.toggle(idOf("rival"));
+  world.set([c(-8, 1, 20, 0.6, "other")]);
+  r = L.resolve(world.reg, ENEMY, from, v.lockHold);
+  ok(r.view === null && r.change === "lost" && L.id === null, "the target dying lets go");
+  world.set(at(0, 30)); L.toggle(idOf("rival"));
+  world.set(at(0, v.lockHold + 5));
+  ok(L.resolve(world.reg, ENEMY, from, v.lockHold).change === "lost", "the target getting too far lets go");
+  world.set(at(0, 30)); L.toggle(idOf("rival"));
+  ok(L.resolve(world.reg, { ...ENEMY, none: FLAG.Down | FLAG.Hittable }, from, v.lockHold).change === "lost", "a target that no longer passes the filter (down) lets go");
 }
 { // Sticky: the last target is kept against a slightly better one.
   const t = new Targeting();
@@ -230,7 +266,7 @@ function bruteLock(cands: readonly TargetCandidate[], qq: LockQuery, vv: TargetV
     let s = d <= cc.r + vv.lockCursor ? d / (cc.r + vv.lockCursor + 1e-3) : Infinity;
     if (cc.foot) { const reach = cc.foot + vv.lockCursor, fd = Math.hypot(qq.cursor.x - cc.x, qq.cursor.z - cc.z); if (fd <= reach) s = Math.min(s, 0.5 + 0.5 * (fd / reach)); }
     if (s === Infinity) continue;
-    if (Math.hypot(cc.x - qq.from.x, cc.z - qq.from.z) > qq.range) continue;
+    if (Math.hypot(cc.x - qq.from.x, cc.z - qq.from.z) > Math.max(qq.range, vv.lockFar)) continue;
     s *= cc.key === last ? sticky : 1;
     if (s < bestS) { bestS = s; best = cc; }
   }

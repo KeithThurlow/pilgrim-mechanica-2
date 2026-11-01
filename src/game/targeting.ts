@@ -4,10 +4,13 @@
 //
 // 1. Under the cursor: an enemy whose centre of mass lies within its radius + `lockCursor` of the camera's cursor ray,
 //    or a tall walker whose footprint (its planted feet, + `lockCursor`) holds the cursor's ground point: its body is
-//    the target either way, never its feet (Keith 2026-10-26). Closest to that ray wins.
+//    the target either way, never its feet (Keith 2026-10-26). Closest to that ray wins. Out to `lockFar`, not just gun
+//    range: what you point at is what you mean (Keith 2026-11-01: the brackets hardly ever showed on a rival mech,
+//    which stands off past the miniguns' 45 m).
 // 2. Otherwise along the line of fire: from the mech through the cursor's ground point, on out to gun range. An enemy
 //    within `lockWidth` + a widening cone (`lockCone`) of that line counts; closest to the line wins (a little bias to
-//    nearer ones).
+//    nearer ones). Out to the gun's range, but never less than `lockMin` (Keith 2026-11-01: a sword's range is its
+//    reach, so with swords fitted the brackets showed only once the rival was already in reach).
 // The last target is kept while it still qualifies unless another is clearly better (`lockSticky`).
 // The candidates come from the register (src/game/register.ts; docs/proposal-register.md step 2): no lab writes a list.
 import type { Param } from "../core/tweaks";
@@ -20,6 +23,9 @@ export const TARGET_DEFAULTS = {
   lockCone: 6,
   lockSticky: 0.4,
   lockLead: 0.12,
+  lockFar: 120,
+  lockMin: 50,
+  lockHold: 160,
   /** Not a slider: degrees a fitted sensor head adds to `lockCone` (src/items/loadout.ts resolve, sensorLock). */
   sensorLock: 0,
 };
@@ -32,6 +38,9 @@ export const TARGET_PARAMS: Param[] = [
   { key: "lockCone", label: "Line of fire: widening (deg)", min: 0, max: 30, step: 0.5, group: "Targeting" },
   { key: "lockLead", label: "Lead a moving target (s)", min: 0, max: 0.6, step: 0.01, group: "Targeting", tip: "Aim this far ahead of a locked target's motion: the guns trail their aim a little as they track (about 1 / gun tracking), so leading by that much puts the rounds on it" },
   { key: "lockSticky", label: "Keep the last target (0-1)", min: 0, max: 1, step: 0.05, group: "Targeting" },
+  { key: "lockMin", label: "Line of fire: at least out to (m)", min: 0, max: 150, step: 5, group: "Targeting", tip: "The line of fire reaches the weapon's range, or this if that's shorter (a sword's range is only its reach)" },
+  { key: "lockFar", label: "Under cursor: out to (m)", min: 20, max: 300, step: 5, group: "Targeting", tip: "An enemy under the cursor is taken out to here, past gun range (the line of fire stops at gun range)" },
+  { key: "lockHold", label: "Target lock (Tab): lost past (m)", min: 30, max: 400, step: 5, group: "Targeting", tip: "Tab over an enemy holds the lock on it (src/game/targetLock.ts) until Tab again, it dies, or it gets this far away" },
 ];
 
 /** One enemy the guns could take: its centre of mass, a body radius, and a key that stays the same while it lives
@@ -50,7 +59,8 @@ export interface LockQuery {
   range: number;
 }
 
-export interface Lock { target: TargetCandidate; how: "cursor" | "line" }
+/** how: under the cursor, along the line of fire, or held by the target lock (Tab; src/game/targetLock.ts). */
+export interface Lock { target: TargetCandidate; how: "cursor" | "line" | "held" }
 
 /** Who the player's guns may take: anything hittable not on the player's team and not knocked down (a register filter). */
 export const enemiesOf = (team: number): Filter => ({ all: FLAG.Hittable, none: FLAG.Down, notTeam: team });
@@ -66,8 +76,9 @@ export class Targeting {
   private feet: number[] = [];
   private hits = new RayHits();
 
-  pick(reg: Register, f: Filter, q: LockQuery, v: TargetValues): Lock | null {
+  pick(reg: Register, f: Filter, q0: LockQuery, v: TargetValues): Lock | null {
     if (!v.autoLock) { this.last = null; return null; }
+    const q = q0.range >= (v.lockMin ?? 0) ? q0 : { ...q0, range: v.lockMin };
     const sticky = 1 - v.lockSticky * 0.6;
     // 1. Under the cursor: things near the cursor ray (by its shadow on the ground, out a little past the cursor where
     // the ray is already under the sand), and walkers whose footprint holds the cursor.
@@ -100,7 +111,7 @@ export class Targeting {
         if (fd <= reachF) s = Math.min(s, 0.5 + 0.5 * (fd / reachF));
       }
       if (s === Infinity) continue;
-      if (Math.hypot(cx - q.from.x, cz - q.from.z) > q.range) continue;
+      if (Math.hypot(cx - q.from.x, cz - q.from.z) > Math.max(q.range, v.lockFar ?? 0)) continue;
       s *= reg.id[e] === this.last ? sticky : 1;
       if (s < bestS || (s === bestS && reg.id[e] < reg.id[best])) { bestS = s; best = e; }
     }
