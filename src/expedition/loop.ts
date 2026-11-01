@@ -57,6 +57,8 @@ import { banditThreat } from "./threat";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
 import { BodyContact } from "../game/bodyContact";
+import type { DeathPhysics } from "../physics/deaths";
+import { robotRagdolls, banditRagdolls } from "./ragdolls";
 import type { Arsenal } from "../weapons/arsenal";
 import type { WeaponValues } from "../weapons/tuning";
 import type { Raider } from "../combat/warband";
@@ -118,6 +120,8 @@ export interface LoopOptions {
   vat?: BanditVatData | null;
   /** The ground changed over a box (a fortress gate went down): rebuild the terrain meshes there. */
   groundChanged?: (x0: number, z0: number, x1: number, z1: number) => void;
+  /** The death physics (ragdolls and wrecks, src/physics/deaths.ts); null or left out: the dead collapse in place. */
+  deaths?: DeathPhysics | null;
 }
 export interface LoopInput { night?: number; eHeld: boolean; recallHeld: boolean; jHeld?: boolean; demo: boolean; mark?: (stage: string) => void; pilot?: LoopPilot; canvas?: HTMLCanvasElement }
 
@@ -239,8 +243,10 @@ export class ExpeditionLoop {
     this.camps = new CampField(v);
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
+    const deaths = opts.deaths ?? null;
+    if (deaths) robotRagdolls(this.swarms.sw, deaths);
     this.droids = new DroidCamps(v, bf, scene, field, opts.vat ?? null, this.swarms);
-    this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms);
+    this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms, undefined, deaths);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
     this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
@@ -249,7 +255,7 @@ export class ExpeditionLoop {
     this.banditCamps = new BanditCamps(v, field, bf, scene, this.bandits, player, opts.vat ?? null, blocked);
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.columns.danger = this.depth.danger;
-    this.bands = new WarBands(v, bf, scene, this.columns);
+    this.bands = new WarBands(v, bf, scene, this.columns, deaths);
     this.contact = new BodyContact(player, bf);
     this.bands.riders = this.banditCamps.sw;
     this.relations = new Relations(v);
@@ -262,6 +268,7 @@ export class ExpeditionLoop {
     ]);
     this.forts = new Fortresses(v, field, bf, scene, this.sites.walls, player, opts.vat ?? null,
       (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1), opts.groundChanged ?? (() => {}));
+    if (deaths) { banditRagdolls(this.banditCamps.sw, deaths); banditRagdolls(this.forts.sw, deaths); }
     this.forts.onKill = (i, gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`f${i}.${gen}`, 0, x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
     this.forts.onAlert = (poi) => {
       this.sound.alarm();
