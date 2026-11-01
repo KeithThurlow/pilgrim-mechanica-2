@@ -28,18 +28,23 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("clipIn", variants(2, 48, (r) => S.mix(S.servo(0.3, 400, 1000, 0.05), S.delay(S.thump(0.18, 120, 50, 0.9), 0.28), S.delay(S.clang(r, 0.08, 0.4), 0.29), S.delay(S.tick(r, 0.02, 0.5), 0.36))), () => v.rocketLevel);
   // The sword (Keith 2026-11-01): a heavy whoosh as the slash starts (dark air, a servo whine).
   sfx.addSound("swordSwing", variants(3, 49, (r) => S.mix(S.noise(r, 0.32, 650 + r() * 250, 0.55, 0.11), S.delay(S.noise(r, 0.2, 1500, 0.25, 0.05), 0.08), S.servo(0.25, 300, 700, 0.04))), () => v.swordLevel);
-  // The hit (Keith 2026-11-01: not a bonk, not chimes: "thick metal crunching", raw, scrunchy and weighty, never the
-  // same twice): a heavy low impact, a short torn-steel grind, dark crunching crackle and a gritty burst, no ring; eight
-  // rolled variants, and each hit's pitch rolled again.
-  sfx.addSound("swordHit", variants(8, 50, (r) => S.mix(S.thump(0.3, 115 + r() * 40, 42, 1.0), S.lowPass(S.grind(r, 0.2 + r() * 0.14, 0.75), 3200),
-    S.lowPass(S.crackle(r, 0.32 + r() * 0.1, 0.75), 2000 + r() * 600), S.noise(r, 0.22, 1300 + r() * 500, 0.6, 0.001),
-    S.delay(S.noise(r, 0.16, 480, 0.45, 0.004), 0.015))), () => v.swordLevel);
-  // The block (Keith 2026-11-01: steel stopped on steel; "I need a sound for it", it has to stand out from a hit): a
-  // hard knock, a big dark clang of two heavy blades meeting (short, low-passed, so not a chime), a bright scrape off
-  // the edges, a grind and a dull thump under it.
-  sfx.addSound("swordBlock", variants(6, 51, (r) => S.mix(S.tick(r, 0.025, 1.2), S.thump(0.22, 190 + r() * 50, 70, 0.9),
-    S.lowPass(S.clang(r, 0.42 + r() * 0.12, 0.85), 2600), S.delay(S.lowPass(S.clang(r, 0.3, 0.35), 1800), 0.006),
-    S.noise(r, 0.09, 2600 + r() * 900, 0.55, 0.0005), S.lowPass(S.grind(r, 0.14 + r() * 0.08, 0.6), 4200),
-    S.delay(S.lowPass(S.crackle(r, 0.2, 0.5), 2600), 0.01))), () => v.swordLevel);
+  // The hit (Keith 2026-11-01: not a bonk, not chimes; "a container being crushed or crashing into the ground ... a loud
+  // noise"): no pitched thump (that was the bonk). A big low boom of struck steel plates, a broad crash of noise, the
+  // crumple of tearing metal (crackle and grind) and a rattle of debris just after; eight rolled variants, each hit's
+  // pitch rolled again.
+  sfx.addSound("swordHit", variants(8, 50, (r) => S.mix(
+    S.metal(r, 0.9 + r() * 0.3, 70 + r() * 40, 0.75, 12, 9),
+    S.lowPass(S.noise(r, 0.55, 2200 + r() * 800, 0.85, 0.0005), 3200),
+    S.lowPass(S.crackle(r, 0.5 + r() * 0.15, 0.85), 2600),
+    S.lowPass(S.grind(r, 0.3 + r() * 0.12, 0.6), 2400),
+    S.delay(S.lowPass(S.noise(r, 0.5, 500, 0.7, 0.003), 800), 0.01),
+    S.delay(S.scale(S.lowPass(S.crackle(r, 0.35, 0.6), 3500), 0.6), 0.12 + r() * 0.06))), () => v.swordLevel);
+  // The block (Keith 2026-11-01: "a satisfying ching"): steel on steel. A hard click, a bright ringing blade (high
+  // inharmonic partials, half a second), the lower body of the two blades under it and a short bright scrape off the edges.
+  sfx.addSound("swordBlock", variants(6, 51, (r) => S.mix(S.tick(r, 0.02, 1),
+    S.metal(r, 0.65 + r() * 0.2, 1500 + r() * 500, 0.7, 7, 3.2),
+    S.metal(r, 0.4, 420 + r() * 120, 0.45, 6, 4),
+    S.noise(r, 0.14, 6500, 0.45, 0.0003),
+    S.delay(S.lowPass(S.noise(r, 0.2, 1400, 0.35, 0.002), 1800), 0.004))), () => v.swordLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }
