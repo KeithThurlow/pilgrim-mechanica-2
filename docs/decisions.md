@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Blast cover: a dune, wall or steel wreck on the line from the blast to a unit's middle shields it fully (no partial cover); within 1.5 m never covered | Keith | Claude | Open for Keith: partial cover, or cover from other units. Slider `blastCover`. |
+| 2026-11-01 | The blast wave is an orb of bent air ending at the damage radius (the solid ground ring is gone) | Keith | Keith | Orb size = damage radius was Claude's pick so the look reads as the hit; `waveSize` slider. |
 | 2026-10-31 | A repair kit (the health potion) on Q that never refills by itself | Keith | Keith | `src/game/repair.ts`. |
 | 2026-10-31 | Recovery moves from hold Q to hold X, so Q is the kit | Claude | Keith | |
 | 2026-10-31 | The second consumable (energy potion) is skipped for now; decide later | Keith | Keith | Options in `docs/proposal-repair.md` §3. |

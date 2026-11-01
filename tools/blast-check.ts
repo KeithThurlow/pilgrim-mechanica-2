@@ -85,7 +85,7 @@ const flat = { height: () => 0, normal: (_x: number, _z: number, out = [0, 1, 0]
 // 4. Cover: a wall of ground between the blast and a robot shields it; the same robot in the open doesn't.
 {
   const wall = { height: (x: number) => (x > 2 && x < 2.8 ? 4 : 0), normal: flat.normal };
-  const run = (ground: typeof flat, steel: Parameters<typeof blastCover>[1] = null) => {
+  const run = (ground: { height(x: number, z: number): number }, steel: Parameters<typeof blastCover>[1] = null) => {
     const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotHp: 1e6 }, flat, 9);
     const i = sw.spawn(1, 4, 0, 0, { mid: 0, big: 0 })[0];
     sw.px[i] = 4; sw.pz[i] = 0;
