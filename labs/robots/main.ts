@@ -20,6 +20,7 @@ import type { Aim, Trigger } from "../../src/mech/upper";
 import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
+import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../src/combat/striderLab";
 import { fireRobotBeam, fireRobotPulse } from "../../src/game/robotBeam";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
 import { DroidSquads } from "../../src/game/droidFight";
@@ -53,18 +54,23 @@ type DemoOut = { cmd: MoveCommand; aim: Aim | null; trigger: Trigger };
 let script: ((t: number, dt: number) => DemoOut) | null = null;
 let draw: RobotsDraw | null = null;
 let droidMeshes: THREE.Object3D[] = [];
+// Striders (the strider lab folded in here, Keith 2026-11-01): ?strider=N, ?strider=beam|slam|grab, ?striderdist=m.
+const striders = new StriderLab(params0);
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_ALL_DEFAULTS },
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_ALL_DEFAULTS, ...STRIDER_LAB_DEFAULTS },
   demo: (t, dt) => script?.(t, dt) ?? null,
-  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }],
-  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }],
-  actions: [{ label: "Pack now", onClick: () => spawnPack() }],
-  report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
+  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS, ...STRIDER_LAB_PARAMS],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
+  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }, striders.selectable],
+  actions: [{ label: "Pack now", onClick: () => spawnPack() }, ...striders.actions],
+  report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0, ...striders.report() }),
+  onChange: (key) => { if (key === "striderScale") striders.restart(); },
 });
 const { V, bf, player, field } = lab;
+striders.attach(lab);
+if (striders.scenario) V.robotSwarmSize = 0;
 // Humanoid robots (the middle tier on the human rig) walk in with each pack.
 const droids = new DroidSquads(bf, lab.app.scene, V, field, await loadBanditVat().catch(() => null), lab.deaths);
 droidMeshes = droids.meshes;
