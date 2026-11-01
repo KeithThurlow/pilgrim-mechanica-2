@@ -125,7 +125,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   there, let go after N frames).
 - Humanoid robots lab: `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; off elsewhere for now (Keith 2026-11-01): `?set=robotDroids:3` brings them into robots-lab packs, `?set=droidsOn:1` into the convoy lab's camps, packs and raids.
 - Strider lab: `?count=N` (striders up at once), `?dist=m` (where they stand up), `?slam` (one 14 m off, slamming at once), `?beam`
-  (one at 45 m, its beam charging at once), plus the combat-lab flags. Striders are mech-sized (8.5 m) with long arms.
+  (one at 45 m, its beam charging at once), `?grab` (one 6 m off, grabbing at once), plus the combat-lab flags. Striders are
+  mech-sized (8 m) with a disc hull and long clawed arms.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
   convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
