@@ -56,7 +56,8 @@ function stats(m: { pos: Float32Array; index: Uint32Array }) {
   return { lo, hi, vol, manifold: two / Math.max(1, edges.size), tris: m.index.length / 3 };
 }
 
-function checkPart(label: string, glb: Uint8Array, kind: Kind, lod = 0) {
+/** fitted: a fit from the parts lab was baked in (setfit.ts), so it may sit off y 0 and outside its box on purpose. */
+function checkPart(label: string, glb: Uint8Array, kind: Kind, lod = 0, fitted = false) {
   const g = readGlb(glb);
   const m = g.meshes.find((x) => x.name === kind.part);
   ok(!!m, `${label}: has mesh ${kind.part}`);
@@ -64,10 +65,10 @@ function checkPart(label: string, glb: Uint8Array, kind: Kind, lod = 0) {
   const s = stats(m);
   ok(s.tris <= kind.tris[lod] * 1.05 && s.tris >= 4, `${label}: ${s.tris} tris within budget ${kind.tris[lod]}`);
   ok(!!m.col, `${label}: vertex colours`);
-  ok(Math.abs(s.lo[1]) < 1e-3, `${label}: base at y 0 (${s.lo[1].toFixed(4)})`);
+  if (!fitted) ok(Math.abs(s.lo[1]) < 1e-3, `${label}: base at y 0 (${s.lo[1].toFixed(4)})`);
   const size = [0, 1, 2].map((c) => s.hi[c] - s.lo[c]);
   const fits = size.every((v, c) => v <= kind.box[c] + 1e-3), fills = size.some((v, c) => v >= kind.box[c] * 0.98);
-  ok(fits && fills, `${label}: fits its box ${kind.box.map((v) => v.toFixed(2)).join("×")} (${size.map((v) => v.toFixed(2)).join("×")})`);
+  if (!fitted) ok(fits && fills, `${label}: fits its box ${kind.box.map((v) => v.toFixed(2)).join("×")} (${size.map((v) => v.toFixed(2)).join("×")})`);
   ok(s.vol > 0, `${label}: faces outward (volume ${s.vol.toFixed(3)} m³)`);
   for (const k of Object.keys(kind.sockets)) ok(g.empties.has(k), `${label}: socket ${k}`);
 }
@@ -201,7 +202,8 @@ if (existsSync(indexPath)) {
   for (const e of list) {
     const k = kinds[e.kind];
     ok(!!k, `${e.id}: known kind ${e.kind}`);
-    if (k) for (const lod of [0, 1, 2]) checkPart(`${e.id}${lod ? ` lod${lod}` : ""}`, new Uint8Array(readFileSync(`public/models/gen/${e.id}${lod ? `-lod${lod}` : ""}.glb`)), k, lod);
+    const fitted = !!JSON.parse(readFileSync(`public/models/gen/${e.id}.json`, "utf8")).fit?.length;
+    if (k) for (const lod of [0, 1, 2]) checkPart(`${e.id}${lod ? ` lod${lod}` : ""}${fitted ? " (fitted)" : ""}`, new Uint8Array(readFileSync(`public/models/gen/${e.id}${lod ? `-lod${lod}` : ""}.glb`)), k, lod, fitted);
   }
   console.log(`${list.length} generated parts checked`);
 } else console.log("no generated parts yet (public/models/gen/index.json)");

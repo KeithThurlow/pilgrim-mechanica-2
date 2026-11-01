@@ -124,7 +124,9 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
-- Parts lab: `?part=<id>` (a generated part from `public/models/gen/index.json`), `?cam=game|close`, `?zoom=metres`. Make parts with
+- Parts lab: `?part=<id>` (a generated part from `public/models/gen/index.json`), `?cam=game|close`, `?zoom=metres`. WASD walks
+  the mech, the mouse aims; the part sits on its mount (hull, both gun pivots, both shoulders); Fit sliders, then Copy fit gives
+  `npx tsx tools/partgen/setfit.ts <id> across,up,fwd,yaw,pitch,roll,scale` (bakes the fit into the part's GLBs). Make parts with
   `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.

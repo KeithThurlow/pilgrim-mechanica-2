@@ -136,7 +136,7 @@ export function delight(col: Float32Array, nrm: Float32Array, amount: number) {
   return { a, b };
 }
 
-function normals(pos: Float32Array, index: Uint32Array) {
+export function normals(pos: Float32Array, index: Uint32Array) {
   const n = new Float32Array(pos.length);
   for (let t = 0; t < index.length; t += 3) {
     const a = index[t] * 3, b = index[t + 1] * 3, c = index[t + 2] * 3;

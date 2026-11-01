@@ -55,6 +55,11 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
   runner sets it per level.
 - Pixal3D's licence is fine.
 
+## Fitting parts
+
+`labs/parts/`: Fit sliders move the part on its mount; Copy fit → `npx tsx tools/partgen/setfit.ts <id> ...` bakes it
+into `<id>.glb`, `-lod1`, `-lod2` and the sockets, and appends it to the sidecar's `fit`. Reset the sliders after.
+
 ## Known rough edges
 
 - Lane A's mesh is as soft as the field: sharp hard-surface edges round off at resolution 160. Raise `--res` or
