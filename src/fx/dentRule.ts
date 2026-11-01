@@ -13,6 +13,7 @@
 // back into the hollows, slow decay; per surface; the time is banked and spent in steps, because a slow decay is
 // below a half float's precision per frame), splat the frame's brushes, clamp.
 
+import { footShapeAt, footSdf, shapeDist } from "./footprint";
 export const SURFACE_IDS = { sand: 0, dirt: 1, gravel: 2, snow: 3, set: 4 } as const;
 export type DentSurface = keyof typeof SURFACE_IDS;
 export const SURFACE_COUNT = 5;
@@ -110,19 +111,27 @@ export interface Brush {
    *  open (0..1): a U open toward where it came from (a round, Keith 2026-10-27): the hollow shallows and the rim fades on
    *  the back half (against the yaw), the rim heaps up on the far end; 0 is the plain round dent. */
   comp: number; surf: number; open: number; mode: number;
+  /** A foot's own print (src/fx/footprint.ts): its atlas tile + 1 (0: the capsule above). With a shape, r is the
+   *  shape's scale (1: the model's size) and elong 1; ext is the tile's half width (m, the shape's own size), wall and
+   *  spread (m, the shape's own size) turn its distances into the rule's (footprint.ts shapeDist). */
+  shape?: number; ext?: number; wall?: number; spread?: number;
 }
 
-/** Floats per brush in the brush texture: three rows of four. */
+/** How far a brush reaches from its centre (m). */
+export const brushReach = (b: Brush) => (b.shape ? (b.ext ?? 1) * b.r : b.r * Math.max(1, b.elong) * REACH);
+
 /** An open brush (a round's U): how much shallower its back end gets, and how much more rim on its far end. */
 export const OPEN_SHALLOW = 0.65, OPEN_HEAP = 0.6;
 const smoothstep01 = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export const BRUSH_ROWS = 3;
+/** Floats per brush in the brush texture: four rows of four. */
+export const BRUSH_ROWS = 4;
 export function packBrush(b: Brush, data: Float32Array, i: number, width: number) {
   const s = width * 4, a = i * 4;
   data[a] = b.x; data[a + 1] = b.z; data[a + 2] = b.r; data[a + 3] = b.elong;
   data[s + a] = b.sy; data[s + a + 1] = b.cy; data[s + a + 2] = b.dep; data[s + a + 3] = b.berm;
   data[2 * s + a] = b.comp; data[2 * s + a + 1] = b.surf; data[2 * s + a + 2] = b.open; data[2 * s + a + 3] = b.mode;
+  data[3 * s + a] = b.shape ?? 0; data[3 * s + a + 1] = b.ext ?? 0; data[3 * s + a + 2] = b.wall ?? 1; data[3 * s + a + 3] = b.spread ?? 1;
 }
 
 /**
@@ -130,9 +139,12 @@ export function packBrush(b: Brush, data: Float32Array, i: number, width: number
  * brush (wrapped). wob: the rim's edge noise (1 none), grain: the berm's grain (1 none). Mirrors the pass.
  */
 export function splat(st: Float32Array | number[], o: number, b: Brush, px: number, pz: number, wob = 1, grain = 1) {
-  const reach = b.r * Math.max(1, b.elong) * REACH;
+  const reach = brushReach(b);
   if (Math.abs(px) > reach || Math.abs(pz) > reach) return;
-  const d = brushDist(px, pz, b.sy, b.cy, b.r, b.elong) / wob;
+  const shape = b.shape ? footShapeAt(b.shape - 1) : null;
+  const d = (shape
+    ? shapeDist(footSdf(shape, (px * b.cy - pz * b.sy) / b.r, (px * b.sy + pz * b.cy) / b.r), b.wall ?? 1, b.spread ?? 1)
+    : brushDist(px, pz, b.sy, b.cy, b.r, b.elong)) / wob;
   if (d > REACH) return;
   let core = coreAt(d), ring = ringAt(d) * grain;
   if (b.open > 0) {

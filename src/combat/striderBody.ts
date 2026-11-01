@@ -14,6 +14,8 @@ import type { LegPose } from "../mech/walker";
 import { STRIDER_FRAME, BEAM, SLAM, type Strider } from "./strider";
 import { glowMaterial } from "../weapons/ribbon";
 import { ROBOT_PALETTE } from "./robotShapes";
+import { footShapeOr } from "../fx/footprint";
+import { bakeFootFromObject } from "../fx/footprintMesh";
 
 /** The robots' shared white palette (ROBOT_PALETTE in robotShapes.ts). */
 export const STRIDER_PALETTE = ROBOT_PALETTE;
@@ -208,6 +210,8 @@ export class StriderBody {
       this.root.add(foot);
       part(DRUM, MAT.dark, foot, [0.24, 0.07, 0.24], [0, 0.035, 0]);
       part(PEG, MAT.plate, foot, [1, 1, 1], [0, 0.07, 0]);
+      // Its print in the sand, from the pad's model (src/fx/footprint.ts; once, shared by every strider).
+      footShapeOr("strider", () => bakeFootFromObject("strider", foot, 1, 0.05));
       return {
         hip: part(BALL, MAT.joint, this.root, [0.3, 0.3, 0.3]),
         thigh: part(ROD, MAT.rod, this.root),

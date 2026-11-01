@@ -12,6 +12,7 @@ import { CrusherBody } from "./crusherBody";
 import { CrusherTarget } from "./crusherTarget";
 import { CrusherFx } from "./crusherFx";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
+import { bakeDiscFoot, footShapeOr } from "../fx/footprint";
 
 export type CrusherFieldValues = CrusherValues & RobotTearValues;
 
@@ -108,6 +109,8 @@ export class CrusherField {
       if (c) this.onAte?.(e.food, c);
     } else if (e.type === "footfall") {
       bf.dust.stomp(e.x, e.y, e.z, 0.6);
+      // A spike's print: a deep round hole about the spike's width (crusherBody: W × 0.1 across).
+      if (!bf.inWater?.(e.x, e.z)) bf.marks?.print(e.x, e.z, 0, 1, footShapeOr("crusher-spike", () => bakeDiscFoot("crusher-spike", 0.5)), this.pack.v.crusherSize * 0.08, 1.6);
       const d = Math.hypot(mp.x - e.x, mp.z - e.z);
       if (d < 30) this.shake(0.06 * (1 - d / 30));
     } else if (e.type === "down") {

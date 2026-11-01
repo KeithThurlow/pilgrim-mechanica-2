@@ -4,6 +4,7 @@
 // a run; a few hang back and shoot. Medium cutters walk in on four crab legs: some hold at range firing slugs, the
 // rest close in, rear back with the saw spinning up and lunge. A few big excavators swing in from the side on four
 // long excavator-arm legs, stop at range and fire heavy bursts from high up, and take a lot of killing.
+import { robotFootfall } from "../../src/combat/robotPrints";
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -136,7 +137,7 @@ sw.onDeath = (i, nx, nz, speed) => {
 };
 // Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at the
 // plating, medium ones' saws bite.
-sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
+sw.onFootfall = robotFootfall(bf, sw);
 // Big ones lob charges through the battlefield's shells: a ring on the sand where each lands, filling as it comes
 // down, so a dash takes the mech out of it.
 const lobFrom = new THREE.Vector3();

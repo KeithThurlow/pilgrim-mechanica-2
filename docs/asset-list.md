@@ -69,6 +69,14 @@ the queue between them.
   - One material per part, with paint, AO and wear in the vertex colours. Keep the `Paint_<section>` names.
   - Spend triangles on silhouette and bevels that catch light at 40 m; detail under 5 cm only shows at the
     closest zoom.
+  - **Legs: the sole is the footprint** (Keith 2026-11-01). Nothing to make by hand: when the game fits a pair of legs
+    it bakes each `Part_Foot_L/R`'s print from the model itself (`src/fx/footprint.ts`, called from
+    `RampartBody.fitLegs`): everything within the Footprint contact slider (12 cm) of the foot's lowest point, seen from
+    below, is what presses into the sand. So model the underside you want printed: toes, heel spur, cleats and gaps
+    between them all show (anything under about 5 cm across is lost to the dent texture). Keep the foot standing on
+    y = 0 in the rest pose, toes along +Z, and the `Foot_L/R` empty over it (its x, z are the print's centre).
+    `npm test` (`tools/footprint-check.ts`) bakes every legs look and checks each sole's size and that L and R mirror.
+    Feet built in code do the same at load: `bakeFootFromObject` (a foot group) or `bakeFootFromGeometry`.
   - The simpler and simplest versions come from the same script with the same pivots, sockets and moving-part
     names. Export them as `<file>-lod1.glb` and `<file>-lod2.glb`.
   - Mount sockets on hulls: `HullMount_L/R`, `Sensor_Front` (a head) and/or `Sensor_Top` (a cluster), `Pack`,
