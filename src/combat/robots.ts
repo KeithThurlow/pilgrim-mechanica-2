@@ -590,7 +590,7 @@ export class RobotSwarm {
   }
 
   /** n robots around (cx, cz) within radius; shares of them medium and big (the sliders', or these). Returns the slots used. */
-  spawn(n: number, cx: number, cz: number, radius: number, shares?: RobotShares, power = 1): number[] {
+  spawn(n: number, cx: number, cz: number, radius: number, shares?: RobotShares, power = 1, sizeK = 1): number[] {
     const v = this.v, plan = this.planKinds(n, shares), made: number[] = [];
     for (let k = 0; k < n; k++) {
       const i = this.freeSlot();
@@ -606,6 +606,7 @@ export class RobotSwarm {
       this.kind[i] = kind;
       const jit = (j: number) => 1 + (this.rand() * 2 - 1) * j;
       this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
+      this.size[i] *= sizeK;
       this.hp[i] = (big ? v.robotBigHp : mid ? v.robotMidHp : v.robotHp) * power;
       this.maxHp[i] = this.hp[i]; this.power[i] = power;
       this.state[i] = RUN; this.stateTime[i] = 0;
