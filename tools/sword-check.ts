@@ -88,7 +88,12 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     const rest = clipPose("guard", 0, side, sh, 0, st, V);
     must(rest.fwd.z < -0.8 && rest.fwd.y > 0.25 && Math.abs(rest.fwd.x) < 0.2, `side ${side}: at rest the blade doesn't lie back over the shoulder, in line with the torso`);
     const re = armIk(sh, rest.hand, V.swordUpperArm, V.swordForearm, rest.pole);
-    must(re.elbow.z - sh.z > 1, `side ${side}: at rest the elbow is only ${(re.elbow.z - sh.z).toFixed(2)} m ahead of the shoulder, not pointing forward`);
+    // Keith's rest triangle: the elbow low but forward, near a right angle there, the fist up ahead of it.
+    const ua = [re.elbow.x - sh.x, re.elbow.y - sh.y, re.elbow.z - sh.z], fa = [re.hand.x - re.elbow.x, re.hand.y - re.elbow.y, re.hand.z - re.elbow.z];
+    const bend = Math.acos(-(ua[0] * fa[0] + ua[1] * fa[1] + ua[2] * fa[2]) / (Math.hypot(...ua) * Math.hypot(...fa))) / D2R;
+    must(ua[1] < -0.6 && ua[2] > 0.5, `side ${side}: at rest the elbow isn't low and forward (${ua.map((q) => q.toFixed(2)).join(",")})`);
+    must(fa[1] > 0.6, `side ${side}: at rest the forearm doesn't angle up to the fist`);
+    must(bend > 70 && bend < 110, `side ${side}: at rest the elbow is bent to ${bend.toFixed(0)}°, not near a right angle`);
     const under = clipPose("A", lens.A, side, sh, 0, st, V);
     must(under.hand.x * side < 0 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
     const mid = clipPose("A", st.windup + st.slash / 2, side, sh, 0, st, V);
@@ -100,12 +105,12 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 // ---- Weight: each move eases out of a stop and into one, fastest mid-cut, never backwards ----
 {
   const cut: [number, number] = [0.38, 0.62], d = 1e-4;
-  const speed = (x: number) => (moveWarp(x + d, cut, V.swordEase, V.swordSnap) - moveWarp(x - d, cut, V.swordEase, V.swordSnap)) / (2 * d);
+  const speed = (x: number) => (moveWarp(x + d, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap) - moveWarp(x - d, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap)) / (2 * d);
   must(speed(0.002) < 0.05 && speed(0.998) < 0.05, `a move doesn't start and end at a stop (${speed(0.002).toFixed(2)}, ${speed(0.998).toFixed(2)})`);
   must(speed(0.5) > speed(0.38) && speed(0.38) > speed(0.2), "the swing doesn't build to its fastest mid-cut");
-  must(Math.abs(moveWarp(0.38, cut, V.swordEase, V.swordSnap) - 0.38) < 1e-9 && Math.abs(moveWarp(0.62, cut, V.swordEase, V.swordSnap) - 0.62) < 1e-9, "the warp moved the cut's ends");
+  must(Math.abs(moveWarp(0.38, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap) - 0.38) < 1e-9 && Math.abs(moveWarp(0.62, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap) - 0.62) < 1e-9, "the warp moved the cut's ends");
   let back = false, prev = 0;
-  for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEase, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
+  for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
   must(!back, "the swing ran backwards in time somewhere");
 }
 // ---- Cuts: bodies in the arc and reach, once per swing, budget ----
