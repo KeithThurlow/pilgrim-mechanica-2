@@ -6,7 +6,7 @@
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
 // resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, type SwordStats, type SwordClip } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, lungeIntent, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -63,9 +63,9 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 {
   for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
-    const lens = Object.fromEntries((["A", "B", "R", "S", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
+    const lens = Object.fromEntries((["A", "B", "R", "S", "P", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
     const sh = SH(side);
-    for (const c of ["guard", "A", "B", "R", "S"] as SwordClip[]) {
+    for (const c of ["guard", "A", "B", "R", "S", "P"] as SwordClip[]) {
       let worst = 0, clash = "", lead = 0, lag = 0;
       let prevTip: number[] | null = null;
       for (let i = 0; i <= 60; i++) {
@@ -119,7 +119,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 // ---- Close or far: a close cut is quicker and shorter, the elbow bent and the hand in close the whole way ----
 {
   const sh = SH(1), near = clipCut("A", st, V, 0)!, far = clipCut("A", st, V, 1)!;
-  must(near[1] - near[0] < (far[1] - far[0]) * 0.6 && clipLength("A", st, V, 0) < clipLength("A", st, V, 1) * 0.6, "a close cut isn't much quicker than the full sweep");
+  must(near[1] - near[0] < (far[1] - far[0]) * 0.7 && clipLength("A", st, V, 0) < clipLength("A", st, V, 1) * 0.7, "a close cut isn't much quicker than the full sweep");
   for (const c of ["A", "B"] as SwordClip[]) {
     const cw = clipCut(c, st, V, 0)!;
     let most = 0, straightest = 0, yaw0 = 0, yaw1 = 0;
@@ -134,6 +134,64 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(straightest < 120 && most < 2.3, `close ${c}: the arm straightened to ${straightest.toFixed(0)}° (hand ${most.toFixed(2)} m out), not kept bent in close`);
     must(Math.abs(yaw0 - yaw1) / D2R < st.arc * 0.6, `close ${c}: the blade turned ${(Math.abs(yaw0 - yaw1) / D2R).toFixed(0)}°, not a short cut`);
   }
+}
+// ---- The draw cut (Keith 2026-11-01, round 9): close, the blade lies across the front and is pulled along its length,
+// turning only at the end; the blade sweeps much less ground than the full cut ----
+{
+  const sh = SH(1);
+  const swept = (c: SwordClip, span: number) => {
+    // Ground the blade's line covers through the cut: cells of 0.25 m touched by the hand-to-tip line, hull frame.
+    const cw = clipCut(c, st, V, span)!, cells = new Set<string>();
+    for (let i = 0; i <= 200; i++) {
+      const p = clipPose(c, cw[0] + ((cw[1] - cw[0]) * i) / 200, 1, sh, 0, st, V, span), l = Math.hypot(p.fwd.x, p.fwd.z) || 1;
+      for (let a = 0; a <= st.reach; a += 0.1) cells.add(`${Math.round((p.hand.x + (p.fwd.x / l) * a) * 4)},${Math.round((p.hand.z + (p.fwd.z / l) * a) * 4)}`);
+    }
+    return cells.size / 16;
+  };
+  for (const c of ["A", "B"] as SwordClip[]) {
+    const cw = clipCut(c, st, V, 0)!, at = (u: number) => clipPose(c, cw[0] + (cw[1] - cw[0]) * u, 1, sh, 0, st, V, 0);
+    const p0 = at(0), p1 = at(0.6), p2 = at(1);
+    const yaw = (p: { fwd: { x: number; z: number } }) => Math.atan2(p.fwd.x, p.fwd.z) / D2R;
+    const pulled = Math.hypot(p1.hand.x - p0.hand.x, p1.hand.z - p0.hand.z), turned = Math.abs(yaw(p1) - yaw(p0)), flick = Math.abs(yaw(p2) - yaw(p1));
+    const across = Math.min(Math.abs(yaw(p0)), Math.abs(yaw(p1)));
+    // The hand's way along the blade: the pull runs along the blade's own line, not square across it.
+    const mx = p1.hand.x - p0.hand.x, mz = p1.hand.z - p0.hand.z, l0 = Math.hypot(p0.fwd.x, p0.fwd.z);
+    const along = Math.abs((mx * p0.fwd.x + mz * p0.fwd.z) / (l0 * Math.hypot(mx, mz)));
+    const near = swept(c, 0), far = swept(c, 1);
+    console.log(`  draw ${c}: pulled ${pulled.toFixed(2)} m, blade turned ${turned.toFixed(0)}° in the draw, ${flick.toFixed(0)}° flick, across ${across.toFixed(0)}° off the aim, pull along the blade ${(along * 100).toFixed(0)}%, ground swept ${near.toFixed(1)} m² (full ${far.toFixed(1)})`);
+    must(pulled > 1.2 && turned < 20, `close ${c}: not a draw (hand pulled ${pulled.toFixed(2)} m, blade turned ${turned.toFixed(0)}°)`);
+    must(across > 45, `close ${c}: the blade isn't across the front (${across.toFixed(0)}° off the aim)`);
+    must(along > 0.6, `close ${c}: the hand doesn't pull along the blade (${(along * 100).toFixed(0)}%)`);
+    must(flick > 25, `close ${c}: no flick at the end (${flick.toFixed(0)}°)`);
+    must(near < far * 0.5, `close ${c}: the draw sweeps ${near.toFixed(1)} m², not much less than the full cut's ${far.toFixed(1)}`);
+  }
+}
+// ---- The lunge and the legs (Keith 2026-11-01, round 9): smooth, full still or walking in, none or back backing off ----
+{
+  const at = (mx: number, mz: number) => lungeIntent({ x: mx, z: mz }, 0, 1, V);
+  must(lungeIntent(undefined, 0, 1, V) === V.swordLungeStill && at(0, 0) === V.swordLungeStill, "standing still doesn't take the still lunge");
+  must(Math.abs(at(0, 1) - V.swordLungeToward) < 1e-9 && Math.abs(at(1, 0) - V.swordLungeSide) < 1e-9 && Math.abs(at(0, -1) - V.swordLungeAway) < 1e-9, "the lunge's ways are off");
+  let jump = 0, prev = at(Math.sin(0), Math.cos(0));
+  for (let i = 1; i <= 360; i++) { const a = i * D2R, q = at(Math.sin(a), Math.cos(a)); jump = Math.max(jump, Math.abs(q - prev)); prev = q; }
+  let pj = 0, pp = at(0, 0);
+  for (let i = 1; i <= 100; i++) { const q = at(0, -i / 100); pj = Math.max(pj, Math.abs(q - pp)); pp = q; }
+  must(jump < 0.02 && pj < 0.05, `the lunge snaps with the walk's way (${jump.toFixed(3)} a degree, ${pj.toFixed(3)} a 1% push)`);
+  must(at(0.7, -0.7) > 0 && at(0.7, -0.7) < V.swordLungeSide, "backing off with a side click doesn't keep a partial lunge");
+}
+// ---- The block (Keith 2026-11-01): a free sword swings up and blocks; one mid-cut can't; it goes back to rest ----
+{
+  const sw = new SwordSim(1);
+  sw.update(dt, false, st, V);
+  must(sw.free && sw.block(V) && sw.clip === "P" && sw.blocking, "a sword at rest didn't block");
+  for (let i = 0; i < 20; i++) sw.update(dt, false, st, V);
+  must(sw.block(V) && sw.clip === "P", "a block that's up didn't block again");
+  let n = 0; while (sw.clip !== "guard" && n++ < 600) sw.update(dt, false, st, V);
+  must(sw.clip === "guard" && Math.abs(n * dt - (V.swordBlockTime - 20 * dt)) < 0.05, `the block didn't go back to rest after its time (${(n * dt).toFixed(2)} s)`);
+  sw.update(dt, true, st, V);
+  for (let i = 0; i < 30; i++) sw.update(dt, true, st, V);
+  must(sw.clip === "A" && !sw.free && !sw.block(V) && sw.clip === "A", "a sword mid-cut blocked");
+  const up = clipPose("P", V.swordBlockTime * 0.45, 1, SH(1), 0, st, V);
+  must(up.fwd.y > 0.7 && up.hand.z > 1.4, `the block doesn't stand the blade up ahead of the chest (${up.fwd.y.toFixed(2)} up, hand ${up.hand.z.toFixed(2)} ahead)`);
 }
 // ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
 {
