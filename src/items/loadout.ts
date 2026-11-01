@@ -51,14 +51,14 @@ export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
   bareDashCharges: 2,
   bareDashRecharge: 4.6,
-  bareRadar: 90,
+  bareRadar: 250,
 };
 export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
   { key: "bareMagBonus", label: "Magazine + without a drum", min: -0.9, max: 2, step: 0.05, group: "Bare mech", tip: "A belt-fed gun's magazine share added when its side's waist mount has no ammo drum (a drum adds its own)" },
   { key: "bareDashCharges", label: "Dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
-  { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 400, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
+  { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 1000, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
 ];
 
 /** Today's mech: Rampart legs and hull, the Rampart visor head (Keith 2026-10-26: hulls have heads), a Medium minigun on each hull mount, the stand-in power

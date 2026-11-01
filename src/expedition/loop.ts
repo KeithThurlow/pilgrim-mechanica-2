@@ -550,7 +550,7 @@ export class ExpeditionLoop {
   }
 
   /**
-   * Extraction pads: hold E on one to call the pickup (pads.ts has the rules); here the beacon's effects on the camps,
+   * Extraction pads: hold E on one to call the pickup, then roam until it hovers in and you board it (pads.ts has the rules); here the beacon's effects on the camps,
    * packs and war bands, the messages, the sounds, and what the HUD and the drawing are told.
    */
   private updatePads(dt: number, inp: LoopInput, pilot: LoopPilot | null) {
@@ -564,7 +564,7 @@ export class ExpeditionLoop {
     });
     for (const e of call.events) {
       if (e.type === "called") {
-        this.hud.note(`Pickup called · ${e.quote.fee} scrap · hold the pad ${clock(e.quote.wait)}`, "#8fd0ff", 5);
+        this.hud.note(`Pickup called · ${e.quote.fee} scrap · inbound in ${clock(e.quote.wait)} · keep moving, be back by then`, "#8fd0ff", 5);
       } else if (e.type === "refused") {
         this.hud.note(e.reason === "locked" ? "Extraction pickups are not bought yet (convoy terminal)" : `Not enough scrap for the fee${v.padBankTopUp >= 0.5 ? " (carried plus bank)" : " (carried scrap only)"}`, "#ffb09a", 4);
       } else if (e.type === "cancelled") {
@@ -575,6 +575,10 @@ export class ExpeditionLoop {
         this.columns.noise(x, z, v.padPull);
         const n = this.threats.pullNear(x, z, v.padPull);
         if (e.first) { this.hud.note(`Beacon lit: it carries${n ? ` · ${n} pack${n > 1 ? "s" : ""} turning your way` : ""}`, "#ff9a7a", 4); this.sound.alarm(); }
+      } else if (e.type === "arrived") {
+        this.hud.note(`Pickup overhead · get under it and hold ${v.padBoard.toFixed(0)} s · it waits ${clock(v.padLoiter)}`, "#8fd0ff", 5); this.sound.alarm();
+      } else if (e.type === "missed") {
+        this.hud.note("The pickup left without you · the fee is gone", "#ffb09a", 5);
       } else if (e.type === "raid") {
         this.heatAnswer("raid");
       } else if (e.type === "extracted") {
@@ -595,7 +599,9 @@ export class ExpeditionLoop {
   /** The pickup prompt for the top of the screen ("" when there is nothing to say). */
   padPrompt(): string {
     const c = this.padCall, n = this.nearPad;
-    if (c.state === "waiting") return `Pickup in ${clock(c.remaining)} · stay on the pad · the beacon is loud`;
+    const who = this.padMech, far = Math.hypot(c.hx - who.x, c.hz - who.z);
+    if (c.state === "waiting") return c.hold > 0 ? `Cancelling… ${Math.round(c.hold * 100)}%` : `Pickup in ${clock(c.remaining)} · ${Math.round(far)} m to the pad · the beacon is loud${n?.on ? " · hold E: cancel" : ""}`;
+    if (c.state === "hovering") return c.under ? `Boarding… ${Math.round(c.board * 100)}% · stay under it` : `Pickup hovering ${Math.round(far)} m off · get under it · leaves in ${clock(c.remaining)}`;
     if (c.state === "lifting") return "Lifting off…";
     if (!n || !n.on || this.exp.state !== "out") return "";
     const q = n.quote;

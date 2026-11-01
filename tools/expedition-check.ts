@@ -231,7 +231,7 @@ const STEP = 1 / 20;
   if (c.blobs.length !== 1 || c.blobs[0].id !== "s") fail(`convoy radar blobs ${c.blobs.map((b) => b.id)} (the one in fog must hide)`);
   if (c.blips.some((b) => b.kind === "robot")) fail("convoy radar shows single robots");
   if (c.fog.length !== 1) fail("unknown area not on the convoy radar");
-  const m = radarPicture(V, world(-500, 0), "mech");
+  const m = radarPicture({ ...V, mechRadar: 150 }, world(-500, 0), "mech"); // the fixture is laid out for 150 m
   const mids = m.blips.map((b) => b.id);
   if (!mids.includes("b") || !mids.includes("r1") || mids.includes("r2") || mids.includes("a")) fail(`mech radar ${mids} (want b and r1 only near: inside fog it still sees)`);
   if (m.blobs.length || m.fog.length) fail("mech radar shows convoy knowledge");
@@ -907,21 +907,66 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
     console.log(`pads: paid pickup (fee ${fee}, waited ${PV.padWaitBase + PV.padWaitPerKm * 2} s) banked ${e.bank.scrap} scrap and ${e.bank.items.length} item, mech home once`);
   }
 
-  // Cancel: leave the pad while waiting, the set share comes back.
+  // Roaming (Keith 2026-11-01): walking off the pad while waiting doesn't cancel; hold E on the pad again does, and
+  // the set share comes back.
   {
     const { e, c, step } = setup({}, 300, 0);
     const fee = padFee(PV, 2);
     step(PV.padHold + 0.3);
     if (c.state !== "waiting") fail("pads(cancel): call did not start");
-    step(5, pad);
-    step(0.5, null, { x: pad.x + PV.padLeave + 3, eHeld: false });
+    step(2, pad);
+    step(5, null, { x: pad.x + 300, eHeld: false });
+    if (c.state !== "waiting") fail(`pads(roam): walking 300 m off the pad ended the call (${c.state})`);
+    step(PV.padHold + 0.3, pad, { eHeld: true });
     const ev = c.events.find((x) => x.type === "cancelled") as Extract<PadEvent, { type: "cancelled" }> | undefined;
-    if (c.state !== "idle" || !ev) fail("pads(cancel): leaving did not cancel");
+    if (c.state !== "idle" || !ev) fail("pads(cancel): holding E on the pad again did not cancel");
     else {
       const want = Math.round(fee * PV.padRefund);
       if (ev.refundCarried !== want || e.scrapAtRisk !== 300 - fee + want) fail(`pads(cancel): refunded ${ev.refundCarried}, carried ${e.scrapAtRisk}, expected refund ${want}`);
-      console.log(`pads: cancel refunds ${ev.refundCarried} of the ${fee} fee (${PV.padRefund * 100}%)`);
+      console.log(`pads: roaming 300 m off keeps the call; E on the pad cancels, refunds ${ev.refundCarried} of the ${fee} fee (${PV.padRefund * 100}%)`);
     }
+  }
+
+  // The hover: it arrives and drifts; you have to get under it and stay padBoard s. Stepping out drains it; out of
+  // reach for padLoiter it leaves with the fee.
+  {
+    const { e, c, step } = setup({}, 300, 0);
+    step(PV.padHold + 0.3);
+    step(padWait(PV, 2) + 0.5, null, { x: pad.x + 200, eHeld: false });
+    if (c.state !== "hovering" || !c.events.some((x) => x.type === "arrived")) fail(`pads(hover): not hovering after the wait (${c.state})`);
+    // Watch it drift while we stay away.
+    let maxOff = 0, minOff = Infinity;
+    for (let t = 0; t < PV.padDriftPeriod; t += 1 / 30) {
+      c.update(1 / 30, null, { x: pad.x + 200, z: pad.z, alive: true, eHeld: false, unlocked: true, convoyM: 2000 });
+      const off = Math.hypot(c.hx - pad.x, c.hz - pad.z); maxOff = Math.max(maxOff, off); minOff = Math.min(minOff, off);
+    }
+    if (maxOff < PV.padDrift * 0.8 || maxOff > PV.padDrift * 1.25) fail(`pads(hover): drifted at most ${maxOff.toFixed(1)} m (want about ${PV.padDrift})`);
+    // Chase it: run at it at 6 m/s (the walk), then stay under it. Time how long boarding takes.
+    let mx = pad.x + 60, mz = pad.z, boarded = NaN, stepOut = false, drained = false;
+    for (let t = 0; t < 40 && c.state === "hovering"; t += 1 / 30) {
+      const dx = c.hx - mx, dz = c.hz - mz, d = Math.hypot(dx, dz);
+      // Halfway through boarding, step out for a second: progress must drop, not reset.
+      if (c.board > 0.5 && !stepOut) {
+        stepOut = true; const b0 = c.board;
+        for (let u = 0; u < 1; u += 1 / 30) c.update(1 / 30, null, { x: c.hx + 30, z: c.hz, alive: true, eHeld: false, unlocked: true, convoyM: 2000 });
+        drained = c.board < b0 && c.board > 0;
+        continue;
+      }
+      if (d > 0.5) { mx += (dx / d) * Math.min(d, 6 / 30); mz += (dz / d) * Math.min(d, 6 / 30); }
+      c.update(1 / 30, null, { x: mx, z: mz, alive: true, eHeld: false, unlocked: true, convoyM: 2000 });
+      e.update(1 / 30, false, false);
+      if ((c.state as string) === "lifting") boarded = t;
+    }
+    if ((c.state as string) !== "lifting") fail(`pads(hover): chasing and standing under it didn't board (${c.state}, board ${c.board.toFixed(2)})`);
+    if (!drained) fail("pads(hover): stepping out didn't drain the board progress (or reset it)");
+    if (!c.clamped) fail("pads(hover): lifting doesn't clamp the mech");
+    console.log(`pads: hover drifts ${minOff.toFixed(1)}..${maxOff.toFixed(1)} m round the pad; chased from 60 m and boarded in ${boarded.toFixed(1)} s (with a 1 s step out); lifting`);
+    // Never reached: it leaves after padLoiter, fee kept.
+    const m = setup({}, 300, 0);
+    m.step(PV.padHold + 0.3);
+    m.step(padWait(PV, 2) + PV.padLoiter + 1, null, { x: pad.x + 200, eHeld: false });
+    if (m.c.state !== "idle" || !m.c.events.some((x) => x.type === "missed") || m.e.scrapAtRisk !== 300 - padFee(PV, 2) || m.e.state !== "out") fail(`pads(missed): state ${m.c.state}, carried ${m.e.scrapAtRisk}, run ${m.e.state}`);
+    console.log(`pads: never reached, it leaves after ${PV.padLoiter} s, the fee kept, the run goes on`);
   }
 
   // Destroyed while waiting: everything and the fee lost.
@@ -953,8 +998,9 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
     const { e, c, step } = setup({ padBankTopUp: 1 }, carried, 1000);
     step(PV.padHold + 0.5);
     if (c.state !== "waiting" || e.scrapAtRisk !== 0 || e.bank.scrap !== 1000 - cost) fail(`pads(top-up): carried ${e.scrapAtRisk}, bank ${e.bank.scrap}, expected 0 and ${1000 - cost}`);
-    // Cancel returns the share to where it came from.
-    step(0.5, null, { x: pad.x + 99, eHeld: false });
+    // Cancel (E on the pad again) returns the share to where it came from.
+    step(0.2, pad, { eHeld: false });
+    step(PV.padHold + 0.3, pad, { eHeld: true });
     const rc = Math.round(carried * PV.padRefund), rb = Math.round(cost * PV.padRefund);
     if (e.scrapAtRisk !== rc || e.bank.scrap !== 1000 - cost + rb) fail(`pads(top-up cancel): carried ${e.scrapAtRisk} (want ${rc}), bank ${e.bank.scrap} (want ${1000 - cost + rb})`);
     const poor = setup({ padBankTopUp: 1 }, 50, cost - 1);

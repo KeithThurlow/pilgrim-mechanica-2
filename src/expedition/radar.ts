@@ -4,7 +4,7 @@
 // - the convoy radar, big (convoyRadar, about 1.5 km): used while aboard or within convoyLink of the convoy. It shows
 //   POIs as icons by tier, swarm camps as heat blobs (a rough guess of danger, no counts), unknown areas as static
 //   (nothing known, no estimate; POIs and camps inside them aren't shown), the route ahead, the convoy, the mech;
-// - the mech radar, small (mechRadar, about 150 m): only what is in range (robots as dots, POIs near), the convoy if
+// - the mech radar, smaller (mechRadar, about 500 m; Keith 2026-11-01, was 150): only what is in range (robots as dots, POIs near), the convoy if
 //   it's that close, and the arrow home at the edge.
 // Crossing the link edge zooms between them over radarZoom seconds (RadarZoom: eased in log scale, an event for the
 // sound). The picture is in world offsets from the mech (x, z); the drawer turns it to screen-up.
@@ -15,7 +15,7 @@ import type { SeekTarget } from "./seekers";
 export const RADAR_DEFAULTS = {
   convoyRadar: 1500,
   convoyLink: 450,
-  mechRadar: 150,
+  mechRadar: 500,
   radarZoom: 1,
   radarSweep: 2.4,
   radarGlow: 0.9,
@@ -31,7 +31,7 @@ const G = "Radar";
 export const RADAR_PARAMS: Param[] = [
   { key: "convoyRadar", label: "Convoy radar range (m)", min: 300, max: 5000, step: 50, group: G, tip: "How far round the convoy its radar sees (upgradeable later)" },
   { key: "convoyLink", label: "Convoy range edge (m)", min: 50, max: 3000, step: 10, group: G, tip: "Within this of the convoy the mech gets the convoy's picture; past it the scope zooms in to the mech's own" },
-  { key: "mechRadar", label: "Mech radar range (m)", min: 40, max: 600, step: 5, group: G, tip: "The mech's own sensors (a sensor part later)" },
+  { key: "mechRadar", label: "Mech radar range (m)", min: 40, max: 2000, step: 5, group: G, tip: "The mech's own sensors (a sensor part later)" },
   { key: "radarZoom", label: "Zoom time (s)", min: 0.1, max: 4, step: 0.05, group: G },
   { key: "radarSweep", label: "Sweep period (s)", min: 0.5, max: 8, step: 0.1, group: G, tip: "One turn of the sweep; contacts are painted as it passes and fade until the next" },
   { key: "radarGlow", label: "Contact fade (× sweep)", min: 0.2, max: 2, step: 0.05, group: G, tip: "How long a painted contact glows, as a share of the sweep" },
