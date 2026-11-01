@@ -6,7 +6,7 @@
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
 // resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, type SwordStats, type SwordClip } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -38,7 +38,8 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   }
   must(sw.swings === 1, `a click cut ${sw.swings} times`);
   must(clips.join(",") === "A,R,guard", `a click went through ${clips.join(",")}, not A,R,guard`);
-  must(Math.abs(cutT - st.slash) < 2 * dt, `the cut lasted ${cutT.toFixed(3)} s, not ${st.slash}`);
+  const win = clipCut("A", st, V, 1)!;
+  must(Math.abs(cutT - (win[1] - win[0])) < 2 * dt, `the cut lasted ${cutT.toFixed(3)} s, not ${(win[1] - win[0]).toFixed(3)}`);
   must(first !== null && first > 0 && last < 0, "the left arm's first cut didn't run from its left across to its right");
   must(first !== null && (first - last) >= st.arc * D2R * 0.9, `the cut turned ${first !== null ? ((first - last) / D2R).toFixed(0) : "?"}°, not the ${st.arc}° arc`);
 }
@@ -60,30 +61,31 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 }
 // ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder ----
 {
-  const lens: Record<SwordClip, number> = { A: st.windup + st.slash + V.swordFollow, B: st.windup * 0.45 + st.slash + V.swordFollow * 0.8, R: st.recover * 1.6, S: st.recover, guard: 1 };
+  for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
+    const lens = Object.fromEntries((["A", "B", "R", "S", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
     const sh = SH(side);
     for (const c of ["guard", "A", "B", "R", "S"] as SwordClip[]) {
       let worst = 0, clash = "", lead = 0, lag = 0;
       let prevTip: number[] | null = null;
       for (let i = 0; i <= 60; i++) {
-        const p = clipPose(c, (lens[c] * i) / 60, side, sh, 0, st, V);
+        const p = clipPose(c, (lens[c] * i) / 60, side, sh, 0, st, V, span);
         worst = Math.max(worst, Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z));
         for (let a = 0; a <= st.reach && !clash; a += 0.2) {
           const q = [p.hand.x + p.fwd.x * a, p.hand.y + p.fwd.y * a, p.hand.z + p.fwd.z * a];
           for (const b of BOXES) if (q.every((x, k) => x > b.lo[k] && x < b.hi[k])) clash = `${b.n} at ${(i / 60).toFixed(2)} of ${c}, ${a.toFixed(1)} m along the blade`;
         }
         const tip = [p.fwd.x, p.fwd.z];
-        const tt = (lens[c] * i) / 60, w0 = c === "A" ? st.windup : st.windup * 0.45;
-        if (prevTip && (c === "A" || c === "B") && tt > w0 && tt <= w0 + st.slash) {
+        const tt = (lens[c] * i) / 60, cw = clipCut(c, st, V, span);
+        if (prevTip && cw && tt > cw[0] && tt <= cw[1]) {
           const mx = tip[0] - prevTip[0], mz = tip[1] - prevTip[1];
           if (Math.hypot(mx, mz) > 0.05) { if (p.up.x * mx + p.up.z * mz < 0) lead++; else lag++; }
         }
         prevTip = tip;
       }
-      must(worst <= V.swordUpperArm + V.swordForearm, `side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
-      must(!clash, `side ${side}: the blade went through the ${clash}`);
-      if (c === "A" || c === "B") must(lead > lag * 3, `side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
+      must(worst <= V.swordUpperArm + V.swordForearm, `span ${span} side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
+      must(!clash, `span ${span} side ${side}: the blade went through the ${clash}`);
+      if (c === "A" || c === "B") must(lead > lag * 3, `span ${span} side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
     }
     const rest = clipPose("guard", 0, side, sh, 0, st, V);
     must(rest.fwd.z < -0.8 && rest.fwd.y > 0.25 && Math.abs(rest.fwd.x) < 0.2, `side ${side}: at rest the blade doesn't lie back over the shoulder, in line with the torso`);
@@ -94,9 +96,10 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(ua[1] < -0.6 && ua[2] > 0.5, `side ${side}: at rest the elbow isn't low and forward (${ua.map((q) => q.toFixed(2)).join(",")})`);
     must(fa[1] > 0.6, `side ${side}: at rest the forearm doesn't angle up to the fist`);
     must(bend > 70 && bend < 110, `side ${side}: at rest the elbow is bent to ${bend.toFixed(0)}°, not near a right angle`);
-    const under = clipPose("A", lens.A, side, sh, 0, st, V);
+    const under = clipPose("A", lens.A, side, sh, 0, st, V, span);
     must(under.hand.x * side < 0 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
-    const mid = clipPose("A", st.windup + st.slash / 2, side, sh, 0, st, V);
+    const cA = clipCut("A", st, V, span)!;
+    const mid = clipPose("A", (cA[0] + cA[1]) / 2, side, sh, 0, st, V, span);
     const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, mid.pole);
     const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
     must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
@@ -112,6 +115,16 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   let back = false, prev = 0;
   for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEaseIn, V.swordEaseOut, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
   must(!back, "the swing ran backwards in time somewhere");
+}
+// ---- Close or far: a close cut is quicker, bent at the elbow mid-cut, and still ends full out ----
+{
+  const sh = SH(1), near = clipCut("A", st, V, 0)!, far = clipCut("A", st, V, 1)!;
+  must(near[1] - near[0] < far[1] - far[0] && clipLength("A", st, V, 0) < clipLength("A", st, V, 1), "a close cut isn't quicker than a far one");
+  const d = (p: { hand: { x: number; y: number; z: number } }) => Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z);
+  const mn = d(clipPose("A", (near[0] + near[1]) / 2, 1, sh, 0, st, V, 0)), mf = d(clipPose("A", (far[0] + far[1]) / 2, 1, sh, 0, st, V, 1));
+  const en = d(clipPose("A", near[1], 1, sh, 0, st, V, 0)), ef = d(clipPose("A", far[1], 1, sh, 0, st, V, 1));
+  must(mn < mf - 0.4, `a close cut's hand mid-cut is ${mn.toFixed(2)} m out, not well in from the far cut's ${mf.toFixed(2)}`);
+  must(Math.abs(en - ef) < 0.15, `a close cut doesn't end full out (${en.toFixed(2)} m against ${ef.toFixed(2)})`);
 }
 // ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
 {

@@ -451,7 +451,9 @@ export class Arsenal implements MechWeapons {
   private stepSword(s: Side, held: boolean, dt: number) {
     const u = this.unit, v = this.v, bf = this.bf, sw = s.sword, body = u.body;
     const st = this.swordStats(s);
-    const sweep = sw.update(dt, held, st, v);
+    // Close or far (Keith 2026-11-01): the cut's reach from how far off the aim is (the lock, else the cursor), on the
+    // lunge's scale: within its no-lunge distance the bent-elbow draw cut, from its full-lunge distance the full sweep.
+    const sweep = sw.update(dt, held, st, v, this.reachShare());
     if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
     // The hull's frame and this side's shoulder in it (a body without them: a frame on the pelvis along the torso).
     const frame = this.frame;
@@ -463,7 +465,7 @@ export class Arsenal implements MechWeapons {
     // The waist (Keith 2026-11-01, round 7): a spring toward where the swing wants the torso, so it lags the blade and
     // swings on past it. Both swords' twists add (dual swords: a cut each way partly cancels), up to swordTwistMax.
     const D2R = Math.PI / 180;
-    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v) * v.swordTwist * D2R : 0;
+    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v, sw.span) * v.swordTwist * D2R : 0;
     for (let left = dt; left > 1e-6; left -= 1 / 120) [s.twist, s.twistV] = springStep(s.twist, s.twistV, want, v.swordTwistHz, v.swordTwistDamp, Math.min(left, 1 / 120));
     let total = 0;
     for (const o of this.sides) if (o.kind === "melee") total += o.twist;
@@ -506,7 +508,7 @@ export class Arsenal implements MechWeapons {
       // Which way the edge travels across the aim: the first cut toward the far side, the back-cut toward its own.
       const dir = sw.side * (sweep.clip === "A" ? 1 : -1);
       for (const t of sweepTimes(sweep)) {
-        const p = clipPose(sweep.clip, t, sw.side, shoulder, aimYaw, st, v);
+        const p = clipPose(sweep.clip, t, sw.side, shoulder, aimYaw, st, v, sw.span);
         feed(p, s.swishT - (sweep.to - t));
         if (s.cleave <= 0) continue;
         hw.set(p.hand.x, p.hand.y, p.hand.z).applyMatrix4(frame);
@@ -565,6 +567,14 @@ export class Arsenal implements MechWeapons {
    * (2026-11-01): by how far off the target is (the lock, else the cursor): none within swordLungeNear, so a close fight
    * can kite, growing to the full lunge at swordLungeFar.
    */
+  /** How far off the sword's aim is, 0 (within the no-lunge distance) .. 1 (the full-lunge distance or farther). */
+  private reachShare(): number {
+    const v = this.v, u = this.unit, at = u.lock ?? u.cursor;
+    if (!at) return 1;
+    const d = Math.hypot(at.x - u.sim.pos.x, at.z - u.sim.pos.z);
+    return Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
+  }
+
   lunge(): { x: number; z: number } | null {
     const v = this.v, u = this.unit;
     let k = 0;
@@ -572,7 +582,7 @@ export class Arsenal implements MechWeapons {
     const at = u.lock ?? u.cursor;
     if (k <= 0 || v.swordLunge <= 0 || !at) return null;
     const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
-    const far = Math.max(0, Math.min(1, (d - v.swordLungeNear) / Math.max(0.1, v.swordLungeFar - v.swordLungeNear)));
+    const far = this.reachShare();
     if (far <= 0 || d < 1e-3) return null;
     const sp = v.swordLunge * k * far;
     return { x: (dx / d) * sp, z: (dz / d) * sp };
