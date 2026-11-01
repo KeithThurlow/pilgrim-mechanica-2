@@ -40,6 +40,7 @@ import { Burns } from "./burn";
 import { famOfTeam } from "../world/lamps";
 import { BlastWaves, BLAST_WAVE_DEFAULTS, type BlastWaveValues, type WaveKind } from "../fx/blastWaves";
 import { BlastWavesDraw } from "../fx/blastWavesDraw";
+import { Solids } from "./solids";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -162,6 +163,8 @@ export class Battlefield {
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts): owners add themselves;
    *  the lab rebuilds it once a tick, before the soft lock. */
   readonly register = new Register();
+  /** Mechs and vehicles as solid bodies (src/game/solids.ts): each resolves itself after it steps. */
+  readonly solids = new Solids();
   /** Slow telegraphed shells (lob) and their landing marks. */
   readonly shells = new Shells();
   readonly shellsDraw: ShellsDraw;
@@ -518,6 +521,7 @@ export class Battlefield {
 
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.look = look;
+    this.solids.tick(dt);
     // One armour rule for every hit (src/game/armour.ts): its floor from the lab's slider.
     const fl = (this.v as { armourFloor?: number }).armourFloor;
     if (fl !== undefined) armourRule.floor = fl;

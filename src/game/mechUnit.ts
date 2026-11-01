@@ -79,6 +79,7 @@ import type { HitSurface } from "../fx/minigun";
 import type { Battlefield, Hittable, SplashOpts } from "./battlefield";
 import { armourHit } from "./armour";
 import { TRAMPLE_DEFAULTS, TRAMPLE_PARAMS } from "../combat/trample";
+import { SOLID_DEFAULTS, SOLID_PARAMS, type Solid, type SolidShape } from "./solids";
 import { RepairKits, REPAIR_DEFAULTS, REPAIR_PARAMS, type KitRefusal } from "./repair";
 import { Abilities, ABILITY_DEFAULTS, ABILITY_PARAMS } from "../abilities/abilities";
 import type { HealTarget } from "../abilities/zones";
@@ -88,6 +89,7 @@ export const MECH_DEFAULTS = {
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
   ...TRAMPLE_DEFAULTS,
+  ...SOLID_DEFAULTS,
   ...REPAIR_DEFAULTS,
   ...ABILITY_DEFAULTS,
   /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
@@ -115,6 +117,7 @@ export const MECH_PARAMS: Param[] = [
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
   ...TRAMPLE_PARAMS,
+  ...SOLID_PARAMS,
   ...REPAIR_PARAMS,
   ...ABILITY_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
@@ -145,7 +148,7 @@ export function roundPenFor(v: { roundPen: number; roundPierce: number; roundPen
   return v.roundPen * Math.pow(Math.max(0, pierce) / Math.max(0.1, v.roundPierce), v.roundPenCurve);
 }
 
-export class MechUnit implements Hittable {
+export class MechUnit implements Hittable, Solid {
   readonly sim: WalkerSim;
   readonly upper: UpperSim;
   surface: HitSurface = "metal";
@@ -332,6 +335,19 @@ export class MechUnit implements Hittable {
     sim.stagger = Math.max(sim.stagger, 0.35 * k);
   }
 
+  /** As a solid body (src/game/solids.ts): a pillbox bodyRadius × the legs' trample round its centre, from the feet up past the hull. */
+  solidShape(out: SolidShape): boolean {
+    if (!this.alive) return false;
+    const sim = this.sim, v = this.v;
+    out.x = sim.pos.x; out.z = sim.pos.z; out.hx = 0; out.hz = 0;
+    out.r = v.bodyRadius * (v.trample || 1);
+    out.y0 = sim.pelvis.y - v.hipHeight; out.y1 = sim.pelvis.y + 3;
+    out.mass = v.ramMechMass; out.mech = true;
+    return true;
+  }
+
+  solidShove(dx: number, dz: number, nx: number, nz: number) { this.sim.shove(dx, dz, nx, nz); }
+
   get maxHealth() { return this.hullOverride ?? this.v.hull; }
 
   reset(x: number, z: number, heading: number) {
@@ -401,6 +417,8 @@ export class MechUnit implements Hittable {
       if (wasDashing && !sim.inDash) dash.cut();
       for (const s of upper.update(dt / sub, sim.heading, this.shoulder, aim, body.armed ? trigger : false)) fired.push(s);
     }
+    // Out of any other mech or vehicle it walked into (src/game/solids.ts), before it's drawn.
+    this.bf.solids.resolve(this, dt, v);
     body.update(sim, upper);
     body.aimSensor?.(dt, aim, v);
     // Wading: the body pushes a wake (rings dropped as it moves, overlapping into a V).

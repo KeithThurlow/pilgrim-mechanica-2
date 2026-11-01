@@ -19,6 +19,8 @@ import { BusCrew, BUS_DEFAULTS, BUS_PARAMS } from "./partyBus";
 import type { InfantrySwarm } from "./infantry";
 import { BusMusic } from "../audio/busMusic";
 import { armourHit } from "../game/armour";
+import { VEHICLE_MASS } from "./trample";
+import type { Solid, SolidShape } from "../game/solids";
 import type { BarEntry } from "../ui/healthBars";
 
 /**
@@ -197,7 +199,7 @@ const shellGun = (k: CarKind) => k === "turretTruck" || k === "tank";
 interface Turret { yaw: number; pitch: number; fireClock: number; hasLos: boolean; losClock: number; slot: number }
 
 /** One raider vehicle: driver, gunner, health. */
-export class Raider implements Hittable {
+export class Raider implements Hittable, Solid {
   readonly team = RAIDERS;
   readonly surface: HitSurface = "metal";
   readonly sim: CarSim;
@@ -252,6 +254,30 @@ export class Raider implements Hittable {
 
   /** Centre of mass for targeting. */
   get centreY() { return this.sim.pos.y + this.shape.capY; }
+
+  /** As a solid body (src/game/solids.ts): its hit capsule's spine and radius, flat on the ground. */
+  solidShape(out: SolidShape): boolean {
+    if (!this.alive) return false;
+    const s = this.sim, sh = this.shape;
+    out.x = s.pos.x; out.z = s.pos.z;
+    out.hx = Math.sin(s.heading) * sh.half; out.hz = Math.cos(s.heading) * sh.half;
+    out.r = sh.radius;
+    out.y0 = s.pos.y - 0.5; out.y1 = s.pos.y + sh.capY + sh.radius * 2 + 0.5;
+    out.mass = VEHICLE_MASS[this.kind] ?? 8; out.mech = false;
+    return true;
+  }
+
+  /** Pushed out of a body: moved, and the speed into it taken off its forward and sideways speeds. */
+  solidShove(dx: number, dz: number, nx: number, nz: number) {
+    const s = this.sim;
+    s.pos.x += dx; s.pos.z += dz;
+    const fx = Math.sin(s.heading), fz = Math.cos(s.heading), lx = Math.cos(s.heading), lz = -Math.sin(s.heading);
+    let vx = fx * s.speed + lx * s.lateral, vz = fz * s.speed + lz * s.lateral;
+    const d = vx * nx + vz * nz;
+    if (d >= 0) return;
+    vx -= nx * d; vz -= nz * d;
+    s.speed = vx * fx + vz * fz; s.lateral = vx * lx + vz * lz;
+  }
 
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number) {
     const s = this.sim, sh = this.shape;
@@ -689,6 +715,8 @@ export class Warband {
     const before = s.pos.clone();
     const sub = Math.max(1, Math.ceil(dt * 120));
     for (let i = 0; i < sub; i++) s.update(dt / sub, throttle, steer);
+    // Out of any mech or vehicle it drove into (src/game/solids.ts).
+    this.bf.solids.resolve(r, dt);
     const moved = s.pos.distanceTo(before);
     // Wheels throw dust and leave ruts.
     s.wheels.forEach((w, i) => {
