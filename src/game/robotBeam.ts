@@ -3,7 +3,9 @@
 // body uses up (src/game/sheetFire.ts): the mech, the pilot, bandits and their vehicles in a robots-on-bandits fight
 // (other robots are its own team). Cosmetic: a scorched furrow along the sand, dust and a crack. Terraforming (Keith
 // 2026-11-01): the beam digs a trench of craters down its line (robotBeamDig), and the big walkers' pulse
-// (fireRobotPulse) blasts a crater under them and shoves the mech away.
+// (fireRobotPulse) blasts a crater under them and shoves the mech away. A big walker's beam sweeps (Keith 2026-11-01): the
+// release (tick 0) burns, scorches and digs the whole line with the crack and sound; each later tick burns the line for
+// its share and scorches, digs and dusts only where it strikes, so the sweep leaves a trench along its path.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
 import type { RobotBeamEvent, RobotPulseEvent } from "../combat/robots";
@@ -22,6 +24,14 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
   const f = { half: e.width / 2, height: reach, pen: 1e4, flat: true, aim: { x: t.x, y: t.y, z: t.z }, pierce: e.pierce };
   const sheet = bf.makeSheet(from, dir, flat, f);
   const shot = bf.resolveSheet(ROBOTS, sheet, e.damage, f, dir);
+  if (e.tick > 0) {
+    // A sweep tick: a short scorch and a dent where it strikes, a puff of dust.
+    const k = Math.max(0, 1 - Math.min(flat, 3) / flat);
+    bf.marks.furrow(s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width * 0.8, 0);
+    bf.dust.stomp(t.x, t.y, t.z, 0.6);
+    if (dig > 0 && (e.tick & 1) === 0) bf.queueDent(t.x, t.z, (e.width * dig) / Math.max(0.05, (bf.v as { craterRadiusShare?: number }).craterRadiusShare ?? 0.7));
+    return shot.result.steps.length;
+  }
   // A furrow burnt along the sand in pieces, dust thrown up along it, and a crack at the emitter and where it strikes.
   const n = Math.max(1, Math.ceil(flat / 8));
   for (let k = 0; k < n; k++) {
