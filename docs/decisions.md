@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Swords parry: two cuts meeting knock both blades back, 10% of the damage lands; a swing leaves an opening before it can block; close cuts quicker and far sweeps slower | Keith | Keith | Values Claude's: parry take 0.1, recoil 0.5 s, block again after half the recovery, close × 0.6, far × 1.4, damage kept at 450. Open: should a weak sword parry a strong one (parry ignores the weapons for now). |
 | 2026-11-01 | Sword block sounds like a ringing ching; sword hits like heavy steel crashing (a container crushed), no pitched thump | Keith | Keith | Built from struck-steel partials (`Synth.metal`); recipes Claude's. |
 | 2026-11-01 | Sword swings 30% slower for weight; blocks get their own distinct sound | Keith | Keith | `swordPace` 1.3 on every move; the block plays a dark clang plus a whoosh as it comes up, and no hit crunch. |
 | 2026-11-01 | The close sword cut is led by the elbow: blade brought down upright in front like a block, carried across, swinging out only at the end as the arm straightens | Keith | Keith | Replaces round 9's draw cut. Values Claude's: upright 68°, lean 28°, out to 62°. A scrub slider shows the poses. |

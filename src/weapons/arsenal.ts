@@ -11,7 +11,7 @@
 // rounds into the gun on that side, or refills energy bars; their passives are applied to the guns and the dash.
 import type { WaveKind } from "../fx/blastWaves";
 import * as THREE from "three/webgpu";
-import type { Battlefield, Hittable } from "../game/battlefield";
+import type { Battlefield, Hittable, Parry } from "../game/battlefield";
 import type { MechUnit, MechWeapons } from "../game/mechUnit";
 import { triggerOf, type Aim, type Trigger } from "../mech/upper";
 import type { Resolved } from "../items/loadout";
@@ -553,9 +553,24 @@ export class Arsenal implements MechWeapons {
       const kd = new THREE.Vector3(tx * 0.7 + dx * 0.5, 0.25, tz * 0.7 + dz * 0.5).normalize();
       this.onFire?.("melee");
       // A mech facing the cut with a free sword blocks it (Keith 2026-11-01): less damage and knock, the blade stalls.
-      const take = t.parry?.(u.sim.pos.x, u.sim.pos.z) ?? 1, blocked = take < 1;
+      const met = t.parry?.(u.sim.pos.x, u.sim.pos.z) ?? { take: 1 }, take = met.take, blocked = take < 1;
       t.damage(st.damage * u.damageScale * take, at, kd, st.ap);
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
+      if (met.parried) {
+        // The blades met (Keith 2026-11-01): a clash of sparks and light, a bend in the air, a loud ching; my blade
+        // recoils too and this cut is over.
+        const f = v.swordParryFlash;
+        bf.gunFx.sparksAt(at, kd.set(kd.x, 0.6, kd.z).normalize(), Math.round(60 * f), 18);
+        bf.gunFx.sparksAt(at, kd.set(-kd.x, 0.6, -kd.z).normalize(), Math.round(30 * f), 14);
+        if (f > 0) { bf.nightLights?.flash(at.x, at.y, at.z, 4 * f); bf.waves?.puff(at.x, at.y, at.z, 3 * f, 0.25 * f, 0.3); }
+        bf.sfx.playSound("swordBlock", at, 2.2, 1.12 + Math.random() * 0.1);
+        bf.sfx.playSound("swordBlock", at, 1.4, 0.8 + Math.random() * 0.08);
+        s.sword.recoil(v);
+        s.swordHits.clear(); s.cleave = 0;
+        this.onShake?.(v.swordShake * 1.4);
+        if (u.player && !u.ally) hitStop.add(v.swordStop * 1.6, v.swordStopScale);
+        return;
+      }
       bf.gunFx.sparksAt(at, kd, blocked ? 26 : 10, blocked ? 14 : 9);
       if (blocked) {
         bf.sfx.playSound("swordBlock", at, 1.7, 0.92 + Math.random() * 0.16);
@@ -593,22 +608,36 @@ export class Arsenal implements MechWeapons {
    * recovering (not mid-cut) whose arm faces the cutter, within swordBlockArc of the torso's aim on that side, swings up
    * across the front and takes it: the share of the damage that lands is swordBlockTake. One already up blocks again.
    */
-  parry(fromX: number, fromZ: number): number {
+  parry(fromX: number, fromZ: number): Parry {
     const v = this.v, u = this.unit;
-    if (v.swordBlock <= 0 || !u.alive) return 1;
-    const to = Math.atan2(fromX - u.sim.pos.x, fromZ - u.sim.pos.z), half = (v.swordBlockArc / 2) * (Math.PI / 180);
+    if (!u.alive) return { take: 1 };
+    const to = Math.atan2(fromX - u.sim.pos.x, fromZ - u.sim.pos.z);
+    // How far off this side's arm faces the cutter (the torso's aim on that side).
+    const off = (s: Side) => {
+      const g = u.upper.guns[s.sword.side === 1 ? 0 : 1];
+      const o = to - (u.upper.torsoYaw + (g?.yaw ?? 0));
+      return Math.abs(Math.atan2(Math.sin(o), Math.cos(o)));
+    };
+    const half = (v.swordBlockArc / 2) * (Math.PI / 180);
+    // The parry (Keith 2026-11-01): my own sword driving or cutting toward the cutter meets its blade; both recoil.
+    if (v.swordParry > 0) for (const s of this.sides) {
+      if (s.kind !== "melee" || !s.sword.swinging || off(s) > half) continue;
+      s.sword.recoil(v);
+      s.swordHits.clear(); s.cleave = 0;
+      this.onShake?.(v.swordShake * 1.4);
+      if (u.player && !u.ally) hitStop.add(v.swordStop * 1.6, v.swordStopScale);
+      return { take: v.swordParryTake, parried: true };
+    }
+    if (v.swordBlock <= 0) return { take: 1 };
     let pick: Side | null = null, best = Infinity;
     for (const s of this.sides) {
       if (s.kind !== "melee" || !(s.sword.blocking || s.sword.free)) continue;
-      const g = u.upper.guns[s.sword.side === 1 ? 0 : 1];
-      let off = to - (u.upper.torsoYaw + (g?.yaw ?? 0));
-      off = Math.atan2(Math.sin(off), Math.cos(off));
       // One already up first, else the arm that faces it best.
-      const score = Math.abs(off) - (s.sword.blocking ? 10 : 0);
-      if (Math.abs(off) <= half && score < best) { best = score; pick = s; }
+      const a = off(s), score = a - (s.sword.blocking ? 10 : 0);
+      if (a <= half && score < best) { best = score; pick = s; }
     }
-    if (!pick || !pick.sword.block(v)) return 1;
-    return v.swordBlockTake;
+    if (!pick || !pick.sword.block(v)) return { take: 1 };
+    return { take: v.swordBlockTake };
   }
 
   lunge(move?: { x: number; z: number }): { x: number; z: number } | null {
