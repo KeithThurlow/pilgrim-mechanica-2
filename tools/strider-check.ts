@@ -45,7 +45,7 @@ function run(seed: number) {
         const p = s.pos(P);
         if (Math.hypot(e.x - p.x, e.z - p.z) > 3) fail(`slam ${Math.hypot(e.x - p.x, e.z - p.z).toFixed(1)} m off its feet`);
       }
-      if (e.type === "beam") {
+      if (e.type === "beam" && e.beam.release) {
         if (t - lastSlam < 2) beamAfterSlam++;
         const b = e.beam;
         const run = Math.hypot(b.end.x - b.start.x, b.end.z - b.start.z);

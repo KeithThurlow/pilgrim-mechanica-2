@@ -15,6 +15,7 @@ import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
 import { steerOut, type KeepOut } from "../game/keepOut";
 import { closingSpeed, trampleFling, trampleHurt, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
+import { beamDrag, beamPower, beamWidthShare, beamTicks, beamTickDamage, beamLive, dragAim, type BeamShape } from "./beamCore";
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
   type V3, type WalkSpec,
@@ -192,7 +193,11 @@ export const ROBOT_DEFAULTS = {
   robotBeamScorch: 3,
   robotBeamDig: 0.5,
   robotBeamSweep: 1.8,
+  robotBeamStartWidth: 0.1,
+  robotBeamStartPower: 0.04,
+  robotBeamGrow: 2.2,
   robotBeamDrag: 4.5,
+  robotBeamChargeDrag: 2,
   robotBeamTick: 0.1,
   robotBeamHeat: 1,
   // The terraform pulse (Keith 2026-11-01: "a beam attack that blasted the ground and then exploded out around them
@@ -336,13 +341,17 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigShotDamage", label: "Charge damage", min: 0, max: 100, step: 0.5, group: G2, tip: "For the lab: what a big one's charge does at the blast's centre" },
   { key: "robotBeamOn", label: "Beam on", min: 0, max: 1, step: 1, group: GB, tip: "Excavators charge a beam now and then beside their volleys" },
   { key: "robotBeamCharge", label: "Charge time (s)", min: 0.5, max: 5, step: 0.05, group: GB, tip: "From the first glow to the beam" },
-  { key: "robotBeamLock", label: "Aim locks at (share)", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the charge the aim follows the mech for; then it holds, and a side step takes you clear" },
+  { key: "robotBeamLock", label: "Quad aim locks at (share)", min: 0, max: 1, step: 0.01, group: GB, tip: "Weapon quads' lasers and rails: share of the charge the aim follows the mech for; then it holds. Big walkers drag instead" },
+  { key: "robotBeamStartWidth", label: "Width at the charge's start (share)", min: 0.02, max: 1, step: 0.01, group: GB, tip: "Keith 2026-11-01: the beam is live from the start of the charge, thin, and grows to full width at the release" },
+  { key: "robotBeamStartPower", label: "Power at the charge's start (share)", min: 0, max: 1, step: 0.01, group: GB, tip: "Damage and sand blast while charging, as a share of the sweep's; grows to full at the release" },
+  { key: "robotBeamGrow", label: "Growth curve (width, power)", min: 0.3, max: 5, step: 0.1, group: GB, tip: "1: grows evenly over the charge; higher: stays thin and weak, then swells at the end" },
   { key: "robotBeamWidth", label: "Width (m)", min: 0.2, max: 6, step: 0.05, group: GB },
   { key: "robotBeamLength", label: "Length (m)", min: 10, max: 150, step: 1, group: GB, tip: "It stops sooner where it meets the ground" },
   { key: "robotBeamReach", label: "Burns up to (m above ground)", min: 1, max: 15, step: 0.5, group: GB, tip: "The line comes down from the emitter; the part this low burns what's under it" },
-  { key: "robotBeamDamage", label: "Damage", min: 0, max: 600, step: 5, group: GB, tip: "To everything on the line (it goes through), if held in it for the whole sweep" },
+  { key: "robotBeamDamage", label: "Damage", min: 0, max: 600, step: 5, group: GB, tip: "To everything on the line (it goes through), if held in it for the whole sweep at full power (the charge adds a little)" },
   { key: "robotBeamSweep", label: "Fires for (s)", min: 0, max: 5, step: 0.05, group: GB, tip: "Keith 2026-11-01: the beam keeps firing this long, dragging across the sand toward the mech (0: one flash)" },
-  { key: "robotBeamDrag", label: "Drags toward you at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "How fast the beam's strike chases the mech while it fires; under walking pace (6), so walking away keeps clear and standing still is caught" },
+  { key: "robotBeamDrag", label: "Drags toward you at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "How fast the beam's strike chases the mech, through the charge and the sweep; under walking pace (6), so walking away keeps clear and standing still is caught" },
+  { key: "robotBeamChargeDrag", label: "Drags while charging at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "Slower than the sweep's drag, so moving off early clears the beam before it reaches full power" },
   { key: "robotBeamTick", label: "Burn tick (s)", min: 0.02, max: 0.5, step: 0.01, group: GB, tip: "How often a firing beam burns what's under it (the damage is shared over the sweep)" },
   { key: "robotBeamHeat", label: "Heat", min: 0, max: 2, step: 0.05, group: GB, tip: "Carried on each beam event for whatever heats the sand (red-hot trails); the quads' lasers and rails send it too" },
   { key: "robotBeamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GB },
@@ -457,6 +466,12 @@ export interface RobotBeamEvent {
    * rails are one tick. heat (robotBeamHeat) is the hook for heated sand along e.end's path.
    */
   tick: number; heat: number;
+  /**
+   * Keith 2026-11-01 (round 2): a big beam is live from the start of its charge, growing. power (0..1) is how grown it is
+   * (damage is already scaled; the sand's blast and heat scale with it); release marks the tick it reaches full power
+   * (the crack, the trench down the line). A one-flash beam is a single release tick at power 1.
+   */
+  power: number; release: boolean;
 }
 /**
  * A big one's terraform pulse going off (plain data, rule 12): the robot, the emitter, the point on the ground under it
@@ -1514,43 +1529,62 @@ export class RobotSwarm {
   /** How long robot i's beam keeps firing once released (s): a big one's sweep; a weapon quad's laser or rail is one flash. */
   beamSweep(i: number): number { return this.kind[i] === MID ? 0 : Math.max(0, this.v.robotBeamSweep); }
 
+  /** A big walker's beam shape (src/combat/beamCore.ts) from the sliders. */
+  bigBeamShape(): BeamShape {
+    const v = this.v, o = this.shape;
+    o.charge = v.robotBeamCharge; o.sweep = v.robotBeamSweep; o.drag = v.robotBeamDrag; o.chargeDrag = v.robotBeamChargeDrag; o.tick = v.robotBeamTick;
+    o.startWidth = v.robotBeamStartWidth; o.startPower = v.robotBeamStartPower; o.growth = v.robotBeamGrow;
+    return o;
+  }
+  private shape: BeamShape = { charge: 1, sweep: 0, drag: 0, chargeDrag: 0, tick: 0.1, startWidth: 1, startPower: 1, growth: 1 };
+  private dragOut = { x: 0, z: 0 };
+
   /**
-   * A charge in progress: track, lock, fire, sweep, burn, cool down. While a big one's beam fires (robotBeamSweep) its
-   * strike drags across the ground toward the target at robotBeamDrag, burning a tick at a time.
+   * A charge in progress. A big walker's (Keith 2026-11-01): live from the start, thin and weak, growing to the release,
+   * then firing on for the sweep, its strike dragging toward the target all the while; a tick at a time. A weapon quad's
+   * laser or rail: the aim tracks, then locks, one flash at the end of the charge.
    */
   private chargeBeam(i: number, dt: number, t: RobotTarget) {
     const v = this.v, spec = this.beamSpec(i), C = spec.charge, was = this.beamT[i];
-    const now = (this.beamT[i] = was + dt), D = this.beamSweep(i);
-    if (now < C * v.robotBeamLock) { this.bax[i] = t.x; this.bay[i] = t.y; this.baz[i] = t.z; }
-    else if (was >= C && was < C + D && v.robotBeamDrag > 0) {
+    const now = (this.beamT[i] = was + dt);
+    if (this.kind[i] !== MID) {
+      const sh = this.bigBeamShape();
       // The drag: the aim slides along the ground toward the target, keeping its height above the sand.
-      const dx = t.x - this.bax[i], dz = t.z - this.baz[i], L = Math.hypot(dx, dz), step = Math.min(L, v.robotBeamDrag * dt);
-      if (L > 1e-4) {
-        const up = this.bay[i] - this.ground.height(this.bax[i], this.baz[i]);
-        this.bax[i] += (dx / L) * step; this.baz[i] += (dz / L) * step;
-        this.bay[i] = this.ground.height(this.bax[i], this.baz[i]) + up;
+      if (was > 0) {
+        const up = this.bay[i] - this.ground.height(this.bax[i], this.baz[i]), d = dragAim(this.bax[i], this.baz[i], t.x, t.z, beamDrag(was, sh), dt, this.dragOut);
+        this.bax[i] = d.x; this.baz[i] = d.z; this.bay[i] = this.ground.height(d.x, d.z) + up;
       }
-    }
-    if (now >= C && was < C + D + 1e-6) {
-      // Ticks: the release at C, then every robotBeamTick until the sweep ends.
-      const T = Math.max(0.02, v.robotBeamTick), n = D > 0 ? Math.max(1, Math.round(D / T)) : 1;
-      const k0 = was < C ? -1 : Math.floor((was - C) / T), k1 = Math.min(n - 1, Math.floor((now - C) / T));
-      for (let k = Math.max(0, k0 + 1); k <= k1; k++) {
-        const b = this.beamLine(i, this.bl);
-        if (k === 0) this.beams++;
+      beamTicks(was, now, sh, (k, tk, release) => {
+        const b = this.beamLine(i, this.bl), p = beamPower(tk, sh);
+        if (release) this.beams++;
         this.onBeam?.({
           robot: i, id: this.uid[i],
           from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
-          width: spec.width, damage: spec.damage / n, pierce: v.robotBeamPierce, tick: k, heat: v.robotBeamHeat,
+          width: spec.width * beamWidthShare(tk, sh), damage: beamTickDamage(tk, spec.damage, sh), pierce: v.robotBeamPierce, tick: k,
+          heat: v.robotBeamHeat * p, power: p, release,
         });
-      }
+      });
+      if (now >= beamLive(sh) + v.robotBeamBurn) this.endBeam(i, spec.cooldown);
+      return;
     }
-    if (now >= C + D + v.robotBeamBurn) {
-      this.beamT[i] = -1;
-      this.beamClock[i] = spec.cooldown * (0.85 + 0.3 * this.rand());
-      // A beat before the next volley's tell.
-      this.fireClock[i] = Math.max(this.fireClock[i], v.robotBigWindup + 0.5);
+    if (now < C * v.robotBeamLock) { this.bax[i] = t.x; this.bay[i] = t.y; this.baz[i] = t.z; }
+    if (was < C && now >= C) {
+      const b = this.beamLine(i, this.bl);
+      this.beams++;
+      this.onBeam?.({
+        robot: i, id: this.uid[i],
+        from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
+        width: spec.width, damage: spec.damage, pierce: v.robotBeamPierce, tick: 0, heat: v.robotBeamHeat, power: 1, release: true,
+      });
     }
+    if (now >= C + v.robotBeamBurn) this.endBeam(i, spec.cooldown);
+  }
+
+  private endBeam(i: number, cooldown: number) {
+    this.beamT[i] = -1;
+    this.beamClock[i] = cooldown * (0.85 + 0.3 * this.rand());
+    // A beat before the next volley's tell.
+    this.fireClock[i] = Math.max(this.fireClock[i], this.v.robotBigWindup + 0.5);
   }
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */

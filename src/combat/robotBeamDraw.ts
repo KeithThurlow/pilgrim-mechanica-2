@@ -11,6 +11,7 @@
 // charging emitter holds a real light at high priority, the line and the scorch glow on the sand.
 import * as THREE from "three/webgpu";
 import { RobotSwarm, BIG, type BeamLine } from "./robots";
+import { beamPower, beamWidthShare } from "./beamCore";
 import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
 import type { BlastWaves } from "../fx/blastWaves";
 import { FAM_ROBOT, type ShortLights } from "../world/lamps";
@@ -114,6 +115,21 @@ export class RobotBeamDraw {
         (s.glow.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.5 * grow;
         (s.halo.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.45 * grow;
         s.glow.visible = s.halo.visible = true;
+        if (sw.kind[i] === BIG) {
+          // A big one (Keith 2026-11-01: the real beam, not a line on the sand): live from the start, thin and
+          // flickering, thickening and brightening with its power to the release (src/combat/beamCore.ts).
+          const sh = sw.bigBeamShape(), ws = beamWidthShare(t, sh), p = beamPower(t, sh);
+          this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
+          const len = this.d.length(), w = W * ws * (0.8 + 0.2 * Math.sin(this.time * (40 + 30 * p) + i));
+          this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
+          for (const [m, kw, o] of [[s.beam, 0.5, 0.3 + 0.45 * p], [s.core, 0.18, 0.6 + 0.4 * p]] as const) {
+            m.position.set(b.ex, b.ey, b.ez); m.quaternion.copy(this.q); m.scale.set(Math.max(0.03, w * kw), Math.max(0.03, w * kw), len);
+            (m.material as THREE.MeshBasicMaterial).opacity = o;
+            m.visible = true;
+          }
+          s.line.mesh.visible = s.edge.mesh.visible = false;
+          continue;
+        }
         // The warning line: thin and faint while it tracks; at the lock it widens to the beam and pulses.
         const pts = this.path(b);
         const pulse = locked ? 0.75 + 0.25 * Math.sin(this.time * 26) : 1;
@@ -149,13 +165,8 @@ export class RobotBeamDraw {
         s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(G * (1.2 + 1.2 * f));
         (s.glow.material as THREE.MeshBasicMaterial).opacity = f; (s.halo.material as THREE.MeshBasicMaterial).opacity = 0.6 * f;
         s.glow.visible = s.halo.visible = true;
-        // While it sweeps, the strike's spot on the sand: a bright ring under it, so the drag reads.
-        s.line.mesh.visible = false;
-        s.edge.mesh.visible = t < C + D && v.robotBeamLine > 0;
-        if (s.edge.mesh.visible) {
-          s.edge.set(this.circle(b.x1, b.z1, W * 1.1), 0.25, "ground", g, 0.11);
-          s.edge.mat.opacity = v.robotBeamLine * 0.8;
-        }
+        // The sand under the strike glows red-hot on its own (src/fx/groundHeat.ts): no ring.
+        s.line.mesh.visible = s.edge.mesh.visible = false;
       }
     }
     for (; k < SLOTS; k++) {
@@ -225,11 +236,11 @@ export class RobotBeamDraw {
   /** The night lights: the emitter holds a real light at high priority while it charges, the line glows, the burn flares. */
   private lights(L: ShortLights) {
     const v = this.swarm.v;
-    for (const { u, line: b, f: lf } of this.live) {
+    for (const { i, u, line: b, f: lf } of this.live) {
       if (u < 1) {
         const grow = Math.pow(u, v.robotBeamGrowth);
         L.hold(b.ex, b.ey, b.ez, v.robotBeamLight * (0.12 + 0.88 * grow), 10 + 16 * grow, u > 0.8 ? 0x80c8ff : HOT, v.robotBeamPrio);
-        if (v.robotBeamLine > 0) L.telegraphLine(b.sx, b.sz, b.x1, b.z1, u >= v.robotBeamLock ? v.robotBeamWidth : 0.6, u, FAM_ROBOT);
+        if (v.robotBeamLine > 0 && this.swarm.kind[i] !== BIG) L.telegraphLine(b.sx, b.sz, b.x1, b.z1, u >= v.robotBeamLock ? v.robotBeamWidth : 0.6, u, FAM_ROBOT);
       } else {
         const f = lf ?? Math.max(0, 1 - (u - 1) * v.robotBeamCharge / Math.max(0.01, v.robotBeamBurn));
         L.hold(b.ex, b.ey, b.ez, v.robotBeamFlash * 0.5 * f, 20, 0xd0ecff, v.robotBeamPrio);

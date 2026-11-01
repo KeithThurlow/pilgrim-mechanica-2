@@ -1,13 +1,15 @@
 // The striders' attacks drawn (sim: src/combat/strider.ts). Cosmetic. Blue, as the robots' weapons are.
-// - Beam charge: a line on the sand along where the beam will plough, brightening and widening to the beam's width as
-//   the charge fills (so a dash off it reads by day). The fire: a white-hot core in a blue sheath from the head's
-//   emitter, its strike sweeping down the furrow for a moment (the damage and the burnt furrow: src/game/robotBeam.ts).
+// - Beam (Keith 2026-11-01: less ground telegraph, the real beam growing instead; src/combat/beamCore.ts): from the start
+//   of the charge a thin live beam from the head's emitter to its strike, flickering, a white-hot core in a blue sheath
+//   that thickens to full at the release (a flare), then holds through the sweep as the strike drags after the prey
+//   (the damage, the furrow and the red-hot sand: src/game/robotBeam.ts).
 // - Slam charge: a ring on the sand at the blast's radius and a second ring filling out to it, and a blue column
 //   straight down from the emitter to the sand that thickens; the release: the column flares (the blast itself is the
 //   battlefield's, with its crater and blast wave).
 import * as THREE from "three/webgpu";
 import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
 import { BEAM, SLAM, type Strider } from "./strider";
+import { beamPower, beamWidthShare } from "./beamCore";
 import type { RobotBeamEvent } from "./robots";
 import { STRIDER_PALETTE } from "./striderBody";
 
@@ -44,8 +46,8 @@ export class StriderFx {
     return s;
   }
 
-  /** A beam fired (the event's line). */
-  beam(id: number, e: RobotBeamEvent) { const s = this.slot(id); s.fire = e; s.fireT = 0; }
+  /** A beam tick (the event's line): the release flares the beam. */
+  beam(id: number, e: RobotBeamEvent) { if (!e.release) return; const s = this.slot(id); s.fire = e; s.fireT = 0; }
   /** A slam went off at (x, y, z). */
   slam(id: number, x: number, y: number, z: number) { const s = this.slot(id); s.slamT = SLAM_T; s.slamAt.set(x, y, z); }
 
@@ -56,14 +58,20 @@ export class StriderFx {
       const s = this.slot(st.id);
       seen.add(st.id);
       const c = st.charge();
-      // The beam's warning line.
+      s.line.mesh.visible = false;
+      // The live beam: thin and flickering as it charges, growing to full at the release, held through the sweep.
       if (st.alive && st.mode === BEAM) {
-        const L = st.beamLine(), n = LINE;
-        for (let i = 0; i < n; i++) { const u = i / (n - 1); this.pts[i].x = L.start.x + (L.end.x - L.start.x) * u; this.pts[i].z = L.start.z + (L.end.z - L.start.z) * u; }
-        const locked = c >= st.v.striderBeamTrack;
-        s.line.set(this.pts.slice(0, n), locked ? st.v.striderBeamWidth : 0.25 + c * 0.6, "ground", this.ground, 0.1);
-        s.line.mat.opacity = 0.2 + c * 0.6 + (locked ? Math.sin(this.time * 24) * 0.12 : 0);
-      } else s.line.mesh.visible = false;
+        const sh = st.beamShape(), t = st.modeT, ws = beamWidthShare(t, sh), p = beamPower(t, sh);
+        const flare = s.fire ? Math.max(0, 1 - s.fireT / FIRE_T) : 0;
+        if (s.fire) { s.fireT += dt; if (s.fireT >= FIRE_T) s.fire = null; }
+        const e = st.emitter(V0), a = st.aim, flick = 0.85 + 0.15 * Math.sin(this.time * (40 + 30 * p) + st.id);
+        const W = st.v.striderBeamWidth * ws * flick * (1 + 0.6 * flare);
+        V1.set(a.x, this.ground.height(a.x, a.z), a.z);
+        this.stretch(s.sheath, e, V1, W * 0.5);
+        this.stretch(s.core, e, V1, Math.max(0.03, W * 0.18));
+        (s.sheath.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.4 * p + 0.25 * flare;
+        (s.core.material as THREE.MeshBasicMaterial).opacity = Math.min(1, 0.6 + 0.4 * p + flare);
+      } else if (!s.fire || !st.alive) { s.fire = null; s.sheath.visible = s.core.visible = false; }
       // The slam's rings and column.
       if (st.alive && st.mode === SLAM) {
         const R = st.v.striderSlamRadius, a = st.slamAt;
@@ -85,21 +93,6 @@ export class StriderFx {
         this.stretch(s.column, e, s.slamAt, 2.5 * k + 0.3);
         this.stretch(s.columnCore, e, s.slamAt, 1.1 * k + 0.1);
         (s.column.material as THREE.MeshBasicMaterial).opacity = 0.8 * k;
-      }
-      // The beam firing: from the emitter, its strike sweeping down the furrow.
-      if (s.fire) {
-        s.fireT += dt;
-        const f = s.fire, u = Math.min(1, s.fireT / (FIRE_T * 0.6)), k = 1 - s.fireT / FIRE_T;
-        if (k <= 0) { s.fire = null; s.sheath.visible = s.core.visible = false; }
-        else {
-          const hit = V1.set(f.start.x + (f.end.x - f.start.x) * u, 0, f.start.z + (f.end.z - f.start.z) * u);
-          hit.y = this.ground.height(hit.x, hit.z);
-          V0.set(f.from.x, f.from.y, f.from.z);
-          this.stretch(s.sheath, V0, hit, f.width * 0.5 * (0.6 + 0.4 * k));
-          this.stretch(s.core, V0, hit, f.width * 0.18);
-          (s.sheath.material as THREE.MeshBasicMaterial).opacity = 0.7 * k;
-          (s.core.material as THREE.MeshBasicMaterial).opacity = Math.min(1, 1.4 * k);
-        }
       }
     }
     // Slots of striders gone: hide them.
