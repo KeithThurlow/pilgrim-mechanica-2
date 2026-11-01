@@ -16,6 +16,7 @@ import type { Param } from "../core/tweaks";
 import { WalkerSim, type Ground, type MoveCommand } from "../mech/walker";
 import { WALKER_DEFAULTS, type WalkerValues } from "../mech/walkerTuning";
 import type { RobotBeamEvent } from "./robots";
+import { beamDrag, beamPower, beamWidthShare, beamTicks, beamTickDamage, beamLive, dragAim, type BeamShape } from "./beamCore";
 
 export const STRIDER_DEFAULTS = {
   striderScale: 1.7,
@@ -35,13 +36,19 @@ export const STRIDER_DEFAULTS = {
   // The beam (blue)
   striderBeamEvery: 9,
   striderBeamCharge: 2.2,
-  striderBeamTrack: 0.6,
   striderBeamMin: 14,
   striderBeamMax: 80,
   striderBeamDamage: 160,
   striderBeamWidth: 1.8,
   striderBeamPierce: 0.8,
   striderBeamRun: 14,
+  striderBeamSweep: 1.8,
+  striderBeamDrag: 4.5,
+  striderBeamChargeDrag: 2,
+  striderBeamTick: 0.1,
+  striderBeamStartWidth: 0.1,
+  striderBeamStartPower: 0.04,
+  striderBeamGrow: 2.2,
   // The slam (blue, straight down)
   striderSlamNear: 14,
   striderSlamCharge: 2.4,
@@ -93,14 +100,20 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderSeekRate", label: "Seeker sweeps per second", min: 0.05, max: 2, step: 0.05, group: G },
   { key: "striderLockTime", label: "Seen this long before it fires (s)", min: 0, max: 5, step: 0.1, group: G },
   { key: "striderBeamEvery", label: "A beam every (s)", min: 1, max: 40, step: 0.5, group: GB },
-  { key: "striderBeamCharge", label: "Charge (s)", min: 0.2, max: 6, step: 0.1, group: GB, tip: "The glow under the head grows and a line shows on the sand: dash off the line" },
-  { key: "striderBeamTrack", label: "Aim follows for (share of the charge)", min: 0, max: 1, step: 0.05, group: GB },
+  { key: "striderBeamCharge", label: "Charge (s)", min: 0.2, max: 6, step: 0.1, group: GB, tip: "Keith 2026-11-01: the beam is live from the start, thin and weak, growing to full at the release (src/combat/beamCore.ts, as the big walkers')" },
+  { key: "striderBeamSweep", label: "Fires for (s)", min: 0, max: 5, step: 0.05, group: GB, tip: "After the release it keeps firing this long at full power" },
+  { key: "striderBeamDrag", label: "Drags toward you at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "Its strike chases the prey over the sand through the charge and the sweep; under walking pace, so walking away keeps clear" },
+  { key: "striderBeamChargeDrag", label: "Drags while charging at (m/s)", min: 0, max: 15, step: 0.25, group: GB, tip: "Slower than the sweep's drag, so moving off early clears the beam before it reaches full power" },
+  { key: "striderBeamTick", label: "Burn tick (s)", min: 0.02, max: 0.5, step: 0.01, group: GB },
+  { key: "striderBeamStartWidth", label: "Width at the charge's start (share)", min: 0.02, max: 1, step: 0.01, group: GB },
+  { key: "striderBeamStartPower", label: "Power at the charge's start (share)", min: 0, max: 1, step: 0.01, group: GB, tip: "Damage and sand blast while charging, as a share of the sweep's" },
+  { key: "striderBeamGrow", label: "Growth curve (width, power)", min: 0.3, max: 5, step: 0.1, group: GB },
   { key: "striderBeamMin", label: "Closest (m)", min: 0, max: 60, step: 1, group: GB },
   { key: "striderBeamMax", label: "Furthest (m)", min: 10, max: 200, step: 1, group: GB },
-  { key: "striderBeamDamage", label: "Damage", min: 0, max: 1000, step: 5, group: GB },
+  { key: "striderBeamDamage", label: "Damage", min: 0, max: 1000, step: 5, group: GB, tip: "If held in it for the whole sweep at full power (the charge adds a little)" },
   { key: "striderBeamWidth", label: "Width (m)", min: 0.2, max: 6, step: 0.1, group: GB },
   { key: "striderBeamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GB },
-  { key: "striderBeamRun", label: "Furrow past the aim (m)", min: 0, max: 60, step: 1, group: GB, tip: "The beam strikes short of the aim and ploughs on through it this far" },
+  { key: "striderBeamRun", label: "Release furrow past the aim (m)", min: 0, max: 60, step: 1, group: GB, tip: "At the release the beam cracks a furrow on through the aim this far" },
   { key: "striderSlamNear", label: "Slams when you're within (m)", min: 0, max: 60, step: 1, group: GS },
   { key: "striderSlamCharge", label: "Charge (s)", min: 0.3, max: 6, step: 0.1, group: GS, tip: "The blue column at its feet and the ring on the sand: get out of the ring" },
   { key: "striderSlamRadius", label: "Blast radius (m)", min: 2, max: 40, step: 0.5, group: GS },
@@ -319,14 +332,16 @@ export class Strider {
         emit({ type: "beamCharge", id: this.id });
       }
     } else if (this.mode === BEAM) {
-      if (has && this.modeT < v.striderBeamCharge * v.striderBeamTrack) {
-        // The aim follows the prey (at a lag) for the first part of the charge, then holds.
-        const k = Math.min(1, dt * 3);
-        this.aim.x += (prey!.x - this.aim.x) * k; this.aim.z += (prey!.z - this.aim.z) * k;
-        this.aim.y = this.ground.field.height(this.aim.x, this.aim.z);
+      // The beam (src/combat/beamCore.ts): live from the start, growing; its strike drags toward the prey all along.
+      const sh = this.beamShape(), was = this.modeT - dt;
+      if (has && was > 0) {
+        const d = dragAim(this.aim.x, this.aim.z, prey!.x, prey!.z, beamDrag(was, sh), dt, DRAG);
+        this.aim.x = d.x; this.aim.z = d.z; this.aim.y = this.ground.field.height(d.x, d.z);
       }
-      if (this.modeT >= v.striderBeamCharge) {
-        emit({ type: "beam", id: this.id, beam: this.beamLine() });
+      beamTicks(was, this.modeT, sh, (k, tk, release) => {
+        emit({ type: "beam", id: this.id, beam: this.beamLine(k, tk, release) });
+      });
+      if (this.modeT >= beamLive(sh)) {
         this.mode = WALK; this.modeT = 0;
         this.beamClock = v.striderBeamEvery * (0.8 + this.rand() * 0.4);
         if (this.rand() < v.striderRush) this.rushT = v.striderRushTime;
@@ -359,19 +374,32 @@ export class Strider {
     void S;
   }
 
-  /** The beam's line: from the emitter to the sand a little short of the aim, on through it by the furrow's run. */
-  beamLine(): RobotBeamEvent {
-    const v = this.v, e = this.emitter(T5), a = this.aim;
+  /** The beam's shape (src/combat/beamCore.ts) from the sliders. */
+  beamShape(): BeamShape {
+    const v = this.v, o = this.shape;
+    o.charge = v.striderBeamCharge; o.sweep = v.striderBeamSweep; o.drag = v.striderBeamDrag; o.chargeDrag = v.striderBeamChargeDrag; o.tick = v.striderBeamTick;
+    o.startWidth = v.striderBeamStartWidth; o.startPower = v.striderBeamStartPower; o.growth = v.striderBeamGrow;
+    return o;
+  }
+  private shape: BeamShape = { charge: 1, sweep: 0, drag: 0, chargeDrag: 0, tick: 0.1, startWidth: 1, startPower: 1, growth: 1 };
+
+  /**
+   * One tick of the beam (k, at tk into it): from the emitter to the sand a little short of the aim and on just past it;
+   * the release tick cracks a furrow on through the aim by striderBeamRun.
+   */
+  beamLine(k = 0, tk = this.modeT, release = false): RobotBeamEvent {
+    const v = this.v, e = this.emitter(T5), a = this.aim, sh = this.beamShape(), p = beamPower(tk, sh);
     const fx = a.x - e.x, fz = a.z - e.z, fl = Math.hypot(fx, fz) || 1, ux = fx / fl, uz = fz / fl;
-    const back = Math.min(fl * 0.5, 6);
-    const sx = a.x - ux * back, sz = a.z - uz * back, ex = a.x + ux * v.striderBeamRun, ez = a.z + uz * v.striderBeamRun;
+    const back = release ? Math.min(fl * 0.5, 6) : Math.min(fl * 0.5, 3), on = release ? v.striderBeamRun : 1.5;
+    const sx = a.x - ux * back, sz = a.z - uz * back, ex = a.x + ux * on, ez = a.z + uz * on;
     const g = this.ground.field;
     return {
       robot: -1 - this.id, id: this.id,
       from: { x: e.x, y: e.y, z: e.z },
       start: { x: sx, y: g.height(sx, sz), z: sz },
       end: { x: ex, y: g.height(ex, ez), z: ez },
-      width: v.striderBeamWidth, damage: v.striderBeamDamage, pierce: v.striderBeamPierce, tick: 0, heat: 1,
+      width: v.striderBeamWidth * beamWidthShare(tk, sh), damage: beamTickDamage(tk, v.striderBeamDamage, sh), pierce: v.striderBeamPierce,
+      tick: k, heat: p, power: p, release,
     };
   }
 
@@ -410,6 +438,7 @@ export class Strider {
   }
 }
 
+const DRAG = { x: 0, z: 0 };
 const T0 = new Vector3(), T1 = new Vector3(), T2 = new Vector3(), T3 = new Vector3(), T4 = new Vector3(), T5 = new Vector3(), T6 = new Vector3(), T7 = new Vector3();
 
 /** The striders on a field: stands them up, steps them, hands out ids. Host. */
@@ -420,7 +449,7 @@ export class Striders {
   /** Fired since construction (for the HUD and the check). */
   beams = 0; slams = 0; kills = 0;
   private emit = (e: StriderEvent) => {
-    if (e.type === "beam") this.beams++;
+    if (e.type === "beam" && e.beam.release) this.beams++;
     else if (e.type === "slam") this.slams++;
     else if (e.type === "down") this.kills++;
     this.onEvent?.(e);

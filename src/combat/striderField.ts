@@ -94,7 +94,7 @@ export class StriderField {
     } else if (e.type === "beam") {
       this.fx.beam(e.id, e.beam);
       fireRobotBeam(bf, e.beam, v.striderBeamReach, undefined, (bf.v as { heatStrider?: number }).heatStrider);
-      if (Math.hypot(mp.x - e.beam.end.x, mp.z - e.beam.end.z) < 80) this.shake(0.25);
+      if (e.beam.release && Math.hypot(mp.x - e.beam.end.x, mp.z - e.beam.end.z) < 80) this.shake(0.25);
     } else if (e.type === "slam") {
       this.fx.slam(e.id, e.x, e.y, e.z);
       bf.blast(3, AT.set(e.x, e.y, e.z), e.radius, e.damage, e.pierce, "beam");
