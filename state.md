@@ -293,6 +293,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Soft gradient telegraphs: the pulse's time-left ring is back (Keith; Claude)
+- Keith: bring back the ring growing out to the blast's edge (it tells you the time left), drawn soft like the new reach ring; head all telegraphs toward soft gradients. New `SoftRing` in `src/weapons/ribbon.ts`: an additive band on the sand, clear at both edges, brightest near its outer edge (vertex colours). The big walkers' pulse draws its reach and a soft front growing out to it (`robotPulseRing` 0.35); the strider's slam rings use the same (`striderFx.ts`). Checked: typecheck, full `npm test`.
+
 ### 2026-11-01 · Big beams grow from a thin live beam; the pulse charges a thin beam and blasts with light (Keith; Claude)
 - Keith: less ground telegraphing, show it with the real thing. New `src/combat/beamCore.ts` (pure): a big beam is live from the start of its charge, thin and weak (`robotBeamStartWidth` 0.1, `robotBeamStartPower` 0.04, `robotBeamGrow` 2.2), grows to the release, fires on for the sweep; its strike drags toward the prey all along (`robotBeamChargeDrag` 2 m/s while charging, `robotBeamDrag` 4.5 after). Damage per tick is the sweep's rate times the power then; the sand's blast, dents and heat scale with power. Events gain `power` and `release` (the crack and the trench down the line). Big walkers' warning line on the sand and the strike ring are gone (weapon quads keep theirs).
 - Striders use the same beam (`striderBeamSweep`, `Drag`, `ChargeDrag`, `Tick`, `StartWidth`, `StartPower`, `Grow`; `striderBeamTrack` gone): a live beam from the head growing to a flare at the release, and the red-hot sand along its drag (`striderFx.ts`, `strider.ts`).
