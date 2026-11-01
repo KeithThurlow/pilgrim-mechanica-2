@@ -36,7 +36,8 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, sweepTimes, swordCuts, clipPose, type SwordStats } from "./sword";
+import { SwordSim, sweepTimes, swordCuts, clipPose, type SwordStats, type SwordPose } from "./sword";
+import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
 import { penDensity, type SheetHit } from "../game/sheet";
@@ -85,14 +86,17 @@ interface Side {
   sv: WeaponValues;
   channel: boolean;
   /** The sword (melee): its swing, the bodies this swing has hit (by target, then its unit key), the swing's cleave
-   *  budget left, whether it has bitten yet, and the trail (recent blade angles, its fade). */
+   *  budget left, whether it has bitten yet, and the swish (the ribbon the blade sweeps, its clock, the bent air's
+   *  spacing). */
   sword: SwordSim;
   swordHits: Map<Hittable, Set<number>>;
   swingSeen: number;
   cleave: number;
   bit: boolean;
-  trail: { x: number; y: number; z: number; q: THREE.Quaternion; at: THREE.Vector3 }[];
-  trailK: number;
+  swish: SwordSwish | null;
+  swishT: number;
+  swishAir: number;
+  swishLast: THREE.Vector3;
 }
 
 /** A shoulder weapon on its key. */
@@ -153,6 +157,7 @@ export class Arsenal implements MechWeapons {
   railSnapped = false;
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
+  private tmp3 = new THREE.Vector3();
   private frame = new THREE.Matrix4();
   private sh = new THREE.Vector3();
   private sh2 = new THREE.Vector3();
@@ -169,7 +174,7 @@ export class Arsenal implements MechWeapons {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
     const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
-      sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, trail: [], trailK: 0 });
+      sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3() });
     this.sides = [side(), side()];
     this.sides[1].sword = new SwordSim(-1);
     addWeaponSounds(bf.sfx, v);
@@ -184,13 +189,14 @@ export class Arsenal implements MechWeapons {
       const g = guns[i];
       const kind: SideKind = !g ? null : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
       const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
-      if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); for (const g of s.model.sword?.trail ?? []) g.mesh.removeFromParent(); s.model = null; }
+      if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
+      if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
-      s.sword.stop(); s.swordHits.clear(); s.trail.length = 0; s.trailK = 0;
+      s.sword.stop(); s.swordHits.clear(); s.swish?.clear();
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
@@ -459,44 +465,48 @@ export class Arsenal implements MechWeapons {
     const m = s.model, ms = m?.sword;
     if (m) m.root.getWorldPosition(hand); else hand.set(pose.hand.x, pose.hand.y, pose.hand.z).applyMatrix4(frame);
     if (sw.started) bf.sfx.playSound("swordSwing", hand, 0.9, 0.85 + Math.random() * 0.25);
+    // The swish (src/weapons/swordSwish.ts): in the hull's frame, so the blade's length there is the reach over the
+    // hull's scale. Fed every pose the cut sweeps (smooth however fast), and the blade's pose just after the cut.
+    const hullG = body.hullGroup?.();
+    const hs = this.tmp2.setFromMatrixScale(frame).x || 1, bladeL = (st.reach * v.swordLength) / hs;
+    const fast = sw.cutting || ((sw.clip === "A" || sw.clip === "B") && sw.t < (sw.cutWindow(st, v)?.[1] ?? 0) + v.swordSwishAfter);
+    if (hullG && v.swordTrail > 0 && !s.swish) s.swish = new SwordSwish();
+    const swish = hullG && v.swordTrail > 0 ? s.swish : null;
+    if (swish && swish.mesh.parent !== hullG) hullG!.add(swish.mesh);
+    s.swishT += dt;
+    const feed = (p: SwordPose, at: number) => {
+      swish?.push(p.hand, p.fwd, bladeL, v.swordSwishInner, at);
+      // Bent air along the arc: a puff every so far the blade's outer half travels.
+      if (v.swordSwishBend <= 0 || !bf.waves) return;
+      const k = 0.75 * bladeL, ax = p.hand.x + p.fwd.x * k, ay = p.hand.y + p.fwd.y * k, az = p.hand.z + p.fwd.z * k;
+      const w = this.tmp3.set(ax, ay, az).applyMatrix4(frame);
+      if (s.swishAir <= 0) { bf.waves.puff(w.x, w.y, w.z, v.swordSwishAirSize, v.swordSwishBend, v.swordSwishLife * 1.6); s.swishAir = v.swordSwishAirStep; }
+      else s.swishAir -= w.distanceTo(s.swishLast);
+      s.swishLast.copy(w);
+    };
+    if (!fast) s.swishAir = 0;
+    if (fast && u.alive && !sweep) feed(pose, s.swishT);
     if (sweep && u.alive) {
       const fw = this.dir, hw = this.sh2;
       // Which way the edge travels across the aim: the first cut toward the far side, the back-cut toward its own.
       const dir = sw.side * (sweep.clip === "A" ? 1 : -1);
       for (const t of sweepTimes(sweep)) {
-        if (s.cleave <= 0) break;
         const p = clipPose(sweep.clip, t, sw.side, shoulder, aimYaw, st, v);
+        feed(p, s.swishT - (sweep.to - t));
+        if (s.cleave <= 0) continue;
         hw.set(p.hand.x, p.hand.y, p.hand.z).applyMatrix4(frame);
         fw.set(p.fwd.x, p.fwd.y, p.fwd.z).transformDirection(frame);
         this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, dir);
       }
     }
-    // The model: the blade stretched to the reach, the edge hot in the cut, the trail's ghost blades at its recent
-    // poses (in the hull's frame, fading).
+    if (s.swish) { if (swish) swish.update(s.swishT, v.swordSwishLife, v.swordTrail); else s.swish.clear(); }
+    // The model: the blade stretched to the reach, the edge hot in the cut.
     if (m && ms) {
       ms.swing.rotation.set(0, 0, 0);
       const ws = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
       const len = st.reach * v.swordLength;
       ms.blade.scale.z = Math.max(0.3, len / ws - 0.46);
-      const fast = sw.cutting || ((sw.clip === "A" || sw.clip === "B") && sw.t < (sw.cutWindow(st, v)?.[1] ?? 0) + 0.06);
       ms.edge.opacity = sw.cutting ? 1 : 0.35;
-      const hull = body.hullGroup?.();
-      s.trailK = fast ? 1 : Math.max(0, s.trailK - dt * 7);
-      if (fast) {
-        const piv = m.root.parent?.parent;
-        s.trail.unshift({ x: pose.hand.x, y: pose.hand.y, z: pose.hand.z, q: piv ? piv.quaternion.clone() : new THREE.Quaternion(), at: piv ? piv.position.clone() : new THREE.Vector3() });
-        if (s.trail.length > ms.trail.length) s.trail.length = ms.trail.length;
-      } else if (s.trailK <= 0) s.trail.length = 0;
-      ms.trail.forEach((g, i) => {
-        if (hull && g.mesh.parent !== hull) hull.add(g.mesh);
-        const t = s.trail[i];
-        g.mesh.visible = !!t && !!hull && s.trailK > 0 && v.swordTrail > 0;
-        if (!g.mesh.visible) return;
-        g.mesh.position.copy(t.at);
-        g.mesh.quaternion.copy(t.q);
-        g.mesh.scale.set(1, 0.3, len);
-        g.mat.opacity = Math.min(1, 0.32 * v.swordTrail * (1 - i / ms.trail.length) * s.trailK);
-      });
     }
   }
 
@@ -563,8 +573,7 @@ export class Arsenal implements MechWeapons {
     for (const s of this.sides) {
       s.rail.holding = false; s.rail.charge = 0; s.whined = false;
       s.aimLine.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
-      s.sword.stop(); s.trail.length = 0; s.trailK = 0;
-      for (const g of s.model?.sword?.trail ?? []) g.mesh.visible = false;
+      s.sword.stop(); s.swish?.clear();
       clearPaint(s.paint);
       for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.15 : 0.9;
     }

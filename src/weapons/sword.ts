@@ -46,6 +46,12 @@ export const SWORD_DEFAULTS = {
   swordShake: 0.55,
   swordLength: 1,
   swordTrail: 1,
+  swordSwishLife: 0.14,
+  swordSwishInner: 0.35,
+  swordSwishAfter: 0.08,
+  swordSwishBend: 0.12,
+  swordSwishAirSize: 1.6,
+  swordSwishAirStep: 0.9,
   swordLevel: 0.7,
   // The arm and the pose (Keith 2026-11-01: "the arms to actually animate"). Hull-frame metres.
   swordUpperArm: 1.45,
@@ -84,7 +90,13 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordStopScale", label: "Hit stop speed", min: 0, max: 1, step: 0.01, group: G, tip: "How fast time runs during the hit stop (0 frozen, 1 off)" },
   { key: "swordShake", label: "Camera shake on a hit", min: 0, max: 2, step: 0.01, group: G },
   { key: "swordLength", label: "Blade drawn × reach", min: 0.3, max: 1.5, step: 0.01, group: G, tip: "The model's blade length as a share of the reach" },
-  { key: "swordTrail", label: "Swing trail", min: 0, max: 3, step: 0.05, group: G },
+  { key: "swordTrail", label: "Swish brightness", min: 0, max: 3, step: 0.05, group: G, tip: "The light ribbon the blade sweeps (0 off)" },
+  { key: "swordSwishLife", label: "Swish length (s)", min: 0.02, max: 0.5, step: 0.01, group: G, tip: "How much of the arc behind the blade it covers, in time" },
+  { key: "swordSwishInner", label: "Swish from (share of the blade)", min: 0, max: 0.95, step: 0.01, group: G, tip: "The ribbon runs from this far up the blade to the tip" },
+  { key: "swordSwishAfter", label: "Swish after the cut (s)", min: 0, max: 0.4, step: 0.01, group: G, tip: "It keeps sweeping into the follow-through this long" },
+  { key: "swordSwishBend", label: "Swish air bend (m)", min: 0, max: 0.6, step: 0.005, group: G, tip: "Heat-haze bends along the arc (blast-wave shimmer puffs); 0 off" },
+  { key: "swordSwishAirSize", label: "Swish air puff size (m)", min: 0.2, max: 5, step: 0.05, group: G },
+  { key: "swordSwishAirStep", label: "Swish air puff every (m)", min: 0.2, max: 4, step: 0.05, group: G, tip: "Spacing along the arc the blade's outer half travels (more puffs cost more)" },
   { key: "swordLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: G },
   { key: "swordUpperArm", label: "Upper arm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordForearm", label: "Forearm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
@@ -156,8 +168,10 @@ const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.9
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
-const UNDER: Key = { t: 0, hand: v3(-2.05, -0.55, 1.65), fwd: v3(-0.8, -0.45, -0.4), up: v3(0.2, 0.2, -1) };
-const COCK: Key = { t: 0, hand: v3(0.45, 0.95, 1.6), fwd: v3(0.8, 0.55, -0.25), up: v3(-0.2, 0.4, -1) };
+// The ends (Keith 2026-11-01, round 6: "more end extension poses"): A finishes low and under on the far side; B
+// finishes with the arm up near straight, the blade pointing forward and a little into the sky.
+const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.8, -0.5, -0.35), up: v3(0.2, 0.2, -1) };
+const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.15, 0.4, 0.9), up: v3(-0.1, 0.9, -0.4) };
 
 /** Clip keys at shares of its length, and its cut window (shares) when it has one. */
 function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; keys: Key[]; cut: [number, number] | null } {
@@ -171,11 +185,12 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
         len, cut: [w / len, (w + s) / len], keys: [
           { ...g, t: 0 },
           { ...DRIVE, t: (w * 0.7) / len },
-          // The cut: the hand runs across the front, the blade from out along its own side to across the far one,
-          // its edge leading (the spine faces back the way it came).
-          { t: w / len, hand: v3(1.0, 0.55, 1.95), yaw: 1, pitch: 4, up: v3(1, 0, -0.4) },
-          { t: (w + s * 0.5) / len, hand: v3(-0.6, 0.15, 2.5), yaw: 0, pitch: 0, up: v3(1, 0, -0.4) },
-          { t: (w + s) / len, hand: v3(-2.0, -0.2, 1.95), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4) },
+          // The cut: the arm near straight (the blade at its fullest reach), the hand dipping low across the front and
+          // on under the body to the far side, the blade from out along its own side to across the far one, its edge
+          // leading (the spine faces back the way it came).
+          { t: w / len, hand: v3(1.37, 0.37, 2.48), yaw: 1, pitch: 4, up: v3(1, 0, -0.4) },
+          { t: (w + s * 0.5) / len, hand: v3(-0.3, -0.56, 2.79), yaw: 0, pitch: -4, up: v3(1, 0, -0.4) },
+          { t: (w + s) / len, hand: v3(-1.95, -1.08, 1.79), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4) },
           { ...UNDER, t: 1 },
         ],
       };
@@ -185,9 +200,10 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
       return {
         len, cut: [r / len, (r + s) / len], keys: [
           { ...UNDER, t: 0 },
-          { t: r / len, hand: v3(-2.0, -0.1, 1.95), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4) },
-          { t: (r + s * 0.5) / len, hand: v3(-0.45, 0.4, 2.5), yaw: 0, pitch: 4, up: v3(-1, 0, -0.4) },
-          { t: (r + s) / len, hand: v3(1.0, 0.8, 1.95), yaw: 1, pitch: 14, up: v3(-1, 0.2, 0.4) },
+          // Rising back across at full reach, on up into the high extension.
+          { t: r / len, hand: v3(-1.92, -0.97, 1.78), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4) },
+          { t: (r + s * 0.5) / len, hand: v3(-0.36, 0.21, 2.83), yaw: 0, pitch: 6, up: v3(-1, 0, -0.4) },
+          { t: (r + s) / len, hand: v3(1.22, 1.32, 2.13), yaw: 1, pitch: 18, up: v3(-1, 0.2, 0.4) },
           { ...COCK, t: 1 },
         ],
       };
