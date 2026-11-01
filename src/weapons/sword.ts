@@ -27,10 +27,10 @@ export const SWORD_DEFAULTS = {
   swordAp: 0.5,
   swordReach: 4.7,
   swordArc: 210,
-  swordWindup: 0.34,
+  swordWindup: 0.22,
   swordSlash: 0.22,
   swordRecover: 0.42,
-  swordFollow: 0.36,
+  swordFollow: 0.5,
   swordComboAt: 0.7,
   swordBlend: 0.08,
   swordCleave: 4,
@@ -51,8 +51,9 @@ export const SWORD_DEFAULTS = {
   swordUpperArm: 1.45,
   swordForearm: 1.45,
   swordDroop: 14,
-  swordSnap: 1.8,
-  swordEase: 1.4,
+  swordSnap: 2.1,
+  swordEaseIn: 1.6,
+  swordEaseOut: 0.9,
   swordGuardUp: 0,
   swordShoulderOut: 0.35,
 };
@@ -89,7 +90,8 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordForearm", label: "Forearm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordDroop", label: "Blade tipped down in the cut (°)", min: -30, max: 60, step: 1, group: GA, tip: "So the tip sweeps low through small enemies" },
   { key: "swordSnap", label: "Wrist snap", min: 1, max: 3, step: 0.05, group: GA, tip: "The blade's speed in the middle of the cut against its average (the wrist snapping round): 1 even, higher whips more of the turn into the middle" },
-  { key: "swordEase", label: "Speed into and out of the cut", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Weight: each move starts and ends at a stop; this is the speed at the cut's ends against the average. Low: a slow heavy build and a long stop; high: snappier" },
+  { key: "swordEaseIn", label: "Speed arriving at the cut", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Against the average: high bursts into the cut out of a short drive (Keith: impact); low builds slowly" },
+  { key: "swordEaseOut", label: "Speed leaving the cut", min: 0.3, max: 3, step: 0.05, group: GA, tip: "Against the average: low hands more of the speed to a long, slowing follow-through (weight); high carries on fast and stops late" },
   { key: "swordShoulderOut", label: "Arm mounted out from the hull (m)", min: 0, max: 1, step: 0.01, group: GA, tip: "A sword arm's shoulder sits this much further out, to make room for the blade" },
   { key: "swordGuardUp", label: "At rest: hand higher (m)", min: -1, max: 1, step: 0.05, group: GA },
 ];
@@ -124,18 +126,18 @@ const herm = (x: number, a: number, b: number, ma: number, mb: number) => {
 };
 /**
  * The weight (Keith 2026-11-01: "ease into the swing and ease out of it"): time through a move (share x) to the share
- * the keys are read at. It starts and ends at a stop, meets each cut end at `ease` × the average speed and peaks at
+ * the keys are read at. It starts and ends at a stop, meets the cut's start at `easeIn` and its end at `easeOut` × the average speed and peaks at
  * `snap` × in the cut's middle; the cut's ends stay where they are, so the hits keep their times.
  */
-export function moveWarp(x: number, cut: [number, number] | null, ease: number, snap: number): number {
+export function moveWarp(x: number, cut: [number, number] | null, easeIn: number, easeOut: number, snap: number): number {
   if (x <= 0 || x >= 1) return Math.max(0, Math.min(1, x));
   if (!cut) return smooth(x);
   const [c0, c1] = cut, cm = (c0 + c1) / 2;
-  const e = Math.min(3, ease), s = Math.min(3, snap);
-  if (x < c0) return herm(x, 0, c0, 0, e);
-  if (x < cm) return herm(x, c0, cm, e, s);
-  if (x < c1) return herm(x, cm, c1, s, e);
-  return herm(x, c1, 1, e, 0);
+  const ei = Math.min(3, easeIn), eo = Math.min(3, easeOut), s = Math.min(3, snap);
+  if (x < c0) return herm(x, 0, c0, 0, ei);
+  if (x < cm) return herm(x, c0, cm, ei, s);
+  if (x < c1) return herm(x, cm, c1, s, eo);
+  return herm(x, c1, 1, eo, 0);
 }
 
 /**
@@ -147,9 +149,10 @@ interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V
 
 // Hand places off the shoulder, left arm (the Rampart's shoulder sits 1.02 m out, 0.89 m over the waist; its torso
 // spans ±1.2 m across, 1.27 m back to 1.37 m ahead, from 0.33 m under the waist to 2.3 m over it).
-// Rest (Keith 2026-11-01, round 4): the fist up in front of the shoulder, the elbow pointing ahead (its pole), the
-// blade laid back over the shoulder toward the pack, near in line with the torso.
-const GUARD: Key = { t: 0, hand: v3(0.12, 0.85, 0.5), fwd: v3(-0.12, 0.42, -0.9), up: v3(0.6, -0.4, -0.2), pole: v3(0.15, -0.25, 1) };
+// Rest (Keith 2026-11-01, round 5): a right-angle triangle. The elbow low, pointing at the ground but forward; the
+// forearm angled up to the fist, ahead of the shoulder at about its height; the blade on the wrist laid back over the
+// shoulder toward the pack (near the triangle's long side), in line with the torso.
+const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.93), up: v3(0.7, -0.6, 0.2), pole: v3(0.05, -1, 0.1) };
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
@@ -198,7 +201,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues): { len: number; 
           { ...UNDER, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
-          { t: 0.82, hand: v3(0.4, 0.3, 1.0), fwd: v3(0.25, 0.4, -0.88), up: v3(0.5, -0.6, -0.3), pole: v3(0.5, -0.6, 0.7) },
+          { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
           { ...g, t: 1 },
         ],
       };
@@ -231,7 +234,7 @@ export function clipPose(c: SwordClip, t: number, side: 1 | -1, shoulder: V, aim
   const { len, keys, cut } = clipKeys(c, st, v);
   let x = Math.max(0, Math.min(1, t / Math.max(1e-3, len)));
   // The weight and the wrist snap: from a stop, fastest mid-cut, to a stop.
-  if (c !== "guard") x = moveWarp(x, cut, v.swordEase, v.swordSnap);
+  if (c !== "guard") x = moveWarp(x, cut, v.swordEaseIn, v.swordEaseOut, v.swordSnap);
   let i = 0;
   while (i < keys.length - 2 && x > keys[i + 1].t) i++;
   const a = keys[i], b = keys[i + 1];

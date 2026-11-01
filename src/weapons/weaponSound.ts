@@ -28,10 +28,11 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("clipIn", variants(2, 48, (r) => S.mix(S.servo(0.3, 400, 1000, 0.05), S.delay(S.thump(0.18, 120, 50, 0.9), 0.28), S.delay(S.clang(r, 0.08, 0.4), 0.29), S.delay(S.tick(r, 0.02, 0.5), 0.36))), () => v.rocketLevel);
   // The sword (Keith 2026-11-01): a heavy whoosh as the slash starts (dark air, a servo whine).
   sfx.addSound("swordSwing", variants(3, 49, (r) => S.mix(S.noise(r, 0.32, 650 + r() * 250, 0.55, 0.11), S.delay(S.noise(r, 0.2, 1500, 0.25, 0.05), 0.08), S.servo(0.25, 300, 700, 0.04))), () => v.swordLevel);
-  // The hit (Keith 2026-11-01: not a bonk, "a knife being sharpened or steel on steel", never the same twice): a shing
-  // of steel dragging through, eight rolled variants (pitch, drag, ring), a light knock of the body under it and a
-  // little grit.
-  sfx.addSound("swordHit", variants(8, 50, (r) => S.mix(S.shing(r, 0.5 + r() * 0.35, 0.9), S.thump(0.12, 260 + r() * 80, 120, 0.3),
-    S.delay(S.lowPass(S.crackle(r, 0.15, 0.25), 3000), 0.01))), () => v.swordLevel);
+  // The hit (Keith 2026-11-01: not a bonk, not chimes: "thick metal crunching", raw, scrunchy and weighty, never the
+  // same twice): a heavy low impact, a short torn-steel grind, dark crunching crackle and a gritty burst, no ring; eight
+  // rolled variants, and each hit's pitch rolled again.
+  sfx.addSound("swordHit", variants(8, 50, (r) => S.mix(S.thump(0.3, 115 + r() * 40, 42, 1.0), S.lowPass(S.grind(r, 0.2 + r() * 0.14, 0.75), 3200),
+    S.lowPass(S.crackle(r, 0.32 + r() * 0.1, 0.75), 2000 + r() * 600), S.noise(r, 0.22, 1300 + r() * 500, 0.6, 0.001),
+    S.delay(S.noise(r, 0.16, 480, 0.45, 0.004), 0.015))), () => v.swordLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }
