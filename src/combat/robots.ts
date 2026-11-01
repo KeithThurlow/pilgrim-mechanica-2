@@ -213,7 +213,7 @@ export const ROBOT_DEFAULTS = {
   robotPulseCooldown: 10,
   robotPulseFirst: 1.5,
   robotPulseHold: 0.6,
-  robotPulseRing: 0.2,
+  robotPulseRing: 0.35,
   robotPulseDrop: 0.3,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
@@ -408,7 +408,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotPulseCooldown", label: "Cooldown (s)", min: 1, max: 40, step: 0.5, group: GP },
   { key: "robotPulseFirst", label: "First pulse after (s)", min: 0, max: 20, step: 0.5, group: GP, tip: "From its arrival (spread per robot)" },
   { key: "robotPulseHold", label: "Beam shown after (s)", min: 0.05, max: 2, step: 0.05, group: GP },
-  { key: "robotPulseRing", label: "Danger ring strength", min: 0, max: 1, step: 0.01, group: GP, tip: "Keith 2026-11-01: a faint soft ring at the blast's reach, not a hard strip; 0 hides it" },
+  { key: "robotPulseRing", label: "Danger ring strength", min: 0, max: 1, step: 0.01, group: GP, tip: "Keith 2026-11-01: soft gradient rings, not hard strips: one at the blast's reach and one growing out to it as the charge runs (the time left); 0 hides them" },
   { key: "robotPulseDrop", label: "Pulse runs down for (s)", min: 0.05, max: 1.5, step: 0.05, group: GP, tip: "The end of the charge: a bright pulse runs down the thin beam into the sand, then the blast" },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },

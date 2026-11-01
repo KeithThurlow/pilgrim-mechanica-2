@@ -95,3 +95,54 @@ export class GroundPatch {
     this.mesh.visible = true;
   }
 }
+
+/**
+ * A soft ring on the sand (Keith 2026-11-01: telegraphs as soft gradients, not flat strips): a band from radius r0 out
+ * to r1 that is clear at both edges and brightest at `peak` (0 the inner edge, 1 the outer), additive so it fades into
+ * the sand. Rebuilt in place; opacity on mat as usual.
+ */
+export class SoftRing {
+  readonly mesh: THREE.Mesh;
+  readonly mat: THREE.MeshBasicMaterial;
+  private pos: THREE.BufferAttribute;
+  private col: THREE.BufferAttribute;
+  private static ROWS = 4;
+
+  constructor(private seg: number, color: number) {
+    const R = SoftRing.ROWS, n = (seg + 1) * R, g = new THREE.BufferGeometry();
+    this.pos = new THREE.BufferAttribute(new Float32Array(n * 3), 3); this.pos.setUsage(THREE.DynamicDrawUsage);
+    this.col = new THREE.BufferAttribute(new Float32Array(n * 3), 3); this.col.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute("position", this.pos); g.setAttribute("color", this.col);
+    const idx: number[] = [];
+    for (let i = 0; i < seg; i++) for (let r = 0; r + 1 < R; r++) {
+      const a = i * R + r, b = a + R;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    g.setIndex(idx);
+    this.mat = glowMaterial(color, true);
+    this.mat.vertexColors = true;
+    this.mesh = new THREE.Mesh(g, this.mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 2;
+    this.mesh.visible = false;
+  }
+
+  /** Lay it round (x, z) from r0 to r1, brightest at peak (0..1 across the band). */
+  set(x: number, z: number, r0: number, r1: number, ground: Ground, peak = 0.7, lift = 0.07) {
+    const R = SoftRing.ROWS, p = Math.max(0.05, Math.min(0.95, peak));
+    // Rows across the band: the inner edge (clear), a soft shoulder, the peak, the outer edge (clear).
+    const t = [0, p * 0.55, p, 1], w = [0, 0.45, 1, 0];
+    const a = this.pos.array as Float32Array, c = this.col.array as Float32Array;
+    r0 = Math.max(0, r0);
+    for (let i = 0; i <= this.seg; i++) {
+      const ang = (i / this.seg) * Math.PI * 2, s = Math.sin(ang), co = Math.cos(ang);
+      for (let r = 0; r < R; r++) {
+        const rad = r0 + (r1 - r0) * t[r], px = x + s * rad, pz = z + co * rad, k = (i * R + r) * 3;
+        a[k] = px; a[k + 1] = ground.height(px, pz) + lift; a[k + 2] = pz;
+        c[k] = c[k + 1] = c[k + 2] = w[r];
+      }
+    }
+    this.pos.needsUpdate = true; this.col.needsUpdate = true;
+    this.mesh.visible = r1 > r0;
+  }
+}

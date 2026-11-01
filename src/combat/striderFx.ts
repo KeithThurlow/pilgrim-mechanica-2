@@ -3,11 +3,12 @@
 //   of the charge a thin live beam from the head's emitter to its strike, flickering, a white-hot core in a blue sheath
 //   that thickens to full at the release (a flare), then holds through the sweep as the strike drags after the prey
 //   (the damage, the furrow and the red-hot sand: src/game/robotBeam.ts).
-// - Slam charge: a ring on the sand at the blast's radius and a second ring filling out to it, and a blue column
+// - Slam charge (Keith 2026-11-01: soft gradients, not flat strips): a soft ring on the sand at the blast's radius and a
+//   soft front growing out to it, and a blue column
 //   straight down from the emitter to the sand that thickens; the release: the column flares (the blast itself is the
 //   battlefield's, with its crater and blast wave).
 import * as THREE from "three/webgpu";
-import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
+import { Ribbon, SoftRing, glowMaterial } from "../weapons/ribbon";
 import { BEAM, SLAM, type Strider } from "./strider";
 import { beamPower, beamWidthShare } from "./beamCore";
 import type { RobotBeamEvent } from "./robots";
@@ -17,7 +18,7 @@ interface Ground { height(x: number, z: number): number }
 const RING = 48, LINE = 24, FIRE_T = 0.45, SLAM_T = 0.35;
 
 interface Slot {
-  line: Ribbon; ring: Ribbon; fill: Ribbon;
+  line: Ribbon; ring: SoftRing; fill: SoftRing;
   sheath: THREE.Mesh; core: THREE.Mesh; column: THREE.Mesh; columnCore: THREE.Mesh;
   fire: RobotBeamEvent | null; fireT: number; slamT: number; slamAt: THREE.Vector3;
 }
@@ -25,7 +26,6 @@ interface Slot {
 export class StriderFx {
   readonly group = new THREE.Group();
   private slots = new Map<number, Slot>();
-  private pts: P3[] = Array.from({ length: RING }, () => ({ x: 0, y: 0, z: 0 }));
   private tube = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true).translate(0, 0.5, 0);
   private time = 0;
 
@@ -37,7 +37,7 @@ export class StriderFx {
     const P = STRIDER_PALETTE;
     const mesh = (color: number) => { const m = new THREE.Mesh(this.tube, glowMaterial(color, true)); m.frustumCulled = false; m.renderOrder = 6; m.visible = false; this.group.add(m); return m; };
     s = {
-      line: new Ribbon(LINE, P.beam, true), ring: new Ribbon(RING + 1, P.beam, true), fill: new Ribbon(RING + 1, P.beamCore, true),
+      line: new Ribbon(LINE, P.beam, true), ring: new SoftRing(RING, P.beam), fill: new SoftRing(RING, P.beamCore),
       sheath: mesh(P.beam), core: mesh(P.beamCore), column: mesh(P.beam), columnCore: mesh(P.beamCore),
       fire: null, fireT: 0, slamT: 0, slamAt: new THREE.Vector3(),
     };
@@ -75,12 +75,11 @@ export class StriderFx {
       // The slam's rings and column.
       if (st.alive && st.mode === SLAM) {
         const R = st.v.striderSlamRadius, a = st.slamAt;
-        this.circle(a.x, a.z, R);
-        s.ring.set(this.pts, 0.5, "ground", this.ground, 0.12, true);
-        s.ring.mat.opacity = 0.5 + Math.sin(this.time * 18) * 0.2 * c;
-        this.circle(a.x, a.z, Math.max(0.5, R * c));
-        s.fill.set(this.pts, 0.35 + c * 0.6, "ground", this.ground, 0.14, true);
-        s.fill.mat.opacity = 0.35 + c * 0.5;
+        s.ring.set(a.x, a.z, R - 3, R + 0.4, this.ground, 0.85);
+        s.ring.mat.opacity = 0.35 + 0.25 * c;
+        const rr = Math.max(0.6, R * c);
+        s.fill.set(a.x, a.z, rr - Math.min(rr, 2.5 + 2 * c), rr, this.ground, 0.88);
+        s.fill.mat.opacity = 0.6 + 0.5 * c;
         const e = st.emitter(V0);
         this.stretch(s.column, e, V1.set(e.x, this.ground.height(e.x, e.z), e.z), 0.4 + c * 1.4);
         this.stretch(s.columnCore, e, V1, 0.15 + c * 0.5);
@@ -102,9 +101,7 @@ export class StriderFx {
     }
   }
 
-  private circle(x: number, z: number, r: number) {
-    for (let i = 0; i < RING; i++) { const a = (i / RING) * Math.PI * 2; this.pts[i].x = x + Math.sin(a) * r; this.pts[i].z = z + Math.cos(a) * r; }
-  }
+
 
   /** A tube from a to b, radius r. */
   private stretch(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, r: number) {
