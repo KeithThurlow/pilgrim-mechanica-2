@@ -34,8 +34,8 @@ export interface WeaponModel {
   /** A clip-fed launcher's magazine (src/weapons/clip.ts): the model shows its loaded tubes and the clip swap. */
   clip?: import("./magazine").Mag | null;
   /** The sword: the group that swings (yaw: the swing's angle, pitch: its lift), the blade inside it (stretched along
-   *  +Z to the reach), the trail's ghost blades (drawn at recent angles, fading) and the hot edge. */
-  sword?: { swing: THREE.Group; blade: THREE.Group; trail: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[]; edge: THREE.MeshBasicMaterial };
+   *  +Z to the reach) and the hot edge. */
+  sword?: { swing: THREE.Group; blade: THREE.Group; edge: THREE.MeshBasicMaterial };
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;
@@ -122,7 +122,7 @@ function rpgModel(look: ToonLook): WeaponModel {
  * The sword (Keith 2026-11-01: "slightly closer to a katana" for the one-handed one): a long wrapped grip with a round
  * guard, then a slim blade curving gently up toward the tip, its edge (a faint hot line) along the underside, the spine
  * dark on top. Built along +Z from the hand; the blade group is 1 long (the arsenal stretches it to the reach). The
- * trail is a few flat ghost blades the arsenal places at the blade's recent poses.
+ * swish is drawn apart (src/weapons/swordSwish.ts).
  */
 function swordModel(look: ToonLook): WeaponModel {
   const { m, add, glow, group } = kit("sword", look);
@@ -148,15 +148,7 @@ function swordModel(look: ToonLook): WeaponModel {
   blade.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && me !== edge && m.glow.includes(me.material as THREE.MeshBasicMaterial)) me.material = edgeMat; });
   m.glow.length = 0; m.glow.push(edgeMat);
   edgeMat.opacity = 0.35;
-  const trail: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
-  const plane = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2).translate(0, 0, 0.5);
-  for (let i = 0; i < 6; i++) {
-    const mat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
-    const mesh = new THREE.Mesh(plane, mat);
-    mesh.visible = false;
-    trail.push({ mesh, mat });
-  }
-  m.sword = { swing, blade, trail, edge: edgeMat };
+  m.sword = { swing, blade, edge: edgeMat };
   return m;
 }
 
