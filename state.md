@@ -294,6 +294,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Rival duels about double the time to kill (Keith; Claude, thread "Double time to kill in rival duels")
+- Keith: up the time to kill in the rival lab, roughly double; maybe swords do too much damage. `src/combat/duelSim.ts`: `DUEL_HULL_MUL` 2.4 scales every rolled hull in duels, both mechs (the lab's new "Duel hull, both mechs" slider, Rival group, starts there); sword `swordDamage` 900 → 450 (one cut at the rail's level; the sword was out of line with guns). Headless (`tools/rival-probe.ts`, 14 seeds): Recruit kill 8.8 → 17.7 s, Veteran 13.2 → 23.0 s, Ace 15.1 → 28.3 s. Open for Keith: is the sword now too weak or about right; the 2.4 is a feel call.
+- Checked: typecheck, rival-probe, full npm test. Who: agent.
 ### 2026-11-01 · Rival mechs sprint to reposition, curving round you (Keith; Claude on `claude/project-thread-9f54zk`)
 - Keith: rivals should sprint into position in arcs, change direction with the drift, and answer his sprints; sprinting costs them dodges. `RivalAi.sprintStep` (`src/combat/rivalAi.ts`): starts when far off its range (`aiSprintUse` per s, 0.35/0.5/0.7 by level, `aiSprintFrom` 12 m) or when the foe starts sprinting (`aiSprintMirror` 0.4/0.6/0.8); dash, Space held, steering to its range `aiSprintArc` 70° round the foe, bent round it, out of its way past 8 m; cuts back the other side partway at `aiSprintSwerve` 0.5; ends there, at `aiSprintMax` 2.6 s, out of energy, or (a sword) once it can cut. Needs two bars past `aiDashKeep`; no shoulder paints while running. The lab's HUD note says "sprinting round you".
 - Checked: `tools/rival-sprint-probe.ts` (new, kinematic stand-in): gun rival Recruit 1.7 sprints per 40 s, about 2.3 s each, about 38° round the foe, answers 6/18 foe sprints (Ace 3.0, 12/18); sword rivals sprint shorter, closing in. `npm test`.
