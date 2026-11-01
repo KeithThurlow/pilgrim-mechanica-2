@@ -52,6 +52,9 @@ export const RIVAL_AI_DEFAULTS = {
   aiPaintTime: 0.7,
   aiPaintSlew: 3,
   aiPressRange: 0.65,
+  aiSwordPull: 0.95,
+  aiSwordStrafe: 0.3,
+  aiSwordFrom: 5,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -103,6 +106,9 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiPeek", label: "Peeks out of cover for (s)", min: 0.5, max: 8, step: 0.25, group: G },
   { key: "aiPaintTime", label: "Holds a shoulder paint (s)", min: 0.1, max: 3, step: 0.05, group: G, tip: "Its mortar rings and strips show this long before they fire: the player's chance to read them" },
   { key: "aiPaintSlew", label: "Painted spot creeps at (m/s)", min: 0, max: 20, step: 0.5, group: G, tip: "It commits to a spot when it starts painting a shoulder weapon (your position plus lead then); the strip or ring then moves toward where you are no faster than this (0: stays put)" },
+  { key: "aiSwordPull", label: "With a sword: range pulled in", min: 0, max: 1, step: 0.05, group: G, tip: "A rival carrying a sword fights this far of the way from its guns' range in to the sword's (Keith 2026-11-01: in your face); it also dashes in from its usual fight" },
+  { key: "aiSwordStrafe", label: "With a sword: circling ×", min: 0, max: 1, step: 0.05, group: G, tip: "A sword rival circles this much of its usual strafe, coming straight on (and sprints in while far)" },
+  { key: "aiSwordFrom", label: "With a sword: swings from (m past its reach)", min: 0, max: 15, step: 0.5, group: G, tip: "It starts a cut this far outside the blade's reach: the sword's lunge carries it in" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -304,7 +310,8 @@ export class RivalAi {
     if (!Number.isFinite(this.fx)) { this.fx = f.x; this.fz = f.z; this.fvx = f.vx; this.fvz = f.vz; } // round start: it knows where you are
 
     // ---- Which state ----
-    const base = v.aiRange > 0 ? v.aiRange : preferredRange(s.kit);
+    const base = v.aiRange > 0 ? v.aiRange : preferredRange(s.kit, v.aiSwordPull);
+    const sword = s.kit.some((k) => k.kind === "sword");
     const exposed = f.gunsOff || f.airborne || f.staggered || f.dashCharges === 0 || f.health < 0.3;
     const cooling = s.weapons.length > 0 && s.weapons.every((w) => !w.ready);
     let want: RivalState = "engage";
@@ -333,9 +340,13 @@ export class RivalAi {
     if (this.flipIn <= 0) { this.strafe = -this.strafe; this.flipIn = this.flipTime(); }
     const tx = -uz * this.strafe, tz = ux * this.strafe;
     const off = dist - range;
-    const radial = Math.abs(off) < v.aiRangeBand ? off / v.aiRangeBand * 0.3 : Math.sign(off);
-    mx = ux * radial * (1 - v.aiStrafe * 0.5) + tx * v.aiStrafe;
-    mz = uz * radial * (1 - v.aiStrafe * 0.5) + tz * v.aiStrafe;
+    // A sword rival doesn't ease into its band: it walks straight in to blade range (and backs off only when too close).
+    const radial = sword ? (off > 0.5 ? 1 : off < -2 ? -0.5 : 0) : Math.abs(off) < v.aiRangeBand ? off / v.aiRangeBand * 0.3 : Math.sign(off);
+    // A sword rival circles less and comes straight on (aiSwordStrafe of the strafe), sprinting while far.
+    const strafeW = sword ? v.aiStrafe * v.aiSwordStrafe : v.aiStrafe;
+    mx = ux * radial * (1 - strafeW * 0.5) + tx * strafeW;
+    mz = uz * radial * (1 - strafeW * 0.5) + tz * strafeW;
+    if (sword && off > v.aiSwordFrom) cmd.move.sprint = true;
     // Lost sight in a fight: circle harder and close a little to get an angle round the cover.
     if (this.blindFor > 1.5 && (this.state === "engage" || this.state === "press")) { mx = tx + ux * 0.4; mz = tz + uz * 0.4; }
     this.note = this.state === "press" ? "pressing: you're exposed" : this.state === "retreat" ? "hurt: backing off" : `range ${Math.round(dist)} / ${Math.round(range)} m`;
@@ -370,7 +381,8 @@ export class RivalAi {
 
     // A reckless rival dashes in to press a foe that's out of dashes (keeping its reserve); never with its own rail
     // charging (Keith 2026-10-31: a dash drops the charge).
-    if (!cmd.dash && !this.railCharging(s) && this.state === "press" && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + 10 && sees && this.r() < v.aiAggression * dt * 0.8) {
+    // A sword rival (Keith 2026-11-01: "more aggressive at getting in your face") dashes in from its usual fight too.
+    if (!cmd.dash && !this.railCharging(s) && (this.state === "press" || (sword && this.state === "engage")) && s.canDash && s.dashCharges > v.aiDashKeep && dist > range + (sword ? 3 : 10) && sees && this.r() < v.aiAggression * dt * 0.8) {
       cmd.dash = { x: ux + tx * 0.6, z: uz + tz * 0.6 };
     }
 
@@ -574,7 +586,7 @@ export class RivalAi {
       const k = s.kit[w.i];
       if (!("trigger" in k.ctl)) continue;
       const side = k.ctl.trigger;
-      const inRange = dist < k.range * 0.95 && dist > k.minRange;
+      const inRange = k.kind === "sword" ? dist < k.range + v.aiSwordFrom : dist < k.range * 0.95 && dist > k.minRange;
       if (!sees || !inRange) {
         // A charged rail keeps its charge while the foe is hidden (released when it shows, or let go after a while).
         if (k.kind === "rail" && w.charge > 0 && w.charge < 1) cmd.trigger[side] = true;
@@ -586,6 +598,9 @@ export class RivalAi {
         if (!full) this.railSince = -1;
         else if (this.railSince < 0) { this.railSince = view.t; this.railWait = v.aiSnapJitter * this.r(); }
         cmd.trigger[side] = (w.ready || w.charge > 0) && (!full || view.t - this.railSince < this.railWait);
+      } else if (k.kind === "sword") {
+        // Swing while the foe is in the blade's reach (the lunge closes the last metres).
+        cmd.trigger[side] = true;
       } else if (k.kind === "autocannon") {
         // Bursts along the frozen line: the trigger goes down in time for the spin-up to end at the snapshot's end.
         cmd.trigger[side] = this.acPhase === "burst" || (this.acPhase === "snap" && view.t >= this.acFireFrom);

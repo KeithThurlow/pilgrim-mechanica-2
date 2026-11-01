@@ -96,6 +96,15 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
   const a = runDuel({ seedA: 5, seedB: 6, maxTime: 60 }), b = runDuel({ seedA: 5, seedB: 6, maxTime: 60 });
   must(a.time === b.time && JSON.stringify(a.score.rounds) === JSON.stringify(b.score.rounds), "the same seeds fought two different duels");
 }
+// A rival with a sword (Keith 2026-11-01: in your face): it closes to blade range on a foe and lands its cuts.
+{
+  const lo = loadoutFor({ left: "sword", right: "minigun", k1: "none", k2: "none", k3: "pack" });
+  must(kitOf(resolve(lo), WEAPON_DEFAULTS).some((k) => k.kind === "sword"), "a rival's sword isn't in its kit");
+  const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+  const r = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], script: (i) => (i === 0 ? stand : null) });
+  const cut = (r.score.rounds[0].taken as Record<string, number>).sword ?? 0;
+  must(cut > 1000, `a sword rival cut a standing foe for only ${Math.round(cut)} in 30 s`);
+}
 // A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
 {
   const r = runDuel({ seedA: 21, seedB: 22, maxTime: 90, hull: 1e6 });

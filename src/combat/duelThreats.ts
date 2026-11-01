@@ -68,6 +68,7 @@ export function weaponStates(a: Arsenal, unit: MechUnit, kit: readonly KitWeapon
     if ("trigger" in k.ctl) {
       const s = a.sides[k.ctl.trigger], g = unit.upper.guns[k.ctl.trigger];
       if (k.kind === "rail") return { i, ready: s.rail.cooldown <= 0, charge: s.rail.charge };
+      if (k.kind === "sword") return { i, ready: true, charge: 0 };
       if (k.kind === "rpg") return { i, ready: s.cool <= 0, charge: 0 };
       return { i, ready: g.ammo > 0, charge: 0 };
     }
