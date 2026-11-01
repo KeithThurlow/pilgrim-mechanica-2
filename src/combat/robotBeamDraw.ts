@@ -2,6 +2,8 @@
 // emitter under the chassis that grows bigger and hotter, and a thin warning line on the sand along the beam's path
 // that brightens (and widens to the beam's width once the aim locks), so it reads by day. Then the beam: a white-hot
 // core in a blue sheath from the emitter to where it strikes, and a scorch along the sand that glows and fades.
+// Keith 2026-11-01: narrower, a thin thread of the beam already showing from the lock as it charges, and a big walker's
+// beam keeps firing for robotBeamSweep, flickering, while its strike drags toward the mech, then fades.
 // Blue since 2026-11-01 (Keith: red for the robots' seeking, blue for their terraforming weapons). The big walkers'
 // terraform pulse draws here too: a beam straight down into the sand, a ring on the ground at the blast's edge and a
 // second ring closing in on it as the charge runs out, then a wide flash of the column.
@@ -33,7 +35,7 @@ export class RobotBeamDraw {
   private c = new THREE.Color();
   private time = 0;
   /** The charging and burning beams this frame, for the lights: robot, charge share (0..1, >1 burning). */
-  private live: { i: number; u: number; line: BeamLine }[] = [];
+  private live: { i: number; u: number; line: BeamLine; f?: number }[] = [];
 
   constructor(private swarm: RobotSwarm) {
     this.group.name = "robot beams";
@@ -94,7 +96,7 @@ export class RobotBeamDraw {
       const spec = sw.beamSpec(i), C = spec.charge, W = spec.width, G = v.robotBeamGlow * (sw.kind[i] === BIG ? 1 : 0.3);
       const s = this.slots[k++], b = sw.beamLine(i, { ...this.line });
       s.ring.mesh.visible = false;
-      const u = t / C, locked = t >= C * v.robotBeamLock;
+      const D = sw.beamSweep(i), u = t / C, locked = t >= C * v.robotBeamLock;
       this.live.push({ i, u, line: b });
       // Caught the moment it fired: leave a scorch.
       if (this.seen[i] < C && t >= C) {
@@ -120,10 +122,21 @@ export class RobotBeamDraw {
         s.edge.set(pts, locked ? 0.3 : 0.12, "ground", g, 0.11);
         s.edge.mat.opacity = v.robotBeamLine * (0.3 + 0.7 * grow) * pulse;
         s.line.mesh.visible = s.edge.mesh.visible = v.robotBeamLine > 0;
-        s.beam.visible = s.core.visible = false;
+        s.beam.visible = false;
+        // Charged up: from the lock a thin thread of the beam, emitter to strike, thickening and brightening to the release.
+        s.core.visible = locked;
+        if (locked) {
+          const k = Math.min(1, (t - C * v.robotBeamLock) / Math.max(0.01, C * (1 - v.robotBeamLock)));
+          this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
+          const len = this.d.length(), w = W * (0.04 + 0.1 * k) * (0.8 + 0.2 * Math.sin(this.time * 50));
+          this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
+          s.core.position.set(b.ex, b.ey, b.ez); s.core.quaternion.copy(this.q); s.core.scale.set(w, w, len);
+          (s.core.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.5 * k;
+        }
       } else {
-        // The burn: bright, fading over the burn time; the emitter flares with it.
-        const f = Math.max(0, 1 - (t - C) / B), w = W * (0.55 + 0.45 * f);
+        // The burn: full and flickering while it sweeps, then fading over the burn time; the emitter flares with it.
+        const f = t < C + D ? 0.9 + 0.1 * Math.sin(this.time * 60 + i) : Math.max(0, 1 - (t - C - D) / B), w = W * (0.55 + 0.45 * f);
+        this.live[this.live.length - 1].f = f;
         this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
         const len = this.d.length();
         this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
@@ -136,7 +149,13 @@ export class RobotBeamDraw {
         s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(G * (1.2 + 1.2 * f));
         (s.glow.material as THREE.MeshBasicMaterial).opacity = f; (s.halo.material as THREE.MeshBasicMaterial).opacity = 0.6 * f;
         s.glow.visible = s.halo.visible = true;
-        s.line.mesh.visible = s.edge.mesh.visible = false;
+        // While it sweeps, the strike's spot on the sand: a bright ring under it, so the drag reads.
+        s.line.mesh.visible = false;
+        s.edge.mesh.visible = t < C + D && v.robotBeamLine > 0;
+        if (s.edge.mesh.visible) {
+          s.edge.set(this.circle(b.x1, b.z1, W * 1.1), 0.25, "ground", g, 0.11);
+          s.edge.mat.opacity = v.robotBeamLine * 0.8;
+        }
       }
     }
     for (; k < SLOTS; k++) {
@@ -206,13 +225,13 @@ export class RobotBeamDraw {
   /** The night lights: the emitter holds a real light at high priority while it charges, the line glows, the burn flares. */
   private lights(L: ShortLights) {
     const v = this.swarm.v;
-    for (const { u, line: b } of this.live) {
+    for (const { u, line: b, f: lf } of this.live) {
       if (u < 1) {
         const grow = Math.pow(u, v.robotBeamGrowth);
         L.hold(b.ex, b.ey, b.ez, v.robotBeamLight * (0.12 + 0.88 * grow), 10 + 16 * grow, u > 0.8 ? 0x80c8ff : HOT, v.robotBeamPrio);
         if (v.robotBeamLine > 0) L.telegraphLine(b.sx, b.sz, b.x1, b.z1, u >= v.robotBeamLock ? v.robotBeamWidth : 0.6, u, FAM_ROBOT);
       } else {
-        const f = Math.max(0, 1 - (u - 1) * v.robotBeamCharge / Math.max(0.01, v.robotBeamBurn));
+        const f = lf ?? Math.max(0, 1 - (u - 1) * v.robotBeamCharge / Math.max(0.01, v.robotBeamBurn));
         L.hold(b.ex, b.ey, b.ez, v.robotBeamFlash * 0.5 * f, 20, 0xd0ecff, v.robotBeamPrio);
         // Along the beam: a few lights where it is low, merged by the clustering where they're close.
         const n = 3;
