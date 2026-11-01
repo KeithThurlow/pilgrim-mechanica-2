@@ -29,12 +29,16 @@ export const HEAT_DEFAULTS = {
   heatRail: 1150,
   heatIgnited: 780,
   heatBlast: 560,
+  heatLight: 900,
+  heatLights: 6,
+  heatLightBin: 6,
+  heatLightPrio: 0.7,
 };
 export type HeatValues = typeof HEAT_DEFAULTS;
 
-const G = "Hot sand", GW = "Hot sand: by weapon";
+const G = "Hot sand", GW = "Hot sand: by weapon", GL = "Hot sand: night light";
 /** The slider groups (the Light topic lists them, via src/world/look.ts LIGHT_GROUPS). */
-export const HEAT_GROUPS = [G, GW];
+export const HEAT_GROUPS = [G, GW, GL];
 export const HEAT_PARAMS: Param[] = [
   { key: "heatOn", label: "Hot sand on", min: 0, max: 1, step: 1, group: G },
   { key: "heatArea", label: "Area (m)", min: 32, max: 200, step: 4, group: G, onRelease: true, tip: "Width of the square round the camera focus that keeps heat (only the fine ground patch shows it)" },
@@ -53,6 +57,10 @@ export const HEAT_PARAMS: Param[] = [
   { key: "heatRail", label: "Rail slug strike (°)", min: 0, max: 3000, step: 10, group: GW, tip: "Where a rail slug stops in the sand (× its charge)" },
   { key: "heatIgnited", label: "Ignited rounds (°)", min: 0, max: 3000, step: 10, group: GW, tip: "Incendiary feed rounds into the sand" },
   { key: "heatBlast", label: "Explosions (°)", min: 0, max: 3000, step: 10, group: GW, tip: "The middle of a blast on the ground: explosions aren't that hot (Keith 2026-11-01), a brief dull ember at most" },
+  { key: "heatLight", label: "Light (per m² glowing)", min: 0, max: 2000, step: 10, group: GL, tip: "Glowing sand lights the ground round it at night (Keith 2026-11-01): the glow is gathered into patches, each asks the night lights for a real light this bright per square metre of glow (0: no light)" },
+  { key: "heatLights", label: "Lights at most", min: 0, max: 16, step: 1, group: GL, tip: "The brightest patches that ask for a light each frame (the night lights' pool decides which get a real one)" },
+  { key: "heatLightBin", label: "Patch size (m)", min: 2, max: 20, step: 0.5, group: GL, tip: "Glow within a patch this wide shares one light: smaller is finer but asks for more" },
+  { key: "heatLightPrio", label: "Priority", min: 0.1, max: 2, step: 0.05, group: GL, tip: "Against blasts (1) and beams for the real lights" },
 ];
 
 /** Glow channel: temperature up to this maps to 0..255. */
@@ -87,6 +95,8 @@ export class GroundHeat {
   readonly stats = { painted: 0, active: 0, hot: 0, ms: 0 };
   private dirty = false;
   private charAcc = 0;
+  private bins = new Map<number, number>();
+  private binData = new Float32Array(6 * 256);
 
   constructor(public v: HeatValues) {
     this.res = Math.max(16, Math.round(v.heatRes));
@@ -177,6 +187,45 @@ export class GroundHeat {
         if (d < 1) this.heatCell(i, j, temp * falloff(d), rise);
       }
     }
+  }
+
+  /**
+   * The glowing sand gathered into patches heatLightBin wide (for lighting the ground at night), the brightest
+   * heatLights of them into out as x, z, power (m² of full glow), mean glow 0..1 (for the colour), size (m). Returns
+   * how many. Only warm cells are read.
+   */
+  lights(out: Float32Array): number {
+    const v = this.v, max = Math.min(Math.floor(out.length / 5), Math.round(v.heatLights));
+    if (max <= 0 || !this.stats.hot || !v.heatOn) return 0;
+    const bin = Math.max(1, v.heatLightBin), from = v.heatGlowFrom, a2 = this.cell * this.cell, m = this.bins;
+    m.clear();
+    let n = 0;
+    const b = this.binData;
+    for (const i of this.active) {
+      const T = this.temp[i];
+      if (T <= from) continue;
+      const u = Math.min(1, (T - from) / 1400), p = u * Math.sqrt(Math.sqrt(u)) * a2;
+      const x = (this.ownX[i] + 0.5) * this.cell, z = (this.ownZ[i] + 0.5) * this.cell;
+      const key = Math.floor(x / bin) * 73856093 ^ Math.floor(z / bin) * 19349663;
+      let k = m.get(key);
+      if (k === undefined) {
+        if (n * 6 >= b.length) continue;
+        k = n++ * 6; m.set(key, k);
+        b[k] = b[k + 1] = b[k + 2] = b[k + 3] = b[k + 4] = 0;
+      }
+      b[k] += x * p; b[k + 1] += z * p; b[k + 2] += p; b[k + 3] += u * p; b[k + 4] += a2;
+    }
+    // The brightest few (n is small: a handful of patches per beam).
+    let w = 0;
+    for (let r = 0; r < max; r++) {
+      let best = -1, bp = 0;
+      for (let k = 0; k < n * 6; k += 6) if (b[k + 2] > bp) { bp = b[k + 2]; best = k; }
+      if (best < 0) break;
+      const o = w++ * 5, p = b[best + 2];
+      out[o] = b[best] / p; out[o + 1] = b[best + 1] / p; out[o + 2] = p; out[o + 3] = b[best + 3] / p; out[o + 4] = Math.sqrt(b[best + 4]);
+      b[best + 2] = 0;
+    }
+    return w;
   }
 
   /**

@@ -533,6 +533,7 @@ export class Battlefield {
       this.dents.update(dt, f.x, f.z);
       this.patch.update(f.x, f.z, true);
       this.heatTex?.update(dt, f.x, f.z);
+      if (this.heatTex && look.lights) this.heatTex.light(look.lights, this.lookGround);
     }
     c?.mark("ground dents");
     this.shells.update(dt, (s) => this.burst(s), this.shellHit);

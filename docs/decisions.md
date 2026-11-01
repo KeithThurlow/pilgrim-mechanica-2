@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Hot sand lights the ground round it at night; no smoke off it yet | Keith | Keith | `GroundHeat.lights` → night lights' held lights. |
+| 2026-11-01 | Hot sand light details (Claude, Keith to tune): glow gathered into 6 m patches, the brightest 6 ask for a real light (900 per m² of full glow), ranked under blasts (priority 0.7); still looks only, no damage to a pilot on foot (Keith didn't say: open) | Claude | Claude | Sliders in Light › Hot sand: night light. |
 | 2026-11-01 | Weapon quad turrets swivel on their own, kept cheap | Keith | Keith | Turret 150°/s within 120° of the body, body 70°/s and faces its walk while running (Claude's values). |
 | 2026-11-01 | Keep the blast's ring growing out to its edge (the time left), drawn as a soft gradient; all telegraphs and aim marks head toward soft gradients, away from flat strips | Keith | Keith | `SoftRing` (ribbon.ts); pulse and strider slam first. |
 | 2026-11-01 | Beam attacks telegraph with the real beam: thin and weak from the start of the charge, growing in width, damage and sand blast, sweeping toward the player; the same for every big beam user (walkers, striders). The ground blast charges a thin beam, pulses down and explodes in light; its reach a faint soft ring | Keith | Keith | `src/combat/beamCore.ts`. |
