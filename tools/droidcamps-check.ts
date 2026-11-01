@@ -24,7 +24,8 @@ const swarms = {
   eachLive(fn: (id: string, x: number, z: number, n: number, awake: boolean, roam: boolean, r: number) => void) { for (const [id, c] of camps) fn(id, c.x, c.z, c.n, c.awake, c.roam, 12); },
   wake(id: string) { woke++; const c = camps.get(id); if (c) c.awake = true; },
 } as unknown as SwarmCamps;
-const v = { ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS };
+// Humanoids are off by default (Keith 2026-11-01); the rules are checked at the shares they had.
+const v = { ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS, droidCampShare: 0.2, droidPackShare: 0.25, ...SWARM_CAMP_DEFAULTS };
 const dc = new DroidCamps(v, bf, new THREE.Scene(), field, null, swarms);
 const mech = { x: 0, z: 0 };
 const at = new THREE.Vector3(0, 3, 0);

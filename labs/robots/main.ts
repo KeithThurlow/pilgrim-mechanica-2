@@ -32,7 +32,7 @@ const WAVE_DEFAULTS = {
   robotSpawnFrom: 100,
   robotTracerShare: 0.5,
   robotStompReach: 2.6,
-  robotDroids: 3,
+  robotDroids: 0,
 };
 const WAVE_PARAMS: Param[] = [
   { key: "robotSwarmSize", label: "Robots on the field", min: 0, max: 1000, step: 10, group: "Robot waves", tip: "Packs keep coming until this many are up" },

@@ -17,7 +17,7 @@ import type { Prey } from "../pilot/quarry";
 import type { KeepOut } from "../game/keepOut";
 import { hash4 } from "../world/pois";
 
-export const DROID_CAMP_DEFAULTS = { droidCampShare: 0.2, droidPackShare: 0.25, droidCampMax: 8, droidCampMin: 1 };
+export const DROID_CAMP_DEFAULTS = { droidCampShare: 0, droidPackShare: 0, droidCampMax: 8, droidCampMin: 1 };
 export type DroidCampValues = typeof DROID_CAMP_DEFAULTS;
 const G = "Humanoid robots: in the field";
 export const DROID_CAMP_GROUP = G;

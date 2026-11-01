@@ -289,6 +289,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Weapon quads get a turret; humanoid robots off (Keith; Claude)
+- **Weapon quad upper half** (Keith: "a thorax, a turret with the weapons mounted on the side on top, and a small abdomen behind"): `quadBodyGeometry` is now a squat white thorax on the hip block, a jointed neck, a white turret drum on top (sensor block and red eyes at its front, trunnions out to the weapons) and a small white abdomen tipped up behind. Weapons hang on the turret's sides (`QUAD_TURRET_Y` 0.3, `QUAD_GUN_X` 0.34 × size, in `robotLegs.ts`); rounds, rockets, the laser/rail beam, lens lamps and eyes leave from there; the round hit shape for weapon quads is raised 0.12 and 0.32 tall (was 0.22). Files: `robotShapes.ts`, `robotsDraw.ts`, `robots.ts`, `robotLegs.ts`.
+- **Humanoid robots off by default** (Keith: "they feel out of place now, especially when everything else is quads"): `robotDroids` 0 in the robots lab, `droidCampShare`/`droidPackShare` 0 in the field. The sliders and the droids lab still bring them back.
+- Checked: robot danger check (quads mini 9.8, rockets 18.7, laser 6.0, rail 9.5 dps, holding 16–23 m), full `npm test` passes. No screenshot (headless render hangs here).
+
 ### 2026-11-01 · Small quads and weapon quads (Keith's roster; Claude)
 - **Small quads** (`robotShapes.ts` `midBodyGeometry`): the medium walkers now wear Keith's "small quad" look, a rounded white shell high on four legs, a dark visor with red eyes, an antenna; still the cutter and slug shooter.
 - **Weapon quads** (`robots.ts`: `variant`, `weapon`, `quadGuns`, `shotDamage`, `lobOf`, `beamSpec`; group Robots: weapon quads): `robotQuadShare` 0.3 of the mediums come 3.6 m (size) with 700 hp, a drum turret and a weapon each side: minigun bursts (14 × 3 dmg), rocket volleys (4 × 28 dmg, 2.5 m, lobbed through the battlefield's shells), a laser (1.1 s charge, 45) or a rail (1.6 s, 95) down the beam path; hold at 14-26 m, a 0.6 s tell. Out on an expedition one drops its weapon half the time (`QUAD_DROP`, `src/expedition/loot.ts`, `drops.ts` `force.base`). Drawn in `robotsDraw.ts` (`quadBodyGeometry`, `quadWeaponGeometry`), beams in `robotBeamDraw.ts` per robot. Robots lab `?quads`, `?lineup` shows all four.

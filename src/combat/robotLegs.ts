@@ -41,6 +41,8 @@ export const SMALL_DISC = 0.33;
 /** Medium body dims (× size): saw centre ahead of and beside the body centre, saw radius; big gun muzzle ahead. */
 export const MID_SAW_Z = 0.62, MID_SAW_X = -0.2, MID_SAW_Y = -0.02, MID_SAW_R = 0.27;
 export const MID_BODY_H = 0.24, BIG_BODY_H = 0.3;
+/** Weapon quad (× size): the turret's centre above the thorax's, and its weapons' line either side (muzzles, lamps). */
+export const QUAD_TURRET_Y = 0.3, QUAD_GUN_X = 0.34;
 
 /** Angle of small leg k (radians, 0 = +Z) for a robot facing h. */
 export const smallLegAngle = (h: number, k: number) => h + Math.PI / 4 + k * (Math.PI / 2);
