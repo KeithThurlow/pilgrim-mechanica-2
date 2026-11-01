@@ -73,8 +73,11 @@ export class TerrainStreamer {
   readonly hole = uniform(new THREE.Vector4(0, 0, 0, 0));
   /** The per-pixel sand shading (mottling, specks, ripples) as a factor, shared with the detail patch. */
   readonly shadeNode: THREE.Node<"float">;
-  /** Called with the box whenever ground is rebuilt or patched (rebuildArea, patchArea), or null for rebuildAll. */
-  readonly onRebuild: ((box: [number, number, number, number] | null) => void)[] = [];
+  /**
+   * Called with the box whenever ground is rebuilt or patched (rebuildArea, patchArea, flushPatches), or null for
+   * rebuildAll. dentsOnly: only the dents changed there (flushPatches: craters).
+   */
+  readonly onRebuild: ((box: [number, number, number, number] | null, dentsOnly?: boolean) => void)[] = [];
   private c3 = new THREE.Color();
   private c4 = new THREE.Color();
   private dirty = new Set<string>();
@@ -349,7 +352,7 @@ export class TerrainStreamer {
    */
   private patchBox(x0: number, z0: number, x1: number, z1: number, cached = false): number {
     const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
-    for (const f of this.onRebuild) f([x0, z0, x1, z1]);
+    for (const f of this.onRebuild) f([x0, z0, x1, z1], cached);
     const a = Math.floor(x0 / size), b = Math.floor(x1 / size), c = Math.floor(z0 / size), d = Math.floor(z1 / size);
     const s: GroundSample = { h: 0, crest: 0, flat: 0 }, nn = [0, 1, 0], tmp = this.c4;
     const water = this.field.waterLevel;

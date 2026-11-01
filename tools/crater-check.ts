@@ -21,6 +21,7 @@ import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
 import { TerrainStreamer, STREAM_DEFAULTS } from "../src/world/chunks";
+import { GroundWindow } from "../src/world/groundWindow";
 
 const problems: string[] = [];
 const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
@@ -219,6 +220,10 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   const sv = { ...v, ...STREAM_DEFAULTS, radius: 1 };
   const queued = new TerrainStreamer(field, sv), direct = new TerrainStreamer(field, sv);
   queued.fill(0, 0); direct.fill(0, 0);
+  // The detail patch's window, told of the queued patches as the labs wire it (dents only: it keeps the dunes).
+  const win = new GroundWindow(field, 60, 0.25, 1);
+  win.follow(0, 0); win.fillNow();
+  queued.onRebuild.push((box, dentsOnly) => win.invalidate(box, dentsOnly));
   let qMs = 0, dMs = 0;
   // The direct one patches the same boxes, one by one, when the queued one flushes.
   const boxes: number[][] = [];
@@ -248,6 +253,17 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
     n++;
     for (let k = 0; k < 7; k++) { worstQ = Math.max(worstQ, Math.abs(a[k] - c[k])); worstD = Math.max(worstD, Math.abs(b[k] - c[k])); }
   }
+  win.fillNow();
+  const truth = new GroundWindow(field, 60, 0.25, 1);
+  truth.follow(0, 0); truth.fillNow();
+  let worstW = 0, dug = 0;
+  for (let j = -110; j <= 110; j++) for (let i = -110; i <= 110; i++) {
+    worstW = Math.max(worstW, Math.abs(win.fineAt(i, j) - truth.fineAt(i, j)));
+    dug = Math.max(dug, Math.abs(craters.at(i * 0.25, j * 0.25)));
+  }
+  console.log(`detail window after dents-only refills: ${worstW.toExponential(1)} off one filled fresh (dents up to ${dug.toFixed(2)} m)`);
+  if (dug < 0.2) fail(`the detail window check saw dents of only ${dug} m`);
+  if (worstW > 1e-4) fail(`the detail window's dents-only refill is ${worstW} off a fresh fill`);
   queued.queuePatch(-60, -60, 60, 60); queued.flushPatches();
   for (let j = -55; j <= 55; j++) for (let i = -55; i <= 55; i++) {
     if (!queued.vertexAt(i, j, a) || !fresh.vertexAt(i, j, c)) continue;
