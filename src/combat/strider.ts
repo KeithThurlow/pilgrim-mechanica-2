@@ -62,7 +62,7 @@ export const STRIDER_DEFAULTS = {
   striderMeleeShove: 7,
   striderMeleeEvery: 3.5,
   // Look
-  striderTilt: 24,
+  striderTilt: 12,
 };
 export type StriderValues = typeof STRIDER_DEFAULTS;
 
@@ -119,9 +119,9 @@ export const STRIDER_FRAME = {
   /** Shoulder joints either side (x) at this height, on the disc's rim; upper arm and forearm lengths. */
   shoulderX: 1.2, shoulderY: 1.0, upperArm: 1.85, foreArm: 1.8,
   /** The disc: its middle's height (where it sees from), radius and thickness. */
-  neck: 1.0, head: 1.0, headR: 1.12, headH: 0.16,
+  neck: 1.0, head: 1.0, headR: 1.12, headH: 0.3,
   /** The beam's emitter: under the disc's front. */
-  emitY: 0.86, emitZ: 0.62,
+  emitY: 0.8, emitZ: 0.62,
 };
 
 /** The walk the sim runs: the mech's own, narrower and longer in the leg (wiry), speeds divided by the scale. */
