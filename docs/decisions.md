@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Generated parts keep their colour texture and normal map for now (an exception to the vertex-colour rule in docs/asset-list.md); textures or vertex colours is decided after Keith sees the textured parts in game | Claude | Keith | Cause of the "puddles": colour squeezed into a few thousand vertices; Keith's TRELLIS.2 workflow keeps 2048² maps. |
 | 2026-11-01 | No lighting baked into generated parts' colours: the concept prompt asks for unlit albedo; lane B keeps only the PBR base colour; lane A's colours are de-lit (luminance fitted as ambient plus one light over the normals, divided out; paint that doesn't follow the normals stays) | Keith | Keith | `delight()` in `tools/partgen/prep.ts`; `--delight 0..1`, default 1 for lane A, 0 for lane B. |
 | 2026-11-01 | Generated meshes are made low-res from the start, not made dense and reduced: Keith's earlier test found low-res-from-the-start meshes better. Lane A meshes the splat at each level's own budget; lane B runs the generator per level when its workflow has a `PG_FACES` node | Keith | Keith | `splatToMeshAt` in `tools/partgen/splat.ts`; the simplifier only trims the last ~30%. |
 | 2026-11-01 | Pixal3D's licence is fine for our use | Keith | Keith | Lane B can ship its output. |

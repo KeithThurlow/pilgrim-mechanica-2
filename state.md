@@ -266,6 +266,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-01 · Decision logged: generated parts keep textures for now (Keith)
+- `docs/decisions.md`: colour and normal maps stay on generated parts until Keith decides after seeing them in game.
+
 ### 2026-11-01 · Parts lab: parts on their mounts, fit sliders, walk the mech (Keith, thread agent on `wip/partgen`)
 - Keith: parts didn't line up and the mech couldn't be moved. Hull weapons now replace both minigun pods (centred where the pod was, left mirrored), shoulder weapons sit on both shoulder mounts, hulls on the waist as before; a Fit group (across, up, forward, yaw, pitch, roll, scale) moves every mounted copy; Copy fit gives a `tools/partgen/setfit.ts` command that bakes it into all three GLBs and their sockets (logged in the sidecar). WASD walks, the mouse aims.
 - Checked: typecheck, partgen-check (fitted parts skip the base and box rules), one game-camera shot of `hullweapon-b-1` on both pivots.
