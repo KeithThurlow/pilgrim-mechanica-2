@@ -252,21 +252,15 @@ interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V
 // forearm angled up to the fist, ahead of the shoulder at about its height; the blade on the wrist laid back over the
 // shoulder toward the pack (near the triangle's long side), in line with the torso.
 const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.93), up: v3(0.7, -0.6, 0.2), pole: v3(0.05, -1, 0.1) };
-// Rest by sword (Keith 2026-11-01: "slightly different ... resting points"), left arm. The katana (the Breaker): at the
-// side and a little behind, low, the blade pointing forward past the hull, edge down. The buster: up behind the head,
-// laid across both shoulders, angled up and in. The short sword: out at a bent arm's length ahead, the tip pointing
-// out and down at the ground.
-const GUARD_KATANA: Key = { t: 0, hand: v3(0.4, -0.55, -0.2), fwd: v3(0.12, 0.12, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.5) };
-const GUARD_BUSTER: Key = { t: 0, hand: v3(0.25, 1.45, 0.25), fwd: v3(-0.75, 0.55, -0.37), up: v3(0, 0.3, 1), pole: v3(1, -0.4, 0.2) };
-/** The return's last key before each rest (the blade brought round to where that rest picks it up). */
-const PRE_REST: (Key | null)[] = [
-  { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
-  { t: 0.82, hand: v3(0.5, -0.6, 0.6), fwd: v3(0.2, 0.0, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.3) },
-  { t: 0.82, hand: v3(0.5, 0.75, 0.9), fwd: v3(0.3, 0.95, 0.05), up: v3(0, 0.2, 1), pole: v3(1, -0.6, 0.2) },
-  null,
-];
-const GUARD_SHORT: Key = { t: 0, hand: v3(0.4, -0.75, 1.65), fwd: v3(0.4, -0.55, 0.73), up: v3(0, 0.8, 0.6), pole: v3(0.6, -1, -0.2) };
-const guardOf = (stance = 0): Key => [GUARD, GUARD_KATANA, GUARD_BUSTER, GUARD_SHORT][Math.max(0, Math.min(3, Math.round(stance)))];
+// Rest by sword, one entry per stance (0 shoulder, 1 Breaker, 2 buster, 3 short sword), with the return's last key
+// before it (the blade brought round to where the rest picks it up). Keith 2026-11-01: back to the over-the-shoulder
+// rest for every sword while the posing lab is built; each stance keeps its own entry so it can be posed apart again
+// (the per-sword rests tried before are in git at 643c27b).
+const PRE_REST_SHOULDER: Key = { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) };
+const copyKey = (k: Key): Key => ({ ...k, hand: { ...k.hand }, ...(k.fwd ? { fwd: { ...k.fwd } } : {}), up: { ...k.up }, ...(k.pole ? { pole: { ...k.pole } } : {}) });
+export const STANCE_REST: Key[] = [GUARD, copyKey(GUARD), copyKey(GUARD), copyKey(GUARD)];
+const PRE_REST: (Key | null)[] = [PRE_REST_SHOULDER, copyKey(PRE_REST_SHOULDER), copyKey(PRE_REST_SHOULDER), copyKey(PRE_REST_SHOULDER)];
+const guardOf = (stance = 0): Key => STANCE_REST[Math.max(0, Math.min(3, Math.round(stance)))];
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
@@ -290,12 +284,10 @@ const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83),
 // yaw here is in degrees off the aim (+ outboard); `at` the key's share through the cut; pole where the elbow points.
 type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V };
 const NEAR_DRIVE: Near = { hand: v3(0.45, 0.85, 1.05), pole: v3(1, 0.1, 0.4) };
-// How each sword enters its cut (Keith 2026-11-01): the buster heaves up high over its shoulder, the blade straight up
-// and back, before it comes down; the short sword snaps out from low at the side, the blade flicked out level.
-const DRIVE_BY: (Key | null)[] = [null, null,
-  { t: 0, hand: v3(0.4, 1.45, 0.95), fwd: v3(0.35, 0.85, -0.4), up: v3(0.2, -0.4, 1), pole: v3(0.9, -0.3, 0.3) },
-  { t: 0, hand: v3(0.85, -0.1, 1.75), fwd: v3(0.95, 0.05, 0.3), up: v3(0, 1, 0.1), pole: v3(0.5, -1, -0.2) }];
-const NEAR_DRIVE_BY: (Near | null)[] = [null, null, { hand: v3(0.4, 1.25, 0.8), pole: v3(1, 0.1, 0.3) }, { hand: v3(0.7, -0.15, 1.5), pole: v3(0.6, -1, 0) }];
+// How each sword enters its cut, by stance: null takes the shared drive (DRIVE, NEAR_DRIVE). Keith 2026-11-01: every
+// sword back on the shared one for now (the buster's high heave and the short sword's low snap are in git at 643c27b).
+const DRIVE_BY: (Key | null)[] = [null, null, null, null];
+const NEAR_DRIVE_BY: (Near | null)[] = [null, null, null, null];
 const nearA = (v: SwordValues): [Near, Near, Near] => [
   { hand: v3(0.6, 0.45, 1.45), yaw: v.swordCloseLean, pitch: v.swordCloseUpright, pole: v3(-0.7, -0.5, 0.6) },
   { hand: v3(-0.35, 0.1, 1.7), yaw: v.swordCloseLean * 0.55, pitch: v.swordCloseUpright - 6, at: 0.66, pole: v3(-1, -0.45, 0.35) },
