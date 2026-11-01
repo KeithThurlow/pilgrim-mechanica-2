@@ -21,6 +21,7 @@
 // Ownership: player (the swing is the player's command; its hits are host-decided when networked, like any shot).
 import type { Param } from "../core/tweaks";
 import type { PenMaterial, SheetHit } from "../game/sheet";
+import { posesFor, type P3 } from "./swordPoses";
 
 export const SWORD_DEFAULTS = {
   swordDamage: 450,
@@ -203,7 +204,7 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordBlockKnock", label: "Knock through a block ×", min: 0, max: 1, step: 0.05, group: GB, tip: "The cut's knock on a blocking mech, × this" },
 ];
 
-export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number }
+export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number; /** Its base id: whose posed keys it swings with (src/weapons/swordPoses.ts). */ pose?: string }
 
 /** K: knocked back off a parry (up and back, back to rest). P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
  *  S the settle after B. */
@@ -252,7 +253,9 @@ export function moveWarp(x: number, cut: [number, number] | null, easeIn: number
  * along the outboard side of the aim, −1 across to the far side, with a pitch in degrees on top of the droop), and a
  * hint for the spine.
  */
-interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V; pole?: V; spine?: 1 | -1 }
+interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V; pole?: V; spine?: 1 | -1;
+  /** Which posable key this is (src/weapons/swordPoses.ts), and a posed spine for a cut key (else from its yaw). */
+  name?: string; upFix?: V }
 
 // Hand places off the shoulder, left arm (the Rampart's shoulder sits 1.02 m out, 0.89 m over the waist; its torso
 // spans ±1.2 m across, 1.27 m back to 1.37 m ahead, from 0.33 m under the waist to 2.3 m over it).
@@ -290,7 +293,7 @@ const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83),
 // on the far side. The back-cut is the same the other way, rising: the elbow leads back across, then it swings out and
 // up into the cock. Each key's hand, blade, elbow and timing blend from these (span 0) to the full sweep's (span 1). A
 // yaw here is in degrees off the aim (+ outboard); `at` the key's share through the cut; pole where the elbow points.
-type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V };
+type Near = { hand: V; fwd?: V; yaw?: number; pitch?: number; at?: number; pole?: V; up?: V };
 const NEAR_DRIVE: Near = { hand: v3(0.45, 0.85, 1.05), pole: v3(1, 0.1, 0.4) };
 // How each sword enters its cut, by stance: null takes the shared drive (DRIVE, NEAR_DRIVE). Keith 2026-11-01: every
 // sword back on the shared one for now (the buster's high heave and the short sword's low snap are in git at 643c27b).
@@ -316,18 +319,60 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
   const tk = mix(v.swordNearTime, v.swordFarTime) * v.swordPace, w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk * Math.max(0.4, Math.min(2.5, st.windup / Math.max(0.01, v.swordWindup)));
   const arc = st.arc * v.swordFarArc;
   // A key between its close and full forms. A cut key's yaw (half-arcs in the full form) comes out in degrees.
-  const at = (key: Key, n: Near, t: number): Key => ({
-    ...key, t, hand: lerpV(n.hand, key.hand, k), fwd: key.fwd && n.fwd ? norm(lerpV(n.fwd, key.fwd, k)) : key.fwd,
-    yaw: key.yaw === undefined ? undefined : mix(n.yaw ?? key.yaw * (arc / 2), key.yaw * (arc / 2)),
-    pitch: key.pitch === undefined ? undefined : mix(n.pitch ?? key.pitch, key.pitch),
-    pole: n.pole ? norm(lerpV(n.pole, key.pole ?? CUT_POLE, k)) : key.pole,
-  });
+  const at = (key: Key, n: Near, t: number): Key => {
+    const out: Key = {
+      ...key, t, hand: lerpV(n.hand, key.hand, k), fwd: key.fwd && n.fwd ? norm(lerpV(n.fwd, key.fwd, k)) : key.fwd,
+      yaw: key.yaw === undefined ? undefined : mix(n.yaw ?? key.yaw * (arc / 2), key.yaw * (arc / 2)),
+      pitch: key.pitch === undefined ? undefined : mix(n.pitch ?? key.pitch, key.pitch),
+      pole: n.pole ? norm(lerpV(n.pole, key.pole ?? CUT_POLE, k)) : key.pole,
+    };
+    // A posed spine (the pose lab): blended between the two forms, the unposed one's spine as the code makes it.
+    if (key.yaw !== undefined) {
+      if (key.upFix || n.up) {
+        const far = key.upFix ?? keyAxes({ ...key, yaw: key.yaw * (arc / 2) }, v).up;
+        const near = n.up ?? keyAxes({ ...key, upFix: undefined, yaw: n.yaw ?? key.yaw * (arc / 2), pitch: n.pitch ?? key.pitch }, v).up;
+        out.upFix = norm(lerpV(near, far, k));
+      }
+    } else if (n.up) out.up = norm(lerpV(n.up, key.up, k));
+    return out;
+  };
   // A cut key's share through the cut, close to full.
   const thru = (n: Near, full: number) => mix(n.at ?? full, full);
+  // Posed keys (the pose lab, src/weapons/swordPoses.ts): a key's far (or only) form, and a cut key's close form.
+  const P = posesFor(st.pose);
+  const vec = (q?: P3): V | undefined => (q ? v3(q[0], q[1], q[2]) : undefined);
+  // A posed blade's way as a cut key's yaw across the aim and pitch (°, before the droop), so the cut still turns.
+  const yawPitch = (f: V) => { const q = norm(f); return { yaw: Math.atan2(q.x, q.z) / D2R, pitch: Math.asin(Math.max(-1, Math.min(1, q.y))) / D2R + v.swordDroop }; };
+  const ovK = (name: string, key: Key): Key => {
+    const o = P[name], out: Key = { ...key, name };
+    if (!o) return out;
+    if (o.hand) out.hand = vec(o.hand)!;
+    if (o.pole) out.pole = vec(o.pole);
+    if (key.yaw !== undefined) {
+      if (o.fwd) { const yp = yawPitch(vec(o.fwd)!); out.yaw = yp.yaw / Math.max(1e-3, arc / 2); out.pitch = yp.pitch; }
+      if (o.up) out.upFix = vec(o.up);
+    } else {
+      if (o.fwd) out.fwd = vec(o.fwd);
+      if (o.up) out.up = vec(o.up)!;
+    }
+    return out;
+  };
+  const ovN = (name: string, n: Near, cutKey: boolean): Near => {
+    const o = P[`${name}:close`];
+    if (!o) return n;
+    const out: Near = { ...n };
+    if (o.hand) out.hand = vec(o.hand)!;
+    if (o.pole) out.pole = vec(o.pole);
+    if (o.up) out.up = vec(o.up);
+    if (o.fwd) { if (cutKey) { const yp = yawPitch(vec(o.fwd)!); out.yaw = yp.yaw; out.pitch = yp.pitch; } else out.fwd = vec(o.fwd); }
+    return out;
+  };
+  /** A cut key, posed in both forms. */
+  const cutAt = (name: string, key: Key, n: Near, t: (n: Near) => number) => { const nn = ovN(name, n, true); return at(ovK(name, key), nn, t(nn)); };
   const NA = nearA(v), NB = nearB(v);
-  const under = at(UNDER, NEAR_UNDER, 0), cock = at(COCK, NEAR_COCK, 0);
+  const under = at(ovK("under", UNDER), ovN("under", NEAR_UNDER, false), 0), cock = at(ovK("cock", COCK), ovN("cock", NEAR_COCK, false), 0);
   const si = Math.max(0, Math.min(3, Math.round(st.stance ?? 0)));
-  const G0 = guardOf(st.stance), g = { ...G0, hand: { ...G0.hand, y: G0.hand.y + v.swordGuardUp } };
+  const G0 = ovK("rest", guardOf(st.stance)), g = { ...G0, hand: { ...G0.hand, y: G0.hand.y + v.swordGuardUp } };
   switch (c) {
     case "guard": return { arc, len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
     case "A": {
@@ -335,13 +380,13 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
       return {
         arc, len, cut: [w / len, (w + s) / len], keys: [
           { ...g, t: 0 },
-          at(DRIVE_BY[si] ?? DRIVE, NEAR_DRIVE_BY[si] ?? NEAR_DRIVE, (w * 0.7) / len),
+          at(ovK("drive", DRIVE_BY[si] ?? DRIVE), ovN("drive", NEAR_DRIVE_BY[si] ?? NEAR_DRIVE, false), (w * 0.7) / len),
           // The cut: the arm near straight (the blade at its fullest reach), the hand dipping low across the front and
           // on under the body to the far side, the blade from out along its own side to across the far one, its edge
           // leading (the spine faces back the way it came). Close: all of it in near the chest.
-          at({ t: 0, hand: v3(1.37, 0.37, 2.48), yaw: 1, pitch: 4, up: v3(1, 0, -0.4), spine: 1 }, NA[0], w / len),
-          at({ t: 0, hand: v3(-0.3, -0.56, 2.79), yaw: 0, pitch: -4, up: v3(1, 0, -0.4), spine: 1 }, NA[1], (w + s * thru(NA[1], 0.5)) / len),
-          at({ t: 0, hand: v3(-1.95, -1.08, 1.79), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4), spine: 1 }, NA[2], (w + s) / len),
+          cutAt("aStart", { t: 0, hand: v3(1.37, 0.37, 2.48), yaw: 1, pitch: 4, up: v3(1, 0, -0.4), spine: 1 }, NA[0], () => w / len),
+          cutAt("aMid", { t: 0, hand: v3(-0.3, -0.56, 2.79), yaw: 0, pitch: -4, up: v3(1, 0, -0.4), spine: 1 }, NA[1], (n) => (w + s * thru(n, 0.5)) / len),
+          cutAt("aEnd", { t: 0, hand: v3(-1.95, -1.08, 1.79), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4), spine: 1 }, NA[2], () => (w + s) / len),
           { ...under, t: 1 },
         ],
       };
@@ -352,14 +397,16 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
         arc, len, cut: [r / len, (r + s) / len], keys: [
           { ...under, t: 0 },
           // Rising back across at full reach, on up into the high extension.
-          at({ t: 0, hand: v3(-1.92, -0.97, 1.78), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4), spine: -1 }, NB[0], r / len),
-          at({ t: 0, hand: v3(-0.36, 0.21, 2.83), yaw: 0, pitch: 6, up: v3(-1, 0, -0.4), spine: -1 }, NB[1], (r + s * thru(NB[1], 0.5)) / len),
-          at({ t: 0, hand: v3(1.22, 1.32, 2.13), yaw: 1, pitch: 18, up: v3(-1, 0.2, 0.4), spine: -1 }, NB[2], (r + s) / len),
+          cutAt("bStart", { t: 0, hand: v3(-1.92, -0.97, 1.78), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4), spine: -1 }, NB[0], () => r / len),
+          cutAt("bMid", { t: 0, hand: v3(-0.36, 0.21, 2.83), yaw: 0, pitch: 6, up: v3(-1, 0, -0.4), spine: -1 }, NB[1], (n) => (r + s * thru(n, 0.5)) / len),
+          cutAt("bEnd", { t: 0, hand: v3(1.22, 1.32, 2.13), yaw: 1, pitch: 18, up: v3(-1, 0.2, 0.4), spine: -1 }, NB[2], () => (r + s) / len),
           { ...cock, t: 1 },
         ],
       };
     }
     case "R": {
+      // The return's last key before rest (a stance without one gets it only when it's posed: from the rest itself).
+      const preRest = (): Key[] => { const b = PRE_REST[si]; return b || P.preRest ? [{ ...ovK("preRest", b ?? { ...G0, t: 0.82 }), t: 0.82 }] : []; };
       // The elbow drops and the wrist and forearm swing the blade round past the waist (point down ahead, then back
       // along its own hip), and up to the shoulder.
       const len = st.recover * 1.6 * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
@@ -368,18 +415,19 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
           { ...under, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
-          ...(PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))] ? [PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))]!] : []),
+          ...preRest(),
           { ...g, t: 1 },
         ],
       };
     }
     case "K": {
       const len = v.swordParryRecoil;
-      return { arc, len, cut: null, keys: [{ ...RECOIL, t: 0 }, { ...RECOIL, hand: { ...RECOIL.hand, y: RECOIL.hand.y + 0.1 }, t: 0.25 }, { ...g, t: 1 }] };
+      const rc = ovK("recoil", RECOIL);
+      return { arc, len, cut: null, keys: [{ ...rc, t: 0 }, { ...rc, name: undefined, hand: { ...rc.hand, y: rc.hand.y + 0.1 }, t: 0.25 }, { ...g, t: 1 }] };
     }
     case "P": {
-      const len = v.swordBlockTime;
-      return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...BLOCK, t: 0.28 }, { ...BLOCK, hand: { ...BLOCK.hand, z: BLOCK.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
+      const len = v.swordBlockTime, blk = ovK("block", BLOCK);
+      return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...blk, t: 0.28 }, { ...blk, name: undefined, hand: { ...blk.hand, z: blk.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
     }
     case "S": {
       const len = st.recover * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
@@ -416,6 +464,20 @@ export function clipCut(c: SwordClip, st: SwordStats, v: SwordValues, span = 1):
   return k.cut ? [k.cut[0] * k.len, k.cut[1] * k.len] : null;
 }
 
+/**
+ * When a posable key (src/weapons/swordPoses.ts) is reached in its clip (s), at a reach (span); null if the clip has
+ * no such key. The keys sit in the eased time (moveWarp), so this finds the real time that eases to the key.
+ */
+export function keyTime(c: SwordClip, name: string, st: SwordStats, v: SwordValues, span = 1): number | null {
+  const { len, keys, cut } = clipKeys(c, st, v, span);
+  const key = keys.find((q) => q.name === name);
+  if (!key) return null;
+  if (c === "guard") return 0;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (moveWarp(m, cut, v.swordEaseIn, v.swordEaseOut, v.swordSnap) < key.t) lo = m; else hi = m; }
+  return ((lo + hi) / 2) * len;
+}
+
 /** A key's blade axes (left arm): a vector, or a yaw across the aim with a pitch under the droop. */
 function keyAxes(k: Key, v: SwordValues): { fwd: V; up: V } {
   let fwd: V;
@@ -424,6 +486,7 @@ function keyAxes(k: Key, v: SwordValues): { fwd: V; up: V } {
     const yaw = (k.yaw ?? 0) * D2R, p = ((k.pitch ?? 0) - v.swordDroop) * D2R;
     fwd = v3(Math.sin(yaw) * Math.cos(p), Math.sin(p), Math.cos(yaw) * Math.cos(p));
   }
+  if (k.upFix) return { fwd, up: square(fwd, norm(k.upFix)) };
   // A cut key's spine faces back the way the blade came (+1: it travels toward −yaw, the first cut; −1 the back-cut),
   // square to the blade in the ground plane, so the edge leads however wide the arc (with the hint's lift on top).
   if (k.yaw !== undefined && k.spine) {

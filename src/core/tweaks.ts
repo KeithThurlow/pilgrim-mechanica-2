@@ -229,7 +229,7 @@ const decimals = (step: number) => (step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.
  * (http://192.168...) has none, and the prompt it fell back to elides long text in the middle (Keith 2026-10-26: the
  * copied values came out cut). So a hidden text box and the old copy command first there.
  */
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   if (navigator.clipboard && window.isSecureContext) {
     try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
   }

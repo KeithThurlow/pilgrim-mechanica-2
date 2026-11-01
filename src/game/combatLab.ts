@@ -85,6 +85,9 @@ export interface CombatLabOptions<E extends object> {
   demo?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; keys?: readonly boolean[]; lock?: TargetCandidate | null } | null;
   /** After any slider changes (after the shared handling, e.g. the dunes rebuilt). */
   onChange?: (key: string) => void;
+  /** The lab takes the mech this frame whatever the player does (the pose lab freezing it to pose); null: as normal.
+   *  No dash or Tab lock while it does. */
+  drive?: (t: number, dt: number) => { cmd: MoveCommand; aim: Aim | null; trigger: Trigger; keys?: readonly boolean[]; lock?: TargetCandidate | null } | null;
 }
 
 export interface CombatLab<E extends object> {
@@ -124,6 +127,8 @@ export interface CombatLab<E extends object> {
   costs: Costs | null;
   /** The pilot: hold F to hop out and back in (src/pilot/onFoot.ts). */
   foot: OnFoot;
+  /** The game camera (enabled false hands the camera to the lab). */
+  iso: IsoCamera;
   /** Who an enemy group whose middle is at (x, z) goes for: the mech, or the pilot on foot when he's nearer. */
   prey: (x: number, z: number) => Prey;
 }
@@ -337,6 +342,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     shake,
     costs: null,
     foot,
+    iso,
     prey: (x, z) => foot.quarry.pick(x, z),
   };
 
@@ -387,7 +393,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     let held: [boolean, boolean, boolean, boolean] = [false, false, false, false];
     let demoLock: TargetCandidate | null = null;
     lock = null;
-    const own = auto && o.demo ? o.demo(clock, dt) : null;
+    const forced = o.drive?.(clock, dt) ?? null;
+    const own = forced ?? (auto && o.demo ? o.demo(clock, dt) : null);
     if (own) { ({ cmd, aim, trigger } = own); held = [0, 1, 2, 3].map((i) => !!own.keys?.[i]) as typeof held; demoLock = own.lock ?? null; lastDemo = { aim, trigger }; cursor = aim; }
     else if (auto) { ({ cmd, aim, trigger } = demo(clock)); lastDemo = { aim, trigger }; cursor = aim; }
     else if (driving) {
@@ -400,6 +407,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       if (held.some(Boolean)) auto = false;
     }
     lockPressed = false;
+    if (forced) dashPressed = false;
     if (!driving) softAim.release();
     if (sel.active) { trigger = false; held = [false, false, false, false]; }
     player.keys = held;
