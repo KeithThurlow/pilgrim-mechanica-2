@@ -75,6 +75,7 @@ export const WALKER_DEFAULTS = {
   slopePitch: 0.35,
   footTiltMax: 28,
   downhillReach: 0.55,
+  climbSink: 0,
   thighFold: 300,
   thighSplay: 90,
   uphillSlow: 0.35,
@@ -193,6 +194,11 @@ export const WALKER_DEFAULTS = {
   swingThighFold: 160,
   swingFoldFrom: 0.12,
   uphillLead: 1,
+  // Room for the leg (Keith 2026-11-01: up steep climbs the uphill leg folded into itself, the cannon through the shin).
+  legRoomKnee: 35,
+  legRoomHock: 35,
+  legRoomForward: 20,
+  legTurnMax: 2000,
   // The dash as footwork (Keith 2026-10-27: "a side step into a walk/run/sprint in the dash direction... like
   // rugby/football"): load, the outside leg pushes onto the edge of its foot, the inside foot steps out, the outside leg
   // comes through; then a short sprint along the dash (src/mech/dashSteps.ts).
@@ -318,6 +324,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "slopePitch", label: "Pitch with slope", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "How much the body tips with the ground; 0 = always level" },
   { key: "footTiltMax", label: "Foot tilt limit (°)", min: 0, max: 45, step: 1, group: "Terrain", tip: "Feet lie flat on slopes up to this angle" },
   { key: "downhillReach", label: "Sink to the low foot", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "On slopes the body drops toward the lower foot so that leg can reach" },
+  { key: "climbSink", label: "Sink to the low foot facing uphill (share)", min: 0, max: 1, step: 0.01, group: "Terrain", tip: "Facing up a climb, the low foot is the back one: sinking to it squashes the front leg until it folds into itself (Keith 2026-11-01). The share of the sink kept there; 1: as before" },
   { key: "thighFold", label: "Thigh folds when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A planted leg that's compressed (uphill side of a slope, front leg climbing) swings its thigh forward at the hip by this much per unit of compression, instead of the thigh hanging straight down" },
   { key: "thighSplay", label: "Knee turns out when squashed (°)", min: 0, max: 200, step: 1, group: "Terrain", tip: "A compressed planted leg turns its knee outward at the hip by this much per unit of compression, so the thigh angles out instead of standing straight" },
   { key: "uphillSlow", label: "Slow uphill", min: 0, max: 0.9, step: 0.01, group: "Terrain", tip: "Share of speed lost on a steep climb" },
@@ -408,6 +415,10 @@ export const WALKER_PARAMS: Param[] = [
   { key: "runClimbSteps", label: "Run: more steps/s per degree uphill", min: 0, max: 0.3, step: 0.005, group: "Sprint", tip: "Climbing, the steps come quicker and shorter (the speed still falls by Slow uphill): 0.1 is 2 more steps a second up a 20° climb" },
   { key: "legReachMax", label: "Longest leg (share of straight)", min: 0.75, max: 1, step: 0.005, group: "Terrain", tip: "Hip to ankle never stretches past this share of the straight leg. Downhill a foot that can't reach the ground hangs there; with nothing under it the mech drops (Keith 2026-10-26: no yanking the legs to the ground)" },
   { key: "swingThighFold", label: "Swinging thigh lifts when squashed (°)", min: 0, max: 500, step: 1, group: "Terrain", tip: "A swinging leg squashed more than usual (stepping uphill) raises its knee through the hip by this much per unit of compression past the threshold below, so the thigh rises toward the hull instead of hanging straight" },
+  { key: "legRoomKnee", label: "Leg room: knee never shuts past (°)", min: 0, max: 90, step: 1, group: "Terrain", tip: "When the walk's pose would shut the knee (thigh to shin) tighter than this, the thigh is re-aimed to the nearest angle that leaves room: up steep climbs the uphill thigh lifts forward instead of folding the leg into itself (Keith 2026-11-01). 0 with the hock at 0: off" },
+  { key: "legRoomHock", label: "Leg room: hock never shuts past (°)", min: 0, max: 90, step: 1, group: "Terrain", tip: "The same for the hock (shin to cannon): below this the cannon was cutting through the shin" },
+  { key: "legRoomForward", label: "Leg room: prefer the thigh forward by (°)", min: 0, max: 60, step: 1, group: "Terrain", tip: "Re-aiming a cramped leg, a thigh angle this much further forward counts as near as one this much closer: the uphill thigh points ahead, making space under it" },
+  { key: "legTurnMax", label: "Thigh never turns faster than (°/s)", min: 100, max: 5000, step: 10, group: "Terrain", tip: "A change of leg pose (a swing landing, a fold engaging) eases over a few frames instead of flicking the knee through the ground. 5000: off" },
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },
   { key: "dashLoad", label: "Steps: load (s)", min: 0.02, max: 0.3, step: 0.005, group: "Dash", tip: "Both legs flex and the hips turn part way toward the dash before the push" },
   { key: "dashUnweight", label: "Steps: weight comes off first (m)", min: 0, max: 0.2, step: 0.005, group: "Dash", tip: "The hips rise this much at the very start, then drop into the crouch" },
