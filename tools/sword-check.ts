@@ -63,9 +63,9 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
 {
   for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
-    const lens = Object.fromEntries((["A", "B", "R", "S", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
+    const lens = Object.fromEntries((["A", "B", "R", "S", "P", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
     const sh = SH(side);
-    for (const c of ["guard", "A", "B", "R", "S"] as SwordClip[]) {
+    for (const c of ["guard", "A", "B", "R", "S", "P"] as SwordClip[]) {
       let worst = 0, clash = "", lead = 0, lag = 0;
       let prevTip: number[] | null = null;
       for (let i = 0; i <= 60; i++) {
@@ -177,6 +177,21 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   for (let i = 1; i <= 100; i++) { const q = at(0, -i / 100); pj = Math.max(pj, Math.abs(q - pp)); pp = q; }
   must(jump < 0.02 && pj < 0.05, `the lunge snaps with the walk's way (${jump.toFixed(3)} a degree, ${pj.toFixed(3)} a 1% push)`);
   must(at(0.7, -0.7) > 0 && at(0.7, -0.7) < V.swordLungeSide, "backing off with a side click doesn't keep a partial lunge");
+}
+// ---- The block (Keith 2026-11-01): a free sword swings up and blocks; one mid-cut can't; it goes back to rest ----
+{
+  const sw = new SwordSim(1);
+  sw.update(dt, false, st, V);
+  must(sw.free && sw.block(V) && sw.clip === "P" && sw.blocking, "a sword at rest didn't block");
+  for (let i = 0; i < 20; i++) sw.update(dt, false, st, V);
+  must(sw.block(V) && sw.clip === "P", "a block that's up didn't block again");
+  let n = 0; while (sw.clip !== "guard" && n++ < 600) sw.update(dt, false, st, V);
+  must(sw.clip === "guard" && Math.abs(n * dt - (V.swordBlockTime - 20 * dt)) < 0.05, `the block didn't go back to rest after its time (${(n * dt).toFixed(2)} s)`);
+  sw.update(dt, true, st, V);
+  for (let i = 0; i < 30; i++) sw.update(dt, true, st, V);
+  must(sw.clip === "A" && !sw.free && !sw.block(V) && sw.clip === "A", "a sword mid-cut blocked");
+  const up = clipPose("P", V.swordBlockTime * 0.45, 1, SH(1), 0, st, V);
+  must(up.fwd.y > 0.7 && up.hand.z > 1.4, `the block doesn't stand the blade up ahead of the chest (${up.fwd.y.toFixed(2)} up, hand ${up.hand.z.toFixed(2)} ahead)`);
 }
 // ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
 {

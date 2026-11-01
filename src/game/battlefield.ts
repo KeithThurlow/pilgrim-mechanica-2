@@ -79,6 +79,9 @@ export interface Hittable {
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
   knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
+  /** A sword cut from a cutter standing at (x, z) is about to land: a mech with a free sword facing it blocks
+   *  (src/weapons/sword.ts). Returns the share of the cut's damage it takes (1: not blocked). */
+  parry?(fromX: number, fromZ: number): number;
 }
 
 /** How a splash lands (src/game/splash.ts). */
