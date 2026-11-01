@@ -12,14 +12,14 @@
 import * as THREE from "three/webgpu";
 import { RobotSwarm, BIG, type BeamLine } from "./robots";
 import { beamPower, beamWidthShare } from "./beamCore";
-import { Ribbon, glowMaterial, type P3 } from "../weapons/ribbon";
+import { Ribbon, SoftRing, glowMaterial, type P3 } from "../weapons/ribbon";
 import type { BlastWaves } from "../fx/blastWaves";
 import { FAM_ROBOT, type ShortLights } from "../world/lamps";
 
 const SLOTS = 16, SCORCHES = 8, PTS = 48;
 const HOT = 0x2a8cff, CORE = 0xe0f6ff, LINE = 0x3aa8ff, EMBER = 0x5ab8ff, EMBER_COLD = 0x0a2a60;
 
-interface Slot { glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon }
+interface Slot { glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon; reach: SoftRing; wave: SoftRing }
 interface Scorch { ribbon: Ribbon; t: number; sx: number; sz: number; x1: number; z1: number; w: number }
 
 export class RobotBeamDraw {
@@ -49,8 +49,9 @@ export class RobotBeamDraw {
       for (const o of [glow, halo, beam, core]) { o.frustumCulled = false; o.renderOrder = 6; }
       line.mesh.renderOrder = edge.mesh.renderOrder = ring.mesh.renderOrder = 3;
       ring.mesh.visible = false;
-      this.group.add(halo, glow, line.mesh, edge.mesh, ring.mesh, beam, core);
-      this.slots.push({ glow, halo, line, edge, beam, core, ring });
+      const reach = new SoftRing(PTS, LINE), wave = new SoftRing(PTS, CORE);
+      this.group.add(halo, glow, line.mesh, edge.mesh, ring.mesh, beam, core, reach.mesh, wave.mesh);
+      this.slots.push({ glow, halo, line, edge, beam, core, ring, reach, wave });
     }
     for (let k = 0; k < SCORCHES; k++) {
       const ribbon = new Ribbon(PTS, EMBER, true);
@@ -96,7 +97,7 @@ export class RobotBeamDraw {
       // Per robot: a big one's beam, or a weapon quad's laser or rail (thinner, a smaller glow).
       const spec = sw.beamSpec(i), C = spec.charge, W = spec.width, G = v.robotBeamGlow * (sw.kind[i] === BIG ? 1 : 0.3);
       const s = this.slots[k++], b = sw.beamLine(i, { ...this.line });
-      s.ring.mesh.visible = false;
+      s.ring.mesh.visible = s.reach.mesh.visible = s.wave.mesh.visible = false;
       const D = sw.beamSweep(i), u = t / C, locked = t >= C * v.robotBeamLock;
       this.live.push({ i, u, line: b });
       // Caught the moment it fired: leave a scorch.
@@ -172,6 +173,7 @@ export class RobotBeamDraw {
     for (; k < SLOTS; k++) {
       const s = this.slots[k];
       s.glow.visible = s.halo.visible = s.line.mesh.visible = s.edge.mesh.visible = s.beam.visible = s.core.visible = s.ring.mesh.visible = false;
+      s.reach.mesh.visible = s.wave.mesh.visible = false;
     }
     // Scorches: hot at first, cooling to a dull ember glow, then gone.
     const T = Math.max(0.05, v.robotBeamScorch);
@@ -226,22 +228,21 @@ export class RobotBeamDraw {
     (s.glow.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.5 + 0.5 * grow : f;
     (s.halo.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.2 + 0.4 * grow : 0.7 * f;
     s.glow.visible = s.halo.visible = true;
-    // The reach: a faint soft ring (three thin rings fading inward), strongest as the charge fills, gone with the blast.
-    const A = v.robotPulseRing * (t < C ? 0.4 + 0.6 * grow : f);
-    const show = A > 0.005;
-    s.edge.mesh.visible = s.ring.mesh.visible = s.line.mesh.visible = show;
-    if (show) {
-      s.edge.set(this.circle(e.x, e.z, R), 0.5, "ground", g, 0.11); s.edge.mat.opacity = A;
-      s.ring.set(this.circle(e.x, e.z, Math.max(0.5, R - 0.8)), 1.1, "ground", g, 0.1); s.ring.mat.opacity = A * 0.45;
-      s.line.set(this.circle(e.x, e.z, Math.max(0.5, R - 2)), 1.6, "ground", g, 0.09); s.line.mat.opacity = A * 0.2;
+    // The reach: a faint soft ring at the blast's edge, fading inward; and the time left (Keith 2026-11-01, round 3): a soft
+    // front growing out from under it to the edge as the charge runs, brightest at its leading edge. Gone with the blast.
+    s.edge.mesh.visible = s.ring.mesh.visible = s.line.mesh.visible = false;
+    const A = v.robotPulseRing * (t < C ? 0.5 + 0.5 * grow : f);
+    s.reach.mesh.visible = A > 0.005;
+    if (s.reach.mesh.visible) { s.reach.set(e.x, e.z, R - 3, R + 0.4, g, 0.85); s.reach.mat.opacity = A; }
+    s.wave.mesh.visible = t < C && v.robotPulseRing > 0;
+    if (s.wave.mesh.visible) {
+      const rr = Math.max(0.6, R * u);
+      s.wave.set(e.x, e.z, rr - Math.min(rr, 2.5 + 2 * u), rr, g, 0.88);
+      s.wave.mat.opacity = v.robotPulseRing * (0.8 + 0.8 * u);
     }
   }
-  /** A closed ring of points on the ground plan. */
-  private circle(x: number, z: number, r: number): P3[] {
-    const pts = this.pts; pts.length = 0;
-    for (let k = 0; k < PTS; k++) { const a = (k / (PTS - 1)) * Math.PI * 2; pts.push({ x: x + Math.sin(a) * r, y: 0, z: z + Math.cos(a) * r }); }
-    return pts;
-  }
+
+
 
   /** The night lights: the emitter holds a real light at high priority while it charges, the line glows, the burn flares. */
   private lights(L: ShortLights) {
