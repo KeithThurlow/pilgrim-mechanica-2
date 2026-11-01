@@ -6,7 +6,9 @@
 //   npx tsx tools/partgen/run.ts --kind hull --prompt "..." [--seed 1] [--lane a|b|both] [--comfy http://127.0.0.1:8188]
 //   npx tsx tools/partgen/run.ts --kind hull --image concept.png --lane b     (skip the concept step)
 //   npx tsx tools/partgen/run.ts --kind wreck --from some.ply|some.glb        (no ComfyUI: prep only)
-// More: --label text (the part lab's name for it), --front +z --up +y (the source's axes; generators differ), --tris N (the full level), --id name, --res N (lane A grid; default: each level meshed at its own budget), --delight 0..1
+// Axes per lane (found 2026-11-01 on Keith's PC): lane A --front +x --up -y; lane B --front +z --up +y --yaw 45,snap.
+// More: --label text (the part lab's name for it), --front +z --up +y (the source's axes; generators differ),
+// --yaw deg[,snap] (turn about +Y after that; snap: then box it tightest within ±45°), --tris N (the full level), --id name, --res N (lane A grid; default: each level meshed at its own budget), --delight 0..1
 // (take baked light out of the colours; default 1 for lane A, 0 for lane B whose base colour is albedo).
 // Workflows: tools/partgen/workflows/{concept,lane-a,lane-b}.json, ComfyUI "Export (API)" files (see comfy.ts).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -29,6 +31,8 @@ const kind = kinds[opt("kind", "hull")!];
 if (!kind) throw new Error(`partgen: --kind one of ${Object.keys(kinds).join(", ")}`);
 const seed = Number(opt("seed", "1")), lane = opt("lane", "both")!, comfyUrl = opt("comfy", "http://127.0.0.1:8188")!;
 const front = opt("front", "+z") as Axis, up = opt("up", "+y") as Axis;
+// --yaw degrees (about +Y after --front/--up), or "<degrees>,snap" / "snap" to then box the part tightest (within ±45°).
+const yawArg = opt("yaw", "0")!, yaw = parseFloat(yawArg) || 0, snap = yawArg.includes("snap");
 const RAW = "shots/partgen/raw", OUT = "public/models/gen";
 mkdirSync(RAW, { recursive: true }); mkdirSync(OUT, { recursive: true });
 const wf = (name: string) => {
@@ -50,12 +54,12 @@ async function save(id: string, laneName: string, source: Source, meta: Record<s
   const lods = [];
   for (const lod of [0, 1, 2] as const) {
     const budget = opt("tris") && lod === 0 ? Number(opt("tris")) : kind.tris[lod];
-    const q = await prepare(await source(lod, budget), kind, { front, up, lod, tris: budget, delight: delightAmount });
+    const q = await prepare(await source(lod, budget), kind, { front, up, yaw, snap, lod, tris: budget, delight: delightAmount });
     writeFileSync(`${OUT}/${id}${lod ? `-lod${lod}` : ""}.glb`, writeGlb([q.part], q.sockets, { kind: kind.id, lane: laneName, lod }));
     lods.push(q);
   }
   const p = lods[0];
-  const side = { id, kind: kind.id, lane: laneName, seed, front, up, delight: delightAmount, trisIn: lods.map((q) => q.trisIn), tris: lods.map((q) => q.part.index.length / 3), size: p.size, made: new Date().toISOString(), ...meta };
+  const side = { id, kind: kind.id, lane: laneName, seed, front, up, yaw: yawArg, delight: delightAmount, trisIn: lods.map((q) => q.trisIn), tris: lods.map((q) => q.part.index.length / 3), size: p.size, made: new Date().toISOString(), ...meta };
   writeFileSync(`${OUT}/${id}.json`, JSON.stringify(side, null, 2) + "\n");
   const indexPath = `${OUT}/index.json`;
   const list = (existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : []) as { id: string }[];

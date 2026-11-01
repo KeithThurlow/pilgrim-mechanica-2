@@ -1,0 +1,33 @@
+{
+  "id": "hullweapon-b-1",
+  "kind": "hullweapon",
+  "lane": "b",
+  "seed": 1,
+  "front": "+z",
+  "up": "+y",
+  "yaw": "45,snap",
+  "delight": 0,
+  "trisIn": [
+    4998,
+    1700,
+    550
+  ],
+  "tris": [
+    4998,
+    1700,
+    550
+  ],
+  "size": [
+    0.7712502410789526,
+    1.1246727908387752,
+    1.6640015840530396
+  ],
+  "made": "2026-11-01T05:10:26.516Z",
+  "prompt": "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground",
+  "image": "shots/partgen/raw/hullweapon-1-concept.png",
+  "raw": [
+    "shots/partgen/raw/hullweapon-1-laneb-lod0.glb",
+    "shots/partgen/raw/hullweapon-1-laneb-lod1.glb",
+    "shots/partgen/raw/hullweapon-1-laneb-lod2.glb"
+  ]
+}

@@ -13,6 +13,8 @@ export type Axis = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
 export interface PrepOptions {
   front: Axis;   // the source's front, turned to +Z
   up: Axis;      // the source's up, turned to +Y
+  yaw?: number;  // degrees about +Y after front/up (+Z towards +X), for camera-aligned generators
+  snap?: boolean; // then turn by the smallest angle (within ±45°) that boxes the part tightest
   lod?: 0 | 1 | 2; // which of the kind's budgets (full, simpler, simplest)
   tris?: number;   // override the budget
   delight?: number; // 0..1: take out shading baked into the colours (see delight())
@@ -44,6 +46,36 @@ function basis(front: Axis, up: Axis): V3[] {
   if (f.some((c, i) => c !== 0 && u[i] !== 0)) throw new Error(`partgen: front ${front} and up ${up} are the same axis`);
   const x: V3 = [u[1] * f[2] - u[2] * f[1], u[2] * f[0] - u[0] * f[2], u[0] * f[1] - u[1] * f[0]]; // up × front = +X (left)
   return [x, u, f];
+}
+
+/** Turn positions about +Y by `deg` (right hand: +Z towards +X for a positive angle). */
+function turnY(pos: Float32Array, deg: number) {
+  const t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
+  for (let v = 0; v < pos.length; v += 3) {
+    const x = pos[v], z = pos[v + 2];
+    pos[v] = x * c + z * s; pos[v + 2] = -x * s + z * c;
+  }
+}
+
+/**
+ * The turn about +Y, within ±45°, that gives the smallest footprint box. Camera-aligned generators (Pixal3D) build
+ * the part in the concept's three-quarter view, so its sides sit off the axes; hard-surface parts are boxy, so their
+ * tightest box finds the sides again.
+ */
+export function boxYaw(pos: Float32Array): number {
+  const n = pos.length / 3, step = Math.max(1, Math.floor(n / 4000));
+  let best = 0, bestArea = Infinity;
+  for (let d = -45; d < 45; d += 0.5) {
+    const t = (d * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let v = 0; v < n; v += step) {
+      const x = pos[v * 3] * c + pos[v * 3 + 2] * s, z = -pos[v * 3] * s + pos[v * 3 + 2] * c;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const area = (x1 - x0) * (z1 - z0);
+    if (area < bestArea - 1e-9) { bestArea = area; best = d; }
+  }
+  return best;
 }
 
 /** Weld vertices that share a position (generators often write split vertices), averaging their colour. */
@@ -127,6 +159,8 @@ export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Pr
   // Orient.
   const B = basis(o.front, o.up), n = src.pos.length / 3, pos = new Float32Array(src.pos.length);
   for (let v = 0; v < n; v++) for (let r = 0; r < 3; r++) pos[v * 3 + r] = B[r][0] * src.pos[v * 3] + B[r][1] * src.pos[v * 3 + 1] + B[r][2] * src.pos[v * 3 + 2];
+  if (o.yaw) turnY(pos, o.yaw);
+  if (o.snap) turnY(pos, boxYaw(pos));
   // Fit: uniform scale into the box, centred in x and z, base at y 0.
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const t of src.index) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], pos[t * 3 + c]); hi[c] = Math.max(hi[c], pos[t * 3 + c]); }

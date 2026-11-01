@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { readGlb, writeGlb } from "./partgen/glb";
 import { loadKinds, type Kind } from "./partgen/kinds";
-import { delight, glbToMesh, prepare } from "./partgen/prep";
+import { boxYaw, delight, glbToMesh, prepare } from "./partgen/prep";
 import { readPly, splatToMesh, splatToMeshAt, writePly, SPLAT_MESH_DEFAULTS, type Mesh, type Splat } from "./partgen/splat";
 
 let fails = 0;
@@ -91,6 +91,16 @@ ok(sa.hi[2] > 0.95, `lane A: barrel kept (front at z ${sa.hi[2].toFixed(2)})`);
 let reds = 0;
 for (let v = 0; v < mesh.col.length / 3; v++) if (mesh.col[v * 3] > 0.6 && mesh.col[v * 3 + 1] < 0.35) reds++;
 ok(reds > 20, `lane A: the red stripe survives (${reds} red vertices)`);
+
+// Lane B is built in the concept's three-quarter view: the yaw snap must find a turned box's sides again.
+{
+  const box: number[] = [];
+  for (const x of [-1, 1]) for (const y of [0, 1]) for (const z of [-0.5, 0.5]) box.push(x, y, z);
+  const t = (-30 * Math.PI) / 180, turned = new Float32Array(box.length);
+  for (let v = 0; v < box.length; v += 3) { turned[v] = box[v] * Math.cos(t) + box[v + 2] * Math.sin(t); turned[v + 1] = box[v + 1]; turned[v + 2] = -box[v] * Math.sin(t) + box[v + 2] * Math.cos(t); }
+  const d = boxYaw(turned);
+  ok(Math.abs(Math.abs(d) - 30) < 1, `lane B: yaw snap finds a box turned 30° (${d}°)`);
+}
 
 // Low-res from the start (Keith 2026-11-01): each level meshed near its own budget, not reduced from a dense mesh.
 for (const lod of [0, 2] as const) {

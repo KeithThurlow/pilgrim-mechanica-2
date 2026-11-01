@@ -16,14 +16,36 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
   `PG_IMAGE`, `PG_SEED`.
 - `labs/parts/`, `tools/partgen-check.ts` (in `npm test`), two sample parts in `public/models/gen/`.
 
-## Left, in order (needs Keith's PC, Remote Control session)
+## Done on Keith's PC (2026-11-01, Remote Control)
 
-1. Check the PC: GPU and VRAM, ComfyUI version (0.34+ for the native TRELLIS.2 / Pixal3D nodes), image models.
-2. Install TripoSplat (ComfyUI template) and the Pixal3D / TRELLIS.2 weights (template `3d_pixal3d_trellis2_image_to_model`).
-3. Build `tools/partgen/workflows/concept.json`, `lane-a.json`, `lane-b.json` (Export (API), title the nodes), commit.
-4. Bake-off: `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck --seed 1..3 --lane both`; find each lane's
-   `--front/--up` (generators differ), commit the parts, Keith picks a lane in `labs/parts/`.
-5. Then: legs (cut at the joints), and hooking parts into the loadout (the "show equipped hulls" thread owns the swap).
+- PC: RTX 3080 10 GB, 32 GB RAM. ComfyUI is Comfy Desktop's standalone install, v0.42.5, at
+  `%LOCALAPPDATA%\Comfy-Desktop\ComfyUI-Installs\ComfyUI`; models in `%LOCALAPPDATA%\Comfy-Desktop\ComfyUI-Shared\models`.
+  Run it headless (what this session did) from that folder's `ComfyUI\`:
+  `.venv\Scripts\python.exe main.py --extra-model-paths-config "%APPDATA%\Comfy Desktop\instance-model-paths\inst-1792962429804.yaml" --input-directory <Shared>\input --output-directory <Shared>\output --enable-manager --port 8188`,
+  or just open Comfy Desktop (check its port is 8188, else pass `--comfy`).
+- Models: Pixal3D / TRELLIS.2 int8 set came with Comfy Desktop; added TripoSplat (fp16, its VAE decoder, DINOv3-H, flux2 VAE)
+  and FLUX.2 Klein 4B distilled + Qwen3 4B (Apache-2.0). FLUX.3 Klein is gated on Hugging Face (needs Keith's login).
+- Workflows: `tools/partgen/workflows/` (README there). Lane B stops at the 512 shape stage, remeshes at 128 (`PG_RES`),
+  decimates to each level's budget (`PG_FACES`), bakes base colour only.
+- Concept prompts in `kinds.ts` name only the part: Klein runs at cfg 1, so "no legs" drew legs.
+- Axes (found on the cannon, whose barrel is unambiguous; noted in `run.ts`):
+  - lane A (TripoSplat, Y-down splat, object-aligned): `--front +x --up -y`
+  - lane B (Pixal3D, camera-aligned, camera at +Z): `--front +z --up +y --yaw 45,snap` (the concept's front faces the
+    viewer's left; `snap` boxes the part tightest within ±45°, `boxYaw` in `prep.ts`)
+- Bake-off, seed 1, both lanes on the same concept (`bash shots/partgen/probe/bake.sh <kind>` is gitignored; it's lane A
+  with the concept, then lane B with `--image shots/partgen/raw/<kind>-1-concept.png`):
+
+  | Part | Lane A tris (full/lod1/lod2) | Lane B tris | Lane A time | Lane B time |
+  | --- | --- | --- | --- | --- |
+  | hull | 6500 / 2054 / 700 | 6480 / 2198 / 696 | 46 s (incl. 9 s concept) | 82 s |
+  | hullweapon | 5000 / 1700 / 549 | 4998 / 1700 / 550 | 43 s | 140 s |
+  | shoulder | 1754 / 700 / 249 | 2000 / 698 / 201 | 44 s | 154 s |
+
+## Left, in order
+
+1. Keith compares the lanes in `labs/parts/` and picks one (or both: lane A for some kinds).
+2. More seeds (`--seed 2..3`) and the wreck kind.
+3. Then: legs (cut at the joints), and hooking parts into the loadout (the "show equipped hulls" thread owns the swap).
 
 ## Keith's calls (2026-11-01)
 
@@ -39,6 +61,13 @@ Keith 2026-10-31: stand up part and asset generation with a local splat model pl
   prefer lane B if that shows.
 - De-lighting only takes out one broad light plus ambient; hard cast shadows in a concept image would survive.
 - Shoulder and wreck parts aren't put on the Rampart yet, only on the stand.
+- TripoSplat aligns each object to its own frame, not the camera's: lane A's front (+x) was confirmed on the cannon
+  only. The hull and launcher agree with lane B on their long axis, but one could still sit back to front; if so,
+  rerun it with `--front -x`.
+- Lane A's lod1 can come in under budget (the hull's 2054 of 2200; the shoulder full level 1754 of 2000): the splat
+  meshing's resolution step is coarse at small budgets.
+- Lane B's time varies (54-154 s) with what else is on the GPU; ComfyUI's cache reruns only the decimator onward for
+  levels 1 and 2.
 
 ## Test
 

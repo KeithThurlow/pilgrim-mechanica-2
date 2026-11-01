@@ -1,5 +1,29 @@
 [
   {
+    "id": "hull-a-1",
+    "kind": "hull",
+    "lane": "a",
+    "label": "a single detached armoured torso shell of a giant robot, boxy angular industrial plating, small armoured cockpit visor at the front, flat underside, resting on the ground"
+  },
+  {
+    "id": "hull-b-1",
+    "kind": "hull",
+    "lane": "b",
+    "label": "a single detached armoured torso shell of a giant robot, boxy angular industrial plating, small armoured cockpit visor at the front, flat underside, resting on the ground"
+  },
+  {
+    "id": "hullweapon-a-1",
+    "kind": "hullweapon",
+    "lane": "a",
+    "label": "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground"
+  },
+  {
+    "id": "hullweapon-b-1",
+    "kind": "hullweapon",
+    "lane": "b",
+    "label": "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground"
+  },
+  {
     "id": "sample-hull",
     "kind": "hull",
     "lane": "a",
@@ -10,5 +34,17 @@
     "kind": "wreck",
     "lane": "a",
     "label": "sample: a made-up splat (blob)"
+  },
+  {
+    "id": "shoulder-a-1",
+    "kind": "shoulder",
+    "lane": "a",
+    "label": "a single compact missile launcher box, boxy armoured housing with a grid of missile tubes on its front face, resting on the ground"
+  },
+  {
+    "id": "shoulder-b-1",
+    "kind": "shoulder",
+    "lane": "b",
+    "label": "a single compact missile launcher box, boxy armoured housing with a grid of missile tubes on its front face, resting on the ground"
   }
 ]

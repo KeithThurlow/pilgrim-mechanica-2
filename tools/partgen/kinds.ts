@@ -58,17 +58,17 @@ export function loadKinds(models = "public/models"): Record<string, Kind> {
         Waist: [0.5, 0, 0.5], HullMount_L: arm("UpperArm_L", 1), HullMount_R: arm("UpperArm_R", -1),
         Sensor_Front: [0.5, 0.8, 1], Sensor_Top: [0.5, 1, 0.5], Pack: [0.5, 0.75, 0], Waist_L: [0.85, 0.1, 0.4], Waist_R: [0.15, 0.1, 0.4],
       },
-      prompt: "armoured hull of a bipedal walking mech, cockpit, no legs, no arms, boxy industrial plating",
+      prompt: "a single detached armoured torso shell of a giant robot, boxy angular industrial plating, small armoured cockpit visor at the front, flat underside, resting on the ground",
     },
     hullweapon: {
       id: "hullweapon", label: "Hull weapon (M)", box: size(pod), tris: [5000, 1700, 550], part: "Body", material: "Paint_plating",
       sockets: { Mount: [0.5, 0.5, 0.3], Muzzle_0: [0.5, 0.5, 1] },
-      prompt: "large mech weapon pod, heavy gun housing with a barrel facing forward",
+      prompt: "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground",
     },
     shoulder: {
       id: "shoulder", label: "Shoulder weapon", box: size(shoulder), tris: [2000, 700, 250], part: "Body", material: "Paint_plating",
       sockets: { Mount: [0.5, 0, 0.5], Muzzle_0: [0.5, 0.6, 1] },
-      prompt: "shoulder-mounted launcher for a mech, compact boxy housing",
+      prompt: "a single compact missile launcher box, boxy armoured housing with a grid of missile tubes on its front face, resting on the ground",
     },
     wreck: {
       id: "wreck", label: "Wreck (big POI piece)", box: [7, 3.5, 5], tris: [25000, 8000, 2500], part: "Part_Wreck", material: "Paint_plating",

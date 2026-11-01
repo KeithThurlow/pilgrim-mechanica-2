@@ -1,0 +1,29 @@
+{
+  "id": "shoulder-a-1",
+  "kind": "shoulder",
+  "lane": "a",
+  "seed": 1,
+  "front": "+x",
+  "up": "-y",
+  "yaw": "0",
+  "delight": 1,
+  "trisIn": [
+    1754,
+    878,
+    878
+  ],
+  "tris": [
+    1754,
+    700,
+    249
+  ],
+  "size": [
+    0.3207787788582031,
+    0.35312165627859887,
+    0.6000000238418579
+  ],
+  "made": "2026-11-01T05:11:10.504Z",
+  "prompt": "a single compact missile launcher box, boxy armoured housing with a grid of missile tubes on its front face, resting on the ground",
+  "image": "shots/partgen/raw/shoulder-1-concept.png",
+  "raw": "shots/partgen/raw/shoulder-1-lanea.ply"
+}
