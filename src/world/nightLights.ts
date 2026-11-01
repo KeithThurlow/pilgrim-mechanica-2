@@ -37,7 +37,7 @@ import { LampDraw } from "../fx/lampDraw";
 import { GunStreams, type GunStream } from "../fx/gunStreams";
 import { clusterLights, type LightCluster, type LightReq } from "./lightCluster";
 import {
-  LAMP_HEAD, LAMP_FLOOD, LAMP_ROBOT, LAMP_RUNNING, LAMP_CAB, LAMP_TAIL, LAMP_MECH, LAMP_KINDS,
+  LAMP_HEAD, LAMP_FLOOD, LAMP_ROBOT, LAMP_RUNNING, LAMP_CAB, LAMP_TAIL, LAMP_MECH, LAMP_ROBOT_GLOW, LAMP_KINDS,
   FAM_PLAYER, FAM_BANDIT, FAM_ROBOT,
   type LampKind, type LampSpot, type LampSource, type LampEmit, type LightFamily, type ShortLights, type ShortLightSource,
 } from "./lamps";
@@ -125,7 +125,14 @@ export const NIGHT_LIGHT_DEFAULTS = {
   robotReach: 9,
   robotAngle: 16,
   robotSweep: 35,
-  robotSweepRate: 0.3,
+  robotScanHold: 0.9,
+  robotScanSnap: 0.12,
+  robotScanOvershoot: 1.6,
+  robotScanNear: 0.25,
+  robotSmallGlow: 0.55,
+  robotSmallIdle: 0.6,
+  robotSmallPulse: 0.25,
+  robotSmallPulseRate: 0.7,
   robotGlow: 0.7,
   robotPool: 0.35,
   robotBeam: 0.14,
@@ -229,8 +236,15 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
 
   { key: "robotReach", label: "Eye beam lands at (m)", min: 2, max: 30, step: 0.5, group: GR },
   { key: "robotAngle", label: "Eye beam cone (°)", min: 4, max: 45, step: 1, group: GR },
-  { key: "robotSweep", label: "Sweep (°)", min: 0, max: 90, step: 1, group: GR, tip: "How far the beam swings either side of where the robot faces (none while it attacks)" },
-  { key: "robotSweepRate", label: "Sweeps per second", min: 0, max: 2, step: 0.01, group: GR },
+  { key: "robotSweep", label: "Scan arc (°)", min: 0, max: 90, step: 1, group: GR, tip: "How far either side of where the robot faces the searchlight steps to (none while it attacks: it snaps onto you)" },
+  { key: "robotScanHold", label: "Scan hold (s)", min: 0.2, max: 3, step: 0.05, group: GR, tip: "How long the searchlight sits on each spot before it snaps to the next (varies a little per robot)" },
+  { key: "robotScanSnap", label: "Scan snap (s)", min: 0.02, max: 1, step: 0.01, group: GR, tip: "How fast it slews to the next spot: short is a servo snap, long is a sweep" },
+  { key: "robotScanOvershoot", label: "Scan overshoot", min: 0, max: 4, step: 0.05, group: GR, tip: "How far it overshoots each spot and settles back (0: stops dead)" },
+  { key: "robotScanNear", label: "Scan near/far", min: 0, max: 0.6, step: 0.01, group: GR, tip: "How much each spot moves the beam's landing in or out (share of the reach)" },
+  { key: "robotSmallGlow", label: "Scrapper glow size (m)", min: 0, max: 2, step: 0.05, group: GR, tip: "Small robots have no searchlight, only a red glow" },
+  { key: "robotSmallIdle", label: "Scrapper glow at rest", min: 0, max: 1, step: 0.01, group: GR, tip: "Brightness while not attacking (attacking: full)" },
+  { key: "robotSmallPulse", label: "Scrapper glow pulse", min: 0, max: 1, step: 0.01, group: GR },
+  { key: "robotSmallPulseRate", label: "Scrapper pulses per second", min: 0, max: 3, step: 0.05, group: GR },
   { key: "robotGlow", label: "Eye glow size (m)", min: 0, max: 3, step: 0.05, group: GR },
   { key: "robotPool", label: "Eye pool", min: 0, max: 3, step: 0.01, group: GR },
   { key: "robotBeam", label: "Eye beam haze", min: 0, max: 1, step: 0.01, group: GR },
@@ -252,9 +266,10 @@ const LAMP_COLOR = 0xfff1c8;
 const KIND_COLOR: number[] = [];
 KIND_COLOR[LAMP_HEAD] = 0xffeccc; KIND_COLOR[LAMP_FLOOD] = 0xffd49a; KIND_COLOR[LAMP_ROBOT] = 0xff1a0c;
 KIND_COLOR[LAMP_RUNNING] = 0xffa040; KIND_COLOR[LAMP_CAB] = 0xffbf6a; KIND_COLOR[LAMP_TAIL] = 0xff2a18; KIND_COLOR[LAMP_MECH] = 0xfff1dc;
+KIND_COLOR[LAMP_ROBOT_GLOW] = 0xff1808;
 /** How much a kind wants a real light, before nearness. */
 const PRIO: number[] = [];
-PRIO[LAMP_HEAD] = 1.2; PRIO[LAMP_FLOOD] = 2; PRIO[LAMP_ROBOT] = 3; PRIO[LAMP_RUNNING] = 0; PRIO[LAMP_CAB] = 0.8; PRIO[LAMP_TAIL] = 0; PRIO[LAMP_MECH] = 0;
+PRIO[LAMP_HEAD] = 1.2; PRIO[LAMP_FLOOD] = 2; PRIO[LAMP_ROBOT] = 3; PRIO[LAMP_RUNNING] = 0; PRIO[LAMP_CAB] = 0.8; PRIO[LAMP_TAIL] = 0; PRIO[LAMP_MECH] = 0; PRIO[LAMP_ROBOT_GLOW] = 0;
 
 /** Per-kind values from the sliders, refreshed each frame. */
 interface KindLook { reach: number; tanHalf: number; angle: number; glow: number; pool: number; beam: number; real: number; spot: boolean; r: number; g: number; b: number }
@@ -557,6 +572,7 @@ export class NightLights implements ShortLights {
     set(LAMP_RUNNING, 0, 0, v.runningGlow, 0, 0, 0);
     set(LAMP_TAIL, 0, 0, v.tailGlow, 0, 0, 0);
     set(LAMP_CAB, 0, 0, v.cabGlow, 0, 0, v.cabReal, false);
+    set(LAMP_ROBOT_GLOW, 0, 0, v.robotSmallGlow, 0, 0, 0);
     set(LAMP_MECH, 0, v.headlampAngle, 0, 0, v.headlampBeam, 0);
   }
 
