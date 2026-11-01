@@ -131,7 +131,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
 - Fortress lab: `?kind=fortress|hub`, `?seed=N` (the layout), `?ring=N` (start in yard N, the gates out to it down),
   `?gates=open`, `?near` (just outside the outer wall), plus the combat-lab flags; the demo shoots the nearest gate down
-  and walks in (with `?kind=hub`, it shoots the fabricators down while they build robots); the keep holds the warlord;
+  and walks in (with `?kind=hub`, it shoots the fabricators down while they build robots, then fights the boss that
+  rolls out of the core); the keep holds the warlord; every `?seed=N` rolls a different shape;
   Shift+R puts it all back up.
 - Inventory (Keith 2026-11-01; convoy and loadout labs): I anywhere (or click the mech doll at the bottom right) opens it; `?inv[=slot]` starts with it open (on that slot). In the field its cargo is the at-risk list, limited by weight (Loot and cargo › Cargo).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth

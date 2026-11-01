@@ -14,7 +14,7 @@ import type { Register } from "../game/register";
 import { putMech } from "../game/registerOwners";
 import { ObjectSerials } from "../game/register";
 
-export const WARLORD_DEFAULTS = { warlordHull: 4500, warlordArmour: 9, warlordDamage: 1.3, warlordRange: 30, warlordDrops: 3, warlordLeash: 0.7 };
+export const WARLORD_DEFAULTS = { warlordHull: 4500, warlordArmour: 9, warlordDamage: 1.3, warlordRange: 30, warlordDrops: 5, warlordLeash: 0.7 };
 export type WarlordValues = typeof WARLORD_DEFAULTS;
 const G = "Fortress: warlord";
 export const WARLORD_PARAMS: Param[] = [
