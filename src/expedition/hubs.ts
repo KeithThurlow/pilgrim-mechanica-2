@@ -3,7 +3,10 @@
 // (src/pois/fabricators.ts). While a hub is awake (the mech came close, or a fabricator was hit) every standing
 // fabricator rolls out a batch of robots into the robot swarm every so often, up to a cap alive from that hub, hunting
 // the mech. A fabricator shot down builds nothing more; once all are down the hub is dead for the expedition, and the
-// roaming packs and raids stop leaning to its side (`bearing`, for src/expedition/threats.ts).
+// roaming packs and raids stop leaning to its side (`bearing`, for src/expedition/threats.ts). When the last tower
+// falls (or the core is stripped first) the core rolls out the hub's boss (Keith 2026-11-01: "I'm kind of expecting a
+// boss or something to come out"): for now a giant excavator from the robot parts, hunting the mech; killed, it drops
+// items (the loop rolls them on `hubBossDown`).
 //
 // Ownership: host (fabricator health, batches, the dead set); drawing (fabricatorsDraw) is cosmetic.
 // Ids: batch groups are `<hub id>/b<n>`, fabricators `<hub id>/f<n>` (stable from the seeded layout).
@@ -23,9 +26,10 @@ export const HUB_LIFE_DEFAULTS = {
   hubSpawn: 700, hubDrop: 1000, hubWake: 200, hubSleep: 450,
   hubBuildEvery: 22, hubBatch: 4, hubCap: 28, hubFirst: 6,
   hubMidShare: 0.25, hubBigShare: 0.06, hubPull: 2000,
+  hubBossDelay: 4, hubBossHp: 14, hubBossPower: 2.5, hubBossSize: 2.2, hubBossDrops: 4, hubCoreItems: 2,
 };
 export type HubLifeValues = typeof HUB_LIFE_DEFAULTS & { hubFabH: number };
-const G = "Manufacturing hub: production";
+const G = "Manufacturing hub: production", B = "Manufacturing hub: boss";
 export const HUB_LIFE_PARAMS: Param[] = [
   ...FAB_PARAMS,
   { key: "hubWake", label: "Wakes within (m)", min: 30, max: 800, step: 10, group: G, tip: "From the hub's centre; a hit on a fabricator wakes it too" },
@@ -37,6 +41,12 @@ export const HUB_LIFE_PARAMS: Param[] = [
   { key: "hubMidShare", label: "Cutters in a batch (share)", min: 0, max: 1, step: 0.01, group: G },
   { key: "hubBigShare", label: "Excavators in a batch (share)", min: 0, max: 1, step: 0.01, group: G },
   { key: "hubPull", label: "Packs and raids lean to a hub within (m)", min: 0, max: 6000, step: 50, group: G, tip: "0: packs and raids come from anywhere" },
+  { key: "hubBossDelay", label: "Boss rolls out after the last tower (s)", min: 0, max: 60, step: 0.5, group: B },
+  { key: "hubBossHp", label: "Boss health (× an excavator's)", min: 1, max: 60, step: 0.5, group: B },
+  { key: "hubBossPower", label: "Boss damage ×", min: 0.2, max: 8, step: 0.1, group: B },
+  { key: "hubBossSize", label: "Boss size ×", min: 1, max: 4, step: 0.05, group: B, tip: "Its legs, reach and hit box grow with it" },
+  { key: "hubBossDrops", label: "Items the boss drops", min: 0, max: 12, step: 1, group: B },
+  { key: "hubCoreItems", label: "Items in the core", min: 0, max: 12, step: 1, group: B, tip: "Rolled hot when the core is stripped" },
   { key: "hubSpawn", label: "Hub streamed in within (m)", min: 200, max: 2000, step: 10, group: G },
   { key: "hubDrop", label: "Hub streamed out past (m)", min: 300, max: 3000, step: 10, group: G },
 ];
@@ -44,12 +54,13 @@ export const HUB_LIFE_PARAMS: Param[] = [
 /** What the hub needs from the robot swarm (src/expedition/swarmCamps.ts). */
 export interface RobotSink {
   addGroup(id: string, n: number, x: number, z: number, shares?: { mid: number; big: number }, hurt?: number, goal?: { x: number; z: number }): void;
-  group(id: string): { n: number } | null;
+  addBoss(id: string, x: number, z: number, hpK: number, powerK: number, sizeK: number, goal?: { x: number; z: number }): number;
+  group(id: string): { n: number; x: number; z: number } | null;
 }
 
-export type HubEvent = FabEvent | { type: "hubWoke"; poi: string } | { type: "hubBatch"; poi: string; fab: string; n: number; x: number; z: number } | { type: "hubDead"; poi: string };
+export type HubEvent = FabEvent | { type: "hubWoke"; poi: string } | { type: "hubBatch"; poi: string; fab: string; n: number; x: number; z: number } | { type: "hubDead"; poi: string } | { type: "hubBossUp"; poi: string; x: number; z: number } | { type: "hubBossDown"; poi: string; x: number; z: number };
 
-interface LiveHub { p: PoiPlacement; L: HubLayout; floor: number; fabs: FabState[]; awake: boolean; t: number[]; groups: string[]; n: number }
+interface LiveHub { p: PoiPlacement; L: HubLayout; floor: number; fabs: FabState[]; awake: boolean; t: number[]; groups: string[]; n: number; bossT: number }
 
 export class Hubs {
   readonly fabs: Fabricators;
@@ -58,6 +69,8 @@ export class Hubs {
   private dead = new Set<string>();
   private kept = new Map<string, number>();
   private serial = new Map<string, number>();
+  /** Hubs whose boss came out (and where it was last seen, while it lives). */
+  private bosses = new Map<string, { x: number; z: number; down: boolean }>();
   onEvent: ((e: HubEvent) => void) | null = null;
 
   constructor(
@@ -81,8 +94,14 @@ export class Hubs {
   /** Everything forgotten (a new expedition, or the placement changed). */
   reset() {
     for (const h of [...this.live.values()]) this.despawn(h, false);
-    this.dead.clear(); this.kept.clear(); this.serial.clear();
+    this.dead.clear(); this.kept.clear(); this.serial.clear(); this.bosses.clear();
   }
+
+  /** Has the hub's boss come out (alive or dead)? */
+  bossOut(poi: string) { return this.bosses.has(poi); }
+
+  /** The core was stripped: the boss comes out now if it hasn't. */
+  summon(poi: string, m: { x: number; z: number }) { const h = this.live.get(poi); if (h) this.bossNow(h, m); }
 
   /** Bearing (the threats' `ring` angle) from (x, z) to the nearest working hub within hubPull, or undefined. */
   bearing(x: number, z: number): number | undefined {
@@ -105,6 +124,14 @@ export class Hubs {
     for (const h of [...this.live.values()]) if (Math.hypot(h.L.x - m.x, h.L.z - m.z) > v.hubDrop) this.despawn(h, true);
     for (const h of this.live.values()) {
       const d = Math.hypot(h.L.x - m.x, h.L.z - m.z);
+      // The boss: out after the last tower falls; tracked till it's dead.
+      if (this.dead.has(h.p.id) && !this.bosses.has(h.p.id) && hunting) { h.bossT -= dt; if (h.bossT <= 0) this.bossNow(h, m); }
+      const bz = this.bosses.get(h.p.id);
+      if (bz && !bz.down) {
+        const g = this.robots.group(`${h.p.id}/boss`);
+        if (g && g.n > 0) { bz.x = g.x; bz.z = g.z; }
+        else { bz.down = true; this.onEvent?.({ type: "hubBossDown", poi: h.p.id, x: bz.x, z: bz.z }); }
+      }
       if (!h.awake && hunting && d < v.hubWake) this.wake(h);
       if (h.awake && (!hunting || d > v.hubSleep)) h.awake = false;
       h.groups = h.groups.filter((id) => this.robots.group(id) !== null);
@@ -131,6 +158,15 @@ export class Hubs {
     this.draw.update();
   }
 
+  private bossNow(h: LiveHub, m: { x: number; z: number }) {
+    if (this.bosses.has(h.p.id)) return;
+    const v = this.v, x = h.L.x, z = h.L.z;
+    const i = this.robots.addBoss(`${h.p.id}/boss`, x, z, v.hubBossHp, v.hubBossPower, v.hubBossSize, { x: m.x, z: m.z });
+    if (i < 0) return;
+    this.bosses.set(h.p.id, { x, z, down: false });
+    this.onEvent?.({ type: "hubBossUp", poi: h.p.id, x, z });
+  }
+
   private count(h: LiveHub) { let n = 0; for (const id of h.groups) n += this.robots.group(id)?.n ?? 0; return n; }
 
   private wake(h: LiveHub) {
@@ -154,7 +190,7 @@ export class Hubs {
     const L = this.walls.layout(p) as HubLayout;
     if (!L.fabs) return;
     const floor = this.field.height(p.x, p.z) - wallHeight(L, p.x, p.z, this.walls.down);
-    const h: LiveHub = { p, L, floor, fabs: [], awake: false, t: [], groups: [], n: this.serial.get(p.id) ?? 0 };
+    const h: LiveHub = { p, L, floor, fabs: [], awake: false, t: [], groups: [], n: this.serial.get(p.id) ?? 0, bossT: this.v.hubBossDelay };
     for (const f of L.fabs) {
       h.fabs.push(this.fabs.add(p.id, f, floor, this.kept.get(f.id)));
       h.t.push(this.v.hubFirst + h.t.length * 1.5);

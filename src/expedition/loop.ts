@@ -87,7 +87,7 @@ export const LOOP_TOPICS = [
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
-  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production"] },
+  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
   { id: "loot", label: "Loot", groups: ["Loot", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
@@ -264,6 +264,9 @@ export class ExpeditionLoop {
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, banditThreat(v), x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
     this.sites.onLoot = (label, scrap, s) => {
       this.stripped++; this.exp.add({ kind: "scrap", amount: scrap, label }); this.loot.spotDone(s, scrap); this.quests?.stripped(s.poi);
+      // The big strips pay out items too (Keith 2026-11-01: fortresses should feel rewarding); the hub's core calls its boss.
+      if (s.label === "vault") this.hotDrops(`vault:${s.poi}`, v.fortVaultItems, s.x, s.z);
+      if (s.label === "core") { this.hotDrops(`core:${s.poi}`, v.hubCoreItems, s.x, s.z); this.hubs.summon(s.poi, player.sim.pelvis); }
       // Now and then a repair kit in the wreck (Keith 2026-10-31), by a hash of the spot (the same spot always does).
       if (kitRoll(s.id) < this.player.v.kitSalvage && this.player.kits.restock(1)) this.kitsFound++;
     };
@@ -293,7 +296,9 @@ export class ExpeditionLoop {
     this.hubs.onEvent = (e) => {
       if (e.type === "hubWoke") { this.hud.note("Manufacturing hub waking up", "#5ac8fa", 3); this.sound.alarm(); }
       else if (e.type === "fabDown") this.hud.note("Fabricator down", "#ffb347", 3);
-      else if (e.type === "hubDead") this.hud.note("Hub silenced: no more robots from there", "#5ac8fa", 4);
+      else if (e.type === "hubDead") this.hud.note("Hub silenced: something is waking in the core", "#5ac8fa", 4);
+      else if (e.type === "hubBossUp") { this.hud.note("The hub's guardian is coming out", "#ff5a3c", 5); this.sound.alarm(); }
+      else if (e.type === "hubBossDown") { this.hud.note("Guardian down", "#ffb347", 4); this.hotDrops(`hubboss:${e.poi}`, v.hubBossDrops, e.x, e.z); }
     };
     this.threats.from = (x, z) => this.hubs.bearing(x, z);
     this.field = field;
@@ -313,10 +318,16 @@ export class ExpeditionLoop {
       if (e.type !== "warlordDown") return;
       this.hud.note("Warlord down", "#ffb347", 4);
       if (this.exp.state !== "out") return;
-      const c = this.dropCtx(e.x, e.z);
-      for (let k = 0; k < Math.round(this.v.warlordDrops); k++)
-        this.loot.drops.roll(`warlord:${e.poi}:${k}`, 1, e.x + Math.sin(k * 2.4) * 3, e.z + Math.cos(k * 2.4) * 3, { ...c, danger: Math.min(1, c.danger + 0.5), heat: 1 });
+      this.hotDrops(`warlord:${e.poi}`, this.v.warlordDrops, e.x, e.z);
     };
+  }
+
+  /** n items round (x, z), rolled as if from deep, hot ground (bosses and vaults), out on an expedition only. */
+  private hotDrops(key: string, n: number, x: number, z: number) {
+    if (this.exp.state !== "out") return;
+    const c = this.dropCtx(x, z);
+    for (let k = 0; k < Math.round(n); k++)
+      this.loot.drops.roll(`${key}:${k}`, 1, x + Math.sin(k * 2.4) * 3, z + Math.cos(k * 2.4) * 3, { ...c, danger: Math.min(1, c.danger + 0.5), heat: 1 });
   }
 
   /** Where a drop rolls (loot rolls by depth and salvage heat). */

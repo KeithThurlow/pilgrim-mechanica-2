@@ -300,7 +300,8 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
 {
   const hub = sieges.find((p) => p.kind === "hub")!;
   const groups = new Map<string, number>();
-  const sink = { addGroup: (id: string, n: number) => { groups.set(id, n); }, group: (id: string) => (groups.has(id) ? { n: groups.get(id)! } : null) };
+  let boss: string | null = null;
+  const sink = { addGroup: (id: string, n: number) => { groups.set(id, n); }, addBoss: (id: string) => { boss = id; return 1; }, group: (id: string) => (id === boss ? { n: 1, x: hub.x, z: hub.z } : groups.has(id) ? { n: groups.get(id)!, x: hub.x, z: hub.z } : null) };
   const HV = { ...HUB_LIFE_DEFAULTS, hubFabH: V.hubFabH };
   const bf = { targets: [] as unknown[] } as unknown as Battlefield;
   const H = new Hubs(HV, w.field, bf, new THREE.Scene(), w.walls, sink, (x0, z0, x1, z1) => w.pois.poisIn(x0, z0, x1, z1));
@@ -328,11 +329,15 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   }
   for (let t = 0; t < 120; t += 0.1) H.update(0.1, true, near);
   if (groups.size) fail(`a dead hub built ${groups.size} batches`);
+  if (!boss || !ev.some((e) => e.type === "hubBossUp")) fail("no boss came out when the last tower fell");
+  boss = null; // killed
+  for (let t = 0; t < 2; t += 0.1) H.update(0.1, true, near);
+  if (ev.filter((e) => e.type === "hubBossDown").length !== 1) fail("the boss's death wasn't one hubBossDown");
   const deads = ev.filter((e) => e.type === "hubDead").length;
   if (deads !== 1 || !H.isDead(hub.id)) fail(`hubDead fired ${deads} times`);
   const b2 = H.bearing(hub.x + 900, hub.z);
   if (b2 !== undefined && b !== undefined && Math.abs(b2 - b) < 1e-6) fail("packs still lean to a dead hub");
-  console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches`);
+  console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches, the boss out and down once`);
 }
 
 if (problems.length) { console.log(`FAIL ${problems.length} problem(s)`); throw new Error("fortress check failed"); }

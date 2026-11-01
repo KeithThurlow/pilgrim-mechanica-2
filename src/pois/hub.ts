@@ -1,7 +1,7 @@
 // Tier 5, Siege: a robot manufacturing hub (Keith 2026-10-31, docs/proposal-fortresses.md): where the robots come
 // from. A pit of machinery inside a ring of slag and wreckage with a few wide openings (no gates: the robots come and
-// go), fabricator towers round a core at the centre. The towers will build robots while the hub is awake until
-// they're destroyed (the glue, later); then the core is the big strip.
+// go), fabricator towers round a core at the centre. The towers build robots while the hub is awake until they're
+// shot down (src/expedition/hubs.ts); then the core sends out its boss, and the core is a quick, rich strip.
 //
 // Pure and seeded: `hubLayout` (the ring the ground reads, the fabricators) and `buildHub` (the POI site).
 import type { Param } from "../core/tweaks";
@@ -18,9 +18,9 @@ export const HUB_DEFAULTS = {
   hubFabR: 32,
   hubFabH: 14,
   hubFabValue: 70,
-  hubFabTime: 5,
+  hubFabTime: 3,
   hubCoreValue: 520,
-  hubCoreTime: 12,
+  hubCoreTime: 4,
   hubClutter: 60,
 };
 export type HubValues = typeof HUB_DEFAULTS & { hubPad: number };
