@@ -961,7 +961,8 @@ export class Arsenal implements MechWeapons {
       if (!s.kind) { out.push(`${b} —`); return; }
       const g = u.upper.guns[i];
       let state = "";
-      if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
+      if (s.kind === "melee") state = s.sword.phase === "idle" ? "click to swing, hold to keep swinging" : s.sword.phase;
+      else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
       else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;
       else state = `${Math.ceil(g.ammo)}/${g.mag.size}`;
