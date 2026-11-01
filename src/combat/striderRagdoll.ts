@@ -22,7 +22,7 @@ export function striderRagdoll(s: Strider, groundY: number): { parts: PartSpec[]
   const pelvis = s.up(0);
   for (const f of s.sim.feet) {
     const p = f.pose, k = parts.length;
-    parts.push(segPart(loc(p.hip), loc(p.knee), 0.3 * S, P.plate, 700), segPart(loc(p.knee), loc(p.hock), 0.2 * S, P.plateDim, 500), segPart(loc(p.hock), loc(p.toe), 0.14 * S, P.dark, 400));
+    parts.push(segPart(loc(p.hip), loc(p.knee), 0.3 * S, P.plate, 700), segPart(loc(p.knee), loc(p.hock), 0.2 * S, P.plateDim, 500), segPart(loc(p.hock), loc(p.foot), 0.14 * S, P.dark, 400));
     joints.push({ a: 0, b: k, at: loc(pelvis, 1) }, { a: k, b: k + 1, at: loc(p.knee) }, { a: k + 1, b: k + 2, at: loc(p.hock) });
   }
   // The arms, shoulder to hand, hung off the chest.

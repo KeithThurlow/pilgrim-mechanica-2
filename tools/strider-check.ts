@@ -97,6 +97,29 @@ if (a.beamAfterSlam) fail(`${a.beamAfterSlam} beams within 2 s of a slam`);
 pack.hit(s, s.health + 1);
 pack.hit(s, 100);
 if (s.alive || pack.kills !== 1) fail(`kill: alive ${s.alive}, kills ${pack.kills}`);
+// The grab (Keith 2026-11-01): a prey standing in reach gets struck and torn; one that steps out during the wind-up
+// doesn't get struck.
+function grab(dodge: boolean) {
+  const v = { ...STRIDER_DEFAULTS };
+  const pack = new Striders(v, field, 9);
+  const s = pack.spawn(0, 0, 0);
+  s.slamClock = 1e9; s.beamClock = 1e9; s.meleeClock = 0;
+  const p0 = s.pos();
+  const prey = { x: p0.x, y: 0, z: p0.z + 5, vx: 0, vz: 0, alive: true };
+  let strikes = 0, tears = 0, damage = 0, winds = 0;
+  pack.onEvent = (e) => {
+    if (e.type === "meleeWind") { winds++; if (dodge) prey.z = p0.z + 30; }
+    if (e.type === "melee") { if (e.kind === "strike") strikes++; else tears++; damage += e.damage; }
+  };
+  for (let t = 0; t < (dodge ? 2.5 : 6); t += dt) { prey.y = field.height(prey.x, prey.z) + 2; pack.update(dt, prey, () => true); }
+  return { strikes, tears, damage, winds };
+}
+{
+  const g = grab(false), d = grab(true);
+  console.log(`  grab: ${g.winds} wind-ups, ${g.strikes} strikes, ${g.tears} tear ticks, ${Math.round(g.damage)} damage in 6 s · dodged: ${d.strikes} strikes`);
+  if (g.strikes < 1 || g.tears < 1) fail("no grab landed on a prey standing in reach");
+  if (d.winds < 1 || d.strikes > 0) fail("a grab struck a prey that stepped out of reach during the wind-up");
+}
 // Same seed, same run.
 const b = run(3);
 { const k = aLog.findIndex((x, i) => x !== b.log[i]); if (k >= 0 || aLog.length !== b.log.length) fail(`two runs with the same seed differ at event ${k}: ${aLog[k]} vs ${b.log[k]} (${aLog.length}/${b.log.length} events)`); }
