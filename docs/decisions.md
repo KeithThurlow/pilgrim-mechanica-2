@@ -4,6 +4,8 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Hot sand lights the ground round it at night; no smoke off it yet | Keith | Keith | `GroundHeat.lights` → night lights' held lights. |
+| 2026-11-01 | Hot sand light details (Claude, Keith to tune): glow gathered into 6 m patches, the brightest 6 ask for a real light (900 per m² of full glow), ranked under blasts (priority 0.7); still looks only, no damage to a pilot on foot (Keith didn't say: open) | Claude | Claude | Sliders in Light › Hot sand: night light. |
 | 2026-11-01 | Beam attacks telegraph with the real beam: thin and weak from the start of the charge, growing in width, damage and sand blast, sweeping toward the player; the same for every big beam user (walkers, striders). The ground blast charges a thin beam, pulses down and explodes in light; its reach a faint soft ring | Keith | Keith | `src/combat/beamCore.ts`. |
 | 2026-11-01 | Beam growth values (Claude, Keith to tune): starts at 10% width and 4% power, growth curve 2.2, drags at 2 m/s while charging and 4.5 after, so moving off early clears it | Claude | Claude | Sliders in Robots: beam and Striders: beam. |
 | 2026-11-01 | Beam weapons leave red-hot sand trails that cool over time; the hotter the weapon, the hotter the sand; explosions barely warm | Keith (a friend's idea) | Keith | `src/fx/groundHeat.ts`. |

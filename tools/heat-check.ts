@@ -104,5 +104,29 @@ function glowTime(temp: number, line = true) {
   ok(ms < 1.5, `4 sweeping beams + 30 ignited hits a frame: ${ms.toFixed(2)} ms/frame, ${h.stats.active} cells warm`);
 }
 
+// 8. Night light: glowing sand gathers into a few patches along the line; none once it stops glowing.
+{
+  const h = new GroundHeat(v);
+  h.update(DT, 0, 0);
+  h.line(-20, 0, 20, 0, 0.5, v.heatBeam);
+  h.update(DT, 0, 0);
+  const out = new Float32Array(5 * 16);
+  const n = h.lights(out);
+  let near = true, pow = 0;
+  for (let k = 0; k < n; k++) { if (Math.abs(out[k * 5 + 1]) > 1 || Math.abs(out[k * 5]) > 21) near = false; pow += out[k * 5 + 2]; }
+  ok(n > 0 && n <= v.heatLights, `a 40 m beam trail asks for ${n} lights (at most ${v.heatLights})`);
+  ok(near, "each light sits on the trail");
+  console.log(`     glowing area ${pow.toFixed(1)} m² of full glow → ${(pow * v.heatLight / Math.max(1, n)).toFixed(0)} power per light`);
+  let t = 0;
+  while (h.lights(out) > 0 && t < 60) { h.update(0.1, 0, 0); t += 0.1; }
+  ok(t > 3 && t < 15, `lights go out with the glow, after ${t.toFixed(1)} s`);
+  const g = new GroundHeat(v); g.update(DT, 0, 0);
+  for (let b = 0; b < 4; b++) g.line(-40 + b * 5, -30, -30 + b * 20, 30, 0.8, v.heatBeam);
+  g.update(DT, 0, 0);
+  const t0 = performance.now();
+  for (let k = 0; k < 100; k++) g.lights(out);
+  ok((performance.now() - t0) / 100 < 0.5, `gathering 4 beams' glow: ${((performance.now() - t0) / 100).toFixed(3)} ms`);
+}
+
 if (fails) { console.log(`${fails} failed`); process.exit(1); }
 console.log("heat check passed");
