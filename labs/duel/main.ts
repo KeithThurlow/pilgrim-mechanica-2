@@ -218,8 +218,22 @@ const box = document.createElement("div");
 box.className = "duel-box";
 document.body.appendChild(box);
 const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", shrpg: "shoulder rocket", mortar: "big mortar", linemortar: "line mortar", missiles: "missile pod" };
+// A fixed rival-number box (type or use the arrows); it never moves with the rival's item list.
+const picker = document.createElement("label");
+picker.style.cssText = "position:fixed;left:12px;top:12px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:4px 8px;border-radius:4px;font:12px sans-serif";
+picker.append("Rival # ");
+const seedInput = document.createElement("input");
+seedInput.type = "number"; seedInput.min = "1"; seedInput.step = "1"; seedInput.style.width = "70px";
+seedInput.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") seedInput.blur(); });
+seedInput.addEventListener("change", () => {
+  const n = Math.max(1, Math.floor(Number(seedInput.value) || 1));
+  reroll(n - rivalSeed);
+});
+picker.appendChild(seedInput);
+document.body.appendChild(picker);
 function board() {
   if (!rivalLo) return;
+  seedInput.value = String(rivalSeed);
   const ctl = (k: KitWeapon) => ("trigger" in k.ctl ? (k.ctl.trigger === 0 ? "L" : "R") : `key ${k.ctl.key}`);
   box.innerHTML = `<div class="row"><b>Rival ${rivalSeed}</b> <span class="muted">level ${rivalLevel} (you ${playerLo ? loadoutLevel(playerLo) : 1}${V.rivalUp ? (V.rivalUp > 0 ? " +" : " ") + Math.round(V.rivalUp) : ""}) · DPS ${Math.round(loadoutDps(rivalLo))} vs yours ${playerLo ? Math.round(loadoutDps(playerLo)) : 0}</span><button data-a="prev">◀</button><button data-a="next">Reroll ▶</button></div>`
     + `<div class="muted">${kit.map((k) => `${ctl(k)} ${KIND_NAME[k.kind]}`).join(" · ")} · likes ${Math.round(V.aiRange || preferredRange(kit))} m · hull ${rival.maxHealth}</div>`

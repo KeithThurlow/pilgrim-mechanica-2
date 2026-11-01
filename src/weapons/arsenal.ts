@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, lungeIntent, sweepTimes, swordCuts, clipPose, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
+import { SwordSim, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -453,7 +453,10 @@ export class Arsenal implements MechWeapons {
     const st = this.swordStats(s);
     // Close or far (Keith 2026-11-01): the cut's reach from how far off the aim is (the lock, else the cursor), on the
     // lunge's scale: within its no-lunge distance the bent-elbow draw cut, from its full-lunge distance the full sweep.
-    const sweep = sw.update(dt, held, st, v, this.reachShare());
+    // Scrubbing (a look slider): the arm held at a point of A (0..1) or B (1..2), at the aim's reach; no cuts.
+    const scrub = v.swordScrub > 0 ? { clip: (v.swordScrub <= 1 ? "A" : "B") as "A" | "B", share: v.swordScrub <= 1 ? v.swordScrub : v.swordScrub - 1, span: this.reachShare() } : null;
+    const sweep = scrub ? null : sw.update(dt, held, st, v, this.reachShare());
+    if (scrub) sw.lungeK = 0;
     if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
     // The hull's frame and this side's shoulder in it (a body without them: a frame on the pelvis along the torso).
     const frame = this.frame;
@@ -475,7 +478,7 @@ export class Arsenal implements MechWeapons {
     // sword's pose is in the drawn hull's frame, so the sword (and its cut) turns with the waist.
     body.setTwist?.(Math.max(-tmax, Math.min(tmax, total)));
     const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
-    const pose = sw.pose(shoulder, aimYaw, st, v);
+    const pose = scrub ? clipPose(scrub.clip, scrub.share * clipLength(scrub.clip, st, v, scrub.span), sw.side, shoulder, aimYaw, st, v, scrub.span) : sw.pose(shoulder, aimYaw, st, v);
     const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, out: v.swordShoulderOut };
     body.holdPose?.(sw.side, u.alive ? armed : null);
     // The hand in the world (the arm may have pulled it in to its reach: the model's pivot is where it really is).
@@ -555,11 +558,11 @@ export class Arsenal implements MechWeapons {
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       bf.gunFx.sparksAt(at, kd, blocked ? 26 : 10, blocked ? 14 : 9);
       if (blocked) {
-        bf.sfx.playSound("swordBlock", at, 1.2, 0.9 + Math.random() * 0.2);
+        bf.sfx.playSound("swordBlock", at, 1.7, 0.92 + Math.random() * 0.16);
         s.sword.bite(v.swordBlockStall);
       }
       bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
-      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
+      if (!blocked) bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
       if (!s.bit) {
         s.bit = true;
         s.sword.bite(v.swordHitch);
@@ -604,7 +607,10 @@ export class Arsenal implements MechWeapons {
       const score = Math.abs(off) - (s.sword.blocking ? 10 : 0);
       if (Math.abs(off) <= half && score < best) { best = score; pick = s; }
     }
+    const fresh = !pick?.sword.blocking;
     if (!pick || !pick.sword.block(v)) return 1;
+    // The block swinging up (Keith 2026-11-01: "I need a sound for it"): a quick heavy whoosh as the blade comes up.
+    if (fresh) this.bf.sfx.playSound("swordSwing", this.tmp3.set(u.sim.pos.x, u.sim.pelvis.y + 1.5, u.sim.pos.z), 0.9, 1.25);
     return v.swordBlockTake;
   }
 
