@@ -16,7 +16,7 @@ export const HEAT_DEFAULTS = {
   heatArea: 104,
   heatRes: 256,
   heatCool: 6,
-  heatRise: 0.12,
+  heatRise: 0.05,
   heatSpread: 1,
   heatGlowFrom: 480,
   heatGlow: 2.2,

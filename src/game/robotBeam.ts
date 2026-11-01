@@ -12,6 +12,8 @@ import type { RobotBeamEvent, RobotPulseEvent } from "../combat/robots";
 
 const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
+/** Where each beam (by robot id) struck on its last tick, so a sweep's red-hot trail joins up. Cosmetic. */
+const lastStrike = new Map<number, { x: number; z: number }>();
 
 /** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
 export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0,
@@ -31,6 +33,12 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.marks.furrow(s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width * 0.8, 0);
     bf.dust.stomp(t.x, t.y, t.z, 0.6);
     if (dig > 0 && (e.tick & 1) === 0) bf.queueDent(t.x, t.z, (e.width * dig) / Math.max(0.05, (bf.v as { craterRadiusShare?: number }).craterRadiusShare ?? 0.7));
+    // Red-hot sand: the strike dragged from where the last tick struck to here, and the last few metres of the line.
+    const hk = heat * (e.heat ?? 1), dtk = Math.max(0.02, (bf.v as { robotBeamTick?: number }).robotBeamTick ?? 0.1);
+    const was = lastStrike.get(e.id);
+    if (was) burnBeam(bf, was.x, was.z, t.x, t.z, e.width, hk, dtk);
+    burnBeam(bf, s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width, hk, dtk);
+    lastStrike.set(e.id, { x: t.x, z: t.z });
     return shot.result.steps.length;
   }
   // A furrow burnt along the sand in pieces, dust thrown up along it, and a crack at the emitter and where it strikes.
@@ -43,9 +51,9 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
-  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts; a sweeping beam would paint each tick
-  // with dt so the sand heats as the beam dwells).
-  burnBeam(bf, s.x, s.z, t.x, t.z, e.width, heat);
+  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts); the sweep's ticks drag it on.
+  burnBeam(bf, s.x, s.z, t.x, t.z, e.width, heat * (e.heat ?? 1));
+  lastStrike.set(e.id, { x: t.x, z: t.z });
   // The trench: craters down the low part of the line, one per width or so (queued, so a long line doesn't stall).
   if (dig > 0) {
     const r = e.width * dig, step = Math.max(1, r * 1.2), m = Math.min(60, Math.floor(flat / step));
