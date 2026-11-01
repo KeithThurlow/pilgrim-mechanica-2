@@ -4,8 +4,10 @@
 // The look (Keith 2026-11-01): sci-fi, not construction. White cylindrical plates are the key feature, the mechanical
 // bits between them dark and squarish; wiry: thin rods for the legs' bones with white sleeves on them, a slim
 // cylindrical chest over an exposed spine and a small abdomen ring (thorax and abdomen), long thin arms hanging, and a
-// wide disc head (his Pinterest reference: a wiry mech with a disc head). A red seeker eye and laser on the head's
-// rim (red is seeking), a blue emitter under its front (blue is the weapon). Pipes and cables dangle off it, swaying
+// wide disc head (his Pinterest reference: a wiry mech with a disc head). Third pass (Keith 2026-11-01): no toes (pegs);
+// the hull a thin wide disc on a thin spine, leaning toward its prey, the shoulders on its rim; blades and claws on the
+// long arms, a grab-and-tear with a scary wind-up. A red seeker eye and laser running round the disc's rim (red is
+// seeking), a blue emitter under its front (blue is the weapon). Pipes and cables dangle off it, swaying
 // on springs (no physics). About 3k triangles.
 import * as THREE from "three/webgpu";
 import type { LegPose } from "../mech/walker";
@@ -33,6 +35,12 @@ const cyl = (seg: number) => new THREE.CylinderGeometry(0.5, 0.5, 1, seg).transl
 const ROD = cyl(6), SLEEVE = cyl(12), DRUM = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
 const BOX = new THREE.BoxGeometry(1, 1, 1), BALL = new THREE.SphereGeometry(0.5, 10, 8);
 const DISC = new THREE.CylinderGeometry(1, 1, 1, 28);
+// The disc's shallow lens: wide at the rim, narrowing to the middle (unit height, origin in the middle).
+const LENS_TOP = new THREE.CylinderGeometry(0.62, 1, 1, 32);
+const LENS_BOTTOM = new THREE.CylinderGeometry(1, 0.5, 1, 32);
+// A leg's peg: a white cuff tapering to the pad.
+const PEG = new THREE.CylinderGeometry(0.075, 0.035, 0.32, 10).translate(0, 0.16, 0);
+const D2R = Math.PI / 180;
 
 function part(geo: THREE.BufferGeometry, m: THREE.Material, parent: THREE.Object3D, size?: [number, number, number], at?: [number, number, number], rot?: [number, number, number]) {
   const mesh = new THREE.Mesh(geo, m);
@@ -72,13 +80,18 @@ interface Leg {
 interface Cable { a: THREE.Object3D; b: THREE.Object3D | null; len: number; sag: number; segs: THREE.Mesh[]; mid: THREE.Vector3; vel: THREE.Vector3; r: number; init: boolean }
 const CABLE_SEGS = 6;
 
+/** An arm: its joints, its three claws' hinges, and where its pose has eased to (shoulder x and z, elbow, claw spread). */
+interface Arm { pivot: THREE.Group; elbow: THREE.Group; claws: THREE.Group[]; x: number; z: number; e: number; spread: number }
+
 export class StriderBody {
   readonly root = new THREE.Group();
   /** Everything above the hips, turned by the torso's yaw. */
   private torso = new THREE.Group();
-  private head = new THREE.Group();
+  /** The hull disc (leaning toward the prey) and the seeker running round its rim. */
+  private disc = new THREE.Group();
+  private eyeYaw!: THREE.Group;
   private pelvis = new THREE.Group();
-  private arms: { pivot: THREE.Group; elbow: THREE.Group }[] = [];
+  private arms: Arm[] = [];
   private legs: Leg[];
   private cables: Cable[] = [];
   private eye: THREE.Mesh;
@@ -96,96 +109,105 @@ export class StriderBody {
     // Hips: a dark block with a white drum across it.
     part(BOX, MAT.dark, this.pelvis, [0.9, 0.34, 0.5]);
     part(DRUM, MAT.plate, this.pelvis, [0.42, 1.3, 0.42], [0, 0.04, 0], [0, 0, Math.PI / 2]);
-    // A short waist: three bare rods up to the chest, through a small white abdomen ring.
+    // The spine: three thin bare rods from the hips up to the disc, through a small white abdomen ring.
     const T = this.torso;
     for (let k = 0; k < 3; k++) {
       const a = (k / 3) * Math.PI * 2;
-      part(ROD, MAT.rod, T, [0.07, F.chestLow - 0.1, 0.07], [Math.sin(a) * 0.14, 0.1, Math.cos(a) * 0.14 - 0.04]);
+      part(ROD, MAT.rod, T, [0.06, F.head - 0.1, 0.06], [Math.sin(a) * 0.11, 0.05, Math.cos(a) * 0.11]);
     }
-    part(SLEEVE, MAT.plate, T, [0.56, 0.16, 0.56], [0, F.waist, -0.02]);
-    part(SLEEVE, MAT.joint, T, [0.46, 0.06, 0.46], [0, F.waist - 0.04, -0.02]);
-    // The chest: short, a white cylinder with a dark band, a square vent at the front and a pack behind.
-    const ch = F.chestTop - F.chestLow;
-    part(SLEEVE, MAT.plate, T, [F.chestR * 2, ch, F.chestR * 2], [0, F.chestLow, 0]);
-    part(SLEEVE, MAT.dark, T, [F.chestR * 2.06, 0.08, F.chestR * 2.06], [0, F.chestLow + ch * 0.3, 0]);
-    part(SLEEVE, MAT.plateDim, T, [F.chestR * 1.7, 0.1, F.chestR * 1.7], [0, F.chestLow - 0.08, 0]);
-    part(BOX, MAT.dark, T, [0.28, 0.2, 0.12], [0, F.chestLow + ch * 0.62, F.chestR - 0.02]);
-    part(BOX, MAT.joint, T, [0.2, 0.05, 0.13], [0, F.chestLow + ch * 0.62 + 0.07, F.chestR + 0.02]);
-    part(BOX, MAT.plateDim, T, [0.5, 0.48, 0.3], [0, F.chestLow + ch * 0.5, -F.chestR - 0.07]);
-    part(BOX, MAT.joint, T, [0.12, 0.4, 0.08], [0.15, F.chestLow + ch * 0.5, -F.chestR - 0.25]);
-    part(BOX, MAT.joint, T, [0.12, 0.4, 0.08], [-0.15, F.chestLow + ch * 0.5, -F.chestR - 0.25]);
-    // Wide shoulders: a white drum across the top of the chest out to square dark housings, a white cap on each.
-    part(DRUM, MAT.plate, T, [0.3, F.shoulderX * 2 - 0.3, 0.3], [0, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
-    part(DRUM, MAT.dark, T, [0.34, 0.1, 0.34], [F.shoulderX * 0.45, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
-    part(DRUM, MAT.dark, T, [0.34, 0.1, 0.34], [-F.shoulderX * 0.45, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
-    for (const sx of [1, -1]) {
-      part(BOX, MAT.joint, T, [0.3, 0.34, 0.36], [sx * F.shoulderX, F.shoulderY, 0]);
-      part(SLEEVE, MAT.plate, T, [0.5, 0.14, 0.52], [sx * (F.shoulderX + 0.02), F.shoulderY + 0.16, 0]);
-      part(BOX, MAT.plateDim, T, [0.08, 0.3, 0.42], [sx * (F.shoulderX + 0.2), F.shoulderY - 0.02, 0]);
+    part(SLEEVE, MAT.plate, T, [0.42, 0.14, 0.42], [0, F.waist, 0]);
+    part(SLEEVE, MAT.joint, T, [0.34, 0.05, 0.34], [0, F.waist - 0.04, 0]);
+    part(SLEEVE, MAT.plateDim, T, [0.3, 0.3, 0.3], [0, F.head * 0.55, 0]);
+    part(SLEEVE, MAT.joint, T, [0.38, 0.1, 0.38], [0, F.head - 0.2, 0]);
+    // The hull: a thin wide disc, a shallow lens (white above, dim below, a dark rim), leaning toward what it faces.
+    this.disc.position.set(0, F.head, 0);
+    T.add(this.disc);
+    const D = this.disc, R = F.headR;
+    part(LENS_TOP, MAT.plate, D, [R, F.headH * 0.55, R], [0, F.headH * 0.3, 0]);
+    part(LENS_BOTTOM, MAT.plateDim, D, [R, F.headH * 0.6, R], [0, -F.headH * 0.25, 0]);
+    part(DISC, MAT.dark, D, [R * 1.025, 0.045, R * 1.025]);
+    part(DISC, MAT.plate, D, [R * 0.3, F.headH * 0.5, R * 0.3], [0, F.headH * 0.55, 0]);
+    part(DISC, MAT.joint, D, [R * 0.42, 0.05, R * 0.42], [0, -F.headH * 0.6, 0]);
+    for (let k = 0; k < 6; k++) {
+      // Dark ribs out across the top, and square vents between them.
+      const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      part(BOX, MAT.dark, D, [0.05, 0.03, R * 0.62], [Math.sin(a) * R * 0.62, F.headH * 0.42, Math.cos(a) * R * 0.62], [0, a, 0]);
+      const b = a + Math.PI / 6;
+      part(BOX, MAT.joint, D, [0.16, 0.025, 0.12], [Math.sin(b) * R * 0.78, F.headH * 0.26, Math.cos(b) * R * 0.78], [0, b, 0]);
     }
-    // Neck: short; the head sits low between the shoulders.
-    part(ROD, MAT.rod, T, [0.12, F.head - F.chestTop, 0.12], [0, F.chestTop, 0.04]);
-    part(SLEEVE, MAT.joint, T, [0.3, 0.08, 0.3], [0, F.chestTop, 0.04]);
-    // The head: a white disc, a dark rim and underside, a red seeker eye on the front of the rim.
-    this.head.position.set(0, F.head, 0.06);
-    T.add(this.head);
-    const H = this.head;
-    part(DISC, MAT.plate, H, [F.headR, F.headH, F.headR]);
-    part(DISC, MAT.plateDim, H, [F.headR * 0.55, F.headH * 0.7, F.headR * 0.55], [0, F.headH * 0.6, 0]);
-    part(DISC, MAT.dark, H, [F.headR * 1.04, 0.04, F.headR * 1.04], [0, -F.headH * 0.2, 0]);
-    part(DISC, MAT.joint, H, [F.headR * 0.62, 0.06, F.headR * 0.62], [0, -F.headH * 0.55, 0]);
-    this.eye = part(BOX, MAT.seek, H, [0.22, 0.04, 0.05], [0, 0.0, F.headR + 0.01]);
+    // The seeker: a red eye that runs round the disc's rim (its sweep), with its laser.
+    this.eyeYaw = new THREE.Group();
+    D.add(this.eyeYaw);
+    this.eye = part(BOX, MAT.seek, this.eyeYaw, [0.26, 0.05, 0.05], [0, 0, R + 0.02]);
     this.eye.castShadow = false;
-    part(BOX, MAT.seek, H, [0.04, 0.03, 0.04], [0.2, 0.0, F.headR - 0.05]).castShadow = false;
-    part(BOX, MAT.seek, H, [0.04, 0.03, 0.04], [-0.2, 0.0, F.headR - 0.05]).castShadow = false;
-    // The seeker's laser: a thin red line out of the eye (length set each frame).
+    part(BOX, MAT.seek, this.eyeYaw, [0.05, 0.035, 0.04], [0.22, 0, R - 0.02]).castShadow = false;
+    part(BOX, MAT.seek, this.eyeYaw, [0.05, 0.035, 0.04], [-0.22, 0, R - 0.02]).castShadow = false;
     this.laserMat = glowMaterial(P.seek, true);
     this.laser = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 5, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), this.laserMat);
-    this.laser.position.set(0, 0, F.headR);
+    this.laser.position.set(0, 0, R + 0.02);
     this.laser.frustumCulled = false;
-    H.add(this.laser);
-    // The blue emitter under the head's front: a dark collar, a blue core, a halo that grows with a charge.
+    this.eyeYaw.add(this.laser);
+    // The blue emitter under the disc's front: a dark collar, a blue core, a halo that grows with a charge.
     const emit = new THREE.Group();
     emit.position.set(0, F.emitY - F.head, F.emitZ);
-    H.add(emit);
-    part(SLEEVE, MAT.joint, emit, [0.2, 0.08, 0.2], [0, -0.02, 0]);
-    this.emitCore = part(BALL, new THREE.MeshBasicMaterial({ color: P.beam, toneMapped: false }), emit, [0.13, 0.13, 0.13], [0, -0.04, 0]);
+    D.add(emit);
+    part(SLEEVE, MAT.joint, emit, [0.24, 0.08, 0.24], [0, -0.02, 0]);
+    this.emitCore = part(BALL, new THREE.MeshBasicMaterial({ color: P.beam, toneMapped: false }), emit, [0.15, 0.15, 0.15], [0, -0.04, 0]);
     this.emitCore.castShadow = false;
     this.haloMat = glowMaterial(P.beam, true);
     this.emitHalo = new THREE.Mesh(BALL, this.haloMat);
     this.emitHalo.position.set(0, -0.04, 0);
     emit.add(this.emitHalo);
-    // Arms: very long, hanging nearly to the sand off the wide shoulders; a white sleeve over the upper arm's rod, a
-    // dark elbow, a long white forearm, a heavy square wrist and long claws.
+    // Shoulders on the disc's rim (on its tilt axis, so they stay put as it leans): a dark bracket from the rim, a
+    // square housing and a white cap.
+    for (const sx of [1, -1]) {
+      part(BOX, MAT.dark, T, [0.22, 0.12, 0.26], [sx * (F.headR - 0.02), F.shoulderY, 0]);
+      part(BOX, MAT.joint, T, [0.24, 0.3, 0.32], [sx * F.shoulderX, F.shoulderY, 0]);
+      part(SLEEVE, MAT.plate, T, [0.38, 0.1, 0.42], [sx * F.shoulderX, F.shoulderY + 0.14, 0]);
+    }
+    // Arms: very long, hanging nearly to the sand. A white sleeve over the upper arm's rod, a dark elbow, a white
+    // forearm with a long dark blade down its outside past the wrist, a blue cutter lamp at the wrist, three long
+    // hooked claws on hinges.
+    const lampMat = new THREE.MeshBasicMaterial({ color: P.beam, toneMapped: false });
     for (const sx of [1, -1]) {
       const pivot = new THREE.Group();
       pivot.position.set(sx * F.shoulderX, F.shoulderY, 0);
       T.add(pivot);
-      part(BALL, MAT.joint, pivot, [0.26, 0.26, 0.26]);
+      part(BALL, MAT.joint, pivot, [0.24, 0.24, 0.24]);
       part(ROD, MAT.rod, pivot, [0.08, F.upperArm, 0.08], [0, -F.upperArm, 0]);
-      part(SLEEVE, MAT.plate, pivot, [0.26, F.upperArm * 0.62, 0.26], [0, -F.upperArm * 0.78, 0]);
-      part(SLEEVE, MAT.dark, pivot, [0.28, 0.06, 0.28], [0, -F.upperArm * 0.5, 0]);
+      part(SLEEVE, MAT.plate, pivot, [0.24, F.upperArm * 0.62, 0.24], [0, -F.upperArm * 0.78, 0]);
+      part(SLEEVE, MAT.dark, pivot, [0.26, 0.05, 0.26], [0, -F.upperArm * 0.5, 0]);
       const elbow = new THREE.Group();
       elbow.position.set(0, -F.upperArm, 0);
       pivot.add(elbow);
       part(BALL, MAT.joint, elbow, [0.2, 0.2, 0.2]);
       part(SLEEVE, MAT.plate, elbow, [0.2, F.foreArm * 0.85, 0.2], [0, -F.foreArm * 0.9, 0]);
-      part(ROD, MAT.rod, elbow, [0.06, F.foreArm * 0.3, 0.06], [0.07 * sx, -F.foreArm * 0.45, -0.1]);
+      // The blade: down the outside of the forearm and on past the claws, a white edge along it.
+      part(BOX, MAT.dark, elbow, [0.05, F.foreArm * 0.95, 0.2], [sx * 0.13, -F.foreArm * 1.18, -0.02]);
+      part(BOX, MAT.plate, elbow, [0.03, F.foreArm * 0.8, 0.04], [sx * 0.13, -F.foreArm * 1.25, 0.1]);
       part(BOX, MAT.dark, elbow, [0.22, 0.22, 0.24], [0, -F.foreArm, 0]);
+      const lamp = part(BOX, lampMat, elbow, [0.12, 0.05, 0.03], [0, -F.foreArm + 0.04, 0.125]);
+      lamp.castShadow = false;
+      const claws: THREE.Group[] = [];
       for (let k = 0; k < 3; k++) {
         const a = (k / 3) * Math.PI * 2;
-        part(BOX, MAT.joint, elbow, [0.05, 0.42, 0.05], [Math.sin(a) * 0.08, -F.foreArm - 0.3, Math.cos(a) * 0.08], [Math.cos(a) * 0.3, 0, -Math.sin(a) * 0.3]);
+        const hinge = new THREE.Group();
+        hinge.position.set(Math.sin(a) * 0.08, -F.foreArm - 0.1, Math.cos(a) * 0.08);
+        hinge.rotation.y = a;
+        elbow.add(hinge);
+        // A long finger and its hooked tip, bending out from the wrist (the hinge's x rotation spreads it).
+        part(BOX, MAT.joint, hinge, [0.05, 0.45, 0.05], [0, -0.22, 0]);
+        part(BOX, MAT.plate, hinge, [0.045, 0.22, 0.045], [0, -0.5, -0.06], [0.7, 0, 0]);
+        claws.push(hinge);
       }
-      this.arms.push({ pivot, elbow });
+      this.arms.push({ pivot, elbow, claws, x: 0, z: 0, e: 0, spread: 0.3 });
     }
-    // Legs.
+    // Legs: no toes; each ends in a peg: a white tapered cuff on a dark pad.
     this.legs = [0, 1].map(() => {
       const foot = new THREE.Group();
       this.root.add(foot);
-      part(BOX, MAT.dark, foot, [0.24, 0.16, 0.3], [0, 0.08, -0.02]);
-      // Three white toes forward and a spur behind.
-      for (const a of [-0.45, 0, 0.45]) part(BOX, MAT.plate, foot, [0.08, 0.08, 0.6], [Math.sin(a) * 0.28, 0.04, Math.cos(a) * 0.28], [0, a, 0]);
-      part(BOX, MAT.joint, foot, [0.07, 0.07, 0.36], [0, 0.04, -0.28]);
+      part(DRUM, MAT.dark, foot, [0.24, 0.07, 0.24], [0, 0.035, 0]);
+      part(PEG, MAT.plate, foot, [1, 1, 1], [0, 0.07, 0]);
       return {
         hip: part(BALL, MAT.joint, this.root, [0.3, 0.3, 0.3]),
         thigh: part(ROD, MAT.rod, this.root),
@@ -201,24 +223,22 @@ export class StriderBody {
         foot,
       };
     });
-    // Cables and pipes: two looping from the chest's pack down to the hips, one from under the head to the chest, and
-    // two pipes hanging free from the chest's bottom ring.
+    // Cables and pipes: two looping from under the disc down to the hips, a hose from each shoulder round the back of
+    // the upper arm, and three pipes hanging free from under the disc's back and sides.
     const anchor = (parent: THREE.Object3D, x: number, y: number, z: number) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
     const cable = (a: THREE.Object3D, b: THREE.Object3D | null, len: number, sag: number, r: number) => {
       const segs: THREE.Mesh[] = [];
       for (let k = 0; k < CABLE_SEGS; k++) { const m = part(ROD, MAT.dark, this.root); m.castShadow = false; segs.push(m); }
       this.cables.push({ a, b, len, sag, segs, mid: new THREE.Vector3(), vel: new THREE.Vector3(), r, init: false });
     };
-    const ch0 = F.chestLow + ch * 0.4;
-    cable(anchor(T, 0.2, ch0, -F.chestR - 0.2), anchor(this.pelvis, 0.38, 0.05, -0.25), 0, 0.35, 0.06);
-    cable(anchor(T, -0.2, ch0, -F.chestR - 0.2), anchor(this.pelvis, -0.38, 0.05, -0.25), 0, 0.45, 0.06);
-    cable(anchor(H, 0.18, -F.headH * 0.5, -0.25), anchor(T, 0.25, F.chestTop - 0.1, -0.3), 0, 0.22, 0.045);
-    cable(anchor(T, 0.3, F.chestLow - 0.12, 0.15), null, 0.95, 0, 0.07);
-    cable(anchor(T, -0.25, F.chestLow - 0.12, 0.22), null, 0.7, 0, 0.05);
-    // A hose from each shoulder housing round the back of the upper arm.
+    cable(anchor(D, 0.35, -F.headH * 0.5, -0.45), anchor(this.pelvis, 0.38, 0.05, -0.2), 0, 0.3, 0.06);
+    cable(anchor(D, -0.35, -F.headH * 0.5, -0.45), anchor(this.pelvis, -0.38, 0.05, -0.2), 0, 0.4, 0.06);
+    cable(anchor(D, 0.1, -F.headH * 0.5, -R * 0.85), null, 1.1, 0, 0.06);
+    cable(anchor(D, R * 0.6, -F.headH * 0.5, -R * 0.55), null, 0.8, 0, 0.05);
+    cable(anchor(D, -R * 0.65, -F.headH * 0.5, -R * 0.4), null, 0.65, 0, 0.045);
     this.arms.forEach((a, i) => {
       const sx = i === 0 ? 1 : -1;
-      cable(anchor(T, sx * (F.shoulderX - 0.3), F.shoulderY - 0.12, -0.22), anchor(a.pivot, 0, -F.upperArm * 0.45, -0.15), 0, 0.15, 0.05);
+      cable(anchor(T, sx * (F.shoulderX - 0.15), F.shoulderY - 0.12, -0.18), anchor(a.pivot, 0, -F.upperArm * 0.45, -0.15), 0, 0.15, 0.05);
     });
   }
 
@@ -228,45 +248,78 @@ export class StriderBody {
   }
 
   update(s: Strider, dt: number) {
-    const sim = s.sim;
+    const sim = s.sim, v = s.v;
     this.t += dt;
     this.root.scale.setScalar(s.S);
     this.pelvis.position.copy(sim.pelvis);
     this.pelvis.quaternion.copy(sim.pelvisQ);
-    // The torso rides the hips and turns with the face (the walker's hull lean kept as a little pitch and roll).
+    // The torso rides the hips and turns with the face; the disc leans toward what it faces, with a slow drift.
     this.torso.position.copy(sim.pelvis);
     this.torso.rotation.set(0, s.face, 0, "YXZ");
-    this.head.rotation.set(s.pitch * 0.6, s.seek, 0, "YXZ");
-    // Arms swing with the walk, against the legs, and hang back while charging.
-    const swing = Math.sin(sim.phase * Math.PI * 2) * Math.min(1, sim.speed * 1.2) * 0.35;
+    const g = s.grab();
+    this.disc.rotation.set(v.striderTilt * D2R + s.pitch * 0.25 + (g >= 0 && g < 1 ? -0.25 * g : 0) + Math.sin(this.t * 1.3) * 0.02, 0, Math.sin(this.t * 0.9) * 0.025, "YXZ");
+    this.eyeYaw.rotation.y = s.seek;
     const charging = s.mode === BEAM || s.mode === SLAM;
-    this.arms.forEach((a, i) => {
-      const k = i === 0 ? 1 : -1;
-      // Hanging a little forward and out, swinging long; spread wide and raised while charging.
-      a.pivot.rotation.set(charging ? -0.35 : swing * k - 0.12, 0, k * (charging ? 0.55 : 0.07));
-      a.elbow.rotation.set(charging ? -0.5 : -0.18 - Math.max(0, swing * k) * 0.45, 0, 0);
-    });
+    this.arms.forEach((a, i) => this.arm(a, i === 0 ? 1 : -1, s, g, charging, dt));
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(sim.pelvisQ);
     sim.feet.forEach((f, i) => this.pose(this.legs[i], f.pose, left));
-    // Lights: the seeker eye pulses while sweeping, holds steady once it sees; the laser shows while it seeks or holds.
+    // Lights: the seeker eye pulses while sweeping, holds steady once it sees, flares through a grab's wind-up; the
+    // laser shows while it seeks or holds.
     const seeking = !s.seen && s.mode === 0 && s.alive;
-    (this.eye.material as THREE.MeshBasicMaterial).color.setHex(P.seek).multiplyScalar(seeking ? 0.6 + 0.4 * Math.abs(Math.sin(this.t * 5)) : 1);
-    this.laser.visible = s.alive && (seeking || s.seen) && !charging;
+    const flare = g >= 0 && g < 1 ? 1.4 + Math.sin(this.t * 30) * 0.4 : 1;
+    (this.eye.material as THREE.MeshBasicMaterial).color.setHex(P.seek).multiplyScalar(seeking ? 0.6 + 0.4 * Math.abs(Math.sin(this.t * 5)) : flare);
+    this.laser.visible = s.alive && (seeking || s.seen) && !charging && g < 0;
     if (this.laser.visible) {
-      // Out to the sand along the head's line (or 40 m), in the root's (sim) metres.
-      const reach = Math.min(40 / s.S, (sim.pelvis.y + STRIDER_FRAME.head) / Math.max(0.12, Math.sin(Math.max(0.05, s.pitch * 0.6 + 0.12))));
+      // Out to the sand along the disc's lean (or 40 m), in the root's (sim) metres.
+      const down = v.striderTilt * D2R + s.pitch * 0.25;
+      const reach = Math.min(40 / s.S, (sim.pelvis.y + STRIDER_FRAME.head) / Math.max(0.12, Math.sin(Math.max(0.05, down))));
       this.laser.scale.set(0.02, 0.02, reach);
       this.laserMat.opacity = seeking ? 0.35 : 0.6;
     }
     const c = s.charge();
     const k = charging ? c : 0;
-    this.emitCore.scale.setScalar(0.16 + k * 0.18);
+    this.emitCore.scale.setScalar(0.15 + k * 0.2);
     this.emitHalo.visible = k > 0.01;
-    this.emitHalo.scale.setScalar(0.3 + k * 0.9 + Math.sin(this.t * 30) * 0.03 * k);
+    this.emitHalo.scale.setScalar(0.3 + k * 1.0 + Math.sin(this.t * 30) * 0.03 * k);
     this.haloMat.opacity = 0.25 + k * 0.6;
     // The cables hang off parts that just moved.
     this.root.updateMatrixWorld(true);
     for (const cb of this.cables) this.cable(cb, dt);
+  }
+
+  /**
+   * One arm (side k: 1 its left). Walking: hung a little forward, swinging long against the legs, claws flexing and
+   * twitching. Rushing: reaching ahead, claws open. Charging: spread wide. A grab: up and back over the disc with the
+   * claws spread and trembling (the tell), a fast swing down at the strike, then wrenching apart, claws clenched.
+   */
+  private arm(a: Arm, k: number, s: Strider, g: number, charging: boolean, dt: number) {
+    const sim = s.sim, t = this.t, ph = k > 0 ? 0 : 1.7;
+    const swing = Math.sin(sim.phase * Math.PI * 2) * Math.min(1, sim.speed * 1.2) * 0.35;
+    const twitch = Math.max(0, Math.sin(t * 0.7 + ph * 2.3) - 0.93) * 6;
+    let x: number, z: number, e: number, spread: number, rate = 8;
+    if (g >= 0 && g < 1) {
+      const u = g * g * (3 - 2 * g);
+      x = -0.3 - 2.4 * u; z = k * (0.1 + 0.45 * u); e = -0.3 - 1.0 * u; spread = 0.4 + 0.8 * u + Math.sin(t * 40 + ph) * 0.06 * u;
+      rate = 10;
+    } else if (g >= 1) {
+      const u = g - 1;
+      // The strike comes down in a blink, then the wrenching.
+      x = -0.95 + Math.sin(t * 13 + ph) * 0.22; z = k * (0.3 + 0.4 * Math.abs(Math.sin(t * 9 + ph))); e = -0.45 - 0.3 * Math.abs(Math.sin(t * 11 + ph)); spread = 0.05;
+      rate = u < 0.15 ? 30 : 12;
+    } else if (charging) {
+      x = -0.35; z = k * 0.55; e = -0.5; spread = 0.9;
+    } else if (s.rushT > 0) {
+      x = -0.95 + swing * 0.3; z = k * 0.12; e = -0.55; spread = 0.75 + Math.sin(t * 6 + ph) * 0.1;
+    } else {
+      x = swing * k - 0.15 - twitch * 0.25; z = k * (0.08 + twitch * 0.1); e = -0.2 - Math.max(0, swing * k) * 0.45 - twitch * 0.3;
+      spread = 0.3 + Math.sin(t * 2.2 + ph) * 0.12 + twitch * 0.5;
+    }
+    const f = Math.min(1, dt * rate);
+    a.x += (x - a.x) * f; a.z += (z - a.z) * f; a.e += (e - a.e) * f; a.spread += (spread - a.spread) * Math.min(1, dt * 14);
+    a.pivot.rotation.set(a.x, 0, a.z);
+    a.elbow.rotation.set(a.e, 0, 0);
+    for (const c of a.claws) c.rotation.x = -a.spread;
+    void s;
   }
 
   private pose(L: Leg, p: LegPose, side: THREE.Vector3) {

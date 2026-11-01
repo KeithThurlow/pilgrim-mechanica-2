@@ -35,9 +35,10 @@ export class StriderTarget implements Hittable, Owner {
     const F = STRIDER_FRAME, S = s.S, sim = s.sim, c = this.caps;
     const set = (k: number, a: THREE.Vector3, b: THREE.Vector3, r: number, part: number) => { c[k].a.copy(a); c[k].b.copy(b); c[k].r = r; c[k].part = part; };
     s.up(F.waist, c[0].a); s.up(F.chestTop, c[0].b); c[0].r = F.chestR * 1.05 * S; c[0].part = PART_BODY;
-    // The disc head: a capsule across it, side to side.
-    const h = s.head(A), rx = Math.cos(s.face) * F.headR * 0.62 * S, rz = -Math.sin(s.face) * F.headR * 0.62 * S;
-    set(1, B.set(h.x - rx, h.y, h.z - rz), C.set(h.x + rx, h.y, h.z + rz), F.headR * 0.42 * S, PART_BODY);
+    // The hull disc: two flat capsules crossing it, side to side and front to back.
+    const h = s.head(A), rx = Math.cos(s.face) * F.headR * 0.75 * S, rz = -Math.sin(s.face) * F.headR * 0.75 * S, r = F.headR * 0.28 * S;
+    set(1, B.set(h.x - rx, h.y, h.z - rz), C.set(h.x + rx, h.y, h.z + rz), r, PART_BODY);
+    set(10, B.set(h.x + rz, h.y, h.z - rx), C.set(h.x - rz, h.y, h.z + rx), r, PART_BODY);
     // The long arms: shoulder to hand, a limb's share.
     set(2, s.shoulder(1, A), s.hand(1, B), 0.12 * S, PART_LEG);
     set(3, s.shoulder(-1, A), s.hand(-1, B), 0.12 * S, PART_LEG);
@@ -46,9 +47,9 @@ export class StriderTarget implements Hittable, Owner {
       const p = f.pose;
       set(k++, A.copy(p.hip).multiplyScalar(S), B.copy(p.knee).multiplyScalar(S), 0.16 * S, PART_LEG);
       set(k++, A.copy(p.knee).multiplyScalar(S), B.copy(p.hock).multiplyScalar(S), 0.1 * S, PART_LEG);
-      set(k++, A.copy(p.hock).multiplyScalar(S), B.copy(p.toe).multiplyScalar(S), 0.11 * S, PART_FOOT);
+      set(k++, A.copy(p.hock).multiplyScalar(S), B.copy(p.foot).multiplyScalar(S), 0.11 * S, PART_FOOT);
     }
-    return c.slice(0, k);
+    return c.slice(0, 11);
   }
 
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number): number {

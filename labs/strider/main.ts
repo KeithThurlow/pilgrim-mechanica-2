@@ -3,7 +3,8 @@
 // then holds you; blue: a beam that ploughs a furrow down the sand where you stood, and up close a slam: a column
 // straight down at its feet, a ring on the sand, then the ground blows out round it.
 // Flags: ?count=N (striders up at once, 1), ?dist=m (where they stand up, 90 m), ?slam (one 14 m off, slamming at once),
-// ?beam (one at 45 m, beam charging at once), plus the combat-lab flags.
+// ?beam (one at 45 m, beam charging at once), ?grab (one 6 m off, grabbing at once), plus the combat-lab flags.
+// Third pass (Keith 2026-11-01): a disc hull, blades and claws on the long arms, a grab that strikes and tears.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -14,6 +15,7 @@ import { StriderTarget } from "../../src/combat/striderTarget";
 import { StriderFx } from "../../src/combat/striderFx";
 import { striderRagdoll } from "../../src/combat/striderRagdoll";
 import { fireRobotBeam } from "../../src/game/robotBeam";
+import { RobotTearFx, ROBOT_TEAR_DEFAULTS } from "../../src/combat/robotTearFx";
 
 const LAB_DEFAULTS = { striderCount: 1, striderFrom: 90, striderBack: 6, striderBeamReach: 5 };
 const LAB_PARAMS: Param[] = [
@@ -30,9 +32,9 @@ let pack: Striders;
 const lab = await combatLab({
   id: "strider-lab",
   title: "Striders",
-  defaults: { ...STRIDER_DEFAULTS, ...LAB_DEFAULTS },
+  defaults: { ...STRIDER_DEFAULTS, ...LAB_DEFAULTS, ...ROBOT_TEAR_DEFAULTS },
   params: [...LAB_PARAMS, ...STRIDER_PARAMS],
-  topics: [{ id: "striders", label: "Striders", groups: ["Strider lab", "Striders", "Striders: beam", "Striders: slam"] }],
+  topics: [{ id: "striders", label: "Striders", groups: ["Strider lab", "Striders", "Striders: beam", "Striders: slam", "Striders: tearing"] }],
   selectables: [{ topic: "striders", label: "Striders", objects: () => [...bodies.values()].map((b) => b.root) }],
   actions: [{ label: "Strider now", onClick: () => spawn() }, { label: "Stand them up again", onClick: () => restart() }],
   report: (): Record<string, unknown> => ({ striders: pack.alive, beams: pack.beams, slams: pack.slams, kills: pack.kills }),
@@ -67,9 +69,28 @@ function drop(s: Strider) {
 }
 function restart() { for (const s of [...pack.list]) drop(s); backClock = 0; }
 
-const at = new THREE.Vector3();
-let backClock = 0;
+const at = new THREE.Vector3(), hitAt = new THREE.Vector3(), hitDir = new THREE.Vector3();
+let backClock = 0, grabs = 0, grabDamage = 0;
+// Who they hunt this frame (the mech, or the pilot on foot when he's nearer).
+let hunted: ReturnType<typeof lab.prey> | null = null;
+const tear = new RobotTearFx(bf.gunFx, bf.sfx, field, V);
+lab.app.scene.add(tear.group);
 pack.onEvent = (e) => {
+  if (e.type === "melee") {
+    // The claws and blades bite: the damage, sparks and torn plate where they hit, and the strike throws the mech.
+    if (!hunted?.alive) return;
+    hunted.unit.damage(e.damage, hitAt.set(e.x, e.y, e.z), hitDir.set(e.dx, 0, e.dz));
+    grabDamage += e.damage;
+    const src = pack.list.find((x) => x.id === e.id)?.pos(at);
+    tear.bite(e.x, e.y, e.z, src?.x ?? e.x, src?.z ?? e.z);
+    if (e.kind === "strike") {
+      grabs++;
+      tear.bite(e.x, e.y + 0.5, e.z, src?.x ?? e.x, src?.z ?? e.z);
+      lab.shake(0.6);
+      if (hunted.kind === "mech" && src) player.shoveFrom(src.x, src.z, V.striderMeleeReach * 2, e.shove);
+    }
+    return;
+  }
   if (e.type === "beam") {
     fx.beam(e.id, e.beam);
     fireRobotBeam(bf, e.beam, V.striderBeamReach);
@@ -96,6 +117,7 @@ pack.onEvent = (e) => {
 
 // ?slam: one close by, about to slam; ?beam: one at 45 m, its beam about to charge.
 if (q.has("slam")) { V.striderCount = Math.max(1, V.striderCount); const s = spawn(14, 0.6); s.slamClock = 0; }
+if (q.has("grab")) { V.striderCount = Math.max(1, V.striderCount); const s = spawn(6, 0.3); s.meleeClock = 0; s.slamClock = 99; }
 if (q.has("beam")) { V.striderCount = Math.max(1, V.striderCount); const s = spawn(45, -0.5); s.beamClock = 0.2; s.lockT = V.striderLockTime; }
 
 const sees = (from: THREE.Vector3, to: THREE.Vector3) => bf.canSee(from, to);
@@ -106,11 +128,13 @@ lab.onFrame((dt) => {
   // Who it hunts: the mech, or the pilot on foot when he's nearer.
   const p0 = pack.list[0]?.pos(at);
   const pr = lab.prey(p0?.x ?? player.sim.pos.x, p0?.z ?? player.sim.pos.z);
+  hunted = pr;
   prey.x = pr.at.x; prey.y = pr.at.y; prey.z = pr.at.z; prey.vx = pr.sim.vel.x; prey.vz = pr.sim.vel.z; prey.alive = pr.alive;
   pack.update(dt, prey, sees);
   for (const s of pack.list) bodies.get(s.id)?.update(s, dt);
   fx.update(dt, pack.list);
+  tear.update(dt);
   const s = pack.list[0];
-  const mode = s ? ["walking", "beam charging", "slam charging", "standing", "down"][s.mode] : "none up";
-  lab.hud("striders", `striders ${pack.alive} · ${mode}${s ? ` · ${Math.round(s.health)} hp · ${s.seen ? "sees you" : "seeking"}` : ""} · beams ${pack.beams} · slams ${pack.slams} · killed ${pack.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+  const mode = s ? ["walking", "beam charging", "slam charging", "standing", "down", "grabbing"][s.mode] + (s.rushT > 0 ? " (rushing)" : "") : "none up";
+  lab.hud("striders", `striders ${pack.alive} · ${mode}${s ? ` · ${Math.round(s.health)} hp · ${s.seen ? "sees you" : "seeking"}` : ""} · beams ${pack.beams} · slams ${pack.slams} · grabs ${grabs} (${Math.round(grabDamage)} damage) · killed ${pack.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
 });
