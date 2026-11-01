@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, sweepAngles, swordCuts, swordPose, type SwordStats } from "./sword";
+import { SwordSim, sweepTimes, swordCuts, clipPose, type SwordStats } from "./sword";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
 import { penDensity, type SheetHit } from "../game/sheet";
@@ -169,9 +169,9 @@ export class Arsenal implements MechWeapons {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
     const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
-      sword: new SwordSim(1, () => v.swordRest), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, trail: [], trailK: 0 });
+      sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, trail: [], trailK: 0 });
     this.sides = [side(), side()];
-    this.sides[1].sword = new SwordSim(-1, () => v.swordRest);
+    this.sides[1].sword = new SwordSim(-1);
     addWeaponSounds(bf.sfx, v);
   }
 
@@ -431,26 +431,25 @@ export class Arsenal implements MechWeapons {
   }
 
   /**
-   * The sword (src/weapons/sword.ts): the swing steps on the trigger and sets the arm's pose (swordPose: the hand round
-   * its arc and the blade out along the swing, or at rest over the shoulder; the body reaches a two-bone arm to it).
-   * Through the slash the blade is a vertical sheet from the hand out to the reach, tested every few degrees of the
-   * stretch it swept this step. Each body it crosses is hit once per swing (damage, knock along the swing, sparks, a
-   * crunch), paying its chord × density out of the swing's cleave budget; once that's spent the rest of the swing passes
-   * over them. The first bite stalls the blade, shakes the camera and (the local player's own swing) asks for hit stop.
+   * The sword (src/weapons/sword.ts): the moves step on the trigger (rest, the cut across to under the far shoulder,
+   * the back-cut, the return past the waist) and set the arm's pose; the body reaches a two-bone arm to its hand.
+   * Through a cut the blade is a vertical sheet from the hand out to the reach, sampled through the time it swept this
+   * step. Each body it crosses is hit once per cut (damage, knock along the cut, sparks, a crunch), paying its chord ×
+   * density out of the cut's cleave budget; once that's spent the rest of the cut passes over them. The first bite stalls
+   * the blade, shakes the camera and (the local player's own cut) asks for hit stop.
    */
   private stepSword(s: Side, held: boolean, dt: number) {
     const u = this.unit, v = this.v, bf = this.bf, sw = s.sword, body = u.body;
     const st = this.swordStats(s);
-    const sweep = sw.update(dt, held, st, v.swordComboAt);
+    const sweep = sw.update(dt, held, st, v);
     if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
     // The hull's frame and this side's shoulder in it (a body without them: a frame on the pelvis along the torso).
     const frame = this.frame;
     if (body.hullFrame) body.hullFrame(frame);
     else frame.compose(this.tmp2.copy(u.sim.pelvis), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), u.upper.torsoYaw), new THREE.Vector3(1, 1, 1));
-    const shoulder = body.shoulderAt ? body.shoulderAt(sw.side, this.sh) : this.sh.set(sw.side * 1.3, 1, 0);
+    const shoulder = body.shoulderAt ? body.shoulderAt(sw.side, this.sh) : this.sh.set(sw.side * 1.02, 0.89, 0);
     const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
-    const poseAt = (angle: number) => swordPose(angle, sw.lift, sw.guard, sw.dir, sw.side, aimYaw, shoulder, v);
-    const pose = poseAt(sw.angle);
+    const pose = sw.pose(shoulder, aimYaw, st, v);
     const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, pole: { x: sw.side * 0.9, y: -1, z: -0.5 } };
     body.holdPose?.(sw.side, u.alive ? armed : null);
     // The hand in the world (the arm may have pulled it in to its reach: the model's pivot is where it really is).
@@ -460,28 +459,30 @@ export class Arsenal implements MechWeapons {
     if (sw.started) bf.sfx.playSound("swordSwing", hand, 0.9, 0.85 + Math.random() * 0.25);
     if (sweep && u.alive) {
       const fw = this.dir, hw = this.sh2;
-      for (const a of sweepAngles(sweep)) {
+      // Which way the edge travels across the aim: the first cut toward the far side, the back-cut toward its own.
+      const dir = sw.side * (sweep.clip === "A" ? 1 : -1);
+      for (const t of sweepTimes(sweep)) {
         if (s.cleave <= 0) break;
-        const p = poseAt(a);
+        const p = clipPose(sweep.clip, t, sw.side, shoulder, aimYaw, st, v);
         hw.set(p.hand.x, p.hand.y, p.hand.z).applyMatrix4(frame);
         fw.set(p.fwd.x, p.fwd.y, p.fwd.z).transformDirection(frame);
-        this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, sw.dir);
+        this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, dir);
       }
     }
-    // The model: the blade stretched to the reach, the edge hot in the slash, the trail's ghost blades at its recent
+    // The model: the blade stretched to the reach, the edge hot in the cut, the trail's ghost blades at its recent
     // poses (in the hull's frame, fading).
     if (m && ms) {
       ms.swing.rotation.set(0, 0, 0);
       const ws = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
       const len = st.reach * v.swordLength;
       ms.blade.scale.z = Math.max(0.3, len / ws - 0.46);
-      ms.edge.opacity = sw.phase === "slash" ? 1 : 0.3 + 0.4 * sw.lift;
+      const fast = sw.cutting || ((sw.clip === "A" || sw.clip === "B") && sw.t < (sw.cutWindow(st, v)?.[1] ?? 0) + 0.06);
+      ms.edge.opacity = sw.cutting ? 1 : 0.35;
       const hull = body.hullGroup?.();
-      s.trailK = sw.phase === "slash" ? 1 : Math.max(0, s.trailK - dt * 7);
-      if (sw.phase === "slash") {
-        const q = new THREE.Quaternion();
-        if (m.root.parent?.parent) q.copy(m.root.parent.parent.quaternion);
-        s.trail.unshift({ x: pose.hand.x, y: pose.hand.y, z: pose.hand.z, q, at: m.root.parent?.parent?.position.clone() ?? new THREE.Vector3() });
+      s.trailK = fast ? 1 : Math.max(0, s.trailK - dt * 7);
+      if (fast) {
+        const piv = m.root.parent?.parent;
+        s.trail.unshift({ x: pose.hand.x, y: pose.hand.y, z: pose.hand.z, q: piv ? piv.quaternion.clone() : new THREE.Quaternion(), at: piv ? piv.position.clone() : new THREE.Vector3() });
         if (s.trail.length > ms.trail.length) s.trail.length = ms.trail.length;
       } else if (s.trailK <= 0) s.trail.length = 0;
       ms.trail.forEach((g, i) => {
@@ -1008,7 +1009,7 @@ export class Arsenal implements MechWeapons {
       if (!s.kind) { out.push(`${b} —`); return; }
       const g = u.upper.guns[i];
       let state = "";
-      if (s.kind === "melee") state = s.sword.phase === "idle" ? "click to swing, hold to keep swinging" : s.sword.phase;
+      if (s.kind === "melee") state = s.sword.clip === "guard" ? "click to cut, again to cut back" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : "recover";
       else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
       else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;
