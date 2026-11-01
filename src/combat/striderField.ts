@@ -104,7 +104,7 @@ export class StriderField {
     } else if (e.type === "footfall") {
       bf.dust.stomp(e.x, e.y, e.z, 0.5 * Math.min(1.5, e.k));
       // The pad's print (baked by StriderBody from its model), at the strider's size.
-      if (!bf.inWater(e.x, e.z)) bf.marks.print(e.x, e.z, 0, e.k, footShape("strider"), v.striderScale, 1.3);
+      if (!bf.inWater?.(e.x, e.z)) bf.marks?.print(e.x, e.z, 0, e.k, footShape("strider"), v.striderScale, 1.3);
       const d = Math.hypot(mp.x - e.x, mp.z - e.z);
       if (d < 40) this.shake(0.08 * (1 - d / 40));
     } else if (e.type === "down") {

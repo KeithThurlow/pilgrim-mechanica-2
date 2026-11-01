@@ -24,10 +24,11 @@ function shapes() {
 /** A swarm's footfall handler: dust, and the foot's print. */
 export function robotFootfall(bf: Battlefield, sw: RobotSwarm) {
   return (i: number, x: number, y: number, z: number, leg: number) => {
-    const v = bf.marks.v;
     const big = sw.kind[i] === BIG;
     bf.dust.stomp(x, y, z, big ? 0.5 : 0.12);
-    if (v.printRobots < (big ? 1 : 2) || !bf.marks.denting || bf.inWater(x, z)) return;
+    if (!bf.marks) return;
+    const v = bf.marks.v;
+    if (v.printRobots < (big ? 1 : 2) || !bf.marks.denting || bf.inWater?.(x, z)) return;
     shapes();
     if (big) {
       // The bucket's claws point out along its leg's spoke (robotsDraw: the foot faces heading + the leg's angle).
