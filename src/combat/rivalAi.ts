@@ -61,6 +61,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiSwordTurn: 150,
   aiSwordLead: 0.6,
   aiSwordFace: 35,
+  aiSwordTrackFrom: 14,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -121,6 +122,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiSwordTurn", label: "Up close with a sword: swing speed (deg/s)", min: 20, max: 600, step: 5, group: G },
   { key: "aiSwordLead", label: "Up close with a sword: lead (share)", min: 0, max: 1.5, step: 0.05, group: G, tip: "How much of your motion over its reaction and lag it leads the cut and the lunge by" },
   { key: "aiSwordFace", label: "Swings only when facing you within (deg)", min: 5, max: 180, step: 5, group: G, tip: "It holds the cut until its torso is turned this close to you, so swings land instead of cutting air behind it" },
+  { key: "aiSwordTrackFrom", label: "With a sword: tight tracking from (m past its swing range)", min: 0, max: 40, step: 1, group: G, tip: "Keith 2026-11-01 (rival 25, minigun and sword, hesitated on its minigun and lost you): a sword rival keeps its torso on you this far out from where it starts a cut, its gun firing along that aim" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -416,7 +418,7 @@ export class RivalAi {
     // loses track"): a gun's snapshot froze the aim, and the slow swing speed couldn't follow a foe circling at 6 m. In
     // blade range it tracks tightly instead (its torso's turn speed is the limit) and every gun fires along that aim.
     const swordK = s.kit.find((k) => k.kind === "sword");
-    this.melee = acquired && !!swordK && dist < swordK.range + v.aiSwordFrom + 4;
+    this.melee = acquired && !!swordK && dist < swordK.range + v.aiSwordFrom + v.aiSwordTrackFrom;
     const fast = acquired && !this.melee ? this.fastWeapon(s, dist) : null;
     if (!fast) { this.frozen = null; this.acPhase = "aim"; this.acUntil = view.t + v.aiBurstAim; }
     this.snapped = false;

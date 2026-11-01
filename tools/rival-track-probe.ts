@@ -38,8 +38,8 @@ for (const lvl of RIVAL_LEVEL_IDS) {
   const out: string[] = [];
   for (const [name, kit] of Object.entries(KITS)) {
     if (name.startsWith("sword")) {
-      const c = run(lvl, kit, circle(6, 6), 12), p = run(lvl, kit, pass(6), 8);
-      out.push(`${name}: circle@6m ${c.deg.toFixed(0)}°, run-past back on in ${p.back < 0 ? "never" : p.back.toFixed(2) + " s"}`);
+      const c = run(lvl, kit, circle(6, 6), 12), c2 = run(lvl, kit, circle(18, 7), 12), p = run(lvl, kit, pass(6), 8);
+      out.push(`${name}: circle@6m ${c.deg.toFixed(0)}°, @18m ${c2.deg.toFixed(0)}°, run-past back on in ${p.back < 0 ? "never" : p.back.toFixed(2) + " s"}`);
     } else {
       const s = run(lvl, kit, strafe(30, 6), 14);
       out.push(`${name}: strafe@30m miss ${s.miss.toFixed(1)} m`);
