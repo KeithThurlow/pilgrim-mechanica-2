@@ -44,7 +44,11 @@ const flat = { height: () => 0, normal: (_x: number, _z: number, out = [0, 1, 0]
       if (sw.state[i] >= (q % 2 ? DOWN : DEAD)) continue;
       const a = Math.random() * 6.28, d = Math.random() * (R + 2);
       at.set(sw.px[i] + Math.cos(a) * d, 0, sw.pz[i] + Math.sin(a) * d); at.y = field.height(at.x, at.z);
-      const reach = (j: number) => (q % 2 ? Math.hypot(bandits.px[j] - at.x, bandits.pz[j] - at.z) < R - 0.1 && Math.abs(bandits.py[j] - at.y) < 1 : rt.splashShare(j, at.x, at.y, at.z, R) > 0.01);
+      // A bandit's reach as splash measures it: to the vertical line from its feet to its head (a flat-only test
+      // flaked: a bandit on a slope just inside flat but outside in 3D).
+      const H = bandits.v.banditHeight;
+      const bReach = (j: number) => { const dy = Math.max(bandits.py[j] - at.y, 0, at.y - (bandits.py[j] + H)); return Math.hypot(bandits.px[j] - at.x, bandits.pz[j] - at.z, dy) < R - 0.05; };
+      const reach = (j: number) => (q % 2 ? bReach(j) : rt.splashShare(j, at.x, at.y, at.z, R) > 0.01);
       const before: number[] = [], inside: number[] = [];
       for (let j = 0; j < n; j++) if (sw.state[j] < (q % 2 ? DOWN : DEAD) && reach(j)) { inside.push(j); before.push(sw.hp[j]); }
       splashBlast(targets, 1, at, R, 300, down);
