@@ -13,6 +13,7 @@
 //   back, the bus's bandits still alive climb back on (taken off the field).
 // Both publish FightGroups so the fight director (src/game/factions.ts) can point them at other factions' groups.
 // Ownership: host state (camps, columns, damage); drawing and sounds are cosmetic.
+import type { DeathPhysics } from "../physics/deaths";
 import type { KeepOut } from "../game/keepOut";
 import * as THREE from "three/webgpu";
 import type { DuneField } from "../world/terrain";
@@ -302,7 +303,9 @@ export class WarBands {
   /** A place every band steers out of (the convoy's safe zone), handed to each band. */
   keepOut: KeepOut | null = null;
 
-  constructor(readonly v: WarbandValues & ColumnValues & FactionValues, private bf: Battlefield, scene: THREE.Scene, readonly columns: WarColumns) {
+  constructor(readonly v: WarbandValues & ColumnValues & FactionValues, private bf: Battlefield, scene: THREE.Scene, readonly columns: WarColumns,
+    /** Wrecks to the death physics (null: the dead-convoy look in place). */
+    private deaths: DeathPhysics | null = null) {
     scene.add(this.group);
   }
 
@@ -326,7 +329,7 @@ export class WarBands {
   /** A column closes with the mech: onto the field. */
   bring(col: Column) {
     if (this.live.has(col.id)) return;
-    const wb = new Warband(this.bf, this.v, null);
+    const wb = new Warband(this.bf, this.v, null, this.deaths);
     wb.autoWaves = false;
     wb.serials = this.serials;
     wb.name = col.id;

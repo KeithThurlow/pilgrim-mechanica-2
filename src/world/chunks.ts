@@ -348,7 +348,7 @@ export class TerrainStreamer {
   /**
    * Redo the loaded chunks' vertices in a box (no padding); the chunks touched wait for finishPatch. cached: read the
    * ground under the dents from the chunk's patch cache (only when nothing but the dents changed since it was built:
-   * the combat labs' craters, not the convoy's road).
+   * craters, not the convoy's road; an uncached patch drops the chunk's cache, so the next cached one refills it).
    */
   private patchBox(x0: number, z0: number, x1: number, z1: number, cached = false): number {
     const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
@@ -364,6 +364,8 @@ export class TerrainStreamer {
       const k0 = Math.max(0, Math.ceil((x0 - ox) / step)), k1 = Math.min(n, Math.floor((x1 - ox) / step));
       const j0 = Math.max(0, Math.ceil((z0 - oz) / step)), j1 = Math.min(n, Math.floor((z1 - oz) / step));
       if (k0 > k1 || j0 > j1) continue;
+      // Ground under the dents changed (the convoy's road): the patch cache no longer holds for this chunk.
+      if (!cached) ch.base = undefined;
       const g = ch.mesh.geometry;
       const P = g.getAttribute("position") as THREE.BufferAttribute, Nm = g.getAttribute("normal") as THREE.BufferAttribute, Cl = g.getAttribute("color") as THREE.BufferAttribute;
       const pos = P.array as Float32Array, nor = Nm.array as Float32Array, col = Cl.array as Float32Array;
