@@ -35,6 +35,8 @@ export interface MechBody {
    *  legValues() then gives their proportions for the walker (src/mech/rampart.ts). */
   setLooks?(legs: string, hull: string): boolean;
   legValues?(): Partial<WalkerValues>;
+  /** The fitted legs' print in the sand, per foot (side 1 left), baked from the foot model (src/fx/footprint.ts). */
+  footprint?(side: 1 | -1): FootShape | null;
   /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
@@ -57,6 +59,7 @@ export interface DeadRig {
   legs: { thigh: THREE.Object3D; shin: THREE.Object3D; cannon: THREE.Object3D; foot: THREE.Object3D }[];
 }
 import type { ToonLook } from "../look/toon";
+import type { FootShape } from "../fx/footprint";
 import type { TargetCandidate } from "./targeting";
 
 /** The weapons that aren't miniguns (src/weapons/arsenal.ts): stepped with the mech, handed the gun clock's shots. */
@@ -266,7 +269,7 @@ export class MechUnit implements Hittable, Solid {
         this.onStomp?.(f.planted.x, f.planted.z, k);
         return;
       }
-      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
       // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       // Sprinting, each footfall lands with weight: a thump and (in labs that shake) a small shake.
@@ -291,7 +294,7 @@ export class MechUnit implements Hittable, Solid {
       if (l.impact > 1.5) {
         for (const f of sim.feet) {
           if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
-          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
           dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
         }
         if (l.impact > v.landSoft) {

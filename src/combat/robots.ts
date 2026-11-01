@@ -598,7 +598,7 @@ export class RobotSwarm {
   private sfx0 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfy0 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfz0 = new Float32Array(ROBOT_MAX * WALK_LEGS);
   private sfx1 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfy1 = new Float32Array(ROBOT_MAX * WALK_LEGS); private sfz1 = new Float32Array(ROBOT_MAX * WALK_LEGS);
   /** A walker's foot coming down: robot, foot world position (dust, sound). */
-  onFootfall: ((i: number, x: number, y: number, z: number) => void) | null = null;
+  onFootfall: ((i: number, x: number, y: number, z: number, leg: number) => void) | null = null;
   /** Set by hitRay: the last hit was on a walker's leg or foot (not its body), and which part (PART_*). */
   hitLeg = false;
   hitPart = PART_BODY;
@@ -1298,7 +1298,7 @@ export class RobotSwarm {
           this.stepT[f] = -1;
           this.waitStep[f] = 1;
           this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
-          this.onFootfall?.(i, this.footX[f], this.footY[f], this.footZ[f]);
+          this.onFootfall?.(i, this.footX[f], this.footY[f], this.footZ[f], k);
         } else stepping++;
       } else {
         // A big one's planted feet follow the ground (its own pulse craters the sand under them).

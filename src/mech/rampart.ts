@@ -25,6 +25,8 @@ import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
+import { footShapeOr, type FootShape } from "../fx/footprint";
+import { bakeFootFromGeometry } from "../fx/footprintMesh";
 
 /**
  * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
@@ -221,6 +223,8 @@ export class RampartBody {
   private legRest: Record<string, THREE.Vector3> = {};
   private hullRest: Record<string, THREE.Vector3> = {};
   private legsLook = "rampart";
+  /** The fitted legs' print shapes, left and right (src/fx/footprint.ts). */
+  private feet: (FootShape | null)[] = [null, null];
   private hullLook = "rampart";
   /** Where the part models load from; fixed: a ?mech= variant (whole, its parts don't swap). */
   private base = "/models/";
@@ -262,6 +266,9 @@ export class RampartBody {
       ankleHeight: foot.y, ankleBack: 0,
     };
   }
+
+  /** The fitted legs' print in the sand: side 1 the left foot, -1 the right (null: the plain oval). */
+  footprint(side: 1 | -1): FootShape | null { return this.feet[side === 1 ? 0 : 1]; }
 
   /** The legs and hull looks on show (a look is a model in public/models: "rampart" or a variant id). */
   get looks() { return { legs: this.legsLook, hull: this.hullLook }; }
@@ -400,6 +407,9 @@ export class RampartBody {
       this.mesh(heelGeo, `Foot_${s}`, L.foot, frame(new THREE.Vector3(fp.x, 0, fp.z)));
       L.toe.position.set(0, 0, hingeZ);
       this.mesh(toeGeo, `Toes_${s}`, L.toe, frame(new THREE.Vector3(fp.x, 0, fp.z + hingeZ)));
+      // Its print in the sand: the sole of this foot model, baked once per look and side (src/fx/footprint.ts).
+      const key = `${id}:${s}`;
+      this.feet[i] = footShapeOr(key, () => bakeFootFromGeometry(key, geo[`Part_Foot_${s}`], new THREE.Vector3(fp.x, 0, fp.z)));
     });
     this.repaint();
   }
