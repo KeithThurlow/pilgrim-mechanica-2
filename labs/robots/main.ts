@@ -21,8 +21,8 @@ import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { fireRobotBeam } from "../../src/game/robotBeam";
-import { DROID_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
-import { DroidFight } from "../../src/game/droidFight";
+import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
+import { DroidSquads } from "../../src/game/droidFight";
 import { loadBanditVat } from "../../src/combat/banditVat";
 
 const WAVE_DEFAULTS = {
@@ -52,23 +52,23 @@ const params0 = new URLSearchParams(location.search);
 type DemoOut = { cmd: MoveCommand; aim: Aim | null; trigger: Trigger };
 let script: ((t: number, dt: number) => DemoOut) | null = null;
 let draw: RobotsDraw | null = null;
-let droidMesh: THREE.Object3D | null = null;
+let droidMeshes: THREE.Object3D[] = [];
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_DEFAULTS },
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_ALL_DEFAULTS },
   demo: (t, dt) => script?.(t, dt) ?? null,
   params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS],
   topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }],
-  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => (droidMesh ? [droidMesh] : []) }],
+  selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0 }),
 });
 const { V, bf, player, field } = lab;
 // Humanoid robots (the middle tier on the human rig) walk in with each pack.
-const droids = new DroidFight(bf, lab.app.scene, V, field, await loadBanditVat().catch(() => null), lab.deaths);
-droidMesh = droids.draw.mesh;
-lab.onFrame((dt) => { droids.update(dt, lab.prey(player.sim.pos.x, player.sim.pos.z)); if (droids.count) lab.hud("droids", `humanoid robots ${droids.count} up · killed ${droids.target.kills}`); });
+const droids = new DroidSquads(bf, lab.app.scene, V, field, await loadBanditVat().catch(() => null), lab.deaths);
+droidMeshes = droids.meshes;
+lab.onFrame((dt) => { droids.update(dt, lab.prey(player.sim.pos.x, player.sim.pos.z)); if (droids.count) lab.hud("droids", `humanoid robots ${droids.count} up · killed ${droids.kills}`); });
 // The mech's body tramples scrappers (Keith 2026-10-31, src/game/bodyContact.ts).
 const contact = new BodyContact(player, bf);
 const sw = new RobotSwarm(V, field);

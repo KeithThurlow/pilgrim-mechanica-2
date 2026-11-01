@@ -123,7 +123,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
-- Humanoid robots lab: `?squad=N` (squad size), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; the robots lab brings 3 with each pack (`?set=robotDroids:N`).
+- Humanoid robots lab: `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; the robots lab brings 3 with each pack (`?set=robotDroids:N`); in the convoy lab squads come with robot camps, packs and raids (`?nearcamp`; `?set=droidCampShare:0,droidPackShare:0` turns them off).
 - Strider lab: `?count=N` (striders up at once), `?dist=m` (where they stand up), `?slam` (one 14 m off, slamming at once), `?beam`
   (one at 45 m, its beam charging at once), plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
