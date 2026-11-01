@@ -23,7 +23,7 @@ import type { Param } from "../core/tweaks";
 import type { PenMaterial, SheetHit } from "../game/sheet";
 
 export const SWORD_DEFAULTS = {
-  swordDamage: 900,
+  swordDamage: 450,
   swordAp: 0.5,
   swordReach: 4.7,
   swordArc: 210,

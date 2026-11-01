@@ -294,6 +294,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Rival duels about double the time to kill (Keith; Claude, thread "Double time to kill in rival duels")
+- Keith: up the time to kill in the rival lab, roughly double; maybe swords do too much damage. `src/combat/duelSim.ts`: `DUEL_HULL_MUL` 2.4 scales every rolled hull in duels, both mechs (the lab's new "Duel hull, both mechs" slider, Rival group, starts there); sword `swordDamage` 900 → 450 (one cut at the rail's level; the sword was out of line with guns). Headless (`tools/rival-probe.ts`, 14 seeds): Recruit kill 8.8 → 17.7 s, Veteran 13.2 → 23.0 s, Ace 15.1 → 28.3 s. Open for Keith: is the sword now too weak or about right; the 2.4 is a feel call.
+- Checked: typecheck, rival-probe, full npm test. Who: agent.
 ### 2026-11-01 · Sword sounds: a ching block, a heavy crash hit (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: the block and hits still read as bonks; the block should be a satisfying ching, a hit like a container crushed or crashing to the ground, and a weird short noise made no sense. The bonk was the pitched-down thump in both; gone. New `Synth.metal` (struck steel: inharmonic partials, each its own decay, no sweep). `swordHit`: a big low steel boom (70–110 Hz base, 12 partials to ×9) with a broad noise crash, crumpling crackle and grind and a debris rattle just after, ~1 s. `swordBlock`: a click, a bright ringing blade (1.5–2 kHz, 7 partials, 0.65–0.85 s), the blades' lower body and a short bright scrape. The whoosh round 10 played as a block came up is removed (likely the odd noise). Peaks 0.8–0.96, as loud as the rail.
 - `src/audio/synth.ts`, `src/weapons/weaponSound.ts`, `src/weapons/arsenal.ts`. npm test.
