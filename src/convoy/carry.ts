@@ -70,7 +70,7 @@ export const CARRY_PARAMS: Param[] = [
   { key: "deckParkPitch", label: "Park nose-down (°)", min: -10, max: 25, step: 0.5, group: "Deck", tip: "How far the hull tips forward when parked" },
 ];
 
-export type CarryState = "walking" | "inRange" | "pickup" | "lifting" | "aboard" | "parked" | "launching" | "deploying" | "falling" | "landing";
+export type CarryState = "walking" | "inRange" | "pickup" | "lifting" | "aboard" | "parked" | "launching" | "deploying" | "falling" | "landing" | "airlifted";
 type Phase = "reach" | "lower" | "lift" | "swing" | "hover" | "set" | "drop" | "settle" | "rise" | "";
 type Values = CarryValues & DeckValues & CraneValues;
 
@@ -98,6 +98,8 @@ export class CraneCarry {
   walkOffs = 0;
   /** The last time the mech left the deck it walked off (no forced follow after the landing). */
   walkedOff = false;
+  /** The last fall was a drop from the helipad's quadcopter (src/convoy/airlift.ts). */
+  airDropped = false;
   /** The walker's ground: the deck while aboard, the dunes otherwise. Assign it to the walker (done on update). */
   readonly ground: DeckGround;
   /** The spot (deck-local) the mech is on, if any, as of the last update. */
@@ -166,7 +168,8 @@ export class CraneCarry {
       case "parked": return this.phase === "rise" ? "standing up" : "parked · hold F to climb out · E to stand up";
       case "launching": return "on the launch pad: crane coming (step off to cancel)";
       case "deploying": return { lift: "lifted off the deck", swing: "swinging out", hover: "steadying over the sand" }[this.phase as "lift"] ?? "launching";
-      case "falling": return this.walkedOff ? "off the side" : "dropped";
+      case "falling": return this.airDropped ? "dropped by the quadcopter" : this.walkedOff ? "off the side" : "dropped";
+      case "airlifted": return "carried by the quadcopter";
       case "landing": return "launched: keep pace";
     }
   }
@@ -175,9 +178,9 @@ export class CraneCarry {
   distance(sim: WalkerSim) { return Math.hypot(sim.pos.x - this.crane.base.x, sim.pos.z - this.crane.base.z); }
 
   /** Start aboard (lab flag): the mech stands on the set-down pad (of the given crane's bay, or the one in use). */
-  putAboard(sim: WalkerSim, crane: Crane = this.crane) {
+  putAboard(sim: WalkerSim, crane: Crane = this.crane, at?: { x: number; z: number }) {
     this.use(crane);
-    const p = this.platform, w = p.toWorld(0, 0, this.v.craneSetDown * p.craneEnd);
+    const p = this.platform, w = p.toWorld(at?.x ?? 0, 0, at?.z ?? this.v.craneSetDown * p.craneEnd);
     this.toDeck(sim, w.x, w.z, p.heading);
   }
 
@@ -200,6 +203,27 @@ export class CraneCarry {
     this.state = "deploying"; this.phase = "hover"; this.attached = true; this.side = side; this.relHeading = 0;
     hangPose(sim, { x: cr.cradle.x, y: cr.cradle.y, z: cr.cradle.z, grip: v.craneGrip, heading: p.heading, floorY: g, leanX: 0, leanZ: 0, deck: null });
     this.drop(sim);
+  }
+
+  /** The helipad's quadcopter takes the mech off the deck (airlift.ts poses it from now until airDrop). */
+  airHold() {
+    this.state = "airlifted"; this.phase = ""; this.attached = false; this.timer = 0; this.armed = false;
+    this.ground.onDeck = false;
+  }
+
+  /**
+   * The quadcopter lets go over the sand: the mech falls with the given velocity and lands itself, as off a side (no
+   * forced follow), and the expedition starts (ON_SAND has "falling").
+   */
+  airDrop(sim: WalkerSim, vx: number, vy: number, vz: number) {
+    const f = this.fall;
+    this.state = "falling"; this.phase = ""; this.timer = 0; this.armed = false; this.attached = false;
+    this.walkedOff = true; this.airDropped = true;
+    this.ground.onDeck = false;
+    sim.ground = this.ground;
+    f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
+    f.vx = vx; f.vy = vy; f.vz = vz; f.t = 0; f.heading = sim.heading;
+    sim.launch(vx, vy, vz);
   }
 
   /** Launch from where the mech stands on the deck (a shortcut; normally walk onto a launch pad). */
@@ -259,7 +283,7 @@ export class CraneCarry {
     const out = vx * ox + vz * oz;
     if (out < need) { vx += (need - out) * ox; vz += (need - out) * oz; }
     this.state = "falling"; this.phase = ""; this.timer = 0; this.armed = false; this.attached = false;
-    this.walkOffs++; this.walkedOff = true;
+    this.walkOffs++; this.walkedOff = true; this.airDropped = false;
     this.ground.onDeck = false;
     f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
     f.vx = vx + p.vel.x; f.vy = vy; f.vz = vz + p.vel.z; f.t = 0; f.heading = sim.heading;
@@ -398,6 +422,11 @@ export class CraneCarry {
         }
         break;
       }
+      case "airlifted":
+        // The helipad's quadcopter has the mech (airlift.ts poses it); the cranes stay stowed.
+        stow();
+        out = null;
+        break;
       case "landing":
         stow();
         this.timer -= dt;
@@ -463,7 +492,7 @@ export class CraneCarry {
     const p = this.platform, f = this.fall;
     this.attached = false;
     this.state = "falling"; this.phase = ""; this.armed = false;
-    this.deploys++; this.walkedOff = false;
+    this.deploys++; this.walkedOff = false; this.airDropped = false;
     this.ground.onDeck = false;
     f.x = sim.pelvis.x; f.y = sim.pelvis.y; f.z = sim.pelvis.z;
     f.vx = p.vel.x; f.vz = p.vel.z; f.vy = Math.min(0, this.crane.cradleVel.y);
