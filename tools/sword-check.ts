@@ -26,7 +26,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(1);
   let t = 0, cutT = 0, first: number | null = null, last = 0, pressed = true;
   const clips: SwordClip[] = [];
-  while (t < 2) {
+  while (t < 2 * V.swordPace) {
     const sweep = sw.update(dt, pressed, st, V);
     pressed = false; t += dt;
     if (clips[clips.length - 1] !== sw.clip) clips.push(sw.clip);
@@ -48,8 +48,8 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(-1);
   const order: SwordClip[] = [];
   let t = 0, seen = 0;
-  while (t < 2.5) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
-  must(order.length >= 4, `held for 2.5 s it cut only ${order.length} times`);
+  while (t < 2.5 * V.swordPace) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
+  must(order.length >= 4, `held for 2.5 s (× pace) it cut only ${order.length} times`);
   must(order.every((c, i) => c === (i % 2 === 0 ? "A" : "B")), `held cuts didn't alternate cut and back-cut: ${order.join(",")}`);
   const b = new SwordSim(1);
   let n = 0;
@@ -135,8 +135,8 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(Math.abs(yaw0 - yaw1) / D2R < st.arc * 0.6, `close ${c}: the blade turned ${(Math.abs(yaw0 - yaw1) / D2R).toFixed(0)}°, not a short cut`);
   }
 }
-// ---- The draw cut (Keith 2026-11-01, round 9): close, the blade lies across the front and is pulled along its length,
-// turning only at the end; the blade sweeps much less ground than the full cut ----
+// ---- The close cut (Keith 2026-11-01, round 10): the blade stands up in front and the elbow leads it across, then it
+// swings out level at the end; it sweeps much less ground than the full cut ----
 {
   const sh = SH(1);
   const swept = (c: SwordClip, span: number) => {
@@ -150,20 +150,22 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   };
   for (const c of ["A", "B"] as SwordClip[]) {
     const cw = clipCut(c, st, V, 0)!, at = (u: number) => clipPose(c, cw[0] + (cw[1] - cw[0]) * u, 1, sh, 0, st, V, 0);
-    const p0 = at(0), p1 = at(0.6), p2 = at(1);
     const yaw = (p: { fwd: { x: number; z: number } }) => Math.atan2(p.fwd.x, p.fwd.z) / D2R;
-    const pulled = Math.hypot(p1.hand.x - p0.hand.x, p1.hand.z - p0.hand.z), turned = Math.abs(yaw(p1) - yaw(p0)), flick = Math.abs(yaw(p2) - yaw(p1));
-    const across = Math.min(Math.abs(yaw(p0)), Math.abs(yaw(p1)));
-    // The hand's way along the blade: the pull runs along the blade's own line, not square across it.
-    const mx = p1.hand.x - p0.hand.x, mz = p1.hand.z - p0.hand.z, l0 = Math.hypot(p0.fwd.x, p0.fwd.z);
-    const along = Math.abs((mx * p0.fwd.x + mz * p0.fwd.z) / (l0 * Math.hypot(mx, mz)));
+    // Which way the cut travels across (A toward the far side, -x for the left arm; B back).
+    const way = c === "A" ? -1 : 1;
+    let lowest = 1, leads = 0, n = 0;
+    for (let i = 0; i <= 12; i++) {
+      const p = at((0.6 * i) / 12), e = armIk(sh, p.hand, V.swordUpperArm, V.swordForearm, p.pole).elbow;
+      lowest = Math.min(lowest, p.fwd.y);
+      if (i > 0) { n++; if ((e.x - p.hand.x) * way > 0.1) leads++; }
+    }
+    const p6 = at(0.6), p1 = at(1), out = Math.abs(yaw(p1) - yaw(p6));
     const near = swept(c, 0), far = swept(c, 1);
-    console.log(`  draw ${c}: pulled ${pulled.toFixed(2)} m, blade turned ${turned.toFixed(0)}° in the draw, ${flick.toFixed(0)}° flick, across ${across.toFixed(0)}° off the aim, pull along the blade ${(along * 100).toFixed(0)}%, ground swept ${near.toFixed(1)} m² (full ${far.toFixed(1)})`);
-    must(pulled > 1.2 && turned < 20, `close ${c}: not a draw (hand pulled ${pulled.toFixed(2)} m, blade turned ${turned.toFixed(0)}°)`);
-    must(across > 45, `close ${c}: the blade isn't across the front (${across.toFixed(0)}° off the aim)`);
-    must(along > 0.6, `close ${c}: the hand doesn't pull along the blade (${(along * 100).toFixed(0)}%)`);
-    must(flick > 25, `close ${c}: no flick at the end (${flick.toFixed(0)}°)`);
-    must(near < far * 0.5, `close ${c}: the draw sweeps ${near.toFixed(1)} m², not much less than the full cut's ${far.toFixed(1)}`);
+    console.log(`  close ${c}: blade at least ${(Math.asin(lowest) / D2R).toFixed(0)}° up through the carry, elbow ahead of the hand ${leads}/${n}, swings out ${out.toFixed(0)}° at the end (level ${(Math.asin(p1.fwd.y) / D2R).toFixed(0)}°), ground swept ${near.toFixed(1)} m² (full ${far.toFixed(1)})`);
+    must(lowest > 0.5, `close ${c}: the blade doesn't stay standing up in front through the carry (${lowest.toFixed(2)})`);
+    must(leads >= n * 0.75, `close ${c}: the elbow doesn't lead the hand across (${leads}/${n})`);
+    must(out > 45 && Math.abs(p1.fwd.y) < 0.45, `close ${c}: the blade doesn't swing out level at the end (${out.toFixed(0)}°)`);
+    must(near < far * 0.6, `close ${c}: sweeps ${near.toFixed(1)} m², not much less than the full cut's ${far.toFixed(1)}`);
   }
 }
 // ---- The lunge and the legs (Keith 2026-11-01, round 9): smooth, full still or walking in, none or back backing off ----

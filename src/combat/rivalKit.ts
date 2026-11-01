@@ -65,7 +65,7 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     } else if (g.cls === "melee") {
       // The sword (Keith 2026-11-01: rivals may carry one, and then get in your face): its reach from the hull is the
       // blade's from the hand plus the arm's (about 2.3 m); a cut about every 0.6 s held.
-      out.push(w(ctl, "sword", { range: (o?.reach ?? v.swordReach) + 2.3, damage: o?.damage ?? v.swordDamage, cooldown: 0.6 }));
+      out.push(w(ctl, "sword", { range: (o?.reach ?? v.swordReach) + 2.3, damage: o?.damage ?? v.swordDamage, cooldown: 0.6 * v.swordPace }));
     } else if (g.cls === "rpg") {
       out.push(w(ctl, "rpg", o ? { range: v.rpgRange, damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown }
         : { range: v.rpgRange, damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: v.rpgCooldown }));
