@@ -607,10 +607,7 @@ export class Arsenal implements MechWeapons {
       const score = Math.abs(off) - (s.sword.blocking ? 10 : 0);
       if (Math.abs(off) <= half && score < best) { best = score; pick = s; }
     }
-    const fresh = !pick?.sword.blocking;
     if (!pick || !pick.sword.block(v)) return 1;
-    // The block swinging up (Keith 2026-11-01: "I need a sound for it"): a quick heavy whoosh as the blade comes up.
-    if (fresh) this.bf.sfx.playSound("swordSwing", this.tmp3.set(u.sim.pos.x, u.sim.pelvis.y + 1.5, u.sim.pos.z), 0.9, 1.25);
     return v.swordBlockTake;
   }
 

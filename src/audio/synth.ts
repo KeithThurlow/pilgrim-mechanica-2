@@ -26,6 +26,28 @@ export class Synth {
     return s;
   }
 
+  /**
+   * Struck steel (Keith 2026-11-01, the sword): n inharmonic partials rolled between base and base × spread, each with its
+   * own decay (higher ones die faster), no pitch sweep, on a hard noise strike. Low base and long: a big sheet or
+   * container booming; high base: a blade's ring.
+   */
+  metal(r: Rng, len: number, base: number, gain: number, n = 8, spread = 6) {
+    const s = new Float32Array(this.n(len));
+    const parts = Array.from({ length: n }, (_, p) => {
+      const hz = base * (p === 0 ? 1 : 1 + r() * (spread - 1)), amp = (0.4 + r() * 0.6) / (1 + p * 0.35);
+      return { w: 2 * Math.PI * hz / this.rate, amp, dec: (4 + r() * 4) * (1 + (hz / base - 1) * 0.35) / len, ph: r() * Math.PI * 2 };
+    });
+    let norm = 0;
+    for (const p of parts) norm += p.amp;
+    for (let i = 0; i < s.length; i++) {
+      const t = i / this.rate;
+      let v = 0;
+      for (const p of parts) v += Math.sin(p.w * i + p.ph) * p.amp * Math.exp(-p.dec * t);
+      s[i] = (v / norm) * gain * Math.min(1, t / 0.0008);
+    }
+    return s;
+  }
+
   /** A sine whose pitch drops (kick, boom body). */
   thump(len: number, fromHz: number, toHz: number, gain: number) {
     const s = new Float32Array(this.n(len));
