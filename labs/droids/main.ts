@@ -1,7 +1,7 @@
 // Humanoid robots lab (Keith 2026-11-01): the robots' middle tier on the human rig, between the scuttlers and the big
 // walkers. Squads of 3.2 m white machines stride in over the dunes, hold a firing band and fire bursts of blue pulses,
 // each burst told by a red seeking laser that lies on you first. They never break; rounds stop on them (metal).
-// Flags: ?squad=N (squad size), ?max=N (on the field), ?still (one squad frozen 30 m ahead, for looking), plus the
+// Flags: ?squad=N (squad size), ?max=N (on the field), ?still (one squad frozen 13 m ahead, for looking), plus the
 // combat-lab flags (?manual, ?zoom=, ?dt=, ?flat, ?onfoot ...).
 import "../../src/core/lab.css";
 import type { Param } from "../../src/core/tweaks";
@@ -47,7 +47,7 @@ function squad(at?: { x: number; z: number }) {
 const still = q.has("still");
 if (still) {
   const p = player.sim.pos;
-  for (const i of squad({ x: p.x, z: p.z + 30 })) f.sw.frozen[i] = 1;
+  for (const i of squad({ x: p.x + 4, z: p.z + 13 })) f.sw.frozen[i] = 1;
 }
 let clock = Infinity;
 lab.onFrame((dt) => {
