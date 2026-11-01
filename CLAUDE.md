@@ -123,6 +123,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
+- Strider lab: `?count=N` (striders up at once), `?dist=m` (where they stand up), `?slam` (one 14 m off, slamming at once), `?beam`
+  (one at 45 m, its beam charging at once), plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
   convoy lab: Q a repair kit (on foot: hold Q by the mech), keys 3 and 4 the pack's and hull's abilities (Medic pack, Salvager, Siege).
