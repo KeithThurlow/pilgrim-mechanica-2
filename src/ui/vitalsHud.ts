@@ -1,10 +1,15 @@
-// Your vitals on the screen (Keith 2026-10-31: "more UI around health for the player"): a hull bar at the bottom left
-// with the number and armour, a pale ghost of what the last hits took that drains after a beat, repair kit pips (Q),
-// a red edge that flashes on a hit and stays faint at low hull, and short red arcs round the mech pointing where hits
-// came from. On foot the bar is the pilot's and the mech's hull shrinks to a thin bar under it. Plain DOM plus one 2D
-// canvas for the arcs. Reads a VitalsView and the mech's hit list; owns nothing in the game.
+// Your vitals on the screen (Keith 2026-10-31: "more UI around health for the player"): a hull bar with the number
+// and armour, a pale ghost of what the last hits took that drains after a beat, a red edge that flashes on a hit and
+// stays faint at low hull, and short red arcs round the mech pointing where hits came from. On foot the bar is the
+// pilot's and the mech's hull shrinks to a thin bar beside it. Keith 2026-11-01: the hull bar stands upright at the
+// left edge beside the energy bars (src/ui/energyBar.ts), and the repair kit, abilities and shoulder keys are buttons
+// on the action bar at the bottom centre (src/ui/actionBar.ts). Plain DOM plus one 2D canvas for the arcs. Reads a
+// VitalsView and the mech's hit list; owns nothing in the game.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
+import { ActionBar, type ActionSlot } from "./actionBar";
+import { leftStack } from "./energyBar";
+import type { KeySlot } from "../weapons/arsenal";
 
 export const VITALS_DEFAULTS = {
   /** Seconds the ghost holds before it drains. */
@@ -19,6 +24,10 @@ export const VITALS_DEFAULTS = {
   arcTime: 0.9,
   /** Arc ring radius round the mech (px). */
   arcRadius: 110,
+  /** The upright hull bar's least height (px; it stretches to the energy bars). */
+  hullBarHeight: 198,
+  /** The action bar's buttons (px square). */
+  actionSize: 60,
 };
 export type VitalsValues = typeof VITALS_DEFAULTS;
 
@@ -30,6 +39,8 @@ export const VITALS_PARAMS: Param[] = [
   { key: "lowHull", label: "Low hull (share)", min: 0, max: 0.8, step: 0.01, group: G, tip: "Below this the edge stays faintly red and pulses, and the warning sounds" },
   { key: "arcTime", label: "Hit arc time (s)", min: 0, max: 3, step: 0.05, group: G },
   { key: "arcRadius", label: "Hit arc radius (px)", min: 40, max: 300, step: 5, group: G },
+  { key: "hullBarHeight", label: "Hull bar least height (px)", min: 80, max: 500, step: 2, group: G, tip: "The upright hull bar beside the energy bars: as tall as they are, at least this" },
+  { key: "actionSize", label: "Action buttons (px)", min: 36, max: 110, step: 2, group: G, tip: "The key buttons along the bottom: shoulder weapons, abilities, the repair kit" },
 ];
 
 export interface VitalsView {
@@ -43,7 +54,9 @@ export interface VitalsView {
   /** Being repaired by a zone right now: the bar glows. */
   healing?: boolean;
   /** Abilities: name, key, 0..1 ready (1 = ready), active. */
-  abilities?: { key: string; name: string; ready: number; active: boolean }[];
+  abilities?: { key: string; name: string; ready: number; active: boolean; cool?: number; coolMax?: number }[];
+  /** The shoulder and back keys (Arsenal.keySlots()). */
+  keys?: KeySlot[];
 }
 
 const COL = { hull: "#8fd18a", mid: "#f0c14b", low: "#f06a4b", ghost: "rgba(255, 240, 220, 0.75)", back: "rgba(18, 14, 10, 0.62)", line: "rgba(255, 220, 160, 0.35)", kit: "#7fd6c8" };
@@ -81,10 +94,9 @@ export class VitalsHud {
   private label: HTMLDivElement;
   private mechRow: HTMLDivElement;
   private mechFill: HTMLDivElement;
-  private kitRow: HTMLDivElement;
-  private pips: { box: HTMLDivElement; fill: HTMLDivElement }[] = [];
-  private noteEl: HTMLSpanElement;
-  private abilityRow: HTMLDivElement;
+  private bar: HTMLDivElement;
+  private actions: ActionBar;
+  private slots: ActionSlot[] = [];
   private edge: HTMLDivElement;
   private arcs: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -104,17 +116,18 @@ export class VitalsHud {
   private drawn = false;
 
   constructor(private v: VitalsValues, parent: HTMLElement = document.body) {
-    this.root = el("div", { position: "fixed", left: "14px", bottom: "14px", width: "280px", pointerEvents: "none", zIndex: "20", font: "600 12px system-ui, sans-serif", color: "#f3e6d0", textShadow: "0 1px 2px #000" }, parent);
-    this.label = el("div", { display: "flex", justifyContent: "space-between", marginBottom: "3px" }, this.root);
-    const bar = el("div", { position: "relative", height: "14px", background: COL.back, border: `1px solid ${COL.line}`, borderRadius: "3px", overflow: "hidden" }, this.root);
-    this.ghostEl = el("div", { position: "absolute", left: "0", top: "0", bottom: "0", background: COL.ghost }, bar);
-    this.fill = el("div", { position: "absolute", left: "0", top: "0", bottom: "0" }, bar);
-    this.mechRow = el("div", { position: "relative", height: "5px", marginTop: "3px", background: COL.back, border: `1px solid ${COL.line}`, borderRadius: "2px", overflow: "hidden", display: "none" }, this.root);
-    this.mechFill = el("div", { position: "absolute", left: "0", top: "0", bottom: "0" }, this.mechRow);
-    this.kitRow = el("div", { display: "flex", alignItems: "center", gap: "4px", marginTop: "6px" }, this.root);
-    el("span", { marginRight: "4px", color: COL.kit }, this.kitRow).textContent = "Q repair";
-    this.noteEl = el("span", { marginLeft: "6px", color: "rgba(243, 230, 208, 0.7)", fontWeight: "500" }, this.kitRow);
-    this.abilityRow = el("div", { display: "flex", gap: "6px", marginTop: "6px" }, this.root);
+    // Upright, just right of the energy bars (left 14 px, 14 px wide), level with their top.
+    // In the left stack (src/ui/energyBar.ts), stretched to the energy bars' height, hullBarHeight at least.
+    this.root = el("div", { position: "relative", order: "1", display: "flex", gap: "4px", alignItems: "stretch", font: "600 12px system-ui, sans-serif", color: "#f3e6d0", textShadow: "0 1px 2px #000" }, leftStack());
+    const bars = this.root;
+    this.bar = el("div", { position: "relative", width: "18px", background: COL.back, border: `1px solid ${COL.line}`, borderRadius: "3px", overflow: "hidden" }, bars);
+    this.ghostEl = el("div", { position: "absolute", left: "0", right: "0", bottom: "0", background: COL.ghost }, this.bar);
+    this.fill = el("div", { position: "absolute", left: "0", right: "0", bottom: "0" }, this.bar);
+    this.mechRow = el("div", { position: "relative", width: "6px", background: COL.back, border: `1px solid ${COL.line}`, borderRadius: "2px", overflow: "hidden", display: "none" }, bars);
+    this.mechFill = el("div", { position: "absolute", left: "0", right: "0", bottom: "0" }, this.mechRow);
+    // Under the hull bar.
+    this.label = el("div", { position: "absolute", top: "100%", left: "0", marginTop: "4px", lineHeight: "1.25", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }, this.root);
+    this.actions = new ActionBar(parent);
     this.edge = el("div", { position: "fixed", inset: "0", pointerEvents: "none", opacity: "0", zIndex: "19", willChange: "opacity", boxShadow: "inset 0 0 140px 36px rgba(200, 40, 20, 0.85)" }, parent);
     this.arcs = el("canvas", { position: "fixed", inset: "0", width: "100%", height: "100%", pointerEvents: "none", zIndex: "19" }, parent);
     this.ctx = this.arcs.getContext("2d")!;
@@ -124,7 +137,7 @@ export class VitalsHud {
   update(dt: number, view: VitalsView, hits: { dx: number; dz: number; amount: number }[], camera: THREE.Camera, at: THREE.Vector3, show = true) {
     const v = this.v;
     this.clock += dt;
-    st(this.root, "display", show ? "" : "none");
+    st(this.root, "display", show ? "flex" : "none");
     const onFoot = !!view.pilot;
     const hp = onFoot ? view.pilot!.hp : view.hull, max = Math.max(1, onFoot ? view.pilot!.max : view.max);
     const share = Math.max(0, Math.min(1, hp / max));
@@ -135,38 +148,27 @@ export class VitalsHud {
     if (this.ghost < share) this.ghost = share;
     this.last = share;
     const col = share > 0.5 ? COL.hull : share > 0.25 ? COL.mid : COL.low;
-    st(this.fill, "width", `${share * 100}%`);
+    st(this.root, "minHeight", `${v.hullBarHeight}px`);
+    st(this.fill, "height", `${share * 100}%`);
     st(this.fill, "background", col);
     st(this.fill, "boxShadow", view.healing || view.kitProgress !== null ? "0 0 8px 2px rgba(127, 240, 200, 0.85)" : "none");
-    st(this.ghostEl, "width", `${this.ghost * 100}%`);
+    st(this.ghostEl, "height", `${this.ghost * 100}%`);
     const name = onFoot ? "Pilot" : view.alive ? "Hull" : "Destroyed";
-    html(this.label, `<span>${name}</span><span>${Math.max(0, Math.round(hp))} / ${Math.round(max)}${onFoot ? "" : ` &nbsp;<span style="opacity:.75">⛨ ${Math.round(view.armour)}</span>`}</span>`);
+    html(this.label, `<div>${name} ${Math.max(0, Math.round(hp))}</div>${onFoot ? "" : `<div style="opacity:.75">⛨ ${Math.round(view.armour)}</div>`}`);
     st(this.mechRow, "display", onFoot ? "" : "none");
     if (onFoot) {
       const ms = Math.max(0, Math.min(1, view.hull / Math.max(1, view.max)));
-      st(this.mechFill, "width", `${ms * 100}%`);
+      st(this.mechFill, "height", `${ms * 100}%`);
       st(this.mechFill, "background", ms > 0.5 ? COL.hull : ms > 0.25 ? COL.mid : COL.low);
     }
-    // Kit pips: full, the one at work (filling), empty.
-    while (this.pips.length < view.kitMax) {
-      const box = el("div", { position: "relative", width: "16px", height: "16px", borderRadius: "3px", border: `1px solid ${COL.line}`, background: COL.back, overflow: "hidden" }, this.kitRow);
-      const fill = el("div", { position: "absolute", left: "0", right: "0", bottom: "0", background: COL.kit }, box);
-      this.kitRow.insertBefore(box, this.noteEl);
-      this.pips.push({ box, fill });
-    }
-    this.pips.forEach((p, i) => {
-      st(p.box, "display", i < view.kitMax ? "" : "none");
-      const working = view.kitProgress !== null && i === view.kits;
-      const h = i < view.kits ? 1 : working ? 1 - view.kitProgress! : 0;
-      st(p.fill, "height", `${h * 100}%`);
-      st(p.fill, "opacity", i < view.kits ? (view.kitReady ? "1" : "0.55") : "0.8");
-    });
-    const note = view.note ?? (view.kits === 0 ? "none left" : "");
-    if (this.noteEl.textContent !== note) this.noteEl.textContent = note;
-    // Abilities (none yet in most labs).
-    const ab = view.abilities ?? [];
-    st(this.abilityRow, "display", ab.length ? "flex" : "none");
-    html(this.abilityRow, ab.map((a) => `<div style="padding:2px 6px;border:1px solid ${COL.line};border-radius:3px;background:linear-gradient(90deg, rgba(127,214,200,${a.ready >= 1 ? 0.45 : 0.18}) ${a.ready * 100}%, ${COL.back} ${a.ready * 100}%);${a.active ? "outline:1px solid #7fd6c8" : ""}">${a.key} ${a.name}</div>`).join(""));
+    // The action bar: shoulder and back keys, abilities, then the kit (the keys only work while driving).
+    const slots = this.slots;
+    slots.length = 0;
+    for (const k of view.keys ?? []) slots.push({ key: k.key, name: k.name, cool: k.cool, coolMax: k.coolMax, active: k.left > 0 && k.leftMax ? k.left / k.leftMax : null, ready: k.cool <= 0 && !k.off, sub: k.rounds ?? (k.aiming ? "aim" : undefined), dim: onFoot || k.off, tone: "weapon" });
+    for (const a of view.abilities ?? []) slots.push({ key: a.key, name: a.name, cool: a.cool ?? 0, coolMax: a.coolMax, active: a.active ? 1 : null, ready: a.ready >= 1, dim: onFoot, tone: "ability" });
+    slots.sort((a, b) => a.key.localeCompare(b.key));
+    slots.push({ key: "Q", name: "Repair", cool: 0, active: view.kitProgress !== null ? 1 - view.kitProgress : null, ready: view.kitReady && view.kits > 0, sub: `${view.kits}/${view.kitMax}`, dim: view.kits === 0, tone: "kit" });
+    this.actions.update(dt, slots, v.actionSize, view.note ?? (view.kits === 0 ? "no repair kits left" : ""), show);
 
     // The red edge: a flash per hit, faint and pulsing at low hull (not on a wreck).
     const low = view.alive && share < v.lowHull;

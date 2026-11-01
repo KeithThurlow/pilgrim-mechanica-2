@@ -6,7 +6,7 @@
 // by robotsDraw.ts (procedural sway, no physics).
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { HUB_R, HUB_H, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_X, MID_SAW_Y, MID_BODY_H, BIG_BODY_H } from "./robotLegs";
+import { HUB_R, HUB_H, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_X, MID_SAW_Y, MID_BODY_H, BIG_BODY_H, QUAD_TURRET_Y, QUAD_GUN_X } from "./robotLegs";
 
 /**
  * The robots' shared palette (also for the humanoid and strider robots in their own files): plate white, a dimmer
@@ -182,25 +182,38 @@ export function midBodyGeometry(): THREE.BufferGeometry {
 }
 
 /**
- * Weapon quad body (× size; Keith's "medium quad bots with weapons" ref): a wide white drum of a turret with a capped
- * top, a dark hip ring and housings below, a squarish sensor block at the front (red eyes drawn apart), short side
- * arms out to where the weapons hang (quadWeaponGeometry).
+ * Weapon quad body (× size; Keith's "medium quad bots with weapons" ref, Keith 2026-11-01: "a thorax, a turret with the
+ * weapons mounted on the side on top, and a small abdomen behind"). A low white thorax on the dark hip block the legs
+ * grip, a jointed neck, a white turret drum on top with a squarish sensor block at its front (red eyes drawn apart) and
+ * trunnions out to where the weapons hang on its sides (quadWeaponGeometry), and a small white abdomen tipped up behind.
  */
 export function quadBodyGeometry(): THREE.BufferGeometry {
-  const k = new Kit(), H = MID_BODY_H;
-  k.cyl(0.3, H * 0.9, WHITE, 0, H * 0.2, 0, 0, 0, 0, 16);
-  k.cyl(0.305, H * 0.12, JOINT, 0, H * 0.12, 0, 0, 0, 0, 16);
-  k.cyl(0.24, H * 0.14, WHITE_DIM, 0, H * 0.72, 0, 0, 0, 0, 16).cyl(0.1, H * 0.08, JOINT, 0, H * 0.82, 0, 0, 0, 0, 10);
-  k.cyl(0.22, H * 0.4, JOINT, 0, -H * 0.38, 0, 0, 0, 0, 12);
+  const k = new Kit(), H = MID_BODY_H, T = QUAD_TURRET_Y;
+  // Thorax: a squat rounded shell over the hips, a dark band round its waist.
+  const shell = [[0, -H * 0.3], [0.26, -H * 0.3], [0.31, -H * 0.1], [0.3, H * 0.2], [0.22, H * 0.42], [0, H * 0.48]].map(([x, y]) => new THREE.Vector2(x, y));
+  k.add(new THREE.LatheGeometry(shell, 14).scale(1, 1, 1.12), WHITE, 0, 0, 0.02, 0, 0, 0, 0.04);
+  k.cyl(0.315, H * 0.1, JOINT, 0, -H * 0.12, 0.02, 0, 0, 0, 14);
+  k.box(0.44, 0.1, 0.44, JOINT, 0, -MID_SPEC.hipDrop, 0);
   for (const a of MID_SPEC.angles) k.box(0.13, 0.13, 0.13, DARK, Math.sin(a) * MID_SPEC.hipR, -MID_SPEC.hipDrop, Math.cos(a) * MID_SPEC.hipR);
-  k.box(0.2, 0.14, 0.14, WHITE, 0, H * 0.3, 0.3).box(0.205, 0.045, 0.08, GLASS, 0, H * 0.33, 0.34);
-  for (const x of [0.32, -0.32]) k.box(0.12, 0.08, 0.1, JOINT, x, H * 0.12, 0.02);
-  return k.build(-H * 0.6, H * 0.4, 0.12);
+  // Neck: a dark ring the turret turns on.
+  k.cyl(0.15, T - H * 0.5, JOINT, 0, (T + H * 0.4) / 2, 0, 0, 0, 0, 12).cyl(0.2, 0.025, DARK, 0, H * 0.5, 0, 0, 0, 0, 14);
+  // Turret: a white drum, a capped top with a dark hatch, a sensor block at the front with its glass slit.
+  k.cyl(0.2, 0.16, WHITE, 0, T, 0, 0, 0, 0, 16).cyl(0.205, 0.03, JOINT, 0, T - 0.06, 0, 0, 0, 0, 16);
+  k.cyl(0.16, 0.03, WHITE_DIM, 0, T + 0.095, 0, 0, 0, 0, 16).box(0.1, 0.02, 0.12, DARK, 0, T + 0.115, -0.04);
+  k.box(0.18, 0.12, 0.14, WHITE, 0, T + 0.01, 0.2).box(0.185, 0.04, 0.08, GLASS, 0, T + 0.03, 0.24);
+  // Trunnions out to the weapons either side.
+  for (const x of [QUAD_GUN_X - 0.1, -(QUAD_GUN_X - 0.1)]) k.box(0.12, 0.07, 0.09, JOINT, x, T, 0.02);
+  // Abdomen: a small white pod behind, tipped up, a dark band and a stub joining it to the thorax.
+  k.box(0.1, 0.08, 0.14, JOINT, 0, H * 0.05, -0.3, -0.3, 0, 0);
+  k.add(pod(0.15, 0.4, 10), WHITE, 0, H * 0.3, -0.5, -0.35, 0, 0, 0.05);
+  k.cyl(0.155, 0.04, JOINT, 0, H * 0.25, -0.44, Math.PI / 2 - 0.35, 0, 0, 10);
+  k.box(0.06, 0.03, 0.22, DARK, 0, H * 0.3 + 0.15, -0.52, -0.35, 0, 0);
+  return k.build(-H * 0.6, T + 0.12, 0.12);
 }
 
-/** A weapon quad's pair of weapons (× size), by Q_* index: minigun pods, rocket pods, a laser, a rail gun. */
+/** A weapon quad's pair of weapons (× size), by Q_* index, on the turret's sides: minigun pods, rocket pods, a laser, a rail gun. */
 export function quadWeaponGeometry(w: number): THREE.BufferGeometry {
-  const k = new Kit(), H = MID_BODY_H, y = H * 0.06;
+  const k = new Kit(), y = QUAD_TURRET_Y, X = QUAD_GUN_X;
   const pod = (x: number) => {
     if (w === 0) {
       // Minigun: a white housing and a cluster of six barrels.
@@ -213,19 +226,19 @@ export function quadWeaponGeometry(w: number): THREE.BufferGeometry {
       for (let b = 0; b < 4; b++) k.cyl(0.028, 0.02, DARK, x + (b & 1 ? 0.04 : -0.04), y + 0.02 + (b & 2 ? 0.04 : -0.04), 0.275, Math.PI / 2, 0, 0, 8);
     }
   };
-  if (w <= 1) { pod(0.4); pod(-0.4); }
+  if (w <= 1) { pod(X); pod(-X); }
   else {
-    // The main gun on the right (the beam leaves at x -0.4, z 0.62), a sensor box on the left.
-    k.box(0.14, 0.14, 0.22, WHITE, -0.4, y, 0.1);
+    // The main gun on the right (the beam leaves at x -X, z 0.62), a sensor box on the left.
+    k.box(0.14, 0.14, 0.22, WHITE, -X, y, 0.1);
     if (w === 2) {
       // Laser: a long white barrel with dark rings, the lens at its tip (glows, drawn apart).
-      k.cyl(0.035, 0.42, WHITE_DIM, -0.4, y, 0.4, Math.PI / 2, 0, 0, 8);
-      for (const z of [0.3, 0.42, 0.54]) k.cyl(0.045, 0.025, JOINT, -0.4, y, z, Math.PI / 2, 0, 0, 8);
+      k.cyl(0.035, 0.42, WHITE_DIM, -X, y, 0.4, Math.PI / 2, 0, 0, 8);
+      for (const z of [0.3, 0.42, 0.54]) k.cyl(0.045, 0.025, JOINT, -X, y, z, Math.PI / 2, 0, 0, 8);
     } else {
       // Rail: two flat dark rails either side of a slot, a white yoke at their root.
-      k.box(0.03, 0.09, 0.46, DARK, -0.36, y, 0.42).box(0.03, 0.09, 0.46, DARK, -0.44, y, 0.42).box(0.12, 0.03, 0.08, WHITE, -0.4, y + 0.06, 0.25);
+      k.box(0.03, 0.09, 0.46, DARK, -X + 0.04, y, 0.42).box(0.03, 0.09, 0.46, DARK, -X - 0.04, y, 0.42).box(0.12, 0.03, 0.08, WHITE, -X, y + 0.06, 0.25);
     }
-    k.box(0.1, 0.1, 0.12, JOINT, 0.38, y + 0.02, 0.08).cyl(0.03, 0.02, GLASS, 0.38, y + 0.02, 0.145, Math.PI / 2, 0, 0, 8);
+    k.box(0.1, 0.1, 0.12, JOINT, X - 0.02, y + 0.02, 0.08).cyl(0.03, 0.02, GLASS, X - 0.02, y + 0.02, 0.145, Math.PI / 2, 0, 0, 8);
   }
   return k.build(-1, 1, 0.1);
 }
