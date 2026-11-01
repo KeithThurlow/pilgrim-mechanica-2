@@ -65,10 +65,12 @@ export const SWORD_DEFAULTS = {
   // Close or far (Keith 2026-11-01, round 7): aimed close the cut comes from the elbow, bent, quicker and narrower,
   // reaching full extension only at its end; aimed far (with the lunge) the full straight-arm sweep, slower. Between
   // the lunge's near and far distances it blends.
-  swordNearTime: 0.7,
+  swordNearTime: 0.55,
   swordFarTime: 1.15,
-  swordNearBend: 0.66,
-  swordNearArc: 0.75,
+  swordNearArc: 0.45,
+  swordFarArc: 1.1,
+  swordCloseWithin: 7.5,
+  swordFullFrom: 15,
   swordTwist: 24,
   swordTwistHz: 2.4,
   swordTwistDamp: 0.5,
@@ -117,10 +119,12 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordEaseIn", label: "Speed arriving at the cut", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Against the average: high bursts into the cut out of a short drive (Keith: impact); low builds slowly" },
   { key: "swordEaseOut", label: "Speed leaving the cut", min: 0.3, max: 3, step: 0.05, group: GA, tip: "Against the average: low hands more of the speed to a long, slowing follow-through (weight); high carries on fast and stops late" },
   { key: "swordShoulderOut", label: "Arm mounted out from the hull (m)", min: 0, max: 1, step: 0.01, group: GA, tip: "A sword arm's shoulder sits this much further out, to make room for the blade" },
-  { key: "swordNearTime", label: "Close cut: time ×", min: 0.3, max: 1.5, step: 0.01, group: GA, tip: "Aimed within the lunge's no-lunge distance: the drive, cut and follow-through take this × their time (quicker)" },
-  { key: "swordFarTime", label: "Far cut: time ×", min: 0.5, max: 2, step: 0.01, group: GA, tip: "Aimed at the full-lunge distance or farther: × their time (the big sweep, slower)" },
-  { key: "swordNearBend", label: "Close cut: hand reach ×", min: 0.4, max: 1, step: 0.01, group: GA, tip: "How far out the hand goes through a close cut (elbow bent), as a share of the full sweep's; it still reaches full out at the cut's end" },
-  { key: "swordNearArc", label: "Close cut: arc ×", min: 0.3, max: 1, step: 0.01, group: GA, tip: "A close cut turns the blade through this share of the arc (drawn across, not swept)" },
+  { key: "swordCloseWithin", label: "Close cut within (m)", min: 2, max: 20, step: 0.5, group: GA, tip: "Aimed (the lock, else the cursor) this close: the short bent-elbow cut, the hand in near the chest" },
+  { key: "swordFullFrom", label: "Full sweep from (m)", min: 3, max: 40, step: 0.5, group: GA, tip: "Aimed this far or farther: the full straight-arm sweep; in between the two blend" },
+  { key: "swordNearTime", label: "Close cut: time ×", min: 0.3, max: 1.5, step: 0.01, group: GA, tip: "The close cut's drive, cut and follow-through take this × their time (quicker)" },
+  { key: "swordFarTime", label: "Full sweep: time ×", min: 0.5, max: 2, step: 0.01, group: GA, tip: "The full sweep's: × their time (slower, heavier)" },
+  { key: "swordNearArc", label: "Close cut: arc ×", min: 0.2, max: 1, step: 0.01, group: GA, tip: "A close cut turns the blade through this share of the arc (short)" },
+  { key: "swordFarArc", label: "Full sweep: arc ×", min: 0.8, max: 1.4, step: 0.01, group: GA, tip: "The full sweep swings round this × the arc" },
   { key: "swordTwist", label: "Waist turns with the cut (°)", min: 0, max: 60, step: 1, group: GA, tip: "The torso coils back a little in the drive, turns this far after the blade through the cut and follow-through, and back on the back-cut; 0 off. Drawn only: the guns on the hull turn back by as much, so nothing aims elsewhere" },
   { key: "swordTwistHz", label: "Waist spring (Hz)", min: 0.5, max: 8, step: 0.1, group: GA, tip: "How fast the waist follows the swing: low lags and swings on (heavy), high snaps" },
   { key: "swordTwistDamp", label: "Waist damping", min: 0.1, max: 1.5, step: 0.01, group: GA, tip: "Below 1 it overshoots and settles back (weight carrying on); 1 no overshoot" },
@@ -177,7 +181,7 @@ export function moveWarp(x: number, cut: [number, number] | null, easeIn: number
  * along the outboard side of the aim, −1 across to the far side, with a pitch in degrees on top of the droop), and a
  * hint for the spine.
  */
-interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V; pole?: V }
+interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V; pole?: V; spine?: 1 | -1 }
 
 // Hand places off the shoulder, left arm (the Rampart's shoulder sits 1.02 m out, 0.89 m over the waist; its torso
 // spans ±1.2 m across, 1.27 m back to 1.37 m ahead, from 0.33 m under the waist to 2.3 m over it).
@@ -190,48 +194,58 @@ const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2),
 const CUT_POLE = v3(0.9, -1, -0.5);
 // The ends (Keith 2026-11-01, round 6: "more end extension poses"): A finishes low and under on the far side; B
 // finishes with the arm up near straight, the blade pointing forward and a little into the sky.
-const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.8, -0.5, -0.35), up: v3(0.2, 0.2, -1) };
-const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.15, 0.4, 0.9), up: v3(-0.1, 0.9, -0.4) };
+const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.76, -0.5, -0.45), up: v3(0.2, 0.2, -1) };
+const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83), up: v3(-0.1, 0.9, -0.5) };
 
-/** Clip keys at shares of its length, and its cut window (shares) when it has one. */
+// The close cut (Keith 2026-11-01, round 8: "shorter, faster swings ... with a bent elbow ... it stays in close"): the
+// same moves with the hand kept in near the chest (about 2 m from the shoulder, the elbow bent near a right angle) the
+// whole way, ends included, over a small arc. Each key's hand and blade blend from these (span 0) to the full sweep's
+// (span 1).
+type Near = { hand: V; fwd?: V };
+const NEAR_DRIVE: Near = { hand: v3(0.35, 0.6, 1.3) };
+const NEAR_A: [Near, Near, Near] = [{ hand: v3(0.9, 0.4, 1.75) }, { hand: v3(-0.1, -0.25, 2.05) }, { hand: v3(-0.95, -0.45, 1.75) }];
+const NEAR_B: [Near, Near, Near] = [{ hand: v3(-1.0, -0.5, 1.75) }, { hand: v3(-0.05, 0.15, 2.05) }, { hand: v3(0.85, 0.65, 1.7) }];
+const NEAR_UNDER: Near = { hand: v3(-1.05, -0.7, 1.65), fwd: v3(-0.7, -0.45, 0.55) };
+const NEAR_COCK: Near = { hand: v3(0.55, 1.2, 1.45), fwd: v3(0.25, 0.45, 0.86) };
+
+/** Clip keys at shares of its length, its cut window (shares) when it has one, and its arc (°). span: 0 the close
+ *  cut .. 1 the full sweep. */
 function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len: number; keys: Key[]; cut: [number, number] | null; arc: number } {
   const k = Math.max(0, Math.min(1, span)), mix = (a: number, b: number) => a + (b - a) * k;
   const tk = mix(v.swordNearTime, v.swordFarTime), w = st.windup * tk, s = st.slash * tk, f = v.swordFollow * tk;
-  // How far out the hand goes (close: bent at the elbow, full out only by the cut's end).
-  const b = mix(v.swordNearBend, 1), bm = (b + 1) / 2;
-  const out = (h: V, q: number) => v3(h.x * q, h.y * q, h.z * q);
-  const arc = st.arc * mix(v.swordNearArc, 1);
-  return { arc, ...keysOf() };
-  function keysOf(): { len: number; keys: Key[]; cut: [number, number] | null } {
+  const arc = st.arc * mix(v.swordNearArc, v.swordFarArc);
+  // A key between its close and full forms.
+  const at = (key: Key, n: Near, t: number): Key => ({ ...key, t, hand: lerpV(n.hand, key.hand, k), fwd: key.fwd && n.fwd ? norm(lerpV(n.fwd, key.fwd, k)) : key.fwd });
+  const under = at(UNDER, NEAR_UNDER, 0), cock = at(COCK, NEAR_COCK, 0);
   const g = { ...GUARD, hand: { ...GUARD.hand, y: GUARD.hand.y + v.swordGuardUp } };
   switch (c) {
-    case "guard": return { len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
+    case "guard": return { arc, len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
     case "A": {
       const len = w + s + f;
       return {
-        len, cut: [w / len, (w + s) / len], keys: [
+        arc, len, cut: [w / len, (w + s) / len], keys: [
           { ...g, t: 0 },
-          { ...DRIVE, t: (w * 0.7) / len },
+          at(DRIVE, NEAR_DRIVE, (w * 0.7) / len),
           // The cut: the arm near straight (the blade at its fullest reach), the hand dipping low across the front and
           // on under the body to the far side, the blade from out along its own side to across the far one, its edge
-          // leading (the spine faces back the way it came).
-          { t: w / len, hand: out(v3(1.37, 0.37, 2.48), b), yaw: 1, pitch: 4, up: v3(1, 0, -0.4) },
-          { t: (w + s * 0.5) / len, hand: out(v3(-0.3, -0.56, 2.79), bm), yaw: 0, pitch: -4, up: v3(1, 0, -0.4) },
-          { t: (w + s) / len, hand: v3(-1.95, -1.08, 1.79), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4) },
-          { ...UNDER, t: 1 },
+          // leading (the spine faces back the way it came). Close: all of it in near the chest.
+          at({ t: 0, hand: v3(1.37, 0.37, 2.48), yaw: 1, pitch: 4, up: v3(1, 0, -0.4), spine: 1 }, NEAR_A[0], w / len),
+          at({ t: 0, hand: v3(-0.3, -0.56, 2.79), yaw: 0, pitch: -4, up: v3(1, 0, -0.4), spine: 1 }, NEAR_A[1], (w + s * 0.5) / len),
+          at({ t: 0, hand: v3(-1.95, -1.08, 1.79), yaw: -1, pitch: -6, up: v3(1, 0.2, 0.4), spine: 1 }, NEAR_A[2], (w + s) / len),
+          { ...under, t: 1 },
         ],
       };
     }
     case "B": {
       const r = w * 0.45, len = r + s + f * 0.8;
       return {
-        len, cut: [r / len, (r + s) / len], keys: [
-          { ...UNDER, t: 0 },
+        arc, len, cut: [r / len, (r + s) / len], keys: [
+          { ...under, t: 0 },
           // Rising back across at full reach, on up into the high extension.
-          { t: r / len, hand: out(v3(-1.92, -0.97, 1.78), bm), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4) },
-          { t: (r + s * 0.5) / len, hand: out(v3(-0.36, 0.21, 2.83), b), yaw: 0, pitch: 6, up: v3(-1, 0, -0.4) },
-          { t: (r + s) / len, hand: v3(1.22, 1.32, 2.13), yaw: 1, pitch: 18, up: v3(-1, 0.2, 0.4) },
-          { ...COCK, t: 1 },
+          at({ t: 0, hand: v3(-1.92, -0.97, 1.78), yaw: -1, pitch: -4, up: v3(-1, 0, -0.4), spine: -1 }, NEAR_B[0], r / len),
+          at({ t: 0, hand: v3(-0.36, 0.21, 2.83), yaw: 0, pitch: 6, up: v3(-1, 0, -0.4), spine: -1 }, NEAR_B[1], (r + s * 0.5) / len),
+          at({ t: 0, hand: v3(1.22, 1.32, 2.13), yaw: 1, pitch: 18, up: v3(-1, 0.2, 0.4), spine: -1 }, NEAR_B[2], (r + s) / len),
+          { ...cock, t: 1 },
         ],
       };
     }
@@ -240,8 +254,8 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
       // along its own hip), and up to the shoulder.
       const len = st.recover * 1.6;
       return {
-        len, cut: null, keys: [
-          { ...UNDER, t: 0 },
+        arc, len, cut: null, keys: [
+          { ...under, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
           { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
@@ -251,9 +265,8 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
     }
     case "S": {
       const len = st.recover;
-      return { len, cut: null, keys: [{ ...COCK, t: 0 }, { ...g, t: 1 }] };
+      return { arc, len, cut: null, keys: [{ ...cock, t: 0 }, { ...g, t: 1 }] };
     }
-  }
   }
 }
 
@@ -272,6 +285,12 @@ function keyAxes(k: Key, arc: number, v: SwordValues): { fwd: V; up: V } {
   else {
     const yaw = (k.yaw ?? 0) * (arc / 2) * D2R, p = ((k.pitch ?? 0) - v.swordDroop) * D2R;
     fwd = v3(Math.sin(yaw) * Math.cos(p), Math.sin(p), Math.cos(yaw) * Math.cos(p));
+  }
+  // A cut key's spine faces back the way the blade came (+1: it travels toward −yaw, the first cut; −1 the back-cut),
+  // square to the blade in the ground plane, so the edge leads however wide the arc (with the hint's lift on top).
+  if (k.yaw !== undefined && k.spine) {
+    const yaw = k.yaw * (arc / 2) * D2R;
+    return { fwd, up: square(fwd, norm(v3(k.spine * Math.cos(yaw), k.up.y, -k.spine * Math.sin(yaw)))) };
   }
   return { fwd, up: square(fwd, norm(k.up)) };
 }
