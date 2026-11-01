@@ -1,7 +1,7 @@
-// Striders (Keith 2026-11-01): large, wiry robots on the mech's own walker rig, scaled up. A tall white machine on two
-// digitigrade legs, a slim cylindrical chest and a disc head (Keith's Pinterest reference: a wiry mech with a disc
-// head). Red is how they seek: the head sweeps a red seeker until it sees its prey, then holds it. Blue is how they
-// hurt: a terraforming beam from the head that burns a furrow down the sand (through the mech, the pilot, bandits),
+// Striders (Keith 2026-11-01): wiry robots on the mech's own walker rig, scaled up to about 8 m: between the mech and
+// the tall terraforming walkers. Long digitigrade legs, a short torso, wide shoulders and long arms that nearly touch
+// the ground (Keith's second pass), a small disc head. Red is how they seek: the head sweeps a red seeker until it
+// sees its prey, then holds it. Blue is how they hurt: a terraforming beam from the head that burns a furrow down the sand (through the mech, the pilot, bandits),
 // and up close a slam: a blue column straight down at its own feet, a ring on the sand growing for a couple of
 // seconds, then the ground blows out round it (a crater; get away when you see the ring).
 //
@@ -18,13 +18,13 @@ import { WALKER_DEFAULTS, type WalkerValues } from "../mech/walkerTuning";
 import type { RobotBeamEvent } from "./robots";
 
 export const STRIDER_DEFAULTS = {
-  striderScale: 2.8,
-  striderSpeed: 4.2,
-  striderHull: 6000,
+  striderScale: 1.7,
+  striderSpeed: 4.8,
+  striderHull: 4000,
   striderArmour: 8,
-  striderRange: 40,
+  striderRange: 32,
   striderStrafe: 0.5,
-  striderTurn: 70,
+  striderTurn: 90,
   striderLegDamage: 0.5,
   striderFootDamage: 0.3,
   striderBlast: 0.6,
@@ -39,14 +39,14 @@ export const STRIDER_DEFAULTS = {
   striderBeamMin: 14,
   striderBeamMax: 80,
   striderBeamDamage: 160,
-  striderBeamWidth: 2.2,
+  striderBeamWidth: 1.8,
   striderBeamPierce: 0.8,
-  striderBeamRun: 16,
+  striderBeamRun: 14,
   // The slam (blue, straight down)
-  striderSlamNear: 20,
+  striderSlamNear: 14,
   striderSlamCharge: 2.4,
-  striderSlamRadius: 15,
-  striderSlamDamage: 220,
+  striderSlamRadius: 11,
+  striderSlamDamage: 180,
   striderSlamPierce: 0.6,
   striderSlamEvery: 12,
   striderSlamRecover: 1.2,
@@ -55,7 +55,7 @@ export type StriderValues = typeof STRIDER_DEFAULTS;
 
 const G = "Striders", GB = "Striders: beam", GS = "Striders: slam";
 export const STRIDER_PARAMS: Param[] = [
-  { key: "striderScale", label: "Size (× the Rampart)", min: 1, max: 5, step: 0.1, group: G, tip: "The mech's walker rig scaled up: 2.8 stands about 17 m to the top of the head. Changing it stands them up again" },
+  { key: "striderScale", label: "Size (× the Rampart)", min: 1, max: 5, step: 0.1, group: G, tip: "The mech's walker rig scaled up: 1.7 stands about 8 m to the top of the head, between the mech and the tall walkers. Changing it stands them up again" },
   { key: "striderSpeed", label: "Walk speed (m/s)", min: 0.5, max: 12, step: 0.1, group: G },
   { key: "striderHull", label: "Hit points", min: 100, max: 30000, step: 50, group: G, tip: "A bandit mech has 1800, the warlord 4500" },
   { key: "striderArmour", label: "Armour (flat per hit)", min: 0, max: 40, step: 0.5, group: G },
@@ -87,11 +87,14 @@ export const STRIDER_PARAMS: Param[] = [
 ];
 
 /** The body's frame above the pelvis, in the sim's (Rampart-sized) metres: shared with the drawing and the hits. */
+// Keith 2026-11-01: long digitigrade legs, a short torso, wide shoulders and long arms that nearly reach the ground.
 export const STRIDER_FRAME = {
-  waist: 0.35, chestLow: 1.05, chestTop: 2.05, chestR: 0.42,
-  neck: 2.3, head: 2.5, headR: 0.78, headH: 0.2,
+  waist: 0.25, chestLow: 0.5, chestTop: 1.15, chestR: 0.4,
+  /** Shoulder joints either side (x) at this height; upper arm and forearm lengths (the hands hang near the sand). */
+  shoulderX: 1.05, shoulderY: 1.0, upperArm: 1.85, foreArm: 1.8,
+  neck: 1.2, head: 1.38, headR: 0.42, headH: 0.16,
   /** The beam's emitter: under the head's front rim. */
-  emitY: 2.38, emitZ: 0.42,
+  emitY: 1.28, emitZ: 0.3,
 };
 
 /** The walk the sim runs: the mech's own, narrower and longer in the leg (wiry), speeds divided by the scale. */
@@ -99,7 +102,7 @@ export function striderWalker(v: StriderValues): WalkerValues {
   const S = v.striderScale;
   return {
     ...WALKER_DEFAULTS,
-    hipHeight: 3.45, hipWidth: 0.72, femur: 1.8, shin: 1.68, cannon: 1.05, footSpread: 0.85, walkSpread: 0.6,
+    hipHeight: 3.55, hipWidth: 0.62, femur: 1.9, shin: 1.75, cannon: 1.12, footSpread: 0.85, walkSpread: 0.6,
     bob: 0.04, moveLean: 2, speedLean: 0.8,
     walkSpeed: v.striderSpeed / S, sprintSpeed: (v.striderSpeed * 1.4) / S,
   };
@@ -193,6 +196,17 @@ export class Strider {
   emitter(out = new Vector3()) {
     const f = STRIDER_FRAME, p = this.sim.pelvis, S = this.S;
     return out.set((p.x + Math.sin(this.face) * f.emitZ) * S, (p.y + f.emitY) * S, (p.z + Math.cos(this.face) * f.emitZ) * S);
+  }
+  /** A shoulder joint (side 1: its left, +X at heading 0) and roughly where that arm's hand hangs (world). */
+  shoulder(side: 1 | -1, out = new Vector3()) {
+    const F = STRIDER_FRAME, k = side * F.shoulderX * this.S;
+    return this.up(F.shoulderY, out).add(T7.set(Math.cos(this.face) * k, 0, -Math.sin(this.face) * k));
+  }
+  hand(side: 1 | -1, out = new Vector3()) {
+    const F = STRIDER_FRAME, S = this.S;
+    this.shoulder(side, out);
+    out.y -= (F.upperArm + F.foreArm) * 0.95 * S;
+    return out.add(T7.set(Math.sin(this.face) * 0.25 * S, 0, Math.cos(this.face) * 0.25 * S));
   }
   /** World velocity on the ground plane. */
   vel(out = new Vector3()) { return out.set(this.sim.vel.x * this.S, 0, this.sim.vel.z * this.S); }
@@ -332,7 +346,7 @@ export class Strider {
   }
 }
 
-const T0 = new Vector3(), T1 = new Vector3(), T2 = new Vector3(), T3 = new Vector3(), T4 = new Vector3(), T5 = new Vector3(), T6 = new Vector3();
+const T0 = new Vector3(), T1 = new Vector3(), T2 = new Vector3(), T3 = new Vector3(), T4 = new Vector3(), T5 = new Vector3(), T6 = new Vector3(), T7 = new Vector3();
 
 /** The striders on a field: stands them up, steps them, hands out ids. Host. */
 export class Striders {

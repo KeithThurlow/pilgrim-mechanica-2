@@ -25,5 +25,11 @@ export function striderRagdoll(s: Strider, groundY: number): { parts: PartSpec[]
     parts.push(segPart(loc(p.hip), loc(p.knee), 0.3 * S, P.plate, 700), segPart(loc(p.knee), loc(p.hock), 0.2 * S, P.plateDim, 500), segPart(loc(p.hock), loc(p.toe), 0.14 * S, P.dark, 400));
     joints.push({ a: 0, b: k, at: loc(pelvis, 1) }, { a: k, b: k + 1, at: loc(p.knee) }, { a: k + 1, b: k + 2, at: loc(p.hock) });
   }
+  // The arms, shoulder to hand, hung off the chest.
+  for (const side of [1, -1] as const) {
+    const a = s.shoulder(side), b = s.hand(side), k = parts.length;
+    parts.push(segPart(loc(a, 1), loc(b, 1), 0.24 * S, P.plate, 400));
+    joints.push({ a: 0, b: k, at: loc(a, 1) });
+  }
   return { parts, joints, x: o.x, y: o.y, z: o.z, yaw };
 }

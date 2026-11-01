@@ -96,40 +96,48 @@ export class StriderBody {
     // Hips: a dark block with a white drum across it.
     part(BOX, MAT.dark, this.pelvis, [0.9, 0.34, 0.5]);
     part(DRUM, MAT.plate, this.pelvis, [0.42, 1.3, 0.42], [0, 0.04, 0], [0, 0, Math.PI / 2]);
-    // The spine: three bare rods up to the chest, through a small white abdomen ring.
+    // A short waist: three bare rods up to the chest, through a small white abdomen ring.
     const T = this.torso;
     for (let k = 0; k < 3; k++) {
       const a = (k / 3) * Math.PI * 2;
       part(ROD, MAT.rod, T, [0.07, F.chestLow - 0.1, 0.07], [Math.sin(a) * 0.14, 0.1, Math.cos(a) * 0.14 - 0.04]);
     }
-    part(SLEEVE, MAT.plate, T, [0.62, 0.26, 0.62], [0, 0.48, -0.02]);
-    part(SLEEVE, MAT.joint, T, [0.5, 0.08, 0.5], [0, 0.44, -0.02]);
-    part(BOX, MAT.joint, T, [0.34, 0.22, 0.3], [0, 0.88, -0.05]);
-    // The chest: a slim white cylinder, a dark band round it, a square vent at the front and a pack behind.
+    part(SLEEVE, MAT.plate, T, [0.56, 0.16, 0.56], [0, F.waist, -0.02]);
+    part(SLEEVE, MAT.joint, T, [0.46, 0.06, 0.46], [0, F.waist - 0.04, -0.02]);
+    // The chest: short, a white cylinder with a dark band, a square vent at the front and a pack behind.
     const ch = F.chestTop - F.chestLow;
     part(SLEEVE, MAT.plate, T, [F.chestR * 2, ch, F.chestR * 2], [0, F.chestLow, 0]);
-    part(SLEEVE, MAT.dark, T, [F.chestR * 2.06, 0.1, F.chestR * 2.06], [0, F.chestLow + ch * 0.42, 0]);
-    part(SLEEVE, MAT.plateDim, T, [F.chestR * 1.7, 0.12, F.chestR * 1.7], [0, F.chestLow - 0.1, 0]);
-    part(BOX, MAT.dark, T, [0.3, 0.32, 0.12], [0, F.chestLow + ch * 0.68, F.chestR - 0.02]);
-    part(BOX, MAT.joint, T, [0.22, 0.05, 0.13], [0, F.chestLow + ch * 0.68 + 0.08, F.chestR + 0.02]);
-    part(BOX, MAT.plateDim, T, [0.5, 0.62, 0.32], [0, F.chestLow + ch * 0.55, -F.chestR - 0.08]);
-    part(BOX, MAT.joint, T, [0.12, 0.5, 0.08], [0.15, F.chestLow + ch * 0.55, -F.chestR - 0.27]);
-    part(BOX, MAT.joint, T, [0.12, 0.5, 0.08], [-0.15, F.chestLow + ch * 0.55, -F.chestR - 0.27]);
-    // Neck.
-    part(ROD, MAT.rod, T, [0.1, F.head - F.chestTop, 0.1], [0, F.chestTop, 0]);
-    part(SLEEVE, MAT.joint, T, [0.3, 0.12, 0.3], [0, F.chestTop, 0]);
-    // The head: a wide white disc, a dark rim and underside, a red seeker eye on the front of the rim.
-    this.head.position.set(0, F.head, 0);
+    part(SLEEVE, MAT.dark, T, [F.chestR * 2.06, 0.08, F.chestR * 2.06], [0, F.chestLow + ch * 0.3, 0]);
+    part(SLEEVE, MAT.plateDim, T, [F.chestR * 1.7, 0.1, F.chestR * 1.7], [0, F.chestLow - 0.08, 0]);
+    part(BOX, MAT.dark, T, [0.28, 0.2, 0.12], [0, F.chestLow + ch * 0.62, F.chestR - 0.02]);
+    part(BOX, MAT.joint, T, [0.2, 0.05, 0.13], [0, F.chestLow + ch * 0.62 + 0.07, F.chestR + 0.02]);
+    part(BOX, MAT.plateDim, T, [0.5, 0.48, 0.3], [0, F.chestLow + ch * 0.5, -F.chestR - 0.07]);
+    part(BOX, MAT.joint, T, [0.12, 0.4, 0.08], [0.15, F.chestLow + ch * 0.5, -F.chestR - 0.25]);
+    part(BOX, MAT.joint, T, [0.12, 0.4, 0.08], [-0.15, F.chestLow + ch * 0.5, -F.chestR - 0.25]);
+    // Wide shoulders: a white drum across the top of the chest out to square dark housings, a white cap on each.
+    part(DRUM, MAT.plate, T, [0.3, F.shoulderX * 2 - 0.3, 0.3], [0, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
+    part(DRUM, MAT.dark, T, [0.34, 0.1, 0.34], [F.shoulderX * 0.45, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
+    part(DRUM, MAT.dark, T, [0.34, 0.1, 0.34], [-F.shoulderX * 0.45, F.shoulderY, -0.02], [0, 0, Math.PI / 2]);
+    for (const sx of [1, -1]) {
+      part(BOX, MAT.joint, T, [0.3, 0.34, 0.36], [sx * F.shoulderX, F.shoulderY, 0]);
+      part(SLEEVE, MAT.plate, T, [0.5, 0.14, 0.52], [sx * (F.shoulderX + 0.02), F.shoulderY + 0.16, 0]);
+      part(BOX, MAT.plateDim, T, [0.08, 0.3, 0.42], [sx * (F.shoulderX + 0.2), F.shoulderY - 0.02, 0]);
+    }
+    // Neck: short; the head sits low between the shoulders.
+    part(ROD, MAT.rod, T, [0.12, F.head - F.chestTop, 0.12], [0, F.chestTop, 0.04]);
+    part(SLEEVE, MAT.joint, T, [0.3, 0.08, 0.3], [0, F.chestTop, 0.04]);
+    // The head: a white disc, a dark rim and underside, a red seeker eye on the front of the rim.
+    this.head.position.set(0, F.head, 0.06);
     T.add(this.head);
     const H = this.head;
     part(DISC, MAT.plate, H, [F.headR, F.headH, F.headR]);
     part(DISC, MAT.plateDim, H, [F.headR * 0.55, F.headH * 0.7, F.headR * 0.55], [0, F.headH * 0.6, 0]);
-    part(DISC, MAT.dark, H, [F.headR * 1.03, 0.05, F.headR * 1.03], [0, -F.headH * 0.2, 0]);
-    part(DISC, MAT.joint, H, [F.headR * 0.62, 0.08, F.headR * 0.62], [0, -F.headH * 0.55, 0]);
-    this.eye = part(BOX, MAT.seek, H, [0.34, 0.05, 0.06], [0, 0.0, F.headR + 0.01]);
+    part(DISC, MAT.dark, H, [F.headR * 1.04, 0.04, F.headR * 1.04], [0, -F.headH * 0.2, 0]);
+    part(DISC, MAT.joint, H, [F.headR * 0.62, 0.06, F.headR * 0.62], [0, -F.headH * 0.55, 0]);
+    this.eye = part(BOX, MAT.seek, H, [0.22, 0.04, 0.05], [0, 0.0, F.headR + 0.01]);
     this.eye.castShadow = false;
-    part(BOX, MAT.seek, H, [0.05, 0.03, 0.05], [0.32, 0.0, F.headR - 0.06]).castShadow = false;
-    part(BOX, MAT.seek, H, [0.05, 0.03, 0.05], [-0.32, 0.0, F.headR - 0.06]).castShadow = false;
+    part(BOX, MAT.seek, H, [0.04, 0.03, 0.04], [0.2, 0.0, F.headR - 0.05]).castShadow = false;
+    part(BOX, MAT.seek, H, [0.04, 0.03, 0.04], [-0.2, 0.0, F.headR - 0.05]).castShadow = false;
     // The seeker's laser: a thin red line out of the eye (length set each frame).
     this.laserMat = glowMaterial(P.seek, true);
     this.laser = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 5, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), this.laserMat);
@@ -140,30 +148,33 @@ export class StriderBody {
     const emit = new THREE.Group();
     emit.position.set(0, F.emitY - F.head, F.emitZ);
     H.add(emit);
-    part(SLEEVE, MAT.joint, emit, [0.26, 0.1, 0.26], [0, -0.02, 0]);
-    this.emitCore = part(BALL, new THREE.MeshBasicMaterial({ color: P.beam, toneMapped: false }), emit, [0.16, 0.16, 0.16], [0, -0.04, 0]);
+    part(SLEEVE, MAT.joint, emit, [0.2, 0.08, 0.2], [0, -0.02, 0]);
+    this.emitCore = part(BALL, new THREE.MeshBasicMaterial({ color: P.beam, toneMapped: false }), emit, [0.13, 0.13, 0.13], [0, -0.04, 0]);
     this.emitCore.castShadow = false;
     this.haloMat = glowMaterial(P.beam, true);
     this.emitHalo = new THREE.Mesh(BALL, this.haloMat);
     this.emitHalo.position.set(0, -0.04, 0);
     emit.add(this.emitHalo);
-    // Arms: long and thin, hanging; a dark shoulder ball, a white sleeve on the upper arm, a slim forearm, claws.
+    // Arms: very long, hanging nearly to the sand off the wide shoulders; a white sleeve over the upper arm's rod, a
+    // dark elbow, a long white forearm, a heavy square wrist and long claws.
     for (const sx of [1, -1]) {
       const pivot = new THREE.Group();
-      pivot.position.set(sx * (F.chestR + 0.1), F.chestTop - 0.2, 0);
+      pivot.position.set(sx * F.shoulderX, F.shoulderY, 0);
       T.add(pivot);
-      part(BALL, MAT.joint, pivot, [0.2, 0.2, 0.2]);
-      part(ROD, MAT.rod, pivot, [0.07, 1.0, 0.07], [0, -1.0, 0]);
-      part(SLEEVE, MAT.plate, pivot, [0.16, 0.6, 0.16], [0, -0.75, 0]);
+      part(BALL, MAT.joint, pivot, [0.26, 0.26, 0.26]);
+      part(ROD, MAT.rod, pivot, [0.08, F.upperArm, 0.08], [0, -F.upperArm, 0]);
+      part(SLEEVE, MAT.plate, pivot, [0.26, F.upperArm * 0.62, 0.26], [0, -F.upperArm * 0.78, 0]);
+      part(SLEEVE, MAT.dark, pivot, [0.28, 0.06, 0.28], [0, -F.upperArm * 0.5, 0]);
       const elbow = new THREE.Group();
-      elbow.position.set(0, -1.0, 0);
+      elbow.position.set(0, -F.upperArm, 0);
       pivot.add(elbow);
-      part(BALL, MAT.joint, elbow, [0.13, 0.13, 0.13]);
-      part(SLEEVE, MAT.plateDim, elbow, [0.1, 1.05, 0.1], [0, -1.05, 0]);
-      part(BOX, MAT.dark, elbow, [0.12, 0.16, 0.12], [0, -1.12, 0]);
+      part(BALL, MAT.joint, elbow, [0.2, 0.2, 0.2]);
+      part(SLEEVE, MAT.plate, elbow, [0.2, F.foreArm * 0.85, 0.2], [0, -F.foreArm * 0.9, 0]);
+      part(ROD, MAT.rod, elbow, [0.06, F.foreArm * 0.3, 0.06], [0.07 * sx, -F.foreArm * 0.45, -0.1]);
+      part(BOX, MAT.dark, elbow, [0.22, 0.22, 0.24], [0, -F.foreArm, 0]);
       for (let k = 0; k < 3; k++) {
         const a = (k / 3) * Math.PI * 2;
-        part(BOX, MAT.joint, elbow, [0.035, 0.28, 0.035], [Math.sin(a) * 0.05, -1.3, Math.cos(a) * 0.05], [Math.cos(a) * 0.35, 0, -Math.sin(a) * 0.35]);
+        part(BOX, MAT.joint, elbow, [0.05, 0.42, 0.05], [Math.sin(a) * 0.08, -F.foreArm - 0.3, Math.cos(a) * 0.08], [Math.cos(a) * 0.3, 0, -Math.sin(a) * 0.3]);
       }
       this.arms.push({ pivot, elbow });
     }
@@ -201,9 +212,14 @@ export class StriderBody {
     const ch0 = F.chestLow + ch * 0.4;
     cable(anchor(T, 0.2, ch0, -F.chestR - 0.2), anchor(this.pelvis, 0.38, 0.05, -0.25), 0, 0.35, 0.06);
     cable(anchor(T, -0.2, ch0, -F.chestR - 0.2), anchor(this.pelvis, -0.38, 0.05, -0.25), 0, 0.45, 0.06);
-    cable(anchor(H, 0.3, -F.headH * 0.5, -0.35), anchor(T, 0.25, F.chestTop - 0.1, -0.3), 0, 0.22, 0.045);
+    cable(anchor(H, 0.18, -F.headH * 0.5, -0.25), anchor(T, 0.25, F.chestTop - 0.1, -0.3), 0, 0.22, 0.045);
     cable(anchor(T, 0.3, F.chestLow - 0.12, 0.15), null, 0.95, 0, 0.07);
     cable(anchor(T, -0.25, F.chestLow - 0.12, 0.22), null, 0.7, 0, 0.05);
+    // A hose from each shoulder housing round the back of the upper arm.
+    this.arms.forEach((a, i) => {
+      const sx = i === 0 ? 1 : -1;
+      cable(anchor(T, sx * (F.shoulderX - 0.3), F.shoulderY - 0.12, -0.22), anchor(a.pivot, 0, -F.upperArm * 0.45, -0.15), 0, 0.15, 0.05);
+    });
   }
 
   /** Parts by region, for the hold-V selector. */
@@ -226,8 +242,9 @@ export class StriderBody {
     const charging = s.mode === BEAM || s.mode === SLAM;
     this.arms.forEach((a, i) => {
       const k = i === 0 ? 1 : -1;
-      a.pivot.rotation.set(charging ? -0.5 : swing * k + 0.08, 0, k * (charging ? 0.5 : 0.12));
-      a.elbow.rotation.set(charging ? -0.4 : -0.25 - Math.max(0, swing * k) * 0.5, 0, 0);
+      // Hanging a little forward and out, swinging long; spread wide and raised while charging.
+      a.pivot.rotation.set(charging ? -0.35 : swing * k - 0.12, 0, k * (charging ? 0.55 : 0.07));
+      a.elbow.rotation.set(charging ? -0.5 : -0.18 - Math.max(0, swing * k) * 0.45, 0, 0);
     });
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(sim.pelvisQ);
     sim.feet.forEach((f, i) => this.pose(this.legs[i], f.pose, left));
