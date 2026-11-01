@@ -31,7 +31,7 @@ export class DetailPatch {
   private uHalf = uniform(1);
   private uScale = uniform(1);
   private uDark = uniform(0.2);
-  private pending: ([number, number, number, number] | null)[] = [];
+  private pending: { box: [number, number, number, number] | null; dentsOnly: boolean }[] = [];
   readonly stats = { vertices: 0, triangles: 0, texBytes: 0, uploadsThisFrame: 0 };
   /**
    * The ground under the window for GPU effects (src/fx/gpuGround.ts): the chunks' own grid (height, normal) as a
@@ -47,7 +47,7 @@ export class DetailPatch {
     this.group.name = "detail patch";
     this.win = this.makeWindow();
     this.build();
-    streamer.onRebuild.push((box) => this.pending.push(box));
+    streamer.onRebuild.push((box, dentsOnly = false) => this.pending.push({ box, dentsOnly }));
   }
 
   private step() { return this.streamer.v.chunkSize / Math.max(1, Math.round(this.streamer.v.segments)); }
@@ -207,7 +207,7 @@ export class DetailPatch {
     const fresh = this.makeWindowIfChanged();
     if (fresh) { this.win = fresh; this.build(); }
     const w = this.win;
-    for (const b of this.pending) w.invalidate(b);
+    for (const b of this.pending) w.invalidate(b.box, b.dentsOnly);
     this.pending.length = 0;
     w.follow(fx, fz, v.patchBudget);
     this.stats.uploadsThisFrame = 0;

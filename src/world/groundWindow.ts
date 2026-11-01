@@ -53,6 +53,16 @@ export class GroundWindow {
   private col = new THREE.Color();
   private got = new Float32Array(7);
   /**
+   * The fine heights without the dents, by slot, with the world index and generation each was taken at (perf,
+   * 2026-11-01): a refill after only the dents changed (a crater) re-reads the dents, not the dunes. Any other change
+   * (the convoy's road, a whole refill) moves to a new generation, so nothing older is used.
+   */
+  private fineBase: Float32Array;
+  private baseI: Int32Array;
+  private baseJ: Int32Array;
+  private baseGen: Int32Array;
+  private gen = 1;
+  /**
    * Where the coarse grid can be copied from instead of sampled: the chunks' own vertex at coarse world index (i, j)
    * (h, normal, colour into out), false when there is none. A coarse sample costs about eight fine ones.
    */
@@ -74,6 +84,10 @@ export class GroundWindow {
     this.mc = this.nc + 1 + 2 * this.pad;
     this.mf = this.nf + 1 + 2 * this.pad * this.sub;
     this.fineH = new Float32Array(this.mf * this.mf);
+    this.fineBase = new Float32Array(this.mf * this.mf);
+    this.baseI = new Int32Array(this.mf * this.mf);
+    this.baseJ = new Int32Array(this.mf * this.mf);
+    this.baseGen = new Int32Array(this.mf * this.mf);
     this.coarse = new Float32Array(this.mc * this.mc * 4);
     this.colour = new Float32Array(this.mc * this.mc * 4);
   }
@@ -126,8 +140,12 @@ export class GroundWindow {
     this.stats.viewSamples = n;
   }
 
-  /** The ground changed in a box (null: everywhere): refill what of it is in the window. */
-  invalidate(box: [number, number, number, number] | null) {
+  /**
+   * The ground changed in a box (null: everywhere): refill what of it is in the window. dentsOnly: only the dents
+   * changed there (craters), so the stored ground under them still holds.
+   */
+  invalidate(box: [number, number, number, number] | null, dentsOnly = false) {
+    if (!dentsOnly) this.gen++;
     if (!box) { if (this.valid) this.refillAll(); return; }
     const s = this.step, S = this.sub, P = this.pad;
     const ci0 = Math.max(this.gx - P, Math.floor(box[0] / s)), ci1 = Math.min(this.gx + this.nc + P, Math.ceil(box[2] / s));
@@ -193,8 +211,21 @@ export class GroundWindow {
     const S = this.sub, P = this.pad, lo = (this.gz - P) * S, hi = (this.gz + this.nc + P) * S;
     if (r.j < lo || r.j > hi) return 0;
     const i0 = Math.max(r.i0, (this.gx - P) * S), i1 = Math.min(r.i1, (this.gx + this.nc + P) * S);
-    const m = this.mf, row = mod(r.j, m) * m, f = this.fine, z = r.j * f;
-    for (let i = i0; i <= i1; i++) this.fineH[row + mod(i, m)] = this.field.height(i * f, z);
+    const m = this.mf, row = mod(r.j, m) * m, f = this.fine, z = r.j * f, j = r.j, g = this.gen;
+    const field = this.field, D = field.dents, B = this.fineBase, BI = this.baseI, BJ = this.baseJ, BG = this.baseGen;
+    if (!D) {
+      for (let i = i0; i <= i1; i++) this.fineH[row + mod(i, m)] = field.height(i * f, z);
+      return Math.max(0, i1 - i0 + 1);
+    }
+    // The dunes where not stored yet (the dents off while they're read), then each height as the dunes plus the dents.
+    field.dents = null;
+    for (let i = i0; i <= i1; i++) {
+      const o = row + mod(i, m);
+      if (BI[o] === i && BJ[o] === j && BG[o] === g) continue;
+      B[o] = field.height(i * f, z); BI[o] = i; BJ[o] = j; BG[o] = g;
+    }
+    field.dents = D;
+    for (let i = i0; i <= i1; i++) { const o = row + mod(i, m); this.fineH[o] = B[o] + D.at(i * f, z); }
     return Math.max(0, i1 - i0 + 1);
   }
 
