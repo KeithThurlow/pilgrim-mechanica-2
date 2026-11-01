@@ -5,7 +5,7 @@ import type { Contract, ContractBoard } from "./contracts";
 import { KIND_NAME, KILL_NAME } from "./contracts";
 import type { Lair } from "./hvt";
 
-const GOLD = "#ffd27a", RED = "#ff8a6a", DIM = "#a99f8a";
+const GOLD = "#ffd27a", RED = "#ff8a6a", DIM = "#a99f8a", GREEN = "#3dff6e";
 
 export interface QuestHudFrame {
   board: ContractBoard;
@@ -47,7 +47,7 @@ export class QuestHud {
     };
     for (const c of b.list) {
       if (c.state === "offered") lines.push(`<div style="color:${GOLD}">▸ ${KIND_NAME[c.kind]} · ${dist(c)} · +${c.reward} <span style="color:${DIM}">J to accept (${Math.ceil(b.left(c))} s)</span></div>`);
-      else if (c.state === "active") lines.push(`<div>◆ <b style="color:${GOLD}">${KIND_NAME[c.kind]}</b> · ${this.goal(c)} · ${c.kind === "tow" && c.carrying ? "" : dist(c) + " · "}+${c.reward}</div>`);
+      else if (c.state === "active") lines.push(`<div>◆ <b style="color:${GREEN}">${KIND_NAME[c.kind]}</b> · ${this.goal(c)} · ${c.kind === "tow" && c.carrying ? "" : dist(c) + " · "}+${c.reward}</div>`);
       else if (c.state === "done") lines.push(`<div style="color:${GOLD}">✓ ${KIND_NAME[c.kind]} done · +${c.reward} ${c.kind === "tow" || c.kind === "pods" ? "banked" : "at risk"}</div>`);
       else if (c.state === "failed") lines.push(`<div style="color:${RED}">✗ ${KIND_NAME[c.kind]} failed</div>`);
       else if (c.state === "dropped") lines.push(`<div style="color:${DIM}">✗ ${KIND_NAME[c.kind]} dropped</div>`);

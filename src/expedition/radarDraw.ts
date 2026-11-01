@@ -3,6 +3,8 @@
 // back (robots fade out entirely; POIs, the convoy's knowledge, stay faintly). Heat blobs for swarms, static for the
 // unknown areas, the route ahead dashed, the convoy's cars and its range edge, the mech in the middle, and the arrow
 // home: on the rim when the return point is out of range (pulsing when fuel is short), a ring on it when in range.
+// Keith 2026-11-01: the scope about twice the size (radarSize), the convoy bright cyan with a ring and a label (a
+// cyan bar on the rim when it's off the scope), mission targets bright green, bigger and ringed, distance always shown.
 import type { RadarPicture, RadarValues } from "./radar";
 
 interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot" | "pad"; tier: number; size: number; stripped?: boolean; faction?: number; label?: string }
@@ -10,9 +12,10 @@ interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot" | 
 const FACTION_RGB = [[255, 90, 60], [255, 70, 170]] as const;
 
 const TAU = Math.PI * 2;
-const INK = "#9fe3d0";
 const AMBER = "#ffb347";
 const RED = "#ff5a3c";
+/** The convoy (Keith 2026-11-01: "really hard to see where the convoy is"): bright cyan cars, a ring and a rim marker. */
+const CONVOY = "#3fe6ff";
 
 export class RadarDraw {
   readonly canvas = document.createElement("canvas");
@@ -54,6 +57,9 @@ export class RadarDraw {
     ctx.clearRect(0, 0, S, S);
     this.time += dt;
     const c = S / 2, R = c - 6, scale = R / Math.max(1, range);
+    // Marks and text grow with the scope, but slower than it (the scope was drawn at 240 px).
+    const k = Math.max(1, Math.sqrt(S / 240));
+    const font = (px: number) => `600 ${Math.round(px * k)}px system-ui, sans-serif`;
     const sy = Math.sin(upYaw), cy = Math.cos(upYaw);
     // World offset to the scope: up along the camera's facing, right to its right.
     const at = (dx: number, dz: number): [number, number] => {
@@ -173,16 +179,36 @@ export class RadarDraw {
         ctx.globalAlpha = 1;
       }
     }
-    // The convoy's cars.
-    ctx.fillStyle = INK;
-    for (const car of pic.convoy) {
-      const [x, y] = at(car.x, car.z);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(Math.sin(upYaw - car.heading), Math.cos(upYaw - car.heading)));
-      const l = Math.max(6, car.length * scale), w = Math.max(3, car.width * scale);
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.7)"; ctx.lineWidth = 1;
-      ctx.strokeRect(-w / 2, -l / 2, w, l);
-      ctx.fillRect(-w / 2, -l / 2, w, l);
+    // The convoy's cars: bright, outlined, glowing; a slow ring and a label on the nearest so it reads at a glance.
+    if (pic.convoy.length) {
+      ctx.save();
+      ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k;
+      ctx.fillStyle = CONVOY;
+      for (const car of pic.convoy) {
+        const [x, y] = at(car.x, car.z);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(Math.sin(upYaw - car.heading), Math.cos(upYaw - car.heading)));
+        const l = Math.max(7 * k, car.length * scale), w = Math.max(4 * k, car.width * scale);
+        ctx.fillRect(-w / 2, -l / 2, w, l);
+        ctx.restore();
+      }
       ctx.restore();
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.75)"; ctx.lineWidth = 1;
+      for (const car of pic.convoy) {
+        const [x, y] = at(car.x, car.z);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(Math.sin(upYaw - car.heading), Math.cos(upYaw - car.heading)));
+        const l = Math.max(7 * k, car.length * scale), w = Math.max(4 * k, car.width * scale);
+        ctx.strokeRect(-w / 2, -l / 2, w, l);
+        ctx.restore();
+      }
+      if (pic.convoyAt) {
+        const [x, y] = at(pic.convoyAt.x, pic.convoyAt.z);
+        const ring = (12 + 3 * Math.sin(this.time * 2.5)) * k;
+        ctx.strokeStyle = "rgba(63, 230, 255, 0.55)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, ring, 0, TAU); ctx.stroke();
+        ctx.font = font(11); ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillText("CONVOY", x + ring + 4 + 1, y + 1);
+        ctx.fillStyle = CONVOY; ctx.fillText("CONVOY", x + ring + 4, y);
+      }
     }
     // Blips.
     for (const p of this.painted.values()) {
@@ -221,7 +247,7 @@ export class RadarDraw {
     // The mech.
     {
       const a = Math.atan2(Math.sin(upYaw - heading), Math.cos(upYaw - heading));
-      ctx.save(); ctx.translate(c, c); ctx.rotate(a);
+      ctx.save(); ctx.translate(c, c); ctx.rotate(a); ctx.scale(k, k);
       ctx.fillStyle = "#f4f1ea"; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.2, 4.5); ctx.lineTo(0, 2.4); ctx.lineTo(-4.2, 4.5); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
@@ -238,43 +264,67 @@ export class RadarDraw {
         ctx.save(); ctx.translate(c, c); ctx.rotate(a);
         ctx.globalAlpha = pulse;
         ctx.fillStyle = hc; ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 1;
-        const tip = R + 4, base = R - 12;
-        ctx.beginPath(); ctx.moveTo(0, -tip); ctx.lineTo(8, -base); ctx.lineTo(0, -base + 4); ctx.lineTo(-8, -base); ctx.closePath(); ctx.fill(); ctx.stroke();
+        const tip = R + 4, base = R - 12 * k;
+        ctx.beginPath(); ctx.moveTo(0, -tip); ctx.lineTo(8 * k, -base); ctx.lineTo(0, -base + 4 * k); ctx.lineTo(-8 * k, -base); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.restore();
         ctx.globalAlpha = 1;
         // Distance by the arrow.
-        const lx = c + Math.sin(a) * (R - 24), ly = c - Math.cos(a) * (R - 24);
-        ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const lx = c + Math.sin(a) * (R - 24 * k), ly = c - Math.cos(a) * (R - 24 * k);
+        ctx.font = font(11); ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(dist(pic.home.dist), lx + 1, ly + 1);
         ctx.fillStyle = hc; ctx.fillText(dist(pic.home.dist), lx, ly);
       }
     }
-    // The seeker: a blue diamond on the target, or on the rim pointing at it, with its distance; contracts the same in theirs.
-    const diamond = (tx: number, tz: number, d: number, colour: string, size: number) => {
+    // The convoy off the scope: a cyan bar on the rim the way it lies, with its distance.
+    if (pic.convoyAt) {
+      const [x, y] = at(pic.convoyAt.x, pic.convoyAt.z);
+      if (Math.hypot(x - c, y - c) >= R - 8) {
+        const a = Math.atan2(x - c, c - y);
+        ctx.save(); ctx.translate(c, c); ctx.rotate(a);
+        ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k;
+        ctx.fillStyle = CONVOY; ctx.fillRect(-9 * k, -R - 3, 18 * k, 6 * k);
+        ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.lineWidth = 1; ctx.strokeRect(-9 * k, -R - 3, 18 * k, 6 * k);
+        ctx.restore();
+        const lx = c + Math.sin(a) * (R - 20 * k), ly = c - Math.cos(a) * (R - 20 * k);
+        ctx.font = font(10); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillText(`CONVOY ${dist(pic.convoyAt.dist)}`, lx + 1, ly + 1);
+        ctx.fillStyle = CONVOY; ctx.fillText(`CONVOY ${dist(pic.convoyAt.dist)}`, lx, ly);
+      }
+    }
+    // The seeker: a blue diamond on the target, or on the rim pointing at it, with its distance. Mission targets
+    // (contracts, high value targets) in bright green, bigger, with a pulsing ring and their distance always shown.
+    const diamond = (tx: number, tz: number, d: number, colour: string, size: number, mission = false) => {
       const [x, y] = at(tx, tz);
       const a = Math.atan2(x - c, c - y), out = Math.hypot(x - c, y - c) >= R - 8;
       const px = out ? c + Math.sin(a) * (R - 4) : x, py = out ? c - Math.cos(a) * (R - 4) : y;
+      if (mission) {
+        const ring = size * (1.9 + 0.6 * ((this.time * 1.4) % 1));
+        ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.globalAlpha = 1 - ((this.time * 1.4) % 1) * 0.8;
+        ctx.beginPath(); ctx.arc(px, py, ring, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+      }
       ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = colour; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.lineWidth = 1;
-      ctx.fillRect(-size, -size, size * 2, size * 2); ctx.strokeRect(-size, -size, size * 2, size * 2);
+      if (mission) { ctx.shadowColor = colour; ctx.shadowBlur = 10 * k; }
+      ctx.fillStyle = colour; ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = 1.2;
+      ctx.fillRect(-size, -size, size * 2, size * 2); ctx.shadowBlur = 0; ctx.strokeRect(-size, -size, size * 2, size * 2);
       ctx.restore();
-      if (out) {
-        const lx = c + Math.sin(a) * (R - 22), ly = c - Math.cos(a) * (R - 22);
-        ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(dist(d), lx + 1, ly + 1);
+      if (out || mission) {
+        const lx = out ? c + Math.sin(a) * (R - 22 * k) : px, ly = out ? c - Math.cos(a) * (R - 22 * k) : py + size * 2.6;
+        ctx.font = font(mission ? 11 : 10); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillText(dist(d), lx + 1, ly + 1);
         ctx.fillStyle = colour; ctx.fillText(dist(d), lx, ly);
       }
     };
-    for (const q of pic.quests ?? []) diamond(q.x, q.z, q.dist, q.color, 3.8);
-    if (pic.seek) diamond(pic.seek.x, pic.seek.z, pic.seek.dist, "#9fd8ff", 4.5);
+    if (pic.seek) diamond(pic.seek.x, pic.seek.z, pic.seek.dist, "#9fd8ff", 4.5 * k);
+    for (const q of pic.quests ?? []) diamond(q.x, q.z, q.dist, q.color, (q.kind === "hvt" ? 7.5 : 6) * k, true);
     // Label on a plate at the bottom of the scope.
     const label = `${pic.mode === "convoy" ? "CONVOY RADAR" : "MECH RADAR"} · ${dist(range)}`;
-    ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = font(10); ctx.textAlign = "center"; ctx.textBaseline = "middle";
     const lw = ctx.measureText(label).width + 12;
     ctx.fillStyle = "rgba(6, 16, 16, 0.92)"; ctx.strokeStyle = "rgba(159, 227, 208, 0.65)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(c - lw / 2, S - 17, lw, 15, 4); ctx.fill(); ctx.stroke();
+    const lh = 15 * k;
+    ctx.beginPath(); ctx.roundRect(c - lw / 2, S - lh - 2, lw, lh, 4); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "rgba(159, 227, 208, 0.95)";
-    ctx.fillText(label, c, S - 9.5);
+    ctx.fillText(label, c, S - 2 - lh / 2);
   }
 }
 
