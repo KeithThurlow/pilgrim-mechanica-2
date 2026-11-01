@@ -251,6 +251,8 @@ loop.register(bf.register);
 const enemies = enemiesOf(player.team);
 // The player's weapons as in the combat labs (src/game/playerAim.ts): the arsenal, camera shake, blasts.
 const shaker = new CameraShake();
+// Striders in the field shake the camera (their slam, strike and footfalls).
+loop.striders.sf.shake = (k) => shaker.add(k);
 const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 // The bandits may dive out of the mech's telegraphed shots (Keith 2026-10-31, src/game/bodyContact.ts).
 loop.threatSource = { arsenal, wv: V };
