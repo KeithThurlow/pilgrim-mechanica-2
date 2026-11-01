@@ -86,7 +86,7 @@ export function duelView(t: number, self: MechUnit, kit: readonly KitWeapon[], s
   return {
     t, threats, cover, sees, arena,
     self: {
-      x: s.pos.x, z: s.pos.z, vx: s.vel.x, vz: s.vel.z, heading: s.heading, health: self.health / self.maxHealth,
+      x: s.pos.x, z: s.pos.z, vx: s.vel.x, vz: s.vel.z, heading: s.heading, torso: self.upper.torsoYaw, health: self.health / self.maxHealth,
       dashCharges: self.dash.charges, canDash: s.canDash, dashing: self.dash.active, walkSpeed: self.v.walkSpeed, kit, weapons: weaponStates(selfArsenal, self, kit),
     },
     foe: {
