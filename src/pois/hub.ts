@@ -1,12 +1,12 @@
 // Tier 5, Siege: a robot manufacturing hub (Keith 2026-10-31, docs/proposal-fortresses.md): where the robots come
 // from. A pit of machinery inside a ring of slag and wreckage with a few wide openings (no gates: the robots come and
-// go), fabricator towers round a core at the centre. The towers will build robots while the hub is awake until
-// they're destroyed (the glue, later); then the core is the big strip.
+// go), fabricator towers round a core at the centre. The towers build robots while the hub is awake until they're
+// shot down (src/expedition/hubs.ts); then the core sends out its boss, and the core is a quick, rich strip.
 //
 // Pure and seeded: `hubLayout` (the ring the ground reads, the fabricators) and `buildHub` (the POI site).
 import type { Param } from "../core/tweaks";
 import { rng, type PoiPlacement } from "../world/pois";
-import type { Layout } from "./fortress";
+import { roundRing, type Layout } from "./fortress";
 import { SiteBuilder, type PoiSite } from "./site";
 
 export const HUB_DEFAULTS = {
@@ -18,9 +18,9 @@ export const HUB_DEFAULTS = {
   hubFabR: 32,
   hubFabH: 14,
   hubFabValue: 70,
-  hubFabTime: 5,
+  hubFabTime: 3,
   hubCoreValue: 520,
-  hubCoreTime: 12,
+  hubCoreTime: 4,
   hubClutter: 60,
 };
 export type HubValues = typeof HUB_DEFAULTS & { hubPad: number };
@@ -58,7 +58,7 @@ export function hubLayout(p: PoiPlacement, v: HubValues): HubLayout {
     const a = f0 + (i / nf) * Math.PI * 2;
     return { id: `${p.id}/f${i}`, a, x: p.x + Math.sin(a) * v.hubFabR, z: p.z + Math.cos(a) * v.hubFabR };
   });
-  return { poi: p.id, x: p.x, z: p.z, rings: [{ r: R, h: v.hubWallH, top, face, gates }], reach: R + top + face, fabs };
+  return { poi: p.id, x: p.x, z: p.z, rings: [roundRing(R, v.hubWallH, top, face, gates)], blocks: [], reach: R + top + face, fabs };
 }
 
 export function buildHub(p: PoiPlacement, v: HubValues): PoiSite {

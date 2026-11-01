@@ -20,7 +20,7 @@ import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
 import { SiegeWalls, isSiege, wallHeight, fenced, routeVia } from "../src/pois/fortressGround";
-import type { Layout } from "../src/pois/fortress";
+import { ringR, type Layout } from "../src/pois/fortress";
 import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
@@ -65,8 +65,8 @@ const sieges = w.pois.poisIn(-A, -A, A, A).filter(isSiege);
 }
 
 // ---- 2. walls, gates and reach, per fortress and hub ----
-const smoothAt = (L: Layout, a: number, ringR: number) => L.rings.some((r) => r.r === ringR && r.gates.some((g) => Math.abs(Math.atan2(Math.sin(a - g.a), Math.cos(a - g.a))) * r.r < g.w / 2 + r.face + 1));
-let rings = 0, gatesTried = 0, steepest = Infinity, spotsReached = 0;
+const smoothAt = (ring: Layout["rings"][number], a: number) => ring.gates.some((g) => Math.abs(Math.atan2(Math.sin(a - g.a), Math.cos(a - g.a))) * ringR(ring, a) < g.w / 2 + ring.face + ring.driftW + 1);
+let rings = 0, gatesTried = 0, steepest = Infinity, spotsReached = 0, driftSteep = 0, shapes = new Set<string>();
 
 /** Grid flood from outside the walls: which cells can be walked to. */
 function flood(field: DuneField, L: Layout) {
@@ -106,18 +106,24 @@ for (const p of sieges.slice(0, 6)) {
     rings++;
     for (let k = 0; k < 90; k++) {
       const a = (k / 90) * Math.PI * 2;
-      if (smoothAt(L, a, ring.r)) continue;
-      const sx = Math.sin(a), sz = Math.cos(a);
-      const top = w.field.height(p.x + sx * ring.r, p.z + sz * ring.r) - floor(p.x + sx * ring.r, p.z + sz * ring.r);
-      if (top < ring.h * 0.95) { fail(`${p.id}: ring at ${ring.r} m only ${top.toFixed(1)} m high at ${(a * 57.3).toFixed(0)} deg`); break; }
-      // Steepest rise across the face, either side (over 0.5 m steps).
-      let worst = 0;
-      for (const side of [-1, 1]) for (let e = ring.top; e < ring.top + ring.face; e += 0.5) {
-        const r0 = ring.r + side * e, r1 = ring.r + side * (e + 0.5);
-        worst = Math.max(worst, Math.abs(w.field.height(p.x + sx * r0, p.z + sz * r0) - w.field.height(p.x + sx * r1, p.z + sz * r1)) / 0.5);
+      if (smoothAt(ring, a)) continue;
+      const sx = Math.sin(a), sz = Math.cos(a), R = ringR(ring, a);
+      const top = w.field.height(p.x + sx * R, p.z + sz * R) - floor(p.x + sx * R, p.z + sz * R);
+      if (top < ring.h * 0.95) { fail(`${p.id}: ring at ${R.toFixed(0)} m only ${top.toFixed(1)} m high at ${(a * 57.3).toFixed(0)} deg`); break; }
+      // The container face: the rise from the drift at its foot to the top, over the face's width, either side (the
+      // least of the two sides counts).
+      let worst = Infinity;
+      for (const side of [-1, 1]) {
+        const r0 = R + side * ring.top, r1 = R + side * (ring.top + ring.face);
+        worst = Math.min(worst, Math.abs(w.field.height(p.x + sx * r0, p.z + sz * r0) - w.field.height(p.x + sx * r1, p.z + sz * r1)) / ring.face);
+      }
+      // The drift's steepest pitch: it's meant to be walked (the walker's grade).
+      for (const side of [-1, 1]) for (let e = ring.top + ring.face; e < ring.top + ring.face + ring.driftW; e += 0.5) {
+        const r0 = R + side * e, r1 = R + side * (e + 0.5);
+        driftSteep = Math.max(driftSteep, Math.abs(w.field.height(p.x + sx * r0, p.z + sz * r0) - w.field.height(p.x + sx * r1, p.z + sz * r1)) / 0.5);
       }
       steepest = Math.min(steepest, worst);
-      if (worst < WALKER_DEFAULTS.wallStop) { fail(`${p.id}: ring at ${ring.r} m: face only rises ${worst.toFixed(2)} per m at ${(a * 57.3).toFixed(0)} deg`); break; }
+      if (worst < WALKER_DEFAULTS.wallStop) { fail(`${p.id}: ring at ${R.toFixed(0)} m: face only rises ${worst.toFixed(2)} per m at ${(a * 57.3).toFixed(0)} deg`); break; }
     }
   }
   // Gates: barred and standing, a plug; down, the floor.
@@ -129,14 +135,15 @@ for (const p of sieges.slice(0, 6)) {
   }
   // Reach: outside in, a ring's gates at a time.
   const site = buildSite(p, V);
-  const inRing = (x: number, z: number, k: number) => Math.hypot(x - p.x, z - p.z) < L.rings[k].r - L.rings[k].top - L.rings[k].face;
+  const inRing = (x: number, z: number, k: number) => Math.hypot(x - p.x, z - p.z) < ringR(L.rings[k], Math.atan2(x - p.x, z - p.z)) - L.rings[k].top - L.rings[k].face;
+  shapes.add(`${L.rings.length}:${L.rings.map((r) => r.gates.length).join(",")}`);
   w.walls.down.clear();
   for (let k = 0; k <= L.rings.length; k++) {
     const can = flood(w.field, L);
     // Everything inside ring k (k < count) must be out of reach while ring k's gates stand.
     if (k < L.rings.length && L.rings[k].gates.some((g) => g.barred)) {
       for (let t = 0; t < 40; t++) {
-        const a = t * 2.4, d = (L.rings[k].r - L.rings[k].top - L.rings[k].face - 2) * Math.sqrt((t + 0.5) / 40);
+        const a = t * 2.4, d = (ringR(L.rings[k], a) - L.rings[k].top - L.rings[k].face - 2) * Math.sqrt((t + 0.5) / 40);
         const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
         if (can(x, z)) { fail(`${p.id}: inside ring ${k} reachable with its gates standing (${d.toFixed(0)} m from the centre)`); break; }
       }
@@ -156,7 +163,8 @@ for (const p of sieges.slice(0, 6)) {
   }
   w.walls.down.clear();
 }
-console.log(`walls: ${rings} rings, ${gatesTried} gates · faces rise at least ${steepest.toFixed(2)} per m (walker stops at ${WALKER_DEFAULTS.wallStop}) · ${spotsReached} spots reached ring by ring`);
+if (driftSteep > GRADE) fail(`a sand drift pitches ${driftSteep.toFixed(2)} per m (the walker climbs ${GRADE})`);
+console.log(`walls: ${rings} rings, ${gatesTried} gates, ${shapes.size} shapes (${[...shapes].join(" ")}) · container faces rise at least ${steepest.toFixed(2)} per m (walker stops at ${WALKER_DEFAULTS.wallStop}), drifts at most ${driftSteep.toFixed(2)} · ${spotsReached} spots reached ring by ring`);
 
 // ---- 3. the real walker against a wall, and through a downed gate ----
 {
@@ -166,7 +174,7 @@ console.log(`walls: ${rings} rings, ${gatesTried} gates · faces rise at least $
     const L = w.walls.layout(fort), outer = L.rings[0], g = outer.gates[0];
     const walkAt = (a: number, sprint: boolean) => {
       const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values }, w.field);
-      const d0 = outer.r + 22, x0 = fort.x + Math.sin(a) * d0, z0 = fort.z + Math.cos(a) * d0;
+      const d0 = ringR(outer, a) + 22, x0 = fort.x + Math.sin(a) * d0, z0 = fort.z + Math.cos(a) * d0;
       sim.reset(x0, z0, a + Math.PI);
       let closest = Infinity;
       for (let i = 0; i < 120 * 12; i++) {
@@ -177,16 +185,16 @@ console.log(`walls: ${rings} rings, ${gatesTried} gates · faces rise at least $
     };
     const wallA = g.a + Math.PI / Math.max(1, outer.gates.length); // half way between two gates
     for (const sprint of [false, true]) {
-      const c = walkAt(wallA, sprint);
-      if (c < outer.r - outer.top) fail(`${sprint ? "running" : "walking"} at the outer wall got to ${c.toFixed(1)} m from the centre (wall at ${outer.r})`);
-      console.log(`walker ${sprint ? "running" : "walking"} at the wall: stopped ${c.toFixed(1)} m from the centre (wall line ${outer.r} m)`);
+      const c = walkAt(wallA, sprint), Rw = ringR(outer, wallA);
+      if (c < Rw - outer.top) fail(`${sprint ? "running" : "walking"} at the outer wall got to ${c.toFixed(1)} m from the centre (wall at ${Rw.toFixed(1)})`);
+      console.log(`walker ${sprint ? "running" : "walking"} at the wall: stopped ${c.toFixed(1)} m from the centre (wall line ${Rw.toFixed(1)} m, up the drift to the containers)`);
     }
     w.walls.down.add(g.id);
     const c = walkAt(g.a, false);
     w.walls.down.clear();
     const inner = L.rings[1];
-    if (c > outer.r - outer.top - outer.face - 4) fail(`walking through a downed gate only got to ${c.toFixed(1)} m from the centre`);
-    console.log(`walker through a downed gate: got to ${c.toFixed(1)} m from the centre (next wall at ${inner?.r ?? 0} m)`);
+    if (c > ringR(outer, g.a) - outer.top - outer.face - 4) fail(`walking through a downed gate only got to ${c.toFixed(1)} m from the centre`);
+    console.log(`walker through a downed gate: got to ${c.toFixed(1)} m from the centre (next wall at ${inner ? ringR(inner, g.a).toFixed(0) : 0} m)`);
   }
 }
 
@@ -207,7 +215,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   for (let t = 0; t < 100; t += 0.05) if (w.field.height(o.x + d.x * t, o.z + d.z * t) > o.y) { sand = t; break; }
   if (hit < 0) fail("a round straight at a gate missed it");
   else if (sand >= 0 && hit > sand + 1e-3) fail(`a round at a gate meets the sand (${sand.toFixed(2)} m) before the slab (${hit.toFixed(2)} m)`);
-  const a2 = g.a + Math.PI / ring.gates.length, o2 = new THREE.Vector3(fort.x + Math.sin(a2) * (ring.r + 40), floor + 3, fort.z + Math.cos(a2) * (ring.r + 40));
+  const a2 = g.a + Math.PI / ring.gates.length, o2 = new THREE.Vector3(fort.x + Math.sin(a2) * (ringR(ring, a2) + 40), floor + 3, fort.z + Math.cos(a2) * (ringR(ring, a2) + 40));
   if (gates.hitRay(o2, new THREE.Vector3(-Math.sin(a2), 0, -Math.cos(a2)), 100) >= 0) fail("a round at the wall between gates hit a gate");
   // Wear it down: 9-damage rounds (armour 3 takes a third), then a blast.
   let rounds = 0;
@@ -238,15 +246,21 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   sw.fence = (x0, z0, x1, z1) => fenced(L, x0, z0, x1, z1, w.walls.down);
   // 40 in the outer yard, the mech 60 m outside the wall half way between two gates; 6 sentries on the wall's top.
   const am = ring.gates[0].a + Math.PI / ring.gates.length;
-  const tx = fort.x + Math.sin(am) * (ring.r + 60), tz = fort.z + Math.cos(am) * (ring.r + 60);
-  const yardR = (next.r + ring.r) / 2;
+  const Ram = ringR(ring, am);
+  const tx = fort.x + Math.sin(am) * (Ram + 60), tz = fort.z + Math.cos(am) * (Ram + 60);
+  const yardR = (ringR(next, am) + Ram) / 2;
   const yard = sw.spawn(40, fort.x + Math.sin(am) * yardR, fort.z + Math.cos(am) * yardR, 10);
-  const sentries = sw.spawn(6, fort.x + Math.sin(am) * ring.r, fort.z + Math.cos(am) * ring.r, 2);
-  for (const i of sentries) { sw.hold[i] = 1; sw.py[i] = w.field.height(sw.px[i], sw.pz[i]); }
+  const sentries = sw.spawn(6, fort.x + Math.sin(am) * Ram, fort.z + Math.cos(am) * Ram, 0.5);
+  // Posted along the wall's top 5 m apart, as the glue posts them.
+  sentries.forEach((i, k) => {
+    const a = am + ((k - 2.5) * 5) / Ram, R = ringR(ring, a);
+    sw.px[i] = fort.x + Math.sin(a) * R; sw.pz[i] = fort.z + Math.cos(a) * R;
+    sw.hold[i] = 1; sw.py[i] = w.field.height(sw.px[i], sw.pz[i]);
+  });
   for (const i of [...yard, ...sentries]) sw.hp[i] = 1e9; // nobody dies of the test
   const T = { x: tx, y: w.field.height(tx, tz) + 3, z: tz, radius: 2.5 };
-  const outside = (i: number) => Math.hypot(sw.px[i] - fort.x, sw.pz[i] - fort.z) > ring.r + ring.top + ring.face;
-  const onWall = (i: number) => wallHeight(L, sw.px[i], sw.pz[i], w.walls.down) > 1;
+  const outside = (i: number) => Math.hypot(sw.px[i] - fort.x, sw.pz[i] - fort.z) > ringR(ring, Math.atan2(sw.px[i] - fort.x, sw.pz[i] - fort.z)) + ring.top + ring.face;
+  const onWall = (i: number) => wallHeight(L, sw.px[i], sw.pz[i], w.walls.down) > ring.h * 0.8; // up on the containers (the drift is walked)
   let out = 0, climbed = 0, sentryMoved = 0, sentryOff = 0;
   const s0 = sentries.map((i) => [sw.px[i], sw.pz[i]]);
   for (let t = 0; t < 30 * 60; t++) {
@@ -262,7 +276,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   // A gate down: the yard comes out through it (aim the mech at that gate).
   const g = ring.gates[0];
   w.walls.down.add(g.id);
-  const T2 = { x: fort.x + Math.sin(g.a) * (ring.r + 40), y: 0, z: fort.z + Math.cos(g.a) * (ring.r + 40), radius: 2.5 };
+  const T2 = { x: fort.x + Math.sin(g.a) * (ringR(ring, g.a) + 40), y: 0, z: fort.z + Math.cos(g.a) * (ringR(ring, g.a) + 40), radius: 2.5 };
   T2.y = w.field.height(T2.x, T2.z) + 3;
   let through = 0;
   // The glue's routing (routeVia): round the yard to the open gate, through it, then at the mech.
@@ -286,7 +300,8 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
 {
   const hub = sieges.find((p) => p.kind === "hub")!;
   const groups = new Map<string, number>();
-  const sink = { addGroup: (id: string, n: number) => { groups.set(id, n); }, group: (id: string) => (groups.has(id) ? { n: groups.get(id)! } : null) };
+  let boss: string | null = null;
+  const sink = { addGroup: (id: string, n: number) => { groups.set(id, n); }, addBoss: (id: string) => { boss = id; return 1; }, group: (id: string) => (id === boss ? { n: 1, x: hub.x, z: hub.z } : groups.has(id) ? { n: groups.get(id)!, x: hub.x, z: hub.z } : null) };
   const HV = { ...HUB_LIFE_DEFAULTS, hubFabH: V.hubFabH };
   const bf = { targets: [] as unknown[] } as unknown as Battlefield;
   const H = new Hubs(HV, w.field, bf, new THREE.Scene(), w.walls, sink, (x0, z0, x1, z1) => w.pois.poisIn(x0, z0, x1, z1));
@@ -314,11 +329,15 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   }
   for (let t = 0; t < 120; t += 0.1) H.update(0.1, true, near);
   if (groups.size) fail(`a dead hub built ${groups.size} batches`);
+  if (!boss || !ev.some((e) => e.type === "hubBossUp")) fail("no boss came out when the last tower fell");
+  boss = null; // killed
+  for (let t = 0; t < 2; t += 0.1) H.update(0.1, true, near);
+  if (ev.filter((e) => e.type === "hubBossDown").length !== 1) fail("the boss's death wasn't one hubBossDown");
   const deads = ev.filter((e) => e.type === "hubDead").length;
   if (deads !== 1 || !H.isDead(hub.id)) fail(`hubDead fired ${deads} times`);
   const b2 = H.bearing(hub.x + 900, hub.z);
   if (b2 !== undefined && b !== undefined && Math.abs(b2 - b) < 1e-6) fail("packs still lean to a dead hub");
-  console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches`);
+  console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches, the boss out and down once`);
 }
 
 if (problems.length) { console.log(`FAIL ${problems.length} problem(s)`); throw new Error("fortress check failed"); }

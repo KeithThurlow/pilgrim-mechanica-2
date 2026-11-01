@@ -1,5 +1,7 @@
-// Fortress and hub walls as part of the ground (pure, like the POI pads; Keith 2026-10-31): every ring a berm of sand
-// banked against wreckage, flat on top, its faces far steeper than the walker's wall grade so nothing walks up them.
+// Fortress and hub walls as part of the ground (pure, like the POI pads; Keith 2026-10-31, containers 2026-11-01): along
+// every ring's line a solid core the containers stand over (flat on top, its faces far steeper than the walker's wall
+// grade so nothing walks up them), with a gentle sand drift banked either side; loose container stacks in the yards
+// are solid boxes in the ground too (cover).
 // Openings are gaps down to the pad's floor. A barred gate is a plug of the wall's height and the barricade's
 // thickness filling its gap (the steel drawn over it) until its id is in `down`; then the gap is open. The host owns
 // `down` (gate health and the gateDown event); after changing it, rebuild the ground over the gate (chunks.rebuildArea
@@ -8,7 +10,7 @@
 // Stack it after the POI pads (addModifier), so the berms sit on the levelled floor.
 import type { GroundModifier, ModifierSample } from "../world/terrain";
 import type { PoiField, PoiPlacement } from "../world/pois";
-import { fortLayout, type FortValues, type Gate, type Layout } from "./fortress";
+import { fortLayout, ringR, ringSpan, type FortValues, type Gate, type Layout, type Ring } from "./fortress";
 import { hubLayout, type HubValues } from "./hub";
 
 const smooth = (a: number, b: number, x: number) => { const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return t * t * (3 - 2 * t); };
@@ -23,48 +25,64 @@ export function siegeLayout(p: PoiPlacement, v: SiegeValues): Layout {
   return p.kind === "hub" ? hubLayout(p, v) : fortLayout(p, v);
 }
 
-/** Height a layout's walls add at (x, z), with the gates in `down` open. */
+/** Height one ring adds at distance d from the centre at heading a (gates in `down` open). */
+function ringHeight(ring: Ring, d: number, a: number, down: ReadonlySet<string>) {
+  const R = ringR(ring, a), e = Math.abs(d - R), span = ringSpan(ring);
+  if (e >= span) return 0;
+  const coreW = ring.top + ring.face;
+  let core = e < coreW ? ring.h * (1 - smooth(ring.top, coreW, e)) : 0;
+  // The drift: rolling along the wall, banked against the containers, falling away to the floor.
+  let drift = ring.drift > 0 ? ring.drift * (0.75 + 0.25 * Math.sin(a * 7.3 + ring.r) * Math.sin(a * 3.1 + 1.7)) * (1 - smooth(ring.top, span, e)) : 0;
+  let plug = 0;
+  for (const g of ring.gates) {
+    const arc = Math.abs(wrap(a - g.a)) * R;
+    if (arc >= g.w / 2 + ring.face + ring.driftW) continue;
+    // The gap: the core cut clean, the drift swept back a drift's width either side.
+    core *= smooth(g.w / 2, g.w / 2 + ring.face, arc);
+    drift *= smooth(g.w / 2 - 1, g.w / 2 + ring.driftW, arc);
+    // A standing barricade: a plug of the wall's height across the whole cut.
+    if (g.barred && !down.has(g.id) && arc < g.w / 2 + ring.face) plug = Math.max(plug, ring.h * (1 - smooth(g.t / 2, g.t / 2 + 0.5, e)));
+  }
+  return Math.max(core, drift, plug);
+}
+
+/** Height a layout's walls and cover add at (x, z), with the gates in `down` open. */
 export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<string>): number {
   const dx = x - L.x, dz = z - L.z;
   if (Math.abs(dx) > L.reach || Math.abs(dz) > L.reach) return 0;
   const d = Math.hypot(dx, dz);
   if (d > L.reach) return 0;
+  const a = Math.atan2(dx, dz);
   let best = 0;
-  let a = NaN;
-  for (const ring of L.rings) {
-    const e = Math.abs(d - ring.r), span = ring.top + ring.face;
-    if (e >= span) continue;
-    let h = ring.h * (1 - smooth(ring.top, span, e));
-    if (Number.isNaN(a)) a = Math.atan2(dx, dz);
-    for (const g of ring.gates) {
-      const arc = Math.abs(wrap(a - g.a)) * ring.r;
-      if (arc >= g.w / 2 + ring.face) continue;
-      // The sand is cut away through the gap (a face's width to blend back into the wall either side).
-      h *= smooth(g.w / 2, g.w / 2 + ring.face, arc);
-      if (g.barred && !down.has(g.id)) {
-        // The plug runs the whole cut (into the sand either side), so no slot opens where the sand blends back.
-        h = Math.max(h, ring.h * (1 - smooth(g.t / 2, g.t / 2 + 0.5, e)));
-      }
-    }
-    if (h > best) best = h;
+  for (const ring of L.rings) best = Math.max(best, ringHeight(ring, d, a, down));
+  for (const b of L.blocks) {
+    const bx = x - b.x, bz = z - b.z;
+    if (Math.abs(bx) > 8 || Math.abs(bz) > 8) continue;
+    const ca = Math.cos(b.a), sa = Math.sin(b.a);
+    // Box frame: long side along heading a.
+    const u = Math.abs(bx * sa + bz * ca) - (b.len / 2 - 0.4), w = Math.abs(bx * ca - bz * sa) - (b.dep / 2 - 0.4);
+    const out = Math.hypot(Math.max(0, u), Math.max(0, w));
+    const core = b.h * (1 - smooth(0, 0.35, out));
+    const drift = 0.9 * (1 - smooth(0, 3, out));
+    best = Math.max(best, core, drift);
   }
   return best;
 }
 
 /**
- * Would a step on foot from (x0, z0) to (x1, z1) climb a wall? Any step rising on the walls at more than half a metre per
- * metre (the faces are far steeper; only their very toe is gentler). Walking a wall's top or dropping off it is fine.
+ * Would a step on foot from (x0, z0) to (x1, z1) climb a wall? Any step rising on the walls at more than 0.8 m per
+ * metre (the container faces are far steeper; the sand drift is gentler and walked). Walking a wall's top or dropping off it is fine.
  */
 export function fenced(L: Layout, x0: number, z0: number, x1: number, z1: number, down: ReadonlySet<string>) {
   const rise = wallHeight(L, x1, z1, down) - wallHeight(L, x0, z0, down);
-  return rise > 0.002 && rise > 0.5 * Math.hypot(x1 - x0, z1 - z0);
+  return rise > 0.002 && rise > 0.8 * Math.hypot(x1 - x0, z1 - z0);
 }
 
 /** Which side of the walls a point is: 0 outside them all, k + 1 in yard k (inside ring k, outside ring k + 1). */
 export function regionOf(L: Layout, x: number, z: number) {
-  const d = Math.hypot(x - L.x, z - L.z);
+  const d = Math.hypot(x - L.x, z - L.z), a = Math.atan2(x - L.x, z - L.z);
   let n = 0;
-  for (const r of L.rings) if (d < r.r) n++;
+  for (const r of L.rings) if (d < ringR(r, a)) n++;
   return n;
 }
 
@@ -85,16 +103,16 @@ export function routeVia(L: Layout, x: number, z: number, tx: number, tz: number
     if (da < bestA) { bestA = da; best = g; }
   }
   if (!best) return null;
-  const da = wrap(best.a - am), arc = Math.abs(da) * ring.r;
-  const span = ring.top + ring.face + 6;
+  const da = wrap(best.a - am), arc = Math.abs(da) * ringR(ring, am);
+  const span = ringSpan(ring) + 4;
   if (arc < best.w / 2 - 1) {
     // In line with the gap: through it, to the far side.
-    const r = ring.r + out * span;
+    const r = ringR(ring, best.a) + out * span;
     return { x: L.x + Math.sin(best.a) * r, z: L.z + Math.cos(best.a) * r };
   }
   // Round the yard toward it, a step at a time (so the way never cuts across the next ring in), on this side of it.
-  const step = Math.max(-0.7, Math.min(0.7, da));
-  const r = out > 0 ? Math.min(ring.r - span, Math.max(d, ring.r - span - 10)) : Math.max(ring.r + span, d);
+  const step = Math.max(-0.5, Math.min(0.5, da)), Rn = ringR(ring, am + step);
+  const r = out > 0 ? Math.min(Rn - span, Math.max(d * (Rn / Math.max(1, ringR(ring, am))), Rn - span - 10)) : Math.max(Rn + span, d);
   return { x: L.x + Math.sin(am + step) * r, z: L.z + Math.cos(am + step) * r };
 }
 

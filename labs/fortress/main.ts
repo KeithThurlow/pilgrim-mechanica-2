@@ -60,8 +60,8 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
   defaults: LAB_DEFAULTS,
   params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...HUB_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Pads"] },
-    { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Pads"] },
+    { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
   ],
@@ -104,7 +104,7 @@ const sd = new SalvageDraw(salvage, bf, V);
 salvageDraw = sd;
 lab.app.scene.add(sd.group);
 const hud = new SalvageHud(salvage);
-salvage.onDone = (s) => sd.burst(s);
+salvage.onDone = (s) => { sd.burst(s); if (s.label === "core") hubs?.summon(s.poi, player.sim.pelvis); };
 salvage.onBanked = (s) => hud.banked(s);
 salvage.onNoise = (x, z, r) => { sd.pulse(x, z); forts?.noise(x, z, r); };
 function buildIt() {
@@ -138,8 +138,8 @@ const S = swarms;
 bf.register.add(S.target);
 hubs = new Hubs(V, field, bf, lab.app.scene, walls, S, () => [place]);
 const H = hubs;
-let fabsDown = 0, batches = 0;
-H.onEvent = (e) => { if (e.type === "fabDown") { fabsDown++; lab.shake(0.6); } if (e.type === "hubBatch") batches++; };
+let fabsDown = 0, batches = 0, boss = "-";
+H.onEvent = (e) => { if (e.type === "fabDown") { fabsDown++; lab.shake(0.6); } if (e.type === "hubBatch") batches++; if (e.type === "hubBossUp") { boss = "out"; lab.shake(0.5); } if (e.type === "hubBossDown") boss = "down"; };
 const contact = new BodyContact(player, bf);
 player.onDash = (x, z, dx, dz) => { F.dashed(x, z, dx, dz, V.dashShoveRadius, V.dashShove, V.dashShoveDamage); };
 let downs = 0, warlordKills = 0;
@@ -214,7 +214,13 @@ function fabDemo() {
   if (!H) return null;
   let f: FabState | null = null, bd = Infinity;
   for (const s of H.fabs.list) if (!s.down) { const d = Math.hypot(s.fab.x - p.x, s.fab.z - p.z); if (d < bd) { bd = d; f = s; } }
-  if (!f) return { cmd: { x: 0, z: 0, sprint: false }, aim: null, trigger: false };
+  if (!f) {
+    // Towers down: fight the boss when it comes out, backing off to 40 m.
+    const g = swarms?.group(`${place.id}/boss`);
+    if (!g || g.n <= 0) return { cmd: { x: 0, z: 0, sprint: false }, aim: null, trigger: false };
+    const dx = g.x - p.x, dz = g.z - p.z, d = Math.hypot(dx, dz) || 1, go = Math.max(-1, Math.min(1, (d - 40) / 6));
+    return { cmd: { x: (dx / d) * go, z: (dz / d) * go, sprint: false }, aim: { x: g.x, y: field.height(g.x, g.z) + 4, z: g.z }, trigger: [d < 70, d < 70] as const };
+  }
   const dx = f.fab.x - p.x, dz = f.fab.z - p.z, d = Math.hypot(dx, dz) || 1;
   const go = Math.max(-1, Math.min(1, (d - 35) / 6));
   return { cmd: { x: (dx / d) * go, z: (dz / d) * go, sprint: false }, aim: { x: f.fab.x, y: f.floor + V.hubFabH * 0.5, z: f.fab.z }, trigger: [d < 60, d < 60] as const };
@@ -247,7 +253,7 @@ lab.onFrame((dt) => {
   const gates = F.gates.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ");
   if (KIND === "hub") {
     const h = H.live.get(place.id);
-    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
+    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · boss ${boss} · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
     return;
   }
   lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);

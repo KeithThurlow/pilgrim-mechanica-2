@@ -211,6 +211,23 @@ export class SwarmCamps {
     this.live.set(id, l);
   }
 
+  /**
+   * A boss (a hub's, src/expedition/hubs.ts): one excavator sizeK times as big, hpK times the health and powerK times
+   * the damage, awake and heading for goal, as a group of one under this id. Returns its slot, or -1.
+   */
+  addBoss(id: string, x: number, z: number, hpK: number, powerK: number, sizeK: number, goal?: { x: number; z: number }): number {
+    if (this.live.has(id)) return -1;
+    const slots = this.sw.spawn(1, x, z, 0, { mid: 0, big: 1 }, powerK * (this.power?.(x, z) ?? 1), sizeK);
+    if (!slots.length) return -1;
+    const i = slots[0];
+    this.sw.hp[i] *= hpK / Math.max(0.01, powerK); this.sw.maxHp[i] = this.sw.hp[i];
+    const camp: Camp = { id, x, z, size: 1, guess: 1, radius: 6, seed: 0, danger: 0, mid: 0, big: 1, bigs: 1 };
+    const l: Live = { camp, slots, gens: [this.sw.gen[i]], awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };
+    l.hp = this.hp(l);
+    this.live.set(id, l);
+    return i;
+  }
+
   /** A group on the field: robots alive and where they are (null once it's gone). */
   group(id: string): { n: number; x: number; z: number; awake: boolean } | null {
     const l = this.live.get(id);

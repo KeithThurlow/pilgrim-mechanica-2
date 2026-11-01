@@ -28,7 +28,16 @@ shape).
 - Hubs: `src/pois/fabricators.ts` (targets), `fabricatorsDraw.ts`, `src/expedition/hubs.ts` (wake, batches into
   `swarmCamps.addGroup`, cap, dead), `threats.from` = `hubs.bearing`. Fortress lab `?kind=hub` builds robots too.
 
+## Done (rework after Keith's playtest 2026-11-01)
+
+- Container walls in a sand drift (`fortress.ts` builder, `fortressGround.ts` `ringHeight`, cover blocks), rolled
+  shapes (`fortLayout`: ring count, `ringR` wobble and off centre, gate counts), danger (`fortresses.ts`: bigger
+  garrison, `fortAlarmAll`, `waves`), loot (`loop.ts` `hotDrops`: vault, warlord, hub core, hub boss), hub boss
+  (`hubs.ts` `bossNow`, `swarmCamps.addBoss`, robots `spawn` sizeK), core strip 4 s.
+
 ## Open questions for Keith (defaults in place)
+
+0. Reference images for the container look and for robot designs (the hub boss is a scaled excavator stand-in).
 
 1. Breaching: gates only, or can walls be blown too (and by what)?
 2. The warlord: a tougher red Rampart on simple AI now. Should it be a rival-brain mech (duel lab AI), a unique hull, a
@@ -41,9 +50,10 @@ shape).
 ## Left, in order
 
 1. Keith's answers; adjust.
-2. Looks: stand-in walls, plates, slabs and towers; fortress lights and a smoke column so they read from far off; radar
+2. Looks: containers are plain boxes (no corrugation, doors as a dark plate), slabs and towers stand-ins; fortress lights and a smoke column so they read from far off; radar
    markers for tier 5; a tower's fall.
-3. Robots fenced by walls; garrison rocketeers or wall turrets.
+3. Robots fenced by walls; garrison rocketeers or wall turrets; bandits may snag on yard cover; sentries posted at random
+   angles can crowd a container top.
 
 ## Known rough edges
 
