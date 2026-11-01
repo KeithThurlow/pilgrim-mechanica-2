@@ -13,6 +13,7 @@
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
+import { steerOut, type KeepOut } from "../game/keepOut";
 import { closingSpeed, trampleFling, trampleHurt, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 import {
   HUB_Y, HUB_H, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_R, BIG_BODY_H, MID_BODY_H, walkHeight, walkHip, walkHome, walkLeg, smallLegs,
@@ -452,6 +453,9 @@ export class RobotSwarm {
    * the sand (the expedition lab). The dead still collapse.
    */
   readonly frozen = new Uint8Array(ROBOT_MAX);
+  /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
+  keepOut: KeepOut | null = null;
+  private ko = { x: 0, z: 0 };
   /**
    * Its own target instead of the one update() is given (a fight with another faction): position, aim height, radius,
    * set with setTarget(), cleared by clearTarget(). Such a robot doesn't leap or latch; small ones bite what they reach.
@@ -954,6 +958,11 @@ export class RobotSwarm {
         if (an > 0 && st === RUN && !walker) {
           const k = v.robotAlign;
           wx += (avx / an - wx) * k; wz += (avz / an - wz) * k;
+        }
+        // Steer out of a keep-out place (the convoy's safe zone).
+        if (this.keepOut && !lunge) {
+          const ko = this.ko, w = this.keepOut.weight(xi, zi, ko);
+          if (w > 0) { steerOut(w, ko.x, ko.z, this.keepOut.push, wx, wz, ko); wx = ko.x; wz = ko.z; }
         }
         // Don't press into the mech (unless lunging with the saw).
         if (dist < keep + 1.5 && !lunge) {

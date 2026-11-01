@@ -4,6 +4,7 @@
 // bandits on foot (partyBus.ts), that swarm the player's mech, circling it at range and breaking in for gun runs a few
 // at a time, and bandit mechs (red Ramparts) that hold off and trade fire. Hurt vehicles flee; wrecks burn out and are
 // cleared. When a band is gone, the next one rolls in from the dunes.
+import { steerOut, type KeepOut } from "../game/keepOut";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { CarSim, CAR_DEFAULTS, CAR_KINDS, axleSpan, type CarKind, type CarValues } from "../vehicles/car";
@@ -358,6 +359,9 @@ export class Warband {
    * hands each vehicle its own target. Null/undefined from it: the band's target as given to update().
    */
   targetFor: ((u: Raider | MechUnit) => WarTarget | null) | null = null;
+  /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
+  keepOut: KeepOut | null = null;
+  private ko = { x: 0, z: 0 };
 
   /**
    * A column on the sand (Keith 2026-10-28): these kinds in a loose line from (x, z) along `heading` (the first leads),
@@ -550,6 +554,16 @@ export class Warband {
     }
     if (dist < 7) { ax += (dx / dist) * (7 - dist) * 3; az += (dz / dist) * (7 - dist) * 3; }
     tx += ax * 2; tz += az * 2;
+    // Steer out of a keep-out place (the convoy's safe zone): the aim point slides outward, harder deeper in.
+    if (this.keepOut) {
+      const ko = this.ko, w = this.keepOut.weight(s.pos.x, s.pos.z, ko);
+      if (w > 0) {
+        const reach = Math.hypot(tx - s.pos.x, tz - s.pos.z), into = ((tx - s.pos.x) * ko.x + (tz - s.pos.z) * ko.z) / Math.max(1, reach);
+        // Cut the inward part of the way it wants to go, then lean out (a car can't be pushed, only steered).
+        if (into < 0) { tx -= ko.x * into * reach * w; tz -= ko.z * into * reach * w; }
+        tx += ko.x * w * 40; tz += ko.z * w * 40;
+      }
+    }
     let desired = Math.atan2(tx - s.pos.x, tz - s.pos.z);
     // Round slopes too steep to climb first; keeping clear of the mech (below) wins over that.
     desired = this.aroundSteep(s.pos.x, s.pos.z, desired);
@@ -753,6 +767,10 @@ export class Warband {
     this.clock += dt;
     const strafe = Math.sin(this.clock * 0.6 + this.mechs.indexOf(m) * 2.1) > 0 ? 0.7 : -0.7;
     let x = ux * close + -uz * strafe, z = uz * close + ux * strafe;
+    if (this.keepOut) {
+      const ko = this.ko, w = this.keepOut.weight(p.x, p.z, ko);
+      if (w > 0) { steerOut(w, ko.x, ko.z, 1, x, z, ko); x = ko.x; z = ko.z; }
+    }
     const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
     const aim = { x: T.x, y: T.y, z: T.z };
     m.step(dt, { x, z, sprint: false }, aim, player.alive && dist < m.v.range + 4);

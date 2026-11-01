@@ -312,13 +312,13 @@ export class SwarmCamps {
   }
 
   /** Awake robots within r of (x, z), as points (the convoy's turrets track them). */
-  threats(x: number, z: number, r: number, out: THREE.Vector3[]) {
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
     out.length = 0;
     const sw = this.sw;
     for (const l of this.live.values()) {
       if (!l.awake) continue;
       for (const i of this.own(l)) {
-        if (sw.state[i] >= DOWN || out.length >= 24) continue;
+        if (sw.state[i] >= DOWN || out.length >= max) continue;
         if (Math.hypot(sw.px[i] - x, sw.pz[i] - z) <= r) out.push(new THREE.Vector3(sw.px[i], sw.hubY[i], sw.pz[i]));
       }
     }
