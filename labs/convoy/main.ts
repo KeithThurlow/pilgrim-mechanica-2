@@ -216,6 +216,8 @@ const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carr
 const convoyGuns = new ConvoyGuns(bf, V, defence, escorts, escortBodies);
 const guardians = new Guardians(bf, V, scene, toon, convoy, () => RampartBody.load(toon));
 escorts.mechs = guardians.spots;
+// For poking at from the console: window.__defence (the guns' shot counts, the guardians, the safe zone).
+(window as unknown as { __defence: unknown }).__defence = { guns: convoyGuns, guardians, zone: loop.zone, defence };
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
 function homeAboard() {
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;

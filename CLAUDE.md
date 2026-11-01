@@ -169,7 +169,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
-  `?bank=N` (N scrap banked), `?raid` (a raid at once). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
+  `?bank=N` (N scrap banked), `?raid` (a raid at once), `?siege[=N]` (on the sand beside the convoy, a robot pack of N, 40, coming in: the convoy's turrets, escorts and guardian mechs fight it; `window.__defence` in the console). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
   with that contract taken), `?hvt[=metres|now]` (that close, 60 m, to the nearest high value target's lair, one kill short of
   drawing it out; `now`: it's coming; with `?quest=bounty` the bounty is on it); J takes the newest offer, hold J drops one,
   hold E by a downed Rampart hooks it (again to drop); `window.__quests` in the console.
@@ -200,7 +200,7 @@ src/game/               battlefield (shared combat stage), repair (repair kits, 
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),
                         firingRange (the weapons lab's ground and target spots), rangeVehicles (trucks on a loop),
                         duelGround (the duel lab's arena, cover drifts, line of sight)
-src/convoy/             route (heading + flattened road), platform, crane (axes + rope swing), carry (pick-up, park,
+src/convoy/             route (heading + flattened road), safeZone (enemies steer out), guard (turrets and escorts fire), guardians (escort mechs), platform, crane (axes + rope swing), carry (pick-up, park,
                         launch), deck (deck as ground, riding, spots), hold (crane hang and park poses), train (line
                         layout, footbridges), tracks (crawler pods), trail (ruts, dust), pipes (seeded pipe runs),
                         furniture, escort (escort driving), plough (the bulldozer that cuts the road) + wake (berms from the sand moved)
