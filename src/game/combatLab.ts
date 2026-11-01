@@ -155,11 +155,19 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   field.dents = craters;
   bf.craters = craters;
   let patchMs = 0, patchN = 0;
+  // Changed ground is queued and patched once a frame (flushGround, after the battlefield digs its craters): trenches
+  // and slumping craters ask for many overlapping boxes a frame (perf, 2026-11-01).
+  let patchAsked = 0;
   const groundChanged = (x0: number, z0: number, x1: number, z1: number) => {
-    const t0 = performance.now();
-    streamer.patchArea(x0, z0, x1, z1);
-    patchMs = performance.now() - t0; patchN++;
+    streamer.queuePatch(x0, z0, x1, z1);
+    patchAsked++;
     deaths.groundChanged();
+  };
+  const flushGround = () => {
+    if (!patchAsked) return;
+    const t0 = performance.now();
+    streamer.flushPatches();
+    patchMs = performance.now() - t0; patchN += patchAsked; patchAsked = 0;
   };
   bf.onGround = groundChanged;
   const deadDraw = new DeadDraw(deaths);
@@ -436,6 +444,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
     cst?.mark("light");
     bf.update(dt, camera, look);
+    flushGround();
     arsenalDraw.update();
     cst?.mark("weapons draw");
     app.hud.set("weapons", () => arsenal.controls().join(" · "));

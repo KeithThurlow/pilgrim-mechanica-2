@@ -27,15 +27,18 @@ export const WATER_COLOURS = {
   foam: new THREE.Color().setHex(0xeef2e8, THREE.SRGBColorSpace),
 };
 
-const c2 = new THREE.Color(), wide = [0, 1, 0];
+const c2 = new THREE.Color(), wideN = [0, 1, 0];
 
-/** The colour at (x, z), given its sample s (field.sample(x, z)); written into out. */
-export function groundColour(field: DuneField, x: number, z: number, s: GroundSample, out: THREE.Color): THREE.Color {
+/**
+ * The colour at (x, z), given its sample s (field.sample(x, z)); written into out. wideNormal: field.normal(x, z, n, 2)
+ * when the caller already has it (the chunks' patch cache), else it's worked out here.
+ */
+export function groundColour(field: DuneField, x: number, z: number, s: GroundSample, out: THREE.Color, wideNormal?: number[]): THREE.Color {
   const [wx, wz] = field.wind();
   const cr = Math.pow(Math.min(1, s.crest), 0.8);
   out.copy(C.trough).lerp(C.windward, Math.min(1, cr * 1.6)).lerp(C.crest, Math.max(0, cr - 0.6) * 2);
   // Colour reads a wide normal (2 m) so the slip-face tint fades smoothly instead of following the grid.
-  field.normal(x, z, wide, 2);
+  const wide = wideNormal ?? field.normal(x, z, wideN, 2);
   const steep = 1 - wide[1], downwind = wide[0] * wx + wide[2] * wz;
   const slipK = smooth(0.12, 0.35, steep) * smooth(0.02, 0.2, downwind);
   out.lerp(C.slip, slipK * 0.75);

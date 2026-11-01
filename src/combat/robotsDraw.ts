@@ -64,8 +64,12 @@ class Pool {
     this.n++;
   }
   finish() {
-    this.mesh.count = this.n; this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor && this.colourChanged) this.mesh.instanceColor.needsUpdate = true;
+    // Upload only the instances drawn this frame (perf, 2026-11-01: the pools hold about 47k instances, 3 MB of matrices
+    // a frame when sent whole).
+    const n = Math.max(1, this.n), im = this.mesh.instanceMatrix, ic = this.mesh.instanceColor;
+    this.mesh.count = this.n;
+    im.clearUpdateRanges(); im.addUpdateRange(0, n * 16); im.needsUpdate = true;
+    if (ic && this.colourChanged) { ic.clearUpdateRanges(); ic.addUpdateRange(0, n * 3); ic.needsUpdate = true; }
     this.colourChanged = false;
     this.n = 0;
   }

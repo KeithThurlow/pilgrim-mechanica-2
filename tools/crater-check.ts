@@ -7,7 +7,9 @@
 //   to 4 degrees over on sharp dune creases);
 // - protected: POI pads, the convoy road and protect() circles keep their exact heights after blasts on and round them;
 // - bare rock barely changes; stacked blasts saturate; craters slump back and are dropped when healed;
-// - cost of height() with 500 craters around against none.
+// - cost of height() with 500 craters around against none;
+// - patching: the chunks' queued, cached patch (flushPatches, the combat labs) gives the same ground as patching each box
+//   at once (patchArea) and as chunks built fresh, through blasts, slumping and healing, and costs less.
 // Run: npm test (or npx tsx tools/crater-check.ts).
 import { DuneField, TERRAIN_DEFAULTS, type GroundSample } from "../src/world/terrain";
 import { CraterLayer, CRATER_DEFAULTS } from "../src/world/craters";
@@ -18,6 +20,8 @@ import { POI_DEFAULTS, PoiField } from "../src/world/pois";
 import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
+import { TerrainStreamer, STREAM_DEFAULTS } from "../src/world/chunks";
+import { GroundWindow } from "../src/world/groundWindow";
 
 const problems: string[] = [];
 const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
@@ -208,6 +212,68 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   const t0 = time(none.field), t1 = time(many.field);
   console.log(`cost: height() ${t0.toFixed(2)} µs plain vs ${t1.toFixed(2)} µs among ${many.craters.count} craters (${added} added, ${(addMs / Math.max(1, added)).toFixed(2)} ms each to fit)`);
   if (t1 > t0 * 2 + 0.5) fail(`height() among 500 craters costs ${t1.toFixed(2)} µs against ${t0.toFixed(2)}`);
+}
+
+// ---- 8. chunk patching ----
+{
+  const { v, field, craters } = world({ craterMax: 40 });
+  const sv = { ...v, ...STREAM_DEFAULTS, radius: 1 };
+  const queued = new TerrainStreamer(field, sv), direct = new TerrainStreamer(field, sv);
+  queued.fill(0, 0); direct.fill(0, 0);
+  // The detail patch's window, told of the queued patches as the labs wire it (dents only: it keeps the dunes).
+  const win = new GroundWindow(field, 60, 0.25, 1);
+  win.follow(0, 0); win.fillNow();
+  queued.onRebuild.push((box, dentsOnly) => win.invalidate(box, dentsOnly));
+  let qMs = 0, dMs = 0;
+  // The direct one patches the same boxes, one by one, when the queued one flushes.
+  const boxes: number[][] = [];
+  const changed = (x0: number, z0: number, x1: number, z1: number) => {
+    const t = performance.now(); queued.queuePatch(x0, z0, x1, z1); qMs += performance.now() - t;
+    boxes.push([x0, z0, x1, z1]);
+  };
+  const flush = () => {
+    let t = performance.now(); queued.flushPatches(); qMs += performance.now() - t;
+    t = performance.now(); for (const b of boxes.splice(0)) direct.patchArea(b[0], b[1], b[2], b[3]); dMs += performance.now() - t;
+  };
+  // Trenches of overlapping craters (as a robot beam digs), more than the count so the oldest heal, then slumping.
+  for (let round = 0; round < 12; round++) {
+    const x0 = (rnd() - 0.5) * 60, z0 = (rnd() - 0.5) * 60, a = rnd() * Math.PI * 2;
+    for (let k = 0; k < 8; k++) { const b = craters.blast(x0 + Math.sin(a) * k * 1.2, z0 + Math.cos(a) * k * 1.2, 1.5); if (b) changed(b[0], b[1], b[2], b[3]); }
+    flush();
+    for (let f = 0; f < 30; f++) { craters.update(1 / 30, changed); flush(); }
+  }
+  // Both trail the true ground only by slumps too small to redraw yet (3 cm); the queued one, redoing whole 4 m cells,
+  // never trails it more. Redrawn everywhere, the cached patch matches chunks built fresh.
+  const fresh = new TerrainStreamer(field, sv);
+  fresh.fill(0, 0);
+  const a = new Float32Array(7), b = new Float32Array(7), c = new Float32Array(7);
+  let worstQ = 0, worstD = 0, worstF = 0, n = 0;
+  for (let j = -55; j <= 55; j++) for (let i = -55; i <= 55; i++) {
+    if (!queued.vertexAt(i, j, a) || !direct.vertexAt(i, j, b) || !fresh.vertexAt(i, j, c)) continue;
+    n++;
+    for (let k = 0; k < 7; k++) { worstQ = Math.max(worstQ, Math.abs(a[k] - c[k])); worstD = Math.max(worstD, Math.abs(b[k] - c[k])); }
+  }
+  win.fillNow();
+  const truth = new GroundWindow(field, 60, 0.25, 1);
+  truth.follow(0, 0); truth.fillNow();
+  let worstW = 0, dug = 0;
+  for (let j = -110; j <= 110; j++) for (let i = -110; i <= 110; i++) {
+    worstW = Math.max(worstW, Math.abs(win.fineAt(i, j) - truth.fineAt(i, j)));
+    dug = Math.max(dug, Math.abs(craters.at(i * 0.25, j * 0.25)));
+  }
+  console.log(`detail window after dents-only refills: ${worstW.toExponential(1)} off one filled fresh (dents up to ${dug.toFixed(2)} m)`);
+  if (dug < 0.2) fail(`the detail window check saw dents of only ${dug} m`);
+  if (worstW > 1e-4) fail(`the detail window's dents-only refill is ${worstW} off a fresh fill`);
+  queued.queuePatch(-60, -60, 60, 60); queued.flushPatches();
+  for (let j = -55; j <= 55; j++) for (let i = -55; i <= 55; i++) {
+    if (!queued.vertexAt(i, j, a) || !fresh.vertexAt(i, j, c)) continue;
+    for (let k = 0; k < 7; k++) worstF = Math.max(worstF, Math.abs(a[k] - c[k]));
+  }
+  console.log(`patching: ${n} vertices off the true ground by ${worstQ.toExponential(1)} queued, ${worstD.toExponential(1)} at once; all redrawn, ${worstF.toExponential(1)} off fresh chunks; ${qMs.toFixed(0)} ms queued and cached vs ${dMs.toFixed(0)} ms at once`);
+  if (n < 10000) fail(`patching compared only ${n} vertices`);
+  if (worstQ > worstD + 1e-5) fail(`queued patching trails the ground by ${worstQ}, patching at once by ${worstD}`);
+  if (worstF > 1e-4) fail(`queued patching differs from fresh chunks by ${worstF}`);
+  if (qMs > dMs) fail(`queued patching (${qMs.toFixed(0)} ms) costs more than patching at once (${dMs.toFixed(0)} ms)`);
 }
 
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("crater check failed"); }
