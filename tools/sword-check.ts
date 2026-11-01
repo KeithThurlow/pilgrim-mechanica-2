@@ -4,7 +4,7 @@
 // or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and resolves to a
 // melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, sweepAngles, swordCuts, type SwordStats } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, sweepAngles, swordCuts, swordPose, armIk, type SwordStats } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -80,6 +80,35 @@ const st: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordRea
   must(cut[0].x > 0, "a forehand from the left didn't cut the left-most body first");
   const short = swing(0.45 * 1.0 * 2.5, half, -half);
   must(short.length >= 1 && short.length < 7, `a small cleave budget still cut ${short.length} of 7`);
+}
+// ---- The pose: in the arm's reach through a whole swing; at rest over the shoulder; the edge leads ----
+{
+  for (const side of [1, -1] as const) {
+    const sh = { x: side * 1.3, y: 1, z: 0 }, sw = new SwordSim(side, () => V.swordRest);
+    let worst = 0, t = 0, pressed = true, prev: ReturnType<typeof swordPose> | null = null, lead = 0, lag = 0;
+    while (t < 1.2) {
+      sw.update(dt, pressed, st, V.swordComboAt); pressed = false; t += dt;
+      const p = swordPose(sw.angle, sw.lift, sw.guard, sw.dir, side, 0, sh, V);
+      worst = Math.max(worst, Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z));
+      if (sw.phase === "slash" && prev) {
+        // The tip moves this way; the spine (up) should face away from it.
+        const mx = p.fwd.x - prev.fwd.x, mz = p.fwd.z - prev.fwd.z;
+        if (Math.hypot(mx, mz) > 1e-4) { if (p.up.x * mx + p.up.z * mz < 0) lead++; else lag++; }
+      }
+      prev = p;
+    }
+    must(worst <= V.swordUpperArm + V.swordForearm + 0.25, `side ${side}: the hand went ${worst.toFixed(2)} m from the shoulder, out of the arm's reach`);
+    must(lead > lag * 4, `side ${side}: the blade's edge didn't lead the slash (${lead} leading, ${lag} trailing)`);
+    const rest = swordPose(sw.restAngle(), 0, 1, 1, side, 0, sh, V);
+    must(rest.fwd.z < -0.5 && rest.fwd.y > 0.2, `side ${side}: at rest the blade doesn't point back and up over the shoulder`);
+    const mid = swordPose(0, 0, 0, 1, side, 0, sh, V);
+    must(mid.fwd.z > 0.7 && mid.fwd.y < 0, `side ${side}: mid-slash the blade isn't out ahead and tipped down`);
+    // The arm reaches its hand with both bones at their lengths.
+    const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, { x: side, y: -1, z: -0.5 });
+    const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
+    must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
+    must(ik.elbow.y < (sh.y + ik.hand.y) / 2, "the elbow didn't bend down");
+  }
 }
 // ---- The item: in an arm's hand, a melee gun ----
 {

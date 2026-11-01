@@ -14,9 +14,9 @@ import type { Param } from "../core/tweaks";
 import type { PenMaterial, SheetHit } from "../game/sheet";
 
 export const SWORD_DEFAULTS = {
-  swordDamage: 260,
+  swordDamage: 900,
   swordAp: 0.5,
-  swordReach: 7,
+  swordReach: 4.7,
   swordArc: 150,
   swordWindup: 0.2,
   swordSlash: 0.16,
@@ -26,7 +26,9 @@ export const SWORD_DEFAULTS = {
   swordHeight: 5,
   swordHalf: 0.5,
   swordKnock: 9,
-  swordLunge: 7,
+  swordLunge: 14,
+  swordLungeNear: 5,
+  swordLungeFar: 16,
   swordHitch: 0.06,
   swordStop: 0.07,
   swordStopScale: 0.08,
@@ -36,11 +38,26 @@ export const SWORD_DEFAULTS = {
   swordLength: 1,
   swordTrail: 1,
   swordLevel: 0.7,
+  // The arm and the pose (Keith 2026-11-01: "the arms to actually animate"; at rest "over the shoulder ... samurai
+  // Ronin style"). Hull-local metres off the shoulder; +x toward the mech's left, mirrored for the right arm.
+  swordUpperArm: 1.25,
+  swordForearm: 1.3,
+  swordArcIn: 0.55,
+  swordArcDrop: 0.35,
+  swordArcFwd: 0.35,
+  swordArcRadius: 1.55,
+  swordLiftHand: 0.9,
+  swordDroop: 24,
+  swordGuardIn: 0.3,
+  swordGuardUp: 0.25,
+  swordGuardFwd: 0.85,
+  swordGuardTilt: 32,
+  swordGuardOut: 12,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
-export const SWORD_GROUP = "Sword";
-const G = SWORD_GROUP;
+export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm";
+const G = SWORD_GROUP, GA = SWORD_ARM_GROUP;
 export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one swing takes this (a rolled sword carries its own)" },
   { key: "swordAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: G },
@@ -54,7 +71,9 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordHeight", label: "Blade reaches up (m)", min: 1, max: 16, step: 0.1, group: G, tip: "The sheet's top over the ground: higher reaches big walkers' bodies" },
   { key: "swordHalf", label: "Blade half-width (m)", min: 0, max: 2, step: 0.05, group: G },
   { key: "swordKnock", label: "Knockback (m/s)", min: 0, max: 40, step: 0.5, group: G, tip: "Light bodies are thrown along the swing" },
-  { key: "swordLunge", label: "Lunge (m/s)", min: 0, max: 25, step: 0.5, group: G, tip: "The mech steps into the slash at this speed toward the aim" },
+  { key: "swordLunge", label: "Lunge (m/s)", min: 0, max: 40, step: 0.5, group: G, tip: "The mech steps into the swing at up to this speed toward the aim, through the end of the wind-up and the slash" },
+  { key: "swordLungeNear", label: "No lunge within (m)", min: 0, max: 30, step: 0.5, group: G, tip: "Aiming (the lock, else the cursor) this close: no lunge, so you can kite in close" },
+  { key: "swordLungeFar", label: "Full lunge from (m)", min: 1, max: 60, step: 0.5, group: G, tip: "Aiming this far or farther: the full lunge; in between it grows with the distance" },
   { key: "swordHitch", label: "Blade stalls on a hit (s)", min: 0, max: 0.3, step: 0.005, group: G, tip: "The swing freezes this long on its first body" },
   { key: "swordStop", label: "Hit stop (s)", min: 0, max: 0.3, step: 0.005, group: G, tip: "The whole fight slows this long on the first body (the player's own swings only)" },
   { key: "swordStopScale", label: "Hit stop speed", min: 0, max: 1, step: 0.01, group: G, tip: "How fast time runs during the hit stop (0 frozen, 1 off)" },
@@ -64,6 +83,19 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordLength", label: "Blade drawn × reach", min: 0.3, max: 1.5, step: 0.01, group: G, tip: "The model's blade length as a share of the reach" },
   { key: "swordTrail", label: "Swing trail", min: 0, max: 3, step: 0.05, group: G },
   { key: "swordLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: G },
+  { key: "swordUpperArm", label: "Upper arm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
+  { key: "swordForearm", label: "Forearm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
+  { key: "swordArcIn", label: "Swing centre: in from the shoulder (m)", min: -1, max: 2, step: 0.05, group: GA, tip: "The hand swings round a point this far toward the mech's middle" },
+  { key: "swordArcDrop", label: "Swing centre: below the shoulder (m)", min: -1, max: 2, step: 0.05, group: GA },
+  { key: "swordArcFwd", label: "Swing centre: ahead of the shoulder (m)", min: -1, max: 2, step: 0.05, group: GA },
+  { key: "swordArcRadius", label: "Hand's swing radius (m)", min: 0.3, max: 3, step: 0.05, group: GA },
+  { key: "swordLiftHand", label: "Hand raised in the wind-up (m)", min: 0, max: 2, step: 0.05, group: GA },
+  { key: "swordDroop", label: "Blade tipped down in the slash (°)", min: -20, max: 70, step: 1, group: GA, tip: "So the tip sweeps low through small enemies" },
+  { key: "swordGuardIn", label: "At rest: hand in (m)", min: -1, max: 2, step: 0.05, group: GA, tip: "The rest pose (the blade over the shoulder): the hand's place off the shoulder" },
+  { key: "swordGuardUp", label: "At rest: hand up (m)", min: -1.5, max: 1.5, step: 0.05, group: GA },
+  { key: "swordGuardFwd", label: "At rest: hand forward (m)", min: -0.5, max: 2, step: 0.05, group: GA },
+  { key: "swordGuardTilt", label: "At rest: blade up from level (°)", min: -10, max: 80, step: 1, group: GA, tip: "The blade points back over the shoulder, raised this much" },
+  { key: "swordGuardOut", label: "At rest: blade out (°)", min: -45, max: 45, step: 1, group: GA },
 ];
 
 export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number }
@@ -95,6 +127,10 @@ export class SwordSim {
   /** The blade now: radians off the aim (+ toward the mech's left), and its lift 0..1 (raised in the wind-up). */
   angle = 0;
   lift = 0;
+  /** How far the arm is in its rest pose (the blade over the shoulder): 1 at rest, 0 through the slash. */
+  guard = 1;
+  /** The swing's lead-in share for the lunge: the wind-up's last half and the slash, 0..1 (0 elsewhere). */
+  lungeK = 0;
   /** The slash's progress 0..1 this step (for the lunge), 0 outside it. */
   slashK = 0;
   /** A swing started this step (the whoosh). */
@@ -110,7 +146,7 @@ export class SwordSim {
   bite(seconds: number) { this.hitch = Math.max(this.hitch, seconds); }
 
   /** Let go of everything (weapons cold): back to rest, no swing. */
-  stop() { this.phase = "idle"; this.t = 0; this.hitch = 0; this.lift = 0; this.slashK = 0; this.angle = this.restAngle(); }
+  stop() { this.phase = "idle"; this.t = 0; this.hitch = 0; this.lift = 0; this.slashK = 0; this.lungeK = 0; this.guard = 1; this.angle = this.restAngle(); }
 
   /**
    * Step: `held` the trigger (a press starts a swing; held, the next comes `comboAt` into the recovery). Returns the
@@ -130,7 +166,7 @@ export class SwordSim {
         this.dir = this.phase === "idle" ? this.side : -this.dir;
         this.phase = "windup"; this.t = 0; this.swings++; this.started = true;
         this.ended = this.angle;
-      } else if (this.phase === "idle") { this.angle = rest; this.lift = 0; this.slashK = 0; return null; }
+      } else if (this.phase === "idle") { this.angle = rest; this.lift = 0; this.slashK = 0; this.lungeK = 0; this.guard = 1; return null; }
     }
     this.t += dt;
     const start = this.dir * half * 1.08, end = -this.dir * half;
@@ -138,6 +174,8 @@ export class SwordSim {
       const k = Math.min(1, this.t / Math.max(1e-3, st.windup));
       this.angle = this.ended + (start - this.ended) * easeOut(k);
       this.lift = easeOut(k);
+      this.guard = 1 - easeOut(Math.min(1, k * 1.4));
+      this.lungeK = k > 0.5 ? (k - 0.5) * 2 * 0.6 : 0;
       this.slashK = 0;
       if (k >= 1) { this.phase = "slash"; this.t -= st.windup; this.cocked = this.angle; }
       else return null;
@@ -147,7 +185,9 @@ export class SwordSim {
       const k = Math.min(1, this.t / Math.max(1e-3, st.slash));
       this.angle = this.cocked + (end - this.cocked) * slashEase(k);
       this.lift = 1 - k;
+      this.guard = 0;
       this.slashK = k;
+      this.lungeK = Math.sin(Math.PI * Math.min(1, 0.5 + k * 0.5)) * 0.4 + 0.6 * (1 - k);
       if (k >= 1) { this.phase = "recover"; this.t -= st.slash; this.ended = this.angle; this.slashK = 0; }
       return { from, to: this.angle };
     }
@@ -155,6 +195,8 @@ export class SwordSim {
     const k = Math.min(1, this.t / Math.max(1e-3, st.recover));
     this.angle = this.ended + (rest - this.ended) * easeInOut(k);
     this.lift = 0;
+    this.lungeK = 0;
+    this.guard = easeInOut(Math.min(1, k * 1.15));
     if (k >= 1) { this.phase = "idle"; this.t = 0; this.ended = this.angle; }
     return null;
   }
@@ -186,4 +228,56 @@ export function swordCuts<T>(hits: SheetHit<T>[], seen: Map<T, Set<number>>, bud
     out.push(h);
   }
   return out;
+}
+
+type V = { x: number; y: number; z: number };
+/** A held sword's pose in the hull's frame: where the hand is, the way the blade points, the way its spine faces (the
+ *  edge faces the other way). */
+export interface SwordPose { hand: V; fwd: V; up: V }
+
+const norm = (v: V): V => { const l = Math.hypot(v.x, v.y, v.z) || 1; return { x: v.x / l, y: v.y / l, z: v.z / l }; };
+const cross = (a: V, b: V): V => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+const lerpV = (a: V, b: V, k: number): V => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k });
+/** `up` made square to `fwd`. */
+const square = (fwd: V, up: V): V => { const d = up.x * fwd.x + up.y * fwd.y + up.z * fwd.z; return norm({ x: up.x - fwd.x * d, y: up.y - fwd.y * d, z: up.z - fwd.z * d }); };
+
+/**
+ * The pose for a swing state (pure; hull frame, +x the mech's left, +z ahead). In the swing the hand runs round an arc
+ * centred a little in from, below and ahead of the shoulder, at the swing's angle; the blade points out along the
+ * same angle, raised by the wind-up's lift and tipped down through the slash, its edge leading the way it cuts. At rest
+ * (guard 1) the hand sits in front of the shoulder with the blade back over it, edge up. Between them it blends.
+ * `aimYaw`: the aim off the hull's heading (the swing is centred on it). `side` mirrors the left arm's values.
+ */
+export function swordPose(angle: number, lift: number, guard: number, dir: number, side: 1 | -1, aimYaw: number, shoulder: V, v: SwordValues): SwordPose {
+  const a = angle + aimYaw;
+  const pitch = lift * v.swordLift * D2R - (1 - lift) * v.swordDroop * D2R;
+  const c = { x: shoulder.x - side * v.swordArcIn, y: shoulder.y - v.swordArcDrop + lift * v.swordLiftHand, z: shoulder.z + v.swordArcFwd };
+  const sHand = { x: c.x + Math.sin(a) * v.swordArcRadius, y: c.y, z: c.z + Math.cos(a) * v.swordArcRadius };
+  const sFwd = { x: Math.sin(a) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(a) * Math.cos(pitch) };
+  // The way it moves (the angle falls for dir +1): the edge leads, so the spine faces back against it.
+  const sUp = square(sFwd, { x: Math.cos(a) * dir, y: 0.15, z: -Math.sin(a) * dir });
+  const gHand = { x: shoulder.x - side * v.swordGuardIn, y: shoulder.y + v.swordGuardUp, z: shoulder.z + v.swordGuardFwd };
+  const t = v.swordGuardTilt * D2R, o = side * v.swordGuardOut * D2R;
+  const gFwd = norm({ x: Math.sin(o) * Math.cos(t), y: Math.sin(t), z: -Math.cos(o) * Math.cos(t) });
+  const gUp = square(gFwd, { x: 0, y: -1, z: 0 });
+  const k = Math.max(0, Math.min(1, guard));
+  const fwd = norm(lerpV(sFwd, gFwd, k));
+  // Blend the spine through the swing's when they'd cancel (rest's spine faces down, the swing's sideways).
+  const up = square(fwd, lerpV(sUp, gUp, k));
+  return { hand: lerpV(sHand, gHand, k), fwd, up: Number.isFinite(up.x) ? up : square(fwd, cross(fwd, { x: 1, y: 0, z: 0 })) };
+}
+
+/**
+ * Two-bone reach (pure): the elbow for a shoulder, a hand and the bones' lengths, bent toward `pole`. The hand is pulled
+ * in to the arm's reach when it's farther; returns the hand used too.
+ */
+export function armIk(s: V, h: V, upper: number, fore: number, pole: V): { elbow: V; hand: V } {
+  const dx = h.x - s.x, dy = h.y - s.y, dz = h.z - s.z;
+  const dist = Math.hypot(dx, dy, dz) || 1e-6;
+  const u = { x: dx / dist, y: dy / dist, z: dz / dist };
+  const d = Math.max(Math.abs(upper - fore) + 1e-3, Math.min(upper + fore - 1e-3, dist));
+  const hand = { x: s.x + u.x * d, y: s.y + u.y * d, z: s.z + u.z * d };
+  const x = (upper * upper - fore * fore + d * d) / (2 * d), hgt = Math.sqrt(Math.max(0, upper * upper - x * x));
+  const q = square(u, pole);
+  return { elbow: { x: s.x + u.x * x + q.x * hgt, y: s.y + u.y * x + q.y * hgt, z: s.z + u.z * x + q.z * hgt }, hand };
 }

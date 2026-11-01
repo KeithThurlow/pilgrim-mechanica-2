@@ -119,23 +119,34 @@ function rpgModel(look: ToonLook): WeaponModel {
 }
 
 /**
- * The sword (Keith 2026-11-01: "a big chonky sword"): a heavy cleaver held out along +Z from the hand: a grip and a
- * guard block, then a tall flat blade with a thick spine, a notch and a hot edge along its underside. The blade group
- * is 1 long along +Z (the arsenal stretches it to the reach); the trail is a few flat ghost blades beside the swing.
+ * The sword (Keith 2026-11-01: "slightly closer to a katana" for the one-handed one): a long wrapped grip with a round
+ * guard, then a slim blade curving gently up toward the tip, its edge (a faint hot line) along the underside, the spine
+ * dark on top. Built along +Z from the hand; the blade group is 1 long (the arsenal stretches it to the reach). The
+ * trail is a few flat ghost blades the arsenal places at the blade's recent poses.
  */
 function swordModel(look: ToonLook): WeaponModel {
   const { m, add, glow, group } = kit("sword", look);
   const swing = group(m.root, [0, 0, 0]);
-  add(swing, cyl, DARK, [0.2, 0.55, 0.2], [0, 0, 0.05], ALONG);
-  add(swing, box, STEEL, [0.95, 0.32, 0.26], [0, 0, 0.36]);
-  add(swing, box, DARK, [0.35, 0.5, 0.2], [0, -0.05, 0.42]);
-  const blade = group(swing, [0, 0, 0.48]);
-  add(blade, box, KHAKI, [0.2, 0.95, 1], [0, -0.05, 0.5]);
-  add(blade, box, DARK, [0.32, 0.26, 0.92], [0, 0.42, 0.46]);
-  add(blade, box, OLIVE, [0.24, 0.5, 0.18], [0, 0.2, 0.93]);
-  add(blade, box, STEEL, [0.26, 0.12, 0.3], [0, 0.05, 0.25]);
-  const edge = glow(blade, box, HOT, [0.08, 0.07, 0.96], [0, -0.53, 0.5]);
-  const edgeMat = edge.material as THREE.MeshBasicMaterial;
+  add(swing, cyl, DARK, [0.16, 0.85, 0.16], [0, 0, -0.12], ALONG);
+  for (let i = 0; i < 4; i++) add(swing, box, STEEL, [0.18, 0.04, 0.05], [0, 0, -0.45 + i * 0.2], [0, 0, 0.6]);
+  add(swing, cyl, OLIVE, [0.5, 0.07, 0.5], [0, 0, 0.32], ALONG);
+  add(swing, box, STEEL, [0.14, 0.24, 0.12], [0, 0, 0.4]);
+  const blade = group(swing, [0, 0, 0.46]);
+  // Four segments, each a little more raised and tipped up: a gentle curve.
+  const N = 4;
+  let edge: THREE.Mesh | null = null;
+  for (let i = 0; i < N; i++) {
+    const z = (i + 0.5) / N, y = 0.12 * z * z, tip = 0.12 * z, taper = 1 - 0.35 * z;
+    add(blade, box, KHAKI, [0.07, 0.26 * taper, 1.02 / N], [0, y, z], [-tip, 0, 0]);
+    add(blade, box, DARK, [0.1, 0.06, 1.02 / N], [0, y + 0.13 * taper, z], [-tip, 0, 0]);
+    const e = glow(blade, box, HOT, [0.04, 0.035, 1.02 / N], [0, y - 0.13 * taper, z], [-tip, 0, 0]);
+    edge ??= e;
+  }
+  add(blade, box, KHAKI, [0.06, 0.14, 0.08], [0, 0.14, 1.02], [-0.6, 0, 0]);
+  const edgeMat = edge!.material as THREE.MeshBasicMaterial;
+  // One material for the whole edge (the arsenal sets its glow).
+  blade.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && me !== edge && m.glow.includes(me.material as THREE.MeshBasicMaterial)) me.material = edgeMat; });
+  m.glow.length = 0; m.glow.push(edgeMat);
   edgeMat.opacity = 0.35;
   const trail: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
   const plane = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2).translate(0, 0, 0.5);
@@ -143,7 +154,6 @@ function swordModel(look: ToonLook): WeaponModel {
     const mat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
     const mesh = new THREE.Mesh(plane, mat);
     mesh.visible = false;
-    m.root.add(mesh);
     trail.push({ mesh, mat });
   }
   m.sword = { swing, blade, trail, edge: edgeMat };

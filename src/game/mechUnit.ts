@@ -39,6 +39,12 @@ export interface MechBody {
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
   showPod?(side: 1 | -1, on: boolean): void;
+  /** A weapon drives this side's arm (the sword), or null gives it back to the gun's aim; the hull's frame, a
+   *  shoulder's place in it, and the hull group (src/mech/rampart.ts). */
+  holdPose?(side: 1 | -1, pose: import("../mech/rampart").HeldPose | null): void;
+  hullFrame?(out: THREE.Matrix4): THREE.Matrix4;
+  shoulderAt?(side: 1 | -1, out: THREE.Vector3): THREE.Vector3;
+  hullGroup?(): THREE.Object3D;
   /** Cosmetic: turn the sensor head toward the aim (or scan), sweep a cluster (src/mech/head.ts). */
   aimSensor?(dt: number, aim: Aim | null, v: HeadValues): void;
 }
