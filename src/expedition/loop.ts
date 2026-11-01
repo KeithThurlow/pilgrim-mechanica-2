@@ -59,6 +59,7 @@ import type { WeaponValues } from "../weapons/tuning";
 import type { Raider } from "../combat/warband";
 import { mechOwner } from "../game/registerOwners";
 import { QuestLoop, QUEST_DEFAULTS, QUEST_PARAMS, QUEST_GROUPS } from "../quests/questLoop";
+import { SafeZone, SAFE_DEFAULTS, SAFE_PARAMS } from "../convoy/safeZone";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
@@ -67,6 +68,7 @@ export const LOOP_DEFAULTS = {
   ...QUEST_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
   ...HUB_LIFE_DEFAULTS,
+  ...SAFE_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
@@ -76,6 +78,7 @@ export const LOOP_PARAMS: Param[] = [
   ...QUEST_PARAMS,
   ...FORT_LIFE_PARAMS,
   ...HUB_LIFE_PARAMS,
+  ...SAFE_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
@@ -127,6 +130,8 @@ export class ExpeditionLoop {
   readonly hubs: Hubs;
   readonly columns: WarColumns;
   readonly bands: WarBands;
+  /** The convoy's safe zone (Keith 2026-11-01): robots, bandits and war bands steer out of it. */
+  readonly zone: SafeZone;
   /** The mech's body against bandits, scrappers and vehicles (src/game/bodyContact.ts). */
   readonly contact: BodyContact;
   /** The player's weapons, for the bandits' dive rolls out of telegraphed shots (the convoy lab sets it). */
@@ -249,6 +254,12 @@ export class ExpeditionLoop {
       // The war bands that gather there send a column out after the first alarm (once per fortress per expedition).
       if (v.fortReinforce > 0 && !this.fortCalls.has(poi)) this.fortCalls.set(poi, v.fortReinforceAfter);
     };
+    this.zone = new SafeZone(v);
+    this.zone.update(convoy.platforms);
+    this.swarms.sw.keepOut = this.zone;
+    this.banditCamps.sw.keepOut = this.zone;
+    this.forts.sw.keepOut = this.zone;
+    this.bands.keepOut = this.zone;
     this.forts.onGate = (e) => { if (e.type === "gateDown") this.hud.note("Gate down", "#ffb347", 3); };
     this.banditCamps.onKill = (_i, _gen, x, z) => { if (this.exp.state === "out") this.loot.drops.fromKill(`b${_i}.${_gen}`, banditThreat(v), x, z, this.dropCtx(x, z)); this.quests?.killed("bandit", x, z); };
     this.sites.onLoot = (label, scrap, s) => {
@@ -363,16 +374,17 @@ export class ExpeditionLoop {
     }
   }
 
-  /** Turret targets: awake robots near the train. */
-  turretThreats(): THREE.Vector3[] {
+  /** Turret targets: awake robots, alert bandits and war band vehicles near the train (at most `max` of each). */
+  turretThreats(max = 24): THREE.Vector3[] {
     const mid = this.convoy.platforms[Math.floor(this.convoy.platforms.length / 2)];
-    this.swarms.threats(mid.x, mid.z, 250, this.turretPts);
-    this.banditCamps.threats(mid.x, mid.z, 250, this.turretPts);
-    return this.bands.threats(mid.x, mid.z, 250, this.turretPts);
+    this.swarms.threats(mid.x, mid.z, 250, this.turretPts, max);
+    this.banditCamps.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    return this.bands.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
   }
 
   update(dt: number, inp: LoopInput) {
     if (this.route.count !== this.roadSeen) { this.roadSeen = this.route.count; this.sites.roadGrew(); }
+    this.zone.update(this.convoy.platforms);
     const { exp, fuel, carry, player, v, bf } = this, sim = player.sim, p = sim.pelvis;
     // Launched (on the sand), picked up (the crane has it: banked), or destroyed out there.
     const happened = exp.follow(carry.state, carry.attached, player.alive);

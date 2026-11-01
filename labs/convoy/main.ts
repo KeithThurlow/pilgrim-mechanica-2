@@ -61,6 +61,9 @@ import { EscortBodies } from "../../src/convoy/escortBody";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
 import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
 import { DefenceBody } from "../../src/convoy/defenceBody";
+import { ConvoyGuns, GUARD_DEFAULTS, GUARD_PARAMS, GUARD_GROUPS } from "../../src/convoy/guard";
+import { Guardians, GUARDIAN_DEFAULTS, GUARDIAN_PARAMS, GUARDIAN_GROUPS } from "../../src/convoy/guardians";
+import { SAFE_GROUPS } from "../../src/convoy/safeZone";
 import { PloughBody } from "../../src/convoy/ploughBody";
 import { PloughFx, PLOUGH_FX_DEFAULTS, PLOUGH_FX_PARAMS } from "../../src/convoy/ploughFx";
 import { PLOUGH_BASE_LENGTH, BLADE_AHEAD } from "../../src/convoy/plough";
@@ -108,7 +111,7 @@ const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...DECK_DEFAULTS,
-  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS,
+  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
   ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
@@ -117,7 +120,7 @@ const V = {
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
-  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS,
 ];
@@ -207,6 +210,14 @@ const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carr
   wb.paint(toon, 0x8e2a1e);
   loop.attachWarlord(wl, scene);
 }
+// The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
+// beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
+// (src/convoy/safeZone.ts, in the loop).
+const convoyGuns = new ConvoyGuns(bf, V, defence, escorts, escortBodies);
+const guardians = new Guardians(bf, V, scene, toon, convoy, () => RampartBody.load(toon));
+escorts.mechs = guardians.spots;
+// For poking at from the console: window.__defence (the guns' shot counts, the guardians, the safe zone).
+(window as unknown as { __defence: unknown }).__defence = { guns: convoyGuns, guardians, zone: loop.zone, defence };
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
 function homeAboard() {
   carry.state = "walking"; carry.phase = ""; carry.attached = false; carry.armed = true; carry.ground.onDeck = false;
@@ -395,6 +406,7 @@ function restart() {
     convoy.jump(route.s + (at - short - route.blade));
   }
   escorts.reset();
+  guardians.reset();
   for (const c of cranes) c.place();
   streamer.rebuildAll();
   const p = convoy.bay, at = p.toWorld(32, 0, V.craneMount + 25);
@@ -484,6 +496,15 @@ function restart() {
     loop.columns.place(x, z, Math.max(1, Number(params.get("warband")) || 6), m.x, m.z, 0.7);
     carry.armed = true;
   }
+  // ?siege[=N]: out on the sand beside the workshop car, a robot pack of N (40) coming at the mech from 200 m off that
+  // side, for the convoy's defence (Keith 2026-11-01); add ?warband for vehicles too.
+  if (params.has("siege")) {
+    const car = convoy.platforms[Math.min(1, convoy.platforms.length - 1)], w = car.toWorld(30, 0, 0);
+    player.reset(w.x, w.z, car.heading + Math.PI / 2);
+    carry.armed = false;
+    const at = car.toWorld(200, 0, 30);
+    loop.swarms.addGroup("siege", Math.max(1, Number(params.get("siege")) || 40), at.x, at.z, { mid: V.robotMidShare + 0.1, big: V.robotBigShare + 0.03, bigMin: 1 });
+  }
   // ?hvt[=metres|now]: out on the sand that close (60 m) to the nearest high value target's lair, one kill short of
   // drawing it out (now: it's already coming).
   if (params.has("hvt")) {
@@ -510,7 +531,7 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // ?items=N: N random items at risk (for the banking count-in and the loss).
@@ -521,7 +542,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -571,7 +592,7 @@ const panel = tweakPanel({
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
-    { id: "defence", label: "Defences", groups: ["Defences"] },
+    { id: "defence", label: "Convoy defence", groups: ["Defences", ...GUARD_GROUPS, ...GUARDIAN_GROUPS, ...SAFE_GROUPS] },
     { id: "cranes", label: "Cranes", groups: ["Crane", "Crane motion", "Crane swing", "Pick-up and launch", "Drop-off"] },
     { id: "deck", label: "Deck", groups: ["Deck", "Walk off"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
@@ -618,6 +639,7 @@ selector = new Selector(app, {
     { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
+    { topic: "defence", label: "Guardian mechs", objects: () => guardians.objects() },
     { topic: "cranes", label: "Cranes", objects: () => craneBodies.flatMap((c) => c.meshes()) },
     { topic: "deck", label: "Deck: parking bays and launch pads", objects: () => bodies.flatMap((b) => b.deckMeshes()) },
     { topic: "tracks", label: "Crawler tracks", objects: () => bodies.flatMap((b) => b.trackMeshes()) },
@@ -834,13 +856,18 @@ app.onTick((rawDt) => {
   }
   trail.update(convoy.platforms);
   costs.mark("trail");
-  // ?threat: a marker circling the train 45 m out, for the turrets to track.
+  // ?threat: a marker circling the train 60 m out, for the turrets to track (and shoot at).
   if (threatOn) {
     const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
     threatMark.position.set(mid.x + Math.sin(a) * 60, mid.y + 6, mid.z + Math.cos(a) * 60);
-    defence.target([threatMark.position]);
-  } else defence.target(loop.turretThreats());
+  }
+  // The convoy's turrets, escort guns and guardians all pick from the same list of threats near the train.
+  const threats = threatOn ? [threatMark.position] : loop.turretThreats(96);
+  defence.target(threats);
   defence.update(dt);
+  convoyGuns.target(threats);
+  convoyGuns.update(dt);
+  guardians.update(dt, threats);
   costs.mark("turrets");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);

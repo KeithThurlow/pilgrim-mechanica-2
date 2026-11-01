@@ -4,6 +4,7 @@
 // Keith 2026-10-24: "a traditional swarm of bandits on foot ... you get to mow down swathes of bandits that are
 // trying to take you out, shooting you with guns."
 // Structure of arrays, INFANTRY_MAX slots; dead slots are reused once their body has sunk (or oldest body first).
+import { steerOut, type KeepOut } from "../game/keepOut";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
@@ -166,6 +167,9 @@ export class InfantrySwarm {
   readonly hold = new Uint8Array(INFANTRY_MAX);
   /** Ground nobody on foot may step onto (a fortress's walls): true blocks the step from (x0, z0) to (x1, z1). */
   fence: ((x0: number, z0: number, x1: number, z1: number) => boolean) | null = null;
+  /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
+  keepOut: KeepOut | null = null;
+  private ko = { x: 0, z: 0 };
   /** Its own target instead of the one update() is given (a fight with another faction, a patrol point): set with
    *  setTarget(), cleared by clearTarget(). */
   readonly hasT = new Uint8Array(INFANTRY_MAX);
@@ -430,6 +434,11 @@ export class InfantrySwarm {
           }
         }
         wx += sx * v.sepStrength; wz += sz * v.sepStrength;
+        // Steer out of a keep-out place (the convoy's safe zone).
+        if (this.keepOut) {
+          const ko = this.ko, w = this.keepOut.weight(px[i], pz[i], ko);
+          if (w > 0) { steerOut(w, ko.x, ko.z, this.keepOut.push, wx, wz, ko); wx = ko.x; wz = ko.z; }
+        }
         // Don't press into the mech.
         if (dist < keep + 1.5) {
           const into = wx * ux + wz * uz;
