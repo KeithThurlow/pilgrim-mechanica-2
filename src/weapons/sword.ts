@@ -83,11 +83,20 @@ export const SWORD_DEFAULTS = {
   swordTwistDamp: 0.5,
   swordTwistMax: 40,
   swordShoulderOut: 0.35,
+  // The block (Keith 2026-11-01: "if you are facing your enemy with ... a free unused sword ... you will block swings
+  // against you ... you still take damage ... reduced"): a sword at rest (or recovering) whose arm faces the cutter
+  // swings up across the front and takes the cut on its blade.
+  swordBlock: 1,
+  swordBlockArc: 140,
+  swordBlockTake: 0.35,
+  swordBlockTime: 0.55,
+  swordBlockStall: 0.14,
+  swordBlockKnock: 0.3,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
-export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm";
-const G = SWORD_GROUP, GA = SWORD_ARM_GROUP;
+export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block";
+const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP;
 export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one cut takes this (a rolled sword carries its own)" },
   { key: "swordAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: G },
@@ -143,13 +152,19 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordTwistDamp", label: "Waist damping", min: 0.1, max: 1.5, step: 0.01, group: GA, tip: "Below 1 it overshoots and settles back (weight carrying on); 1 no overshoot" },
   { key: "swordTwistMax", label: "Waist twist at most (°)", min: 0, max: 90, step: 1, group: GA, tip: "Two swords swinging at once add up to this at most" },
   { key: "swordGuardUp", label: "At rest: hand higher (m)", min: -1, max: 1, step: 0.05, group: GA },
+  { key: "swordBlock", label: "Auto block", min: 0, max: 1, step: 1, group: GB, tip: "1: a free sword (at rest or recovering, not mid-cut) facing an enemy's sword cut swings up and blocks it; 0 off" },
+  { key: "swordBlockArc", label: "Blocks within (°)", min: 0, max: 360, step: 5, group: GB, tip: "The cutter must be inside this arc round where the sword arm faces (the torso's aim)" },
+  { key: "swordBlockTake", label: "Damage taken through a block", min: 0, max: 1, step: 0.01, group: GB, tip: "Share of the cut's damage that still lands when it's blocked" },
+  { key: "swordBlockTime", label: "Block lasts (s)", min: 0.2, max: 1.5, step: 0.01, group: GB, tip: "Up, held across the front, and back to rest; cuts landing while it's up are blocked too" },
+  { key: "swordBlockStall", label: "Blocked blade stalls (s)", min: 0, max: 0.5, step: 0.01, group: GB, tip: "The cutter's blade stops on the block this long" },
+  { key: "swordBlockKnock", label: "Knock through a block ×", min: 0, max: 1, step: 0.05, group: GB, tip: "The cut's knock on a blocking mech, × this" },
 ];
 
 export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number }
 
-/** guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
+/** P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
  *  S the settle after B. */
-export type SwordClip = "guard" | "A" | "B" | "R" | "S";
+export type SwordClip = "guard" | "A" | "B" | "R" | "S" | "P";
 
 type V = { x: number; y: number; z: number };
 /** A held sword's pose in the hull's frame: where the hand is, the way the blade points, the way its spine faces (the
@@ -208,6 +223,9 @@ const CUT_POLE = v3(0.9, -1, -0.5);
 // The ends (Keith 2026-11-01, round 6: "more end extension poses"): A finishes low and under on the far side; B
 // finishes with the arm up near straight, the blade pointing forward and a little into the sky.
 const UNDER: Key = { t: 0, hand: v3(-1.95, -1.0, 1.6), fwd: v3(-0.76, -0.5, -0.45), up: v3(0.2, 0.2, -1) };
+// The block (left arm): the hand up ahead of the chest, toward the middle, the blade standing up and leaning in across
+// the front, its edge out toward the cut.
+const BLOCK: Key = { t: 0, hand: v3(-0.2, 0.55, 1.8), fwd: v3(-0.45, 0.85, 0.25), up: v3(0, 0.1, -1), pole: v3(0.8, -1, -0.1) };
 const COCK: Key = { t: 0, hand: v3(0.56, 2.15, 1.68), fwd: v3(0.12, 0.55, 0.83), up: v3(-0.1, 0.9, -0.5) };
 
 // The close cut (Keith 2026-11-01, round 9: "you literally don't have enough length to swing that sword ... you'd end
@@ -293,6 +311,10 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
           { ...g, t: 1 },
         ],
       };
+    }
+    case "P": {
+      const len = v.swordBlockTime;
+      return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...BLOCK, t: 0.28 }, { ...BLOCK, hand: { ...BLOCK.hand, z: BLOCK.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
     }
     case "S": {
       const len = st.recover;
@@ -388,7 +410,7 @@ export function blendPose(a: SwordPose, b: SwordPose, k: number): SwordPose {
  * spring toward this, which is the lag and the swing on past.
  */
 export function twistTarget(c: SwordClip, t: number, st: SwordStats, v: SwordValues, span = 1): number {
-  if (c === "guard") return 0;
+  if (c === "guard" || c === "P") return 0;
   const { len, cut } = clipKeys(c, st, v, span);
   const x = Math.max(0, Math.min(1, t / Math.max(1e-3, len)));
   const lerp = (a: number, b: number, k: number) => a + (b - a) * smooth(Math.max(0, Math.min(1, k)));
@@ -439,6 +461,20 @@ export class SwordSim {
 
   constructor(readonly side: 1 | -1) {}
 
+  /** Free to block: at rest or recovering, not in a cut (Keith 2026-11-01). */
+  get free() { return this.clip === "guard" || this.clip === "R" || this.clip === "S"; }
+  /** Up in a block now (cuts landing are blocked). */
+  get blocking() { return this.clip === "P" && this.t < 0.75 * this.blockLen; }
+  private blockLen = 0.55;
+  /** Swing up to block (when free), or keep the block that's up. True when it blocks. */
+  block(v: SwordValues): boolean {
+    if (this.blocking) return true;
+    if (!this.free) return false;
+    this.blockLen = v.swordBlockTime; this.queued = false; this.lungeK = 0; this.cutting = false;
+    this.go("P", 0);
+    return true;
+  }
+
   /** Stall the blade (a body bit it). */
   bite(seconds: number) { this.hitch = Math.max(this.hitch, seconds); }
 
@@ -483,7 +519,7 @@ export class SwordSim {
       this.queued = false;
       if (this.clip === "A") this.go("B", 0);
       else this.go("A", this.driveAt(st, v));
-    } else if ((this.clip === "R" || this.clip === "S") && want) { this.queued = false; this.go("A", 0); }
+    } else if ((this.clip === "R" || this.clip === "S" || this.clip === "P") && want) { this.queued = false; this.go("A", 0); }
     const t0 = this.t;
     this.t += dt;
     const L = this.length(st, v), w = this.cutWindow(st, v);
@@ -501,7 +537,7 @@ export class SwordSim {
       const over = this.t - L;
       if (this.clip === "A") { if (want) { this.queued = false; this.go("B", over); } else this.go("R", over); }
       else if (this.clip === "B") { if (want) { this.queued = false; this.go("A", this.driveAt(st, v)); } else this.go("S", over); }
-      else if (this.clip === "R" || this.clip === "S") this.go("guard", 0);
+      else if (this.clip === "R" || this.clip === "S" || this.clip === "P") this.go("guard", 0);
       else this.t = 0;
     }
     return sweep;
