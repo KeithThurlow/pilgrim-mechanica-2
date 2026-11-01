@@ -26,7 +26,7 @@ export class DeadDraw {
   update() {
     let n = 0;
     for (const d of this.phys.dead) {
-      if (d.kind !== "ragdoll") continue;
+      if (d.kind !== "ragdoll") continue; // vehicles and mechs draw themselves
       for (let i = 0; i < d.parts.length && n < MAX_PARTS; i++, n++) {
         const h = d.parts[i].half;
         this.p.copy(d.pos[i]).setY(d.pos[i].y - d.sink);

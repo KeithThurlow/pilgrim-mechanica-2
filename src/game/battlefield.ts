@@ -13,6 +13,7 @@ import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
 import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
+import type { DeathPhysics } from "../physics/deaths";
 import { sinkDepth, type SinkSurface, type SinkValues } from "../mech/sink";
 import { DustSim, DUST_MAX, type DustValues } from "../fx/dust";
 import type { FxBudget } from "../fx/budget";
@@ -79,10 +80,14 @@ export interface Hittable {
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
   knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
-  /** A sword cut from a cutter standing at (x, z) is about to land: a mech with a free sword facing it blocks
-   *  (src/weapons/sword.ts). Returns the share of the cut's damage it takes (1: not blocked). */
-  parry?(fromX: number, fromZ: number): number;
+  /** A sword cut from a cutter standing at (x, z) is about to land: a mech with a free sword facing it blocks, one
+   *  swinging its own sword at it parries (src/weapons/sword.ts). The share of the cut's damage it takes (1: neither),
+   *  and whether the blades met (the cutter's blade recoils too). */
+  parry?(fromX: number, fromZ: number): Parry;
 }
+
+/** A sword cut met: the share of its damage that lands, and whether it was a parry (both blades recoil). */
+export interface Parry { take: number; parried?: boolean }
 
 /** How a splash lands (src/game/splash.ts). */
 export interface SplashOpts {
@@ -433,6 +438,10 @@ export class Battlefield {
 
   /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
   onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
+  /** The death physics, where the lab has one: destroyed mechs fall in it as heavy wrecks (src/physics/mechWreck.ts). */
+  deaths: DeathPhysics | null = null;
+  /** A heavy wreck slamming into the sand (where, strength about 0-2), e.g. for camera shake in a lab. */
+  onThud: ((at: THREE.Vector3, strength: number) => void) | null = null;
 
   /**
    * A blast on the ground at p (its y is moved onto the new ground): the crater, dust and debris, the sound, and

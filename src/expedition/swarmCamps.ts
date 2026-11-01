@@ -5,6 +5,7 @@
 // with everything the robot lab has (leaps, clinging, saws, slugs, lobbed charges). It gives up (freezes again where
 // it is) once the mech is aboard, dead, or campGiveUp away; clingers are shaken off first. Past campDrop the camp
 // streams out and its survivors go back into the count.
+import { robotFootfall } from "../combat/robotPrints";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
@@ -67,7 +68,7 @@ export class SwarmCamps {
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, v);
     scene.add(this.tear.group);
     // Walkers' feet kick up sand; big ones lob charges through the battlefield's shells.
-    this.sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, this.sw.kind[i] === BIG ? 0.5 : 0.12);
+    this.sw.onFootfall = robotFootfall(bf, this.sw);
     this.sw.onLob = (i, fx, fy, fz, x, z, flight) => {
       if (!player.alive && !this.sw.hasT[i]) return;
       const l = this.sw.lobOf(i);

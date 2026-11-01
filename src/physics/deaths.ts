@@ -35,9 +35,14 @@ export const DEATH_PARAMS: Param[] = [
 ];
 
 /** A box part in a body's own frame (origin at its feet, facing +Z), optionally turned (a quaternion x y z w). */
-export interface PartSpec { half: [number, number, number]; at: [number, number, number]; color: number; mass?: number; rot?: [number, number, number, number] }
-/** A joint between parts a and b at a point in the body's own frame; hinge: about this axis with limits. */
-export interface JointSpec { a: number; b: number; at: [number, number, number]; hinge?: [number, number, number]; limits?: [number, number] }
+export interface PartSpec {
+  half: [number, number, number]; at: [number, number, number]; color: number; mass?: number; rot?: [number, number, number, number];
+  /** More boxes welded to this part (heavy bodies only), placed in the same frame as the part. */
+  extra?: { half: [number, number, number]; at: [number, number, number]; rot?: [number, number, number, number]; mass?: number }[];
+}
+/** A joint between parts a and b at a point in the body's own frame; hinge: about this axis with limits; fixed: welded
+ *  (heavy bodies only). */
+export interface JointSpec { a: number; b: number; at: [number, number, number]; hinge?: [number, number, number]; limits?: [number, number]; fixed?: boolean }
 
 export interface Dead {
   parts: PartSpec[];
@@ -48,14 +53,40 @@ export interface Dead {
   quat: Quaternion[];
   age: number;
   live: boolean;
-  /** Vehicles are drawn by their own body: the physics only moves sim.pos and sim.quat for them. */
-  kind: "ragdoll" | "vehicle";
+  /** Vehicles are drawn by their own body: the physics only moves sim.pos and sim.quat for them. Mechs too: their
+   *  model's pivots follow the parts (src/physics/mechWreckDraw.ts). */
+  kind: "ragdoll" | "vehicle" | "mech";
   /** Extra sink below the sand at the end of its life (metres). */
   sink: number;
   done: boolean;
   /** Waiting for its physics (too many died this frame): flying on as thrown, ballistic, until its turn. */
   pending?: Pending | null;
+  /** Kept by its owner (a mech's wreck): not frozen by the cap, never sunk or cleared; the owner calls remove(). */
+  keep?: boolean;
+  /** Moves at most this long (s) before freezing (default liveFor); frozen sooner once it has settled. */
+  moveFor?: number;
+  /** Joints that hold their pose at death (a mech's wreck, src/physics/mechWreck.ts). */
+  hold?: Hold | null;
+  /** Its own ground: a plane fitted to the dunes under it, moved along as it slides (heavy bodies only). */
+  plane?: RAPIER.Collider | null;
+  planeAt?: Vector3;
+  /** Parts that report hitting the sand (the hull and pelvis slamming down): impacts since the owner last drained them. */
+  thud?: Thud | null;
 }
+
+/** Live tuning for held joints (a mech's wreck): read every frame, so sliders act on wrecks already falling. */
+export interface HoldValues {
+  /** Each hinge's pull back to its pose at death: N·m per radian, × the whole body's weight × 1 m. */
+  mechPoseStiffness: number;
+  /** And its damping: N·m per rad/s, × weight × 1 m. */
+  mechPoseDamping: number;
+  /** Seconds the joints hold before the power dies, the share they keep after, and how long the dying takes. */
+  mechHoldFor: number;
+  mechHoldEnd: number;
+  mechFadeTime: number;
+}
+interface Hold { hinges: RAPIER.RevoluteImpulseJoint[]; v: HoldValues; weight: number; still: number; gain: number }
+interface Thud { parts: number[]; offs: Vector3[]; prevVy: number[]; cool: number[]; impacts: { x: number; y: number; z: number; speed: number }[] }
 
 /** A ragdoll's bodies not yet made: its parts' starting velocities and spins, in the order of parts. */
 interface Pending { joints: JointSpec[]; lin: { x: number; y: number; z: number }[]; ang: { x: number; y: number; z: number }[]; floor: number }
@@ -224,6 +255,7 @@ export class DeathPhysics {
     if (d.pending) { d.pending = null; const i = this.waiting.indexOf(d); if (i >= 0) this.waiting.splice(i, 1); }
     this.read(d);
     for (const j of d.joints) this.world.removeImpulseJoint(j, false);
+    if (d.plane) { this.world.removeCollider(d.plane, false); d.plane = null; }
     for (const b of d.bodies) this.world.removeRigidBody(b);
     d.joints = []; d.bodies = [];
     d.live = false;
@@ -238,25 +270,161 @@ export class DeathPhysics {
     this.madeThisFrame = 0;
     for (const d of this.waiting) this.drift(d, dt);
     // Freeze the oldest past the cap, and any that have moved long enough.
-    const live = this.dead.filter((d) => d.live);
+    const live = this.dead.filter((d) => d.live && !d.keep);
     for (let i = 0; i < live.length - v.maxRagdolls; i++) this.freeze(live[i]);
-    for (const d of this.dead) if (d.live && d.age > v.liveFor) this.freeze(d);
+    for (const d of this.dead) if (d.live && d.age > (d.moveFor ?? v.liveFor)) this.freeze(d);
     // Fixed 60 Hz steps (at most 3 a frame).
     this.acc = Math.min(this.acc + dt, 3 / 60);
+    for (const d of this.dead) if (d.live && d.hold) { this.holdPose(d); this.fitPlane(d); }
     while (this.acc >= 1 / 60) {
       this.world.timestep = 1 / 60;
       this.world.step();
+      for (const d of this.dead) if (d.live && d.thud) this.listen(d, 1 / 60);
       this.acc -= 1 / 60;
     }
     for (const d of this.dead) {
       d.age += dt;
       if (d.live && !d.pending) this.read(d);
+      if (d.keep) { if (d.live && d.hold && this.settled(d, dt)) this.freeze(d); continue; }
       // At the end, sink into the sand, then clear.
       const end = v.bodyStays;
       if (d.age > end) d.sink = Math.min(1.5, (d.age - end) * 0.4);
       if (d.age > end + 4) { this.freeze(d); d.done = true; }
     }
     for (let i = this.dead.length - 1; i >= 0; i--) if (this.dead[i].done) this.dead.splice(i, 1);
+  }
+
+  /**
+   * A heavy body that holds its shape (a destroyed mech): parts in world space (origin 0, yaw 0), each with its own
+   * starting velocity, made at once (they're rare). Every body starts unturned (its box turned inside it), so a hinge's
+   * axis and limits read the same from both sides and angle 0 is the pose it died in; each hinge has a motor pulling
+   * back to 0 (hold), fixed joints are welded.
+   */
+  heavy(parts: PartSpec[], joints: JointSpec[], lin: { x: number; y: number; z: number }[], ang: { x: number; y: number; z: number },
+    o: { damping: number; moveFor: number; hold: HoldValues; thud: { part: number; at: [number, number, number] }[] }): Dead {
+    const w = this.world;
+    const d: Dead = {
+      parts, bodies: [], joints: [], pos: parts.map(() => new Vector3()), quat: parts.map(() => new Quaternion()),
+      age: 0, live: true, kind: "mech", sink: 0, done: false, keep: true, moveFor: o.moveFor,
+    };
+    let weight = 0;
+    parts.forEach((p, k) => {
+      const b = w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(p.at[0], p.at[1], p.at[2])
+        .setLinvel(lin[k].x, lin[k].y, lin[k].z).setAngvel(ang)
+        .setLinearDamping(0.15).setAngularDamping(o.damping));
+      for (const c of [p, ...(p.extra ?? [])]) {
+        const r = c.rot ?? [0, 0, 0, 1];
+        const rr = Math.min(0.12, Math.min(...c.half) * 0.5);
+        w.createCollider(RAPIER.ColliderDesc.roundCuboid(c.half[0] - rr, c.half[1] - rr, c.half[2] - rr, rr).setTranslation(c.at[0] - p.at[0], c.at[1] - p.at[1], c.at[2] - p.at[2])
+          .setRotation({ x: r[0], y: r[1], z: r[2], w: r[3] }).setDensity(c.mass ?? p.mass ?? 2000).setFriction(0.9).setRestitution(0).setCollisionGroups(MECH), b);
+      }
+      weight += b.mass() * 9.81;
+      d.bodies.push(b);
+    });
+    const hinges: RAPIER.RevoluteImpulseJoint[] = [];
+    const I = { x: 0, y: 0, z: 0, w: 1 };
+    for (const j of joints) {
+      const A = parts[j.a].at, B = parts[j.b].at;
+      const a1 = { x: j.at[0] - A[0], y: j.at[1] - A[1], z: j.at[2] - A[2] }, a2 = { x: j.at[0] - B[0], y: j.at[1] - B[1], z: j.at[2] - B[2] };
+      const data = j.fixed ? RAPIER.JointData.fixed(a1, I, a2, I)
+        : j.hinge ? RAPIER.JointData.revolute(a1, a2, { x: j.hinge[0], y: j.hinge[1], z: j.hinge[2] }) : RAPIER.JointData.spherical(a1, a2);
+      if (j.hinge && j.limits) { data.limitsEnabled = true; data.limits = j.limits; }
+      const joint = w.createImpulseJoint(data, d.bodies[j.a], d.bodies[j.b], true);
+      d.joints.push(joint);
+      if (j.hinge && !j.fixed) {
+        const h = joint as RAPIER.RevoluteImpulseJoint;
+        h.configureMotorModel(RAPIER.MotorModel.ForceBased);
+        hinges.push(h);
+      }
+    }
+    d.hold = { hinges, v: o.hold, weight, still: 0, gain: -1 };
+    // The heavy chain on the heightfield's (or a trimesh's) triangles gained energy and never settled: legs flailing
+    // for seconds (2026-11-01, tools/mechwreck-check.ts). On a flat box it settles in a few seconds, so each wreck
+    // lies on its own plane fitted to the dunes under it, refitted as it moves.
+    d.plane = w.createCollider(RAPIER.ColliderDesc.cuboid(30, 1, 30).setFriction(1.4).setCollisionGroups(MECH_FLOOR));
+    d.planeAt = new Vector3(1e9, 0, 0);
+    this.fitPlane(d);
+    this.holdPose(d);
+    d.thud = {
+      parts: o.thud.map((t) => t.part), offs: o.thud.map((t) => new Vector3(t.at[0] - parts[t.part].at[0], t.at[1] - parts[t.part].at[1], t.at[2] - parts[t.part].at[2])),
+      prevVy: o.thud.map((t) => lin[t.part].y), cool: o.thud.map(() => 0), impacts: [],
+    };
+    this.read(d);
+    this.dead.push(d);
+    return d;
+  }
+
+  /** Move a wreck's plane under it when it has moved a metre: the dunes there as a plane (least squares over ±6 m). */
+  private fitPlane(d: Dead) {
+    const b = d.bodies[0], t = b.translation();
+    if (!d.plane || Math.hypot(t.x - d.planeAt!.x, t.z - d.planeAt!.z) < 1) return;
+    d.planeAt!.set(t.x, 0, t.z);
+    let sxx = 0, szz = 0, sxz = 0, sxh = 0, szh = 0, sh = 0, n = 0;
+    for (let i = -2; i <= 2; i++) for (let k = -2; k <= 2; k++) {
+      const x = i * 3, z = k * 3, h = this.ground.height(t.x + x, t.z + z);
+      sxx += x * x; szz += z * z; sxz += x * z; sxh += x * h; szh += z * h; sh += h; n++;
+    }
+    // A grid centred on the body: x and z sums are 0, so the fit separates.
+    const a = sh / n, det = sxx * szz - sxz * sxz || 1;
+    const gx = (sxh * szz - szh * sxz) / det, gz = (szh * sxx - sxh * sxz) / det;
+    const nrm = new Vector3(-gx, 1, -gz).normalize();
+    const q = new Quaternion().setFromUnitVectors(UP, nrm);
+    d.plane.setTranslation({ x: t.x - nrm.x, y: a - nrm.y, z: t.z - nrm.z });
+    d.plane.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+  }
+
+  /** Take a kept body out for good (its owner is done with it: a mech rebuilt). */
+  remove(d: Dead) {
+    this.freeze(d);
+    d.done = true;
+    const i = this.dead.indexOf(d);
+    if (i >= 0) this.dead.splice(i, 1);
+  }
+
+  /** The power in a wreck's joints now, as a share (1 until mechHoldFor, fading to mechHoldEnd). */
+  static holdGain(v: HoldValues, age: number) {
+    const f = Math.min(1, Math.max(0, (age - v.mechHoldFor) / Math.max(0.01, v.mechFadeTime)));
+    return 1 - f * (1 - v.mechHoldEnd);
+  }
+
+  /** Set each hinge's motor (toward the pose at death) for the power left; only when it changed. */
+  private holdPose(d: Dead) {
+    const h = d.hold!, v = h.v, g = DeathPhysics.holdGain(v, d.age);
+    // The damping stays when the power dies (seized joints only slow things), so it can only settle.
+    const k = v.mechPoseStiffness * h.weight * g, c = v.mechPoseDamping * h.weight;
+    const key = k * 1e-3 + c;
+    if (key === h.gain) return;
+    h.gain = key;
+    for (const j of h.hinges) j.configureMotorPosition(0, k, c);
+  }
+
+  /** Thud points (on their parts) falling fast that suddenly stop near the sand: an impact (where, how fast it came down). */
+  private listen(d: Dead, dt: number) {
+    const t = d.thud!, p = this.v3, q = this.q;
+    t.parts.forEach((k, i) => {
+      const b = d.bodies[k], r = b.rotation(), o = b.translation(), c = b.worldCom(), l = b.linvel(), w = b.angvel();
+      p.copy(t.offs[i]).applyQuaternion(q.set(r.x, r.y, r.z, r.w)).add(this.v3b.set(o.x, o.y, o.z));
+      // The point's own speed: the body's, plus its spin about the centre of mass.
+      const vy = l.y + w.z * (p.x - c.x) - w.x * (p.z - c.z);
+      t.cool[i] = Math.max(0, t.cool[i] - dt);
+      if (t.prevVy[i] < -2 && vy - t.prevVy[i] > 1.5 && t.cool[i] <= 0 && p.y - this.ground.height(p.x, p.z) < 2) {
+        t.impacts.push({ x: p.x, y: p.y, z: p.z, speed: -t.prevVy[i] });
+        t.cool[i] = 0.4;
+      }
+      t.prevVy[i] = vy;
+    });
+  }
+  private v3b = new Vector3();
+
+  /** A wreck at rest for a second (after its joints have gone quiet): no point stepping it. */
+  private settled(d: Dead, dt: number) {
+    const h = d.hold!;
+    if (d.age < h.v.mechHoldFor + h.v.mechFadeTime) return false;
+    let fast = 0;
+    for (const b of d.bodies) { const l = b.linvel(), a = b.angvel(); fast = Math.max(fast, Math.hypot(l.x, l.y, l.z), Math.hypot(a.x, a.y, a.z) * 0.5); }
+    h.still = fast < 0.08 ? h.still + dt : 0;
+    return h.still > 1;
   }
 
   get liveCount() { return this.dead.filter((d) => d.live).length; }
@@ -275,5 +443,8 @@ function anchor(at: [number, number, number], p: PartSpec) {
 // neighbouring parts at every joint was most of the cost and made limbs jitter).
 const FLOOR = (0x0001 << 16) | 0xffff;
 const BODY = (0x0002 << 16) | 0x0001;
+// Mech wrecks meet only the planes under them (see heavy()).
+const MECH = (0x0008 << 16) | 0x0010;
+const MECH_FLOOR = (0x0010 << 16) | 0x0008;
 // Vehicle wrecks also meet each other.
 const WRECK = (0x0004 << 16) | 0x0005;

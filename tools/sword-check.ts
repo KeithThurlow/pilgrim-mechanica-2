@@ -26,7 +26,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(1);
   let t = 0, cutT = 0, first: number | null = null, last = 0, pressed = true;
   const clips: SwordClip[] = [];
-  while (t < 2 * V.swordPace) {
+  while (t < 3 * V.swordPace) {
     const sweep = sw.update(dt, pressed, st, V);
     pressed = false; t += dt;
     if (clips[clips.length - 1] !== sw.clip) clips.push(sw.clip);
@@ -48,7 +48,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   const sw = new SwordSim(-1);
   const order: SwordClip[] = [];
   let t = 0, seen = 0;
-  while (t < 2.5 * V.swordPace) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
+  while (t < 2.5 * V.swordPace * (V.swordFarTime / 1.15)) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
   must(order.length >= 4, `held for 2.5 s (× pace) it cut only ${order.length} times`);
   must(order.every((c, i) => c === (i % 2 === 0 ? "A" : "B")), `held cuts didn't alternate cut and back-cut: ${order.join(",")}`);
   const b = new SwordSim(1);
@@ -59,13 +59,15 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   for (let i = 0; i < 5; i++) b.update(dt, true, st, V);
   must(Math.abs(b.t - t0) < 1e-9, "the blade moved while stalled in a body");
 }
-// ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder ----
-{
+// ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder; every sword's rest stance ----
+for (const stance of [0, 1, 2, 3]) {
+  const st0 = st;
+  { const st = { ...st0, stance };
   for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
-    const lens = Object.fromEntries((["A", "B", "R", "S", "P", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
+    const lens = Object.fromEntries((["A", "B", "R", "S", "P", "K", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
     const sh = SH(side);
-    for (const c of ["guard", "A", "B", "R", "S", "P"] as SwordClip[]) {
+    for (const c of ["guard", "A", "B", "R", "S", "P", "K"] as SwordClip[]) {
       let worst = 0, clash = "", lead = 0, lag = 0;
       let prevTip: number[] | null = null;
       for (let i = 0; i <= 60; i++) {
@@ -83,10 +85,11 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
         }
         prevTip = tip;
       }
-      must(worst <= V.swordUpperArm + V.swordForearm, `span ${span} side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
-      must(!clash, `span ${span} side ${side}: the blade went through the ${clash}`);
-      if (c === "A" || c === "B") must(lead > lag * 3, `span ${span} side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
+      must(worst <= V.swordUpperArm + V.swordForearm, `stance ${stance} span ${span} side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
+      must(!clash, `stance ${stance} span ${span} side ${side}: the blade went through the ${clash}`);
+      if (c === "A" || c === "B") must(lead > lag * 3, `stance ${stance} span ${span} side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
     }
+    if (!stance) {
     const rest = clipPose("guard", 0, side, sh, 0, st, V);
     must(rest.fwd.z < -0.8 && rest.fwd.y > 0.25 && Math.abs(rest.fwd.x) < 0.2, `side ${side}: at rest the blade doesn't lie back over the shoulder, in line with the torso`);
     const re = armIk(sh, rest.hand, V.swordUpperArm, V.swordForearm, rest.pole);
@@ -96,6 +99,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(ua[1] < -0.6 && ua[2] > 0.5, `side ${side}: at rest the elbow isn't low and forward (${ua.map((q) => q.toFixed(2)).join(",")})`);
     must(fa[1] > 0.6, `side ${side}: at rest the forearm doesn't angle up to the fist`);
     must(bend > 70 && bend < 110, `side ${side}: at rest the elbow is bent to ${bend.toFixed(0)}°, not near a right angle`);
+    }
     const under = clipPose("A", lens.A, side, sh, 0, st, V, span);
     must((under.hand.x - sh.x) * side < -0.8 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
     const cA = clipCut("A", st, V, span)!;
@@ -104,6 +108,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
     must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
   }
+}
 }
 // ---- Weight: each move eases out of a stop and into one, fastest mid-cut, never backwards ----
 {
@@ -194,6 +199,29 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   must(sw.clip === "A" && !sw.free && !sw.block(V) && sw.clip === "A", "a sword mid-cut blocked");
   const up = clipPose("P", V.swordBlockTime * 0.45, 1, SH(1), 0, st, V);
   must(up.fwd.y > 0.7 && up.hand.z > 1.4, `the block doesn't stand the blade up ahead of the chest (${up.fwd.y.toFixed(2)} up, hand ${up.hand.z.toFixed(2)} ahead)`);
+}
+// ---- The parry (Keith 2026-11-01): a sword driving or cutting meets a cut and recoils; a swing leaves an opening ----
+{
+  const sw = new SwordSim(1);
+  sw.update(dt, true, st, V, 0);
+  for (let i = 0; i < 10; i++) sw.update(dt, true, st, V, 0);
+  must(sw.clip === "A" && sw.swinging && !sw.free, "a close cut in its drive can't parry");
+  // A full sweep parries only right at its cut: a much shorter window than a close cut's.
+  const win = (span: number) => { const q = new SwordSim(1); let open = 0; q.update(dt, true, st, V, span); for (let i = 0; i < 600 && (q.clip === "A"); i++) { q.update(dt, false, st, V, span); if (q.swinging) open += dt; } return open; };
+  const wn = win(0), wf = win(1);
+  console.log(`  parry window: close ${wn.toFixed(2)} s, full sweep ${wf.toFixed(2)} s`);
+  must(wn > wf * 1.8, `a close cut's parry window (${wn.toFixed(2)} s) isn't much wider than a sweep's (${wf.toFixed(2)} s)`);
+  sw.recoil(V);
+  must(sw.clip === "K" && !sw.swinging, "a parried sword didn't recoil");
+  let n = 0; while (sw.clip !== "guard" && n++ < 600) sw.update(dt, false, st, V);
+  must(sw.clip === "guard" && Math.abs(n * dt - V.swordParryRecoil - V.swordParryStall) < 0.05, `the recoil didn't go back to rest after its time (${(n * dt).toFixed(2)} s)`);
+  // A click, let go: through the follow-through and the first share of the return it can't block.
+  const s2 = new SwordSim(1);
+  s2.update(dt, true, st, V);
+  let open = 0, freeAgain = -1, t = 0;
+  while (t < 4 * V.swordPace && freeAgain < 0) { s2.update(dt, false, st, V); t += dt; if (!s2.free && !s2.swinging && s2.clip !== "guard") open += dt; else if (s2.free && open > 0) freeAgain = t; }
+  must(open > 0.25, `a swing leaves no opening (${open.toFixed(2)} s)`);
+  console.log(`  after a click: open to a punish for ${open.toFixed(2)} s`);
 }
 // ---- The waist: coils back in the drive, turns after the blade, swings on past and settles ----
 {

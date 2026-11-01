@@ -15,8 +15,9 @@ import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "../world/terrain";
 import {
   SURFACE_IDS, SURFACE_COUNT, SET_RATES, relaxRates, bermRatio, packBrush, BRUSH_ROWS, MAX_DIF, BERM_DECAY, COMP_DECAY,
-  CORE_IN, CORE_OUT, RING_AT, RING_K, REACH, OPEN_SHALLOW, OPEN_HEAP, type Brush, type DentSurface, type SurfaceFeel, type RelaxRates,
+  CORE_IN, CORE_OUT, RING_AT, RING_K, REACH, OPEN_SHALLOW, OPEN_HEAP, brushReach, type Brush, type DentSurface, type SurfaceFeel, type RelaxRates,
 } from "./dentRule";
+import { footAtlas, footAtlasVersion, setFootContact, shapeBermRatio, TILE, MAX_SHAPES, type FootShape } from "./footprint";
 
 export const DENT_DEFAULTS = {
   dentCoverage: 100,
@@ -46,6 +47,13 @@ export const DENT_DEFAULTS = {
   dentMaxDepth: 0.6,
   dentRelaxStep: 0.3,
   printSize: 1,
+  printShaped: 1,
+  printWall: 0.1,
+  printSpread: 0.3,
+  printContact: 0.12,
+  printRobots: 2,
+  printBigDepth: 1.2,
+  printMidDepth: 0.45,
   craterSize: 0.35,
   slideOnSlope: 1,
   dentSandDepth: 1, dentSandBerm: 1, dentSandSoften: 6, dentSandSlump: 0.5, dentSandLife: 90,
@@ -83,6 +91,13 @@ export const DENT_PARAMS: Param[] = [
   { key: "dentRound", label: "Small shell dent depth (m)", min: 0, max: 0.3, step: 0.005, group: G, tip: "Small shells into the sand (an autocannon's miss)" },
   { key: "dentRoundEvery", label: "Minigun and small shell dent every Nth", min: 1, max: 10, step: 1, group: G },
   { key: "printSize", label: "Footprint size ×", min: 0.3, max: 2, step: 0.01, group: G },
+  { key: "printShaped", label: "Footprint: foot's own shape", min: 0, max: 1, step: 1, group: G, tip: "1: each foot prints its own sole, baked from its model when the legs load (src/fx/footprint.ts). 0: the old plain oval for every foot" },
+  { key: "printWall", label: "Footprint: wall (m)", min: 0.02, max: 0.4, step: 0.01, group: G, tip: "How far in from the sole's outline the print reaches full depth: small is a crisp stamp, large a soft dimple (thin toes go shallow)" },
+  { key: "printSpread", label: "Footprint: berm spread (m)", min: 0.05, max: 0.7, step: 0.01, group: G, tip: "How far out from the outline the pushed-up sand spreads (wider is lower, the same sand)" },
+  { key: "printContact", label: "Footprint: sole contact (m)", min: 0.01, max: 0.5, step: 0.01, group: G, onRelease: true, tip: "How high above the lowest point of a foot model still counts as pressing the sand: higher takes in raised toes and the heel's sides" },
+  { key: "printRobots", label: "Robot prints (0 none, 1 big, 2 all walkers)", min: 0, max: 2, step: 1, group: G, tip: "Which robots leave prints (src/combat/robotPrints.ts): every print is a brush in the dent pass, and a big swarm walks a lot. 1 keeps only the big walkers'" },
+  { key: "printBigDepth", label: "Robot prints: big walker depth ×", min: 0, max: 3, step: 0.05, group: G, tip: "× the Footprint depth (the bucket's three claws)" },
+  { key: "printMidDepth", label: "Robot prints: medium walker depth ×", min: 0, max: 3, step: 0.05, group: G, tip: "× the Footprint depth (a peg)" },
   { key: "craterSize", label: "Shell and blast dent size (m)", min: 0.1, max: 2, step: 0.01, group: G },
   { key: "slideOnSlope", label: "Slides on steep sand", min: 0, max: 3, step: 0.05, group: G, tip: "On steep dune faces a step breaks sand loose downhill: a longer trough the steeper it is" },
   { key: "dentBlast", label: "Blast dent depth (m)", min: 0, max: 1, step: 0.01, group: G, tip: "Shells and vehicle blasts (the fine rim; real craters belong in the true ground)" },
@@ -109,6 +124,8 @@ export interface StampOptions {
   surface?: DentSurface;
   /** 0..1: a U open toward the back (against the yaw), for a round's strike (dentRule Brush.open). */
   open?: number;
+  /** A foot's own print (src/fx/footprint.ts): the radius is then the shape's scale and elong is ignored. */
+  shape?: FootShape | null;
 }
 
 interface Persistent { b: Brush; reach: number; done: boolean; key: string }
@@ -133,6 +150,9 @@ export class DentLayer {
   private prevTex: THREE.TextureNode;
   private brushData: Float32Array;
   private brushTex: THREE.DataTexture;
+  /** Every foot's print shape (src/fx/footprint.ts), re-uploaded when one is baked. */
+  private atlasTex: THREE.DataTexture;
+  private atlasVersion = -1;
   private brushes: Brush[] = [];
   private carry: Brush[] = [];
   private persistent: Persistent[] = [];
@@ -164,6 +184,10 @@ export class DentLayer {
     this.brushTex.minFilter = this.brushTex.magFilter = THREE.NearestFilter;
     this.brushTex.generateMipmaps = false;
     this.brushTex.needsUpdate = true;
+    this.atlasTex = new THREE.DataTexture(footAtlas, TILE * MAX_SHAPES, TILE, THREE.RedFormat, THREE.FloatType);
+    this.atlasTex.minFilter = this.atlasTex.magFilter = THREE.NearestFilter;
+    this.atlasTex.generateMipmaps = false;
+    this.atlasTex.needsUpdate = true;
     const mk = () => {
       const t = new THREE.RenderTarget(64, 64, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false });
       t.texture.wrapS = t.texture.wrapT = THREE.RepeatWrapping;
@@ -198,7 +222,7 @@ export class DentLayer {
 
   /** The pass, per texel: scroll, relax, splat, clamp (the same rules as dentRule.ts). */
   private passNode() {
-    const N = this.uRes, NF = this.uResF, prev = this.prevTex, bt = this.brushTex;
+    const N = this.uRes, NF = this.uResF, prev = this.prevTex, bt = this.brushTex, at = this.atlasTex;
     const size = this.uSize, half = size.mul(0.5);
     return Fn(() => {
       const pix = screenCoordinate.xy.floor();
@@ -230,15 +254,30 @@ export class DentLayer {
         ));
       });
       Loop({ start: int(0), end: this.uCount, type: "int", condition: "<" }, ({ i }) => {
-        const a = textureLoad(bt, ivec2(i, 0)), b = textureLoad(bt, ivec2(i, 1)), e = textureLoad(bt, ivec2(i, 2));
+        const a = textureLoad(bt, ivec2(i, 0)), b = textureLoad(bt, ivec2(i, 1)), e = textureLoad(bt, ivec2(i, 2)), f = textureLoad(bt, ivec2(i, 3));
         const p = world.sub(a.xy).toVar();
         p.subAssign(size.mul(round(p.div(size))));
-        const reach = a.z.mul(max(a.w, 1)).mul(REACH);
+        const shaped = f.x.greaterThan(0.5);
+        const reach = select(shaped, f.y.mul(a.z), a.z.mul(max(a.w, 1)).mul(REACH));
         If(abs(p.x).lessThan(reach).and(abs(p.y).lessThan(reach)), () => {
           const along = p.x.mul(b.x).add(p.y.mul(b.y)), across = p.x.mul(b.y).sub(p.y.mul(b.x));
-          const hl = a.z.mul(max(0, a.w.sub(1)));
           const wob = float(1).add(this.uRough.mul(0.18).mul(wobN));
-          const dd = length(vec2(max(0, abs(along).sub(hl)), across)).div(a.z).div(wob);
+          const dd = float(0).toVar();
+          If(shaped, () => {
+            // A foot's own print (src/fx/footprint.ts): its tile's signed distance, bilinear from four texels.
+            const T = float(TILE), u = across.div(a.z).div(f.y).mul(0.5).add(0.5).mul(T).sub(0.5);
+            const w = along.div(a.z).div(f.y).mul(0.5).add(0.5).mul(T).sub(0.5);
+            const iu = clamp(u.floor(), 0, TILE - 2), iw = clamp(w.floor(), 0, TILE - 2);
+            const fu = clamp(u.sub(iu), 0, 1), fw = clamp(w.sub(iw), 0, 1);
+            const ox = int(round(f.x.sub(1))).mul(TILE).add(int(iu)), oy = int(iw);
+            const s00 = textureLoad(at, ivec2(ox, oy)).x, s10 = textureLoad(at, ivec2(ox.add(1), oy)).x;
+            const s01 = textureLoad(at, ivec2(ox, oy.add(1))).x, s11 = textureLoad(at, ivec2(ox.add(1), oy.add(1))).x;
+            const sd = s00.mul(float(1).sub(fu)).add(s10.mul(fu)).mul(float(1).sub(fw)).add(s01.mul(float(1).sub(fu)).add(s11.mul(fu)).mul(fw));
+            dd.assign(max(0, float(1).add(sd.div(select(sd.lessThan(0), f.z, f.w)))).div(wob));
+          }).Else(() => {
+            const hl = a.z.mul(max(0, a.w.sub(1)));
+            dd.assign(length(vec2(max(0, abs(along).sub(hl)), across)).div(a.z).div(wob));
+          });
           If(dd.lessThan(REACH), () => {
             const q = dd.sub(RING_AT).mul(RING_K);
             const grain = float(1).add(this.uRough.mul(0.4).mul(grainN));
@@ -291,9 +330,14 @@ export class DentLayer {
     const d = depth * f.depth * (1 - hard);
     if (d <= 1e-4) return;
     const e = Math.max(1, elong);
+    const sh = o.shape;
+    // A shaped print's wall and berm spread are in metres on the ground: into the shape's own size.
+    const wall = sh ? this.v.printWall / radius : 0, spread = sh ? this.v.printSpread / radius : 0;
     this.brushes.push({
-      x, z, r: radius, elong: e, sy: Math.sin(yaw), cy: Math.cos(yaw), dep: d, berm: d * (o.berm ?? 1) * f.berm * bermRatio(e),
+      x, z, r: radius, elong: sh ? 1 : e, sy: Math.sin(yaw), cy: Math.cos(yaw), dep: d,
+      berm: d * (o.berm ?? 1) * f.berm * (sh ? shapeBermRatio(sh, wall, spread) : bermRatio(e)),
       comp: o.comp ?? this.v.dentComp, surf: SURFACE_IDS[surf], open: o.open ?? 0, mode: o.mode === "add" ? 1 : 0,
+      ...(sh ? { shape: sh.index + 1, ext: sh.ext, wall, spread } : {}),
     });
   }
 
@@ -339,7 +383,8 @@ export class DentLayer {
     let n = 0;
     this.carry = [];
     for (const b of list) {
-      if (Math.abs(b.x - this.cx) > half + b.r * b.elong * REACH || Math.abs(b.z - this.cz) > half + b.r * b.elong * REACH) continue;
+      const br = brushReach(b);
+      if (Math.abs(b.x - this.cx) > half + br || Math.abs(b.z - this.cz) > half + br) continue;
       if (n >= MAX_BRUSHES) { this.carry.push(b); continue; }
       packBrush(b, this.brushData, n++, MAX_BRUSHES);
     }
@@ -347,6 +392,8 @@ export class DentLayer {
     this.brushes = [];
     this.stats.brushes = n;
     this.brushTex.needsUpdate = true;
+    setFootContact(v.printContact);
+    if (footAtlasVersion() !== this.atlasVersion) { this.atlasVersion = footAtlasVersion(); this.atlasTex.needsUpdate = true; }
 
     this.owed += dt;
     let rdt = 0;
@@ -380,5 +427,6 @@ export class DentLayer {
   dispose() {
     for (const t of this.targets) t.dispose();
     this.brushTex.dispose();
+    this.atlasTex.dispose();
   }
 }

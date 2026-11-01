@@ -35,6 +35,8 @@ export interface MechBody {
    *  legValues() then gives their proportions for the walker (src/mech/rampart.ts). */
   setLooks?(legs: string, hull: string): boolean;
   legValues?(): Partial<WalkerValues>;
+  /** The fitted legs' print in the sand, per foot (side 1 left), baked from the foot model (src/fx/footprint.ts). */
+  footprint?(side: 1 | -1): FootShape | null;
   /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
@@ -49,8 +51,15 @@ export interface MechBody {
   hullGroup?(): THREE.Object3D;
   /** Cosmetic: turn the sensor head toward the aim (or scan), sweep a cluster (src/mech/head.ts). */
   aimSensor?(dt: number, aim: Aim | null, v: HeadValues): void;
+  /** The pivots a destroyed mech's wreck moves, and the hull's box in its own frame (src/physics/mechWreck.ts). */
+  deadRig?(): DeadRig;
+}
+export interface DeadRig {
+  pelvis: THREE.Object3D; hull: THREE.Object3D; hullBox: MechPose["hullBox"];
+  legs: { thigh: THREE.Object3D; shin: THREE.Object3D; cannon: THREE.Object3D; foot: THREE.Object3D }[];
 }
 import type { ToonLook } from "../look/toon";
+import type { FootShape } from "../fx/footprint";
 import type { TargetCandidate } from "./targeting";
 
 /** The weapons that aren't miniguns (src/weapons/arsenal.ts): stepped with the mech, handed the gun clock's shots. */
@@ -68,7 +77,7 @@ export interface MechWeapons {
   /** A sword's step into its slash (world m/s), or null (src/weapons/sword.ts). */
   lunge?(move?: { x: number; z: number }): { x: number; z: number } | null;
   /** An enemy's sword cut from (x, z) is landing: a free sword facing it blocks. The share of damage taken (1: none). */
-  parry?(fromX: number, fromZ: number): number;
+  parry?(fromX: number, fromZ: number): import("./battlefield").Parry;
   /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
    *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
   stop?(): void;
@@ -85,9 +94,13 @@ import { SOLID_DEFAULTS, SOLID_PARAMS, type Solid, type SolidShape } from "./sol
 import { RepairKits, REPAIR_DEFAULTS, REPAIR_PARAMS, type KitRefusal } from "./repair";
 import { Abilities, ABILITY_DEFAULTS, ABILITY_PARAMS } from "../abilities/abilities";
 import type { HealTarget } from "../abilities/zones";
+import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, mechWreckSpec, mechWreckThrow, mechWreckThuds, seedOf, legPart, BODY, type MechPose } from "../physics/mechWreck";
+import { MechWreckRig } from "../physics/mechWreckDraw";
+import type { Dead } from "../physics/deaths";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
+  ...MECH_WRECK_DEFAULTS,
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
   ...TRAMPLE_DEFAULTS,
@@ -116,6 +129,7 @@ export type MechValues = typeof MECH_DEFAULTS;
 
 export const MECH_PARAMS: Param[] = [
   ...DASH_PARAMS,
+  ...MECH_WRECK_PARAMS,
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
   ...TRAMPLE_PARAMS,
@@ -158,6 +172,11 @@ export class MechUnit implements Hittable, Solid {
   health: number;
   /** Seconds since destroyed (for the lab's rebuild). */
   deadFor = 0;
+  /** The wreck falling in the death physics (cosmetic; Keith 2026-11-01), while destroyed. */
+  wreck: { dead: Dead; rig: MechWreckRig } | null = null;
+  /** Where the last hit came from (flat, unit; the kill's push) and how many times this mech has died (seeds its fall). */
+  private lastHit = { x: 0, z: 0 };
+  private deaths = 0;
   /** Recent damage taken per second (for a HUD flash). */
   hurt = 0;
   /** Recent hits for the HUD's hit arcs: where each came from (unit x, z on the ground) and how much it took. Newest
@@ -250,7 +269,7 @@ export class MechUnit implements Hittable, Solid {
         this.onStomp?.(f.planted.x, f.planted.z, k);
         return;
       }
-      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
       // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       // Sprinting, each footfall lands with weight: a thump and (in labs that shake) a small shake.
@@ -275,7 +294,7 @@ export class MechUnit implements Hittable, Solid {
       if (l.impact > 1.5) {
         for (const f of sim.feet) {
           if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
-          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k);
+          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
           dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
         }
         if (l.impact > v.landSoft) {
@@ -358,6 +377,7 @@ export class MechUnit implements Hittable, Solid {
     this.health = this.maxHealth;
     this.alive = true;
     this.deadFor = 0;
+    this.clearWreck();
     this.goCold();
     this.bf.nightLights?.streams.clear();
     this.body.paint(this.look, this.paint);
@@ -374,7 +394,7 @@ export class MechUnit implements Hittable, Solid {
     if (this.wasPiloted && !this.piloted) this.goCold();
     this.wasPiloted = this.piloted;
     // Dead: the weapons still fly what is already in the air, with every trigger let go.
-    if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); return; }
+    if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); this.stepWreck(); return; }
     this.heal(this.kits.step(dt));
     this.abilities.step(dt);
     // Braced by the Field weld: rooted where it stands.
@@ -555,8 +575,8 @@ export class MechUnit implements Hittable, Solid {
     };
   }
 
-  parry(fromX: number, fromZ: number): number {
-    return this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ) ?? 1 : 1;
+  parry(fromX: number, fromZ: number): import("./battlefield").Parry {
+    return (this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ) : null) ?? { take: 1 };
   }
 
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
@@ -572,6 +592,7 @@ export class MechUnit implements Hittable, Solid {
     if (l > 1e-4) {
       const last = this.hits[this.hits.length - 1];
       const dx = -dir.x / l, dz = -dir.z / l;
+      this.lastHit.x = -dx; this.lastHit.z = -dz;
       // Rounds from one gun in one step merge into one arc.
       if (last && last.dx * dx + last.dz * dz > 0.97) last.amount += amount;
       else { this.hits.push({ dx, dz, amount }); if (this.hits.length > 8) this.hits.shift(); }
@@ -602,6 +623,62 @@ export class MechUnit implements Hittable, Solid {
         0.8 + Math.random() * 0.8, 3 + Math.random() * 3, 0.85, 0.75);
     }
     this.bf.dust.stomp(p.x, p.y - 3, p.z, 2.5);
+    this.fall();
+  }
+
+  /**
+   * Hand the body to the death physics as a heavy wreck (src/physics/mechWreck.ts): it buckles and topples the way the
+   * killing hit pushed it (or the way it was going) and the model follows the parts. Only with a death world and a
+   * model that can be posed (not the stand-in walker).
+   */
+  private fall() {
+    const deaths = this.bf.deaths, v = this.v, body = this.body;
+    if (!deaths || !v.mechWreckOn || !body.deadRig) return;
+    this.clearWreck();
+    const rig = body.deadRig(), sim = this.sim;
+    rig.hull.updateWorldMatrix(true, false);
+    const hp = rig.hull.getWorldPosition(new THREE.Vector3()), hq = rig.hull.getWorldQuaternion(new THREE.Quaternion());
+    const pose: MechPose = {
+      pelvis: sim.pelvis.clone(), pelvisQ: sim.pelvisQ.clone(), hull: hp, hullQ: hq, hullBox: rig.hullBox,
+      legs: sim.feet.map((f) => ({ hip: f.pose.hip, knee: f.pose.knee, hock: f.pose.hock, ankle: f.pose.ankle, foot: f.pose.foot, footQ: f.pose.footQ })),
+      vel: sim.vel,
+    };
+    const { parts, joints } = mechWreckSpec(pose, v.mechBendLimit);
+    // Pushed away from the last hit; with none, the way it faces.
+    let dx = this.lastHit.x, dz = this.lastHit.z;
+    if (dx === 0 && dz === 0) { dx = Math.sin(sim.heading); dz = Math.cos(sim.heading); }
+    const g = this.sim.ground.height(sim.pos.x, sim.pos.z);
+    const { lin, ang } = mechWreckThrow(parts, pose, v, dx, dz, seedOf(`${this.uid}:${this.deaths++}`), g);
+    const dead = deaths.heavy(parts, joints, lin, ang, { damping: v.mechWreckDamping, moveFor: v.mechMoveFor, hold: v, thud: mechWreckThuds(parts) });
+    const objs: { obj: THREE.Object3D; part: number }[] = [{ obj: rig.pelvis, part: BODY }, { obj: rig.hull, part: BODY }];
+    rig.legs.forEach((L, i) => objs.push({ obj: L.thigh, part: legPart(i, 0) }, { obj: L.shin, part: legPart(i, 1) }, { obj: L.cannon, part: legPart(i, 2) }, { obj: L.foot, part: legPart(i, 2) }));
+    this.wreck = { dead, rig: new MechWreckRig(objs, dead) };
+    // For checking from the console (and the headless smoke run): the newest wreck's state.
+    (globalThis as { __wreck?: () => unknown }).__wreck = () => ({ live: dead.live, age: +dead.age.toFixed(2), pelvis: rig.pelvis.position.toArray().map((x) => +x.toFixed(2)), body: dead.pos[0].toArray().map((x) => +x.toFixed(2)) });
+  }
+
+  /** Pose the model on the wreck; each slam into the sand kicks up dust, thuds and calls onThud (camera shake). */
+  private stepWreck() {
+    const w = this.wreck;
+    if (!w) return;
+    w.rig.apply();
+    const hits = w.dead.thud?.impacts;
+    if (!hits?.length) return;
+    for (const h of hits.splice(0)) {
+      const k = Math.min(2, h.speed / 5) * this.v.mechThud;
+      if (k <= 0.05) continue;
+      this.a.set(h.x, this.sim.ground.height(h.x, h.z), h.z);
+      this.bf.dust.stomp(this.a.x, this.a.y, this.a.z, 1.5 * k);
+      this.bf.sfx.play("brap", this.a, Math.min(1.8, 0.6 + k * 0.7), 0.3, false);
+      this.bf.onThud?.(this.a, k);
+    }
+  }
+
+  /** The wreck out of the death physics (rebuilt, respawned). */
+  private clearWreck() {
+    if (!this.wreck) return;
+    this.bf.deaths?.remove(this.wreck.dead);
+    this.wreck = null;
   }
 }
 

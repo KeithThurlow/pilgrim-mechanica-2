@@ -299,6 +299,9 @@ carry.onTouchdown = (x, y, z, speed) => {
   shaker.add(V.craneLandShake * k);
 };
 player.onLanding = (l) => { shaker.add(V.craneLandShake * Math.min(1.6, l.impact / 7.7)); };
+// Destroyed mechs (yours, guardians, rivals) fall in the death physics; their slams shake the camera by how near they are.
+bf.deaths = deaths;
+bf.onThud = (at, k) => shaker.add(0.25 * k * Math.max(0, 1 - Math.hypot(at.x - player.sim.pos.x, at.z - player.sim.pos.z) / 60));
 // Each sprinting footfall: a small shake (sprintShake).
 player.onSprintStep = (k) => shaker.add(V.sprintShake * Math.min(1.5, k));
 
@@ -685,7 +688,7 @@ const panel = tweakPanel({
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
     { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
     { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },
