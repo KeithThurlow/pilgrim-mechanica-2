@@ -171,7 +171,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?left= ?right= ?k1= ?k2= ?k3=` (as the weapons lab) fit those instead. `?bigclose[=metres]` (an excavator that close,
   cursor held on its bucket, both guns firing), `?pad[=m]` (start out that close, default 60, to the nearest extraction pad,
   pickups bought, 400+ scrap at risk; hold E on the pad to call, then roam; when it hovers in, stand under it 4 s; quick: `&set=padWaitBase:5,padWaitPerKm:0`), `?unlock=all` (every convoy unlock bought; U or the bay screen shows the shop),
-  `?bank=N` (N scrap banked), `?raid` (a raid at once), `?siege[=N]` (on the sand beside the convoy, a robot pack of N, 40, coming in: the convoy's turrets, escorts and guardian mechs fight it; `window.__defence` in the console). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
+  `?bank=N` (N scrap banked), `?heli[=metres]` (start on the helipad on the lead bay, bank at least 500 unless `?bank=` says: hold H to call the quadcopter, WASD steers, H drops you; with metres it flies itself that far out to the left and drops), `?raid` (a raid at once), `?siege[=N]` (on the sand beside the convoy, a robot pack of N, 40, coming in: the convoy's turrets, escorts and guardian mechs fight it; `window.__defence` in the console). Contracts and HVTs: `?quest=salvage|cull|bounty|tow|pods` (out on the sand
   with that contract taken), `?hvt[=metres|now]` (that close, 60 m, to the nearest high value target's lair, one kill short of
   drawing it out; `now`: it's coming; with `?quest=bounty` the bounty is on it); J takes the newest offer, hold J drops one,
   hold E by a downed Rampart hooks it (again to drop); `window.__quests` in the console.
