@@ -525,7 +525,7 @@ export class Arsenal implements MechWeapons {
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock);
       bf.gunFx.sparksAt(at, kd, 10, 9);
       bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
-      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.85 + Math.random() * 0.25);
+      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
       if (!s.bit) {
         s.bit = true;
         s.sword.bite(v.swordHitch);

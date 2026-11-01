@@ -210,6 +210,34 @@ export class Synth {
     return s;
   }
 
+  /**
+   * A blade's shing (Keith 2026-11-01: "a knife being sharpened or steel on steel"): a bright high scrape (high-passed
+   * grit swelling and rasping as it drags) under an inharmonic steel ring that glides a touch as it fades. Everything
+   * rolled from `r`, so variants differ in pitch, drag and ring.
+   */
+  shing(r: Rng, len: number, gain: number) {
+    const s = new Float32Array(this.n(len));
+    const drag = 0.07 + r() * 0.1, rasp = 45 + r() * 70, glide = (r() - 0.35) * 0.06;
+    const base = 2300 + r() * 1700, parts = [1, 1.37 + r() * 0.1, 1.93 + r() * 0.15, 2.61 + r() * 0.2, 3.3 + r() * 0.3];
+    const ph = parts.map(() => r());
+    let lp = 0, lp2 = 0;
+    for (let i = 0; i < s.length; i++) {
+      const t = i / this.rate;
+      // The scrape: noise with the lows taken out, swelling in over the drag and rasping along it.
+      const n = r() * 2 - 1;
+      lp += 0.18 * (n - lp); lp2 += 0.6 * (n - lp2);
+      const hi = lp2 - lp;
+      const swell = Math.min(1, t / (drag * 0.35)) * Math.exp(-Math.max(0, t - drag * 0.35) / (drag * 0.6));
+      const rs = 0.55 + 0.45 * Math.abs(Math.sin(Math.PI * rasp * t + 2 * Math.sin(t * 31)));
+      // The ring: high partials, each fading faster than the one under it, the pitch gliding a touch.
+      const f = base * (1 + glide * Math.min(1, t / drag));
+      let ring = 0;
+      for (let p = 0; p < parts.length; p++) ring += Math.sin(2 * Math.PI * (f * parts[p] * t + ph[p])) * Math.exp(-(3 + p * 2.5) * t / len) / (1 + p * 0.6);
+      s[i] = (hi * 1.4 * swell * rs + ring * 0.22 * Math.min(1, t / 0.004)) * gain;
+    }
+    return s;
+  }
+
   lowPass(part: Float32Array, hz: number) {
     const a = 1 - Math.exp((-2 * Math.PI * hz) / this.rate), s = new Float32Array(part.length);
     let lp = 0;
