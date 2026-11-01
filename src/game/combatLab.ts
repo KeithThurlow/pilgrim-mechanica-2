@@ -198,6 +198,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const shake = shaker.add;
   // Each sprinting footfall: a small shake (sprintShake).
   player.onSprintStep = (k) => shake(V.sprintShake * Math.min(1.5, k));
+  // Destroyed mechs fall in the death physics; their slams into the sand shake the camera by how near they are.
+  bf.deaths = deaths;
+  bf.onThud = (at, k) => shake(0.25 * k * Math.max(0, 1 - Math.hypot(at.x - player.sim.pos.x, at.z - player.sim.pos.z) / 60));
   const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, enemies, shaker);
 
   const iso = new IsoCamera(camera, canvas, V);
@@ -240,7 +243,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ABILITY_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
       { id: "legs", label: "Legs", groups: ["Move", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
-      { id: "deaths", label: "Deaths", groups: ["Death physics"] },
+      { id: "deaths", label: "Deaths", groups: ["Mech wrecks", "Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },

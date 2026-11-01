@@ -43,12 +43,12 @@ const cases: Case[] = [
   { name: "standing, limp (stiffness 0)", flat: true, cmd: { x: 0, z: 0, sprint: false }, walk: 2, dir: [1, 0], v: { mechPoseStiffness: 0, mechPoseDamping: 0 } },
 ];
 const bends: Record<string, number> = {};
-for (const c of cases.filter((c) => !process.env.MWCASE || c.name.includes(process.env.MWCASE))) {
+for (const c of cases) {
   const field = new DuneField(c.flat ? { ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 } : { ...TERRAIN_DEFAULTS });
   const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values }, field);
   sim.reset(13, -40, 0);
   for (let t = 0; t < c.walk; t += 1 / 120) sim.update(1 / 120, c.cmd);
-  const v = { ...MECH_WRECK_DEFAULTS, ...(process.env.MW ? JSON.parse(process.env.MW) : {}), ...c.v };
+  const v = { ...MECH_WRECK_DEFAULTS, ...c.v };
   const phys = new DeathPhysics({ ...DEATH_DEFAULTS }, field);
   phys.follow(sim.pos.x, sim.pos.z);
   const pose = poseOf(sim);
@@ -66,8 +66,6 @@ for (const c of cases.filter((c) => !process.env.MWCASE || c.name.includes(proce
     for (const im of d.thud?.impacts.splice(0) ?? []) { thuds++; hardest = Math.max(hardest, im.speed); }
     if (Math.abs(t - 1.5) < 1e-6) bend1 = bend(d, rest, pairs);
     if (!d.live && restAt < 0) restAt = t;
-    if (process.env.MWTILT && i % 30 === 29) { const up = new Vector3(0, 1, 0).applyQuaternion(d.quat[BODY]); console.log(`  t ${t.toFixed(1)} y ${(d.pos[BODY].y - field.height(d.pos[BODY].x, d.pos[BODY].z)).toFixed(2)} up ${up.y.toFixed(2)} feet ${d.pos[3].y.toFixed(2)},${d.pos[6].y.toFixed(2)}`); }
-    if (process.env.MWDBG && d.live && i % 60 === 59) { const sp = d.bodies.map((b) => { const l = b.linvel(), a = b.angvel(); return Math.hypot(l.x, l.y, l.z).toFixed(1) + "/" + Math.hypot(a.x, a.y, a.z).toFixed(1); }); console.log(`  t ${t.toFixed(0)} ${sp.join(" ")}`); }
     // Joints together: each joint's point as seen from both its parts.
     for (const j of joints) {
       const pa = parts[j.a], pb = parts[j.b];

@@ -13,6 +13,7 @@ import type { DuneField } from "../world/terrain";
 import type { DesertLook } from "../world/look";
 import type { WreckStandIns } from "../world/wrecks";
 import type { CraterLayer } from "../world/craters";
+import type { DeathPhysics } from "../physics/deaths";
 import { sinkDepth, type SinkSurface, type SinkValues } from "../mech/sink";
 import { DustSim, DUST_MAX, type DustValues } from "../fx/dust";
 import type { FxBudget } from "../fx/budget";
@@ -433,6 +434,10 @@ export class Battlefield {
 
   /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
   onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
+  /** The death physics, where the lab has one: destroyed mechs fall in it as heavy wrecks (src/physics/mechWreck.ts). */
+  deaths: DeathPhysics | null = null;
+  /** A heavy wreck slamming into the sand (where, strength about 0-2), e.g. for camera shake in a lab. */
+  onThud: ((at: THREE.Vector3, strength: number) => void) | null = null;
 
   /**
    * A blast on the ground at p (its y is moved onto the new ground): the crater, dust and debris, the sound, and

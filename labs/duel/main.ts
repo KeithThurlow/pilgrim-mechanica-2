@@ -252,6 +252,7 @@ function board() {
 // ---- Rounds and the score ----
 const score = new DuelScore();
 let clock = 0, roundStart = 0, roundOver = -1;
+const wreckAt = params.has("wreck") ? Number(params.get("wreck")) || 2 : -1;
 function startRound() {
   const S = V.duelStart;
   player.reset(0, -S, 0);
@@ -312,6 +313,11 @@ lab.onFrame((dt: number) => {
   // (Magazines reload by themselves since 2026-10-31: no more topping the rival up.)
   rivalDraw.update();
 
+  // ?wreck[=s]: the rival is destroyed that long into each round (2 s), hit from the player's side: for watching the wreck fall.
+  if (wreckAt >= 0 && rival.alive && t > wreckAt) {
+    const d = new THREE.Vector3(rival.sim.pos.x - player.sim.pos.x, 0, rival.sim.pos.z - player.sim.pos.z).normalize();
+    rival.damage(1e9, rival.sim.pelvis, d, 99);
+  }
   // A kill ends the round; the next starts after duelAutoRestart (or R).
   if (roundOver < 0 && (!rival.alive || !player.alive)) {
     roundOver = clock;
