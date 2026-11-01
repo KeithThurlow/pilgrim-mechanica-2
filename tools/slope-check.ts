@@ -139,5 +139,43 @@ for (const H of [3, 6]) {
   if (!(at(10).rate > at(0).rate + 0.1 && at(25).rate > at(0).rate + 0.15 && at(20).rate > at(10).rate - 0.15 && at(25).rate > at(20).rate)) problems.push(`sprint cadence doesn't rise with the climb: ${rows.map((r) => `${r.deg}° ${r.rate.toFixed(2)}`).join(", ")}`);
   if (at(-10).rate > at(0).rate + 0.1) problems.push(`sprint cadence rises downhill (${at(-10).rate.toFixed(2)} vs ${at(0).rate.toFixed(2)} steps/s)`);
 }
+// Steep climbs (Keith 2026-11-01: up steep ground, and stopped on it, the uphill leg kept its thigh pointing down and folded
+// into itself, the cannon through the shin, then flicked through the ground): walking up 20-30° (straight up and at an
+// angle), then stopping, the knee never jumps in a frame (1/120 s), the hock and knee never shut, the solve never has to
+// push the hock off the cannon, and the knee and hock stay out of the ground. Off: the leg-room sliders at 0.
+{
+  const climb = (deg: number, heading: number, over: Record<string, number> = {}) => {
+    const g = Math.tan((deg * Math.PI) / 180), gr = plane(0, g);
+    const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...over }, gr);
+    sim.reset(0, 0, heading);
+    const minD = Math.abs(sim.v.femur - sim.v.shin) + 0.05, last = sim.feet.map(() => new Vector3(NaN));
+    let jump = 0, hock = 180, knee = 180, clamped = 0, under = 0;
+    for (let i = 0; i < 120 * 9; i++) {
+      const go = i < 120 * 6;
+      sim.update(1 / 120, go ? { x: Math.sin(heading), z: Math.cos(heading), sprint: false } : { x: 0, z: 0, sprint: false });
+      if (i < 120 * 2) continue;
+      sim.feet.forEach((f, k) => {
+        const P = f.pose, A = (a: Vector3, b: Vector3, c: Vector3) => (new Vector3().subVectors(a, b).angleTo(new Vector3().subVectors(c, b)) * 180) / Math.PI;
+        if (Number.isFinite(last[k].x)) jump = Math.max(jump, last[k].distanceTo(P.knee));
+        last[k].copy(P.knee);
+        hock = Math.min(hock, A(P.knee, P.hock, P.ankle)); knee = Math.min(knee, A(P.hip, P.knee, P.hock));
+        if (P.hip.distanceTo(P.hock) < minD + 0.001 && Math.abs(P.hock.distanceTo(P.ankle) - sim.v.cannon) > 0.01) clamped++;
+        under = Math.max(under, gr.height(P.knee.x, P.knee.z) - P.knee.y, gr.height(P.hock.x, P.hock.z) - P.hock.y);
+      });
+    }
+    return { jump, hock, knee, clamped, under };
+  };
+  const off = { legRoomKnee: 0, legRoomHock: 0, legTurnMax: 5000 };
+  for (const deg of [20, 25, 30]) for (const heading of [0, 0.5]) {
+    const r = climb(deg, heading), o = climb(deg, heading, off);
+    const f = (x: typeof r) => `knee jumps ≤ ${x.jump.toFixed(2)} m/frame · hock ≥ ${x.hock.toFixed(0)}° · knee ≥ ${x.knee.toFixed(0)}° · cannon pushed off ${x.clamped} frames · joints under ${Math.max(0, x.under).toFixed(2)} m`;
+    console.log(`climb ${deg}° ${heading ? "aslant" : "straight"}, then stop: ${f(r)}\n  without leg room:          ${f(o)}`);
+    const what = `climbing ${deg}° ${heading ? "aslant" : "straight"}`;
+    if (r.jump > 0.6) problems.push(`${what}: the knee jumped ${r.jump.toFixed(2)} m in a frame`);
+    if (r.hock < 8 || r.knee < 8) problems.push(`${what}: the leg folded shut (hock ${r.hock.toFixed(0)}°, knee ${r.knee.toFixed(0)}°)`);
+    if (r.clamped > 0) problems.push(`${what}: the hock pushed off the cannon ${r.clamped} frames`);
+    if (r.under > 0.05) problems.push(`${what}: a knee or hock ${r.under.toFixed(2)} m in the ground`);
+  }
+}
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("slope check failed"); }
 console.log("slope check passed");
