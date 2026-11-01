@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Items are scrapped for their scrap value only at the convoy (the stash), never in the field; scrap from wrecks stays the field resource | Keith | Keith | Two-click Scrap button in the inventory on the convoy. |
 | 2026-11-01 | Inventory sorts by DPS, weight, scrap value (and rarity, power, value per tonne, level); DPS shown is sustained, reload counted, with the burst on the card | Keith | Keith (sorts); Claude (extra sorts, showing both DPS figures) | `src/items/sort.ts`. |
 | 2026-11-01 | Item scrap value: 10 × 2.5^rarity tier × (1 + 0.08 per level over 1) × (1 + 0.1 per tonne), plus Protocols; shown and sorted only | Claude | Claude | Sliders in Item value. **Open for Keith:** should items be scrapped or sold for this at the convoy (or in the field, to save weight)? |
 | 2026-11-01 | A heavy quad tier: the crusher, a chunky crab-like robot between the weapon quads and the walkers, that crunches things up with a sucking turbine maw | Keith | Keith | `src/combat/crusher.ts`, `labs/crusher/`. |
