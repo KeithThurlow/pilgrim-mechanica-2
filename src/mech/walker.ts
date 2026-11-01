@@ -476,6 +476,34 @@ export class WalkerSim {
   }
 
   /**
+   * Pushed out of another solid body (src/game/solids.ts; Keith 2026-11-01: mechs walked through each other): the body
+   * moves by (dx, dz) and its planted feet slide with it, as a skid does; the motion into the other (against the outward
+   * unit nx, nz) is taken off the walk, the skid, the run and a flight, as a wall takes it.
+   */
+  shove(dx: number, dz: number, nx: number, nz: number) {
+    if (dx * dx + dz * dz > 1e-12) {
+      this.pos.x += dx; this.pos.z += dz;
+      this.pelvis.x += dx; this.pelvis.z += dz;
+      for (const f of this.feet) {
+        if (f.swinging) { f.lift.x += dx; f.lift.z += dz; f.target.x += dx; f.target.z += dz; this.groundAt(f.target, f.targetUp); continue; }
+        f.planted.x += dx; f.planted.z += dz;
+        this.groundAt(f.planted, f.plantedUp);
+      }
+    }
+    const strip = (p: Vector3) => { const d = p.x * nx + p.z * nz; if (d < 0) { p.x -= nx * d; p.z -= nz * d; } };
+    strip(this.vel); strip(this.skid); strip(this.airVel); strip(this.push);
+    if (this.running || this.bStance) {
+      const vx = Math.sin(this.course) * this.boundSpeed, vz = Math.cos(this.course) * this.boundSpeed, d = vx * nx + vz * nz;
+      if (d < 0) {
+        const ox = vx - nx * d, oz = vz - nz * d, s = Math.hypot(ox, oz);
+        this.boundSpeed = s;
+        if (s > 0.3) this.course = Math.atan2(ox, oz);
+      }
+      this.speed = this.boundSpeed;
+    } else if (!this.airborne) this.speed = Math.hypot(this.vel.x, this.vel.z);
+  }
+
+  /**
    * A heavy landing (after a drop): the hips start sink metres low and spring back up on the body's height spring,
    * and the plant-thud spring is hit downward at kick m/s on top (the hocks squash with it).
    */
