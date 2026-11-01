@@ -42,6 +42,7 @@ import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
 import { SwarmCamps, SWARM_CAMP_DEFAULTS, SWARM_CAMP_PARAMS } from "./swarmCamps";
 import { DroidCamps, DROID_CAMP_DEFAULTS, DROID_CAMP_PARAMS, DROID_CAMP_GROUP } from "./droidCamps";
 import { StriderCamps, STRIDER_CAMP_DEFAULTS, STRIDER_CAMP_PARAMS, STRIDER_CAMP_TOPIC } from "./striderCamps";
+import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_TOPIC } from "./crusherSites";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
@@ -76,6 +77,7 @@ export const LOOP_DEFAULTS = {
   ...SAFE_DEFAULTS,
   ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS,
   ...STRIDER_CAMP_DEFAULTS,
+  ...CRUSHER_SITE_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
@@ -88,6 +90,7 @@ export const LOOP_PARAMS: Param[] = [
   ...SAFE_PARAMS,
   ...DROID_CAMP_PARAMS, ...DROID_PARAMS,
   ...STRIDER_CAMP_PARAMS,
+  ...CRUSHER_SITE_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
@@ -103,6 +106,7 @@ export const LOOP_TOPICS = [
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
   { id: "droids", label: "Humanoid robots", groups: [DROID_CAMP_GROUP, ...DROID_GROUPS] },
   STRIDER_CAMP_TOPIC,
+  CRUSHER_SITE_TOPIC,
 ];
 
 
@@ -136,6 +140,8 @@ export class ExpeditionLoop {
   /** Humanoid squads that come with the robot camps, packs and raids. */
   readonly droids: DroidCamps;
   readonly striders: StriderCamps;
+  /** Crushers grazing on salvage sites (killing one calls a swarm). */
+  readonly crushers: CrusherSites;
   /** The raider faction (Keith 2026-10-28): bandit camps (settled) and war band columns (roaming), and how the factions meet. */
   readonly bandits: BanditField;
   readonly banditCamps: BanditCamps;
@@ -247,6 +253,7 @@ export class ExpeditionLoop {
     if (deaths) robotRagdolls(this.swarms.sw, deaths);
     this.droids = new DroidCamps(v, bf, scene, field, opts.vat ?? null, this.swarms);
     this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms, undefined, deaths);
+    this.crushers = new CrusherSites(v, bf, scene, field, player, this.sites, this.swarms);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
     this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
@@ -365,6 +372,7 @@ export class ExpeditionLoop {
     reg.add(this.swarms.target);
     for (const t of this.droids.squads.targets) reg.add(t);
     reg.add(this.striders.sf.target);
+    reg.add(this.crushers.cf.target);
     reg.add(this.banditCamps.target);
     reg.add(this.forts.target);
     reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
@@ -381,6 +389,7 @@ export class ExpeditionLoop {
     this.swarms.reset();
     this.droids.reset();
     this.striders.reset();
+    this.crushers.reset();
     this.banditCamps.reset();
     this.forts.reset();
     this.fortCalls.clear();
@@ -399,7 +408,7 @@ export class ExpeditionLoop {
   }
 
   /** Placement sliders changed. */
-  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.hubs.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.droids.reset(); this.striders.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
+  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.hubs.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.droids.reset(); this.striders.reset(); this.crushers.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
@@ -456,6 +465,7 @@ export class ExpeditionLoop {
     this.swarms.update(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     this.droids.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
     this.striders.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
+    this.crushers.update(dt, hunting, foot && pl ? pl : p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
     inp.mark?.("swarm camps");
     this.updateHumans(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     inp.mark?.("raiders and fights");
@@ -535,6 +545,7 @@ export class ExpeditionLoop {
     this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     this.droids.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     this.striders.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
+    this.crushers.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     for (const c of this.banditCamps.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
     for (const c of this.bands.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
     // Moving danger as heat: packs and raids (hotter hunting), and blasts for a few seconds.
@@ -834,7 +845,7 @@ export class ExpeditionLoop {
   /** Debug line for the frame HUD. */
   get line() {
     const e = this.exp, sw = this.swarms;
-    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
+    return `expedition ${e.state}${e.state === "out" ? ` ${Math.round(e.outFor)} s` : ""} · fuel ${this.v.fuelOn > 0 ? `${Math.round(this.fuel.left)} s` : "off"} · home ${this.home.reachable ? Math.round(this.home.eta) + " s" : "unreachable"} (${this.home.crane ? "rear" : "front"} crane) · radar ${this.zoom.mode} ${Math.round(this.zoom.range)} m · POIs built ${this.sites.count} · camps & packs on the field ${sw.campsLive}, robots ${sw.count} (${sw.awake} awake), crushers ${this.crushers.count} (${this.crushers.calls} swarms called) · raiders: bandit camps ${this.banditCamps.campsLive} (${this.banditCamps.count} up, ${this.banditCamps.alert} alert), war bands ${this.bands.columnsLive} (${this.bands.count} vehicles), columns ${this.columns.cols.length} · fortresses ${this.forts.live.size} (${this.forts.count} up${this.forts.anyAlert ? ", alert" : ""}, gates ${this.forts.gates.list.filter((g) => g.down).length}/${this.forts.gates.list.length} down) · hubs ${this.hubs.live.size} (fabricators ${this.hubs.fabs.list.filter((s) => !s.down).length}/${this.hubs.fabs.list.length} up) · fights: ${this.director.count} engaged in view, ${this.skirmish.clashes.length} off view, ${this.clashes} resolved · packs ${this.threats.packs.filter((q) => q.kind !== "raid").length} (${this.threats.packs.filter((q) => q.state === "hunt").length} hunting), raids ${this.threats.packs.filter((q) => q.kind === "raid").length}, next raid ${Math.round(this.threats.raidT)} s, first fight ${this.threats.engaged ? "had" : "not yet"} · banked ${e.counts.banked}, recalled ${e.counts.recalled}, fuel ${e.counts.fuel}, lost ${e.counts.destroyed}, pilot killed ${e.counts.pilot}`;
   }
 }
 
