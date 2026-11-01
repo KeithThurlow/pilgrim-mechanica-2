@@ -181,7 +181,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - **Packs and raids are rough:** raids are robot waves only (no vehicle war band yet); a pack that isn't engaged is a
   point on the sand (no robots drawn until it comes within 130 m, only its dust plume nearby and a mark at the screen's
   edge); packs and raids never go for the convoy; the drawn dust plume only shows within 260 m; pacing judged from a
-  headless walk and still shots, not played. The convoy lab has no craters or death physics (robots collapse in place).
+  headless walk and still shots, not played. The convoy lab has craters and death physics since 2026-11-01 (as the combat labs).
 - **Expedition step 1 is rough:** recovery is instant (a fade, no helicopter, nothing can hit you while waiting);
   salvage pays scrap only (the at-risk list takes items, nothing drops them yet); fuel is a slider, not a property of the
   power pack item; the return point assumes a straight walk at walk pace (tall dunes slow the walker uphill, so far
@@ -293,9 +293,15 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · The labs' work in the convoy: blast craters, death physics, the sword in the stash (Keith; Claude on `claude/project-thread-r9cq2o`)
+- Keith: everything recent playable in the convoy. Survey: weapon and small quads, walkers' growing beam and terraform pulse, striders, red-hot sand, the HUD and the inventory were already in; crushers in the world belong to the crusher thread. Missing were craters and ragdolls.
+- Craters: `CraterLayer` on the convoy's field (`field.dents`, `bf.craters`, `bf.onGround`), queued and flushed once a frame like the combat labs; `route.onChange` re-reads crater hardness (none on the road). `TerrainStreamer.patchBox`: an uncached patch (the road) drops the chunk's patch cache, so cached crater patches never bring back old ground.
+- Deaths: `DeathPhysics` + `DeadDraw` in the convoy lab, passed to the loop (`LoopOptions.deaths`): robots and bandits (camps, fortresses, bus riders) ragdoll (`src/expedition/ragdolls.ts`), striders ragdoll (`StriderCamps`), war band vehicles become Rapier wrecks (`WarBands`).
+- Sword: one rare Breaker sword goes into the convoy bay stash once (saved bays too), to fit on a held slot.
+- Checked: typecheck; headless convoy lab `?norender&dt=0.033&nearcamp=30` for 60 s: no errors, craters 8, bodies 1, craters 0.2 ms and deaths 0.13 ms a frame; full `npm test`.
+
 ### 2026-11-01 · Soft gradient telegraphs: the pulse's time-left ring is back (Keith; Claude)
 - Keith: bring back the ring growing out to the blast's edge (it tells you the time left), drawn soft like the new reach ring; head all telegraphs toward soft gradients. New `SoftRing` in `src/weapons/ribbon.ts`: an additive band on the sand, clear at both edges, brightest near its outer edge (vertex colours). The big walkers' pulse draws its reach and a soft front growing out to it (`robotPulseRing` 0.35); the strider's slam rings use the same (`striderFx.ts`). Checked: typecheck, full `npm test`.
-
 ### 2026-11-01 · Big beams grow from a thin live beam; the pulse charges a thin beam and blasts with light (Keith; Claude)
 - Keith: less ground telegraphing, show it with the real thing. New `src/combat/beamCore.ts` (pure): a big beam is live from the start of its charge, thin and weak (`robotBeamStartWidth` 0.1, `robotBeamStartPower` 0.04, `robotBeamGrow` 2.2), grows to the release, fires on for the sweep; its strike drags toward the prey all along (`robotBeamChargeDrag` 2 m/s while charging, `robotBeamDrag` 4.5 after). Damage per tick is the sweep's rate times the power then; the sand's blast, dents and heat scale with power. Events gain `power` and `release` (the crack and the trench down the line). Big walkers' warning line on the sand and the strike ring are gone (weapon quads keep theirs).
 - Striders use the same beam (`striderBeamSweep`, `Drag`, `ChargeDrag`, `Tick`, `StartWidth`, `StartPower`, `Grow`; `striderBeamTrack` gone): a live beam from the head growing to a flare at the release, and the red-hot sand along its drag (`striderFx.ts`, `strider.ts`).

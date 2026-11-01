@@ -108,7 +108,7 @@ import { ABILITY_TOPIC } from "../../src/abilities/abilities";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, type SlotId } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
 import { newBag, addTo, bagWeight } from "../../src/items/cargo";
-import { rollLoot } from "../../src/items/generate";
+import { rollLoot, makeItem } from "../../src/items/generate";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { itemName } from "../../src/expedition/drops";
 import { applyLoadout } from "../../src/game/loadoutApply";
@@ -337,6 +337,17 @@ const kit: Pick = { left: "minigun", right: "minigun", k1: "missiles", k2: "belt
 const kitFlagged = pickFromParams(kit, params);
 const bayState: BayState = (!params.has("fresh") && loadBay(BAY_KEY)) || { loadout: loadoutFor(kit), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1 };
 if (kitFlagged) bayState.loadout = loadoutFor(kit);
+// The Breaker sword (Keith 2026-11-01: the labs' work in the convoy): one goes into the stash once, saved or fresh, so it
+// can be fitted to an arm in the bay (B: a held slot) without waiting for a drop.
+{
+  const GIVEN = "pm2:convoy-lab:sword-given";
+  const has = [...Object.values(bayState.loadout), ...bayState.stash.items].some((it) => it?.base === "sword-light");
+  if (!has && (params.has("fresh") || !localStorage.getItem(GIVEN))) {
+    addTo(bayState.stash, makeItem("sword-light", "rare", "starter-sword"));
+    localStorage.setItem(GIVEN, "1");
+    saveBay(BAY_KEY, bayState);
+  }
+}
 // What the convoy has banked and bought comes back from the save; ?unlock=all buys everything, ?bank=N sets the scrap.
 loop.unlocks.load(bayState.unlocks);
 loop.exp.bank.scrap = bayState.scrap ?? 0;
@@ -1032,6 +1043,7 @@ app.onTick((rawDt) => {
   deaths.step(dt);
   deadDraw.update();
   costs.mark("deaths");
+  app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving) · craters ${craters.count}`);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
   if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }
