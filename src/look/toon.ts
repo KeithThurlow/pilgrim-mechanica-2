@@ -6,6 +6,9 @@ import { positionLocal, normalLocal, cameraPosition, modelWorldMatrix, uniform, 
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Param } from "../core/tweaks";
 
+/** Texture maps a material keeps through the look. */
+type Maps = { map?: THREE.Texture | null; normalMap?: THREE.Texture | null };
+
 export const TOON_DEFAULTS = {
   celShading: 0,
   inkWidth: 0,
@@ -32,7 +35,7 @@ export class ToonLook {
   private inkScale = uniform(0.001);
   readonly ink: THREE.MeshBasicNodeMaterial;
   private bands = new Uint8Array(3 * 4);
-  private meshes: { mesh: THREE.Mesh; tint: number }[] = [];
+  private meshes: { mesh: THREE.Mesh; tint: number; maps?: Maps }[] = [];
   private cel = -1; // material key: cel on/off and paint values; a change swaps the materials
 
   constructor(public v: ToonValues) {
@@ -68,9 +71,10 @@ export class ToonLook {
     if (Math.abs(cur - this.v.shadeFloor) > 0.003 || Math.abs(mid - this.v.shadeMid) > 0.003) this.writeBands();
   }
 
-  material(vertexColors: boolean, tint = 0xffffff) {
-    if (this.v.celShading > 0.5) return new THREE.MeshToonMaterial({ color: tint, vertexColors, gradientMap: this.gradient });
-    return new THREE.MeshStandardMaterial({ color: tint, vertexColors, roughness: this.v.paintRoughness, metalness: this.v.paintMetal });
+  /** `maps`: a textured model's base colour and normal map (generated parts), kept through the look. */
+  material(vertexColors: boolean, tint = 0xffffff, maps: Maps = {}) {
+    if (this.v.celShading > 0.5) return new THREE.MeshToonMaterial({ color: tint, vertexColors, gradientMap: this.gradient, ...maps });
+    return new THREE.MeshStandardMaterial({ color: tint, vertexColors, roughness: this.v.paintRoughness, metalness: this.v.paintMetal, ...maps });
   }
 
   /** Recolour a mesh this look manages (keeps the colour across cel on/off swaps). */
@@ -81,17 +85,20 @@ export class ToonLook {
   }
 
   private swapMaterials() {
-    for (const { mesh, tint } of this.meshes) {
+    for (const { mesh, tint, maps } of this.meshes) {
       (mesh.material as THREE.Material).dispose();
-      mesh.material = this.material(!!mesh.geometry.attributes.color, tint);
+      mesh.material = this.material(!!mesh.geometry.attributes.color, tint, maps);
     }
   }
 
   /** Give a mesh the toon material and an ink outline child. */
   apply(mesh: THREE.Mesh, outline = true) {
-    const g = mesh.geometry;
-    mesh.material = this.material(!!g.attributes.color);
-    this.meshes.push({ mesh, tint: 0xffffff });
+    const g = mesh.geometry, src = mesh.material as THREE.MeshStandardMaterial;
+    const maps: Maps = {};
+    if (src?.map) maps.map = src.map;
+    if (src?.normalMap) maps.normalMap = src.normalMap;
+    mesh.material = this.material(!!g.attributes.color, 0xffffff, maps);
+    this.meshes.push({ mesh, tint: 0xffffff, maps });
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     if (!outline) return;

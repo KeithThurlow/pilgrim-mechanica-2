@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { readGlb, writeGlb } from "./partgen/glb";
 import { loadKinds, type Kind } from "./partgen/kinds";
-import { boxYaw, delight, glbToMesh, prepare } from "./partgen/prep";
+import { boxYaw, delight, glbToMesh, prepare, prepareTextured } from "./partgen/prep";
 import { readPly, splatToMesh, splatToMeshAt, writePly, SPLAT_MESH_DEFAULTS, type Mesh, type Splat } from "./partgen/splat";
 
 let fails = 0;
@@ -64,7 +64,8 @@ function checkPart(label: string, glb: Uint8Array, kind: Kind, lod = 0, fitted =
   if (!m) return;
   const s = stats(m);
   ok(s.tris <= kind.tris[lod] * 1.05 && s.tris >= 4, `${label}: ${s.tris} tris within budget ${kind.tris[lod]}`);
-  ok(!!m.col, `${label}: vertex colours`);
+  if (m.maps) ok(!!m.uv && !!m.image && !!m.nrm, `${label}: textured (UVs, ${m.image?.w ?? 0}² base colour${m.maps.normal ? ", normal map" : ""}, normals)`);
+  else ok(!!m.col, `${label}: vertex colours`);
   if (!fitted) ok(Math.abs(s.lo[1]) < 1e-3, `${label}: base at y 0 (${s.lo[1].toFixed(4)})`);
   const size = [0, 1, 2].map((c) => s.hi[c] - s.lo[c]);
   const fits = size.every((v, c) => v <= kind.box[c] + 1e-3), fills = size.some((v, c) => v >= kind.box[c] * 0.98);
@@ -194,6 +195,22 @@ for (let v = 0; v < cube.col.length / 3; v++) { if (cube.col[v * 3] > 0.7) red++
 ok(red === 12 && blue === 12, `lane B: texture to vertex colours (${red} red, ${blue} blue of 24)`);
 ok(Math.abs(stats(cube).hi[0] - 0.5) < 1e-6, "lane B: node transform applied");
 checkPart("wreck from lane B", await run(cube, kinds.wreck), kinds.wreck);
+
+// Lane B with baked maps (Keith 2026-11-01): orient and fit only; the texture, UVs and triangles go through untouched.
+{
+  const src = readGlb(texturedCube());
+  const q = prepareTextured(src, kinds.wreck, { front: "+z", up: "+y" });
+  const out = writeGlb([q.part], q.sockets, { kind: "wreck", lane: "b", lod: 0 });
+  checkPart("textured wreck from lane B", out, kinds.wreck);
+  const back = readGlb(out).meshes[0];
+  const same = back.maps?.base?.bytes.length === src.meshes[0].maps?.base?.bytes.length;
+  ok(same && back.index.length === src.meshes[0].index.length && back.uv?.length === src.meshes[0].uv?.length,
+    `lane B textured: image bytes, UVs and ${back.index.length / 3} triangles kept`);
+  const mesh = glbToMesh(readGlb(out));
+  let r2 = 0, b2 = 0;
+  for (let v = 0; v < mesh.col.length / 3; v++) { if (mesh.col[v * 3] > 0.8 && mesh.col[v * 3 + 2] < 0.2) r2++; if (mesh.col[v * 3 + 2] > 0.8 && mesh.col[v * 3] < 0.2) b2++; }
+  ok(r2 === 12 && b2 === 12, `lane B textured: texture still maps red and blue halves (${r2} red, ${b2} blue of 24)`);
+}
 
 // 4. Generated parts on disk.
 const indexPath = "public/models/gen/index.json";

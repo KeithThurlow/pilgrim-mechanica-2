@@ -1,11 +1,13 @@
 // The back half of the part pipeline, shared by both lanes: a raw generated mesh (lane A's splat mesh, or lane B's
 // textured GLB) becomes a game part. Orient (the generator's front and up to the game's +Z and +Y), fit into the
 // kind's box (uniform scale, centred, base at y 0), weld and simplify to the kind's triangle budget with
-// meshoptimizer (colour kept as an attribute), colours into vertex colours (textures dropped: the toon look reads
-// vertex colour), smooth normals, then the kind's sockets as empties. Pure: same input, same part.
+// meshoptimizer (colour kept as an attribute), colours into vertex colours, smooth normals, then the kind's sockets
+// as empties. A generator that already made the level at its budget with baked maps (lane B) goes through
+// prepareTextured instead: orient and fit only, UVs, base colour and normal map kept (Keith 2026-11-01: his
+// 1,000-triangle tests with baked maps beat vertex-coloured parts). Pure: same input, same part.
 /// <reference path="./meshopt.d.ts" />
 import { MeshoptSimplifier } from "three/addons/libs/meshopt_simplifier.module.js";
-import { sample, type Glb, type OutPart } from "./glb";
+import { sample, type Glb, type Maps, type OutPart } from "./glb";
 import type { Kind, V3 } from "./kinds";
 import type { Mesh } from "./splat";
 
@@ -154,20 +156,61 @@ export function normals(pos: Float32Array, index: Uint32Array) {
 
 export interface Prepared { part: OutPart; sockets: [string, V3][]; size: V3; scale: number; trisIn: number }
 
-export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Prepared> {
-  if (!src.index.length) throw new Error("partgen: empty mesh");
-  // Orient.
-  const B = basis(o.front, o.up), n = src.pos.length / 3, pos = new Float32Array(src.pos.length);
-  for (let v = 0; v < n; v++) for (let r = 0; r < 3; r++) pos[v * 3 + r] = B[r][0] * src.pos[v * 3] + B[r][1] * src.pos[v * 3 + 1] + B[r][2] * src.pos[v * 3 + 2];
-  if (o.yaw) turnY(pos, o.yaw);
-  if (o.snap) turnY(pos, boxYaw(pos));
-  // Fit: uniform scale into the box, centred in x and z, base at y 0.
+/** Orient (front/up, yaw, snap) and fit (uniform scale into the box, centred in x and z, base at y 0). Turns `nrm` too. */
+function orientFit(src: Float32Array, index: Uint32Array, kind: Kind, o: PrepOptions, nrm?: Float32Array) {
+  const B = basis(o.front, o.up), n = src.length / 3, pos = new Float32Array(src.length);
+  const rot = (a: Float32Array, out: Float32Array) => {
+    for (let v = 0; v < n; v++) for (let r = 0; r < 3; r++) out[v * 3 + r] = B[r][0] * a[v * 3] + B[r][1] * a[v * 3 + 1] + B[r][2] * a[v * 3 + 2];
+  };
+  rot(src, pos);
+  const N = nrm ? new Float32Array(nrm.length) : undefined;
+  if (nrm) rot(nrm, N!);
+  const yaw = o.yaw ?? 0;
+  if (yaw) { turnY(pos, yaw); if (N) turnY(N, yaw); }
+  if (o.snap) { const d = boxYaw(pos); turnY(pos, d); if (N) turnY(N, d); }
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-  for (const t of src.index) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], pos[t * 3 + c]); hi[c] = Math.max(hi[c], pos[t * 3 + c]); }
+  for (const t of index) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], pos[t * 3 + c]); hi[c] = Math.max(hi[c], pos[t * 3 + c]); }
   const scale = Math.min(...[0, 1, 2].map((c) => kind.box[c] / Math.max(1e-6, hi[c] - lo[c])));
   const mid = [(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2];
   for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) pos[v * 3 + c] = (pos[v * 3 + c] - mid[c]) * scale;
   const size = [0, 1, 2].map((c) => (hi[c] - lo[c]) * scale) as V3;
+  return { pos, nrm: N, size, scale };
+}
+
+/** Signed volume (positive = faces point outward). */
+function volume(p: Float32Array, I: Uint32Array) {
+  let vol = 0;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    vol += p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c]);
+  }
+  return vol;
+}
+
+/** Sockets at fractions of the fitted box (x 0 = right side, -X). */
+const socketsOf = (kind: Kind, size: V3) => Object.entries(kind.sockets).map(([name, f]) =>
+  [name, [(f[0] - 0.5) * size[0], f[1] * size[1], (f[2] - 0.5) * size[2]] as V3] as [string, V3]);
+
+/**
+ * A generator mesh already at the level's budget with baked maps (lane B): orient and fit only, keeping its UVs,
+ * normals, base colour and normal map. No simplifying (that would tear the UV seams) and no vertex colours.
+ */
+export function prepareTextured(g: Glb, kind: Kind, o: PrepOptions): Prepared {
+  const ms = g.meshes.filter((m) => m.uv && m.maps?.base);
+  if (!ms.length) throw new Error("partgen: no textured mesh in the GLB");
+  if (ms.length > 1) throw new Error(`partgen: ${ms.length} textured meshes; one expected`);
+  const m = ms[0];
+  const f = orientFit(m.pos, m.index, kind, o, m.nrm);
+  const I = Uint32Array.from(m.index);
+  if (volume(f.pos, I) < 0) for (let t = 0; t < I.length; t += 3) { const x = I[t + 1]; I[t + 1] = I[t + 2]; I[t + 2] = x; }
+  const maps: Maps = { base: m.maps!.base, normal: m.maps!.normal };
+  const part: OutPart = { name: kind.part, pos: f.pos, nrm: f.nrm ?? normals(f.pos, I), col: new Float32Array(0), index: I, material: kind.material, uv: m.uv, maps };
+  return { part, sockets: socketsOf(kind, f.size), size: f.size, scale: f.scale, trisIn: I.length / 3 };
+}
+
+export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Prepared> {
+  if (!src.index.length) throw new Error("partgen: empty mesh");
+  const { pos, size, scale } = orientFit(src.pos, src.index, kind, o);
 
   // Weld at a millimetre, then simplify to budget keeping colour.
   const w = weld({ pos, col: src.col, index: src.index }, 1e-3);
@@ -196,15 +239,7 @@ export async function prepare(src: Mesh, kind: Kind, o: PrepOptions): Promise<Pr
   for (let i = 1; i < fp.length; i += 3) minY = Math.min(minY, fp[i]);
   for (let i = 1; i < fp.length; i += 3) fp[i] -= minY;
   // Inside out (some exporters wind clockwise)? Flip, so the outline shell and back-face culling work.
-  let vol = 0;
-  for (let t = 0; t < I.length; t += 3) {
-    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
-    vol += fp[a] * (fp[b + 1] * fp[c + 2] - fp[b + 2] * fp[c + 1]) - fp[a + 1] * (fp[b] * fp[c + 2] - fp[b + 2] * fp[c]) + fp[a + 2] * (fp[b] * fp[c + 1] - fp[b + 1] * fp[c]);
-  }
-  if (vol < 0) for (let t = 0; t < I.length; t += 3) { const x = I[t + 1]; I[t + 1] = I[t + 2]; I[t + 2] = x; }
+  if (volume(fp, I) < 0) for (let t = 0; t < I.length; t += 3) { const x = I[t + 1]; I[t + 1] = I[t + 2]; I[t + 2] = x; }
   const part: OutPart = { name: kind.part, pos: fp, nrm: normals(fp, I), col: new Float32Array(C), index: I, material: kind.material };
-  // Sockets at fractions of the fitted box (x 0 = right side, -X).
-  const sockets = Object.entries(kind.sockets).map(([name, f]) =>
-    [name, [(f[0] - 0.5) * size[0], f[1] * size[1], (f[2] - 0.5) * size[2]] as V3] as [string, V3]);
-  return { part, sockets, size, scale, trisIn };
+  return { part, sockets: socketsOf(kind, size), size, scale, trisIn };
 }

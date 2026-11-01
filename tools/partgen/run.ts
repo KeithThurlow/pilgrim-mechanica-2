@@ -10,13 +10,13 @@
 // More: --label text (the part lab's name for it), --front +z --up +y (the source's axes; generators differ),
 // --yaw deg[,snap] (turn about +Y after that; snap: then box it tightest within ±45°), --tris N (the full level), --id name, --res N (lane A grid; default: each level meshed at its own budget), --delight 0..1
 // (take baked light out of the colours; default 1 for lane A, 0 for lane B whose base colour is albedo).
-// Workflows: tools/partgen/workflows/{concept,lane-a,lane-b}.json, ComfyUI "Export (API)" files (see comfy.ts).
+// Workflows: tools/partgen/workflows/{concept,lane-a,lane-b}.json, ComfyUI API files (see comfy.ts); --lane-b x.json etc. runs another.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname } from "node:path";
 import { Comfy, hasTitle, patch, type OutFile, type Workflow } from "./comfy";
-import { readGlb, writeGlb } from "./glb";
+import { readGlb, writeGlb, type Glb } from "./glb";
 import { loadKinds } from "./kinds";
-import { glbToMesh, prepare, type Axis } from "./prep";
+import { glbToMesh, prepare, prepareTextured, type Axis } from "./prep";
 import { readPly, splatToMesh, splatToMeshAt, SPLAT_MESH_DEFAULTS, type Mesh } from "./splat";
 
 /** House style for concept images: one part, whole, unlit (the colours become paint: Keith 2026-11-01, no baked lighting). */
@@ -36,14 +36,16 @@ const yawArg = opt("yaw", "0")!, yaw = parseFloat(yawArg) || 0, snap = yawArg.in
 const RAW = "shots/partgen/raw", OUT = "public/models/gen";
 mkdirSync(RAW, { recursive: true }); mkdirSync(OUT, { recursive: true });
 const wf = (name: string) => {
-  const p = `tools/partgen/workflows/${name}.json`;
+  const p = opt(name) ?? `tools/partgen/workflows/${name}.json`; // --concept/--lane-a/--lane-b other.json
   if (!existsSync(p)) throw new Error(`partgen: no ${p} (export it from ComfyUI as API format; see tools/partgen/workflows/README.md)`);
   return JSON.parse(readFileSync(p, "utf8")) as Workflow;
 };
 const pick = (files: OutFile[], exts: string[]) => files.find((f) => exts.includes(extname(f.filename).toLowerCase()));
 
-/** A level of detail's raw mesh: each level is made at its own budget where the lane can (low-res from the start). */
-type Source = (lod: 0 | 1 | 2, budget: number) => Promise<Mesh>;
+/** A level of detail's raw mesh: each level is made at its own budget where the lane can (low-res from the start).
+ * A GLB with a textured mesh keeps its maps (prepareTextured); anything else becomes vertex colours. */
+type Source = (lod: 0 | 1 | 2, budget: number) => Promise<Mesh | Glb>;
+const textured = (g: Glb) => g.meshes.some((m) => m.uv && m.maps?.base);
 
 async function save(id: string, laneName: string, source: Source, meta: Record<string, unknown>) {
   const t0 = performance.now();
@@ -54,7 +56,8 @@ async function save(id: string, laneName: string, source: Source, meta: Record<s
   const lods = [];
   for (const lod of [0, 1, 2] as const) {
     const budget = opt("tris") && lod === 0 ? Number(opt("tris")) : kind.tris[lod];
-    const q = await prepare(await source(lod, budget), kind, { front, up, yaw, snap, lod, tris: budget, delight: delightAmount });
+    const src = await source(lod, budget), o = { front, up, yaw, snap, lod, tris: budget, delight: delightAmount };
+    const q = "meshes" in src ? (textured(src) ? prepareTextured(src, kind, o) : await prepare(glbToMesh(src), kind, o)) : await prepare(src, kind, o);
     writeFileSync(`${OUT}/${id}${lod ? `-lod${lod}` : ""}.glb`, writeGlb([q.part], q.sockets, { kind: kind.id, lane: laneName, lod }));
     lods.push(q);
   }
@@ -83,8 +86,8 @@ const from = opt("from");
 if (from) {
   const bytes = new Uint8Array(readFileSync(from));
   const isPly = from.toLowerCase().endsWith(".ply");
-  const glbMesh = isPly ? null : glbToMesh(readGlb(bytes));
-  await save(opt("id", `${kind.id}-${isPly ? "a" : "b"}-${seed}`)!, isPly ? "a" : "b", isPly ? splatSource(bytes) : async () => glbMesh!, { from });
+  const glb = isPly ? null : readGlb(bytes);
+  await save(opt("id", `${kind.id}-${isPly ? "a" : "b"}-${seed}`)!, isPly ? "a" : "b", isPly ? splatSource(bytes) : async () => glb!, { from });
 } else {
   const comfy = new Comfy(comfyUrl);
   const prompt = `${opt("prompt", kind.prompt)}, ${STYLE}`;
@@ -116,13 +119,13 @@ if (from) {
       // Lane B: a workflow with a PG_FACES node is run once per level at that level's budget (low-res from the start);
       // without one, its single output is reduced for each level.
       const perLod = hasTitle(wf("lane-b"), "PG_FACES");
-      let one: Mesh | null = null;
+      let one: Glb | null = null;
       const raws: string[] = [];
       await save(id, "b", async (lod, budget) => {
         if (!perLod && one) return one;
         const { bytes, raw } = await fetchOut("b", { faces: budget, res: opt("res") ? Number(opt("res")) : undefined }, perLod ? `-lod${lod}` : "");
         raws.push(raw);
-        one = glbToMesh(readGlb(bytes));
+        one = readGlb(bytes);
         return one;
       }, { ...meta, raw: raws });
     }

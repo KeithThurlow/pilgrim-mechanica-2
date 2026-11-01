@@ -1,17 +1,23 @@
 // Minimal GLB reading and writing for the part pipeline (plain Node, no three.js loaders: those need a browser to
 // decode textures). Reads every triangle mesh with its node transform, UVs, vertex colours and the base colour image
-// bytes; writes one vertex-coloured mesh per part plus empties (sockets). Enough for generator output and our parts.
+// bytes; writes one mesh per part (vertex-coloured, or textured: UVs, base colour and normal map passed through as
+// PNG/JPEG bytes) plus empties (sockets). Enough for generator output and our parts.
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 
 export interface Img { w: number; h: number; rgba: Uint8Array }
+/** An encoded texture image (PNG or JPEG bytes), passed through without decoding. */
+export interface Tex { bytes: Uint8Array; mime: string }
+export interface Maps { base?: Tex; normal?: Tex }
 export interface RawMesh {
   name: string;
   pos: Float32Array;          // world space (node transforms applied)
   uv?: Float32Array;
+  nrm?: Float32Array;         // world space, unit
   col?: Float32Array;         // rgb 0..1 per vertex
   index: Uint32Array;
   image?: Img;                // base colour texture
+  maps?: Maps;                // the material's base colour and normal map, encoded
   factor: [number, number, number];
 }
 export interface Glb { meshes: RawMesh[]; empties: Map<string, [number, number, number]> }
@@ -90,6 +96,12 @@ export function readGlb(buf: Uint8Array): Glb {
     return images.get(src)!;
   };
 
+  const encoded = (tex: number): Tex => {
+    const im = j.images[j.textures[tex].source];
+    if (im.bufferView === undefined) throw new Error("partgen: external textures not supported (embed them in the GLB)");
+    return { bytes: view(im.bufferView).slice(), mime: im.mimeType ?? "image/png" };
+  };
+
   const out: Glb = { meshes: [], empties: new Map() };
   const walk = (ni: number, parent: M4) => {
     const n = j.nodes[ni], m = mul(parent, trs(n));
@@ -106,6 +118,16 @@ export function readGlb(buf: Uint8Array): Glb {
         const index = prim.indices !== undefined ? Uint32Array.from(acc(prim.indices)) : Uint32Array.from({ length: pos.length / 3 }, (_, i) => i);
         const mesh: RawMesh = { name: n.name ?? `mesh${n.mesh}`, pos, index, factor: [1, 1, 1] };
         if (prim.attributes.TEXCOORD_0 !== undefined) mesh.uv = acc(prim.attributes.TEXCOORD_0) as Float32Array;
+        if (prim.attributes.NORMAL !== undefined) {
+          const q = acc(prim.attributes.NORMAL) as Float32Array, nrm = new Float32Array(q.length);
+          for (let i = 0; i < q.length; i += 3) {
+            const x = q[i], y = q[i + 1], z = q[i + 2];
+            const a = m[0] * x + m[4] * y + m[8] * z, b = m[1] * x + m[5] * y + m[9] * z, c = m[2] * x + m[6] * y + m[10] * z;
+            const l = Math.hypot(a, b, c) || 1;
+            nrm[i] = a / l; nrm[i + 1] = b / l; nrm[i + 2] = c / l;
+          }
+          mesh.nrm = nrm;
+        }
         if (prim.attributes.COLOR_0 !== undefined) {
           const c = acc(prim.attributes.COLOR_0) as Float32Array, k = j.accessors[prim.attributes.COLOR_0].type === "VEC4" ? 4 : 3;
           mesh.col = new Float32Array(pos.length);
@@ -115,6 +137,10 @@ export function readGlb(buf: Uint8Array): Glb {
         const pbr = mat?.pbrMetallicRoughness;
         if (pbr?.baseColorFactor) mesh.factor = pbr.baseColorFactor.slice(0, 3);
         if (pbr?.baseColorTexture) mesh.image = image(pbr.baseColorTexture.index);
+        if (pbr?.baseColorTexture || mat?.normalTexture) mesh.maps = {
+          base: pbr?.baseColorTexture ? encoded(pbr.baseColorTexture.index) : undefined,
+          normal: mat?.normalTexture ? encoded(mat.normalTexture.index) : undefined,
+        };
         out.meshes.push(mesh);
       }
     } else if (n.name) out.empties.set(n.name, [m[12], m[13], m[14]]);
@@ -139,9 +165,12 @@ export function sample(img: Img, u: number, v: number, out: number[]) {
   return out;
 }
 
-export interface OutPart { name: string; pos: Float32Array; nrm: Float32Array; col: Float32Array; index: Uint32Array; material: string }
+export interface OutPart {
+  name: string; pos: Float32Array; nrm: Float32Array; col: Float32Array; index: Uint32Array; material: string;
+  uv?: Float32Array; maps?: Maps; // textured: no vertex colours written
+}
 
-/** Write parts (vertex colours as normalised bytes, no textures) and empties into a GLB. */
+/** Write parts (vertex colours as normalised bytes, or UVs with their textures) and empties into a GLB. */
 export function writeGlb(parts: OutPart[], empties: [string, [number, number, number]][], extras: Record<string, unknown> = {}): Uint8Array {
   const chunks: Uint8Array[] = [];
   let len = 0;
@@ -153,33 +182,53 @@ export function writeGlb(parts: OutPart[], empties: [string, [number, number, nu
     chunks.push(data); len += data.byteLength;
     return bufferViews.length - 1;
   };
-  const meshes: object[] = [], materials: object[] = [], nodes: object[] = [];
+  const meshes: object[] = [], materials: object[] = [], nodes: object[] = [], images: object[] = [], textures: object[] = [];
+  const texture = (t: Tex) => {
+    images.push({ bufferView: push(t.bytes), mimeType: t.mime });
+    textures.push({ source: images.length - 1, sampler: 0 });
+    return { index: textures.length - 1 };
+  };
   const matIndex = new Map<string, number>();
   for (const p of parts) {
     const n = p.pos.length / 3;
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < p.pos.length; i++) { min[i % 3] = Math.min(min[i % 3], p.pos[i]); max[i % 3] = Math.max(max[i % 3], p.pos[i]); }
-    const col = new Uint8Array(n * 4);
-    for (let v = 0; v < n; v++) {
-      for (let c = 0; c < 3; c++) col[v * 4 + c] = Math.round(Math.min(1, Math.max(0, p.col[v * 3 + c])) * 255);
-      col[v * 4 + 3] = 255;
-    }
+    const textured = !!(p.uv && p.maps);
     const a0 = accessors.length;
     accessors.push({ bufferView: push(new Uint8Array(p.pos.buffer.slice(0)), 34962), componentType: 5126, count: n, type: "VEC3", min, max });
     accessors.push({ bufferView: push(new Uint8Array(p.nrm.buffer.slice(0)), 34962), componentType: 5126, count: n, type: "VEC3" });
-    accessors.push({ bufferView: push(col, 34962), componentType: 5121, normalized: true, count: n, type: "VEC4" });
-    accessors.push({ bufferView: push(new Uint8Array(p.index.buffer.slice(0)), 34963), componentType: 5125, count: p.index.length, type: "SCALAR" });
-    if (!matIndex.has(p.material)) {
-      matIndex.set(p.material, materials.length);
-      materials.push({ name: p.material, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0.2, roughnessFactor: 0.7 } });
+    if (textured) accessors.push({ bufferView: push(new Uint8Array(new Float32Array(p.uv!).buffer), 34962), componentType: 5126, count: n, type: "VEC2" });
+    else {
+      const col = new Uint8Array(n * 4);
+      for (let v = 0; v < n; v++) {
+        for (let c = 0; c < 3; c++) col[v * 4 + c] = Math.round(Math.min(1, Math.max(0, p.col[v * 3 + c])) * 255);
+        col[v * 4 + 3] = 255;
+      }
+      accessors.push({ bufferView: push(col, 34962), componentType: 5121, normalized: true, count: n, type: "VEC4" });
     }
-    meshes.push({ name: p.name, primitives: [{ attributes: { POSITION: a0, NORMAL: a0 + 1, COLOR_0: a0 + 2 }, indices: a0 + 3, material: matIndex.get(p.material) }] });
+    accessors.push({ bufferView: push(new Uint8Array(p.index.buffer.slice(0)), 34963), componentType: 5125, count: p.index.length, type: "SCALAR" });
+    let mat: number;
+    if (textured) {
+      // A textured part gets its own material (its own maps).
+      mat = materials.length;
+      materials.push({ name: p.material, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0.2, roughnessFactor: 0.7,
+        ...(p.maps!.base ? { baseColorTexture: texture(p.maps!.base) } : {}) }, ...(p.maps!.normal ? { normalTexture: texture(p.maps!.normal) } : {}) });
+    } else {
+      if (!matIndex.has(p.material)) {
+        matIndex.set(p.material, materials.length);
+        materials.push({ name: p.material, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0.2, roughnessFactor: 0.7 } });
+      }
+      mat = matIndex.get(p.material)!;
+    }
+    const attributes = textured ? { POSITION: a0, NORMAL: a0 + 1, TEXCOORD_0: a0 + 2 } : { POSITION: a0, NORMAL: a0 + 1, COLOR_0: a0 + 2 };
+    meshes.push({ name: p.name, primitives: [{ attributes, indices: a0 + 3, material: mat }] });
     nodes.push({ name: p.name, mesh: meshes.length - 1 });
   }
   for (const [name, t] of empties) nodes.push({ name, translation: t });
   const json = {
     asset: { version: "2.0", generator: "pilgrim-mechanica-2 tools/partgen", extras },
     scene: 0, scenes: [{ nodes: nodes.map((_, i) => i) }], nodes, meshes, materials, accessors, bufferViews,
+    ...(images.length ? { images, textures, samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }] } : {}),
     buffers: [{ byteLength: len + ((4 - (len % 4)) % 4) }],
   };
   let jb = new TextEncoder().encode(JSON.stringify(json));
