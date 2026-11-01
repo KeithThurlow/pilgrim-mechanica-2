@@ -126,7 +126,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Humanoid robots lab: `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; off elsewhere for now (Keith 2026-11-01): `?set=robotDroids:3` brings them into robots-lab packs, `?set=droidsOn:1` into the convoy lab's camps, packs and raids.
 - Striders (in the robots lab, Keith 2026-11-01; `labs/strider/` forwards there): `?strider=N` (N up at once, 1 by default),
   `?strider=beam|slam|grab` (one at 45 m about to beam, 14 m about to slam, 6 m about to grab; no packs), `?striderdist=m`.
-  Striders are mech-sized (8 m) with a disc hull and long clawed arms.
+  Striders are mech-sized (8 m) with a disc hull and long clawed arms. In the convoy lab they come with big robot camps, packs and raids (`?nearcamp`, `?raid`; Striders: in the field).
 - Crusher lab (the heavy crab quad): `?count=N` (up at once), `?dist=m` (where they stand up), `?suck` (one 14 m ahead, spinning up at once), `?claw` (one beside you, pincer ready), `?eat` (it never hunts you: watch it eat the salvage heaps), `?heaps=N`, plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
