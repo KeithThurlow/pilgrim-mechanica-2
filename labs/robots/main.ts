@@ -162,7 +162,7 @@ if (params0.has("lineup")) {
   const p = player.sim.pos;
   const put = (dx: number, dz: number, mid: number, big: number, quad = 0, weapon = 0) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big, quad, weapon })) sw.frozen[i] = 1; };
   put(-4, 9, 0, 0); put(-2.5, 10, 0, 0); put(1, 10, 1, 0); put(10, 16, 0, 1);
-  for (let w = 0; w < 4; w++) put(-12 + w * 5, 17, 1, 0, 1, w);
+  for (let w = 0; w < 4; w++) put([9, 15, -9, -15][w], 1, 1, 0, 1, w);
 }
 // ?quads: no packs, one weapon quad of each weapon (minigun, rockets, laser, rail) coming in from ahead.
 if (params0.has("quads")) {

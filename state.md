@@ -289,6 +289,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Small quads and weapon quads (Keith's roster; Claude)
+- **Small quads** (`robotShapes.ts` `midBodyGeometry`): the medium walkers now wear Keith's "small quad" look, a rounded white shell high on four legs, a dark visor with red eyes, an antenna; still the cutter and slug shooter.
+- **Weapon quads** (`robots.ts`: `variant`, `weapon`, `quadGuns`, `shotDamage`, `lobOf`, `beamSpec`; group Robots: weapon quads): `robotQuadShare` 0.3 of the mediums come 3.6 m (size) with 700 hp, a drum turret and a weapon each side: minigun bursts (14 × 3 dmg), rocket volleys (4 × 28 dmg, 2.5 m, lobbed through the battlefield's shells), a laser (1.1 s charge, 45) or a rail (1.6 s, 95) down the beam path; hold at 14-26 m, a 0.6 s tell. Out on an expedition one drops its weapon half the time (`QUAD_DROP`, `src/expedition/loot.ts`, `drops.ts` `force.base`). Drawn in `robotsDraw.ts` (`quadBodyGeometry`, `quadWeaponGeometry`), beams in `robotBeamDraw.ts` per robot. Robots lab `?quads`, `?lineup` shows all four.
+- Checked: `robot-danger-check` (each weapon: fires, hurts a standing mech 7.5-18.7 dps, holds at 16-24 m, legs in reach, never saws, drop base exists; pack of 30 still 20.8-29.8 s), `robots-check` and `weapons-check` (with quads off, as before), full `npm test`; one game-camera shot.
+
 ### 2026-11-01 · Robots restyled as white sci-fi walkers, blue terraform pulse (Keith's ask; Claude)
 - **Look** (`src/combat/robotShapes.ts`, `robotsDraw.ts`): white plate, cylinders, dark square mechanics, red eyes, blue weapons; mites, long medium walkers with a blue cutter disc, big walkers with a thorax and abdomen 15 m up on four long legs (`BIG_SPEC`, `robotBigHeight` 10 → 15); cables and tendrils sway procedurally. `ROBOT_PALETTE` and `ROBOT_RAG` exported for the other robot threads.
 - **Weapons** (`robots.ts`, `src/game/robotBeam.ts`, `robotBeamDraw.ts`, `mechUnit.ts`): beams blue and digging a trench; new terraform pulse for big ones (sliders in Robots: terraform pulse), `MechUnit.shoveFrom`. Robots lab `?pulse`, `?lineup`.

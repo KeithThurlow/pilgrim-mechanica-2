@@ -676,7 +676,7 @@ export class RobotSwarm {
       this.kind[i] = kind;
       const jit = (j: number) => 1 + (this.rand() * 2 - 1) * j;
       // Weapon quads: a share of the mediums, with a weapon (shares?.quad and shares?.weapon force them).
-      const quad = mid && this.rand() < (shares?.quad ?? v.robotQuadShare);
+      const qs = shares?.quad ?? v.robotQuadShare, quad = mid && qs > 0 && (qs >= 1 || this.rand() < qs);
       this.variant[i] = quad ? QUAD_WEAPON : QUAD_SMALL;
       this.weapon[i] = quad ? (shares?.weapon ?? Math.min(3, Math.floor(this.rand() * 4))) : 0;
       this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : quad ? v.robotQuadSize * jit(v.robotMidSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);

@@ -179,7 +179,7 @@ const dt = 1 / 120;
   // The rail through a line of mixed robots: small scrappers, a cutter and an excavator (its body 10 m up) all hit,
   // the excavator by its body; a line past its body but through its legs hits a leg.
   {
-    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 3);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, flatN, 3);
     const put = (x: number, z: number, kind: "small" | "mid" | "big") => sw.spawn(1, x, z, 0, kind === "small" ? { mid: 0, big: 0 } : kind === "mid" ? { mid: 1, big: 0 } : { mid: 0, big: 1 })[0];
     const ids = [put(0, 10, "small"), put(0, 14, "small"), put(0, 21, "mid"), put(0, 33, "big"), put(0, 45, "small"), put(0, 50, "small")];
     const hitIdx = new Set<number>();
@@ -192,7 +192,7 @@ const dt = 1 / 120;
     const big = ids[3];
     must(sw.hubY[big] > 8, `the excavator's body isn't high (${sw.hubY[big].toFixed(1)} m)`);
     // Past the body but through the legs.
-    const sw2 = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 3);
+    const sw2 = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, flatN, 3);
     sw2.spawn(1, 0, 30, 0, { mid: 0, big: 1 });
     const rt2 = new RobotTarget(sw2, 2);
     let legHit = false;
@@ -208,7 +208,7 @@ const dt = 1 / 120;
   // Minigun rounds aimed at the sand under a scrapper on a slope above and below the mech hit it (the sheet reaches).
   for (const k of [0.35, -0.35]) {
     const g = plane(k);
-    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, g, 5);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, g, 5);
     const i = sw.spawn(1, 0, 25, 0, { mid: 0, big: 0 })[0];
     const rt = new RobotTarget(sw, 2);
     const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: g.height(0, 25), z: 25 } };
@@ -231,7 +231,7 @@ const dt = 1 / 120;
     const f: SheetFire = { half: MECH_DEFAULTS.roundSheetHalf, height: MECH_DEFAULTS.roundSheetHeight, line: MECH_DEFAULTS.roundLine, pen: light, aim: { x: 0, y: 0, z: 20 } };
     const s1 = shoot(flat, [it], { x: 0, y: 0, z: 20 }, f, 6);
     must(s1.result.steps.length === 1 && s1.result.steps[0].stopped, `a light minigun round (${light.toFixed(2)} m) didn't stop in the first bandit (${s1.result.steps.length} hits)`);
-    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 9);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, flatN, 9);
     for (const z of [10, 13, 16, 19]) sw.spawn(1, 0, z, 0, { mid: 0, big: 0 });
     const rt = new RobotTarget(sw, 2);
     const s2 = shoot(flat, [rt], { x: 0, y: 0, z: 25 }, { ...f, pen: MECH_DEFAULTS.roundPen, aim: { x: 0, y: 0, z: 25 } }, 9);
@@ -462,7 +462,7 @@ const dt = 1 / 120;
   const maxHp = (k: Kind) => (k === "small" ? ROBOT_DEFAULTS.robotHp : k === "mid" ? ROBOT_DEFAULTS.robotMidHp : ROBOT_DEFAULTS.robotBigHp);
   /** A stage: robots placed (frozen: no update), their target adapter and soft-lock candidates. */
   const stage = (place: { kind: Kind; x: number; z: number }[]) => {
-    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, flatN, 7);
+    const sw = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, flatN, 7);
     const ids = place.map((p) => sw.spawn(1, p.x, p.z, 0, shares(p.kind))[0]);
     const rt = new RobotTarget(sw, 3);
     const cands = () => robotCandidates(sw);
