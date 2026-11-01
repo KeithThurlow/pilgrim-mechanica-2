@@ -447,10 +447,12 @@ export class Arsenal implements MechWeapons {
     const frame = this.frame;
     if (body.hullFrame) body.hullFrame(frame);
     else frame.compose(this.tmp2.copy(u.sim.pelvis), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), u.upper.torsoYaw), new THREE.Vector3(1, 1, 1));
+    // A sword arm's shoulder sits further out from the hull, to make room for the blade (Keith 2026-11-01, round 4).
     const shoulder = body.shoulderAt ? body.shoulderAt(sw.side, this.sh) : this.sh.set(sw.side * 1.02, 0.89, 0);
+    shoulder.x += sw.side * v.swordShoulderOut;
     const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
     const pose = sw.pose(shoulder, aimYaw, st, v);
-    const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, pole: { x: sw.side * 0.9, y: -1, z: -0.5 } };
+    const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, out: v.swordShoulderOut };
     body.holdPose?.(sw.side, u.alive ? armed : null);
     // The hand in the world (the arm may have pulled it in to its reach: the model's pivot is where it really is).
     const hand = this.tmp;
@@ -523,7 +525,7 @@ export class Arsenal implements MechWeapons {
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock);
       bf.gunFx.sparksAt(at, kd, 10, 9);
       bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
-      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.85 + Math.random() * 0.25);
+      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
       if (!s.bit) {
         s.bit = true;
         s.sword.bite(v.swordHitch);

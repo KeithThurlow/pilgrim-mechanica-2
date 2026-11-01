@@ -19,7 +19,8 @@ import { armIk, type SwordPose } from "../weapons/sword";
 
 /** A held weapon's pose driven by its weapon (the sword, src/weapons/sword.ts), hull frame: the hand's place and the
  *  weapon's axes, the arm's bone lengths, and the way the elbow bends. */
-export interface HeldPose extends SwordPose { upper: number; fore: number; pole: { x: number; y: number; z: number } }
+/** A held pose and its arm: bone lengths, and how far the shoulder sits out from the hull's (a stub bridges it). */
+export interface HeldPose extends SwordPose { upper: number; fore: number; out: number }
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
@@ -184,7 +185,7 @@ interface PodRig {
   heldAt?: THREE.Vector3; armShown?: boolean;
   /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
   held?: boolean;
-  ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh };
+  ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; stub: THREE.Mesh; joint: THREE.Mesh };
 }
 
 export class RampartBody {
@@ -553,7 +554,8 @@ export class RampartBody {
     const ik = p.ik ?? (p.ik = this.ikArm());
     ik.g.visible = true;
     p.arm.visible = p.forearm.visible = false;
-    const r = armIk(p.home, pose.hand, pose.upper, pose.fore, pose.pole);
+    const root = new THREE.Vector3(p.home.x + side * pose.out, p.home.y, p.home.z);
+    const r = armIk(root, pose.hand, pose.upper, pose.fore, pose.pole);
     p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
     const z = new THREE.Vector3(pose.fwd.x, pose.fwd.y, pose.fwd.z), y = new THREE.Vector3(pose.up.x, pose.up.y, pose.up.z);
     const x = new THREE.Vector3().crossVectors(y, z).normalize();
@@ -566,7 +568,10 @@ export class RampartBody {
       m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.divideScalar(Math.max(1e-6, len)));
       m.scale.set(1, len, 1);
     };
-    bone(ik.upper, p.home, e);
+    ik.stub.visible = pose.out > 0.02;
+    if (ik.stub.visible) bone(ik.stub, p.home, root);
+    ik.joint.position.copy(root);
+    bone(ik.upper, root, e);
     bone(ik.fore, e, h);
     ik.elbow.position.copy(e);
     ik.hand.position.copy(h);
@@ -581,8 +586,10 @@ export class RampartBody {
     const fore = part(new THREE.BoxGeometry(0.32, 1, 0.34).translate(0, 0.5, 0), 0xb7a77c);
     const elbow = part(new THREE.SphereGeometry(0.27, 10, 8), 0x3e3c35);
     const hand = part(new THREE.BoxGeometry(0.36, 0.34, 0.36), 0x3e3c35);
+    const stub = part(new THREE.BoxGeometry(0.42, 1, 0.42).translate(0, 0.5, 0), 0x3e3c35);
+    const joint = part(new THREE.SphereGeometry(0.3, 10, 8), 0x6c7546);
     this.hull.add(g);
-    return { g, upper, fore, elbow, hand };
+    return { g, upper, fore, elbow, hand, stub, joint };
   }
 
   /** The hull's frame (hull to world), current now. */

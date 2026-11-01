@@ -6,7 +6,7 @@
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
 // resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, type SwordStats, type SwordClip } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -17,7 +17,8 @@ const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
 const V = SWORD_DEFAULTS, D2R = Math.PI / 180, dt = 1 / 120;
 const st: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordReach, arc: V.swordArc, windup: V.swordWindup, slash: V.swordSlash, recover: V.swordRecover, cleave: V.swordCleave };
 // The Rampart's shoulders and its torso and pelvis boxes in the hull's frame (from public/models/rampart.glb).
-const SH = (side: 1 | -1) => ({ x: side * 1.02, y: 0.89, z: 0 });
+// A sword arm's shoulder sits swordShoulderOut further out.
+const SH = (side: 1 | -1) => ({ x: side * (1.02 + V.swordShoulderOut), y: 0.89, z: 0 });
 const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, { n: "pelvis", lo: [-0.68, -1.25, -0.4], hi: [0.68, 0.24, 0.62] }];
 
 // ---- A click: one cut, back to rest ----
@@ -85,14 +86,27 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
       if (c === "A" || c === "B") must(lead > lag * 3, `side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
     }
     const rest = clipPose("guard", 0, side, sh, 0, st, V);
-    must(rest.fwd.z < -0.5 && rest.fwd.y > 0.4 && rest.fwd.x * side > 0, `side ${side}: at rest the blade doesn't point back and up over its own shoulder`);
+    must(rest.fwd.z < -0.8 && rest.fwd.y > 0.25 && Math.abs(rest.fwd.x) < 0.2, `side ${side}: at rest the blade doesn't lie back over the shoulder, in line with the torso`);
+    const re = armIk(sh, rest.hand, V.swordUpperArm, V.swordForearm, rest.pole);
+    must(re.elbow.z - sh.z > 1, `side ${side}: at rest the elbow is only ${(re.elbow.z - sh.z).toFixed(2)} m ahead of the shoulder, not pointing forward`);
     const under = clipPose("A", lens.A, side, sh, 0, st, V);
     must(under.hand.x * side < 0 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
     const mid = clipPose("A", st.windup + st.slash / 2, side, sh, 0, st, V);
-    const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, { x: side, y: -1, z: -0.5 });
+    const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, mid.pole);
     const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
     must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
   }
+}
+// ---- Weight: each move eases out of a stop and into one, fastest mid-cut, never backwards ----
+{
+  const cut: [number, number] = [0.38, 0.62], d = 1e-4;
+  const speed = (x: number) => (moveWarp(x + d, cut, V.swordEase, V.swordSnap) - moveWarp(x - d, cut, V.swordEase, V.swordSnap)) / (2 * d);
+  must(speed(0.002) < 0.05 && speed(0.998) < 0.05, `a move doesn't start and end at a stop (${speed(0.002).toFixed(2)}, ${speed(0.998).toFixed(2)})`);
+  must(speed(0.5) > speed(0.38) && speed(0.38) > speed(0.2), "the swing doesn't build to its fastest mid-cut");
+  must(Math.abs(moveWarp(0.38, cut, V.swordEase, V.swordSnap) - 0.38) < 1e-9 && Math.abs(moveWarp(0.62, cut, V.swordEase, V.swordSnap) - 0.62) < 1e-9, "the warp moved the cut's ends");
+  let back = false, prev = 0;
+  for (let i = 1; i <= 1000; i++) { const w = moveWarp(i / 1000, cut, V.swordEase, V.swordSnap); if (w < prev - 1e-9) back = true; prev = w; }
+  must(!back, "the swing ran backwards in time somewhere");
 }
 // ---- Cuts: bodies in the arc and reach, once per swing, budget ----
 {
