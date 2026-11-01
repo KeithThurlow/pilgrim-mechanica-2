@@ -188,26 +188,27 @@ export const BASES: Base[] = [
   // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
   // Two styles (Keith 2026-10-26): heads at the front follow the aim and help it a little (a wider soft-lock cone, a
   // touch more gun tracking) on a shorter radar; clusters on top reach further on the radar and don't help the aim
-  // (Claude's call, small on purpose). The Rampart's default is the visor head at today's radar range.
+  // (Claude's call, small on purpose). The Rampart's default is the visor head at 500 m (Keith 2026-11-01: 150 m made
+  // things too hard to find; every sensor scaled by the same ×3.3).
   {
     id: "sensor-visor", name: "Rampart visor head", kind: "sensor", tags: ["sensor", "head"], weight: 0.5, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    sensor: { style: "head" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(150, 0.08), lockAssist: s(2, 0.25) },
+    sensor: { style: "head" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(500, 0.08), lockAssist: s(2, 0.25) },
   },
   {
     id: "sensor-optic", name: "Twin-optic head", kind: "sensor", tags: ["sensor", "head"], weight: 0.6, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0.8,
-    sensor: { style: "head" }, seekers: ["rare", "scrap", "wreck", "legendary"], stats: { radarRange: s(120, 0.08), lockAssist: s(4, 0.25), trackAssist: s(0.12, 0.25) },
+    sensor: { style: "head" }, seekers: ["rare", "scrap", "wreck", "legendary"], stats: { radarRange: s(400, 0.08), lockAssist: s(4, 0.25), trackAssist: s(0.12, 0.25) },
   },
   {
     id: "sensor-mast", name: "Rampart mast", kind: "sensor", tags: ["sensor", "cluster"], weight: 0.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    sensor: { style: "cluster" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(180, 0.08) },
+    sensor: { style: "cluster" }, seekers: ["scrap", "wreck", "rare", "legendary"], stats: { radarRange: s(600, 0.08) },
   },
   {
     id: "sensor-dish", name: "Survey dish", kind: "sensor", tags: ["sensor", "cluster"], weight: 0.7, makers: ["Novus-Lux"], look: "rampart-salvager", drop: 0.8,
-    sensor: { style: "cluster", sweep: 40 }, seekers: ["wreck", "scrap", "rare", "legendary"], stats: { radarRange: s(210, 0.08) },
+    sensor: { style: "cluster", sweep: 40 }, seekers: ["wreck", "scrap", "rare", "legendary"], stats: { radarRange: s(700, 0.08) },
   },
   {
     id: "sensor-array", name: "Long array", kind: "sensor", tags: ["sensor", "cluster"], weight: 1.1, makers: ["Suzaku", "Novus-Lux"], look: "rampart-railgun", drop: 0.5,
-    sensor: { style: "cluster" }, seekers: ["rare", "legendary", "wreck", "scrap"], stats: { radarRange: s(280, 0.08) },
+    sensor: { style: "cluster" }, seekers: ["rare", "legendary", "wreck", "scrap"], stats: { radarRange: s(900, 0.08) },
   },
   // Arms: on a hull mount in place of a hull weapon; hold a held weapon (their tracking and arc are its) and carry
   // a shoulder weapon on the same mount. Hands strip salvage faster (Keith: arms might make salvaging faster).

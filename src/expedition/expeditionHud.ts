@@ -117,7 +117,7 @@ export class ExpeditionHud {
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
     if (f.pad) {
       const p = f.pad, col = p.state !== "idle" ? "#8fd0ff" : p.quote.reason === "locked" ? COL.dim : p.quote.ok ? COL.ok : COL.red;
-      const head = p.state === "waiting" ? `PICKUP IN ${clock(p.remaining)}` : p.state === "lifting" ? "LIFTING" : `PAD ${p.dist >= 1000 ? (p.dist / 1000).toFixed(1) + " km" : Math.round(p.dist) + " m"}`;
+      const head = p.state === "waiting" ? `PICKUP IN ${clock(p.remaining)}` : p.state === "hovering" ? `PICKUP HERE · LEAVES IN ${clock(p.remaining)}` : p.state === "lifting" ? "LIFTING" : `PAD ${p.dist >= 1000 ? (p.dist / 1000).toFixed(1) + " km" : Math.round(p.dist) + " m"}`;
       lines.push(`<div style="font-size:12px;color:${col};margin-top:4px"><span style="letter-spacing:0.08em">${head}</span>`
         + (p.state === "idle" ? ` · ${p.quote.reason === "locked" ? "pickups not bought" : `${p.quote.fee} scrap · wait ${clock(p.quote.wait)}`}` : "")
         + (p.state === "idle" && p.quote.reason !== "locked" ? `<div style="font-size:10px;color:${COL.dim}">${p.text}${p.quote.ok ? "" : " · NOT ENOUGH"}</div>` : "") + `</div>`);
