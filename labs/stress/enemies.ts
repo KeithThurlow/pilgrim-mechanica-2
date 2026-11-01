@@ -2,6 +2,7 @@
 // own labs wire them (rounds through bf.fire, deaths to the ragdoll physics, footfall dust, lobbed charges and
 // rockets), each topped up to a count every frame, each publishing into the battlefield's register (the soft lock,
 // the demo and the barrage find targets there). Trimmed: no wading, no per-lab readouts.
+import { robotFootfall } from "../../src/combat/robotPrints";
 import * as THREE from "three/webgpu";
 import type { CombatLab } from "../../src/game/combatLab";
 import { MechUnit } from "../../src/game/mechUnit";
@@ -58,7 +59,7 @@ export class StressRobots {
       lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
         { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
     };
-    sw.onFootfall = (i, x, y, z) => bf.dust.stomp(x, y, z, sw.kind[i] === BIG ? 0.5 : 0.12);
+    sw.onFootfall = robotFootfall(bf, sw);
     const lobFrom = new THREE.Vector3();
     sw.onLob = (i, fx, fy, fz, x, z, flight) => { const l = sw.lobOf(i); bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage); };
     sw.onBeam = (e) => fireRobotBeam(bf, e, V.robotBeamReach);
