@@ -3,6 +3,7 @@
 // pilot (hold F to hop out and back in; the enemies pick him through lab.foot.quarry when he's nearer), the
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
+import { hitStop } from "./hitStop";
 import { energyHud } from "../ui/energyBar";
 import * as THREE from "three/webgpu";
 import { createApp, type App } from "../core/app";
@@ -341,7 +342,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   /** ?holdf=seconds: F held from the start (headless shots of getting out). */
   const holdF = Number(params.get("holdf") ?? 0);
   app.onTick((rawDt) => {
-    const dt = fixedDt || rawDt;
+    // A heavy melee hit slows the fight a moment (src/game/hitStop.ts).
+    const dt = (fixedDt || rawDt) * hitStop.dtScale(rawDt);
     const cst = lab.costs;
     cst?.begin();
     bf.costs = cst;

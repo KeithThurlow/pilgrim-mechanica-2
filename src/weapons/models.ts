@@ -10,8 +10,11 @@ import { libraryModel } from "./modelSwap";
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
 export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
-export type ModelKind = LauncherKind | GearKind;
-const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor"];
+/** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
+export type MeleeKind = "sword";
+export type ModelKind = LauncherKind | GearKind | MeleeKind;
+/** Kinds with no library model: always the code stand-in. */
+const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword"];
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -30,6 +33,9 @@ export interface WeaponModel {
   glowPoints?: THREE.Object3D[];
   /** A clip-fed launcher's magazine (src/weapons/clip.ts): the model shows its loaded tubes and the clip swap. */
   clip?: import("./magazine").Mag | null;
+  /** The sword: the group that swings (yaw: the swing's angle, pitch: its lift), the blade inside it (stretched along
+   *  +Z to the reach), the trail's ghost blades (drawn at recent angles, fading) and the hot edge. */
+  sword?: { swing: THREE.Group; blade: THREE.Group; trail: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[]; edge: THREE.MeshBasicMaterial };
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;
@@ -109,6 +115,38 @@ function rpgModel(look: ToonLook): WeaponModel {
   glow(recoil, box, HOT, [0.08, 0.06, 0.03], [0.36, 0.42, 1.0]);
   add(recoil, cyl, HOT, [0.3, 0.3, 0.3], [0, 0.05, 2.7], ALONG);
   muzzle(recoil, [0, 0.05, 3.0]);
+  return m;
+}
+
+/**
+ * The sword (Keith 2026-11-01: "a big chonky sword"): a heavy cleaver held out along +Z from the hand: a grip and a
+ * guard block, then a tall flat blade with a thick spine, a notch and a hot edge along its underside. The blade group
+ * is 1 long along +Z (the arsenal stretches it to the reach); the trail is a few flat ghost blades beside the swing.
+ */
+function swordModel(look: ToonLook): WeaponModel {
+  const { m, add, glow, group } = kit("sword", look);
+  const swing = group(m.root, [0, 0, 0]);
+  add(swing, cyl, DARK, [0.2, 0.55, 0.2], [0, 0, 0.05], ALONG);
+  add(swing, box, STEEL, [0.95, 0.32, 0.26], [0, 0, 0.36]);
+  add(swing, box, DARK, [0.35, 0.5, 0.2], [0, -0.05, 0.42]);
+  const blade = group(swing, [0, 0, 0.48]);
+  add(blade, box, KHAKI, [0.2, 0.95, 1], [0, -0.05, 0.5]);
+  add(blade, box, DARK, [0.32, 0.26, 0.92], [0, 0.42, 0.46]);
+  add(blade, box, OLIVE, [0.24, 0.5, 0.18], [0, 0.2, 0.93]);
+  add(blade, box, STEEL, [0.26, 0.12, 0.3], [0, 0.05, 0.25]);
+  const edge = glow(blade, box, HOT, [0.08, 0.07, 0.96], [0, -0.53, 0.5]);
+  const edgeMat = edge.material as THREE.MeshBasicMaterial;
+  edgeMat.opacity = 0.35;
+  const trail: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+  const plane = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2).translate(0, 0, 0.5);
+  for (let i = 0; i < 6; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
+    const mesh = new THREE.Mesh(plane, mat);
+    mesh.visible = false;
+    m.root.add(mesh);
+    trail.push({ mesh, mat });
+  }
+  m.sword = { swing, blade, trail, edge: edgeMat };
   return m;
 }
 
@@ -237,6 +275,7 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   beltfeed: beltFeedModel,
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
+  sword: swordModel,
 };
 
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */

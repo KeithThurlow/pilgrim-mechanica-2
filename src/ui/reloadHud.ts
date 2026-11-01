@@ -46,7 +46,7 @@ export class ReloadHud {
     this.svg.style.transform = `translate(${mouse.x - R - 4}px, ${mouse.y - R - 4}px)`;
     // The mech's left gun (side +1, upper gun 0) is on the screen's left side of the ring.
     upper.guns.forEach((g, i) => {
-      const has = g.enabled && g.stats?.cls !== "rail";
+      const has = g.enabled && g.stats?.cls !== "rail" && g.stats?.cls !== "melee";
       this.back[i].style.display = this.fill[i].style.display = has ? "" : "none";
       if (!has) return;
       const reloading = g.mag.reloading > 0;
