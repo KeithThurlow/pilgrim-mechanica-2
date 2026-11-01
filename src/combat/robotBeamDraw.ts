@@ -188,44 +188,54 @@ export class RobotBeamDraw {
   private c2 = new THREE.Color();
   private ep = { x: 0, y: 0, z: 0 };
 
-  /** A terraform pulse on slot s for robot i: the column into the sand, the rings, the flash. */
+  /**
+   * A terraform pulse on slot s for robot i (Keith 2026-11-01: show it with the real thing, not a strip on the sand): a
+   * very thin beam straight down that brightens as it charges, a bright pulse running down it at the end, then the blast
+   * as a burst of light (the column flares wide, the emitter blazes). The blast's reach is a faint soft ring, three
+   * thin rings fading inward (robotPulseRing).
+   */
   private pulse(s: Slot, i: number) {
     const sw = this.swarm, v = sw.v, g = sw.ground, C = Math.max(0.05, v.robotPulseCharge), t = sw.pulseT[i];
     const e = sw.beamFrom(i, this.ep), gy = g.height(e.x, e.z), len = Math.max(0.5, e.y - gy), R = v.robotPulseRadius;
     const u = Math.min(1, t / C), grow = Math.pow(u, v.robotBeamGrowth);
     this.live.push({ i, u: t < C ? u : 1 + (t - C) / C, line: { ex: e.x, ey: e.y, ez: e.z, sx: e.x, sy: gy, sz: e.z, x1: e.x, y1: gy, z1: e.z } });
-    // The column straight down: thin and flickering while it charges, a wide flash when it blasts.
     const f = t < C ? 0 : Math.max(0, 1 - (t - C) / Math.max(0.05, v.robotPulseHold));
-    const w = t < C ? 0.25 + 0.9 * grow * (0.85 + 0.15 * Math.sin(this.time * 40)) : 1.2 + 3 * f;
     this.q.setFromUnitVectors(Z, this.d.set(0, -1, 0));
-    for (const [m, kw, o] of [[s.beam, 0.5, t < C ? 0.45 + 0.4 * grow : 0.8 * f], [s.core, 0.2, t < C ? 0.7 + 0.3 * grow : f]] as const) {
-      m.position.set(e.x, e.y, e.z); m.quaternion.copy(this.q); m.scale.set(w * kw * 2, w * kw * 2, len);
-      (m.material as THREE.MeshBasicMaterial).opacity = o;
-      m.visible = o > 0.01;
-    }
-    const r = Math.max(0.2, v.robotBeamGlow * (t < C ? 0.3 + 0.7 * grow : 1 + f));
+    // The thin beam down; at the blast a wide flare.
+    const w = t < C ? (0.05 + 0.12 * grow) * (0.8 + 0.2 * Math.sin(this.time * 50)) : 0.6 + 5 * f * f;
+    s.core.position.set(e.x, e.y, e.z); s.core.quaternion.copy(this.q); s.core.scale.set(w, w, len);
+    (s.core.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.55 + 0.45 * grow : f;
+    s.core.visible = t < C || f > 0.01;
+    // The pulse running down (the end of the charge), then the flare's sheath.
+    const D = Math.min(C, Math.max(0.05, v.robotPulseDrop)), k = (t - (C - D)) / D;
+    if (t < C && k >= 0) {
+      const seg = Math.min(len, 2.5), y = e.y - (len - seg) * Math.min(1, k);
+      s.beam.position.set(e.x, y, e.z); s.beam.quaternion.copy(this.q); s.beam.scale.set(0.5, 0.5, seg);
+      (s.beam.material as THREE.MeshBasicMaterial).opacity = 0.9;
+      s.beam.visible = true;
+    } else if (t >= C && f > 0.01) {
+      const ww = 1.2 + 9 * f * f;
+      s.beam.position.set(e.x, e.y, e.z); s.beam.quaternion.copy(this.q); s.beam.scale.set(ww, ww, len);
+      (s.beam.material as THREE.MeshBasicMaterial).opacity = 0.7 * f;
+      s.beam.visible = true;
+    } else s.beam.visible = false;
+    // The emitter: a small hot glow that grows; a blaze of light at the blast.
+    const r = Math.max(0.2, v.robotBeamGlow * (t < C ? 0.2 + 0.5 * grow : 1 + 3 * f));
     s.glow.position.set(e.x, e.y, e.z); s.glow.scale.setScalar(r * 0.55);
     s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(r * 1.4);
     (s.glow.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.5 + 0.5 * grow : f;
-    (s.halo.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.25 + 0.45 * grow : 0.6 * f;
+    (s.halo.material as THREE.MeshBasicMaterial).opacity = t < C ? 0.2 + 0.4 * grow : 0.7 * f;
     s.glow.visible = s.halo.visible = true;
-    // Rings on the sand: the blast's edge, pulsing, and one closing in from the centre as the charge runs out.
-    if (t < C) {
-      const pulse = 0.7 + 0.3 * Math.sin(this.time * (10 + 20 * u));
-      s.edge.set(this.circle(e.x, e.z, R), 0.35, "ground", g, 0.11);
-      s.edge.mat.opacity = v.robotBeamLine * (0.35 + 0.65 * grow) * pulse;
-      s.ring.set(this.circle(e.x, e.z, Math.max(0.5, R * u)), 0.6, "ground", g, 0.1);
-      s.ring.mat.opacity = v.robotBeamLine * (0.3 + 0.5 * u);
-      s.edge.mesh.visible = s.ring.mesh.visible = v.robotBeamLine > 0;
-    } else {
-      s.ring.mesh.visible = false;
-      s.edge.set(this.circle(e.x, e.z, R), 0.5 + 1.5 * (1 - f), "ground", g, 0.11);
-      s.edge.mat.opacity = v.robotBeamLine * f;
-      s.edge.mesh.visible = v.robotBeamLine > 0 && f > 0;
+    // The reach: a faint soft ring (three thin rings fading inward), strongest as the charge fills, gone with the blast.
+    const A = v.robotPulseRing * (t < C ? 0.4 + 0.6 * grow : f);
+    const show = A > 0.005;
+    s.edge.mesh.visible = s.ring.mesh.visible = s.line.mesh.visible = show;
+    if (show) {
+      s.edge.set(this.circle(e.x, e.z, R), 0.5, "ground", g, 0.11); s.edge.mat.opacity = A;
+      s.ring.set(this.circle(e.x, e.z, Math.max(0.5, R - 0.8)), 1.1, "ground", g, 0.1); s.ring.mat.opacity = A * 0.45;
+      s.line.set(this.circle(e.x, e.z, Math.max(0.5, R - 2)), 1.6, "ground", g, 0.09); s.line.mat.opacity = A * 0.2;
     }
-    s.line.mesh.visible = false;
   }
-
   /** A closed ring of points on the ground plan. */
   private circle(x: number, z: number, r: number): P3[] {
     const pts = this.pts; pts.length = 0;
