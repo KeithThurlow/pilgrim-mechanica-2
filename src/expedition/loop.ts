@@ -41,6 +41,7 @@ import { RadarSound } from "./radarSound";
 import { CampField, CAMP_DEFAULTS, CAMP_PARAMS } from "./camps";
 import { SwarmCamps, SWARM_CAMP_DEFAULTS, SWARM_CAMP_PARAMS } from "./swarmCamps";
 import { DroidCamps, DROID_CAMP_DEFAULTS, DROID_CAMP_PARAMS, DROID_CAMP_GROUP } from "./droidCamps";
+import { StriderCamps, STRIDER_CAMP_DEFAULTS, STRIDER_CAMP_PARAMS, STRIDER_CAMP_TOPIC } from "./striderCamps";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
@@ -72,6 +73,7 @@ export const LOOP_DEFAULTS = {
   ...HUB_LIFE_DEFAULTS,
   ...SAFE_DEFAULTS,
   ...DROID_ALL_DEFAULTS, ...DROID_CAMP_DEFAULTS,
+  ...STRIDER_CAMP_DEFAULTS,
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
@@ -83,6 +85,7 @@ export const LOOP_PARAMS: Param[] = [
   ...HUB_LIFE_PARAMS,
   ...SAFE_PARAMS,
   ...DROID_CAMP_PARAMS, ...DROID_PARAMS,
+  ...STRIDER_CAMP_PARAMS,
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
@@ -97,6 +100,7 @@ export const LOOP_TOPICS = [
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
   { id: "droids", label: "Humanoid robots", groups: [DROID_CAMP_GROUP, ...DROID_GROUPS] },
+  STRIDER_CAMP_TOPIC,
 ];
 
 
@@ -127,6 +131,7 @@ export class ExpeditionLoop {
   readonly swarms: SwarmCamps;
   /** Humanoid squads that come with the robot camps, packs and raids. */
   readonly droids: DroidCamps;
+  readonly striders: StriderCamps;
   /** The raider faction (Keith 2026-10-28): bandit camps (settled) and war band columns (roaming), and how the factions meet. */
   readonly bandits: BanditField;
   readonly banditCamps: BanditCamps;
@@ -235,6 +240,7 @@ export class ExpeditionLoop {
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
     this.droids = new DroidCamps(v, bf, scene, field, opts.vat ?? null, this.swarms);
+    this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
     this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
@@ -351,6 +357,7 @@ export class ExpeditionLoop {
   register(reg: Register) {
     reg.add(this.swarms.target);
     for (const t of this.droids.squads.targets) reg.add(t);
+    reg.add(this.striders.sf.target);
     reg.add(this.banditCamps.target);
     reg.add(this.forts.target);
     reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
@@ -366,6 +373,7 @@ export class ExpeditionLoop {
     this.columns.start = { x, z };
     this.swarms.reset();
     this.droids.reset();
+    this.striders.reset();
     this.banditCamps.reset();
     this.forts.reset();
     this.fortCalls.clear();
@@ -384,7 +392,7 @@ export class ExpeditionLoop {
   }
 
   /** Placement sliders changed. */
-  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.hubs.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.droids.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
+  rebuild(what: "sites" | "camps") { if (what === "sites") { this.sites.rebuild(); this.forts.reset(); this.hubs.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); } else { this.swarms.reset(); this.droids.reset(); this.striders.reset(); this.banditCamps.reset(); this.bands.reset(); this.columns.reset(); this.skirmish.reset(); this.threats.reset(); } this.slowT = 0; }
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
@@ -440,6 +448,7 @@ export class ExpeditionLoop {
     this.hubs.update(dt, hunting, foot && pl ? pl : p);
     this.swarms.update(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     this.droids.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
+    this.striders.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
     inp.mark?.("swarm camps");
     this.updateHumans(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
     inp.mark?.("raiders and fights");
@@ -518,6 +527,7 @@ export class ExpeditionLoop {
     }
     this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     this.droids.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
+    this.striders.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
     for (const c of this.banditCamps.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
     for (const c of this.bands.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
     // Moving danger as heat: packs and raids (hotter hunting), and blasts for a few seconds.
