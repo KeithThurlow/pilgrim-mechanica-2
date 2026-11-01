@@ -295,6 +295,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-01 · Parry and block cooldowns; a shorter parry window (Keith; Claude on `claude/project-thread-1ysipc`)
+- Keith: nearly every cut was getting parried. The parry window is now at most `swordParryMax` 0.3 s in all (close cut ±0.12 s × the sword's parry, full sweep ±0.04 s: Breaker 0.24 / 0.07 s, short sword 0.3 s, was up to 0.9 s). A window that closes unused cools the parry for `swordParryMiss` 1 s; a parry that lands for `swordParryHit` 0.5 s. A block cools for `swordBlockCool` 1 s from its start. All in the Sword block sliders; the headless duel mirrors them. The rival has no parry timing of its own: it was the nonstop swinging that parried everything.
+- `src/weapons/sword.ts` (`parryCool`, `blockCool`, `parried`), `arsenal.ts`, `src/combat/duelSim.ts`, `tools/sword-check.ts` (window cap with the short sword, held swings, block cooldown). npm test.
 ### 2026-11-01 · Every sword back on the over-the-shoulder rest (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: the old rest worked better; all three swords (Breaker, buster, short sword) back on the over-the-shoulder rest and the shared swing entry while a posing lab is built. Speed, damage, parry and heft differences stay. The per-stance data stays (`STANCE_REST`, `PRE_REST`, `DRIVE_BY`, `NEAR_DRIVE_BY` in `sword.ts`, one entry per stance, now all the shoulder pose) for the posing lab to edit; the tried per-sword poses are in git at 643c27b.
 - `src/weapons/sword.ts`. sword-check, npm test.

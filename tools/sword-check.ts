@@ -204,13 +204,35 @@ for (const stance of [0, 1, 2, 3]) {
 {
   const sw = new SwordSim(1);
   sw.update(dt, true, st, V, 0);
-  for (let i = 0; i < 10; i++) sw.update(dt, true, st, V, 0);
-  must(sw.clip === "A" && sw.swinging && !sw.free, "a close cut in its drive can't parry");
+  for (let i = 0; i < 400 && !sw.swinging; i++) sw.update(dt, false, st, V, 0);
+  must(sw.clip === "A" && sw.swinging && !sw.free, "a close cut never opens its parry window");
   // A full sweep parries only right at its cut: a much shorter window than a close cut's.
   const win = (span: number) => { const q = new SwordSim(1); let open = 0; q.update(dt, true, st, V, span); for (let i = 0; i < 600 && (q.clip === "A"); i++) { q.update(dt, false, st, V, span); if (q.swinging) open += dt; } return open; };
   const wn = win(0), wf = win(1);
   console.log(`  parry window: close ${wn.toFixed(2)} s, full sweep ${wf.toFixed(2)} s`);
   must(wn > wf * 1.8, `a close cut's parry window (${wn.toFixed(2)} s) isn't much wider than a sweep's (${wf.toFixed(2)} s)`);
+  // Never longer than swordParryMax in all, even the short sword's (Keith 2026-11-01: nearly every cut was parried).
+  const winOf = (stats: SwordStats, span: number) => { const q = new SwordSim(1); let open = 0; q.update(dt, true, stats, V, span); for (let i = 0; i < 600 && (q.clip === "A"); i++) { q.update(dt, false, stats, V, span); if (q.swinging) open += dt; } return open; };
+  const wShort = winOf({ ...st, parry: 1.7 }, 0);
+  console.log(`  short sword close parry window ${wShort.toFixed(2)} s (at most ${V.swordParryMax})`);
+  must(wShort <= V.swordParryMax + dt * 2, `the short sword's parry window (${wShort.toFixed(2)} s) is longer than swordParryMax`);
+  // Swinging nonstop: a window that closes unused cools the parry, so the next swing inside swordParryMiss can't parry.
+  {
+    const q = new SwordSim(1); let opens = 0, was = false, tt = 0, firstClose = -1, reopen = -1;
+    for (let i = 0; i < Math.round(4 / dt); i++) { q.update(dt, true, st, V, 0); tt += dt; if (q.swinging && !was) { opens++; if (firstClose >= 0 && reopen < 0) reopen = tt; } if (!q.swinging && was && firstClose < 0) firstClose = tt; was = q.swinging; }
+    console.log(`  held swings for 4 s: ${opens} parry windows, the second ${reopen < 0 ? "never" : (reopen - firstClose).toFixed(2) + " s"} after the first closed`);
+    must(reopen < 0 || reopen - firstClose >= V.swordParryMiss - dt * 2, "a parry window opened again inside the miss cooldown");
+  }
+  // The block cools: a second block straight after the first isn't taken.
+  {
+    const q = new SwordSim(1);
+    q.update(dt, false, st, V);
+    must(q.block(V), "a resting sword didn't block");
+    let tt = 0; while (q.clip === "P" && tt < 3) { q.update(dt, false, st, V); tt += dt; }
+    must(!q.block(V) || tt >= V.swordBlockCool, `blocked again ${tt.toFixed(2)} s after a block (cooldown ${V.swordBlockCool} s)`);
+    while (tt < V.swordBlockCool + 0.05) { q.update(dt, false, st, V); tt += dt; }
+    must(q.block(V), "the block never came back after its cooldown");
+  }
   sw.recoil(V);
   must(sw.clip === "K" && !sw.swinging, "a parried sword didn't recoil");
   let n = 0; while (sw.clip !== "guard" && n++ < 600) sw.update(dt, false, st, V);

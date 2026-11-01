@@ -624,7 +624,7 @@ export class Arsenal implements MechWeapons {
     // The parry (Keith 2026-11-01): my own sword driving or cutting toward the cutter meets its blade; both recoil.
     if (v.swordParry > 0) for (const s of this.sides) {
       if (s.kind !== "melee" || !s.sword.swinging || off(s) > half) continue;
-      s.sword.recoil(v);
+      s.sword.parried(v);
       s.swordHits.clear(); s.cleave = 0;
       this.onShake?.(v.swordShake * 1.4);
       if (u.player && !u.ally) hitStop.add(v.swordStop * 1.6, v.swordStopScale);
