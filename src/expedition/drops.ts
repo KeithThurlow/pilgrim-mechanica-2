@@ -54,11 +54,18 @@ export const DROP_PARAMS: Param[] = [
   { key: "dropForget", label: "Drops vanish past (m)", min: 50, max: 2000, step: 10, group: G, tip: "A drop left this far behind is gone" },
 ];
 
-export interface Drop { id: string; x: number; z: number; item: Item }
+export interface Drop {
+  id: string; x: number; z: number; item: Item;
+  /** Put down by a collector (dropped from the cargo): nobody picks it up again until every collector has walked
+   *  out of reach of it once, so it isn't grabbed straight back. */
+  laid?: boolean;
+}
 export type DropEvent =
   | { type: "dropped"; drop: Drop }
   | { type: "picked"; drop: Drop; by: "mech" | "pilot" }
-  | { type: "forgotten"; id: string };
+  | { type: "forgotten"; id: string }
+  /** A collector was in reach but the glue said no (the cargo is full). */
+  | { type: "refused"; drop: Drop; by: "mech" | "pilot" };
 /** Where a drop rolls: danger 0..1+ (depth.ts dangerOf), salvage heat 0..1, depth in metres (convoyDepth). */
 export interface DropContext { danger: number; heat: number; depth: number }
 /** A kill's drop size: (threat / threatRef)^threatCurve (1: one item on average before dropPerThreat). */
@@ -121,6 +128,16 @@ export class DropField {
     return drop;
   }
 
+  /** Lay a carried item down on the sand at (x, z) (dropped from the cargo; host state like any drop). */
+  place(item: Item, x: number, z: number): Drop {
+    const drop: Drop = { id: `laid:${item.id}`, x, z, item, laid: true };
+    const old = this.drops.findIndex((d) => d.id === drop.id);
+    if (old >= 0) this.drops.splice(old, 1);
+    this.drops.push(drop);
+    this.events.push({ type: "dropped", drop });
+    return drop;
+  }
+
   /** A level for a drop this deep (m): 1 + depth / levelMetres, give or take levelJitter, capped. */
   levelAt(r: () => number, depth: number): number {
     const v = this.v, mid = 1 + Math.max(0, depth) / Math.max(1, v.levelMetres);
@@ -152,16 +169,19 @@ export class DropField {
    * One step: collectors within reach pick drops up (take: may they; the glue says no while not out), drops further
    * than dropForget from every collector are forgotten. Returns the drops picked this step.
    */
-  update(collectors: Collector[], take: boolean): Drop[] {
+  update(collectors: Collector[], take: boolean, canTake: (d: Drop) => boolean = () => true): Drop[] {
     const picked: Drop[] = [];
     for (let k = this.drops.length - 1; k >= 0; k--) {
       const d = this.drops[k];
-      let near = Infinity, by: Collector | null = null;
+      let near = Infinity, by: Collector | null = null, inReach = false;
       for (const c of collectors) {
         const dist = Math.hypot(c.x - d.x, c.z - d.z), reach = c.by === "mech" ? this.v.pickupMech : this.v.pickupPilot;
+        if (dist <= reach) inReach = true;
         if (take && dist <= reach && !by) by = c;
         near = Math.min(near, dist);
       }
+      if (d.laid) { if (!inReach) d.laid = false; by = null; }
+      if (by && !canTake(d)) { this.events.push({ type: "refused", drop: d, by: by.by }); by = null; }
       if (by) {
         this.drops.splice(k, 1);
         picked.push(d);
