@@ -1,10 +1,12 @@
-// The sword's rules (src/weapons/sword.ts): a click swings once (wind-up, slash, recover, then still), the slash
-// sweeps the whole arc from outboard across, held it swings again the other way, the blade stalls for its hitch on a
-// bite, it hits only in the slash; the blade's sheets cut every body in the arc and reach once per swing (none behind
-// or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and resolves to a
-// melee gun with the reach as its range.
+// The sword's rules (src/weapons/sword.ts): a click cuts once (rest, cut, then back to rest past the waist), the cut
+// lasts its time and turns the blade through the whole arc from outboard across; clicked again it cuts back the
+// other way, and on (A, B, A); a bite stalls the blade; the hand stays in the arm's reach and the blade stays clear of
+// the Rampart's torso and pelvis in every move; the edge leads each cut; at rest the blade points back and up over the
+// shoulder; the arm's bones keep their lengths; the blade's sheets cut every body in the arc and reach once per cut
+// (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
+// resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, sweepAngles, swordCuts, swordPose, armIk, type SwordStats } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -14,40 +16,83 @@ const problems: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
 const V = SWORD_DEFAULTS, D2R = Math.PI / 180, dt = 1 / 120;
 const st: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordReach, arc: V.swordArc, windup: V.swordWindup, slash: V.swordSlash, recover: V.swordRecover, cleave: V.swordCleave };
+// The Rampart's shoulders and its torso and pelvis boxes in the hull's frame (from public/models/rampart.glb).
+const SH = (side: 1 | -1) => ({ x: side * 1.02, y: 0.89, z: 0 });
+const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, { n: "pelvis", lo: [-0.68, -1.25, -0.4], hi: [0.68, 0.24, 0.62] }];
 
-// ---- Timing: one click, one swing ----
+// ---- A click: one cut, back to rest ----
 {
-  const sw = new SwordSim(1, () => V.swordRest);
-  let t = 0, slashT = 0, lo = Infinity, hi = -Infinity, first: number | null = null, last = 0;
-  let pressed = true;
+  const sw = new SwordSim(1);
+  let t = 0, cutT = 0, first: number | null = null, last = 0, pressed = true;
+  const clips: SwordClip[] = [];
   while (t < 2) {
-    const sweep = sw.update(dt, pressed, st, V.swordComboAt);
-    pressed = false;
-    t += dt;
-    if (sweep) { slashT += dt; first ??= sweep.from; last = sweep.to; lo = Math.min(lo, sweep.to); hi = Math.max(hi, sweep.from); }
+    const sweep = sw.update(dt, pressed, st, V);
+    pressed = false; t += dt;
+    if (clips[clips.length - 1] !== sw.clip) clips.push(sw.clip);
+    if (sweep) {
+      cutT += sweep.to - sweep.from;
+      const a = clipPose(sweep.clip, sweep.from, 1, SH(1), 0, st, V), b = clipPose(sweep.clip, sweep.to, 1, SH(1), 0, st, V);
+      first ??= Math.atan2(a.fwd.x, a.fwd.z); last = Math.atan2(b.fwd.x, b.fwd.z);
+    }
   }
-  must(sw.swings === 1, `a click swung ${sw.swings} times`);
-  must(sw.phase === "idle", "a single swing didn't come back to rest");
-  must(Math.abs(slashT - st.slash) < 2 * dt, `slash lasted ${slashT.toFixed(3)} s, not ${st.slash}`);
-  must(first !== null && first > 0 && last < 0, "the left arm's first swing didn't cut from its left across to its right");
-  must(hi - lo >= st.arc * D2R * 0.98, `the slash swept ${((hi - lo) / D2R).toFixed(0)}°, not the ${st.arc}° arc`);
+  must(sw.swings === 1, `a click cut ${sw.swings} times`);
+  must(clips.join(",") === "A,R,guard", `a click went through ${clips.join(",")}, not A,R,guard`);
+  must(Math.abs(cutT - st.slash) < 2 * dt, `the cut lasted ${cutT.toFixed(3)} s, not ${st.slash}`);
+  must(first !== null && first > 0 && last < 0, "the left arm's first cut didn't run from its left across to its right");
+  must(first !== null && (first - last) >= st.arc * D2R * 0.9, `the cut turned ${first !== null ? ((first - last) / D2R).toFixed(0) : "?"}°, not the ${st.arc}° arc`);
 }
-// ---- Held: alternating swings; a bite stalls the blade ----
+// ---- Clicked again: back-cut, and on; a bite stalls the blade ----
 {
-  const sw = new SwordSim(-1, () => V.swordRest);
-  const dirs: number[] = [];
-  let seen = 0, t = 0;
-  while (t < 2.5) { sw.update(dt, true, st, V.swordComboAt); t += dt; if (sw.swings !== seen) { seen = sw.swings; dirs.push(sw.dir); } }
-  must(dirs.length >= 3, `held for 2.5 s it swung only ${dirs.length} times`);
-  must(dirs[0] === -1, "the right arm's first swing didn't start from its right");
-  must(dirs.every((d, i) => i === 0 || d === -dirs[i - 1]), "held swings didn't alternate");
-  const b = new SwordSim(1, () => V.swordRest);
+  const sw = new SwordSim(-1);
+  const order: SwordClip[] = [];
+  let t = 0, seen = 0;
+  while (t < 2.5) { sw.update(dt, true, st, V); t += dt; if (sw.swings !== seen) { seen = sw.swings; order.push(sw.clip); } }
+  must(order.length >= 4, `held for 2.5 s it cut only ${order.length} times`);
+  must(order.every((c, i) => c === (i % 2 === 0 ? "A" : "B")), `held cuts didn't alternate cut and back-cut: ${order.join(",")}`);
+  const b = new SwordSim(1);
   let n = 0;
-  while (b.phase !== "slash" && n++ < 200) b.update(dt, true, st, V.swordComboAt);
-  const a0 = b.angle;
+  while (!b.cutting && n++ < 200) b.update(dt, true, st, V);
+  const t0 = b.t;
   b.bite(0.05);
-  for (let i = 0; i < 5; i++) b.update(dt, true, st, V.swordComboAt);
-  must(Math.abs(b.angle - a0) < 1e-9, "the blade moved while stalled in a body");
+  for (let i = 0; i < 5; i++) b.update(dt, true, st, V);
+  must(Math.abs(b.t - t0) < 1e-9, "the blade moved while stalled in a body");
+}
+// ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder ----
+{
+  const lens: Record<SwordClip, number> = { A: st.windup + st.slash + V.swordFollow, B: st.windup * 0.45 + st.slash + V.swordFollow * 0.8, R: st.recover * 1.6, S: st.recover, guard: 1 };
+  for (const side of [1, -1] as const) {
+    const sh = SH(side);
+    for (const c of ["guard", "A", "B", "R", "S"] as SwordClip[]) {
+      let worst = 0, clash = "", lead = 0, lag = 0;
+      let prevTip: number[] | null = null;
+      for (let i = 0; i <= 60; i++) {
+        const p = clipPose(c, (lens[c] * i) / 60, side, sh, 0, st, V);
+        worst = Math.max(worst, Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z));
+        for (let a = 0; a <= st.reach && !clash; a += 0.2) {
+          const q = [p.hand.x + p.fwd.x * a, p.hand.y + p.fwd.y * a, p.hand.z + p.fwd.z * a];
+          for (const b of BOXES) if (q.every((x, k) => x > b.lo[k] && x < b.hi[k])) clash = `${b.n} at ${(i / 60).toFixed(2)} of ${c}, ${a.toFixed(1)} m along the blade`;
+        }
+        const tip = [p.fwd.x, p.fwd.z];
+        const tt = (lens[c] * i) / 60, w0 = c === "A" ? st.windup : st.windup * 0.45;
+        if (prevTip && (c === "A" || c === "B") && tt > w0 && tt <= w0 + st.slash) {
+          const mx = tip[0] - prevTip[0], mz = tip[1] - prevTip[1];
+          if (Math.hypot(mx, mz) > 0.05) { if (p.up.x * mx + p.up.z * mz < 0) lead++; else lag++; }
+        }
+        prevTip = tip;
+      }
+      must(worst <= V.swordUpperArm + V.swordForearm, `side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
+      must(!clash, `side ${side}: the blade went through the ${clash}`);
+      if (c === "A" || c === "B") must(lead > lag * 3, `side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
+    }
+    const rest = clipPose("guard", 0, side, sh, 0, st, V);
+    must(rest.fwd.z < -0.5 && rest.fwd.y > 0.4 && rest.fwd.x * side > 0, `side ${side}: at rest the blade doesn't point back and up over its own shoulder`);
+    const under = clipPose("A", lens.A, side, sh, 0, st, V);
+    must(under.hand.x * side < 0 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
+    const mid = clipPose("A", st.windup + st.slash / 2, side, sh, 0, st, V);
+    const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, { x: side, y: -1, z: -0.5 });
+    const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
+    must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
+  }
 }
 // ---- Cuts: bodies in the arc and reach, once per swing, budget ----
 {
@@ -64,7 +109,7 @@ const st: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordRea
     const steps = Math.ceil(st.slash / dt);
     for (let i = 0; i < steps; i++) {
       const a0 = from + ((to - from) * i) / steps, a1 = from + ((to - from) * (i + 1)) / steps;
-      for (const a of sweepAngles({ from: a0, to: a1 })) {
+      for (const a of [a0 + (a1 - a0) / 2, a1]) {
         const s = sheetAt(a), hits: SheetHit<T>[] = [];
         for (const t of bodies) { const c = sheetCircle(s, t.x, t.z, t.r); if (c) hits.push({ target: t, key: 0, along: c.along, chord: c.chord, material: t.m, x: t.x, y: 1, z: t.z }); }
         for (const h of swordCuts(hits, seen, b, () => 0.45)) cut.push(h.target);
@@ -80,35 +125,6 @@ const st: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordRea
   must(cut[0].x > 0, "a forehand from the left didn't cut the left-most body first");
   const short = swing(0.45 * 1.0 * 2.5, half, -half);
   must(short.length >= 1 && short.length < 7, `a small cleave budget still cut ${short.length} of 7`);
-}
-// ---- The pose: in the arm's reach through a whole swing; at rest over the shoulder; the edge leads ----
-{
-  for (const side of [1, -1] as const) {
-    const sh = { x: side * 1.3, y: 1, z: 0 }, sw = new SwordSim(side, () => V.swordRest);
-    let worst = 0, t = 0, pressed = true, prev: ReturnType<typeof swordPose> | null = null, lead = 0, lag = 0;
-    while (t < 1.2) {
-      sw.update(dt, pressed, st, V.swordComboAt); pressed = false; t += dt;
-      const p = swordPose(sw.angle, sw.lift, sw.guard, sw.dir, side, 0, sh, V);
-      worst = Math.max(worst, Math.hypot(p.hand.x - sh.x, p.hand.y - sh.y, p.hand.z - sh.z));
-      if (sw.phase === "slash" && prev) {
-        // The tip moves this way; the spine (up) should face away from it.
-        const mx = p.fwd.x - prev.fwd.x, mz = p.fwd.z - prev.fwd.z;
-        if (Math.hypot(mx, mz) > 1e-4) { if (p.up.x * mx + p.up.z * mz < 0) lead++; else lag++; }
-      }
-      prev = p;
-    }
-    must(worst <= V.swordUpperArm + V.swordForearm + 0.25, `side ${side}: the hand went ${worst.toFixed(2)} m from the shoulder, out of the arm's reach`);
-    must(lead > lag * 4, `side ${side}: the blade's edge didn't lead the slash (${lead} leading, ${lag} trailing)`);
-    const rest = swordPose(sw.restAngle(), 0, 1, 1, side, 0, sh, V);
-    must(rest.fwd.z < -0.5 && rest.fwd.y > 0.2, `side ${side}: at rest the blade doesn't point back and up over the shoulder`);
-    const mid = swordPose(0, 0, 0, 1, side, 0, sh, V);
-    must(mid.fwd.z > 0.7 && mid.fwd.y < 0, `side ${side}: mid-slash the blade isn't out ahead and tipped down`);
-    // The arm reaches its hand with both bones at their lengths.
-    const ik = armIk(sh, mid.hand, V.swordUpperArm, V.swordForearm, { x: side, y: -1, z: -0.5 });
-    const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
-    must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
-    must(ik.elbow.y < (sh.y + ik.hand.y) / 2, "the elbow didn't bend down");
-  }
 }
 // ---- The item: in an arm's hand, a melee gun ----
 {
