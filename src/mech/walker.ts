@@ -131,6 +131,8 @@ export class Foot {
   /** The thigh angle (forward of straight down) an uphill swing has raised to (swingThighFold). */
   foldW = 0;
   foldT = 0;
+  /** The thigh angle (forward of straight down) last frame's pose ended on, for legTurnMax. NaN: none (a reset). */
+  legW = NaN;
   /** A swing joined part way (out of a landing stance): from entryU the foot eases from entryRel (body-relative, like runA) onto its path. -1: none. */
   entryU = -1;
   entryRel = new Vector3();
@@ -174,6 +176,8 @@ export interface WalkerStats {
   leaps: number;
   /** Running foot-frames whose toes dragged forward at full stretch. */
   toeDrag: number;
+  /** Leg-frames the walk's pose had the knee or hock shut and the thigh was re-aimed for room (legRoomKnee/Hock). */
+  cramped: number;
 }
 
 export class WalkerSim {
@@ -188,7 +192,9 @@ export class WalkerSim {
   pelvisQ = new Quaternion();
   hullQ = new Quaternion();
   feet: [Foot, Foot] = [new Foot(1, 0), new Foot(-1, 0.5)];
-  stats: WalkerStats = { steps: 0, takeoffs: 0, landings: 0, airFrames: 0, overreach: 0, scuffs: 0, frames: 0, leaps: 0, toeDrag: 0 };
+  /** The step the next pose() eases over (legTurnMax). */
+  private poseDt = 1 / 120;
+  stats: WalkerStats = { steps: 0, takeoffs: 0, landings: 0, airFrames: 0, overreach: 0, scuffs: 0, frames: 0, leaps: 0, toeDrag: 0, cramped: 0 };
   /**
    * The sprint, set from outside each frame (src/mech/bound.ts: Space held after the dash). The walker decides when it
    * can run it: not while staggered or squatting out of a hard landing.
@@ -394,7 +400,7 @@ export class WalkerSim {
   /** This frame's lean into a change of velocity as body pitch (nose down +) and roll (left side up +), radians. */
   accPitch = 0;
   accRoll = 0;
-  private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), n3: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
+  private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), c: new Vector3(), d: new Vector3(), n3: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
     this.reset(0, 0, 0);
@@ -430,6 +436,7 @@ export class WalkerSim {
       ft.planted.copy(this.pos).addScaledVector(l, ft.side * this.v.footSpread).addScaledVector(f, ft.side * 0.25);
       this.groundAt(ft.planted, ft.plantedUp);
       ft.plantedYaw = heading + ft.side * this.v.toeOut * D2R;
+      ft.legW = NaN;
       ft.pos.copy(ft.planted); ft.up.copy(ft.plantedUp); ft.yaw = ft.plantedYaw; ft.pitch = 0;
       ft.theta = ft.liftTheta = this.v.cannonRake * D2R;
     }
@@ -510,7 +517,7 @@ export class WalkerSim {
   get landing() { return this.squatState !== null; }
 
   /** Solve the legs for the body and feet as they stand (after writing the pose from outside, e.g. a crane holding the mech). */
-  solve() { this.pose(); }
+  solve() { for (const f of this.feet) f.legW = NaN; this.pose(); }
 
   stride() { return Math.min(this.v.strideMax, this.v.strideBase + this.v.stridePerSpeed * this.speed); }
   /** 0 at walk speed and below, 1 at sprint speed: how much the gait is a run (bounce, crouch). */
@@ -520,6 +527,7 @@ export class WalkerSim {
   duty() { return this.v.duty + (this.v.dutyFast - this.v.duty) * clamp(this.speed / Math.max(0.1, this.v.sprintSpeed), 0, 1); }
 
   update(dt: number, cmd: MoveCommand) {
+    this.poseDt = dt;
     if (dt <= 0) return;
     const v = this.v;
     this.stats.frames++;
@@ -2474,7 +2482,14 @@ export class WalkerSim {
     // Walking, the ground under the body as deep as the feet sink in, so on sand the whole mech sits that much lower (the
     // legs keep their shape) rather than the hips dropping only part of the way (the sprint keeps its own heights).
     const under = this.ground.height(this.pos.x, this.pos.z) - this.sink(this.pos.x, this.pos.z) * (1 - this.sprintK);
-    const ref = (avg + (low - avg) * v.downhillReach) * 0.7 + under * 0.3;
+    // Facing up a climb (the low foot behind the high one) the sink to the low foot squashes the front leg until it has no
+    // room to fold (Keith 2026-11-01: the uphill leg collapsed into itself), so it keeps only climbSink of it there.
+    const lowF = a.groundY < b.groundY ? a : b, highF = lowF === a ? b : a;
+    const fx = highF.pos.x - lowF.pos.x, fz = highF.pos.z - lowF.pos.z;
+    const ahead = fx * Math.sin(this.heading) + fz * Math.cos(this.heading);
+    const climbShare = ahead > 0 ? (ahead * ahead) / (fx * fx + fz * fz || 1) : 0;
+    const sinkTo = v.downhillReach * (1 - (1 - v.climbSink) * climbShare * smooth(0.05, 0.3, highF.groundY - lowF.groundY));
+    const ref = (avg + (low - avg) * sinkTo) * 0.7 + under * 0.3;
     // Walking the hips are highest over the planted foot (vaulting); running they sink onto it and spring off.
     const run = this.runShare(), rk = this.runK;
     // Running the hips are lowest at each mid-stance and highest in the flights between (a small bob: the hull rides
@@ -2728,43 +2743,147 @@ export class WalkerSim {
         }
       }
       f.theta = theta;
+      this.placeLeg(f, P, toHip, planeUp, theta, reach);
 
-      // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
-      // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
-      // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
-      const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
-      const dirHip = toHip.clone().normalize();
-      const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
-      const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
-      const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
-      P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
-      if (P.hock.distanceTo(P.hip) > lim) {
-        let lo = 0, hi = 1;
-        const dir = new Vector3();
-        for (let i = 0; i < 10; i++) {
-          const w = (lo + hi) / 2;
-          dir.copy(dirRake).lerp(dirHip, w).normalize();
-          if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > lim) lo = w; else hi = w;
+      // Room for the leg (Keith 2026-11-01: up a steep climb, and stopped on one, the uphill leg kept its thigh pointing
+      // down, so the hip came within the folded thigh-and-shin of the hock and the leg collapsed into itself, the cannon
+      // through the shin, then flicked to another pose). When the pose has the knee or the hock shut past legRoomKnee /
+      // legRoomHock, aim the thigh instead: the nearest thigh angle that leaves both open, forward first (legRoomForward),
+      // so the uphill thigh lifts out ahead and the rest of the leg has room under it. And the thigh never turns faster
+      // than legTurnMax: a change of pose (a swing landing, a fold engaging) eases over a few frames instead of flicking.
+      const dtNow = Math.max(1e-4, this.poseDt);
+      const r = this.legRoom(P, planeUp);
+      const prev = f.legW, step = Math.max(0.5, v.legTurnMax) * D2R * dtNow;
+      const kMin = v.legRoomKnee * D2R, hMin = v.legRoomHock * D2R;
+      const cramped = v.legRoomKnee + v.legRoomHock > 0 && (r.clamped || r.knee < kMin || r.hock < hMin || r.under > 0);
+      const fast = v.legTurnMax < 5000 && Number.isFinite(prev) && Math.abs(r.w - prev) > step;
+      if (cramped || fast) {
+        // The thigh angle to aim for: the walk's own, or, cramped, the nearest that leaves the knee and hock open (one
+        // further forward counts as nearer by legRoomForward); with none, the one that leaves them most open.
+        let aim = r.w;
+        if (cramped) {
+          this.stats.cramped++;
+          let bestCost = Infinity;
+          for (let w = -40 * D2R; w <= 100 * D2R; w += 2 * D2R) {
+            if (!this.legAtThigh(P, planeUp, w)) continue;
+            const q = this.legRoom(P, planeUp), d = w - r.w;
+            const short = Math.max(0, kMin - q.knee) + Math.max(0, hMin - q.hock) + q.under + 10 * q.back;
+            const cost = Math.abs(d) - (d > 0 ? v.legRoomForward * D2R : 0) + 100 * short;
+            if (cost < bestCost) { bestCost = cost; aim = w; }
+          }
         }
-        dir.copy(dirRake).lerp(dirHip, hi).normalize();
-        P.hock.copy(P.ankle).addScaledVector(dir, v.cannon);
-        // The swing starts from the cannon as it really was.
-        f.theta = Math.atan2(-dir.dot(P.legFwd), dir.dot(planeUp));
-        if (P.hock.distanceTo(P.hip) > reach + 0.01) {
-          this.stats.overreach++;
-          P.hock.sub(P.hip).setLength(reach).add(P.hip);
+        // At most legTurnMax from last frame's thigh: the pose the leg can make in that range nearest the aim (and least in
+        // the ground or bent backward), or, if it can reach none there, the nearest it can.
+        const from = Number.isFinite(prev) ? prev : aim, span = Number.isFinite(prev) ? step : 0;
+        let w = NaN, ok = false, bestCost = Infinity;
+        // Never with the knee or hock in the ground, if it can help it.
+        const cost = (c: number) => (this.legAtThigh(P, planeUp, c) ? Math.abs(c - aim) + this.misfit(P, planeUp, kMin, hMin) : Infinity);
+        for (let x = -span; x <= span + 1e-6; x += Math.max(0.25 * D2R, span / 8)) {
+          const k = cost(from + x);
+          if (k < bestCost) { bestCost = k; w = from + x; }
         }
+        for (let x = span + D2R; !Number.isFinite(w) && x < 120 * D2R; x += D2R) {
+          for (const c of [from + x, from - x]) {
+            const k = cost(c) - Math.abs(c - aim);
+            if (k < bestCost) { bestCost = k; w = c; }
+          }
+        }
+        if (Number.isFinite(w)) ok = this.legAtThigh(P, planeUp, w);
+        if (ok) {
+          this.t.a.subVectors(P.hock, P.ankle);
+          f.theta = Math.atan2(-this.t.a.dot(P.legFwd), this.t.a.dot(planeUp));
+        } else { f.theta = theta; this.placeLeg(f, P, toHip, planeUp, theta, reach, false); }
       }
-
-      // Thigh and shin: two-bone IK in the leg plane, knee forward.
-      const toHock = new Vector3().subVectors(P.hock, P.hip);
-      let dist = toHock.length();
-      const minD = Math.abs(v.femur - v.shin) + 0.05;
-      if (dist < minD) { toHock.setLength(minD); P.hock.copy(P.hip).add(toHock); dist = minD; }
-      const dir = toHock.divideScalar(dist);
-      const cosA = clamp((v.femur * v.femur + dist * dist - v.shin * v.shin) / (2 * v.femur * dist), -1, 1);
-      const perp = new Vector3().copy(P.legFwd).addScaledVector(dir, -P.legFwd.dot(dir)).normalize();
-      P.knee.copy(P.hip).addScaledVector(dir, v.femur * cosA).addScaledVector(perp, v.femur * Math.sqrt(1 - cosA * cosA));
+      f.legW = this.legRoom(P, planeUp).w;
     }
+  }
+  /** Hock and knee for the cannon at theta (f.theta follows if the hip was out of reach and the cannon swung toward it). */
+  private placeLeg(f: Foot, P: LegPose, toHip: Vector3, planeUp: Vector3, theta: number, reach: number, count = true) {
+    const v = this.v;
+
+    // If the hip is still out of reach, swing the cannon toward the hip until it isn't. A planted leg also stops short
+    // of a straight knee (kneeMaxPlanted): at the end of a push-off the hock opens just enough instead (Keith
+    // 2026-10-24 didn't want the knee going straight; with the hock not opening by itself, hockExtend 0, it did).
+    const dirRake = planeUp.clone().multiplyScalar(Math.cos(theta)).addScaledVector(P.legFwd, -Math.sin(theta));
+    const dirHip = toHip.clone().normalize();
+    const kneeCap = clamp(v.kneeMaxPlanted, 90, 180) * D2R;
+    const dKnee = Math.sqrt(v.femur * v.femur + v.shin * v.shin - 2 * v.femur * v.shin * Math.cos(kneeCap));
+    const lim = !f.swinging && !this.airborne ? Math.min(reach, dKnee) : reach;
+    P.hock.copy(P.ankle).addScaledVector(dirRake, v.cannon);
+    if (P.hock.distanceTo(P.hip) > lim) {
+      let lo = 0, hi = 1;
+      const dir = new Vector3();
+      for (let i = 0; i < 10; i++) {
+        const w = (lo + hi) / 2;
+        dir.copy(dirRake).lerp(dirHip, w).normalize();
+        if (P.hock.copy(P.ankle).addScaledVector(dir, v.cannon).distanceTo(P.hip) > lim) lo = w; else hi = w;
+      }
+      dir.copy(dirRake).lerp(dirHip, hi).normalize();
+      P.hock.copy(P.ankle).addScaledVector(dir, v.cannon);
+      // The swing starts from the cannon as it really was.
+      f.theta = Math.atan2(-dir.dot(P.legFwd), dir.dot(planeUp));
+      if (P.hock.distanceTo(P.hip) > reach + 0.01) {
+        if (count) this.stats.overreach++;
+        P.hock.sub(P.hip).setLength(reach).add(P.hip);
+      }
+    }
+
+    // Thigh and shin: two-bone IK in the leg plane, knee forward.
+    const toHock = new Vector3().subVectors(P.hock, P.hip);
+    let dist = toHock.length();
+    const minD = Math.abs(v.femur - v.shin) + 0.05;
+    if (dist < minD) { toHock.setLength(minD); P.hock.copy(P.hip).add(toHock); dist = minD; }
+    const dir = toHock.divideScalar(dist);
+    const cosA = clamp((v.femur * v.femur + dist * dist - v.shin * v.shin) / (2 * v.femur * dist), -1, 1);
+    const perp = new Vector3().copy(P.legFwd).addScaledVector(dir, -P.legFwd.dot(dir)).normalize();
+    P.knee.copy(P.hip).addScaledVector(dir, v.femur * cosA).addScaledVector(perp, v.femur * Math.sqrt(1 - cosA * cosA));
+  }
+
+  /**
+   * Pose the leg from its thigh: the knee at w forward of the leg plane's down, the hock where shin and cannon meet
+   * behind the knee-ankle line. False (pose untouched) if the leg can't reach.
+   */
+  private legAtThigh(P: LegPose, planeUp: Vector3, w: number) {
+    const v = this.v, k = this.t.c, d = this.t.d;
+    k.copy(P.hip).addScaledVector(P.legFwd, v.femur * Math.sin(w)).addScaledVector(planeUp, -v.femur * Math.cos(w));
+    d.subVectors(P.ankle, k);
+    const kd = d.length();
+    if (kd > v.shin + v.cannon - 0.01 || kd < Math.abs(v.cannon - v.shin) + 0.05) return false;
+    d.divideScalar(kd);
+    // In the plane, "behind" the knee-ankle line: the line turned a quarter back.
+    const df = d.dot(P.legFwd), du = d.dot(planeUp);
+    const a = (v.shin * v.shin - v.cannon * v.cannon + kd * kd) / (2 * kd), h = Math.sqrt(Math.max(0, v.shin * v.shin - a * a));
+    const bf = -du, bu = df, s = bf < 0 || (bf === 0 && bu < 0) ? 1 : -1;
+    const hx = k.x + d.x * a + (P.legFwd.x * bf + planeUp.x * bu) * s * h;
+    const hy = k.y + d.y * a + (P.legFwd.y * bf + planeUp.y * bu) * s * h;
+    const hz = k.z + d.z * a + (P.legFwd.z * bf + planeUp.z * bu) * s * h;
+    P.knee.copy(k); P.hock.set(hx, hy, hz);
+    return true;
+  }
+
+  /** What a pose costs for having its knee or hock in the ground, the knee bent backward, or either shut past kMin/hMin. */
+  private misfit(P: LegPose, planeUp: Vector3, kMin: number, hMin: number) {
+    const q = this.legRoom(P, planeUp);
+    return 100 * q.under + 1000 * q.back + 3 * (Math.max(0, kMin - q.knee) + Math.max(0, hMin - q.hock));
+  }
+
+  /** The leg as posed: thigh forward of straight down, the knee's and the hock's angles (radians), and whether the hip
+   * came closer to the hock than the folded thigh and shin can (the solve pushed the hock off the cannon). */
+  private legRoom(P: LegPose, planeUp: Vector3) {
+    const v = this.v, a = this.t.a, b = this.t.b;
+    a.subVectors(P.knee, P.hip);
+    const w = Math.atan2(a.dot(P.legFwd), -a.dot(planeUp));
+    a.subVectors(P.hip, P.knee); b.subVectors(P.hock, P.knee);
+    const knee = a.angleTo(b);
+    a.subVectors(P.knee, P.hock); b.subVectors(P.ankle, P.hock);
+    const hock = a.angleTo(b);
+    const clamped = P.hock.distanceTo(P.hip) < Math.abs(v.femur - v.shin) + 0.051;
+    // How far the knee or hock sits under the ground (0 above it).
+    const under = Math.max(0, this.ground.height(P.hock.x, P.hock.z) + 0.1 - P.hock.y, this.ground.height(P.knee.x, P.knee.z) + 0.1 - P.knee.y);
+    // How far the knee sits behind the hip-hock line (it should bend forward; 0 when it does by 3 cm or more).
+    a.subVectors(P.knee, P.hip); b.subVectors(P.hock, P.hip);
+    const bq = b.lengthSq() || 1;
+    const back = Math.max(0, 0.03 - (a.dot(P.legFwd) - b.dot(P.legFwd) * a.dot(b) / bq));
+    return { w, knee, hock, clamped, under, back };
   }
 }
