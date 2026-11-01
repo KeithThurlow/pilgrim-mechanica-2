@@ -4,6 +4,7 @@
 // and wake with their group (shooting one wakes it), stream out with it, remembering how many are left, and fight on
 // while the mech is near once their group's robots are all gone. As src/expedition/droidCamps.ts.
 // Ownership: host (striders, damage).
+import type { DeathPhysics } from "../physics/deaths";
 import type * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Battlefield } from "../game/battlefield";
@@ -38,8 +39,8 @@ export class StriderCamps {
   private left = new Map<string, number>();
   private seen = new Set<string>();
 
-  constructor(private v: StriderFieldValues & StriderCampValues & SwarmCampValues, bf: Battlefield, scene: THREE.Scene, field: DuneField, mech: MechUnit, private swarms: SwarmCamps, shake?: (k: number) => void) {
-    this.sf = new StriderField(v, bf, scene, field, mech, null, shake, 7, false);
+  constructor(private v: StriderFieldValues & StriderCampValues & SwarmCampValues, bf: Battlefield, scene: THREE.Scene, field: DuneField, mech: MechUnit, private swarms: SwarmCamps, shake?: (k: number) => void, deaths: DeathPhysics | null = null) {
+    this.sf = new StriderField(v, bf, scene, field, mech, deaths, shake, 7, false);
   }
 
   get count() { return this.sf.pack.alive; }
