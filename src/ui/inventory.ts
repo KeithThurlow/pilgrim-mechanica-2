@@ -189,6 +189,7 @@ export function inventoryScreen(o: InventoryOptions) {
     const eff = effectiveStats(it);
     for (const k in it.stats) {
       const info = STATS[k];
+      if (info?.hidden) continue;
       h += `<div class="inv-stat"><span>${info?.label ?? k}</span><span>${fmt(eff[k], info?.decimals ?? 2)}</span></div>`;
     }
     if (it.sockets) h += `<div class="dim">Sockets ${it.socketed.length}/${it.sockets}${it.socketed.length ? ": " + it.socketed.map((p) => PROTOCOL_BY_ID[p.base]?.name ?? p.base).join(", ") : ""}</div>`;
