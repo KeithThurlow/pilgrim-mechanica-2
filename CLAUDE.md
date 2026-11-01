@@ -130,6 +130,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?gates=open`, `?near` (just outside the outer wall), plus the combat-lab flags; the demo shoots the nearest gate down
   and walks in (with `?kind=hub`, it shoots the fabricators down while they build robots); the keep holds the warlord;
   Shift+R puts it all back up.
+- Inventory (Keith 2026-11-01; convoy and loadout labs): I anywhere (or click the mech doll at the bottom right) opens it; `?inv[=slot]` starts with it open (on that slot). In the field its cargo is the at-risk list, limited by weight (Loot and cargo › Cargo).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).

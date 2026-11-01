@@ -24,7 +24,7 @@ export function partsFromHull(share: number, fitted: Partial<Record<DollPart, bo
 }
 
 export const DOLL_DEFAULTS = {
-  dollSize: 96,
+  dollSize: 110,
   dollWarn: 0.6,
   dollCritical: 0.3,
   dollFlash: 0.35,
@@ -101,6 +101,8 @@ export function mechDollHud(v: DollValues, onClick: () => void, parent: HTMLElem
   svg.style.filter = "drop-shadow(0 1px 2px #000a)";
   root.appendChild(svg);
   const label = document.createElement("div");
+  label.style.whiteSpace = "nowrap";
+  label.style.fontSize = "10px";
   const bar = document.createElement("div"), fill = document.createElement("div");
   Object.assign(bar.style, { height: "5px", background: "#0007", border: "1px solid #ffffff30", borderRadius: "3px", overflow: "hidden", marginTop: "3px" } as CSSStyleDeclaration);
   Object.assign(fill.style, { height: "100%", width: "0%" } as CSSStyleDeclaration);

@@ -35,7 +35,7 @@ export const FIELD_LOOT_PARAMS: Param[] = [
   { key: "dropHearMax", label: "Drop sound: silent past (m)", min: 10, max: 1000, step: 5, group: "Loot", tip: "Fades out between the two; a drop further off than this makes no sound" },
   // Cargo (Keith 2026-11-01: manage the cargo, drop things, rather than let it rack up).
   { key: "cargoLimit", label: "Cargo limit on", min: 0, max: 1, step: 1, group: "Cargo", tip: "1: the at-risk cargo can't go over the mech's cargo capacity (legs' carry + hull and waist racks). 0: carry anything, as before" },
-  { key: "scrapWeight", label: "Scrap weight (t each)", min: 0, max: 0.2, step: 0.005, group: "Cargo", tip: "What one scrap weighs in the cargo. 0.02: 100 scrap is 2 t, the Rampart carries about 16 t" },
+  { key: "scrapWeight", label: "Scrap weight (t each)", min: 0, max: 0.2, step: 0.005, group: "Cargo", tip: "What one scrap weighs in the cargo. 0.02: 100 scrap is 2 t; the default Rampart carries 12 t" },
   { key: "cargoWarn", label: "Cargo nearly full at (share)", min: 0.3, max: 1, step: 0.01, group: "Cargo", tip: "The cargo bar turns amber past this share of capacity" },
   { key: "cargoFullNote", label: "\"Cargo full\" note every (s)", min: 0.5, max: 15, step: 0.5, group: "Cargo", tip: "Standing by a drop with a full cargo says so at most this often" },
   { key: "streakGap", label: "Clink streak breaks after (s)", min: 0.05, max: 2, step: 0.05, group: "Loot", tip: "Clumps landing closer together than this climb the scale" },

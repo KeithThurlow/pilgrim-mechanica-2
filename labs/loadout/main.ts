@@ -71,10 +71,10 @@ function refit() {
 }
 refit();
 
-bay = bayScreen({ state: st, tuning: V, onChange: refit });
+bay = bayScreen({ state: st, tuning: V, onChange: refit, onOpen: () => inv?.close() });
 // The inventory with the mech doll (Keith 2026-11-01): I, or a click on the doll at the bottom right. No expedition
 // here: its cargo is the bay's cargo list. ?inv[=slot] opens it (on that slot).
-inv = inventoryScreen({ state: st, tuning: V, onChange: refit, openBay: () => bay!.open() });
+inv = inventoryScreen({ state: st, tuning: V, onChange: refit, openBay: () => bay!.open(), onOpen: () => bay!.close() });
 const doll = mechDollHud(V, () => inv!.toggle());
 const openBtn = document.createElement("button");
 openBtn.type = "button";

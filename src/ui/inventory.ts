@@ -38,6 +38,8 @@ export interface InventoryOptions {
   onChange: () => void;
   /** Open the bay screen (sockets, loot rolls), where there is one. */
   openBay?: () => void;
+  /** Called on opening (close the bay so they don't stack). */
+  onOpen?: () => void;
 }
 
 /** Where each slot's tile sits on the doll (px in a 340 × 410 box) and its short label. */
@@ -46,14 +48,14 @@ const TILES: Record<SlotId, { x: number; y: number; label: string }> = {
   pack: { x: 252, y: 8, label: "Back · 3" },
   shoulderL: { x: 8, y: 8, label: "Shoulder · 1" },
   shoulderR: { x: 252, y: 70, label: "Shoulder · 2" },
-  mountL: { x: 8, y: 132, label: "Left mount · LMB" },
-  mountR: { x: 252, y: 132, label: "Right mount · RMB" },
-  heldL: { x: 8, y: 194, label: "Left hand" },
-  heldR: { x: 252, y: 194, label: "Right hand" },
+  mountL: { x: 8, y: 128, label: "L mount · LMB" },
+  mountR: { x: 252, y: 128, label: "R mount · RMB" },
+  heldL: { x: 8, y: 204, label: "Left hand" },
+  heldR: { x: 252, y: 204, label: "Right hand" },
   hull: { x: 130, y: 150, label: "Hull" },
-  waistL: { x: 8, y: 264, label: "Waist L" },
-  waistR: { x: 252, y: 264, label: "Waist R" },
-  legs: { x: 130, y: 350, label: "Legs" },
+  waistL: { x: 8, y: 280, label: "Waist L" },
+  waistR: { x: 252, y: 280, label: "Waist R" },
+  legs: { x: 130, y: 352, label: "Legs" },
 };
 /** Which doll shape lights for a slot. */
 const PART_OF: Record<SlotId, DollPart> = {
@@ -216,11 +218,11 @@ export function inventoryScreen(o: InventoryOptions) {
       tile.style.left = `${t.x}px`; tile.style.top = `${t.y}px`;
       if (it) tile.style.borderColor = RARITY[it.rarity].color;
       const kind = s === "mountL" || s === "mountR" ? (isArm(it) ? "Arm" : isHullWeapon(it) ? "Hull weapon" : "") : "";
-      tile.append(el("span", "inv-tilelabel", t.label + (kind ? ` · ${kind}` : "")));
+      tile.append(el("span", "inv-tilelabel", t.label));
       const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "needs an arm" : "empty");
       if (it) name.style.color = RARITY[it.rarity].color;
       tile.append(name);
-      if (it) tile.append(el("span", "inv-tilemeta", `Lv ${levelOf(it)} · P ${itemPower(it)}`));
+      if (it) tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}Lv ${levelOf(it)} · P ${itemPower(it)}`));
       tile.addEventListener("click", () => { slot = slot === s ? null : s; render(); });
       if (it) hoverable(tile, it, false);
       box.append(tile);
@@ -331,10 +333,10 @@ export function inventoryScreen(o: InventoryOptions) {
   /** What the screen shows, cheaply, so a pick-up or a bank while it's open redraws it. */
   function signature() {
     const e = o.exp;
-    return `${field()}|${e ? e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
+    return `${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
   }
 
-  function open() { root.hidden = false; render(); }
+  function open() { o.onOpen?.(); root.hidden = false; render(); }
   function close() { root.hidden = true; hideTip(); }
   function toggle() { if (root.hidden) open(); else close(); }
 

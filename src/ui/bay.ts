@@ -28,6 +28,8 @@ export interface BayOptions {
   tuning: LootValues & LoadoutValues;
   /** After anything changes (refit the mech, save). */
   onChange: () => void;
+  /** Called on opening (close the inventory so they don't stack). */
+  onOpen?: () => void;
 }
 
 /** On a hull mount slot, which of its two choices the list shows. */
@@ -395,7 +397,7 @@ export function bayScreen(o: BayOptions) {
     refreshDeltas();
   }
 
-  function open() { root.hidden = false; render(); }
+  function open() { o.onOpen?.(); root.hidden = false; render(); }
   function close() { root.hidden = true; hover = null; }
 
   addEventListener("keydown", (e) => {

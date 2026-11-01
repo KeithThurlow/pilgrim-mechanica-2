@@ -332,10 +332,10 @@ loop.loot.hud.fitted = () => Object.values(bayState.loadout);
 addEventListener("keydown", (e) => { if (e.code === "Tab" && !bay.isOpen) { e.preventDefault(); loop.seeker.cycle(); } });
 // ?seek=scrap|wreck|rare|legendary: start on that mode if the sensor has it.
 for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeker.mode !== params.get("seek"); i++) loop.seeker.cycle();
-const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); } });
+const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); }, onOpen: () => inventory.close() });
 // The inventory with the mech doll (Keith 2026-11-01): I anywhere, or a click on the HUD doll at the bottom right. Out in
 // the field its cargo is the at-risk list (with the cargo limit); aboard, the bay's cargo list rides out at the launch.
-const inventory = inventoryScreen({ state: bayState, tuning: V, exp: loop.exp, onChange: () => { refit(); panel.refresh(); }, openBay: () => bay.open() });
+const inventory = inventoryScreen({ state: bayState, tuning: V, exp: loop.exp, onChange: () => { refit(); panel.refresh(); }, openBay: () => bay.open(), onOpen: () => bay.close() });
 const doll = mechDollHud(V, () => inventory.toggle());
 /** The bay's cargo list goes out with the mech: it joins the at-risk list at the launch; once out, it's off the list. */
 function syncCarry() {
