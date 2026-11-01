@@ -62,3 +62,7 @@
   .inv { left: 10px; right: 10px; transform: none; width: auto; top: 50px; }
   .inv-body { grid-template-columns: 1fr; overflow: auto; }
 }
+.inv-sort { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 10px; border-bottom: 1px solid var(--line); }
+.inv button.chip { padding: 1px 8px; font-size: 11px; border-radius: 10px; background: #1f2226; color: var(--muted); border-color: var(--line); }
+.inv button.chip.on { border-color: var(--accent); color: var(--accent); }
+.inv-hot { color: var(--fg); font-weight: 600; }

@@ -9,6 +9,9 @@ import { defaultLoadout, emptyLoadout, fit, resolve, fitProblem, LOADOUT_DEFAULT
 import { fitWithHeld } from "../src/items/fitting";
 import { itemWeight } from "../src/items/item";
 import { partsFromHull } from "../src/ui/mechDoll";
+import { sortItems, sortValue, SORT_KEYS } from "../src/items/sort";
+import { itemValue } from "../src/items/value";
+import { itemCadence, dpsOf } from "../src/items/dps";
 
 const fails: string[] = [];
 const must = (ok: boolean, what: string) => { if (!ok) fails.push(what); };
@@ -95,6 +98,27 @@ must(!aboard.dropItem("x") && aboard.dumpScrap(5) === 0 && !aboard.stow(small, "
   const p = partsFromHull(0.4, { pack: false });
   must(p.hull === 0.4 && p.legL === 0.4 && p.pack === null, "partsFromHull wrong");
   must(partsFromHull(-1).sensor === 0 && partsFromHull(3).sensor === 1, "partsFromHull not clamped");
+}
+
+// ---- Sorting and scrap value ----
+{
+  const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((k) => rollItem(k * 37, LOOT_DEFAULTS, k % 3 ? { kind: "weapon" } : {}));
+  for (const key of SORT_KEYS) {
+    for (const up of [false, true]) {
+      const out = sortItems(items, key, up);
+      must(out.length === items.length && new Set(out).size === items.length, `sort ${key} lost or doubled items`);
+      const ks = out.map((it) => sortValue(it, key)).filter((x): x is number => x !== null);
+      must(ks.every((x, i) => !i || (up ? x >= ks[i - 1] : x <= ks[i - 1])), `sort ${key} ${up ? "up" : "down"} out of order`);
+      const firstNull = out.findIndex((it) => sortValue(it, key) === null);
+      must(firstNull < 0 || out.slice(firstNull).every((it) => sortValue(it, key) === null), `sort ${key}: items without a value not last`);
+    }
+  }
+  const c = makeItem("mg-medium", "common", "v1"), l = makeItem("mg-medium", "legendary", "v2");
+  must(itemValue(l) > itemValue(c) * 10 && itemValue({ ...c, level: 10 }) > itemValue(c), "scrap value doesn't grow with rarity and level");
+  // DPS is sustained: with a magazine and reload it's below the burst.
+  const cad = itemCadence(c)!;
+  must(cad.magazine > 0 && dpsOf(cad) < cad.damage * cad.rounds * cad.rate, "minigun DPS isn't counting the reload");
+  console.log(`minigun: ${Math.round(dpsOf(cad))} dps sustained, ${Math.round(cad.damage * cad.rounds * cad.rate)} burst · value common ${itemValue(c)}, legendary ${itemValue(l)}`);
 }
 
 if (fails.length) { console.error("cargo-check FAILED:\n  " + fails.join("\n  ")); process.exit(1); }
