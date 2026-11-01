@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | Weapon quad turrets swivel on their own, kept cheap | Keith | Keith | Turret 150°/s within 120° of the body, body 70°/s and faces its walk while running (Claude's values). |
 | 2026-11-01 | Keep the blast's ring growing out to its edge (the time left), drawn as a soft gradient; all telegraphs and aim marks head toward soft gradients, away from flat strips | Keith | Keith | `SoftRing` (ribbon.ts); pulse and strider slam first. |
 | 2026-11-01 | Beam attacks telegraph with the real beam: thin and weak from the start of the charge, growing in width, damage and sand blast, sweeping toward the player; the same for every big beam user (walkers, striders). The ground blast charges a thin beam, pulses down and explodes in light; its reach a faint soft ring | Keith | Keith | `src/combat/beamCore.ts`. |
 | 2026-11-01 | Beam growth values (Claude, Keith to tune): starts at 10% width and 4% power, growth curve 2.2, drags at 2 m/s while charging and 4.5 after, so moving off early clears it | Claude | Claude | Sliders in Robots: beam and Striders: beam. |
