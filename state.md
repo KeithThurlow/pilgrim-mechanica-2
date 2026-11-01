@@ -266,6 +266,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-01 · Generated parts: lane B keeps its baked maps (Keith: "puddles of mesh", thread agent on `wip/partgen`)
+- Fault: prep turned lane B's texture into vertex colours on ≤6,500 vertices, and lane B stopped at Pixal3D's 512 stage with a 128 remesh. Keith's own good results are 1,000-triangle meshes with 2048² base colour and normal maps. Now: `prepareTextured` (`tools/partgen/prep.ts`) keeps UVs, normals, base colour and normal map; the GLB writer writes them; the toon look (`src/look/toon.ts`) and setfit keep them. Lane B is Keith's TRELLIS.2 workflow (upsample 1024, remesh 768) decimated to each level's budget with maps baked from the dense surface (`tools/partgen/workflows/build-lane-b.py`); over-budget decimations retried lower (last try plain decimation); `--lane-b x.json` runs another workflow; the baked albedo (about half the concept's brightness) is scaled to the concept's (`matchAlbedo`, `--albedo`). Parts remade: hull-b-1, hullweapon-b-1, shoulder-b-1 (TRELLIS.2) and hullweapon-b-pixal (Pixal3D).
+- Checked: partgen-check (textured round trip: bytes, UVs, triangles kept, texture still maps); cannon variants timed (handoff table).
+
 ### 2026-11-01 · Decision logged: generated parts keep textures for now (Keith)
 - `docs/decisions.md`: colour and normal maps stay on generated parts until Keith decides after seeing them in game.
 

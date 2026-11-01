@@ -24,7 +24,7 @@ export interface Glb { meshes: RawMesh[]; empties: Map<string, [number, number, 
 
 const COMPS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 
-function decodeImage(bytes: Uint8Array, mime: string): Img {
+export function decodeImage(bytes: Uint8Array, mime: string): Img {
   if (mime === "image/png" || (bytes[0] === 0x89 && bytes[1] === 0x50)) {
     const p = PNG.sync.read(Buffer.from(bytes));
     return { w: p.width, h: p.height, rgba: new Uint8Array(p.data) };

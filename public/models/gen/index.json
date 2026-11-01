@@ -24,6 +24,12 @@
     "label": "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground"
   },
   {
+    "id": "hullweapon-b-pixal",
+    "kind": "hullweapon",
+    "lane": "b",
+    "label": "a single heavy cannon pod, boxy armoured gun housing with one thick barrel pointing forward, resting on the ground"
+  },
+  {
     "id": "sample-hull",
     "kind": "hull",
     "lane": "a",

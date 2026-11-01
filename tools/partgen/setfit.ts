@@ -26,6 +26,8 @@ const m = new THREE.Matrix4().compose(
   new THREE.Vector3(scale, scale, scale),
 );
 const v = new THREE.Vector3();
+const rot = new THREE.Matrix3().getNormalMatrix(m);
+const turnNormals = (n: Float32Array) => { for (let i = 0; i < n.length; i += 3) { v.fromArray(n, i).applyMatrix3(rot).normalize(); v.toArray(n, i); } return n; };
 const move = (p: Float32Array) => { for (let i = 0; i < p.length; i += 3) { v.fromArray(p, i).applyMatrix4(m); v.toArray(p, i); } };
 
 for (const f of [`${id}.glb`, `${id}-lod1.glb`, `${id}-lod2.glb`]) {
@@ -34,7 +36,9 @@ for (const f of [`${id}.glb`, `${id}-lod1.glb`, `${id}-lod2.glb`]) {
   const g = readGlb(new Uint8Array(readFileSync(path)));
   const parts = g.meshes.map((mesh) => {
     move(mesh.pos);
-    return { name: mesh.name, pos: mesh.pos, nrm: normals(mesh.pos, mesh.index), col: mesh.col ?? new Float32Array(mesh.pos.length).fill(1), index: mesh.index, material: kind.material };
+    // A textured part (lane B) keeps its UVs, maps and its own normals, turned with the fit.
+    const nrm = mesh.nrm ? turnNormals(mesh.nrm) : normals(mesh.pos, mesh.index);
+    return { name: mesh.name, pos: mesh.pos, nrm, col: mesh.col ?? new Float32Array(mesh.pos.length).fill(1), index: mesh.index, material: kind.material, uv: mesh.maps ? mesh.uv : undefined, maps: mesh.maps };
   });
   const empties = [...g.empties].map(([n, p]) => { v.set(...p).applyMatrix4(m); return [n, [v.x, v.y, v.z]] as [string, [number, number, number]]; });
   writeFileSync(path, writeGlb(parts, empties, { kind: kind.id, lane: side.lane }));

@@ -5,29 +5,34 @@
   "seed": 1,
   "front": "+z",
   "up": "+y",
-  "yaw": "45,snap",
+  "yaw": "0",
   "delight": 0,
   "trisIn": [
-    6480,
-    2198,
-    696
+    6438,
+    2168,
+    632
   ],
   "tris": [
-    6480,
-    2198,
-    696
+    6438,
+    2168,
+    632
   ],
   "size": [
-    2.009163942762888,
-    2.452760320602079,
+    2.2573119810714943,
+    2.376035023317505,
     2.634999990463257
   ],
-  "made": "2026-11-01T05:07:22.876Z",
+  "made": "2026-11-01T06:12:07.897Z",
   "prompt": "a single detached armoured torso shell of a giant robot, boxy angular industrial plating, small armoured cockpit visor at the front, flat underside, resting on the ground",
   "image": "shots/partgen/raw/hull-1-concept.png",
   "raw": [
     "shots/partgen/raw/hull-1-laneb-lod0.glb",
     "shots/partgen/raw/hull-1-laneb-lod1.glb",
     "shots/partgen/raw/hull-1-laneb-lod2.glb"
+  ],
+  "albedoGain": [
+    1.24,
+    1.24,
+    1.13
   ]
 }

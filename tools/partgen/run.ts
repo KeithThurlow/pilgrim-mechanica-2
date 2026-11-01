@@ -6,7 +6,8 @@
 //   npx tsx tools/partgen/run.ts --kind hull --prompt "..." [--seed 1] [--lane a|b|both] [--comfy http://127.0.0.1:8188]
 //   npx tsx tools/partgen/run.ts --kind hull --image concept.png --lane b     (skip the concept step)
 //   npx tsx tools/partgen/run.ts --kind wreck --from some.ply|some.glb        (no ComfyUI: prep only)
-// Axes per lane (found 2026-11-01 on Keith's PC): lane A --front +x --up -y; lane B --front +z --up +y --yaw 45,snap.
+// Axes per lane (found 2026-11-01 on Keith's PC): lane A --front +x --up -y; lane B (TRELLIS.2) the defaults +z/+y;
+// Pixal3D in lane B (--lane-b from build-lane-b.py --model pixal) --front +z --up +y --yaw 45,snap.
 // More: --label text (the part lab's name for it), --front +z --up +y (the source's axes; generators differ),
 // --yaw deg[,snap] (turn about +Y after that; snap: then box it tightest within ±45°), --tris N (the full level), --id name, --res N (lane A grid; default: each level meshed at its own budget), --delight 0..1
 // (take baked light out of the colours; default 1 for lane A, 0 for lane B whose base colour is albedo).
@@ -16,7 +17,8 @@ import { extname } from "node:path";
 import { Comfy, hasTitle, patch, type OutFile, type Workflow } from "./comfy";
 import { readGlb, writeGlb, type Glb } from "./glb";
 import { loadKinds } from "./kinds";
-import { glbToMesh, prepare, prepareTextured, type Axis } from "./prep";
+import { glbToMesh, matchAlbedo, objectLuminance, prepare, prepareTextured, type Axis } from "./prep";
+import { decodeImage } from "./glb";
 import { readPly, splatToMesh, splatToMeshAt, SPLAT_MESH_DEFAULTS, type Mesh } from "./splat";
 
 /** House style for concept images: one part, whole, unlit (the colours become paint: Keith 2026-11-01, no baked lighting). */
@@ -58,6 +60,14 @@ async function save(id: string, laneName: string, source: Source, meta: Record<s
     const budget = opt("tris") && lod === 0 ? Number(opt("tris")) : kind.tris[lod];
     const src = await source(lod, budget), o = { front, up, yaw, snap, lod, tris: budget, delight: delightAmount };
     const q = "meshes" in src ? (textured(src) ? prepareTextured(src, kind, o) : await prepare(glbToMesh(src), kind, o)) : await prepare(src, kind, o);
+    // A textured part's base colour brought to the concept's brightness (--albedo 0..1, default 1; needs the concept).
+    const concept = (meta.image ?? opt("image")) as string | undefined, albedo = Number(opt("albedo", "1"));
+    if (q.part.maps?.base && concept && albedo > 0) {
+      const target = objectLuminance(decodeImage(new Uint8Array(readFileSync(concept)), concept.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg"), true);
+      const m = matchAlbedo(q.part.maps.base, target, albedo);
+      q.part.maps.base = m.tex;
+      console.log(`lod${lod}: base colour ×${m.gain.toFixed(2)} (linear) to the concept's brightness`);
+    }
     writeFileSync(`${OUT}/${id}${lod ? `-lod${lod}` : ""}.glb`, writeGlb([q.part], q.sockets, { kind: kind.id, lane: laneName, lod }));
     lods.push(q);
   }
@@ -101,8 +111,14 @@ if (from) {
     console.log(`concept → ${image}`);
   }
   const uploaded = await comfy.upload(image);
-  const fetchOut = async (l: string, extra: { faces?: number; res?: number }, tag: string) => {
-    const files = await comfy.run(patch(wf(`lane-${l}`), { image: uploaded, seed, ...extra }));
+  const fetchOut = async (l: string, extra: { faces?: number; res?: number; loose?: boolean }, tag: string) => {
+    const w = patch(wf(`lane-${l}`), { image: uploaded, seed, ...extra });
+    // loose: the face-target node drops its edge-keeping placement (plain midpoint collapses reach small targets).
+    if (extra.loose) for (const n of Object.values(w)) if (n._meta?.title === "PG_FACES" && "placement_mode" in n.inputs) {
+      n.inputs.placement_mode = "midpoint";
+      for (const k of Object.keys(n.inputs)) if (k.startsWith("placement_mode.")) delete n.inputs[k];
+    }
+    const files = await comfy.run(w);
     const f = pick(files, l === "a" ? [".ply"] : [".glb"]);
     if (!f) throw new Error(`partgen: lane ${l} wrote no ${l === "a" ? "PLY" : "GLB"} (got ${files.map((x) => x.filename).join(", ") || "nothing"})`);
     const bytes = await comfy.download(f), raw = `${RAW}/${kind.id}-${seed}-lane${l}${tag}${extname(f.filename)}`;
@@ -123,10 +139,20 @@ if (from) {
       const raws: string[] = [];
       await save(id, "b", async (lod, budget) => {
         if (!perLod && one) return one;
-        const { bytes, raw } = await fetchOut("b", { faces: budget, res: opt("res") ? Number(opt("res")) : undefined }, perLod ? `-lod${lod}` : "");
+        // The edge-keeping decimator can stop short of a small target: ask again lower (only the decimator onward reruns).
+        let faces = budget, got = Infinity, raw = "";
+        for (let tries = 0; tries < 4; tries++) {
+          const loose = tries === 3; // last try: plain decimation at the budget itself
+          if (loose) faces = budget;
+          const r = await fetchOut("b", { faces, loose, res: opt("res") ? Number(opt("res")) : undefined }, perLod ? `-lod${lod}` : "");
+          raw = r.raw; one = readGlb(r.bytes);
+          got = one.meshes.reduce((n, m) => n + m.index.length / 3, 0);
+          if (!perLod || got <= budget * 1.05) break;
+          faces = Math.max(16, Math.floor(faces * (budget / got) * 0.95));
+          console.log(`lod${lod}: ${got} tris over ${budget}, asking for ${tries === 2 ? `${budget} with plain decimation` : faces}`);
+        }
         raws.push(raw);
-        one = readGlb(bytes);
-        return one;
+        return one!;
       }, { ...meta, raw: raws });
     }
   }

@@ -7,7 +7,8 @@
 // 1,000-triangle tests with baked maps beat vertex-coloured parts). Pure: same input, same part.
 /// <reference path="./meshopt.d.ts" />
 import { MeshoptSimplifier } from "three/addons/libs/meshopt_simplifier.module.js";
-import { sample, type Glb, type Maps, type OutPart } from "./glb";
+import { PNG } from "pngjs";
+import { decodeImage, sample, type Glb, type Img, type Maps, type OutPart, type Tex } from "./glb";
 import type { Kind, V3 } from "./kinds";
 import type { Mesh } from "./splat";
 
@@ -190,6 +191,41 @@ function volume(p: Float32Array, I: Uint32Array) {
 /** Sockets at fractions of the fitted box (x 0 = right side, -X). */
 const socketsOf = (kind: Kind, size: V3) => Object.entries(kind.sockets).map(([name, f]) =>
   [name, [(f[0] - 0.5) * size[0], f[1] * size[1], (f[2] - 0.5) * size[2]] as V3] as [string, V3]);
+
+const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+
+/**
+ * Mean linear luminance of an image's object pixels: those that differ from the corner colour (the concept's plain
+ * background) by more than 0.15, or every pixel that isn't near black (a texture atlas's gaps).
+ */
+export function objectLuminance(img: Img, background: boolean) {
+  const p = img.rgba, bg = [p[0], p[1], p[2]];
+  let sum = 0, k = 0;
+  for (let i = 0; i < p.length; i += 4) {
+    const d = Math.abs(p[i] - bg[0]) + Math.abs(p[i + 1] - bg[1]) + Math.abs(p[i + 2] - bg[2]);
+    if (background ? d < 0.15 * 3 * 255 : p[i] + p[i + 1] + p[i + 2] < 15) continue;
+    sum += 0.2126 * toLin(p[i] / 255) + 0.7152 * toLin(p[i + 1] / 255) + 0.0722 * toLin(p[i + 2] / 255); k++;
+  }
+  return k ? sum / k : 0;
+}
+
+/**
+ * Scale a base colour texture (in linear light) so its mean luminance matches `target` (the concept object's, whose
+ * prompt asks for flat unlit paint). TRELLIS.2's albedo comes out about half as bright as the concept (2026-11-01:
+ * cannon 53/255 against 106/255). Gain capped at 3; `amount` 0..1 blends towards it. Returns a PNG and the gain.
+ */
+export function matchAlbedo(t: Tex, target: number, amount = 1): { tex: Tex; gain: number } {
+  const img = decodeImage(t.bytes, t.mime), have = objectLuminance(img, false);
+  if (!(have > 1e-4) || amount <= 0) return { tex: t, gain: 1 };
+  const gain = 1 + amount * (Math.min(3, Math.max(1 / 3, target / have)) - 1);
+  const png = new PNG({ width: img.w, height: img.h });
+  for (let i = 0; i < img.rgba.length; i += 4) {
+    for (let c = 0; c < 3; c++) png.data[i + c] = Math.round(Math.min(1, toSrgb(Math.min(1, toLin(img.rgba[i + c] / 255) * gain))) * 255);
+    png.data[i + 3] = img.rgba[i + 3];
+  }
+  return { tex: { bytes: new Uint8Array(PNG.sync.write(png)), mime: "image/png" }, gain };
+}
 
 /**
  * A generator mesh already at the level's budget with baked maps (lane B): orient and fit only, keeping its UVs,
