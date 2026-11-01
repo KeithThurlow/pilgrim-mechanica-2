@@ -90,6 +90,8 @@ export interface ModifierSample {
  * 0 (fast) where it has no effect.
  */
 export interface GroundLayer { at(x: number, z: number): number }
+/** The half-step DuneField.normal takes by default (m). */
+export const NORMAL_E = 0.35;
 
 export class DuneField {
   /** Optional reshaping (the convoy road). Null: plain dunes. */
@@ -279,7 +281,7 @@ export class DuneField {
   }
 
   /** Surface normal by central differences; written into out = [x, y, z]. */
-  normal(x: number, z: number, out: number[] = [0, 1, 0], e = 0.35): number[] {
+  normal(x: number, z: number, out: number[] = [0, 1, 0], e = NORMAL_E): number[] {
     const hx = this.height(x + e, z) - this.height(x - e, z);
     const hz = this.height(x, z + e) - this.height(x, z - e);
     const nx = -hx, ny = 2 * e, nz = -hz;

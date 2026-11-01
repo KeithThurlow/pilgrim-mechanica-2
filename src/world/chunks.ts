@@ -4,7 +4,7 @@
 import * as THREE from "three/webgpu";
 import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, vec4, float, sin, smoothstep, clamp, cameraPosition, attribute, time, abs, max } from "three/tsl";
 import type { Param } from "../core/tweaks";
-import type { DuneField, GroundSample } from "./terrain";
+import { NORMAL_E, type DuneField, type GroundSample } from "./terrain";
 import { groundColour, WATER_COLOURS, smooth } from "./groundColour";
 
 export const STREAM_DEFAULTS = {
@@ -38,8 +38,20 @@ export const STREAM_PARAMS: Param[] = [
 
 /** Objects on this layer are drawn only into the sun's shadow map (the camera doesn't see it; src/world/look.ts lets the shadow camera). */
 export const SHADOW_ONLY_LAYER = 3;
+/** Patching: how far round a changed box the vertices are redone (m: normals read the ground 2 m round), and the grid
+ *  queued patches merge on (m). Not feel: the ground looks the same either way. */
+const PATCH_PAD = 2.5, PATCH_CELL = 4;
 
-interface Chunk { mesh: THREE.Mesh; water: THREE.Mesh | null; shadow: THREE.Mesh | null; cx: number; cz: number }
+interface Chunk {
+  mesh: THREE.Mesh; water: THREE.Mesh | null; shadow: THREE.Mesh | null; cx: number; cz: number;
+  /** The patch cache (flushPatches): per vertex, the ground without the dents at the points a vertex reads, filled as
+   *  vertices are first patched (NaN: not yet). Dents are added on last (DuneField.sample), so a patch only re-reads them. */
+  base?: Float32Array;
+}
+/** Patch cache layout per vertex: h, h at ±e on x and z (normal), at ±2 m (the colour's wide normal), crest, flat, wr, ws, rock. */
+const BASE_N = 14, WIDE_E = 2;
+/** out = (x, y, z) normalised, as DuneField.normal does it. */
+function unit(out: number[], x: number, y: number, z: number) { const l = Math.hypot(x, y, z); out[0] = x / l; out[1] = y / l; out[2] = z / l; }
 
 export class TerrainStreamer {
   readonly group = new THREE.Group();
@@ -66,6 +78,12 @@ export class TerrainStreamer {
   private c3 = new THREE.Color();
   private c4 = new THREE.Color();
   private dirty = new Set<string>();
+  /** Patching: chunks touched since the last finishPatch, those that now need a water sheet, cells queued by row. */
+  private patched = new Map<string, Chunk>();
+  private patchWater = new Set<string>();
+  private patchRows = new Map<number, Set<number>>();
+  private sb: GroundSample = { h: 0, crest: 0, flat: 0 };
+  private wideN = [0, 1, 0];
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
   private shadowIndex: THREE.BufferAttribute | null = null;
@@ -231,6 +249,31 @@ export class TerrainStreamer {
     this.v.budgetMs = b;
   }
 
+  /**
+   * One ground vertex as vertex() works it out, from the chunk's patch cache plus the dents read now: the same sums in
+   * the same order, so the same ground (to float32 rounding of the cached heights). The cache fills on first use.
+   */
+  private vertexCached(ch: Chunk, i: number, x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
+    const f = this.field, n = Math.round(this.v.segments), E = NORMAL_E;
+    const B = (ch.base ??= new Float32Array((n + 1) * (n + 1) * BASE_N).fill(NaN));
+    const o = i * BASE_N;
+    if (B[o] !== B[o]) {
+      const dents = f.dents;
+      f.dents = null;
+      const q = f.sample(x, z, this.sb);
+      B[o] = q.h; B[o + 9] = q.crest; B[o + 10] = q.flat; B[o + 11] = q.wr ?? 0; B[o + 12] = q.ws ?? 0; B[o + 13] = q.rock ?? 0;
+      B[o + 1] = f.height(x + E, z); B[o + 2] = f.height(x - E, z); B[o + 3] = f.height(x, z + E); B[o + 4] = f.height(x, z - E);
+      B[o + 5] = f.height(x + WIDE_E, z); B[o + 6] = f.height(x - WIDE_E, z); B[o + 7] = f.height(x, z + WIDE_E); B[o + 8] = f.height(x, z - WIDE_E);
+      f.dents = dents;
+    }
+    const D = f.dents, at = (px: number, pz: number) => (D ? D.at(px, pz) : 0);
+    s.h = B[o] + at(x, z); s.crest = B[o + 9]; s.flat = B[o + 10]; s.wr = B[o + 11]; s.ws = B[o + 12]; s.rock = B[o + 13];
+    unit(nn, -((B[o + 1] + at(x + E, z)) - (B[o + 2] + at(x - E, z))), 2 * E, -((B[o + 3] + at(x, z + E)) - (B[o + 4] + at(x, z - E))));
+    const w = this.wideN;
+    unit(w, -((B[o + 5] + at(x + WIDE_E, z)) - (B[o + 6] + at(x - WIDE_E, z))), 2 * WIDE_E, -((B[o + 7] + at(x, z + WIDE_E)) - (B[o + 8] + at(x, z - WIDE_E))));
+    groundColour(f, x, z, s, tmp, w);
+  }
+
   /** One ground vertex at (x, z): the sample into s, the normal into nn, the colour into tmp. */
   private vertex(x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
     this.field.sample(x, z, s);
@@ -241,12 +284,71 @@ export class TerrainStreamer {
   /**
    * Update the loaded chunks' vertices inside a box in place (after the ground changed there, e.g. a crater): heights,
    * normals, colours and the water sheet's depth. Much cheaper than rebuilding whole chunks; a chunk that now needs a
-   * water sheet it didn't have is queued for a rebuild instead. Returns the vertices touched.
+   * water sheet it didn't have is queued for a rebuild instead. Returns the vertices touched. pad: how far round the box
+   * to redo (normals and the colour's wide normal read the ground 2 m round each vertex).
    */
-  patchArea(x0: number, z0: number, x1: number, z1: number): number {
+  patchArea(x0: number, z0: number, x1: number, z1: number, pad = PATCH_PAD): number {
+    const count = this.patchBox(x0 - pad, z0 - pad, x1 + pad, z1 + pad);
+    this.finishPatch();
+    return count;
+  }
+
+  /**
+   * Queue a changed box for flushPatches (perf, Keith 2026-11-01: the robots' trenches and slumping craters asked for
+   * dozens of overlapping patches a frame, each redoing the same vertices and re-uploading the same chunks). The box,
+   * padded as patchArea pads it, marks cells of a PATCH_CELL grid; the flush redoes each marked cell once.
+   */
+  queuePatch(x0: number, z0: number, x1: number, z1: number) {
+    const C = PATCH_CELL;
+    const a = Math.floor((x0 - PATCH_PAD) / C), b = Math.floor((x1 + PATCH_PAD) / C);
+    const c = Math.floor((z0 - PATCH_PAD) / C), d = Math.floor((z1 + PATCH_PAD) / C);
+    for (let iz = c; iz <= d; iz++) {
+      let row = this.patchRows.get(iz);
+      if (!row) { row = new Set(); this.patchRows.set(iz, row); }
+      for (let ix = a; ix <= b; ix++) row.add(ix);
+    }
+  }
+
+  /**
+   * Patch every box queued since the last flush, each ground vertex once: runs of marked cells along each row, runs with
+   * the same span on following rows joined into one rectangle, and each chunk finished (uploaded, bounds, shadow copy)
+   * once. Cells are half-open, so a vertex on a shared edge is done by one of them only. Returns the vertices touched.
+   */
+  flushPatches(): number {
+    if (!this.patchRows.size) return 0;
+    const C = PATCH_CELL, eps = 1e-4;
+    const rows = [...this.patchRows.keys()].sort((p, q) => p - q);
+    // Open rectangles by span ("x0,x1" in cells): the first and last row they cover.
+    let open = new Map<string, [number, number, number, number]>();
+    let count = 0;
+    const close = (r: [number, number, number, number]) => { count += this.patchBox(r[0] * C, r[2] * C, (r[1] + 1) * C - eps, (r[3] + 1) * C - eps, true); };
+    for (const iz of rows) {
+      const xs = [...this.patchRows.get(iz)!].sort((p, q) => p - q);
+      const next = new Map<string, [number, number, number, number]>();
+      for (let i = 0; i < xs.length;) {
+        let j = i;
+        while (j + 1 < xs.length && xs[j + 1] === xs[j] + 1) j++;
+        const key = xs[i] + "," + xs[j], prev = open.get(key);
+        if (prev && prev[3] === iz - 1) { prev[3] = iz; next.set(key, prev); open.delete(key); }
+        else next.set(key, [xs[i], xs[j], iz, iz]);
+        i = j + 1;
+      }
+      for (const r of open.values()) close(r);
+      open = next;
+    }
+    for (const r of open.values()) close(r);
+    this.patchRows.clear();
+    this.finishPatch();
+    return count;
+  }
+
+  /**
+   * Redo the loaded chunks' vertices in a box (no padding); the chunks touched wait for finishPatch. cached: read the
+   * ground under the dents from the chunk's patch cache (only when nothing but the dents changed since it was built:
+   * the combat labs' craters, not the convoy's road).
+   */
+  private patchBox(x0: number, z0: number, x1: number, z1: number, cached = false): number {
     const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
-    // Normals and the colour's wide normal read the ground 2 m round each vertex.
-    x0 -= 2.5; z0 -= 2.5; x1 += 2.5; z1 += 2.5;
     for (const f of this.onRebuild) f([x0, z0, x1, z1]);
     const a = Math.floor(x0 / size), b = Math.floor(x1 / size), c = Math.floor(z0 / size), d = Math.floor(z1 / size);
     const s: GroundSample = { h: 0, crest: 0, flat: 0 }, nn = [0, 1, 0], tmp = this.c4;
@@ -263,28 +365,39 @@ export class TerrainStreamer {
       const P = g.getAttribute("position") as THREE.BufferAttribute, Nm = g.getAttribute("normal") as THREE.BufferAttribute, Cl = g.getAttribute("color") as THREE.BufferAttribute;
       const pos = P.array as Float32Array, nor = Nm.array as Float32Array, col = Cl.array as Float32Array;
       const wg = ch.water?.geometry;
-      let needWater = false;
       for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) {
         const i = j * row + k;
-        this.vertex(ox + k * step, oz + j * step, s, nn, tmp);
+        if (cached) this.vertexCached(ch, i, ox + k * step, oz + j * step, s, nn, tmp);
+        else this.vertex(ox + k * step, oz + j * step, s, nn, tmp);
         pos[i * 3 + 1] = s.h;
         nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
         col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
         const ws = s.ws ?? 0;
         if (water !== null && ws > 0) {
           if (wg) this.waterVertex(wg, i, water, ws, s.h);
-          else if (s.h - water < 0.3) needWater = true;
+          else if (s.h - water < 0.3) this.patchWater.add(key);
         }
         count++;
       }
-      P.needsUpdate = true; Nm.needsUpdate = true; Cl.needsUpdate = true;
-      g.computeBoundingSphere();
-      if (ch.shadow) this.makeShadow(ch);
-      if (wg) for (const k of ["color", "depth", "fade"]) (wg.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
-      if (needWater) this.dirty.add(key);
+      this.patched.set(key, ch);
     }
     this.stats.patched += count;
     return count;
+  }
+
+  /** Upload the chunks patched since the last call, once each: attributes, bounds, the shadow copy, the water sheet. */
+  private finishPatch() {
+    for (const [key, ch] of this.patched) {
+      const g = ch.mesh.geometry;
+      g.getAttribute("position").needsUpdate = true; g.getAttribute("normal").needsUpdate = true; g.getAttribute("color").needsUpdate = true;
+      g.computeBoundingSphere();
+      if (ch.shadow) this.makeShadow(ch);
+      const wg = ch.water?.geometry;
+      if (wg) for (const k of ["color", "depth", "fade"]) (wg.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
+      if (this.patchWater.has(key)) this.dirty.add(key);
+    }
+    this.patched.clear();
+    this.patchWater.clear();
   }
 
   /** One water vertex: depth from the ground under it, the tint by depth and foam, faded where the shallows end. */
