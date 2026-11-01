@@ -164,6 +164,7 @@ export function bayScreen(o: BayOptions) {
     const eff = effectiveStats(it);
     for (const k in it.stats) {
       const info = STATS[k];
+      if (info?.hidden) continue;
       const row = el("div", "bay-stat");
       row.append(el("span", "", info?.label ?? k));
       const base = it.stats[k], now = eff[k];

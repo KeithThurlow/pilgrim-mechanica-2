@@ -59,8 +59,10 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
   for (let i = 0; i < 5; i++) b.update(dt, true, st, V);
   must(Math.abs(b.t - t0) < 1e-9, "the blade moved while stalled in a body");
 }
-// ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder ----
-{
+// ---- Poses: in reach, clear of the hull, edge leading, rest over the shoulder; every sword's rest stance ----
+for (const stance of [0, 1, 2, 3]) {
+  const st0 = st;
+  { const st = { ...st0, stance };
   for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
     const lens = Object.fromEntries((["A", "B", "R", "S", "P", "K", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
@@ -83,10 +85,11 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
         }
         prevTip = tip;
       }
-      must(worst <= V.swordUpperArm + V.swordForearm, `span ${span} side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
-      must(!clash, `span ${span} side ${side}: the blade went through the ${clash}`);
-      if (c === "A" || c === "B") must(lead > lag * 3, `span ${span} side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
+      must(worst <= V.swordUpperArm + V.swordForearm, `stance ${stance} span ${span} side ${side} ${c}: the hand went ${worst.toFixed(2)} m from the shoulder, past the arm's reach`);
+      must(!clash, `stance ${stance} span ${span} side ${side}: the blade went through the ${clash}`);
+      if (c === "A" || c === "B") must(lead > lag * 3, `stance ${stance} span ${span} side ${side} ${c}: the edge didn't lead the cut (${lead} leading, ${lag} trailing)`);
     }
+    if (!stance) {
     const rest = clipPose("guard", 0, side, sh, 0, st, V);
     must(rest.fwd.z < -0.8 && rest.fwd.y > 0.25 && Math.abs(rest.fwd.x) < 0.2, `side ${side}: at rest the blade doesn't lie back over the shoulder, in line with the torso`);
     const re = armIk(sh, rest.hand, V.swordUpperArm, V.swordForearm, rest.pole);
@@ -96,6 +99,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     must(ua[1] < -0.6 && ua[2] > 0.5, `side ${side}: at rest the elbow isn't low and forward (${ua.map((q) => q.toFixed(2)).join(",")})`);
     must(fa[1] > 0.6, `side ${side}: at rest the forearm doesn't angle up to the fist`);
     must(bend > 70 && bend < 110, `side ${side}: at rest the elbow is bent to ${bend.toFixed(0)}°, not near a right angle`);
+    }
     const under = clipPose("A", lens.A, side, sh, 0, st, V, span);
     must((under.hand.x - sh.x) * side < -0.8 && under.hand.y < sh.y, `side ${side}: the first cut doesn't finish low on the far side`);
     const cA = clipCut("A", st, V, span)!;
@@ -104,6 +108,7 @@ const BOXES = [{ n: "torso", lo: [-1.2, -0.33, -1.27], hi: [1.2, 2.3, 1.37] }, {
     const a = Math.hypot(ik.elbow.x - sh.x, ik.elbow.y - sh.y, ik.elbow.z - sh.z), b = Math.hypot(ik.hand.x - ik.elbow.x, ik.hand.y - ik.elbow.y, ik.hand.z - ik.elbow.z);
     must(Math.abs(a - V.swordUpperArm) < 1e-6 && Math.abs(b - V.swordForearm) < 1e-6, "the arm's bones stretched");
   }
+}
 }
 // ---- Weight: each move eases out of a stop and into one, fastest mid-cut, never backwards ----
 {

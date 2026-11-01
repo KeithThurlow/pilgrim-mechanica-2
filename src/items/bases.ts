@@ -34,6 +34,8 @@ export interface StatInfo {
   decimals: number;
   /** Rolls round to a whole number. */
   whole?: boolean;
+  /** Not shown in the stat lists (a kind, not a number to compare: a sword's rest stance). */
+  hidden?: boolean;
 }
 
 /** Every stat an item can carry. */
@@ -84,6 +86,7 @@ export const STATS: Record<string, StatInfo> = {
   cleave: { label: "Cleave (m)", better: 1, decimals: 1 },
   parry: { label: "Parry window ×", better: 1, decimals: 2 },
   heft: { label: "Blade heft ×", better: 1, decimals: 2 },
+  stance: { label: "Rest stance", better: 1, decimals: 0, whole: true, hidden: true },
   shellSpeed: { label: "Shell speed (m/s)", better: 1, decimals: 0 },
   splash: { label: "Splash (m)", better: 1, decimals: 1 },
   stripLength: { label: "Strip length (m)", better: 1, decimals: 0 },
@@ -263,7 +266,7 @@ export const BASES: Base[] = [
   // side's mouse button (src/weapons/sword.ts). Base values from the Sword sliders; `swing` is its arc (°).
   {
     id: "sword-light", name: "Breaker sword", kind: "weapon", size: "L", cls: "melee", tags: ["weapon", "melee", "blade"], weight: 1.6, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart", drop: 0.7,
-    stats: { damage: s(WD.swordDamage, 0.1), ap: s(WD.swordAp, 0), reach: s(WD.swordReach, 0.05), swing: s(WD.swordArc, 0.05), windup: s(WD.swordWindup, 0.08), slash: s(WD.swordSlash, 0.05), recover: s(WD.swordRecover, 0.08), cleave: s(WD.swordCleave, 0.15), parry: s(1, 0.05), heft: s(1, 0.03), handling: s(1.2, 0.08), arcBonus: s(10, 0.2), salvage: s(0.15, 0.3) },
+    stats: { damage: s(WD.swordDamage, 0.1), ap: s(WD.swordAp, 0), reach: s(WD.swordReach, 0.05), swing: s(WD.swordArc, 0.05), windup: s(WD.swordWindup, 0.08), slash: s(WD.swordSlash, 0.05), recover: s(WD.swordRecover, 0.08), cleave: s(WD.swordCleave, 0.15), parry: s(1, 0.05), heft: s(1, 0.03), stance: s(1, 0), handling: s(1.2, 0.08), arcBonus: s(10, 0.2), salvage: s(0.15, 0.3) },
   },
   // The sword line (Keith 2026-11-01: "a bigger, heavier sword, better for AoE clears ... but harder to use when
   // fighting other melee units"; the Breaker "feels like a katana ... buster swords, which are much slower but do have
@@ -272,11 +275,11 @@ export const BASES: Base[] = [
   // swing and recover, a narrow parry window. The short sword: quick, light, a wide parry window, armour stops more of it.
   {
     id: "sword-heavy", name: "Buster sword", kind: "weapon", size: "L", cls: "melee", tags: ["weapon", "melee", "blade"], weight: 2.8, makers: ["Stratford-Aegis"], look: "rampart", drop: 0.5,
-    stats: { damage: s(WD.swordDamage * 1.7, 0.1), ap: s(0.85, 0), reach: s(WD.swordReach * 1.15, 0.05), swing: s(WD.swordArc * 1.1, 0.05), windup: s(WD.swordWindup * 1.45, 0.08), slash: s(WD.swordSlash * 1.25, 0.05), recover: s(WD.swordRecover * 1.5, 0.08), cleave: s(WD.swordCleave * 1.9, 0.15), parry: s(0.5, 0.05), heft: s(2.1, 0.05), handling: s(0.85, 0.08), arcBonus: s(14, 0.2), salvage: s(0.15, 0.3) },
+    stats: { damage: s(WD.swordDamage * 1.7, 0.1), ap: s(0.85, 0), reach: s(WD.swordReach * 1.15, 0.05), swing: s(WD.swordArc * 1.1, 0.05), windup: s(WD.swordWindup * 1.45, 0.08), slash: s(WD.swordSlash * 1.25, 0.05), recover: s(WD.swordRecover * 1.5, 0.08), cleave: s(WD.swordCleave * 1.9, 0.15), parry: s(0.5, 0.05), heft: s(2.1, 0.05), stance: s(2, 0), handling: s(0.85, 0.08), arcBonus: s(14, 0.2), salvage: s(0.15, 0.3) },
   },
   {
     id: "sword-short", name: "Short sword", kind: "weapon", size: "L", cls: "melee", tags: ["weapon", "melee", "blade"], weight: 1.0, makers: ["Suzaku"], look: "rampart", drop: 0.6,
-    stats: { damage: s(WD.swordDamage * 0.6, 0.1), ap: s(0.25, 0), reach: s(WD.swordReach * 0.72, 0.05), swing: s(WD.swordArc * 0.9, 0.05), windup: s(WD.swordWindup * 0.65, 0.08), slash: s(WD.swordSlash * 0.75, 0.05), recover: s(WD.swordRecover * 0.65, 0.08), cleave: s(WD.swordCleave * 0.6, 0.15), parry: s(1.7, 0.05), heft: s(0.85, 0.05), handling: s(1.4, 0.08), arcBonus: s(8, 0.2), salvage: s(0.15, 0.3) },
+    stats: { damage: s(WD.swordDamage * 0.6, 0.1), ap: s(0.25, 0), reach: s(WD.swordReach * 0.72, 0.05), swing: s(WD.swordArc * 0.9, 0.05), windup: s(WD.swordWindup * 0.65, 0.08), slash: s(WD.swordSlash * 0.75, 0.05), recover: s(WD.swordRecover * 0.65, 0.08), cleave: s(WD.swordCleave * 0.6, 0.15), parry: s(1.7, 0.05), heft: s(0.85, 0.05), stance: s(3, 0), handling: s(1.4, 0.08), arcBonus: s(8, 0.2), salvage: s(0.15, 0.3) },
   },
   {
     id: "rail-medium", name: "Rail cannon", kind: "weapon", size: "M", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 2.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 1,

@@ -195,7 +195,7 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordBlockKnock", label: "Knock through a block ×", min: 0, max: 1, step: 0.05, group: GB, tip: "The cut's knock on a blocking mech, × this" },
 ];
 
-export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number }
+export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number }
 
 /** K: knocked back off a parry (up and back, back to rest). P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
  *  S the settle after B. */
@@ -252,6 +252,21 @@ interface Key { t: number; hand: V; fwd?: V; yaw?: number; pitch?: number; up: V
 // forearm angled up to the fist, ahead of the shoulder at about its height; the blade on the wrist laid back over the
 // shoulder toward the pack (near the triangle's long side), in line with the torso.
 const GUARD: Key = { t: 0, hand: v3(0.15, -0.05, 2.0), fwd: v3(-0.06, 0.36, -0.93), up: v3(0.7, -0.6, 0.2), pole: v3(0.05, -1, 0.1) };
+// Rest by sword (Keith 2026-11-01: "slightly different ... resting points"), left arm. The katana (the Breaker): at the
+// side and a little behind, low, the blade pointing forward past the hull, edge down. The buster: up behind the head,
+// laid across both shoulders, angled up and in. The short sword: out at a bent arm's length ahead, the tip pointing
+// out and down at the ground.
+const GUARD_KATANA: Key = { t: 0, hand: v3(0.4, -0.55, -0.2), fwd: v3(0.12, 0.12, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.5) };
+const GUARD_BUSTER: Key = { t: 0, hand: v3(0.25, 1.45, 0.25), fwd: v3(-0.75, 0.55, -0.37), up: v3(0, 0.3, 1), pole: v3(1, -0.4, 0.2) };
+/** The return's last key before each rest (the blade brought round to where that rest picks it up). */
+const PRE_REST: (Key | null)[] = [
+  { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
+  { t: 0.82, hand: v3(0.5, -0.6, 0.6), fwd: v3(0.2, 0.0, 0.98), up: v3(0, 1, 0), pole: v3(0.3, -1, -0.3) },
+  { t: 0.82, hand: v3(0.5, 0.75, 0.9), fwd: v3(0.3, 0.95, 0.05), up: v3(0, 0.2, 1), pole: v3(1, -0.6, 0.2) },
+  null,
+];
+const GUARD_SHORT: Key = { t: 0, hand: v3(0.4, -0.75, 1.65), fwd: v3(0.4, -0.55, 0.73), up: v3(0, 0.8, 0.6), pole: v3(0.6, -1, -0.2) };
+const guardOf = (stance = 0): Key => [GUARD, GUARD_KATANA, GUARD_BUSTER, GUARD_SHORT][Math.max(0, Math.min(3, Math.round(stance)))];
 const DRIVE: Key = { t: 0, hand: v3(0.45, 0.95, 1.85), fwd: v3(0.85, 0.5, -0.2), up: v3(0.2, -0.3, 1), pole: v3(0.6, -0.6, 0.6) };
 /** Where the elbow bends to in the cuts (left arm): out and down, a little back. */
 const CUT_POLE = v3(0.9, -1, -0.5);
@@ -305,7 +320,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
   const thru = (n: Near, full: number) => mix(n.at ?? full, full);
   const NA = nearA(v), NB = nearB(v);
   const under = at(UNDER, NEAR_UNDER, 0), cock = at(COCK, NEAR_COCK, 0);
-  const g = { ...GUARD, hand: { ...GUARD.hand, y: GUARD.hand.y + v.swordGuardUp } };
+  const G0 = guardOf(st.stance), g = { ...G0, hand: { ...G0.hand, y: G0.hand.y + v.swordGuardUp } };
   switch (c) {
     case "guard": return { arc, len: 1, keys: [{ ...g, t: 0 }, { ...g, t: 1 }], cut: null };
     case "A": {
@@ -346,7 +361,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
           { ...under, t: 0 },
           { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
           { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
-          { t: 0.82, hand: v3(0.35, -0.2, 1.85), fwd: v3(0.1, 0.25, -0.96), up: v3(0.7, -0.6, 0.2), pole: v3(0.3, -1, 0.1) },
+          ...(PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))] ? [PRE_REST[Math.max(0, Math.min(3, Math.round(st.stance ?? 0)))]!] : []),
           { ...g, t: 1 },
         ],
       };
