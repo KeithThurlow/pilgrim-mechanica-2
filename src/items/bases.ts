@@ -76,6 +76,12 @@ export const STATS: Record<string, StatInfo> = {
   rockets: { label: "Rockets per salvo", better: 1, decimals: 0, whole: true },
   shells: { label: "Shells per volley", better: 1, decimals: 0, whole: true },
   blast: { label: "Blast radius (m)", better: 1, decimals: 1 },
+  reach: { label: "Reach (m)", better: 1, decimals: 1 },
+  swing: { label: "Swing arc (°)", better: 1, decimals: 0 },
+  windup: { label: "Wind-up (s)", better: -1, decimals: 2 },
+  slash: { label: "Slash (s)", better: -1, decimals: 2 },
+  recover: { label: "Recover (s)", better: -1, decimals: 2 },
+  cleave: { label: "Cleave (m)", better: 1, decimals: 1 },
   shellSpeed: { label: "Shell speed (m/s)", better: 1, decimals: 0 },
   splash: { label: "Splash (m)", better: 1, decimals: 1 },
   stripLength: { label: "Strip length (m)", better: 1, decimals: 0 },
@@ -250,6 +256,12 @@ export const BASES: Base[] = [
   {
     id: "rpg-light", name: "Arm missile pod", kind: "weapon", size: "L", cls: "rpg", tags: ["weapon", "explosive", "rocket"], weight: 1.2, makers: ["Stratford-Aegis", "Suzaku"], look: "rampart-rocket", drop: 1,
     stats: { damage: s(WD.rpgDamage * WD.podDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.podBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.podCooldown, 0.1), magazine: s(WD.podMag, 0.25), reload: s(WD.podReload, 0.1), handling: s(1.15, 0.08), arcBonus: s(4, 0.2) },
+  },
+  // The sword (Keith 2026-11-01: "a big chonky sword ... cleave through things"): a held weapon in an arm, swung on its
+  // side's mouse button (src/weapons/sword.ts). Base values from the Sword sliders; `swing` is its arc (°).
+  {
+    id: "sword-light", name: "Breaker sword", kind: "weapon", size: "L", cls: "melee", tags: ["weapon", "melee", "blade"], weight: 1.6, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart", drop: 0.7,
+    stats: { damage: s(WD.swordDamage, 0.1), ap: s(WD.swordAp, 0), reach: s(WD.swordReach, 0.05), swing: s(WD.swordArc, 0.05), windup: s(WD.swordWindup, 0.08), slash: s(WD.swordSlash, 0.05), recover: s(WD.swordRecover, 0.08), cleave: s(WD.swordCleave, 0.15), handling: s(1.2, 0.08), arcBonus: s(10, 0.2), salvage: s(0.15, 0.3) },
   },
   {
     id: "rail-medium", name: "Rail cannon", kind: "weapon", size: "M", cls: "rail", tags: ["weapon", "energy", "rail"], weight: 2.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 1,

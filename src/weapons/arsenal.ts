@@ -36,8 +36,12 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
+import { SwordSim, sweepAngles, swordCuts, type SwordStats } from "./sword";
+import { sheetHits } from "../game/sheetFire";
+import { penDensity, type SheetHit } from "../game/sheet";
+import { hitStop } from "../game/hitStop";
 
-type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | null;
+type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | null;
 
 /** The rail cannon's energy colour (its charge preview, coils and beam). */
 export const RAIL_GLOW = 0x7fe0ff;
@@ -79,6 +83,15 @@ interface Side {
   swarm: SwarmSim;
   sv: WeaponValues;
   channel: boolean;
+  /** The sword (melee): its swing, the bodies this swing has hit (by target, then its unit key), the swing's cleave
+   *  budget left, whether it has bitten yet, and the trail (recent blade angles, its fade). */
+  sword: SwordSim;
+  swordHits: Map<Hittable, Set<number>>;
+  swingSeen: number;
+  cleave: number;
+  bit: boolean;
+  trail: number[];
+  trailK: number;
 }
 
 /** A shoulder weapon on its key. */
@@ -113,7 +126,9 @@ export interface Shoulder {
 }
 
 const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
-const NAMES: Record<string, string> = { rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const D2R = Math.PI / 180;
+const swordBuf: SheetHit<Hittable>[] = [];
+const NAMES: Record<string, string> = { melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -150,8 +165,10 @@ export class Arsenal implements MechWeapons {
     public candidates: () => TargetCandidate[] = () => []) {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false });
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
+      sword: new SwordSim(1, () => v.swordRest), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, trail: [], trailK: 0 });
     this.sides = [side(), side()];
+    this.sides[1].sword = new SwordSim(-1, () => v.swordRest);
     addWeaponSounds(bf.sfx, v);
   }
 
@@ -162,13 +179,14 @@ export class Arsenal implements MechWeapons {
     const guns = [r.guns.left, r.guns.right];
     this.sides.forEach((s, i) => {
       const g = guns[i];
-      const kind: SideKind = !g ? null : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
-      const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : null;
+      const kind: SideKind = !g ? null : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
+      const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
+      s.sword.stop(); s.swordHits.clear(); s.trail.length = 0; s.trailK = 0;
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
@@ -240,6 +258,11 @@ export class Arsenal implements MechWeapons {
     if (light) return { damage: v.rpgDamage * v.podDamage, blast: v.podBlast, speed: v.rpgSpeed, cooldown: v.podCooldown, ap: v.rpgAp };
     return { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
   }
+  swordStats(s: Side): SwordStats {
+    const v = this.v, o = s.own;
+    return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave }
+      : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave };
+  }
   swarmStats(o: Record<string, number> | null): SwarmStats {
     const v = this.v;
     return o ? { missiles: o.rockets, damage: o.damage, blast: o.blast, cooldown: o.cooldown, radius: v.swarmRadius }
@@ -283,6 +306,7 @@ export class Arsenal implements MechWeapons {
       // Targeting laser on the minigun and the rocket launcher, along the gun.
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
+      if (s.kind === "melee") { this.stepSword(s, held, dt); clearPaint(s.paint); return; }
       if (s.kind === "rpg") {
         // Clip-fed (Keith 2026-10-31): held, the clip ripples out a rocket every cooldown at the ground under the cursor,
         // tube by tube (this side's magazine, in the gun record: the HUD reads it there; a click fires one), then the
@@ -403,6 +427,105 @@ export class Arsenal implements MechWeapons {
   }
 
   /**
+   * The sword (src/weapons/sword.ts): the swing steps on the trigger; through the slash the blade is a vertical sheet
+   * from the hand out to the reach, tested every few degrees of the stretch it swept this step. Each body it crosses is
+   * hit once per swing (damage, knock along the swing, sparks, a crunch), paying its chord × density out of the swing's
+   * cleave budget; once that's spent the rest of the swing passes over them. The first bite stalls the blade, shakes the
+   * camera and (the local player's own swing) asks for hit stop. The model follows the swing; the mech steps into the
+   * slash (lunge).
+   */
+  private stepSword(s: Side, held: boolean, dt: number) {
+    const u = this.unit, v = this.v, bf = this.bf, sw = s.sword;
+    const st = this.swordStats(s);
+    const sweep = sw.update(dt, held, st, v.swordComboAt);
+    if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
+    // The hand and the way the arm points (the model's pivot; a body without one: beside the hull, along the torso).
+    const hand = this.tmp, along = this.dir;
+    const m = s.model, ms = m?.sword;
+    let reachScale = 1;
+    if (m && ms) {
+      m.root.getWorldPosition(hand);
+      m.root.getWorldDirection(along);
+      reachScale = Math.max(1e-3, m.root.getWorldScale(this.tmp2).x);
+    } else {
+      const yaw = u.upper.torsoYaw;
+      hand.set(u.sim.pelvis.x + Math.cos(yaw) * 1.6 * sw.side, u.sim.pelvis.y, u.sim.pelvis.z - Math.sin(yaw) * 1.6 * sw.side);
+      along.set(Math.sin(yaw), 0, Math.cos(yaw));
+    }
+    const baseYaw = Math.atan2(along.x, along.z);
+    if (sw.started) bf.sfx.playSound("swordSwing", hand, 0.9, 0.85 + Math.random() * 0.25);
+    if (sweep && u.alive) {
+      for (const a of sweepAngles(sweep)) {
+        if (s.cleave <= 0) break;
+        this.swordSheet(s, hand, baseYaw + a, st, sw.dir);
+      }
+    }
+    // The model: the swing's yaw and lift, the blade stretched to the reach, the trail's ghost blades fading behind it.
+    if (m && ms) {
+      ms.swing.rotation.set(-sw.lift * v.swordLift * D2R, sw.angle, 0);
+      const len = (st.reach * v.swordLength) / reachScale;
+      ms.blade.scale.z = Math.max(0.3, len - 0.48);
+      ms.edge.opacity = sw.phase === "slash" ? 1 : 0.3 + 0.4 * sw.lift;
+      s.trailK = sw.phase === "slash" ? 1 : Math.max(0, s.trailK - dt * 7);
+      if (sw.phase === "slash") { s.trail.unshift(sw.angle); if (s.trail.length > ms.trail.length) s.trail.length = ms.trail.length; }
+      else if (s.trailK <= 0) s.trail.length = 0;
+      ms.trail.forEach((g, i) => {
+        const a = s.trail[i];
+        g.mesh.visible = a !== undefined && s.trailK > 0 && v.swordTrail > 0;
+        if (!g.mesh.visible) return;
+        g.mesh.rotation.set(0, a, 0);
+        g.mesh.scale.set(1, 0.95, len);
+        g.mat.opacity = Math.min(1, 0.32 * v.swordTrail * (1 - i / ms.trail.length) * s.trailK);
+      });
+    }
+  }
+
+  /** One sheet of the blade at a world yaw: hit what it crosses that this swing hasn't hit yet. */
+  private swordSheet(s: Side, hand: THREE.Vector3, yaw: number, st: SwordStats, dir: number) {
+    const u = this.unit, v = this.v, bf = this.bf, field = bf.field;
+    const dx = Math.sin(yaw), dz = Math.cos(yaw);
+    const sheet = {
+      ox: hand.x, oz: hand.z, dx, dz, from: 0, len: st.reach, half: v.swordHalf, under: v.sheetUnder,
+      top: (t: number) => field.height(hand.x + dx * t, hand.z + dz * t) + v.swordHeight,
+      ground: (x: number, z: number) => field.height(x, z),
+    };
+    const budget = { left: s.cleave };
+    const hits = swordCuts(sheetHits(bf.targets, u.team, sheet, null, swordBuf, bf.register), s.swordHits, budget, (m) => penDensity(v, m));
+    s.cleave = budget.left;
+    // The swing's way across (the blade's tangent, toward where it's cutting) and out along the blade: the knock.
+    const tx = -dz * dir, tz = dx * dir;
+    for (const h of hits) {
+      const t = h.target;
+      const at = new THREE.Vector3(h.x, h.y, h.z);
+      if (h.ray) { const o = new THREE.Vector3(h.ray.ox, h.ray.oy, h.ray.oz), d = new THREE.Vector3(h.ray.dx, h.ray.dy, h.ray.dz); t.hitRay(o, d, h.ray.dist + 1e-3); }
+      else t.pick?.(h.key);
+      const kd = new THREE.Vector3(tx * 0.7 + dx * 0.5, 0.25, tz * 0.7 + dz * 0.5).normalize();
+      this.onFire?.("melee");
+      t.damage(st.damage * u.damageScale, at, kd, st.ap);
+      if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock);
+      bf.gunFx.sparksAt(at, kd, 10, 9);
+      bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
+      bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.85 + Math.random() * 0.25);
+      if (!s.bit) {
+        s.bit = true;
+        s.sword.bite(v.swordHitch);
+        this.onShake?.(v.swordShake);
+        if (u.player && !u.ally) hitStop.add(v.swordStop, v.swordStopScale);
+      } else this.onShake?.(v.swordShake * 0.35);
+    }
+  }
+
+  /** The mech steps into a slash (world m/s along the aim), or null: the walker takes it as outside motion. */
+  lunge(): { x: number; z: number } | null {
+    const v = this.v;
+    let k = 0;
+    for (const s of this.sides) if (s.kind === "melee" && s.sword.phase === "slash") k = Math.max(k, Math.sin(Math.PI * Math.min(1, s.sword.slashK + 0.15)));
+    if (k <= 0 || v.swordLunge <= 0) return null;
+    const yaw = this.unit.upper.torsoYaw;
+    return { x: Math.sin(yaw) * v.swordLunge * k, z: Math.cos(yaw) * v.swordLunge * k };
+  }
+
+  /**
    * Weapons cold (Keith 2026-10-31: effects stuck after a mech died mid-fire): the owner died, got out, or the round
    * started over. Every trigger and key is let go WITHOUT firing (a held rail would otherwise fire on release, a painted
    * shoulder shot too), and everything a held weapon was showing is dropped: the rail's charge, aim line, meter and coil
@@ -412,6 +535,8 @@ export class Arsenal implements MechWeapons {
     for (const s of this.sides) {
       s.rail.holding = false; s.rail.charge = 0; s.whined = false;
       s.aimLine.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
+      s.sword.stop(); s.trail.length = 0; s.trailK = 0;
+      for (const g of s.model?.sword?.trail ?? []) g.mesh.visible = false;
       clearPaint(s.paint);
       for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.15 : 0.9;
     }
@@ -858,7 +983,8 @@ export class Arsenal implements MechWeapons {
       if (!s.kind) { out.push(`${b} —`); return; }
       const g = u.upper.guns[i];
       let state = "";
-      if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
+      if (s.kind === "melee") state = s.sword.phase === "idle" ? "click to swing, hold to keep swinging" : s.sword.phase;
+      else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
       else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;
       else state = `${Math.ceil(g.ammo)}/${g.mag.size}`;

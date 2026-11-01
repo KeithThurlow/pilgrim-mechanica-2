@@ -6,6 +6,7 @@
 import type { Param } from "../core/tweaks";
 import { PEN_DEFAULTS, PEN_PARAMS } from "../game/sheet";
 import { ARMOUR_DEFAULTS, ARMOUR_PARAMS } from "../game/armour";
+import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP } from "./sword";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -175,6 +176,7 @@ export const WEAPON_DEFAULTS = {
   salvoAp: 0.3,
   ...ARMOUR_DEFAULTS,
   ...PEN_DEFAULTS,
+  ...SWORD_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
@@ -335,7 +337,8 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "salvoAp", label: "Line mortar", min: 0, max: 1, step: 0.01, group: AP },
   ...ARMOUR_PARAMS,
   ...PEN_PARAMS,
+  ...SWORD_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SG, M, S, SA, R, A, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SG, M, S, SA, R, A, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

@@ -19,6 +19,7 @@
 // (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
+import { hitStop } from "../../src/game/hitStop";
 import { energyHud } from "../../src/ui/energyBar";
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
@@ -346,7 +347,8 @@ for (let i = 0; params.get("seek") && i < loop.seeker.modes.length && loop.seeke
 const bay = bayScreen({ state: bayState, tuning: V, onChange: () => { refit(); panel.refresh(); }, onOpen: () => inventory.close() });
 // The inventory with the mech doll (Keith 2026-11-01): I anywhere, or a click on the HUD doll at the bottom right. Out in
 // the field its cargo is the at-risk list (with the cargo limit); aboard, the bay's cargo list rides out at the launch.
-const inventory = inventoryScreen({ state: bayState, tuning: V, exp: loop.exp, onChange: () => { refit(); panel.refresh(); }, openBay: () => bay.open(), onOpen: () => bay.close() });
+const inventory = inventoryScreen({ state: bayState, tuning: V, exp: loop.exp, onChange: () => { refit(); panel.refresh(); }, openBay: () => bay.open(), onOpen: () => bay.close(),
+  bankScrap: (n) => { loop.exp.bank.scrap += n; persist(); shop.refresh(); } });
 const doll = mechDollHud(V, () => inventory.toggle());
 /** The bay's cargo list goes out with the mech: it joins the at-risk list at the launch; once out, it's off the list. */
 function syncCarry() {
@@ -811,7 +813,8 @@ const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 const holdF = Number(params.get("holdf") ?? 0);
 app.onTick((rawDt) => {
   if (bigClose) holdOnBucket();
-  const dt = fixedDt || rawDt;
+  // A heavy melee hit slows the fight a moment (src/game/hitStop.ts).
+  const dt = (fixedDt || rawDt) * hitStop.dtScale(rawDt);
   clock += dt;
   costs.begin();
   bf.register.rebuild();

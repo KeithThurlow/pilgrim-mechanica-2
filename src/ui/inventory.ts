@@ -41,6 +41,9 @@ export interface InventoryOptions {
   onChange: () => void;
   /** Open the bay screen (sockets, loot rolls), where there is one. */
   openBay?: () => void;
+  /** Scrap an item for its value into the convoy's bank (Keith 2026-11-01: only at the convoy, never in the field, or
+   *  everything gets scrapped into junk). Without it (no bank, e.g. the loadout lab) there's no Scrap button. */
+  bankScrap?: (n: number) => void;
   /** Called on opening (close the bay so they don't stack). */
   onOpen?: () => void;
 }
@@ -93,6 +96,8 @@ export function inventoryScreen(o: InventoryOptions) {
   let slot: SlotId | null = null;
   let message = "", messageT = 0;
   let sig = "";
+  /** The stash item whose Scrap button was clicked once (the next click scraps it). */
+  let scrapArmed: string | null = null;
   // Sorting (Keith 2026-11-01): one order for every list, kept between visits.
   let sortKey: SortKey = "rarity", sortUp = false;
   try {
@@ -280,6 +285,19 @@ export function inventoryScreen(o: InventoryOptions) {
     row.append(name, metaEl);
     row.addEventListener("click", () => equip(x));
     if (mode === "cargo") row.append(btn("Drop", () => { hideTip(); if (o.exp!.dropItem(x.id)) render(); }, "small"));
+    if (mode === "stash" && o.bankScrap) {
+      // Two clicks: the first arms it ("Sure?"), the second scraps it. Protocols socketed in it go with it (counted).
+      const val = itemValue(x, vv()), armed = scrapArmed === x.id;
+      row.append(btn(armed ? `Sure? +◆${val}` : `Scrap ◆${val}`, () => {
+        if (!armed) { scrapArmed = x.id; render(); return; }
+        scrapArmed = null;
+        if (!takeFrom(st.stash, x.id)) return;
+        o.bankScrap!(val);
+        hideTip();
+        say(`Scrapped ${itemName(x)} for ${val} scrap (banked).`);
+        changed();
+      }, "small" + (armed ? " danger" : "")));
+    }
     if (mode === "stash") row.append(btn("→ cargo", () => { if (moveItem(st.stash, st.cargo, x.id)) changed(); else say(`No room in the cargo for ${itemName(x)}.`); }, "small"));
     if (mode === "bayCargo") row.append(btn("→ stash", () => { moveItem(st.cargo, st.stash, x.id); changed(); }, "small"));
     hoverable(row, x, true);
@@ -365,7 +383,7 @@ export function inventoryScreen(o: InventoryOptions) {
     return `${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
   }
 
-  function open() { o.onOpen?.(); root.hidden = false; render(); }
+  function open() { scrapArmed = null; o.onOpen?.(); root.hidden = false; render(); }
   function close() { root.hidden = true; hideTip(); }
   function toggle() { if (root.hidden) open(); else close(); }
 

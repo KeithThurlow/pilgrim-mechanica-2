@@ -39,6 +39,8 @@ export function cadenceOf(s: Record<string, number>, shot?: ShotProtocols, cost 
   if (s.damage === undefined) return null;
   let rounds: number, magUse: number, gap: number;
   if (s.fireRate !== undefined) { rounds = shotRounds(shot?.split, shot?.rate, shot?.multi); magUse = 1; gap = 1 / Math.max(0.01, s.fireRate); }
+  // A sword (src/weapons/sword.ts): one swing per wind-up, slash and recovery, one body's worth (cleave hits more).
+  else if (s.slash !== undefined) { rounds = 1; magUse = 1; gap = Math.max(0.05, (s.windup ?? 0) + s.slash + (s.recover ?? 0)); }
   else { const volley = s.rockets ?? s.shells ?? 1; rounds = volley * shotRounds(shot?.split, 1, shot?.multi); magUse = volley; gap = Math.max(0.05, (s.cooldown ?? 1) + (s.charge ?? 0)); }
   const magazine = s.magazine ?? 0, reload = s.reload ?? 0;
   const rate = 1 / gap;
