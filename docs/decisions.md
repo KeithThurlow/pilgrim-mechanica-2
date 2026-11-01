@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-01 | The sword's lunge follows WASD as a smooth blend; the close cut is a draw cut (blade across the front, pulled along its length, flick at the end) | Keith | Keith | Values Claude's, Keith to tune: still 1, toward 1.15, across 0.5, straight away −0.3 (a small back hop, on c² so side clicks keep a step); draw 72° off the aim, flick 72°. |
 | 2026-11-01 | Hot sand lights the ground round it at night; no smoke off it yet | Keith | Keith | `GroundHeat.lights` → night lights' held lights. |
 | 2026-11-01 | Hot sand light details (Claude, Keith to tune): glow gathered into 6 m patches, the brightest 6 ask for a real light (900 per m² of full glow), ranked under blasts (priority 0.7); still looks only, no damage to a pilot on foot (Keith didn't say: open) | Claude | Claude | Sliders in Light › Hot sand: night light. |
 | 2026-11-01 | Weapon quad turrets swivel on their own, kept cheap | Keith | Keith | Turret 150°/s within 120° of the body, body 70°/s and faces its walk while running (Claude's values). |
