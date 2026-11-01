@@ -25,6 +25,7 @@ import { addModifier } from "../../src/world/modifiers";
 import { WreckStandIns } from "../../src/world/wrecks";
 import type { RampartBody } from "../../src/mech/rampart";
 import { DuelGround, DUEL_GROUND_DEFAULTS, DUEL_GROUND_PARAMS, lineOfSight, wreckSpots } from "../../src/game/duelGround";
+import { DUEL_HULL_MUL } from "../../src/combat/duelSim";
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_AI_PARAMS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type MechCommand, type RivalLevel } from "../../src/combat/rivalAi";
 import { applyFitSpec, describeLoadout, kitOf, loadoutDps, loadoutLevel, preferredRange, rollRivalLoadout, type KitWeapon } from "../../src/combat/rivalKit";
 import { ThreatIds, duelView, threatsFrom } from "../../src/combat/duelThreats";
@@ -37,9 +38,10 @@ import type { Param } from "../../src/core/tweaks";
 import { LEG_SHAPE_KEYS } from "../../src/mech/legTypes";
 import { lookFor } from "../../src/items/item";
 
-const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, rivalUp: 0, duelAutoRestart: 3.5 };
+const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, duelHull: DUEL_HULL_MUL, rivalUp: 0, duelAutoRestart: 3.5 };
 const DUEL_PARAMS: Param[] = [
   { key: "rivalHull", label: "Rival hull (× its parts')", min: 0.25, max: 4, step: 0.05, group: "Rival", tip: "Its hull points from the rolled hull item, times this" },
+  { key: "duelHull", label: "Duel hull, both mechs (× the parts')", min: 0.25, max: 6, step: 0.05, group: "Rival", tip: "Every rolled hull times this, yours and the rival's: sets how long a duel lasts (about 2 = double the time to kill, Keith 2026-11-01)" },
   { key: "rivalUp", label: "Rival item level vs yours (+/-)", min: -10, max: 40, step: 1, group: "Rival", tip: "The rival rolls every item this many levels above (or below) the mean level of yours, on the shared curve (power = 1 + 0.075 x (level - 1) on damage and hull). ?rivalup=N" },
   { key: "duelAutoRestart", label: "Next round after a kill (s, 0: R only)", min: 0, max: 15, step: 0.5, group: "Rival" },
 ];
@@ -74,6 +76,7 @@ const lab = await combatLab({
       lab.field.update(); lab.craters.invalidate(); lab.streamer.rebuildAll();
       wrecks?.rebuild(lab.field, wreckSpots(ground!.spots, V));
     } else if (k === "rivalHull" || k === "rivalUp") fitRival();
+    else if (k === "duelHull") { fitRival(); refit(); }
     // (The rival's own legs keep their walk: a leg slider tunes it only while it walks on Rampart legs too.)
     else if (!RESOLVED.has(k) && !(rivalOwnLegs() && (LEG_SHAPE_KEYS as readonly string[]).includes(k))) (RV as Record<string, number>)[k] = (V as Record<string, number>)[k];
   },
@@ -115,7 +118,7 @@ function fitRival() {
   rivalLo = rollRivalLoadout(rivalSeed, V, { level: rivalLevel });
   fitNotes = fitSpec ? applyFitSpec(rivalLo, fitSpec, V, rivalSeed, rivalLevel) : [];
   const r = resolve(rivalLo, V);
-  rival.hullOverride = Math.round(r.values.hull * V.rivalHull);
+  rival.hullOverride = Math.round(r.values.hull * V.rivalHull * V.duelHull);
   applyLoadout(rival, r);
   kit = kitOf(r, RV);
   ai.reset();
@@ -147,6 +150,8 @@ let useBay = !!bayLo && (params.has("bay") || !urlPick);
 function refit() {
   playerLo = useBay && bayLo ? bayLo : loadoutFor(pick);
   applyLoadout(player, resolve(playerLo, V));
+  player.hullOverride = Math.round(resolve(playerLo, V).values.hull * V.duelHull);
+  player.health = player.maxHealth;
   if (rivalLo) fitRival();
   // The rival's tuning follows the shared sliders the loadout doesn't set.
   lab.refresh();

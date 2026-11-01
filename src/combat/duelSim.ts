@@ -93,6 +93,10 @@ export interface DuelOptions {
 }
 
 /** Run one duel to a kill (or maxTime). */
+/** Duel hull multiplier, both mechs (Keith 2026-11-01: roughly double the time to kill in the rival duels). Scales the
+ * hull each loadout rolls; the lab's Duel hull slider starts here. */
+export const DUEL_HULL_MUL = 2.4;
+
 export function runDuel(o: DuelOptions): DuelResult {
   const gv = { ...DUEL_GROUND_DEFAULTS, ...(o.cover !== undefined ? { duelCover: o.cover } : {}) };
   const field = new DuneField({ ...TERRAIN_DEFAULTS, ...(o.field?.flat ? { height: 0, swell: 0, bumps: 0 } : {}) });
@@ -104,7 +108,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   const base = () => ({ ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...DASH_DEFAULTS, ...BOUND_DEFAULTS, hull: MECH_DEFAULTS.hull });
   const mechs = [new DuelMech(base(), field, o.loadouts?.[0] ?? rollRivalLoadout(o.seedA, LOOT_DEFAULTS)), new DuelMech(base(), field, o.loadouts?.[1] ?? rollRivalLoadout(o.seedB, LOOT_DEFAULTS))];
   const starts = o.starts ?? [{ x: 0, z: -gv.duelStart, heading: 0 }, { x: 0, z: gv.duelStart, heading: Math.PI }];
-  mechs.forEach((m, i) => { m.sim.reset(starts[i].x, starts[i].z, starts[i].heading); if (o.hull) m.hull = m.health = o.hull; if (o.hullMul) m.hull = m.health = Math.round(m.hull * o.hullMul[i]); });
+  mechs.forEach((m, i) => { m.sim.reset(starts[i].x, starts[i].z, starts[i].heading); if (o.hull) m.hull = m.health = o.hull; else m.hull = m.health = Math.round(m.hull * (o.hullMul?.[i] ?? 1) * DUEL_HULL_MUL); });
   const aiv = { ...RIVAL_AI_DEFAULTS, ...o.ai };
   const ais = [new RivalAi({ ...aiv, ...o.aiEach?.[0] }, (o.aiSeed ?? 1) * 2 + 1), new RivalAi({ ...aiv, ...o.aiEach?.[1] }, (o.aiSeed ?? 1) * 2 + 2)];
   const r = rng((o.aiSeed ?? 1) * 104729 + o.seedA * 31 + o.seedB);
