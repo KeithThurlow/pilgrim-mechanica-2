@@ -94,6 +94,17 @@ export class LootHud {
     if (e.state === "out" && this.mode === "idle") this.startRisk();
   }
 
+  /** The item lines follow the cargo (Keith 2026-11-01: items carried out, dropped or stowed from the inventory). */
+  private syncItems(e: Expedition) {
+    let n = 0;
+    for (const l of e.atRisk) if (l.kind === "item") n++;
+    if (n === this.lines.length && this.lines.every((q) => q.loot.kind === "item" && e.atRisk.some((l) => l.kind === "item" && l.item === (q.loot as typeof l).item))) return;
+    const ids = new Set<string>();
+    for (const l of e.atRisk) if (l.kind === "item") ids.add(l.item.id);
+    this.lines = this.lines.filter((q) => q.loot.kind === "item" && ids.has(q.loot.item.id));
+    for (const l of e.atRisk) if (l.kind === "item" && !this.lines.some((q) => q.loot.kind === "item" && q.loot.item.id === l.item.id)) this.lines.push({ loot: l, age: 9 });
+  }
+
   private startRisk() { this.mode = "risk"; this.lines = []; this.shown = 0; this.t = 0; }
 
   private showCard(it: Item) {
@@ -127,6 +138,7 @@ export class LootHud {
     };
 
     if (this.mode === "risk" && e.state !== "out") this.mode = "idle";
+    if (this.mode === "risk") this.syncItems(e);
     if (this.mode === "risk") {
       const target = Math.max(0, e.scrapAtRisk - inFlight);
       if (target < this.shown) this.shown = target;
