@@ -77,6 +77,8 @@ interface Side {
   laser: Laser;
   /** Rail: the thin aim line on the sand while charging (ground points out to where the slug would stop). */
   aimLine: Vec3[];
+  /** The rail's drawn aim line: muzzle to where the slug would stop, at slug height (the aimLine on the sand is for AI). */
+  aimBeam: Vec3[];
   /** Rail: the reticle the charge meter rings (the lock or the cursor). */
   meterAt: Vec3 | null;
   /** Its Protocols' behaviour (a rocket launcher's split) and what each round costs from the magazine. */
@@ -187,7 +189,7 @@ export class Arsenal implements MechWeapons {
     public candidates: () => TargetCandidate[] = () => []) {
     this.fam = famOfTeam(unit.team);
     if (!this.findTarget) this.findTarget = (key) => { const c = this.candidates().find((x) => x.key === key); return c ? { x: c.x, z: c.z } : null; };
-    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
+    const side = (): Side => ({ kind: null, light: false, own: null, rail: new RailSim(v), cool: 0, paint: newPaint(), model: null, whined: false, laser: newLaser(), aimLine: [], aimBeam: [], meterAt: null, proto: undefined, cost: 1, tube: 0, idle: 0, seat: -1, swarm: new SwarmSim({ ...v }), sv: { ...v }, channel: false,
       sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3(), twist: 0, twistV: 0 });
     this.sides = [side(), side()];
     this.sides[1].sword = new SwordSim(-1);
@@ -414,8 +416,11 @@ export class Arsenal implements MechWeapons {
         const sheet = bf.makeSheet(muzzle, d, st.range, f);
         const end = bf.resolveSheet(u.team, sheet, 0, f, d, false).result.end;
         this.lineOnSand(sheet, end, s.aimLine);
+        const e = s.aimLine[s.aimLine.length - 1];
+        s.aimBeam.length = 0;
+        if (e) s.aimBeam.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z }, { x: e.x, y: Math.max(e.y + 0.3, bf.field.height(e.x, e.z) + v.railSlugHeight), z: e.z });
         s.meterAt = aim ? { x: aim.x, y: aim.y, z: aim.z } : null;
-      } else { s.aimLine.length = 0; s.meterAt = null; }
+      } else { s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; }
       if (fired !== null) this.fireRail(s, side, muzzle, d, aim, st, fired);
     });
 
@@ -775,7 +780,7 @@ export class Arsenal implements MechWeapons {
   stop() {
     for (const s of this.sides) {
       s.rail.holding = false; s.rail.charge = 0; s.whined = false;
-      s.aimLine.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
+      s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
       s.sword.stop(); s.swish?.clear(); s.twist = s.twistV = 0;
       this.unit.body.setTwist?.(0);
       clearPaint(s.paint);
