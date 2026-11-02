@@ -304,8 +304,11 @@ const dt = 1 / 120;
   must(landed.length === 3, `${landed.length} mortar shells landed of 3`);
   must(landed.every((p) => Math.hypot(p.x, p.z - 45) <= V.mortarRing + 1e-6), "a mortar shell landed outside its ring");
   must(minClear > V.mortarClear * 0.8, `a shell skimmed the dune (cleared it by ${minClear.toFixed(2)} m)`);
-  const led = mortarAim({ x: 0, z: 0 }, { x: 30, z: 30 }, { x: 30, z: 30, vx: 3, vz: 0 }, V);
-  must(Math.abs(led.x - (30 + 3 * V.mortarFlight * V.mortarLead)) < 1e-6, "the ring doesn't lead a locked target's walk");
+  const lk = { x: 31, z: 30, vx: 3, vz: 0 };
+  const plain = mortarAim({ x: 0, z: 0 }, { x: 30, z: 30 }, lk, V);
+  must(plain.x === 30 && plain.z === 30, "the ring moved off the cursor for a locked target by default");
+  const led = mortarAim({ x: 0, z: 0 }, { x: 30, z: 30 }, lk, { ...V, mortarLead: 1 });
+  must(Math.abs(led.x - (31 + 3 * V.mortarFlight)) < 1e-6, "the ring doesn't lead a locked target's walk when mortarLead is up");
 }
 
 // ---- Autocannon: lead hits a crossing target at constant speed; no lead misses ----
