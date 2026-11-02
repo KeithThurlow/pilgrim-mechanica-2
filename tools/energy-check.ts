@@ -123,19 +123,22 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   const mkBf = (range: DummyRange, ground: (x: number, z: number) => number) => ({
     targets: range.dummies, field: { height: ground }, wrecks: null, heat: null,
     sfx: { addSound() {}, playSound() {}, startSoundLoop: () => null, setSoundLoop() {}, stopLoop() {}, rate: 8000 },
-    gunFx: { sparksAt() {}, onFleshHit: null }, dust: { hit() {}, smoke() {} }, inWater: () => false,
+    gunFx: { sparksAt() {}, onFleshHit: null }, dust: { hit() {}, smoke() {} }, inWater: () => false, marks: { crater() {} }, register: { stamp: 0, count: 0 },
     blast: (_team: number, at: P, r: number, dmg: number) => { blasts.push({ at: { x: at.x, y: at.y, z: at.z }, r, dmg }); },
   });
   const mkUnit = () => ({ team: 0, dash: new Dash({ ...DASH_DEFAULTS }), lock: null, upper: { guns: [{ kick: 0 }, { kick: 0 }], shake: 0 } });
   const muzzle = new THREE.Vector3(0, 3.5, 0), flatDir = new THREE.Vector3(0, 0, 1);
-  const fire = (cls: "laser" | "beam" | "lance", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[]) => {
+  const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0) => {
     const range = new DummyRange({ ...DUMMY_DEFAULTS }, spots);
     const unit = mkUnit();
-    const guns = new EnergyGuns(mkBf(range, ground) as never, unit as never, V);
+    // Candidates (the register is empty on this stand-in): each live dummy's middle.
+    const cands = () => range.dummies.filter((d) => d.alive).map((d) => ({ x: d.x, y: d.y + 1, z: d.z, r: 0.6, key: d }));
+    const guns = new EnergyGuns(mkBf(range, ground) as never, unit as never, V, cands);
     guns.configure(1, cls, null);
-    const aim = { x: 0, y: ground(0, aimZ), z: aimZ };
+    const aim = { x: aimX, y: ground(aimX, aimZ), z: aimZ };
     for (let t = 0; t < secs; t += dt) { guns.step(1, dt, true, false, muzzle, flatDir, aim); guns.age(dt); }
     guns.step(1, dt, false, false, muzzle, flatDir, aim);
+    for (let t = 0; t < after; t += dt) guns.age(dt);
     return { range, unit, guns };
   };
   const flat = () => 0;
@@ -164,6 +167,42 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     const { range } = fire("laser", dune, 25, 1, [{ x: 0, z: 25 }]);
     must(taken(range.dummies[0]) === 0, "a pulse laser went through a dune");
   }
+  // ---- Batch 2 on the stand-in field ----
+  {
+    // Plasma: flies at its speed (not there at once), bursts on the cutout on its line, splashes one beside it.
+    const range0 = fire("plasma", flat, 25, dt * 2, [{ x: 0, z: 25 }]);
+    must(taken(range0.range.dummies[0]) === 0 && range0.guns.orbs.length === 1, "a plasma bolt hit at once (it should fly)");
+    const { range, guns } = fire("plasma", flat, 25, dt * 2, [{ x: 0, z: 25 }, { x: 1.2, z: 25.5 }, { x: 9, z: 25 }], 25 / V.plasmaSpeed + 0.3);
+    must(taken(range.dummies[0]) >= V.plasmaDamage * 0.5, `the plasma bolt didn't burst on the cutout on its line (${taken(range.dummies[0]).toFixed(0)})`);
+    must(taken(range.dummies[1]) > 0, "the plasma splash missed a cutout beside the burst");
+    must(taken(range.dummies[2]) === 0, "the plasma splash reached a cutout 9 m off");
+    must(guns.orbs.length === 0, "the plasma bolt didn't end at its burst");
+  }
+  {
+    // Orb: passes through cutouts on its line, burning each, and runs out at its range.
+    const life = V.orbRange / V.orbSpeed;
+    const { range, guns } = fire("orb", flat, 30, dt * 2, [{ x: 0, z: 12 }, { x: 0.5, z: 20 }, { x: 9, z: 16 }], life + 0.5);
+    must(taken(range.dummies[0]) > 0 && taken(range.dummies[1]) > 0, `the orb didn't burn both cutouts on its path (${taken(range.dummies[0]).toFixed(0)}, ${taken(range.dummies[1]).toFixed(0)})`);
+    must(taken(range.dummies[2]) === 0, "the orb burnt a cutout 9 m off its path");
+    must(guns.orbs.length === 0, "the orb outlived its range");
+  }
+  {
+    // Arc: the cutout nearest the aim, then jumps along a line of cutouts 6 m apart, damage falling by the keep.
+    const line = [0, 1, 2, 3, 4, 5, 6].map((k) => ({ x: k * 6, z: 20 }));
+    const { range, guns } = fire("arc", flat, 20, dt, line);
+    const hits = guns.last.arcHits ?? 0;
+    must(hits === Math.min(line.length, V.arcHops + 1), `the arc struck ${hits} cutouts (want ${Math.min(line.length, V.arcHops + 1)})`);
+    must(taken(range.dummies[0]) > 0 && taken(range.dummies[V.arcHops]) > 0 && taken(range.dummies[V.arcHops + 1]) === 0, "the arc's jumps didn't run down the line in order and stop");
+    const lone = fire("arc", flat, 20, dt, [{ x: 0, z: 20 }, { x: 0, z: 20 + V.arcHopRange + 3 }]);
+    must(lone.guns.last.arcHits === 1 && taken(lone.range.dummies[1]) === 0, "the arc jumped further than its reach");
+    const none = fire("arc", flat, 20, dt, [{ x: 0, z: 60 }]);
+    must(none.guns.arcs.length === 1 && none.guns.last.arcHits === 1 && taken(none.range.dummies[0]) === 0, "an arc with nothing in range didn't ground at the aim");
+  }
+  for (const [base, cls] of [["plasma-medium", "plasma"], ["orb-medium", "orb"], ["arc-medium", "arc"]] as const) {
+    const lo = defaultLoadout(), it = makeItem(base, "common", `energy-${base}`);
+    fit(lo, "mountL", it);
+    must(resolve(lo).guns.left?.cls === cls && (itemDps(it) ?? 0) > 50, `${base} didn't resolve to an energy ${cls} with DPS`);
+  }
 }
 
 if (problems.length) {
@@ -171,4 +210,4 @@ if (problems.length) {
   for (const p of problems) console.error(" -", p);
   process.exit(1);
 }
-console.log("energy-check: ok (bars, laser, beam, lance timing and energy, items, rays on a stand-in field)");
+console.log("energy-check: ok (bars, laser, beam, lance, plasma, orb, arc: timing and energy, items, hits on a stand-in field)");

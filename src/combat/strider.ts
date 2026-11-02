@@ -68,11 +68,21 @@ export const STRIDER_DEFAULTS = {
   striderMeleeTearDps: 45,
   striderMeleeShove: 7,
   striderMeleeEvery: 3.5,
+  // Its death (Keith 2026-11-02: "a big explosion when they die ... damage the enemies nearby", so killing one can
+  // clear the swarm round it): a blast that hurts robots too.
+  striderDeathDelay: 0.35,
+  striderDeathRadius: 18,
+  striderDeathDamage: 60,
+  striderDeathOwnDamage: 450,
+  striderDeathPierce: 0.4,
+  striderDeathShove: 18,
+  striderDeathBoom: 1.4,
   // Look
   striderTilt: 12,
 };
 export type StriderValues = typeof STRIDER_DEFAULTS;
 
+const GD = "Striders: death";
 const G = "Striders", GB = "Striders: beam", GS = "Striders: slam", GM = "Striders: tearing";
 export const STRIDER_PARAMS: Param[] = [
   { key: "striderRush", label: "Rushes in after a beam (chance)", min: 0, max: 1, step: 0.05, group: GM, tip: "Then it runs at you to grab and tear, for up to the rush time" },
@@ -121,6 +131,13 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderSlamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GS },
   { key: "striderSlamEvery", label: "A slam at most every (s)", min: 1, max: 60, step: 0.5, group: GS },
   { key: "striderSlamRecover", label: "Stands after it (s)", min: 0, max: 5, step: 0.1, group: GS },
+  { key: "striderDeathDelay", label: "Goes up after (s)", min: 0, max: 3, step: 0.05, group: GD },
+  { key: "striderDeathRadius", label: "Death blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
+  { key: "striderDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot. Full at the centre, half at the edge" },
+  { key: "striderDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Every robot in reach (swarm, striders, crushers, droids) by its blast share, behind cover none" },
+  { key: "striderDeathPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GD },
+  { key: "striderDeathShove", label: "Shove (m/s)", min: 0, max: 60, step: 0.5, group: GD },
+  { key: "striderDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD },
 ];
 
 /** The body's frame above the pelvis, in the sim's (Rampart-sized) metres: shared with the drawing and the hits. */

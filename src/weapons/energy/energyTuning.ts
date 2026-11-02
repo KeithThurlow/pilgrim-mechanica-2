@@ -37,14 +37,48 @@ export const ENERGY_DEFAULTS = {
   lanceBlast: 6,
   lanceBlastDamage: 220,
   lanceShake: 0.35,
+  // Plasma cannon: glowing bolts that fly (not hitscan) and splash where they burst.
+  plasmaDamage: 55,
+  plasmaAp: 0.3,
+  plasmaRate: 2.5,
+  plasmaRange: 55,
+  plasmaSpeed: 42,
+  plasmaSplash: 2.6,
+  plasmaEnergy: 0.07,
+  plasmaSize: 0.45,
+  // Particle orb: a slow ball of charged particles drifting over the sand, burning everything within its radius as it
+  // passes through them, popping at the end of its range.
+  orbDps: 160,
+  orbAp: 0.35,
+  orbRate: 0.8,
+  orbRange: 45,
+  orbSpeed: 8,
+  orbRadius: 3.2,
+  orbTicks: 8,
+  orbEnergy: 0.5,
+  orbPop: 120,
+  orbHover: 1.6,
+  orbSize: 0.9,
+  // Arc caster: lightning to the enemy nearest the aim, jumping on to the nearest not yet struck.
+  arcDamage: 40,
+  arcAp: 0.5,
+  arcRate: 4,
+  arcRange: 24,
+  arcAim: 6,
+  arcHops: 4,
+  arcHopRange: 10,
+  arcKeep: 0.75,
+  arcEnergy: 0.06,
+  arcShow: 0.12,
 };
 export type EnergyValues = typeof ENERGY_DEFAULTS;
 
 export const ENERGY_GROUP = "Energy", LASER_GROUP = "Pulse laser", BEAM_GROUP = "Beam laser", LANCE_GROUP = "Nova lance";
+export const PLASMA_GROUP = "Plasma cannon", ORB_GROUP = "Particle orb", ARC_GROUP = "Arc caster";
 /** Their groups in the Weapons topic. */
-export const ENERGY_GROUPS = [ENERGY_GROUP, LASER_GROUP, BEAM_GROUP, LANCE_GROUP];
+export const ENERGY_GROUPS = [ENERGY_GROUP, LASER_GROUP, BEAM_GROUP, LANCE_GROUP, PLASMA_GROUP, ORB_GROUP, ARC_GROUP];
 
-const E = ENERGY_GROUP, LA = LASER_GROUP, BE = BEAM_GROUP, LN = LANCE_GROUP;
+const E = ENERGY_GROUP, LA = LASER_GROUP, BE = BEAM_GROUP, LN = LANCE_GROUP, PL = PLASMA_GROUP, OR = ORB_GROUP, AR = ARC_GROUP;
 export const ENERGY_PARAMS: Param[] = [
   { key: "energyCost", label: "Energy weapons spend energy", min: 0, max: 1, step: 1, group: E, tip: "1: every energy weapon spends the energy bars (the dash's); 0: free, for tuning damage" },
   { key: "energyLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: E },
@@ -73,4 +107,33 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "lanceBlast", label: "Burst radius (m, full)", min: 0, max: 15, step: 0.1, group: LN },
   { key: "lanceBlastDamage", label: "Burst damage (full)", min: 0, max: 1000, step: 5, group: LN },
   { key: "lanceShake", label: "Camera shake", min: 0, max: 1, step: 0.01, group: LN },
+  { key: "plasmaDamage", label: "Damage per bolt", min: 1, max: 300, step: 1, group: PL, tip: "The body it bursts on takes this; the splash round it a share by distance" },
+  { key: "plasmaAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: PL },
+  { key: "plasmaRate", label: "Bolts/s", min: 0.2, max: 10, step: 0.1, group: PL },
+  { key: "plasmaRange", label: "Range (m)", min: 10, max: 120, step: 1, group: PL },
+  { key: "plasmaSpeed", label: "Bolt speed (m/s)", min: 5, max: 150, step: 1, group: PL },
+  { key: "plasmaSplash", label: "Splash radius (m)", min: 0, max: 8, step: 0.1, group: PL },
+  { key: "plasmaEnergy", label: "Energy per bolt (bars)", min: 0, max: 0.5, step: 0.005, group: PL },
+  { key: "plasmaSize", label: "Bolt size (m)", min: 0.1, max: 1.5, step: 0.05, group: PL },
+  { key: "orbDps", label: "Damage/s inside it", min: 10, max: 800, step: 5, group: OR },
+  { key: "orbAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: OR },
+  { key: "orbRate", label: "Orbs/s", min: 0.1, max: 4, step: 0.05, group: OR },
+  { key: "orbRange", label: "Range (m)", min: 5, max: 100, step: 1, group: OR },
+  { key: "orbSpeed", label: "Speed (m/s)", min: 1, max: 30, step: 0.5, group: OR },
+  { key: "orbRadius", label: "Burn radius (m)", min: 0.5, max: 8, step: 0.1, group: OR },
+  { key: "orbTicks", label: "Burn ticks/s", min: 2, max: 20, step: 1, group: OR },
+  { key: "orbEnergy", label: "Energy per orb (bars)", min: 0, max: 2, step: 0.01, group: OR },
+  { key: "orbPop", label: "Pop damage at the end", min: 0, max: 500, step: 5, group: OR },
+  { key: "orbHover", label: "Hover height (m)", min: 0.3, max: 4, step: 0.05, group: OR },
+  { key: "orbSize", label: "Orb size (m)", min: 0.2, max: 3, step: 0.05, group: OR },
+  { key: "arcDamage", label: "Damage (first target)", min: 1, max: 300, step: 1, group: AR },
+  { key: "arcAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: AR },
+  { key: "arcRate", label: "Zaps/s", min: 0.5, max: 15, step: 0.1, group: AR },
+  { key: "arcRange", label: "Range (m)", min: 5, max: 60, step: 1, group: AR },
+  { key: "arcAim", label: "Seeks within (m of the aim)", min: 1, max: 20, step: 0.5, group: AR, tip: "The first target is the lock, else the nearest enemy this close to the aim point" },
+  { key: "arcHops", label: "Jumps", min: 0, max: 12, step: 1, group: AR },
+  { key: "arcHopRange", label: "Jump reach (m)", min: 1, max: 30, step: 0.5, group: AR },
+  { key: "arcKeep", label: "Damage kept per jump", min: 0, max: 1, step: 0.01, group: AR },
+  { key: "arcEnergy", label: "Energy per zap (bars)", min: 0, max: 0.5, step: 0.005, group: AR },
+  { key: "arcShow", label: "Bolt shows for (s)", min: 0.03, max: 0.5, step: 0.01, group: AR },
 ];

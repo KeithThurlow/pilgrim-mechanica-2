@@ -5,6 +5,13 @@
 //   Beam laser: a beam that swings after the aim at beamTrack °/s and burns what it touches in ticks; the sand glows.
 //   Nova lance: charges at the muzzle; released, a thick beam to the first thing on the line and a burst there, both by
 //   the charge.
+//   Plasma cannon: a glowing bolt flown at its speed, swept each step with the same ray; it bursts on the first thing it
+//   meets (the body struck takes its damage, a splash round it a share by distance) or fizzles at its range.
+//   Particle orb: a slow ball drifting at hover height over the sand along the aim, burning everything of another team
+//   within its radius in ticks as it passes through them (it isn't stopped by bodies), popping at its range.
+//   Arc caster: lightning to the lock, else the enemy nearest the aim point (within arcAim m, in range); from there it
+//   jumps to the nearest enemy not yet struck within jump reach, damage × keep each jump. No target: it grounds at
+//   the aim. Targets come from the register (or the lab's candidates when the register is empty).
 // Ownership: host (damage) from the owner's commands (trigger, aim); the views and effects are cosmetic.
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable } from "../../game/battlefield";
@@ -15,12 +22,19 @@ import { rayGround } from "../../world/raycast";
 import { EnergySim, energyStats, type EnergyClass, type EnergyStats } from "./energySim";
 import { addEnergySounds } from "./energySound";
 import type { Loop } from "../../audio/sfx";
+import { splashBlast } from "../../game/splash";
+import { FLAG, KIND, kindBit, type Filter } from "../../game/register";
+import type { TargetCandidate } from "../../game/targeting";
 
 /** A fading shot for the draw: a pulse bolt or a lance's beam, from the muzzle to where it stopped. */
 export interface Bolt { cls: EnergyClass; from: Vec3; to: Vec3; age: number; life: number; power: number; hit: boolean }
 /** A side's beam now (on, from the muzzle to where it touches) and a lance's charge at the muzzle. */
 export interface BeamView { on: boolean; from: Vec3; to: Vec3; hit: boolean; age: number }
 export interface ChargeView { on: boolean; at: Vec3; k: number }
+/** A plasma bolt or a particle orb in flight (host: its damage; the draw reads pos). */
+export interface Orb { cls: "plasma" | "orb"; pos: THREE.Vector3; dir: THREE.Vector3; speed: number; left: number; damage: number; ap: number; radius: number; pop: number; tick: number; ticks: number; age: number; seed: number }
+/** A lightning strike for the draw: the chain of points from the muzzle through each target (or to the sand). */
+export interface Arc { pts: Vec3[]; age: number; life: number; seed: number }
 
 interface ESide {
   cls: EnergyClass | null;
@@ -43,6 +57,9 @@ interface Trace { t: number; target: Hittable | null; ground: boolean; steel: bo
 export class EnergyGuns {
   readonly sides: [ESide, ESide];
   readonly bolts: Bolt[] = [];
+  /** Plasma bolts and particle orbs in flight, and recent lightning. */
+  readonly orbs: Orb[] = [];
+  readonly arcs: Arc[] = [];
   /** Damage dealt by the last shot or tick per kind (the weapons lab's readout). */
   readonly last: Record<string, number> = {};
   /** Camera shake and the per-shot readout (the arsenal's hooks). */
@@ -55,7 +72,9 @@ export class EnergyGuns {
   private g = new THREE.Vector3();
   private tr: Trace = { t: 0, target: null, ground: false, steel: false };
 
-  constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues) {
+  constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues,
+    /** Targets when the register is empty (the lab's candidates). */
+    private candidates: () => TargetCandidate[] = () => []) {
     const side = (): ESide => ({ cls: null, own: null, sim: new EnergySim(), dir: new THREE.Vector3(0, 0, 1), beam: { on: false, from: v3(), to: v3(), hit: false, age: 0 },
       charge: { on: false, at: v3(), k: 0 }, loop: null, whined: false });
     this.sides = [side(), side()];
@@ -91,6 +110,10 @@ export class EnergyGuns {
 
     if (st.cls === "laser") {
       for (let k = 0; k < out.shots; k++) this.pulse(st, muzzle, want, gi);
+    } else if (st.cls === "plasma" || st.cls === "orb") {
+      for (let k = 0; k < out.shots; k++) this.launch(st, muzzle, st.cls === "orb" ? flat : want, gi);
+    } else if (st.cls === "arc") {
+      for (let k = 0; k < out.shots; k++) this.zap(st, muzzle, want, aim, gi);
     } else if (st.cls === "beam") {
       this.stepBeam(s, st, dt, muzzle, want, out.shots);
     } else {
@@ -105,14 +128,18 @@ export class EnergyGuns {
     }
   }
 
-  /** Age the fading shots (once a frame, after both sides). */
+  /** Age the fading shots and fly the bolts and orbs (once a step, after both sides). */
   age(dt: number) {
     for (const b of this.bolts) b.age += dt;
     for (let k = this.bolts.length - 1; k >= 0; k--) if (this.bolts[k].age > this.bolts[k].life) this.bolts.splice(k, 1);
+    for (const a of this.arcs) a.age += dt;
+    for (let k = this.arcs.length - 1; k >= 0; k--) if (this.arcs[k].age > this.arcs[k].life) this.arcs.splice(k, 1);
+    for (let k = this.orbs.length - 1; k >= 0; k--) if (!this.fly(this.orbs[k], dt)) this.orbs.splice(k, 1);
   }
 
   /** Everything off: a dead owner, a refit. */
   stop() { for (const s of this.sides) { s.sim.drop(); this.quiet(s); } }
+  // (Bolts and orbs already in flight carry on: they're shots, not the gun.)
 
   private quiet(s: ESide) {
     s.beam.on = false; s.charge.on = false; s.charge.k = 0; s.whined = false;
@@ -208,6 +235,154 @@ export class EnergyGuns {
     if (!s.loop) s.loop = bf.sfx.startSoundLoop("beamHum", Math.random());
     if (s.loop) bf.sfx.setSoundLoop(s.loop, "beamHum", muzzle, 0.7, s.beam.hit ? 1.08 : 1);
     this.unit.upper.guns[s === this.sides[0] ? 0 : 1].kick = 0.015;
+  }
+
+  // ---- Plasma and orbs ----
+
+  private launch(st: EnergyStats, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number) {
+    const bf = this.bf, u = this.unit, orb = st.cls === "orb";
+    this.onFire?.(st.cls);
+    const dir = d.clone();
+    if (orb) { dir.y = 0; dir.normalize(); }
+    this.orbs.push({ cls: orb ? "orb" : "plasma", pos: muzzle.clone(), dir, speed: st.speed, left: st.range, damage: st.damage, ap: st.ap, radius: st.radius,
+      pop: st.blastDamage, tick: 0, ticks: st.ticks, age: 0, seed: Math.random() * 100 });
+    bf.sfx.playSound(orb ? "orbLaunch" : "plasmaShot", muzzle, 0.8, 1);
+    bf.gunFx.sparksAt(muzzle, dir, orb ? 4 : 3, 4);
+    u.upper.guns[gi].kick = Math.max(u.upper.guns[gi].kick, orb ? 0.12 : 0.08);
+  }
+
+  /** One step of a plasma bolt or an orb; false when it's gone. */
+  private fly(o: Orb, dt: number): boolean {
+    const bf = this.bf, team = this.unit.team;
+    o.age += dt;
+    const step = Math.min(o.left, o.speed * dt);
+    if (o.cls === "plasma") {
+      const tr = this.trace(o.pos, o.dir, step);
+      if (tr.t < step - 1e-4) {
+        const at = this.at.copy(o.pos).addScaledVector(o.dir, tr.t);
+        this.burst(o, at, tr);
+        return false;
+      }
+      o.pos.addScaledVector(o.dir, step);
+      o.left -= step;
+      if (o.left <= 1e-3) { this.burst(o, o.pos, null); return false; }
+      return true;
+    }
+    // The orb drifts at hover height over the sand (rising over a dune, sinking into a hollow) and burns as it goes.
+    o.pos.x += o.dir.x * step; o.pos.z += o.dir.z * step;
+    const want = bf.field.height(o.pos.x, o.pos.z) + this.v.orbHover;
+    o.pos.y += (want - o.pos.y) * Math.min(1, dt * 6);
+    o.pos.y = Math.max(o.pos.y, want - this.v.orbHover * 0.5);
+    o.left -= step;
+    o.tick -= dt;
+    const gap = 1 / Math.max(1, o.ticks);
+    while (o.tick <= 0) {
+      o.tick += gap;
+      splashBlast(bf.targets, team, o.pos, o.radius, o.damage * gap, o.dir, null, o.ap);
+      bf.heat?.spot(o.pos.x, o.pos.z, o.radius * 0.35, this.v.beamHeat * 0.4, gap);
+    }
+    if (o.left <= 1e-3) {
+      // Its pop: a small burst of everything it held.
+      if (o.pop > 0) bf.blast(team, o.pos.clone(), o.radius * 0.9, o.pop, o.ap, "beam");
+      return false;
+    }
+    return true;
+  }
+
+  /** A plasma bolt bursting: the body struck takes its damage, a splash round it a share by distance. */
+  private burst(o: Orb, at: THREE.Vector3, tr: Trace | null) {
+    const bf = this.bf;
+    if (tr) this.last.plasma = this.strike(tr, at, o.dir, o.damage, o.ap, 1.5);
+    if (o.radius > 0) splashBlast(bf.targets, this.unit.team, at, o.radius, o.damage * 0.6, o.dir, tr?.target ?? null, o.ap);
+    bf.gunFx.sparksAt(at, this.n.copy(o.dir).negate(), 10, 8);
+    if (tr?.ground || !tr) {
+      const g = bf.field.height(at.x, at.z);
+      if (at.y - g < 1.5) { bf.heat?.spot(at.x, at.z, Math.max(0.4, o.radius * 0.4), this.v.beamHeat * 0.8); bf.marks.crater(at.x, at.z, 0.8); }
+    }
+    bf.sfx.playSound("plasmaHit", at, 0.7, 1);
+  }
+
+  // ---- Arcs ----
+
+  private filter: Filter = { all: FLAG.Hittable, kinds: kindBit(KIND.Unit) | kindBit(KIND.Vehicle) | kindBit(KIND.Mech) | kindBit(KIND.Prop) };
+  private nearBuf: number[] = [];
+
+  /** Enemy points near (x, z) within R: from the register, else the lab's candidates. */
+  private enemiesNear(x: number, z: number, R: number, out: { x: number; y: number; z: number; id: unknown }[]) {
+    out.length = 0;
+    const reg = this.bf.register;
+    if (reg.stamp > 0 && reg.count > 0) {
+      this.filter.notTeam = this.unit.team;
+      reg.near(x, z, R, this.filter, this.nearBuf);
+      for (const e of this.nearBuf) out.push({ x: reg.x[e], y: reg.y[e], z: reg.z[e], id: reg.id[e] });
+      return out;
+    }
+    for (const c of this.candidates()) if (Math.hypot(c.x - x, c.z - z) <= R) out.push({ x: c.x, y: c.y, z: c.z, id: c.key });
+    return out;
+  }
+  private found: { x: number; y: number; z: number; id: unknown }[] = [];
+
+  private zap(st: EnergyStats, muzzle: THREE.Vector3, d: THREE.Vector3, aim: Vec3 | null, gi: number) {
+    const bf = this.bf, u = this.unit, team = u.team;
+    this.onFire?.("arc");
+    const pts: Vec3[] = [set3(v3(), muzzle)];
+    const hit = new Set<unknown>();
+    // The first target: the lock, else the enemy nearest the aim point within reach.
+    let cur: { x: number; y: number; z: number } | null = null;
+    if (u.lock && Math.hypot(u.lock.x - muzzle.x, u.lock.z - muzzle.z) <= st.range + (u.lock.r ?? 0)) { cur = { x: u.lock.x, y: u.lock.y, z: u.lock.z }; hit.add(u.lock.key); }
+    else {
+      const ax = aim ? aim.x : muzzle.x + d.x * st.range * 0.6, az = aim ? aim.z : muzzle.z + d.z * st.range * 0.6;
+      let bd = Infinity, first: unknown = null;
+      for (const e of this.enemiesNear(ax, az, st.seek, this.found)) {
+        if (Math.hypot(e.x - muzzle.x, e.z - muzzle.z) > st.range) continue;
+        const q = Math.hypot(e.x - ax, e.z - az);
+        if (q < bd) { bd = q; cur = { x: e.x, y: e.y, z: e.z }; first = e.id; }
+      }
+      if (cur) hit.add(first);
+    }
+    const dir = this.d;
+    let dealt = 0;
+    if (!cur) {
+      // Nothing to strike: it grounds at the aim (or at its reach along the barrel), stinging whatever stands there.
+      const flatD = Math.hypot(d.x, d.z) || 1;
+      let gx = aim ? aim.x : muzzle.x + (d.x / flatD) * st.range, gz = aim ? aim.z : muzzle.z + (d.z / flatD) * st.range;
+      const L = Math.hypot(gx - muzzle.x, gz - muzzle.z);
+      if (L > st.range) { gx = muzzle.x + ((gx - muzzle.x) / L) * st.range; gz = muzzle.z + ((gz - muzzle.z) / L) * st.range; }
+      const g = this.at.set(gx, bf.field.height(gx, gz), gz);
+      pts.push(set3(v3(), g));
+      dir.set(gx - muzzle.x, 0, gz - muzzle.z).normalize();
+      splashBlast(bf.targets, team, g, 1.2, st.damage * 0.5, dir, null, st.ap);
+      bf.heat?.spot(gx, gz, 0.4, this.v.beamHeat * 0.5);
+      bf.gunFx.sparksAt(g, this.n.set(0, 1, 0), 5, 5);
+    } else {
+      let damage = st.damage;
+      for (let hop = 0; cur && hop <= st.hops; hop++) {
+        const prev = pts[pts.length - 1];
+        const p = this.at.set(cur.x, cur.y, cur.z);
+        dir.set(p.x - prev.x, p.y - prev.y, p.z - prev.z).normalize();
+        pts.push(set3(v3(), p));
+        splashBlast(bf.targets, team, p, 1.2, damage, dir, null, st.ap);
+        dealt += damage;
+        bf.gunFx.sparksAt(p, this.n.set(0, 1, 0), 4, 6);
+        damage *= st.keep;
+        if (hop === st.hops || damage < 0.5) break;
+        // The next: the nearest enemy not yet struck within jump reach.
+        let next: { x: number; y: number; z: number; id: unknown } | null = null, bd = Infinity;
+        for (const e of this.enemiesNear(p.x, p.z, st.hopRange, this.found)) {
+          if (hit.has(e.id)) continue;
+          const q = (e.x - p.x) ** 2 + (e.z - p.z) ** 2;
+          if (q > 0.04 && q < bd) { bd = q; next = e; }
+        }
+        if (!next) break;
+        hit.add(next.id);
+        cur = { x: next.x, y: next.y, z: next.z };
+      }
+    }
+    this.last.arc = dealt;
+    this.last.arcHits = pts.length - 1;
+    this.arcs.push({ pts, age: 0, life: this.v.arcShow, seed: Math.random() * 1000 });
+    bf.sfx.playSound("arcZap", muzzle, 0.8, 0.9 + Math.random() * 0.2);
+    u.upper.guns[gi].kick = Math.max(u.upper.guns[gi].kick, 0.04);
   }
 
   private lance(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number) {
