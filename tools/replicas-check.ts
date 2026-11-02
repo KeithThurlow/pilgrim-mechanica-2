@@ -29,7 +29,7 @@ const dt = 1 / 60;
 const noop: unknown = new Proxy(function () {}, { get: () => noop, apply: () => undefined });
 
 function stage(over: Partial<typeof REPLICA_DEFAULTS> = {}, seed = 1) {
-  const V = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DUST_DEFAULTS, ...MECH_DEFAULTS, ...REPLICA_DEFAULTS, ...over } as unknown as MechUnitValues & typeof REPLICA_DEFAULTS;
+  const V = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DUST_DEFAULTS, ...MECH_DEFAULTS, ...REPLICA_DEFAULTS, repBuild: 0, ...over } as unknown as MechUnitValues & typeof REPLICA_DEFAULTS;
   const register = new Register(), solids = new Solids(), targets: Hittable[] = [];
   const counts = { fire: 0, lob: 0 };
   const bf = new Proxy({ register, targets, solids, field, v: V, lookGround: null, water: null, deaths: null, sinkSurface: null, nightLights: null,
@@ -54,21 +54,21 @@ function stage(over: Partial<typeof REPLICA_DEFAULTS> = {}, seed = 1) {
   let rockets = 0, n = 0;
   for (let seed = 1; seed <= 50; seed++) {
     const s = stage({ repCount: 4 }, seed);
-    s.tick();
+    for (let k = 0; k < 6; k++) s.tick();
     for (const r of s.reps.list) { n++; if (r.body.weapon === "rockets") rockets++; }
   }
-  const again = (seed: number) => { const s = stage({ repCount: 4 }, seed); s.tick(); return s.reps.list.map((r) => r.body.weapon).join(","); };
+  const again = (seed: number) => { const s = stage({ repCount: 4 }, seed); for (let k = 0; k < 6; k++) s.tick(); return s.reps.list.map((r) => r.body.weapon).join(","); };
   console.log(`roll: ${rockets}/${n} built with rockets (share ${REPLICA_DEFAULTS.repRocketShare}), seed 7: ${again(7)}`);
   if (Math.abs(rockets / n - REPLICA_DEFAULTS.repRocketShare) > 0.15) fail("roll: rocket share off");
   if (again(7) !== again(7)) fail("roll: not seeded");
-  const all = stage({ repCount: 4, repRocketShare: 0 }); all.tick();
+  const all = stage({ repCount: 4, repRocketShare: 0 }); for (let k = 0; k < 6; k++) all.tick();
   if (all.reps.list.some((r) => r.body.weapon !== "minigun")) fail("roll: share 0 built rockets");
 }
 
 // 2. Follow, 3. fight, 4. size.
 {
   const s = stage({ repCount: 2 }, 3);
-  s.tick();
+  s.tick(); s.tick();
   // One of each.
   s.reps.list[0].body.setWeapon("minigun"); s.reps.list[1].body.setWeapon("rockets");
   let worst = 0, nan = 0;

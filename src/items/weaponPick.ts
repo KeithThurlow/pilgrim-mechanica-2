@@ -8,8 +8,8 @@ import { makeItem, protocolItem } from "./generate";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 
 export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Missile pod (arm)", sword: "Breaker sword (arm)", buster: "Buster sword (arm)", shortsword: "Short sword (arm)", laser: "Pulse laser", beam: "Beam laser", lance: "Nova lance", plasma: "Plasma cannon", orb: "Particle orb", arc: "Arc caster", sunder: "Sunder beam", smg: "SMG (arm)", rifle: "Battle rifle (arm)", shotgun: "Scattergun (arm)", sniper: "Longshot rifle", flak: "Flak cannon", cannon: "Breach cannon" } as const;
-export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank" } as const;
-export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
+export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank", drones: "Drone rack (summoner)", hive: "Swarm hive (summoner)" } as const;
+export const BACK = { pack: "Power pack", none: "—", replicas: "Replica bay (summoner)", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
 export type SidePick = keyof typeof SIDE;
 export type ShoulderPick = keyof typeof SHOULDER;
 export type BackPick = keyof typeof BACK;
@@ -29,6 +29,8 @@ export function pickFromParams(pick: Pick, params: URLSearchParams): boolean {
   // ?barrage (Keith 2026-10-31: lots of rockets at night): rockets everywhere, the single flags below still override.
   const barrage = params.get("barrage");
   if (barrage !== null) { Object.assign(pick, barragePick(barrage === "arms" ? "arms" : "hull")); any = true; }
+  // ?summoner (Keith 2026-11-02): the summoner gear, drones on key 1, the swarm hive on key 2, the replica bay.
+  if (params.has("summoner")) { Object.assign(pick, { k1: "drones", k2: "hive", k3: "replicas" }); any = true; }
   for (const [row, , opts] of ROWS) {
     let q = params.get(row);
     if (q && OLD[q]) q = OLD[q];
@@ -65,7 +67,7 @@ export function choose(pick: Pick, row: keyof Pick, id: string): Pick {
 
 const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium", laser: "laser-medium", beam: "beam-medium", lance: "lance-medium", plasma: "plasma-medium", orb: "orb-medium", arc: "arc-medium", sunder: "sunder-medium", sniper: "sniper-medium", flak: "flak-medium", cannon: "cannon-medium" };
 const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light", rocketpod: "rpg-light", sword: "sword-light", buster: "sword-heavy", shortsword: "sword-short", laser: "mg-light", beam: "mg-light", lance: "mg-light", plasma: "mg-light", orb: "mg-light", arc: "mg-light", sunder: "mg-light", smg: "smg-light", rifle: "rifle-light", shotgun: "shotgun-light", sniper: "mg-light", flak: "mg-light", cannon: "mg-light" };
-const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar", beltfeed: "sh-beltfeed", incendiary: "sh-incendiary", capacitor: "sh-capacitor" };
+const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar", beltfeed: "sh-beltfeed", incendiary: "sh-incendiary", capacitor: "sh-capacitor", drones: "sh-drones", hive: "sh-hive" };
 
 export function loadoutFor(p: Pick): Loadout {
   const lo = defaultLoadout();
@@ -82,7 +84,8 @@ export function loadoutFor(p: Pick): Loadout {
     lo[m.shoulder] = null;
     if (shoulder) put(m.shoulder, shoulder);
   }
-  if (SHOULDER_BASE[p.k3]) put("pack", SHOULDER_BASE[p.k3]);
+  if (p.k3 === "replicas") put("pack", "pack-replica");
+  else if (SHOULDER_BASE[p.k3]) put("pack", SHOULDER_BASE[p.k3]);
   else if (p.k3 === "none") lo.pack = null;
   return lo;
 }

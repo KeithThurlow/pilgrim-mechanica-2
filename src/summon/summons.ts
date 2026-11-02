@@ -4,6 +4,7 @@
 // hittable by the other teams' rounds, and draws them. Any combat lab (or the convoy lab) can add one.
 // Ownership: host (the drones' damage and targets); the owner is the player whose mech carries them.
 import * as THREE from "three/webgpu";
+import type { Param } from "../core/tweaks";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import type { MechUnit } from "../game/mechUnit";
@@ -18,10 +19,17 @@ import { Replicas, REPLICA_DEFAULTS, REPLICA_PARAMS, REPLICA_GROUPS, type Replic
 import type { MechUnitValues } from "../game/mechUnit";
 import type { ToonLook } from "../look/toon";
 
-export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS };
-export type SummonValues = DroneValues & AllyValues & RobotValues & ReplicaValues & MechUnitValues;
-export const SUMMON_PARAMS = [...DRONE_PARAMS, ...REPLICA_PARAMS, ...ALLY_PARAMS];
-export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...REPLICA_GROUPS, ...ALLY_GROUPS] };
+/** Dismissed (Keith 2026-11-02: picked up by the convoy): drones and the swarm fold away at once, the replicas walk on
+ *  for `sumLinger` s, then fold away too. Summoned again (out on the sand) they come back as they were built. */
+const SUMMON_OWN = { sumLinger: 15 };
+const GD = "Summons: dismissed";
+const SUMMON_OWN_PARAMS: Param[] = [
+  { key: "sumLinger", label: "Replicas walk on for (s)", min: 0, max: 120, step: 1, group: GD, tip: "After the convoy picks you up, the replicas walk beside it this long before folding away (drones and the swarm go at once). Out on the sand again, they're built anew" },
+];
+export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS, ...SUMMON_OWN };
+export type SummonValues = DroneValues & AllyValues & RobotValues & ReplicaValues & MechUnitValues & typeof SUMMON_OWN;
+export const SUMMON_PARAMS = [...DRONE_PARAMS, ...REPLICA_PARAMS, ...ALLY_PARAMS, ...SUMMON_OWN_PARAMS];
+export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...REPLICA_GROUPS, ...ALLY_GROUPS, GD] };
 
 /** Battlefield gun slots the summons' rounds use (other guns share 2..19; the effects hold 24). */
 const SLOT0 = 20, SLOTS = 4;
@@ -95,6 +103,19 @@ export class Summons {
   }
 
   /** The send command (the swarm at the owner's lock, else at the cursor) and the recall. */
+  /** Out with the owner (true), or dismissed (false: aboard the convoy). */
+  get active() { return this.on; }
+  private on = true;
+  private offFor = 0;
+  setActive(on: boolean) {
+    if (on === this.on) return;
+    this.on = on; this.offFor = 0;
+    if (!on) this.allies.recall();
+  }
+
+  /** A swarm key (Keith 2026-11-02, a swarm hive's shoulder key): out at home, the swarm goes; sent, it comes back. */
+  sendOrRecall() { if (this.allies.mode === "sent") this.recall(); else this.send(); }
+
   send() {
     const o = this.owner, L = o.lock;
     if (L) this.allies.sendSwarm(L.x, L.z, typeof L.key === "number" ? L.key : -1);
@@ -113,6 +134,7 @@ export class Summons {
   get meshes(): THREE.Object3D[] { return [...this.dronesDraw.meshes, ...this.allies.draw.group.children, ...(this.replicas?.objects() ?? [])]; }
 
   update(dt: number) {
+    this.dismiss(dt);
     const bf = this.bf, o = this.owner, v = this.v, reg = bf.register, p = o.sim.pelvis;
     // The register's foes round the mech (it was rebuilt this tick, before the soft lock).
     this.near.length = 0; this.foes.length = 0;
@@ -154,6 +176,26 @@ export class Summons {
     this.dronesDraw.update(dt);
     this.allies.update(dt);
     this.replicas?.update(dt);
+    this.restore();
+  }
+
+  /** Dismissed: zero counts for this step (drones and the swarm at once, the replicas after `sumLinger` s). */
+  private saved: [number, number, number, number] = [0, 0, 0, 0];
+  private zeroed = false;
+  private dismiss(dt: number) {
+    const v = this.v;
+    if (this.on) return;
+    this.offFor += dt;
+    this.saved = [v.droneCount, v.swarmCount, v.compCount, v.repCount];
+    v.droneCount = 0; v.swarmCount = 0; v.compCount = 0;
+    if (this.offFor > v.sumLinger) v.repCount = 0;
+    this.zeroed = true;
+  }
+  private restore() {
+    if (!this.zeroed) return;
+    const v = this.v;
+    [v.droneCount, v.swarmCount, v.compCount, v.repCount] = this.saved;
+    this.zeroed = false;
   }
 
   /** HUD line. */
@@ -161,6 +203,6 @@ export class Summons {
     const d = this.drones;
     let busy = 0;
     for (let i = 0; i < d.n; i++) if (d.up[i] && d.foe[i] >= 0) busy++;
-    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost} · ${this.allies.hud()}${this.replicas?.hud() ?? ""}`;
+    return `${this.on ? "" : `dismissed ${Math.round(this.offFor)} s · `}drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost} · ${this.allies.hud()}${this.replicas?.hud() ?? ""}`;
   }
 }

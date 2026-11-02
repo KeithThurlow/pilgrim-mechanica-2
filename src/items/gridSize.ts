@@ -52,6 +52,8 @@ export const GRID_CLASS_OF: Record<string, GridClass> = {
   // Long held guns (the heavy minigun, a two-hander, falls back to long too).
   // Swords (Keith 2026-11-02, corrected: 2×4 is the longest size; Buster 2×4, Breaker 1×4, Short 1×3).
   "sword-heavy": "swordBig", "sword-short": "swordShort",
+  // Summoner gear (Keith 2026-11-02).
+  "pack-replica": "summon", "sh-drones": "summon", "sh-hive": "summon",
   "rifle-light": "heldLong", "shotgun-light": "heldLong", "rail-light": "heldLong",
 };
 

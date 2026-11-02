@@ -17,8 +17,10 @@ A build that fights through its units rather than its own guns. Everything lives
    turn on them.
 3. **The scrap swarm** (done; salvage on the sand still to come): a pack of small scrappers you send out (a key, aimed at the cursor or the lock): they run out,
    bite what they reach, and come back; with nothing to fight they strip salvage on the sand for you.
-4. **Items**: the summoner gear as loot (a drone bay pack, a kennel hull for the companions, a hive pack for the
-   swarm, a relay sensor that widens their reach), so the archetype is a loadout, and it works in the convoy lab.
+4. **Items** (done, Keith's split): the Replica bay pack builds mech replicas over time; Drone racks and Swarm hives
+   ride the shoulders (a hive's key sends and recalls). Dismissed at a convoy pickup, summoned again on the sand. In
+   the convoy lab (`?summoner`). Still to come: a relay sensor that widens their reach, the quads as an item,
+   manufacturing-speed handhelds, a handheld swarm launcher.
 
 ## More summoner pieces (to offer Keith)
 
@@ -68,4 +70,9 @@ A build that fights through its units rather than its own guns. Everything lives
   shoulders give drones and swarms. When the convoy picks you up, the summons are dismissed (default: they walk beside
   the convoy for a while, then fold away), and you resummon once you hop off. Later: handhelds that speed up
   manufacturing, handheld swarm launchers.
+- Items (Claude's values): Replica bay 2 replicas, one every 10 s, a lost one after 25 s, 3 energy bars (the stand-in
+  pack has 4); Drone rack 2 drones (two racks: 4); Swarm hive 8 scrappers (two: 16). Rarer rolls widen the counts.
+  Should a rare bay build a third replica? Should a hive's key hold to recall instead of a second tap?
+- Pickup: drones and the swarm fold away at once, the replicas walk on 15 s (`sumLinger`), then fold away; out on the
+  sand they're built again from nothing (replicas one every 10 s). They don't yet walk round the train cars.
 - Keys: Z send, C recall (free in every lab). Should the swarm instead ride on key 3 (the pack's ability key)?
