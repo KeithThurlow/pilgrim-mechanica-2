@@ -14,12 +14,13 @@ export interface MortarStats { shells: number; damage: number; cooldown: number;
 export interface Moving { x: number; z: number; vx?: number; vz?: number }
 
 /**
- * The ring's centre: the cursor, or (with a lock within a ring and a half of it, or further for a big ring) where the
+ * The ring's centre: the cursor (Keith 2026-11-02: lobbed blasts are aimed by hand, no lead; mortarLead 0), or with
+ * mortarLead above 0 (with a lock within a ring and a half of it, or further for a big ring) where the
  * lock will be after the flight, by mortarLead; never beyond range.
  */
 export function mortarAim(from: { x: number; z: number }, cursor: { x: number; z: number }, lock: Moving | null, v: WeaponValues): { x: number; z: number } {
   let x = cursor.x, z = cursor.z;
-  if (lock && Math.hypot(lock.x - cursor.x, lock.z - cursor.z) < v.mortarRing * 1.5 + 2) {
+  if (v.mortarLead > 0 && lock && Math.hypot(lock.x - cursor.x, lock.z - cursor.z) < v.mortarRing * 1.5 + 2) {
     x = lock.x + (lock.vx ?? 0) * v.mortarFlight * v.mortarLead;
     z = lock.z + (lock.vz ?? 0) * v.mortarFlight * v.mortarLead;
   }
@@ -35,7 +36,8 @@ export function mortarAim(from: { x: number; z: number }, cursor: { x: number; z
  */
 export function mortarHeight(x: number, z: number, lock: { x: number; y: number; z: number; r: number; vx?: number; vz?: number } | null, v: WeaponValues): number | undefined {
   if (!lock) return undefined;
-  const lx = lock.x + (lock.vx ?? 0) * v.mortarFlight * v.mortarLead, lz = lock.z + (lock.vz ?? 0) * v.mortarFlight * v.mortarLead;
+  const lead = v.mortarFlight * v.mortarLead;
+  const lx = lock.x + (lock.vx ?? 0) * lead, lz = lock.z + (lock.vz ?? 0) * lead;
   return Math.hypot(x - lx, z - lz) <= lock.r + v.mortarRing ? lock.y : undefined;
 }
 

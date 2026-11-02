@@ -298,6 +298,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · No lead prediction on the big mortar (Keith; Claude on `claude/project-thread-on5osk`)
+- The mortar ring sits at the cursor even with a lock (`mortarAim`, `mortarHeight` in `src/weapons/mortar.ts`); `mortarLead` default 0 (slider kept). Rule written in `docs/proposal-weapons.md` and `docs/decisions.md`. Checked: `weapons-check` (updated: default no lead, lead when raised), `duel-check`. Line mortar, missiles and RPG already took the cursor.
 ### 2026-11-02 · The blast sound built from Keith's reference explosion (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: use the explosion from his reference clip (the sound at 11.2 s, measured on his PC; nothing sampled). Every blast (`"blast"`: rockets, mortars, missiles, `Battlefield.blast`) is now a dark rolling rumble: a 45-75 Hz body swelling in uneven surges (`Synth.swell`, new) with its pitch falling 74 to 53 Hz, dense 200 Hz-1.5 kHz noise bands at about -25 dB/s, a small crack at 48 ms, 1.45 s long; a short low thump and dark noise at the start so it lands at once (the clip's body takes 0.57 s to peak).
 - One explosion for every explosive, dialled by size (Keith: "dial it up and down"): `blastVoice(radius, v, size)` plays it louder and deeper per doubling of the blast radius from `blastSizeRef` 4 m (`blastSizeLoud` 0.35, `blastSizePitch` 0.3 octaves, `blastSizeMax` 1.5; Weapon sound sliders): a pod missile (3 m) 0.85 × at 1.1 × pitch, an RPG (4.5 m) 1.06 × at 0.92, a big mortar (14 m) 1.5 × at 0.7. Wired through `bf.onBlast` (`src/game/playerAim.ts`), so every `Battlefield.blast` uses it.

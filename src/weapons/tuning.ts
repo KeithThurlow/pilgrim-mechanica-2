@@ -64,7 +64,7 @@ export const WEAPON_DEFAULTS = {
   mortarArc: 22,
   mortarClear: 3,
   mortarGap: 0.28,
-  mortarLead: 1,
+  mortarLead: 0,
   mortarCooldown: 8,
   mortarMaxRange: 90,
   // Autocannon
@@ -241,7 +241,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "mortarArc", label: "Arc height (m)", min: 2, max: 40, step: 0.5, group: M, tip: "Raised by itself where a dune is in the way" },
   { key: "mortarClear", label: "Clears the sand by (m)", min: 0, max: 10, step: 0.5, group: M },
   { key: "mortarGap", label: "Gap between shells (s)", min: 0, max: 1, step: 0.01, group: M },
-  { key: "mortarLead", label: "Lead a locked target (0-1)", min: 0, max: 1.5, step: 0.05, group: M, tip: "The ring moves this share of where a locked target will be after the flight" },
+  { key: "mortarLead", label: "Lead a locked target (0-1)", min: 0, max: 1.5, step: 0.05, group: M, tip: "0 (default): the ring sits where you aim, lock or not (a slow lob can't be led by a short sample of the target's walk). Above 0 the ring moves to this share of where a locked target will be after the flight" },
   { key: "mortarCooldown", label: "Cooldown (s)", min: 0.2, max: 30, step: 0.1, group: M },
   { key: "mortarMaxRange", label: "Range (m)", min: 10, max: 200, step: 1, group: M },
 
