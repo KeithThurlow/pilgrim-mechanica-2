@@ -213,6 +213,8 @@ export class MechUnit implements Hittable, Solid {
   /** The sprint (Keith 2026-10-26): Space held past the dash. */
   readonly bound: Bound;
   private wakeAcc = 0;
+  /** The hover drive's downwash puffs carried over (fractional). */
+  private washAcc = 0;
   /** Space still held: the dash carries on into the sprint. Set by the lab before step (only while driving). */
   dashHold = false;
   /** The shoulder weapon keys 1-4 held (hold to paint, release to fire). Set by the lab before step. */
@@ -458,6 +460,17 @@ export class MechUnit implements Hittable, Solid {
       if (moved > 0 && bf.inWater(sim.pos.x, sim.pos.z, 0.15)) {
         this.wakeAcc = bf.water.wake(sim.pos.x, sim.pos.z, moved, this.wakeAcc, 0.7, 1.4);
         if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
+      }
+    }
+    // Hovering (src/mech/hover.ts): the drive's downwash blows sand out from under it, fading with height.
+    if (sim.hovering && v.hoverDust > 0) {
+      const gy = bf.field.height(sim.pos.x, sim.pos.z), up = sim.pelvis.y - gy - v.hipHeight - v.hoverLift;
+      const k = v.hoverDust * Math.max(0, 1 - up / Math.max(0.1, v.hoverDustReach));
+      this.washAcc += dt * v.hoverDustRate;
+      for (; this.washAcc >= 1; this.washAcc--) {
+        if (k <= 0 || bf.inWater(sim.pos.x, sim.pos.z)) continue;
+        const a = Math.random() * Math.PI * 2, r = 0.8 + Math.random() * 1.2, x = sim.pos.x + Math.cos(a) * r, z = sim.pos.z + Math.sin(a) * r;
+        bf.dust.kick(x, bf.field.height(x, z), z, Math.cos(a), Math.sin(a), k);
       }
     }
     // Any skidding foot (the dash's slide, a drift in the sprint, a landing skid, sliding down a face) carves the ground:
