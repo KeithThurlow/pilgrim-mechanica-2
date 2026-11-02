@@ -10,6 +10,7 @@ import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK
 import { ENERGY_DEFAULTS, ENERGY_PARAMS, ENERGY_GROUPS } from "./energy/energyTuning";
 import { GUN_DEFAULTS, GUN_PARAMS, GUN_GROUPS } from "./guns";
 import { CANNON_DEFAULTS, CANNON_PARAMS, CANNON_GROUP } from "./cannon";
+import { SAMPLE_DEFAULTS, SAMPLE_PARAMS } from "../audio/samples";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -194,6 +195,7 @@ export const WEAPON_DEFAULTS = {
   ...ENERGY_DEFAULTS,
   ...GUN_DEFAULTS,
   ...CANNON_DEFAULTS,
+  ...SAMPLE_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
@@ -369,6 +371,7 @@ export const WEAPON_PARAMS: Param[] = [
   ...ENERGY_PARAMS,
   ...GUN_PARAMS,
   ...CANNON_PARAMS,
+  ...SAMPLE_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */

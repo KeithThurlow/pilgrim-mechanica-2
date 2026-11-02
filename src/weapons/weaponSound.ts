@@ -5,6 +5,7 @@ import { Synth, rng } from "../audio/synth";
 import type * as THREE from "three/webgpu";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
+import { sampleBank, sampleBankOf } from "../audio/sampleBank";
 
 export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
@@ -122,6 +123,8 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("breach", variants(3, 66, (r) => S.mix(S.tick(r, 0.03, 0.9), S.noise(r, 0.12, 3000, 0.75, 0.0003), S.thump(0.6, 95, 30, 1.3), S.lowPass(S.noise(r, 0.4, 900, 0.8, 0.002), 1200),
     S.delay(S.lowPass(S.noise(r, 1.8, 380, 0.55, 0.02), 520), 0.06))), () => v.breachLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
+  // The recorded sounds (Keith 2026-11-02, src/audio/samples.ts) swap in over these as they load, each behind its sliders.
+  sampleBank(sfx, v as unknown as Record<string, number>);
 }
 
 /**
@@ -145,6 +148,15 @@ export function blastVoice(radius: number, v: WeaponValues, size = 1) {
 /** Play an explosion of this radius at a point: hit, tail and (big ones) the boom. */
 export function playBlast(sfx: Sfx, at: THREE.Vector3, radius: number, v: WeaponValues, size = 1) {
   const b = blastVoice(radius, v, size);
+  // A blast big enough plays a recording (Keith 2026-11-02: largebomb, giantbomb for the biggest) at the size's level,
+  // its own pitch jittered, in place of the procedural hit and tail; the sub boom stays for the biggest.
+  const bank = sampleBankOf(sfx), r = radius * size;
+  const rec = !bank || r < v.sampleBlastFrom ? null : r >= v.sampleGiantFrom && bank.liveSound("blastGiant") ? "blastGiant" : bank.liveSound("blastLarge") ? "blastLarge" : null;
+  if (rec) {
+    sfx.playSound(rec, at, b.volume, 0.96 + Math.random() * 0.08);
+    if (b.boom > 0.02) sfx.playSound("blastBoom", at, b.boom, 0.9 + Math.random() * 0.2);
+    return;
+  }
   sfx.playSound("blast", at, b.volume, b.rate);
   sfx.playSound("blastTail", at, b.tail, b.tailRate);
   if (b.boom > 0.02) sfx.playSound("blastBoom", at, b.boom, 0.9 + Math.random() * 0.2);
