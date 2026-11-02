@@ -81,6 +81,23 @@ export class Synth {
     return s;
   }
 
+  /**
+   * A rolling swell (Keith 2026-11-02, the explosion): the part's level rises and falls in uneven surges every `minGap` to
+   * `maxGap` s, each `lowDb` to `highDb` over the trough, from `from` s on; before then it's left as it is.
+   */
+  swell(r: Rng, part: Float32Array, from: number, minGap: number, maxGap: number, lowDb: number, highDb: number) {
+    const s = new Float32Array(part.length), bumps: [number, number, number][] = [];
+    for (let t = from + minGap * r(); t < part.length / this.rate; t += minGap + (maxGap - minGap) * r())
+      bumps.push([t, Math.pow(10, (lowDb + (highDb - lowDb) * r()) / 20) - 1, 0.025 + r() * 0.03]);
+    for (let i = 0; i < s.length; i++) {
+      const t = i / this.rate;
+      let g = 1;
+      if (t >= from) { g = 0; for (const [bt, h, w] of bumps) { const d = (t - bt) / w; if (d > -4 && d < 4) g += h * Math.exp(-d * d); } g = (1 + g) / 2; }
+      s[i] = part[i] * g;
+    }
+    return s;
+  }
+
   /** A sine whose pitch drops (kick, boom body). */
   thump(len: number, fromHz: number, toHz: number, gain: number) {
     const s = new Float32Array(this.n(len));
