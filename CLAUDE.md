@@ -150,7 +150,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword` (rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword|smg|rifle|shotgun|sniper|flak` (smg, rifle, shotgun: held; sniper, flak: hull; rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
   launchers on both hull mounts, the shoulder rocket on key 1, missile pods on keys 2 and 3; `?barrage=arms`: arm rocket pods
   instead; works wherever `?left=` does: robots, weapons, duel, convoy labs; add `&proto=splitter&time=22` for the night show), `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
   (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
