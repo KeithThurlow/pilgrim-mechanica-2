@@ -166,7 +166,7 @@ export const MECH_PARAMS: Param[] = [
 
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
-const WRECK = 0x3b3531;
+export const WRECK = 0x3b3531;
 const D2R = Math.PI / 180;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
