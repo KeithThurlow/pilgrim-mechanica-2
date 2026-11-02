@@ -132,6 +132,9 @@ export const ROBOT_DEFAULTS = {
   robotQuadRailDamage: 95,
   robotQuadRailCooldown: 5,
   robotQuadDrop: 0.5,
+  // No grenades on robots (Keith 2026-11-02: "lean into charged beam explosions and beams ... avoid having grenade
+  // type things on them"): weapon quads roll minigun, laser or rail, not the rocket pod, unless this is on.
+  robotQuadRocketsOn: 0,
   // Big excavators.
   robotBigShare: 0.035,
   robotBigSize: 4,
@@ -167,6 +170,7 @@ export const ROBOT_DEFAULTS = {
   robotBigPause: 2.2,
   robotBigAim: 1,
   robotBigWindup: 0.9,
+  robotBigLobOn: 0,
   robotBigLobSpeed: 14,
   robotBigLobArc: 9,
   robotBigLobRadius: 3.5,
@@ -183,8 +187,8 @@ export const ROBOT_DEFAULTS = {
   robotBeamReach: 5,
   robotBeamDamage: 150,
   robotBeamPierce: 0.8,
-  robotBeamCooldown: 11,
-  robotBeamFirst: 4,
+  robotBeamCooldown: 6,
+  robotBeamFirst: 2.5,
   robotBeamNear: 12,
   robotBeamFar: 50,
   robotBeamBurn: 0.45,
@@ -363,6 +367,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigPause", label: "Pause between volleys (s)", min: 0.5, max: 12, step: 0.1, group: G2 },
   { key: "robotBigAim", label: "Aim before first volley (s)", min: 0, max: 6, step: 0.05, group: G2 },
   { key: "robotBigWindup", label: "Tell before a volley (s)", min: 0, max: 3, step: 0.05, group: G2, tip: "Gun lamp red and the chassis rears before each volley" },
+  { key: "robotBigLobOn", label: "Lobbed charges on", min: 0, max: 1, step: 1, group: G2, tip: "Keith 2026-11-02: off, no grenades on robots; big ones beam and pulse instead" },
   { key: "robotBigLobSpeed", label: "Charge speed (m/s)", min: 3, max: 60, step: 0.5, group: G2, tip: "Ground speed of the lobbed charge: flight time is distance over this. Slower gives more time to dash out of the marked ring" },
   { key: "robotBigLobArc", label: "Charge arc (m)", min: 0, max: 40, step: 0.5, group: G2 },
   { key: "robotBigLobRadius", label: "Blast radius (m)", min: 0.5, max: 12, step: 0.1, group: G2 },
@@ -428,6 +433,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotQuadRocketDamage", label: "Rockets: damage", min: 0, max: 200, step: 1, group: GQ },
   { key: "robotQuadRocketRadius", label: "Rockets: blast (m)", min: 0.5, max: 8, step: 0.1, group: GQ },
   { key: "robotQuadRocketArc", label: "Rockets: arc (m)", min: 0, max: 15, step: 0.1, group: GQ },
+  { key: "robotQuadRocketsOn", label: "Rocket quads on", min: 0, max: 1, step: 1, group: GQ, tip: "Keith 2026-11-02: off, no grenade-like weapons on robots; the rocket share goes to lasers" },
   { key: "robotQuadRocketSpeed", label: "Rockets: speed (m/s)", min: 5, max: 60, step: 0.5, group: GQ },
   { key: "robotQuadRocketPause", label: "Rockets: pause (s)", min: 0.5, max: 15, step: 0.1, group: GQ },
   { key: "robotQuadLaserCharge", label: "Laser: charge (s)", min: 0.2, max: 4, step: 0.05, group: GQ, tip: "Aim follows for the beam's lock share, then holds" },
@@ -780,7 +786,9 @@ export class RobotSwarm {
       // Weapon quads: a share of the mediums, with a weapon (shares?.quad and shares?.weapon force them).
       const qs = shares?.quad ?? v.robotQuadShare, quad = mid && qs > 0 && (qs >= 1 || this.rand() < qs);
       this.variant[i] = quad ? QUAD_WEAPON : QUAD_SMALL;
-      this.weapon[i] = quad ? (shares?.weapon ?? Math.min(3, Math.floor(this.rand() * 4))) : 0;
+      // Without rockets the rocket roll goes to the laser (one in two lasers, a quarter each minigun and rail).
+      const roll = quad && shares?.weapon === undefined ? Math.min(3, Math.floor(this.rand() * 4)) : 0;
+      this.weapon[i] = quad ? (shares?.weapon ?? (roll === Q_ROCKETS && v.robotQuadRocketsOn < 0.5 ? Q_LASER : roll)) : 0;
       this.turret[i] = this.heading[i];
       this.size[i] = big ? v.robotBigSize * jit(v.robotBigSizeJitter) : quad ? v.robotQuadSize * jit(v.robotMidSizeJitter) : mid ? v.robotMidSize * jit(v.robotMidSizeJitter) : v.robotSize * jit(v.robotSizeJitter);
       this.size[i] *= sizeK;
@@ -1252,6 +1260,9 @@ export class RobotSwarm {
           this.beamT[i] = 0; this.beamCharges++;
           this.bax[i] = target.x; this.bay[i] = target.y; this.baz[i] = target.z;
           this.tell[i] = 0;
+        } else if (big && v.robotBigLobOn < 0.5) {
+          // No lobbed charges (Keith 2026-11-02): it waits on its beam and pulse.
+          this.tell[i] = 0; this.burstLeft[i] = 0;
         } else if (big) {
           // Volleys of lobbed charges that land on a marked ring (telegraphed: dash out of it), after a tell.
           if (this.fireClock[i] <= 0 && dh < v.robotBigArc * DEG) {

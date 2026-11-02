@@ -14,7 +14,7 @@ import { StriderTarget } from "./striderTarget";
 import { StriderFx } from "./striderFx";
 import { striderRagdoll } from "./striderRagdoll";
 import { footShape } from "../fx/footprint";
-import { fireRobotBeam } from "../game/robotBeam";
+import { fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
 
 export type StriderFieldValues = StriderValues & RobotTearValues & { striderBeamReach: number };
@@ -74,6 +74,30 @@ export class StriderField {
     for (const s of this.pack.list) this.bodies.get(s.id)?.update(s, dt);
     this.fx.update(dt, this.pack.list);
     this.tear.update(dt);
+    this.tickCores(dt);
+  }
+
+  /** Dead striders' cores waiting to go up. */
+  private cores: { id: number; x: number; y: number; z: number; t: number }[] = [];
+  /** Death blasts gone off since construction. */
+  deathBlasts = 0;
+
+  /** Cores due go up: a big blast on the mech and anything not a robot, and the robots round it hurt too (a kill there
+   *  queues its own core: a chain, one delay apart). */
+  private tickCores(dt: number) {
+    if (!this.cores.length) return;
+    const v = this.v, bf = this.bf, due = this.cores.filter((c) => (c.t -= dt) <= 0);
+    if (!due.length) return;
+    this.cores = this.cores.filter((c) => c.t > 0);
+    for (const c of due) {
+      this.deathBlasts++;
+      const gy = this.field.height(c.x, c.z);
+      fireRobotDeathBlast(bf, {
+        id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: Math.max(gy + 2, c.y), radius: v.striderDeathRadius, damage: v.striderDeathDamage,
+        pierce: v.striderDeathPierce, shove: v.striderDeathShove, boom: v.striderDeathBoom,
+      }, (x, z, r, sp) => { if (this.mech.alive) this.mech.shoveFrom(x, z, r, sp); });
+      bf.blastOwn(3, AT.set(c.x, gy, c.z), v.striderDeathRadius, v.striderDeathOwnDamage, v.striderDeathPierce);
+    }
   }
 
   private event(e: Parameters<NonNullable<Striders["onEvent"]>>[0]) {
@@ -114,7 +138,8 @@ export class StriderField {
         const r = striderRagdoll(s, this.field.height(s.pos(AT).x, AT.z));
         this.deaths.ragdoll(r.parts, r.joints, r.x, r.y, r.z, r.yaw, { x: 0, y: 0, z: 0 }, 0, 0, 1);
       }
-      bf.blast(3, AT.set(e.x, e.y, e.z), 6, 0, 0, "death");
+      // Its core goes up a moment later (in update: a kill inside a blast mustn't blow up mid-loop).
+      this.cores.push({ id: e.id, x: e.x, y: e.y, z: e.z, t: v.striderDeathDelay });
       this.remove(s);
       this.onDown?.(s);
     }
