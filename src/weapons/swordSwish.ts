@@ -16,7 +16,10 @@ export class SwordSwish {
   private col: Float32Array;
   private geo: THREE.BufferGeometry;
   private readonly max: number;
-  private colour = new THREE.Color(0xfff1d6);
+  private readonly base = new THREE.Color(0xfff1d6);
+  private colour = this.base;
+  /** Tint the ribbon (a power cut's colour), or null for the plain light. */
+  tint(c: THREE.Color | null) { this.colour = c ?? this.base; }
 
   constructor(max = 64) {
     this.max = max;

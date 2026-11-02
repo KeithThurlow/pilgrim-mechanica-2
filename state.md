@@ -202,6 +202,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Sword power cut (Keith 2026-11-02): merged; Keith to try duel lab `?left=sword&rivalfit=heldL:sword-light`; open questions in `docs/decisions.md` (2026-11-02 power cut row).
 - Pose lab (Keith 2026-11-01): merged; Keith to pose in `labs/pose/` and paste Copy pose's JSON in chat (it goes into `SWORD_POSES`, src/weapons/swordPoses.ts). Open: posing arm guns (they don't use a held pose yet), posing the return's middle keys.
 - Red-hot sand from beams (Keith 2026-11-01): merged; Keith to try `labs/robots/?beam`, `?strider=beam`, `?proto=` with an incendiary feed; open questions in `docs/decisions.md` (2026-11-01 hot sand rows).
 - Crushers, the heavy crab quad (Keith 2026-11-01): in the expedition at salvage sites; Keith to try convoy lab `?crusher` (salvage next to it, then kill it and watch for the swarm). Open questions in `docs/decisions.md` (2026-11-01 crusher rows).
@@ -297,6 +298,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Sword power cut: Space mid-cut or a cut right after a dash in (Keith; Claude on `claude/project-thread-etn03a`)
+- Space while a sword cut drives in or cuts makes it a power cut instead of a dash (costs `swordPowerCost` 1 energy bar; not enough: a normal cut and Space dashes as before); a cut started within `swordPowerDashWindow` 0.6 s of a dash toward the aim (within 60°) is a power cut paid by the dash's bar. Power: 0.8 × the drive/cut/follow-through time, 1.25 × damage, 1.3 × lunge, a blue swish (red on enemies) 2.2 × brighter, a hydraulic bang. It breaks a block (the blocker's sword is flung back into the recoil; full damage lands) but a parry still stops it, and a parried power cut stalls the cutter 0.3 s longer. Rivals get it when they dash in and cut. Sliders: Weapons › Sword power. `src/weapons/sword.ts` (SwordSim power/primed/powerUp, powerStats), `src/weapons/arsenal.ts` (powerCut, dashed, block break), `src/mech/dash.ts` (spend), `src/game/mechUnit.ts` (tryDash), `src/weapons/swordSwish.ts` (tint). Checked: sword-check (new power section: 0.82 s normal vs 0.68 s Space mid-drive vs 0.65 s dash-in to the cut's end, no pose jump, energy spent), typecheck, npm test. Who: agent.
 ### 2026-11-02 · Keith's block poses for all three swords (Keith; Claude on `claude/project-thread-yofecw`)
 - `SWORD_POSES`: a posed `block` key for the Breaker, short sword and buster (from the pose lab); the rest of the set is unchanged. `src/weapons/swordPoses.ts`. Checked: pose-check, sword-check, npm test. Who: agent.
 ### 2026-11-02 · Keith's poses for all three swords; a relaxed return that stays out of the ground (Keith; Claude on `claude/project-thread-yofecw`)

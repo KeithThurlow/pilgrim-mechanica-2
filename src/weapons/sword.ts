@@ -119,11 +119,25 @@ export const SWORD_DEFAULTS = {
   swordParryRecoil: 0.5,
   swordParryStall: 0.06,
   swordParryFlash: 1,
+  // The power cut (Keith 2026-11-02: "negate blocks and encourage parries ... consume stamina"): Space pressed while a
+  // cut is driving in or cutting, or a cut started just after a dash toward the aim, is a power cut: quicker, harder,
+  // a blue swish (red on an enemy's), and it breaks a block (the blocking sword is flung back, the damage lands). A parry
+  // still stops it, and a parried power cut leaves the cutter stalled longer.
+  swordPower: 1,
+  swordPowerCost: 1,
+  swordPowerTime: 0.8,
+  swordPowerDamage: 1.25,
+  swordPowerLunge: 1.3,
+  swordPowerBlockTake: 1,
+  swordPowerParried: 0.3,
+  swordPowerDashWindow: 0.6,
+  swordPowerDashCone: 60,
+  swordPowerTrail: 2.2,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
-export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block";
-const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP;
+export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block", SWORD_POWER_GROUP = "Sword power";
+const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP, GP = SWORD_POWER_GROUP;
 export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one cut takes this (a rolled sword carries its own)" },
   { key: "swordAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: G },
@@ -204,6 +218,16 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordParryStall", label: "Parry stall (s)", min: 0, max: 0.4, step: 0.01, group: GB, tip: "Both blades freeze at the clash this long before the recoil" },
   { key: "swordParryFlash", label: "Parry flash ×", min: 0, max: 3, step: 0.05, group: GB, tip: "Sparks, light and air bend at the clash" },
   { key: "swordBlockKnock", label: "Knock through a block ×", min: 0, max: 1, step: 0.05, group: GB, tip: "The cut's knock on a blocking mech, × this" },
+  { key: "swordPower", label: "Power cut", min: 0, max: 1, step: 1, group: GP, tip: "1: Space while a cut drives in or cuts (or a cut right after a dash toward the aim) makes it a power cut; 0 off (Space dashes as always)" },
+  { key: "swordPowerCost", label: "Costs (energy bars)", min: 0, max: 4, step: 0.25, group: GP, tip: "Space mid-cut spends this much of the dash's energy (needs that much in full bars' worth); after a dash in, the dash's own bar pays. Not enough: a normal cut" },
+  { key: "swordPowerTime", label: "Time ×", min: 0.4, max: 1.2, step: 0.01, group: GP, tip: "The power cut's drive, cut and follow-through take this × their time (quicker); the return is as slow as ever" },
+  { key: "swordPowerDamage", label: "Damage ×", min: 0.5, max: 3, step: 0.05, group: GP },
+  { key: "swordPowerLunge", label: "Lunge ×", min: 0, max: 3, step: 0.05, group: GP, tip: "Its step into the cut, × this (the cut is quicker, so it needs more speed to carry as far)" },
+  { key: "swordPowerBlockTake", label: "Damage through a block", min: 0, max: 1, step: 0.01, group: GP, tip: "A block it breaks still lets this share land (1: all of it). The blocking sword is flung back and can't block the next cut" },
+  { key: "swordPowerParried", label: "Parried: cutter stalls longer (s)", min: 0, max: 1.5, step: 0.01, group: GP, tip: "A parried power cut freezes the cutter's blade this much longer than a normal parry: the punish" },
+  { key: "swordPowerDashWindow", label: "After a dash within (s)", min: 0, max: 2, step: 0.05, group: GP, tip: "A cut that starts this soon after a dash toward the aim is a power cut (the dash's bar pays)" },
+  { key: "swordPowerDashCone", label: "Dash counts within (° of the aim)", min: 0, max: 180, step: 5, group: GP, tip: "The dash's way must be this close to the way to the aim (the lock, else the cursor)" },
+  { key: "swordPowerTrail", label: "Swish brightness ×", min: 0, max: 5, step: 0.05, group: GP, tip: "The power cut's swish: blue for players, red for enemies" },
 ];
 
 export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number; /** Its base id: whose posed keys it swings with (src/weapons/swordPoses.ts). */ pose?: string }
@@ -460,6 +484,11 @@ export function cutDamage(st: SwordStats, v: SwordValues, span: number) {
   return st.damage * (v.swordNearDamage + (v.swordFarDamage - v.swordNearDamage) * k);
 }
 
+/** A power cut's stats (Keith 2026-11-02): the drive and cut (and so the follow-through) × swordPowerTime. */
+export function powerStats(st: SwordStats, v: SwordValues): SwordStats {
+  return { ...st, windup: st.windup * v.swordPowerTime, slash: st.slash * v.swordPowerTime };
+}
+
 /** A clip's length (s) at a reach (span: 0 close .. 1 far). */
 export function clipLength(c: SwordClip, st: SwordStats, v: SwordValues, span = 1) { return clipKeys(c, st, v, span).len; }
 /** A clip's cut window (s) at a reach, or null. */
@@ -596,6 +625,31 @@ export class SwordSim {
   private queued = false;
   private nextSpan = 1;
   private wasHeld = false;
+  /** This cut is a power cut (Keith 2026-11-02): quicker, harder, breaks blocks. Set as it starts or mid-cut. */
+  power = false;
+  /** Seconds left in which a starting cut is a power cut (after a dash toward the aim). */
+  primed = 0;
+  /** Became a power cut this step (the sound). */
+  powered = false;
+
+  /** In a cut that hasn't finished cutting (driving in or cutting), not yet a power cut. */
+  canPower(st: SwordStats, v: SwordValues): boolean {
+    if (this.power || (this.clip !== "A" && this.clip !== "B")) return false;
+    const w = this.cutWindow(st, v);
+    return !!w && this.t < w[1];
+  }
+  /**
+   * Make this cut a power cut now (st: the normal stats). The move's time is rescaled so the pose carries on from the
+   * same point of it, only quicker (every part of the drive, cut and follow-through scales by swordPowerTime).
+   */
+  powerUp(st: SwordStats, v: SwordValues): boolean {
+    if (!this.canPower(st, v)) return false;
+    const L0 = this.length(st, v);
+    this.power = true; this.powered = true;
+    const L1 = this.length(powerStats(st, v), v);
+    this.t *= L1 / Math.max(1e-6, L0);
+    return true;
+  }
 
   constructor(readonly side: 1 | -1) {}
 
@@ -635,13 +689,16 @@ export class SwordSim {
   bite(seconds: number) { this.hitch = Math.max(this.hitch, seconds); }
 
   /** Let go of everything (weapons cold): back at rest, no move. */
-  stop() { this.clip = this.prev = "guard"; this.t = this.prevT = 0; this.since = 99; this.hitch = 0; this.queued = false; this.cutting = false; this.lungeK = 0; }
+  stop() { this.clip = this.prev = "guard"; this.t = this.prevT = 0; this.since = 99; this.hitch = 0; this.queued = false; this.cutting = false; this.lungeK = 0; this.power = false; this.primed = 0; }
 
   private go(c: SwordClip, t: number) {
     this.prev = this.clip; this.prevT = this.t; this.prevSpan = this.span; this.since = 0;
     this.clip = c; this.t = t;
     if (c === "A" || c === "B") this.span = this.nextSpan;
     if (c === "A" || c === "B") this.swings++;
+    // A cut starting just after a dash in is a power cut; every other move (and the next cut of a combo) is not.
+    this.power = (c === "A" || c === "B") && this.primed > 0;
+    if (this.power) { this.primed = 0; this.powered = true; }
   }
 
   /** Where an A picked up from the cock starts: 0.7 of its (scaled) drive. */
@@ -656,8 +713,9 @@ export class SwordSim {
 
   /** Step on the trigger. Returns the stretch of a cut swept this step (inside the cut window), or null. */
   update(dt: number, held: boolean, st: SwordStats, v: SwordValues, span = 1): Sweep | null {
-    this.started = false;
+    this.started = false; this.powered = false;
     this.nextSpan = Math.max(0, Math.min(1, span));
+    this.primed = Math.max(0, this.primed - dt);
     if (held && !this.wasHeld) this.queued = true;
     this.wasHeld = held;
     const want = this.queued || held;
