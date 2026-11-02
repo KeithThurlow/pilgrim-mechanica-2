@@ -133,10 +133,13 @@ export const NIGHT_LIGHT_DEFAULTS = {
   robotSmallIdle: 0.6,
   robotSmallPulse: 0.25,
   robotSmallPulseRate: 0.7,
-  robotGlow: 0.7,
-  robotPool: 0.35,
-  robotBeam: 0.14,
-  robotReal: 260,
+  robotGlow: 0.45,
+  robotPool: 0.2,
+  robotBeam: 0.06,
+  robotReal: 90,
+  robotSquare: 1,
+  robotScanLine: 0.9,
+  robotScanRate: 0.8,
   // Convoy lights
   floodAngle: 38,
   floodGlow: 1.3,
@@ -249,6 +252,9 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "robotPool", label: "Eye pool", min: 0, max: 3, step: 0.01, group: GR },
   { key: "robotBeam", label: "Eye beam haze", min: 0, max: 1, step: 0.01, group: GR },
   { key: "robotReal", label: "Eye real light", min: 0, max: 2000, step: 10, group: GR, tip: "The nearest few eyes get real red spot lights" },
+  { key: "robotSquare", label: "Square searchlight", min: 0, max: 1, step: 1, group: GR, tip: "Keith 2026-11-02: 1 a square pool with corner brackets under a four-sided beam (robotic); 0 the round cone" },
+  { key: "robotScanLine", label: "Scan line", min: 0, max: 3, step: 0.05, group: GR, tip: "A thin bright line sweeping across the searchlight's pool, like a scanner (share of the pool's brightness)" },
+  { key: "robotScanRate", label: "Scan line sweeps per second", min: 0.1, max: 4, step: 0.05, group: GR },
 
   { key: "floodAngle", label: "Flood cone (°)", min: 10, max: 80, step: 1, group: GC },
   { key: "floodGlow", label: "Flood glow size (m)", min: 0, max: 4, step: 0.05, group: GC },
@@ -272,7 +278,7 @@ const PRIO: number[] = [];
 PRIO[LAMP_HEAD] = 1.2; PRIO[LAMP_FLOOD] = 2; PRIO[LAMP_ROBOT] = 3; PRIO[LAMP_RUNNING] = 0; PRIO[LAMP_CAB] = 0.8; PRIO[LAMP_TAIL] = 0; PRIO[LAMP_MECH] = 0; PRIO[LAMP_ROBOT_GLOW] = 0;
 
 /** Per-kind values from the sliders, refreshed each frame. */
-interface KindLook { reach: number; tanHalf: number; angle: number; glow: number; pool: number; beam: number; real: number; spot: boolean; r: number; g: number; b: number }
+interface KindLook { reach: number; tanHalf: number; angle: number; glow: number; pool: number; beam: number; real: number; spot: boolean; square: number; scan: number; r: number; g: number; b: number }
 
 interface Lamp { list: () => Iterable<THREE.Object3D>; color: number; k: number }
 /** A short light: a blast (kind 0, r its radius), a launch flash (1) or a gun's muzzle flash (2) (r its size share). */
@@ -362,7 +368,7 @@ export class NightLights implements ShortLights {
   constructor(public v: NightLightValues) {
     this.group.name = "night lights";
     this.group.add(this.draw.group);
-    for (let i = 0; i < LAMP_KINDS; i++) this.kinds.push({ reach: 0, tanHalf: 0, angle: 0, glow: 0, pool: 0, beam: 0, real: 0, spot: true, r: 0, g: 0, b: 0 });
+    for (let i = 0; i < LAMP_KINDS; i++) this.kinds.push({ reach: 0, tanHalf: 0, angle: 0, glow: 0, pool: 0, beam: 0, real: 0, spot: true, square: 0, scan: 0, r: 0, g: 0, b: 0 });
     this.emitFn = (kind, x, y, z, ax, ay, az, ground, reach, k) => this.emitWorld(kind, x, y, z, ax, ay, az, ground, reach, k);
     this.short = this;
   }
@@ -563,12 +569,13 @@ export class NightLights implements ShortLights {
     const v = this.v, c = new THREE.Color();
     const set = (kind: number, reach: number, angle: number, glow: number, pool: number, beam: number, real: number, spot = true) => {
       const K = this.kinds[kind];
-      K.reach = reach; K.angle = (angle * Math.PI) / 180; K.tanHalf = Math.tan(K.angle); K.glow = glow; K.pool = pool; K.beam = beam; K.real = real; K.spot = spot;
+      K.reach = reach; K.angle = (angle * Math.PI) / 180; K.tanHalf = Math.tan(K.angle); K.glow = glow; K.pool = pool; K.beam = beam; K.real = real; K.spot = spot; K.square = 0; K.scan = 0;
       c.setHex(KIND_COLOR[kind]); K.r = c.r; K.g = c.g; K.b = c.b;
     };
     set(LAMP_HEAD, v.vehReach, v.vehAngle, v.vehGlow, v.vehPool, v.vehBeam, v.vehReal);
     set(LAMP_FLOOD, 12, v.floodAngle, v.floodGlow, v.floodPool, v.floodBeam, v.floodReal);
     set(LAMP_ROBOT, v.robotReach, v.robotAngle, v.robotGlow, v.robotPool, v.robotBeam, v.robotReal);
+    this.kinds[LAMP_ROBOT].square = v.robotSquare > 0.5 ? 1 : 0; this.kinds[LAMP_ROBOT].scan = v.robotScanLine;
     set(LAMP_RUNNING, 0, 0, v.runningGlow, 0, 0, 0);
     set(LAMP_TAIL, 0, 0, v.tailGlow, 0, 0, 0);
     set(LAMP_CAB, 0, 0, v.cabGlow, 0, 0, v.cabReal, false);
@@ -613,8 +620,21 @@ export class NightLights implements ShortLights {
         const rad = Math.max(0.3, dist * K.tanHalf);
         // Low beams stretch their pool along the way they come in.
         const sinG = Math.max(0.22, -(dx * nx + dy * ny + dz * nz) / dist);
-        if (K.pool > 0) this.draw.pool(lx, ly, lz, nx, ny, nz, dx, dz, rad, Math.min(rad * 2.5, rad / sinG), r * K.pool, g * K.pool, b * K.pool);
-        if (K.beam > 0) this.draw.beam(x, y, z, lx, ly, lz, rad, r * K.beam, g * K.beam, b * K.beam);
+        const len = Math.min(rad * 2.5, rad / sinG);
+        if (K.square) {
+          // Keith 2026-11-02: a robotic searchlight, a square with corner brackets under a four-sided beam, and a thin
+          // line sweeping across it like a scanner (each lamp its own phase, from where it stands).
+          if (K.pool > 0) this.draw.squarePool(lx, ly, lz, nx, ny, nz, dx, dz, rad, len, r * K.pool, g * K.pool, b * K.pool);
+          if (K.beam > 0) this.draw.squareBeam(x, y, z, lx, ly, lz, rad, r * K.beam, g * K.beam, b * K.beam);
+          if (K.scan > 0 && K.pool > 0) {
+            const ph = this.time * this.v.robotScanRate + (x * 0.137 + z * 0.311), u = ph - Math.floor(ph), s = (u < 0.5 ? u * 4 - 1 : 3 - u * 4) * 0.85;
+            const hl = Math.hypot(dx, dz) || 1, kk = K.pool * K.scan;
+            this.draw.pool(lx + (dx / hl) * len * s, ly, lz + (dz / hl) * len * s, nx, ny, nz, dx, dz, rad * 0.9, Math.max(0.06, len * 0.05), r * kk, g * kk, b * kk);
+          }
+        } else {
+          if (K.pool > 0) this.draw.pool(lx, ly, lz, nx, ny, nz, dx, dz, rad, len, r * K.pool, g * K.pool, b * K.pool);
+          if (K.beam > 0) this.draw.beam(x, y, z, lx, ly, lz, rad, r * K.beam, g * K.beam, b * K.beam);
+        }
       }
       if (K.real > 0 && K.spot) this.want(kind, x, y, z, lx, ly, lz, Math.max(1, dist), a, K.real, 0);
     } else if (K.real > 0 && !K.spot) this.want(kind, x, y, z, x, y, z, 1, a, K.real, 0, 9);

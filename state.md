@@ -298,6 +298,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Robot searchlights and beam looks (Keith; Claude on `claude/project-thread-5ic92j`)
+- Searchlights dimmer and robotic: a square pool with corner brackets under a four-sided beam, a thin scan line sweeping across it (`robotSquare`, `robotScanLine`, `robotScanRate`); pool 0.35 → 0.2, haze 0.14 → 0.06, real light 260 → 90, glow 0.7 → 0.45.
+- Beams drawn fine: a thin white-hot core in a soft glow (two crossed strips, `src/fx/beamStrand.ts`), wavering and flickering, three wisps spiralling along in puffs; a melt flash where it strikes (white point, orange bloom, glow on the sand) throwing molten spatter (`src/fx/meltSparks.ts`). Sliders in Robots: beam, "Look: …". The old blue scorch ribbon off (`robotBeamScorchGlow` 0).
+- Ground light from beams a quarter (strike and along-beam lights; hot-sand light `heatLight` 350 → 90). A fired line heats the sand less toward its start (`robotBeamMeltRamp` 0.45), so the start cools first.
+- `src/combat/robotBeamDraw.ts`, `src/fx/lampDraw.ts`, `src/world/nightLights.ts`, `src/game/robotBeam.ts`, `src/combat/robots.ts`, `src/fx/groundHeat.ts`. Typecheck, npm test; not looked at in a render (software GL too slow here). Striders' beams unchanged.
 ### 2026-11-02 · Explosions the loudest sound (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: the explosion was the quietest sound and should be the loudest. Two causes: most of it sat under 80 Hz (laptops and many headphones drop that) and its level was 0.6. Its 180 Hz-1.2 kHz body raised about 3 dB (the rumble kept), `blastLevel` 0.6 → 2.0 (slider to 4), the size scaling kept. Measured above 250 Hz over its loudest 0.3 s: an RPG blast now about -12 dB against a sword hit's -19, the rail's -23 (was -25, the quietest). A limiter at the end of the sound chain (`src/audio/sfx.ts`: -4 dB threshold, 12:1) so stacked blasts squash rather than clip.
 - `src/weapons/weaponSound.ts`, `tuning.ts`, `src/audio/sfx.ts`. Node probe; npm test.

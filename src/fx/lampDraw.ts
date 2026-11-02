@@ -8,7 +8,7 @@
 // Real lights are nightLights.ts's job; this only draws.
 import * as THREE from "three/webgpu";
 
-export const GLOW_MAX = 1024, POOL_MAX = 1024, BEAM_MAX = 640, LINE_MAX = 128;
+export const GLOW_MAX = 1024, POOL_MAX = 1024, BEAM_MAX = 640, LINE_MAX = 128, SQUARE_MAX = 512;
 
 /** A radial falloff texture (linear values): core 0..1 sharp for glows, soft for pools. */
 function radial(core: number, power: number): THREE.DataTexture {
@@ -18,6 +18,27 @@ function radial(core: number, power: number): THREE.DataTexture {
     const halo = Math.pow(1 - r, power), c = core > 0 ? Math.exp(-(r * r) / (core * core)) : 0;
     const v = Math.round(255 * Math.min(1, halo * 0.6 + c));
     data.set([v, v, v, 255], (j * N + i) * 4);
+  }
+  const t = new THREE.DataTexture(data, N, N);
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
+/**
+ * A robotic searchlight's pool (Keith 2026-11-02): a faint square fill, a thin frame and brighter corner brackets,
+ * soft-edged so it sits on the sand rather than being stamped on it.
+ */
+function squareTexture(): THREE.DataTexture {
+  const N = 64, data = new Uint8Array(N * N * 4);
+  const band = (d: number, a: number, b: number, soft: number) => Math.max(0, Math.min(1, (d - a) / soft + 1, (b - d) / soft + 1));
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = Math.abs((i + 0.5) / N * 2 - 1), y = Math.abs((j + 0.5) / N * 2 - 1), m = Math.max(x, y), n = Math.min(x, y);
+    const fill = 0.16 * (1 - Math.pow(m, 4)) * (m < 0.95 ? 1 : 0);
+    const frame = 0.32 * band(m, 0.86, 0.9, 0.04);
+    const bracket = n > 0.62 ? band(m, 0.84, 0.93, 0.04) : 0;
+    const c = Math.round(255 * Math.min(1, fill + frame + bracket));
+    data.set([c, c, c, 255], (j * N + i) * 4);
   }
   const t = new THREE.DataTexture(data, N, N);
   t.magFilter = t.minFilter = THREE.LinearFilter;
@@ -59,9 +80,13 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, n: number, na
   return m;
 }
 
-/** An open cone, apex at the origin, base radius 1 at z = 1; vertex colour fades from the apex to the base. */
-function coneGeometry(): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(0.04, 1, 1, 18, 6, true);
+/**
+ * An open cone, apex at the origin, base radius 1 at z = 1; vertex colour fades from the apex to the base. sides 4: a
+ * square pyramid whose base square has half-side 1, its faces square to x and y.
+ */
+function coneGeometry(sides = 18): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(0.04, 1, 1, sides, 6, true);
+  if (sides === 4) { g.rotateY(Math.PI / 4); g.scale(Math.SQRT2, 1, Math.SQRT2); }
   g.translate(0, -0.5, 0); // apex (top) at y = 0, base at y = -1
   g.rotateX(-Math.PI / 2); // y -> z: base at z = +1
   const pos = g.attributes.position, col = new Float32Array(pos.count * 3);
@@ -80,7 +105,9 @@ export class LampDraw {
   readonly pools: THREE.InstancedMesh;
   readonly beams: THREE.InstancedMesh;
   readonly lines: THREE.InstancedMesh;
-  private nG = 0; private nP = 0; private nB = 0; private nL = 0;
+  readonly squarePools: THREE.InstancedMesh;
+  readonly squareBeams: THREE.InstancedMesh;
+  private nG = 0; private nP = 0; private nB = 0; private nL = 0; private nSP = 0; private nSB = 0;
   private m = new THREE.Matrix4();
   private x = new THREE.Vector3(); private y = new THREE.Vector3(); private z = new THREE.Vector3();
   private p = new THREE.Vector3(); private s = new THREE.Vector3();
@@ -97,13 +124,15 @@ export class LampDraw {
     const uv = line.attributes.uv, lp = line.attributes.position;
     for (let i = 0; i < uv.count; i++) uv.setY(i, lp.getZ(i));
     this.lines = instanced(line, additive(tubeTexture(), false, THREE.DoubleSide), LINE_MAX, "lamp lines");
-    this.pools.renderOrder = 1; this.beams.renderOrder = 2; this.lines.renderOrder = 3; this.glows.renderOrder = 4;
-    this.group.add(this.pools, this.beams, this.lines, this.glows);
+    this.squarePools = instanced(pool.clone(), additive(squareTexture()), SQUARE_MAX, "lamp square pools");
+    this.squareBeams = instanced(coneGeometry(4), additive(null, true, THREE.DoubleSide), SQUARE_MAX, "lamp square beams");
+    this.pools.renderOrder = this.squarePools.renderOrder = 1; this.beams.renderOrder = this.squareBeams.renderOrder = 2; this.lines.renderOrder = 3; this.glows.renderOrder = 4;
+    this.group.add(this.pools, this.squarePools, this.beams, this.squareBeams, this.lines, this.glows);
   }
 
   /** Start a frame: sprites face this camera (or a fixed high view without one). */
   begin(camera: THREE.Camera | null) {
-    this.nG = this.nP = this.nB = this.nL = 0;
+    this.nG = this.nP = this.nB = this.nL = this.nSP = this.nSB = 0;
     if (camera) { camera.getWorldQuaternion(this.camQ); camera.getWorldPosition(this.camP); }
     else { this.camQ.setFromEuler(new THREE.Euler(-0.87, 0, 0)); this.camP.set(0, 1e4, 1e4); }
   }
@@ -125,6 +154,24 @@ export class LampDraw {
    */
   pool(x: number, y: number, z: number, nx: number, ny: number, nz: number, hx: number, hz: number, w: number, l: number, r: number, g: number, b: number) {
     if (this.nP >= POOL_MAX || w <= 0) return;
+    this.poolBasis(x, y, z, nx, ny, nz, hx, hz, w, l);
+    this.put(this.pools, this.nP++, r, g, b);
+  }
+
+  /** pool(), square (a robot's searchlight). */
+  squarePool(x: number, y: number, z: number, nx: number, ny: number, nz: number, hx: number, hz: number, w: number, l: number, r: number, g: number, b: number) {
+    if (this.nSP >= SQUARE_MAX || w <= 0) return;
+    this.poolBasis(x, y, z, nx, ny, nz, hx, hz, w, l);
+    this.put(this.squarePools, this.nSP++, r, g, b);
+  }
+
+  /** beam(), a four-sided pyramid (a robot's searchlight). */
+  squareBeam(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, rad: number, r: number, g: number, b: number) {
+    if (this.nSB >= SQUARE_MAX || rad <= 0 || !this.beamBasis(x0, y0, z0, x1, y1, z1, rad)) return;
+    this.put(this.squareBeams, this.nSB++, r, g, b);
+  }
+
+  private poolBasis(x: number, y: number, z: number, nx: number, ny: number, nz: number, hx: number, hz: number, w: number, l: number) {
     this.y.set(nx, ny, nz).normalize();
     this.z.set(hx, 0, hz);
     this.z.addScaledVector(this.y, -this.z.dot(this.y));
@@ -133,15 +180,18 @@ export class LampDraw {
     this.x.crossVectors(this.y, this.z).normalize();
     this.m.makeBasis(this.x.multiplyScalar(w), this.y, this.z.multiplyScalar(l));
     this.m.setPosition(x + nx * 0.12, y + ny * 0.12, z + nz * 0.12);
-    this.put(this.pools, this.nP++, r, g, b);
   }
 
   /** A beam cone from (x0, y0, z0) to (x1, y1, z1), radius rad at the far end. */
   beam(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, rad: number, r: number, g: number, b: number) {
-    if (this.nB >= BEAM_MAX || rad <= 0) return;
+    if (this.nB >= BEAM_MAX || rad <= 0 || !this.beamBasis(x0, y0, z0, x1, y1, z1, rad)) return;
+    this.put(this.beams, this.nB++, r, g, b);
+  }
+
+  private beamBasis(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, rad: number): boolean {
     this.z.set(x1 - x0, y1 - y0, z1 - z0);
     const len = this.z.length();
-    if (len < 0.05) return;
+    if (len < 0.05) return false;
     this.s.copy(this.z).divideScalar(len);
     this.x.set(0, 1, 0).cross(this.s);
     if (this.x.lengthSq() < 1e-6) this.x.set(1, 0, 0);
@@ -149,7 +199,7 @@ export class LampDraw {
     this.y.crossVectors(this.s, this.x).normalize();
     this.m.makeBasis(this.x.multiplyScalar(rad), this.y.multiplyScalar(rad), this.z);
     this.m.setPosition(x0, y0, z0);
-    this.put(this.beams, this.nB++, r, g, b);
+    return true;
   }
 
   /** A glowing line from (x0..) to (x1..), this wide, facing the camera round its axis. */
@@ -178,12 +228,12 @@ export class LampDraw {
 
   /** End a frame: upload what was drawn. */
   end() {
-    for (const [mesh, n] of [[this.glows, this.nG], [this.pools, this.nP], [this.beams, this.nB], [this.lines, this.nL]] as const) {
+    for (const [mesh, n] of [[this.glows, this.nG], [this.pools, this.nP], [this.beams, this.nB], [this.lines, this.nL], [this.squarePools, this.nSP], [this.squareBeams, this.nSB]] as const) {
       const was = mesh.count;
       mesh.count = n;
       if (n || was) { mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor!.needsUpdate = true; }
     }
   }
 
-  get counts() { return { glows: this.nG, pools: this.nP, beams: this.nB, lines: this.nL }; }
+  get counts() { return { glows: this.nG, pools: this.nP, beams: this.nB, lines: this.nL, squarePools: this.nSP, squareBeams: this.nSB }; }
 }
