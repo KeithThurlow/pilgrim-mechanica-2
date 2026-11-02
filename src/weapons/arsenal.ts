@@ -144,7 +144,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -374,7 +374,7 @@ export class Arsenal implements MechWeapons {
         const { d, aim } = this.railAim(side, muzzle);
         this.energy.step(i, dt, held, noRail, muzzle, d, aim);
         const es = this.energy.sides[i];
-        for (const mat of glows) mat.opacity = es.cls === "lance" ? 0.2 + 0.8 * es.sim.charge : es.beam.on ? 1 : 0.45;
+        for (const mat of glows) mat.opacity = es.cls === "lance" || es.cls === "sunder" ? (es.beam.on ? 1 : 0.2 + 0.8 * es.sim.charge) : es.beam.on ? 1 : 0.45;
         clearPaint(s.paint);
         return;
       }
@@ -791,8 +791,8 @@ export class Arsenal implements MechWeapons {
     for (const g of this.unit.upper.guns) { g.rateMul = 1; }
   }
 
-  /** Walking speed share now: the arm missile pod slows the walk while it channels. */
-  moveMul() { return this.sides.some((s) => s.channel) ? 1 - this.v.podSlow : 1; }
+  /** Walking speed share now: the arm missile pod slows the walk while it channels, a sunder beam while it charges and blasts. */
+  moveMul() { return (this.sides.some((s) => s.channel) ? 1 - this.v.podSlow : 1) * (this.energy.slowed() ? 1 - this.v.sunderSlow : 1); }
 
   /** A feed or power key: a press (not paint-and-release) fires it if it's off cooldown. */
   private stepGear(sh: Shoulder, dt: number, down: boolean) {

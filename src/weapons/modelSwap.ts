@@ -30,6 +30,7 @@ export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; til
   plasma: { id: "plasma-cannon-hull", scale: 0.85 },
   orb: { id: "plasma-cannon-hull", scale: 1.1 },
   arc: { id: "laser-projector-hull", scale: 0.9 },
+  sunder: { id: "plasma-cannon-hull", scale: 1.25 },
 };
 
 const ids = [...new Set(Object.values(KIND_MODELS).flatMap(({ id }) => [id, entry(id).mirror].filter((x): x is string => !!x)))];
