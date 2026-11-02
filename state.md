@@ -307,6 +307,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Fix typecheck in railtruck-check (car kind `gunTruck`, not `truck`) (Claude)
 ### 2026-11-02 · Weapon weight review, batch 1: hull guns with their weight behind the shoulder (Keith; Claude on `claude/project-thread-pwbnhj`)
 - Rule (Keith): a hull gun's magazines, feeds, casings and counterweights sit behind the shoulder, not much barrel out front. `tools/weight-check.ts` (in npm test): surface-weighted centre behind the shoulder, 0.9 m+ behind it, muzzle within 3.2 m (longshot 4.2), axis 0.8 m+ outboard. Batch 1 models pass; the rest are listed "not yet".
 - Breach cannon rebuilt (`build/guns.ts` `cannonHull`, now its model): autoloader bustle with a ready rack of shells, counterweight plate, casing chute and basket; barrel to 3 m (was 4.8), 1 m outboard (was centred in the shoulder). Rail cannon (`build/rail.ts`): rails to 2.75 m (were 3.35), a power cell with radiator fins and a capacitor bank behind. Flak cannon gets a model (`build/roundGuns.ts` `flakHull`: a pan magazine on top behind the shoulder, three short barrels); longshot rifle too (`sniperHull`: long receiver, box magazine and buffered butt behind, barrel to 4 m, was 5.8).
