@@ -37,6 +37,7 @@ step(1);
 const per = dc.squads.fights.map((f) => f.count);
 if (dc.count !== 4) fail(`a camp of 20 brought ${dc.count} humanoids (want 4)`);
 if (frozen().n !== dc.count) fail(`asleep: ${frozen().n} of ${dc.count} frozen`);
+{ const pts: THREE.Vector3[] = []; dc.threats(0, 0, 400, pts); if (pts.length) fail(`${pts.length} sleeping humanoids counted as turret threats`); }
 step(2);
 if (fired) fail(`${fired} pulses from a sleeping squad`);
 // Shoot one: the camp wakes.
@@ -47,6 +48,7 @@ if (!woke) fail("shooting a sleeping humanoid didn't wake its camp");
 step(15);
 if (frozen().n) fail(`awake: ${frozen().n} still frozen`);
 if (!fired) fail("an awake squad never fired");
+{ const pts: THREE.Vector3[] = []; dc.threats(0, 0, 400, pts); if (pts.length !== dc.count) fail(`turret threats ${pts.length}, awake humanoids ${dc.count}`); }
 // The camp's robots all gone: the squad fights on near the mech.
 camps.delete("c1");
 step(1);

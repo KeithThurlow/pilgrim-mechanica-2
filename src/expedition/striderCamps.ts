@@ -5,7 +5,7 @@
 // while the mech is near once their group's robots are all gone. As src/expedition/droidCamps.ts.
 // Ownership: host (striders, damage).
 import type { DeathPhysics } from "../physics/deaths";
-import type * as THREE from "three/webgpu";
+import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
@@ -53,6 +53,16 @@ export class StriderCamps {
   /** Mech radar contacts (big robots). */
   contacts(x: number, z: number, r: number, out: { id: number; x: number; z: number; kind: number }[]) {
     for (const s of this.sf.pack.list) { if (!s.alive) continue; const p = s.pos(); if (Math.hypot(p.x - x, p.z - z) < r) out.push({ id: 4e9 + s.id, x: p.x, z: p.z, kind: 2 }); }
+  }
+
+  /** Awake striders within r of (x, z), as points (the convoy's turrets track them). */
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
+    for (const s of this.sf.pack.list) {
+      if (!s.alive || s.frozen || out.length >= max) continue;
+      const p = s.pos();
+      if (Math.hypot(p.x - x, p.z - z) <= r) out.push(new THREE.Vector3(p.x, s.up(5).y, p.z));
+    }
+    return out;
   }
 
   /** One frame, after the swarm camps' (so their wake and calm are this frame's). p: the mech. */

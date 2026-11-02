@@ -57,6 +57,18 @@ export class DroidCamps {
     });
   }
 
+  /** Awake humanoids within r of (x, z), as points (the convoy's turrets track them). */
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
+    for (const f of this.squads.fights) {
+      const sw = f.sw;
+      for (let i = 0; i < sw.hi && out.length < max; i++) {
+        if (sw.state[i] >= DEAD || sw.frozen[i] || Math.hypot(sw.px[i] - x, sw.pz[i] - z) > r) continue;
+        out.push(new THREE.Vector3(sw.px[i], sw.py[i] + 1.2, sw.pz[i]));
+      }
+    }
+    return out;
+  }
+
   /** One frame, after the swarm camps' (so their wake and calm are this frame's). p: the mech. */
   update(dt: number, hunting: boolean, p: { x: number; z: number }, prey: Prey) {
     const v = this.v, sq = this.squads;

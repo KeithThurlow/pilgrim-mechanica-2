@@ -309,6 +309,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · The convoy's guns now target every enemy kind (Keith: "they wouldn't shoot the new mech robot"; Claude)
+- Cause: `ExpeditionLoop.turretThreats` (`src/expedition/loop.ts`) only listed robots, bandits and war bands. Humanoid robots, striders and crushers were never in the list the turrets, escort guns and guardians pick from. Added `threats()` to `DroidCamps`, `StriderCamps` and `CrusherSites` (awake ones only, as the robots'), and the loop adds them.
+- Checked: `droidcamps-`, `stridercamps-`, `crushersites-check` now assert the threat count (sleeping none, awake all). Not covered: fortress garrisons, hub robots, HVT/rival mechs (far from the train; open item).
 ### 2026-11-02 · Recorded sounds, batch 3: distant blasts (Keith; Claude on `claude/project-thread-ng4h7l`)
 - The expedition's distant blasts play Keith's "cannon" recording (Distant blast group: 4 s, low-pass 1.5 kHz, 2 semitones down), from 30 m toward the blast and quieter with distance; they were silent off screen before. `src/audio/samples.ts`, `src/expedition/loop.ts`. npm test.
 ### 2026-11-02 · One swarm lab for every enemy kind; weapon flags in every combat lab (Claude, Keith's ask)

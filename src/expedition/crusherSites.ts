@@ -99,6 +99,14 @@ export class CrusherSites {
     for (const c of this.cf.pack.list) if (c.alive && Math.hypot(c.x - x, c.z - z) < r) out.push({ id: 5e9 + c.id, x: c.x, z: c.z, kind: 2 });
   }
 
+  /** Crushers within r of (x, z), as points (the convoy's turrets track them). */
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
+    for (const c of this.cf.pack.list) {
+      if (c.alive && out.length < max && Math.hypot(c.x - x, c.z - z) <= r) out.push(new THREE.Vector3(c.x, c.bodyY, c.z));
+    }
+    return out;
+  }
+
   /** One frame. p: the mech (or the pilot); hunting: the expedition is on and someone's on the sand. */
   update(dt: number, hunting: boolean, p: { x: number; z: number }, prey: Prey) {
     const v = this.v;
