@@ -310,6 +310,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Longest grid size 2×4 (Keith; Claude)
+- Long hull guns and the Buster sword 2×4, Breaker 1×4, Short sword 1×3 (were 2×8, 1×8, 1×6); `src/items/gridSize.ts`. Checked: `grid-check` (now also: no class longer than 4).
 ### 2026-11-02 · Grid inventory with item sizes (Keith; Claude)
 - Every item has a grid size by class (`src/items/gridSize.ts`: Keith's sizes, the rest defaults; all sliders), a grid sim with turning (`src/items/grid.ts`), placeholder pictures (`src/ui/itemIcon.ts`). The inventory's cargo and stash are grids with drag and drop on and off the doll (`src/ui/inventory.ts`), saved in `BayState.grids`. Salvage at risk shows as blocks in the field cargo (placeholder, compaction slider). New `labs/inventory/`; Grid sliders in the loadout and convoy labs' Loadout topic.
 - Checked: `tools/grid-check.ts` (every base sized, Keith's sizes, 3000 random place/move/turn steps never overlap or leave the grid, turning fits a 2×8 into an 8-wide gap, sync and repack sound and order-free); a Playwright run of the lab (stash to cargo drag with a turn, a waist drum dragged off the doll, salvage blocks out in the field, no console errors).

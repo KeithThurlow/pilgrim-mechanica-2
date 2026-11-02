@@ -3,8 +3,8 @@
 // (each a pair of sliders, w then h, so Keith can retune a whole family at once) and one table saying which class each
 // base is in. A base not named in the table falls back by its kind, weapon size and gun class, so a new base always
 // gets a size (tools/grid-check.ts holds every base to having one).
-// Keith's sizes: hull weapons 2×3 or 2×8, hulls 3×2 or 4×2, packs 2×2, legs 2×3, arms 2×2, held weapons 2×2 or 2×3,
-// waist mounts 2×1, shoulder gear 2×2; Buster sword 2×8, Breaker 1×8, Short sword 1×6, repair kits 1×2, Protocols 1×1. The rest are defaults picked here (open questions in docs/decisions.md).
+// Keith's sizes: hull weapons 2×3 or 2×4 (Keith's correction: 2×4 is the longest), hulls 3×2 or 4×2, packs 2×2, legs 2×3, arms 2×2, held weapons 2×2 or 2×3,
+// waist mounts 2×1, shoulder gear 2×2; Buster sword 2×4, Breaker 1×4, Short sword 1×3, repair kits 1×2, Protocols 1×1. The rest are defaults picked here (open questions in docs/decisions.md).
 // w is columns, h is rows, before turning; any item may turn 90° in the grid (Keith's call to confirm).
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, type Base } from "./bases";
@@ -13,16 +13,16 @@ import type { Item } from "./item";
 /** The size classes. */
 export const GRID_CLASSES = {
   hullGun: { label: "Hull weapon", w: 2, h: 3 },
-  hullGunLong: { label: "Long hull weapon", w: 2, h: 8 },
+  hullGunLong: { label: "Long hull weapon", w: 2, h: 4 },
   hull: { label: "Hull", w: 3, h: 2 },
   hullBig: { label: "Big hull", w: 4, h: 2 },
   legs: { label: "Legs", w: 2, h: 3 },
   arm: { label: "Arm", w: 2, h: 2 },
   held: { label: "Held weapon", w: 2, h: 2 },
   heldLong: { label: "Long held weapon", w: 2, h: 3 },
-  swordBig: { label: "Big sword", w: 2, h: 8 },
-  sword: { label: "Sword", w: 1, h: 8 },
-  swordShort: { label: "Short sword", w: 1, h: 6 },
+  swordBig: { label: "Big sword", w: 2, h: 4 },
+  sword: { label: "Sword", w: 1, h: 4 },
+  swordShort: { label: "Short sword", w: 1, h: 3 },
   shoulder: { label: "Shoulder gear", w: 2, h: 2 },
   pack: { label: "Pack", w: 2, h: 2 },
   waist: { label: "Waist mount", w: 2, h: 1 },
@@ -47,7 +47,7 @@ export const GRID_CLASS_OF: Record<string, GridClass> = {
   // The big hulls.
   "hull-rampart": "hullBig", "hull-siege": "hullBig",
   // Long held guns (the heavy minigun, a two-hander, falls back to long too).
-  // Swords (Keith 2026-11-02: Buster 2×8, Breaker 1×8, Short 1×6).
+  // Swords (Keith 2026-11-02, corrected: 2×4 is the longest size; Buster 2×4, Breaker 1×4, Short 1×3).
   "sword-heavy": "swordBig", "sword-short": "swordShort",
   "rifle-light": "heldLong", "shotgun-light": "heldLong", "rail-light": "heldLong",
 };
