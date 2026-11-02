@@ -49,4 +49,18 @@ A build that fights through its units rather than its own guns. Everything lives
   within 16 m of the spot and come home once it's clear for 3 s or after 25 s; C calls them back.
 - Enemy robots within 14 m of a companion or scrapper (and nearer it than you) turn on it, 60% of them. Only in the
   summoner lab for now; out in the field the fight director would do it.
+- Mech replicas (Keith 2026-11-02: "a robotic mech, roughly the same proportions as the player's mech, but very
+  clearly thin and robotic"): Ramparts on the stilt legs with the light Cuirass hull, pale robot steel, 2200 hit points,
+  armour 4, miniguns at 0.6× damage; at your flanks 9 m out, hold 18 m off a foe, leash 45 m, rebuilt after 20 s. When
+  you sprint they dash and sprint too (on their own energy bars), and run to catch up past 12 m off their spot. They
+  are the lab's default companion; the quads stay as the other kind (`?companions=quads|both`).
+- Keeping up: while you're faster than them, scrappers run 1.25× your speed and quads too, up to 20 m/s (their legs
+  may skate at that speed; never seen).
+- Taking damage: enemy robots within 14 m of a summon go for it when it's nearer than you, or within 7 m (60% of
+  them); only those that shoot go for drones; blasts now hurt drones too; a scrapper is rebuilt every 3 s (was 1.5), so
+  losses show. Scrappers have no health bars (they die to a few hits); companions do.
+- Items (Keith 2026-11-02, next batch): the backpack gives the core summons (mech replicas, built up over time); the
+  shoulders give drones and swarms. When the convoy picks you up, the summons are dismissed (default: they walk beside
+  the convoy for a while, then fold away), and you resummon once you hop off. Later: handhelds that speed up
+  manufacturing, handheld swarm launchers.
 - Keys: Z send, C recall (free in every lab). Should the swarm instead ride on key 3 (the pack's ability key)?

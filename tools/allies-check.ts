@@ -5,16 +5,18 @@
 // 2. engage: robots 14 m ahead: the companions fire rounds and rockets, the swarm bites, robots die.
 // 3. send: robots 45 m off (past the guard ring): the swarm sent there reaches them and kills some; recalled, it comes
 //    home.
+// 4. sprint: the mech runs at 16 m/s: they keep up. 5. hurt: biting robots turn on the swarm and kill some.
 // Fails on NaN, falling behind, shooting at nothing, no fire on foes, no kills, a send that never arrives or a swarm
 // that never comes home. Prints the numbers. Run: npm test (or npx tsx tools/allies-check.ts).
 import * as THREE from "three/webgpu";
-import { Allies, ALLY_DEFAULTS } from "../src/summon/allies";
+import { Allies, ALLY_DEFAULTS, aggroOnAllies } from "../src/summon/allies";
+import { splashBlast } from "../src/game/splash";
 import { RobotSwarm, ROBOT_DEFAULTS, DEAD } from "../src/combat/robots";
 import { RobotTarget } from "../src/combat/robotTarget";
 import { Register } from "../src/game/register";
 import { enemiesOf } from "../src/game/targeting";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
-import type { Battlefield } from "../src/game/battlefield";
+import type { Battlefield, Hittable } from "../src/game/battlefield";
 import type { MechUnit } from "../src/game/mechUnit";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
@@ -26,10 +28,11 @@ const dt = 1 / 60;
 const noop: unknown = new Proxy(function () {}, { get: () => noop, apply: () => undefined });
 
 function stage() {
-  const V = { ...ROBOT_DEFAULTS, ...ALLY_DEFAULTS };
+  const V = { ...ROBOT_DEFAULTS, ...ALLY_DEFAULTS, compCount: 2, swarmRebuild: 1.5 };
   const register = new Register();
   const counts = { fire: 0, lob: 0 };
-  const bf = new Proxy({ register, targets: [] as unknown[], lookGround: null, canSee: () => true,
+  const targets: Hittable[] = [];
+  const bf = new Proxy({ register, targets, lookGround: null, canSee: () => true,
     fire: () => { counts.fire++; return 0; }, lob: () => { counts.lob++; return null; } }, {
     get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : noop),
   }) as unknown as Battlefield;
@@ -37,12 +40,12 @@ function stage() {
     sim: { pos: new THREE.Vector3(0, 0, 0), pelvis: new THREE.Vector3(0, 3, 0), vel: new THREE.Vector3(), heading: 0 } };
   const enemy = new RobotSwarm({ ...ROBOT_DEFAULTS }, field, 4);
   const et = new RobotTarget(enemy, 3);
-  (bf.targets as unknown[]).push(et);
+  targets.push(et);
   register.add(et);
   const allies = new Allies(bf, new THREE.Group(), V, field, owner as unknown as MechUnit, enemiesOf(1));
   const place = (x: number, z: number) => { owner.sim.pos.set(x, field.height(x, z), z); owner.sim.pelvis.set(x, owner.sim.pos.y + 3, z); };
   place(0, 0);
-  return { V, register, counts, owner, enemy, et, allies, place };
+  return { V, register, counts, owner, enemy, et, allies, place, targets };
 }
 
 function spread(s: ReturnType<typeof stage>) {
@@ -121,6 +124,47 @@ function pack(s: ReturnType<typeof stage>, x: number, z: number, n: number, mid 
   if (arrived < 0 || arrived > 8) fail("send: the swarm never reached the spot");
   if (kills < 2) fail("send: the swarm killed too few");
   if (home < 0) fail("send: the swarm never came home");
+}
+
+// 4. Sprint: the mech runs at 16 m/s (its sprint) for 12 s: the swarm and the companions stay with it.
+{
+  const s = stage();
+  for (let t = 0; t < 25; t += dt) { s.register.rebuild(); s.allies.update(dt); }
+  let worst = 0, meanSum = 0, samples = 0;
+  for (let t = 0; t < 12; t += dt) {
+    s.place(0, t * 16); s.owner.sim.vel.set(0, 0, 16);
+    s.register.rebuild(); s.allies.update(dt);
+    if (t > 3) { const r = spread(s); worst = Math.max(worst, r.worst); meanSum += r.mean; samples++; }
+  }
+  const mean = meanSum / Math.max(1, samples);
+  console.log(`sprint: mean from the mech ${mean.toFixed(1)} m, worst ${worst.toFixed(1)} m (leash ${s.V.compLeash})`);
+  if (worst > s.V.compLeash) fail("sprint: an ally fell past the leash");
+  if (mean > 18) fail("sprint: allies trailing too far on average");
+}
+
+// 5. Enemies hurt allies: a pack of robots that bite, 12 m off the swarm out on a send, turn on it and kill some.
+{
+  const s = stage();
+  s.V.compCount = 0;
+  for (let t = 0; t < 30; t += dt) { s.register.rebuild(); s.allies.update(dt); }
+  pack(s, 0, 40, 20);
+  s.allies.sendSwarm(0, 40);
+  const lost0 = s.allies.target.kills, down = new THREE.Vector3(0, -1, 0), at = new THREE.Vector3(), list: number[] = [];
+  let enemyBites = 0;
+  for (let t = 0; t < 15; t += dt) {
+    s.register.rebuild();
+    s.allies.update(dt);
+    aggroOnAllies(s.enemy, s.allies, s.owner.sim.pos, s.V.allyAggro, s.V.allyAggroShare, list);
+    s.enemy.update(dt, { x: 0, y: 3, z: 0, radius: 2 }, () => {}, (i, dmg) => {
+      if (!s.enemy.hasT[i]) return;
+      enemyBites++;
+      splashBlast(s.targets, 3, at.set(s.enemy.px[i], s.enemy.py[i] + 0.4, s.enemy.pz[i]), 1.6, dmg, down);
+    });
+  }
+  const lost = s.allies.target.kills - lost0;
+  console.log(`hurt: enemy bites on allies ${enemyBites}, scrappers lost ${lost}`);
+  if (enemyBites < 10) fail("hurt: enemies never turned on the swarm");
+  if (lost < 1) fail("hurt: the swarm took no losses");
 }
 
 if (failed) { console.log("allies check FAILED"); process.exit(1); }
