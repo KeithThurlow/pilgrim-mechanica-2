@@ -10,7 +10,8 @@
 // flagged release, and every other tick blasts the sand by the beam's power, little while it charges, most once full.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
-import type { RobotBeamEvent, RobotPulseEvent } from "../combat/robots";
+import type { RobotBeamEvent, RobotDeathBlastEvent, RobotPulseEvent } from "../combat/robots";
+import { famOfTeam } from "../world/lamps";
 
 const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
@@ -95,5 +96,31 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
     bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 9, 3 + Math.random() * 3, Math.cos(a) * 9, 1.2, 2.5 + Math.random() * 2, 0.9);
   }
   bf.waves?.post("beam", e.from.x, e.from.y, e.from.z, 3, { ground: false, fam: 2 });
+  shove?.(e.at.x, e.at.z, e.radius, e.shove);
+}
+
+/**
+ * Resolve a big walker's core going up after its death (Keith 2026-11-02: "a really big, significant boom"): a big
+ * blast on the ground under it (everything of another team in reach; the swarm hurt its own robots already), its
+ * blast wave in the death kind, a second wave and flash up at the chassis, a column and a ring of dust, a deep extra
+ * layer of the shared explosion sound (boom) and the shove outward.
+ */
+export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
+  from.set(e.at.x, e.at.y, e.at.z);
+  bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "death");
+  const hy = Math.max(e.at.y + 2, e.hubY);
+  bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * 0.6, { ground: false, fam: 2 });
+  bf.nightLights?.flash(e.at.x, hy, e.at.z, e.radius * 1.5, famOfTeam(ROBOTS));
+  // A column of dust and smoke up through where the chassis was, and a wide ring thrown out along the ground.
+  for (let k = 0; k < 40; k++) {
+    const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 4;
+    bf.dust.emit(1, e.at.x, e.at.y + Math.random() * hy * 0.5, e.at.z, Math.cos(a) * sp, 8 + Math.random() * 14, Math.sin(a) * sp, 1.6, 3 + Math.random() * 3, 0.9);
+  }
+  for (let k = 0; k < 36; k++) {
+    const a = (k / 36) * Math.PI * 2, r = e.radius * 0.5;
+    const x = e.at.x + Math.sin(a) * r, z = e.at.z + Math.cos(a) * r;
+    bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 14, 2 + Math.random() * 4, Math.cos(a) * 14, 1.4, 2.5 + Math.random() * 2.5, 0.9);
+  }
+  if (e.boom > 0) { bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1); bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1); }
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
 }
