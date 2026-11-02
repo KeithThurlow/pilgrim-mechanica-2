@@ -77,6 +77,8 @@ export const STRIDER_DEFAULTS = {
   striderDeathPierce: 0.4,
   striderDeathShove: 18,
   striderDeathBoom: 1.4,
+  striderDeathCrater: 0.7,
+  striderDeathCraterDepth: 3,
   // Look
   striderTilt: 12,
 };
@@ -137,6 +139,8 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Every robot in reach (swarm, striders, crushers, droids) by its blast share, behind cover none" },
   { key: "striderDeathPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GD },
   { key: "striderDeathShove", label: "Shove (m/s)", min: 0, max: 60, step: 0.5, group: GD },
+  { key: "striderDeathCrater", label: "Crater radius (share of blast)", min: 0, max: 1.5, step: 0.05, group: GD },
+  { key: "striderDeathCraterDepth", label: "Crater depth (m)", min: 0, max: 8, step: 0.1, group: GD },
   { key: "striderDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD },
 ];
 

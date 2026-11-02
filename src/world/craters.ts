@@ -265,10 +265,10 @@ export class CraterLayer {
   }
 
   /**
-   * Add a crater of radius r and depth d (limited by max depth and the wall limit, fitted to the ground, softness per
+   * Add a crater of radius r and depth d (limited by max depth, craterMaxDepth unless given, and the wall limit, fitted to the ground, softness per
    * point on top). Returns the box whose ground changed (for the chunks), or null if nothing changed.
    */
-  add(x: number, z: number, r: number, d: number): [number, number, number, number] | null {
+  add(x: number, z: number, r: number, d: number, maxDepth = this.v.craterMaxDepth): [number, number, number, number] | null {
     const t0 = performance.now();
     const v = this.v;
     this.stats.scale = 0;
@@ -276,7 +276,7 @@ export class CraterLayer {
     const a = rimAmp(v.craterRim);
     const tanWall = Math.tan((Math.min(60, v.craterWall) * Math.PI) / 180);
     // On flat ground alone no wall steeper than the limit.
-    d = Math.min(d, v.craterMaxDepth, (tanWall * r) / profileSlope(a));
+    d = Math.min(d, maxDepth, (tanWall * r) / profileSlope(a));
     // Its footprint on the lattice, with room round it for slumped sand (the outer ring stays as it is).
     const R = r * REACH + 1.5;
     const i0 = Math.floor((x - R) / STEP), i1 = Math.ceil((x + R) / STEP), j0 = Math.floor((z - R) / STEP), j1 = Math.ceil((z + R) / STEP);
