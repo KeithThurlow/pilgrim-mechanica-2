@@ -31,6 +31,7 @@ export const SWORD_DEFAULTS = {
   swordWindup: 0.22,
   swordSlash: 0.22,
   swordRecover: 0.42,
+  swordReturnTime: 1.5,
   swordFollow: 0.5,
   swordComboAt: 0.7,
   swordBlend: 0.08,
@@ -131,6 +132,7 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordWindup", label: "Drive (s)", min: 0.02, max: 1, step: 0.01, group: G, tip: "From rest: the elbow drives forward and up before the cut (the back-cut's lead-in takes about half)" },
   { key: "swordSlash", label: "Cut (s)", min: 0.04, max: 0.6, step: 0.01, group: G, tip: "The cut itself: the only time it hits" },
   { key: "swordFollow", label: "Follow-through (s)", min: 0.02, max: 0.6, step: 0.01, group: G, tip: "After the cut, on to under the far shoulder (or up over its own)" },
+  { key: "swordReturnTime", label: "Return to rest: time ×", min: 0.5, max: 3, step: 0.05, group: GA, tip: "Keith 2026-11-02: the return after a cut and the settle after the back-cut take this × their time (more relaxed); the opening after a swing grows with it" },
   { key: "swordRecover", label: "Return to rest (s)", min: 0.05, max: 1.5, step: 0.01, group: G, tip: "No follow-up: after the first cut the arm drops past the waist and back up over the shoulder in 1.6 × this" },
   { key: "swordComboAt", label: "Next cut from (share of follow-through)", min: 0, max: 1, step: 0.01, group: G, tip: "Clicked or held, the next cut (the other way) starts this far into the follow-through" },
   { key: "swordBlend", label: "Blend into a new move (s)", min: 0, max: 0.4, step: 0.01, group: G },
@@ -406,15 +408,17 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
     }
     case "R": {
       // The return's last key before rest (a stance without one gets it only when it's posed: from the rest itself).
-      const preRest = (): Key[] => { const b = PRE_REST[si]; return b || P.preRest ? [{ ...ovK("preRest", b ?? { ...G0, t: 0.82 }), t: 0.82 }] : []; };
-      // The elbow drops and the wrist and forearm swing the blade round past the waist (point down ahead, then back
-      // along its own hip), and up to the shoulder.
-      const len = st.recover * 1.6 * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
+      // A posed rest drops the coded last key (it led into the old shoulder rest), unless that key is posed too.
+      const preRest = (): Key[] => { const b = P.rest && !P.preRest ? null : PRE_REST[si]; return b || P.preRest ? [{ ...ovK("preRest", b ?? { ...G0, t: 0.82 }), t: 0.82 }] : []; };
+      // The return (Keith 2026-11-02: the blade "swinging through the ground ... a little more relaxed"): from under
+      // the far side the hand comes back up across the front with the blade raised (clear of the hull), never pointing down,
+      // then to rest; swordReturnTime × slower than before.
+      const len = st.recover * 1.6 * v.swordPace * v.swordReturnTime * mix(v.swordNearRecover, v.swordFarRecover);
       return {
         arc, len, cut: null, keys: [
           { ...under, t: 0 },
-          { t: 0.28, hand: v3(-1.0, -0.9, 2.0), fwd: v3(-0.2, -0.85, 0.5), up: v3(0, 0.4, 1) },
-          { t: 0.58, hand: v3(0.55, -0.85, 1.45), fwd: v3(0.45, -0.55, -0.7), up: v3(0.3, 0.6, -0.5) },
+          { ...ovK("ret1", { t: 0, hand: v3(-1.5, -0.55, 2.1), fwd: v3(-0.8, -0.2, 0.55), up: v3(0.2, 0.9, 0.3), pole: v3(0.2, -1, 0.3) }), t: 0.3 },
+          { ...ovK("ret2", { t: 0, hand: v3(0.2, -0.4, 2.1), fwd: v3(-0.15, 0.8, 0.55), up: v3(0.8, 0.3, -0.2), pole: v3(0.4, -1, 0.1) }), t: 0.62 },
           ...preRest(),
           { ...g, t: 1 },
         ],
@@ -430,7 +434,7 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
       return { arc, len, cut: null, keys: [{ ...g, t: 0 }, { t: 0.13, hand: v3(0.35, 0.35, 1.95), fwd: v3(0.35, 0.93, 0.1), up: v3(0, 0, -1), pole: v3(0.6, -1, 0) }, { ...blk, t: 0.28 }, { ...blk, name: undefined, hand: { ...blk.hand, z: blk.hand.z - 0.1 }, t: 0.62 }, { t: 0.8, hand: v3(0.35, 0.3, 1.9), fwd: v3(0.4, 0.9, -0.15), up: v3(0, 0, -1), pole: v3(0.5, -1, 0.05) }, { ...g, t: 1 }] };
     }
     case "S": {
-      const len = st.recover * v.swordPace * mix(v.swordNearRecover, v.swordFarRecover);
+      const len = st.recover * v.swordPace * v.swordReturnTime * mix(v.swordNearRecover, v.swordFarRecover);
       return { arc, len, cut: null, keys: [{ ...cock, t: 0 }, { ...g, t: 1 }] };
     }
   }
