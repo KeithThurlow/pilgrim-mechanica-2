@@ -2,10 +2,11 @@
 // charge whine, a rocket leaving the pod, a big blast, the mortar's thunk and the autocannon's bark. Levels are the
 // Weapon sound sliders.
 import { Synth, rng } from "../audio/synth";
+import type * as THREE from "three/webgpu";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock";
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -26,18 +27,30 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   // 53 Hz), dense mid noise bands at 200 Hz-1.5 kHz dying at about -25 dB/s, all gone by 1.45 s. The clip's body takes
   // 0.57 s to peak; a short low thump and a burst of dark noise at the start here make the blast land when it goes off.
   const BLAST_MID: [number, number, number][] = [[213, -27.2, -25], [312, -29.9, -24], [388, -32.1, -25], [572, -30.7, -28], [748, -37.9, -29], [931, -39.9, -27], [1063, -39.4, -25], [1273, -39.4, -32], [1509, -36.5, -35]];
+  // Played as three layers (Keith 2026-11-02: the deep tail made big blasts sound "like ... within a drum"; the mortar's
+  // first hit could be bassier): the hit (thump, dark burst, crack, the first of the mids), the tail (the rolling
+  // rumble, the falling low ring, the mid bands' decay) and a sub boom only big blasts add. Small blasts play hit and
+  // tail as one, as before; bigger ones thin the tail and add the boom (blastVoice).
   sfx.addSound("blast", variants(4, 44, (r) => {
-    const f = 0.9 + r() * 0.2, len = 1.45;
-    const rumble = S.swell(r, S.lowPass(S.band(r, len, 25, 110, 0.7, 0.2, -17), 150), 0.08, 0.05, 0.15, 4, 12);
-    return S.scale(S.mix(
+    const f = 0.9 + r() * 0.2;
+    return S.mix(
       S.thump(0.45, 90 * f, 45 * f, 0.45),
       S.lowPass(S.noise(r, 0.35, 900, 0.9, 0.002), 1300),
       S.delay(S.band(r, 0.05, 2000, 6000, 0.12, 0.001, -200), 0.048),
+      S.ring(r, 0.4, hz(BLAST_MID, f), 0.3, { attack: 0.01, detune: 0.04, jitter: 0.06, chokeAt: 0.2, choke: 60 }),
+      S.band(r, 0.4, 180, 1200, 0.25, 0.01, -60));
+  }), () => v.blastLevel);
+  sfx.addSound("blastTail", variants(4, 52, (r) => {
+    const f = 0.9 + r() * 0.2, len = 1.45;
+    const rumble = S.swell(r, S.lowPass(S.band(r, len, 25, 110, 0.7, 0.2, -17), 150), 0.08, 0.05, 0.15, 4, 12);
+    return S.mix(
       S.ring(r, len, [[74 * f, -8, -17]], 0.6, { attack: 0.2, glide: 0.72 }),
       S.scale(rumble, 0.75),
-      S.ring(r, 1.2, hz(BLAST_MID, f), 0.3, { attack: 0.01, detune: 0.04, jitter: 0.06 }),
-      S.band(r, 1.0, 180, 1200, 0.25, 0.01, -30)), 1.0);
+      S.delay(S.ring(r, 1.0, hz(BLAST_MID, f), 0.2, { attack: 0.08, detune: 0.04, jitter: 0.06 }), 0.15),
+      S.delay(S.band(r, 0.85, 180, 1200, 0.18, 0.08, -30), 0.15));
   }), () => v.blastLevel);
+  // The big blast's sub boom: a deep falling sine and a low push of air, short, no ring.
+  sfx.addSound("blastBoom", variants(3, 53, (r) => S.mix(S.thump(0.6, 62 + r() * 8, 28, 0.9), S.lowPass(S.noise(r, 0.4, 160, 0.8, 0.004), 220))), () => v.blastLevel);
   sfx.addSound("mortar", variants(2, 45, (r) => S.mix(S.thump(0.3, 150, 55, 1.0), S.noise(r, 0.25, 1100, 0.5, 0.001), S.clang(r, 0.12, 0.12))), () => v.mortarLevel);
   // A rocket clip's swap (Keith 2026-10-31: a reload you can hear): the empty clip unlatching and dropping (a clank and a
   // short servo slide), then the full one seating (a heavy clunk with a latch tick).
@@ -91,15 +104,27 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
 }
 
 /**
- * The explosion as one sound for every explosive (Keith 2026-11-02: "dial it up and down"): the volume and playback
- * rate a blast of this radius plays "blast" at, scaled from blastSizeRef by doublings of the radius (bigger: louder and
- * deeper, longer; smaller: quieter and higher, shorter). `size` multiplies the radius for a caller that wants its
- * blasts to sound bigger or smaller than they hit.
+ * The explosion as one sound for every explosive (Keith 2026-11-02: "dial it up and down"), by the blast's radius (× `size`
+ * for a caller that wants its blasts to sound bigger or smaller than they hit): k doublings from blastSizeRef. Bigger:
+ * the hit louder and deeper, the tail thinner (blastTailCut a doubling, not under blastTailMin) and never slowed, and a
+ * sub boom (blastBoom a doubling). Smaller: quieter and higher, hit and tail together, no boom.
  */
-export function blastVoice(radius: number, v: WeaponValues, size = 1): { volume: number; rate: number } {
+export function blastVoice(radius: number, v: WeaponValues, size = 1) {
   const k = Math.log2(Math.max(0.1, radius * size) / Math.max(0.1, v.blastSizeRef));
+  const volume = Math.max(0.2, Math.min(v.blastSizeMax, 1 + v.blastSizeLoud * k));
+  const rate = Math.max(0.5, Math.min(1.8, Math.pow(2, -v.blastSizePitch * k))) * (0.94 + Math.random() * 0.12);
   return {
-    volume: Math.max(0.2, Math.min(v.blastSizeMax, 1 + v.blastSizeLoud * k)),
-    rate: Math.max(0.5, Math.min(1.8, Math.pow(2, -v.blastSizePitch * k))) * (0.94 + Math.random() * 0.12),
+    volume, rate,
+    tail: volume * Math.max(v.blastTailMin, Math.min(1, 1 - v.blastTailCut * Math.max(0, k))),
+    tailRate: Math.max(1, rate),
+    boom: volume * v.blastBoom * Math.max(0, k),
   };
+}
+
+/** Play an explosion of this radius at a point: hit, tail and (big ones) the boom. */
+export function playBlast(sfx: Sfx, at: THREE.Vector3, radius: number, v: WeaponValues, size = 1) {
+  const b = blastVoice(radius, v, size);
+  sfx.playSound("blast", at, b.volume, b.rate);
+  sfx.playSound("blastTail", at, b.tail, b.tailRate);
+  if (b.boom > 0.02) sfx.playSound("blastBoom", at, b.boom, 0.9 + Math.random() * 0.2);
 }
