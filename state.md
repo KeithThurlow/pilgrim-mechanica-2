@@ -297,6 +297,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Keith's block poses for all three swords (Keith; Claude on `claude/project-thread-yofecw`)
+- `SWORD_POSES`: a posed `block` key for the Breaker, short sword and buster (from the pose lab); the rest of the set is unchanged. `src/weapons/swordPoses.ts`. Checked: pose-check, sword-check, npm test. Who: agent.
 ### 2026-11-02 · Keith's poses for all three swords; a relaxed return that stays out of the ground (Keith; Claude on `claude/project-thread-yofecw`)
 - `SWORD_POSES`: Keith's Breaker set (new bEnd, close drive/aStart/aMid, rest), and the short sword's and buster's own keys where they differ from the Breaker (short: its close cut, rest, cock; buster: close aEnd, rest); the rest still inherit the Breaker's.
 - Keith: after cut 1 the return swung the blade through the ground, and quickly. The return's two middle keys pointed the blade down (the tip ~1.5 m into the sand); now the hand comes back up across the front with the blade out to the far side and then raised (tip lowest ~1 m above the sand on the Breaker), and they are posable in the pose lab (`ret1`, `ret2`). A posed rest drops the coded last key before it (it led into the old shoulder rest). `swordReturnTime` 1.5 (Sword arm): the return and the settle take 1.5 × as long (Breaker full sweep 1.09 → 1.64 s), so the opening after a swing grows too.
