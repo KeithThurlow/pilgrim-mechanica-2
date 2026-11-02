@@ -187,7 +187,7 @@ const panel = tweakPanel({
   ],
   // What's in this lab, and which slider groups each thing owns (hold V and click it, or use the buttons).
   topics: [
-    { id: "legs", label: "Legs", groups: ["Move", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain", "Dust: sources", "Ground dents"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Hover", "Sprint", "Sprint kit", "Dash", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain", "Dust: sources", "Ground dents"] },
     { id: "dust", label: "Dust", groups: ["Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Ground dents"] },
     { id: "hull", label: "Hull", groups: ["Body", "Lean", "Torso & guns", "Sensor head"] },
     { id: "guns", label: "Miniguns", groups: ["Torso & guns", "Minigun", "Minigun FX", "Minigun hits", "Sound"] },

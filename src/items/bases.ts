@@ -52,6 +52,10 @@ export const STATS: Record<string, StatInfo> = {
   crush: { label: "Trample damage ×", better: 1, decimals: 2 },
   turnRate: { label: "Turn rate (°/s)", better: 1, decimals: 0 },
   carry: { label: "Carries (t)", better: 1, decimals: 1 },
+  /** Hover legs (src/mech/hover.ts): 1 flies on the hover drive instead of walking. */
+  hover: { label: "Hovers", better: 1, decimals: 0, whole: true, hidden: true },
+  /** Legs that can only lift so much (hover legs): the heaviest hull they take (t; src/items/loadout.ts fitProblem). */
+  lifts: { label: "Lifts hulls up to (t)", better: 1, decimals: 1 },
   hull: { label: "Hull points", better: 1, decimals: 0 },
   torsoTurnRate: { label: "Torso turn (°/s)", better: 1, decimals: 0 },
   carryBonus: { label: "Cargo racks (t)", better: 1, decimals: 1 },
@@ -198,6 +202,13 @@ export const BASES: Base[] = [
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
     stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), carry: s(18, 0.1), trample: s(1.3, 0.06), crush: s(1.5, 0.1) },
   },
+  {
+    // Hover legs (Keith 2026-11-02: "a floating leg that can't support heavy hulls... hovers instead of walking"): the
+    // Stilt's legs on a hover drive, feet hanging; quick and floaty, no stomp, light hulls only (the Cuirass, the
+    // Salvager). A model of their own comes later: the Stilt's legs stand in.
+    id: "legs-hover", name: "Hover legs", kind: "legs", tags: ["legs", "hover"], weight: 3, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.7,
+    stats: { walkSpeed: s(7.5, 0.06), sprintSpeed: s(10, 0.06), accel: s(4, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), carry: s(6, 0.1), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), lifts: s(6, 0) },
+  },
   // Hulls: hull points, torso turn, mounts.
   {
     id: "hull-rampart", name: "Rampart hull", kind: "hull", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
@@ -213,6 +224,12 @@ export const BASES: Base[] = [
     // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon; a head at the
     // front to see what it strips, no top mount (the crane rail runs over it).
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2400, 0.08), armour: s(5, 0.1), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
+  },
+  {
+    // A light cuirass (Keith 2026-11-02: hover legs "could support really light cuirasses"): the Stilt's narrow torso,
+    // thin plate, quick to turn; both mounts and a front head, no ability.
+    id: "hull-cuirass", name: "Cuirass hull", kind: "hull", tags: ["hull", "light"], weight: 4, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.8,
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(1900, 0.08), armour: s(4, 0.1), torsoTurnRate: s(230, 0.08) },
   },
   // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
   // Two styles (Keith 2026-10-26): heads at the front follow the aim and help it a little (a wider soft-lock cone, a

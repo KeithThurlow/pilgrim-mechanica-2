@@ -3,10 +3,13 @@
 // about 5 m to the top of the hull; the names are new and the old lab's 140 sliders are cut to what matters here.
 import type { Param } from "../core/tweaks";
 import { SINK_DEFAULTS, SINK_PARAMS } from "./sink";
+import { HOVER_DEFAULTS, HOVER_PARAMS } from "./hover";
 
 export const WALKER_DEFAULTS = {
   // Feet sink into soft ground (src/mech/sink.ts).
   ...SINK_DEFAULTS,
+  // Hover legs fly instead (src/mech/hover.ts).
+  ...HOVER_DEFAULTS,
   // Move
   // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
   walkSpeed: 6,
@@ -263,6 +266,7 @@ export type WalkerValues = typeof WALKER_DEFAULTS;
 // runDescentSteps). Their values stay above and still take ?set=.
 export const WALKER_PARAMS: Param[] = [
   ...SINK_PARAMS,
+  ...HOVER_PARAMS,
   { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
   { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
   { key: "accel", label: "Leg weight stat (speed up)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "The legs' speed-up stat (leg items roll it); 4 = the Rampart. Lower is heavier: slows the walk's response by Walk: leg weight" },

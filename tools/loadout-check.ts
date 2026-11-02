@@ -423,7 +423,10 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   for (const b of BASES) if (b.kind === "hull") must(!!b.mounts && b.mounts.hull.length >= 2, `${b.id}: a hull with no hull mounts`);
   const armed = defaultLoadout();
   fit(armed, "mountL", mk("arm-rampart")); fit(armed, "mountR", mk("arm-rampart"));
-  for (const b of BASES) must(SLOTS.some((s) => !fitProblem(armed, s, makeItem(b.id)) || !fitProblem(defaultLoadout(), s, makeItem(b.id))), `${b.id} fits no slot`);
+  // (Legs that lift only light hulls, hover legs, on the lightest hull.)
+  const light = defaultLoadout();
+  light.hull = makeItem(BASES.filter((b) => b.kind === "hull").sort((a, b) => a.weight - b.weight)[0].id);
+  for (const b of BASES) must(SLOTS.some((s) => !fitProblem(armed, s, makeItem(b.id)) || !fitProblem(defaultLoadout(), s, makeItem(b.id)) || !fitProblem(light, s, makeItem(b.id))), `${b.id} fits no slot`);
 }
 
 // ---- Cargo ----

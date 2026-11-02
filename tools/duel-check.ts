@@ -109,7 +109,9 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
 {
   const r = runDuel({ seedA: 21, seedB: 22, maxTime: 90, hull: 1e6 });
   must(r.stuckWorst < 12, `long duel: a mech went ${r.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
-  must(Object.values(r.states[0]).filter((x) => x > 0).length >= 2, "long duel: the AI never changed state");
+  // (Either side: which one changes state depends on the rolled kits, and those move whenever a base joins the pool.
+  // Seed 22 rolls hover legs since 2026-11-02, so this also runs a hover rival for a minute and a half.)
+  must(r.states.some((st) => Object.values(st).filter((x) => x > 0).length >= 2), "long duel: the AI never changed state");
   worstStuck = Math.max(worstStuck, r.stuckWorst);
 }
 
