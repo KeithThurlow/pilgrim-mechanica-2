@@ -307,6 +307,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Big robot beams scorch the sand; big blasts cook it (Keith; Claude on `claude/tall-walker-beam-scorch`)
+- Every robot beam (terraforming walkers, striders, quads' lasers) leaves a dark scorch wider than its glowing melt (`heatScorchW` 2.2 × the beam, `heatScorch` 0.85), lasting the fused sand's fade (`heatCharLife` 40 → 90 s, `heatChar` 0.6 → 0.8); smoke rises off the strike; melt flash 1.4 → 1.8 m, spatter 90 → 140/s.
+- Striders' beams drawn fine like the swarm's: the look moved into `src/fx/fineBeam.ts` (shared by `robotBeamDraw.ts` and `striderFx.ts`), striders read the robots' "Look: …" sliders.
+- The walkers' terraform pulse, the striders' slam and walker and strider death blasts cook and scorch the sand under them (`heatPulse` 1300°, `heatSlam` 1200°, `heatDeath` 1500°; `cookGround` in `src/game/robotBeam.ts`, `GroundHeat.scorch`/`scorchSpot`).
+- Typecheck (the one error, `tools/railtruck-check.ts`, is on main already), npm test. Not rendered here.
 ### 2026-11-02 · Summoner: mech replicas, summons sprint with you, summons take damage (Keith; Claude on `claude/project-thread-vhklb8`)
 - Mech replicas, the new default companion: Ramparts on stilt legs with the light Cuirass hull, pale robot steel, on your team (`src/summon/replicas.ts`, a brain like the convoy's guardians); they dash and sprint when you do. The quads stay as the other kind (`?companions=quads|both`, `?replicas=N`).
 - Scrappers and quads run up to 1.25× your speed while you're faster (quads capped at 20 m/s). Enemies turn on summons nearer than you or within 7 m; shooters go for drones; blasts hurt drones; enemy rounds at a summon now reach it (their range ran to you); a scrapper rebuilt every 3 s.

@@ -214,8 +214,8 @@ export const ROBOT_DEFAULTS = {
   robotBeamWaver: 0.07,
   robotBeamFlicker: 0.4,
   robotBeamWisps: 0.7,
-  robotBeamHit: 1.4,
-  robotBeamSparks: 90,
+  robotBeamHit: 1.8,
+  robotBeamSparks: 140,
   robotBeamScorchGlow: 0,
   robotBeamMeltRamp: 0.45,
   // The terraform pulse (Keith 2026-11-01: "a beam attack that blasted the ground and then exploded out around them
