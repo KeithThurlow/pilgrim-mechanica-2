@@ -53,8 +53,9 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     bf.dust.stomp(xm, bf.field.height(xm, zm), zm, 0.7);
   }
   bf.dust.stomp(t.x, t.y, t.z, 1.4);
-  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts); the sweep's ticks drag it on.
-  burnBeam(bf, s.x, s.z, t.x, t.z, e.width, heat * (e.heat ?? 1));
+  // Red-hot sand down the line, hottest where it strikes (src/fx/groundHeat.ts); the sweep's ticks drag it on. Keith
+  // 2026-11-02: cooler toward the start (robotBeamMeltRamp), so the start is already fading while the strike still burns.
+  burnBeamRamp(bf, s.x, s.z, t.x, t.z, e.width, heat * (e.heat ?? 1), (bf.v as { robotBeamMeltRamp?: number }).robotBeamMeltRamp ?? 0.5);
   lastStrike.set(e.id, { x: t.x, z: t.z });
   // The trench: craters down the low part of the line, one per width or so (queued, so a long line doesn't stall).
   if (dig > 0) {
@@ -78,6 +79,18 @@ export function burnBeam(bf: Battlefield, x0: number, z0: number, x1: number, z1
   if (!h || heat <= 0) return;
   h.line(x0, z0, x1, z1, width * 0.45, heat, dt);
   h.spot(x1, z1, width * 0.8, heat * 1.1, dt);
+}
+
+/** burnBeam in pieces, `start` × the heat at (x0, z0) rising to the full heat at the strike (a one-shot line). */
+export function burnBeamRamp(bf: Battlefield, x0: number, z0: number, x1: number, z1: number, width: number, heat: number, start: number) {
+  const h = bf.heat;
+  if (!h || heat <= 0) return;
+  const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.min(12, Math.ceil(L / 3)));
+  for (let k = 0; k < n; k++) {
+    const a = k / n, b = (k + 1) / n, f = start + (1 - start) * (b * b);
+    h.line(x0 + (x1 - x0) * a, z0 + (z1 - z0) * a, x0 + (x1 - x0) * b, z0 + (z1 - z0) * b, width * 0.45, heat * f);
+  }
+  h.spot(x1, z1, width * 0.8, heat * 1.1);
 }
 
 /**

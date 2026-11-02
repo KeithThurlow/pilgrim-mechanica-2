@@ -298,6 +298,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Robot searchlights and beam looks (Keith; Claude on `claude/project-thread-5ic92j`)
+- Searchlights dimmer and robotic: a square pool with corner brackets under a four-sided beam, a thin scan line sweeping across it (`robotSquare`, `robotScanLine`, `robotScanRate`); pool 0.35 → 0.2, haze 0.14 → 0.06, real light 260 → 90, glow 0.7 → 0.45.
+- Beams drawn fine: a thin white-hot core in a soft glow (two crossed strips, `src/fx/beamStrand.ts`), wavering and flickering, three wisps spiralling along in puffs; a melt flash where it strikes (white point, orange bloom, glow on the sand) throwing molten spatter (`src/fx/meltSparks.ts`). Sliders in Robots: beam, "Look: …". The old blue scorch ribbon off (`robotBeamScorchGlow` 0).
+- Ground light from beams a quarter (strike and along-beam lights; hot-sand light `heatLight` 350 → 90). A fired line heats the sand less toward its start (`robotBeamMeltRamp` 0.45), so the start cools first.
+- `src/combat/robotBeamDraw.ts`, `src/fx/lampDraw.ts`, `src/world/nightLights.ts`, `src/game/robotBeam.ts`, `src/combat/robots.ts`, `src/fx/groundHeat.ts`. Typecheck, npm test; not looked at in a render (software GL too slow here). Striders' beams unchanged.
 ### 2026-11-02 · Robots lab: your guns hit 4× harder (Keith; Claude on `claude/project-thread-2315lc`)
 - Keith: too slow to kill a large walker in the robots lab, about 4× the damage. A lab-only slider `labGunDamage` (Lab: your guns, default 4) sets the mech's `damageScale` each frame: minigun rounds and sword cuts; arsenal weapons (rail, rockets) unchanged. The robots topic now also lists the pulse and weapon quad groups.
 - `labs/robots/main.ts`. Typecheck; npm test.
