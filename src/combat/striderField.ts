@@ -14,7 +14,7 @@ import { StriderTarget } from "./striderTarget";
 import { StriderFx } from "./striderFx";
 import { striderRagdoll } from "./striderRagdoll";
 import { footShape } from "../fx/footprint";
-import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
+import { cookGround, coreWarnFx, fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
 import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
 
@@ -42,6 +42,7 @@ export class StriderField {
     bf.targets.push(this.target);
     if (register) bf.register.add(this.target);
     this.fx = new StriderFx(field);
+    this.fx.look = bf.v as unknown as { readonly [k: string]: number | undefined };
     scene.add(this.fx.group);
     this.warn = new CoreWarnDraw(field);
     coreWarnFx(bf, this.warn);
@@ -130,6 +131,7 @@ export class StriderField {
     } else if (e.type === "slam") {
       this.fx.slam(e.id, e.x, e.y, e.z);
       bf.blast(3, AT.set(e.x, e.y, e.z), e.radius, e.damage, e.pierce, "beam");
+      cookGround(bf, e.x, e.z, e.radius, (bf.v as { heatSlam?: number }).heatSlam ?? 1200);
       const d = Math.hypot(mp.x - e.x, mp.z - e.z);
       if (d < 80) this.shake(d < e.radius * 2 ? 1 : 0.3);
     } else if (e.type === "footfall") {
