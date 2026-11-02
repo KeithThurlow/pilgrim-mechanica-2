@@ -298,6 +298,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Robots lab: your guns hit 4× harder (Keith; Claude on `claude/project-thread-2315lc`)
+- Keith: too slow to kill a large walker in the robots lab, about 4× the damage. A lab-only slider `labGunDamage` (Lab: your guns, default 4) sets the mech's `damageScale` each frame: minigun rounds and sword cuts; arsenal weapons (rail, rockets) unchanged. The robots topic now also lists the pulse and weapon quad groups.
+- `labs/robots/main.ts`. Typecheck; npm test.
 ### 2026-11-02 · Big blasts: less drum, more boom (Keith; Claude on `claude/project-thread-1ysipc`)
 - Keith: the explosion works for strings of missile hits, but on the big mortar the deep tail sounds like being inside a drum; its first hit could be a bit bassier. The blast is now three layers (`playBlast` in `src/weapons/weaponSound.ts`): the hit (`blast`), the rolling tail (`blastTail`) and a short sub boom (`blastBoom`). Small blasts play hit and tail together as before; above `blastSizeRef` the tail thins `blastTailCut` 0.45 a doubling (not under `blastTailMin` 0.2) and is never slowed down (the slowed tail was the drum), and the boom comes in at `blastBoom` 0.35 a doubling. Hit / tail / boom: pod missile 0.85 / 0.85 / 0, RPG 1.06 / 0.98 / 0.06, big mortar 1.5 / 0.3 / 0.95.
 - `src/weapons/weaponSound.ts`, `tuning.ts`, `src/game/playerAim.ts`, `src/expedition/loop.ts` (distant blasts get the tail). npm test.
