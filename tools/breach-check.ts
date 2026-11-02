@@ -45,7 +45,7 @@ function shoot(radius: number | null, v = V) {
   const gun = () => ({ enabled: true, mag: newMag(6, 1), rateMul: 1, spinCut: 0, ammoMul: 1, stats: null });
   const unit = {
     team: 1, alive: true, gunsOff: false, cursor: new THREE.Vector3(0, radius === null ? -1 : 1.5, 30) as THREE.Vector3 | null, lock: null, keys: [false, false, false],
-    sim: { pelvis: new THREE.Vector3(0, 3, 0), pos: new THREE.Vector3(), inDash: false }, dash: { refillMul: 1 },
+    sim: { pelvis: new THREE.Vector3(0, 3, 0), pos: new THREE.Vector3(), inDash: false }, dash: { refillMul: 1 }, reactor: { refillMul: 1 },
     body: { barrel: (_s: number, o: THREE.Vector3) => o.set(0, 0, 1), muzzle: (_s: number, o: THREE.Vector3) => o.set(0, 1.5, 1) },
     upper: { guns: [gun(), gun()], sizeMag: noop },
   };

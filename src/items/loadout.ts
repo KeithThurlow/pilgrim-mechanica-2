@@ -14,6 +14,7 @@
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
 import { isEnergy } from "../weapons/energy/energySim";
+import { REACTOR_DEFAULTS } from "../mech/reactor";
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf } from "./protocols";
@@ -293,6 +294,8 @@ export interface ResolvedValues {
   /** The hull's armour (src/game/armour.ts). */
   armour: number;
   dashCharges: number; dashRecharge: number; boostFuel: number;
+  /** The hull's reactor (Keith 2026-11-02): what energy weapons draw on, apart from the pack's kinetic bars. */
+  reactorCap: number; reactorRegen: number;
   ammoPerGun: number;
   /** The first gun's reload (s). */
   reloadTime: number;
@@ -408,6 +411,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     hover: legs.hover ?? 0,
     hull: hull.hull, torsoTurnRate: hull.torsoTurnRate, armour: hull.armour ?? 0,
     dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
+    reactorCap: hull.reactorCap ?? REACTOR_DEFAULTS.reactorCap, reactorRegen: hull.reactorRegen ?? REACTOR_DEFAULTS.reactorRegen,
     ammoPerGun: first?.ammo ?? BASE_STATS("mg-medium").magazine,
     reloadTime: first?.reload ?? D.reload,
     fireRate: first?.fireRate ?? D.fireRate, spinUp: first?.spinUp ?? D.spinUp, spread: first?.spread ?? D.spread, range: first?.range ?? D.range,
@@ -464,6 +468,7 @@ export function summary(r: Resolved): SummaryLine[] {
     line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),
     line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
+    line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
   ];
   for (const [name, g] of [["L", r.guns.left], ["R", r.guns.right]] as const) {
