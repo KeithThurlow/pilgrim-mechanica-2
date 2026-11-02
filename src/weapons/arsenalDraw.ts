@@ -195,13 +195,14 @@ export class ArsenalDraw {
           this.arcs.setMatrixAt(na++, this.m);
         }
       }
-      if (s.aimLine.length >= 2) {
-        line.set(s.aimLine, v.beamWidth * 1.1, "ground", this.ground, 0.07);
-        line.mat.opacity = 0.35 + 0.55 * c;
-        line.mat.color.setHex(c >= v.railMinCharge ? RAIL_GLOW : 0x6c8890);
-        // Frozen for the shot (a rival's snapshot): bright, solid and wider, so "now move" reads.
-        if (a.railSnapped) { line.set(s.aimLine, v.beamWidth * 2.2, "ground", this.ground, 0.07); line.mat.opacity = 1; line.mat.color.setHex(0xffffff); }
-      }
+      if (s.aimBeam.length >= 2 && v.railLineOn > 0.5) {
+        // A faint straight line from the muzzle to where the slug stops (Keith 2026-11-02), white by default; it
+        // brightens with the charge. Frozen for the shot (a rival's snapshot): bright and wider.
+        line.set(s.aimBeam, v.railLineWidth, "flat", null);
+        line.mat.opacity = v.railLineOpacity * (0.6 + 0.4 * c);
+        line.mat.color.setHex(v.railLineWhite > 0.5 ? 0xffffff : c >= v.railMinCharge ? RAIL_GLOW : 0x6c8890);
+        if (a.railSnapped) { line.set(s.aimBeam, v.railLineWidth * 2.5, "flat", null); line.mat.opacity = 1; line.mat.color.setHex(0xffffff); }
+      } else line.mesh.visible = false;
       if (s.meterAt && s.rail.holding) {
         // A ring round the reticle: dim behind, filling clockwise from the top of the screen; full flashes white.
         const R = 1.9, m = s.meterAt, pts = this.pts;
