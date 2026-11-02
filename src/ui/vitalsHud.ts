@@ -134,6 +134,9 @@ export class VitalsHud {
   }
 
   /** hits: the mech's hit list (drained here); camera and at (the mech's hull) place the arcs. */
+  /** Set while a full-screen panel (bay, inventory) is open, so the action bar doesn't sit on top of it. */
+  hideActions = false;
+
   update(dt: number, view: VitalsView, hits: { dx: number; dz: number; amount: number }[], camera: THREE.Camera, at: THREE.Vector3, show = true) {
     const v = this.v;
     this.clock += dt;
@@ -168,7 +171,7 @@ export class VitalsHud {
     for (const a of view.abilities ?? []) slots.push({ key: a.key, name: a.name, cool: a.cool ?? 0, coolMax: a.coolMax, active: a.active ? 1 : null, ready: a.ready >= 1, dim: onFoot, tone: "ability" });
     slots.sort((a, b) => a.key.localeCompare(b.key));
     slots.push({ key: "Q", name: "Repair", cool: 0, active: view.kitProgress !== null ? 1 - view.kitProgress : null, ready: view.kitReady && view.kits > 0, sub: `${view.kits}/${view.kitMax}`, dim: view.kits === 0, tone: "kit" });
-    this.actions.update(dt, slots, v.actionSize, view.note ?? (view.kits === 0 ? "no repair kits left" : ""), show);
+    this.actions.update(dt, slots, v.actionSize, view.note ?? (view.kits === 0 ? "no repair kits left" : ""), show && !this.hideActions);
 
     // The red edge: a flash per hit, faint and pulsing at low hull (not on a wreck).
     const low = view.alive && share < v.lowHull;
