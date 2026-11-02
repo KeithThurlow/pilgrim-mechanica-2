@@ -17,6 +17,7 @@ import {
   SURFACE_IDS, SURFACE_COUNT, SET_RATES, relaxRates, bermRatio, packBrush, BRUSH_ROWS, MAX_DIF, BERM_DECAY, COMP_DECAY,
   CORE_IN, CORE_OUT, RING_AT, RING_K, REACH, OPEN_SHALLOW, OPEN_HEAP, brushReach, type Brush, type DentSurface, type SurfaceFeel, type RelaxRates,
 } from "./dentRule";
+import { DentMemory } from "./dentMemory";
 import { footAtlas, footAtlasVersion, setFootContact, shapeBermRatio, TILE, MAX_SHAPES, type FootShape } from "./footprint";
 
 export const DENT_DEFAULTS = {
@@ -50,8 +51,11 @@ export const DENT_DEFAULTS = {
   dentRelaxStep: 0.3,
   printSize: 1,
   printShaped: 1,
-  printWall: 0.1,
-  printSpread: 0.3,
+  printWall: 0.14,
+  printSpread: 0.36,
+  dentMemory: 6000,
+  dentMemoryRange: 250,
+  dentMemoryLife: 1,
   printContact: 0.12,
   printRobots: 2,
   printBigDepth: 1.2,
@@ -99,6 +103,9 @@ export const DENT_PARAMS: Param[] = [
   { key: "printWall", label: "Footprint: wall (m)", min: 0.02, max: 0.4, step: 0.01, group: G, tip: "How far in from the sole's outline the print reaches full depth: small is a crisp stamp, large a soft dimple (thin toes go shallow)" },
   { key: "printSpread", label: "Footprint: berm spread (m)", min: 0.05, max: 0.7, step: 0.01, group: G, tip: "How far out from the outline the pushed-up sand spreads (wider is lower, the same sand)" },
   { key: "printContact", label: "Footprint: sole contact (m)", min: 0.01, max: 0.5, step: 0.01, group: G, onRelease: true, tip: "How high above the lowest point of a foot model still counts as pressing the sand: higher takes in raised toes and the heel's sides" },
+  { key: "dentMemory", label: "Marks remembered off screen (each kind)", min: 0, max: 20000, step: 500, group: G, onRelease: true, tip: "Footprints and skids, and separately ruts, furrows and craters, kept after they leave the dent area (Keith 2026-11-02), pressed in again when they come back into it, healed by their age. The oldest go first. About 80 bytes each; 0: off" },
+  { key: "dentMemoryRange", label: "Marks remembered within (m)", min: 50, max: 1000, step: 10, group: G, tip: "Marks farther than this from the camera focus are forgotten" },
+  { key: "dentMemoryLife", label: "Remembered marks heal ×", min: 0.2, max: 5, step: 0.1, group: G, tip: "× the surface's heal time for a mark away off screen (it's forgotten once healed to 8%)" },
   { key: "printRobots", label: "Robot prints (0 none, 1 big, 2 all walkers)", min: 0, max: 2, step: 1, group: G, tip: "Which robots leave prints (src/combat/robotPrints.ts): every print is a brush in the dent pass, and a big swarm walks a lot. 1 keeps only the big walkers'" },
   { key: "printBigDepth", label: "Robot prints: big walker depth ×", min: 0, max: 3, step: 0.05, group: G, tip: "× the Footprint depth (the bucket's three claws)" },
   { key: "printMidDepth", label: "Robot prints: medium walker depth ×", min: 0, max: 3, step: 0.05, group: G, tip: "× the Footprint depth (a peg)" },
@@ -130,7 +137,12 @@ export interface StampOptions {
   open?: number;
   /** A foot's own print (src/fx/footprint.ts): the radius is then the shape's scale and elong is ignored. */
   shape?: FootShape | null;
+  /** Remember it, so it is pressed in again when it comes back into the window: "print" (footprints and skids, a ring
+   *  of their own so a convoy's ruts can't push them out), true (default: everything else) or false (the many small
+   *  marks, minigun rounds, not worth the memory). */
+  remember?: boolean | "print";
 }
+
 
 interface Persistent { b: Brush; reach: number; done: boolean; key: string }
 
@@ -160,6 +172,10 @@ export class DentLayer {
   private brushes: Brush[] = [];
   private carry: Brush[] = [];
   private persistent: Persistent[] = [];
+  /** Recent marks (a ring of dentMemory slots), the clock they're aged by, and the next slot to write. */
+  /** Marks kept after they leave the window, and the clock they're aged by (src/fx/dentMemory.ts). */
+  readonly memory = new DentMemory();
+  private clock = 0;
   private uPrevCentre = uniform(new THREE.Vector2(1e6, 1e6));
   private uCount = uniform(0, "int");
   private uRes = uniform(1024, "int");
@@ -338,6 +354,7 @@ export class DentLayer {
     if (d <= 1e-4) return;
     const e = Math.max(1, elong);
     const sh = o.shape;
+    const at = this.brushes.length;
     // A shaped print's wall and berm spread are in metres on the ground: into the shape's own size.
     const wall = sh ? this.v.printWall / radius : 0, spread = sh ? this.v.printSpread / radius : 0;
     this.brushes.push({
@@ -346,6 +363,9 @@ export class DentLayer {
       comp: o.comp ?? this.v.dentComp, surf: SURFACE_IDS[surf], open: o.open ?? 0, mode: o.mode === "add" ? 1 : 0,
       ...(sh ? { shape: sh.index + 1, ext: sh.ext, wall, spread } : {}),
     });
+    if (o.remember !== false && surf !== "set") {
+      this.memory.remember(o.remember === "print" ? 0 : 1, this.brushes[at], (f as SurfaceFeel).life * this.v.dentMemoryLife, this.clock, this.v.dentMemory);
+    }
   }
 
   /**
@@ -378,6 +398,8 @@ export class DentLayer {
     const t = this.texel, half = this.size / 2;
     this.pcx = this.cx; this.pcz = this.cz;
     this.cx = Math.round(fx / t) * t; this.cz = Math.round(fz / t) * t;
+    this.clock += dt;
+    this.memory.replay(this.clock, this.cx, this.cz, this.pcx, this.pcz, half, this.v.dentMemoryRange, this.brushes);
     // Persistent dents that reach texels new to the window this frame.
     for (const p of this.persistent) {
       const inNow = Math.abs(p.b.x - this.cx) < half + p.reach && Math.abs(p.b.z - this.cz) < half + p.reach;

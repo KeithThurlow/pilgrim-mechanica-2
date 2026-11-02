@@ -7,6 +7,7 @@
 //   and its coarse grid is the chunks' (so the edge blend lands on them).
 import { DentGrid, relaxRates, bermRatio, texelWorld, SURFACE_IDS, SET_RATES, type Brush, type RelaxRates } from "../src/fx/dentRule";
 import { DENT_DEFAULTS } from "../src/fx/dents";
+import { DentMemory } from "../src/fx/dentMemory";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { GroundWindow } from "../src/world/groundWindow";
 import { TerrainStreamer, STREAM_DEFAULTS } from "../src/world/chunks";
@@ -216,6 +217,31 @@ const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; 
   }
   ok(late === 0, `walking north at 6 m/s beside the plough: no rows filled at the last moment (${late} frames)`);
   ok(worstC < 1e-4, `the patch's coarse grid is the chunks' own beside the plough (worst ${worstC.toExponential(1)} m); fill ${(ms / 600).toFixed(2)} ms a frame`);
+}
+
+// 7. Marks remembered off screen (src/fx/dentMemory.ts): pressed in again, healed, when the window comes back; never
+//    while it stays; forgotten when far or healed; a ring of ruts can't push the prints out.
+{
+  const m = new DentMemory(), life = 90, half = 16, out: Brush[] = [];
+  m.remember(0, brush(0, 0, 0.45, 0, 1.42, 0.1), life, 0, 100);
+  m.replay(0, 0, 0, 0, 0, half, 250, out);
+  ok(out.length === 0, "a fresh mark isn't pressed twice");
+  m.replay(10, 2, 0, 0, 0, half, 250, out);
+  ok(out.length === 0, "a mark that stays in the window isn't pressed again");
+  m.replay(20, 100, 0, 2, 0, half, 250, out);
+  ok(out.length === 0 && m.stats.kept === 1, "off screen it's kept, not pressed");
+  m.replay(30, 0, 0, 100, 0, half, 250, out);
+  const k = Math.exp(-30 / life);
+  ok(out.length === 1 && Math.abs(out[0].dep - 0.1 * k) < 1e-6 && out[0].mode === 0, `back in view it's pressed again, healed to ${(k * 100).toFixed(0)}% (${out.length} replayed)`);
+  out.length = 0;
+  for (let i = 0; i < 300; i++) m.remember(1, brush(i, 5, 0.3, 0, 3, 0.06), life, 31, 100);
+  m.replay(40, 100, 0, 0, 0, half, 250, out);
+  ok(m.stats.kept === 101, `300 ruts fill only their own ring of 100; the print stays (${m.stats.kept} kept)`);
+  m.replay(41, 700, 0, 100, 0, half, 250, out);
+  ok(m.stats.kept === 0, "marks farther than the range are forgotten");
+  m.remember(0, brush(0, 0, 0.45, 0, 1.42, 0.1), life, 50, 100);
+  m.replay(50 + life * 2.6, 0, 300, 0, 300, half, 1000, out);
+  ok(m.stats.kept === 0, "marks healed below 8% are forgotten");
 }
 
 console.log(fails ? `${fails} FAILED` : "dents ok");
