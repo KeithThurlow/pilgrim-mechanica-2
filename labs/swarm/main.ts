@@ -1,9 +1,10 @@
 // Swarm lab (Keith 2026-11-02: "collapse our swarm labs into one, where we can just adjust the kind of swarm based on
 // enemy type, and potentially even have it so that all enemies turn up in a swarm"). One combat field; which enemies
-// come is ?enemy=robots|bandits|warband|droids, a list (?enemy=robots,bandits) or ?enemy=mix (all of them), or the
+// come is ?enemy=robots|bandits|warband|droids|crusher, a list (?enemy=robots,bandits) or ?enemy=mix (all of them), or the
 // enemy buttons in the panel (the page reloads with the new list). Robots by default. Each enemy kind is a front
 // (src/game/fronts/), with its own flags as its old lab had them; the weapon flags (?left= ?right= ?k1-3= ?barrage
-// ?proto=) and every other combat-lab flag work whatever comes. The old labs (robots, bandits, warband, droids,
+// ?proto=) and every other combat-lab flag work whatever comes; ?summon brings the summoner's units on your side. The old
+// labs (robots, bandits, warband, droids, crusher, summoner,
 // strider) forward here.
 import "../../src/core/lab.css";
 import type { Param } from "../../src/core/tweaks";
@@ -16,6 +17,9 @@ import { robotsFront } from "../../src/game/fronts/robots";
 import { banditsFront } from "../../src/game/fronts/bandits";
 import { warbandFront } from "../../src/game/fronts/warband";
 import { droidsFront } from "../../src/game/fronts/droids";
+import { crusherFront } from "../../src/game/fronts/crusher";
+import { summonerFront, summonGearInUrl } from "../../src/game/fronts/summoner";
+import type { Summons } from "../../src/summon/summons";
 
 const q = new URLSearchParams(location.search);
 const ID = "swarm-lab";
@@ -23,7 +27,7 @@ const ID = "swarm-lab";
 function enemies(): FrontId[] {
   const raw = (q.get("enemy") ?? "robots").toLowerCase();
   if (raw === "mix" || raw === "all") return [...FRONT_IDS];
-  const alias: Record<string, FrontId> = { robot: "robots", bandit: "bandits", band: "warband", raiders: "warband", humanoids: "droids", droid: "droids" };
+  const alias: Record<string, FrontId> = { crushers: "crusher", robot: "robots", bandit: "bandits", band: "warband", raiders: "warband", humanoids: "droids", droid: "droids" };
   const ids = raw.split(",").map((s) => (alias[s] ?? s) as FrontId).filter((s) => FRONT_IDS.includes(s));
   return ids.length ? [...new Set(ids)] : ["robots"];
 }
@@ -33,14 +37,20 @@ const make: Record<FrontId, () => Front> = {
   bandits: () => banditsFront(),
   warband: () => warbandFront(),
   droids: () => droidsFront(q),
+  crusher: () => crusherFront(q),
 };
 const fronts = FRONT_IDS.filter((id) => on.has(id)).map((id) => make[id]());
+// ?summon: the summoner's units (drones, companions, the scrap swarm) on your side, whatever enemies come. Last, so they
+// move after the enemies each frame.
+const summonOn = q.has("summon") || summonGearInUrl(q);
+let summons: Summons | null = null;
+if (summonOn) fronts.push(summonerFront(q, (s) => { summons = s; }));
 
 // The first visit brings over the sliders saved in the old labs, so tuning done there isn't lost.
 try {
   if (!localStorage.getItem(`pm2:${ID}`)) {
     const v: Record<string, unknown> = {}, d: Record<string, unknown> = {};
-    for (const old of ["droids-lab", "warband-lab", "bandits-lab", "robots-lab"]) {
+    for (const old of ["crusher-lab", "summoner-lab", "droids-lab", "warband-lab", "bandits-lab", "robots-lab"]) {
       const s = JSON.parse(localStorage.getItem(`pm2:${old}`) || "{}") as { v?: object; d?: object };
       if (s.v && s.d) { Object.assign(v, s.v); Object.assign(d, s.d); }
     }
@@ -78,6 +88,10 @@ const enemyActions = [
     onClick: () => { const s = new Set(on); if (s.has(id)) s.delete(id); else s.add(id); if (s.size) reload(FRONT_IDS.filter((x) => s.has(x))); },
   })),
   { label: "All enemies", active: () => on.size === FRONT_IDS.length, onClick: () => reload([...FRONT_IDS]) },
+  {
+    label: "Your units (summoner)", active: () => summonOn,
+    onClick: () => { const next = new URLSearchParams(location.search); if (summonOn) { next.delete("summon"); next.delete("summoner"); } else next.set("summon", ""); location.search = next.toString().replace(/=(&|$)/g, "$1"); },
+  },
 ];
 
 // ?lmb=x,z holds the left button aimed there, ?fireat=N lets go after N frames (shot flags, 2026-10-26).
@@ -89,7 +103,7 @@ let groundAt: (x: number, z: number) => number = () => 0;
 
 const lab = await combatLab({
   id: ID,
-  title: `Swarm: ${[...on].map((id) => FRONT_LABELS[id]).join(", ")}`,
+  title: `Swarm: ${[...on].map((id) => FRONT_LABELS[id]).join(", ")}${summonOn ? " + your units" : ""}`,
   defaults,
   params,
   topics,
@@ -114,7 +128,7 @@ let making: Promise<DroidSquads> | null = null;
 const droids = () => making ??= loadBanditVat().catch(() => null).then((vat) => (squads = new DroidSquads(bf, lab.app.scene, V as never, field, vat, lab.deaths)));
 
 const running: Running[] = [];
-for (const f of fronts) running.push(await f.start({ lab, contact, q, droids, fronts: on }));
+for (const f of fronts) running.push(await f.start({ lab, contact, q, droids, summons: () => summons, fronts: on }));
 
 lab.onFrame((dt) => {
   for (const r of running) r.update(dt);

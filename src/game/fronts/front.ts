@@ -9,10 +9,11 @@ import type { CombatLab, CombatLabOptions, SelectEntry } from "../combatLab";
 import type { BodyContact } from "../bodyContact";
 import type { MechUnit } from "../mechUnit";
 import type { DroidSquads } from "../droidFight";
+import type { Summons } from "../../summon/summons";
 
-export type FrontId = "robots" | "bandits" | "warband" | "droids";
-export const FRONT_IDS: FrontId[] = ["robots", "bandits", "warband", "droids"];
-export const FRONT_LABELS: Record<FrontId, string> = { robots: "Robots", bandits: "Bandits", warband: "War band", droids: "Humanoids" };
+export type FrontId = "robots" | "bandits" | "warband" | "droids" | "crusher";
+export const FRONT_IDS: FrontId[] = ["robots", "bandits", "warband", "droids", "crusher"];
+export const FRONT_LABELS: Record<FrontId, string> = { robots: "Robots", bandits: "Bandits", warband: "War band", droids: "Humanoids", crusher: "Crushers" };
 
 export interface Topic { id: string; label: string; groups: string[] }
 type Action = { label: string; onClick: () => void; active?: () => boolean };
@@ -37,6 +38,8 @@ export interface FrontCtx {
   q: URLSearchParams;
   /** The one set of humanoid squads on the field (the droids front and the robots' packs share it). */
   droids: () => Promise<DroidSquads>;
+  /** The summoner's units on this field (?summon), or null: robots near them turn on them. */
+  summons: () => Summons | null;
   /** Every front on this field, so one can stand down when another asks for a set piece. */
   fronts: ReadonlySet<FrontId>;
 }

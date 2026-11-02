@@ -118,9 +118,10 @@ desert look direction. What came from where: `docs/decisions.md`.
   Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
   is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
-- Swarm lab (Keith 2026-11-02; the robots, bandits, warband, droids and strider labs forward here with their flags):
-  `?enemy=robots|bandits|warband|droids` (robots by default), a list (`?enemy=robots,bandits`) or `?enemy=mix` (all at once);
-  the enemy buttons in the panel do the same. Each kind keeps its old lab's flags below. Every enemy kind is a front in
+- Swarm lab (Keith 2026-11-02; the robots, bandits, warband, droids, crusher, summoner and strider labs forward here with their flags):
+  `?enemy=robots|bandits|warband|droids|crusher` (robots by default), a list (`?enemy=robots,bandits`) or `?enemy=mix` (all at once);
+  `?summon` adds the summoner's units on your side (drones, companions, the scrap swarm; robots near them turn on them);
+  the buttons in the panel do the same. Each kind keeps its old lab's flags below. Every enemy kind is a front in
   `src/game/fronts/`. The weapon flags (`?left= ?right= ?k1-3= ?barrage ?proto=`) now work in every combat lab.
 - Combat labs (swarm, summoner, crusher, repair, stress...): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
@@ -134,8 +135,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Striders (in the swarm lab with the robots, Keith 2026-11-01; `labs/strider/` forwards there): `?strider=N` (N up at once, 1 by default),
   `?strider=beam|slam|grab` (one at 45 m about to beam, 14 m about to slam, 6 m about to grab; no packs), `?striderdist=m`.
   Striders are mech-sized (8 m) with a disc hull and long clawed arms. In the convoy lab they come with big robot camps, packs and raids (`?nearcamp`, `?raid`; Striders: in the field).
-- Summoner lab (Keith 2026-11-02; `docs/proposal-summoner.md`): `?drones=N` (attack drones up, 4), `?enemies=N` (robots on the field), `?pack=N`, `?companions=replicas|quads|both` (which kind walks with you; replicas by default), `?replicas=N` (wire-frame mechs, each rolled minigun or rockets; `&set=repRocketShare:1` all rockets, `:0` all miniguns), `?comps=N` (turret quads), `?scrappers=N` (the scrap swarm, 16), `?send` (the swarm thrown 30 m ahead at once), `?still` (a pack standing 25 m ahead, shooting back: watch your units), `?summoner` (the summoner items fitted: drone rack on key 1, swarm hive on key 2, replica bay on the pack; counts from the items), `?dismissat=s` (dismissed s in, as at a convoy pickup, back 30 s later), plus the combat-lab flags; drones and companions go for the Tab lock, else the nearest robots; Z throws the swarm at the lock or cursor, C calls it back.
-- Crusher lab (the heavy crab quad): `?count=N` (up at once), `?dist=m` (where they stand up), `?suck` (one 14 m ahead, spinning up at once), `?claw` (one beside you, pincer ready), `?eat` (it never hunts you: watch it eat the salvage heaps), `?heaps=N`, plus the combat-lab flags.
+- Summoner (Keith 2026-11-02; `docs/proposal-summoner.md`; swarm lab `?summon`, `labs/summoner/` forwards to `?enemy=robots&summon` on its old waves): `?drones=N` (attack drones up, 4), `?enemies=N` (robots on the field), `?pack=N`, `?companions=replicas|quads|both` (which kind walks with you; replicas by default), `?replicas=N` (wire-frame mechs, each rolled minigun or rockets; `&set=repRocketShare:1` all rockets, `:0` all miniguns), `?comps=N` (turret quads), `?scrappers=N` (the scrap swarm, 16), `?send` (the swarm thrown 30 m ahead at once), `?still` (a pack standing 25 m ahead, shooting back: watch your units), `?summoner` (the summoner items fitted: drone rack on key 1, swarm hive on key 2, replica bay on the pack; counts from the items), `?dismissat=s` (dismissed s in, as at a convoy pickup, back 30 s later), plus the combat-lab flags; drones and companions go for the Tab lock, else the nearest robots; Z throws the swarm at the lock or cursor, C calls it back.
+- Crushers (the heavy crab quad; swarm lab `?enemy=crusher`, `labs/crusher/` forwards there): `?count=N` (up at once), `?dist=m` (where they stand up), `?suck` (one 14 m ahead, spinning up at once), `?claw` (one beside you, pincer ready), `?eat` (it never hunts you: watch it eat the salvage heaps), `?heaps=N`, plus the combat-lab flags.
 - Sounds lab (Keith 2026-11-02; the Pixabay recordings): a ▶ button per sound, `?play=<id>` (Breach, Autocannon, Flak, Sniper, Rifle, Smg, Mortar, RobotCharge, RobotBeam, RobotDeath, RobotBigDeath: plays on the first click), plus the combat-lab flags. The Sound samples topic (every combat lab and the convoy lab) cuts each one; `?set=samplesOn:0` is all procedural.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
@@ -216,7 +217,7 @@ src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule
                         minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings), blastWaves + blastWavesDraw
                         (a blast wave on every explosion: screen bend, ground ring, heat shimmer)
-src/game/               fronts/ (the swarm lab's enemy kinds: robots, bandits, warband, droids), battlefield (shared combat stage), solids (mechs and vehicles as solid bodies), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
+src/game/               fronts/ (the swarm lab's enemy kinds: robots, bandits, warband, droids, crusher; summoner: your units), battlefield (shared combat stage), solids (mechs and vehicles as solid bodies), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),

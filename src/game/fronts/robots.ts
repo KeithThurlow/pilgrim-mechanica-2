@@ -18,6 +18,8 @@ import { robotDeathSound, wireRobotBlasts } from "../robotBeam";
 
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../combat/droids";
 import { hook, type Front } from "./front";
+import { splashBlast } from "../splash";
+import { aggroOnAllies } from "../../summon/allies";
 
 const WAVE_DEFAULTS = {
   robotSwarmSize: 220,
@@ -70,7 +72,7 @@ export function robotsFront(params0: URLSearchParams): Front {
       report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0, ...striders.report() }),
       onChange: (key) => { if (key === "striderScale") striders.restart(); },
     },
-    async start({ lab, contact, droids: shared }) {
+    async start({ lab, contact, droids: shared, summons: allies }) {
       const { V, bf, player, field } = lab;
       striders.attach(lab);
       if (striders.scenario) V.robotSwarmSize = 0;
@@ -95,6 +97,14 @@ export function robotsFront(params0: URLSearchParams): Front {
       if (params0.has("swarm")) {
         V.robotSwarmSize = Number(params0.get("swarm")) || 300;
         V.robotGroupSize = 60; V.robotGroupEvery = 1.5;
+      }
+      // ?still: they stand where they are and only shoot back (the summoner lab's flag, for watching your units work):
+      // one pack 25 m ahead, no more coming.
+      if (params0.has("still")) {
+        V.robotSwarmSize = 0;
+        Object.assign(V, { robotRunSpeed: 0, robotMidSpeed: 0, robotQuadSpeed: 0, robotBigSpeed: 0, robotLeapRange: 0, robotShooterShare: 1 });
+        const p = player.sim.pos;
+        sw.spawn(Math.round(V.robotGroupSize), p.x, p.z + 25, 6, { mid: 0.15, big: 0 });
       }
       const robotLine = params0.has("robotline");
       if (robotLine) {
@@ -191,6 +201,7 @@ export function robotsFront(params0: URLSearchParams): Front {
       };
       pack = spawnPack;
 
+      const aimAt = new THREE.Vector3(), aggroList: number[] = [];
       const from = new THREE.Vector3(), dir = new THREE.Vector3(), bitePos = new THREE.Vector3(), up = new THREE.Vector3(0, -1, 0);
       let packClock = Infinity, slot = 2; // the first pack comes at once
       // Into the register for the soft lock and the weapons: the hub, or a walker's chassis (a cursor among a walker's
@@ -211,25 +222,32 @@ export function robotsFront(params0: URLSearchParams): Front {
           if (prey.kind !== lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
           lastPrey = prey.kind;
           const p = prey.at;
+          // Robots near your summoned units (nearer them than you) turn on them, a share of them (src/summon/allies.ts).
+          const units = allies();
+          if (units) aggroOnAllies(sw, units, p, V.allyAggro, V.allyAggroShare, aggroList);
           sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.radius, vx: prey.sim.vel.x, vz: prey.sim.vel.z, latchLow: prey.latchLow, latchHigh: prey.latchHigh },
             (fx, fy, fz, tx, ty, tz, kind, ri) => {
-              if (!prey.alive) return;
+              // On one of your units (a companion or scrapper it turned on), the round goes where it aims.
+              const own = sw.hasT[ri] === 1;
+              if (!own && !prey.alive) return;
               from.set(fx, fy, fz);
-              if (!bf.canSee(from, p)) return;
+              if (!bf.canSee(from, own ? aimAt.set(tx, ty, tz) : p)) return;
               dir.set(tx - fx, ty - fy, tz - fz).normalize();
               const drawn = kind !== SMALL || Math.random() < V.robotTracerShare;
               if (drawn) slot = slot >= 19 ? 2 : slot + 1;
               const damage = sw.shotDamage(ri);
               const look = SHOT[kind];
-              bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, damage,
+              bf.fire(slot, 3, from, dir, from.distanceTo(own ? aimAt : p) + 8, damage,
                 drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
             },
             (i, damage) => {
+              if (sw.hasT[i]) { splashBlast(bf.targets, 3, bitePos.set(sw.px[i], sw.py[i] + 0.4, sw.pz[i]), 1.6, damage, up); return; }
               if (!prey.alive) return;
               prey.unit.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), up);
               tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z);
             },
-            (_i, damage, x, y, z) => {
+            (ci, damage, x, y, z) => {
+              if (sw.hasT[ci]) { splashBlast(bf.targets, 3, bitePos.set(x, y, z), 1.8, damage, up); return; }
               if (!prey.alive) return;
               // A saw strike: the damage plus a heavier spray of sparks and a torn plate where the blade bites the hull.
               prey.unit.damage(damage, bitePos.set(x, y, z), up);
