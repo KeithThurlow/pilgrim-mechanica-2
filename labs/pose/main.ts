@@ -35,7 +35,7 @@ import { SIDE, loadoutFor, type Pick, type SidePick } from "../../src/items/weap
 import { armIk, clipLength, clipPose, keyTime, type SwordClip, type SwordStats } from "../../src/weapons/sword";
 import { SWORD_KEYS, SWORD_POSES, livePoses, poseKey, posesFor, setLivePose, setLivePoses, type KeyPose, type P3, type PoseSet } from "../../src/weapons/swordPoses";
 
-const POSE_DEFAULTS = { posePlaySpeed: 0.25, poseGizmo: 0.7, poseOrbitDist: 9 };
+const POSE_DEFAULTS = { posePlaySpeed: 0.25, poseGizmo: 1, poseOrbitDist: 9 };
 const G = "Pose lab";
 const POSE_PARAMS: Param[] = [
   { key: "posePlaySpeed", label: "Play the move at (× real time)", min: 0.02, max: 1, step: 0.01, group: G, tip: "Pose mode's ▶: the held move plays at this speed, looping" },
@@ -128,6 +128,7 @@ arsenal.swordHold = (side) => (mode === "pose" && (side === 1 || state.both) ? {
 driveFn = () => (mode === "pose" ? { cmd: { x: 0, z: 0, sprint: false }, aim: frozenAim, trigger: false, keys: [false, false, false, false] } : null);
 
 const orbit = new OrbitControls(camera, canvas);
+const frameOff = new THREE.Vector3();
 orbit.enabled = false;
 orbit.enableDamping = false;
 const gizmo = new TransformControls(camera, canvas);
@@ -149,7 +150,9 @@ function enterPose(fromNow: boolean) {
   playing = false;
   const i = Math.max(0, swordSide()), fr = arsenal.swordFrame[i];
   // Pause: hold the sword where it is now; else on the selected (or rest) key.
-  if (fromNow && fr) { hold.clip = fr.clip; hold.t = fr.t; hold.span = fr.span; snap(); }
+  // The reach is close or far, never between (Keith 2026-11-02: edits seemed lost; a pause mid-blend showed a mix of
+  // the two forms, so a posed key only moved part way and slid back when the handles were placed again).
+  if (fromNow && fr) { hold.clip = fr.clip; hold.t = fr.t; hold.span = fr.span < 0.5 ? 0 : 1; snap(); }
   else { hold.span = state.close ? 0 : 1; }
   state.close = hold.span < 0.5;
   const c = player.cursor;
@@ -158,8 +161,12 @@ function enterPose(fromNow: boolean) {
   iso.enabled = false;
   orbit.enabled = true;
   const p = player.sim.pelvis, h = player.sim.heading, dist = V.poseOrbitDist;
-  orbit.target.set(p.x, p.y + 0.8, p.z);
   camera.position.set(p.x + Math.sin(h + 0.7) * dist, p.y + dist * 0.35, p.z + Math.cos(h + 0.7) * dist);
+  // Looked at a little to its left, so the mech sits right of the panel.
+  const look = new THREE.Vector3(p.x, p.y + 0.8, p.z), toCam = camera.position.clone().sub(look);
+  frameOff.copy(new THREE.Vector3().crossVectors(Y, toCam).normalize().multiplyScalar(-dist * 0.28)).setY(0.8);
+  orbit.target.copy(look).add(frameOff).setY(p.y + 0.8);
+  camera.position.add(new THREE.Vector3(frameOff.x, 0, frameOff.z));
   orbit.update();
   render();
 }
@@ -173,14 +180,15 @@ function enterPlay() {
   render();
 }
 
-/** Select the key the hold sits on (within a hair) and sit on it exactly; or none. */
+/** Go to the nearest key of the held move and sit on it exactly (Keith 2026-11-02: "when I'm adjusting a joint, it
+ *  automatically goes to the closest key"); none only for a move without keys (Settle). */
 function snap() {
-  keySel = keyAt();
+  keySel = keyAt(Infinity);
   const st = stats(), k = SWORD_KEYS.find((q) => q.name === keySel);
   if (st && k) hold.t = keyTime(k.clip, k.name, st, V, hold.span) ?? hold.t;
 }
 /** The key the hold sits on now (within a hair), or null. */
-function keyAt(): string | null {
+function keyAt(within = 0.012): string | null {
   const st = stats();
   if (!st) return null;
   const len = Math.max(0.05, clipLength(hold.clip, st, V, hold.span));
@@ -191,7 +199,7 @@ function keyAt(): string | null {
     const d = Math.abs(t - hold.t);
     if (d < bd) { bd = d; best = k.name; }
   }
-  return bd <= len * 0.012 ? best : null;
+  return bd <= len * within ? best : null;
 }
 const stats = (): SwordStats | null => arsenal.swordStatsOf(Math.max(0, swordSide()));
 const baseId = () => stats()?.pose ?? "sword-light";
@@ -246,6 +254,26 @@ function onDrag() {
   save();
 }
 gizmo.addEventListener("objectChange", onDrag);
+// Undo: the edits as they stood before each drag, reset or paste.
+const undo: string[] = [];
+function remember() { undo.push(JSON.stringify(livePoses())); if (undo.length > 100) undo.shift(); }
+function undoOnce() {
+  const last = undo.pop();
+  if (last === undefined) { status("Nothing to undo"); return; }
+  setLivePoses(JSON.parse(last)); save(); status("Undone"); render();
+}
+gizmo.addEventListener("mouseDown", remember);
+/** The key before or after this one in the held move (wrapping). */
+function stepKey(dir: 1 | -1) {
+  const st = stats();
+  if (!st) return;
+  const ts = SWORD_KEYS.filter((k) => k.clip === hold.clip).map((k) => ({ k, t: keyTime(k.clip, k.name, st, V, hold.span) })).filter((x) => x.t !== null) as { k: typeof SWORD_KEYS[number]; t: number }[];
+  if (!ts.length) return;
+  ts.sort((a, b) => a.t - b.t);
+  const i = ts.findIndex((x) => x.k.name === keySel);
+  const j = i < 0 ? (dir > 0 ? 0 : ts.length - 1) : (i + dir + ts.length) % ts.length;
+  goKey(ts[j].k.name);
+}
 gizmo.addEventListener("mouseUp", () => render());
 
 /** Put the handles where the held pose is (all but the one being dragged), and the gizmo on the tool's handle. */
@@ -274,6 +302,75 @@ function placeHandles() {
   gizmo.setSize(V.poseGizmo);
 }
 
+// ---- Which way everything faces (Keith 2026-11-02: "I can't tell what is the front of the blade ... an arrow showing
+// what each joint thinks is forward and up"): drawn in Pose on top of everything, in the hull's frame.
+// Blue: forward (along the upper arm, the forearm, the blade to its tip). Green: up (the back of each arm bone, where
+// the elbow points, the triceps side; the blade's spine). Red: the blade's cutting edge, a strip along it. White: the tip.
+const COL = { fwd: 0x3aa0ff, up: 0x4be06a, edge: 0xff3b30, tip: 0xffffff };
+const cueMat = (c: number) => new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.95 });
+class Arrow {
+  readonly g = new THREE.Group();
+  private shaft: THREE.Mesh; private head: THREE.Mesh;
+  constructor(color: number, r = 0.035) {
+    const m = cueMat(color);
+    this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 8).translate(0, 0.5, 0), m);
+    this.head = new THREE.Mesh(new THREE.ConeGeometry(r * 3, r * 7, 10).translate(0, r * 3.5, 0), m);
+    for (const o of [this.shaft, this.head]) { o.renderOrder = 11; this.g.add(o); }
+  }
+  set(from: THREE.Vector3, dir: THREE.Vector3, len: number) {
+    this.g.position.copy(from);
+    this.g.quaternion.setFromUnitVectors(Y, dir.clone().normalize());
+    this.shaft.scale.y = Math.max(0.01, len);
+    this.head.position.y = len;
+  }
+}
+const Y = new THREE.Vector3(0, 1, 0);
+/** A flat strip along a bone or the blade, on one face (len along +Y). */
+const strip = (color: number, w: number, d: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1, d).translate(0, 0.5, 0), cueMat(color)); m.renderOrder = 11; return m; };
+const cues = new THREE.Group();
+const aUpperF = new Arrow(COL.fwd), aUpperU = new Arrow(COL.up), aForeF = new Arrow(COL.fwd), aForeU = new Arrow(COL.up);
+const aBlade = new Arrow(COL.fwd, 0.045), aSpine = new Arrow(COL.up, 0.04);
+const backUpper = strip(COL.up, 0.14, 0.05), backFore = strip(COL.up, 0.14, 0.05), edgeStrip = strip(COL.edge, 0.07, 0.07);
+const tipDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), cueMat(COL.tip));
+tipDot.renderOrder = 11;
+cues.add(aUpperF.g, aUpperU.g, aForeF.g, aForeU.g, aBlade.g, aSpine.g, backUpper, backFore, edgeStrip, tipDot);
+/** Lay a strip from a to b, pushed `off` along n (square to the bone, facing n). */
+function layStrip(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3, off: number) {
+  const d = b.clone().sub(a), len = d.length();
+  m.position.copy(a).addScaledVector(n, off);
+  const yAx = d.normalize(), zAx = n.clone().normalize(), xAx = new THREE.Vector3().crossVectors(yAx, zAx).normalize();
+  m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAx, yAx, new THREE.Vector3().crossVectors(xAx, yAx)));
+  m.scale.y = len;
+}
+function placeCues() {
+  const hg = hullGroup(), i = swordSide(), fr = i >= 0 ? arsenal.swordFrame[i] : null, st = stats();
+  cues.visible = mode === "pose" && !!hg && !!fr && !!st;
+  if (!cues.visible) return;
+  if (cues.parent !== hg) hg!.add(cues);
+  const side: 1 | -1 = i === 0 ? 1 : -1;
+  const p = clipPose(hold.clip, hold.t, side, fr!.shoulder, fr!.aimYaw, st!, V, hold.span);
+  const ik = armIk(fr!.shoulder, p.hand, V.swordUpperArm, V.swordForearm, p.pole);
+  const S = fr!.shoulder.clone(), E = new THREE.Vector3(ik.elbow.x, ik.elbow.y, ik.elbow.z), H = new THREE.Vector3(ik.hand.x, ik.hand.y, ik.hand.z);
+  // The back of the arm: from the shoulder-to-hand line out to the elbow (where the elbow points).
+  const line = H.clone().sub(S).normalize(), back = E.clone().sub(S);
+  back.addScaledVector(line, -back.dot(line));
+  if (back.lengthSq() < 1e-6) back.set(p.pole.x, p.pole.y, p.pole.z);
+  back.normalize();
+  const mid = (a: THREE.Vector3, b: THREE.Vector3) => a.clone().add(b).multiplyScalar(0.5);
+  const bu = E.clone().sub(S).normalize(), bf = H.clone().sub(E).normalize();
+  // Each bone's own "up": its back, square to the bone.
+  const upOf = (b: THREE.Vector3) => back.clone().addScaledVector(b, -back.dot(b)).normalize();
+  aUpperF.set(mid(S, E), bu, 0.55); aUpperU.set(mid(S, E), upOf(bu), 0.55);
+  aForeF.set(mid(E, H), bf, 0.55); aForeU.set(mid(E, H), upOf(bf), 0.55);
+  layStrip(backUpper, S, E, upOf(bu), 0.21); layStrip(backFore, E, H, upOf(bf), 0.19);
+  const hs = hg!.getWorldScale(new THREE.Vector3()).x || 1, bladeL = (st!.reach * V.swordLength) / hs;
+  const F = new THREE.Vector3(p.fwd.x, p.fwd.y, p.fwd.z).normalize(), U = new THREE.Vector3(p.up.x, p.up.y, p.up.z).normalize();
+  aBlade.set(H, F, Math.min(1.6, bladeL * 0.45)); aSpine.set(H, U, 0.7);
+  // The edge faces away from the spine: a red strip down that side of the blade, the tip a white ball.
+  layStrip(edgeStrip, H.clone().addScaledVector(F, 0.3), H.clone().addScaledVector(F, bladeL), U.clone().negate(), 0.14);
+  tipDot.position.copy(H).addScaledVector(F, bladeL);
+}
+
 // ---- Saving and the way out ----
 function save() { try { localStorage.setItem(KEY_STORE, JSON.stringify(livePoses())); } catch { /* private window */ } }
 /** The posed keys as SWORD_POSES wants them (defaults merged with the lab's edits), for one sword or all. */
@@ -297,6 +394,7 @@ function load() {
   try {
     const all = JSON.parse(text) as Record<string, PoseSet>;
     const live = { ...livePoses() };
+    remember();
     for (const [id, set] of Object.entries(all)) live[id] = { ...(live[id] ?? {}), ...set };
     setLivePoses(live); save(); status("Loaded"); render();
   } catch { status("That isn't pose JSON"); }
@@ -305,8 +403,9 @@ function load() {
 // ---- The panel ----
 const style = document.createElement("style");
 style.textContent = `
-.pose { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 4px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: min(760px, calc(100vw - 20px)); font: 12px var(--sans); }
+.pose { position: fixed; left: 70px; top: 110px; z-index: 5; display: flex; flex-direction: column; gap: 4px; overflow: auto;
+  max-height: calc(100vh - 230px); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+  width: min(400px, calc(100vw - 90px)); font: 12px var(--sans); }
 .pose-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .pose-row > span.l { color: var(--muted); width: 54px; }
 .pose button { background: #1f2226; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; font: 12px var(--sans); cursor: pointer; }
@@ -314,6 +413,7 @@ style.textContent = `
 .pose button.posed::after { content: " ●"; color: var(--ok); }
 .pose input[type=range] { flex: 1; min-width: 160px; }
 .pose .msg { color: var(--muted); }
+.pose .editing { color: var(--accent); font-weight: 600; font-size: 13px; }
 .pose .vals { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; white-space: pre; }
 `;
 document.head.appendChild(style);
@@ -359,18 +459,26 @@ function render() {
   }
   if (mode === "pose" && isSword()) {
     const st = stats()!;
+    // What's being edited, in one line (Keith 2026-11-02).
+    const ed = row("");
+    const eb = document.createElement("div"); eb.className = "editing";
+    const kk = SWORD_KEYS.find((k) => k.name === keySel);
+    eb.textContent = kk ? `Editing: ${NAMES[baseId()] ?? baseId()} · ${kk.label}${kk.span ? (hold.span < 0.5 ? " · close cut" : " · full sweep") : ""}${posesFor(baseId())[keyName()] ? " · posed ●" : " · as coded"}`
+      : `${CLIPS.find((c) => c[0] === hold.clip)?.[1]} has no keys of its own: pick a key below`;
+    ed.appendChild(eb);
     const cr = row("Move");
     for (const [c, label] of CLIPS) btn(cr, label, hold.clip === c, () => { hold.clip = c; hold.t = 0; snap(); playing = false; render(); });
     btn(cr, playing ? "❚❚ Stop" : "▶ Play the move", playing, () => { playing = !playing; if (!playing) snap(); render(); }, "Loops the held move at the Pose lab speed slider");
     const sr = row("Time");
     const len = clipLength(hold.clip, st, V, hold.span);
-    btn(sr, "◀", false, () => { hold.t = Math.max(0, hold.t - len / 60); snap(); playing = false; render(); }, "Step back (1/60 of the move)");
+    btn(sr, "◀ key", false, () => stepKey(-1), "The key before (wraps round the move)");
     scrub = document.createElement("input");
     scrub.type = "range"; scrub.min = "0"; scrub.max = "1"; scrub.step = "0.001"; scrub.value = String(len > 0 ? hold.t / len : 0);
+    // Dragging the slider plays through freely (no gizmo between keys); letting go snaps to the nearest key.
     scrub.addEventListener("input", () => { hold.t = Number(scrub!.value) * len; playing = false; keySel = keyAt(); updateScrubText(); });
     scrub.addEventListener("change", () => { snap(); render(); });
     sr.appendChild(scrub);
-    btn(sr, "▶", false, () => { hold.t = Math.min(len, hold.t + len / 60); snap(); playing = false; render(); }, "Step on (1/60 of the move)");
+    btn(sr, "key ▶", false, () => stepKey(1), "The next key (wraps round the move)");
     scrubText = document.createElement("span"); scrubText.className = "msg"; sr.appendChild(scrubText);
     updateScrubText();
     const kr = row("Keys");
@@ -381,23 +489,26 @@ function render() {
       const stored = poseKey(k.name, k.span && hold.span < 0.5);
       btn(kr, k.label.replace(/^Cut \d: /, ""), keySel === k.name, () => goKey(k.name), `Jump to ${k.label}${k.span ? (hold.span < 0.5 ? " (close cut)" : " (full sweep)") : ""} and grab it`, posed[stored] ? "posed" : undefined);
     }
+    // The gizmo's three tools, always shown (Keith 2026-11-02: couldn't find the rotation): arrows move the hand, rings
+    // rotate the blade about the hand, arrows on the orange dot bend the elbow.
+    const tr = row("Gizmo");
+    btn(tr, "Move hand (G)", tool === "hand", () => { tool = "hand"; render(); }, "Arrows: drag the hand");
+    btn(tr, "Rotate blade (T)", tool === "blade", () => { tool = "blade"; render(); }, "Rings: turn the blade about the hand");
+    btn(tr, "Bend elbow (E)", tool === "elbow", () => { tool = "elbow"; render(); }, "Arrows on the orange dot: where the elbow points");
+    btn(tr, `Undo (Ctrl+Z)${undo.length ? ` ·${undo.length}` : ""}`, false, undoOnce, "Take back the last drag, reset or paste");
     if (keySel) {
-      const tr = row("Grab");
-      btn(tr, "Move hand (G)", tool === "hand", () => { tool = "hand"; render(); });
-      btn(tr, "Turn blade (T)", tool === "blade", () => { tool = "blade"; render(); });
-      btn(tr, "Swing elbow (E)", tool === "elbow", () => { tool = "elbow"; render(); });
-      btn(tr, "Reset this key", false, () => { setLivePose(baseId(), keyName(), null); save(); status(`${keyName()} back to the code's`); }, "Back to the code's key (or the committed default)");
+      btn(tr, "Reset this key", false, () => { remember(); setLivePose(baseId(), keyName(), null); save(); status(`${keyName()} back to the code's`); }, "Back to the code's key (or the committed default)");
       const v = keyNow();
       if (v) { const s = document.createElement("span"); s.className = "vals"; s.textContent = `${keyName()}  hand ${v.hand!.join(", ")}  fwd ${v.fwd!.join(", ")}`; tr.appendChild(s); }
     } else {
-      const t = document.createElement("span"); t.className = "msg"; t.textContent = "Jump to a key to grab it (between keys the swing only shows)"; kr.appendChild(t);
+      const t = document.createElement("span"); t.className = "msg"; t.textContent = "Click a key above to show the gizmo (between keys the swing only plays)"; tr.appendChild(t);
     }
   }
   const er = row("Poses");
   btn(er, `Copy pose (${NAMES[baseId()] ?? baseId()})`, false, () => void copy(baseId()), "The posed keys of this sword as JSON on the clipboard: paste it to Claude in chat");
   btn(er, "Copy all swords", false, () => void copy(null));
   btn(er, "Paste…", false, load, "Load posed keys from JSON");
-  btn(er, "Reset sword", false, () => { if (confirm(`Clear every posed key of the ${NAMES[baseId()] ?? baseId()} in this browser?`)) { const live = { ...livePoses() }; delete live[baseId()]; setLivePoses(live); save(); status("Cleared"); } }, "Clear this sword's edits in this browser (committed defaults stay)");
+  btn(er, "Reset sword", false, () => { if (confirm(`Clear every posed key of the ${NAMES[baseId()] ?? baseId()} in this browser?`)) { remember(); const live = { ...livePoses() }; delete live[baseId()]; setLivePoses(live); save(); status("Cleared"); } }, "Clear this sword's edits in this browser (committed defaults stay)");
   if (msg) { const m = document.createElement("span"); m.className = "msg"; m.textContent = msg; er.appendChild(m); }
 }
 function updateScrubText() {
@@ -409,9 +520,13 @@ function updateScrubText() {
 
 addEventListener("keydown", (e) => {
   const tag = (e.target as HTMLElement)?.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || e.repeat) return;
+  // The time slider keeps focus after a drag: G, T and E still work there; only typing boxes take the keys.
+  if (((tag === "INPUT" && (e.target as HTMLInputElement).type !== "range") || tag === "TEXTAREA") || e.repeat) return;
   if (e.code === "KeyP") { if (mode === "play") enterPose(true); else enterPlay(); }
   if (mode !== "pose") return;
+  if (e.code === "KeyZ" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undoOnce(); return; }
+  if (e.code === "BracketLeft") stepKey(-1);
+  if (e.code === "BracketRight") stepKey(1);
   if (e.code === "KeyG") { tool = "hand"; render(); }
   if (e.code === "KeyT") { tool = "blade"; render(); }
   if (e.code === "KeyE") { tool = "elbow"; render(); }
@@ -435,12 +550,13 @@ lab.onFrame((dt) => {
     if (scrub) scrub.value = String(hold.t / len);
     updateScrubText();
   }
-  if (mode === "pose") { const p = player.sim.pelvis; orbit.target.lerp(new THREE.Vector3(p.x, p.y + 0.8, p.z), Math.min(1, dt * 4)); orbit.update(); }
+  if (mode === "pose") { const p = player.sim.pelvis; orbit.target.lerp(new THREE.Vector3(p.x + frameOff.x, p.y + 0.8, p.z + frameOff.z), Math.min(1, dt * 4)); orbit.update(); }
   placeHandles();
+  placeCues();
 });
 
 // The console (and headless checks): the hold, the handles, a drag, the JSON.
-(window as unknown as { __pose: unknown }).__pose = { hold, state, handle, elbowHandle, drag: onDrag, json: (all = false) => exportJson(all ? null : baseId()).text, key: () => keySel };
+(window as unknown as { __pose: unknown }).__pose = { hold, state, handle, elbowHandle, drag: onDrag, json: (all = false) => exportJson(all ? null : baseId()).text, key: () => keySel, gizmo, tool: () => tool };
 
 refit();
 // ?pose[=key]: start posing (on that key).

@@ -297,6 +297,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Pose lab usable: edits stick, snaps to keys, direction arrows, undo (Keith; Claude on `claude/project-thread-yofecw`)
+- Keith: edits seemed lost when switching joints; couldn't find rotation; couldn't tell which way the blade, hand and arms face; the panel sat under the repair badge. Cause of the lost edits: a pause mid-swing held the reach between the close and full forms, so a posed key moved only part way and slid back. Now the reach is always close or full, pausing or letting go of the time slider snaps to the nearest key (◀ key / key ▶, [ and ] step key to key), an "Editing: sword · key · reach · posed" line shows what's edited, Ctrl+Z / Undo takes back drags, resets and pastes.
+- Direction cues in Pose: blue forward and green up arrows on the upper arm, forearm and blade; a green strip on the back of each arm bone (where the elbow points); a red strip on the blade's cutting edge and a white ball at the tip. The Gizmo row (Move hand G, Rotate blade T, Bend elbow E) always shows; G/T/E work after using the slider; the gizmo starts bigger; the panel is docked left; the pose camera frames the mech right of it.
+- `labs/pose/main.ts`, `index.html`. Checked: headless run (hand moved, then the elbow, a key away and back: both edits kept; T gives the rotate rings), npm test. Who: agent.
 ### 2026-11-02 · Action bar (incl. the Q repair kit button) hides while the bay or inventory is open (Keith; Claude)
 - It sat on top of the bay/inventory panels at the bottom centre. `VitalsHud.hideActions`, set in `labs/convoy/main.ts` from `bay.isOpen || inventory.isOpen`. Typecheck and `npm test` pass.
 ### 2026-11-01 · Pose lab: pose each sword's keys with a gizmo (Keith; Claude on `claude/project-thread-yofecw`)
