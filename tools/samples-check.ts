@@ -4,8 +4,8 @@
 // prints its default cut (length, peak, how its punch compares with the procedural sound's). Run: npm test.
 import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { cutSample, matchLoudness, onset, punchRms, mixUnder } from "../src/audio/sampleCut";
-import { SAMPLES, SAMPLE_DEFAULTS, SAMPLE_PARAMS, sampleKey } from "../src/audio/samples";
+import { alienize, cutSample, matchLoudness, onset, punchRms, mixUnder } from "../src/audio/sampleCut";
+import { SAMPLES, SAMPLE_DEFAULTS, SAMPLE_PARAMS, ALIEN_FIELDS, alienKey, sampleKey } from "../src/audio/samples";
 import { cutVariants } from "../src/audio/sampleBank";
 import { addWeaponSounds } from "../src/weapons/weaponSound";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
@@ -35,6 +35,14 @@ const loud = matchLoudness(Float32Array.from(cut), 44100, 5, 12);
 ok(Math.max(...loud.map(Math.abs)) <= 0.981, "never past the ceiling");
 ok(mixUnder(cut, new Float32Array(50000), 0.5).length === 50000, "mix under lengthens to the longer");
 
+// The robot remix: every stage on at once stays finite and bounded, and does change the sound.
+const al = alienize(Float32Array.from(cut), 44100, { ring: 90, ringMix: 0.5, comb: 5, combFb: 0.9, sweepFrom: 3000, sweepTo: 100, sweepQ: 12, sweepMix: 0.8 });
+ok(al.every(Number.isFinite) && Math.max(...al.map(Math.abs)) < 50, "remix finite and bounded");
+let diff = 0; for (let i = 0; i < al.length; i++) diff += Math.abs(al[i] - cut[i]);
+ok(diff / al.length > 0.01, "remix changes the sound");
+const same = alienize(Float32Array.from(cut), 44100, { ring: 0, ringMix: 0, comb: 0, combFb: 0, sweepFrom: 100, sweepTo: 100, sweepQ: 1, sweepMix: 0 });
+ok(same.every((x, i) => x === cut[i]), "remix with every stage off leaves it alone");
+
 // The table: files present, sliders complete, sounds that exist.
 const procedural = readFileSync("src/weapons/weaponSound.ts", "utf8");
 const keys = new Set(SAMPLE_PARAMS.map((p) => p.key));
@@ -42,6 +50,7 @@ const D = SAMPLE_DEFAULTS as unknown as Record<string, number>;
 for (const d of SAMPLES) {
   ok(existsSync(`public/sounds/pixabay/${d.file}.mp3`), `${d.file}.mp3 in public/sounds/pixabay`);
   for (const f of ["On", "Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const) ok(keys.has(sampleKey(d, f)) && Number.isFinite(D[sampleKey(d, f)]), `${d.id} ${f} slider`);
+  if (d.alien) for (const [f] of ALIEN_FIELDS) ok(keys.has(alienKey(d, f)) && Number.isFinite(D[alienKey(d, f)]), `${d.id} remix ${f} slider`);
   ok(procedural.includes(`addSound("${d.ref ?? d.sound}"`), `${d.id} matches a procedural sound (${d.ref ?? d.sound})`);
 }
 

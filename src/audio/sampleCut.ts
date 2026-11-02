@@ -101,3 +101,39 @@ export function toMono(chans: Float32Array[]): Float32Array {
   for (const c of chans) for (let i = 0; i < n; i++) out[i] += c[i] / chans.length;
   return out;
 }
+
+/** The robot remix (Keith 2026-11-02: the underwater recordings made alien), each stage off at 0. */
+export interface AlienOptions {
+  /** Ring modulation: the sound times a sine at this many Hz (metallic, inharmonic), mixed in at ringMix. */
+  ring: number; ringMix: number;
+  /** A comb resonator: a feedback delay of this many ms (a pitch of 1000/ms Hz) at this feedback (0..0.95). */
+  comb: number; combFb: number;
+  /** A resonant band-pass sweeping from sweepFrom to sweepTo Hz over the sound (exponentially), at Q, mixed in at sweepMix. */
+  sweepFrom: number; sweepTo: number; sweepQ: number; sweepMix: number;
+}
+
+/** Run the robot remix on `x` in place (ring, then comb, then the sweep). */
+export function alienize(x: Float32Array, sr: number, o: AlienOptions): Float32Array {
+  const n = x.length;
+  if (o.ring > 0 && o.ringMix > 0) {
+    const w = (2 * Math.PI * o.ring) / sr;
+    for (let i = 0; i < n; i++) x[i] = x[i] * (1 - o.ringMix) + x[i] * Math.sin(w * i) * o.ringMix * 2;
+  }
+  if (o.comb > 0.1 && o.combFb > 0) {
+    const d = Math.max(1, Math.round((o.comb / 1000) * sr)), fb = Math.min(0.95, o.combFb), buf = new Float32Array(d);
+    for (let i = 0, j = 0; i < n; i++, j = (j + 1) % d) { const y = x[i] + buf[j] * fb; buf[j] = y; x[i] = y * (1 - fb * 0.5); }
+  }
+  if (o.sweepMix > 0 && o.sweepFrom > 0 && o.sweepTo > 0) {
+    // A state-variable filter (Chamberlin), its corner moved every sample; the band output, mixed in.
+    const q = 1 / Math.max(0.5, o.sweepQ), lr = Math.log(o.sweepTo / o.sweepFrom);
+    let lo = 0, bp = 0;
+    for (let i = 0; i < n; i++) {
+      const hz = Math.min(sr * 0.2, o.sweepFrom * Math.exp(lr * (i / n)));
+      const f = 2 * Math.sin((Math.PI * hz) / sr);
+      const hi = x[i] - lo - q * bp;
+      bp += f * hi; lo += f * bp;
+      x[i] = x[i] * (1 - o.sweepMix) + bp * o.sweepMix * 1.5;
+    }
+  }
+  return x;
+}

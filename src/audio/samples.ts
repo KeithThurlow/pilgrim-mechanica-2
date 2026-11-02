@@ -4,6 +4,7 @@
 // the sample off (or before it has loaded, or if it fails to) the procedural sound plays as before. "Procedural
 // under" mixes the procedural sound in beneath the sample (its crack on a softer recording, say).
 import type { Param } from "../core/tweaks";
+import type { AlienOptions } from "./sampleCut";
 
 export interface SampleDef {
   /** Key stem for its sliders (smp<Id>On, ...) and its file: public/sounds/pixabay/<file>.mp3. */
@@ -14,6 +15,10 @@ export interface SampleDef {
   /** The procedural sound its loudness is matched to and mixed under it (default: `sound`). */
   ref?: string;
   label: string;
+  /** The slider its level is read from (default: the ref's own level). */
+  level?: string;
+  /** The robot remix's defaults (sampleCut.ts alienize); robots only. */
+  alien?: AlienOptions;
   start: number; len: number; fade: number; pitch: number; spread: number; lowpass: number; highpass: number; gain: number; under: number;
 }
 
@@ -29,6 +34,16 @@ export const SAMPLES: SampleDef[] = [
   { id: "Mortar", file: "grenadelauncherthump", sound: "mortar", label: "Mortar launch (grenadelauncherthump)", start: 0, len: 0.7, fade: 0.35, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "BlastLarge", file: "largebomb", sound: "blastLarge", ref: "blast", label: "Large blast (largebomb)", start: 0, len: 2.0, fade: 1.0, pitch: 0, spread: 1.2, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "BlastGiant", file: "giantbomb", sound: "blastGiant", ref: "blast", label: "Giant blast (giantbomb)", start: 0, len: 2.4, fade: 1.2, pitch: 0, spread: 1.2, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
+  // The robots (batch 2; Keith: "underwater", to be remixed further): pitched down and run through the alien remix. Matched
+  // in loudness to the procedural blast (the beam and deaths) and the rail's charge whine (the charge).
+  { id: "RobotCharge", file: "robotchargingnoise", sound: "robotCharge", ref: "railCharge", level: "robotChargeLevel", label: "Robot beam charge (robotchargingnoise)", start: 0, len: 2.0, fade: 0.4, pitch: -2, spread: 1, lowpass: 20000, highpass: 40, gain: 0, under: 0,
+    alien: { ring: 0, ringMix: 0, comb: 4, combFb: 0.55, sweepFrom: 180, sweepTo: 2400, sweepQ: 8, sweepMix: 0.6 } },
+  { id: "RobotBeam", file: "robotalienbeam", sound: "robotBeam", ref: "blast", level: "robotSoundLevel", label: "Robot beam release (robotalienbeam)", start: 0, len: 1.6, fade: 0.9, pitch: 0, spread: 1.5, lowpass: 20000, highpass: 30, gain: -3, under: 0,
+    alien: { ring: 110, ringMix: 0.4, comb: 3, combFb: 0.6, sweepFrom: 300, sweepTo: 3000, sweepQ: 5, sweepMix: 0.35 } },
+  { id: "RobotDeath", file: "robotalienexplosion", sound: "robotDeath", ref: "blast", level: "robotSoundLevel", label: "Robot death (robotalienexplosion)", start: 0, len: 2.2, fade: 1.2, pitch: -3, spread: 2, lowpass: 20000, highpass: 30, gain: -2, under: 0,
+    alien: { ring: 70, ringMix: 0.35, comb: 6, combFb: 0.6, sweepFrom: 2000, sweepTo: 200, sweepQ: 6, sweepMix: 0.4 } },
+  { id: "RobotBigDeath", file: "largerrobotalienexplosion", sound: "robotBigDeath", ref: "blast", level: "robotSoundLevel", label: "Big robot death (largerrobotalienexplosion)", start: 0, len: 3.0, fade: 1.6, pitch: -5, spread: 1.5, lowpass: 20000, highpass: 25, gain: 0, under: 0,
+    alien: { ring: 45, ringMix: 0.3, comb: 9, combFb: 0.65, sweepFrom: 1500, sweepTo: 120, sweepQ: 6, sweepMix: 0.4 } },
 ];
 
 /** How many variants each sample is cut into (pitches spread evenly across its spread). */
@@ -39,13 +54,29 @@ export type SampleField = (typeof FIELDS)[number];
 export const sampleKey = (d: SampleDef, f: SampleField) => `smp${d.id}${f}`;
 
 export const SAMPLE_GROUP = "Sound samples";
+
+type AlienField = keyof AlienOptions;
+export const ALIEN_FIELDS: [AlienField, string, number, number, number, string][] = [
+  ["ring", "Remix: ring mod (Hz)", 0, 600, 1, "Multiplies the sound by a tone this high: metallic, inharmonic; 0 off"],
+  ["ringMix", "Remix: ring mod mix", 0, 1, 0.01, ""],
+  ["comb", "Remix: resonator (ms)", 0, 30, 0.1, "A feedback delay this long rings at 1000/ms Hz (a hollow, robotic body); 0 off"],
+  ["combFb", "Remix: resonator feedback", 0, 0.95, 0.01, "Higher rings longer and more pitched"],
+  ["sweepFrom", "Remix: sweep from (Hz)", 50, 8000, 10, "A resonant band moving across the sound, from here..."],
+  ["sweepTo", "Remix: sweep to (Hz)", 50, 8000, 10, "...to here (up for a charge, down for a death)"],
+  ["sweepQ", "Remix: sweep resonance", 0.5, 20, 0.1, ""],
+  ["sweepMix", "Remix: sweep mix", 0, 1, 0.01, "0 off"],
+];
+export const alienKey = (d: SampleDef, f: AlienField) => `smp${d.id}${f[0].toUpperCase()}${f.slice(1)}`;
 export const sampleGroup = (d: SampleDef) => `Sample: ${d.label}`;
 
-const defaults: Record<string, number> = { samplesOn: 1, sampleBlastFrom: 2.5, sampleGiantFrom: 9 };
+const defaults: Record<string, number> = { samplesOn: 1, sampleBlastFrom: 2.5, sampleGiantFrom: 9, robotSoundLevel: 2, robotChargeLevel: 0.5, robotSmallDeath: 0.3 };
 const params: Param[] = [
   { key: "samplesOn", label: "Recorded sounds on", min: 0, max: 1, step: 1, group: SAMPLE_GROUP, tip: "0: every sound procedural, as before the Pixabay sounds" },
   { key: "sampleBlastFrom", label: "Blasts this big use the recording (m)", min: 0, max: 20, step: 0.5, group: SAMPLE_GROUP, tip: "Smaller blasts (swarm missiles 2.2 m) keep the procedural blast; RPG 4.5, pod 3, cannon shell 4, salvo 5.5" },
   { key: "sampleGiantFrom", label: "Giant blast from (m)", min: 0, max: 30, step: 0.5, group: SAMPLE_GROUP, tip: "Blasts this big play the giant recording (the big mortar is 14 m)" },
+  { key: "robotSoundLevel", label: "Robot beams and deaths level", min: 0, max: 4, step: 0.01, group: SAMPLE_GROUP, tip: "The robots' recorded beam release and deaths (as loud as Big blasts at the same value)" },
+  { key: "robotChargeLevel", label: "Robot beam charge level", min: 0, max: 2, step: 0.01, group: SAMPLE_GROUP },
+  { key: "robotSmallDeath", label: "Small robot death share", min: 0, max: 1, step: 0.01, group: SAMPLE_GROUP, tip: "Scrappers die by the dozen: their death is the robot death this loud, higher and shorter (0: silent)" },
 ];
 for (const d of SAMPLES) {
   const g = sampleGroup(d);
@@ -63,10 +94,15 @@ for (const d of SAMPLES) {
     { key: sampleKey(d, "Gain"), label: "Gain (dB)", min: -24, max: 12, step: 0.5, group: g, tip: "0: as loud in its first quarter second as the procedural sound it replaces" },
     { key: sampleKey(d, "Under"), label: "Procedural under", min: 0, max: 1.5, step: 0.01, group: g, tip: "Mix the procedural sound in beneath the recording, this loud" },
   );
+  if (d.alien) for (const [f, label, min, max, step, tip] of ALIEN_FIELDS) {
+    const key = alienKey(d, f);
+    defaults[key] = d.alien[f];
+    params.push({ key, label, min, max, step, group: g, tip });
+  }
 }
 
 /** Every sample slider's default; typed as the three shared keys only so spreading it doesn't loosen a lab's value type
  *  (the per-sample keys are read by name, sampleBank.ts). */
-export const SAMPLE_DEFAULTS = defaults as { samplesOn: number; sampleBlastFrom: number; sampleGiantFrom: number };
+export const SAMPLE_DEFAULTS = defaults as { samplesOn: number; sampleBlastFrom: number; sampleGiantFrom: number; robotSoundLevel: number; robotChargeLevel: number; robotSmallDeath: number };
 export const SAMPLE_PARAMS: Param[] = params;
 export const SAMPLE_TOPIC = { id: "samples", label: "Sound samples", groups: [SAMPLE_GROUP, ...SAMPLES.map(sampleGroup)] };

@@ -10,7 +10,8 @@
 // flagged release, and every other tick blasts the sand by the beam's power, little while it charges, most once full.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
-import type { RobotBeamEvent, RobotDeathBlastEvent, RobotPulseEvent } from "../combat/robots";
+import { SMALL, BIG, type RobotBeamEvent, type RobotDeathBlastEvent, type RobotPulseEvent, type RobotSwarm } from "../combat/robots";
+import { sampleBankOf } from "../audio/sampleBank";
 import { famOfTeam } from "../world/lamps";
 import type { CoreWarnDraw } from "../fx/coreWarnDraw";
 
@@ -20,6 +21,25 @@ const from = new THREE.Vector3(), dir = new THREE.Vector3();
 const lastStrike = new Map<number, { x: number; z: number }>();
 
 /** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
+/** Beams whose charge sound has played (by beam id), until they release. */
+const charging = new Set<number>();
+const live = (bf: Battlefield, sound: string) => sampleBankOf(bf.sfx)?.liveSound(sound) ?? false;
+
+/**
+ * A robot's death, heard (Keith 2026-11-02: the recorded robot death, remixed): a walker the full sound, a small one
+ * higher, shorter and quieter (robotSmallDeath); a big one's sound is its core's death blast. Chained in front of
+ * whatever the swarm does on a death. Cosmetic.
+ */
+export function robotDeathSound(bf: Battlefield, sw: RobotSwarm) {
+  const prev = sw.onDeath, at = new THREE.Vector3();
+  sw.onDeath = (i, nx, nz, speed) => {
+    const small = sw.kind[i] === SMALL, share = (bf.v as { robotSmallDeath?: number }).robotSmallDeath ?? 0.3;
+    if (sw.kind[i] !== BIG && live(bf, "robotDeath") && (!small || share > 0))
+      bf.sfx.playSound("robotDeath", at.set(sw.px[i], sw.py[i], sw.pz[i]), small ? share : 1, small ? 1.6 + Math.random() * 0.3 : 0.9 + Math.random() * 0.2);
+    prev?.(i, nx, nz, speed);
+  };
+}
+
 export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0,
   heat = (bf.v as { heatBeam?: number }).heatBeam ?? 0): number {
   const s = e.start, t = e.end;
@@ -31,6 +51,10 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
   const f = { half: e.width / 2, height: reach, pen: 1e4, flat: true, aim: { x: t.x, y: t.y, z: t.z }, pierce: e.pierce };
   const sheet = bf.makeSheet(from, dir, flat, f);
   const shot = bf.resolveSheet(ROBOTS, sheet, e.damage, f, dir);
+  // The charge (the first tick of a big beam, from the start of its charge) and the release: the recorded robot sounds
+  // when they're in (src/audio/samples.ts).
+  if (!e.release && !charging.has(e.id)) { charging.add(e.id); if (live(bf, "robotCharge")) bf.sfx.playSound("robotCharge", from.set(e.from.x, e.from.y, e.from.z), 1); from.set(s.x, s.y, s.z); }
+  if (e.release) charging.delete(e.id);
   if (!e.release) {
     // A charge or sweep tick: a short scorch and a dent where it strikes, a puff of dust, all by the beam's power.
     const k = Math.max(0, 1 - Math.min(flat, 3) / flat), p = e.power ?? 1;
@@ -69,7 +93,8 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
   // The release: a blast wave off the emitter and where it strikes (src/fx/blastWaves.ts, the beam kind).
   bf.waves?.post("beam", e.from.x, e.from.y, e.from.z, 2.5, { ground: false, fam: 2 });
   bf.waves?.post("beam", t.x, t.y, t.z, 3, { fam: 2 });
-  bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
+  if (live(bf, "robotBeam")) bf.sfx.playSound("robotBeam", from.set(e.from.x, e.from.y, e.from.z), 1);
+  else bf.sfx.play("brap", from.set(e.from.x, e.from.y, e.from.z), 1.6, 0.28, false);
   bf.sfx.play("brap", from.set(t.x, t.y, t.z), 1.4, 0.5, false);
   return shot.result.steps.length;
 }
@@ -164,7 +189,11 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
     const x = e.at.x + Math.sin(a) * r, z = e.at.z + Math.cos(a) * r;
     bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 14, 2 + Math.random() * 4, Math.cos(a) * 14, 1.4, 2.5 + Math.random() * 2.5, 0.9);
   }
-  if (e.boom > 0) { bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1); bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1); }
+  if (e.boom > 0) {
+    bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1);
+    if (live(bf, "robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), 0.95 + Math.random() * 0.1);
+    else bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1);
+  }
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
 }
 
