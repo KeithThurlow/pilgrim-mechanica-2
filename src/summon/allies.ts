@@ -27,7 +27,7 @@ import type { DeathPhysics } from "../physics/deaths";
 import { SUMMON_PAINT } from "./dronesDraw";
 
 export const ALLY_DEFAULTS = {
-  compCount: 2,
+  compCount: 0,
   compHp: 1400,
   compSize: 3.2,
   compSpeed: 7.5,
@@ -46,13 +46,15 @@ export const ALLY_DEFAULTS = {
   swarmHp: 20,
   swarmSpeed: 11,
   swarmBite: 3,
-  swarmRebuild: 1.5,
+  swarmRebuild: 3,
   swarmGuard: 12,
   swarmHome: 4,
   swarmSendRange: 70,
   swarmHunt: 16,
   swarmSendTime: 25,
   swarmClear: 3,
+  keepUp: 1.25,
+  compTopSpeed: 20,
   allyAggro: 14,
   allyAggroShare: 0.6,
 };
@@ -87,6 +89,8 @@ export const ALLY_PARAMS: Param[] = [
   { key: "swarmHunt", label: "Sent: bite foes within (m of the spot)", min: 2, max: 60, step: 1, group: GS },
   { key: "swarmSendTime", label: "Sent: home after (s)", min: 2, max: 120, step: 1, group: GS },
   { key: "swarmClear", label: "Sent: home once clear for (s)", min: 0.5, max: 20, step: 0.5, group: GS },
+  { key: "keepUp", label: "Keep up: run to × your speed", min: 1, max: 2, step: 0.05, group: GS, tip: "When you sprint, scrappers (and companions, up to their top speed) run this many times your speed to stay with you" },
+  { key: "compTopSpeed", label: "Companions: top speed keeping up (m/s)", min: 2, max: 30, step: 0.5, group: GC, tip: "The most a quad runs to keep up with you sprinting (its walk speed is the floor)" },
   { key: "allyAggro", label: "Enemies turn on allies within (m)", min: 0, max: 40, step: 0.5, group: GA, tip: "An enemy robot this close to a companion or scrapper (and nearer it than to you) goes for it instead" },
   { key: "allyAggroShare", label: "Share that turn on them", min: 0, max: 1, step: 0.05, group: GA },
 ];
@@ -160,6 +164,11 @@ export class Allies {
     a.robotQuadRocketDamage = V.compRocketDamage; a.robotQuadRocketPause = V.compRocketPause;
     a.robotHp = V.swarmHp; a.robotRunSpeed = V.swarmSpeed; a.robotBiteDamage = V.swarmBite;
     a.robotShooterShare = 0; a.robotBigLobLead = 0; a.robotSpeedJitter = 0.08;
+    // Keeping up (Keith 2026-11-02: summons sprint with you): faster than the mech while it's faster than them.
+    const sp = Math.hypot(this.owner.sim.vel.x, this.owner.sim.vel.z) * V.keepUp;
+    a.robotRunSpeed = Math.max(V.swarmSpeed, sp);
+    a.robotQuadSpeed = Math.max(V.compSpeed, Math.min(V.compTopSpeed, sp));
+    a.robotAccel = Math.max(V.robotAccel, sp * 0.8);
   }
 
   private rand() { this.rs = (Math.imul(this.rs, 1664525) + 1013904223) >>> 0; return this.rs / 4294967296; }
@@ -328,7 +337,7 @@ export class Allies {
   hud(): string {
     const c = this.comps.filter((u) => this.live(u)).length;
     const sent = this.mode === "sent" ? ` · sent ${Math.round(this.sendT)} s` : " · home";
-    return `companions ${c}/${Math.round(this.V.compCount)} · scrappers ${this.scrappers}/${Math.round(this.V.swarmCount)}${sent} · enemy kills ${this.target.kills}`;
+    return `companions ${c}/${Math.round(this.V.compCount)} · scrappers ${this.scrappers}/${Math.round(this.V.swarmCount)}${sent} · lost ${this.target.kills}`;
   }
 }
 
@@ -337,17 +346,24 @@ export class Allies {
  * ally, and nearer it than to the prey, goes for it, a share of them (by slot, spread evenly). Others go back to the
  * prey. Robots already leaping on or latched to the mech are left alone.
  */
-export function aggroOnAllies(enemy: RobotSwarm, allies: Allies, prey: { x: number; z: number }, range: number, share: number, list: number[] = []) {
+export function aggroOnAllies(enemy: RobotSwarm, allies: { each(fn: (x: number, y: number, z: number, r: number, air?: boolean) => void): void }, prey: { x: number; z: number }, range: number, share: number, list: number[] = []) {
   list.length = 0;
-  allies.each((x, y, z, r) => { list.push(x, y, z, r); });
+  allies.each((x, y, z, r, air) => { list.push(x, y, z, r, air ? 1 : 0); });
   for (let i = 0; i < enemy.hi; i++) {
     if (enemy.state[i] >= DEAD || isAirborne(enemy.state[i]) || enemy.frozen[i]) continue;
     if ((i * 0.618034) % 1 >= share) { if (enemy.hasT[i]) enemy.clearTarget(i); continue; }
     const ex = enemy.px[i], ez = enemy.pz[i];
+    // Only those that shoot go for drones in the air (a biter can't reach them).
+    const shoots = enemy.shooter[i] === 1 || enemy.kind[i] !== SMALL;
     let best = -1, bd = range * range;
-    for (let k = 0; k < list.length; k += 4) { const d = (list[k] - ex) ** 2 + (list[k + 2] - ez) ** 2; if (d < bd) { bd = d; best = k; } }
+    for (let k = 0; k < list.length; k += 5) {
+      if (list[k + 4] && !shoots) continue;
+      const d = (list[k] - ex) ** 2 + (list[k + 2] - ez) ** 2;
+      if (d < bd) { bd = d; best = k; }
+    }
+    // An ally nearer it than the prey, or right in its face (within half the range), is what it goes for.
     const dp = (prey.x - ex) ** 2 + (prey.z - ez) ** 2;
-    if (best >= 0 && bd < dp) enemy.setTarget(i, list[best], list[best + 1], list[best + 2], list[best + 3]);
+    if (best >= 0 && (bd < dp || bd < range * range * 0.25)) enemy.setTarget(i, list[best], list[best + 1], list[best + 2], list[best + 3]);
     else if (enemy.hasT[i]) enemy.clearTarget(i);
   }
 }

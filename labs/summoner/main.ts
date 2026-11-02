@@ -53,7 +53,10 @@ const lab = await combatLab({
 const { V, bf, player, field } = lab;
 if (q.has("drones")) V.droneCount = Number(q.get("drones")) || 0;
 if (q.has("enemies")) V.sumEnemies = Number(q.get("enemies")) || 0;
+// ?companions=replicas|quads|both: which kind walks with you (replicas by default, Keith 2026-11-02).
+{ const c = q.get("companions"); if (c === "quads") { V.compCount = 2; V.repCount = 0; } else if (c === "both") { V.compCount = 2; V.repCount = 2; } }
 if (q.has("comps")) V.compCount = Number(q.get("comps")) || 0;
+if (q.has("replicas")) V.repCount = Number(q.get("replicas")) || 0;
 if (q.has("scrappers")) V.swarmCount = Number(q.get("scrappers")) || 0;
 if (q.has("pack")) V.sumPack = Number(q.get("pack")) || V.sumPack;
 const still = q.has("still");
@@ -88,7 +91,7 @@ sw.onLob = (i, fx, fy, fz, x, z, flight) => { if (!player.alive) return; const l
 if (still) { const p = player.sim.pos; sw.spawn(Math.round(V.sumPack), p.x, p.z + 25, 6, { mid: 0.15, big: 0 }); }
 
 // The summoner's units.
-summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths);
+summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon, load: lab.loadRampart });
 // Z sends the swarm (at the lock, else the cursor), C calls it back.
 addEventListener("keydown", (e) => {
   if (typing(e) || e.repeat) return;
@@ -119,7 +122,7 @@ lab.onFrame((dt) => {
   lastPrey = prey.kind;
   const p = prey.at;
   // Robots near your companions and scrappers (nearer them than you) turn on them, a share of them.
-  aggroOnAllies(sw, summons!.allies, p, V.allyAggro, V.allyAggroShare, aggroList);
+  aggroOnAllies(sw, summons!, p, V.allyAggro, V.allyAggroShare, aggroList);
   sw.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.radius, vx: prey.sim.vel.x, vz: prey.sim.vel.z, latchLow: prey.latchLow, latchHigh: prey.latchHigh },
     (fx, fy, fz, tx, ty, tz, kind, ri) => {
       // On an ally (a companion or scrapper it turned on), the round goes where it aims.
@@ -131,7 +134,7 @@ lab.onFrame((dt) => {
       const drawn = kind !== SMALL || Math.random() < 0.5;
       if (drawn) slot = slot >= 19 ? 2 : slot + 1;
       const look = LOOK[kind];
-      bf.fire(slot, 3, from, dir, from.distanceTo(p) + 8, sw.shotDamage(ri), drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
+      bf.fire(slot, 3, from, dir, from.distanceTo(own ? aimAt : p) + 8, sw.shotDamage(ri), drawn ? { flashScale: look.flash, voice: "other", hitScale: look.hit } : { tracer: false, voice: "none" });
     },
     (i, damage) => { if (sw.hasT[i]) { splashBlast(bf.targets, 3, bitePos.set(sw.px[i], sw.py[i] + 0.4, sw.pz[i]), 1.6, damage, down); return; } if (!prey.alive) return; prey.unit.damage(damage, bitePos.set(sw.px[i], sw.py[i], sw.pz[i]), down); tear.bite(sw.px[i], sw.py[i], sw.pz[i], p.x, p.z); },
     (ci, damage, x, y, z) => { if (sw.hasT[ci]) { splashBlast(bf.targets, 3, bitePos.set(x, y, z), 1.8, damage, down); return; } if (!prey.alive) return; prey.unit.damage(damage, bitePos.set(x, y, z), down); tear.bite(x, y, z, p.x, p.z); });
