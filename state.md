@@ -297,6 +297,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Action bar (incl. the Q repair kit button) hides while the bay or inventory is open (Keith; Claude)
+- It sat on top of the bay/inventory panels at the bottom centre. `VitalsHud.hideActions`, set in `labs/convoy/main.ts` from `bay.isOpen || inventory.isOpen`. Typecheck and `npm test` pass.
 ### 2026-11-01 · Pose lab: pose each sword's keys with a gizmo (Keith; Claude on `claude/project-thread-yofecw`)
 - New `labs/pose/`: pick a weapon, fight two steel dummies and cutouts (Tab locks), P pauses the sword and poses it: moves, scrub, slow play, keys grabbed with three.js TransformControls (hand, blade, elbow), close and far forms, an orbit camera. Copy pose puts JSON on the clipboard; Paste loads it; Report carries it.
 - `src/weapons/swordPoses.ts`: posed keys per sword base id (`SWORD_POSES`, the lab's live edits on top); `sword.ts` applies them in `clipKeys` (a cut key's posed blade read back as yaw and pitch so the cut still turns; a posed spine `upFix`), `keyTime`; `SwordStats.pose` from the item's base (`GunStats.base`). `arsenal.swordHold`/`swordFrame`, `combatLab` `drive` and `iso`.
