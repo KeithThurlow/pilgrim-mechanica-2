@@ -3,7 +3,9 @@
 // refuses, turning lets a long item into a wide gap, and the same items repack the same way.
 import { BASES } from "../src/items/bases";
 import { LOOT_DEFAULTS, rollLoot } from "../src/items/generate";
-import { GRID_CLASS_IDS, GRID_SIZE_DEFAULTS, classCells, gridClassOfBase, itemCells, type GridClass } from "../src/items/gridSize";
+import { Unlocks, UNLOCK_DEFAULTS } from "../src/expedition/unlocks";
+import { Expedition, EXPEDITION_DEFAULTS } from "../src/expedition/expedition";
+import { SALVAGE_LEVELS, salvageBlocks, salvageItem, salvageLevelOf, GRID_CLASS_IDS, GRID_SIZE_DEFAULTS, classCells, gridClassOfBase, itemCells, type GridClass } from "../src/items/gridSize";
 import { autoPlace, findSpot, fitsAt, footprint, itemAt, newGrid, placeAt, removeFrom, repack, syncGrid, usedCells, type Grid } from "../src/items/grid";
 
 const fails: string[] = [];
@@ -105,6 +107,20 @@ must(sy.placed.length + over.length === changed.length, "sync lost items");
 const st2 = newGrid(12, 4);
 must(syncGrid(st2, list, true, true).length === 0 && st2.rows > 4, "a growing grid didn't take everything");
 sound(st2, "grow");
+
+// Salvage compactor: blocks never grow with the level, banking is worth more each level, and the expedition banks at it.
+{
+  const area = (l: number) => { const c = itemCells(salvageItem(0, l, 1)); return c.w * c.h; };
+  for (let l = 1; l <= SALVAGE_LEVELS; l++) must(area(l) <= area(l - 1), `salvage block at level ${l} bigger than at ${l - 1}`);
+  const blocks = salvageBlocks(110, 25, 2);
+  must(blocks.length === 5 && blocks[4].stats.scrap === 10 && blocks.every((b) => salvageLevelOf(b) === 2), "salvage blocks split wrong");
+  for (let l = 1; l <= SALVAGE_LEVELS; l++) must(Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", l) > Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", l - 1), `compactor ${l} not worth more`);
+  const ex = new Expedition(EXPEDITION_DEFAULTS);
+  ex.launch(); ex.add({ kind: "scrap", amount: 100, label: "w" });
+  ex.scrapValueMul = Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", 3);
+  ex.pickedUp();
+  must(ex.bank.scrap === Math.floor(100 * UNLOCK_DEFAULTS.unlCompactMul3), `compactor 3 banked ${ex.bank.scrap}`);
+}
 
 if (fails.length) { console.error("grid-check FAILED:\n  " + fails.slice(0, 20).join("\n  ")); process.exit(1); }
 console.log(`grid-check ok: ${BASES.length} bases sized, ${placed} random placements sound, repack ${a.placed.length}/${list.length} in 10x8`);

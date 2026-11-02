@@ -54,6 +54,10 @@ export interface InventoryOptions {
   /** Scrap an item for its value into the convoy's bank (Keith 2026-11-01: only at the convoy, never in the field, or
    *  everything gets scrapped into junk). Without it (no bank, e.g. the loadout lab) there's no Scrap button. */
   bankScrap?: (n: number) => void;
+  /** The salvage compactor's level (the convoy's unlock); without it, the Salvage blocks slider. */
+  compactLevel?: () => number;
+  /** What one scrap at risk banks for at that level (shown on the blocks). */
+  scrapValueMul?: () => number;
   /** Called on opening (close the bay so they don't stack). */
   onOpen?: () => void;
 }
@@ -240,7 +244,7 @@ export function inventoryScreen(o: InventoryOptions) {
   /** The items in a grid: the cargo is the at-risk list in the field, the bay's cargo aboard. */
   const gridItems = (g: GridId): Item[] => (g === "stash" ? st.stash.items : field() ? [...pool(), ...salvage()] : st.cargo.items);
   /** The scrap at risk as salvage blocks in the cargo grid (field only). */
-  const salvage = (): Item[] => (field() ? salvageBlocks(o.exp!.scrapAtRisk, gv().salvagePerBlock, gv().salvageCompact >= 0.5) : []);
+  const salvage = (): Item[] => (field() ? salvageBlocks(o.exp!.scrapAtRisk, gv().salvagePerBlock, o.compactLevel ? o.compactLevel() : gv().salvageLevel) : []);
   /** A grid in step with its items (saved positions kept); `over`: the items with no room. */
   function gridOf(g: GridId): { grid: Grid; over: Item[] } {
     const v = gv();
@@ -383,7 +387,7 @@ export function inventoryScreen(o: InventoryOptions) {
     if (press) {
       const p = press;
       press = null;
-      if (isSalvage(p.item)) say(`Salvage: ${p.item.stats.scrap} scrap, banked when the mech is picked up. Drag it onto the sand to dump it.`);
+      if (isSalvage(p.item)) say(`Salvage: ${p.item.stats.scrap} scrap, banks for ${Math.floor(p.item.stats.scrap * (o.scrapValueMul?.() ?? 1))} when the mech is picked up (the Salvage compactor packs it smaller and banks it for more). Drag it onto the sand to dump it.`);
       else if (p.from === "cargo" || p.from === "stash") equip(p.item);
       else { slot = slot === p.from ? null : p.from; render(); }
     }
@@ -419,7 +423,8 @@ export function inventoryScreen(o: InventoryOptions) {
       cell.style.width = `${f.w * px}px`; cell.style.height = `${f.h * px}px`;
       cell.style.borderColor = col;
       cell.append(itemIcon(it, col, p.rot, gv()));
-      const label = isSalvage(it) ? `◆ ${it.stats.scrap}` : itemName(it);
+      const mul = o.scrapValueMul?.() ?? 1;
+      const label = isSalvage(it) ? `◆ ${it.stats.scrap}${mul > 1.001 ? ` → ${Math.floor(it.stats.scrap * mul)}` : ""}` : itemName(it);
       if (f.w * f.h >= 2 || isSalvage(it)) { const n = el("span", "inv-gname", label); n.style.color = isSalvage(it) ? "#e6c86a" : col; cell.append(n); }
       if (isSalvage(it)) cell.classList.add("salvage");
       cell.addEventListener("pointerdown", (e) => {

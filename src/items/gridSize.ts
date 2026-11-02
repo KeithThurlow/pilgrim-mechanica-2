@@ -34,8 +34,11 @@ export const GRID_CLASSES = {
   material: { label: "Crafting material", w: 1, h: 1 },
   // Salvage as blocks in the cargo (Keith 2026-11-02, leaning that way: salvage competes with gear for room, and
   // compaction upgrades pack it into smaller blocks). Each block holds `salvagePerBlock` scrap (src/items/grid.ts).
-  salvageRaw: { label: "Raw salvage block", w: 3, h: 3 },
-  salvageCompact: { label: "Compacted salvage block", w: 2, h: 2 },
+  // By compaction level (the convoy's Salvage compactor unlock, src/expedition/unlocks.ts): 0 raw, 1-3 compacted.
+  salvage0: { label: "Raw salvage block", w: 3, h: 3 },
+  salvage1: { label: "Salvage block, compactor 1", w: 3, h: 2 },
+  salvage2: { label: "Salvage block, compactor 2", w: 2, h: 2 },
+  salvage3: { label: "Salvage block, compactor 3", w: 2, h: 2 },
 } as const;
 export type GridClass = keyof typeof GRID_CLASSES;
 export const GRID_CLASS_IDS = Object.keys(GRID_CLASSES) as GridClass[];
@@ -73,8 +76,7 @@ export function gridClassOfBase(b: Base): GridClass {
 
 /** An item's size class (Protocols and unknown bases: their own small classes). */
 export function gridClassOf(item: Pick<Item, "kind" | "base">): GridClass {
-  if (item.base === SALVAGE_RAW) return "salvageRaw";
-  if (item.base === SALVAGE_COMPACT) return "salvageCompact";
+  if (isSalvage(item)) return `salvage${salvageLevelOf(item)}` as GridClass;
   if (item.kind === "protocol") return "protocol";
   const b = BASE_BY_ID[item.base];
   return b ? gridClassOfBase(b) : "material";
@@ -106,17 +108,21 @@ export function classCells(c: GridClass, v: Partial<GridSizeValues> = GRID_SIZE_
 export const itemCells = (item: Pick<Item, "kind" | "base">, v?: Partial<GridSizeValues>): Cells => classCells(gridClassOf(item), v);
 
 // ---- Salvage blocks (a placeholder: the expedition still counts scrap as a number; the grid shows it as blocks) ----
-export const SALVAGE_RAW = "salvage-raw", SALVAGE_COMPACT = "salvage-compact";
-export const isSalvage = (item: Pick<Item, "base">) => item.base === SALVAGE_RAW || item.base === SALVAGE_COMPACT;
+export const SALVAGE_LEVELS = 3;
+const SALVAGE_PREFIX = "salvage-";
+export const isSalvage = (item: Pick<Item, "base">) => item.base.startsWith(SALVAGE_PREFIX);
+/** A salvage block's compaction level (0 raw .. SALVAGE_LEVELS). */
+export const salvageLevelOf = (item: Pick<Item, "base">) => Math.max(0, Math.min(SALVAGE_LEVELS, Number(item.base.slice(SALVAGE_PREFIX.length)) || 0));
 
 /** A salvage block as a grid item (not a real item: no slot takes it, it isn't in any list). */
-export function salvageItem(index: number, compact: boolean, amount: number): Item {
-  return { id: `salvage#${index}`, base: compact ? SALVAGE_COMPACT : SALVAGE_RAW, kind: "protocol", rarity: "common", stats: { scrap: amount }, tags: ["salvage"], sockets: 0, socketed: [], maker: "", look: "", weight: 0, seed: 0 };
+export function salvageItem(index: number, level: number, amount: number): Item {
+  const l = Math.max(0, Math.min(SALVAGE_LEVELS, Math.round(level)));
+  return { id: `salvage#${index}`, base: SALVAGE_PREFIX + l, kind: "protocol", rarity: "common", stats: { scrap: amount }, tags: ["salvage"], sockets: 0, socketed: [], maker: "", look: "", weight: 0, seed: 0 };
 }
 
 /** The blocks for an amount of scrap: full blocks of `perBlock`, the last one part full. */
-export function salvageBlocks(scrap: number, perBlock: number, compact: boolean): Item[] {
+export function salvageBlocks(scrap: number, perBlock: number, level: number): Item[] {
   const per = Math.max(1, perBlock), n = Math.ceil(Math.max(0, Math.floor(scrap)) / per), out: Item[] = [];
-  for (let i = 0; i < n; i++) out.push(salvageItem(i, compact, Math.min(per, Math.floor(scrap) - i * per)));
+  for (let i = 0; i < n; i++) out.push(salvageItem(i, level, Math.min(per, Math.floor(scrap) - i * per)));
   return out;
 }

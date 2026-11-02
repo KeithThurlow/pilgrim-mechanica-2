@@ -94,6 +94,8 @@ export class Expedition {
    */
   capacity = Infinity;
   scrapWeight = 0;
+  /** What one scrap at risk banks for (the Salvage compactor unlock; 1: as found). The glue sets it. */
+  scrapValueMul = 1;
   /** Loot the mech takes out with it (the bay's cargo list): joins the at-risk list at the launch, without events. */
   carryOut: Loot[] = [];
 
@@ -177,7 +179,7 @@ export class Expedition {
   /** The crane has the mech: the at-risk list goes into the bank. The only way anything is banked. */
   pickedUp() {
     if (this.state !== "out") return false;
-    const scrap = this.scrapAtRisk, items = this.itemsAtRisk;
+    const scrap = Math.floor(this.scrapAtRisk * this.scrapValueMul), items = this.itemsAtRisk;
     this.events.push({ type: "banked", lines: this.atRisk.map((l) => ({ ...l })), scrapBefore: this.bank.scrap });
     this.bank.scrap += scrap;
     for (const l of this.atRisk) if (l.kind === "item") this.bank.items.push(l.item);
@@ -193,7 +195,7 @@ export class Expedition {
    */
   extracted() {
     if (this.state !== "out") return false;
-    const scrap = this.scrapAtRisk, items = this.itemsAtRisk;
+    const scrap = Math.floor(this.scrapAtRisk * this.scrapValueMul), items = this.itemsAtRisk;
     this.events.push({ type: "banked", lines: this.atRisk.map((l) => ({ ...l })), scrapBefore: this.bank.scrap });
     this.bank.scrap += scrap;
     for (const l of this.atRisk) if (l.kind === "item") this.bank.items.push(l.item);
