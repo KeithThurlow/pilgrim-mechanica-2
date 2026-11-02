@@ -205,7 +205,7 @@ export class Arsenal implements MechWeapons {
     this.sides.forEach((s, i) => {
       const g = guns[i];
       const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "cannon" ? "cannon" : g.cls === "rpg" ? "rpg" : isRoundGun(g.cls) ? g.cls : "minigun";
-      const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "cannon" ? "breach" : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
+      const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "cannon" ? "breach" : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : isRoundGun(kind) ? kind : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
