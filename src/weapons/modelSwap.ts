@@ -35,6 +35,9 @@ export const KIND_MODELS: Partial<Record<ModelKind, { id: string; scale?: number
   minigunFeed: { id: "minigun-feed-hull" },
   flak: { id: "flak-hull" },
   sniper: { id: "sniper-hull" },
+  rifle: { id: "rifle-held" },
+  smg: { id: "smg-held" },
+  shotgun: { id: "shotgun-held" },
 };
 
 const ids = [...new Set(Object.values(KIND_MODELS).flatMap(({ id }) => [id, entry(id).mirror].filter((x): x is string => !!x)))];
