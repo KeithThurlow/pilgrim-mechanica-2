@@ -36,6 +36,8 @@ export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number,
     const k = Math.max(0, 1 - Math.min(flat, 3) / flat), p = e.power ?? 1;
     bf.marks.furrow(s.x + (t.x - s.x) * k, s.z + (t.z - s.z) * k, t.x, t.z, e.width * 0.8, 0);
     if (p > 0.08 || (e.tick & 3) === 0) bf.dust.stomp(t.x, t.y, t.z, 0.15 + 0.6 * p);
+    // Smoke off the melt (Keith 2026-11-02: read as doing damage), more as the beam powers up.
+    if (p > 0.3 && (e.tick & 1) === 0) bf.dust.emit(1, t.x, t.y + 0.3, t.z, (Math.random() - 0.5) * 1.5, 2.5 + Math.random() * 2, (Math.random() - 0.5) * 1.5, 1 + p, 2 + Math.random() * 2, 0.9);
     if (dig > 0 && p > 0.3 && (e.tick & 1) === 0) bf.queueDent(t.x, t.z, (e.width * dig) / Math.max(0.05, (bf.v as { craterRadiusShare?: number }).craterRadiusShare ?? 0.7));
     // Red-hot sand: the strike dragged from where the last tick struck to here, and the last few metres of the line.
     const hk = heat * (e.heat ?? 1), dtk = Math.max(0.02, (bf.v as { robotBeamTick?: number }).robotBeamTick ?? 0.1);
@@ -81,6 +83,30 @@ export function burnBeam(bf: Battlefield, x0: number, z0: number, x1: number, z1
   if (!h || heat <= 0) return;
   h.line(x0, z0, x1, z1, width * 0.45, heat, dt);
   h.spot(x1, z1, width * 0.8, heat * 1.1, dt);
+  scorchBeam(bf, x0, z0, x1, z1, width);
+}
+
+type HeatV = { heatScorchW?: number; heatScorch?: number; heatPulse?: number; heatDeath?: number; heatSlam?: number };
+
+/** A dark burn either side of a beam's melt (Keith 2026-11-02: big beams leave scorch marks), lasting the fused sand's fade. */
+export function scorchBeam(bf: Battlefield, x0: number, z0: number, x1: number, z1: number, width: number) {
+  const h = bf.heat, v = bf.v as HeatV;
+  if (!h) return;
+  const w = (v.heatScorchW ?? 2.2) * width / 2, k = v.heatScorch ?? 0.85;
+  h.scorch(x0, z0, x1, z1, w, k);
+  h.scorchSpot(x1, z1, w * 1.3, k);
+}
+
+/**
+ * A big robot blast cooks the sand under it (Keith 2026-11-02): a hot disc `heat` degrees at its middle over `share` of
+ * the radius, and a scorch over most of it.
+ */
+export function cookGround(bf: Battlefield, x: number, z: number, radius: number, heat: number, share = 0.55) {
+  const h = bf.heat;
+  if (!h || heat <= 0 || radius <= 0) return;
+  h.spot(x, z, radius * share, heat);
+  h.spot(x, z, radius * share * 0.4, heat * 1.15);
+  h.scorchSpot(x, z, radius * share * 1.3, (bf.v as HeatV).heatScorch ?? 0.85);
 }
 
 /** burnBeam in pieces, `start` × the heat at (x0, z0) rising to the full heat at the strike (a one-shot line). */
@@ -93,6 +119,7 @@ export function burnBeamRamp(bf: Battlefield, x0: number, z0: number, x1: number
     h.line(x0 + (x1 - x0) * a, z0 + (z1 - z0) * a, x0 + (x1 - x0) * b, z0 + (z1 - z0) * b, width * 0.45, heat * f);
   }
   h.spot(x1, z1, width * 0.8, heat * 1.1);
+  scorchBeam(bf, x0, z0, x1, z1, width);
 }
 
 /**
@@ -103,6 +130,7 @@ export function burnBeamRamp(bf: Battlefield, x0: number, z0: number, x1: number
 export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
   from.set(e.at.x, e.at.y, e.at.z);
   bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "beam");
+  cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatPulse ?? 1300);
   // A second, wider ring of dust thrown outward.
   for (let k = 0; k < 24; k++) {
     const a = (k / 24) * Math.PI * 2, r = e.radius * 0.6;
@@ -122,6 +150,7 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
 export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
   from.set(e.at.x, e.at.y, e.at.z);
   bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "death");
+  cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatDeath ?? 1500, 0.45);
   const hy = Math.max(e.at.y + 2, e.hubY);
   bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * 0.6, { ground: false, fam: 2 });
   bf.nightLights?.flash(e.at.x, hy, e.at.z, e.radius * 1.5, famOfTeam(ROBOTS));
