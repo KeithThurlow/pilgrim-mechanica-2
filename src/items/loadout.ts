@@ -13,6 +13,7 @@
 // The hull item says which mounts it offers and what each takes (`Base.mounts` in bases.ts). More mounts later: add
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
+import { isEnergy } from "../weapons/energy/energySim";
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf } from "./protocols";
@@ -343,6 +344,12 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // The sword (src/weapons/sword.ts): no magazine; its "rate" is one swing per wind-up, slash and recovery, its range
     // the reach.
     if (cls === "melee") return { fireRate: 1 / Math.max(0.1, w.windup + w.slash + w.recover), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.reach, pierce: 99, ap: w.ap, cls, own, base: item.base, light };
+    // Energy weapons (Keith 2026-11-02, src/weapons/energy/): no magazine, they spend the energy bars; a beam's rate is
+    // its ticks, a lance's one shot per charge and cooldown.
+    if (isEnergy(cls)) {
+      const rate = w.fireRate ?? 1 / Math.max(0.1, (w.charge ?? 0) + (w.cooldown ?? 0));
+      return { fireRate: rate, spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: w.energyShot ?? w.energyDrain ?? 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 0, ap: w.ap, cls, own, light };
+    }
     // A round gun (src/weapons/guns.ts): the minigun's path with its own pellets and splash; magazine-fed (no drum).
     if (isRoundGun(cls)) return { fireRate: w.fireRate, spinUp: 0.05, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, cls, own, light, proto,
       pellets: Math.max(1, Math.round(w.pellets ?? 1)), splash: w.splash ?? 0, splashShare: w.splashShare ?? 0 };

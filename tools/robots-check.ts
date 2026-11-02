@@ -296,5 +296,52 @@ console.log(`shake: ${held} latched, ${shaken} shaken off after 6 s at 6.5 m/s (
 if (held === 0) fail("nobody latched for the shake test");
 else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
 
+// Own blasts (Keith 2026-11-02): a big one's pulse hurts robots under it but not itself; its death blast goes off after
+// the delay, hurts robots round it and can set off another big one (a chain).
+{
+  const big = (seed: number) => new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1, robotPulseFirst: 0 }, field, seed);
+  const sw = big(21);
+  sw.spawn(1, 160, 160, 0);
+  const b = 0, hp0 = sw.hp[b];
+  const mech = { x: 160 + 6, y: field.height(166, 160) + 3, z: 160, radius: 2 };
+  // Small ones packed round its feet (spawned from a second swarm's settings: add them by hand through spawn shares).
+  sw.v.robotBigShare = 0; sw.v.robotMidShare = 0; sw.v.robotShooterShare = 0;
+  sw.spawn(20, 160, 160, 5);
+  const small0 = sw.count - 1;
+  let pulses = 0;
+  sw.onPulse = () => { pulses++; };
+  for (let s = 0; s < 6 * 120 && !pulses; s++) sw.update(dt, mech, () => {});
+  const smallLeft = sw.count - (sw.state[b] < DEAD ? 1 : 0);
+  console.log(`own pulse: ${pulses} pulse, ${small0 - smallLeft} of ${small0} small ones under it killed, its own hp ${Math.round(sw.hp[b])}/${Math.round(hp0)}, ownKills ${sw.ownKills}`);
+  if (!pulses) fail("the big one never pulsed with the mech beside it");
+  else {
+    if (sw.ownKills === 0) fail("its pulse hurt none of the robots under it");
+    if (sw.hp[b] < hp0) fail("its pulse hurt itself");
+  }
+  // Death: two big ones 8 m apart; kill one, its core goes up after the delay and takes the other with it.
+  const d = big(22);
+  d.spawn(1, 220, 220, 0); d.spawn(1, 228, 220, 0);
+  const far = { x: 600, y: 0, z: 600, radius: 2 };
+  d.update(dt, far, () => {});
+  const blasts: number[] = [];
+  let t = 0;
+  d.onDeathBlast = (e) => { blasts.push(t); if (!(e.radius > 0 && e.damage > 0)) fail("death blast event without radius or damage"); };
+  d.v.robotBigDeathOwnDamage = 5000;
+  d.damage(0, 1e6, 1, 0);
+  for (let s = 0; s < 4 * 120; s++) { d.update(dt, far, () => {}); t += dt; }
+  console.log(`death blast: ${blasts.length} blasts at ${blasts.map((x) => x.toFixed(2)).join(", ")} s, ${d.count} big ones left`);
+  if (blasts.length < 1) fail("a big one died with no death blast");
+  else if (Math.abs(blasts[0] - ROBOT_DEFAULTS.robotBigDeathDelay) > 0.05) fail("the death blast didn't wait its delay");
+  if (blasts.length < 2 || d.count !== 0) fail("the death blast didn't set off the big one beside it");
+  // Off: no blast.
+  const o = big(23);
+  o.v.robotBigDeathOn = 0;
+  o.spawn(1, 260, 260, 0);
+  let n = 0; o.onDeathBlast = () => n++;
+  o.damage(0, 1e6, 1, 0);
+  for (let s = 0; s < 120; s++) o.update(dt, far, () => {});
+  if (n) fail("death blast went off with robotBigDeathOn 0");
+}
+
 if (failed) throw new Error("robots check failed");
 console.log("robots check passed");

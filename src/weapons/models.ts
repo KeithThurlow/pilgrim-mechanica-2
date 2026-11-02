@@ -9,7 +9,9 @@ import { libraryModel } from "./modelSwap";
 
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
-export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
+/** Energy weapons (Keith 2026-11-02, src/weapons/energy/): the library's laser projector and plasma cannon stand-ins. */
+export type EnergyKind = "laser" | "beam" | "lance";
+export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar" | EnergyKind;
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
@@ -265,6 +267,11 @@ function capacitorModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+/** An energy weapon's box fallback while its library model loads: the rail's boxes. */
+function energyBox(kind: EnergyKind) {
+  return (l: ToonLook): WeaponModel => { const m = railModel("rail", l); m.kind = kind; m.root.name = `weapon-${kind}`; return m; };
+}
+
 // ---- Round guns (Keith 2026-11-02): original stand-ins, each readable by its silhouette from the game camera ----
 
 /** SMG (Light): a stubby receiver, a perforated shroud over a short barrel, a long magazine jutting out sideways, a
@@ -368,6 +375,9 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
   sword: swordModel,
+  laser: energyBox("laser"),
+  beam: energyBox("beam"),
+  lance: energyBox("lance"),
   smg: smgModel,
   rifle: rifleModel,
   shotgun: shotgunModel,
