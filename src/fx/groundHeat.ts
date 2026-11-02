@@ -21,9 +21,14 @@ export const HEAT_DEFAULTS = {
   heatGlowFrom: 480,
   heatGlow: 2.2,
   heatFlicker: 0.35,
-  heatChar: 0.6,
+  heatChar: 0.8,
   heatCharFrom: 950,
-  heatCharLife: 40,
+  heatCharLife: 90,
+  heatScorchW: 2.2,
+  heatScorch: 0.85,
+  heatPulse: 1300,
+  heatDeath: 1500,
+  heatSlam: 1200,
   heatBeam: 1700,
   heatStrider: 2100,
   heatRail: 1150,
@@ -52,10 +57,15 @@ export const HEAT_PARAMS: Param[] = [
   { key: "heatChar", label: "Fused sand darkens", min: 0, max: 1, step: 0.01, group: G, tip: "How dark sand that got hotter than 'fuses from' goes (glassy, burnt)" },
   { key: "heatCharFrom", label: "Fuses from (°)", min: 300, max: 2500, step: 10, group: G },
   { key: "heatCharLife", label: "Fused sand fades (s)", min: 1, max: 300, step: 1, group: G },
+  { key: "heatScorchW", label: "Beam scorch width (× beam)", min: 0, max: 6, step: 0.05, group: G, tip: "Keith 2026-11-02: big beams leave a dark scorch wider than their glowing trail (burnt edges round the melt); 0: only the fused sand" },
+  { key: "heatScorch", label: "Beam scorch darkness", min: 0, max: 1, step: 0.01, group: G, tip: "How burnt the scorch starts (fades over 'fused sand fades')" },
   { key: "heatBeam", label: "Excavator beam (°)", min: 0, max: 3000, step: 10, group: GW, tip: "The hotter the weapon, the hotter the sand and the longer it glows" },
   { key: "heatStrider", label: "Strider beam (°)", min: 0, max: 3000, step: 10, group: GW },
   { key: "heatRail", label: "Rail slug strike (°)", min: 0, max: 3000, step: 10, group: GW, tip: "Where a rail slug stops in the sand (× its charge)" },
   { key: "heatIgnited", label: "Ignited rounds (°)", min: 0, max: 3000, step: 10, group: GW, tip: "Incendiary feed rounds into the sand" },
+  { key: "heatPulse", label: "Walker terraform pulse (°)", min: 0, max: 3000, step: 10, group: GW, tip: "Keith 2026-11-02: the big robots' blasts cook the sand under them: the pulse's middle (cooler to its edge)" },
+  { key: "heatDeath", label: "Walker and strider death blast (°)", min: 0, max: 3000, step: 10, group: GW },
+  { key: "heatSlam", label: "Strider slam (°)", min: 0, max: 3000, step: 10, group: GW },
   { key: "heatBlast", label: "Explosions (°)", min: 0, max: 3000, step: 10, group: GW, tip: "The middle of a blast on the ground: explosions aren't that hot (Keith 2026-11-01), a brief dull ember at most" },
   { key: "heatLight", label: "Light (per m² glowing)", min: 0, max: 2000, step: 10, group: GL, tip: "Glowing sand lights the ground round it at night (Keith 2026-11-01): the glow is gathered into patches, each asks the night lights for a real light this bright per square metre of glow (0: no light)" },
   { key: "heatLights", label: "Lights at most", min: 0, max: 16, step: 1, group: GL, tip: "The brightest patches that ask for a light each frame (the night lights' pool decides which get a real one)" },
@@ -152,6 +162,62 @@ export class GroundHeat {
 
   /** The share of the way to its heat a cell gets in dt (0: at once). */
   private rise(dt: number) { return dt > 0 ? 1 - Math.exp(-dt / Math.max(0.005, this.v.heatRise)) : 1; }
+
+  /** Scorch one cell (char toward amt, no heat): a burn mark round a beam's melt. */
+  private scorchCell(ix: number, iz: number, amt: number) {
+    if (amt < CHAR_GONE || !this.inWindow(ix, iz)) return;
+    const i = this.index(ix, iz);
+    if (!this.live[i] || this.ownX[i] !== ix || this.ownZ[i] !== iz) {
+      this.temp[i] = 0; this.char[i] = 0; this.ownX[i] = ix; this.ownZ[i] = iz;
+      if (!this.live[i]) { this.live[i] = 1; this.active.push(i); }
+    }
+    if (amt <= this.char[i]) return;
+    this.char[i] = amt;
+    const b = this.bytes;
+    b[i * 4 + 1] = Math.min(255, Math.round(amt * 255));
+    this.stats.painted++;
+    this.dirty = true;
+  }
+
+  /** A scorch along a line, `half` m either side, darkness amt in the middle softening to its edges. */
+  scorch(x0: number, z0: number, x1: number, z1: number, half: number, amt: number) {
+    if (!this.v.heatOn || amt <= 0 || half <= 0) return;
+    this.brushLine(x0, z0, x1, z1, Math.max(half, this.cell * 0.75), (i, j, d) => this.scorchCell(i, j, amt * Math.min(1, 1.6 * falloff(d))));
+  }
+
+  /** A round scorch of radius r. */
+  scorchSpot(x: number, z: number, r: number, amt: number) {
+    if (!this.v.heatOn || amt <= 0 || r <= 0) return;
+    this.brushSpot(x, z, Math.max(r, this.cell * 0.75), (i, j, d) => this.scorchCell(i, j, amt * Math.min(1, 1.6 * falloff(d))));
+  }
+
+  private brushSpot(x: number, z: number, R: number, fn: (i: number, j: number, d: number) => void) {
+    const c = this.cell;
+    const i0 = Math.floor((x - R) / c), i1 = Math.floor((x + R) / c), j0 = Math.floor((z - R) / c), j1 = Math.floor((z + R) / c);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const d = Math.hypot((i + 0.5) * c - x, (j + 0.5) * c - z) / R;
+      if (d < 1) fn(i, j, d);
+    }
+  }
+
+  private brushLine(x0: number, z0: number, x1: number, z1: number, H: number, fn: (i: number, j: number, d: number) => void) {
+    const c = this.cell, len = Math.hypot(x1 - x0, z1 - z0);
+    if (len < 1e-3) { this.brushSpot(x0, z0, H, fn); return; }
+    const dx = (x1 - x0) / len, dz = (z1 - z0) / len;
+    const n = Math.max(1, Math.ceil(len / PIECE));
+    for (let k = 0; k < n; k++) {
+      const a = (len * k) / n, b = (len * (k + 1)) / n;
+      const ax = x0 + dx * a, az = z0 + dz * a, bx = x0 + dx * b, bz = z0 + dz * b;
+      const i0 = Math.floor((Math.min(ax, bx) - H) / c), i1 = Math.floor((Math.max(ax, bx) + H) / c);
+      const j0 = Math.floor((Math.min(az, bz) - H) / c), j1 = Math.floor((Math.max(az, bz) + H) / c);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const px = (i + 0.5) * c - x0, pz = (j + 0.5) * c - z0;
+        const along = Math.min(b, Math.max(a, px * dx + pz * dz));
+        const d = Math.hypot(px - dx * along, pz - dz * along) / H;
+        if (d < 1) fn(i, j, d);
+      }
+    }
+  }
 
   /** A round hot spot of radius r (m), `temp` at its middle falling to nothing at its edge. dt > 0: held there for dt. */
   spot(x: number, z: number, r: number, temp: number, dt = 0) {
