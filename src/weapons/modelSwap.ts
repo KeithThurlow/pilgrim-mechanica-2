@@ -23,6 +23,10 @@ export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; til
   missiles: { id: "missile-pod-h", tilt: 30 },
   mortar: { id: "mortar-heavy" },
   linemortar: { id: "mortar-line" },
+  // Energy weapons (Keith 2026-11-02): the code-built laser projector and plasma cannon (src/weapons/build/energy.ts).
+  laser: { id: "laser-projector-hull", scale: 0.85 },
+  beam: { id: "laser-projector-hull" },
+  lance: { id: "plasma-cannon-hull" },
 };
 
 const ids = [...new Set(Object.values(KIND_MODELS).flatMap(({ id }) => [id, entry(id).mirror].filter((x): x is string => !!x)))];

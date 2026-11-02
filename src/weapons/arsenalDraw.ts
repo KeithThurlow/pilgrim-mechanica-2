@@ -13,6 +13,7 @@ import { ProjectileMeshes } from "./projectileDraw";
 import { PainterDraw } from "./painterDraw";
 import { Ribbon, glowMaterial } from "./ribbon";
 import type { NightLights } from "../world/nightLights";
+import { EnergyDraw } from "./energy/energyDraw";
 
 interface Ground { height(x: number, z: number): number }
 
@@ -41,6 +42,8 @@ export class ArsenalDraw {
   private t = 0;
   /** The library's rocket, missile and mortar-shell models, once loaded (the boxes and slugs stand in until then). */
   private proj = new ProjectileMeshes(MAX_ROCKETS);
+  /** The energy weapons' bolts, beams and charges (src/weapons/energy/energyDraw.ts). */
+  private energy: EnergyDraw;
 
   /** The night lights rockets ask for light (cosmetic), when the lab has a look. */
   constructor(private arsenal: Arsenal, private ground: Ground, private lights: (() => NightLights | null) | null = null) {
@@ -51,6 +54,8 @@ export class ArsenalDraw {
     for (const o of [this.rockets, this.flares, this.slugs]) { o.frustumCulled = false; o.count = 0; this.group.add(o); }
     this.rockets.castShadow = true;
     this.group.add(this.proj.group);
+    this.energy = new EnergyDraw(arsenal.energy);
+    this.group.add(this.energy.group);
     const unitBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5);
     for (let i = 0; i < MAX_BEAMS; i++) {
       const streak = new THREE.Mesh(unitBox, glowMaterial(RAIL_GLOW, true)), core = new THREE.Mesh(unitBox, glowMaterial(0xffffff, true));
@@ -86,6 +91,7 @@ export class ArsenalDraw {
   update(dt = 1 / 60) {
     const a = this.arsenal, v = a.v;
     this.t += dt;
+    this.energy.update(dt);
     const paints: Paint[] = [a.sides[0].paint, a.sides[1].paint, ...a.shoulders.flatMap((s) => [s.paint, s.fired])];
     paints.forEach((p, i) => this.paintDraw(i).update(p));
     for (let i = paints.length; i < this.paints.length; i++) this.paints[i].update({ on: false } as Paint);

@@ -1,6 +1,7 @@
 // The magazines by the reticle (Keith 2026-10-31: reload shown on the HUD by the weapon): two thin arcs round the mouse
 // cursor, the left gun's on the left and the right gun's on the right. Each shows the magazine left (pale), and while
 // it reloads it refills in amber from the bottom. Rails (no magazine) and empty sides show nothing. Cosmetic, local.
+import { isEnergy } from "../weapons/energy/energySim";
 import type { UpperSim } from "../mech/upper";
 import { magShare } from "../weapons/magazine";
 
@@ -46,7 +47,7 @@ export class ReloadHud {
     this.svg.style.transform = `translate(${mouse.x - R - 4}px, ${mouse.y - R - 4}px)`;
     // The mech's left gun (side +1, upper gun 0) is on the screen's left side of the ring.
     upper.guns.forEach((g, i) => {
-      const has = g.enabled && g.stats?.cls !== "rail" && g.stats?.cls !== "melee";
+      const has = g.enabled && g.stats?.cls !== "rail" && g.stats?.cls !== "melee" && !isEnergy(g.stats?.cls);
       this.back[i].style.display = this.fill[i].style.display = has ? "" : "none";
       if (!has) return;
       const reloading = g.mag.reloading > 0;

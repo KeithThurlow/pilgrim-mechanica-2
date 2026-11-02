@@ -42,8 +42,11 @@ import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
 import { penDensity, type SheetHit } from "../game/sheet";
 import { hitStop } from "../game/hitStop";
+import { EnergyGuns } from "./energy/energyGuns";
+import { isEnergy } from "./energy/energySim";
+import type { EnergyKind } from "./models";
 
-type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | null;
+type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | null;
 
 /** The rail cannon's energy colour (its charge preview, coils and beam). */
 export const RAIL_GLOW = 0x7fe0ff;
@@ -139,7 +142,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -153,6 +156,8 @@ export class Arsenal implements MechWeapons {
   shoulders: Shoulder[] = [];
   /** Rail beams fired recently (the draw fades them). */
   readonly railShots: RailShot[] = [];
+  /** Energy weapons on either side (Keith 2026-11-02, src/weapons/energy/): pulse laser, beam laser, nova lance. */
+  readonly energy: EnergyGuns;
   /** Camera shake asked for (the lab decays it). */
   onShake: ((k: number) => void) | null = null;
   /** Called as a weapon fires (its kind), before its damage lands: the lab's per-shot readout. */
@@ -184,6 +189,9 @@ export class Arsenal implements MechWeapons {
       sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3(), twist: 0, twistV: 0 });
     this.sides = [side(), side()];
     this.sides[1].sword = new SwordSim(-1);
+    this.energy = new EnergyGuns(bf, unit, v);
+    this.energy.onShake = (k) => this.onShake?.(k);
+    this.energy.onFire = (k) => this.onFire?.(k);
     addWeaponSounds(bf.sfx, v);
   }
 
@@ -194,8 +202,8 @@ export class Arsenal implements MechWeapons {
     const guns = [r.guns.left, r.guns.right];
     this.sides.forEach((s, i) => {
       const g = guns[i];
-      const kind: SideKind = !g ? null : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
-      const mk: ModelKind | null = kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
+      const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
+      const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
@@ -205,6 +213,7 @@ export class Arsenal implements MechWeapons {
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
+      this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null);
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
@@ -341,6 +350,17 @@ export class Arsenal implements MechWeapons {
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
       if (s.kind === "melee") { this.stepSword(s, held, dt); clearPaint(s.paint); return; }
+      if (s.kind === "energy") {
+        // Energy weapons (src/weapons/energy/energyGuns.ts): a dash or the sprint drops a charge and stops a beam. The
+        // lamps follow a lance's charge and a beam.
+        const muzzle = this.muzzleOf(s, side, this.tmp);
+        const { d, aim } = this.railAim(side, muzzle);
+        this.energy.step(i, dt, held, noRail, muzzle, d, aim);
+        const es = this.energy.sides[i];
+        for (const mat of glows) mat.opacity = es.cls === "lance" ? 0.2 + 0.8 * es.sim.charge : es.beam.on ? 1 : 0.45;
+        clearPaint(s.paint);
+        return;
+      }
       if (s.kind === "rpg") {
         // Clip-fed (Keith 2026-10-31): held, the clip ripples out a rocket every cooldown at the ground under the cursor,
         // tube by tube (this side's magazine, in the gun record: the HUD reads it there; a click fires one), then the
@@ -381,6 +401,8 @@ export class Arsenal implements MechWeapons {
       } else { s.aimLine.length = 0; s.meterAt = null; }
       if (fired !== null) this.fireRail(s, side, muzzle, d, aim, st, fired);
     });
+
+    this.energy.age(dt);
 
     // Shoulders: hold the key to paint, release to fire.
     // Sprinting with the weapons off, a painted shot is dropped, not fired (stepShoulder).
@@ -743,6 +765,7 @@ export class Arsenal implements MechWeapons {
       for (const mat of s.model?.glow ?? []) mat.opacity = s.kind === "rail" ? 0.15 : 0.9;
     }
     this.prevTrig[0] = this.prevTrig[1] = false;
+    this.energy.stop();
     for (const sh of this.shoulders) {
       sh.held = false; sh.strip = null; sh.laser.on = false;
       clearPaint(sh.paint);
@@ -1188,11 +1211,12 @@ export class Arsenal implements MechWeapons {
       const g = u.upper.guns[i];
       let state = "";
       if (s.kind === "melee") state = (s.sword.power ? `<b style="color:#6cc4ff">power</b> ` : "") + (s.sword.clip === "guard" ? "click to cut, again to cut back; Space mid-cut: power cut" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : "recover");
+      else if (s.kind === "energy") state = this.energy.stateText(i);
       else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
       else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;
       else state = `${Math.ceil(g.ammo)}/${g.mag.size}`;
-      out.push(`${b} ${NAMES[s.kind]}${s.light ? " (hand)" : ""} ${state}`);
+      out.push(`${b} ${NAMES[s.kind === "energy" ? this.energy.sides[i].cls ?? s.kind : s.kind]}${s.light ? " (hand)" : ""} ${state}`);
     });
     for (const sh of this.shoulders) {
       if (sh.gear) {
