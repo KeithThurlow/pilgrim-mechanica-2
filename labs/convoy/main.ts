@@ -71,6 +71,9 @@ import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defe
 import { DefenceBody } from "../../src/convoy/defenceBody";
 import { ConvoyGuns, GUARD_DEFAULTS, GUARD_PARAMS, GUARD_GROUPS } from "../../src/convoy/guard";
 import { Guardians, GUARDIAN_DEFAULTS, GUARDIAN_PARAMS, GUARDIAN_GROUPS } from "../../src/convoy/guardians";
+import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC } from "../../src/summon/summons";
+import { applyGear, isSwarmKey } from "../../src/summon/gear";
+import type { Resolved } from "../../src/items/loadout";
 import { SAFE_GROUPS } from "../../src/convoy/safeZone";
 import { PloughBody } from "../../src/convoy/ploughBody";
 import { PloughFx, PLOUGH_FX_DEFAULTS, PLOUGH_FX_PARAMS } from "../../src/convoy/ploughFx";
@@ -121,6 +124,8 @@ const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
 const canvas = app.renderer.domElement;
 const V = {
+  // The summoner's units first (their counts come from the fitted summoner gear; src/summon/gear.ts).
+  ...SUMMON_DEFAULTS,
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
@@ -130,8 +135,11 @@ const V = {
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
+// No summoner gear until the loadout says so (the summoner lab's defaults would put drones and a swarm on every mech).
+Object.assign(V, { repCount: 0, droneCount: 0, swarmCount: 0, compCount: 0 });
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
+  ...SUMMON_PARAMS,
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
@@ -252,6 +260,13 @@ const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carr
 const convoyGuns = new ConvoyGuns(bf, V, defence, escorts, escortBodies);
 const guardians = new Guardians(bf, V, scene, toon, convoy, () => RampartBody.load(toon));
 escorts.mechs = guardians.spots;
+// The summoner's units (Keith 2026-11-02): what the fitted summoner gear brings out (a replica bay on the pack, drone
+// racks and swarm hives on the shoulders; ?summoner fits all three). Out on the sand they're with you (replicas built
+// one at a time); picked up by the convoy they're dismissed (drones and the swarm at once, the replicas walk on a
+// while), and summoned again once you're back on the sand. A swarm hive's key (1 or 2) throws the swarm and calls it
+// back.
+const summons = new Summons(bf, scene, V, field, player, enemiesOf(player.team), deaths, { look: toon });
+const swarmKeyWas = [false, false];
 // For poking at from the console: window.__defence (the guns' shot counts, the guardians, the safe zone).
 (window as unknown as { __defence: unknown }).__defence = { guns: convoyGuns, guardians, zone: loop.zone, defence };
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */
@@ -367,8 +382,12 @@ function persist() {
   savedScrap = loop.exp.bank.scrap;
   saveBay(BAY_KEY, bayState);
 }
+let fitted: Resolved | null = null;
 function refit() {
   const r = resolve(bayState.loadout, V);
+  fitted = r;
+  // Summoner gear (Keith 2026-11-02): the pack's replicas, the shoulders' drones and swarm.
+  applyGear(V, r);
   bayState.cargo.capacity = r.cargoCapacity;
   loop.exp.capacity = V.cargoLimit ? r.cargoCapacity : Infinity;
   applyLoadout(player, r);
@@ -675,7 +694,7 @@ const panel = tweakPanel({
     { label: "Restart", onClick: () => restart() },
   ],
   topics: [
-    PILOT_TOPIC,
+    PILOT_TOPIC, SUMMON_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
     ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Grid", "Item sizes", "Salvage blocks"] },
@@ -1002,6 +1021,19 @@ app.onTick((rawDt) => {
 
   dashPressed = false;
   costs.mark("mech");
+
+  // The summons: with you on the sand, dismissed aboard (src/summon/summons.ts).
+  // Counts and build times come from the fitted gear (over any saved slider).
+  if (fitted) applyGear(V, fitted);
+  summons.setActive(carry.state === "walking" || carry.state === "inRange");
+  for (const k of [1, 2] as const) {
+    const down = keys.has(`Digit${k}`) && driving && !bay.isOpen;
+    if (down && !swarmKeyWas[k - 1] && fitted && isSwarmKey(fitted, k)) summons.sendOrRecall();
+    swarmKeyWas[k - 1] = down;
+  }
+  summons.update(dt);
+  if (V.repCount || V.droneCount || V.swarmCount) app.hud.set("summons", () => summons.hud());
+  costs.mark("summons");
 
   // Getting out and in: the mount, the field kneel or the bay's park, the crane kept off an empty mech on the sand.
   const kitPrompt = kitCtl.update(dt, keys.has("KeyQ") && !bay.isOpen, auto);

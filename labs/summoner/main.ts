@@ -7,7 +7,9 @@
 // your allies turn on them.
 // Flags: ?drones=N (drones up, 4), ?comps=N (companions, 2), ?scrappers=N (the swarm, 16), ?send (the swarm thrown
 // 30 m ahead at once), ?enemies=N (robots on the field, 60; 0 none), ?pack=N (pack size), ?still (one pack stands 25 m
-// ahead and only shoots back: watch your units work), plus the combat-lab flags (?manual, ?zoom, ?flat...).
+// ahead and only shoots back: watch your units work), ?summoner (the summoner gear fitted: drone rack on key 1, swarm hive
+// on key 2, replica bay on the pack; counts from the items), ?dismissat=s (dismissed s in, as at a convoy pickup, summoned
+// again 30 s later), plus the combat-lab flags (?manual, ?zoom, ?flat...).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -24,6 +26,9 @@ import { typing } from "../../src/core/input";
 import { splashBlast } from "../../src/game/splash";
 import { aggroOnAllies } from "../../src/summon/allies";
 import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC } from "../../src/summon/summons";
+import { applyGear, isSwarmKey } from "../../src/summon/gear";
+import { resolve, type Resolved } from "../../src/items/loadout";
+import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 
 const q = new URLSearchParams(location.search);
 const WAVE_DEFAULTS = { sumEnemies: 60, sumPack: 20, sumPackEvery: 6, sumPackFrom: 90 };
@@ -48,7 +53,7 @@ const lab = await combatLab({
     { topic: "summons", label: "Drones, companions and swarm", objects: () => summons?.meshes ?? [] },
     { topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) },
   ],
-  actions: [{ label: "Pack now", onClick: () => spawnPack() }, { label: "Send the swarm (Z)", onClick: () => summons?.send() }, { label: "Recall (C)", onClick: () => summons?.recall() }],
+  actions: [{ label: "Pack now", onClick: () => spawnPack() }, { label: "Dismiss / summon", onClick: () => summons?.setActive(!summons.active), active: () => !!summons && !summons.active }, { label: "Send the swarm (Z)", onClick: () => summons?.send() }, { label: "Recall (C)", onClick: () => summons?.recall() }],
   report: (): Record<string, unknown> => ({ drones: summons?.hud() ?? "", robots: swarm?.count ?? 0 }),
 });
 const { V, bf, player, field } = lab;
@@ -67,6 +72,19 @@ if (still) {
   Object.assign(V, { robotRunSpeed: 0, robotMidSpeed: 0, robotQuadSpeed: 0, robotBigSpeed: 0, robotLeapRange: 0, robotShooterShare: 1 });
 }
 lab.refresh();
+// Summoner gear (Keith 2026-11-02): ?summoner (or ?k1=drones|hive, ?k2=drones|hive, ?k3=replicas) fits the items, and
+// the summons' counts come from them instead of the sliders; a swarm hive's key (1 or 2) throws and recalls the swarm.
+let gear: Resolved | null = null;
+{
+  const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
+  if (pickFromParams(pick, q)) {
+    const r = resolve(loadoutFor(pick));
+    if (r.summons.replicas + r.summons.drones + r.summons.scrappers > 0) { gear = r; applyGear(V, r); }
+  }
+}
+// ?dismissat=s: dismissed s seconds in (as a convoy pickup), summoned again 30 s later.
+const dismissAt = q.has("dismissat") ? Number(q.get("dismissat")) || 10 : -1;
+let clock = 0;
 
 // The enemy swarm, as in the robots lab (shorter: no droids, striders or shot flags).
 const sw = new RobotSwarm(V, field, 3);
@@ -101,6 +119,7 @@ addEventListener("keydown", (e) => {
   if (typing(e) || e.repeat) return;
   if (e.code === "KeyZ") summons!.send();
   if (e.code === "KeyC") summons!.recall();
+  if (gear && (e.code === "Digit1" || e.code === "Digit2") && isSwarmKey(gear, e.code === "Digit1" ? 1 : 2)) summons!.sendOrRecall();
 });
 const sendAtStart = q.has("send");
 // The demo throws the swarm at the nearest robots every 12 s.
@@ -118,6 +137,8 @@ const aggroList: number[] = [];
 let packClock = Infinity, slot = 2, lastPrey = "mech";
 lab.onFrame((dt) => {
   packClock += dt;
+  clock += dt;
+  if (dismissAt >= 0) summons!.setActive(!(clock >= dismissAt && clock < dismissAt + 30));
   if (sw.count < V.sumEnemies && packClock >= V.sumPackEvery) { packClock = 0; spawnPack(); }
   let cx = 0, cz = 0, n = 0;
   for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DOWN) { cx += sw.px[i]; cz += sw.pz[i]; n++; }
