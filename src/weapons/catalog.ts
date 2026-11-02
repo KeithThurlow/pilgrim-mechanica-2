@@ -15,6 +15,7 @@ import { railCannonHull, railCannon2h } from "./build/rail";
 import { autocannonHull, cannonHull, minigunFeedHull } from "./build/guns";
 import { plasmaCannonHull, laserProjectorHull, orbHull, arcHull } from "./build/energy";
 import { flakHull, sniperHull } from "./build/roundGuns";
+import { rifleHeld, smgHeld, shotgunHeld } from "./build/heldGuns";
 
 export type Mount = "hull" | "shoulder" | "back" | "hand" | "forearm" | "two_handed" | "belt" | "projectile";
 
@@ -79,6 +80,10 @@ const ROWS: Row[] = [
   ["cannon-hull", "Cannon", "Hull", "Breach cannon (hull)", "hull", true, { build: cannonHull }],
   // Round guns on the hull (Keith 2026-11-02): weight behind the shoulder.
   ["flak-hull", "Flak", "Hull", "Flak cannon (hull)", "hull", true, { build: flakHull }],
+  // Held round guns (Keith 2026-11-02), after the sister project's rifle template.
+  ["rifle-held", "Rifle", "Held", "Battle rifle (held)", "hand", true, { build: rifleHeld }],
+  ["smg-held", "SMG", "Held", "SMG (held)", "hand", true, { build: smgHeld }],
+  ["shotgun-held", "Shotgun", "Held", "Scattergun (held)", "hand", true, { build: shotgunHeld }],
   ["sniper-hull", "Sniper", "Hull", "Longshot rifle (hull)", "hull", true, { build: sniperHull }],
   ["plasma-cannon-hull", "PlasmaCannon", "Hull", "Plasma cannon (hull)", "hull", true, { build: plasmaCannonHull }],
   ["laser-projector-hull", "LaserProjector", "Hull", "Laser projector (hull)", "hull", true, { build: laserProjectorHull }],
