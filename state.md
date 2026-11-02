@@ -205,6 +205,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batch 1 merged (robots, bandits, warband, droids in `labs/swarm/`). **Edit the robot, bandit, war band and droid lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Next: crusher and summoner as fronts, if Keith wants.
 - Summoner archetype (Keith 2026-11-02, Claude on `claude/project-thread-vhklb8`): batches 1 (drones) and 2 (companions, scrap swarm) merged; next summoner items (so it's a loadout and works in the convoy lab), the swarm salvaging on the sand. Plan and open questions: `docs/proposal-summoner.md`. Keith to try `labs/summoner/` (`?still`, Tab a robot).
 - Energy weapons (Keith 2026-11-02, Claude on `claude/project-thread-7z9btg`): both batches merged (laser, beam, lance, plasma, orb, arc); Keith to try them. Open questions in `docs/decisions.md` (2026-11-02 energy rows).
 - Summoner archetype (Keith 2026-11-02, Claude on `claude/project-thread-vhklb8`): batch 1 (drones) merged; next turret companions, the scrap swarm, then summoner items. Plan and open questions: `docs/proposal-summoner.md`. Keith to try `labs/summoner/` (`?still`, Tab a robot).
@@ -307,6 +308,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · One swarm lab for every enemy kind; weapon flags in every combat lab (Claude, Keith's ask)
+- New `labs/swarm/`: `?enemy=robots|bandits|warband|droids`, a list, or `?enemy=mix` for all at once (enemy buttons in the panel reload with the new list). Each kind is a front in `src/game/fronts/` (`robots.ts`, `bandits.ts`, `warband.ts`, `droids.ts`, `front.ts`), moved over from its lab unchanged; fronts share one body contact and chain the mech's dash and stomp hooks; the humanoid squads are one set shared by the droids front and the robots' packs. First visit copies the old labs' saved sliders.
+- `labs/robots`, `bandits`, `warband`, `droids`, `strider` now forward to the swarm lab with their flags. Hub and `tools/shots.mjs` point at it.
+- `combatLab` fits the weapon flags (`?left= ?right= ?k1-3= ?barrage ?proto=`) itself, so every combat lab takes them (bandits, summoner, crusher, repair, stress); the robots lab's own copy is gone.
+- Checked: typecheck; `npm test` green; headless `?norender` runs: `?enemy=mix&left=rail` (all four fronts up at once, rail fitted), `labs/bandits/?left=rail&right=rpg` (forwards, guns fitted), `labs/droids/?still`, `labs/strider/?beam`.
+
 ### 2026-11-02 · Big robot beams scorch the sand; big blasts cook it (Keith; Claude on `claude/tall-walker-beam-scorch`)
 - Every robot beam (terraforming walkers, striders, quads' lasers) leaves a dark scorch wider than its glowing melt (`heatScorchW` 2.2 × the beam, `heatScorch` 0.85), lasting the fused sand's fade (`heatCharLife` 40 → 90 s, `heatChar` 0.6 → 0.8); smoke rises off the strike; melt flash 1.4 → 1.8 m, spatter 90 → 140/s.
 - Striders' beams drawn fine like the swarm's: the look moved into `src/fx/fineBeam.ts` (shared by `robotBeamDraw.ts` and `striderFx.ts`), striders read the robots' "Look: …" sliders.
