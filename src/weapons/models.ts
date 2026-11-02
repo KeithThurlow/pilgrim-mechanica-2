@@ -5,7 +5,7 @@
 // shoulder mount or the back mount (origin at the mount's top, +Z forward, +Y up).
 import * as THREE from "three/webgpu";
 import type { ToonLook } from "../look/toon";
-import { libraryModel } from "./modelSwap";
+import { libraryModel, KIND_MODELS } from "./modelSwap";
 
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
@@ -17,8 +17,6 @@ export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
 export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach";
 export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind;
-/** Kinds with no library model: always the code stand-in. */
-const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword", "smg", "rifle", "shotgun", "sniper", "flak", "breach"];
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -410,5 +408,5 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */
 export const WEAPON_MODELS: Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel> = Object.fromEntries(
   (Object.keys(BOX_MODELS) as ModelKind[]).map((k) => [k, (look: ToonLook, side: "left" | "right" = "right") =>
-    GEAR_KINDS.includes(k) ? BOX_MODELS[k](look) : libraryModel(k as LauncherKind, look, side, () => BOX_MODELS[k](look))]),
+    KIND_MODELS[k] ? libraryModel(k, look, side, () => BOX_MODELS[k](look)) : BOX_MODELS[k](look)]),
 ) as Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel>;
