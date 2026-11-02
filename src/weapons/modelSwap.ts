@@ -28,10 +28,11 @@ export const KIND_MODELS: Partial<Record<ModelKind, { id: string; scale?: number
   beam: { id: "laser-projector-hull" },
   lance: { id: "plasma-cannon-hull" },
   plasma: { id: "plasma-cannon-hull", scale: 0.85 },
-  orb: { id: "plasma-cannon-hull", scale: 1.1 },
-  arc: { id: "laser-projector-hull", scale: 0.9 },
+  orb: { id: "orb-hull" },
+  arc: { id: "arc-hull" },
   // Hull guns rebuilt with their weight behind the shoulder (Keith 2026-11-02; src/weapons/build/guns.ts, roundGuns.ts).
   breach: { id: "cannon-hull" },
+  minigunFeed: { id: "minigun-feed-hull" },
   flak: { id: "flak-hull" },
   sniper: { id: "sniper-hull" },
 };
