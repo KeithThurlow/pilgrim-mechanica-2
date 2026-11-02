@@ -487,6 +487,19 @@ export class Battlefield {
     splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
   }
 
+  /**
+   * A blast that hurts the given team's own units (Keith 2026-11-02: a strider's death clears the robots round it):
+   * every target of `team` in reach takes its blast share as an explosive's, with cover; no effects (the caller's
+   * blast plays them). Returns the number hit.
+   */
+  blastOwn(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number): number {
+    if (damage <= 0) return 0;
+    const cover = this.cover(p), dir = this.back.set(0, -1, 0);
+    let n = 0;
+    for (const t of this.targets) if (t.alive && t.team === team && t.splash) n += t.splash(p, radius, damage, dir, { blast: true, pierce, cover });
+    return n;
+  }
+
   /** A blast's cover test at p (dunes, walls and steel wrecks between it and a unit shield the unit). */
   private steelRay = (o: THREE.Vector3, d: THREE.Vector3, max: number) => (this.wrecks!.hit(o, d, max, this.steelAt, this.steelN) ? o.distanceTo(this.steelAt) : -1);
   private steelAt = new THREE.Vector3();

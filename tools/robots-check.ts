@@ -6,13 +6,14 @@
 // legs and feet a share, a medium one's legs and feet hittable too), and a stomp knocks latched
 // ones off. Run: npm test (or npx tsx tools/robots-check.ts).
 import * as THREE from "three/webgpu";
-import { RobotSwarm, ROBOT_DEFAULTS, RUN, LEAP, LATCHED, FIRE, FLUNG, CUT, DOWN, DEAD, BIG, MID, SMALL, PART_LEG, PART_FOOT, isAirborne, robotCentre } from "../src/combat/robots";
+import { RobotSwarm, ROBOT_DEFAULTS, QUAD_WEAPON, Q_ROCKETS, RUN, LEAP, LATCHED, FIRE, FLUNG, CUT, DOWN, DEAD, BIG, MID, SMALL, PART_LEG, PART_FOOT, isAirborne, robotCentre } from "../src/combat/robots";
 import { RobotTarget } from "../src/combat/robotTarget";
 import { S_THIGH, S_SHIN, WALK_LEGS, type V3 } from "../src/combat/robotLegs";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
-const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0 }, field, 7);
+// Lobbed charges are off by default (Keith 2026-11-02); this run turns them on to keep checking them.
+const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigLobOn: 1 }, field, 7);
 const target = { x: 0, y: field.height(0, 0) + 3, z: 0, radius: 2 };
 const dt = 1 / 120;
 let failed = false;
@@ -341,6 +342,25 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   o.damage(0, 1e6, 1, 0);
   for (let s = 0; s < 120; s++) o.update(dt, far, () => {});
   if (n) fail("death blast went off with robotBigDeathOn 0");
+}
+
+// No grenades by default (Keith 2026-11-02): with the defaults no big one lobs and no weapon quad rolls rockets.
+{
+  const sw = new RobotSwarm({ ...ROBOT_DEFAULTS }, field, 31);
+  sw.spawn(150, 330, 300, 14);
+  let lobbed = 0;
+  sw.onLob = () => lobbed++;
+  const t = { x: 300, y: field.height(300, 300) + 3, z: 300, radius: 2 };
+  for (let s = 0; s < 20 * 120; s++) sw.update(dt, t, () => {});
+  let quads = 0, rockets = 0, bigs = 0;
+  for (let i = 0; i < sw.hi; i++) {
+    if (sw.kind[i] === BIG) bigs++;
+    if (sw.kind[i] === MID && sw.variant[i] === QUAD_WEAPON) { quads++; if (sw.weapon[i] === Q_ROCKETS) rockets++; }
+  }
+  console.log(`no grenades: ${lobbed} lobbed over 20 s by ${bigs} big ones and ${quads} weapon quads (${rockets} with rockets), ${sw.beamCharges} beams charged, ${sw.pulseCharges} pulses`);
+  if (lobbed) fail(`${lobbed} lobbed with lobs and rockets off`);
+  if (rockets) fail(`${rockets} weapon quads rolled rockets with them off`);
+  if (!quads) fail("no weapon quads in the no-grenade swarm");
 }
 
 if (failed) throw new Error("robots check failed");
