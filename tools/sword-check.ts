@@ -6,11 +6,12 @@
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
 // resolves to a melee gun with the reach as its range.
 // Run: npm test (or npx tsx tools/sword-check.ts).
-import { SwordSim, SWORD_DEFAULTS, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, lungeIntent, type SwordStats, type SwordClip } from "../src/weapons/sword";
+import { SwordSim, SWORD_DEFAULTS, powerStats, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, lungeIntent, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
 import { loadoutFor } from "../src/items/weaponPick";
+import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 
 const problems: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
@@ -302,6 +303,65 @@ for (const stance of [0, 1, 2, 3]) {
   must(!!g && Math.abs(g.range - V.swordReach) < 1e-6, "the sword's range isn't its reach");
   const pick = resolve(loadoutFor({ left: "sword", right: "minigun", k1: "none", k2: "none", k3: "pack" }));
   must(pick.guns.left?.cls === "melee" && pick.guns.right?.cls !== "melee", "?left=sword didn't put the sword in the left hand only");
+}
+
+// ---- The power cut (Keith 2026-11-02): Space mid-cut or a cut after a dash in; quicker; costs energy ----
+{
+  // Run one click (power at the given time into the drive, or primed by a dash): time to the cut's end, and its clips.
+  const run = (powerAt: number | null, primed = false) => {
+    const sw = new SwordSim(1); if (primed) sw.primed = V.swordPowerDashWindow;
+    let t = 0, cutEnd = -1, poweredAt = -1, wasPower = false, cutting = false;
+    sw.update(dt, true, st, V, 1); t += dt;
+    for (let i = 0; i < 900 && sw.clip !== "guard"; i++) {
+      if (powerAt !== null && poweredAt < 0 && t >= powerAt) { if (sw.powerUp(st, V)) poweredAt = t; }
+      const s2 = sw.power ? powerStats(st, V) : st;
+      const sweep = sw.update(dt, false, s2, V, 1); t += dt;
+      if (sw.clip === "A" && sw.power) wasPower = true;
+      if (sweep) cutting = true; else if (cutting && cutEnd < 0) cutEnd = t;
+    }
+    return { cutEnd, poweredAt, wasPower, swings: sw.swings, sw };
+  };
+  const plain = run(null), mid = run(V.swordWindup * 0.5), dash = run(null, true);
+  console.log(`  cut over at: normal ${plain.cutEnd.toFixed(2)} s, Space mid-drive ${mid.cutEnd.toFixed(2)} s, after a dash ${dash.cutEnd.toFixed(2)} s`);
+  must(!plain.wasPower, "a plain click came out as a power cut");
+  must(mid.poweredAt > 0 && mid.wasPower, "Space mid-drive didn't power the cut");
+  must(dash.wasPower, "a cut started just after a dash in wasn't a power cut");
+  must(mid.cutEnd < plain.cutEnd - 0.03 && dash.cutEnd < plain.cutEnd - 0.03, "a power cut isn't quicker than a normal one");
+  must(dash.cutEnd <= plain.cutEnd * V.swordPowerTime + 0.03, `a dash-in power cut (${dash.cutEnd.toFixed(2)} s) isn't swordPowerTime × the normal`);
+  // Rescaling mid-cut keeps the pose where it was (no jump).
+  {
+    const sw = new SwordSim(1); sw.update(dt, true, st, V, 1);
+    for (let i = 0; i < 400 && !(sw.clip === "A" && sw.t > V.swordWindup * 0.8); i++) sw.update(dt, false, st, V, 1);
+    const a = clipPose("A", sw.t, 1, SH(1), 0, st, V);
+    sw.powerUp(st, V);
+    const b = clipPose("A", sw.t, 1, SH(1), 0, powerStats(st, V), V);
+    const jump = Math.hypot(a.hand.x - b.hand.x, a.hand.y - b.hand.y, a.hand.z - b.hand.z);
+    must(jump < 0.15, `powering mid-cut jumps the hand ${jump.toFixed(2)} m`);
+  }
+  // Past the cut it can't be powered; a dash's prime runs out.
+  {
+    const sw = new SwordSim(1); sw.update(dt, true, st, V, 1);
+    const w = sw.cutWindow(st, V)!;
+    for (let i = 0; i < 400 && sw.t <= w[1] + 0.01; i++) sw.update(dt, false, st, V, 1);
+    must(!sw.canPower(st, V), "a cut past its window could still be powered");
+    const q = new SwordSim(1); q.primed = V.swordPowerDashWindow;
+    for (let i = 0; i < Math.ceil((V.swordPowerDashWindow + 0.1) / dt); i++) q.update(dt, false, st, V, 1);
+    q.update(dt, true, st, V, 1);
+    must(!q.power, "a cut long after a dash was still a power cut");
+  }
+  // A combo's next cut is normal unless powered again.
+  {
+    const sw = new SwordSim(1); sw.primed = 1; sw.update(dt, true, st, V, 1);
+    let sawB = false;
+    for (let i = 0; i < 600 && !sawB; i++) { sw.update(dt, true, sw.power ? powerStats(st, V) : st, V, 1); if (sw.clip === "B") sawB = true; }
+    must(sawB && !sw.power, "the back-cut after a power cut was a power cut too");
+  }
+  // Energy: it spends swordPowerCost bars; without it, nothing is spent.
+  const d = new Dash({ ...DASH_DEFAULTS });
+  const e0 = d.energy, ok1 = d.spend(V.swordPowerCost);
+  must(ok1 && Math.abs(d.energy - (e0 - V.swordPowerCost)) < 1e-6, "a power cut didn't spend its energy");
+  d.charges = 0;
+  must(!d.spend(V.swordPowerCost) && d.energy === 0, "a power cut went through with no energy");
 }
 
 if (problems.length) { console.error("sword-check FAILED:\n  " + problems.join("\n  ")); process.exit(1); }

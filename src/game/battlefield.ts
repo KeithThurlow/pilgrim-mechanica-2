@@ -83,11 +83,12 @@ export interface Hittable {
   /** A sword cut from a cutter standing at (x, z) is about to land: a mech with a free sword facing it blocks, one
    *  swinging its own sword at it parries (src/weapons/sword.ts). The share of the cut's damage it takes (1: neither),
    *  and whether the blades met (the cutter's blade recoils too). */
-  parry?(fromX: number, fromZ: number): Parry;
+  parry?(fromX: number, fromZ: number, power?: boolean): Parry;
 }
 
 /** A sword cut met: the share of its damage that lands, and whether it was a parry (both blades recoil). */
-export interface Parry { take: number; parried?: boolean }
+/** How a sword cut landed on a mech: the share of damage taken, parried (the blades met), broke (a power cut broke its block). */
+export interface Parry { take: number; parried?: boolean; broke?: boolean }
 
 /** How a splash lands (src/game/splash.ts). */
 export interface SplashOpts {

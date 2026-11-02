@@ -140,6 +140,20 @@ export class Dash {
     return added;
   }
 
+  /**
+   * Spend n bars' worth of energy without dashing (a sword's power cut, Keith 2026-11-02): full bars first, from the top,
+   * then a part bar. False (nothing spent) when there's less than n in full bars and the rest together.
+   */
+  spend(n: number): boolean {
+    if (n <= 0) return true;
+    if (this.energy < n - 1e-6) return false;
+    let left = n;
+    for (let i = this.bars.length - 1; i >= 0 && left > 1e-6; i--) if (this.bars[i] >= 0.999) { const d = Math.min(1, left); this.bars[i] -= d; left -= d; }
+    for (let i = this.bars.length - 1; i >= 0 && left > 1e-6; i--) { const d = Math.min(this.bars[i], left); this.bars[i] -= d; left -= d; }
+    this.idle = 0;
+    return true;
+  }
+
   /** Skidding on its feet: the shove or the glide after it. */
   get active() { return this.phase !== "none"; }
   /** The shove itself (damage cut, the sand burst). */

@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, cutDamage, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose, type SwordClip } from "./sword";
+import { SwordSim, cutDamage, powerStats, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose, type SwordClip } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -137,6 +137,8 @@ export interface Shoulder {
 
 const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
+/** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
+const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
 const NAMES: Record<string, string> = { melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
@@ -286,6 +288,11 @@ export class Arsenal implements MechWeapons {
   swordStatsOf(i: number): SwordStats | null { const s = this.sides[i]; return s.kind === "melee" ? this.swordStats(s) : null; }
 
   swordStats(s: Side): SwordStats {
+    const st = this.swordBase(s);
+    return s.sword.power ? powerStats(st, this.v) : st;
+  }
+  /** A side's sword stats before a power cut's (src/weapons/sword.ts powerStats). */
+  private swordBase(s: Side): SwordStats {
     const v = this.v, o = s.own;
     return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave, parry: o.parry ?? 1, heft: o.heft ?? 1, stance: o.stance ?? 0, pose: s.base }
       : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave, parry: 1, heft: 1, stance: 1, pose: s.base ?? "sword-light" };
@@ -504,7 +511,9 @@ export class Arsenal implements MechWeapons {
     const hand = this.tmp;
     const m = s.model, ms = m?.sword;
     if (m) m.root.getWorldPosition(hand); else hand.set(pose.hand.x, pose.hand.y, pose.hand.z).applyMatrix4(frame);
-    if (sw.started) bf.sfx.playSound("swordSwing", hand, 0.9, 0.85 + Math.random() * 0.25);
+    if (sw.started) bf.sfx.playSound("swordSwing", hand, sw.power ? 1.2 : 0.9, (sw.power ? 0.7 : 0.85) + Math.random() * 0.25);
+    // A power cut (Keith 2026-11-02): the hydraulics bang and a low whoosh as it kicks in.
+    if (sw.powered && u.alive) { bf.sfx.play("brap", u.sim.pelvis, 0.8, 0.3, false); if (!sw.started) bf.sfx.playSound("swordSwing", hand, 1.1, 0.7 + Math.random() * 0.15); }
     // The swish (src/weapons/swordSwish.ts): in the hull's frame, so the blade's length there is the reach over the
     // hull's scale. Fed every pose the cut sweeps (smooth however fast), and the blade's pose just after the cut.
     const hullG = body.hullGroup?.();
@@ -539,7 +548,11 @@ export class Arsenal implements MechWeapons {
         this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, dir);
       }
     }
-    if (s.swish) { if (swish) swish.update(s.swishT, v.swordSwishLife, v.swordTrail); else s.swish.clear(); }
+    // A power cut's swish (Keith 2026-11-02): blue for players, red for enemies, brighter.
+    if (s.swish) {
+      s.swish.tint(sw.power ? (u.player ? POWER_BLUE : POWER_RED) : null);
+      if (swish) swish.update(s.swishT, v.swordSwishLife, v.swordTrail * (sw.power ? v.swordPowerTrail : 1)); else s.swish.clear();
+    }
     // The model: the blade stretched to the reach, the edge hot in the cut.
     if (m && ms) {
       ms.swing.rotation.set(0, 0, 0);
@@ -574,8 +587,9 @@ export class Arsenal implements MechWeapons {
       const kd = new THREE.Vector3(tx * 0.7 + dx * 0.5, 0.25, tz * 0.7 + dz * 0.5).normalize();
       this.onFire?.("melee");
       // A mech facing the cut with a free sword blocks it (Keith 2026-11-01): less damage and knock, the blade stalls.
-      const met = t.parry?.(u.sim.pos.x, u.sim.pos.z) ?? { take: 1 }, take = met.take, blocked = take < 1;
-      t.damage(cutDamage(st, v, s.sword.span) * u.damageScale * take, at, kd, st.ap);
+      const power = s.sword.power;
+      const met = t.parry?.(u.sim.pos.x, u.sim.pos.z, power) ?? { take: 1 }, take = met.take, blocked = take < 1 && !met.broke;
+      t.damage(cutDamage(st, v, s.sword.span) * (power ? v.swordPowerDamage : 1) * u.damageScale * take, at, kd, st.ap);
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       if (met.parried) {
         // The blades met (Keith 2026-11-01): a clash of sparks and light, a bend in the air, a loud ching; my blade
@@ -587,10 +601,18 @@ export class Arsenal implements MechWeapons {
         bf.sfx.playSound("swordBlock", at, 2.2, 1.12 + Math.random() * 0.1);
         bf.sfx.playSound("swordBlock", at, 1.4, 0.8 + Math.random() * 0.08);
         s.sword.recoil(v);
+        // A parried power cut is the punish (Keith 2026-11-02): the cutter's blade hangs longer.
+        if (power) s.sword.hitch += v.swordPowerParried;
         s.swordHits.clear(); s.cleave = 0;
         this.onShake?.(v.swordShake * 1.4);
         if (u.player && !u.ally) hitStop.add(v.swordStop * 1.6, v.swordStopScale);
         return;
+      }
+      if (met.broke) {
+        // Through the block: a burst of sparks and a heavy clang; the cut carries on.
+        bf.gunFx.sparksAt(at, kd, 40, 16);
+        if (v.swordParryFlash > 0) bf.nightLights?.flash(at.x, at.y, at.z, 2.5 * v.swordParryFlash);
+        bf.sfx.playSound("swordBlock", at, 2, 0.7 + Math.random() * 0.08);
       }
       bf.gunFx.sparksAt(at, kd, blocked ? 26 : 10, blocked ? 14 : 9);
       if (blocked) {
@@ -629,7 +651,7 @@ export class Arsenal implements MechWeapons {
    * recovering (not mid-cut) whose arm faces the cutter, within swordBlockArc of the torso's aim on that side, swings up
    * across the front and takes it: the share of the damage that lands is swordBlockTake. One already up blocks again.
    */
-  parry(fromX: number, fromZ: number): Parry {
+  parry(fromX: number, fromZ: number, power = false): Parry {
     const v = this.v, u = this.unit;
     if (!u.alive) return { take: 1 };
     const to = Math.atan2(fromX - u.sim.pos.x, fromZ - u.sim.pos.z);
@@ -657,14 +679,43 @@ export class Arsenal implements MechWeapons {
       const a = off(s), score = a - (s.sword.blocking ? 10 : 0);
       if (a <= half && score < best) { best = score; pick = s; }
     }
+    // A power cut (Keith 2026-11-02) breaks the block: the sword that would take it is flung back (so it can't block
+    // the next cut either) and swordPowerBlockTake of the damage lands.
+    if (pick && power && v.swordPower > 0) {
+      pick.sword.recoil(v);
+      this.onShake?.(v.swordShake);
+      return { take: v.swordPowerBlockTake, broke: true };
+    }
     if (!pick || !pick.sword.block(v)) return { take: 1 };
     return { take: v.swordBlockTake };
+  }
+
+  /**
+   * Space pressed (Keith 2026-11-02): every sword driving in or cutting becomes a power cut, for swordPowerCost of the
+   * dash's energy. False (Space dashes as usual) when no sword is mid-cut or there isn't the energy: a normal cut.
+   */
+  powerCut(): boolean {
+    const v = this.v;
+    if (v.swordPower <= 0) return false;
+    const ready = this.sides.filter((s) => s.kind === "melee" && s.sword.canPower(this.swordBase(s), v));
+    if (!ready.length || !this.unit.dash.spend(v.swordPowerCost)) return false;
+    for (const s of ready) s.sword.powerUp(this.swordBase(s), v);
+    return true;
+  }
+
+  /** A dash started along (x, z) (unit): toward the aim (the lock, else the cursor), a cut starting soon is a power cut. */
+  dashed(x: number, z: number) {
+    const v = this.v, u = this.unit, at = u.lock ?? u.cursor;
+    if (v.swordPower <= 0 || !at) return;
+    const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
+    if (d < 1e-3 || (x * dx + z * dz) / d < Math.cos(v.swordPowerDashCone * Math.PI / 180)) return;
+    for (const s of this.sides) if (s.kind === "melee") s.sword.primed = v.swordPowerDashWindow;
   }
 
   lunge(move?: { x: number; z: number }): { x: number; z: number } | null {
     const v = this.v, u = this.unit;
     let k = 0;
-    for (const s of this.sides) if (s.kind === "melee") k = Math.max(k, s.sword.lungeK);
+    for (const s of this.sides) if (s.kind === "melee") k = Math.max(k, s.sword.lungeK * (s.sword.power ? v.swordPowerLunge : 1));
     const at = u.lock ?? u.cursor;
     if (k <= 0 || v.swordLunge <= 0 || !at) return null;
     const dx = at.x - u.sim.pos.x, dz = at.z - u.sim.pos.z, d = Math.hypot(dx, dz);
@@ -1136,7 +1187,7 @@ export class Arsenal implements MechWeapons {
       if (!s.kind) { out.push(`${b} —`); return; }
       const g = u.upper.guns[i];
       let state = "";
-      if (s.kind === "melee") state = s.sword.clip === "guard" ? "click to cut, again to cut back" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : "recover";
+      if (s.kind === "melee") state = (s.sword.power ? `<b style="color:#6cc4ff">power</b> ` : "") + (s.sword.clip === "guard" ? "click to cut, again to cut back; Space mid-cut: power cut" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : "recover");
       else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;
       else if (s.kind === "rpg") state = `${Math.ceil(g.ammo)}/${g.mag.size}${s.cool > 0 ? ` ${s.cool.toFixed(1)} s` : ""}`;

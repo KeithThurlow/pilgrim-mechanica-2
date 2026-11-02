@@ -114,6 +114,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed. Energy bars at the left edge
   (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no weapons while sprinting.
+  Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
+  is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
