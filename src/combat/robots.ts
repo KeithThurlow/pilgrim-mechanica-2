@@ -247,6 +247,8 @@ export const ROBOT_DEFAULTS = {
   robotBigDeathPierce: 0.4,
   robotBigDeathShove: 22,
   robotBigDeathBoom: 1.6,
+  robotBigDeathCrater: 0.75,
+  robotBigDeathCraterDepth: 3.5,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -465,6 +467,8 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Robots in reach, full at the centre, half at the edge; medium and big ones take their blast share. Enough kills another big one: a chain" },
   { key: "robotBigDeathPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GD },
   { key: "robotBigDeathShove", label: "Shove (m/s)", min: 0, max: 60, step: 0.5, group: GD, tip: "The mech is pushed away this fast at the centre, half at the edge" },
+  { key: "robotBigDeathCrater", label: "Crater radius (share of blast)", min: 0, max: 1.5, step: 0.05, group: GD, tip: "Keith 2026-11-02: a huge crater. 0: only the usual blast dent" },
+  { key: "robotBigDeathCraterDepth", label: "Crater depth (m)", min: 0, max: 8, step: 0.1, group: GD, tip: "Past the usual crater depth limit (Craters); the wall steepness limit (Craters) still holds a wide one shallower" },
   { key: "robotBigDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD, tip: "A deep layer of the explosion sound on top of the blast's own (which already grows with the radius)" },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
@@ -552,6 +556,8 @@ export interface RobotDeathBlastEvent {
   id: number;
   at: V3; hubY: number;
   radius: number; damage: number; pierce: number; shove: number; boom: number;
+  /** Its crater: radius (m) and depth (m), past the usual crater depth limit. */
+  craterR: number; craterDepth: number;
 }
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
@@ -1843,6 +1849,7 @@ export class RobotSwarm {
         id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: c.hubY,
         radius: c.radius, damage: v.robotBigDeathDamage * c.power, pierce: v.robotBigDeathPierce,
         shove: v.robotBigDeathShove, boom: v.robotBigDeathBoom,
+        craterR: c.radius * v.robotBigDeathCrater, craterDepth: v.robotBigDeathCraterDepth,
       });
     }
   }

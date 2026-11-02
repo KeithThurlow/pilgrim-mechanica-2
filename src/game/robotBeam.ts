@@ -10,7 +10,7 @@
 // flagged release, and every other tick blasts the sand by the beam's power, little while it charges, most once full.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
-import type { RobotBeamEvent, RobotDeathBlastEvent, RobotPulseEvent } from "../combat/robots";
+import type { RobotBeamEvent, RobotDeathBlastEvent, RobotPulseEvent, RobotSwarm } from "../combat/robots";
 import { famOfTeam } from "../world/lamps";
 import type { CoreWarnDraw } from "../fx/coreWarnDraw";
 
@@ -150,6 +150,8 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
 export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
   from.set(e.at.x, e.at.y, e.at.z);
   bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "death");
+  // A huge crater on top of the blast's own dent (on dry ground; in water the blast splashes instead).
+  if (e.craterR > 0.5 && e.craterDepth > 0 && !bf.inWater(e.at.x, e.at.z)) bf.crater(e.at.x, e.at.z, e.craterR, e.craterDepth);
   cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatDeath ?? 1500, 0.45);
   const hy = Math.max(e.at.y + 2, e.hubY);
   bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * 0.6, { ground: false, fam: 2 });
@@ -183,4 +185,16 @@ export function coreWarnFx(bf: Battlefield, warn: CoreWarnDraw) {
     bf.dust.emit(1, x, y - 1, z, (Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3, 0.8, 1 + Math.random(), 0.9);
     bf.nightLights?.flash(x, y, z, 3 + 5 * k, famOfTeam(ROBOTS));
   };
+}
+
+/**
+ * Every big-walker attack and death of a robot swarm resolved on a battlefield, in one call for any lab that adds a
+ * swarm (Keith 2026-11-02: in the summoner lab the death blasts never went off): beams, pulses, death blasts (with the
+ * crater) and the unstable core's warning. shove pushes whoever can be pushed (the player's mech).
+ */
+export function wireRobotBlasts(bf: Battlefield, sw: RobotSwarm, warn: CoreWarnDraw, beamReach: number, shove?: (x: number, z: number, radius: number, speed: number) => void) {
+  sw.onBeam = (e) => fireRobotBeam(bf, e, beamReach);
+  sw.onPulse = (e) => fireRobotPulse(bf, e, shove);
+  sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, shove);
+  coreWarnFx(bf, warn);
 }

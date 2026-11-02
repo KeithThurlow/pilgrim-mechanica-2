@@ -276,5 +276,18 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   if (qMs > dMs) fail(`queued patching (${qMs.toFixed(0)} ms) costs more than patching at once (${dMs.toFixed(0)} ms)`);
 }
 
+// A dying walker's core (Keith 2026-11-02: "a huge crater"): past the usual depth limit when asked, never past it otherwise.
+{
+  const { field, craters } = world({ height: 0, swell: 0, bumps: 0 });
+  const x = 400, z = 400, g0 = field.height(x, z);
+  craters.add(x, z, 16.5, 3.5, 3.5);
+  const deep = g0 - field.height(x, z);
+  const { field: f2, craters: c2 } = world({ height: 0, swell: 0, bumps: 0 });
+  c2.add(x, z, 16.5, 3.5);
+  const capped = f2.height(x, z) - f2.height(x, z) + (g0 - f2.height(x, z));
+  console.log(`huge crater: 16.5 m radius, ${deep.toFixed(2)} m deep (the wall limit holds it there; usual depth limit ${capped.toFixed(2)} m)`);
+  if (deep < capped + 0.5) problems.push(`a huge crater dug only ${deep.toFixed(2)} m`);
+  if (capped > CRATER_DEFAULTS.craterMaxDepth + 0.05) problems.push(`a crater without a depth override went ${capped.toFixed(2)} m deep`);
+}
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("crater check failed"); }
 console.log("crater check passed");

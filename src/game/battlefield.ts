@@ -427,6 +427,14 @@ export class Battlefield {
     this.dentStats.worstMs = Math.max(this.dentStats.worstMs * 0.995, ms);
   }
 
+  /** A crater of its own size, past the usual depth limit (a dying walker's core: Keith 2026-11-02 "a huge crater"). */
+  crater(x: number, z: number, radius: number, depth: number): boolean {
+    if (!this.craters) return false;
+    const box = this.craters.add(x, z, radius, depth, depth);
+    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
+    return !!box;
+  }
+
   dent(x: number, z: number, blastRadius: number): boolean {
     if (!this.craters) return false;
     const box = this.craters.blast(x, z, blastRadius);
