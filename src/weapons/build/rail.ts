@@ -52,7 +52,7 @@ export function railCannonHull(sd: 1 | -1 = -1, seed = 8): ModelDef {
   plate(P, v(0, 0.06, -1.76), X(), Y(), 0.6, 0.7, 0.08, "dark", { bevel: 0.02 });
   for (let i = 0; i < 8; i++) plate(P, v(0, 0.58, -1.6 + i * 0.12), X(), Z().negate(), 0.7, 0.05, 0.1, "mechanical", { bevel: 0, ch: 0.01 });
   hazard(P, v(sd * 0.425, -0.22, -1.15), rd, Y(), 0.5, 0.08, 6);
-  stencilDigits(P, v(sd * 0.425, 0.12, -1.15), rd, Y(), 0.16, "HV");
+  stencilDigits(P, v(sd * 0.425, 0.12, -1.15), rd, Y(), 0.16, "H4");
   readyLamp(P, v(-sd * 0.25, 0.37, -0.5), Y(), 0.03);
   lightStrip(P, v(sd * 0.2, 0.5, -0.6), Z(), X(), 0.22, 0.03);
   for (const s of [1, -1]) tube(P, bezier(v(s * 0.3, 0.3, -1.3), v(s * 0.5, 0.5, -0.6), v(s * 0.45, 0.45, 0.0), v(s * 0.3, 0.3, 0.3), 8), 0.035, "dark", { n: 6 });

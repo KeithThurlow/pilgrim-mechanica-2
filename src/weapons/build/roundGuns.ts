@@ -66,7 +66,7 @@ export function sniperHull(sd: 1 | -1 = -1, seed = 22): ModelDef {
   trunnion(B, P, 0.15, 0.5, v(-sd * 0.28, 0, 0));
   louvres(P, v(sd * 0.305, 0.04, -0.15), rd.clone().negate(), Y(), 0.5, 0.3, 5);
   boltRow(P, v(sd * 0.3, 0.22, -1.1), v(sd * 0.3, 0.22, 0.35), 6, o, 0.016);
-  stencilDigits(P, v(sd * 0.305, 0.05, -0.8), rd, Y(), 0.16, "12.7");
+  stencilDigits(P, v(sd * 0.305, 0.05, -0.8), rd, Y(), 0.16, "127");
   // The bolt housing: a raised block on the outboard side with the bolt handle sticking out.
   loftZ(P, [[-0.85, octRing(0.1, 0.12, 0.03)], [-0.25, octRing(0.1, 0.12, 0.03)]], "mechanical", { x0: sd * 0.36, y0: 0.05 });
   prism(P, v(sd * 0.44, 0.08, -0.4), v(sd * 0.62, 0.0, -0.45), octRing(0.03, 0.03, 0.01), "dark");
