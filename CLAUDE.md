@@ -118,16 +118,20 @@ desert look direction. What came from where: `docs/decisions.md`.
   Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
   is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
-- Combat labs (warband, bandits, robots): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
+- Swarm lab (Keith 2026-11-02; the robots, bandits, warband, droids and strider labs forward here with their flags):
+  `?enemy=robots|bandits|warband|droids` (robots by default), a list (`?enemy=robots,bandits`) or `?enemy=mix` (all at once);
+  the enemy buttons in the panel do the same. Each kind keeps its old lab's flags below. Every enemy kind is a front in
+  `src/game/fronts/`. The weapon flags (`?left= ?right= ?k1-3= ?barrage ?proto=`) now work in every combat lab.
+- Combat labs (swarm, summoner, crusher, repair, stress...): `?manual` (no demo), `?zoom=metres`, `?dt=0.033`, `?flat`,
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
   the mech), `?proto=split:3,rate:2,multi:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced; multi: side by side) or `?proto=splitter,overclock,doubleShot,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
-  takes `?biome=` too. Robots lab: `?beam` (no packs; two excavators stopped either side of the mech, about to charge
+  takes `?biome=` too. Swarm lab, robots (`?enemy=robots`): `?beam` (no packs; two excavators stopped either side of the mech, about to charge
   their beams, which sweep after the mech for `robotBeamSweep` s), `?pulse` (one big walker 10 m off, about to fire its terraform pulse), `?bigdeath[=s]` (a big walker 12 m off with robots round its feet, destroyed after s: watch its core go unstable and blow), `?lineup` (a frozen row of each kind, the four weapon quads beside the mech), `?quads` (one weapon quad of each weapon coming in), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
-- Humanoid robots lab: `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; off elsewhere for now (Keith 2026-11-01): `?set=robotDroids:3` brings them into robots-lab packs, `?set=droidsOn:1` into the convoy lab's camps, packs and raids.
-- Striders (in the robots lab, Keith 2026-11-01; `labs/strider/` forwards there): `?strider=N` (N up at once, 1 by default),
+- Swarm lab, humanoid robots (`?enemy=droids`; `labs/droids/` forwards there): `?squad=N` (squad size, split into troopers, lancers and brutes by `droidLancerShare`/`droidBruteShare`), `?max=N` (on the field), `?still` (one squad frozen 13 m ahead, for looking), plus the combat-lab flags; off elsewhere for now (Keith 2026-11-01): `?set=robotDroids:3` brings them into robots-lab packs, `?set=droidsOn:1` into the convoy lab's camps, packs and raids.
+- Striders (in the swarm lab with the robots, Keith 2026-11-01; `labs/strider/` forwards there): `?strider=N` (N up at once, 1 by default),
   `?strider=beam|slam|grab` (one at 45 m about to beam, 14 m about to slam, 6 m about to grab; no packs), `?striderdist=m`.
   Striders are mech-sized (8 m) with a disc hull and long clawed arms. In the convoy lab they come with big robot camps, packs and raids (`?nearcamp`, `?raid`; Striders: in the field).
 - Summoner lab (Keith 2026-11-02; `docs/proposal-summoner.md`): `?drones=N` (attack drones up, 4), `?enemies=N` (robots on the field), `?pack=N`, `?companions=replicas|quads|both` (which kind walks with you; replicas by default), `?replicas=N` (wire-frame mechs, each rolled minigun or rockets; `&set=repRocketShare:1` all rockets, `:0` all miniguns), `?comps=N` (turret quads), `?scrappers=N` (the scrap swarm, 16), `?send` (the swarm thrown 30 m ahead at once), `?still` (a pack standing 25 m ahead, shooting back: watch your units), plus the combat-lab flags; drones and companions go for the Tab lock, else the nearest robots; Z throws the swarm at the lock or cursor, C calls it back.
@@ -211,7 +215,7 @@ src/fx/                 dust (sim) + dustDraw, dents (GPU dent layer) + dentRule
                         minigun (tracers, flash, hits, casings),
                         water (ripples, wakes, splashes) + waterDraw, shellsDraw (telegraph rings), blastWaves + blastWavesDraw
                         (a blast wave on every explosion: screen bend, ground ring, heat shimmer)
-src/game/               battlefield (shared combat stage), solids (mechs and vehicles as solid bodies), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
+src/game/               fronts/ (the swarm lab's enemy kinds: robots, bandits, warband, droids), battlefield (shared combat stage), solids (mechs and vehicles as solid bodies), repair (repair kits, pure) + repairUse (Q, sounds, the HUD view), sheet + sheetFire (direct fire as a vertical sheet with a penetration
                         budget), mechUnit (a mech with health), combatLab (combat lab shell), targeting (soft lock),
                         playerAim (mouse buttons, soft aim + reticle and brackets, camera shake, the arsenal; shared by the combat
                         labs and the convoy lab), loadoutApply (a loadout onto a mech), dummies + dummiesDraw (target dummies and cutouts),

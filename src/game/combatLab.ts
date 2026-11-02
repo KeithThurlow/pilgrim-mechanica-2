@@ -4,6 +4,9 @@
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
 import { hitStop } from "./hitStop";
+import { applyLoadout } from "./loadoutApply";
+import { resolve, LOADOUT_DEFAULTS, type LoadoutValues } from "../items/loadout";
+import { loadoutFor, pickFromParams, type Pick } from "../items/weaponPick";
 import { energyHud, reactorHud } from "../ui/energyBar";
 import { isEnergy } from "../weapons/energy/energySim";
 import * as THREE from "three/webgpu";
@@ -347,6 +350,14 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     iso,
     prey: (x, z) => foot.quarry.pick(x, z),
   };
+
+  // The weapon flags in every combat lab (Keith 2026-11-02: "I can't adjust weapon arguments in the URL with the bandit
+  // swarm"): ?left= ?right= ?k1-3= ?barrage ?proto=<ids> fit those weapons as the weapons lab does. Labs with their own
+  // pick (weapons, duel) fit theirs after this, from the same flags.
+  {
+    const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
+    if (pickFromParams(pick, params)) applyLoadout(player, resolve(loadoutFor(pick), { ...LOADOUT_DEFAULTS, ...(V as Partial<LoadoutValues>) }));
+  }
 
   // For headless debugging and tests: the lab on the page (window.__lab).
   (globalThis as unknown as { __lab: unknown }).__lab = lab;
