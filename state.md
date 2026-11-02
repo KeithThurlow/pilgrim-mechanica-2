@@ -298,6 +298,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Robot searchlights round again, dimmer (Keith; Claude on `claude/project-thread-5ic92j`)
+- Keith: the square searchlight read as a texture projected on the sand; the plain red spotlight worked better, just weaker. `robotSquare` 0 by default (the square stays a slider), real light 150 (was 260 before today, 90 with the square), pool 0.2, haze 0.06 kept. Beams' new look unchanged.
+- `src/world/nightLights.ts`. Typecheck, npm test.
 ### 2026-11-02 · Robot searchlights and beam looks (Keith; Claude on `claude/project-thread-5ic92j`)
 - Searchlights dimmer and robotic: a square pool with corner brackets under a four-sided beam, a thin scan line sweeping across it (`robotSquare`, `robotScanLine`, `robotScanRate`); pool 0.35 → 0.2, haze 0.14 → 0.06, real light 260 → 90, glow 0.7 → 0.45.
 - Beams drawn fine: a thin white-hot core in a soft glow (two crossed strips, `src/fx/beamStrand.ts`), wavering and flickering, three wisps spiralling along in puffs; a melt flash where it strikes (white point, orange bloom, glow on the sand) throwing molten spatter (`src/fx/meltSparks.ts`). Sliders in Robots: beam, "Look: …". The old blue scorch ribbon off (`robotBeamScorchGlow` 0).
