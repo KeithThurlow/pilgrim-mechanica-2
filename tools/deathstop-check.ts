@@ -88,7 +88,7 @@ function rig() {
   const gun = () => ({ enabled: true, mag: newMag(1, 1), rateMul: 1, spinCut: 0, ammoMul: 1, stats: null, firing: false });
   const unit = {
     team: 1, alive: true, gunsOff: false, cursor: new THREE.Vector3(0, 0, 30) as THREE.Vector3 | null, lock: null, keys: [true, true, false],
-    sim: { pelvis: new THREE.Vector3(0, 3, 0), pos: new THREE.Vector3(), inDash: false }, dash: { refillMul: 1, refillNow: noop },
+    sim: { pelvis: new THREE.Vector3(0, 3, 0), pos: new THREE.Vector3(), inDash: false }, dash: { refillMul: 1, refillNow: noop }, reactor: { refillMul: 1, refillNow: noop },
     body: { barrel: (_s: number, o: THREE.Vector3) => o.set(0, 0, 1), muzzle: (_s: number, o: THREE.Vector3) => o.set(1, 3.5, 1) },
     upper: { guns: [gun(), gun()] },
   };
