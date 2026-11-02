@@ -1,6 +1,6 @@
 /* The inventory (src/ui/inventory.ts), in the lab chrome's colours (src/core/lab.css). Left of the tuning panel. */
 .inv {
-  position: fixed; left: 50%; transform: translateX(-50%); top: 10px; bottom: 84px; width: min(940px, calc(100% - 360px)); z-index: 6;
+  position: fixed; left: max(10px, calc(100% - 1310px)); top: 10px; bottom: 84px; width: min(940px, calc(100% - 370px)); z-index: 6;
   display: flex; flex-direction: column; background: rgba(20, 22, 25, 0.96); border: 1px solid var(--line); border-radius: 6px; font-size: 13px;
 }
 .inv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
