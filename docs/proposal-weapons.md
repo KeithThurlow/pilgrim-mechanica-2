@@ -51,12 +51,17 @@ The miniguns worked because they assist (soft lock), never stop, show every roun
 
 ## Targeting modes (each weapon has one, with its own preview)
 
+**Rule (Keith 2026-11-02):** direct-fire weapons lead a locked target (soft lock, lead by velocity). Delayed or lobbed
+area weapons (big mortar, mortars, line mortar, grenade launchers and the like) never predict: the player aims the
+ground point by hand, even with a lock. A long flight sampled over a short stretch of the target's walk lands far off
+(often off screen). A new lobbed weapon takes a lead slider that defaults to 0, so it's tunable but off.
+
 | Mode | Input | Preview | Help | Weapons |
 | --- | --- | --- | --- | --- |
 | **Assist** | hold the side's button | lock brackets, the faint targeting laser | soft lock, lead by velocity | minigun, autocannon |
 | **Ground shot** | the side's button (hull) or hold the key (shoulder) | faint laser to the ground under the cursor; on a key, a ring the blast's size | none: straight at the point, early on anything in the way | RPG rocket |
 | **Line** | hold the key: a laser from the launcher and a strip on the sand; release | the strip, then a running light up it; the strip stays dim while the shells fall | the strip snaps onto a line of targets near it | line mortar |
-| **Point** | hold the key: a ring and a dotted arc over the hills; release | ring the blast's size, dotted lob | the ring leads a locked target's walk | big mortar |
+| **Point** | hold the key: a ring and a dotted arc over the hills; release | ring the blast's size, dotted lob | none (Keith 2026-11-02: the ring sits at the cursor, lock or not; `mortarLead` slider, 0 by default) | big mortar |
 | **Swarm** | hold the key: a ring of the swarm's reach; release | the ring | missiles share out the enemies in reach and follow them down | missile pod |
 | **Skill shot** | hold to charge, release | a thin beam thickening | none | rail cannon |
 | **Auto** (later) | none | a faint arc of reach | nearest in arc | turrets, drones |
