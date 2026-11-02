@@ -1,6 +1,6 @@
 // This lab now lives in the swarm lab (Keith 2026-11-02): the page forwards there with ?summon (your units) and the robots,
 // on the summoner lab's waves (60 robots in packs of 20 every 6 s from 90 m, your guns at their own damage). Its flags
-// carry over: ?drones ?companions ?replicas ?comps ?scrappers ?send ?still as they were; ?enemies=N and ?pack=N become
+// carry over: ?drones ?companions ?replicas ?comps ?scrappers ?send ?still ?summoner ?dismissat as they were; ?enemies=N and ?pack=N become
 // the robots' wave sliders. Any ?set= given wins.
 const q = new URLSearchParams(location.search);
 if (!q.has("enemy")) q.set("enemy", "robots");

@@ -18,7 +18,7 @@ import { banditsFront } from "../../src/game/fronts/bandits";
 import { warbandFront } from "../../src/game/fronts/warband";
 import { droidsFront } from "../../src/game/fronts/droids";
 import { crusherFront } from "../../src/game/fronts/crusher";
-import { summonerFront } from "../../src/game/fronts/summoner";
+import { summonerFront, summonGearInUrl } from "../../src/game/fronts/summoner";
 import type { Summons } from "../../src/summon/summons";
 
 const q = new URLSearchParams(location.search);
@@ -42,7 +42,7 @@ const make: Record<FrontId, () => Front> = {
 const fronts = FRONT_IDS.filter((id) => on.has(id)).map((id) => make[id]());
 // ?summon: the summoner's units (drones, companions, the scrap swarm) on your side, whatever enemies come. Last, so they
 // move after the enemies each frame.
-const summonOn = q.has("summon");
+const summonOn = q.has("summon") || summonGearInUrl(q);
 let summons: Summons | null = null;
 if (summonOn) fronts.push(summonerFront(q, (s) => { summons = s; }));
 
@@ -90,7 +90,7 @@ const enemyActions = [
   { label: "All enemies", active: () => on.size === FRONT_IDS.length, onClick: () => reload([...FRONT_IDS]) },
   {
     label: "Your units (summoner)", active: () => summonOn,
-    onClick: () => { const next = new URLSearchParams(location.search); if (summonOn) next.delete("summon"); else next.set("summon", ""); location.search = next.toString().replace(/=(&|$)/g, "$1"); },
+    onClick: () => { const next = new URLSearchParams(location.search); if (summonOn) { next.delete("summon"); next.delete("summoner"); } else next.set("summon", ""); location.search = next.toString().replace(/=(&|$)/g, "$1"); },
   },
 ];
 
