@@ -20,7 +20,7 @@ export const STRIDER_LAB_PARAMS: Param[] = [
   { key: "striderBeamReach", label: "Beam burns up to (m above ground)", min: 1, max: 15, step: 0.5, group: "Striders: beam" },
   ...STRIDER_PARAMS,
 ];
-export const STRIDER_TOPIC = { id: "striders", label: "Striders", groups: [GL, "Striders", "Striders: beam", "Striders: slam", "Striders: tearing"] };
+export const STRIDER_TOPIC = { id: "striders", label: "Striders", groups: [GL, "Striders", "Striders: beam", "Striders: slam", "Striders: tearing", "Striders: death"] };
 
 /** Make before the lab (its selector entry and buttons), attach() once the lab is up. */
 export class StriderLab {
