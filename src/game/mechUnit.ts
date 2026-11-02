@@ -77,7 +77,12 @@ export interface MechWeapons {
   /** A sword's step into its slash (world m/s), or null (src/weapons/sword.ts). */
   lunge?(move?: { x: number; z: number }): { x: number; z: number } | null;
   /** An enemy's sword cut from (x, z) is landing: a free sword facing it blocks. The share of damage taken (1: none). */
-  parry?(fromX: number, fromZ: number): import("./battlefield").Parry;
+  parry?(fromX: number, fromZ: number, power?: boolean): import("./battlefield").Parry;
+  /** Space pressed (Keith 2026-11-02): a sword driving in or cutting becomes a power cut instead of a dash, paid from the
+   *  dash's energy. True when it took the press. */
+  powerCut?(): boolean;
+  /** A dash started along (x, z) (unit): a sword cut starting soon after, toward the aim, is a power cut. */
+  dashed?(x: number, z: number): void;
   /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
    *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
   stop?(): void;
@@ -332,8 +337,11 @@ export class MechUnit implements Hittable, Solid {
   private slideAcc = [0, 0];
 
   tryDash(x: number, z: number): boolean {
+    // Space mid-cut is a sword's power cut instead (Keith 2026-11-02), when there's the energy for it.
+    if (this.alive && !this.gunsOff && this.weapons?.powerCut?.()) return true;
     if (!this.alive || !this.sim.canDash || !this.dash.start(x, z)) return false;
     this.sim.dash(this.dash.dirX, this.dash.dirZ);
+    this.weapons?.dashed?.(this.dash.dirX, this.dash.dirZ);
     // The hydraulics bang: a burst of sand off both feet.
     for (const f of this.sim.feet) this.bf.dust.stomp(f.pos.x, f.pos.y, f.pos.z, 1.3, -this.dash.dirX * 4, -this.dash.dirZ * 4);
     this.bf.sfx.play("brap", this.sim.pelvis, 0.9, 0.35, false);
@@ -575,8 +583,8 @@ export class MechUnit implements Hittable, Solid {
     };
   }
 
-  parry(fromX: number, fromZ: number): import("./battlefield").Parry {
-    return (this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ) : null) ?? { take: 1 };
+  parry(fromX: number, fromZ: number, power?: boolean): import("./battlefield").Parry {
+    return (this.alive && !this.gunsOff ? this.weapons?.parry?.(fromX, fromZ, power) : null) ?? { take: 1 };
   }
 
   damage(amount: number, at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {

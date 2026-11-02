@@ -36,7 +36,7 @@ function glowTime(temp: number, line = true) {
   const strider = glowTime(v.heatStrider), beam = glowTime(v.heatBeam), rail = glowTime(v.heatRail, false), ign = glowTime(v.heatIgnited, false), blast = glowTime(v.heatBlast, false);
   console.log(`     glow time: strider ${strider.toFixed(1)} s, excavator beam ${beam.toFixed(1)} s, rail ${rail.toFixed(1)} s, ignited ${ign.toFixed(1)} s, blast ${blast.toFixed(1)} s`);
   ok(strider > beam && beam > rail && rail > ign && ign >= blast, "the hotter the weapon, the longer the sand glows");
-  ok(beam > 3 && beam < 15, `excavator beam glows ${beam.toFixed(1)} s (3..15)`);
+  ok(beam > 1.5 && beam < 6, `excavator beam glows ${beam.toFixed(1)} s (1.5..6; Keith 2026-11-02: fade almost at once)`);
   ok(blast < 1.5, `an explosion glows ${blast.toFixed(1)} s at most (under 1.5)`);
 }
 
@@ -119,7 +119,7 @@ function glowTime(temp: number, line = true) {
   console.log(`     glowing area ${pow.toFixed(1)} m² of full glow → ${(pow * v.heatLight / Math.max(1, n)).toFixed(0)} power per light`);
   let t = 0;
   while (h.lights(out) > 0 && t < 60) { h.update(0.1, 0, 0); t += 0.1; }
-  ok(t > 3 && t < 15, `lights go out with the glow, after ${t.toFixed(1)} s`);
+  ok(t > 1.5 && t < 6, `lights go out with the glow, after ${t.toFixed(1)} s`);
   const g = new GroundHeat(v); g.update(DT, 0, 0);
   for (let b = 0; b < 4; b++) g.line(-40 + b * 5, -30, -30 + b * 20, 30, 0.8, v.heatBeam);
   g.update(DT, 0, 0);
