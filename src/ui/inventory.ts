@@ -10,6 +10,13 @@
 //   walking back over it after leaving it); scrap can be dumped (gone). The stash is on the convoy, out of reach.
 // - Aboard (or with no expedition: the loadout lab) the cargo is the bay's cargo list, which goes out with the mech at
 //   the next launch; fitting takes from the stash and the cargo and puts what comes off in the stash, as the bay does.
+// The grids (Keith 2026-11-02): the cargo and the stash are grid inventories, each item a block of cells by its size
+// (src/items/gridSize.ts) with a placeholder image (src/ui/itemIcon.ts). Drag an item to move it (R or right click
+// while held turns it), onto a doll slot to fit it, from a doll slot onto a grid to take it off, between the cargo and
+// the stash, onto the bin to scrap it (twice) or, in the field, onto the sand to drop it. A click still fits it; a
+// right click sends it across (stash and cargo). The weight limit still rules the cargo; the grid adds the room. In
+// the field, a pick-up with no room in the grid still goes in (the grid doesn't refuse pick-ups yet) and shows under
+// the grid as "no room".
 // The bay screen (B) still does sockets, loot rolls and the side-by-side stat changes.
 import "./inventory.css";
 import { STATS } from "../items/bases";
@@ -31,10 +38,13 @@ import { itemCadence } from "../items/dps";
 import type { LootValues } from "../items/generate";
 import type { Expedition } from "../expedition/expedition";
 import { dollSvg, paintPart, DOLL_PARTS, type DollPart } from "./mechDoll";
+import { GRID_SIZE_DEFAULTS, isSalvage, itemCells, salvageBlocks, type GridSizeValues } from "../items/gridSize";
+import { GRID_DEFAULTS, fitsAt, footprint, placeAt, syncGrid, type Grid, type GridValues } from "../items/grid";
+import { itemIcon } from "./itemIcon";
 
 export interface InventoryOptions {
   state: BayState;
-  tuning: LootValues & LoadoutValues & Partial<ValueValues> & { cargoWarn?: number };
+  tuning: LootValues & LoadoutValues & Partial<ValueValues> & Partial<GridValues> & Partial<GridSizeValues> & { cargoWarn?: number };
   /** The expedition, where there is one: out in the field its at-risk list is the cargo. */
   exp?: Expedition | null;
   /** After anything changes (refit the mech, save). */
@@ -218,6 +228,225 @@ export function inventoryScreen(o: InventoryOptions) {
     row.addEventListener("mouseleave", hideTip);
   }
 
+  // ---- the grids ----
+
+  type GridId = "cargo" | "stash";
+  const gv = (): GridValues & GridSizeValues => {
+    const t = o.tuning as Record<string, number | undefined>, out: Record<string, number> = { ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
+    for (const k in out) if (typeof t[k] === "number") out[k] = t[k]!;
+    return out as GridValues & GridSizeValues;
+  };
+  const turnable = () => gv().gridTurn >= 0.5;
+  /** The items in a grid: the cargo is the at-risk list in the field, the bay's cargo aboard. */
+  const gridItems = (g: GridId): Item[] => (g === "stash" ? st.stash.items : field() ? [...pool(), ...salvage()] : st.cargo.items);
+  /** The scrap at risk as salvage blocks in the cargo grid (field only). */
+  const salvage = (): Item[] => (field() ? salvageBlocks(o.exp!.scrapAtRisk, gv().salvagePerBlock, gv().salvageCompact >= 0.5) : []);
+  /** A grid in step with its items (saved positions kept); `over`: the items with no room. */
+  function gridOf(g: GridId): { grid: Grid; over: Item[] } {
+    const v = gv();
+    st.grids ??= { cargo: [], stash: [] };
+    const grid: Grid = g === "cargo" ? { cols: v.cargoCols, rows: v.cargoRows, placed: st.grids.cargo } : { cols: v.stashCols, rows: v.stashRows, placed: st.grids.stash };
+    if (g === "stash") grid.rows = Math.max(grid.rows, ...grid.placed.map((p) => p.y + footprint(p, p.rot).h));
+    const items = gridItems(g);
+    const left = new Set(syncGrid(grid, items.map((it) => ({ id: it.id, cells: itemCells(it, v) })), turnable(), g === "stash"));
+    st.grids[g] = grid.placed;
+    // The stash shows one free row at the bottom so there's always somewhere to drop.
+    if (g === "stash") grid.rows = Math.max(v.stashRows, ...grid.placed.map((p) => p.y + footprint(p, p.rot).h + 1));
+    return { grid, over: items.filter((it) => left.has(it.id)) };
+  }
+  const findItem = (id: string) => [...gridItems("cargo"), ...st.stash.items].find((x) => x.id === id) ?? null;
+
+  /** What is being dragged: an item from a grid or off a doll slot, how it's turned and where it was grabbed. */
+  interface Drag { item: Item; from: GridId | SlotId; rot: boolean; gx: number; gy: number; ghost: HTMLElement; armed?: boolean }
+  let drag: Drag | null = null;
+  let press: { item: Item; from: GridId | SlotId; x: number; y: number; rot: boolean; gx: number; gy: number } | null = null;
+
+  function ghostOf(it: Item, rot: boolean): HTMLElement {
+    const px = gv().gridCellPx, c = footprint(itemCells(it, gv()), rot);
+    const g = el("div", "inv-ghost");
+    g.style.width = `${c.w * px}px`; g.style.height = `${c.h * px}px`;
+    const col = isSalvage(it) ? "#e6c86a" : RARITY[it.rarity].color;
+    g.style.borderColor = col;
+    g.append(itemIcon(it, col, rot, gv()));
+    document.body.append(g);
+    return g;
+  }
+  /** Where the drag would land: a grid cell, a doll slot, the bin or the sand. */
+  function target(e: PointerEvent): { grid: GridId; x: number; y: number } | { slot: SlotId } | { zone: "bin" | "sand" } | null {
+    const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const gEl = hit?.closest<HTMLElement>("[data-grid]");
+    if (gEl && drag) {
+      const r = gEl.getBoundingClientRect(), px = gv().gridCellPx;
+      return { grid: gEl.dataset.grid as GridId, x: Math.floor((e.clientX - r.left) / px) - drag.gx, y: Math.floor((e.clientY - r.top) / px) - drag.gy };
+    }
+    const sEl = hit?.closest<HTMLElement>("[data-slot]");
+    if (sEl) return { slot: sEl.dataset.slot as SlotId };
+    const zEl = hit?.closest<HTMLElement>("[data-zone]");
+    if (zEl) return { zone: zEl.dataset.zone as "bin" | "sand" };
+    return null;
+  }
+  /** Whether the dragged item can land there (for the ghost's colour). */
+  function canLand(t: ReturnType<typeof target>): boolean {
+    if (!drag || !t) return false;
+    const it = drag.item;
+    if ("slot" in t) return !isSalvage(it) && typeof drag.from === "string" && (drag.from === "cargo" || drag.from === "stash") && !fitProblem(st.loadout, t.slot, it);
+    if ("zone" in t) return t.zone === "bin" ? drag.from === "stash" && !!o.bankScrap : drag.from === "cargo" && field();
+    if (field() && t.grid === "stash") return false;
+    const { grid } = gridOf(t.grid);
+    return fitsAt(grid, itemCells(it, gv()), t.x, t.y, drag.rot, it.id);
+  }
+  function moveGhost(e: PointerEvent) {
+    if (!drag) return;
+    const px = gv().gridCellPx;
+    drag.ghost.style.left = `${e.clientX - (drag.gx + 0.5) * px}px`;
+    drag.ghost.style.top = `${e.clientY - (drag.gy + 0.5) * px}px`;
+    drag.ghost.classList.toggle("bad", !canLand(target(e)));
+  }
+  function startDrag(e: PointerEvent) {
+    if (!press) return;
+    hideTip();
+    drag = { item: press.item, from: press.from, rot: press.rot, gx: press.gx, gy: press.gy, ghost: ghostOf(press.item, press.rot) };
+    press = null;
+    root.classList.add("dragging");
+    for (const t of root.querySelectorAll<HTMLElement>("[data-slot]")) t.classList.toggle("fits", !fitProblem(st.loadout, t.dataset.slot as SlotId, drag.item));
+    moveGhost(e);
+  }
+  function turnDrag(e?: PointerEvent) {
+    if (!drag || !turnable()) return;
+    drag.rot = !drag.rot;
+    [drag.gx, drag.gy] = [0, 0];
+    const c = footprint(itemCells(drag.item, gv()), drag.rot);
+    drag.gx = Math.floor(c.w / 2); drag.gy = Math.floor(c.h / 2);
+    drag.ghost.remove();
+    drag.ghost = ghostOf(drag.item, drag.rot);
+    if (e) moveGhost(e); else drag.ghost.style.left = "-999px";
+  }
+  function endDrag() {
+    drag?.ghost.remove();
+    drag = null;
+    root.classList.remove("dragging");
+  }
+  /** Put an item into a grid at a spot if it's free there (else wherever it was auto-placed). */
+  function setAt(g: GridId, it: Item, x: number, y: number, rot: boolean) {
+    const { grid } = gridOf(g);
+    placeAt(grid, it.id, itemCells(it, gv()), x, y, rot);
+    st.grids![g] = grid.placed;
+  }
+  function drop(e: PointerEvent) {
+    if (!drag) return;
+    const d = drag, t = target(e), it = d.item;
+    endDrag();
+    if (!t || !canLandFor(d, t)) { render(); return; }
+    if ("slot" in t) { fitInto(t.slot, it); return; }
+    if ("zone" in t) {
+      if (t.zone === "sand") {
+        if (isSalvage(it)) { o.exp!.dumpScrap(it.stats.scrap); say(`Dumped ${it.stats.scrap} scrap.`); return; }
+        if (o.exp!.dropItem(it.id)) render();
+        return;
+      }
+      // The bin: twice to scrap (the first drop arms it).
+      const val = itemValue(it, vv());
+      if (scrapArmed !== it.id) { scrapArmed = it.id; say(`Drop ${itemName(it)} on the bin again to scrap it for ◆ ${val}.`); return; }
+      scrapArmed = null;
+      if (!takeFrom(st.stash, it.id)) return;
+      o.bankScrap!(val);
+      say(`Scrapped ${itemName(it)} for ${val} scrap (banked).`);
+      changed();
+      return;
+    }
+    if (d.from === t.grid) { setAt(t.grid, it, t.x, t.y, d.rot); changed(); return; }
+    if (d.from === "cargo" || d.from === "stash") {
+      // Across: stash and the bay's cargo (aboard only; the field's stash is out of reach).
+      const from = d.from === "stash" ? st.stash : st.cargo, to = t.grid === "stash" ? st.stash : st.cargo;
+      if (!moveItem(from, to, it.id)) { say(`No room in the cargo for ${itemName(it)} (weight).`); return; }
+      setAt(t.grid, it, t.x, t.y, d.rot);
+      changed();
+      return;
+    }
+    // Off a doll slot onto a grid: take it off, then put it where it was dropped.
+    const slotFrom = d.from;
+    takeOff(slotFrom);
+    if (st.loadout[slotFrom]?.id === it.id) return;
+    const home: GridId = field() ? "cargo" : "stash";
+    if (t.grid !== home && !field() && !moveItem(st.stash, st.cargo, it.id)) { say(`No room in the cargo for ${itemName(it)} (weight); it went to the stash.`); return; }
+    setAt(t.grid, it, t.x, t.y, d.rot);
+    changed();
+  }
+  const canLandFor = (d: Drag, t: NonNullable<ReturnType<typeof target>>) => { const keep = drag; drag = d; const ok = canLand(t) || ("grid" in t && typeof d.from === "string" && d.from !== "cargo" && d.from !== "stash" && !(field() && t.grid === "stash")); drag = keep; return ok; };
+
+  addEventListener("pointermove", (e) => {
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) startDrag(e);
+    else if (drag) moveGhost(e);
+  });
+  addEventListener("pointerup", (e) => {
+    if (drag) { drop(e); return; }
+    if (press) {
+      const p = press;
+      press = null;
+      if (isSalvage(p.item)) say(`Salvage: ${p.item.stats.scrap} scrap, banked when the mech is picked up. Drag it onto the sand to dump it.`);
+      else if (p.from === "cargo" || p.from === "stash") equip(p.item);
+      else { slot = slot === p.from ? null : p.from; render(); }
+    }
+  });
+  // R or a right click turns the held item; Esc lets go of it. Capture, so the lab's R (reload) doesn't see it.
+  addEventListener("keydown", (e) => {
+    if (!drag) return;
+    if (e.code === "KeyR") { e.preventDefault(); e.stopImmediatePropagation(); turnDrag(); }
+    if (e.code === "Escape") { e.stopImmediatePropagation(); endDrag(); render(); }
+  }, { capture: true });
+  addEventListener("contextmenu", (e) => { if (drag) { e.preventDefault(); turnDrag(e as PointerEvent); } }, { capture: true });
+
+  /** Right click on a grid item: across to the other list (aboard). */
+  function sendAcross(it: Item, from: GridId) {
+    if (field()) return;
+    if (from === "stash") { if (moveItem(st.stash, st.cargo, it.id)) changed(); else say(`No room in the cargo for ${itemName(it)}.`); }
+    else { moveItem(st.cargo, st.stash, it.id); changed(); }
+  }
+
+  function gridBox(g: GridId) {
+    const { grid, over } = gridOf(g);
+    const px = gv().gridCellPx;
+    const box = el("div", "inv-grid");
+    box.dataset.grid = g;
+    box.style.width = `${grid.cols * px}px`; box.style.height = `${grid.rows * px}px`;
+    box.style.backgroundSize = `${px}px ${px}px`;
+    for (const p of grid.placed) {
+      const it = findItem(p.id);
+      if (!it) continue;
+      const f = footprint(p, p.rot), col = isSalvage(it) ? "#e6c86a" : RARITY[it.rarity].color;
+      const cell = el("div", "inv-gitem" + (slot && !fitProblem(st.loadout, slot, it) ? " fits" : "") + (scrapArmed === it.id ? " armed" : ""));
+      cell.style.left = `${p.x * px}px`; cell.style.top = `${p.y * px}px`;
+      cell.style.width = `${f.w * px}px`; cell.style.height = `${f.h * px}px`;
+      cell.style.borderColor = col;
+      cell.append(itemIcon(it, col, p.rot, gv()));
+      const label = isSalvage(it) ? `◆ ${it.stats.scrap}` : itemName(it);
+      if (f.w * f.h >= 2 || isSalvage(it)) { const n = el("span", "inv-gname", label); n.style.color = isSalvage(it) ? "#e6c86a" : col; cell.append(n); }
+      if (isSalvage(it)) cell.classList.add("salvage");
+      cell.addEventListener("pointerdown", (e) => {
+        const r = cell.getBoundingClientRect();
+        e.preventDefault();
+        if (e.button === 0) press = { item: it, from: g, x: e.clientX, y: e.clientY, rot: p.rot, gx: Math.floor((e.clientX - r.left) / px), gy: Math.floor((e.clientY - r.top) / px) };
+      });
+      cell.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!drag) sendAcross(it, g); });
+      if (!isSalvage(it)) hoverable(cell, it, true);
+      box.append(cell);
+    }
+    const wrap = el("div", "inv-gridwrap");
+    wrap.append(box);
+    const overSalvage = over.filter(isSalvage), overItems = over.filter((x) => !isSalvage(x));
+    if (overSalvage.length) wrap.append(el("p", "inv-note bad", `No room in the grid for ${overSalvage.length} salvage block${overSalvage.length > 1 ? "s" : ""} (◆ ${overSalvage.reduce((n, x) => n + x.stats.scrap, 0)}).`));
+    if (overItems.length) {
+      wrap.append(el("p", "inv-note bad", `No room in the grid for ${overItems.length} (drop or move something):`));
+      const list = el("div", "inv-list");
+      for (const x of overItems) list.append(itemRow(x, g === "stash" ? "stash" : field() ? "cargo" : "bayCargo"));
+      wrap.append(list);
+    }
+    return wrap;
+  }
+  /** Lay a grid out afresh, biggest first. */
+  function tidy(g: GridId) { st.grids![g] = []; changed(); }
+  const zone = (z: "bin" | "sand", text: string) => { const b = el("div", "inv-zone", text); b.dataset.zone = z; return b; };
+
   // ---- pieces ----
 
   function dollBox() {
@@ -249,7 +478,15 @@ export function inventoryScreen(o: InventoryOptions) {
       if (it) name.style.color = RARITY[it.rarity].color;
       tile.append(name);
       if (it) tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}Lv ${levelOf(it)} · P ${itemPower(it)}`));
-      tile.addEventListener("click", () => { slot = slot === s ? null : s; render(); });
+      tile.dataset.slot = s;
+      // Press: a click picks the slot; dragging it off onto a grid takes it off (legs and hull only swap).
+      tile.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const off = it && s !== "legs" && s !== "hull" && !heldBy2;
+        press = { item: it ?? ({} as Item), from: s, x: e.clientX, y: e.clientY, rot: false, gx: 0, gy: 0 };
+        if (!off) press.x = press.y = Number.NaN; // no drag: only the click
+      });
       if (it) hoverable(tile, it, false);
       box.append(tile);
     }
@@ -331,25 +568,18 @@ export function inventoryScreen(o: InventoryOptions) {
         row.append(btn(`Dump ${n}`, () => { e.dumpScrap(n); render(); }, "small"), btn("Dump all", () => { e.dumpScrap(scrap); render(); }, "small"));
         col.append(row);
       }
-      const items = sorted(pool());
-      if (!items.length && scrap <= 0) col.append(el("p", "inv-note", "Empty."));
-      const list = el("div", "inv-list");
-      for (const x of items) list.append(itemRow(x, "cargo"));
-      col.append(list);
+      col.append(gridBox("cargo"), zone("sand", "Drop here to leave it on the sand"));
       col.append(el("h3", "", "Stash"), el("p", "inv-note", `On the convoy: ${st.stash.items.length} items. Bank the cargo to reach it.`));
     } else {
       const cap = capacity();
       col.append(el("h3", "", "Cargo · goes out with the mech"));
       col.append(...weightBar(bagWeight(st.cargo), cap));
-      const list = el("div", "inv-list");
-      if (!st.cargo.items.length) list.append(el("p", "inv-note", "Empty. Spare parts sent here ride out at the next launch (at risk)."));
-      for (const x of sorted(st.cargo.items)) list.append(itemRow(x, "bayCargo"));
-      col.append(list);
-      col.append(el("h3", "", `Stash · ${st.stash.items.length}`));
-      const sl = el("div", "inv-list");
-      if (!st.stash.items.length) sl.append(el("p", "inv-note", "Empty."));
-      for (const x of sorted(st.stash.items)) sl.append(itemRow(x, "stash"));
-      col.append(sl);
+      col.append(gridBox("cargo"));
+      if (!st.cargo.items.length) col.append(el("p", "inv-note", "Spare parts dragged here ride out at the next launch (at risk). Right click an item to send it across."));
+      const sh = el("div", "inv-row");
+      sh.append(el("h3", "", `Stash · ${st.stash.items.length}`), btn("Tidy", () => tidy("stash"), "small"));
+      col.append(sh, gridBox("stash"));
+      if (o.bankScrap) col.append(zone("bin", "Scrap bin: drop a stash item here twice to scrap it"));
     }
     return col;
   }
@@ -381,7 +611,8 @@ export function inventoryScreen(o: InventoryOptions) {
   /** What the screen shows, cheaply, so a pick-up or a bank while it's open redraws it. */
   function signature() {
     const e = o.exp;
-    return `${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
+    const g = gv();
+    return `${Object.values(g).join(",")}|${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
   }
 
   function open() { scrapArmed = null; o.onOpen?.(); root.hidden = false; render(); }

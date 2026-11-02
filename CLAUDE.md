@@ -146,6 +146,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   rolls out of the core); the keep holds the warlord; every `?seed=N` rolls a different shape;
   Shift+R puts it all back up.
 - Inventory (Keith 2026-11-01; convoy and loadout labs): I anywhere (or click the mech doll at the bottom right) opens it; `?inv[=slot]` starts with it open (on that slot). In the field its cargo is the at-risk list, limited by weight (Loot and cargo › Cargo).
+- Inventory lab (Keith 2026-11-02; the grid inventory and the doll): `?roll=N` (N items into the stash), `?out[=scrap]` (out in the field with that much salvage, 120), `?inv=slot`, `?fresh`. In every inventory: drag items, R or right click while dragging turns one, drop on a doll slot fits it, drag a slot off onto a grid takes it off, right click sends across, bin (twice) scraps, sand drops. Sizes: Grid topic (`src/items/gridSize.ts`).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
   fitting item), `?fit=slot:base:rarity,...` (fit rolled items first; slots legs, hull, sensor, mountL/R, heldL/R, shoulderL/R,
   pack, waistL/R), `?choice=arm|hull` (what the bay offers a hull mount), `?fresh` (ignore the saved bay).
@@ -234,7 +235,7 @@ src/combat/             warband (raider vehicles and bandit mechs) + partyBus (t
                         crusher (the heavy crab quad: a sucking turbine maw, pincers, eats salvage) + crusherBody, crusherTarget, crusherFx, crusherField (glue),
                         rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
-src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
+src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve), gridSize (item grid sizes) + grid (the grid inventory),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHud (hull bar, kits, red edge, hit arcs)
 src/summon/             the summoner's units: drones (attack drones, pure) + dronesDraw; glue: allies (turret companions and the scrap swarm on the robots' sim), summons (all of them on a battlefield)
