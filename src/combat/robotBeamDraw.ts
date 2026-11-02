@@ -7,6 +7,10 @@
 // Blue since 2026-11-01 (Keith: red for the robots' seeking, blue for their terraforming weapons). The big walkers'
 // terraform pulse draws here too: a beam straight down into the sand, a ring on the ground at the blast's edge and a
 // second ring closing in on it as the charge runs out, then a wide flash of the column.
+// Keith 2026-11-02: fine beams, not wide tubes: a thin white-hot core in a soft glow (src/fx/beamStrand.ts), wavering
+// and flickering, with wisps spiralling along it, and a bright melt flash where it strikes the sand, throwing molten
+// spatter (src/fx/meltSparks.ts). The light it casts on the ground is a quarter of what it was; the old blue scorch
+// ribbon is off by default (the hot sand, src/fx/groundHeat.ts, shows the melt and cools point by point).
 // At night it lights the ground through the night lights' one request path (src/world/lamps.ts ShortLights): the
 // charging emitter holds a real light at high priority, the line and the scorch glow on the sand.
 import * as THREE from "three/webgpu";
@@ -15,11 +19,21 @@ import { beamPower, beamWidthShare } from "./beamCore";
 import { Ribbon, SoftRing, glowMaterial, type P3 } from "../weapons/ribbon";
 import type { BlastWaves } from "../fx/blastWaves";
 import { FAM_ROBOT, type ShortLights } from "../world/lamps";
+import { BeamStrand, type StrandShape } from "../fx/beamStrand";
+import { MeltSparks } from "../fx/meltSparks";
 
 const SLOTS = 16, SCORCHES = 8, PTS = 48;
+const WISPS = 3, MELT = 0xffc890, MELT_HALO = 0xff7a20;
 const HOT = 0x2a8cff, CORE = 0xe0f6ff, LINE = 0x3aa8ff, EMBER = 0x5ab8ff, EMBER_COLD = 0x0a2a60;
 
-interface Slot { glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon; reach: SoftRing; wave: SoftRing }
+interface Slot {
+  glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon; reach: SoftRing; wave: SoftRing;
+  /** The fine beam: a soft glow round a thin core, and wisps along it. */
+  sGlow: BeamStrand; sCore: BeamStrand; wisps: BeamStrand[];
+  /** The melt flash where it strikes: a white-hot point, an orange bloom, a flat glow on the sand. */
+  hit: THREE.Mesh; hitHalo: THREE.Mesh; hitPool: THREE.Mesh;
+  sparkAcc: number;
+}
 interface Scorch { ribbon: Ribbon; t: number; sx: number; sz: number; x1: number; z1: number; w: number }
 
 export class RobotBeamDraw {
@@ -35,6 +49,79 @@ export class RobotBeamDraw {
   private d = new THREE.Vector3();
   private c = new THREE.Color();
   private time = 0;
+  private sparks: MeltSparks;
+  /** The beam being laid now, for the strand shapes (set before each strand's set). */
+  private cur = { L: 1, w: 1, seed: 0, waver: 0, flick: 0, wisp: 0, j: 0 };
+  private shapeCore: StrandShape = (t, o) => {
+    const c = this.cur, T = this.time, x = t * c.L, env = Math.sqrt(Math.sin(Math.PI * Math.min(1, t * 1.05)));
+    o.a = c.waver * env * (0.6 * Math.sin(x * 0.45 + T * 17 + c.seed) + 0.4 * Math.sin(x * 1.1 - T * 31 + c.seed * 2));
+    o.b = c.waver * env * (0.6 * Math.sin(x * 0.5 - T * 13 + c.seed * 3) + 0.4 * Math.sin(x * 0.95 + T * 37));
+    // Flicker runs down it in pulses, the emitter end steadier.
+    o.k = 1 - c.flick * 0.6 * (0.5 + 0.5 * Math.sin(x * 0.7 - T * 70 + c.seed)) * Math.min(1, t * 3);
+  };
+  private shapeGlow: StrandShape = (t, o) => {
+    this.shapeCore(t, o);
+    o.a *= 0.7; o.b *= 0.7;
+    o.k = 1 - this.cur.flick * 0.35 * (0.5 + 0.5 * Math.sin(t * this.cur.L * 0.3 - this.time * 25 + this.cur.seed));
+  };
+  private shapeWisp: StrandShape = (t, o) => {
+    const c = this.cur, T = this.time, j = c.j, x = t * c.L, dir = j & 1 ? 1 : -1;
+    const r = c.w * (0.18 + 0.12 * Math.sin(T * 3 + j * 2 + x * 0.2)) * Math.min(1, t * 6);
+    const ph = dir * x * (0.5 + 0.15 * j) - T * (6 + 2.5 * j) + j * 2.1 + c.seed;
+    o.a = r * Math.cos(ph); o.b = r * Math.sin(ph);
+    // Broken into drifting puffs.
+    const puff = Math.max(0, Math.sin(x * (0.35 + 0.1 * j) - T * (9 + 3 * j) + j * 4 + c.seed));
+    o.k = c.wisp * puff * puff * puff * Math.min(1, t * 4) * Math.min(1, (1 - t) * 8 + 0.3);
+  };
+
+  /**
+   * The fine beam on slot s for robot i from (b.ex..) to the strike: a soft glow `w` wide round a thin core, wisps,
+   * brightness `a` (0..1), and the melt flash where it strikes with power p (0..1); dt for the spatter.
+   */
+  private fine(s: Slot, i: number, b: BeamLine, w: number, a: number, p: number, dt: number, wisps = true) {
+    const v = this.swarm.v, c = this.cur;
+    const L = Math.hypot(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
+    const fl = v.robotBeamFlicker ?? 0.4, wob = 1 - fl * 0.25 * (0.5 + 0.5 * Math.sin(this.time * 53 + i * 1.7)) * (0.5 + 0.5 * Math.sin(this.time * 19 + i));
+    c.L = L; c.w = w; c.seed = (i * 0.618) % 1 * 20; c.waver = (v.robotBeamWaver ?? 0.07) * Math.min(1, w * 2.5); c.flick = fl; c.wisp = (v.robotBeamWisps ?? 0.7) * a;
+    const coreW = Math.max(0.03, w * (v.robotBeamCoreW ?? 0.3)), haloW = Math.max(0.1, w * (v.robotBeamHaloW ?? 1.6));
+    s.sCore.set(b.ex, b.ey, b.ez, b.x1, b.y1, b.z1, coreW, this.shapeCore);
+    s.sCore.mat.opacity = Math.min(1, a * wob);
+    s.sGlow.set(b.ex, b.ey, b.ez, b.x1, b.y1, b.z1, haloW, this.shapeGlow);
+    s.sGlow.mat.opacity = (v.robotBeamHaloK ?? 0.45) * a * wob;
+    for (let j = 0; j < WISPS; j++) {
+      const m = s.wisps[j];
+      if (!wisps || c.wisp <= 0.01) { m.mesh.visible = false; continue; }
+      c.j = j;
+      m.set(b.ex, b.ey, b.ez, b.x1, b.y1, b.z1, Math.max(0.04, w * 0.14), this.shapeWisp);
+      m.mat.opacity = 0.8;
+    }
+    // The melt flash: white-hot at the point, an orange bloom, the sand glowing round it; spatter thrown up.
+    const H = (v.robotBeamHit ?? 1.4) * p * a, fk = 0.75 + 0.25 * Math.sin(this.time * 47 + i) * Math.sin(this.time * 29);
+    const show = H > 0.03;
+    s.hit.visible = s.hitHalo.visible = s.hitPool.visible = show;
+    if (show) {
+      const gy = this.swarm.ground.height(b.x1, b.z1);
+      s.hit.position.set(b.x1, Math.max(b.y1, gy) + 0.1, b.z1); s.hit.scale.setScalar(H * 0.45 * fk);
+      s.hitHalo.position.copy(s.hit.position); s.hitHalo.scale.setScalar(H * 1.1 * fk);
+      (s.hit.material as THREE.MeshBasicMaterial).opacity = Math.min(1, 0.6 + 0.4 * p);
+      (s.hitHalo.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.25 * p;
+      s.hitPool.position.set(b.x1, gy + 0.12, b.z1); s.hitPool.scale.set(H * 1.6, 1, H * 1.6);
+      (s.hitPool.material as THREE.MeshBasicMaterial).opacity = 0.7 * fk;
+      s.sparkAcc += (v.robotBeamSparks ?? 90) * p * a * dt;
+      const n = Math.floor(s.sparkAcc);
+      if (n > 0) {
+        s.sparkAcc -= n;
+        const fx = b.x1 - b.ex, fz = b.z1 - b.ez, fh = Math.hypot(fx, fz) || 1;
+        this.sparks.emit(n, b.x1, gy, b.z1, 3 + 4 * p, fx / fh, fz / fh);
+      }
+    }
+  }
+
+  private hideFine(s: Slot) {
+    s.sGlow.mesh.visible = s.sCore.mesh.visible = s.hit.visible = s.hitHalo.visible = s.hitPool.visible = false;
+    for (const w of s.wisps) w.mesh.visible = false;
+  }
+
   /** The charging and burning beams this frame, for the lights: robot, charge share (0..1, >1 burning). */
   private live: { i: number; u: number; line: BeamLine; f?: number }[] = [];
 
@@ -50,9 +137,18 @@ export class RobotBeamDraw {
       line.mesh.renderOrder = edge.mesh.renderOrder = ring.mesh.renderOrder = 3;
       ring.mesh.visible = false;
       const reach = new SoftRing(PTS, LINE), wave = new SoftRing(PTS, CORE);
-      this.group.add(halo, glow, line.mesh, edge.mesh, ring.mesh, beam, core, reach.mesh, wave.mesh);
-      this.slots.push({ glow, halo, line, edge, beam, core, ring, reach, wave });
+      const sGlow = new BeamStrand(40, HOT, 0.3), sCore = new BeamStrand(40, CORE, 0.2);
+      const wisps = Array.from({ length: WISPS }, () => new BeamStrand(56, 0x8cd0ff, 0.3));
+      const hit = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), glowMaterial(0xfff4e0, true));
+      const hitHalo = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), glowMaterial(MELT_HALO, true));
+      const hitPool = new THREE.Mesh(POOL_GEO, poolMaterial());
+      for (const o of [hit, hitHalo, hitPool]) { o.frustumCulled = false; o.renderOrder = 7; o.visible = false; }
+      hitPool.renderOrder = 4;
+      this.group.add(halo, glow, line.mesh, edge.mesh, ring.mesh, beam, core, reach.mesh, wave.mesh, sGlow.mesh, sCore.mesh, ...wisps.map((w) => w.mesh), hitPool, hitHalo, hit);
+      this.slots.push({ glow, halo, line, edge, beam, core, ring, reach, wave, sGlow, sCore, wisps, hit, hitHalo, hitPool, sparkAcc: 0 });
     }
+    this.sparks = new MeltSparks(swarm.ground);
+    this.group.add(this.sparks.mesh);
     for (let k = 0; k < SCORCHES; k++) {
       const ribbon = new Ribbon(PTS, EMBER, true);
       ribbon.mesh.visible = false;
@@ -104,7 +200,7 @@ export class RobotBeamDraw {
       if (this.seen[i] < C && t >= C) {
         const sc = this.scorches[this.nextScorch++ % SCORCHES];
         sc.t = 0; sc.sx = b.sx; sc.sz = b.sz; sc.x1 = b.x1; sc.z1 = b.z1; sc.w = W;
-        sc.ribbon.set(this.path(b), W * 1.3, "ground", g, 0.1);
+        if ((v.robotBeamScorchGlow ?? 0) > 0) sc.ribbon.set(this.path(b), W * 1.3, "ground", g, 0.1);
       }
       this.seen[i] = t;
       if (t < C) {
@@ -120,14 +216,8 @@ export class RobotBeamDraw {
           // A big one (Keith 2026-11-01: the real beam, not a line on the sand): live from the start, thin and
           // flickering, thickening and brightening with its power to the release (src/combat/beamCore.ts).
           const sh = sw.bigBeamShape(), ws = beamWidthShare(t, sh), p = beamPower(t, sh);
-          this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
-          const len = this.d.length(), w = W * ws * (0.8 + 0.2 * Math.sin(this.time * (40 + 30 * p) + i));
-          this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
-          for (const [m, kw, o] of [[s.beam, 0.5, 0.3 + 0.45 * p], [s.core, 0.18, 0.6 + 0.4 * p]] as const) {
-            m.position.set(b.ex, b.ey, b.ez); m.quaternion.copy(this.q); m.scale.set(Math.max(0.03, w * kw), Math.max(0.03, w * kw), len);
-            (m.material as THREE.MeshBasicMaterial).opacity = o;
-            m.visible = true;
-          }
+          this.fine(s, i, b, W * ws, 0.55 + 0.45 * p, p, dt);
+          s.beam.visible = s.core.visible = false;
           s.line.mesh.visible = s.edge.mesh.visible = false;
           continue;
         }
@@ -139,29 +229,19 @@ export class RobotBeamDraw {
         s.edge.set(pts, locked ? 0.3 : 0.12, "ground", g, 0.11);
         s.edge.mat.opacity = v.robotBeamLine * (0.3 + 0.7 * grow) * pulse;
         s.line.mesh.visible = s.edge.mesh.visible = v.robotBeamLine > 0;
-        s.beam.visible = false;
+        s.beam.visible = s.core.visible = false;
         // Charged up: from the lock a thin thread of the beam, emitter to strike, thickening and brightening to the release.
-        s.core.visible = locked;
         if (locked) {
           const k = Math.min(1, (t - C * v.robotBeamLock) / Math.max(0.01, C * (1 - v.robotBeamLock)));
-          this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
-          const len = this.d.length(), w = W * (0.04 + 0.1 * k) * (0.8 + 0.2 * Math.sin(this.time * 50));
-          this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
-          s.core.position.set(b.ex, b.ey, b.ez); s.core.quaternion.copy(this.q); s.core.scale.set(w, w, len);
-          (s.core.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.5 * k;
-        }
+          this.fine(s, i, b, W * (0.15 + 0.35 * k), 0.35 + 0.5 * k, 0.15 * k, dt, false);
+        } else this.hideFine(s);
       } else {
         // The burn: full and flickering while it sweeps, then fading over the burn time; the emitter flares with it.
         const f = t < C + D ? 0.9 + 0.1 * Math.sin(this.time * 60 + i) : Math.max(0, 1 - (t - C - D) / B), w = W * (0.55 + 0.45 * f);
         this.live[this.live.length - 1].f = f;
         this.d.set(b.x1 - b.ex, b.y1 - b.ey, b.z1 - b.ez);
-        const len = this.d.length();
-        this.q.setFromUnitVectors(Z, this.d.divideScalar(len || 1));
-        for (const [m, kw, o] of [[s.beam, 0.5, 0.75], [s.core, 0.18, 1]] as const) {
-          m.position.set(b.ex, b.ey, b.ez); m.quaternion.copy(this.q); m.scale.set(w * kw, w * kw, len);
-          (m.material as THREE.MeshBasicMaterial).opacity = o * f;
-          m.visible = true;
-        }
+        this.fine(s, i, b, w, f, f, dt);
+        s.beam.visible = s.core.visible = false;
         s.glow.position.set(b.ex, b.ey, b.ez); s.glow.scale.setScalar(G * (0.6 + 0.6 * f));
         s.halo.position.copy(s.glow.position); s.halo.scale.setScalar(G * (1.2 + 1.2 * f));
         (s.glow.material as THREE.MeshBasicMaterial).opacity = f; (s.halo.material as THREE.MeshBasicMaterial).opacity = 0.6 * f;
@@ -174,15 +254,17 @@ export class RobotBeamDraw {
       const s = this.slots[k];
       s.glow.visible = s.halo.visible = s.line.mesh.visible = s.edge.mesh.visible = s.beam.visible = s.core.visible = s.ring.mesh.visible = false;
       s.reach.mesh.visible = s.wave.mesh.visible = false;
+      this.hideFine(s);
     }
+    this.sparks.update(dt);
     // Scorches: hot at first, cooling to a dull ember glow, then gone.
     const T = Math.max(0.05, v.robotBeamScorch);
     for (const sc of this.scorches) {
       sc.t += dt;
       const f = 1 - sc.t / T;
-      sc.ribbon.mesh.visible = f > 0;
-      if (f <= 0) continue;
-      sc.ribbon.mat.opacity = 0.9 * f * f;
+      sc.ribbon.mesh.visible = f > 0 && (v.robotBeamScorchGlow ?? 0) > 0;
+      if (!sc.ribbon.mesh.visible) continue;
+      sc.ribbon.mat.opacity = 0.9 * f * f * v.robotBeamScorchGlow;
       this.c.setHex(EMBER).lerp(this.c2.setHex(EMBER_COLD), 1 - f);
       sc.ribbon.mat.color.copy(this.c);
     }
@@ -197,6 +279,7 @@ export class RobotBeamDraw {
    * thin rings fading inward (robotPulseRing).
    */
   private pulse(s: Slot, i: number) {
+    this.hideFine(s);
     const sw = this.swarm, v = sw.v, g = sw.ground, C = Math.max(0.05, v.robotPulseCharge), t = sw.pulseT[i];
     const e = sw.beamFrom(i, this.ep), gy = g.height(e.x, e.z), len = Math.max(0.5, e.y - gy), R = v.robotPulseRadius;
     const u = Math.min(1, t / C), grow = Math.pow(u, v.robotBeamGrowth);
@@ -255,17 +338,35 @@ export class RobotBeamDraw {
       } else {
         const f = lf ?? Math.max(0, 1 - (u - 1) * v.robotBeamCharge / Math.max(0.01, v.robotBeamBurn));
         L.hold(b.ex, b.ey, b.ez, v.robotBeamFlash * 0.5 * f, 20, 0xd0ecff, v.robotBeamPrio);
-        // Along the beam: a few lights where it is low, merged by the clustering where they're close.
-        const n = 3;
-        for (let k = 1; k <= n; k++) {
-          const t = k / n, x = b.sx + (b.x1 - b.sx) * t, y = b.sy + (b.y1 - b.sy) * t, z = b.sz + (b.z1 - b.sz) * t;
-          L.hold(x, y + 1, z, v.robotBeamFlash * f / n, 14, 0x4090ff, v.robotBeamPrio * 0.5);
-        }
+        // Keith 2026-11-02: a quarter of the light on the ground it used to cast; most of it from the melt at the strike.
+        L.hold(b.x1, b.y1 + 0.8, b.z1, v.robotBeamFlash * 0.18 * f, 10, MELT, v.robotBeamPrio * 0.5);
+        L.hold((b.sx + b.x1) / 2, (b.sy + b.y1) / 2 + 1, (b.sz + b.z1) / 2, v.robotBeamFlash * 0.07 * f, 14, 0x4090ff, v.robotBeamPrio * 0.3);
       }
     }
     const T = Math.max(0.05, v.robotBeamScorch);
-    for (const sc of this.scorches) if (sc.t < T) L.telegraphLine(sc.sx, sc.sz, sc.x1, sc.z1, sc.w * 1.4, 0.6 * (1 - sc.t / T), FAM_ROBOT);
+    const sg = v.robotBeamScorchGlow ?? 0;
+    if (sg > 0) for (const sc of this.scorches) if (sc.t < T) L.telegraphLine(sc.sx, sc.sz, sc.x1, sc.z1, sc.w * 1.4, 0.6 * sg * (1 - sc.t / T), FAM_ROBOT);
   }
 }
 
 const Z = new THREE.Vector3(0, 0, 1);
+
+/** A flat soft disc on the sand (the melt's glow round the strike). */
+const POOL_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+let poolTex: THREE.DataTexture | null = null;
+function poolMaterial() {
+  if (!poolTex) {
+    const N = 64, data = new Uint8Array(N * N * 4);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const r = Math.min(1, Math.hypot((i + 0.5) / N * 2 - 1, (j + 0.5) / N * 2 - 1));
+      const c = Math.round(255 * Math.min(1, Math.exp(-(r * r) / 0.04) * 0.9 + 0.35 * Math.pow(1 - r, 2.5)));
+      data.set([c, c, c, 255], (j * N + i) * 4);
+    }
+    poolTex = new THREE.DataTexture(data, N, N);
+    poolTex.magFilter = poolTex.minFilter = THREE.LinearFilter;
+    poolTex.needsUpdate = true;
+  }
+  const m = glowMaterial(MELT, true);
+  m.map = poolTex;
+  return m;
+}
