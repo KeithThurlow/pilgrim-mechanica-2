@@ -89,3 +89,17 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   }), () => v.swordLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }
+
+/**
+ * The explosion as one sound for every explosive (Keith 2026-11-02: "dial it up and down"): the volume and playback
+ * rate a blast of this radius plays "blast" at, scaled from blastSizeRef by doublings of the radius (bigger: louder and
+ * deeper, longer; smaller: quieter and higher, shorter). `size` multiplies the radius for a caller that wants its
+ * blasts to sound bigger or smaller than they hit.
+ */
+export function blastVoice(radius: number, v: WeaponValues, size = 1): { volume: number; rate: number } {
+  const k = Math.log2(Math.max(0.1, radius * size) / Math.max(0.1, v.blastSizeRef));
+  return {
+    volume: Math.max(0.2, Math.min(v.blastSizeMax, 1 + v.blastSizeLoud * k)),
+    rate: Math.max(0.5, Math.min(1.8, Math.pow(2, -v.blastSizePitch * k))) * (0.94 + Math.random() * 0.12),
+  };
+}
