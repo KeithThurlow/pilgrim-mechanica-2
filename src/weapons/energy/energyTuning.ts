@@ -69,15 +69,33 @@ export const ENERGY_DEFAULTS = {
   arcKeep: 0.75,
   arcEnergy: 0.06,
   arcShow: 0.12,
+  // Sunder beam (Keith 2026-11-02: "like the walkers... charge up a beam and then you blast"): one press commits it: it
+  // charges, then a heavy beam burns for its channel time while you steer it (slowly), cutting through everything under
+  // it, then it ends and cools down. The whole cost is paid when it starts.
+  sunderDps: 650,
+  sunderAp: 0.8,
+  sunderTicks: 12,
+  sunderRange: 55,
+  sunderCharge: 1.2,
+  sunderChannel: 2.5,
+  sunderCooldown: 3,
+  sunderEnergy: 2.5,
+  sunderTrack: 70,
+  sunderWidth: 1,
+  sunderSlow: 0.5,
+  sunderCore: 0.45,
+  sunderHeat: 2500,
+  sunderDig: 0.6,
+  sunderShake: 0.06,
 };
 export type EnergyValues = typeof ENERGY_DEFAULTS;
 
 export const ENERGY_GROUP = "Energy", LASER_GROUP = "Pulse laser", BEAM_GROUP = "Beam laser", LANCE_GROUP = "Nova lance";
-export const PLASMA_GROUP = "Plasma cannon", ORB_GROUP = "Particle orb", ARC_GROUP = "Arc caster";
+export const PLASMA_GROUP = "Plasma cannon", ORB_GROUP = "Particle orb", ARC_GROUP = "Arc caster", SUNDER_GROUP = "Sunder beam";
 /** Their groups in the Weapons topic. */
-export const ENERGY_GROUPS = [ENERGY_GROUP, LASER_GROUP, BEAM_GROUP, LANCE_GROUP, PLASMA_GROUP, ORB_GROUP, ARC_GROUP];
+export const ENERGY_GROUPS = [ENERGY_GROUP, LASER_GROUP, BEAM_GROUP, LANCE_GROUP, PLASMA_GROUP, ORB_GROUP, ARC_GROUP, SUNDER_GROUP];
 
-const E = ENERGY_GROUP, LA = LASER_GROUP, BE = BEAM_GROUP, LN = LANCE_GROUP, PL = PLASMA_GROUP, OR = ORB_GROUP, AR = ARC_GROUP;
+const E = ENERGY_GROUP, LA = LASER_GROUP, BE = BEAM_GROUP, LN = LANCE_GROUP, PL = PLASMA_GROUP, OR = ORB_GROUP, AR = ARC_GROUP, SU = SUNDER_GROUP;
 export const ENERGY_PARAMS: Param[] = [
   { key: "energyCost", label: "Energy weapons spend energy", min: 0, max: 1, step: 1, group: E, tip: "1: every energy weapon draws on the reactor; 0: free, for tuning damage" },
   { key: "energyLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: E },
@@ -135,4 +153,19 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "arcKeep", label: "Damage kept per jump", min: 0, max: 1, step: 0.01, group: AR },
   { key: "arcEnergy", label: "Energy per zap (bars)", min: 0, max: 0.5, step: 0.005, group: AR },
   { key: "arcShow", label: "Bolt shows for (s)", min: 0.03, max: 0.5, step: 0.01, group: AR },
+  { key: "sunderDps", label: "Damage/s", min: 50, max: 2500, step: 10, group: SU, tip: "To everything under the beam at once" },
+  { key: "sunderAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: SU },
+  { key: "sunderTicks", label: "Burn ticks/s", min: 2, max: 30, step: 1, group: SU },
+  { key: "sunderRange", label: "Range (m)", min: 10, max: 120, step: 1, group: SU },
+  { key: "sunderCharge", label: "Charge (s)", min: 0.2, max: 4, step: 0.05, group: SU, tip: "From the press to the blast; the aim line shows where it'll start" },
+  { key: "sunderChannel", label: "Blast lasts (s)", min: 0.5, max: 8, step: 0.1, group: SU },
+  { key: "sunderCooldown", label: "Cooldown (s)", min: 0, max: 10, step: 0.1, group: SU },
+  { key: "sunderEnergy", label: "Energy (bars, paid at the press)", min: 0, max: 8, step: 0.05, group: SU, tip: "Not enough in the reactor and it won't start" },
+  { key: "sunderTrack", label: "Sweep speed (°/s)", min: 5, max: 360, step: 5, group: SU, tip: "How fast the beam swings after the aim while charging and blasting" },
+  { key: "sunderWidth", label: "Cut half-width (m)", min: 0.1, max: 4, step: 0.05, group: SU, tip: "Bodies this close to the beam's line burn" },
+  { key: "sunderSlow", label: "Walk slows by (share)", min: 0, max: 1, step: 0.01, group: SU, tip: "While it charges and blasts" },
+  { key: "sunderCore", label: "Beam width (m, look)", min: 0.05, max: 2, step: 0.01, group: SU },
+  { key: "sunderHeat", label: "Sand heat", min: 0, max: 4000, step: 50, group: SU },
+  { key: "sunderDig", label: "Digs the sand (crater size)", min: 0, max: 2, step: 0.05, group: SU, tip: "0: no dents where it burns" },
+  { key: "sunderShake", label: "Camera shake", min: 0, max: 0.3, step: 0.005, group: SU },
 ];

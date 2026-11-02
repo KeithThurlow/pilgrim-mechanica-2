@@ -12,6 +12,10 @@
 //   Arc caster: lightning to the lock, else the enemy nearest the aim point (within arcAim m, in range); from there it
 //   jumps to the nearest enemy not yet struck within jump reach, damage × keep each jump. No target: it grounds at
 //   the aim. Targets come from the register (or the lab's candidates when the register is empty).
+//   Sunder beam: a press commits it. While it charges a thin aim line shows where it will burn; then a heavy beam burns
+//   for its channel time, swinging after the aim at its (slow) sweep speed. It isn't stopped by bodies: every body
+//   under its line within the cut's half-width burns each tick (a sheet, src/game/sheetFire.ts); only a dune or steel
+//   ends it. The sand where it touches glows and is dug out. The walk slows while it runs (slowed()).
 // Ownership: host (damage) from the owner's commands (trigger, aim); the views and effects are cosmetic.
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable } from "../../game/battlefield";
@@ -24,6 +28,8 @@ import { addEnergySounds } from "./energySound";
 import type { Loop } from "../../audio/sfx";
 import { splashBlast } from "../../game/splash";
 import { FLAG, KIND, kindBit, type Filter } from "../../game/register";
+import { sheetHits } from "../../game/sheetFire";
+import type { Sheet, SheetHit } from "../../game/sheet";
 import type { TargetCandidate } from "../../game/targeting";
 
 /** A fading shot for the draw: a pulse bolt or a lance's beam, from the muzzle to where it stopped. */
@@ -44,6 +50,8 @@ interface ESide {
   dir: THREE.Vector3;
   beam: BeamView;
   charge: ChargeView;
+  /** Sunder: the aim line while it charges (k: the charge). */
+  tele: BeamView & { k: number };
   loop: Loop | null;
   whined: boolean;
 }
@@ -76,7 +84,7 @@ export class EnergyGuns {
     /** Targets when the register is empty (the lab's candidates). */
     private candidates: () => TargetCandidate[] = () => []) {
     const side = (): ESide => ({ cls: null, own: null, sim: new EnergySim(), dir: new THREE.Vector3(0, 0, 1), beam: { on: false, from: v3(), to: v3(), hit: false, age: 0 },
-      charge: { on: false, at: v3(), k: 0 }, loop: null, whined: false });
+      charge: { on: false, at: v3(), k: 0 }, tele: { on: false, from: v3(), to: v3(), hit: false, age: 0, k: 0 }, loop: null, whined: false });
     this.sides = [side(), side()];
     addEnergySounds(bf.sfx, v);
   }
@@ -116,6 +124,8 @@ export class EnergyGuns {
       for (let k = 0; k < out.shots; k++) this.zap(st, muzzle, want, aim, gi);
     } else if (st.cls === "beam") {
       this.stepBeam(s, st, dt, muzzle, want, out.shots);
+    } else if (st.cls === "sunder") {
+      this.stepSunder(s, st, dt, muzzle, want, out.shots, gi);
     } else {
       // The lance: the charge glows at the muzzle and whines; on release it fires.
       s.charge.on = s.sim.holding && s.sim.charge > 0;
@@ -141,8 +151,11 @@ export class EnergyGuns {
   stop() { for (const s of this.sides) { s.sim.drop(); this.quiet(s); } }
   // (Bolts and orbs already in flight carry on: they're shots, not the gun.)
 
+  /** A sunder beam is charging or burning (the walk slows). */
+  slowed(): boolean { return this.sides.some((s) => s.cls === "sunder" && s.sim.phase > 0); }
+
   private quiet(s: ESide) {
-    s.beam.on = false; s.charge.on = false; s.charge.k = 0; s.whined = false;
+    s.beam.on = false; s.charge.on = false; s.charge.k = 0; s.whined = false; s.tele.on = false;
     if (s.loop) { this.bf.sfx.stopLoop(s.loop); s.loop = null; }
   }
 
@@ -153,6 +166,7 @@ export class EnergyGuns {
     if (s.sim.dry) return `<b style="color:#ff7a5c">no energy</b>`;
     if (s.cls === "lance") return s.sim.cool > 0 ? `${s.sim.cool.toFixed(1)} s` : s.sim.holding ? `charge ${Math.round(s.sim.charge * 100)}%` : "hold to charge";
     if (s.cls === "beam") return s.beam.on ? "burning" : "hold to burn";
+    if (s.cls === "sunder") return s.sim.phase === 1 ? `charge ${Math.round(s.sim.charge * 100)}%` : s.sim.phase === 2 ? `blast ${(s.sim.left * (this.stats(i)?.channel ?? 0)).toFixed(1)} s` : s.sim.cool > 0 ? `${s.sim.cool.toFixed(1)} s` : "click to charge";
     return "hold to fire";
   }
 
@@ -401,5 +415,102 @@ export class EnergyGuns {
     u.upper.guns[gi].kick = v.railKick * (0.5 + 0.5 * power);
     u.upper.shake = Math.min(0.08, u.upper.shake + 0.04 * power);
     this.onShake?.(v.lanceShake * power);
+  }
+
+  // ---- The sunder beam ----
+
+  private sheetBuf: SheetHit<import("../../game/battlefield").Hittable>[] = [];
+  private digT = 0;
+  private shakeT = 0;
+  private ro = new THREE.Vector3();
+  private rd = new THREE.Vector3();
+
+  /** Where a line ends on the sand or steel (bodies don't stop it): distance, and whether it was steel or sand. */
+  private reach(o: THREE.Vector3, d: THREE.Vector3, max: number): Trace {
+    const bf = this.bf, tr = this.tr;
+    let best = max, ground = false, steel = false;
+    const g = rayGround(o, d, bf.field, best, this.g);
+    if (g) { const gd = o.distanceTo(g); if (gd < best) { best = gd; ground = true; } }
+    if (bf.wrecks?.hit(o, d, best, this.at, this.n)) { const sd = o.distanceTo(this.at); if (sd < best) { best = sd; ground = false; steel = true; } }
+    tr.t = best; tr.target = null; tr.ground = ground; tr.steel = steel;
+    return tr;
+  }
+
+  private stepSunder(s: ESide, st: EnergyStats, dt: number, muzzle: THREE.Vector3, want: THREE.Vector3, ticks: number, gi: number) {
+    const bf = this.bf, v = this.v, u = this.unit, phase = s.sim.phase;
+    if (phase === 0) {
+      s.dir.copy(want);
+      if (s.beam.on || s.tele.on || s.charge.on) this.quiet(s);
+      return;
+    }
+    // Swing after the aim at the sweep speed (charging and blasting alike: the aim line is where the blast starts).
+    const ang = s.dir.angleTo(want), max = (st.speed * Math.PI / 180) * dt;
+    if (ang > 1e-4) s.dir.lerp(want, Math.min(1, max / ang)).normalize();
+    const d = this.d.copy(s.dir);
+    const tr = this.reach(muzzle, d, st.range);
+    const end = this.at.copy(muzzle).addScaledVector(d, tr.t);
+    if (phase === 1) {
+      // Charging: the ball swells at the muzzle, a thin aim line flickers out to where it'll burn, a rising whine.
+      s.charge.on = true; s.charge.k = s.sim.charge; set3(s.charge.at, muzzle);
+      s.tele.on = true; s.tele.k = s.sim.charge; set3(s.tele.from, muzzle); set3(s.tele.to, end);
+      if (!s.whined) { s.whined = true; bf.sfx.playSound("sunderCharge", muzzle, 1, 1.2 / Math.max(0.3, st.charge)); }
+      u.upper.guns[gi].kick = 0.01 * s.sim.charge;
+      return;
+    }
+    // Blasting.
+    if (!s.beam.on) {
+      s.beam.age = 0; s.charge.on = false; s.tele.on = false;
+      this.onFire?.("sunder");
+      bf.sfx.playSound("lanceFire", muzzle, 1, 0.75);
+      bf.gunFx.sparksAt(muzzle, d, 18, 12);
+      this.onShake?.(v.sunderShake * 3);
+    }
+    s.beam.on = true; s.beam.age += dt;
+    set3(s.beam.from, muzzle); set3(s.beam.to, end);
+    // Every body under the line burns each tick: a sheet along the beam's flat line, as tall as the beam there.
+    let dealt = 0, hits = 0;
+    if (ticks > 0) {
+      const fx = end.x - muzzle.x, fz = end.z - muzzle.z, flen = Math.hypot(fx, fz);
+      if (flen > 0.3) {
+        const dx = fx / flen, dz = fz / flen, y0 = muzzle.y, y1 = end.y, half = st.radius, field = bf.field;
+        const sheet: Sheet = {
+          ox: muzzle.x, oz: muzzle.z, dx, dz, from: 0, len: flen, half, under: v.sheetUnder,
+          top: (t: number) => y0 + (y1 - y0) * (t / flen) + half,
+          line: (t: number) => y0 + (y1 - y0) * (t / flen),
+          ground: (x: number, z: number) => field.height(x, z),
+        };
+        const found = sheetHits(bf.targets, u.team, sheet, null, this.sheetBuf, bf.register);
+        for (const h of found) {
+          const t = h.target;
+          const at = new THREE.Vector3(h.x, h.y, h.z);
+          if (h.ray) { this.ro.set(h.ray.ox, h.ray.oy, h.ray.oz); this.rd.set(h.ray.dx, h.ray.dy, h.ray.dz); t.hitRay(this.ro, this.rd, h.ray.dist + 1e-3); }
+          else t.pick?.(h.key);
+          for (let k = 0; k < ticks; k++) t.damage(st.damage, at, d, st.ap);
+          dealt += st.damage * ticks; hits++;
+          if (Math.random() < 0.5) {
+            if (t.surface === "flesh") bf.gunFx.onFleshHit?.(at, d);
+            else bf.gunFx.sparksAt(at, this.n.copy(d).negate(), 3, 7);
+          }
+        }
+      }
+      this.last.sunder = dealt;
+      this.last.sunderHits = hits;
+    }
+    s.beam.hit = hits > 0;
+    // Where it touches: sand glows white-hot and is dug out, smoke and grit thrown up; steel sprays sparks.
+    if (tr.ground) {
+      bf.heat?.spot(end.x, end.z, 1.1, v.sunderHeat, dt);
+      bf.heat?.line(end.x - d.x * 2, end.z - d.z * 2, end.x, end.z, 0.6, v.sunderHeat * 0.5, dt);
+      this.digT -= dt;
+      if (this.digT <= 0 && v.sunderDig > 0) { this.digT = 0.12; bf.marks.crater(end.x, end.z, v.sunderDig); }
+      if (Math.random() < dt * 14) bf.dust.smoke(end.x, end.y + 0.1, end.z, (Math.random() - 0.5) * 0.8, 1 + Math.random(), (Math.random() - 0.5) * 0.8, 0.4, 1.1, 0.4, 0.8);
+      if (Math.random() < dt * 8 && !bf.inWater(end.x, end.z)) bf.dust.hit(end.x, end.y, end.z, d.x, d.z, 0.8);
+    } else if (tr.steel && Math.random() < dt * 20) bf.gunFx.sparksAt(end, this.n.copy(d).negate(), 4, 9);
+    this.shakeT -= dt;
+    if (this.shakeT <= 0) { this.shakeT = 0.1; this.onShake?.(v.sunderShake); }
+    if (!s.loop) s.loop = bf.sfx.startSoundLoop("sunderHum", Math.random());
+    if (s.loop) bf.sfx.setSoundLoop(s.loop, "sunderHum", muzzle, 1, 0.95 + 0.1 * s.sim.left);
+    u.upper.guns[gi].kick = 0.03;
+    u.upper.shake = Math.min(0.05, u.upper.shake + 0.2 * dt);
   }
 }
