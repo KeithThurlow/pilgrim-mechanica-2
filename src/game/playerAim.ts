@@ -23,7 +23,7 @@ import { TargetLock, type LockChange } from "./targetLock";
 import { EntryList, type Filter, type Register } from "./register";
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
-import { blastVoice } from "../weapons/weaponSound";
+import { playBlast } from "../weapons/weaponSound";
 import type { WeaponValues } from "../weapons/tuning";
 
 /**
@@ -220,8 +220,7 @@ export function fitArsenal(bf: Battlefield, player: MechUnit, v: MechUnit["v"] &
   scene.add(draw.group);
   arsenal.onShake = shake.add;
   bf.onBlast = (at, radius) => {
-    const bv = blastVoice(radius, v);
-    bf.sfx.playSound("blast", at, bv.volume, bv.rate);
+    playBlast(bf.sfx, at, radius, v);
     const d = Math.hypot(at.x - player.sim.pos.x, at.z - player.sim.pos.z);
     if (d < v.blastShakeReach) shake.add(v.blastShake * (radius / 2.5) * (1 - d / v.blastShakeReach));
   };
