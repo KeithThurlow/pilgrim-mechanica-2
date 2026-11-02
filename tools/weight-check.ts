@@ -11,7 +11,7 @@ import { CATALOG } from "../src/weapons/catalog";
 import { rootAtMount, type ModelDef } from "../src/weapons/parts";
 import { Piece } from "../src/weapons/kit";
 
-const BALANCED = new Set(["cannon-hull", "rail-cannon-hull", "flak-hull", "sniper-hull"]);
+const BALANCED = new Set(["cannon-hull", "rail-cannon-hull", "flak-hull", "sniper-hull", "plasma-cannon-hull", "laser-projector-hull", "orb-hull", "arc-hull", "autocannon-hull", "rocket-pod-hull", "minigun-feed-hull"]);
 const REACH: Record<string, number> = { "sniper-hull": 4.2 };
 
 // Decals are open quads with no volume or weight: leave them out.

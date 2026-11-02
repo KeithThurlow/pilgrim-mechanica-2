@@ -97,7 +97,8 @@ function clipLauncher(sd: 1 | -1, seed: number, o: ClipOpts): ModelDef {
   plate(R, v(0, sy + 0.071 * k, o.z0 + o.len * 0.15), Z(), X(), 0.25 * k, 0.2 * k, 0.01, "trim");
   if (o.hang === "hull") {
     // The trunnion on the inboard side, onto the shoulder joint (Mount: the root goes there).
-    const at: V3 = v(-sd * (hw + 0.04), cy + hh * 0.35, o.z0 + o.len * 0.3);
+    // Hung near the clip's front so most of it sits behind the shoulder (Keith 2026-11-02: weight behind).
+    const at: V3 = v(-sd * (hw + 0.04), cy + hh * 0.35, o.z0 + o.len * 0.62);
     prism(P, v(-sd * (hw + 0.02), sy, at.z), v(-sd * (hw + 0.02), at.y - 0.12, at.z), octRing(0.14, 0.04, 0.02), "plating", Z());
     trunnion(B, P, 0.14, 0.42, at);
     B.socket("Mount", at.clone().addScaledVector(v(-sd, 0, 0), 0.42));
