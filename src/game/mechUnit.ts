@@ -166,7 +166,7 @@ export const MECH_PARAMS: Param[] = [
 
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
-const WRECK = 0x3b3531;
+export const WRECK = 0x3b3531;
 const D2R = Math.PI / 180;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
@@ -238,6 +238,8 @@ export class MechUnit implements Hittable, Solid {
   kneelPitch = 0;
   /** A co-op ally's mech (player: true but not the local one): its effects give way to the local player's. */
   ally = false;
+  /** A summon (src/summon/replicas.ts): its own team's mechs walk through it, nudging it aside (src/game/solids.ts). */
+  softSolid = false;
   /** A player sits in it (the lab sets it): standing a while, its legs flex now and then. Enemies stay still. */
   piloted = false;
   /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
@@ -384,6 +386,7 @@ export class MechUnit implements Hittable, Solid {
     out.r = v.bodyRadius * (v.trample || 1);
     out.y0 = sim.pelvis.y - v.hipHeight; out.y1 = sim.pelvis.y + 3;
     out.mass = v.ramMechMass; out.mech = true;
+    out.soft = this.softSolid; out.team = this.team;
     return true;
   }
 

@@ -95,7 +95,7 @@ wireRobotBlasts(bf, sw, draw.coreWarn, V.robotBeamReach, (x, z, r, sp) => { if (
 if (still) { const p = player.sim.pos; sw.spawn(Math.round(V.sumPack), p.x, p.z + 25, 6, { mid: 0.15, big: 0 }); }
 
 // The summoner's units.
-summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon, load: lab.loadRampart });
+summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon });
 // Z sends the swarm (at the lock, else the cursor), C calls it back.
 addEventListener("keydown", (e) => {
   if (typing(e) || e.repeat) return;

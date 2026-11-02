@@ -54,6 +54,11 @@ A build that fights through its units rather than its own guns. Everything lives
   armour 4, miniguns at 0.6× damage; at your flanks 9 m out, hold 18 m off a foe, leash 45 m, rebuilt after 20 s. When
   you sprint they dash and sprint too (on their own energy bars), and run to catch up past 12 m off their spot. They
   are the lab's default companion; the quads stay as the other kind (`?companions=quads|both`).
+- Replica model (Keith 2026-11-02: "way more wireframey ... builds with rockets or miniguns, sort of random"): a
+  code-built wire frame on your mech's proportions; each build rolls miniguns or a rocket rack (half and half,
+  `repRocketShare`), rockets lob 4 × 30 damage every 3 s. Hit size 0.9 m (yours 1.7); you walk through them and they
+  get nudged aside (any summon gives way to its own team; enemy mechs still bump them). Should the drones and quads
+  also give way? (They aren't solid bodies today, so they already do.)
 - Keeping up: while you're faster than them, scrappers run 1.25× your speed and quads too, up to 20 m/s (their legs
   may skate at that speed; never seen).
 - Taking damage: enemy robots within 14 m of a summon go for it when it's nearer than you, or within 7 m (60% of
