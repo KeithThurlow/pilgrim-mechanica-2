@@ -27,9 +27,9 @@ export class GroundMarks {
     const v = this.v, nr = this.ground.normal(x, z, this.nn), steep = 1 - nr[1], s = v.printSize;
     const dep = v.dentPrint * depth * Math.min(1.6, 0.7 + 0.3 * strength) * (1 + steep * 1.5);
     // Pressed deeper on steep sand (it slides in).
-    if (shape && v.printShaped > 0.5) this.dents!.stamp(x, z, scale * s, yaw, 1, dep, { shape });
+    if (shape && v.printShaped > 0.5) this.dents!.stamp(x, z, scale * s, yaw, 1, dep, { shape, remember: "print" });
     // The plain oval: the Rampart's foot, about 0.95 m across and 1.35 m long.
-    else this.dents!.stamp(x, z, 0.45 * s * scale, yaw, 1.42, dep);
+    else this.dents!.stamp(x, z, 0.45 * s * scale, yaw, 1.42, dep, { remember: "print" });
     // Only properly steep sand breaks loose.
     if (v.slideOnSlope > 0 && steep > 0.14) {
       // Sand broken loose downhill: a long shallow trough with its sand piled at the bottom.
@@ -46,7 +46,7 @@ export class GroundMarks {
   dig(x: number, z: number, yaw: number, strength: number) {
     if (!this.denting || strength <= 0) return;
     const s = this.v.printSize;
-    this.dents!.stamp(x, z, 0.3 * s, yaw, 1.6, this.v.dentPrint * Math.min(2.5, strength), { berm: 1.3, comp: 0.3, mode: "add" });
+    this.dents!.stamp(x, z, 0.3 * s, yaw, 1.6, this.v.dentPrint * Math.min(2.5, strength), { berm: 1.3, comp: 0.3, mode: "add", remember: "print" });
   }
 
   /** A wheel or track rut: a trough `width` m wide, `length` m long along yaw. */
@@ -79,7 +79,7 @@ export class GroundMarks {
     const n = Math.min(12, Math.max(1, Math.ceil(len / 0.1)));
     for (let k = 1; k <= n; k++) {
       const t = k / n;
-      this.dents!.stamp(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, s, yaw, 1, this.v.dentFurrow, { shape, berm: 1.2, comp: 0.7 });
+      this.dents!.stamp(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, s, yaw, 1, this.v.dentFurrow, { shape, berm: 1.2, comp: 0.7, remember: "print" });
     }
   }
 
@@ -106,7 +106,7 @@ export class GroundMarks {
     const r = v.dentHitSize * (0.7 + Math.random() * 0.6) * s;
     const yaw = Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.2;
     const elong = 1 + (v.dentHitLength - 1) * (1 - steep);
-    this.dents!.stamp(x, z, r, yaw, elong, v.dentHitDepth * s, { mode: "add", comp: 0.25, open: v.dentHitOpen * (1 - 0.7 * steep) });
+    this.dents!.stamp(x, z, r, yaw, elong, v.dentHitDepth * s, { mode: "add", comp: 0.25, open: v.dentHitOpen * (1 - 0.7 * steep), remember: false });
   }
 
   /**
