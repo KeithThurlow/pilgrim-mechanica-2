@@ -88,6 +88,7 @@ function wOf(item: Item): W {
     const light = b.size === "L";
     return { ...common, kind: "rail", n: 1, latency: s.charge, radius: 0, share: 0, pen: WD.railPen * (light ? WD.railLightPen : 1), spread: 0, speed: Infinity, range: s.range, sheetHalf: WD.railSheetHalf, scatter: 0 };
   }
+  if (cls === "cannon") return { ...common, kind: "cannon", n: 1, latency: 0, radius: s.blast, share: WD.cannonBlastShare, pen: WD.cannonPen, spread: s.spread, speed: s.shellSpeed, range: s.range, sheetHalf: WD.acSheetHalf, scatter: 0 };
   if (cls === "autocannon") return { ...common, kind: "cannon", n: 1, latency: s.spinUp, radius: s.splash, share: WD.acSplashShare, pen: WD.acPen, spread: s.spread, speed: s.shellSpeed, range: s.range, sheetHalf: WD.acSheetHalf, scatter: 0 };
   if (cls === "rpg") return { ...common, kind: "rocket", n: 1, cycle: common.cycle + (sh ? REF.paint / Math.max(1, s.magazine ?? 1) : 0), latency: sh ? REF.paint : 0, radius: s.blast, share: 1, pen: 0, spread: 0, speed: s.shellSpeed, range: WD.rpgRange, sheetHalf: 0, scatter: 0.5 };
   if (cls === "missiles") return { ...common, kind: "missiles", n: s.rockets, cycle: common.cycle + REF.paint, latency: REF.paint + 1, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.swarmSpeed, range: 70, sheetHalf: 0, scatter: WD.swarmFan * 0.5 };
@@ -100,7 +101,7 @@ const withProtos = (base: string, ids: string[]): Item => {
   for (const id of ids) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
   return it;
 };
-const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
+const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "cannon-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)
 interface T {

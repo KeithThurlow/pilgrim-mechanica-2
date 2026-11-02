@@ -139,7 +139,7 @@ export interface GunStats {
   splashShare?: number;
 }
 
-export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass | import("../weapons/guns").RoundGun;
+export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass | import("../weapons/guns").RoundGun | "cannon";
 import { isRoundGun } from "../weapons/guns";
 import { newMag, magFill, magResize, magReady, magStep, magTake, type Mag } from "../weapons/magazine";
 
@@ -265,7 +265,7 @@ export class UpperSim {
       // The magazine reloads in its own time (a rocket launcher on this side spends it in src/weapons).
       magStep(g.mag, dt);
       // A rail cannon, rocket launcher, sword or energy weapon only aims here (round guns fire on this clock): it charges, fires or swings in src/weapons.
-      if (own?.cls && own.cls !== "minigun" && own.cls !== "autocannon" && !isRoundGun(own.cls)) { g.spin = 0; g.firing = false; g.clock = 0; continue; }
+      if (own?.cls && own.cls !== "minigun" && own.cls !== "autocannon" && own.cls !== "cannon" && !isRoundGun(own.cls)) { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       const trigger = triggerOf(triggers, g.side === 1 ? 0 : 1);
       g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit) * (1 - g.spinCut);
       g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
@@ -274,7 +274,7 @@ export class UpperSim {
 
       // A round gun (src/weapons/guns.ts) has no barrels to spin: its clock refills while it waits, so the first round
       // leaves on the click (a sniper's 1.7 s cycle shouldn't start after the press).
-      const semi = isRoundGun(own?.cls);
+      const semi = isRoundGun(own?.cls) || own?.cls === "cannon";
       g.firing = trigger && (semi || g.spin >= v.fireFrom) && g.onTarget && magReady(g.mag);
       if (g.firing) {
         g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (semi ? 1 : (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin));

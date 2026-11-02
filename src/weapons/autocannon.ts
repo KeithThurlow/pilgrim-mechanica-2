@@ -17,6 +17,10 @@ export interface Shell {
   pos: THREE.Vector3; vel: THREE.Vector3; travelled: number; range: number; live: boolean; damage: number; splash: number; team: number;
   /** Armour pierce (src/game/armour.ts), set after fire. */
   ap?: number;
+  /** A breach cannon's shell (src/weapons/cannon.ts): its blast radius (0: an autocannon shell's splash) and its own
+   *  drop (m/s²; none: the update's), set after fire. */
+  blast: number;
+  gravity?: number;
   /** Penetration left and at the start (m; the sweep spends it), and what it already went through (target, key). */
   pen: number; pen0: number; passed: { t: unknown; key: number }[];
 }
@@ -60,8 +64,8 @@ export class CannonShells {
   /** Fire a shell from `from` along unit `dir` at `speed`. */
   fire(team: number, from: Vec3, dir: Vec3, st: CannonStats, pen = 0): Shell {
     let s = this.list.find((x) => !x.live);
-    if (!s) { s = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), travelled: 0, range: 0, live: false, damage: 0, splash: 0, team, pen: 0, pen0: 0, passed: [] }; this.list.push(s); }
-    s.pen = s.pen0 = pen; s.passed.length = 0;
+    if (!s) { s = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), travelled: 0, range: 0, live: false, damage: 0, splash: 0, team, pen: 0, pen0: 0, passed: [], blast: 0 }; this.list.push(s); }
+    s.pen = s.pen0 = pen; s.passed.length = 0; s.blast = 0; s.gravity = undefined;
     s.pos.set(from.x, from.y, from.z);
     s.vel.set(dir.x, dir.y, dir.z).normalize().multiplyScalar(st.speed);
     s.travelled = 0; s.range = st.range; s.live = true; s.damage = st.damage; s.splash = st.splash; s.team = team;
@@ -76,7 +80,7 @@ export class CannonShells {
   update(dt: number, gravity: number, ground: Ground, targets: readonly Hittable[], onHit: (s: Shell, at: THREE.Vector3, t: Hittable | null, swept?: boolean) => void, sweep: ShellSweep | null = null) {
     for (const s of this.list) {
       if (!s.live) continue;
-      s.vel.y -= gravity * dt;
+      s.vel.y -= (s.gravity ?? gravity) * dt;
       this.seg.copy(s.vel).multiplyScalar(dt);
       const len = this.seg.length();
       this.dir.copy(this.seg).divideScalar(len || 1);

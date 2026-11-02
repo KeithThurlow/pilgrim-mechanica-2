@@ -62,6 +62,9 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
       const L = !!g.light;
       out.push(w(ctl, "rail", o ? { range: o.range, damage: o.damage, charge: o.charge, cooldown: o.cooldown }
         : { range: v.railRange * (L ? 0.85 : 1), damage: v.railDamage * (L ? v.railLightDamage : 1), charge: v.railCharge * (L ? v.railLightCharge : 1), cooldown: v.railCooldown }));
+    } else if (g.cls === "cannon") {
+      // The breach cannon fights like a slow autocannon with a big blast.
+      out.push(w(ctl, "autocannon", { range: o?.range ?? v.cannonRange, damage: o?.damage ?? v.cannonDamage, speed: o?.shellSpeed ?? v.cannonSpeed, blast: o?.blast ?? v.cannonBlast, rate: g.fireRate, spread: o?.spread ?? v.cannonSpread, spinUp: 0 }));
     } else if (g.cls === "autocannon") {
       out.push(w(ctl, "autocannon", o ? { range: o.range, damage: o.damage, speed: o.shellSpeed, blast: o.splash, rate: g.fireRate, spread: o.spread, spinUp: g.spinUp }
         : { range: v.acRange, damage: v.acDamage, speed: v.acSpeed, blast: v.acSplash, rate: v.acRate, spread: v.acSpread, spinUp: g.spinUp }));
