@@ -87,6 +87,7 @@ import { Costs } from "../../src/core/costs";
 import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type Lock } from "../../src/game/targeting";
 import { mechOwner } from "../../src/game/registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../../src/weapons/tuning";
+import { SAMPLE_TOPIC } from "../../src/audio/samples";
 import { SHOT_DEFAULTS, SHOT_PARAMS } from "../../src/game/shots";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "../../src/game/playerAim";
 import { ReloadHud } from "../../src/ui/reloadHud";
@@ -686,7 +687,7 @@ const panel = tweakPanel({
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Craters", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
-    { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
+    { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
     { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },

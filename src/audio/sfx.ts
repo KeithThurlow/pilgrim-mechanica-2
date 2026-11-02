@@ -157,22 +157,70 @@ export class Sfx {
   update() {
     this.master.gain.value = this.v.masterVolume;
     for (const l of this.watch.sweep(this.ctx.currentTime)) this.stopLoop(l);
+    for (const f of this.onUpdate) f();
   }
 
-  private extra = new Map<string, { buffers: AudioBuffer[]; level: () => number; playing: AudioBufferSourceNode[] }>();
+  private extra = new Map<string, { buffers: AudioBuffer[]; level: () => number; playing: AudioBufferSourceNode[]; proc: Float32Array[]; swapped: boolean }>();
+  /** Called at the end of every update() (the sample bank watching its sliders). */
+  readonly onUpdate: (() => void)[] = [];
   /** The sample rate sounds are generated at (for addSound's recipes). */
   get rate() { return this.ctx.sampleRate; }
 
   /** A sound another system brings (e.g. src/weapons/weaponSound.ts): generated variants and a level read on each play. */
   addSound(name: string, data: Float32Array[], level: () => number) {
-    const buffers = data.map((d) => { const b = this.ctx.createBuffer(1, d.length, this.ctx.sampleRate); b.copyToChannel(d as Float32Array<ArrayBuffer>, 0); return b; });
-    this.extra.set(name, { buffers, level, playing: [] });
+    // Added again (another arsenal on the same battlefield): keep a recorded sound swapped in over it (sampleBank.ts).
+    const had = this.extra.get(name);
+    if (had?.swapped) { had.proc = data; had.level = level; return; }
+    this.extra.set(name, { buffers: this.toBuffers(data), level, playing: [], proc: data, swapped: false });
+  }
+
+  private toBuffers(data: Float32Array[]) {
+    return data.map((d) => { const b = this.ctx.createBuffer(1, d.length, this.ctx.sampleRate); b.copyToChannel(d as Float32Array<ArrayBuffer>, 0); return b; });
+  }
+
+  /** Play raw samples once at a point (the sounds lab's A/B, playing a procedural sound while its recording is in). */
+  playData(data: Float32Array, at: THREE.Vector3, volume = 1) {
+    if (!this.running) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.toBuffers([data])[0];
+    const g = this.ctx.createGain();
+    g.gain.value = volume;
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = this.panFor(at) ?? 0;
+    src.connect(g).connect(p).connect(this.master);
+    src.start();
+  }
+
+  /** The level a sound added with addSound plays at now (its slider). */
+  soundLevel(name: string) { return this.extra.get(name)?.level() ?? 0; }
+
+  /** Whether a sound added with addSound (or swapped in) exists. */
+  hasSound(name: string) { return this.extra.has(name); }
+
+  /** The procedural variants a sound was added with (for the sample bank to match and mix under). */
+  procedural(name: string): Float32Array[] | undefined { return this.extra.get(name)?.proc; }
+
+  /**
+   * Swap a recorded sound's variants in for a sound (src/audio/sampleBank.ts), or back to its procedural ones with
+   * null. A sound nobody added (a sample-only name such as blastLarge) is created, at `level`.
+   */
+  swapSound(name: string, data: Float32Array[] | null, level?: () => number) {
+    let e = this.extra.get(name);
+    if (!e) {
+      if (!data) return;
+      e = { buffers: [], level: level ?? (() => 1), playing: [], proc: [], swapped: false };
+      this.extra.set(name, e);
+    }
+    if (level) e.level = level;
+    const use = data ?? e.proc;
+    e.buffers = use.length ? this.toBuffers(use) : [];
+    e.swapped = !!data;
   }
 
   /** Play a sound added with addSound (a few voices at most; the oldest is cut). */
   playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1) {
     const e = this.extra.get(name);
-    if (!e || !this.running) return;
+    if (!e || !e.buffers.length || !this.running) return;
     const pan = this.panFor(at);
     if (pan === null) return;
     if (e.playing.length >= PER_KIND) { try { e.playing.shift()!.stop(); } catch { /* already ended */ } }
