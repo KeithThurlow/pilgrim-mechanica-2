@@ -7,7 +7,7 @@ import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadou
 import { makeItem, protocolItem } from "./generate";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
 
-export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Missile pod (arm)", sword: "Breaker sword (arm)", buster: "Buster sword (arm)", shortsword: "Short sword (arm)" } as const;
+export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Missile pod (arm)", sword: "Breaker sword (arm)", buster: "Buster sword (arm)", shortsword: "Short sword (arm)", laser: "Pulse laser", beam: "Beam laser", lance: "Nova lance" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank" } as const;
 export const BACK = { pack: "Power pack", none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar" } as const;
 export type SidePick = keyof typeof SIDE;
@@ -63,8 +63,8 @@ export function choose(pick: Pick, row: keyof Pick, id: string): Pick {
   return pick;
 }
 
-const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium" };
-const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light", rocketpod: "rpg-light", sword: "sword-light", buster: "sword-heavy", shortsword: "sword-short" };
+const HULL_BASE: Partial<Record<SidePick, string>> = { minigun: "mg-medium", rail: "rail-medium", autocannon: "ac-medium", rpg: "rpg-medium", laser: "laser-medium", beam: "beam-medium", lance: "lance-medium" };
+const HELD_BASE: Record<SidePick, string> = { minigun: "mg-light", lightmg: "mg-light", rail: "rail-light", lightrail: "rail-light", autocannon: "mg-light", rpg: "mg-light", rocketpod: "rpg-light", sword: "sword-light", buster: "sword-heavy", shortsword: "sword-short", laser: "mg-light", beam: "mg-light", lance: "mg-light" };
 const SHOULDER_BASE: Record<string, string> = { rpg: "sh-rpg", missiles: "sh-missiles", mortar: "sh-mortar", linemortar: "sh-linemortar", beltfeed: "sh-beltfeed", incendiary: "sh-incendiary", capacitor: "sh-capacitor" };
 
 export function loadoutFor(p: Pick): Loadout {
