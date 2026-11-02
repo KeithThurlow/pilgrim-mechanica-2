@@ -103,6 +103,8 @@ import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { convoyShop } from "../../src/ui/convoyShop";
 import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../../src/ui/vitalsHud";
 import { DOLL_DEFAULTS, DOLL_PARAMS, mechDollHud, partsFromHull } from "../../src/ui/mechDoll";
+import { GRID_DEFAULTS, GRID_PARAMS } from "../../src/items/grid";
+import { GRID_SIZE_DEFAULTS, GRID_SIZE_PARAMS } from "../../src/items/gridSize";
 import { inventoryScreen } from "../../src/ui/inventory";
 import { KitControl, addRepairSounds } from "../../src/game/repairUse";
 import { AbilityControl } from "../../src/abilities/abilityUse";
@@ -123,14 +125,14 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
 };
 const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
-  ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
+  ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS,
@@ -676,7 +678,7 @@ const panel = tweakPanel({
     PILOT_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
     ABILITY_TOPIC,
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Grid", "Item sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },

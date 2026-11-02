@@ -92,6 +92,33 @@ export function repack(g: Grid, items: { id: string; cells: Cells }[], turn = tr
   return left;
 }
 
+/**
+ * Bring a grid in step with a list of items (its saved layout against what is really in the bag): items gone are taken
+ * out, items whose size changed (a slider) are placed again, new items go in the first free spot. `grow`: add rows
+ * until everything fits (the stash). Returns the ids that have no room (shown apart, as over the grid).
+ */
+export function syncGrid(g: Grid, items: { id: string; cells: Cells }[], turn = true, grow = false): string[] {
+  const want = new Map(items.map((i) => [i.id, i.cells]));
+  g.placed = g.placed.filter((p) => {
+    const c = want.get(p.id);
+    if (!c || c.w !== p.w || c.h !== p.h) return false;
+    const f = footprint(p, p.rot);
+    return p.x >= 0 && p.y >= 0 && p.x + f.w <= g.cols && p.y + f.h <= g.rows;
+  });
+  // Overlaps from a stale save: the later one is placed again.
+  const kept: Placed[] = [];
+  for (const p of g.placed) if (fitsAt({ ...g, placed: kept }, p, p.x, p.y, p.rot)) kept.push(p);
+  g.placed = kept;
+  const fresh = items.filter((i) => !g.placed.some((p) => p.id === i.id))
+    .sort((a, b) => b.cells.w * b.cells.h - a.cells.w * a.cells.h || (a.id < b.id ? -1 : 1));
+  const left: string[] = [];
+  for (const it of fresh) {
+    while (!autoPlace(g, it.id, it.cells, turn) && grow && g.rows < 400) g.rows++;
+    if (!g.placed.some((p) => p.id === it.id)) left.push(it.id);
+  }
+  return left;
+}
+
 // ---- Sliders: the grids' own sizes ----
 export interface GridValues {
   cargoCols: number;
@@ -100,17 +127,21 @@ export interface GridValues {
   stashRows: number;
   gridTurn: number;
   gridCellPx: number;
+  salvagePerBlock: number;
+  salvageCompact: number;
   [k: string]: number;
 }
 
-export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 14, stashRows: 12, gridTurn: 1, gridCellPx: 34 };
+export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 30, salvagePerBlock: 25, salvageCompact: 0 };
 
 const G = "Grid";
 export const GRID_PARAMS: Param[] = [
   { key: "cargoCols", label: "Cargo columns", min: 4, max: 20, step: 1, group: G, tip: "The mech's cargo grid (later from the legs and hull, like the weight)" },
   { key: "cargoRows", label: "Cargo rows", min: 4, max: 20, step: 1, group: G },
-  { key: "stashCols", label: "Stash columns", min: 6, max: 30, step: 1, group: G, tip: "The convoy's stash grid" },
+  { key: "stashCols", label: "Stash columns", min: 6, max: 30, step: 1, group: G, tip: "The convoy's stash grid: as wide as this, at least this tall, and it grows to take everything (no limit yet)" },
   { key: "stashRows", label: "Stash rows", min: 6, max: 30, step: 1, group: G },
   { key: "gridTurn", label: "Items can turn", min: 0, max: 1, step: 1, group: G, tip: "1: R (or right click) turns an item 90° while you hold it, and auto-placing tries it turned" },
   { key: "gridCellPx", label: "Cell size (px)", min: 16, max: 64, step: 1, group: G },
+  { key: "salvagePerBlock", label: "Scrap per salvage block", min: 5, max: 200, step: 5, group: "Salvage blocks", tip: "Out in the field the scrap at risk shows in the cargo grid as blocks of this much" },
+  { key: "salvageCompact", label: "Compaction (0 raw, 1 compacted)", min: 0, max: 1, step: 1, group: "Salvage blocks", tip: "Stand-in for the compaction upgrade: 1 packs the same scrap into the smaller compacted block" },
 ];

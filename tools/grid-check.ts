@@ -4,7 +4,7 @@
 import { BASES } from "../src/items/bases";
 import { LOOT_DEFAULTS, rollLoot } from "../src/items/generate";
 import { GRID_CLASS_IDS, GRID_SIZE_DEFAULTS, classCells, gridClassOfBase, itemCells, type GridClass } from "../src/items/gridSize";
-import { autoPlace, findSpot, fitsAt, footprint, itemAt, newGrid, placeAt, removeFrom, repack, usedCells, type Grid } from "../src/items/grid";
+import { autoPlace, findSpot, fitsAt, footprint, itemAt, newGrid, placeAt, removeFrom, repack, syncGrid, usedCells, type Grid } from "../src/items/grid";
 
 const fails: string[] = [];
 const must = (ok: boolean, what: string) => { if (!ok) fails.push(what); };
@@ -88,6 +88,21 @@ const leftA = repack(a, list), leftB = repack(b, [...list].reverse());
 sound(a, "repack");
 must(JSON.stringify(a.placed) === JSON.stringify(b.placed) && leftA.join() === leftB.join(), "repack depends on the input order");
 must(a.placed.length + leftA.length === list.length, "repack lost items");
+
+// Sync: a stale layout (gone items, a changed size, an overlap) comes back sound; new items go in; grow takes all.
+const sy = newGrid(10, 8);
+repack(sy, list);
+const firstId = sy.placed.find((p) => list.slice(0, 30).some((l) => l.id === p.id) && p.w * p.h > 1)!.id;
+sy.placed.push({ id: "ghost", x: 0, y: 0, w: 1, h: 1, rot: false }, { ...sy.placed[1], id: "dupe" });
+const changed = list.map((l) => (l.id === firstId ? { id: l.id, cells: { w: 1, h: 1 } } : l)).slice(0, 30);
+const over = syncGrid(sy, changed);
+sound(sy, "sync");
+must(!sy.placed.some((p) => p.id === "ghost" || p.id === "dupe"), "sync kept items that aren't in the bag");
+must(sy.placed.find((p) => p.id === firstId)?.w === 1 || over.includes(firstId), "sync didn't re-place a resized item");
+must(sy.placed.length + over.length === changed.length, "sync lost items");
+const st2 = newGrid(12, 4);
+must(syncGrid(st2, list, true, true).length === 0 && st2.rows > 4, "a growing grid didn't take everything");
+sound(st2, "grow");
 
 if (fails.length) { console.error("grid-check FAILED:\n  " + fails.slice(0, 20).join("\n  ")); process.exit(1); }
 console.log(`grid-check ok: ${BASES.length} bases sized, ${placed} random placements sound, repack ${a.placed.length}/${list.length} in 10x8`);
