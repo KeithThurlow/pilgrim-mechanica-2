@@ -11,6 +11,7 @@ import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import { UPPER_DEFAULTS, UpperSim } from "../src/mech/upper";
 import { DASH_DEFAULTS } from "../src/mech/dash";
+import { REACTOR_DEFAULTS } from "../src/mech/reactor";
 import { MECH_DEFAULTS, type MechUnit } from "../src/game/mechUnit";
 import { applyLoadout } from "../src/game/loadoutApply";
 import { BASES, BASE_BY_ID, STATS } from "../src/items/bases";
@@ -46,6 +47,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...UPPER_DEFAULTS, ...DASH_DEFAULTS,
     hull: MECH_DEFAULTS.hull, roundDamage: MECH_DEFAULTS.roundDamage, roundPierce: MECH_DEFAULTS.roundPierce,
     mechRadar: RADAR_DEFAULTS.mechRadar, gearSalvage: 1, trample: MECH_DEFAULTS.trample, crush: MECH_DEFAULTS.crush,
+    reactorCap: REACTOR_DEFAULTS.reactorCap, reactorRegen: REACTOR_DEFAULTS.reactorRegen,
     // The default visor head's small lock help (Keith 2026-10-26: hulls have heads; the one value that's new).
     sensorLock: makeItem("sensor-visor").stats.lockAssist,
   } as Record<string, number>;

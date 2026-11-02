@@ -1,5 +1,6 @@
-// Energy weapons' rules (Keith 2026-11-02, src/weapons/energy/): they spend the energy bars (the emptiest bar first, so
-// full bars stay for dashes; nothing spent when there isn't enough; spending pauses the refill); a pulse laser fires at
+// Energy weapons' rules (Keith 2026-11-02, src/weapons/energy/): they draw on the reactor (src/mech/reactor.ts), never
+// the dash's kinetic bars (busy regen, cap, a capacitor's passive and discharge; hulls carry reactors);
+// a pulse laser fires at
 // its rate and stops dry; a beam drains per second and ticks its damage at its rate; a nova lance pays as it charges,
 // holds when dry, fires by its charge, fizzles under the least charge and drops its charge in a dash; the bases fit
 // and resolve to their classes on no magazine; and on a stand-in battlefield the pulse laser, beam and lance hurt a
@@ -10,6 +11,8 @@ import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 import { EnergySim, energyStats, isEnergy, type EnergyPool } from "../src/weapons/energy/energySim";
 import { EnergyGuns } from "../src/weapons/energy/energyGuns";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
+import { Reactor, REACTOR_DEFAULTS } from "../src/mech/reactor";
+import { BASE_BY_ID } from "../src/items/bases";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
 import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
@@ -23,27 +26,28 @@ const dt = 1 / 120;
 const near = (a: number, b: number, e = 1e-6) => Math.abs(a - b) <= e;
 const taken = (d: { health: number; maxHealth: number }) => d.maxHealth - d.health;
 
-// ---- The energy bars ----
+// ---- The reactor (Keith 2026-11-02: apart from the dash's kinetic bars) ----
 {
-  const d = new Dash({ ...DASH_DEFAULTS });
-  must(d.charges === 4 && near(d.energy, 4), "a fresh mech doesn't start on 4 full bars");
-  must(d.use(0.3) && near(d.energy, 3.7) && d.charges === 3 && near(d.bars[3], 0.7), `use() didn't take from the top bar first (${d.bars.map((b) => b.toFixed(2))})`);
-  d.use(0.5);
-  must(near(d.bars[3], 0.2) && d.charges === 3, "use() spent a full bar while a part bar had energy");
-  d.use(0.5);
-  must(near(d.bars[3], 0) && near(d.bars[2], 0.7) && d.charges === 2, `use() didn't carry over into the next bar (${d.bars.map((b) => b.toFixed(2))})`);
-  const before = d.energy;
-  must(!d.use(9) && near(d.energy, before), "use() spent energy it didn't have");
-  must(d.use(0), "use(0) refused");
-  // Spending pauses the refill like the sprint.
-  d.use(0.1);
-  d.update(DASH_DEFAULTS.dashRegenDelay * 0.5);
-  const held = d.energy;
-  d.use(0.01);
-  d.update(DASH_DEFAULTS.dashRegenDelay * 0.9);
-  must(d.energy <= held - 0.01 + 1e-6, "the bars refilled while energy was being spent");
-  for (let t = 0; t < 30; t += 0.1) d.update(0.1);
-  must(near(d.energy, 4, 1e-3), "the bars didn't refill after the weapons stopped");
+  const R = { ...REACTOR_DEFAULTS }, r = new Reactor(R);
+  must(near(r.energy, R.reactorCap), "a fresh reactor isn't full");
+  must(r.use(1.5) && near(r.energy, R.reactorCap - 1.5), "the reactor didn't spend");
+  must(!r.use(99) && near(r.energy, R.reactorCap - 1.5), "the reactor spent energy it didn't have");
+  // Busy (drawn on within the delay): regen at the busy share; idle: full regen.
+  r.charge = 1; r.use(0.5); r.update(0.1);
+  must(near(r.energy, 0.5 + R.reactorRegen * R.reactorBusy * 0.1, 1e-6), `the reactor's regen while firing isn't the busy share (${r.energy.toFixed(4)})`);
+  r.charge = 1; r.idle = 99; r.update(0.1);
+  must(near(r.energy, 1 + R.reactorRegen * 0.1, 1e-6), "the reactor's idle regen isn't its full rate");
+  for (let t = 0; t < 60; t += 0.1) r.update(0.1);
+  must(near(r.energy, R.reactorCap), "the reactor didn't refill to its cap (or went past it)");
+  r.charge = 0; r.refillMul = 2; r.idle = 99; r.update(0.1);
+  must(near(r.energy, 2 * R.reactorRegen * 0.1, 1e-6), "a capacitor's passive didn't speed the reactor's regen");
+  r.charge = R.reactorCap - 0.5;
+  must(near(r.refillNow(2), 0.5) && near(r.energy, R.reactorCap), "a discharge filled the reactor past its cap");
+  // Hulls carry their own reactors, and they resolve onto the mech.
+  for (const id of ["hull-rampart", "hull-siege", "hull-salvager", "hull-cuirass"]) must(!!BASE_BY_ID[id]?.stats.reactorCap && !!BASE_BY_ID[id]?.stats.reactorRegen, `${id} has no reactor`);
+  const lo = defaultLoadout(); fit(lo, "hull", makeItem("hull-siege", "common", "reactor-siege"));
+  const rv = resolve(lo).values;
+  must(rv.reactorCap > REACTOR_DEFAULTS.reactorCap && rv.reactorRegen < REACTOR_DEFAULTS.reactorRegen, "the siege hull's big slow reactor didn't come through");
 }
 
 // ---- The timing sims on a counting pool ----
@@ -126,7 +130,7 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     gunFx: { sparksAt() {}, onFleshHit: null }, dust: { hit() {}, smoke() {} }, inWater: () => false, marks: { crater() {} }, register: { stamp: 0, count: 0 },
     blast: (_team: number, at: P, r: number, dmg: number) => { blasts.push({ at: { x: at.x, y: at.y, z: at.z }, r, dmg }); },
   });
-  const mkUnit = () => ({ team: 0, dash: new Dash({ ...DASH_DEFAULTS }), lock: null, upper: { guns: [{ kick: 0 }, { kick: 0 }], shake: 0 } });
+  const mkUnit = () => ({ team: 0, dash: new Dash({ ...DASH_DEFAULTS }), reactor: new Reactor({ ...REACTOR_DEFAULTS }), lock: null, upper: { guns: [{ kick: 0 }, { kick: 0 }], shake: 0 } });
   const muzzle = new THREE.Vector3(0, 3.5, 0), flatDir = new THREE.Vector3(0, 0, 1);
   const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0) => {
     const range = new DummyRange({ ...DUMMY_DEFAULTS }, spots);
@@ -147,7 +151,8 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     const { range, unit } = fire("laser", flat, 25, 1, spots);
     const on = taken(range.dummies[0]), off = taken(range.dummies[1]);
     must(on > V.pulseDamage * 2 && off === 0, `the pulse laser didn't hurt the cutout on its line only (on ${on.toFixed(0)}, off ${off.toFixed(0)})`);
-    must(unit.dash.energy < 4 - V.pulseEnergy * 3, "the pulse laser didn't spend the bars");
+    must(unit.reactor.energy < REACTOR_DEFAULTS.reactorCap - V.pulseEnergy * 3, "the pulse laser didn't draw on the reactor");
+    must(near(unit.dash.energy, DASH_DEFAULTS.dashCharges), "the pulse laser spent the dash's kinetic bars");
   }
   {
     const { range, guns } = fire("beam", flat, 25, 1, spots);
@@ -210,4 +215,4 @@ if (problems.length) {
   for (const p of problems) console.error(" -", p);
   process.exit(1);
 }
-console.log("energy-check: ok (bars, laser, beam, lance, plasma, orb, arc: timing and energy, items, hits on a stand-in field)");
+console.log("energy-check: ok (reactor, laser, beam, lance, plasma, orb, arc: timing and energy, items, hits on a stand-in field)");

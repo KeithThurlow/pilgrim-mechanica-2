@@ -1,6 +1,5 @@
 // Energy weapons' feel values (Keith 2026-11-02: "energy weapons and having energy as a mechanic"). Every energy weapon
-// spends the mech's energy bars (the same bars as the dash and the sprint, src/mech/dash.ts; the pack is the reactor:
-// its bars are the capacity, its recharge the regen). Spending pauses the refill like the sprint does. An unrolled
+// draws on the hull's reactor (src/mech/reactor.ts; Keith 2026-11-02: kept apart from the dash's kinetic bars). An unrolled
 // weapon (the weapons lab's picker) runs on these sliders; a rolled one carries its own damage, energy and timings
 // (src/weapons/energy/energyBases.ts).
 import type { Param } from "../../core/tweaks";
@@ -80,7 +79,7 @@ export const ENERGY_GROUPS = [ENERGY_GROUP, LASER_GROUP, BEAM_GROUP, LANCE_GROUP
 
 const E = ENERGY_GROUP, LA = LASER_GROUP, BE = BEAM_GROUP, LN = LANCE_GROUP, PL = PLASMA_GROUP, OR = ORB_GROUP, AR = ARC_GROUP;
 export const ENERGY_PARAMS: Param[] = [
-  { key: "energyCost", label: "Energy weapons spend energy", min: 0, max: 1, step: 1, group: E, tip: "1: every energy weapon spends the energy bars (the dash's); 0: free, for tuning damage" },
+  { key: "energyCost", label: "Energy weapons spend energy", min: 0, max: 1, step: 1, group: E, tip: "1: every energy weapon draws on the reactor; 0: free, for tuning damage" },
   { key: "energyLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: E },
   { key: "pulseDamage", label: "Damage per bolt", min: 1, max: 200, step: 1, group: LA },
   { key: "pulseAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: LA },
