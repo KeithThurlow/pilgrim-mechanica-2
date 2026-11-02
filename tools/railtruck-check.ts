@@ -12,7 +12,7 @@ const flat: any = { height: () => 0, normal: (_x: number, _z: number, o = [0, 1,
 const dunes: any = new DuneField({ ...TERRAIN_DEFAULTS });
 let bad = 0;
 for (const [name, ground] of [["flat", flat], ["dunes", dunes]] as const) {
-  for (const kind of ["technical", "truck"] as const) {
+  for (const kind of ["technical", "gunTruck"] as const) {
     for (const off of [0, 1.5]) {
       const car = new RangeCar(kind, ground, { ...RANGE_CAR_DEFAULTS } as any, 0);
       let clearN = 0, found = 0;
