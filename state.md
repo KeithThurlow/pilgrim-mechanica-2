@@ -297,6 +297,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Shaped footprints had no depth on the GPU: fixed (Keith; Claude on `claude/project-thread-j1a1o6`)
+- Keith: prints showed as paint only, never in the mesh. Read the dent texture back in the walker lab (WebGL): shaped brushes wrote compression but zero depth and berm, the oval wrote both. The dent pass read the brush rows as nodes first used inside the shaped branch of an If, so the depth maths after it read them unset. The rows, along/across and the rim wobble are now variables set before the If. After: a Rampart print is 11 cm deep in the sole's shape (two toes and the heel), berm 11 cm.
+- `src/fx/dents.ts`. npm test; readback in the walker lab.
 ### 2026-11-02 · Keith's Breaker poses, round 2 (Keith; Claude on `claude/project-thread-yofecw`)
 - Keith ("pretty happy with how the breaker animations are looking"): rest, the full sweep's drive and aStart added to `SWORD_POSES` (`src/weapons/swordPoses.ts`). Still the code's: the full sweep's aMid and cock. The buster and short sword now start from the Breaker's poses (`INHERIT`), only keys posed for them override; their timing, reach, heft and parry stay their own. npm test. Who: agent.
 ### 2026-11-02 · Footprints press the mesh; skids in the foot's shape (Keith; Claude on `claude/project-thread-j1a1o6`)
