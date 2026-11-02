@@ -5,13 +5,13 @@
 // While a GLB is still loading the box stand-in shows, then the model takes its place.
 import * as THREE from "three/webgpu";
 import type { ToonLook } from "../look/toon";
-import type { LauncherKind, WeaponModel as ArsenalModel } from "./models";
+import type { ModelKind, WeaponModel as ArsenalModel } from "./models";
 import { createWeapon, entry, isLoaded, loadDef, preloadWeapons, type WeaponModel } from "./library";
 import { WeaponLook, WEAPON_LOOK_DEFAULTS } from "./weaponLook";
 import { clipPose } from "./clip";
 
 /** Which library model each arsenal kind draws as (scale on top of its fit; tilt raises a pod's face, degrees). */
-export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; tilt?: number }> = {
+export const KIND_MODELS: Partial<Record<ModelKind, { id: string; scale?: number; tilt?: number }>> = {
   rail: { id: "rail-cannon-hull" },
   railLight: { id: "rail-cannon-hull", scale: 0.75 },
   autocannon: { id: "autocannon-hull" },
@@ -30,6 +30,10 @@ export const KIND_MODELS: Record<LauncherKind, { id: string; scale?: number; til
   plasma: { id: "plasma-cannon-hull", scale: 0.85 },
   orb: { id: "plasma-cannon-hull", scale: 1.1 },
   arc: { id: "laser-projector-hull", scale: 0.9 },
+  // Hull guns rebuilt with their weight behind the shoulder (Keith 2026-11-02; src/weapons/build/guns.ts, roundGuns.ts).
+  breach: { id: "cannon-hull" },
+  flak: { id: "flak-hull" },
+  sniper: { id: "sniper-hull" },
 };
 
 const ids = [...new Set(Object.values(KIND_MODELS).flatMap(({ id }) => [id, entry(id).mirror].filter((x): x is string => !!x)))];
@@ -47,8 +51,8 @@ export function weaponLookFor(toon: ToonLook) {
 let frameStamp = -1;
 
 /** An arsenal model for a kind on a side: the library's, with the boxes until it's loaded. */
-export function libraryModel(kind: LauncherKind, toon: ToonLook, side: "left" | "right", fallback: () => ArsenalModel): ArsenalModel {
-  const pick = KIND_MODELS[kind];
+export function libraryModel(kind: ModelKind, toon: ToonLook, side: "left" | "right", fallback: () => ArsenalModel): ArsenalModel {
+  const pick = KIND_MODELS[kind]!;
   const id = side === "left" ? entry(pick.id).mirror ?? pick.id : pick.id;
   const root = new THREE.Group();
   root.name = `weapon-${kind}`;
