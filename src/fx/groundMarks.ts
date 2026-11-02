@@ -67,6 +67,22 @@ export class GroundMarks {
     this.dents!.stamp((x0 + x1) / 2, (z0 + z1) / 2, r, Math.atan2(dx, dz), 1 + len / (2 * r), this.v.dentFurrow, { berm: 1.2, comp: 0.7 });
   }
 
+  /**
+   * A skidding foot from (x0, z0) to (x1, z1) this frame, facing yaw (Keith 2026-11-02: skids in the foot's shape too):
+   * the foot's sole pressed along the way, a stamp every few centimetres, so the trench is the foot's width with its
+   * toes' grooves; without a shape, the plain furrow.
+   */
+  skid(x0: number, z0: number, x1: number, z1: number, yaw: number, shape: FootShape | null, dt: number) {
+    if (!this.denting) return;
+    if (!shape || this.v.printShaped < 0.5) { this.furrow(x0, z0, x1, z1, 0.9, dt); return; }
+    const len = Math.hypot(x1 - x0, z1 - z0), s = this.v.printSize;
+    const n = Math.min(12, Math.max(1, Math.ceil(len / 0.1)));
+    for (let k = 1; k <= n; k++) {
+      const t = k / n;
+      this.dents!.stamp(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, s, yaw, 1, this.v.dentFurrow, { shape, berm: 1.2, comp: 0.7 });
+    }
+  }
+
   /** A shell (k about 1) or a blast (k several) into the sand: a round crater. */
   crater(x: number, z: number, k: number) {
     if (!this.denting) return;
