@@ -14,11 +14,15 @@ import { DronesDraw } from "./dronesDraw";
 import { Allies, ALLY_DEFAULTS, ALLY_PARAMS, ALLY_GROUPS, type AllyValues } from "./allies";
 import type { RobotValues } from "../combat/robots";
 import type { DeathPhysics } from "../physics/deaths";
+import { Replicas, REPLICA_DEFAULTS, REPLICA_PARAMS, REPLICA_GROUPS, type ReplicaValues } from "./replicas";
+import type { MechUnitValues } from "../game/mechUnit";
+import type { RampartBody } from "../mech/rampart";
+import type { ToonLook } from "../look/toon";
 
-export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS };
-export type SummonValues = DroneValues & AllyValues & RobotValues;
-export const SUMMON_PARAMS = [...DRONE_PARAMS, ...ALLY_PARAMS];
-export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...ALLY_GROUPS] };
+export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS };
+export type SummonValues = DroneValues & AllyValues & RobotValues & ReplicaValues & MechUnitValues;
+export const SUMMON_PARAMS = [...DRONE_PARAMS, ...REPLICA_PARAMS, ...ALLY_PARAMS];
+export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...REPLICA_GROUPS, ...ALLY_GROUPS] };
 
 /** Battlefield gun slots the summons' rounds use (other guns share 2..19; the effects hold 24). */
 const SLOT0 = 20, SLOTS = 4;
@@ -46,6 +50,19 @@ class DronesTarget implements Hittable {
     return best;
   }
   damage(amount: number) { if (this.last >= 0) this.d.hurt(this.last, amount); }
+  /** Blasts and splash: every drone in the radius takes the damage, less toward the edge. */
+  splash(at: THREE.Vector3, radius: number, damage: number) {
+    const d = this.d;
+    let n = 0;
+    for (let i = 0; i < d.n; i++) {
+      if (!d.up[i]) continue;
+      const r = Math.hypot(d.x[i] - at.x, d.y[i] - at.y, d.z[i] - at.z);
+      if (r > radius + d.v.droneSize * 0.5) continue;
+      d.hurt(i, damage * Math.max(0.3, 1 - r / Math.max(0.1, radius)));
+      n++;
+    }
+    return n;
+  }
 }
 
 export class Summons {
@@ -53,6 +70,8 @@ export class Summons {
   readonly dronesDraw: DronesDraw;
   /** Turret companions and the scrap swarm. */
   readonly allies: Allies;
+  /** Mech replicas (thin robot copies of the owner's mech), when the lab can load Ramparts. */
+  readonly replicas: Replicas | null;
   private target: DronesTarget;
   private foes: DroneFoe[] = [];
   private pool: DroneFoe[] = [];
@@ -63,7 +82,8 @@ export class Summons {
   private wasAlive = true;
   private filter: Filter;
 
-  constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter, deaths: DeathPhysics | null = null) {
+  constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter, deaths: DeathPhysics | null = null,
+    mechs: { look: ToonLook; load: () => Promise<RampartBody> } | null = null) {
     this.drones = new Drones(v, ground);
     this.dronesDraw = new DronesDraw(this.drones);
     scene.add(this.dronesDraw.group);
@@ -72,6 +92,7 @@ export class Summons {
     // Foes: hittable things of another team, not asleep or knocked down.
     this.filter = { ...enemies, none: (enemies.none ?? 0) | FLAG.Asleep | FLAG.Down };
     this.allies = new Allies(bf, scene, v, ground, owner, enemies, deaths);
+    this.replicas = mechs ? new Replicas(bf, scene, v, mechs.look, mechs.load, owner, enemies) : null;
   }
 
   /** The send command (the swarm at the owner's lock, else at the cursor) and the recall. */
@@ -82,8 +103,15 @@ export class Summons {
   }
   recall() { this.allies.recall(); }
 
+  /** Every summon on the ground (companions, scrappers, replicas): where and how big, for enemies to turn on. */
+  each(fn: (x: number, y: number, z: number, r: number, air?: boolean) => void) {
+    this.allies.each(fn); this.replicas?.each(fn);
+    const d = this.drones;
+    for (let i = 0; i < d.n; i++) if (d.up[i]) fn(d.x[i], d.y[i], d.z[i], d.v.droneSize * 0.5, true);
+  }
+
   /** Meshes for the hold-V selector. */
-  get meshes(): THREE.Object3D[] { return [...this.dronesDraw.meshes, ...this.allies.draw.group.children]; }
+  get meshes(): THREE.Object3D[] { return [...this.dronesDraw.meshes, ...this.allies.draw.group.children, ...(this.replicas?.objects() ?? [])]; }
 
   update(dt: number) {
     const bf = this.bf, o = this.owner, v = this.v, reg = bf.register, p = o.sim.pelvis;
@@ -126,6 +154,7 @@ export class Summons {
     }
     this.dronesDraw.update(dt);
     this.allies.update(dt);
+    this.replicas?.update(dt);
   }
 
   /** HUD line. */
@@ -133,6 +162,6 @@ export class Summons {
     const d = this.drones;
     let busy = 0;
     for (let i = 0; i < d.n; i++) if (d.up[i] && d.foe[i] >= 0) busy++;
-    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost} · ${this.allies.hud()}`;
+    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost} · ${this.allies.hud()}${this.replicas?.hud() ?? ""}`;
   }
 }
