@@ -48,7 +48,7 @@ import type { EnergyKind } from "./models";
 
 import { gunFeel, gunNumbers, isRoundGun, type RoundGun } from "./guns";
 
-type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | RoundGun | null;
+type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | "cannon" | RoundGun | null;
 
 /** The rail cannon's energy colour (its charge preview, coils and beam). */
 export const RAIL_GLOW = 0x7fe0ff;
@@ -144,7 +144,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -204,8 +204,8 @@ export class Arsenal implements MechWeapons {
     const guns = [r.guns.left, r.guns.right];
     this.sides.forEach((s, i) => {
       const g = guns[i];
-      const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : isRoundGun(g.cls) ? g.cls : "minigun";
-      const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
+      const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "cannon" ? "cannon" : g.cls === "rpg" ? "rpg" : isRoundGun(g.cls) ? g.cls : "minigun";
+      const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "cannon" ? "breach" : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
@@ -280,6 +280,12 @@ export class Arsenal implements MechWeapons {
     const v = this.v;
     return o ? { damage: o.damage, speed: o.shellSpeed, splash: o.splash, range: o.range, spread: o.spread, ap: o.ap ?? v.acAp } : { damage: v.acDamage, speed: v.acSpeed, splash: v.acSplash, range: v.acRange, spread: v.acSpread, ap: v.acAp };
   }
+  /** The breach cannon's shell (src/weapons/cannon.ts): the item's own numbers when rolled, else the sliders. */
+  breachStats(o: Record<string, number> | null): CannonStats & { blast: number } {
+    const v = this.v;
+    return o ? { damage: o.damage, speed: o.shellSpeed, splash: 0, range: o.range, spread: o.spread, ap: o.ap ?? v.cannonAp, blast: o.blast }
+      : { damage: v.cannonDamage, speed: v.cannonSpeed, splash: 0, range: v.cannonRange, spread: v.cannonSpread, ap: v.cannonAp, blast: v.cannonBlast };
+  }
   /** light: an arm's rocket pod (its own sliders). */
   rpgStats(o: Record<string, number> | null, shoulder: boolean, light = false): RocketStats {
     const v = this.v;
@@ -348,6 +354,7 @@ export class Arsenal implements MechWeapons {
       // An unrolled autocannon (the picker's) fires at the Shells/s slider, live; its gun clock reads the gun's stats,
       // which carried the base's rate (Keith 2026-10-26: the slider did nothing). A rolled one keeps its own.
       if (s.kind === "autocannon" && !s.own && g.stats) { g.stats.fireRate = v.acRate; g.stats.ammo = v.acMag; g.stats.reload = v.acReload; u.upper.sizeMag(g); }
+      if (s.kind === "cannon" && !s.own && g.stats) { g.stats.fireRate = v.cannonRate; g.stats.ammo = v.cannonMag; g.stats.reload = v.cannonReload; u.upper.sizeMag(g); }
       // An unrolled round gun (the picker's) runs on its sliders, live, like the autocannon.
       if (isRoundGun(s.kind) && !s.own && g.stats) {
         const n = gunNumbers(s.kind, v);
@@ -426,7 +433,7 @@ export class Arsenal implements MechWeapons {
     });
 
     // Everything in flight.
-    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept, s.ap), this.shellSweep);
+    this.shells.update(dt, v.acGravity, bf.field, bf.targets, (s, at, t, swept) => s.blast > 0 ? this.breachBurst(s, at, t, !!swept) : this.cannonBurst(s.team, at, t, s.damage, s.splash, s.vel, swept, s.ap), this.shellSweep);
     const steel = bf.wrecks ? (o: THREE.Vector3, d: THREE.Vector3, max: number) => (bf.wrecks!.hit(o, d, max, this.tmp2, this.dir) ? o.distanceTo(this.tmp2) : -1) : null;
     this.rockets.update(dt, bf.field, bf.targets, steel, (r, at, _why, t) => {
       if (t) t.damage(r.damage * 0.5, at, r.dir, r.ap);
@@ -924,21 +931,23 @@ export class Arsenal implements MechWeapons {
     return !!s.model?.muzzles.length;
   }
 
-  /** A gun of another class fired a round on its clock (the autocannon). */
+  /** A gun of another class fired a round on its clock (the autocannon, the breach cannon). */
   shot(side: 1 | -1) {
     const s = this.sides[side === 1 ? 0 : 1];
-    if (s.kind !== "autocannon") return;
-    const u = this.unit, v = this.v, st = this.cannonStats(s.own);
+    if (s.kind !== "autocannon" && s.kind !== "cannon") return;
+    const breach = s.kind === "cannon";
+    const u = this.unit, v = this.v, st: CannonStats & { blast?: number } = breach ? this.breachStats(s.own) : this.cannonStats(s.own);
+    const grav = breach ? v.cannonGravity : v.acGravity, lead = breach ? v.cannonLead : v.acLead;
     const m = this.muzzleOf(s, side, new THREE.Vector3());
     const d = u.body.barrel(side, this.dir);
     const lock = u.lock;
     if (lock) {
-      const lp = leadPoint(m, lock, { x: lock.vx ?? 0, y: 0, z: lock.vz ?? 0 }, st.speed, v.acGravity, v.acLead);
+      const lp = leadPoint(m, lock, { x: lock.vx ?? 0, y: 0, z: lock.vz ?? 0 }, st.speed, grav, lead);
       d.set(lp.x - m.x, lp.y - m.y, lp.z - m.z).normalize();
     } else if (u.cursor) {
       // No lock: along the gun, pitched to come down on the cursor (with the drop).
       const c = u.cursor, flat = Math.hypot(c.x - m.x, c.z - m.z), hl = Math.hypot(d.x, d.z) || 1;
-      const t = flat / st.speed, y = c.y + 1 + 0.5 * v.acGravity * t * t;
+      const t = flat / st.speed, y = c.y + 1 + 0.5 * grav * t * t;
       d.set((d.x / hl) * flat, y - m.y, (d.z / hl) * flat).normalize();
     }
     const spread = (st.spread * Math.PI) / 180;
@@ -949,11 +958,22 @@ export class Arsenal implements MechWeapons {
     const hl = Math.hypot(d.x, d.z) || 1, px = d.z / hl, pz = -d.x / hl;
     for (let k = 0; k < pairs; k++) {
       const off = (k - (pairs - 1) / 2) * gap;
-      this.shells.fire(u.team, pairs > 1 ? new THREE.Vector3(m.x + px * off, m.y, m.z + pz * off) : m, d, st, this.v.acPen).ap = st.ap;
+      const sh = this.shells.fire(u.team, pairs > 1 ? new THREE.Vector3(m.x + px * off, m.y, m.z + pz * off) : m, d, st, breach ? v.cannonPen : v.acPen);
+      sh.ap = st.ap;
+      if (breach) { sh.blast = st.blast ?? 0; sh.gravity = v.cannonGravity; }
     }
     // Its stream's tube light pulses with each shell, out to the lock or the cursor (Keith 2026-10-31; cosmetic).
     const aimAt = lock ?? u.cursor, reach = aimAt ? Math.min(st.range, Math.hypot(aimAt.x - m.x, aimAt.z - m.z)) : st.range;
     this.bf.nightLights?.stream(m.x, m.y, m.z, m.x + d.x * reach, m.y + d.y * reach, m.z + d.z * reach, st.damage * (1 + (st.ap ?? 0)), this.fam, false, true);
+    if (breach) {
+      // A heavy boom, a big cloud of smoke rolling off the brake, a hard kick.
+      this.onFire?.("cannon");
+      this.bf.sfx.playSound("breach", m, 1);
+      for (let k = 0; k < 3; k++) this.bf.dust.smoke(m.x, m.y, m.z, d.x * (3 + k * 2) + (Math.random() - 0.5), d.y * 3 + 0.6, d.z * (3 + k * 2) + (Math.random() - 0.5), 0.6, 1.1, 0.6, 0.45);
+      if (s.model) s.model.recoil.position.z = -v.cannonKick;
+      this.onShake?.(v.cannonShake);
+      return;
+    }
     this.onFire?.("autocannon");
     this.bf.sfx.playSound("cannon", m, 1);
     this.bf.dust.smoke(m.x, m.y, m.z, d.x * 3, d.y * 3 + 0.5, d.z * 3, 0.3, 0.6, 0.6, 0.4);
@@ -1183,6 +1203,14 @@ export class Arsenal implements MechWeapons {
     bf.sfx.play("brap", at, 0.9, 0.8, true);
     // A small blast wave (src/fx/blastWaves.ts), a ground ring when it hit the sand.
     bf.waves?.post("cannon", at.x, at.y + 0.3, at.z, Math.max(1.2, splash), { ground: !t, fam: this.fam });
+  }
+
+  /** A breach cannon shell bursts (src/weapons/cannon.ts): the body it struck takes the shell (unless the sweep already
+   *  hit it), then a real explosion through the shared blast (crater, wave, the blast sound scaled by its radius). */
+  private breachBurst(s: Shell, at: THREE.Vector3, t: Hittable | null, swept: boolean) {
+    const d = this.dir.copy(s.vel).normalize();
+    if (t) { if (!swept) t.damage(s.damage, at, d, s.ap); this.bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 14, 9); }
+    this.blast(at, s.blast, s.damage * this.v.cannonBlastShare, s.ap, "rocket");
   }
 
   /** A rocket, missile or shell's blast: the battlefield's one blast entry point (crater queued, dust, sound, splash). */

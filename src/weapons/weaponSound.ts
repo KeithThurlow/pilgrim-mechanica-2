@@ -6,7 +6,7 @@ import type * as THREE from "three/webgpu";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom" | import("./guns").RoundGun;
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -113,6 +113,10 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
     S.delay(S.lowPass(S.noise(r, 1.6, 450, 0.5, 0.01), 650), 0.05), S.delay(S.scale(S.clang(r, 0.1, 0.25), 0.45), 0.75))), () => v.sniperLevel);
   // Flak: a heavy cough and the shrapnel's rattle spreading out after it.
   sfx.addSound("flak", variants(3, 65, (r) => S.mix(S.thump(0.4, 105, 44, 1.2), S.noise(r, 0.32, 1100, 0.85, 0.001), S.delay(S.scale(S.crackle(r, 0.35, 0.35), 0.8), 0.06))), () => v.flakLevel);
+  // Breach cannon (src/weapons/cannon.ts): a big, deep gun report: a sharp crack in front, a heavy low punch and a
+  // long rumble rolling off; its shell's explosion is the shared blast, scaled by its radius.
+  sfx.addSound("breach", variants(3, 66, (r) => S.mix(S.tick(r, 0.03, 0.9), S.noise(r, 0.12, 3000, 0.75, 0.0003), S.thump(0.6, 95, 30, 1.3), S.lowPass(S.noise(r, 0.4, 900, 0.8, 0.002), 1200),
+    S.delay(S.lowPass(S.noise(r, 1.8, 380, 0.55, 0.02), 520), 0.06))), () => v.breachLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }
 

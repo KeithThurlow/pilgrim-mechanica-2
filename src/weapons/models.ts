@@ -15,10 +15,10 @@ export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLig
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
-export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak";
+export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach";
 export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind;
 /** Kinds with no library model: always the code stand-in. */
-const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword", "smg", "rifle", "shotgun", "sniper", "flak"];
+const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword", "smg", "rifle", "shotgun", "sniper", "flak", "breach"];
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -360,6 +360,24 @@ function flakModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+/** Breach cannon (Medium, hull; src/weapons/cannon.ts): a tall boxy breech with a sliding block, a thick tapered barrel
+ *  with a fume extractor bulge halfway, a big two-baffle muzzle brake and a recoil sleeve. A tank gun on a walker. */
+function breachModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("breach", look);
+  add(m.root, box, OLIVE, [0.95, 0.85, 1.0], [0, 0, 0.2]);
+  add(recoil, box, KHAKI, [0.8, 0.95, 0.9], [0, 0.05, 0.25]);
+  add(recoil, box, DARK, [0.5, 0.3, 0.12], [0, 0.25, -0.24]);
+  glow(recoil, box, HOT, [0.08, 0.06, 0.02], [0.3, 0.42, -0.21]);
+  add(recoil, cyl, STEEL, [0.62, 0.7, 0.62], [0, 0.05, 0.95], ALONG);
+  add(recoil, cyl, DARK, [0.4, 1.6, 0.4], [0, 0.05, 2.1], ALONG);
+  add(recoil, cyl, OLIVE, [0.56, 0.6, 0.56], [0, 0.05, 2.7], ALONG);
+  add(recoil, cyl, DARK, [0.34, 1.3, 0.34], [0, 0.05, 3.6], ALONG);
+  for (const z of [4.3, 4.6]) add(recoil, box, STEEL, [0.78, 0.36, 0.14], [0, 0.05, z]);
+  add(recoil, box, DARK, [0.5, 0.3, 0.6], [0, 0.05, 4.45]);
+  muzzle(recoil, [0, 0.05, 4.8]);
+  return m;
+}
+
 /** The box stand-ins, by kind (the fallback). */
 export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   rail: (l) => railModel("rail", l),
@@ -383,6 +401,7 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   shotgun: shotgunModel,
   sniper: sniperModel,
   flak: flakModel,
+  breach: breachModel,
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),
   arc: energyBox("arc"),

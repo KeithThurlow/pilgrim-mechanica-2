@@ -11,6 +11,7 @@ import { UPPER_DEFAULTS } from "../mech/upper";
 import { DASH_DEFAULTS } from "../mech/dash";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import { gunNumbers, type RoundGun } from "../weapons/guns";
+import { cannonNumbers } from "../weapons/cannon";
 import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
 import { ENERGY_BASES, ENERGY_STATS } from "../weapons/energy/energyBases";
@@ -188,6 +189,14 @@ function roundGun(id: string, name: string, size: Size, cls: RoundGun, tags: str
   return { id, name, kind: "weapon", size, cls, tags, weight, makers, look, drop, stats };
 }
 
+function breachCannon(): Base {
+  const c = cannonNumbers(WD);
+  return {
+    id: "cannon-medium", name: "Breach cannon", kind: "weapon", size: "M", cls: "cannon", tags: ["weapon", "ballistic", "explosive", "cannon"], weight: 3, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.9,
+    stats: { fireRate: s(c.fireRate, 0.08), damage: s(c.damage, 0.1), ap: s(c.ap, 0), magazine: s(c.magazine, 0.15), reload: s(c.reload, 0.1), blast: s(c.blast, 0.08), shellSpeed: s(c.shellSpeed, 0.08), range: s(c.range, 0.06), spread: s(c.spread, 0.12), arc: s(24, 0.08), track: s(8, 0.08) },
+  };
+}
+
 export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
   {
@@ -335,6 +344,9 @@ export const BASES: Base[] = [
   roundGun("rifle-light", "Battle rifle", "L", "rifle", ["weapon", "ballistic", "rifle"], 1.1, ["Stratford-Aegis", "Suzaku"], "rampart", 1.2, { handling: s(1.15, 0.08), arcBonus: s(6, 0.2) }),
   roundGun("shotgun-light", "Scattergun", "L", "shotgun", ["weapon", "ballistic", "shotgun"], 1.2, ["Suzaku"], "rampart", 1, { handling: s(1.25, 0.08), arcBonus: s(8, 0.2) }),
   roundGun("sniper-medium", "Longshot rifle", "M", "sniper", ["weapon", "ballistic", "sniper"], 2.2, ["Novus-Lux", "Stratford-Aegis"], "rampart-railgun", 0.9, { arc: s(18, 0.08), track: s(7, 0.08) }),
+  // The breach cannon (Keith 2026-11-02: cannons "that fire explosive rounds", src/weapons/cannon.ts): one big shell at a
+  // time, leading a lock, bursting through the shared blast. Base values from the Breach cannon sliders.
+  breachCannon(),
   roundGun("flak-medium", "Flak cannon", "M", "flak", ["weapon", "ballistic", "flak"], 2.6, ["Suzaku", "Stratford-Aegis"], "rampart-turret", 0.9, { arc: s(30, 0.08), track: s(10, 0.08) }),
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
