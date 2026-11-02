@@ -14,7 +14,7 @@ import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../comba
 import { robotRagdoll } from "../../physics/bodies";
 import { ROBOT_RAG } from "../../combat/robotShapes";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../combat/striderLab";
-import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../robotBeam";
+import { wireRobotBlasts } from "../robotBeam";
 
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../combat/droids";
 import { hook, type Front } from "./front";
@@ -110,7 +110,6 @@ export function robotsFront(params0: URLSearchParams): Front {
       }
       const d = new RobotsDraw(sw);
       draw = d;
-      coreWarnFx(bf, d.coreWarn);
       lab.app.scene.add(d.group);
       const target = new RobotTarget(sw, 3);
       bf.targets.push(target);
@@ -136,12 +135,9 @@ export function robotsFront(params0: URLSearchParams): Front {
         const l = sw.lobOf(i);
         bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage);
       };
-      // Big ones' beams (Keith 2026-10-31): burnt down the line on the battlefield (the mech, the pilot, anything of
-      // another team on it), a scorch and a crack.
-      sw.onBeam = (e) => { if (player.alive) fireRobotBeam(bf, e, V.robotBeamReach); };
-      sw.onPulse = (e) => { if (player.alive) fireRobotPulse(bf, e, (x, z, r, sp) => player.shoveFrom(x, z, r, sp)); };
-      // A big one's core going up after it dies (Keith 2026-11-02): hurts everything round it, robots too.
-      sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, (x, z, r, sp) => { if (player.alive) player.shoveFrom(x, z, r, sp); });
+      // Big ones' beams, terraform pulses, the unstable-core warning and the death blast (the shared hookup, #116):
+      // burnt down the line on the battlefield, a scorch and a crack; a dead one's core going up hurts robots too.
+      wireRobotBlasts(bf, sw, d.coreWarn, V.robotBeamReach, (x, z, r, sp) => { if (player.alive) player.shoveFrom(x, z, r, sp); });
       // ?beam: no packs, two excavators stopped at range either side of the mech, about to charge (and again every
       // cooldown).
       if (params0.has("beam")) {

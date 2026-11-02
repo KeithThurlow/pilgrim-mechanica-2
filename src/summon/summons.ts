@@ -16,7 +16,6 @@ import type { RobotValues } from "../combat/robots";
 import type { DeathPhysics } from "../physics/deaths";
 import { Replicas, REPLICA_DEFAULTS, REPLICA_PARAMS, REPLICA_GROUPS, type ReplicaValues } from "./replicas";
 import type { MechUnitValues } from "../game/mechUnit";
-import type { RampartBody } from "../mech/rampart";
 import type { ToonLook } from "../look/toon";
 
 export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS };
@@ -70,7 +69,7 @@ export class Summons {
   readonly dronesDraw: DronesDraw;
   /** Turret companions and the scrap swarm. */
   readonly allies: Allies;
-  /** Mech replicas (thin robot copies of the owner's mech), when the lab can load Ramparts. */
+  /** Mech replicas (wire-frame robot mechs at the owner's flanks), when the lab gives a toon look. */
   readonly replicas: Replicas | null;
   private target: DronesTarget;
   private foes: DroneFoe[] = [];
@@ -83,7 +82,7 @@ export class Summons {
   private filter: Filter;
 
   constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter, deaths: DeathPhysics | null = null,
-    mechs: { look: ToonLook; load: () => Promise<RampartBody> } | null = null) {
+    mechs: { look: ToonLook } | null = null) {
     this.drones = new Drones(v, ground);
     this.dronesDraw = new DronesDraw(this.drones);
     scene.add(this.dronesDraw.group);
@@ -92,7 +91,7 @@ export class Summons {
     // Foes: hittable things of another team, not asleep or knocked down.
     this.filter = { ...enemies, none: (enemies.none ?? 0) | FLAG.Asleep | FLAG.Down };
     this.allies = new Allies(bf, scene, v, ground, owner, enemies, deaths);
-    this.replicas = mechs ? new Replicas(bf, scene, v, mechs.look, mechs.load, owner, enemies) : null;
+    this.replicas = mechs ? new Replicas(bf, scene, v, mechs.look, owner, enemies) : null;
   }
 
   /** The send command (the swarm at the owner's lock, else at the cursor) and the recall. */

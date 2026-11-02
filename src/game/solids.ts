@@ -20,6 +20,11 @@ export interface SolidShape {
   mass: number;
   /** Mechs share overlaps by who walked in (`mechShove`); everything else by mass. */
   mech: boolean;
+  /** A summon (Keith 2026-11-02: "for the summons, we probably don't want them to ... block the player's movement. So
+   *  they should maybe just get nudged around"): against a body of its own team that isn't soft, it never pushes back
+   *  and is nudged aside, `softNudge` of the overlap a second; against anyone else it's solid as usual. */
+  soft?: boolean;
+  team?: number;
 }
 
 export interface Solid {
@@ -33,18 +38,21 @@ export interface SolidValues {
   solidsOn: number;
   bodyRadius: number;
   mechShove: number;
+  softNudge: number;
 }
 
 export const SOLID_DEFAULTS: SolidValues = {
   solidsOn: 1,
   bodyRadius: 2.4,
   mechShove: 0.3,
+  softNudge: 8,
 };
 
 const G = "Body collisions";
 export const SOLID_PARAMS: Param[] = [
   { key: "solidsOn", label: "Mechs and vehicles are solid", min: 0, max: 1, step: 1, group: G, tip: "0: everything walks and drives through each other, as before" },
   { key: "bodyRadius", label: "Mech body radius (m, × legs)", min: 1, max: 5, step: 0.05, group: G, tip: "The pillbox other mechs and vehicles can't enter, from the mech's centre; the legs' Trample stat scales it. Two Ramparts stand at least twice this apart" },
+  { key: "softNudge", label: "Summons give way (per s)", min: 0.5, max: 30, step: 0.5, group: G, tip: "Your own summons never block you: walking into one nudges it aside, this share of the overlap a second (high: they hop out of the way; low: you walk through them)" },
   { key: "mechShove", label: "Mech shoves mech", min: 0, max: 1, step: 0.05, group: G, tip: "Walking into another mech: 0 it stands like a wall, 1 you push it as hard as it pushes you (half each)" },
 ];
 
@@ -54,7 +62,9 @@ const DROP = 5;
 
 interface Entry { s: Solid; at: number; lx: number; lz: number; vx: number; vz: number }
 
-const shapeA = (): SolidShape => ({ x: 0, z: 0, hx: 0, hz: 0, r: 0, y0: 0, y1: 0, mass: 1, mech: false });
+const shapeA = (): SolidShape => ({ x: 0, z: 0, hx: 0, hz: 0, r: 0, y0: 0, y1: 0, mass: 1, mech: false, soft: false, team: 0 });
+/** Clear the optional fields before a body fills the shape (vehicles don't set them). */
+const fill = (b: Solid, s: SolidShape) => { s.soft = false; s.team = 0; return b.solidShape(s); };
 
 /** Closest points between two flat segments (centres ± half vectors): A's and B's into `out` [ax, az, bx, bz]. */
 export function closestPoints(a: SolidShape, b: SolidShape, out: number[]): number[] {
@@ -141,7 +151,7 @@ export class Solids {
     this.v = v;
     let e = this.byBody.get(body);
     const me = this.me;
-    const solid = body.solidShape(me);
+    const solid = fill(body, me);
     if (!e) { e = { s: body, at: this.now, lx: me.x, lz: me.z, vx: 0, vz: 0 }; this.byBody.set(body, e); this.list.push(e); }
     e.at = this.now;
     if (!solid) { e.lx = NaN; return; }
@@ -153,12 +163,20 @@ export class Solids {
       const o = this.other, ov = this.ov;
       for (const f of this.list) {
         if (f === e || this.now - f.at > STALE) continue;
-        if (!f.s.solidShape(o)) continue;
+        if (!fill(f.s, o)) continue;
         // Cheap reject: centres further apart than both reaches.
         const reach = me.r + o.r + Math.hypot(me.hx, me.hz) + Math.hypot(o.hx, o.hz);
         if (Math.abs(me.x - o.x) > reach || Math.abs(me.z - o.z) > reach) continue;
         overlap(me, o, ov, this.pts);
         if (ov.depth <= 0) continue;
+        // A summon and a body of its own team: the summon is nudged, the other passes.
+        if (me.soft !== o.soft && me.team === o.team) {
+          const d = ov.depth * Math.min(1, (v.softNudge ?? 8) * dt);
+          if (me.soft) { body.solidShove(ov.nx * d, ov.nz * d, ov.nx, ov.nz); me.x += ov.nx * d; me.z += ov.nz * d; }
+          else f.s.solidShove(-ov.nx * d, -ov.nz * d, -ov.nx, -ov.nz);
+          this.pushes++;
+          continue;
+        }
         const k = shareOf(me, o, e.vx, e.vz, f.vx, f.vz, ov.nx, ov.nz, v.mechShove);
         const da = ov.depth * k, db = ov.depth - da;
         body.solidShove(ov.nx * da, ov.nz * da, ov.nx, ov.nz);
@@ -167,7 +185,7 @@ export class Solids {
         this.pushes++;
       }
     }
-    body.solidShape(me);
+    fill(body, me);
     e.lx = me.x; e.lz = me.z;
   }
 }
