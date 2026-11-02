@@ -16,7 +16,9 @@ export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLig
 export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
 export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach";
-export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind;
+/** The drum and chute behind the Rampart's own minigun pod (Keith 2026-11-02). */
+export type FeedKind = "minigunFeed";
+export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind | FeedKind;
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -400,6 +402,7 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   sniper: sniperModel,
   flak: flakModel,
   breach: breachModel,
+  minigunFeed: (l) => { const m = kit("minigunFeed", l).m; return m; },
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),
   arc: energyBox("arc"),

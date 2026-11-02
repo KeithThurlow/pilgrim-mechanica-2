@@ -43,6 +43,7 @@ import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type TargetCandidate, type L
 import type { Filter } from "./register";
 import { mechOwner } from "./registerOwners";
 import { WEAPON_DEFAULTS, WEAPON_PARAMS, WEAPON_TOPIC } from "../weapons/tuning";
+import { SAMPLE_TOPIC } from "../audio/samples";
 import { SHOT_DEFAULTS, SHOT_PARAMS } from "./shots";
 import type { Arsenal } from "../weapons/arsenal";
 import { MouseButtons, SoftAim, CameraShake, fitArsenal } from "./playerAim";
@@ -258,7 +259,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Reactor", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
       ABILITY_TOPIC,
-      { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
+      { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Hover", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Mech wrecks", "Death physics"] },
       PILOT_TOPIC,
