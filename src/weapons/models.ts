@@ -12,9 +12,11 @@ export type GearKind = "beltfeed" | "incendiary" | "capacitor";
 export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
-export type ModelKind = LauncherKind | GearKind | MeleeKind;
+/** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
+export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak";
+export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind;
 /** Kinds with no library model: always the code stand-in. */
-const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword"];
+const GEAR_KINDS: readonly string[] = ["beltfeed", "incendiary", "capacitor", "sword", "smg", "rifle", "shotgun", "sniper", "flak"];
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -263,6 +265,94 @@ function capacitorModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+// ---- Round guns (Keith 2026-11-02): original stand-ins, each readable by its silhouette from the game camera ----
+
+/** SMG (Light): a stubby receiver, a perforated shroud over a short barrel, a long magazine jutting out sideways, a
+ *  folded stub stock. The shortest gun. */
+function smgModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, muzzle } = kit("smg", look);
+  add(recoil, box, OLIVE, [0.36, 0.42, 0.8], [0, 0, 0.35]);
+  add(recoil, box, DARK, [0.3, 0.14, 0.5], [0, -0.05, -0.2]);
+  add(recoil, cyl, STEEL, [0.22, 0.6, 0.22], [0, 0.04, 1.02], ALONG);
+  for (let i = 0; i < 4; i++) add(recoil, box, DARK, [0.25, 0.05, 0.05], [0, 0.04, 0.82 + i * 0.13]);
+  add(recoil, cyl, DARK, [0.1, 0.22, 0.1], [0, 0.04, 1.4], ALONG);
+  // The magazine out of the left flank, angled forward.
+  add(recoil, box, KHAKI, [0.5, 0.13, 0.16], [0.36, 0, 0.45], [0, -0.35, 0]);
+  muzzle(recoil, [0, 0.04, 1.52]);
+  return m;
+}
+
+/** Battle rifle (Light): a long bullpup body (the magazine behind the grip), a top sight rail with a box scope, a long
+ *  barrel with a slotted brake. */
+function rifleModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("rifle", look);
+  add(recoil, box, OLIVE, [0.34, 0.46, 1.25], [0, 0, 0.35]);
+  add(recoil, box, KHAKI, [0.22, 0.4, 0.26], [0, -0.32, -0.05], [0.25, 0, 0]);
+  add(recoil, box, DARK, [0.1, 0.06, 1.0], [0, 0.27, 0.45]);
+  add(recoil, box, DARK, [0.16, 0.18, 0.42], [0, 0.39, 0.5]);
+  glow(recoil, box, GLOW, [0.1, 0.1, 0.02], [0, 0.39, 0.72]);
+  add(recoil, cyl, STEEL, [0.11, 1.15, 0.11], [0, 0.06, 1.55], ALONG);
+  add(recoil, box, DARK, [0.2, 0.18, 0.26], [0, 0.06, 2.15]);
+  muzzle(recoil, [0, 0.06, 2.3]);
+  m.laserFrom = group(recoil, [0.12, 0.16, 0.95]);
+  return m;
+}
+
+/** Scattergun (Light): two fat barrels one over the other, a ribbed pump fore-end, a drum under the receiver. */
+function shotgunModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, muzzle } = kit("shotgun", look);
+  add(recoil, box, OLIVE, [0.42, 0.5, 0.9], [0, 0, 0.3]);
+  for (const y of [0.1, -0.12]) add(recoil, cyl, STEEL, [0.22, 1.1, 0.22], [0, y, 1.25], ALONG);
+  add(recoil, box, DARK, [0.32, 0.22, 0.5], [0, -0.2, 1.0]);
+  for (let i = 0; i < 4; i++) add(recoil, box, KHAKI, [0.34, 0.24, 0.05], [0, -0.2, 0.8 + i * 0.13]);
+  add(recoil, cyl, KHAKI, [0.46, 0.22, 0.46], [0, -0.36, 0.35]);
+  add(recoil, box, DARK, [0.3, 0.46, 0.08], [0, -0.01, 1.82]);
+  muzzle(recoil, [0, 0, 1.88]);
+  return m;
+}
+
+/** Longshot rifle (Medium, hull): a very long fluted barrel on a slim receiver, a big scope with a lens, cheek fins
+ *  and a wide three-port muzzle brake. The longest thing on the mech. */
+function sniperModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("sniper", look);
+  add(recoil, box, OLIVE, [0.52, 0.56, 1.5], [0, 0, 0.4]);
+  add(recoil, box, KHAKI, [0.4, 0.4, 0.6], [0.42, -0.08, 0.3]);
+  // The scope: a tube on two rings, a lit lens at the front.
+  add(recoil, cyl, DARK, [0.26, 1.1, 0.26], [0, 0.5, 0.6], ALONG);
+  for (const z of [0.3, 0.9]) add(recoil, box, STEEL, [0.12, 0.2, 0.08], [0, 0.32, z]);
+  glow(recoil, cyl, GLOW, [0.2, 0.02, 0.2], [0, 0.5, 1.16], ALONG);
+  // The barrel in three fluted lengths, thinning out.
+  const len = 4.2;
+  for (let i = 0; i < 3; i++) {
+    const r = 0.2 - i * 0.03, z0 = 1.15 + (i * len) / 3;
+    add(recoil, cyl, i % 2 ? STEEL : DARK, [r, len / 3, r], [0, 0.05, z0 + len / 6], ALONG);
+    add(recoil, box, KHAKI, [r * 1.6, 0.04, 0.2], [0, 0.05, z0 + 0.05]);
+  }
+  for (const x of [0.18, -0.18]) add(recoil, box, DARK, [0.04, 0.3, 0.7], [x, 0.05, 1.5]);
+  add(recoil, box, DARK, [0.42, 0.24, 0.42], [0, 0.05, 1.15 + len + 0.2]);
+  for (let i = 0; i < 3; i++) add(recoil, box, STEEL, [0.46, 0.05, 0.05], [0, 0.05, 1.15 + len + 0.08 + i * 0.12]);
+  muzzle(recoil, [0, 0.05, 1.15 + len + 0.45]);
+  m.laserFrom = group(recoil, [0, 0.5, 1.2]);
+  return m;
+}
+
+/** Flak cannon (Medium, hull): three short, wide barrels bundled in a triangle in a clamp, a drum feed on the flank,
+ *  hot vents along the receiver. Stubby and heavy where the sniper is long and thin. */
+function flakModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("flak", look);
+  add(recoil, box, OLIVE, [0.9, 0.8, 1.2], [0, 0, 0.4]);
+  add(recoil, cyl, KHAKI, [0.75, 0.42, 0.75], [0.6, 0, 0.35], [0, 0, Math.PI / 2]);
+  for (let i = 0; i < 3; i++) glow(recoil, box, HOT, [0.04, 0.08, 0.7], [-0.46, 0.2 - i * 0.18, 0.45]);
+  const tri: [number, number][] = [[0, 0.2], [0.19, -0.13], [-0.19, -0.13]];
+  for (const [x, y] of tri) {
+    add(recoil, cyl, DARK, [0.32, 1.5, 0.32], [x, y, 1.75], ALONG);
+    add(recoil, cyl, STEEL, [0.38, 0.18, 0.38], [x, y, 2.45], ALONG);
+    muzzle(recoil, [x, y, 2.55]);
+  }
+  for (const z of [1.3, 2.0]) add(recoil, cyl, KHAKI, [0.8, 0.14, 0.8], [0, 0, z], ALONG);
+  return m;
+}
+
 /** The box stand-ins, by kind (the fallback). */
 export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   rail: (l) => railModel("rail", l),
@@ -278,6 +368,11 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
   sword: swordModel,
+  smg: smgModel,
+  rifle: rifleModel,
+  shotgun: shotgunModel,
+  sniper: sniperModel,
+  flak: flakModel,
 };
 
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */

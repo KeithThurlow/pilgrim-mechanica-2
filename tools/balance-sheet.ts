@@ -8,6 +8,7 @@
 //                                            behaviour Protocol's niche multiplier is outside ×1.1-1.5 (npm test)
 // Cadence (damage, rounds per shot, sustained shots/s over the magazine and reload) comes from src/items/dps.ts, the
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
+import { isRoundGun } from "../src/weapons/guns";
 import { BASE_BY_ID } from "../src/items/bases";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 import { MECH_DEFAULTS } from "../src/game/mechUnit";
@@ -78,6 +79,9 @@ function wOf(item: Item): W {
   const common = { id: b.id, name: b.name + (item.socketed.length ? ` +${item.socketed.map((p) => PROTOCOL_BY_ID[p.base].name).join("+")}` : ""), slot: sh ? "shoulder" as const : SLOT[b.size ?? "M"],
     dmg: s.damage, cycle: 1 / cad.sustained, burst: 1 / cad.rate, ap: s.ap ?? 0, shot, cad, item, stripLength: 0 };
   const cls = b.cls ?? (sh ? b.shoulder : "minigun");
+  // Round guns (src/weapons/guns.ts): the minigun's rounds, n pellets a shot, flak's shrapnel splash on each.
+  if (isRoundGun(cls)) return { ...common, kind: "gun", n: Math.max(1, s.pellets ?? 1), latency: 0, radius: s.splash ?? MD.roundSplash, share: s.splash ? s.splashShare ?? 0 : MD.roundSplashShare, pen: roundPenFor(MD, s.pierce),
+    spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf, scatter: 0 };
   if (cls === "minigun") return { ...common, kind: "gun", n: 1, latency: s.spinUp, radius: MD.roundSplash, share: MD.roundSplashShare, pen: roundPenFor(MD, s.pierce),
     spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf, scatter: 0 };
   if (cls === "rail") {
@@ -96,7 +100,7 @@ const withProtos = (base: string, ids: string[]): Item => {
   for (const id of ids) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
   return it;
 };
-const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
+const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)
 interface T {
@@ -173,7 +177,7 @@ function volleySingle(w: W, t: T): number {
   if (w.kind === "gun") {
     const p = hitscanP(w, t);
     const rounds = offs.filter((o) => Math.abs(o) < t.r + w.sheetHalf).length;
-    return p * rounds * rate(w) * multi(w) * thru(w.dmg * t.directK, A, ap);
+    return p * rounds * rate(w) * multi(w) * thru(w.dmg * t.directK, A, ap) * w.n;
   }
   if (w.kind === "rail") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * thru(w.dmg * t.directK, A, ap);
   // Projectiles and blasts: Monte Carlo over the aim error.
@@ -235,7 +239,7 @@ function volleySwarm(w: W, t: T): number {
     let chain = 0, k = 1;
     for (let i = 0; i < (sh.chain ?? 0); i++) { k *= SHOT_DEFAULTS.protoChainKeep; chain += k; }
     per += cap(d) * chain + cap(d * SHOT_DEFAULTS.protoRicochetKeep) * (sh.ricochet ? 0.6 : 0);
-    return per * split(w) * rate(w) * multi(w);
+    return per * split(w) * rate(w) * multi(w) * w.n;
   }
   if (w.kind === "rail") return line(w.dmg, w.pen, w.sheetHalf);
   if (w.kind === "cannon") return (line(w.dmg, w.pen, w.sheetHalf) + ringHp(w.dmg * w.share, w.radius, t, ap, true)) * multi(w);

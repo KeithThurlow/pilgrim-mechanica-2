@@ -68,6 +68,9 @@ export interface MechWeapons {
   step(dt: number, aim: Aim | null, trigger: Trigger): void;
   /** A gun of another class (autocannon) fired a round on its clock: the weapons fire it. */
   shot(side: 1 | -1): void;
+  /** A round gun (src/weapons/guns.ts) is firing a shot from this side: the weapons set its muzzle (its model's), play
+   *  its sound, kick its model and shake the camera. False: no model fitted (the hull's own muzzle stays). */
+  gunShot?(side: 1 | -1, muzzle: THREE.Vector3): boolean;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
   configure?(r: import("../items/loadout").Resolved): void;
   /** Special rounds loaded into this side's gun now (the incendiary feed's key, src/weapons/gear.ts), or null. */
@@ -88,6 +91,7 @@ export interface MechWeapons {
   stop?(): void;
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
+import { isRoundGun } from "../weapons/guns";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
 import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
 import type { DustValues } from "../fx/dust";
@@ -480,11 +484,14 @@ export class MechUnit implements Hittable, Solid {
     for (const s of fired) {
       // A gun with its own item values (src/items) fires with those; else the shared sliders.
       const own = upper.guns[s === 1 ? 0 : 1].stats;
-      if (own?.cls && own.cls !== "minigun") { this.weapons?.shot(s); continue; }
+      if (own?.cls && own.cls !== "minigun" && !isRoundGun(own.cls)) { this.weapons?.shot(s); continue; }
+      // Round guns (src/weapons/guns.ts): their own muzzle, sound and kick; pellets and shrapnel below.
+      const round = isRoundGun(own?.cls);
       // Off the ground (a leap, a jump), the guns spray wider.
       const spread = (((own?.spread ?? v.spread) + (sim.airborne ? v.airGunSpread : 0)) * Math.PI) / 180;
       body.muzzle(s, this.muzzle);
       body.barrel(s, this.dir);
+      if (round) this.weapons?.gunShot?.(s, this.muzzle);
       // A gun only fires once its barrel is inside the fire cone (upper.ts), so the round flies from the real muzzle
       // straight to the aim, like the autocannon. Using the barrel's own heading carried the arm's swing lag (the
       // outward arm turns slower) and the gap between the model's muzzle and the sim's shoulder, so on small targets
@@ -495,17 +502,27 @@ export class MechUnit implements Hittable, Solid {
         const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
         if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
       }
-      const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
-      const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
       if (this.player) body.eject(s, this.eject);
       // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
       const special = this.weapons?.rounds?.(s) ?? null;
       const proto = special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
       // Armour pierce: the gun's own (an item's), else the slider; special rounds add theirs (armour-piercing, later).
       const ap = Math.min(1, (own?.ap ?? v.roundAp) + (special?.ap ?? 0));
-      this.bf.fire(this.flashSlot + (s === 1 ? 0 : 1), this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
-        ? { eject: this.eject, outboard: left.clone().multiplyScalar(s), voice: "player", ally: this.ally, sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash: v.roundSplash, splashShare: v.roundSplashShare, proto, hot: !!special, pierce: ap }
-        : { voice: "other", hitScale: 0.7, proto: special ? proto : undefined, hot: !!special, pierce: ap });
+      // A shotgun or flak shot is a cone of pellets: each its own round, only the first flashing, throwing brass and
+      // (for the minigun's voice) sounding; a round gun's sound came from the weapons (gunShot), so its rounds are quiet.
+      const pellets = round ? Math.max(1, own?.pellets ?? 1) : 1;
+      const splash = round && (own?.splash ?? 0) > 0 ? own!.splash! : v.roundSplash, splashShare = round && (own?.splash ?? 0) > 0 ? own!.splashShare ?? 0 : v.roundSplashShare;
+      for (let p = 0; p < pellets; p++) {
+        // Pellets spread evenly over the cone (a random point in the disc: sqrt), single rounds as before.
+        const r = pellets > 1 ? Math.sqrt(Math.random()) : Math.random();
+        const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * r);
+        const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
+        const first = p === 0;
+        this.bf.fire(first ? this.flashSlot + (s === 1 ? 0 : 1) : -1, this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
+          ? { eject: first ? this.eject : undefined, outboard: first ? left.clone().multiplyScalar(s) : undefined, voice: "player", silent: round, flashScale: first ? undefined : 0, ally: this.ally,
+            sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, proto, hot: !!special, pierce: ap }
+          : { voice: round ? "none" : "other", hitScale: 0.7, flashScale: first ? undefined : 0, proto: special ? proto : undefined, hot: !!special, pierce: ap });
+      }
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);

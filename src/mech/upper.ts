@@ -133,9 +133,14 @@ export interface GunStats {
   light?: boolean;
   /** Its socketed Protocols' behaviour on every round (src/game/shots.ts). */
   proto?: import("../game/shots").ShotProtocols;
+  /** Round guns (src/weapons/guns.ts): rounds per shot (a shotgun's pellets; 1 else) and each round's splash at its end. */
+  pellets?: number;
+  splash?: number;
+  splashShare?: number;
 }
 
-export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee";
+export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/guns").RoundGun;
+import { isRoundGun } from "../weapons/guns";
 import { newMag, magFill, magResize, magReady, magStep, magTake, type Mag } from "../weapons/magazine";
 
 /** One trigger for both guns, or one per gun (Keith 2026-10-25: left click the left side, right click the right). */
@@ -267,9 +272,12 @@ export class UpperSim {
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
       this.spin = Math.max(this.spin, g.spin);
 
-      g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && magReady(g.mag);
+      // A round gun (src/weapons/guns.ts) has no barrels to spin: its clock refills while it waits, so the first round
+      // leaves on the click (a sniper's 1.7 s cycle shouldn't start after the press).
+      const semi = isRoundGun(own?.cls);
+      g.firing = trigger && (semi || g.spin >= v.fireFrom) && g.onTarget && magReady(g.mag);
       if (g.firing) {
-        g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
+        g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (semi ? 1 : (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin));
         // Each tick's shot takes one round × the Protocols' declared cost (Overclock, Double shot 2; magazine.ts).
         const cost = own?.cost ?? 1;
         while (g.clock >= 1 && magTake(g.mag, 1, cost)) {
@@ -278,7 +286,7 @@ export class UpperSim {
           this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
           shots.push(g.side);
         }
-      } else g.clock = Math.min(g.clock, 0.99);
+      } else g.clock = semi ? Math.min(1, g.clock + dt * (own?.fireRate ?? v.fireRate) * g.rateMul) : Math.min(g.clock, 0.99);
     }
     this.shake *= Math.exp(-dt * 18);
     return shots;

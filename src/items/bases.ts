@@ -10,6 +10,7 @@ import { LEG_TYPES } from "../mech/legTypes";
 import { UPPER_DEFAULTS } from "../mech/upper";
 import { DASH_DEFAULTS } from "../mech/dash";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
+import { gunNumbers, type RoundGun } from "../weapons/guns";
 import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
 
@@ -89,6 +90,8 @@ export const STATS: Record<string, StatInfo> = {
   stance: { label: "Rest stance", better: 1, decimals: 0, whole: true, hidden: true },
   shellSpeed: { label: "Shell speed (m/s)", better: 1, decimals: 0 },
   splash: { label: "Splash (m)", better: 1, decimals: 1 },
+  splashShare: { label: "Splash share", better: 1, decimals: 2 },
+  pellets: { label: "Pellets per shot", better: 1, decimals: 0, whole: true },
   stripLength: { label: "Strip length (m)", better: 1, decimals: 0 },
   radarRange: { label: "Mech radar (m)", better: 1, decimals: 0 },
   salvage: { label: "Salvage speed +", better: 1, decimals: 2 },
@@ -165,6 +168,18 @@ const s = (base: number, spread: number): StatRange => ({ base, spread });
 const HULL_POINTS = 3000, HULL_ARMOUR = 8, ROUND_DAMAGE = 12, ROUND_PIERCE = 2, ROUND_AP = 0.1;
 /** An ammo drum's magazine bonus: the default loadout (a drum per side) gives the Medium minigun the slider's magazine. */
 const DRUM_BONUS = 0.5;
+
+/** A round gun's base (src/weapons/guns.ts): its numbers from the sliders, plus how it sits in the hand or on the hull. */
+function roundGun(id: string, name: string, size: Size, cls: RoundGun, tags: string[], weight: number, makers: string[], look: string, drop: number, extra: Record<string, StatRange>): Base {
+  const g = gunNumbers(cls, WD);
+  const stats: Record<string, StatRange> = {
+    fireRate: s(g.fireRate, 0.08), damage: s(g.damage, 0.1), ap: s(g.ap, 0), magazine: s(g.magazine, 0.15), reload: s(g.reload, 0.1),
+    spread: s(g.spread, 0.1), range: s(g.range, 0.06), pierce: s(g.pierce, 0.2), ...extra,
+  };
+  if (g.pellets > 1) stats.pellets = s(g.pellets, 0.1);
+  if (g.splash > 0) { stats.splash = s(g.splash, 0.1); stats.splashShare = s(g.splashShare, 0); }
+  return { id, name, kind: "weapon", size, cls, tags, weight, makers, look, drop, stats };
+}
 
 export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
@@ -293,6 +308,14 @@ export const BASES: Base[] = [
     id: "rpg-medium", name: "Rocket launcher", kind: "weapon", size: "M", cls: "rpg", tags: ["weapon", "explosive", "rocket"], weight: 2.2, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-rocket", drop: 1,
     stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgCooldown, 0.1), magazine: s(WD.rpgMag, 0.25), reload: s(WD.rpgReload, 0.1), arc: s(26, 0.08), track: s(10, 0.08) },
   },
+  // Round guns (Keith 2026-11-02, src/weapons/guns.ts): an SMG, a rifle and a shotgun in the hand, a sniper rifle and a
+  // flak cannon (the shotgun's hull-mounted big brother) on the hull. They fire rounds like the minigun, with no spin-up.
+  // Base values from the round gun sliders.
+  roundGun("smg-light", "SMG", "L", "smg", ["weapon", "ballistic", "smg"], 0.7, ["Novus-Lux", "Suzaku"], "rampart-wildcat", 1.2, { handling: s(1.4, 0.08), arcBonus: s(10, 0.2) }),
+  roundGun("rifle-light", "Battle rifle", "L", "rifle", ["weapon", "ballistic", "rifle"], 1.1, ["Stratford-Aegis", "Suzaku"], "rampart", 1.2, { handling: s(1.15, 0.08), arcBonus: s(6, 0.2) }),
+  roundGun("shotgun-light", "Scattergun", "L", "shotgun", ["weapon", "ballistic", "shotgun"], 1.2, ["Suzaku"], "rampart", 1, { handling: s(1.25, 0.08), arcBonus: s(8, 0.2) }),
+  roundGun("sniper-medium", "Longshot rifle", "M", "sniper", ["weapon", "ballistic", "sniper"], 2.2, ["Novus-Lux", "Stratford-Aegis"], "rampart-railgun", 0.9, { arc: s(18, 0.08), track: s(7, 0.08) }),
+  roundGun("flak-medium", "Flak cannon", "M", "flak", ["weapon", "ballistic", "flak"], 2.6, ["Suzaku", "Stratford-Aegis"], "rampart-turret", 0.9, { arc: s(30, 0.08), track: s(10, 0.08) }),
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
     id: "sh-rpg", name: "Shoulder rocket", kind: "shoulder", shoulder: "rpg", tags: ["shoulder", "explosive", "rocket"], weight: 1.8, makers: ["Suzaku"], look: "rampart-rocket", drop: 1,

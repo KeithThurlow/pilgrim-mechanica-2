@@ -6,7 +6,7 @@ import type * as THREE from "three/webgpu";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom";
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom" | import("./guns").RoundGun;
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -100,6 +100,19 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
       S.band(r, 0.12, 150, 2000, 0.4, 0.006, -80),
       S.delay(S.ring(r, 0.7, hz(BLOCK_BODY.slice(0, 5), f), 0.18, { attack: 0.01 }), 0.5 + r() * 0.04));
   }), () => v.swordLevel);
+  // Round guns (Keith 2026-11-02, src/weapons/guns.ts), one voice each, levels on the Round guns: feel sliders.
+  // SMG: a light, bright snap with a small thump; played many times a second, so short.
+  sfx.addSound("smg", variants(4, 61, (r) => S.mix(S.tick(r, 0.02, 0.7), S.noise(r, 0.07, 5200, 0.55, 0.0003), S.thump(0.08, 280, 130, 0.45))), () => v.smgLevel);
+  // Rifle: a harder crack, a firm thump and a short rolling tail.
+  sfx.addSound("rifle", variants(3, 62, (r) => S.mix(S.tick(r, 0.025, 0.9), S.noise(r, 0.12, 3600, 0.7, 0.0003), S.thump(0.2, 190, 70, 0.75), S.delay(S.lowPass(S.noise(r, 0.45, 600, 0.3, 0.01), 800), 0.03))), () => v.rifleLevel);
+  // Shotgun: a broad, boomy blast with no snap to speak of, and the pump racking after it.
+  sfx.addSound("shotgun", variants(3, 63, (r) => S.mix(S.thump(0.35, 130, 48, 1.1), S.noise(r, 0.3, 1700, 0.9, 0.0008), S.delay(S.lowPass(S.noise(r, 0.6, 500, 0.35, 0.02), 700), 0.04),
+    S.delay(S.scale(S.clang(r, 0.08, 0.2), 0.6), 0.42), S.delay(S.scale(S.clang(r, 0.07, 0.2), 0.5), 0.55))), () => v.shotgunLevel);
+  // Sniper: a supersonic crack, a deep punch and a long tail rolling off the dunes; the bolt cycles after.
+  sfx.addSound("sniper", variants(2, 64, (r) => S.mix(S.tick(r, 0.03, 1), S.noise(r, 0.07, 6500, 0.85, 0.0002), S.thump(0.5, 115, 34, 1.2),
+    S.delay(S.lowPass(S.noise(r, 1.6, 450, 0.5, 0.01), 650), 0.05), S.delay(S.scale(S.clang(r, 0.1, 0.25), 0.45), 0.75))), () => v.sniperLevel);
+  // Flak: a heavy cough and the shrapnel's rattle spreading out after it.
+  sfx.addSound("flak", variants(3, 65, (r) => S.mix(S.thump(0.4, 105, 44, 1.2), S.noise(r, 0.32, 1100, 0.85, 0.001), S.delay(S.scale(S.crackle(r, 0.35, 0.35), 0.8), 0.06))), () => v.flakLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
 }
 
