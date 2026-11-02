@@ -142,7 +142,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -189,7 +189,7 @@ export class Arsenal implements MechWeapons {
       sword: new SwordSim(1), swordHits: new Map(), swingSeen: 0, cleave: 0, bit: false, swish: null, swishT: 0, swishAir: 0, swishLast: new THREE.Vector3(), twist: 0, twistV: 0 });
     this.sides = [side(), side()];
     this.sides[1].sword = new SwordSim(-1);
-    this.energy = new EnergyGuns(bf, unit, v);
+    this.energy = new EnergyGuns(bf, unit, v, () => this.candidates());
     this.energy.onShake = (k) => this.onShake?.(k);
     this.energy.onFire = (k) => this.onFire?.(k);
     addWeaponSounds(bf.sfx, v);
