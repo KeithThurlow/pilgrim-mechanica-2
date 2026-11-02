@@ -255,9 +255,16 @@ export class DentLayer {
       const wobN = mx_noise_float(vec3(world.mul(2.3), 0.7)).toVar(), grainN = mx_noise_float(vec3(world.mul(9.1), 3.1)).toVar();
       const was = max(abs(world.x.sub(this.uPrevCentre.x)), abs(world.y.sub(this.uPrevCentre.y))).lessThanEqual(half);
       If(was, () => {
-        const c = textureLoad(prev, ivec2(ix, iy));
-        const l = textureLoad(prev, ivec2(ix.add(N).sub(1).mod(N), iy)), r = textureLoad(prev, ivec2(ix.add(1).mod(N), iy));
-        const d = textureLoad(prev, ivec2(ix, iy.add(N).sub(1).mod(N))), u = textureLoad(prev, ivec2(ix, iy.add(1).mod(N)));
+        const c = textureLoad(prev, ivec2(ix, iy)).toVar();
+        // A neighbour across the window's edge is the far side of the window (the texture wraps), a coverage away in
+        // the world: read the texel itself there instead, so nothing seeps from behind the mech to ahead of it
+        // (Keith 2026-11-02: prints tiled).
+        const ts = size.div(NF), o = world.sub(this.uCentre);
+        const nb = (x: THREE.Node<"int">, y: THREE.Node<"int">, ok: THREE.Node<"bool">) => select(ok, textureLoad(prev, ivec2(x, y)), c);
+        const l = nb(ix.add(N).sub(1).mod(N), iy, o.x.sub(ts).greaterThan(half.negate()));
+        const r = nb(ix.add(1).mod(N), iy, o.x.add(ts).lessThanEqual(half));
+        const d = nb(ix, iy.add(N).sub(1).mod(N), o.y.sub(ts).greaterThan(half.negate()));
+        const u = nb(ix, iy.add(1).mod(N), o.y.add(ts).lessThanEqual(half));
         const id = round(c.w);
         const R = this.uRates;
         const rate = select(id.lessThan(0.5), R[0], select(id.lessThan(1.5), R[1], select(id.lessThan(2.5), R[2], select(id.lessThan(3.5), R[3], R[4]))));
@@ -278,8 +285,9 @@ export class DentLayer {
         // and the other branch (and the code after) read it unset (Keith 2026-11-02: shaped prints had no depth).
         const a = textureLoad(bt, ivec2(i, 0)).toVar(), b = textureLoad(bt, ivec2(i, 1)).toVar();
         const e = textureLoad(bt, ivec2(i, 2)).toVar(), f = textureLoad(bt, ivec2(i, 3)).toVar();
+        // The brush at its true place only: no wrapping round the window (that put a mark past one edge onto the
+        // texels at the other, a coverage ahead; Keith 2026-11-02: prints tiled).
         const p = world.sub(a.xy).toVar();
-        p.subAssign(size.mul(round(p.div(size))));
         const shaped = f.x.greaterThan(0.5);
         const reach = select(shaped, f.y.mul(a.z), a.z.mul(max(a.w, 1)).mul(REACH));
         If(abs(p.x).lessThan(reach).and(abs(p.y).lessThan(reach)), () => {

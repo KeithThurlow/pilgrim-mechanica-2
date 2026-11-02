@@ -2,7 +2,7 @@
 // sliders, with the procedural sounds as the fallback. A button per sound plays it beside the mech; with "Compare" on,
 // the procedural sound plays first and the recording after it. Every combat lab has the same Sound samples topic, so
 // fire the real guns there (weapons lab ?left=sniper and so on) once a sound is cut.
-// Flags: ?play=<sample id> (play it once on the first click), plus the combat-lab flags (?manual, ?left=, ...).
+// Flags: ?play=<sample id> (play it once on the first click; e.g. Sniper, RobotDeath), plus the combat-lab flags (?manual, ?left=, ...).
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -28,7 +28,7 @@ const lab = await combatLab({
   topics: [{ ...SAMPLE_TOPIC, groups: ["Sounds lab", ...SAMPLE_TOPIC.groups] }],
   demo: () => ({ cmd: { x: 0, z: 0, sprint: false }, aim: null, trigger: false }),
   actions: [
-    ...SAMPLES.filter((d) => !d.ref).map((d) => ({ label: `▶ ${d.label.replace(/ \(.*/, "")}`, onClick: (): void => play(d) })),
+    ...SAMPLES.filter((d) => !d.sound.startsWith("blast")).map((d) => ({ label: `▶ ${d.label.replace(/ \(.*/, "")}`, onClick: (): void => play(d) })),
     ...BLASTS.map((b) => ({ label: `▶ Blast ${b.r} m (${b.what})`, onClick: (): void => blast(b.r) })),
   ],
   report: (): Record<string, unknown> => ({ samplesLoaded: loaded }),

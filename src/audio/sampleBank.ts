@@ -3,8 +3,8 @@
 // (Sfx.swapSound). Watches the sliders and recuts a sound a moment after one of its values changes; a sample switched
 // off, still loading or failing to load leaves the procedural sound playing. Cosmetic: sound only, no game state.
 import type { Sfx } from "./sfx";
-import { SAMPLES, SAMPLE_VARIANTS, sampleKey, type SampleDef } from "./samples";
-import { cutSample, matchLoudness, mixUnder, punchRms, toMono } from "./sampleCut";
+import { SAMPLES, SAMPLE_VARIANTS, ALIEN_FIELDS, alienKey, sampleKey, type SampleDef } from "./samples";
+import { alienize, cutSample, matchLoudness, mixUnder, punchRms, toMono, type AlienOptions } from "./sampleCut";
 
 type V = Record<string, number>;
 const banks = new WeakMap<Sfx, SampleBank>();
@@ -52,7 +52,8 @@ export class SampleBank {
   private signature(d: SampleDef) {
     const v = this.v, on = (v.samplesOn ?? 1) > 0.5 && (v[sampleKey(d, "On")] ?? 1) > 0.5;
     if (!on) return "off";
-    return "on:" + (["Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const).map((f) => v[sampleKey(d, f)]).join(",");
+    return "on:" + (["Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const).map((f) => v[sampleKey(d, f)]).join(",")
+      + (d.alien ? ":" + ALIEN_FIELDS.map(([f]) => v[alienKey(d, f)]).join(",") : "");
   }
 
   /** Recut any sample whose values changed (checked five times a second; a slider drag recuts at most that often). */
@@ -69,8 +70,8 @@ export class SampleBank {
       if (s === "off") { this.sfx.swapSound(d.sound, null); continue; }
       const ref = d.ref ?? d.sound;
       const proc = this.sfx.procedural(ref);
-      // A sample-only sound (blastLarge) takes the level of the sound it's matched to.
-      const level = d.ref ? this.levelOf(d.ref) : undefined;
+      // A sample-only sound (blastLarge) takes its own level slider, else that of the sound it's matched to.
+      const level = d.level ? () => this.v[d.level!] ?? 1 : d.ref ? this.levelOf(d.ref) : undefined;
       this.sfx.swapSound(d.sound, cutVariants(d, this.v, raw.data, raw.rate, this.sfx.rate, proc), level);
     }
   }
@@ -90,6 +91,14 @@ export function cutVariants(d: SampleDef, v: V, src: Float32Array, srcRate: numb
     const semis = k("Pitch") + (SAMPLE_VARIANTS > 1 ? (i / (SAMPLE_VARIANTS - 1) - 0.5) * k("Spread") : 0);
     const rate = Math.pow(2, semis / 12);
     const cut = cutSample(src, srcRate, outRate, { start: k("Start"), len: k("Len") / rate, fade: k("Fade") / rate, rate, lowpass: k("Lp"), highpass: k("Hp") });
+    if (d.alien) {
+      const a = {} as AlienOptions;
+      for (const [f] of ALIEN_FIELDS) a[f] = v[alienKey(d, f)] ?? d.alien[f];
+      alienize(cut, outRate, a);
+      // The resonator rings on past the fade: close it again so the cut ends in silence.
+      const fo = Math.min(cut.length, Math.round(0.02 * outRate));
+      for (let j = 0; j < fo; j++) cut[cut.length - fo + j] *= 1 - j / fo;
+    }
     matchLoudness(cut, outRate, refRms, k("Gain"));
     out.push(mixUnder(cut, proc?.[i % Math.max(1, proc.length)], k("Under")));
   }
