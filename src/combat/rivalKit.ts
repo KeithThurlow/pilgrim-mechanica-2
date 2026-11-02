@@ -3,6 +3,7 @@
 // each weapon on its control (left or right trigger, keys 1-3), its kind, range, projectile speed, blast and rate,
 // read from the item's own rolled stats or the weapon sliders exactly as the arsenal reads them (src/weapons/arsenal.ts),
 // and the range the rival likes to fight at. Ownership: host (the rival's loadout is loot later: factions step 5).
+import { isRoundGun } from "../weapons/guns";
 import { BASES, BASE_BY_ID, type Base } from "../items/bases";
 import { rng, rollItem, type LootValues } from "../items/generate";
 import { RARITIES, type Rarity } from "../items/rarity";
@@ -54,7 +55,9 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
   ([[0, r.guns.left], [1, r.guns.right]] as const).forEach(([i, g]) => {
     if (!g) return;
     const ctl = { trigger: i } as KitControl, o = g.own;
-    if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
+    // A round gun (src/weapons/guns.ts) fights like a minigun: a pellet shot is its pellets' worth of damage.
+    if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
+    else if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
     else if (g.cls === "rail") {
       const L = !!g.light;
       out.push(w(ctl, "rail", o ? { range: o.range, damage: o.damage, charge: o.charge, cooldown: o.cooldown }

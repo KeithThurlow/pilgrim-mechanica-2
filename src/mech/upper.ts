@@ -133,9 +133,14 @@ export interface GunStats {
   light?: boolean;
   /** Its socketed Protocols' behaviour on every round (src/game/shots.ts). */
   proto?: import("../game/shots").ShotProtocols;
+  /** Round guns (src/weapons/guns.ts): rounds per shot (a shotgun's pellets; 1 else) and each round's splash at its end. */
+  pellets?: number;
+  splash?: number;
+  splashShare?: number;
 }
 
-export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass;
+export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass | import("../weapons/guns").RoundGun;
+import { isRoundGun } from "../weapons/guns";
 import { newMag, magFill, magResize, magReady, magStep, magTake, type Mag } from "../weapons/magazine";
 
 /** One trigger for both guns, or one per gun (Keith 2026-10-25: left click the left side, right click the right). */
@@ -259,17 +264,20 @@ export class UpperSim {
 
       // The magazine reloads in its own time (a rocket launcher on this side spends it in src/weapons).
       magStep(g.mag, dt);
-      // A rail cannon, rocket launcher, sword or energy weapon only aims here: it charges, fires or swings in src/weapons.
-      if (own?.cls && own.cls !== "minigun" && own.cls !== "autocannon") { g.spin = 0; g.firing = false; g.clock = 0; continue; }
+      // A rail cannon, rocket launcher, sword or energy weapon only aims here (round guns fire on this clock): it charges, fires or swings in src/weapons.
+      if (own?.cls && own.cls !== "minigun" && own.cls !== "autocannon" && !isRoundGun(own.cls)) { g.spin = 0; g.firing = false; g.clock = 0; continue; }
       const trigger = triggerOf(triggers, g.side === 1 ? 0 : 1);
       g.spinUpTime = (own?.spinUp ?? v.spinUp) * (1 - g.side * v.spinSplit) * (1 - g.spinCut);
       g.spin = trigger && g.enabled ? Math.min(1, g.spin + dt / g.spinUpTime) : Math.max(0, g.spin - dt / v.spinDown);
       g.spinAngle = (g.spinAngle + spinRate * g.spin * dt) % (Math.PI * 2);
       this.spin = Math.max(this.spin, g.spin);
 
-      g.firing = trigger && g.spin >= v.fireFrom && g.onTarget && magReady(g.mag);
+      // A round gun (src/weapons/guns.ts) has no barrels to spin: its clock refills while it waits, so the first round
+      // leaves on the click (a sniper's 1.7 s cycle shouldn't start after the press).
+      const semi = isRoundGun(own?.cls);
+      g.firing = trigger && (semi || g.spin >= v.fireFrom) && g.onTarget && magReady(g.mag);
       if (g.firing) {
-        g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin);
+        g.clock += dt * (own?.fireRate ?? v.fireRate) * g.rateMul * (semi ? 1 : (1 + g.side * v.rateSplit) * (0.6 + 0.4 * g.spin));
         // Each tick's shot takes one round × the Protocols' declared cost (Overclock, Double shot 2; magazine.ts).
         const cost = own?.cost ?? 1;
         while (g.clock >= 1 && magTake(g.mag, 1, cost)) {
@@ -278,7 +286,7 @@ export class UpperSim {
           this.shake = Math.min(3 * D2R, this.shake + v.torsoKick * D2R);
           shots.push(g.side);
         }
-      } else g.clock = Math.min(g.clock, 0.99);
+      } else g.clock = semi ? Math.min(1, g.clock + dt * (own?.fireRate ?? v.fireRate) * g.rateMul) : Math.min(g.clock, 0.99);
     }
     this.shake *= Math.exp(-dt * 18);
     return shots;

@@ -112,6 +112,8 @@ export interface FireOptions {
   voice?: "player" | "other" | "none";
   /** A co-op ally's round: the player's voice and brass, but its effects give way to the local player's. */
   ally?: boolean;
+  /** The player's round, but its sound was played by its weapon (a round gun, src/weapons/guns.ts): no minigun voice. */
+  silent?: boolean;
   /** Draw the tracer (default) or resolve the round without one (for crowds of small arms). */
   tracer?: boolean;
   /** Size of the impact effects (1 the minigun; small arms about 0.35: few small sparks, little dust, no crater). */
@@ -269,7 +271,7 @@ export class Battlefield {
     }
     return this.shots.fire(
       { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
-      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot,
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.silent ? "none" : o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot,
         team, power: damage * (1 + Math.max(0, o.pierce ?? 0)) });
   }
 

@@ -46,7 +46,9 @@ import { EnergyGuns } from "./energy/energyGuns";
 import { isEnergy } from "./energy/energySim";
 import type { EnergyKind } from "./models";
 
-type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | null;
+import { gunFeel, gunNumbers, isRoundGun, type RoundGun } from "./guns";
+
+type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | RoundGun | null;
 
 /** The rail cannon's energy colour (its charge preview, coils and beam). */
 export const RAIL_GLOW = 0x7fe0ff;
@@ -142,7 +144,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", melee: "sword", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -202,7 +204,7 @@ export class Arsenal implements MechWeapons {
     const guns = [r.guns.left, r.guns.right];
     this.sides.forEach((s, i) => {
       const g = guns[i];
-      const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : "minigun";
+      const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "rpg" ? "rpg" : isRoundGun(g.cls) ? g.cls : "minigun";
       const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : null;
       if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
@@ -346,8 +348,14 @@ export class Arsenal implements MechWeapons {
       // An unrolled autocannon (the picker's) fires at the Shells/s slider, live; its gun clock reads the gun's stats,
       // which carried the base's rate (Keith 2026-10-26: the slider did nothing). A rolled one keeps its own.
       if (s.kind === "autocannon" && !s.own && g.stats) { g.stats.fireRate = v.acRate; g.stats.ammo = v.acMag; g.stats.reload = v.acReload; u.upper.sizeMag(g); }
-      // Targeting laser on the minigun and the rocket launcher, along the gun.
-      s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg") && laserK > 0;
+      // An unrolled round gun (the picker's) runs on its sliders, live, like the autocannon.
+      if (isRoundGun(s.kind) && !s.own && g.stats) {
+        const n = gunNumbers(s.kind, v);
+        Object.assign(g.stats, { fireRate: n.fireRate, damage: n.damage, spread: n.spread, range: n.range, pierce: n.pierce, ap: n.ap, ammo: n.magazine, reload: n.reload, pellets: n.pellets, splash: n.splash, splashShare: n.splashShare });
+        u.upper.sizeMag(g);
+      }
+      // Targeting laser on the minigun, the rocket launcher, the rifle and the sniper rifle, along the gun.
+      s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg" || s.kind === "rifle" || s.kind === "sniper") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
       if (s.kind === "melee") { this.stepSword(s, held, dt); clearPaint(s.paint); return; }
       if (s.kind === "energy") {
@@ -895,6 +903,25 @@ export class Arsenal implements MechWeapons {
     if (sh.model) { sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 6); sh.model.recoil.position.z += (0 - sh.model.recoil.position.z) * Math.min(1, dt * 8); }
     const ready = sh.weapon === "linemortar" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0 && magReady(sh.mag);
     for (const mat of sh.model?.glow ?? []) mat.opacity = ready ? 0.95 : 0.15;
+  }
+
+  /** A round gun fires a shot (src/weapons/guns.ts; the unit fires its rounds): its model's muzzle, sound, kick, shake. */
+  gunShot(side: 1 | -1, muzzle: THREE.Vector3): boolean {
+    const s = this.sides[side === 1 ? 0 : 1];
+    if (!isRoundGun(s.kind)) return false;
+    const feel = gunFeel(s.kind, this.v);
+    if (s.model?.muzzles.length) this.muzzleOf(s, side, muzzle, s.tube++);
+    if (s.model) s.model.recoil.position.z = -feel.kick;
+    this.bf.sfx.playSound(s.kind, muzzle, 1);
+    const d = this.unit.body.barrel(side, this.dir);
+    // Shotguns and flak cough a puff of smoke; the sniper a long one.
+    if (s.kind === "shotgun" || s.kind === "flak" || s.kind === "sniper") {
+      const big = s.kind === "shotgun" ? 0.35 : 0.5;
+      this.bf.dust.smoke(muzzle.x, muzzle.y, muzzle.z, d.x * 4, d.y * 4 + 0.4, d.z * 4, big, 0.7, 0.55, 0.45);
+    }
+    this.onFire?.(s.kind);
+    this.onShake?.(feel.shake);
+    return !!s.model?.muzzles.length;
   }
 
   /** A gun of another class fired a round on its clock (the autocannon). */
