@@ -22,7 +22,7 @@ import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../src/combat/striderLab";
-import { fireRobotBeam, fireRobotPulse } from "../../src/game/robotBeam";
+import { fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
 import { DroidSquads } from "../../src/game/droidFight";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -157,6 +157,8 @@ sw.onLob = (i, fx, fy, fz, x, z, flight) => {
 // another team on it), a scorch and a crack.
 sw.onBeam = (e) => { if (player.alive) fireRobotBeam(bf, e, V.robotBeamReach); };
 sw.onPulse = (e) => { if (player.alive) fireRobotPulse(bf, e, (x, z, r, sp) => player.shoveFrom(x, z, r, sp)); };
+// A big one's core going up after it dies (Keith 2026-11-02): hurts everything round it, robots too.
+sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, (x, z, r, sp) => { if (player.alive) player.shoveFrom(x, z, r, sp); });
 // ?beam: no packs, two excavators stopped at range either side of the mech, about to charge (and again every cooldown).
 if (params0.has("beam")) {
   V.robotSwarmSize = 0;
