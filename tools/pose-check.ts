@@ -31,8 +31,9 @@ for (const stance of [0, 1, 2, 3]) {
   for (const span of [0, 1]) {
     setLivePoses({});
     const before = samples(st, span);
-    for (const k of SWORD_KEYS) {
-      const p = readKey(k.name, k.clip, st, span);
+    // Read every key first, then pose them all (a posed rest drops the coded last key before it unless that's posed too).
+    const read = SWORD_KEYS.map((k) => [k, readKey(k.name, k.clip, st, span)] as const);
+    for (const [k, p] of read) {
       if (!p) continue;
       setLivePose("check", poseKey(k.name, k.span && span < 0.5), p);
       posed++;
