@@ -117,6 +117,13 @@ export const STATS: Record<string, StatInfo> = {
   burnTime: { label: "Burns for (s)", better: 1, decimals: 1 },
   burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
+  // Summoner gear (Keith 2026-11-02, src/summon/gear.ts): the pack builds mech replicas, the shoulders carry drones and
+  // the scrap swarm.
+  replicas: { label: "Mech replicas", better: 1, decimals: 0, whole: true },
+  replicaBuild: { label: "Builds one every (s)", better: -1, decimals: 1 },
+  drones: { label: "Attack drones", better: 1, decimals: 0, whole: true },
+  scrappers: { label: "Scrappers", better: 1, decimals: 0, whole: true },
+  summonRebuild: { label: "Rebuilt after (s)", better: -1, decimals: 1 },
   // Energy weapons (Keith 2026-11-02): src/weapons/energy/energyBases.ts.
   ...ENERGY_STATS,
 };
@@ -167,7 +174,13 @@ export interface Base {
   family?: ShoulderFamily;
   /** Feeds: the special round their key loads (none: the key overdrives the gun's fire rate). */
   round?: RoundType;
+  /** Summoner gear (Keith 2026-11-02): a pack that builds mech replicas, a shoulder rack of drones, a shoulder hive of
+   *  scrappers (its key sends the swarm and calls it back). No `shoulder` weapon: the arsenal leaves them alone. */
+  summon?: SummonKind;
 }
+
+/** What a summoner item brings out. */
+export type SummonKind = "replicas" | "drones" | "swarm";
 
 const R = LEG_TYPES.rampart.values;
 const W = { ...WALKER_DEFAULTS, ...R };
@@ -399,6 +412,22 @@ export const BASES: Base[] = [
   {
     id: "pack-medic", name: "Medic pack", kind: "pack", tags: ["power", "repair"], weight: 2.0, makers: ["Stratford-Aegis"], look: "rampart", drop: 0.7, ability: "beacon",
     stats: { dashCharges: s(3, 0.15), dashRecharge: s(DASH_DEFAULTS.dashRecharge * 1.15, 0.1) },
+  },
+  // Summoner gear (Keith 2026-11-02: "the backpack is where the larger mech replicas come out of over time ... drone
+  // summons come out of your shoulders, and ... the swarms come out of there too"). A replica bay builds its replicas
+  // one at a time once you're out on the sand, fewer energy bars than the stand-in; a drone rack keeps its drones up,
+  // two per shoulder; a swarm hive keeps its scrappers, its key throws them at the lock or cursor and calls them back.
+  {
+    id: "pack-replica", name: "Replica bay", kind: "pack", tags: ["power", "summon", "replicas"], weight: 3.2, makers: ["Novus-Lux", "Suzaku"], look: "rampart", drop: 0.6, summon: "replicas",
+    stats: { dashCharges: s(3, 0.15), dashRecharge: s(DASH_DEFAULTS.dashRecharge * 1.1, 0.1), replicas: s(2, 0.2), replicaBuild: s(10, 0.15), summonRebuild: s(25, 0.15) },
+  },
+  {
+    id: "sh-drones", name: "Drone rack", kind: "shoulder", tags: ["shoulder", "summon", "drones"], weight: 1.4, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart", drop: 0.7, summon: "drones",
+    stats: { drones: s(2, 0.25), summonRebuild: s(6, 0.15) },
+  },
+  {
+    id: "sh-hive", name: "Swarm hive", kind: "shoulder", tags: ["shoulder", "summon", "swarm"], weight: 1.8, makers: ["Suzaku"], look: "rampart", drop: 0.7, summon: "swarm",
+    stats: { scrappers: s(8, 0.2), summonRebuild: s(3, 0.15) },
   },
   // A booster pack (Keith 2026-10-25: a boost item to slide around on): hold Space after a dash to keep thrusting.
   {

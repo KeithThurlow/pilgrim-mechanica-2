@@ -29,6 +29,7 @@ export const REPLICA_DEFAULTS = {
   repBack: 2,
   repCatchUp: 12,
   repRebuild: 20,
+  repBuild: 6,
   repHitSize: 0.9,
   repBodySize: 1.1,
   repRocketShare: 0.5,
@@ -56,7 +57,8 @@ export const REPLICA_PARAMS: Param[] = [
   { key: "repSide", label: "Walks this far to the side (m)", min: 3, max: 30, step: 0.5, group: G },
   { key: "repBack", label: "And this far behind (m)", min: -10, max: 20, step: 0.5, group: G },
   { key: "repCatchUp", label: "Runs to catch up past (m off its spot)", min: 2, max: 60, step: 1, group: G },
-  { key: "repRebuild", label: "Rebuilt after (s)", min: 1, max: 180, step: 1, group: G },
+  { key: "repRebuild", label: "Rebuilt after (s)", min: 1, max: 180, step: 1, group: G, tip: "A destroyed replica walks out again this long after" },
+  { key: "repBuild", label: "Builds one every (s)", min: 0, max: 60, step: 0.5, group: G, tip: "Keith 2026-11-02: replicas come out of the pack over time. Out on the sand (or summoned again after the convoy), a missing one walks out this often, one at a time" },
   { key: "repHitSize", label: "Hit size (m)", min: 0.3, max: 3, step: 0.05, group: G, tip: "Radius of the capsule enemy rounds hit (your mech's is 1.7)" },
   { key: "repBodySize", label: "Body size (m)", min: 0.3, max: 4, step: 0.05, group: G, tip: "The pillbox enemy mechs bump into; you walk through them either way (Body collisions › Summons give way)" },
   { key: "repRocketShare", label: "Built with rockets (share)", min: 0, max: 1, step: 0.05, group: GR, tip: "Each replica rolls minigun or rockets when it's built: 0 all miniguns, 1 all rockets" },
@@ -90,6 +92,7 @@ export class Replicas {
   private wasBound = false;
 
   private from = new THREE.Vector3();
+  private buildClock = 0;
   private shots = 0;
 
   constructor(private bf: Battlefield, private scene: THREE.Object3D, readonly v: MechUnitValues & ReplicaValues, private look: ToonLook,
@@ -112,8 +115,8 @@ export class Replicas {
     unit.ally = true;
     unit.softSolid = true;
     unit.paint = REPLICA_PAINT;
+    body.root.visible = false;
     this.list.push({ unit, body, on: false, builds: 0, clock: 0, left: 0, side: 1 });
-    this.place(this.list[k], k);
   }
 
   /** Station k at the owner's flank: alternating sides, the second pair further out. */
@@ -184,10 +187,13 @@ export class Replicas {
     reg.near(P.x, P.z, v.repEngage, this.filter, this.near);
     const sprinting = o.bound.on, sprintStart = sprinting && !this.wasBound;
     this.wasBound = sprinting;
+    let built = false, waiting = false;
+    this.buildClock += dt;
     this.list.forEach((r, k) => {
       if (k >= want) { if (r.on) this.off(r); return; }
       const u = r.unit;
-      if (!r.on) { if (o.alive) this.place(r, k); return; }
+      // Built one at a time, `repBuild` s apart.
+      if (!r.on) { if (o.alive && !built && this.buildClock >= v.repBuild) { this.place(r, k); this.buildClock = 0; built = true; } else waiting = true; return; }
       this.tune(u);
       if (!u.alive) {
         u.step(dt, { x: 0, z: 0, sprint: false }, null, false);
@@ -229,6 +235,7 @@ export class Replicas {
       u.step(dt, { x: mx, z: mz, sprint: !has && off > v.repCatchUp }, has ? this.aim : null, !rockets && has && dist < u.v.range + 4);
       if (rockets) this.rockets(r, k, dt, has, fx, fz, dist);
     });
+    if (!waiting) this.buildClock = 0;
   }
 
   /** Every replica on the field and alive: where it is and its radius (for enemies to turn on). */

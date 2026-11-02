@@ -327,6 +327,10 @@ export interface Resolved {
   seekers: SeekerMode[];
   /** Timed abilities (src/abilities/abilities.ts): the pack's on key 3, the hull's on key 4. */
   abilities: { key: 3 | 4; id: import("../abilities/abilities").AbilityId }[];
+  /** Summoner gear (Keith 2026-11-02; src/summon/gear.ts): what the pack and shoulders bring out. A replica bay on the
+   *  pack builds `replicas`, one every `replicaBuild` s, a lost one rebuilt after `replicaRebuild` s; drone racks on the
+   *  shoulders add their drones; swarm hives their scrappers, and their keys (1 or 2) send and recall the swarm. */
+  summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[] };
   /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
   cargoCapacity: number;
   /** Everything fitted (t). */
@@ -444,9 +448,32 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
       const a = lo[slot] ? BASE_BY_ID[lo[slot]!.base]?.ability : undefined;
       return a && (slot !== "pack" || lo.pack?.kind === "pack") ? [{ key, id: a }] : [];
     }),
+    summons: summonsOf(lo),
     cargoCapacity: legs.carry + (hull.carryBonus ?? 0) + racks,
     weight: SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0),
   };
+}
+
+/** The summoner gear fitted (Resolved.summons): the pack's replicas, the shoulders' drones and scrappers (rebuild
+ *  times: the quickest of the fitted racks or hives). */
+function summonsOf(lo: Loadout): Resolved["summons"] {
+  const out: Resolved["summons"] = { replicas: 0, replicaBuild: 10, replicaRebuild: 25, drones: 0, droneRebuild: 6, scrappers: 0, swarmRebuild: 3, swarmKeys: [] };
+  const pack = lo.pack, pb = pack ? BASE_BY_ID[pack.base] : undefined;
+  if (pack && pb?.summon === "replicas") {
+    const w = effectiveStats(pack);
+    out.replicas = Math.max(0, Math.round(w.replicas ?? 0)); out.replicaBuild = w.replicaBuild ?? out.replicaBuild; out.replicaRebuild = w.summonRebuild ?? out.replicaRebuild;
+  }
+  let dr = Infinity, sr = Infinity;
+  for (const [slot, key] of [["shoulderL", 1], ["shoulderR", 2]] as const) {
+    const it = lo[slot], b = it ? BASE_BY_ID[it.base] : undefined;
+    if (!it || !b?.summon) continue;
+    const w = effectiveStats(it);
+    if (b.summon === "drones") { out.drones += Math.max(0, Math.round(w.drones ?? 0)); dr = Math.min(dr, w.summonRebuild ?? out.droneRebuild); }
+    if (b.summon === "swarm") { out.scrappers += Math.max(0, Math.round(w.scrappers ?? 0)); sr = Math.min(sr, w.summonRebuild ?? out.swarmRebuild); out.swarmKeys.push(key); }
+  }
+  if (Number.isFinite(dr)) out.droneRebuild = dr;
+  if (Number.isFinite(sr)) out.swarmRebuild = sr;
+  return out;
 }
 
 function BASE_STATS(id: string): Record<string, number> {
