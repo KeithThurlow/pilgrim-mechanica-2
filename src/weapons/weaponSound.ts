@@ -10,6 +10,8 @@ export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
   const variants = (n: number, seed: number, make: (r: () => number) => Float32Array) => Array.from({ length: n }, (_, i) => make(rng(seed * 131 + i)));
+  /** A list of modes ([hz, dB, dB/s]) moved by f in pitch. */
+  const hz = (m: [number, number, number][], f: number) => m.map(([h, d, r]) => [h * f, d, r] as [number, number, number]);
   // Rail (Keith 2026-10-26: a rail gun, not a laser): the slug's supersonic crack (a sharp tick and a split-second of
   // bright noise), a heavy thump under it and a low rolling boom; no beam whine on the shot.
   sfx.addSound("rail", variants(2, 41, (r) => S.mix(S.tick(r, 0.03, 1), S.noise(r, 0.06, 7000, 0.9, 0.0002), S.delay(S.noise(r, 0.05, 4200, 0.5, 0.0004), 0.012),
@@ -18,9 +20,24 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("railCharge", variants(1, 42, (r) => S.mix(S.whine(1.1, 160, 2100, 0.2), S.whine(1.1, 320, 4200, 0.06), S.servo(1.1, 600, 3200, 0.05), S.scale(S.crackle(r, 1.1, 0.16), 0.7))), () => v.railLevel * 0.6);
   // A rocket off the rail: a thump and a long hiss.
   sfx.addSound("rocket", variants(3, 43, (r) => S.mix(S.thump(0.12, 220, 90, 0.6), S.noise(r, 0.55, 2400 + r() * 800, 0.55, 0.004), S.delay(S.noise(r, 0.4, 900, 0.3, 0.05), 0.05))), () => v.rocketLevel);
-  // A big blast: a deep falling boom, dark noise and crackle.
-  sfx.addSound("blast", variants(4, 44, (r) => S.scale(S.mix(S.thump(0.7, 110 + r() * 30, 30, 1.1), S.noise(r, 0.6, 700 + r() * 300, 0.75, 0.002),
-    S.delay(S.lowPass(S.crackle(r, 0.5, 0.6), 1600), 0.04), S.delay(S.noise(r, 0.9, 260, 0.4, 0.05), 0.06)), 0.85)), () => v.blastLevel);
+  // A big blast (Keith 2026-11-02: the explosion in his reference clip, the sound at 11.2 s; built from its measurements,
+  // not the audio). A dark rolling rumble rather than a sharp crack: little above 2 kHz even at the start, one small crack
+  // 48 ms in, a 45-75 Hz body swelling for half a second in uneven surges every 50-150 ms while its pitch falls (74 to
+  // 53 Hz), dense mid noise bands at 200 Hz-1.5 kHz dying at about -25 dB/s, all gone by 1.45 s. The clip's body takes
+  // 0.57 s to peak; a short low thump and a burst of dark noise at the start here make the blast land when it goes off.
+  const BLAST_MID: [number, number, number][] = [[213, -27.2, -25], [312, -29.9, -24], [388, -32.1, -25], [572, -30.7, -28], [748, -37.9, -29], [931, -39.9, -27], [1063, -39.4, -25], [1273, -39.4, -32], [1509, -36.5, -35]];
+  sfx.addSound("blast", variants(4, 44, (r) => {
+    const f = 0.9 + r() * 0.2, len = 1.45;
+    const rumble = S.swell(r, S.lowPass(S.band(r, len, 25, 110, 0.7, 0.2, -17), 150), 0.08, 0.05, 0.15, 4, 12);
+    return S.scale(S.mix(
+      S.thump(0.45, 90 * f, 45 * f, 0.45),
+      S.lowPass(S.noise(r, 0.3, 700, 0.7, 0.002), 1000),
+      S.delay(S.band(r, 0.05, 2000, 6000, 0.12, 0.001, -200), 0.048),
+      S.ring(r, len, [[74 * f, -8, -17]], 0.6, { attack: 0.2, glide: 0.72 }),
+      S.scale(rumble, 0.75),
+      S.ring(r, 1.2, hz(BLAST_MID, f), 0.1, { attack: 0.01, detune: 0.04, jitter: 0.06 }),
+      S.band(r, 1.0, 200, 1200, 0.06, 0.01, -30)), 1.0);
+  }), () => v.blastLevel);
   sfx.addSound("mortar", variants(2, 45, (r) => S.mix(S.thump(0.3, 150, 55, 1.0), S.noise(r, 0.25, 1100, 0.5, 0.001), S.clang(r, 0.12, 0.12))), () => v.mortarLevel);
   // A rocket clip's swap (Keith 2026-10-31: a reload you can hear): the empty clip unlatching and dropping (a clank and a
   // short servo slide), then the full one seating (a heavy clunk with a latch tick).
@@ -32,7 +49,6 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   // sound for an unblocked hit and its 7 s sound for steel on steel). Built from measurements of those sounds (modes,
   // levels, decay rates, pitch bends), not from the audio: docs/decisions.md 2026-11-01 has the numbers. Every
   // variant rolls the whole set of modes a few percent up or down.
-  const hz = (m: [number, number, number][], f: number) => m.map(([h, d, r]) => [h * f, d, r] as [number, number, number]);
   // Unblocked hit (the 23 s slam): a 3.3 kHz crack first, then a 60-190 Hz body swelling to its peak 160 ms in with the
   // low mode bending down (153 to 92 Hz) and an inharmonic ring at 400 Hz to 1.4 kHz; choked off from 0.55 s rather than
   // ringing, with a small late knock. Two of the eight variants are the clip's other slam (20.97 s): no crack, a mid-heavy
@@ -72,4 +88,18 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
       S.delay(S.ring(r, 0.7, hz(BLOCK_BODY.slice(0, 5), f), 0.18, { attack: 0.01 }), 0.5 + r() * 0.04));
   }), () => v.swordLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
+}
+
+/**
+ * The explosion as one sound for every explosive (Keith 2026-11-02: "dial it up and down"): the volume and playback
+ * rate a blast of this radius plays "blast" at, scaled from blastSizeRef by doublings of the radius (bigger: louder and
+ * deeper, longer; smaller: quieter and higher, shorter). `size` multiplies the radius for a caller that wants its
+ * blasts to sound bigger or smaller than they hit.
+ */
+export function blastVoice(radius: number, v: WeaponValues, size = 1): { volume: number; rate: number } {
+  const k = Math.log2(Math.max(0.1, radius * size) / Math.max(0.1, v.blastSizeRef));
+  return {
+    volume: Math.max(0.2, Math.min(v.blastSizeMax, 1 + v.blastSizeLoud * k)),
+    rate: Math.max(0.5, Math.min(1.8, Math.pow(2, -v.blastSizePitch * k))) * (0.94 + Math.random() * 0.12),
+  };
 }
