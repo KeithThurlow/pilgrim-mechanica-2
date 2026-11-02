@@ -11,6 +11,10 @@ export const UNLOCK_DEFAULTS = {
   unlRadarMul1: 1.3, unlRadarMul2: 1.7, unlRadarMul3: 2.2,
   unlCrane1: 150, unlCrane2: 400,
   unlCraneMul1: 1.35, unlCraneMul2: 1.8,
+  // Salvage compactor (Keith 2026-11-02, placeholder values): each level packs salvage blocks smaller in the cargo grid
+  // (src/items/gridSize.ts salvage1-3) and banks the scrap at risk for more.
+  unlCompact1: 200, unlCompact2: 450, unlCompact3: 900,
+  unlCompactMul1: 1.1, unlCompactMul2: 1.25, unlCompactMul3: 1.5,
 };
 export type UnlockValues = typeof UNLOCK_DEFAULTS;
 const G = UNLOCK_GROUP;
@@ -26,9 +30,15 @@ export const UNLOCK_PARAMS: Param[] = [
   { key: "unlCrane2", label: "Crane speed 2 (scrap)", min: 0, max: 3000, step: 10, group: G },
   { key: "unlCraneMul1", label: "Crane speed 1 (× speed)", min: 1, max: 3, step: 0.05, group: G },
   { key: "unlCraneMul2", label: "Crane speed 2 (× speed)", min: 1, max: 3, step: 0.05, group: G },
+  { key: "unlCompact1", label: "Salvage compactor 1 (scrap)", min: 0, max: 3000, step: 10, group: G },
+  { key: "unlCompact2", label: "Salvage compactor 2 (scrap)", min: 0, max: 3000, step: 10, group: G },
+  { key: "unlCompact3", label: "Salvage compactor 3 (scrap)", min: 0, max: 3000, step: 10, group: G },
+  { key: "unlCompactMul1", label: "Salvage compactor 1 (× scrap banked)", min: 1, max: 3, step: 0.05, group: G },
+  { key: "unlCompactMul2", label: "Salvage compactor 2 (× scrap banked)", min: 1, max: 3, step: 0.05, group: G },
+  { key: "unlCompactMul3", label: "Salvage compactor 3 (× scrap banked)", min: 1, max: 3, step: 0.05, group: G },
 ];
 
-export type UnlockId = "pickup" | "radar" | "crane";
+export type UnlockId = "pickup" | "radar" | "crane" | "compactor";
 export interface UnlockDef {
   id: UnlockId;
   label: string;
@@ -42,6 +52,7 @@ export const UNLOCKS: UnlockDef[] = [
   { id: "pickup", label: "Extraction pickups", tip: "A quadcopter can lift you off a pad out in the sand, for a fee", price: ["unlPickup"] },
   { id: "radar", label: "Radar range", tip: "The convoy's radar sees further", price: ["unlRadar1", "unlRadar2", "unlRadar3"], mul: ["unlRadarMul1", "unlRadarMul2", "unlRadarMul3"] },
   { id: "crane", label: "Crane speed", tip: "The cranes slew, luff and hoist faster", price: ["unlCrane1", "unlCrane2"], mul: ["unlCraneMul1", "unlCraneMul2"] },
+  { id: "compactor", label: "Salvage compactor", tip: "Packs salvage into smaller blocks in the cargo grid, and it banks for more", price: ["unlCompact1", "unlCompact2", "unlCompact3"], mul: ["unlCompactMul1", "unlCompactMul2", "unlCompactMul3"] },
 ];
 export const UNLOCK_BY_ID: Record<string, UnlockDef> = Object.fromEntries(UNLOCKS.map((u) => [u.id, u]));
 
@@ -79,6 +90,12 @@ export class Unlocks {
   /** The multiplier the unlock gives now (1 at level 0, or for a switch). */
   mul(v: UnlockValues, id: UnlockId): number {
     const d = UNLOCK_BY_ID[id], l = this.level(id);
+    return d.mul && l > 0 ? v[d.mul[l - 1]] : 1;
+  }
+
+  /** The multiplier a level of an unlock gives (1 at level 0), for labs without an Unlocks (the inventory lab). */
+  static mulAt(v: UnlockValues, id: UnlockId, level: number): number {
+    const d = UNLOCK_BY_ID[id], l = Math.max(0, Math.min(d.price.length, Math.round(level)));
     return d.mul && l > 0 ? v[d.mul[l - 1]] : 1;
   }
 

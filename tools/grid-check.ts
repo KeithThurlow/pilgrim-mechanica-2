@@ -3,7 +3,9 @@
 // refuses, turning lets a long item into a wide gap, and the same items repack the same way.
 import { BASES } from "../src/items/bases";
 import { LOOT_DEFAULTS, rollLoot } from "../src/items/generate";
-import { GRID_CLASS_IDS, GRID_SIZE_DEFAULTS, classCells, gridClassOfBase, itemCells, type GridClass } from "../src/items/gridSize";
+import { Unlocks, UNLOCK_DEFAULTS } from "../src/expedition/unlocks";
+import { Expedition, EXPEDITION_DEFAULTS } from "../src/expedition/expedition";
+import { SALVAGE_LEVELS, salvageBlocks, salvageItem, salvageLevelOf, GRID_CLASS_IDS, GRID_SIZE_DEFAULTS, classCells, gridClassOfBase, itemCells, type GridClass } from "../src/items/gridSize";
 import { autoPlace, findSpot, fitsAt, footprint, itemAt, newGrid, placeAt, removeFrom, repack, syncGrid, usedCells, type Grid } from "../src/items/grid";
 
 const fails: string[] = [];
@@ -18,7 +20,7 @@ const cls = (id: string): GridClass => gridClassOfBase(BASES.find((b) => b.id ==
 const sz = (id: string) => { const s = classCells(cls(id)); return `${s.w}x${s.h}`; };
 // Keith's sizes (2026-11-02).
 must(sz("mg-medium") === "2x3", `hull minigun ${sz("mg-medium")}, want 2x3`);
-must(sz("rail-medium") === "2x8", `rail cannon ${sz("rail-medium")}, want 2x8`);
+must(sz("rail-medium") === "2x4", `rail cannon ${sz("rail-medium")}, want 2x4`);
 must(sz("hull-cuirass") === "3x2" && sz("hull-siege") === "4x2", "hulls not 3x2 / 4x2");
 must(sz("pack-standin") === "2x2", "pack not 2x2");
 must(sz("legs-rampart") === "2x3", "legs not 2x3");
@@ -26,7 +28,9 @@ must(sz("arm-rampart") === "2x2", "arm not 2x2");
 must(sz("smg-light") === "2x2" && sz("rifle-light") === "2x3", "held weapons not 2x2 / 2x3");
 must(sz("waist-drums") === "2x1", "waist not 2x1");
 must(sz("sh-missiles") === "2x2", "shoulder not 2x2");
-must(sz("sword-heavy") === "2x8" && sz("sword-light") === "1x8" && sz("sword-short") === "1x6", "swords not 2x8 / 1x8 / 1x6");
+must(sz("sword-heavy") === "2x4" && sz("sword-light") === "1x4" && sz("sword-short") === "1x3", "swords not 2x4 / 1x4 / 1x3");
+// 2x4 is the longest size (Keith 2026-11-02).
+for (const c of GRID_CLASS_IDS) { const s = classCells(c); must(Math.max(s.w, s.h) <= 4, `${c} is ${s.w}x${s.h}, longer than 4`); }
 must(`${classCells("repairKit").w}x${classCells("repairKit").h}` === "1x2" && classCells("protocol").w * classCells("protocol").h === 1, "repair kit not 1x2 or protocol not 1x1");
 // Every class's sliders exist.
 for (const c of GRID_CLASS_IDS) must(`grid_${c}_w` in GRID_SIZE_DEFAULTS && `grid_${c}_h` in GRID_SIZE_DEFAULTS, `${c} has no sliders`);
@@ -103,6 +107,20 @@ must(sy.placed.length + over.length === changed.length, "sync lost items");
 const st2 = newGrid(12, 4);
 must(syncGrid(st2, list, true, true).length === 0 && st2.rows > 4, "a growing grid didn't take everything");
 sound(st2, "grow");
+
+// Salvage compactor: blocks never grow with the level, banking is worth more each level, and the expedition banks at it.
+{
+  const area = (l: number) => { const c = itemCells(salvageItem(0, l, 1)); return c.w * c.h; };
+  for (let l = 1; l <= SALVAGE_LEVELS; l++) must(area(l) <= area(l - 1), `salvage block at level ${l} bigger than at ${l - 1}`);
+  const blocks = salvageBlocks(110, 25, 2);
+  must(blocks.length === 5 && blocks[4].stats.scrap === 10 && blocks.every((b) => salvageLevelOf(b) === 2), "salvage blocks split wrong");
+  for (let l = 1; l <= SALVAGE_LEVELS; l++) must(Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", l) > Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", l - 1), `compactor ${l} not worth more`);
+  const ex = new Expedition(EXPEDITION_DEFAULTS);
+  ex.launch(); ex.add({ kind: "scrap", amount: 100, label: "w" });
+  ex.scrapValueMul = Unlocks.mulAt(UNLOCK_DEFAULTS, "compactor", 3);
+  ex.pickedUp();
+  must(ex.bank.scrap === Math.floor(100 * UNLOCK_DEFAULTS.unlCompactMul3), `compactor 3 banked ${ex.bank.scrap}`);
+}
 
 if (fails.length) { console.error("grid-check FAILED:\n  " + fails.slice(0, 20).join("\n  ")); process.exit(1); }
 console.log(`grid-check ok: ${BASES.length} bases sized, ${placed} random placements sound, repack ${a.placed.length}/${list.length} in 10x8`);
