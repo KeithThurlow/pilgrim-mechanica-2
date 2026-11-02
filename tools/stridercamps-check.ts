@@ -44,6 +44,8 @@ step(0.1);
 if (!woke) fail("shooting a sleeping strider didn't wake its camp");
 step(8);
 if (s0 && (s0.frozen || s0.pos().distanceTo(p0!) < 5)) fail(`awake: frozen ${s0.frozen}, moved ${s0.pos().distanceTo(p0!).toFixed(1)} m`);
+// The convoy's turrets can see it (awake, in range); a sleeping one is not a threat.
+{ const pts: THREE.Vector3[] = []; sc.threats(0, 0, 400, pts); if (pts.length !== sc.count) fail(`turret threats ${pts.length}, striders ${sc.count}`); }
 // The camp's robots all gone: it fights on near the mech.
 camps.delete("c1");
 step(1);

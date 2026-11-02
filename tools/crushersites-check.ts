@@ -58,6 +58,7 @@ step(1);
 if (cs.count !== 1) fail(`one site near: ${cs.count} crushers (want 1)`);
 const c0 = cs.cf.pack.list[0];
 // 3. Nobody to hunt: it eats the spots.
+{ const pts: THREE.Vector3[] = []; cs.threats(0, 0, 600, pts); if (pts.length !== cs.count) fail(`turret threats ${pts.length}, crushers ${cs.count}`); }
 step(40);
 const eaten = spots.filter((s) => s.done).length;
 console.log(`grazing 40 s: ${eaten}/4 spots eaten, crusher ${c0 ? Math.round(Math.hypot(c0.x - 200, c0.z)) : "-"} m from the site`);

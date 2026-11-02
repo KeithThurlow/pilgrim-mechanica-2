@@ -429,7 +429,10 @@ export class ExpeditionLoop {
     const mid = this.convoy.platforms[Math.floor(this.convoy.platforms.length / 2)];
     this.swarms.threats(mid.x, mid.z, 250, this.turretPts, max);
     this.banditCamps.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
-    return this.bands.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    this.bands.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    this.droids.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    this.striders.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    return this.crushers.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
   }
 
   update(dt: number, inp: LoopInput) {
