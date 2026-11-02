@@ -297,6 +297,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Hot sand fades sooner (Keith; Claude on `claude/project-thread-ain460`)
+Beam sand glow ~3x shorter: `heatCool` 6→2.2 s (glow ~2.7 s, was ~7.6), `robotBeamScorch` 3→1.5 s, night light `heatLight` 900→350 (the light barely read; kept dim, slider still there). Files: groundHeat.ts, robots.ts, tools/heat-check.ts bounds. `npm test` run.
 ### 2026-11-02 · Keith's block poses for all three swords (Keith; Claude on `claude/project-thread-yofecw`)
 - `SWORD_POSES`: a posed `block` key for the Breaker, short sword and buster (from the pose lab); the rest of the set is unchanged. `src/weapons/swordPoses.ts`. Checked: pose-check, sword-check, npm test. Who: agent.
 ### 2026-11-02 · Keith's poses for all three swords; a relaxed return that stays out of the ground (Keith; Claude on `claude/project-thread-yofecw`)
