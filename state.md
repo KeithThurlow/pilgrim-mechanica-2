@@ -297,6 +297,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Pose lab: the rotate gizmo easier to find; the panel off the repair badge (Keith; Claude on `claude/project-thread-yofecw`)
+- Keith couldn't find the rotation, and the panel sat under the repair kit badge at the bottom middle. The Gizmo row (Move hand G, Rotate blade T, Bend elbow E) now always shows in Pose, saying to click a key when none is picked; G/T/E work while the time slider has focus (it swallowed them before); the gizmo starts bigger (`poseGizmo` 1); the panel is docked on the left below the HUD.
+- `labs/pose/main.ts`, `index.html`. Checked: headless run (T switches the gizmo to rotate, rings drawn on the hand), npm test. Who: agent.
 ### 2026-11-01 · Pose lab: pose each sword's keys with a gizmo (Keith; Claude on `claude/project-thread-yofecw`)
 - New `labs/pose/`: pick a weapon, fight two steel dummies and cutouts (Tab locks), P pauses the sword and poses it: moves, scrub, slow play, keys grabbed with three.js TransformControls (hand, blade, elbow), close and far forms, an orbit camera. Copy pose puts JSON on the clipboard; Paste loads it; Report carries it.
 - `src/weapons/swordPoses.ts`: posed keys per sword base id (`SWORD_POSES`, the lab's live edits on top); `sword.ts` applies them in `clipKeys` (a cut key's posed blade read back as yaw and pitch so the cut still turns; a posed spine `upFix`), `keyTime`; `SwordStats.pose` from the item's base (`GunStats.base`). `arsenal.swordHold`/`swordFrame`, `combatLab` `drive` and `iso`.
