@@ -4,7 +4,7 @@
 // - cannon-hull: a tank-gun look: a long barrel with a fume extractor and a thermal sleeve, a big breech, a
 //   mantlet. Recoil 0.4 m.
 // Root at the trunnion on the barrel's axis. Sockets Muzzle_0, Eject, Mount, Glow_n (barrel heat, lamps).
-import { Build, Piece, v, X, Y, Z, lathe, loftZ, octRing, plate, boltRow, boltCircle, hazard, chevrons, stencilDigits, heatRings, louvres, lightStrip, serrations } from "../kit";
+import { Build, Piece, v, X, Y, Z, lathe, loftZ, octRing, plate, prism, bolt, boltRow, boltCircle, hazard, chevrons, stencilDigits, heatRings, louvres, lightStrip, serrations } from "../kit";
 import { cowl, laserEmitter, readyLamp, trunnion } from "./common";
 import type { ModelDef } from "../parts";
 
@@ -51,37 +51,65 @@ export function autocannonHull(sd: 1 | -1 = -1, seed = 10): ModelDef {
   return B.def();
 }
 
-/** Hull cannon: a long tank gun with a fume extractor and a big breech. */
+/**
+ * The breach cannon (hull; src/weapons/cannon.ts), rebalanced (Keith 2026-11-02: "you'd expect to have shells and
+ * casings and potentially a large magazine sitting behind ... the weight of this thing"). The weight sits behind the
+ * shoulder: an armoured autoloader bustle with a rack of ready shells showing through its open outboard flank, a
+ * counterweight plate at the back, a spent casing chute and a catcher basket under the bustle. Ahead: a short
+ * mantlet, two recuperator cylinders over the barrel and a stubby barrel (fume extractor, two-baffle brake) that
+ * reaches 3 m, not the old 4.8. The gun axis hangs 1 m outboard of the shoulder. Recoil 0.4 m.
+ */
 export function cannonHull(sd: 1 | -1 = -1, seed = 11): ModelDef {
   const B = new Build(seed, 2.4, sd), P = B.piece("Body"), o = B.out, rd = B.read;
-  cowl(P, -0.6, 0.4, 0.5, 0.42, 0);
-  trunnion(B, P, 0.18, 0.5, v(-sd * 0.48, 0, -0.05));
-  // Mantlet: a battered armour block on the front with a bolt circle.
-  loftZ(P, [[0.35, octRing(0.44, 0.38, 0.12, 0.04)], [0.6, octRing(0.38, 0.32, 0.1, 0.04)]], "plating");
-  boltCircle(P, v(0, 0, 0.6), Z(), 0.26, 10, 0.018);
-  plate(P, v(sd * 0.5, 0, -0.1), rd.clone().negate(), Y(), 0.8, 0.5, 0.05, "secondary");
-  stencilDigits(P, v(sd * 0.555, 0.03, -0.1), rd, Y(), 0.24, "105");
-  serrations(P, v(0, 0.42, -0.2), Z(), X(), 0.5, 0.5, 6, 0.03, "dark");
-  hazard(P, v(sd * 0.505, -0.3, 0.25), rd, Y(), 0.4, 0.08, 6);
-  boltRow(P, v(sd * 0.505, 0.33, -0.55), v(sd * 0.505, 0.33, 0.3), 5, o, 0.022);
-  readyLamp(P, v(-sd * 0.3, 0.42, -0.4), Y(), 0.032);
-  B.socket("Glow_1", v(-sd * 0.3, 0.45, -0.4));
-  lightStrip(P, v(-sd * 0.3, 0.42, 0.1), Z(), X(), 0.3, 0.03);
-  plate(P, v(-sd * 0.15, -0.43, -0.2), X(), Z(), 0.4, 0.2, 0.03, "dark", { bevel: 0 });
-  B.socket("Eject", v(-sd * 0.15, -0.46, -0.2), Y().negate());
-  laserEmitter(B, P, v(sd * 0.3, -0.3, 0.62), 0.05);
-  // The recoiling gun: breech block, barrel, thermal sleeve bands, fume extractor, muzzle brake.
+  // Mantlet housing round the breech, just ahead of the shoulder.
+  cowl(P, -0.4, 0.5, 0.48, 0.42, 0);
+  trunnion(B, P, 0.18, 0.55, v(-sd * 0.46, 0, 0));
+  loftZ(P, [[0.42, octRing(0.42, 0.36, 0.12, 0.04)], [0.62, octRing(0.34, 0.3, 0.1, 0.04)]], "plating");
+  boltCircle(P, v(0, 0, 0.62), Z(), 0.24, 10, 0.018);
+  // The autoloader bustle behind the shoulder: taller and wider than the mantlet, battered top, tapering to the back.
+  loftZ(P, [
+    [-1.5, octRing(0.44, 0.42, 0.13, 0.06, 0.05), 0.06],
+    [-1.25, octRing(0.52, 0.5, 0.15, 0.06, 0.05), 0.08],
+    [-0.42, octRing(0.5, 0.48, 0.14, 0.05, 0.04), 0.06],
+  ], "plating");
+  serrations(P, v(0, 0.58, -0.85), Z(), X(), 0.6, 0.55, 7, 0.03, "dark");
+  readyLamp(P, v(-sd * 0.3, 0.585, -0.55), Y(), 0.032);
+  B.socket("Glow_1", v(-sd * 0.3, 0.615, -0.55));
+  lightStrip(P, v(-sd * 0.3, 0.585, -1.05), Z(), X(), 0.3, 0.03);
+  // The ready rack: shells lying fore and aft in an open frame along the outboard flank, brass cases, dark noses.
+  const rx = sd * 0.53;
+  plate(P, v(rx, 0.06, -0.93), rd.clone().negate(), Y(), 0.98, 0.8, 0.04, "dark", { bevel: 0 });
+  for (const y of [0.42, -0.3]) plate(P, v(rx + sd * 0.1, 0.06 + y, -0.93), rd.clone().negate(), o, 1.0, 0.2, 0.05, "secondary", { bevel: 0.01 });
+  for (let i = 0; i < 3; i++) {
+    const y = 0.28 - i * 0.22;
+    lathe(P, v(rx + sd * 0.11, 0.06 + y, -1.36), Z(), [[0, 0], [0, 0.085], [0.04, 0.09], [0.56, 0.09], [0.58, 0.08], [0.58, 0]], "trim", { n: 10, secs: ["trim", "trim", "trim", "trim", "trim"] });
+    lathe(P, v(rx + sd * 0.11, 0.06 + y, -0.78), Z(), [[0, 0], [0, 0.08], [0.1, 0.07], [0.2, 0.035], [0.24, 0]], "dark", { n: 10 });
+  }
+  stencilDigits(P, v(rx + sd * 0.12, 0.43, -1.25), rd, Y(), 0.12, "105");
+  hazard(P, v(sd * 0.505, -0.35, 0.25), rd, Y(), 0.4, 0.08, 6);
+  boltRow(P, v(sd * 0.505, 0.33, -0.3), v(sd * 0.505, 0.33, 0.4), 4, o, 0.022);
+  // Counterweight: a thick bolted plate across the back of the bustle.
+  plate(P, v(0, 0.06, -1.5), X(), Y(), 0.82, 0.78, 0.12, "secondary", { bevel: 0.03 });
+  for (const x of [-0.28, 0, 0.28]) for (const y of [-0.22, 0.34]) bolt(P, v(x, 0.06 + y, -1.625), Z().negate(), 0.03);
+  // Spent casings: a chute out of the bustle's belly and a wire basket under it with a couple of empty cases.
+  prism(P, v(-sd * 0.12, -0.42, -0.7), v(-sd * 0.12, -0.62, -0.9), octRing(0.13, 0.11, 0.03), "dark");
+  B.socket("Eject", v(-sd * 0.12, -0.64, -0.92), Y().negate());
+  loftZ(P, [[-1.32, octRing(0.24, 0.13, 0.04)], [-0.95, octRing(0.24, 0.13, 0.04)]], "mechanical", { y0: -0.58, x0: sd * 0.12 });
+  for (let i = 0; i < 2; i++) lathe(P, v(sd * (0.04 + i * 0.16), -0.46, -1.28 + i * 0.05), Z(), [[0, 0], [0, 0.07], [0.3, 0.075], [0.3, 0]], "trim", { n: 8 });
+  // Recuperators over the barrel and the laser under the mantlet.
+  for (const x of [-0.17, 0.17]) lathe(P, v(x, 0.27, 0.55), Z(), [[0, 0], [0, 0.075], [0.5, 0.075], [0.55, 0.05], [0.55, 0]], "mechanical", { n: 10 });
+  laserEmitter(B, P, v(sd * 0.3, -0.3, 0.64), 0.05);
+  // The recoiling gun: breech block (inside the housing), barrel, thermal sleeve bands, fume extractor, muzzle brake.
   const T = B.piece("Recoil", v());
-  loftZ(T, [[-1.15, octRing(0.24, 0.24, 0.06)], [-0.55, octRing(0.26, 0.26, 0.07)]], "mechanical");
-  plate(T, v(0, 0, -1.16), X(), Y().negate(), 0.36, 0.36, 0.04, "dark", { bevel: 0.015 });
-  barrel(T, 0.55, 4.0, 0.1, 0.36);
-  T.heatAt = (p) => (p.z > 2.6 ? 0.6 : 0);
-  lathe(T, v(0, 0, 2.2), Z(), [[0, 0.1], [0.12, 0.17], [0.55, 0.17], [0.7, 0.1]], "secondary", { n: 12, ring: false });
+  loftZ(T, [[-0.95, octRing(0.24, 0.24, 0.06)], [-0.3, octRing(0.26, 0.26, 0.07)]], "mechanical");
+  barrel(T, 0.6, 3.0, 0.11, 0.38);
+  T.heatAt = (p) => (p.z > 2.0 ? 0.6 : 0);
+  lathe(T, v(0, 0, 1.45), Z(), [[0, 0.11], [0.1, 0.18], [0.45, 0.18], [0.58, 0.11]], "secondary", { n: 12, ring: false });
   T.heatAt = () => 0;
-  for (const z of [0.9, 1.35, 1.8]) lathe(T, v(0, 0, z), Z(), [[0, 0.1], [0, 0.135], [0.12, 0.135], [0.12, 0.1]], "dark", { n: 10, ring: true });
+  for (const z of [0.85, 1.2]) lathe(T, v(0, 0, z), Z(), [[0, 0.11], [0, 0.145], [0.1, 0.145], [0.1, 0.11]], "dark", { n: 10, ring: true });
   B.move({ node: "Recoil", kind: "slide", travel: 0.4 });
-  B.socket("Recoil/Muzzle_0", v(0, 0, 4.05), Z());
-  B.socket("Recoil/Glow_0", v(0, 0, 3.3));
-  B.socket("Mount", v(-sd * 0.98, 0, -0.05));
+  B.socket("Recoil/Muzzle_0", v(0, 0, 3.05), Z());
+  B.socket("Recoil/Glow_0", v(0, 0, 2.5));
+  B.socket("Mount", v(-sd * 1.0, 0, 0));
   return B.def();
 }

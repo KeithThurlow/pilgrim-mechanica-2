@@ -66,6 +66,7 @@ export function makeSheet(field: Ground, muzzle: THREE.Vector3, d: THREE.Vector3
     top: (t) => g0 + slope * t + f.height,
     line: f.line === undefined ? undefined : f.flat ? (t) => g0 + slope * t + f.line! : (t) => Math.max(g0 + slope * t + f.line!, muzzle.y + rise * t),
     ground: (x, z) => field.height(x, z),
+    aim: f.flat && aim && aimFlat > 1 ? { y0: muzzle.y, t: aimFlat, y: aim.y } : undefined,
   };
 }
 
@@ -114,14 +115,21 @@ function rayFan(s: Sheet, t: Hittable | null, steel: Steel | null, out: SheetHit
     return steel!.hit(o, d, max, steelAt, steelN) ? o.distanceTo(steelAt) : -1;
   };
   const material: PenMaterial = !t ? "steel" : t.material ?? (t.surface === "flesh" ? "flesh" : "vehicle");
+  // Rows: five spread floor to top, plus (a flat shot with an aim) three from the muzzle through the aim's height.
+  const rows: [number, number][] = [];
+  for (let j = 0; j < 5; j++) { const k = j / 4; rows.push([b0 + (t0 - b0) * k, b1 + (t1 - b1) * k]); }
+  if (s.aim) {
+    const a = s.aim, reach = s.len / a.t;
+    for (const dy of [-0.8, 0, 0.8]) rows.push([a.y0, a.y0 + (a.y + dy - a.y0) * reach]);
+  }
   for (let i = 0; i < 3; i++) {
     const off = (i - 1) * s.half;
-    for (let j = 0; j < 5; j++) {
-      const k = j / 4, y0 = b0 + (t0 - b0) * k, y1 = b1 + (t1 - b1) * k;
-      const o = fanO.set(x0 + s.dz * off, y0, z0 - s.dx * off);
-      const d = fanD.set(x1 + s.dz * off - o.x, y1 - y0, z1 - s.dx * off - o.z);
-      const len = d.length();
-      d.divideScalar(len);
+    for (const [y0, y1] of rows) {
+      {
+        const o = fanO.set(x0 + s.dz * off, y0, z0 - s.dx * off);
+        const d = fanD.set(x1 + s.dz * off - o.x, y1 - y0, z1 - s.dx * off - o.z);
+        const len = d.length();
+        d.divideScalar(len);
       let base = 0;
       for (let n = 0; n < 6 && base < len; n++) {
         const from = fanF.copy(o).addScaledVector(d, base);
@@ -144,6 +152,7 @@ function rayFan(s: Sheet, t: Hittable | null, steel: Steel | null, out: SheetHit
           h.chord = Math.max(h.chord, chord);
         }
         base = exit + 0.05;
+      }
       }
     }
   }
