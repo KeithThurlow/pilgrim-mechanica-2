@@ -136,8 +136,8 @@ export const NIGHT_LIGHT_DEFAULTS = {
   robotGlow: 0.45,
   robotPool: 0.2,
   robotBeam: 0.06,
-  robotReal: 90,
-  robotSquare: 1,
+  robotReal: 150,
+  robotSquare: 0,
   robotScanLine: 0.9,
   robotScanRate: 0.8,
   // Convoy lights
@@ -252,7 +252,7 @@ export const NIGHT_LIGHT_PARAMS: Param[] = [
   { key: "robotPool", label: "Eye pool", min: 0, max: 3, step: 0.01, group: GR },
   { key: "robotBeam", label: "Eye beam haze", min: 0, max: 1, step: 0.01, group: GR },
   { key: "robotReal", label: "Eye real light", min: 0, max: 2000, step: 10, group: GR, tip: "The nearest few eyes get real red spot lights" },
-  { key: "robotSquare", label: "Square searchlight", min: 0, max: 1, step: 1, group: GR, tip: "Keith 2026-11-02: 1 a square pool with corner brackets under a four-sided beam (robotic); 0 the round cone" },
+  { key: "robotSquare", label: "Square searchlight", min: 0, max: 1, step: 1, group: GR, tip: "1 a square pool with corner brackets under a four-sided beam and a scan line; 0 the round light (Keith 2026-11-02: the square read as a texture on the ground, round is back)" },
   { key: "robotScanLine", label: "Scan line", min: 0, max: 3, step: 0.05, group: GR, tip: "A thin bright line sweeping across the searchlight's pool, like a scanner (share of the pool's brightness)" },
   { key: "robotScanRate", label: "Scan line sweeps per second", min: 0.1, max: 4, step: 0.05, group: GR },
 
