@@ -297,6 +297,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Keith's Breaker poses, round 2 (Keith; Claude on `claude/project-thread-yofecw`)
+- Keith ("pretty happy with how the breaker animations are looking"): rest, the full sweep's drive and aStart added to `SWORD_POSES` (`src/weapons/swordPoses.ts`). Still the code's: the full sweep's aMid and cock. The buster and short sword now start from the Breaker's poses (`INHERIT`), only keys posed for them override; their timing, reach, heft and parry stay their own. npm test. Who: agent.
 ### 2026-11-02 · Footprints press the mesh; skids in the foot's shape (Keith; Claude on `claude/project-thread-j1a1o6`)
 - Keith: the shaped prints read as painted on, and skids didn't use the foot brush. Cause: the detail patch's vertices are 25 cm apart and low-passed one vertex apart, so a foot-sized print reached about one vertex (probe: 1.4 vertices past half depth for the Rampart's sole, 3.9 for the old oval); the rest was per-pixel shading. Now the patch has a dense middle (`patchFineArea` 32 m, `patchFineSub` 2: 12.5 cm, the ground bilinear between samples, the dent low-pass at the local spacing): about 15–22 vertices pressed per print. 148k to 263k patch vertices, GPU only (no extra CPU ground sampling; not in the shadow pass with the shadow terrain on). Skids stamp the foot's sole along the slide (`GroundMarks.skid`, every 10 cm, Dash furrow depth), the oval furrow without a shape.
 - `src/world/detailPatch.ts`, `src/fx/dents.ts` (sliders), `src/fx/groundMarks.ts`, `src/game/mechUnit.ts`. npm test; walker lab compiles and draws in WebGL (software GPU).
