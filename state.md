@@ -297,6 +297,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Footprints and tracks remembered off screen; softer fresh prints (Keith; Claude on `claude/project-thread-j1a1o6`)
+- Keith: prints (and the convoy's tracks) vanished as soon as they left the screen; fresh prints a little harsh. Marks are kept after they leave the dent window (`src/fx/dentMemory.ts`, two rings: footprints and skids, and ruts, furrows and craters; `dentMemory` 6000 each, `dentMemoryRange` 250 m) and pressed in again, healed by their age over the surface's life (`dentMemoryLife` ×1), when they come back into it; minigun rounds aren't kept. Cost: one box test per kept mark a frame, about 80 bytes a mark; re-pressing happens only at the window's edge. Prints: wall 10 → 14 cm, berm spread 30 → 36 cm.
+- `src/fx/dentMemory.ts`, `src/fx/dents.ts`, `src/fx/groundMarks.ts`; `tools/dents-check.ts` (kept, re-pressed healed only when back, rings separate, forgotten far or healed). npm test.
 ### 2026-11-02 · Keith's block poses for all three swords (Keith; Claude on `claude/project-thread-yofecw`)
 - `SWORD_POSES`: a posed `block` key for the Breaker, short sword and buster (from the pose lab); the rest of the set is unchanged. `src/weapons/swordPoses.ts`. Checked: pose-check, sword-check, npm test. Who: agent.
 ### 2026-11-02 · Keith's poses for all three swords; a relaxed return that stays out of the ground (Keith; Claude on `claude/project-thread-yofecw`)

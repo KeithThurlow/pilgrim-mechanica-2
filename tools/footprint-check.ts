@@ -68,7 +68,7 @@ if (rampart) {
   ok(at(b0, inX, inZ)[0] > dep * 0.95, `the sole's middle presses full depth (${f2(at(b0, inX, inZ)[0] * 100)} cm)`);
   // The toes: a point on the sole well forward, and the gap beside it.
   let toe: [number, number] | null = null, gap: [number, number] | null = null;
-  for (let z = s.length; z > 0.2 && !toe; z -= 0.02) for (let x = -0.6; x <= 0.6; x += 0.02) if (footSdf(s, x, z) < -0.03) { toe = [x, z]; break; }
+  for (let z = s.length; z > 0.2 && !toe; z -= 0.02) for (let x = -0.6; x <= 0.6; x += 0.02) if (footSdf(s, x, z) < -0.06) { toe = [x, z]; break; }
   if (toe) for (let x = toe[0]; x <= toe[0] + 0.5; x += 0.01) if (footSdf(s, x, toe[1]) > 0.06) { gap = [x, toe[1]]; break; }
   ok(!!toe && at(b0, toe[0], toe[1])[0] > dep * 0.5, `a toe tip presses (${toe ? f2(at(b0, toe[0], toe[1])[0] * 100) : "-"} cm at ${toe?.map(f2)})`);
   ok(!!gap && at(b0, gap[0], gap[1])[0] < dep * 0.05, `the sand beside the toe stays up (${gap ? f2(at(b0, gap[0], gap[1])[0] * 100) : "-"} cm)`);
