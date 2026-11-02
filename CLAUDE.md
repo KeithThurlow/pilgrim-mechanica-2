@@ -114,6 +114,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed. Energy bars at the left edge
   (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no weapons while sprinting.
+  Energy weapons draw on the hull's reactor instead, a separate cyan bar beside them (Keith 2026-11-02; Your mech › Reactor).
   Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
   is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
@@ -121,7 +122,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
   the mech), `?proto=split:3,rate:2,multi:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced; multi: side by side) or `?proto=splitter,overclock,doubleShot,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
   takes `?biome=` too. Robots lab: `?beam` (no packs; two excavators stopped either side of the mech, about to charge
-  their beams, which sweep after the mech for `robotBeamSweep` s), `?pulse` (one big walker 10 m off, about to fire its terraform pulse), `?lineup` (a frozen row of each kind, the four weapon quads beside the mech), `?quads` (one weapon quad of each weapon coming in), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  their beams, which sweep after the mech for `robotBeamSweep` s), `?pulse` (one big walker 10 m off, about to fire its terraform pulse), `?bigdeath[=s]` (a big walker 12 m off with robots round its feet, destroyed after s: watch its core go unstable and blow), `?lineup` (a frozen row of each kind, the four weapon quads beside the mech), `?quads` (one weapon quad of each weapon coming in), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).

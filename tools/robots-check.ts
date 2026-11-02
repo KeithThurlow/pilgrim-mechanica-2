@@ -329,7 +329,7 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   d.onDeathBlast = (e) => { blasts.push(t); if (!(e.radius > 0 && e.damage > 0)) fail("death blast event without radius or damage"); };
   d.v.robotBigDeathOwnDamage = 5000;
   d.damage(0, 1e6, 1, 0);
-  for (let s = 0; s < 4 * 120; s++) { d.update(dt, far, () => {}); t += dt; }
+  for (let s = 0; s < (2 * ROBOT_DEFAULTS.robotBigDeathDelay + 1) * 120; s++) { d.update(dt, far, () => {}); t += dt; }
   console.log(`death blast: ${blasts.length} blasts at ${blasts.map((x) => x.toFixed(2)).join(", ")} s, ${d.count} big ones left`);
   if (blasts.length < 1) fail("a big one died with no death blast");
   else if (Math.abs(blasts[0] - ROBOT_DEFAULTS.robotBigDeathDelay) > 0.05) fail("the death blast didn't wait its delay");
@@ -340,7 +340,7 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   o.spawn(1, 260, 260, 0);
   let n = 0; o.onDeathBlast = () => n++;
   o.damage(0, 1e6, 1, 0);
-  for (let s = 0; s < 120; s++) o.update(dt, far, () => {});
+  for (let s = 0; s < (ROBOT_DEFAULTS.robotBigDeathDelay + 1) * 120; s++) o.update(dt, far, () => {});
   if (n) fail("death blast went off with robotBigDeathOn 0");
 }
 

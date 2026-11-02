@@ -321,7 +321,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "burnTick", label: "Burn tick (s)", min: 0.05, max: 1, step: 0.01, group: SG, tip: "Damage is applied this often" },
   { key: "burnMax", label: "Burning targets at most", min: 8, max: 1000, step: 8, group: SG, tip: "A safety cap; the one with least time left is dropped for a new one" },
   { key: "burnFlames", label: "Burn flames and smoke", min: 0, max: 3, step: 0.05, group: SG },
-  { key: "capRefill", label: "Capacitor bank: refill + (always)", min: 0, max: 3, step: 0.05, group: SG, tip: "The energy bars refill this much faster" },
+  { key: "capRefill", label: "Capacitor bank: refill + (always)", min: 0, max: 3, step: 0.05, group: SG, tip: "The reactor regenerates this much faster (energy weapons' pool; not the dash's bars)" },
   { key: "capBars", label: "Discharge: bars refilled", min: 1, max: 8, step: 1, group: SG, tip: "The capacitor bank's key tops up this many bars at once, the nearest full first" },
   { key: "capCooldown", label: "Discharge cooldown (s)", min: 1, max: 90, step: 0.5, group: SG },
 

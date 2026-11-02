@@ -32,6 +32,10 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   // first hit could be bassier): the hit (thump, dark burst, crack, the first of the mids), the tail (the rolling
   // rumble, the falling low ring, the mid bands' decay) and a sub boom only big blasts add. Small blasts play hit and
   // tail as one, as before; bigger ones thin the tail and add the boom (blastVoice).
+  // A dying walker's core going unstable (Keith 2026-11-02): a rising, crackling whine over the countdown (2.8 s at rate
+  // 1, stretched to the delay) and a short two-tone beep on each blink of its warning ring.
+  sfx.addSound("coreWhine", variants(1, 61, (r) => S.mix(S.whine(2.8, 90, 1400, 0.22), S.whine(2.8, 181, 2790, 0.07), S.scale(S.crackle(r, 2.8, 0.2), 0.8))), () => v.blastLevel * 0.3);
+  sfx.addSound("coreBeep", variants(1, 62, () => S.mix(S.whine(0.06, 1650, 1650, 0.3), S.delay(S.whine(0.05, 2200, 2200, 0.22), 0.06))), () => v.blastLevel * 0.2);
   sfx.addSound("blast", variants(4, 44, (r) => {
     const f = 0.9 + r() * 0.2;
     return S.mix(

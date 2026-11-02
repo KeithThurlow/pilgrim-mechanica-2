@@ -233,11 +233,13 @@ export class Arsenal implements MechWeapons {
     // sliders stay live), a capacitor's faster refill.
     for (const g of this.unit.upper.guns) { g.rateMul = 1; g.spinCut = 0; g.ammoMul = 1; }
     this.unit.dash.refillMul = 1;
+    this.unit.reactor.refillMul = 1;
     for (const sh of this.shoulders) {
       if (!sh.gear) continue;
       const st = sh.gear.stats, gi = this.gunOf(sh);
       if (st.family === "feed" && (gi === 0 || gi === 1)) this.unit.upper.guns[gi].ammoMul *= 1 + st.ammo;
-      if (st.family === "power") this.unit.dash.refillMul += st.refill;
+      // Power feeds the reactor (Keith 2026-11-02: kept apart from the dash's kinetic bars).
+      if (st.family === "power") this.unit.reactor.refillMul += st.refill;
     }
   }
 
@@ -803,7 +805,7 @@ export class Arsenal implements MechWeapons {
     for (const mat of sh.model?.glow ?? []) mat.opacity = lit ? 0.95 : gear.cool <= 0 ? 0.5 : 0.12;
     if (!pressed || !gear.press()) return;
     const st = gear.stats;
-    if (st.family === "power") u.dash.refillNow(st.bars);
+    if (st.family === "power") u.reactor.refillNow(st.bars);
     if (sh.model) sh.model.recoil.position.y = -0.12;
     bf.sfx.playSound("railCharge", u.sim.pelvis, 0.5, st.family === "power" ? 2.6 : 1.9);
     this.onFire?.(sh.weapon);
@@ -958,7 +960,7 @@ export class Arsenal implements MechWeapons {
     const hl = Math.hypot(d.x, d.z) || 1, px = d.z / hl, pz = -d.x / hl;
     for (let k = 0; k < pairs; k++) {
       const off = (k - (pairs - 1) / 2) * gap;
-      const sh = this.shells.fire(u.team, pairs > 1 ? new THREE.Vector3(m.x + px * off, m.y, m.z + pz * off) : m, d, st, breach ? v.cannonPen : v.acPen);
+      const sh = this.shells.fire(u.team, pairs > 1 ? new THREE.Vector3(m.x + px * off, m.y, m.z + pz * off) : m, d, st, breach ? 0 : v.acPen);
       sh.ap = st.ap;
       if (breach) { sh.blast = st.blast ?? 0; sh.gravity = v.cannonGravity; }
     }
@@ -1179,6 +1181,16 @@ export class Arsenal implements MechWeapons {
       top: (t) => ay + ((by - ay) * t) / fl + v.acSheetUp, ground: (x, z) => bf.field.height(x, z),
     };
     const d = this.tmp2.set(b.x - a.x, b.y - a.y, b.z - a.z).normalize();
+    // A breach cannon shell (Keith 2026-11-02: it went through what it hit and burst behind it) never tears through: it
+    // stops on the first body its sheet meets, at the point the line enters it, and bursts there (breachBurst applies
+    // the direct hit, then the blast).
+    if (s.blast > 0) {
+      const look = bf.resolveSheet(s.team, sheet, s.damage, { half: v.acSheetHalf, height: v.acSheetUp, pen: 1e6, pierce: s.ap }, d, false);
+      const first = look.result.steps[0];
+      if (!first) return null;
+      const t = Math.max(0, Math.min(1, first.hit.along / fl));
+      return { at: this.tmp.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t), t: first.hit.target ?? null };
+    }
     // The damage this shell still carries, by the budget it has left (the walk's share is relative to what it's given).
     const k = s.pen0 > 0 ? Math.pow(Math.max(0, s.pen / s.pen0), v.penCurve) : 1;
     const shot = bf.resolveSheet(s.team, sheet, s.damage * k, { half: v.acSheetHalf, height: v.acSheetUp, pen: Math.max(1e-3, s.pen), pierce: s.ap }, d, true,
@@ -1209,7 +1221,8 @@ export class Arsenal implements MechWeapons {
    *  hit it), then a real explosion through the shared blast (crater, wave, the blast sound scaled by its radius). */
   private breachBurst(s: Shell, at: THREE.Vector3, t: Hittable | null, swept: boolean) {
     const d = this.dir.copy(s.vel).normalize();
-    if (t) { if (!swept) t.damage(s.damage, at, d, s.ap); this.bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 14, 9); }
+    void swept; // the breach sweep never applies damage itself: the struck body always takes the shell here
+    if (t) { t.damage(s.damage, at, d, s.ap); this.bf.gunFx.sparksAt(at, this.tmp2.copy(d).negate(), 14, 9); }
     this.blast(at, s.blast, s.damage * this.v.cannonBlastShare, s.ap, "rocket");
   }
 

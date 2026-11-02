@@ -17,7 +17,7 @@ import { InfantryTarget } from "../../src/combat/infantryTarget";
 import { loadBanditVat } from "../../src/combat/banditVat";
 import { Warband, type WarbandValues } from "../../src/combat/warband";
 import { robotRagdoll, BANDIT_PARTS, BANDIT_JOINTS } from "../../src/physics/bodies";
-import { fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
 
 export interface StressValues {
   stressSpawnFrom: number;
@@ -47,6 +47,7 @@ export class StressRobots {
     const sw = this.sw = new RobotSwarm(V, field);
     sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(sw);
+    coreWarnFx(lab.bf, this.draw.coreWarn);
     lab.app.scene.add(this.draw.group);
     this.target = new RobotTarget(sw, 3);
     bf.targets.push(this.target);

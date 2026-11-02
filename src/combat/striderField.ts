@@ -14,7 +14,8 @@ import { StriderTarget } from "./striderTarget";
 import { StriderFx } from "./striderFx";
 import { striderRagdoll } from "./striderRagdoll";
 import { footShape } from "../fx/footprint";
-import { fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
+import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
 
 export type StriderFieldValues = StriderValues & RobotTearValues & { striderBeamReach: number };
@@ -42,6 +43,9 @@ export class StriderField {
     if (register) bf.register.add(this.target);
     this.fx = new StriderFx(field);
     scene.add(this.fx.group);
+    this.warn = new CoreWarnDraw(field);
+    coreWarnFx(bf, this.warn);
+    scene.add(this.warn.group);
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, v);
     scene.add(this.tear.group);
     this.sees = (from, to) => bf.canSee(from, to);
@@ -75,10 +79,13 @@ export class StriderField {
     this.fx.update(dt, this.pack.list);
     this.tear.update(dt);
     this.tickCores(dt);
+    this.warn.update(dt, this.cores);
   }
 
   /** Dead striders' cores waiting to go up. */
-  private cores: { id: number; x: number; y: number; z: number; t: number }[] = [];
+  cores: { id: number; x: number; y: number; hy: number; z: number; t: number; delay: number; radius: number }[] = [];
+  /** The cores drawn going unstable. */
+  readonly warn: CoreWarnDraw;
   /** Death blasts gone off since construction. */
   deathBlasts = 0;
 
@@ -93,10 +100,10 @@ export class StriderField {
       this.deathBlasts++;
       const gy = this.field.height(c.x, c.z);
       fireRobotDeathBlast(bf, {
-        id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: Math.max(gy + 2, c.y), radius: v.striderDeathRadius, damage: v.striderDeathDamage,
+        id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: Math.max(gy + 2, c.hy), radius: c.radius, damage: v.striderDeathDamage,
         pierce: v.striderDeathPierce, shove: v.striderDeathShove, boom: v.striderDeathBoom,
       }, (x, z, r, sp) => { if (this.mech.alive) this.mech.shoveFrom(x, z, r, sp); });
-      bf.blastOwn(3, AT.set(c.x, gy, c.z), v.striderDeathRadius, v.striderDeathOwnDamage, v.striderDeathPierce);
+      bf.blastOwn(3, AT.set(c.x, gy, c.z), c.radius, v.striderDeathOwnDamage, v.striderDeathPierce);
     }
   }
 
@@ -139,7 +146,7 @@ export class StriderField {
         this.deaths.ragdoll(r.parts, r.joints, r.x, r.y, r.z, r.yaw, { x: 0, y: 0, z: 0 }, 0, 0, 1);
       }
       // Its core goes up a moment later (in update: a kill inside a blast mustn't blow up mid-loop).
-      this.cores.push({ id: e.id, x: e.x, y: e.y, z: e.z, t: v.striderDeathDelay });
+      this.cores.push({ id: e.id, x: e.x, y: this.field.height(e.x, e.z), hy: e.y, z: e.z, t: v.striderDeathDelay, delay: v.striderDeathDelay, radius: v.striderDeathRadius });
       this.remove(s);
       this.onDown?.(s);
     }
