@@ -70,7 +70,7 @@ export const STRIDER_DEFAULTS = {
   striderMeleeEvery: 3.5,
   // Its death (Keith 2026-11-02: "a big explosion when they die ... damage the enemies nearby", so killing one can
   // clear the swarm round it): a blast that hurts robots too.
-  striderDeathDelay: 0.35,
+  striderDeathDelay: 2.8,
   striderDeathRadius: 18,
   striderDeathDamage: 60,
   striderDeathOwnDamage: 450,
@@ -131,7 +131,7 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderSlamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GS },
   { key: "striderSlamEvery", label: "A slam at most every (s)", min: 1, max: 60, step: 0.5, group: GS },
   { key: "striderSlamRecover", label: "Stands after it (s)", min: 0, max: 5, step: 0.1, group: GS },
-  { key: "striderDeathDelay", label: "Goes up after (s)", min: 0, max: 3, step: 0.05, group: GD },
+  { key: "striderDeathDelay", label: "Goes up after (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Time to get clear after a melee kill: the wreck goes unstable (amber ring, sweep, glowing core), then the boom" },
   { key: "striderDeathRadius", label: "Death blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
   { key: "striderDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot. Full at the centre, half at the edge" },
   { key: "striderDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Every robot in reach (swarm, striders, crushers, droids) by its blast share, behind cover none" },
