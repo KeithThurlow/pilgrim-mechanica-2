@@ -128,11 +128,11 @@ export interface GridValues {
   gridTurn: number;
   gridCellPx: number;
   salvagePerBlock: number;
-  salvageCompact: number;
+  salvageLevel: number;
   [k: string]: number;
 }
 
-export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 30, salvagePerBlock: 25, salvageCompact: 0 };
+export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 30, salvagePerBlock: 25, salvageLevel: 0 };
 
 const G = "Grid";
 export const GRID_PARAMS: Param[] = [
@@ -143,5 +143,5 @@ export const GRID_PARAMS: Param[] = [
   { key: "gridTurn", label: "Items can turn", min: 0, max: 1, step: 1, group: G, tip: "1: R (or right click) turns an item 90° while you hold it, and auto-placing tries it turned" },
   { key: "gridCellPx", label: "Cell size (px)", min: 16, max: 64, step: 1, group: G },
   { key: "salvagePerBlock", label: "Scrap per salvage block", min: 5, max: 200, step: 5, group: "Salvage blocks", tip: "Out in the field the scrap at risk shows in the cargo grid as blocks of this much" },
-  { key: "salvageCompact", label: "Compaction (0 raw, 1 compacted)", min: 0, max: 1, step: 1, group: "Salvage blocks", tip: "Stand-in for the compaction upgrade: 1 packs the same scrap into the smaller compacted block" },
+  { key: "salvageLevel", label: "Compactor level (labs without a convoy)", min: 0, max: 3, step: 1, group: "Salvage blocks", tip: "Stand-in for the convoy's Salvage compactor unlock where there's no convoy (the inventory lab); the convoy lab uses what's bought" },
 ];

@@ -18,13 +18,14 @@ import { newBag } from "../../src/items/cargo";
 import { inventoryScreen } from "../../src/ui/inventory";
 import { loadBay, saveBay, type BayState } from "../../src/ui/bay";
 import { Expedition, EXPEDITION_DEFAULTS } from "../../src/expedition/expedition";
+import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS } from "../../src/expedition/unlocks";
 
 const KEY = "pm2:inventory-lab:bay";
 const app = await createApp(document.getElementById("view")!);
 app.scene.background = new THREE.Color(0x2a2620);
 const params = app.params;
 
-const V = { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...VALUE_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
+const V = { ...UNLOCK_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...VALUE_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
 const DEFAULTS = { ...V };
 const st: BayState = (!params.has("fresh") && loadBay(KEY)) || { loadout: defaultLoadout(), stash: newBag(), cargo: newBag(), seed: (Date.now() % 1e9) | 1, scrap: 0 };
 
@@ -57,18 +58,20 @@ function comeHome() {
 function changed() {
   st.cargo.capacity = resolve(st.loadout, V).cargoCapacity;
   if (exp.state === "out") exp.capacity = st.cargo.capacity;
+  // The Compactor level slider stands in for the convoy's Salvage compactor unlock.
+  exp.scrapValueMul = Unlocks.mulAt(V, "compactor", V.salvageLevel);
   saveBay(KEY, st);
   inv.render();
 }
 
-const inv = inventoryScreen({ state: st, tuning: V, exp, onChange: changed, bankScrap: (n) => { st.scrap = (st.scrap ?? 0) + n; } });
+const inv = inventoryScreen({ state: st, tuning: V, exp, scrapValueMul: () => exp.scrapValueMul, onChange: changed, bankScrap: (n) => { st.scrap = (st.scrap ?? 0) + n; } });
 const rollN = Number(params.get("roll"));
 if (rollN > 0 || !st.stash.items.length) roll(rollN > 0 ? rollN : 24);
 
 const panel = tweakPanel({
   id: "inventory-lab",
   title: "Inventory lab",
-  params: [...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...LOOT_PARAMS, ...VALUE_PARAMS, ...LOADOUT_PARAMS],
+  params: [...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...UNLOCK_PARAMS.filter((p) => p.key.startsWith("unlCompact")), ...LOOT_PARAMS, ...VALUE_PARAMS, ...LOADOUT_PARAMS],
   values: V,
   defaults: DEFAULTS,
   actions: [
@@ -82,7 +85,7 @@ const panel = tweakPanel({
     { label: "Reset the mech", onClick: () => { st.loadout = defaultLoadout(); changed(); } },
   ],
   topics: [
-    { id: "grid", label: "Grid", groups: ["Grid", "Item sizes", "Salvage blocks"] },
+    { id: "grid", label: "Grid", groups: ["Grid", "Item sizes", "Salvage blocks", "Convoy unlocks"] },
     { id: "loot", label: "Loot", groups: ["Loot rolls", "Item value", "Bare mech"] },
   ],
   onChange: () => changed(),
