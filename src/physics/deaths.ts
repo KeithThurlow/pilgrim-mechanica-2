@@ -9,6 +9,9 @@ import { Quaternion, Vector3 } from "three";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 
+/** The thinnest a ragdoll part's collider is (half extent, m). */
+const MIN_HALF = 0.1;
+
 export const DEATH_DEFAULTS = {
   deathPush: 1,
   deathLift: 0.5,
@@ -187,7 +190,9 @@ export class DeathPhysics {
         .setAngvel(pend.ang[k])
         .setLinearDamping(0.1).setAngularDamping(v.jointDamping * 0.15);
       const b = w.createRigidBody(desc);
-      w.createCollider(RAPIER.ColliderDesc.cuboid(p.half[0], p.half[1], p.half[2]).setDensity(p.mass ?? 600).setFriction(0.8).setCollisionGroups(BODY), b);
+      // Thin parts (a cutter's shins, 11 cm across) could slip through the dune floor's heightfield lying flat on it:
+      // their colliders are at least MIN_HALF thick (the look is drawn from the part, not the collider).
+      w.createCollider(RAPIER.ColliderDesc.cuboid(Math.max(MIN_HALF, p.half[0]), Math.max(MIN_HALF, p.half[1]), Math.max(MIN_HALF, p.half[2])).setDensity(p.mass ?? 600).setFriction(0.8).setCollisionGroups(BODY), b);
       bodies.push(b);
     });
     for (const j of pend.joints) {

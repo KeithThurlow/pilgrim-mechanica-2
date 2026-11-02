@@ -12,6 +12,7 @@ import { DASH_DEFAULTS } from "../mech/dash";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
+import { ENERGY_BASES, ENERGY_STATS } from "../weapons/energy/energyBases";
 
 /** Shoulder gear (Keith 2026-10-25, widened 2026-10-30): on a hull's shoulder (keys 1 and 2, whatever its hull mount
  *  holds) or, for launchers, on the pack mount as a back weapon (key 3, in place of the pack). Every one has a key. */
@@ -109,6 +110,8 @@ export const STATS: Record<string, StatInfo> = {
   burnTime: { label: "Burns for (s)", better: 1, decimals: 1 },
   burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Bars refilled by the key", better: 1, decimals: 0, whole: true },
+  // Energy weapons (Keith 2026-11-02): src/weapons/energy/energyBases.ts.
+  ...ENERGY_STATS,
 };
 
 /** A hull mount's side. Two today; a hull with more mounts adds a side here (and its slots in loadout.ts MOUNTS). */
@@ -386,6 +389,8 @@ export const BASES: Base[] = [
     id: "waist-kit", name: "Cutting kit", kind: "waist", tags: ["waist", "salvage"], weight: 0.5, makers: ["Suzaku"], look: "rampart-salvager", drop: 0.6,
     stats: { salvage: s(0.3, 0.2) },
   },
+  // Energy weapons (Keith 2026-11-02): hull weapons on the energy bars, src/weapons/energy/energyBases.ts.
+  ...ENERGY_BASES,
 ];
 
 // Every shoulder item has a family (launcher unless it says otherwise: the older four).

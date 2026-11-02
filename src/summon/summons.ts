@@ -1,0 +1,123 @@
+// The summoner's units on a battlefield (glue; docs/proposal-summoner.md, Keith 2026-11-02): the attack drones
+// (drones.ts) for now. Feeds them their owner (the player's mech) and the foes the register holds round it, prefers the
+// owner's target lock (Tab, or the soft lock), turns their shots into battlefield rounds of the owner's team, makes them
+// hittable by the other teams' rounds, and draws them. Any combat lab (or the convoy lab) can add one.
+// Ownership: host (the drones' damage and targets); the owner is the player whose mech carries them.
+import * as THREE from "three/webgpu";
+import type { Battlefield, Hittable } from "../game/battlefield";
+import type { HitSurface } from "../fx/minigun";
+import type { MechUnit } from "../game/mechUnit";
+import { FLAG, type Filter } from "../game/register";
+import type { Ground } from "../mech/walker";
+import { Drones, DRONE_DEFAULTS, DRONE_PARAMS, DRONE_GROUPS, type DroneFoe, type DroneValues } from "./drones";
+import { DronesDraw } from "./dronesDraw";
+
+export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS };
+export type SummonValues = DroneValues;
+export const SUMMON_PARAMS = [...DRONE_PARAMS];
+export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS] };
+
+/** Battlefield gun slots the summons' rounds use (other guns share 2..19; the effects hold 24). */
+const SLOT0 = 20, SLOTS = 4;
+
+/** The drones as one target for the other teams' rounds: a sphere each. */
+class DronesTarget implements Hittable {
+  readonly surface: HitSurface = "metal";
+  alive = true;
+  private last = -1;
+  constructor(private d: Drones, readonly team: number) {}
+  hitRay(o: THREE.Vector3, dir: THREE.Vector3, maxDist: number) {
+    const d = this.d, R = d.v.droneSize * 0.5;
+    let best = -1;
+    this.last = -1;
+    for (let i = 0; i < d.n; i++) {
+      if (!d.up[i]) continue;
+      const ox = d.x[i] - o.x, oy = d.y[i] - o.y, oz = d.z[i] - o.z;
+      const t = ox * dir.x + oy * dir.y + oz * dir.z;
+      if (t < 0 || t > maxDist) continue;
+      const q = ox * ox + oy * oy + oz * oz - t * t;
+      if (q > R * R) continue;
+      const hit = t - Math.sqrt(R * R - q);
+      if (best < 0 || hit < best) { best = hit; this.last = i; }
+    }
+    return best;
+  }
+  damage(amount: number) { if (this.last >= 0) this.d.hurt(this.last, amount); }
+}
+
+export class Summons {
+  readonly drones: Drones;
+  readonly dronesDraw: DronesDraw;
+  private target: DronesTarget;
+  private foes: DroneFoe[] = [];
+  private pool: DroneFoe[] = [];
+  private near: number[] = [];
+  private lockFoe: DroneFoe = { key: 0, x: 0, y: 0, z: 0, r: 1, vx: 0, vz: 0 };
+  private from = new THREE.Vector3(); private dir = new THREE.Vector3(); private at = new THREE.Vector3();
+  private slot = 0;
+  private wasAlive = true;
+  private filter: Filter;
+
+  constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter) {
+    this.drones = new Drones(v, ground);
+    this.dronesDraw = new DronesDraw(this.drones);
+    scene.add(this.dronesDraw.group);
+    this.target = new DronesTarget(this.drones, owner.team);
+    bf.targets.push(this.target);
+    // Foes: hittable things of another team, not asleep or knocked down.
+    this.filter = { ...enemies, none: (enemies.none ?? 0) | FLAG.Asleep | FLAG.Down };
+  }
+
+  /** Meshes for the hold-V selector. */
+  get meshes(): THREE.Object3D[] { return this.dronesDraw.meshes; }
+
+  update(dt: number) {
+    const bf = this.bf, o = this.owner, v = this.v, reg = bf.register, p = o.sim.pelvis;
+    // The register's foes round the mech (it was rebuilt this tick, before the soft lock).
+    this.near.length = 0; this.foes.length = 0;
+    reg.near(p.x, p.z, v.droneEngage, this.filter, this.near);
+    for (let k = 0; k < this.near.length; k++) {
+      const e = this.near[k];
+      const f = this.pool[k] ?? (this.pool[k] = { key: 0, x: 0, y: 0, z: 0, r: 1, vx: 0, vz: 0 });
+      f.key = reg.id[e]; f.x = reg.x[e]; f.y = reg.y[e]; f.z = reg.z[e]; f.r = reg.r[e]; f.vx = reg.vx[e]; f.vz = reg.vz[e];
+      this.foes.push(f);
+    }
+    // The owner's lock (Tab or the soft lock): its key is the register's id.
+    let lock: DroneFoe | null = null;
+    const L = o.lock;
+    if (L) {
+      const lf = this.lockFoe;
+      lf.key = typeof L.key === "number" ? L.key : -2; lf.x = L.x; lf.y = L.y; lf.z = L.z; lf.r = L.r; lf.vx = L.vx ?? 0; lf.vz = L.vz ?? 0;
+      lock = lf;
+    }
+    if (this.wasAlive && !o.alive) this.drones.grounded();
+    this.wasAlive = o.alive;
+    const d = this.drones;
+    d.step(dt, { x: p.x, y: p.y, z: p.z, vx: o.sim.vel.x, vz: o.sim.vel.z, alive: o.alive }, this.foes, lock);
+    for (const e of d.events) {
+      if (e.kind === "shot") {
+        const s = e.shot;
+        this.from.set(s.fx, s.fy, s.fz);
+        this.at.set(s.tx, s.ty, s.tz);
+        if (!bf.canSee(this.from, this.at)) continue;
+        this.dir.subVectors(this.at, this.from);
+        const len = this.dir.length();
+        this.dir.multiplyScalar(1 / Math.max(1e-6, len));
+        this.slot = (this.slot + 1) % SLOTS;
+        bf.fire(SLOT0 + this.slot, o.team, this.from, this.dir, len + 6, s.damage, { flashScale: 0.3, voice: "other", hitScale: 0.35, seed: s.id * 977 + d.shots });
+      } else if (e.kind === "down") {
+        // Shot down: a pop of sparks and smoke where it was.
+        bf.blast(o.team, this.at.set(e.x, e.y, e.z), 1.2, 0);
+      }
+    }
+    this.dronesDraw.update(dt);
+  }
+
+  /** HUD line. */
+  hud(): string {
+    const d = this.drones;
+    let busy = 0;
+    for (let i = 0; i < d.n; i++) if (d.up[i] && d.foe[i] >= 0) busy++;
+    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost}`;
+  }
+}

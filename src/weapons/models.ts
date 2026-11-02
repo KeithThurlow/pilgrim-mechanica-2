@@ -9,7 +9,9 @@ import { libraryModel } from "./modelSwap";
 
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
-export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar";
+/** Energy weapons (Keith 2026-11-02, src/weapons/energy/): the library's laser projector and plasma cannon stand-ins. */
+export type EnergyKind = "laser" | "beam" | "lance";
+export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar" | EnergyKind;
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
 export type ModelKind = LauncherKind | GearKind | MeleeKind;
@@ -263,6 +265,11 @@ function capacitorModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+/** An energy weapon's box fallback while its library model loads: the rail's boxes. */
+function energyBox(kind: EnergyKind) {
+  return (l: ToonLook): WeaponModel => { const m = railModel("rail", l); m.kind = kind; m.root.name = `weapon-${kind}`; return m; };
+}
+
 /** The box stand-ins, by kind (the fallback). */
 export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   rail: (l) => railModel("rail", l),
@@ -278,6 +285,9 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
   sword: swordModel,
+  laser: energyBox("laser"),
+  beam: energyBox("beam"),
+  lance: energyBox("lance"),
 };
 
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */
