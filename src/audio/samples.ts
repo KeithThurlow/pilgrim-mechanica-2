@@ -34,6 +34,9 @@ export const SAMPLES: SampleDef[] = [
   { id: "Mortar", file: "grenadelauncherthump", sound: "mortar", label: "Mortar launch (grenadelauncherthump)", start: 0, len: 0.7, fade: 0.35, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "BlastLarge", file: "largebomb", sound: "blastLarge", ref: "blast", label: "Large blast (largebomb)", start: 0, len: 2.0, fade: 1.0, pitch: 0, spread: 1.2, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "BlastGiant", file: "giantbomb", sound: "blastGiant", ref: "blast", label: "Giant blast (giantbomb)", start: 0, len: 2.4, fade: 1.2, pitch: 0, spread: 1.2, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
+  // Batch 3: something going off far out in the desert (the expedition's distant blasts): the 7 s rolling double boom
+  // Keith labelled "cannon", darkened and slowed a little, as far thunder.
+  { id: "Distant", file: "cannon", sound: "distantBlast", ref: "blast", label: "Distant blast (cannon)", start: 0, len: 4, fade: 2.5, pitch: -2, spread: 1.5, lowpass: 1500, highpass: 30, gain: -2, under: 0 },
   // The robots (batch 2; Keith: "underwater", to be remixed further): pitched down and run through the alien remix. Matched
   // in loudness to the procedural blast (the beam and deaths) and the rail's charge whine (the charge).
   { id: "RobotCharge", file: "robotchargingnoise", sound: "robotCharge", ref: "railCharge", level: "robotChargeLevel", label: "Robot beam charge (robotchargingnoise)", start: 0, len: 2.0, fade: 0.4, pitch: -2, spread: 1, lowpass: 20000, highpass: 40, gain: 0, under: 0,

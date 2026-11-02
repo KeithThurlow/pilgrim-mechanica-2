@@ -59,6 +59,7 @@ import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
 import { BodyContact } from "../game/bodyContact";
 import type { DeathPhysics } from "../physics/deaths";
+import { sampleBankOf } from "../audio/sampleBank";
 import { robotRagdolls, banditRagdolls } from "./ragdolls";
 import type { Arsenal } from "../weapons/arsenal";
 import type { WeaponValues } from "../weapons/tuning";
@@ -749,8 +750,16 @@ export class ExpeditionLoop {
         const y = field.height(e.x, e.z);
         bf.dust.stomp(e.x, y, e.z, 6);
         bf.dust.smoke(e.x, y + 2, e.z, 0, 4, 0, 8, 6, 1, 0.8);
-        bf.sfx.playSound("blast", new THREE.Vector3(e.x, y, e.z), 0.9, 0.7);
-        bf.sfx.playSound("blastTail", new THREE.Vector3(e.x, y, e.z), 0.6, 1);
+        // The recorded far boom when it's in (src/audio/samples.ts, Distant blast), else the procedural blast slowed.
+        // Heard from its direction, not its place (140-380 m out is off screen, where sounds aren't played): 30 m
+        // toward it from the mech, quieter the farther it is.
+        const dx = e.x - p.x, dz = e.z - p.z, d = Math.max(1, Math.hypot(dx, dz)), k = Math.min(1, 30 / d);
+        const near = new THREE.Vector3(p.x + dx * k, y, p.z + dz * k);
+        if (sampleBankOf(bf.sfx)?.liveSound("distantBlast")) bf.sfx.playSound("distantBlast", near, Math.max(0.35, Math.min(1, 200 / d)));
+        else {
+          bf.sfx.playSound("blast", new THREE.Vector3(e.x, y, e.z), 0.9, 0.7);
+          bf.sfx.playSound("blastTail", new THREE.Vector3(e.x, y, e.z), 0.6, 1);
+        }
         bf.waves?.post("default", e.x, y + 1, e.z, 6);
         this.blasts.push({ id: `blast:${this.blastSeq++}`, x: e.x, z: e.z, t: 0 });
       }
