@@ -11,7 +11,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { type RobotShares, RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
 import { RobotsDraw } from "../combat/robotsDraw";
-import { fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../game/robotBeam";
 import { RobotTarget } from "../combat/robotTarget";
 import { RobotTearFx, type RobotTearValues } from "../combat/robotTearFx";
 import type { Battlefield } from "../game/battlefield";
@@ -62,6 +62,7 @@ export class SwarmCamps {
     this.sw = new RobotSwarm(v, field, 11);
     this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw);
+    coreWarnFx(bf, this.draw.coreWarn);
     scene.add(this.draw.group);
     this.target = new RobotTarget(this.sw, 3);
     bf.targets.push(this.target);

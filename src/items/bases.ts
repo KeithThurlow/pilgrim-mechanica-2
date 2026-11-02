@@ -9,6 +9,7 @@ import { WALKER_DEFAULTS } from "../mech/walkerTuning";
 import { LEG_TYPES } from "../mech/legTypes";
 import { UPPER_DEFAULTS } from "../mech/upper";
 import { DASH_DEFAULTS } from "../mech/dash";
+import { REACTOR_DEFAULTS } from "../mech/reactor";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import { gunNumbers, type RoundGun } from "../weapons/guns";
 import { cannonNumbers } from "../weapons/cannon";
@@ -108,12 +109,14 @@ export const STATS: Record<string, StatInfo> = {
   feedRate: { label: "Fire rate + (passive)", better: 1, decimals: 2 },
   feedSpin: { label: "Spin-up cut (passive)", better: 1, decimals: 2 },
   feedAmmo: { label: "Rounds + (passive)", better: 1, decimals: 2 },
-  refill: { label: "Energy refill + (passive)", better: 1, decimals: 2 },
+  refill: { label: "Reactor regen + (passive)", better: 1, decimals: 2 },
+  reactorCap: { label: "Reactor (bars)", better: 1, decimals: 1 },
+  reactorRegen: { label: "Reactor regen (bars/s)", better: 1, decimals: 2 },
   boost: { label: "Overdrive fire rate +", better: 1, decimals: 2 },
   effectTime: { label: "Key effect lasts (s)", better: 1, decimals: 1 },
   burnTime: { label: "Burns for (s)", better: 1, decimals: 1 },
   burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
-  dischargeBars: { label: "Bars refilled by the key", better: 1, decimals: 0, whole: true },
+  dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
   // Energy weapons (Keith 2026-11-02): src/weapons/energy/energyBases.ts.
   ...ENERGY_STATS,
 };
@@ -221,24 +224,24 @@ export const BASES: Base[] = [
   // Hulls: hull points, torso turn, mounts.
   {
     id: "hull-rampart", name: "Rampart hull", kind: "hull", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), armour: s(HULL_ARMOUR, 0.1), torsoTurnRate: s(U.torsoTurnRate, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), armour: s(HULL_ARMOUR, 0.1), torsoTurnRate: s(U.torsoTurnRate, 0.08), reactorCap: s(REACTOR_DEFAULTS.reactorCap, 0.1), reactorRegen: s(REACTOR_DEFAULTS.reactorRegen, 0.1) },
   },
   {
     id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
     // Armoured all over the front: sensors only up on top.
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(4200, 0.08), armour: s(12, 0.1), torsoTurnRate: s(110, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(4200, 0.08), armour: s(12, 0.1), torsoTurnRate: s(110, 0.08), reactorCap: s(5.5, 0.1), reactorRegen: s(0.32, 0.1) },
   },
   {
     id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1, ability: "nanite",
     // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon; a head at the
     // front to see what it strips, no top mount (the crane rail runs over it).
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2400, 0.08), armour: s(5, 0.1), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2400, 0.08), armour: s(5, 0.1), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15), reactorCap: s(3, 0.1), reactorRegen: s(0.45, 0.1) },
   },
   {
     // A light cuirass (Keith 2026-11-02: hover legs "could support really light cuirasses"): the Stilt's narrow torso,
     // thin plate, quick to turn; both mounts and a front head, no ability.
     id: "hull-cuirass", name: "Cuirass hull", kind: "hull", tags: ["hull", "light"], weight: 4, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.8,
-    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(1900, 0.08), armour: s(4, 0.1), torsoTurnRate: s(230, 0.08) },
+    mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(1900, 0.08), armour: s(4, 0.1), torsoTurnRate: s(230, 0.08), reactorCap: s(3, 0.1), reactorRegen: s(0.55, 0.1) },
   },
   // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
   // Two styles (Keith 2026-10-26): heads at the front follow the aim and help it a little (a wider soft-lock cone, a
@@ -375,7 +378,8 @@ export const BASES: Base[] = [
     id: "sh-incendiary", name: "Incendiary feed", kind: "shoulder", shoulder: "incendiary", round: "incendiary", tags: ["shoulder", "feed", "kinetic", "hose", "fire"], weight: 1.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart", drop: 0.8,
     stats: { feedRate: s(WD.incRate, 0.15), feedAmmo: s(WD.incAmmo, 0.15), effectTime: s(WD.incTime, 0.12), burnTime: s(WD.burnTime, 0.12), burnDps: s(WD.burnDps, 0.12), cooldown: s(WD.incCooldown, 0.1) },
   },
-  // Power (Keith 2026-10-30): for the energy builds. The passive refills the energy bars faster; the key refills bars at once.
+  // Power (Keith 2026-10-30): for the energy builds. Since the reactor (Keith 2026-11-02) it feeds the reactor, not the
+  // dash's kinetic bars: the passive speeds its regen, the key refills reactor bars at once.
   {
     id: "sh-capacitor", name: "Capacitor bank", kind: "shoulder", shoulder: "capacitor", tags: ["shoulder", "power", "energy"], weight: 1.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 0.9,
     stats: { refill: s(WD.capRefill, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },

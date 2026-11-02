@@ -91,6 +91,7 @@ export interface MechWeapons {
   stop?(): void;
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
+import { Reactor, REACTOR_DEFAULTS, REACTOR_PARAMS } from "../mech/reactor";
 import { isRoundGun } from "../weapons/guns";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
 import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
@@ -109,6 +110,7 @@ import type { Dead } from "../physics/deaths";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
+  ...REACTOR_DEFAULTS,
   ...MECH_WRECK_DEFAULTS,
   ...HEAD_DEFAULTS,
   ...BOUND_DEFAULTS,
@@ -138,6 +140,7 @@ export type MechValues = typeof MECH_DEFAULTS;
 
 export const MECH_PARAMS: Param[] = [
   ...DASH_PARAMS,
+  ...REACTOR_PARAMS,
   ...MECH_WRECK_PARAMS,
   ...HEAD_PARAMS,
   ...BOUND_PARAMS,
@@ -214,6 +217,8 @@ export class MechUnit implements Hittable, Solid {
   /** Each frame of a dash: where the mech is and the dash's direction (labs shove their swarms). */
   onDash: ((x: number, z: number, dirX: number, dirZ: number) => void) | null = null;
   readonly dash: Dash;
+  /** The reactor (Keith 2026-11-02): energy weapons draw on it, apart from the dash's kinetic bars (src/mech/reactor.ts). */
+  readonly reactor: Reactor;
   /** The sprint (Keith 2026-10-26): Space held past the dash. */
   readonly bound: Bound;
   private wakeAcc = 0;
@@ -267,6 +272,7 @@ export class MechUnit implements Hittable, Solid {
       return bf.sinkDepth(x, z);
     };
     this.dash = new Dash(v);
+    this.reactor = new Reactor(v);
     this.bound = new Bound(v);
     this.upper = new UpperSim(v);
     this.health = v.hull;
@@ -436,6 +442,7 @@ export class MechUnit implements Hittable, Solid {
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
       const grade = dash.active ? (f.height(sim.pos.x + gx, sim.pos.z + gz) - f.height(sim.pos.x - gx, sim.pos.z - gz)) / 4 : 0;
       dash.update(dt / sub, grade);
+      this.reactor.update(dt / sub);
       // The walker's steps (src/mech/dashSteps.ts) move the body, crouch and lean it; the shove (dash.ts) only times the
       // damage cut and the crowd shove now.
       sim.push.set(0, 0, 0);

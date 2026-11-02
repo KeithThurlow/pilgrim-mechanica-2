@@ -1,5 +1,5 @@
 // Put a resolved loadout (src/items/loadout.ts) onto a mech unit: its values go into the unit's tuning (legs change
-// the walk, the hull the hull points and torso turn, the pack the dash), each gun gets its own values or is switched
+// the walk, the hull the hull points, torso turn and reactor, the pack the dash's kinetic bars), each gun gets its own values or is switched
 // off when its side has none, and the model hides what isn't fitted. A gun whose values match the shared sliders
 // runs on the sliders (so the default loadout leaves the mech exactly as it was, sliders live). Fitted legs and hulls
 // show their own models (Keith 2026-10-31), and legs bring their walk: proportions, stance, gait and feet.
@@ -52,4 +52,5 @@ export function applyLoadout(unit: MechUnit, r: Resolved) {
   if (unit.alive) unit.health = unit.maxHealth;
   unit.dash.charges = Math.round(unit.v.dashCharges);
   unit.dash.fuel = unit.v.boostFuel;
+  unit.reactor?.fill();
 }

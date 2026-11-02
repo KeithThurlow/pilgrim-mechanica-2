@@ -74,6 +74,9 @@ export interface Sheet {
   line?(along: number): number;
   /** The ground's height (world y). */
   ground(x: number, z: number): number;
+  /** A flat shot's aim: its muzzle height and the body height at the aim `t` m along. Extra rays run muzzle to aim, so
+   *  a body on a dune off the floor chord is still met (the rail on trucks over dunes). */
+  aim?: { y0: number; t: number; y: number };
 }
 
 /** One body in a sheet. `key` is the target's own (which unit and part); `at` is a point in the body on the line. */

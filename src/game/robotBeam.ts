@@ -12,6 +12,7 @@ import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
 import type { RobotBeamEvent, RobotDeathBlastEvent, RobotPulseEvent } from "../combat/robots";
 import { famOfTeam } from "../world/lamps";
+import type { CoreWarnDraw } from "../fx/coreWarnDraw";
 
 const ROBOTS = 3;
 const from = new THREE.Vector3(), dir = new THREE.Vector3();
@@ -136,4 +137,21 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
   }
   if (e.boom > 0) { bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1); bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1); }
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
+}
+
+const SPARK_AT = new THREE.Vector3(), SPARK_UP = new THREE.Vector3(0, 1, 0);
+/**
+ * A dying walker's core going unstable (src/fx/coreWarnDraw.ts), heard and seen on the battlefield (cosmetic): a
+ * rising whine stretched over the countdown when it starts, and on each blink a beep (higher toward the end), a spit
+ * of sparks off the wreck, a puff of dust and a flicker of light.
+ */
+export function coreWarnFx(bf: Battlefield, warn: CoreWarnDraw) {
+  warn.onStart = (x, y, z, delay) => { bf.sfx.playSound("coreWhine", SPARK_AT.set(x, y + 1.5, z), 1, Math.max(0.4, Math.min(2.5, 2.8 / Math.max(0.1, delay)))); };
+  warn.onBeep = (x, y, z, k) => {
+    SPARK_AT.set(x, y, z);
+    bf.sfx.playSound("coreBeep", SPARK_AT, 0.6 + 0.6 * k, 1 + 0.6 * k);
+    bf.gunFx.sparksAt(SPARK_AT, SPARK_UP, Math.round(6 + 18 * k), 5 + 6 * k);
+    bf.dust.emit(1, x, y - 1, z, (Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3, 0.8, 1 + Math.random(), 0.9);
+    bf.nightLights?.flash(x, y, z, 3 + 5 * k, famOfTeam(ROBOTS));
+  };
 }

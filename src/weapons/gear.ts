@@ -1,8 +1,8 @@
 // Shoulder gear that isn't a launcher (Keith 2026-10-30; docs/proposal-shoulders.md): feeds and power.
 // A feed boosts only its own side's gun, always (the passive: fire rate, spin-up, rounds), and its key does more:
 // the belt feed OVERDRIVES the gun (fire rate up for a few seconds), the incendiary feed loads IGNITED rounds (what
-// they hit burns for a few seconds, src/game/burn.ts). Power (the capacitor bank) refills the energy bars faster, and
-// its key DISCHARGES: bars refilled at once. Every one is a press on its key (not paint-and-release) with a cooldown
+// they hit burns for a few seconds, src/game/burn.ts). Power (the capacitor bank) speeds the reactor's regen (Keith
+// 2026-11-02: the reactor, not the dash's bars), and its key DISCHARGES: reactor bars refilled at once. Every one is a press on its key (not paint-and-release) with a cooldown
 // counted from the press.
 // Pure maths, no drawing or input: the arsenal (src/weapons/arsenal.ts) presses the key and applies the numbers to the
 // mech's guns and energy bars; tools/weapons-check.ts runs it headless. Numbers come from the item's own rolled stats,
@@ -17,7 +17,7 @@ import type { WeaponValues } from "./tuning";
 export interface GearStats {
   weapon: ShoulderWeapon;
   family: "feed" | "power";
-  /** Passive, always on: its side's gun fire rate +, spin-up time cut, rounds +; the energy bars' refill speed +. */
+  /** Passive, always on: its side's gun fire rate +, spin-up time cut, rounds +; the reactor's regen +. */
   rate: number; spin: number; ammo: number; refill: number;
   /** The key: overdrive's fire rate +, how long the key's effect lasts (s), the cooldown (s, from the press). */
   boost: number; time: number; cooldown: number;
