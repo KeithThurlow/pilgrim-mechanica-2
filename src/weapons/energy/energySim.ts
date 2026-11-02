@@ -4,11 +4,13 @@
 //   beam   beam laser: on while held and paid for (energy per second), its damage landing in `rate` ticks a second.
 //   lance  nova lance: held, it charges over `charge` s, paying as it goes (out of energy the charge holds); released at
 //          `minCharge` or more it fires at that power (0..1), less fizzles. Then `cooldown`.
+//   plasma, orb, arc  fire like the pulse laser (a shot every 1/rate s while held, each paying its energy); the glue
+//          flies the plasma bolt and the orb and runs the arc's jumps.
 // A dash or the sprint drops any charge and stops the beam (drop()). Ownership: the player's own (their weapons).
 import type { EnergyValues } from "./energyTuning";
 
-export type EnergyClass = "laser" | "beam" | "lance";
-export const ENERGY_CLASSES: readonly EnergyClass[] = ["laser", "beam", "lance"];
+export type EnergyClass = "laser" | "beam" | "lance" | "plasma" | "orb" | "arc";
+export const ENERGY_CLASSES: readonly EnergyClass[] = ["laser", "beam", "lance", "plasma", "orb", "arc"];
 export const isEnergy = (cls: string | undefined | null): cls is EnergyClass => !!cls && (ENERGY_CLASSES as readonly string[]).includes(cls);
 
 /** Where the energy comes from (the mech's energy bars, src/mech/dash.ts). use(n) spends n bars' worth or nothing. */
@@ -30,12 +32,28 @@ export interface EnergyStats {
   minCharge: number;
   blast: number;
   blastDamage: number;
+  /** Plasma and orb: speed (m/s) and radius (splash, burn). Orb: burn ticks/s and its pop. Arc: jumps, their reach,
+   *  the damage kept per jump and how close to the aim it seeks its first target. */
+  speed: number;
+  radius: number;
+  ticks: number;
+  hops: number;
+  hopRange: number;
+  keep: number;
+  seek: number;
 }
 
 /** A weapon's numbers: its rolled stats (own) or the sliders. */
 export function energyStats(cls: EnergyClass, own: Record<string, number> | null | undefined, v: EnergyValues): EnergyStats {
   const o = own ?? {};
-  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0 };
+  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0, speed: 0, radius: 0, ticks: 0, hops: 0, hopRange: 0, keep: 0, seek: 0 };
+  if (cls === "plasma") return { ...base, damage: o.damage ?? v.plasmaDamage, ap: o.ap ?? v.plasmaAp, range: o.range ?? v.plasmaRange, rate: o.fireRate ?? v.plasmaRate, energy: o.energyShot ?? v.plasmaEnergy,
+    speed: o.shellSpeed ?? v.plasmaSpeed, radius: o.splash ?? v.plasmaSplash };
+  // An orb's damage is per second to each body inside it.
+  if (cls === "orb") return { ...base, damage: o.damage ?? v.orbDps, ap: o.ap ?? v.orbAp, range: o.range ?? v.orbRange, rate: o.fireRate ?? v.orbRate, energy: o.energyShot ?? v.orbEnergy,
+    speed: o.shellSpeed ?? v.orbSpeed, radius: o.splash ?? v.orbRadius, ticks: v.orbTicks, blastDamage: o.blastDamage ?? v.orbPop };
+  if (cls === "arc") return { ...base, damage: o.damage ?? v.arcDamage, ap: o.ap ?? v.arcAp, range: o.range ?? v.arcRange, rate: o.fireRate ?? v.arcRate, energy: o.energyShot ?? v.arcEnergy,
+    hops: Math.round(o.hops ?? v.arcHops), hopRange: o.hopRange ?? v.arcHopRange, keep: v.arcKeep, seek: v.arcAim };
   if (cls === "laser") return { ...base, damage: o.damage ?? v.pulseDamage, ap: o.ap ?? v.pulseAp, range: o.range ?? v.pulseRange, rate: o.fireRate ?? v.pulseRate, energy: o.energyShot ?? v.pulseEnergy };
   if (cls === "beam") {
     const ticks = o.fireRate ?? v.beamTicks;
@@ -68,7 +86,7 @@ export class EnergySim {
     this.dry = false;
     this.cool = Math.max(-1, this.cool - dt);
     const pay = (n: number) => free || n <= 0 || pool.use(n);
-    if (st.cls === "laser") {
+    if (st.cls === "laser" || st.cls === "plasma" || st.cls === "orb" || st.cls === "arc") {
       if (!held) { this.cool = Math.max(0, this.cool); return out; }
       const gap = 1 / Math.max(0.05, st.rate);
       while (this.cool <= 0) {

@@ -129,6 +129,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 - Striders (in the robots lab, Keith 2026-11-01; `labs/strider/` forwards there): `?strider=N` (N up at once, 1 by default),
   `?strider=beam|slam|grab` (one at 45 m about to beam, 14 m about to slam, 6 m about to grab; no packs), `?striderdist=m`.
   Striders are mech-sized (8 m) with a disc hull and long clawed arms. In the convoy lab they come with big robot camps, packs and raids (`?nearcamp`, `?raid`; Striders: in the field).
+- Summoner lab (Keith 2026-11-02; `docs/proposal-summoner.md`): `?drones=N` (attack drones up, 4), `?enemies=N` (robots on the field), `?pack=N`, `?still` (a pack standing 25 m ahead, shooting back: watch the drones), plus the combat-lab flags; drones go for the Tab lock, else the nearest robots.
 - Crusher lab (the heavy crab quad): `?count=N` (up at once), `?dist=m` (where they stand up), `?suck` (one 14 m ahead, spinning up at once), `?claw` (one beside you, pincer ready), `?eat` (it never hunts you: watch it eat the salvage heaps), `?heaps=N`, plus the combat-lab flags.
 - Repair lab: `?hurt=share` (start at that share of hull), `?kits=N`, `?ability=beacon|nanite|weld` (fit only that one), `?ally`
   (a friendly mech at 15% hull 10 m off, for zones to heal), `?chip=dps` (the test turret; 0 stops it). Every combat lab and the
@@ -150,7 +151,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword|laser|beam|lance` (energy weapons on the energy bars: pulse laser, beam laser, nova lance; `&set=energyCost:0` makes them free) (rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword|laser|beam|lance|plasma|orb|arc` (energy weapons on the energy bars: pulse laser, beam laser, nova lance, plasma cannon, particle orb, arc caster; `&set=energyCost:0` makes them free) (rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
   launchers on both hull mounts, the shoulder rocket on key 1, missile pods on keys 2 and 3; `?barrage=arms`: arm rocket pods
   instead; works wherever `?left=` does: robots, weapons, duel, convoy labs; add `&proto=splitter&time=22` for the night show), `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
   (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
@@ -230,6 +231,7 @@ src/combat/             warband (raider vehicles and bandit mechs) + partyBus (t
 src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHud (hull bar, kits, red edge, hit arcs)
+src/summon/             the summoner's units: drones (attack drones, pure) + dronesDraw; glue: summons (foes, lock, rounds)
 src/abilities/          abilities (timed abilities from hulls and packs), zones (heal zones, pure) + zonesDraw; glue: abilityUse
 src/pilot/              the pilot on foot: pilot (capsule controller), mount (hold F out and in), quarry (the pilot as a
                         target, who enemies pick); glue: onFoot; drawing: pilotBody (Vanguard bake), pilotHud
