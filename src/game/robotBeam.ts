@@ -20,7 +20,6 @@ const from = new THREE.Vector3(), dir = new THREE.Vector3();
 /** Where each beam (by robot id) struck on its last tick, so a sweep's red-hot trail joins up. Cosmetic. */
 const lastStrike = new Map<number, { x: number; z: number }>();
 
-/** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
 /** Beams whose charge sound has played (by beam id), until they release. */
 const charging = new Set<number>();
 const live = (bf: Battlefield, sound: string) => sampleBankOf(bf.sfx)?.liveSound(sound) ?? false;
@@ -40,6 +39,7 @@ export function robotDeathSound(bf: Battlefield, sw: RobotSwarm) {
   };
 }
 
+/** Resolve a beam: damage along the line (returns the bodies burnt), scorch the sand, kick up dust, sound it. */
 export function fireRobotBeam(bf: Battlefield, e: RobotBeamEvent, reach: number, dig = (bf.v as { robotBeamDig?: number }).robotBeamDig ?? 0,
   heat = (bf.v as { heatBeam?: number }).heatBeam ?? 0): number {
   const s = e.start, t = e.end;
@@ -175,6 +175,8 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
 export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
   from.set(e.at.x, e.at.y, e.at.z);
   bf.blast(ROBOTS, from, e.radius, e.damage, e.pierce, "death");
+  // A huge crater on top of the blast's own dent (on dry ground; in water the blast splashes instead).
+  if (e.craterR > 0.5 && e.craterDepth > 0 && !bf.inWater(e.at.x, e.at.z)) bf.crater(e.at.x, e.at.z, e.craterR, e.craterDepth);
   cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatDeath ?? 1500, 0.45);
   const hy = Math.max(e.at.y + 2, e.hubY);
   bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * 0.6, { ground: false, fam: 2 });
@@ -212,4 +214,16 @@ export function coreWarnFx(bf: Battlefield, warn: CoreWarnDraw) {
     bf.dust.emit(1, x, y - 1, z, (Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3, 0.8, 1 + Math.random(), 0.9);
     bf.nightLights?.flash(x, y, z, 3 + 5 * k, famOfTeam(ROBOTS));
   };
+}
+
+/**
+ * Every big-walker attack and death of a robot swarm resolved on a battlefield, in one call for any lab that adds a
+ * swarm (Keith 2026-11-02: in the summoner lab the death blasts never went off): beams, pulses, death blasts (with the
+ * crater) and the unstable core's warning. shove pushes whoever can be pushed (the player's mech).
+ */
+export function wireRobotBlasts(bf: Battlefield, sw: RobotSwarm, warn: CoreWarnDraw, beamReach: number, shove?: (x: number, z: number, radius: number, speed: number) => void) {
+  sw.onBeam = (e) => fireRobotBeam(bf, e, beamReach);
+  sw.onPulse = (e) => fireRobotPulse(bf, e, shove);
+  sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, shove);
+  coreWarnFx(bf, warn);
 }

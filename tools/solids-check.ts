@@ -23,11 +23,13 @@ const TOL = 0.05;
 /** A mech as MechUnit makes it a solid (pillbox, mass from the ram sliders). */
 class Mech implements Solid {
   sim = new WalkerSim({ ...WV }, flat);
+  soft = false; team = 1;
   constructor(x: number, z: number, heading: number, private sv: SolidValues) { this.sim.reset(x, z, heading); }
   solidShape(o: SolidShape) {
     const s = this.sim;
     o.x = s.pos.x; o.z = s.pos.z; o.hx = 0; o.hz = 0; o.r = this.sv.bodyRadius;
     o.y0 = s.pelvis.y - WV.hipHeight; o.y1 = s.pelvis.y + 3; o.mass = TRAMPLE_DEFAULTS.ramMechMass; o.mech = true;
+    o.soft = this.soft; o.team = this.team;
     return true;
   }
   solidShove(dx: number, dz: number, nx: number, nz: number) { this.sim.shove(dx, dz, nx, nz); }
@@ -171,6 +173,31 @@ const R = sv.bodyRadius;
   const c = new Mech(0, -8, 0, off), d = new Mech(0, 0, Math.PI, off);
   for (let f = 0; f < 300; f++) { c.step(s3, { x: 0, z: 1, sprint: false }); d.step(s3, { x: 0, z: 0, sprint: false }); s3.tick(dt); }
   must(c.sim.pos.z > 2, "solidsOn 0: they should pass through");
+}
+
+// 6. Summons (Keith 2026-11-02): the player walks through its own replica, which is nudged aside, without slowing;
+// an enemy mech (another team) still blocks the replica.
+{
+  const solids = new Solids();
+  const a = new Mech(0, -8, 0, sv), rep = new Mech(0.4, 0, Math.PI, { ...sv, bodyRadius: 1.2 });
+  rep.soft = true;
+  let moved = 0;
+  for (let f = 0; f < 300; f++) { a.step(solids, { x: 0, z: 1, sprint: false }); rep.step(solids, { x: 0, z: 0, sprint: false }); solids.tick(dt); }
+  moved = Math.hypot(rep.sim.pos.x - 0.4, rep.sim.pos.z);
+  const alone = new Mech(0, -8, 0, sv), s0 = new Solids();
+  for (let f = 0; f < 300; f++) { alone.step(s0, { x: 0, z: 1, sprint: false }); s0.tick(dt); }
+  console.log(`walk through your replica: you at z ${a.sim.pos.z.toFixed(2)} (alone ${alone.sim.pos.z.toFixed(2)}), replica nudged ${moved.toFixed(2)} m`);
+  must(a.sim.pos.z > alone.sim.pos.z - 0.3, "your replica blocked you");
+  must(moved > 0.5, "your replica wasn't nudged aside");
+  must(legsOk(rep), "replica legs broke from the nudge");
+
+  const s2 = new Solids();
+  const foe = new Mech(0, -8, 0, sv), rep2 = new Mech(0, 0, Math.PI, { ...sv, bodyRadius: 1.2 });
+  foe.team = 3; rep2.soft = true;
+  let worst = 0;
+  for (let f = 0; f < 300; f++) { foe.step(s2, { x: 0, z: 1, sprint: false }); rep2.step(s2, { x: 0, z: 0, sprint: false }); s2.tick(dt); if (f > 200) worst = Math.max(worst, depth(foe, rep2)); }
+  console.log(`enemy mech into a replica: worst overlap ${worst.toFixed(3)} m`);
+  must(worst < 0.2, "an enemy mech walked through a replica");
 }
 
 console.log(fails ? `solids-check: ${fails} failed` : "solids-check: ok");

@@ -103,6 +103,7 @@ export class StriderField {
       fireRobotDeathBlast(bf, {
         id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: Math.max(gy + 2, c.hy), radius: c.radius, damage: v.striderDeathDamage,
         pierce: v.striderDeathPierce, shove: v.striderDeathShove, boom: v.striderDeathBoom,
+        craterR: c.radius * v.striderDeathCrater, craterDepth: v.striderDeathCraterDepth,
       }, (x, z, r, sp) => { if (this.mech.alive) this.mech.shoveFrom(x, z, r, sp); });
       bf.blastOwn(3, AT.set(c.x, gy, c.z), c.radius, v.striderDeathOwnDamage, v.striderDeathPierce);
     }
