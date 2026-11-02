@@ -53,8 +53,8 @@ function shapes(c: GridClass, W: number, H: number): string {
     }
     case "repairKit":
       return r(m, m, W - 2 * m, H - 2 * m, 2) + r(cx - 1, H / 2 - 3.5, 2, 7, 0.3) + r(cx - 3.5, H / 2 - 1, 7, 2, 0.3);
-    case "salvageRaw": case "salvageCompact": {
-      if (c === "salvageCompact") return r(m, m, W - 2 * m, H - 2 * m, 1) + `<line x1="${m}" y1="${H / 3}" x2="${W - m}" y2="${H / 3}"/><line x1="${m}" y1="${2 * H / 3}" x2="${W - m}" y2="${2 * H / 3}"/><line x1="${W / 2}" y1="${m}" x2="${W / 2}" y2="${H - m}"/>`;
+    case "salvage0": case "salvage1": case "salvage2": case "salvage3": {
+      if (c !== "salvage0") return r(m, m, W - 2 * m, H - 2 * m, 1) + `<line x1="${m}" y1="${H / 3}" x2="${W - m}" y2="${H / 3}"/><line x1="${m}" y1="${2 * H / 3}" x2="${W - m}" y2="${2 * H / 3}"/><line x1="${W / 2}" y1="${m}" x2="${W / 2}" y2="${H - m}"/>`;
       return `<path d="M${m} ${H - m} L${W * 0.2} ${H * 0.45} L${W * 0.38} ${H * 0.55} L${W * 0.5} ${H * 0.2} L${W * 0.66} ${H * 0.5} L${W * 0.8} ${H * 0.35} L${W - m} ${H - m} Z"/>`
         + `<path d="M${W * 0.3} ${H * 0.8} L${W * 0.45} ${H * 0.62} L${W * 0.6} ${H * 0.78}" fill="none"/>` + ci(W * 0.7, H * 0.75, Math.min(W, H) * 0.08);
     }
