@@ -109,30 +109,39 @@ export class RobotsDraw {
   /** The excavators' charging beams (Keith 2026-10-31). */
   readonly beamDraw: RobotBeamDraw;
 
-  constructor(private swarm: RobotSwarm) {
+  /** Lamp colours swapped in for the eyes' red and alarm (a friendly swarm's, opts.eye / opts.alarm). */
+  private eyeSwap: [number, number] | null = null;
+
+  /**
+   * opts (a friendly swarm, src/summon/allies.ts): cap, the most robots drawn (pools sized to it; ROBOT_MAX by default);
+   * paint, a colour multiplied into every painted part; eye and alarm, lamp colours in place of the red ones.
+   */
+  constructor(private swarm: RobotSwarm, opts: { cap?: number; paint?: number; eye?: number; alarm?: number } = {}) {
     this.beamDraw = new RobotBeamDraw(swarm);
     this.group.add(this.beamDraw.group);
-    const paint = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.25, flatShading: true });
+    if (opts.eye !== undefined) this.eyeSwap = [opts.eye, opts.alarm ?? opts.eye];
+    const M = Math.max(1, Math.min(ROBOT_MAX, opts.cap ?? ROBOT_MAX)), cap = (n: number) => Math.min(n, M);
+    const paint = new THREE.MeshStandardMaterial({ color: opts.paint ?? 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.25, flatShading: true });
     const lamp = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const pool = (geo: THREE.BufferGeometry, n: number, mat: THREE.Material = paint, shadow = true) => {
       const mesh = instanced(geo, mat, n, shadow);
       this.group.add(mesh);
       return new Pool(mesh, n);
     };
-    this.smallBodies = pool(smallBodyGeometry(), ROBOT_MAX);
-    this.midBodies = pool(midBodyGeometry(), ROBOT_MAX);
-    this.quadBodies = pool(quadBodyGeometry(), 512);
-    this.quadTurrets = pool(quadTurretGeometry(), 512);
-    this.quadGuns = [0, 1, 2, 3].map((w) => pool(quadWeaponGeometry(w), 256));
-    this.bigBodies = pool(bigBodyGeometry(), 256);
-    this.saws = pool(sawGeometry(), ROBOT_MAX, lamp, false);
-    this.buckets = pool(bucketGeometry(), 256 * WALK_LEGS);
-    this.beams = pool(beamGeometry(), ROBOT_MAX * 2);
-    this.limbs = pool(pipeGeometry(10), ROBOT_MAX * 6);
-    this.pipes = pool(pipeGeometry(), ROBOT_MAX * 10);
-    this.cables = pool(pipeGeometry(5), ROBOT_MAX * 12);
-    this.knuckles = pool(knuckleGeometry(), ROBOT_MAX * 8);
-    this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), ROBOT_MAX * 3, lamp, false);
+    this.smallBodies = pool(smallBodyGeometry(), M);
+    this.midBodies = pool(midBodyGeometry(), M);
+    this.quadBodies = pool(quadBodyGeometry(), cap(512));
+    this.quadTurrets = pool(quadTurretGeometry(), cap(512));
+    this.quadGuns = [0, 1, 2, 3].map((w) => pool(quadWeaponGeometry(w), cap(256)));
+    this.bigBodies = pool(bigBodyGeometry(), cap(256));
+    this.saws = pool(sawGeometry(), M, lamp, false);
+    this.buckets = pool(bucketGeometry(), cap(256) * WALK_LEGS);
+    this.beams = pool(beamGeometry(), M * 2);
+    this.limbs = pool(pipeGeometry(10), M * 6);
+    this.pipes = pool(pipeGeometry(), M * 10);
+    this.cables = pool(pipeGeometry(5), M * 12);
+    this.knuckles = pool(knuckleGeometry(), M * 8);
+    this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), M * 3, lamp, false);
     // After dark every working robot sweeps a red beam where it looks; the night lights (src/world/nightLights.ts)
     // find this on the group and draw the beams (faked, a real red light on the nearest few).
     this.group.userData.lampSource = (emit: LampEmit, time: number, v: { readonly [k: string]: number }) => this.emitEyes(emit, time, v);
@@ -519,6 +528,8 @@ export class RobotsDraw {
   private lamp(m: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, hex: number | THREE.Color) {
     this.ml.compose(this.tmp.set(x, y, z), this.qa.identity(), this.s.set(w, h, d));
     this.mb.multiplyMatrices(m, this.ml);
+    const sw = this.eyeSwap;
+    if (sw && typeof hex === "number") hex = hex === EYE_RED ? sw[0] : hex === ALARM ? sw[1] : hex;
     this.lamps.put(this.mb, typeof hex === "number" ? lin(hex) : hex);
   }
 

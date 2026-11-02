@@ -1,5 +1,5 @@
 // The summoner's units on a battlefield (glue; docs/proposal-summoner.md, Keith 2026-11-02): the attack drones
-// (drones.ts) for now. Feeds them their owner (the player's mech) and the foes the register holds round it, prefers the
+// (drones.ts), and the ground units (allies.ts: turret companions and the scrap swarm). Feeds them their owner (the player's mech) and the foes the register holds round it, prefers the
 // owner's target lock (Tab, or the soft lock), turns their shots into battlefield rounds of the owner's team, makes them
 // hittable by the other teams' rounds, and draws them. Any combat lab (or the convoy lab) can add one.
 // Ownership: host (the drones' damage and targets); the owner is the player whose mech carries them.
@@ -11,11 +11,14 @@ import { FLAG, type Filter } from "../game/register";
 import type { Ground } from "../mech/walker";
 import { Drones, DRONE_DEFAULTS, DRONE_PARAMS, DRONE_GROUPS, type DroneFoe, type DroneValues } from "./drones";
 import { DronesDraw } from "./dronesDraw";
+import { Allies, ALLY_DEFAULTS, ALLY_PARAMS, ALLY_GROUPS, type AllyValues } from "./allies";
+import type { RobotValues } from "../combat/robots";
+import type { DeathPhysics } from "../physics/deaths";
 
-export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS };
-export type SummonValues = DroneValues;
-export const SUMMON_PARAMS = [...DRONE_PARAMS];
-export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS] };
+export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS };
+export type SummonValues = DroneValues & AllyValues & RobotValues;
+export const SUMMON_PARAMS = [...DRONE_PARAMS, ...ALLY_PARAMS];
+export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...ALLY_GROUPS] };
 
 /** Battlefield gun slots the summons' rounds use (other guns share 2..19; the effects hold 24). */
 const SLOT0 = 20, SLOTS = 4;
@@ -48,6 +51,8 @@ class DronesTarget implements Hittable {
 export class Summons {
   readonly drones: Drones;
   readonly dronesDraw: DronesDraw;
+  /** Turret companions and the scrap swarm. */
+  readonly allies: Allies;
   private target: DronesTarget;
   private foes: DroneFoe[] = [];
   private pool: DroneFoe[] = [];
@@ -58,7 +63,7 @@ export class Summons {
   private wasAlive = true;
   private filter: Filter;
 
-  constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter) {
+  constructor(private bf: Battlefield, scene: THREE.Object3D, readonly v: SummonValues, ground: Ground, private owner: MechUnit, enemies: Filter, deaths: DeathPhysics | null = null) {
     this.drones = new Drones(v, ground);
     this.dronesDraw = new DronesDraw(this.drones);
     scene.add(this.dronesDraw.group);
@@ -66,10 +71,19 @@ export class Summons {
     bf.targets.push(this.target);
     // Foes: hittable things of another team, not asleep or knocked down.
     this.filter = { ...enemies, none: (enemies.none ?? 0) | FLAG.Asleep | FLAG.Down };
+    this.allies = new Allies(bf, scene, v, ground, owner, enemies, deaths);
   }
 
+  /** The send command (the swarm at the owner's lock, else at the cursor) and the recall. */
+  send() {
+    const o = this.owner, L = o.lock;
+    if (L) this.allies.sendSwarm(L.x, L.z, typeof L.key === "number" ? L.key : -1);
+    else if (o.cursor) this.allies.sendSwarm(o.cursor.x, o.cursor.z);
+  }
+  recall() { this.allies.recall(); }
+
   /** Meshes for the hold-V selector. */
-  get meshes(): THREE.Object3D[] { return this.dronesDraw.meshes; }
+  get meshes(): THREE.Object3D[] { return [...this.dronesDraw.meshes, ...this.allies.draw.group.children]; }
 
   update(dt: number) {
     const bf = this.bf, o = this.owner, v = this.v, reg = bf.register, p = o.sim.pelvis;
@@ -111,6 +125,7 @@ export class Summons {
       }
     }
     this.dronesDraw.update(dt);
+    this.allies.update(dt);
   }
 
   /** HUD line. */
@@ -118,6 +133,6 @@ export class Summons {
     const d = this.drones;
     let busy = 0;
     for (let i = 0; i < d.n; i++) if (d.up[i] && d.foe[i] >= 0) busy++;
-    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost}`;
+    return `drones ${d.flying}/${d.n} up · ${busy} attacking · rounds ${d.shots} · lost ${d.lost} · ${this.allies.hud()}`;
   }
 }
