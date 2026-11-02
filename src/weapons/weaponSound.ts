@@ -31,12 +31,12 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
     const rumble = S.swell(r, S.lowPass(S.band(r, len, 25, 110, 0.7, 0.2, -17), 150), 0.08, 0.05, 0.15, 4, 12);
     return S.scale(S.mix(
       S.thump(0.45, 90 * f, 45 * f, 0.45),
-      S.lowPass(S.noise(r, 0.3, 700, 0.7, 0.002), 1000),
+      S.lowPass(S.noise(r, 0.35, 900, 0.9, 0.002), 1300),
       S.delay(S.band(r, 0.05, 2000, 6000, 0.12, 0.001, -200), 0.048),
       S.ring(r, len, [[74 * f, -8, -17]], 0.6, { attack: 0.2, glide: 0.72 }),
       S.scale(rumble, 0.75),
-      S.ring(r, 1.2, hz(BLAST_MID, f), 0.1, { attack: 0.01, detune: 0.04, jitter: 0.06 }),
-      S.band(r, 1.0, 200, 1200, 0.06, 0.01, -30)), 1.0);
+      S.ring(r, 1.2, hz(BLAST_MID, f), 0.3, { attack: 0.01, detune: 0.04, jitter: 0.06 }),
+      S.band(r, 1.0, 180, 1200, 0.25, 0.01, -30)), 1.0);
   }), () => v.blastLevel);
   sfx.addSound("mortar", variants(2, 45, (r) => S.mix(S.thump(0.3, 150, 55, 1.0), S.noise(r, 0.25, 1100, 0.5, 0.001), S.clang(r, 0.12, 0.12))), () => v.mortarLevel);
   // A rocket clip's swap (Keith 2026-10-31: a reload you can hear): the empty clip unlatching and dropping (a clank and a

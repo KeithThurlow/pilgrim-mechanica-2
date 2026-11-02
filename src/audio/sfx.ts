@@ -58,7 +58,10 @@ export class Sfx {
   constructor(public v: SfxValues, private camera: THREE.Camera) {
     this.ctx = new AudioContext();
     this.master = this.ctx.createGain();
-    this.master.connect(this.ctx.destination);
+    // A limiter at the end (Keith 2026-11-02: explosions the loudest sound): stacked blasts squash instead of clipping.
+    const limit = this.ctx.createDynamicsCompressor();
+    limit.threshold.value = -4; limit.knee.value = 4; limit.ratio.value = 12; limit.attack.value = 0.003; limit.release.value = 0.2;
+    this.master.connect(limit).connect(this.ctx.destination);
     this.build();
     // Browsers start audio suspended until the page is clicked or a key is pressed.
     const wake = () => { if (this.ctx.state !== "running") void this.ctx.resume(); };
