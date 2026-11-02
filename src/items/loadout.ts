@@ -95,8 +95,14 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   const hull = lo.hull ? BASE_BY_ID[lo.hull.base] : null;
   const side = sideOf(slot);
   switch (slot) {
-    case "legs": return item.kind === "legs" ? null : "only legs go here";
-    case "hull": return item.kind === "hull" ? null : "only a hull goes here";
+    case "legs": {
+      if (item.kind !== "legs") return "only legs go here";
+      return liftProblem(item, lo.hull);
+    }
+    case "hull": {
+      if (item.kind !== "hull") return "only a hull goes here";
+      return liftProblem(lo.legs, item);
+    }
     case "sensor": {
       if (item.kind !== "sensor") return "only a sensor goes here";
       const has = hull?.mounts?.sensor ?? [];
@@ -134,6 +140,18 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
       return hull?.mounts?.waist.includes(side!) ? null : "the hull has no waist mount here";
     }
   }
+}
+
+/**
+ * Legs that can only lift so much (hover legs, Keith 2026-11-02: they "can't support heavy hulls"): why this hull is
+ * too heavy for these legs, or null. The hull's own weight counts (with its Protocols), not what hangs on it.
+ */
+export function liftProblem(legs: Item | null, hull: Item | null): string | null {
+  if (!legs || !hull) return null;
+  const lifts = effectiveStats(legs).lifts;
+  if (lifts === undefined) return null;
+  const w = itemWeight(hull);
+  return w > lifts + 1e-6 ? `too heavy: ${BASE_BY_ID[legs.base]?.name ?? "these legs"} lift hulls up to ${lifts.toFixed(1)} t, this hull is ${w.toFixed(1)} t` : null;
 }
 
 /** A sensor item's style (an unknown base counts as a cluster, the old default). */
@@ -268,6 +286,8 @@ export interface ResolvedValues {
   walkSpeed: number; sprintSpeed: number; accel: number; strideBase: number; stridePerSpeed: number; impact: number; turnRate: number;
   /** The legs' trample reach and damage, × the Trample sliders (src/combat/trample.ts; Keith 2026-10-31). */
   trample: number; crush: number;
+  /** 1: the legs hover (src/mech/hover.ts) instead of walking. */
+  hover: number;
   hull: number; torsoTurnRate: number;
   /** The hull's armour (src/game/armour.ts). */
   armour: number;
@@ -381,6 +401,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   const values: ResolvedValues = {
     walkSpeed: legs.walkSpeed, sprintSpeed: legs.sprintSpeed, accel: legs.accel, strideBase: legs.strideBase, stridePerSpeed: legs.stridePerSpeed, impact: legs.impact, turnRate: legs.turnRate,
     trample: legs.trample ?? 1, crush: legs.crush ?? 1,
+    hover: legs.hover ?? 0,
     hull: hull.hull, torsoTurnRate: hull.torsoTurnRate, armour: hull.armour ?? 0,
     dashCharges: pack?.dashCharges ?? bare.bareDashCharges, dashRecharge: pack?.dashRecharge ?? bare.bareDashRecharge, boostFuel: pack?.boostFuel ?? 0,
     ammoPerGun: first?.ammo ?? BASE_STATS("mg-medium").magazine,

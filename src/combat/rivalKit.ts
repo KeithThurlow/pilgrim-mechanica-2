@@ -128,7 +128,9 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     return false;
   };
   put("legs", pickBase(r, ofKind("legs")).id);
-  put("hull", pickBase(r, ofKind("hull")).id);
+  // A hull the legs can lift (hover legs take only light ones).
+  const lifts = lo.legs?.stats.lifts ?? Infinity;
+  put("hull", pickBase(r, ofKind("hull").filter((b) => b.weight <= lifts)).id);
   // A sensor that fits the hull's sockets (a few tries).
   for (let i = 0; i < 4 && !lo.sensor; i++) put("sensor", pickBase(r, ofKind("sensor")).id);
   for (const s of SIDES) {

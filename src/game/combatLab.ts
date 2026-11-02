@@ -255,7 +255,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
       ABILITY_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] },
-      { id: "legs", label: "Legs", groups: ["Move", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
+      { id: "legs", label: "Legs", groups: ["Move", "Hover", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Mech wrecks", "Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },

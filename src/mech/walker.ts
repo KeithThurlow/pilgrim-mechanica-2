@@ -28,6 +28,7 @@
 // that can't reach the ground hangs while the mech drops the rest.
 import { Vector3, Quaternion, Euler, Matrix4 } from "three";
 import type { WalkerValues } from "./walkerTuning";
+import { HoverState, hoverDash, stepHover } from "./hover";
 import { dashAcross, dashBeats, dashBurst, dashBurstEnd, dashDip, dashHoldEnd, dashEdgeK, dashKind, dashLeanK, dashPreTurn, dashTurn, dashYaw, type DashBeats, type DashKind } from "./dashSteps";
 
 export interface Ground {
@@ -294,11 +295,16 @@ export class WalkerSim {
   /** In the dash's push-off and slide. */
   get dashing() { return this.dashMove !== null; }
   /** In a dash at all: its steps or the rest of its burst (Keith 2026-10-31: no rail charge through it). */
-  get inDash() { return this.dashMove !== null || this.burst; }
+  get inDash() { return this.dashMove !== null || this.burst || (this.hovering && this.hov.dashing); }
   /** Seconds since the dash was pressed (its steps or the rest of its burst); -1 out of a dash. */
-  get dashClock() { return this.dashMove ? this.dashMove.t : this.burst ? this.burstT : -1; }
+  get dashClock() { return this.hovering ? this.hov.dashT : this.dashMove ? this.dashMove.t : this.burst ? this.burstT : -1; }
   /** The burst's hold ends this long after the press: Space still down then, the sprint; else the hard stop. */
-  get dashHoldEnd() { return dashHoldEnd(this.v); }
+  get dashHoldEnd() { return this.v.hover >= 0.5 ? this.v.hoverDashTime : dashHoldEnd(this.v); }
+  /** Flying on hover legs (src/mech/hover.ts): the walk is off, the feet hang under the hips. */
+  hovering = false;
+  private hov = new HoverState();
+  /** Off the ground for the leg pose: in the air or hovering (the legs hang, nothing is planted). */
+  private get lofted() { return this.airborne || this.hovering; }
 
   /**
    * A tapped dash's hard stop (Keith 2026-10-31: "more grip at the dash so you can exit out of it easier... allow more
@@ -421,6 +427,7 @@ export class WalkerSim {
     this.accPitch = this.accRoll = 0;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
     this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstBraking = false; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
+    this.hovering = false; this.hov = new HoverState();
     this.pos.set(x, 0, z);
     this.heading = heading;
     this.speed = 0;
@@ -518,6 +525,8 @@ export class WalkerSim {
    * a crane letting go, a jump, a blast. The walker lands by itself.
    */
   launch(vx: number, vy: number, vz: number) {
+    // Hovering, a launch (a blast, a crane letting go) throws the body and the drive catches it.
+    if (this.v.hover >= 0.5) { if (!this.hovering) this.hoverBegin(); this.vel.set(vx, 0, vz); this.bodyY.v = vy; return; }
     this.dashMove = null; this.burst = false; this.boostTo = 0;
     this.hipOpen = 0;
     for (const f of this.feet) f.kneeYaw = 0;
@@ -569,6 +578,9 @@ export class WalkerSim {
     if (this.stagger > 0) { this.stagger = Math.max(0, this.stagger - dt); cmd = { x: 0, z: 0, sprint: false }; }
     this.footSlip = 0;
     this.slip.set(0, 0, 0);
+    // Hover legs fly instead of walking (src/mech/hover.ts); switched off mid-flight, it drops and lands as any fall.
+    if (v.hover >= 0.5) { this.hoverUpdate(dt, cmd); return; }
+    if (this.hovering) { this.hovering = false; this.launch(this.vel.x, this.bodyY.v, this.vel.z); }
     this.tuckPose();
     this.turnLean(dt);
     this.accelLean(dt);
@@ -1642,7 +1654,7 @@ export class WalkerSim {
   }
 
   /** The legs can start a dash now (on the ground, not staggered or in a landing squat; mid-dash too). */
-  get canDash() { return !this.airborne && !this.squatState && this.stagger <= 0 && !this.bStance; }
+  get canDash() { return this.v.hover >= 0.5 ? this.stagger <= 0 : !this.airborne && !this.squatState && this.stagger <= 0 && !this.bStance; }
 
   /**
    * Start a dash the way (x, z) points (src/mech/dash.ts keeps the charges); out of the sprint or a dash's short sprint
@@ -1650,6 +1662,7 @@ export class WalkerSim {
    */
   dash(x: number, z: number) {
     if (!this.canDash || x * x + z * z < 1e-6) return false;
+    if (this.v.hover >= 0.5) { if (!this.hovering) this.hoverBegin(); hoverDash(this.hov, this.hoverBody(), x, z, this.v); return true; }
     if (this.running) this.runEnd();
     // Mid-dash: the new one starts from the feet as they are (a swinging one carries on into the new plan).
     this.dashMove = null;
@@ -2661,6 +2674,75 @@ export class WalkerSim {
   }
 
   /** Solve every leg for the current body and feet. */
+  /** The walker's own body fields as the hover drive moves them (its height on the height spring). */
+  private hoverBody() {
+    const self = this;
+    return {
+      pos: this.pos, vel: this.vel,
+      get heading() { return self.heading; }, set heading(h: number) { self.heading = h; },
+      get y() { return self.bodyY.x; }, set y(y: number) { self.bodyY.x = y; },
+      get vy() { return self.bodyY.v; }, set vy(y: number) { self.bodyY.v = y; },
+    };
+  }
+
+  /** Into the hover from whatever it was doing: the hips where they are, the feet hanging from where they were. */
+  private hoverBegin() {
+    this.hovering = true;
+    if (this.airborne) { this.vel.set(this.airVel.x, 0, this.airVel.z); this.bodyY.v = this.airVel.y; this.bodyY.x = this.airY; }
+    this.airborne = false; this.squatState = null; this.dashMove = null; this.burst = false; this.boostTo = 0;
+    this.bStance = null; this.bLeap = false; this.running = false; this.runK = 0;
+    this.hipOpen = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0; this.turnRoll = 0;
+    this.hov = new HoverState();
+    for (const f of this.feet) { f.airRel.subVectors(f.pos, this.pelvis); f.kneeYaw = 0; }
+  }
+
+  /** A step on hover legs: the drive moves the body (src/mech/hover.ts), the feet hang and trail under the hips. */
+  private hoverUpdate(dt: number, cmd: MoveCommand) {
+    const v = this.v, h = this.hov;
+    if (!this.hovering) this.hoverBegin();
+    // A shove from outside (a blast's skid, a lunge) joins the drift.
+    this.vel.x += this.skid.x + this.push.x * dt; this.vel.z += this.skid.z + this.push.z * dt;
+    this.skid.set(0, 0, 0);
+    this.prevPos.copy(this.pos);
+    const h0 = this.heading;
+    stepHover(h, this.hoverBody(), { x: cmd.x, z: cmd.z, run: cmd.sprint, boost: this.bound, face: cmd.face }, v, dt,
+      (x, z) => this.ground.height(x, z), (vx, vz) => this.faceScrub(vx, vz, 1, false));
+    this.turnSpeed = wrap(this.heading - h0) / dt;
+    this.speed = Math.hypot(this.vel.x, this.vel.z);
+    // Boosting counts as the sprint for the weapons (off after a while) and anyone reading the line of run.
+    this.running = this.bound; this.runK = 0; this.boundSpeed = this.speed;
+    this.course = this.speed > 0.5 ? Math.atan2(this.vel.x, this.vel.z) : this.heading;
+    this.cpsNow = 0; this.dutyNow = v.duty;
+    this.backing = false; this.idleLeft = 0; this.idleK = 0;
+    this.accLean.x = this.accLean.z = this.accLean.vx = this.accLean.vz = 0;
+    this.pitch.x = h.pitch + this.leanPitch; this.pitch.v = 0;
+    this.roll.x = h.roll + this.leanRoll; this.roll.v = 0;
+    this.lat.step(0, dt); this.impact.step(0, dt);
+    this.pelvis.set(this.pos.x, this.bodyY.x - this.crouch, this.pos.z);
+    this.orient(this.heading);
+    // The feet: hanging under the hips, trailing the travel, swaying out of step; eased in the body's frame so they
+    // swing on after a turn or a stop.
+    this.airExt = 0.35;
+    const fw = forwardOf(this.heading, this.t.f), lf = leftOf(this.heading, this.t.l), rel = this.t.b;
+    const len = v.hipHeight * v.hoverTuck, k = 1 - Math.exp(-dt * v.hoverFootLag);
+    for (const f of this.feet) {
+      const sw = v.hoverSway * Math.sin(2 * Math.PI * v.hoverBobRate * 1.3 * h.t + f.side * 1.7);
+      const side = v.footSpread * v.hoverSpread * f.side;
+      rel.set(lf.x * side + fw.x * sw - this.vel.x * v.hoverTrail, -len + sw * 0.3, lf.z * side + fw.z * sw - this.vel.z * v.hoverTrail);
+      f.airRel.lerp(rel, k);
+      f.pos.set(this.pelvis.x + f.airRel.x, this.pelvis.y + f.airRel.y, this.pelvis.z + f.airRel.z);
+      const g = this.ground.height(f.pos.x, f.pos.z);
+      if (f.pos.y < g + 0.1) f.pos.y = g + 0.1;
+      f.swinging = true; f.u = 0.5; f.stanceT = 0; f.bState = 0; f.hang = false; f.short = false; f.entryU = -1;
+      f.slide.set(0, 0, 0); f.wasPlanted = false;
+      f.up.copy(UP); f.yaw = this.heading + f.side * v.toeOut * D2R; f.pitch = v.hoverToe * D2R; f.toe = 0.3;
+      f.groundY = g;
+      f.liftTheta = f.theta = v.cannonRake * D2R;
+      f.planted.copy(f.pos); f.plantedUp.copy(UP); f.plantedYaw = f.yaw;
+    }
+    this.pose();
+  }
+
   private pose() {
     const v = this.v;
     const pl = this.t.l.set(1, 0, 0).applyQuaternion(this.pelvisQ);
@@ -2685,7 +2767,7 @@ export class WalkerSim {
       // A squashed planted leg also turns its knee outward at the hip (thighSplay per unit of compression), so the
       // thigh angles out to the side instead of standing straight up and down (Keith 2026-10-24, side slopes).
       const rest = Math.max(0.5, v.hipHeight - v.ankleHeight);
-      const squash = f.swinging || this.airborne ? 0 : clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.6);
+      const squash = f.swinging || this.lofted ? 0 : clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.6);
       f.splay += ((v.thighSplay * squash) - f.splay) * 0.15;
       forwardOf(this.heading + this.hipOpen + f.side * (v.kneeOut + f.splay) * D2R + f.kneeYaw, P.legFwd);
       const reach = v.femur + v.shin - 0.002;
@@ -2698,7 +2780,7 @@ export class WalkerSim {
       const planeUp = toHip.clone().addScaledVector(P.legFwd, -toHip.dot(P.legFwd)).normalize();
       const rake = v.cannonRake * D2R;
       let theta: number;
-      if (this.airborne) {
+      if (this.lofted) {
         // In the air: the hocks fold as the legs tuck, open as they reach for the ground.
         theta = rake + v.airFold * D2R * (1 - this.airExt);
       } else if (f.swinging) {
@@ -2730,7 +2812,7 @@ export class WalkerSim {
       // A swinging leg squashed more than a flat step squashes it (stepping uphill) lifts its knee through the hip too
       // (Keith 2026-10-26 18:28: uphill the thigh was held down vertical; it's fine for it to rise toward the hull).
       // The run's swing has its own tuck, so this fades out as the run blends in.
-      const swingSquash = f.swinging && !this.airborne && f.bState === 0
+      const swingSquash = f.swinging && !this.lofted && f.bState === 0
         ? Math.max(0, clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.7) - v.swingFoldFrom) * (1 - this.runK) : 0;
       if (swingSquash > 0.005) {
         // Swinging, the knee folds shut long before the thigh moves (long thigh, short shin), so aim the thigh itself:
