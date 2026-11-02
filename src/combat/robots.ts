@@ -193,7 +193,7 @@ export const ROBOT_DEFAULTS = {
   robotBeamLight: 1600,
   robotBeamPrio: 6,
   robotBeamFlash: 3500,
-  robotBeamScorch: 3,
+  robotBeamScorch: 1.5,
   robotBeamDig: 0.5,
   robotBeamSweep: 1.8,
   robotBeamStartWidth: 0.1,
