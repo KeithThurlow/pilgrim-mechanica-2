@@ -133,6 +133,33 @@ const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; 
   ok(Math.hypot(bx - before.x, bz - before.z) < 0.11 && Math.abs(best - before.d) < 1e-6, `dent stays put in the world after scrolling (${before.x.toFixed(2)}, ${before.z.toFixed(2)} → ${bx.toFixed(2)}, ${bz.toFixed(2)})`);
 }
 
+// 5b. No tiling (Keith 2026-11-02): a mark only ever lands at its true place. A print straddling the window's back edge
+// marks nothing at the front edge, and walking one way across many windows, printing as you go, never finds a mark
+// ahead of you that you didn't make there.
+{
+  const n = 100, size = 10, g = new DentGrid(n, size, rates(0.1, false));
+  g.follow(0, 0); g.step(0, []);
+  g.step(0.016, [brush(-4.9, 0, 0.5, 0, 1, 0.1), brush(-6, 0, 0.5, 0, 1, 0.1)]);
+  let front = 0;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if (texelWorld(i, n, size, g.cx) > 3) front = Math.max(front, g.a[(j * n + i) * 4]);
+  ok(front === 0, `a print past the back edge leaves the front edge alone (${(front * 100).toFixed(2)} cm)`);
+  // Walk +x at 6 m/s for 30 s, a print every 0.4 m along z=0 (remembered, as the game does, and replayed as the window
+  // moves), relaxing as it goes; the window ahead must stay clean.
+  const w = new DentGrid(n, size, rates(0.1, false)), mem = new DentMemory();
+  let x = 0, next = 0, ahead = 0;
+  w.follow(0, 0); w.step(0, []);
+  for (let t = 0; t < 30; t += 1 / 30) {
+    const px = w.cx, pz = w.cz;
+    x += 6 / 30; w.follow(x, 0);
+    const bs: Brush[] = [];
+    mem.replay(t, w.cx, w.cz, px, pz, size / 2, 250, bs);
+    if (x >= next) { const b = brush(x, 0, 0.45, Math.PI / 2, 1.4, 0.1); bs.push(b); mem.remember(0, b, 600, t, 6000); next += 0.4; }
+    w.step(1 / 30, bs);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if (texelWorld(i, n, size, w.cx) > x + 1.5) ahead = Math.max(ahead, w.a[(j * n + i) * 4], w.a[(j * n + i) * 4 + 1]);
+  }
+  ok(ahead < 1e-4, `30 s walking one way: nothing ahead of the walker (${(ahead * 1000).toFixed(3)} mm)`);
+}
+
 // 6. The patch's true ground: exact at its vertices, within 2 cm between, while it scrolls; coarse = the chunks' grid.
 {
   const field = new DuneField({ ...TERRAIN_DEFAULTS });

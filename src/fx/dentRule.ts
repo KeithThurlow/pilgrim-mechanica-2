@@ -236,11 +236,16 @@ export class DentGrid {
         const wx = texelWorld(i, n, size, this.cx);
         if (zin && Math.abs(wx - this.pcx) <= half) {
           const il = ((i + n - 1) % n), ir = (i + 1) % n, jd = (j + n - 1) % n, ju = (j + 1) % n;
-          const L = (j * n + il) * 4, R = (j * n + ir) * 4, D = (jd * n + i) * 4, U = (ju * n + i) * 4;
+          // Across the window's edge the wrapped neighbour is a coverage away: use the texel itself (dents.ts).
+          const ts = size / n;
+          const L = (j * n + (Math.abs(texelWorld(il, n, size, this.cx) - wx) < ts * 1.5 ? il : i)) * 4;
+          const R = (j * n + (Math.abs(texelWorld(ir, n, size, this.cx) - wx) < ts * 1.5 ? ir : i)) * 4;
+          const D = ((Math.abs(texelWorld(jd, n, size, this.cz) - wz) < ts * 1.5 ? jd : j) * n + i) * 4;
+          const U = ((Math.abs(texelWorld(ju, n, size, this.cz) - wz) < ts * 1.5 ? ju : j) * n + i) * 4;
           const surf = Math.round(A[o + 3]);
           relaxTexel(A, o, A[L] + A[R] + A[D] + A[U], A[L + 1] + A[R + 1] + A[D + 1] + A[U + 1], this.rates[surf] ?? SET_RATES, rdt, B, o);
         } else { B[o] = 0; B[o + 1] = 0; B[o + 2] = 0; B[o + 3] = 0; }
-        for (const br of brushes) splat(B, o, br, wrap(wx - br.x, size), wrap(wz - br.z, size));
+        for (const br of brushes) splat(B, o, br, wx - br.x, wz - br.z);
         clampTexel(B, o, this.maxDepth, this.maxBerm);
       }
     }
