@@ -105,6 +105,35 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   must(s4.charge === 0 && s4.step(dt, false, st, pool(100)).power === 0, "a dash didn't drop the lance's charge");
 }
 
+// ---- The sunder beam: a press commits it, it charges, blasts for its channel time, cools down ----
+{
+  const st = energyStats("sunder", null, V), p = pool(100), sim = new EnergySim();
+  sim.step(dt, true, st, p);
+  must(near(100 - p.left, V.sunderEnergy, 1e-6) && sim.phase === 1, `the sunder beam didn't pay its whole cost at the press (${(100 - p.left).toFixed(2)})`);
+  let shots = 0, onAt = -1, offAt = -1;
+  // One tap: let go at once; it carries on by itself.
+  for (let t = dt; t < V.sunderCharge + V.sunderChannel + 1; t += dt) {
+    shots += sim.step(dt, false, st, p).shots;
+    if (sim.on && onAt < 0) onAt = t;
+    if (!sim.on && onAt >= 0 && offAt < 0) offAt = t;
+  }
+  must(Math.abs(onAt - V.sunderCharge) < 0.02, `the sunder beam blasted ${onAt.toFixed(2)} s after the press (want ${V.sunderCharge})`);
+  must(Math.abs(offAt - onAt - V.sunderChannel) < 0.02, `the sunder blast lasted ${(offAt - onAt).toFixed(2)} s (want ${V.sunderChannel})`);
+  must(Math.abs(shots - V.sunderTicks * V.sunderChannel) <= 1, `the sunder blast ticked ${shots} times (want ${V.sunderTicks * V.sunderChannel})`);
+  must(near(100 - p.left, V.sunderEnergy, 1e-6), "the sunder beam spent more energy after the press");
+  must(sim.cool > 0 && sim.step(dt, true, st, p).shots === 0 && sim.phase === 0, "the sunder beam started again during its cooldown");
+  // Not enough in the reactor: it doesn't start (and takes nothing).
+  const low = pool(V.sunderEnergy * 0.5), s2 = new EnergySim();
+  s2.step(dt, true, st, low);
+  must(s2.phase === 0 && s2.dry && near(low.left, V.sunderEnergy * 0.5), "a sunder beam started without the energy for it");
+  // A dash cuts it off mid-blast.
+  const s3 = new EnergySim();
+  for (let t = 0; t < V.sunderCharge + 0.5; t += dt) s3.step(dt, true, st, pool(100));
+  must(s3.on, "the sunder beam wasn't blasting half a second in");
+  s3.drop();
+  must(!s3.on && s3.phase === 0 && s3.step(dt, false, st, pool(100)).shots === 0, "a dash didn't cut the sunder beam off");
+}
+
 // ---- Items ----
 {
   for (const [base, cls] of [["laser-medium", "laser"], ["beam-medium", "beam"], ["lance-medium", "lance"]] as const) {
@@ -132,7 +161,7 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   });
   const mkUnit = () => ({ team: 0, dash: new Dash({ ...DASH_DEFAULTS }), reactor: new Reactor({ ...REACTOR_DEFAULTS }), lock: null, upper: { guns: [{ kick: 0 }, { kick: 0 }], shake: 0 } });
   const muzzle = new THREE.Vector3(0, 3.5, 0), flatDir = new THREE.Vector3(0, 0, 1);
-  const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0) => {
+  const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc" | "sunder", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0) => {
     const range = new DummyRange({ ...DUMMY_DEFAULTS }, spots);
     const unit = mkUnit();
     // Candidates (the register is empty on this stand-in): each live dummy's middle.
@@ -203,7 +232,25 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     const none = fire("arc", flat, 20, dt, [{ x: 0, z: 60 }]);
     must(none.guns.arcs.length === 1 && none.guns.last.arcHits === 1 && taken(none.range.dummies[0]) === 0, "an arc with nothing in range didn't ground at the aim");
   }
-  for (const [base, cls] of [["plasma-medium", "plasma"], ["orb-medium", "orb"], ["arc-medium", "arc"]] as const) {
+  {
+    // Sunder: one press, it charges, then burns every cutout under its line (it isn't stopped by the first), none off it.
+    const line = [{ x: 0, z: 12 }, { x: 0, z: 20 }, { x: 0, z: 28 }, { x: 7, z: 20 }];
+    const charged = fire("sunder", flat, 40, V.sunderCharge * 0.9, line);
+    must(line.every((_, k) => taken(charged.range.dummies[k]) === 0), "the sunder beam hurt something while still charging");
+    must(charged.guns.sides[1].tele.on && !charged.guns.sides[1].beam.on, "the sunder beam's aim line didn't show while charging");
+    must(charged.guns.slowed(), "the walk didn't slow while the sunder beam charged");
+    const { range, guns, unit } = fire("sunder", flat, 40, V.sunderCharge + 1, line);
+    const hit = [0, 1, 2].map((k) => taken(range.dummies[k]));
+    must(hit.every((h) => h > 0), `the sunder beam didn't cut through every cutout on its line (${hit.map((h) => h.toFixed(0)).join(", ")})`);
+    must(taken(range.dummies[3]) === 0, "the sunder beam burnt a cutout 7 m off its line");
+    must(guns.sides[1].beam.on, "the sunder blast stopped when the trigger let go (it should run its channel time)");
+    must(near(unit.reactor.energy, REACTOR_DEFAULTS.reactorCap - V.sunderEnergy, 0.3) && near(unit.dash.energy, DASH_DEFAULTS.dashCharges), "the sunder beam didn't draw its cost from the reactor alone");
+    // A dune in the way: the blast ends in it.
+    const dune = (_x: number, z: number) => 6 * Math.exp(-(((z - 16) / 3) ** 2));
+    const blocked = fire("sunder", dune, 40, V.sunderCharge + 1, [{ x: 0, z: 25 }]);
+    must(taken(blocked.range.dummies[0]) === 0, "the sunder beam went through a dune");
+  }
+  for (const [base, cls] of [["plasma-medium", "plasma"], ["orb-medium", "orb"], ["arc-medium", "arc"], ["sunder-medium", "sunder"]] as const) {
     const lo = defaultLoadout(), it = makeItem(base, "common", `energy-${base}`);
     fit(lo, "mountL", it);
     must(resolve(lo).guns.left?.cls === cls && (itemDps(it) ?? 0) > 50, `${base} didn't resolve to an energy ${cls} with DPS`);
@@ -215,4 +262,4 @@ if (problems.length) {
   for (const p of problems) console.error(" -", p);
   process.exit(1);
 }
-console.log("energy-check: ok (reactor, laser, beam, lance, plasma, orb, arc: timing and energy, items, hits on a stand-in field)");
+console.log("energy-check: ok (reactor, laser, beam, lance, plasma, orb, arc, sunder: timing and energy, items, hits on a stand-in field)");
