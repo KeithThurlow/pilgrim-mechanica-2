@@ -9,6 +9,7 @@
 // Standing small ones take their feet from the sim's leg pose; latched ones lie flat on the hull, legs gripping and
 // raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take every leg from the sim (planted,
 // stepping) through RobotSwarm.legPose.
+import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import * as THREE from "three/webgpu";
 import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
@@ -116,9 +117,13 @@ export class RobotsDraw {
    * opts (a friendly swarm, src/summon/allies.ts): cap, the most robots drawn (pools sized to it; ROBOT_MAX by default);
    * paint, a colour multiplied into every painted part; eye and alarm, lamp colours in place of the red ones.
    */
+  /** Dying big ones' cores going unstable (its hooks: src/game/robotBeam.ts coreWarnFx). */
+  readonly coreWarn: CoreWarnDraw;
   constructor(private swarm: RobotSwarm, opts: { cap?: number; paint?: number; eye?: number; alarm?: number } = {}) {
     this.beamDraw = new RobotBeamDraw(swarm);
     this.group.add(this.beamDraw.group);
+    this.coreWarn = new CoreWarnDraw(swarm.ground);
+    this.group.add(this.coreWarn.group);
     if (opts.eye !== undefined) this.eyeSwap = [opts.eye, opts.alarm ?? opts.eye];
     const M = Math.max(1, Math.min(ROBOT_MAX, opts.cap ?? ROBOT_MAX)), cap = (n: number) => Math.min(n, M);
     const paint = new THREE.MeshStandardMaterial({ color: opts.paint ?? 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.25, flatShading: true });
@@ -196,6 +201,7 @@ export class RobotsDraw {
     }
     for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, this.quadTurrets, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
     this.beamDraw.update(dt);
+    this.coreWarn.update(dt, sw.cores);
   }
 
   /** One small scrapper. */

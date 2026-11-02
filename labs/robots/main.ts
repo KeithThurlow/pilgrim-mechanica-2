@@ -22,7 +22,7 @@ import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../src/combat/striderLab";
-import { fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
 import { DroidSquads } from "../../src/game/droidFight";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -128,6 +128,7 @@ if (robotLine) {
   if (lmb) script = () => { frame++; return { cmd: { x: 0, z: 0, sprint: false }, aim: { x: lmb.x, y: field.height(lmb.x, lmb.z) + 1.2, z: lmb.z }, trigger: [frame < fireAt, false] }; };
 }
 draw = new RobotsDraw(sw);
+coreWarnFx(bf, draw.coreWarn);
 lab.app.scene.add(draw.group);
 const target = new RobotTarget(sw, 3);
 bf.targets.push(target);
@@ -171,6 +172,17 @@ if (params0.has("pulse")) {
   V.robotSwarmSize = 0;
   const p = player.sim.pos;
   sw.spawn(1, p.x + 6, p.z + 8, 0, { mid: 0, big: 1 }).forEach((i) => { sw.pulseClock[i] = 1.5; sw.beamClock[i] = 99; });
+}
+// ?bigdeath[=s]: no packs, a big walker 12 m off with small ones round its feet, destroyed after s (1 by default):
+// watch its core go unstable and blow, and get clear (Keith 2026-11-02).
+if (params0.has("bigdeath")) {
+  V.robotSwarmSize = 0;
+  const p = player.sim.pos, at = Number(params0.get("bigdeath")) || 1;
+  const [b] = sw.spawn(1, p.x + 4, p.z + 11, 0, { mid: 0, big: 1 });
+  sw.frozen[b] = 1;
+  for (const i of sw.spawn(14, p.x + 4, p.z + 11, 6, { mid: 0.2, big: 0 })) sw.frozen[i] = 1;
+  let t = 0;
+  lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
 }
 // ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
 if (params0.has("lineup")) {
