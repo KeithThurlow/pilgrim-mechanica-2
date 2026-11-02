@@ -154,6 +154,26 @@ export class Dash {
     return true;
   }
 
+  /**
+   * Energy weapons (Keith 2026-11-02, src/weapons/energy/): spend n bars' worth, the emptiest bar with any left first
+   * (from the top on a tie), so the full bars stay for dashes as long as they can. Pauses the refill like the sprint.
+   * False (nothing spent) when there's less than n in all.
+   */
+  use(n: number): boolean {
+    if (n <= 0) return true;
+    if (this.energy < n - 1e-9) return false;
+    let left = n;
+    while (left > 1e-9) {
+      let k = -1;
+      for (let i = 0; i < this.bars.length; i++) if (this.bars[i] > 1e-9 && (k < 0 || this.bars[i] <= this.bars[k])) k = i;
+      if (k < 0) break;
+      const d = Math.min(this.bars[k], left);
+      this.bars[k] -= d; left -= d;
+    }
+    this.idle = 0;
+    return true;
+  }
+
   /** Skidding on its feet: the shove or the glide after it. */
   get active() { return this.phase !== "none"; }
   /** The shove itself (damage cut, the sand burst). */
