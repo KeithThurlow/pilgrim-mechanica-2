@@ -127,6 +127,8 @@ export interface GunStats {
   cls?: GunClass;
   /** The weapon item's own rolled stats for src/weapons (null: an unrolled base item, which runs on the sliders). */
   own?: Record<string, number> | null;
+  /** The weapon item's base id (swords: whose posed keys it swings with, src/weapons/swordPoses.ts). */
+  base?: string;
   /** Light (a hand weapon) rather than Medium (on the hull). */
   light?: boolean;
   /** Its socketed Protocols' behaviour on every round (src/game/shots.ts). */

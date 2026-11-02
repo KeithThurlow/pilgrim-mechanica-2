@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, cutDamage, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose } from "./sword";
+import { SwordSim, cutDamage, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose, type SwordClip } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -61,6 +61,8 @@ interface Side {
   kind: SideKind;
   light: boolean;
   own: Record<string, number> | null;
+  /** The weapon's base id (a sword's posed keys). */
+  base?: string;
   rail: RailSim;
   /** RPG: seconds until it can fire again. */
   cool: number;
@@ -196,7 +198,7 @@ export class Arsenal implements MechWeapons {
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
       body.setTwist?.(0);
-      s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.proto = g?.proto; s.cost = g?.cost ?? 1;
+      s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.base = g?.base; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
@@ -272,10 +274,21 @@ export class Arsenal implements MechWeapons {
     if (light) return { damage: v.rpgDamage * v.podDamage, blast: v.podBlast, speed: v.rpgSpeed, cooldown: v.podCooldown, ap: v.rpgAp };
     return { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
   }
+  /**
+   * The pose lab (labs/pose/): hold a side's sword at a point of a move (clip, time in s, reach 0 close .. 1 far)
+   * instead of swinging it; no cuts. null: swing as normal. Lab only.
+   */
+  swordHold: ((side: 1 | -1) => { clip: SwordClip; t: number; span: number } | null) | null = null;
+  /** Each side's last sword frame (0 left, 1 right): its shoulder in the hull's frame, the aim's yaw off the hull, its
+   *  stats and reach (the pose lab reads poses back through these). */
+  readonly swordFrame: ({ shoulder: THREE.Vector3; aimYaw: number; st: SwordStats; span: number; clip: SwordClip; t: number } | null)[] = [null, null];
+  /** A side's sword stats (0 left, 1 right), or null when it holds no sword. */
+  swordStatsOf(i: number): SwordStats | null { const s = this.sides[i]; return s.kind === "melee" ? this.swordStats(s) : null; }
+
   swordStats(s: Side): SwordStats {
     const v = this.v, o = s.own;
-    return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave, parry: o.parry ?? 1, heft: o.heft ?? 1, stance: o.stance ?? 0 }
-      : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave, parry: 1, heft: 1, stance: 1 };
+    return o ? { damage: o.damage, ap: o.ap ?? v.swordAp, reach: o.reach, arc: o.swing, windup: o.windup, slash: o.slash, recover: o.recover, cleave: o.cleave, parry: o.parry ?? 1, heft: o.heft ?? 1, stance: o.stance ?? 0, pose: s.base }
+      : { damage: v.swordDamage, ap: v.swordAp, reach: v.swordReach, arc: v.swordArc, windup: v.swordWindup, slash: v.swordSlash, recover: v.swordRecover, cleave: v.swordCleave, parry: 1, heft: 1, stance: 1, pose: s.base ?? "sword-light" };
   }
   swarmStats(o: Record<string, number> | null): SwarmStats {
     const v = this.v;
@@ -454,7 +467,9 @@ export class Arsenal implements MechWeapons {
     // Close or far (Keith 2026-11-01): the cut's reach from how far off the aim is (the lock, else the cursor), on the
     // lunge's scale: within its no-lunge distance the bent-elbow draw cut, from its full-lunge distance the full sweep.
     // Scrubbing (a look slider): the arm held at a point of A (0..1) or B (1..2), at the aim's reach; no cuts.
-    const scrub = v.swordScrub > 0 ? { clip: (v.swordScrub <= 1 ? "A" : "B") as "A" | "B", share: v.swordScrub <= 1 ? v.swordScrub : v.swordScrub - 1, span: this.reachShare() } : null;
+    const held0 = this.swordHold?.(sw.side) ?? null;
+    const scrub: { clip: SwordClip; share: number; span: number; t?: number } | null = held0 ? { clip: held0.clip, share: 0, span: held0.span, t: held0.t }
+      : v.swordScrub > 0 ? { clip: (v.swordScrub <= 1 ? "A" : "B") as "A" | "B", share: v.swordScrub <= 1 ? v.swordScrub : v.swordScrub - 1, span: this.reachShare() } : null;
     const sweep = scrub ? null : sw.update(dt, held, st, v, this.reachShare());
     if (scrub) sw.lungeK = 0;
     if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
@@ -469,7 +484,7 @@ export class Arsenal implements MechWeapons {
     // swings on past it. Both swords' twists add (dual swords: a cut each way partly cancels), up to swordTwistMax.
     const D2R = Math.PI / 180;
     // A close cut turns the waist less (0.5 ×).
-    const want = u.alive ? sw.side * twistTarget(sw.clip, sw.t, st, v, sw.span) * v.swordTwist * D2R * (0.5 + 0.5 * sw.span) : 0;
+    const want = u.alive ? sw.side * (scrub ? twistTarget(scrub.clip, scrub.t ?? scrub.share * clipLength(scrub.clip, st, v, scrub.span), st, v, scrub.span) : twistTarget(sw.clip, sw.t, st, v, sw.span)) * v.swordTwist * D2R * (0.5 + 0.5 * sw.span) : 0;
     for (let left = dt; left > 1e-6; left -= 1 / 120) [s.twist, s.twistV] = springStep(s.twist, s.twistV, want, v.swordTwistHz, v.swordTwistDamp, Math.min(left, 1 / 120));
     let total = 0;
     for (const o of this.sides) if (o.kind === "melee") total += o.twist;
@@ -478,7 +493,11 @@ export class Arsenal implements MechWeapons {
     // sword's pose is in the drawn hull's frame, so the sword (and its cut) turns with the waist.
     body.setTwist?.(Math.max(-tmax, Math.min(tmax, total)));
     const aimYaw = u.upper.guns[sw.side === 1 ? 0 : 1].yaw;
-    const pose = scrub ? clipPose(scrub.clip, scrub.share * clipLength(scrub.clip, st, v, scrub.span), sw.side, shoulder, aimYaw, st, v, scrub.span) : sw.pose(shoulder, aimYaw, st, v);
+    const scrubT = scrub ? scrub.t ?? scrub.share * clipLength(scrub.clip, st, v, scrub.span) : 0;
+    const pose = scrub ? clipPose(scrub.clip, scrubT, sw.side, shoulder, aimYaw, st, v, scrub.span) : sw.pose(shoulder, aimYaw, st, v);
+    const fr = this.swordFrame[sw.side === 1 ? 0 : 1] ??= { shoulder: new THREE.Vector3(), aimYaw: 0, st, span: 1, clip: "guard", t: 0 };
+    fr.shoulder.copy(shoulder); fr.aimYaw = aimYaw; fr.st = st;
+    fr.span = scrub ? scrub.span : sw.span; fr.clip = scrub ? scrub.clip : sw.clip; fr.t = scrub ? scrubT : sw.t;
     const armed: HeldPose = { ...pose, upper: v.swordUpperArm, fore: v.swordForearm, out: v.swordShoulderOut };
     body.holdPose?.(sw.side, u.alive ? armed : null);
     // The hand in the world (the arm may have pulled it in to its reach: the model's pivot is where it really is).

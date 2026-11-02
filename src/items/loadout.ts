@@ -341,7 +341,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // The rail charges on energy-tagged coils but spends nothing yet (the energy hook, later): no magazine.
     // The sword (src/weapons/sword.ts): no magazine; its "rate" is one swing per wind-up, slash and recovery, its range
     // the reach.
-    if (cls === "melee") return { fireRate: 1 / Math.max(0.1, w.windup + w.slash + w.recover), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.reach, pierce: 99, ap: w.ap, cls, own, light };
+    if (cls === "melee") return { fireRate: 1 / Math.max(0.1, w.windup + w.slash + w.recover), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.reach, pierce: 99, ap: w.ap, cls, own, base: item.base, light };
     if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, ap: w.ap, cls, own, light };
     return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, ap: w.ap, cls, own, light, proto };
   };
