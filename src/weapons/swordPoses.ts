@@ -38,7 +38,7 @@ export const SWORD_KEYS: { name: string; label: string; clip: "guard" | "A" | "B
 
 /** Keith's posed keys, the defaults everywhere. Paste the pose lab's "Copy pose" JSON here. */
 export const SWORD_POSES: Record<string, PoseSet> = {
-  // Keith 2026-11-02, from the pose lab: the Breaker's full sweep (cut 1's end, under, all of cut 2) and its whole close cut.
+  // Keith 2026-11-02, from the pose lab: the Breaker's rest, its whole close cut, and the full sweep but for cut 1's middle and the cock.
   "sword-light": {
     "bMid": {"hand":[0.705,-0.836,2.596],"fwd":[-0.109,-0.046,0.993],"up":[-0.954,-0.277,-0.118],"pole":[0.756,-0.182,0.629]},
     "bEnd": {"hand":[2.84,-0.086,-0.375],"fwd":[0.992,-0.12,-0.032],"up":[0.013,-0.151,0.989],"pole":[0.213,-0.005,-0.977]},
@@ -54,8 +54,15 @@ export const SWORD_POSES: Record<string, PoseSet> = {
     "bMid:close": {"hand":[0.399,-0.723,1.521],"fwd":[-0.999,-0.028,0.024],"up":[-0.023,-0.043,-0.999],"pole":[0.869,-0.391,0.304]},
     "bEnd:close": {"hand":[2.227,0.793,0.386],"fwd":[0.838,0.243,0.488],"up":[-0.24,-0.64,0.73],"pole":[0.752,0.217,-0.622]},
     "cock:close": {"hand":[0.618,1.2,1.875],"fwd":[-0.216,0.452,-0.865],"up":[-0.151,-0.891,-0.428],"pole":[0.627,-0.697,-0.348]},
+    "rest": {"hand":[0.158,-0.05,2.292],"fwd":[-0.154,0.264,-0.952],"up":[0.253,-0.921,-0.296],"pole":[0.394,-0.392,0.832]},
+    "drive": {"hand":[0.891,1.493,0.323],"fwd":[-0.293,-0.713,-0.637],"up":[-0.222,-0.597,0.771],"pole":[-0.057,-0.586,0.808]},
+    "aStart": {"hand":[1.941,-1.141,0.688],"fwd":[0.763,0.035,-0.646],"up":[-0.646,0.045,-0.762],"pole":[0.239,-0.921,0.309]},
   },
 };
+
+/** Swords that start from another's poses (Keith 2026-11-02: "make that breaker animation a default for the other
+ *  swords, and then I can branch from there"): every key they don't pose themselves is the Breaker's, edits included. */
+export const INHERIT: Record<string, string> = { "sword-heavy": "sword-light", "sword-short": "sword-light" };
 
 /** The pose lab's unsaved edits (only ever set in the lab), on top of SWORD_POSES. */
 let live: Record<string, PoseSet> = {};
@@ -67,7 +74,9 @@ export function posesFor(id: string | undefined): PoseSet {
   if (!id) return EMPTY;
   let m = merged.get(id);
   if (!m) {
-    m = { ...(SWORD_POSES[id] ?? {}) };
+    // A sword that branches from another starts from that one's posed keys (its own on top).
+    m = INHERIT[id] ? { ...posesFor(INHERIT[id]) } : {};
+    for (const [k, p] of Object.entries(SWORD_POSES[id] ?? {})) m[k] = { ...(m[k] ?? {}), ...p };
     for (const [k, p] of Object.entries(live[id] ?? {})) m[k] = { ...(m[k] ?? {}), ...p };
     merged.set(id, m);
   }
