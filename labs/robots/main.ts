@@ -22,7 +22,7 @@ import { applyLoadout } from "../../src/game/loadoutApply";
 import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../src/combat/striderLab";
-import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse } from "../../src/game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse, robotDeathSound } from "../../src/game/robotBeam";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../../src/combat/droids";
 import { DroidSquads } from "../../src/game/droidFight";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -146,6 +146,8 @@ sw.onDeath = (i, nx, nz, speed) => {
 // Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at the
 // plating, medium ones' saws bite.
 sw.onFootfall = robotFootfall(bf, sw);
+// Their deaths, heard (the recorded robot death, src/game/robotBeam.ts).
+robotDeathSound(bf, sw);
 // Big ones lob charges through the battlefield's shells: a ring on the sand where each lands, filling as it comes
 // down, so a dash takes the mech out of it.
 const lobFrom = new THREE.Vector3();
