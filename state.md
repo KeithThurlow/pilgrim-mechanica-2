@@ -308,6 +308,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Footprints no longer tile (Keith; Claude on `claude/project-thread-j1a1o6`)
+- Keith: running one way, you met your own footprints ahead of you. A mark past the dent window's edge was wrapped onto the texels at the far edge (the texture wraps round the window), so prints and ruts kept behind you (`dentMemory`) were pressed a whole window (about 100 m) ahead. Brushes now press only at their true place, and the relax step no longer seeps across the window's edge. Prints still wear away over time as before; kept marks come back only where they were made.
+- `src/fx/dents.ts` (pass), `src/fx/dentRule.ts` (`DentGrid`, its headless twin); `tools/dents-check.ts` 5b (a print past the back edge marks nothing at the front; 30 s walking one way with memory on: nothing ahead; failed on the old code with 10 cm prints ahead). npm test.
 ### 2026-11-02 · Weapon weight review, batch 3: rifle, SMG and scattergun models (Keith; Claude on `claude/project-thread-pwbnhj`)
 - The held round guns get kit models in place of their boxes (`src/weapons/build/heldGuns.ts`: `rifleHeld`, `smgHeld`, `shotgunHeld`; catalog `rifle-held`, `smg-held`, `shotgun-held`; `modelSwap.ts`), laid out after the sister project's rifle template (Unity `tools/blender/templates/rifle.py`; it has no rifle or SMG meshes): battle rifle (solid stock, slab handguard, curved magazine, scope, brake), SMG (stubby, perforated shroud, long stick magazine, folded wire stock), scattergun (over and under barrels, ribbed pump, drum, solid stock). Root at the grip. armoury check; npm test.
 ### 2026-11-02 · Recorded sounds, batch 1: guns and blasts (Keith; Claude on `claude/project-thread-ng4h7l`)
