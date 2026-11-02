@@ -258,14 +258,17 @@ export class DentLayer {
         ));
       });
       Loop({ start: int(0), end: this.uCount, type: "int", condition: "<" }, ({ i }) => {
-        const a = textureLoad(bt, ivec2(i, 0)), b = textureLoad(bt, ivec2(i, 1)), e = textureLoad(bt, ivec2(i, 2)), f = textureLoad(bt, ivec2(i, 3));
+        // Each read into its own variable here: a node first used inside one branch of the If below is declared there,
+        // and the other branch (and the code after) read it unset (Keith 2026-11-02: shaped prints had no depth).
+        const a = textureLoad(bt, ivec2(i, 0)).toVar(), b = textureLoad(bt, ivec2(i, 1)).toVar();
+        const e = textureLoad(bt, ivec2(i, 2)).toVar(), f = textureLoad(bt, ivec2(i, 3)).toVar();
         const p = world.sub(a.xy).toVar();
         p.subAssign(size.mul(round(p.div(size))));
         const shaped = f.x.greaterThan(0.5);
         const reach = select(shaped, f.y.mul(a.z), a.z.mul(max(a.w, 1)).mul(REACH));
         If(abs(p.x).lessThan(reach).and(abs(p.y).lessThan(reach)), () => {
-          const along = p.x.mul(b.x).add(p.y.mul(b.y)), across = p.x.mul(b.y).sub(p.y.mul(b.x));
-          const wob = float(1).add(this.uRough.mul(0.18).mul(wobN));
+          const along = p.x.mul(b.x).add(p.y.mul(b.y)).toVar(), across = p.x.mul(b.y).sub(p.y.mul(b.x)).toVar();
+          const wob = float(1).add(this.uRough.mul(0.18).mul(wobN)).toVar();
           const dd = float(0).toVar();
           If(shaped, () => {
             // A foot's own print (src/fx/footprint.ts): its tile's signed distance, bilinear from four texels.
