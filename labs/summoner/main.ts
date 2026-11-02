@@ -14,6 +14,7 @@ import type { Param } from "../../src/core/tweaks";
 import { combatLab } from "../../src/game/combatLab";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, SMALL, MID, BIG } from "../../src/combat/robots";
 import { RobotsDraw } from "../../src/combat/robotsDraw";
+import { wireRobotBlasts } from "../../src/game/robotBeam";
 import { RobotTarget } from "../../src/combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../src/combat/robotTearFx";
 import { robotRagdoll } from "../../src/physics/bodies";
@@ -88,10 +89,13 @@ sw.onDeath = (i, nx, nz, speed) => {
 sw.onFootfall = robotFootfall(bf, sw);
 const lobFrom = new THREE.Vector3();
 sw.onLob = (i, fx, fy, fz, x, z, flight) => { if (!player.alive) return; const l = sw.lobOf(i); bf.lob(3, lobFrom.set(fx, fy, fz), x, z, flight, l.arc, l.radius, l.damage); };
+// Big ones' beams, pulses and death blasts, as in the robots lab (Keith 2026-11-02: here they never went off). Summons
+// are of the player's team, so they take them like the mech.
+wireRobotBlasts(bf, sw, draw.coreWarn, V.robotBeamReach, (x, z, r, sp) => { if (player.alive) player.shoveFrom(x, z, r, sp); });
 if (still) { const p = player.sim.pos; sw.spawn(Math.round(V.sumPack), p.x, p.z + 25, 6, { mid: 0.15, big: 0 }); }
 
 // The summoner's units.
-summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon, load: lab.loadRampart });
+summons = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon });
 // Z sends the swarm (at the lock, else the cursor), C calls it back.
 addEventListener("keydown", (e) => {
   if (typing(e) || e.repeat) return;
