@@ -64,7 +64,7 @@ export class DetailPatch {
   /** (Re)make the mesh and textures for the current window size and spacing. */
   private build() {
     const w = this.win;
-    this.key = `${w.step}|${w.sub}|${w.nc}|${w.pad}`;
+    this.key = `${w.step}|${w.sub}|${w.nc}|${w.pad}|${this.fineKey()}`;
     if (this.mesh) { this.group.remove(this.mesh); this.mesh.geometry.dispose(); }
     for (const t of [this.fineTex, this.coarseTex, this.colourTex]) t?.dispose();
     const tex = (data: Float32Array, n: number, fmt: THREE.PixelFormat) => {
@@ -84,10 +84,19 @@ export class DetailPatch {
     this.gpuGround.cells.value = w.nc;
     this.gpuGround.wrap.value = w.mc;
 
-    // A grid of (nf + 1)² vertices whose positions are just their grid indices; the shader places them.
-    const n = w.nf, row = n + 1;
+    // A grid of vertices whose positions are just their grid indices; the shader places them. Round the focus (the
+    // window's middle) the lines come closer, patchFineSub to a ground sample, so foot-sized dents reach the mesh
+    // (Keith 2026-11-02: footprints read as painted on at 25 cm); the ground there is interpolated between samples.
+    // A plain tensor grid: the dense band runs out to the edges in each direction, no T-junctions.
+    const [c0, c1, sub] = this.fineBand();
+    const line: number[] = [];
+    for (let k = 0; k <= w.nf; k++) {
+      line.push(k);
+      if (k >= c0 && k < c1) for (let q = 1; q < sub; q++) line.push(k + q / sub);
+    }
+    const n = line.length - 1, row = n + 1;
     const pos = new Float32Array(row * row * 3), nor = new Float32Array(row * row * 3);
-    for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) { pos[i * 3] = k; pos[i * 3 + 2] = j; nor[i * 3 + 1] = 1; }
+    for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) { pos[i * 3] = line[k]; pos[i * 3 + 2] = line[j]; nor[i * 3 + 1] = 1; }
     const idx = new Uint32Array(n * n * 6);
     let p = 0;
     // Each cell split like the chunks' (diagonal from (k + 1, j) to (k, j + 1)), so at the edge the triangles lie
@@ -114,6 +123,15 @@ export class DetailPatch {
     this.group.add(mesh);
   }
 
+  /** The window cells (fine) of the dense middle band, and vertices per fine cell there. */
+  private fineBand(): [number, number, number] {
+    const w = this.win, sub = Math.max(1, Math.round(this.v.patchFineSub ?? 1));
+    const m = Math.min(w.nf, 2 * Math.round(Math.max(0, this.v.patchFineArea ?? 0) / w.fine / 2));
+    if (sub <= 1 || m <= 0) return [0, 0, 1];
+    return [w.nf / 2 - m / 2, w.nf / 2 + m / 2, sub];
+  }
+  private fineKey() { return this.fineBand().join(","); }
+
   private material() {
     const w = this.win, S = w.sub, MF = w.mf, MC = w.mc, NF = w.nf, F = w.fine;
     // One texture node each, every lookup a clone of it, so each texture is one sampler uniform (WebGL 2 allows only
@@ -123,7 +141,14 @@ export class DetailPatch {
     const vN = varyingProperty("vec3", "vPatchN"), vCol = varyingProperty("vec3", "vPatchCol"), vW = varyingProperty("float", "vPatchW");
     // Wrapped grid index (offset half a cell so float rounding in the division can't land on the next cell).
     const wrapI = (i: THREE.Node<"float">, m: number) => int(floor(mod(i.add(0.5), m)));
-    const fineAt = (gx: THREE.Node<"float">, gz: THREE.Node<"float">) => textureLoad(fineT, ivec2(wrapI(gx, MF), wrapI(gz, MF))).x;
+    const fineAt0 = (gx: THREE.Node<"float">, gz: THREE.Node<"float">) => textureLoad(fineT, ivec2(wrapI(gx, MF), wrapI(gz, MF))).x;
+    // Between samples (the dense middle band): bilinear.
+    const fineAt = (gx: THREE.Node<"float">, gz: THREE.Node<"float">) => {
+      const x0 = floor(gx.add(1e-4)), z0 = floor(gz.add(1e-4));
+      const fx = max(gx.sub(x0), 0), fz = max(gz.sub(z0), 0);
+      return mix(mix(fineAt0(x0, z0), fineAt0(x0.add(1), z0), fx), mix(fineAt0(x0, z0.add(1)), fineAt0(x0.add(1), z0.add(1)), fx), fz);
+    };
+    const [B0, B1, SUB] = this.fineBand();
     const cAt = (gx: THREE.Node<"float">, gz: THREE.Node<"float">) => ivec2(wrapI(gx, MC), wrapI(gz, MC));
     // The dents' height (berm - depression) at a world point, faded out toward the dent window's edge.
     const dentFade = (p: THREE.Node<"vec2">) => {
@@ -163,11 +188,14 @@ export class DetailPatch {
       const edgeD = min(this.uHalf.sub(max(off.x, off.y)), min(min(li, float(NF).sub(li)), min(lj, float(NF).sub(lj))).mul(F));
       const wgt = smoothstep(0, this.uEdge, edgeD);
       const p = vec2(x, z);
-      // The dents, low-passed to what the lattice can carry (a 3 x 3 binomial one vertex apart).
+      // The dents, low-passed to what the lattice can carry (a 3 x 3 binomial one vertex apart: closer in the dense
+      // middle, where the vertices are).
+      const dense = li.greaterThanEqual(B0).and(li.lessThanEqual(B1)).and(lj.greaterThanEqual(B0)).and(lj.lessThanEqual(B1));
+      const KD = select(dense, float(F / SUB), float(F));
       let acc: THREE.Node<"float"> = float(0);
       for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
         const wt = ((2 - Math.abs(a)) * (2 - Math.abs(b))) / 16;
-        acc = acc.add(dentH(p.add(vec2(a * F, b * F))).mul(wt));
+        acc = acc.add(dentH(p.add(vec2(KD.mul(a), KD.mul(b)))).mul(wt));
       }
       const dent = acc.mul(this.uScale).mul(dentFade(p));
       const y = mix(coarse.x, h.add(dent), wgt);
@@ -234,6 +262,6 @@ export class DetailPatch {
 
   private makeWindowIfChanged(): GroundWindow | null {
     const st = this.step(), sh = GroundWindow.shape(this.coverage(), this.v.patchSpacing, st);
-    return `${st}|${sh.sub}|${sh.nc}|${this.lead()}` === this.key ? null : this.makeWindow();
+    return `${st}|${sh.sub}|${sh.nc}|${this.lead()}|${this.fineKey()}` === this.key ? null : this.makeWindow();
   }
 }

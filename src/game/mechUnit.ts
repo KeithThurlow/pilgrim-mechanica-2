@@ -461,7 +461,7 @@ export class MechUnit implements Hittable, Solid {
       this.slideAcc[i] = bf.dust.slide(f.pos.x, f.pos.y, f.pos.z, f.slide.x, f.slide.z, dt, this.slideAcc[i]);
       // A furrow from where the foot was last frame (a skid that just started begins here).
       if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
-      bf.marks.furrow(from.x, from.y, f.pos.x, f.pos.z, 0.9, dt);
+      bf.marks.skid(from.x, from.y, f.pos.x, f.pos.z, f.yaw, this.body.footprint?.(f.side) ?? null, dt);
       from.set(f.pos.x, f.pos.z, 1);
     });
     // Whatever is in the dash's way gets shoved (the lab decides what that is).
