@@ -233,11 +233,13 @@ export class Arsenal implements MechWeapons {
     // sliders stay live), a capacitor's faster refill.
     for (const g of this.unit.upper.guns) { g.rateMul = 1; g.spinCut = 0; g.ammoMul = 1; }
     this.unit.dash.refillMul = 1;
+    this.unit.reactor.refillMul = 1;
     for (const sh of this.shoulders) {
       if (!sh.gear) continue;
       const st = sh.gear.stats, gi = this.gunOf(sh);
       if (st.family === "feed" && (gi === 0 || gi === 1)) this.unit.upper.guns[gi].ammoMul *= 1 + st.ammo;
-      if (st.family === "power") this.unit.dash.refillMul += st.refill;
+      // Power feeds the reactor (Keith 2026-11-02: kept apart from the dash's kinetic bars).
+      if (st.family === "power") this.unit.reactor.refillMul += st.refill;
     }
   }
 
@@ -803,7 +805,7 @@ export class Arsenal implements MechWeapons {
     for (const mat of sh.model?.glow ?? []) mat.opacity = lit ? 0.95 : gear.cool <= 0 ? 0.5 : 0.12;
     if (!pressed || !gear.press()) return;
     const st = gear.stats;
-    if (st.family === "power") u.dash.refillNow(st.bars);
+    if (st.family === "power") u.reactor.refillNow(st.bars);
     if (sh.model) sh.model.recoil.position.y = -0.12;
     bf.sfx.playSound("railCharge", u.sim.pelvis, 0.5, st.family === "power" ? 2.6 : 1.9);
     this.onFire?.(sh.weapon);

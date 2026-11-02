@@ -20,7 +20,8 @@
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
 import { hitStop } from "../../src/game/hitStop";
-import { energyHud } from "../../src/ui/energyBar";
+import { energyHud, reactorHud } from "../../src/ui/energyBar";
+import { isEnergy } from "../../src/weapons/energy/energySim";
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import { createApp } from "../../src/core/app";
@@ -1096,6 +1097,7 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", () => `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
+  reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
   vitals.hideActions = bay.isOpen || inventory.isOpen;
   vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: arsenal.keySlots(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();

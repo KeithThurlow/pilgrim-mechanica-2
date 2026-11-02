@@ -98,7 +98,7 @@ export class EnergyGuns {
     if (!s.cls) return;
     const st = energyStats(s.cls, s.own, v);
     if (blocked) { s.sim.drop(); held = false; }
-    const out = s.sim.step(dt, held, st, u.dash, v.energyCost < 0.5);
+    const out = s.sim.step(dt, held, st, u.reactor, v.energyCost < 0.5);
     // Where it points: at the aim point (a body's height over the cursor's sand, so it meets what stands there), else
     // along the barrel.
     const want = this.want;
