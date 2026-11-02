@@ -57,13 +57,19 @@ let draw: RobotsDraw | null = null;
 let droidMeshes: THREE.Object3D[] = [];
 // Striders (the strider lab folded in here, Keith 2026-11-01): ?strider=N, ?strider=beam|slam|grab, ?striderdist=m.
 const striders = new StriderLab(params0);
+// The player's minigun (and sword) damage × in this lab only (Keith 2026-11-02: "too slow to kill a large walker. Need
+// probably 4 times more damage"), so the walkers can be played with; the guns' own values stay as they are elsewhere.
+const LAB_GUN_DEFAULTS = { labGunDamage: 4 };
+const LAB_GUN_PARAMS: Param[] = [
+  { key: "labGunDamage", label: "Your gun damage ×", min: 0.25, max: 10, step: 0.25, group: "Lab: your guns", tip: "This lab only: the mech's minigun rounds (and sword) hit this many times harder" },
+];
 const lab = await combatLab({
   id: "robots-lab",
   title: "Robot swarm",
-  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_ALL_DEFAULTS, ...STRIDER_LAB_DEFAULTS },
+  defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...LOADOUT_DEFAULTS, ...DROID_ALL_DEFAULTS, ...STRIDER_LAB_DEFAULTS, ...LAB_GUN_DEFAULTS },
   demo: (t, dt) => script?.(t, dt) ?? null,
-  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS, ...STRIDER_LAB_PARAMS],
-  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
+  params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS, ...STRIDER_LAB_PARAMS, ...LAB_GUN_PARAMS],
+  topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: terraform pulse", "Robots: weapon quads", "Robots: hit parts", "Lab: your guns"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
   selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }, striders.selectable],
   actions: [{ label: "Pack now", onClick: () => spawnPack() }, ...striders.actions],
   report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0, ...striders.report() }),
@@ -71,6 +77,7 @@ const lab = await combatLab({
 });
 const { V, bf, player, field } = lab;
 striders.attach(lab);
+lab.onFrame(() => { player.damageScale = V.labGunDamage; });
 if (striders.scenario) V.robotSwarmSize = 0;
 // Humanoid robots (the middle tier on the human rig) walk in with each pack.
 const droids = new DroidSquads(bf, lab.app.scene, V, field, await loadBanditVat().catch(() => null), lab.deaths);
