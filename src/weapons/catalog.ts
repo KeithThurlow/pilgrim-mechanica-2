@@ -14,6 +14,7 @@ import { mortarHeavy, mortarLine, mortarShellProjectile } from "./build/mortar";
 import { railCannonHull, railCannon2h } from "./build/rail";
 import { autocannonHull, cannonHull } from "./build/guns";
 import { plasmaCannonHull, laserProjectorHull } from "./build/energy";
+import { flakHull, sniperHull } from "./build/roundGuns";
 
 export type Mount = "hull" | "shoulder" | "back" | "hand" | "forearm" | "two_handed" | "belt" | "projectile";
 
@@ -74,7 +75,10 @@ const ROWS: Row[] = [
   ["rail-cannon-hull", "RailCannon", "Hull", "Rail cannon (hull)", "hull", true, { build: railCannonHull }],
   ["rail-cannon-2h", "RailCannon", "2H", "Rail cannon (two-handed)", "two_handed", false, { build: railCannon2h }],
   ["autocannon-hull", "Autocannon", "Hull", "Autocannon (hull)", "hull", true, { build: autocannonHull }],
-  ["cannon-hull", "Cannon", "Hull", "Cannon (hull)", "hull", true, { build: cannonHull }],
+  ["cannon-hull", "Cannon", "Hull", "Breach cannon (hull)", "hull", true, { build: cannonHull }],
+  // Round guns on the hull (Keith 2026-11-02): weight behind the shoulder.
+  ["flak-hull", "Flak", "Hull", "Flak cannon (hull)", "hull", true, { build: flakHull }],
+  ["sniper-hull", "Sniper", "Hull", "Longshot rifle (hull)", "hull", true, { build: sniperHull }],
   ["plasma-cannon-hull", "PlasmaCannon", "Hull", "Plasma cannon (hull)", "hull", true, { build: plasmaCannonHull }],
   ["laser-projector-hull", "LaserProjector", "Hull", "Laser projector (hull)", "hull", true, { build: laserProjectorHull }],
   ["rocket", "Projectile", "Rocket", "Rocket (projectile)", "projectile", false, { note: "desktop GLB (asset list W1)" }],
