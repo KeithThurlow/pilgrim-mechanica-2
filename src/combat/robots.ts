@@ -14,6 +14,7 @@ import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
 import { steerOut, type KeepOut } from "../game/keepOut";
+import { armourHit } from "../game/armour";
 import { closingSpeed, trampleFling, trampleHurt, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 import { beamDrag, beamPower, beamWidthShare, beamTicks, beamTickDamage, beamLive, dragAim, type BeamShape } from "./beamCore";
 import {
@@ -73,7 +74,7 @@ export const ROBOT_DEFAULTS = {
   robotMidHeight: 1.5,
   robotMidSizeJitter: 0.1,
   robotMidHp: 220,
-  robotMidSpeed: 3.5,
+  robotMidSpeed: 5,
   robotMidAccel: 2.5,
   robotMidTurn: 140,
   robotMidFlank: 25,
@@ -103,7 +104,7 @@ export const ROBOT_DEFAULTS = {
   robotQuadShare: 0.3,
   robotQuadSize: 3.6,
   robotQuadHp: 700,
-  robotQuadSpeed: 3,
+  robotQuadSpeed: 4.5,
   robotQuadNear: 14,
   robotQuadFar: 26,
   robotQuadWindup: 0.6,
@@ -228,6 +229,20 @@ export const ROBOT_DEFAULTS = {
   robotPulseHold: 0.6,
   robotPulseRing: 0.35,
   robotPulseDrop: 0.3,
+  // Its own kind under it (Keith 2026-11-02: "other things get damaged underneath ... the player can play around with
+  // kiting enemies under those walkers"): the pulse also hits robots in its reach, the walker itself spared.
+  robotPulseOwnDamage: 220,
+  // A big one's death (Keith 2026-11-02: "a much larger explosion ... a really big, significant boom, showing off how
+  // much energy they have"): a moment after it falls its core goes up, hurting everything round it, robots too
+  // (a chain of them can go up together).
+  robotBigDeathOn: 1,
+  robotBigDeathDelay: 0.45,
+  robotBigDeathRadius: 22,
+  robotBigDeathDamage: 90,
+  robotBigDeathOwnDamage: 450,
+  robotBigDeathPierce: 0.4,
+  robotBigDeathShove: 22,
+  robotBigDeathBoom: 1.6,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -244,7 +259,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
-const GB = "Robots: beam", GP = "Robots: terraform pulse", GQ = "Robots: weapon quads";
+const GB = "Robots: beam", GP = "Robots: terraform pulse", GD = "Robots: big death", GQ = "Robots: weapon quads";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
@@ -435,7 +450,16 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotPulseFirst", label: "First pulse after (s)", min: 0, max: 20, step: 0.5, group: GP, tip: "From its arrival (spread per robot)" },
   { key: "robotPulseHold", label: "Beam shown after (s)", min: 0.05, max: 2, step: 0.05, group: GP },
   { key: "robotPulseRing", label: "Danger ring strength", min: 0, max: 1, step: 0.01, group: GP, tip: "Keith 2026-11-01: soft gradient rings, not hard strips: one at the blast's reach and one growing out to it as the charge runs (the time left); 0 hides them" },
+  { key: "robotPulseOwnDamage", label: "Damage to robots under it", min: 0, max: 1500, step: 10, group: GP, tip: "Keith 2026-11-02: kite the swarm under a walker and let its pulse hit them. Full at the centre, half at the edge; medium and big ones take their blast share (Robots: hit parts); the walker firing is spared" },
   { key: "robotPulseDrop", label: "Pulse runs down for (s)", min: 0.05, max: 1.5, step: 0.05, group: GP, tip: "The end of the charge: a bright pulse runs down the thin beam into the sand, then the blast" },
+  { key: "robotBigDeathOn", label: "Death blast on", min: 0, max: 1, step: 1, group: GD, tip: "A big one's core goes up a moment after it falls" },
+  { key: "robotBigDeathDelay", label: "Goes up after (s)", min: 0, max: 3, step: 0.05, group: GD, tip: "From the kill: the wreck falls, then the boom (and the next in a chain)" },
+  { key: "robotBigDeathRadius", label: "Blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
+  { key: "robotBigDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot (the pilot, bandits). Full at the centre, half at the edge" },
+  { key: "robotBigDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Robots in reach, full at the centre, half at the edge; medium and big ones take their blast share. Enough kills another big one: a chain" },
+  { key: "robotBigDeathPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GD },
+  { key: "robotBigDeathShove", label: "Shove (m/s)", min: 0, max: 60, step: 0.5, group: GD, tip: "The mech is pushed away this fast at the centre, half at the edge" },
+  { key: "robotBigDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD, tip: "A deep layer of the explosion sound on top of the blast's own (which already grows with the radius)" },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
   { key: "robotStompReach", label: "Stomp knocks off below (m)", min: 0, max: 6, step: 0.1, group: G3, tip: "Latched ones lower than this near the foot are knocked off" },
@@ -513,6 +537,16 @@ export interface RobotPulseEvent {
   from: V3; at: V3;
   radius: number; damage: number; pierce: number; shove: number;
 }
+/**
+ * A big one's core going up after its death (plain data, rule 12): where (the ground under its body, and the chassis
+ * height), the blast radius, damage (to the mech and anything not a robot), armour pierce, shove and the extra boom.
+ * The swarm has already hurt its own robots; the host resolves the rest (src/game/robotBeam.ts fireRobotDeathBlast).
+ */
+export interface RobotDeathBlastEvent {
+  id: number;
+  at: V3; hubY: number;
+  radius: number; damage: number; pierce: number; shove: number; boom: number;
+}
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
 
@@ -589,6 +623,12 @@ export class RobotSwarm {
   onPulse: ((e: RobotPulseEvent) => void) | null = null;
   /** Pulses started and fired since construction. */
   pulseCharges = 0; pulses = 0;
+  /** A big one's core going up (resolve it: blast, shove, boom). */
+  onDeathBlast: ((e: RobotDeathBlastEvent) => void) | null = null;
+  /** Death blasts gone off; robots killed by their own (pulses and death blasts) since construction. */
+  deathBlasts = 0; ownKills = 0;
+  /** Big ones' cores waiting to go up: x, z, ground y, hub y, id, power, seconds left. */
+  private cores: { x: number; z: number; y: number; hubY: number; id: number; power: number; t: number }[] = [];
   private aim: RobotTarget = { x: 0, y: 0, z: 0, radius: 2 };
   /** Latch spot taken while leaping or latched (-1 none). */
   readonly slot = new Int16Array(ROBOT_MAX).fill(-1);
@@ -943,6 +983,7 @@ export class RobotSwarm {
       this.tvz += ((base.z - this.tPrevZ) / dt - this.tvz) * k;
     }
     this.tPrevX = base.x; this.tPrevZ = base.z;
+    this.tickCores(dt);
     this.tx = base.x; this.tz = base.z; this.tr = base.radius; this.tLow = base.latchLow ?? -1; this.tHigh = base.latchHigh ?? -1;
     this.baseY = this.ground.height(base.x, base.z);
     const tSpeed = Math.hypot(this.tvx, this.tvz);
@@ -1527,6 +1568,7 @@ export class RobotSwarm {
     if (was < C && now >= C) {
       const e = this.beamFrom(i, this.bf3), gy = this.ground.height(e.x, e.z);
       this.pulses++;
+      this.hurtOwn(e.x, e.z, v.robotPulseRadius, v.robotPulseOwnDamage * this.power[i], v.robotPulsePierce, this.uid[i]);
       this.onPulse?.({
         robot: i, id: this.uid[i], from: { x: e.x, y: e.y, z: e.z }, at: { x: e.x, y: gy, z: e.z },
         radius: v.robotPulseRadius, damage: v.robotPulseDamage * this.power[i], pierce: v.robotPulsePierce, shove: v.robotPulseShove,
@@ -1767,7 +1809,53 @@ export class RobotSwarm {
       this.spin[i] = (this.rand() < 0.5 ? -1 : 1) * (6 + this.rand() * 8);
     }
     this.count--;
+    if (this.kind[i] === BIG && v.robotBigDeathOn > 0.5) {
+      this.cores.push({ x: this.px[i], z: this.pz[i], y: this.ground.height(this.px[i], this.pz[i]), hubY: this.hubY[i], id: this.uid[i], power: this.power[i], t: v.robotBigDeathDelay });
+    }
     this.onDeath?.(i, nx, nz, Math.hypot(this.vx[i], this.vz[i]));
+  }
+
+  /** Big ones' cores counting down; those due go up: their robots hurt here, the rest (the battlefield) by the event. */
+  private tickCores(dt: number) {
+    if (!this.cores.length) return;
+    const v = this.v, due = [];
+    for (let k = this.cores.length - 1; k >= 0; k--) {
+      const c = this.cores[k];
+      if ((c.t -= dt) <= 0) { due.push(c); this.cores.splice(k, 1); }
+    }
+    for (const c of due) {
+      this.deathBlasts++;
+      // Hurting robots can kill more big ones: their cores queue up and go off after their own delay (a chain).
+      this.hurtOwn(c.x, c.z, v.robotBigDeathRadius, v.robotBigDeathOwnDamage * c.power, v.robotBigDeathPierce, c.id);
+      this.onDeathBlast?.({
+        id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: c.hubY,
+        radius: v.robotBigDeathRadius, damage: v.robotBigDeathDamage * c.power, pierce: v.robotBigDeathPierce,
+        shove: v.robotBigDeathShove, boom: v.robotBigDeathBoom,
+      });
+    }
+  }
+
+  /**
+   * A blast of the swarm's own at (x, z) hurting its robots (Keith 2026-11-02: kite them under a walker): flat distance
+   * to each body, full at the centre, half at the edge; small ones take it all, medium and big ones their blast share
+   * (robotMidBlast, robotBigBlast) after armour. The robot with id `spare` (the one firing) is left out. Wrecks are
+   * thrown outward. Returns the number killed.
+   */
+  hurtOwn(x: number, z: number, radius: number, damage: number, pierce: number, spare = -1): number {
+    if (damage <= 0 || radius <= 0) return 0;
+    const v = this.v, r2 = radius * radius;
+    let killed = 0;
+    for (let i = 0; i < this.hi; i++) {
+      if (this.state[i] >= DEAD || this.uid[i] === spare) continue;
+      const dx = this.px[i] - x, dz = this.pz[i] - z, d2 = dx * dx + dz * dz;
+      if (d2 > r2) continue;
+      const k = this.kind[i], share = k === SMALL ? 1 : k === MID ? v.robotMidBlast : v.robotBigBlast;
+      if (share <= 0) continue;
+      const fall = 1 - 0.5 * Math.sqrt(d2) / radius;
+      if (this.damage(i, armourHit(damage * share * fall, this.armourOf(i), pierce), dx, dz)) killed++;
+    }
+    this.ownKills += killed;
+    return killed;
   }
 
   /** Damage a live robot; returns true if this killed it. Small wrecks are thrown along (dirX, dirZ). */
