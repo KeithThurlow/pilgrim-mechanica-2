@@ -162,7 +162,7 @@ export const WEAPON_DEFAULTS = {
   // Weapon sound
   railLevel: 0.6,
   rocketLevel: 0.45,
-  blastLevel: 0.6,
+  blastLevel: 2.0,
   blastSizeRef: 4,
   blastSizeLoud: 0.35,
   blastSizePitch: 0.3,
@@ -329,7 +329,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "shakeDecay", label: "Shake settles (/s)", min: 1, max: 30, step: 0.5, group: B },
   { key: "railLevel", label: "Rail cannon", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "rocketLevel", label: "Rocket launch", min: 0, max: 1.5, step: 0.01, group: SND },
-  { key: "blastLevel", label: "Big blasts", min: 0, max: 1.5, step: 0.01, group: SND },
+  { key: "blastLevel", label: "Big blasts", min: 0, max: 4, step: 0.01, group: SND, tip: "Explosions are the loudest sound in the game (Keith 2026-11-02): about 7 dB over a sword hit at an RPG blast" },
   { key: "blastSizeRef", label: "Blast sound: size at full (m)", min: 0.5, max: 20, step: 0.5, group: SND, tip: "An explosion of this radius plays the blast at its own pitch and level; bigger ones deeper and louder, smaller ones higher and quieter" },
   { key: "blastSizeLoud", label: "Blast sound: louder per doubling", min: 0, max: 1, step: 0.01, group: SND, tip: "Share louder for each doubling of the radius (quieter for each halving)" },
   { key: "blastSizePitch", label: "Blast sound: deeper per doubling", min: 0, max: 1, step: 0.01, group: SND, tip: "Octaves lower for each doubling of the radius (higher for each halving): a mortar booms, a pod missile cracks" },

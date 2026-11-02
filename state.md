@@ -298,6 +298,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-02 · Explosions the loudest sound (Keith; Claude on `claude/project-thread-1ysipc`)
+- Keith: the explosion was the quietest sound and should be the loudest. Two causes: most of it sat under 80 Hz (laptops and many headphones drop that) and its level was 0.6. Its 180 Hz-1.2 kHz body raised about 3 dB (the rumble kept), `blastLevel` 0.6 → 2.0 (slider to 4), the size scaling kept. Measured above 250 Hz over its loudest 0.3 s: an RPG blast now about -12 dB against a sword hit's -19, the rail's -23 (was -25, the quietest). A limiter at the end of the sound chain (`src/audio/sfx.ts`: -4 dB threshold, 12:1) so stacked blasts squash rather than clip.
+- `src/weapons/weaponSound.ts`, `tuning.ts`, `src/audio/sfx.ts`. Node probe; npm test.
 ### 2026-11-02 · No lead prediction on the big mortar (Keith; Claude on `claude/project-thread-on5osk`)
 - The mortar ring sits at the cursor even with a lock (`mortarAim`, `mortarHeight` in `src/weapons/mortar.ts`); `mortarLead` default 0 (slider kept). Rule written in `docs/proposal-weapons.md` and `docs/decisions.md`. Checked: `weapons-check` (updated: default no lead, lead when raised), `duel-check`. Line mortar, missiles and RPG already took the cursor.
 ### 2026-11-02 · The blast sound built from Keith's reference explosion (Keith; Claude on `claude/project-thread-1ysipc`)
