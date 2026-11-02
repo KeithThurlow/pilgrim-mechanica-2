@@ -22,7 +22,7 @@ export class SampleBank {
 
   constructor(private sfx: Sfx, private v: V) {
     for (const d of SAMPLES) void this.load(d);
-    sfx.onUpdate.push(() => this.update());
+    sfx.onUpdate?.push(() => this.update()); // (absent on the headless checks' stand-in Sfx)
   }
 
   /** Whether a sample's sound is playing the recording now. */
