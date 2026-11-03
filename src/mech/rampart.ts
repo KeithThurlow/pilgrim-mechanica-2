@@ -134,6 +134,10 @@ function boneQuat(a: THREE.Vector3, b: THREE.Vector3, side: THREE.Vector3, out: 
 }
 
 /** Split a rest-space geometry into the triangles behind and ahead of z (by each triangle's centre). */
+/** Where the minigun pod's rear box starts, behind its shoulder (m; the Rampart's pod: a box round the barrel axis from
+ *  -1.0 to -0.62, the housing ahead of it). */
+const POD_REAR_Z = -0.62;
+
 function splitAtZ(g: THREE.BufferGeometry, z: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const src = g.index ? g.toNonIndexed() : g;
   const pos = src.attributes.position;
@@ -179,6 +183,8 @@ function mirrored(g: THREE.BufferGeometry) {
 interface Bone { pivot: THREE.Group; restLen: number }
 interface PodRig {
   yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1;
+  /** The pod's rear box (hidden while the feed drum sits in its place). */
+  rear: THREE.Mesh;
   /** The gun pivot's rest place on the shoulder (an arm moves it to its hand). */
   home: THREE.Vector3;
   /** Stand-in arm: the upper arm (fixed to the hull) and the forearm (turns with the aim). */
@@ -322,7 +328,10 @@ export class RampartBody {
       this.hull.add(yawPitch);
       const kick = new THREE.Group();
       yawPitch.add(kick);
-      this.mesh(sd === -1 ? podR : mirrored(podR), `pod_${sd}`, kick, frame(shoulder));
+      // The pod's rear box (behind PodRearZ) is its own mesh so the minigun's ammo drum can take its place (Keith 2026-11-03).
+      const [podBack, podMain] = splitAtZ(sd === -1 ? podR : mirrored(podR), shoulder.z + POD_REAR_Z);
+      this.mesh(podMain, `pod_${sd}`, kick, frame(shoulder));
+      const rear = this.mesh(podBack, `podRear_${sd}`, kick, frame(shoulder));
       // Barrel cluster spins about its own axis (along +Z in the rest pose).
       const spin = new THREE.Group();
       spin.position.copy(axis).sub(shoulder);
@@ -336,7 +345,7 @@ export class RampartBody {
       arm.visible = forearm.visible = false;
       this.hull.add(arm);
       yawPitch.add(forearm);
-      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: new THREE.Vector3(), arm, forearm });
+      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: new THREE.Vector3(), arm, forearm, rear });
       // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
       const sm = new THREE.Group();
       this.hull.add(sm);
@@ -613,9 +622,10 @@ export class RampartBody {
   hullGroup() { return this.hull; }
 
   /** Show or hide a side's minigun pod itself (another weapon's stand-in takes its place on the same pivot). */
-  showPod(side: 1 | -1, on: boolean) {
+  showPod(side: 1 | -1, on: boolean, rear = true) {
     const p = this.pods.find((q) => q.side === side)!;
     for (const o of p.kick.children) if ((o as THREE.Mesh).isMesh || o === p.spin) o.visible = on;
+    p.rear.visible = on && rear;
   }
 
   /** Has guns (the battlefield's mech unit fires them). */
