@@ -313,8 +313,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 ### 2026-11-03 · Default mech starts with three energy bars (Keith via the coordinator; Claude)
-- Bare mech (no pack) dash charges 2 → 3 (`bareDashCharges` in `src/items/loadout.ts`; packs already start at 3 or more). Check added to `tools/loadout-check.ts`. Keith's summoner item report is handled in another thread.
-- Checked: `npm test`. Open for Keith: the bare mech's bar count is the default, so a pack that rolls low still sets its own count.
+- Player's bare mech dash charges 2 → 3 (`bareDashCharges`, `src/items/loadout.ts`); rival mechs without a pack stay at 2 (`rivalBareDashCharges`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`). At three, the duel check's long fight (seed 22) stalled with both rivals in engage. Checks: `tools/loadout-check.ts` pins both values; `npm test` passes. Coordinator's call (Keith's card: rivals keep two). Open for Keith: whether rivals should get three once the AI handles the extra bar.
 
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
