@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Player's mech starts with three energy bars (Keith via the coordinator; Claude)
+- Player's bare mech dash charges 2 → 3 (`bareDashCharges`, `src/items/loadout.ts`); rival mechs without a pack stay at 2 (`rivalBareDashCharges`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`). At three, the duel check's long fight (seed 22) stalled with both rivals in engage. Checks: `tools/loadout-check.ts` pins both values; `npm test` passes. Open for Keith: whether rivals should get three once the rival AI handles the extra bar.
+
 - 2026-11-03 **Minigun ammo drum moved forward** (Keith's feedback: it sat too far back, mounted oddly): with the feed fitted the pod's rear box is hidden (the pod mesh is split at 0.62 m behind the shoulder, `showPod`'s new `rear` flag) and the drum stands across in its place, tucked against the housing; a belt chute runs along the pod's outboard flank into the back of the barrels. Files: `src/weapons/build/guns.ts` (`minigunFeedHull`), `src/mech/rampart.ts`, one line in `src/weapons/arsenal.ts`. Checked: weight-check (weight 0.79 m behind the shoulder), one shot from the game camera, `npm test`. Claude.
 - 2026-11-03 **Flak trimmed to about twice its budget against a swarm** (main's npm test had failed since the flak change: the balance sheet put it at 339%): pellets 24 → 18, blast 3 → 2.5 m, share 0.85 → 0.75, now 198% vs swarm; `tools/balance-sheet.ts` `REF.bandOver` lets flak sit up to 230% vs swarm (others still 130%). `guns.ts`, `tools/balance-sheet.ts`; balance-sheet --check, npm test. Claude.
 ### 2026-11-03 · Arms come with the hull (Keith; Claude)
