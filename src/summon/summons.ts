@@ -127,6 +127,30 @@ export class Summons {
   }
   recall() { this.allies.recall(); }
 
+  /** A drone strike (Keith 2026-11-03, "they don't have actives": the drone rack's key): every drone dives on the lock,
+   *  else the foe nearest the cursor, else the nearest foe, for `droneStrikeTime` s, firing `droneStrikeRate` × faster.
+   *  False when it's cooling down or there's nothing to strike. */
+  strike(): boolean {
+    const o = this.owner, v = this.v, reg = this.bf.register, p = o.sim.pelvis;
+    if (!this.on || this.strikeCool > 0 || this.drones.n === 0) return false;
+    let key = -1;
+    if (o.lock && typeof o.lock.key === "number") key = o.lock.key;
+    else {
+      let e = o.cursor ? reg.nearest(o.cursor.x, o.cursor.z, 15, this.filter) : -1;
+      if (e < 0) e = reg.nearest(p.x, p.z, v.droneEngage, this.filter);
+      if (e >= 0) key = reg.id[e];
+    }
+    if (key < 0) return false;
+    this.strikeKey = key; this.strikeLeft = v.droneStrikeTime; this.strikeCool = v.droneStrikeCool + v.droneStrikeTime;
+    this.strikes++;
+    return true;
+  }
+  /** Seconds left of a strike, of its cooldown (counting the strike), strikes made. */
+  strikeLeft = 0;
+  strikeCool = 0;
+  strikes = 0;
+  private strikeKey = -1;
+
   /** Every summon on the ground (companions, scrappers, replicas): where and how big, for enemies to turn on. */
   each(fn: (x: number, y: number, z: number, r: number, air?: boolean) => void) {
     this.allies.each(fn); this.replicas?.each(fn);
@@ -157,6 +181,21 @@ export class Summons {
       lf.key = typeof L.key === "number" ? L.key : -2; lf.x = L.x; lf.y = L.y; lf.z = L.z; lf.r = L.r; lf.vx = L.vx ?? 0; lf.vz = L.vz ?? 0;
       lock = lf;
     }
+    // A strike: its target as the lock while it lasts (out to the leash); it ends when the target's gone.
+    this.strikeCool = Math.max(0, this.strikeCool - dt);
+    if (this.strikeLeft > 0) {
+      this.strikeLeft -= dt;
+      this.near.length = 0;
+      reg.near(p.x, p.z, v.droneLeash, this.filter, this.near);
+      const e = this.near.find((i) => reg.id[i] === this.strikeKey);
+      if (e === undefined || this.strikeLeft <= 0) this.strikeLeft = 0;
+      else {
+        const lf = this.lockFoe;
+        lf.key = this.strikeKey; lf.x = reg.x[e]; lf.y = reg.y[e]; lf.z = reg.z[e]; lf.r = reg.r[e]; lf.vx = reg.vx[e]; lf.vz = reg.vz[e];
+        lock = lf;
+      }
+    }
+    this.drones.frenzy = this.strikeLeft > 0 ? v.droneStrikeRate : 1;
     if (this.wasAlive && !o.alive) this.drones.grounded();
     this.wasAlive = o.alive;
     const d = this.drones;
