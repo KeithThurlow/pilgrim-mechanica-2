@@ -217,13 +217,13 @@ export class Sfx {
     e.swapped = !!data;
   }
 
-  /** Play a sound added with addSound (a few voices at most; the oldest is cut). */
-  playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1) {
+  /** Play a sound added with addSound (a few voices at most, `voices` for a crowd of them; the oldest is cut), `delay` s from now. */
+  playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1, delay = 0, voices = PER_KIND) {
     const e = this.extra.get(name);
     if (!e || !e.buffers.length || !this.running) return;
     const pan = this.panFor(at);
     if (pan === null) return;
-    if (e.playing.length >= PER_KIND) { try { e.playing.shift()!.stop(); } catch { /* already ended */ } }
+    if (e.playing.length >= voices) { try { e.playing.shift()!.stop(); } catch { /* already ended */ } }
     const src = this.ctx.createBufferSource();
     src.buffer = e.buffers[Math.floor(Math.random() * e.buffers.length)];
     src.playbackRate.value = rate * (0.95 + Math.random() * 0.1);
@@ -232,7 +232,7 @@ export class Sfx {
     const p = this.ctx.createStereoPanner();
     p.pan.value = pan;
     src.connect(g).connect(p).connect(this.master);
-    src.start();
+    src.start(delay > 0 ? this.ctx.currentTime + delay : 0);
     e.playing.push(src);
     src.onended = () => { const i = e.playing.indexOf(src); if (i >= 0) e.playing.splice(i, 1); };
   }

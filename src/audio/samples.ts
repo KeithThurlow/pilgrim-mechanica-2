@@ -27,7 +27,7 @@ export interface SampleDef {
 export const SAMPLES: SampleDef[] = [
   { id: "Breach", file: "hugecannon", sound: "breach", label: "Breach cannon (hugecannon)", start: 0, len: 2.2, fade: 1.0, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "Autocannon", file: "mediumcannon", sound: "cannon", label: "Autocannon (mediumcannon)", start: 0, len: 0.6, fade: 0.35, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
-  { id: "Flak", file: "flakcannon", sound: "flak", label: "Flak (flakcannon)", start: 0, len: 1.1, fade: 0.6, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
+  { id: "Shotgun", file: "flakcannon", sound: "shotgun", label: "Scattergun (flakcannon; Keith 2026-11-03: the flak recording suits the scattergun)", start: 0, len: 1.1, fade: 0.6, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "Sniper", file: "sniper", sound: "sniper", label: "Sniper (sniper)", start: 0, len: 1.6, fade: 0.9, pitch: 0, spread: 0.8, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "Rifle", file: "rifle", sound: "rifle", label: "Rifle (rifle)", start: 0, len: 0.5, fade: 0.3, pitch: 0, spread: 1, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "Smg", file: "smallroundfire", sound: "smg", label: "SMG (smallroundfire)", start: 0, len: 0.2, fade: 0.12, pitch: 0, spread: 1.5, lowpass: 20000, highpass: 120, gain: 0, under: 0 },
