@@ -186,6 +186,8 @@ function mirrored(g: THREE.BufferGeometry) {
 }
 
 interface Bone { pivot: THREE.Group; restLen: number }
+/** RampartBody.slim: cross-section of the legs and feet, the hull's width, height and length, the guns (1: as modelled). */
+export interface RampartSlim { leg: number; foot: number; hull: [number, number, number]; gun: number }
 interface PodRig {
   yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1;
   /** The pod's rear box (hidden while the feed drum sits in its place). */
@@ -546,6 +548,32 @@ export class RampartBody {
    * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
    * along the barrel, origin on the shoulder), a shoulder mount on the hull, or the top of the back mount (+Z forward).
    */
+  /** A slimmer build of the same rig (1: as modelled). */
+  private thin: RampartSlim = { leg: 1, foot: 1, hull: [1, 1, 1], gun: 1 };
+  /**
+   * A slimmer build on the same skeleton (Keith 2026-11-03, the summoner's replicas: "looks like my mech, but like
+   * very thin ... no need for a pilot in the center. The legs can be thinner ... the weapons ... a little bit lighter"):
+   * the legs' and feet's cross-section, the hull (width, height, length, about the waist; the shoulders, gun pivots and
+   * sockets come in with it) and the guns scaled. The walk is the sim's, untouched. Cosmetic; call again to change.
+   */
+  slim(o: RampartSlim) {
+    const [hx, hy, hz] = o.hull, was = this.thin, k = new THREE.Vector3(hx / was.hull[0], hy / was.hull[1], hz / was.hull[2]);
+    this.thin = { ...o, hull: [hx, hy, hz] };
+    this.torso.scale.set(hx, hy, hz);
+    if (this.back) this.back.scale.set(hx, hy, hz);
+    for (const p of this.pods) {
+      p.home.multiply(k);
+      if (!p.held) p.yawPitch.position.copy(p.home);
+      if (p.heldAt) p.heldAt.multiply(k);
+      p.arm.position.multiply(k);
+      p.yawPitch.scale.setScalar(o.gun);
+    }
+    for (const m of this.shoulderMounts) m.g.position.multiply(k);
+    this.frontAt.multiply(k);
+    this.sensorFront.position.multiply(k);
+    this.sensorTop.position.multiply(k);
+  }
+
   mount(slot: MountSocket): THREE.Object3D {
     switch (slot) {
       case "back": case "Pack": return this.backTop;
@@ -693,13 +721,14 @@ export class RampartBody {
     const set = (b: Bone, a: THREE.Vector3, c: THREE.Vector3) => {
       b.pivot.position.copy(a);
       boneQuat(a, c, side, b.pivot.quaternion);
-      b.pivot.scale.set(1, a.distanceTo(c) / b.restLen, 1);
+      b.pivot.scale.set(this.thin.leg, a.distanceTo(c) / b.restLen, this.thin.leg);
     };
     set(L.thigh, P.hip, P.knee);
     set(L.shin, P.knee, P.hock);
     set(L.cannon, P.hock, P.ankle);
     L.foot.position.copy(P.foot);
     L.foot.quaternion.copy(P.footQ);
+    L.foot.scale.setScalar(this.thin.foot);
     // Toe bend relative to the foot: toeQ = footQ * bend.
     L.toe.quaternion.copy(L.foot.quaternion).invert().multiply(P.toeQ);
   }
