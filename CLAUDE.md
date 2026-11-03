@@ -166,6 +166,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   weapon in place of the pack), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
+- Weapon review lab (Keith 2026-11-03; `src/items/weaponScaling.ts` on the balance sheet's model, `src/items/balanceModel.ts`): `?w=<base id>` (mg-medium, flak-medium, sh-mortar...), `?protos=splitter,splitter` (socketed into the fired weapon, repeats allowed), `?nofire` (the demo aims, holds fire), `?panel=0`, plus the combat-lab flags. `npx tsx tools/weaponscaling-check.ts` prints the same axes for every weapon.
 - Combat controls (every combat lab): left click fires the left side's weapon, right click the right side's (both can
   be held); keys 1-3 hold to paint a shoulder launcher, release to fire; keys 1-2 on a feed or power item are a press (belt feed: overdrive, incendiary feed: ignited rounds, capacitor bank: discharge a bar; Keith 2026-10-30); hold F to hop out of the mech, hold F by it to get
   back in (Keith 2026-10-26; F no longer fires). Tab with an enemy under the cursor locks it (shots and sword act as if the cursor were
@@ -236,7 +237,7 @@ src/combat/             warband (raider vehicles and bandit mechs) + partyBus (t
                         crusher (the heavy crab quad: a sucking turbine maw, pincers, eats salvage) + crusherBody, crusherTarget, crusherFx, crusherField (glue),
                         rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
-src/items/              item, bases (the part and weapon table), rarity, protocols, loadout (slots, fit rules, resolve), gridSize (item grid sizes) + grid (the grid inventory),
+src/items/              item, bases (the part and weapon table), rarity, protocols, balanceModel (the balance sheet's maths) + weaponScaling (focus, area, crowd, reliability, reach, Protocol ceilings), loadout (slots, fit rules, resolve), gridSize (item grid sizes) + grid (the grid inventory),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHud (hull bar, kits, red edge, hit arcs)
 src/summon/             the summoner's units: drones (attack drones, pure) + dronesDraw; glue: allies (turret companions and the scrap swarm on the robots' sim), summons (all of them on a battlefield)

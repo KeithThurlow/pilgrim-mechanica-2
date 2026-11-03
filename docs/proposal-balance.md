@@ -250,6 +250,20 @@ The tool's `--proposed` prints all of this; `P_WEAPON`, `P_TARGET` and `P_PROTO`
 - **The item card's number** should become the rated eDPS against the item's best set (or a small row of five), from
   the same model, so the card and the balance agree.
 
+## 10. Scaling axes (2026-11-03, `src/items/weaponScaling.ts`, labs/weaponreview/)
+
+Every weapon on five axes from the same model, so area weapons and damage weapons can be compared:
+- **Focus F**: eDPS against its best single target (cutter, excavator, raider or rival). **F%** of its slot's budget.
+- **Area A**: hp/s out of the camp-density swarm. **A%** of budget × 2 (the swarm's weight).
+- **Crowd C = A ÷ eDPS on one scrapper**: bodies' worth a shot (minigun 2.9, flak 4.9, rail 0.2).
+- **Reliability R(v)**: eDPS on a mech juking at v m/s ÷ standing still, at 35 m: hitscan and rails 1, autocannon 0.48,
+  big mortar 0.48, rockets 0.69 at 8 m/s. Projectile speed shows up here.
+- **Reach D½**: where eDPS against the juking rival halves.
+- **Spend S = F% + A%** (proposed cap 200, not enforced): today only flak is over (297).
+- **Scaling**: each Protocol stacked 0-4 times, and the best build for F and for A by sockets. A ceiling ÷ F ceiling at
+  4 sockets over 1.25 is an area scaler (miniguns, rockets, arm pod), under 0.8 a damage scaler (rifles, scattergun,
+  breach cannon); no fitting Protocol is fixed (rails, missile pod, mortars).
+
 ## Questions for Keith
 
 1. Armour as above (flat per hit, pierce, floor 15%)? Excavator 8 and rival mechs 8 about right, or heavier?
