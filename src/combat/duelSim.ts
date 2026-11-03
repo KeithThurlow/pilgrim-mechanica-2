@@ -17,7 +17,8 @@ import { rng, LOOT_DEFAULTS } from "../items/generate";
 import { resolve, LOADOUT_DEFAULTS, type Loadout } from "../items/loadout";
 import { DuelGround, DUEL_GROUND_DEFAULTS, lineOfSight } from "../game/duelGround";
 import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand, type Threat, type WeaponState } from "./rivalAi";
-import { kitOf, rollRivalLoadout, type KitWeapon } from "./rivalKit";
+import { gearOf, kitOf, rollRivalLoadout, type KitWeapon } from "./rivalKit";
+import { GearSim, gearStats } from "../weapons/gear";
 import { DuelScore } from "./duelScore";
 import { EnergySim } from "../weapons/energy/energySim";
 import { Reactor, REACTOR_DEFAULTS } from "../mech/reactor";
@@ -39,6 +40,8 @@ class DuelMech {
   guns: Gun[];
   /** Energy weapons (by kit index) on the hull's reactor, as the arsenal's EnergyGuns. */
   esim: EnergySim[];
+  /** Feeds and power on the shoulders (their key, the gun a feed feeds). */
+  gear: { key: 1 | 2 | 3; gun: number; sim: GearSim; prev: boolean }[];
   reactor: Reactor;
   moved = 0;
   fired = 0;
@@ -53,6 +56,8 @@ class DuelMech {
     this.kit = kitOf(r, W);
     this.guns = this.kit.map(() => ({ lastCut: 0, powered: false, cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
     this.esim = this.kit.map(() => new EnergySim());
+    const gk = gearOf(r);
+    this.gear = r.shoulders.filter((s) => s.family === "feed" || s.family === "power").map((s, n) => ({ key: s.key, gun: gk[n].gun, sim: new GearSim(gearStats(s.weapon, s.own, W)), prev: false }));
     this.reactor = new Reactor({ ...REACTOR_DEFAULTS, reactorCap: r.values.reactorCap, reactorRegen: r.values.reactorRegen });
   }
   get alive() { return this.health > 0; }
@@ -66,6 +71,8 @@ export interface DuelResult {
   threatened: [number, number];
   dodged: [number, number];
   dashes: [number, number];
+  /** Feed and power presses made. */
+  gearPresses: [number, number];
   /** Power cuts made (a sword's cut with a bar spent). */
   powerCuts: [number, number];
   /** Threatened / dodged by weapon kind (both sides). */
@@ -127,7 +134,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   /** Particle orbs drifting out to their range, burning whatever they pass, then popping (as EnergyGuns.fly). */
   const orbs: { id: number; from: 0 | 1; x: number; z: number; dx: number; dz: number; speed: number; left: number; dps: number; r: number; pop: number }[] = [];
   let nextId = 1;
-  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], powerCuts: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
+  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], powerCuts: [0, 0], gearPresses: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
   const dt = 1 / 60, maxT = o.maxTime ?? 90;
   let t = 0;
   const lastAct = [0, 0], lastPos = mechs.map((m) => ({ x: m.sim.pos.x, z: m.sim.pos.z }));
@@ -185,7 +192,8 @@ export function runDuel(o: DuelOptions): DuelResult {
     });
     return {
       t, threats, cover: ground.spots, sees, arena: { x: 0, z: 0, r: gv.duelRadius },
-      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, energy: m.reactor.charge, energyCap: m.reactor.cap, kit: m.kit, weapons },
+      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, energy: m.reactor.charge, energyCap: m.reactor.cap, kit: m.kit, weapons,
+        gear: m.gear.map((g) => ({ key: g.key, family: g.sim.stats.family, gun: g.gun, ready: g.sim.cool <= 0, bars: g.sim.stats.bars })) },
       foe: { x: f.sim.pos.x, y: f.sim.pelvis.y, z: f.sim.pos.z, vx: f.sim.vel.x, vz: f.sim.vel.z, health: f.health / f.hull, dashCharges: f.dash.charges, alive: f.alive, gunsOff: false, airborne: f.sim.airborne, staggered: f.sim.stagger > 0, r: HIT_R },
     };
   }
@@ -229,6 +237,13 @@ export function runDuel(o: DuelOptions): DuelResult {
 
   function weapons(i: number, cmd: MechCommand) {
     const m = mechs[i], f = mechs[1 - i];
+    // Feeds and power: a press on the key (rising edge), as the arsenal's stepGear.
+    for (const q of m.gear) {
+      q.sim.update(dt);
+      const down = cmd.keys[q.key - 1] && m.alive, pressed = down && !q.prev;
+      q.prev = down;
+      if (pressed && q.sim.press()) { res.gearPresses[i]++; if (q.sim.stats.family === "power") m.reactor.refillNow(q.sim.stats.bars); }
+    }
     const dist = Math.hypot(f.sim.pos.x - m.sim.pos.x, f.sim.pos.z - m.sim.pos.z);
     const see = sees(m.sim.pos.x, m.sim.pos.z, f.sim.pos.x, f.sim.pos.z);
     aimAt[i] = cmd.cursor ?? cmd.lock ?? null;
@@ -266,7 +281,10 @@ export function runDuel(o: DuelOptions): DuelResult {
         if (k.kind === "minigun" || k.kind === "autocannon") {
           g.spin = held ? Math.min(1, g.spin + dt / Math.max(0.05, k.spinUp)) : Math.max(0, g.spin - dt * 2);
           if (!held || g.spin < 1 || !cmd.shotAt || dist > k.range) { g.acc = 0; return; }
-          g.acc += k.rate * dt;
+          // Feeds on this gun: the passive rate and an overdrive while it lasts (ignited rounds' burn isn't modelled).
+          let mul = 1;
+          for (const q of m.gear) if (q.gun === k.ctl.trigger && q.sim.stats.family === "feed") mul *= q.sim.rateMul;
+          g.acc += k.rate * mul * dt;
           while (g.acc >= 1) {
             g.acc -= 1; m.fired++; lastAct[i] = t;
             const spread = Math.tan(k.spread * Math.PI / 180) * dist * r();

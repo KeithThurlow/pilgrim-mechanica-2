@@ -9,7 +9,7 @@
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand, type Threat } from "../src/combat/rivalAi";
-import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
+import { rollRivalLoadout, applyFitSpec, gearOf, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
 import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
 import { levelPower, levelMul } from "../src/items/level";
@@ -92,6 +92,18 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
     const dealt = (x.score.rounds[0].dealt as Record<string, number>)[w] ?? 0;
     must(dealt > 200, `a rival with two ${w}s dealt only ${Math.round(dealt)} with them in a minute`);
   }
+}
+
+// ---- Feeds and power (2026-11-03): rivals roll them on their shoulders and press them ----
+{
+  let n = 0;
+  for (let seed = 1; seed <= 300; seed++) if (gearOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS))).length) n++;
+  must(n >= 30, `only ${n} of 300 rolled rivals carry a feed or power on a shoulder`);
+  const feed = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "beltfeed", k2: "incendiary", k3: "pack" }), null], maxTime: 60 });
+  must(feed.gearPresses[0] >= 3, `a rival with two feeds pressed them only ${feed.gearPresses[0]} times in a minute`);
+  const power = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "laser", right: "laser", k1: "capacitor", k2: "none", k3: "pack" }), null], maxTime: 60 });
+  must(power.gearPresses[0] >= 1, "a rival with lasers never discharged its capacitor bank into the reactor");
+  console.log(`gear: ${n}/300 rivals carry feeds or power; feeds pressed ${feed.gearPresses[0]}x, capacitor ${power.gearPresses[0]}x in a minute`);
 }
 
 // ---- Duels between two AIs ----

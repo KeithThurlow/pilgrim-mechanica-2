@@ -16,7 +16,7 @@ import type { MoveCommand } from "../mech/walker";
 import type { Aim } from "../mech/upper";
 import type { TargetCandidate } from "../game/targeting";
 import { rng } from "../items/generate";
-import { isEnergyKind, preferredRange, type KitWeapon } from "./rivalKit";
+import { isEnergyKind, preferredRange, type KitGear, type KitWeapon } from "./rivalKit";
 
 export const RIVAL_AI_DEFAULTS = {
   aiAggression: 0.5,
@@ -177,6 +177,8 @@ export interface DuelSelf {
   energyCap?: number;
   kit: readonly KitWeapon[];
   weapons: readonly WeaponState[];
+  /** Feeds and power on its shoulders (a press each; ready: off cooldown) and, for power, the bars a discharge refills. */
+  gear?: readonly (KitGear & { ready: boolean; bars: number })[];
 }
 
 export interface DuelFoe {
@@ -331,6 +333,9 @@ export class RivalAi {
   private cutOn = false;
   private cutPower = false;
   powerCuts = 0;
+  /** A gear key pressed last frame (let up this one, so the next press is a new press); presses made. */
+  private gearDown = [false, false, false];
+  gearPresses = 0;
   /** Its energy weapons ran the reactor dry: holding fire until it's back to aiReactorResume (HUD, checks). */
   dry = false;
 
@@ -809,6 +814,18 @@ export class RivalAi {
         // Bursts along the frozen line: the trigger goes down in time for the spin-up to end at the snapshot's end.
         cmd.trigger[side] = this.acPhase === "burst" || (this.acPhase === "snap" && view.t >= this.acFireFrom);
       } else cmd.trigger[side] = w.ready || k.kind === "minigun";
+    }
+    // Feeds and power (Keith 2026-10-30; rivals since 2026-11-03): a press each, never on a key it's painting with. A feed
+    // overdrives or loads ignited rounds while its gun is firing at the foe; power discharges into a reactor low enough
+    // to take the whole refill (and only for energy weapons).
+    for (const g of s.gear ?? []) {
+      const k = g.key - 1;
+      if (this.gearDown[k]) { this.gearDown[k] = false; continue; }
+      if (!g.ready || (this.painting && s.kit[this.painting.i]?.ctl && "key" in s.kit[this.painting.i].ctl && (s.kit[this.painting.i].ctl as { key: number }).key === g.key)) continue;
+      const press = g.family === "feed"
+        ? g.gun >= 0 && cmd.trigger[g.gun] && sees && s.kit.some((w) => "trigger" in w.ctl && w.ctl.trigger === g.gun && w.kind !== "sword" && !w.energy)
+        : s.energy !== undefined && s.kit.some((w) => !!w.energy) && (s.energyCap ?? 0) - s.energy >= g.bars * 0.9;
+      if (press) { cmd.keys[k] = true; this.gearDown[k] = true; this.gearPresses++; }
     }
     // Shoulder weapons: one painted at a time, held long enough to read, then released.
     if (this.painting) {

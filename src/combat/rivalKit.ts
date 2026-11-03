@@ -99,6 +99,13 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
   return out;
 }
 
+/** Shoulder gear that isn't a launcher (feeds, power), as the AI sees it: its key, and the gun a feed feeds (0, 1; -1 none). */
+export interface KitGear { key: 1 | 2 | 3; family: "feed" | "power"; gun: number }
+export function gearOf(r: Resolved): KitGear[] {
+  return r.shoulders.filter((s) => s.family === "feed" || s.family === "power")
+    .map((s) => ({ key: s.key, family: s.family as "feed" | "power", gun: s.mount === "shoulderL" ? 0 : s.mount === "shoulderR" ? 1 : -1 }));
+}
+
 /**
  * The range a kit likes (m): the mean of its weapons' (the trigger guns count double: they do most of the work). A kit
  * with a sword is pulled in toward the sword's (`swordPull` of the way: it wants to be in your face).
@@ -121,8 +128,8 @@ function pickBase(r: () => number, pool: Base[]): Base {
   return pool[pool.length - 1];
 }
 
-// A rival's shoulders are launchers (its AI knows no feeds or power yet, Keith 2026-10-30: shoulder gear is the player's).
-const ofKind = (kind: string, size?: string) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher"));
+// A rival's back weapon is a launcher; its shoulders roll feeds and power too (2026-11-03: its AI presses them).
+const ofKind = (kind: string, size?: string, gear = false) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher" || (gear && (b.family === "feed" || b.family === "power"))));
 
 /**
  * A random rival loadout from a seed (the same seed always rolls the same mech): legs, hull, a sensor that fits it, each
@@ -159,7 +166,7 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     // arm is kept so every seed still rolls the same rival.
     r();
     put(m.held, pickBase(r, ofKind("weapon", "L")).id);
-    if (r() < 0.6) put(m.shoulder, pickBase(r, ofKind("shoulder")).id);
+    if (r() < 0.6) put(m.shoulder, pickBase(r, ofKind("shoulder", undefined, true)).id);
   }
   // Arms on both mounts: now and then a two-hander across them.
   if (lo.mountL?.kind === "arm" && lo.mountR?.kind === "arm" && r() < 0.25) put("heldR", pickBase(r, ofKind("weapon", "H")).id);
