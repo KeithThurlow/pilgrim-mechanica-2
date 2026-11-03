@@ -53,7 +53,7 @@ interface Feed { bonus: number; speed: number }
 export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
   bareDashCharges: 3, // Keith 2026-11-03: the player's mech starts with at least three energy bars
-  rivalBareDashCharges: 2, // rival mechs (duel, HVT) keep two: the duel check's long fight stalls at three
+  rivalBareDashCharges: 3, // rival mechs (duel, HVT) get the same three bars; the rival AI uses the extra one
   bareDashRecharge: 4.6,
   bareRadar: 250,
 };

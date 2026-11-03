@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Rival mechs start with three energy bars too (coordinator's call while Keith is away; Claude)
+- `rivalBareDashCharges` 2 → 3 (`src/items/loadout.ts`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`); `tools/loadout-check.ts` now pins 3. With main's latest changes the long duel no longer stalls: one rival still holds engage the whole minute (the check takes either side), the other presses and takes cover. Rival AI itself is unchanged; it doesn't yet use the third bar beyond the sprint-to-reposition rule (needs 3 spare). Checked: `npm test` passes. Open for Keith: whether the rival AI should press on a spare bar.
+
 ### 2026-11-03 · Replicas are your own mech, slimmed (Keith; Claude)
 - The replica model is now the Rampart on the same rig, slimmed (`RampartBody.slim` in `src/mech/rampart.ts`; `src/summon/replicaBody.ts`): legs ×0.55 thick, feet ×0.8, hull ×0.62 wide, ×0.8 high, ×0.85 long (the guns and sockets come in with it), guns ×0.72, no ammo drums, pack or back unit, a twin-optic head; your mech's paint (a slider tints it paler). Rocket replicas carry a light four-tube rack in place of each minigun pod. Sliders: Summons › Mech replicas: look (live). The wire frame (`src/summon/replicaWire.ts`) only stands in while the model loads and in headless checks.
 - Checked: replicas-check and summongear-check pass on the stand-in; a game-camera shot of a minigun and a rocket replica beside the mech.
