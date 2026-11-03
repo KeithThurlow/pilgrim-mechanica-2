@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Replicas are your own mech, slimmed (Keith; Claude)
+- The replica model is now the Rampart on the same rig, slimmed (`RampartBody.slim` in `src/mech/rampart.ts`; `src/summon/replicaBody.ts`): legs ×0.55 thick, feet ×0.8, hull ×0.62 wide, ×0.8 high, ×0.85 long (the guns and sockets come in with it), guns ×0.72, no ammo drums, pack or back unit, a twin-optic head; your mech's paint (a slider tints it paler). Rocket replicas carry a light four-tube rack in place of each minigun pod. Sliders: Summons › Mech replicas: look (live). The wire frame (`src/summon/replicaWire.ts`) only stands in while the model loads and in headless checks.
+- Checked: replicas-check and summongear-check pass on the stand-in; a game-camera shot of a minigun and a rocket replica beside the mech.
 ### 2026-11-03 · Inventory: footprints on the doll, weapons upright, working sort and filters (Keith; Claude on `claude/project-thread-s93ecs`)
 - Doll tiles show the fitted item's grid footprint (a small block of its cells with its picture, 5 px a cell) and w×h. Auto-placing never turns an item (only R does), and saved layouts reset once (`grids.v` 2) so old sideways weapons stand up. Tidy (and a Tidy both button) lays a grid out in the sort chips' order; new Show chips (hull weapons, held weapons, parts, shoulder/back/waist, Protocols) dim everything else. Also cleaned a stray conflict marker here. `src/ui/inventory.ts`, `inventory.css`, `src/items/grid.ts`, `bayState.ts`; grid-check (auto-place never turns), npm test.
 ### 2026-11-03 · Arms reach from the shoulder toward the target (Keith; Claude on `claude/project-thread-pp5ek9`)
