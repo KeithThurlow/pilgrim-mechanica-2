@@ -122,6 +122,8 @@ export function runDuel(o: DuelOptions): DuelResult {
   const score = new DuelScore();
   score.start(0);
   const flying: Flying[] = [];
+  /** Particle orbs drifting out to their range, burning whatever they pass, then popping (as EnergyGuns.fly). */
+  const orbs: { id: number; from: 0 | 1; x: number; z: number; dx: number; dz: number; speed: number; left: number; dps: number; r: number; pop: number }[] = [];
   let nextId = 1;
   const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
   const dt = 1 / 60, maxT = o.maxTime ?? 90;
@@ -161,6 +163,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   function view(i: number): DuelView {
     const m = mechs[i], f = mechs[1 - i];
     const threats: Threat[] = [];
+    for (const o of orbs) if (o.from !== i) { const L = Math.min(o.left, o.speed * 3); threats.push({ id: o.id, kind: "line", ax: o.x, az: o.z, x: o.x + o.dx * L, z: o.z + o.dz * L, r: o.r, t: 1.5 }); }
     for (const fl of flying) if (fl.from !== i) threats.push(fl.ax !== undefined
       ? { id: fl.id, kind: "line", ax: fl.ax, az: fl.az, x: fl.x, z: fl.z, r: fl.r, t: Math.max(0, fl.land - t) }
       : { id: fl.id, kind: "ring", x: fl.x, z: fl.z, r: fl.r, t: Math.max(0, fl.land - t), homing: !!fl.homing });
@@ -243,10 +246,11 @@ export function runDuel(o: DuelOptions): DuelResult {
           if (!at || (!out.shots && !out.power)) return;
           m.fired++; lastAct[i] = t;
           const miss = Math.hypot(at.x - f.sim.pos.x, at.z - f.sim.pos.z), reach = see && dist <= st.range;
-          if (k.kind === "plasma" || k.kind === "orb") {
-            // An orb burns about a second in its cloud, then pops.
-            const dmg = k.kind === "orb" ? st.damage + st.blastDamage : st.damage;
-            for (let n = 0; n < out.shots; n++) launch(i, k, k.kind, at, { r: Math.max(0.5, st.radius), blast: st.radius, damage: dmg, land: Math.min(dist, st.range) / Math.max(1, st.speed) });
+          if (k.kind === "orb") {
+            const dx = at.x - m.sim.pos.x, dz = at.z - m.sim.pos.z, l = Math.hypot(dx, dz) || 1;
+            for (let n = 0; n < out.shots; n++) orbs.push({ id: nextId++, from: i as 0 | 1, x: m.sim.pos.x, z: m.sim.pos.z, dx: dx / l, dz: dz / l, speed: st.speed, left: st.range, dps: st.damage, r: st.radius, pop: st.blastDamage });
+          } else if (k.kind === "plasma") {
+            for (let n = 0; n < out.shots; n++) launch(i, k, k.kind, at, { r: Math.max(0.5, st.radius), blast: st.radius, damage: st.damage, land: Math.min(dist, st.range) / Math.max(1, st.speed) });
           } else if (k.kind === "lance") {
             if (reach && miss < HIT_R + 0.5) hurt(1 - i, "lance", (st.damage + st.blastDamage) * out.power);
           } else {
@@ -323,6 +327,16 @@ export function runDuel(o: DuelOptions): DuelResult {
     });
   }
 
+  function flyOrbs() {
+    for (let n = orbs.length - 1; n >= 0; n--) {
+      const o = orbs[n], ti = 1 - o.from, tgt = mechs[ti], step = Math.min(o.left, o.speed * dt);
+      o.x += o.dx * step; o.z += o.dz * step; o.left -= step;
+      const d = Math.hypot(tgt.sim.pos.x - o.x, tgt.sim.pos.z - o.z);
+      if (d < o.r + HIT_R) hurt(ti, "orb", o.dps * dt);
+      if (o.left <= 1e-3) { if (o.pop > 0) blastOn(ti, o.x, o.z, o.r * 0.9, o.pop, "orb"); orbs.splice(n, 1); }
+    }
+  }
+
   function land() {
     for (let n = flying.length - 1; n >= 0; n--) {
       const fl = flying[n], ti = 1 - fl.from, tgt = mechs[ti];
@@ -374,6 +388,7 @@ export function runDuel(o: DuelOptions): DuelResult {
     });
     mechs.forEach((_, i) => weapons(i, cmds[i]));
     land();
+    flyOrbs();
     if (res.nan) break;
   }
   res.time = t;
