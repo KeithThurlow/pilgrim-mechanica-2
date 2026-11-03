@@ -85,7 +85,7 @@ export function weaponStates(a: Arsenal, unit: MechUnit, kit: readonly KitWeapon
         const busy = k.kind === "sunder" ? sim.phase > 0 : k.kind === "lance" && sim.holding;
         return { i, ready: sim.cool <= 0 && sim.phase === 0 && e >= cost, charge: k.kind === "sunder" ? (sim.phase === 1 ? sim.charge : 0) : sim.charge, busy };
       }
-      if (k.kind === "sword") return { i, ready: true, charge: 0 };
+      if (k.kind === "sword") return { i, ready: true, charge: 0, busy: a.canPowerCut() };
       if (k.kind === "rpg") return { i, ready: s.cool <= 0, charge: 0 };
       return { i, ready: g.ammo > 0, charge: 0 };
     }
