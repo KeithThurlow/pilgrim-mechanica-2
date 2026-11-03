@@ -244,6 +244,11 @@ export class MechUnit implements Hittable, Solid {
   piloted = false;
   /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
   gunsOff = false;
+  /** Sprinting, the sides whose held weapon still aims and fires (Keith 2026-11-03: the arms track from the shoulder
+   *  while the hull faces the run; hull weapons, melee and the shoulders stay off). */
+  armsFree: [boolean, boolean] = [false, false];
+  /** This side's weapon is off: the sprint's weapons-off, unless its arm is free. */
+  sideOff(i: number) { return this.gunsOff && !this.armsFree[i]; }
   private fwdAim = { x: 0, y: 0, z: 0 };
   stepTimes: number[] = [];
   private clock = 0;
@@ -439,7 +444,11 @@ export class MechUnit implements Hittable, Solid {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);
       this.gunsOff = this.bound.gunsOff && this.alive;
-      if (this.gunsOff) { trigger = false; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
+      // Held guns (not swords) keep their own aim while sprinting: the torso faces the run, the arm tracks the aim.
+      for (let k = 0; k < 2; k++) { const st = upper.guns[k].stats; this.armsFree[k] = this.gunsOff && !!st?.held && st.cls !== "melee" && upper.guns[k].enabled; }
+      upper.freeArms[0] = this.armsFree[0]; upper.freeArms[1] = this.armsFree[1];
+      upper.armAim = want.aim; upper.armsOnly = this.gunsOff;
+      if (this.gunsOff) { trigger = [this.armsFree[0] && triggerOf(want.trigger, 0), this.armsFree[1] && triggerOf(want.trigger, 1)]; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
       upper.leanFwd = this.gunsOff ? v.sprintHullLean * D2R * clamp((sim.speed - v.walkSpeed) / Math.max(0.5, (sim.boundTopNow || v.boundTop) - v.walkSpeed), 0, 1) : 0;
       // The slope along the slide: + uphill. Read a couple of metres either side of the body.
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
@@ -520,7 +529,8 @@ export class MechUnit implements Hittable, Solid {
       // outward arm turns slower) and the gap between the model's muzzle and the sim's shoulder, so on small targets
       // the left gun's rounds landed off to the left (Keith 2026-10-25). Before that, the barrel's pitch put rounds
       // ~2 m low at 20 m (Keith: "very hard to hit"). The barrel's heading stays the fallback with no aim.
-      const at = shotAt ?? aim;
+      // A free arm while sprinting fires at the real aim, not the run's line.
+      const at = this.armsFree[s === 1 ? 0 : 1] ? shotAt ?? want.aim : shotAt ?? aim;
       if (at) {
         const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
         if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();

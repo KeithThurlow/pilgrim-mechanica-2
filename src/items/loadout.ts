@@ -391,7 +391,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     const h = lo[m.held];
     if (isArm(mount) && h?.kind === "weapon" && h.size === "L") {
       const a = effectiveStats(mount!), w = effectiveStats(h);
-      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, feedOf(s));
+      return { ...gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, feedOf(s)), held: true };
     }
     return null;
   };
@@ -401,7 +401,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // handling; fed by the bigger of the two waist drums.
     const w = effectiveStats(lo.heldR!), a = effectiveStats(lo.mountL!), b = effectiveStats(lo.mountR!);
     const fl = feedOf("L"), fr = feedOf("R");
-    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, { bonus: Math.max(fl.bonus, fr.bonus), speed: Math.max(fl.speed, fr.speed) });
+    right = { ...gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, { bonus: Math.max(fl.bonus, fr.bonus), speed: Math.max(fl.speed, fr.speed) }), held: true };
     left = null;
   }
   const first = right ?? left;

@@ -312,6 +312,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Held weapons aim and fire while sprinting (Keith; Claude on `claude/project-thread-pp5ek9`)
+- Sprinting, the hull still faces the run and hull weapons, swords and shoulders stay off, but each held gun's arm tracks the aim on its own inside a shoulder arc (75° out, 25° across the chest) and fires; its rounds go to the aim. Held weapons track 1.8× faster always (outward 0.9). Sliders: Your mech › Held weapons (`heldTrack`, `heldOutward`, `runArmOut`, `runArmIn`). `GunStats.held` from `src/items/loadout.ts`; `UpperSim.freeArms/armAim`, `MechUnit.armsFree/sideOff()`; HUD says "arms only". Checked: `tools/upper-check.ts` (target 50° left while sprinting: left arm on target in 0.08 s and fires, right arm and a target behind don't, torso never turns), full `npm test`.
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
 ### 2026-11-03 · Enemies go for summons; replicas walk round the train (Keith via the coordinator; Claude on `claude/project-thread-vhklb8`)

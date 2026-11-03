@@ -256,7 +256,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     actions: [{ label: "Demo", onClick: () => { auto = !auto; }, active: () => auto }, ...(o.actions ?? [])],
     topics: [
       ...o.topics,
-      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Reactor", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+      { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Reactor", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
       ABILITY_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
@@ -461,7 +461,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.
-    softAim.draw(driving ? pointer ?? cursor : null, lock ?? (demoLock ? { target: demoLock, how: "cursor" } : null), player.upper.onTarget && !player.gunsOff);
+    softAim.draw(driving ? pointer ?? cursor : null, lock ?? (demoLock ? { target: demoLock, how: "cursor" } : null), player.upper.onTarget && (!player.gunsOff || player.armsFree[0] || player.armsFree[1]));
     // Each gun's magazine and reload round the cursor (src/ui/reloadHud.ts); enemies' health bars.
     reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
     healthBars.update(dt);
