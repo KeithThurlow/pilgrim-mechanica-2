@@ -113,7 +113,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   30 m ahead of the straight demo), `?turnat=seconds` (with `?walk=straight`, the demo turns hard right then).
 - Sprint (every lab with the mech): tap Space dashes, keep holding and the mech carries on into the sprint, faster and
   faster up to the legs' top speed; let go and it runs on, skidding off the extra speed. Energy bars at the left edge
-  (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no weapons while sprinting.
+  (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no hull weapons while sprinting: held guns' arms still track and fire inside a shoulder arc while the hull faces the run (Keith 2026-11-03; Your mech › Held weapons).
   Energy weapons draw on the hull's reactor instead, a separate cyan bar beside them (Keith 2026-11-02; Your mech › Reactor).
   Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
   is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
