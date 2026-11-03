@@ -41,7 +41,7 @@ export const MOUNT_STANDIN = {
   // grip (about 0.3 under its origin, scaled) is in that fist: held in the hand, not lying along the forearm (Keith
   // 2026-11-03: "they look mounted on the forearm").
   handAt: [0, -0.14, 0.72] as [number, number, number],
-  heldAt: [0, 0.08, 0.78] as [number, number, number],
+  gunAt: [0, 0.08, 0.78] as [number, number, number],
   sensorTop: [0, 1.62, -0.55] as [number, number, number],
   sensorFront: [0, 0.78, 1.0] as [number, number, number],
 };
@@ -518,7 +518,7 @@ export class RampartBody {
       p.yawPitch.position.copy(p.home);
       if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
       p.kick.scale.setScalar(arm ? S.heldScale : 1);
-      p.kickBase = arm ? new THREE.Vector3(...S.heldAt) : new THREE.Vector3();
+      p.kickBase = arm ? new THREE.Vector3(...S.gunAt) : new THREE.Vector3();
       p.kick.position.copy(p.kickBase);
       p.heldAt = p.yawPitch.position.clone(); p.armShown = arm;
       p.kick.visible = L ? parts.gunLeft : parts.gunRight;
@@ -757,7 +757,7 @@ function armUpper(look: ToonLook, side: 1 | -1) {
   return g;
 }
 /** Stand-in forearm (box) from the elbow (the gun pivot) along the aim to a fist (handAt), which holds the weapon's
- *  grip; the weapon sits ahead of and above the fist (heldAt), not along the forearm. */
+ *  grip; the weapon sits ahead of and above the fist (gunAt), not along the forearm. */
 function armFore(look: ToonLook) {
   const g = new THREE.Group(), H = MOUNT_STANDIN.handAt;
   const len = H[2] + 0.1;

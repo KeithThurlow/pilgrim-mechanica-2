@@ -86,6 +86,44 @@ export const isTwoHander = (i: Item | null) => !!i && i.kind === "weapon" && i.s
 /** Does this side have an arm (so its held and shoulder slots exist)? */
 export const hasArm = (lo: Loadout, s: MountSide) => isArm(lo[MOUNTS[s].mount]);
 
+// ---- Arms come with the hull (Keith 2026-11-03) ----
+// Arms aren't items the player finds or fits: each hull names its arm (Base.arm) and it goes on every hull mount that
+// takes an arm and holds no hull weapon. Fitting a held weapon puts the arm back (a hull weapon there comes off);
+// taking a hull weapon off puts the arm back; a new hull brings its own arms. These arms never go to the stash.
+export const BUILTIN_TAG = "builtin";
+export const isBuiltinArm = (i: Item | null) => isArm(i) && i!.tags.includes(BUILTIN_TAG);
+/** The arm base a hull comes with (null: none). */
+export const hullArmBase = (hull: Item | null) => (hull ? BASE_BY_ID[hull.base]?.arm ?? null : null);
+/** The hull's own arm for a side (base values, no sockets). */
+export function hullArm(lo: Loadout, s: MountSide): Item | null {
+  const base = hullArmBase(lo.hull);
+  if (!base || !lo.hull) return null;
+  const it = makeItem(base, "common", `${lo.hull.id}/arm-${s}`);
+  it.sockets = 0;
+  it.level = lo.hull.level ?? 1;
+  it.tags.push(BUILTIN_TAG);
+  return it;
+}
+/** Can this side hold a weapon: an arm there now, or the hull's arm can go on. */
+export function armable(lo: Loadout, s: MountSide): boolean {
+  if (hasArm(lo, s)) return true;
+  return !!hullArmBase(lo.hull) && !!hullMount(lo, s)?.takes.includes("arm");
+}
+/** Put the hull's arm on every mount that takes one and is empty, and swap another hull's arms for this one's. */
+function armUp(lo: Loadout) {
+  for (const s of ["L", "R"] as MountSide[]) {
+    const slot = MOUNTS[s].mount, it = lo[slot];
+    if (!hullMount(lo, s)?.takes.includes("arm")) continue;
+    if (!it || (isBuiltinArm(it) && lo.hull && !it.id.startsWith(lo.hull.id + "/"))) lo[slot] = hullArm(lo, s);
+  }
+}
+const notBuiltin = (xs: Item[]) => xs.filter((x) => !isBuiltinArm(x));
+/** A held weapon sitting in a hand with no arm on that mount now (fitProblem allows it, since fit puts the arm on). */
+function armless(lo: Loadout, s: SlotId, it: Item): boolean {
+  if (s !== "heldL" && s !== "heldR") return false;
+  return isTwoHander(it) ? !hasArm(lo, "L") || !hasArm(lo, "R") : !hasArm(lo, sideOf(s)!);
+}
+
 /** The hull's mount on a side, or null if it has none there. */
 export function hullMount(lo: Loadout, s: MountSide) {
   const hull = lo.hull ? BASE_BY_ID[lo.hull.base] : null;
@@ -125,8 +163,8 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
     case "heldL": case "heldR": {
       if (item.kind !== "weapon") return "only weapons are held";
       if (item.size === "M") return "a hull weapon: it takes a whole hull mount, not a hand";
-      if (item.size === "H") return hasArm(lo, "L") && hasArm(lo, "R") ? null : "a two-handed weapon needs an arm on both hull mounts";
-      return hasArm(lo, side!) ? null : "a held weapon needs an arm on this hull mount";
+      if (item.size === "H") return armable(lo, "L") && armable(lo, "R") ? null : "a two-handed weapon needs arms on both hull mounts (this hull has none there)";
+      return armable(lo, side!) ? null : "this hull has no arm on this mount";
     }
     case "shoulderL": case "shoulderR": {
       // Whatever the hull mount holds (Keith 2026-10-30): no arm needed.
@@ -172,6 +210,9 @@ export function fit(lo: Loadout, slot: SlotId, item: Item): Item[] {
   if (why) throw new Error(`${item.base} in ${slot}: ${why}`);
   const removed: Item[] = [];
   const take = (s: SlotId) => { const it = lo[s]; if (it) removed.push(it); lo[s] = null; };
+  // A held weapon brings back the hull's arm on its side (a hull weapon there comes off).
+  const arm = (s: MountSide) => { if (!hasArm(lo, s)) { take(MOUNTS[s].mount); lo[MOUNTS[s].mount] = hullArm(lo, s); } };
+  if (item.kind === "weapon" && (slot === "heldL" || slot === "heldR")) { if (isTwoHander(item)) { arm("L"); arm("R"); } else arm(sideOf(slot)!); }
   if (isTwoHander(item)) { take("heldL"); take("heldR"); lo.heldR = item; }
   else {
     // A one-hander in either hand drops a two-hander.
@@ -179,7 +220,7 @@ export function fit(lo: Loadout, slot: SlotId, item: Item): Item[] {
     take(slot);
     lo[slot] = item;
   }
-  return removed.concat(settle(lo));
+  return notBuiltin(removed.concat(settle(lo)));
 }
 
 /** Take an item off (legs and the hull can only be swapped). Returns it and anything that no longer fits. */
@@ -188,12 +229,13 @@ export function unfit(lo: Loadout, slot: SlotId): Item[] {
   const target = slot === "heldL" && isTwoHander(lo.heldR) ? "heldR" : slot;
   const it = lo[target];
   lo[target] = null;
-  return (it ? [it] : []).concat(settle(lo));
+  return notBuiltin((it ? [it] : []).concat(settle(lo)));
 }
 
 /** Drop whatever no longer fits (until nothing changes); returns what came off. */
 export function settle(lo: Loadout): Item[] {
   const out: Item[] = [];
+  armUp(lo);
   for (let pass = 0; pass < 4; pass++) {
     let changed = false;
     for (const s of SLOTS) {
@@ -202,11 +244,12 @@ export function settle(lo: Loadout): Item[] {
       // A two-hander sits in the right hand; the left hand stays empty.
       if (s === "heldL" && isTwoHander(lo.heldR)) { lo.heldL = null; out.push(it); changed = true; continue; }
       lo[s] = null;
-      if (fitProblem(lo, s, it)) { out.push(it); changed = true; } else lo[s] = it;
+      if (fitProblem(lo, s, it) || armless(lo, s, it)) { out.push(it); changed = true; } else lo[s] = it;
     }
     if (!changed) break;
   }
-  return out;
+  armUp(lo);
+  return notBuiltin(out);
 }
 
 /** Every rule this loadout breaks (empty when it's sound). */
@@ -220,7 +263,7 @@ export function problems(lo: Loadout): string[] {
     if (!it) continue;
     if (s === "heldL" && isTwoHander(lo.heldR)) continue;
     lo[s] = null;
-    const why = fitProblem(lo, s, it);
+    const why = fitProblem(lo, s, it) ?? (armless(lo, s, it) ? "a held weapon with no arm to hold it" : null);
     lo[s] = it;
     if (why) out.push(`${SLOT_NAMES[s]}: ${why}`);
     if (it.socketed.length > it.sockets) out.push(`${it.base}: more Protocols than sockets`);

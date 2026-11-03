@@ -47,6 +47,9 @@ const REF = {
   mc: 4000, // Monte Carlo samples
   /** A behaviour Protocol's niche multiplier should land here (Keith 2026-10-31: about ×1.2-1.3; --check fails outside). */
   nicheLo: 1.1, nicheHi: 1.5,
+  /** Weapons allowed over the 130% band against one set, by base id: the cap there (Keith 2026-11-03: flak is meant
+   *  to be a crowd-clearing menace, so about twice its budget against a swarm; Claude's band, open). */
+  bandOver: { "flak-medium": { swarm: 230 } } as Record<string, Record<string, number>>,
 };
 const armourFloor = WEAPON_DEFAULTS.armourFloor;
 const thru = (d: number, A: number, ap: number) => armourHit(d, A, ap, armourFloor);
@@ -316,7 +319,7 @@ for (const w of W_) {
   const pct = e.map((x, i) => (100 * x) / (budget * (REF.setWeight[T_[i].id] ?? 1)));
   const best = Math.max(...pct), bi = pct.indexOf(best);
   const off = pct.filter((_, i) => i !== bi), offMean = off.reduce((a, b) => a + b, 0) / off.length;
-  if (best > 130) problems.push(`${w.name} ${f0(best)}% of budget vs ${T_[bi].id}`);
+  if (best > (REF.bandOver[w.id]?.[T_[bi].id] ?? 130)) problems.push(`${w.name} ${f0(best)}% of budget vs ${T_[bi].id}`);
   console.log(pad(w.name, 20) + e.map((x, i) => lp(`${f0(x)} [${f0(pct[i])}]`, 14)).join("") + `   ${pad(T_[bi].id, 9)} ${f0(offMean)}%`);
 }
 
