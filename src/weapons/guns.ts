@@ -61,15 +61,15 @@ export const GUN_DEFAULTS = {
   // Flak cannon
   flakRate: 1,
   flakPellets: 14,
-  flakDamage: 24,
+  flakDamage: 18,
   flakSpread: 7,
   flakRange: 38,
   flakPierce: 1,
   flakAp: 0.15,
   flakMag: 8,
   flakReload: 3,
-  flakSplash: 3,
-  flakSplashShare: 0.85,
+  flakSplash: 2.5,
+  flakSplashShare: 0.75,
   // Each pellet bursts where it ends (Keith 2026-11-03): a small blast's look (×) and its pop (sound level).
   flakBurstFx: 1,
   flakPopLevel: 0.8,
