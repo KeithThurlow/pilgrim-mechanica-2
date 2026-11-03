@@ -312,6 +312,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+- 2026-11-03 **Hull turns slower (Keith via coordinator: hull weapons up close felt too easy to aim while moving):** walk hull turn `legTurnRate` 360 → 270°/s and sprint `turnRate` 120 → 90°/s (both about 25% lower; `walkerTuning.ts`, Move group sliders "Walk: legs turn" and "Sprint turn rate"). Arm tracking untouched. Checked: `npm test` (full suite). Claude.
 - 2026-11-03 **Strider death blast waited for the next strider** (Keith's report): the strider lab (and the swarm lab's `?strider=`) skipped `StriderField.update` while no strider stood, so the last one's core only counted down once the next stood up (`striderBack` 6 s on). The field now updates with nobody standing. File: `src/combat/striderLab.ts`. Checked: `npm test`. Claude.
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
