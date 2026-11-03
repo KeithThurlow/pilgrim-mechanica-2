@@ -137,7 +137,8 @@ export function bayScreen(o: BayOptions) {
     const chips = el("div", "bay-chips");
     for (const [c, label] of [["hullWeapon", "Hull weapon"], ["arm", "Arm"]] as const) {
       const on = choiceOf(it!) === c, picking = slot === m.mount && choice === c;
-      const b = btn(label, () => pickSlot(m.mount, c), "chip" + (on ? " on" : "") + (picking ? " picking" : ""));
+      // Arms come with the hull (Keith 2026-11-03): "Arm" picks the hand; a held weapon there puts the hull's arm on.
+      const b = btn(label, () => (c === "arm" ? pickSlot(m.held) : pickSlot(m.mount, c)), "chip" + (on ? " on" : "") + (picking ? " picking" : ""));
       if (!hm.takes.includes(c)) { b.disabled = true; b.title = "this hull mount doesn't take one"; }
       chips.append(b);
     }
@@ -293,8 +294,8 @@ export function bayScreen(o: BayOptions) {
 
     if (isMountSlot(slot)) {
       const note = choice === "arm"
-        ? "Arms: hold a weapon (smaller than a hull weapon, but it swings quicker and wider) and carry a shoulder weapon; hands strip salvage faster. Fitting one takes the hull weapon off."
-        : "Hull weapons: one big military gun on the whole mount. Fitting one takes this side's arm, held weapon and shoulder weapon off.";
+        ? "Arms come with the hull: pick the hand and fit a held weapon (smaller than a hull weapon, but it swings quicker and wider); the hull's arm goes on and the hull weapon comes off."
+        : "Hull weapons: one big military gun on the whole mount. Fitting one replaces the hull's arm on this side (its held weapon comes off; the shoulder stays).";
       col.append(el("p", "bay-note", note));
     }
     col.append(el("h3", "", choice === "arm" ? "Arms that fit (stash and cargo)" : choice === "hullWeapon" ? "Hull weapons that fit (stash and cargo)" : "Fits here (stash and cargo)"));

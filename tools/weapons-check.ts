@@ -341,7 +341,7 @@ const dt = 1 / 120;
   must(!fitProblem(lo, "mountR", makeItem("rail-medium")), "a Medium rail cannon doesn't fit a hull mount");
   must(!!fitProblem(lo, "heldR", makeItem("rail-medium")), "a Medium rail cannon was held");
   must(!!fitProblem(lo, "mountR", makeItem("rail-light")), "a Light rail cannon fit a hull mount");
-  must(!!fitProblem(lo, "heldR", makeItem("rail-light")), "a Light rail cannon was held with no arm");
+  must(!fitProblem(lo, "heldR", makeItem("rail-light")), "a Light rail cannon refused a hand (the hull's arm goes on, Keith 2026-11-03)");
   must(!fitProblem(lo, "mountL", makeItem("ac-medium")), "an autocannon doesn't fit a hull mount");
   must(!fitProblem(lo, "mountL", makeItem("rpg-medium")), "a rocket launcher doesn't fit a hull mount");
   const arms = defaultLoadout();

@@ -144,7 +144,9 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     if (!mount) continue;
     const gun = mount.takes.includes("hullWeapon") && (!mount.takes.includes("arm") || r() < 0.5);
     if (gun) { put(m.mount, pickBase(r, ofKind("weapon", "M")).id); continue; }
-    put(m.mount, pickBase(r, ofKind("arm")).id);
+    // Arms come with the hull (Keith 2026-11-03): a held weapon puts the hull's arm on. The draw that used to pick the
+    // arm is kept so every seed still rolls the same rival.
+    r();
     put(m.held, pickBase(r, ofKind("weapon", "L")).id);
     if (r() < 0.6) put(m.shoulder, pickBase(r, ofKind("shoulder")).id);
   }
