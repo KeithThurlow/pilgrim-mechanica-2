@@ -14,6 +14,7 @@ import { applyGear, isSwarmKey } from "../../summon/gear";
 import { resolve, type Resolved } from "../../items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../../items/weaponPick";
 import type { Front } from "./front";
+import { SummonPrey } from "../../summon/aggro";
 
 /** Does the URL fit summoner gear (?summoner, or drones/hive on a shoulder key, or the replica bay)? */
 export function summonGearInUrl(q: URLSearchParams): boolean {
@@ -56,6 +57,8 @@ export function summonerFront(q: URLSearchParams, onReady: (s: Summons) => void)
       lab.refresh();
       const s = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon });
       summons = s;
+      // Every enemy group near one of your ground units may go for it (src/summon/aggro.ts).
+      lab.foot.quarry.summons = new SummonPrey(s, V);
       onReady(s);
       // Z sends the swarm (at the lock, else the cursor), C calls it back.
       addEventListener("keydown", (e) => {

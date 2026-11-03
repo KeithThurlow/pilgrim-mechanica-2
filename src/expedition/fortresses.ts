@@ -239,7 +239,7 @@ export class Fortresses {
     this.stepWarlord(dt, hunting, q);
     if (!sw.hi) return;
     const bf = this.bf;
-    sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : this.mechReach }, (fx, fy, fz, tx, ty, tz, i) => {
+    sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : q.kind === "summon" ? q.radius + 1 : this.mechReach }, (fx, fy, fz, tx, ty, tz, i) => {
       const own = sw.hasT[i] === 1;
       if (!own && !q.alive) return;
       const from = this.from.set(fx, fy, fz);

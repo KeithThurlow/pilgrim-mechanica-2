@@ -5,6 +5,7 @@
 // Ownership: host (the drones' damage and targets); the owner is the player whose mech carries them.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
+import { SUMMON_AGGRO_DEFAULTS, SUMMON_AGGRO_PARAMS, SUMMON_AGGRO_GROUPS, type SummonAggroValues } from "./aggro";
 import type { Battlefield, Hittable } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import type { MechUnit } from "../game/mechUnit";
@@ -26,10 +27,10 @@ const GD = "Summons: dismissed";
 const SUMMON_OWN_PARAMS: Param[] = [
   { key: "sumLinger", label: "Replicas walk on for (s)", min: 0, max: 120, step: 1, group: GD, tip: "After the convoy picks you up, the replicas walk beside it this long before folding away (drones and the swarm go at once). Out on the sand again, they're built anew" },
 ];
-export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS, ...SUMMON_OWN };
-export type SummonValues = DroneValues & AllyValues & RobotValues & ReplicaValues & MechUnitValues & typeof SUMMON_OWN;
-export const SUMMON_PARAMS = [...DRONE_PARAMS, ...REPLICA_PARAMS, ...ALLY_PARAMS, ...SUMMON_OWN_PARAMS];
-export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...REPLICA_GROUPS, ...ALLY_GROUPS, GD] };
+export const SUMMON_DEFAULTS = { ...DRONE_DEFAULTS, ...ALLY_DEFAULTS, ...REPLICA_DEFAULTS, ...SUMMON_OWN, ...SUMMON_AGGRO_DEFAULTS };
+export type SummonValues = DroneValues & AllyValues & RobotValues & ReplicaValues & MechUnitValues & typeof SUMMON_OWN & SummonAggroValues;
+export const SUMMON_PARAMS = [...DRONE_PARAMS, ...REPLICA_PARAMS, ...ALLY_PARAMS, ...SUMMON_OWN_PARAMS, ...SUMMON_AGGRO_PARAMS];
+export const SUMMON_TOPIC = { id: "summons", label: "Summons", groups: [...DRONE_GROUPS, ...REPLICA_GROUPS, ...ALLY_GROUPS, GD, ...SUMMON_AGGRO_GROUPS] };
 
 /** Battlefield gun slots the summons' rounds use (other guns share 2..19; the effects hold 24). */
 const SLOT0 = 20, SLOTS = 4;
@@ -103,6 +104,9 @@ export class Summons {
   }
 
   /** The send command (the swarm at the owner's lock, else at the cursor) and the recall. */
+  /** The owner's team (the summons fight on it). */
+  get team() { return this.owner.team; }
+
   /** Out with the owner (true), or dismissed (false: aboard the convoy). */
   get active() { return this.on; }
   private on = true;

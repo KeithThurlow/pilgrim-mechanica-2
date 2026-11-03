@@ -97,7 +97,7 @@ export function warbandFront(): Front {
           for (let i = 0; i < riders.hi; i++) if (riders.state[i] < DEAD) { rx += riders.px[i]; rz += riders.pz[i]; rn++; }
           const prey = rn ? lab.prey(rx / rn, rz / rn) : lab.prey(player.sim.pos.x, player.sim.pos.z);
           const p = prey.at;
-          riders.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz) => {
+          riders.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : prey.kind === "summon" ? prey.radius + 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz) => {
             if (!prey.alive) return;
             from.set(fx, fy, fz);
             if (!bf.canSee(from, p)) return;

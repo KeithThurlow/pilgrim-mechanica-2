@@ -26,7 +26,8 @@ export const QUARRY_PARAMS: Param[] = [
 
 /** What an enemy group goes for this frame. */
 export interface Prey {
-  kind: "mech" | "pilot";
+  /** The mech, the pilot on foot, or one of the summoner's units (src/summon/aggro.ts). */
+  kind: "mech" | "pilot" | "summon";
   alive: boolean;
   /** Where to shoot (the hull, or the pilot's chest). */
   at: THREE.Vector3;
@@ -118,8 +119,17 @@ export class Quarry {
   /** The pilot is out and alive. */
   get pilotOut() { return this.pilot.alive; }
 
-  /** The prey for a group whose middle is at (x, z): the pilot when he's out and near enough, else the mech. */
+  /** The summoner's units, when there are any (src/summon/aggro.ts): a group near one may go for it instead. */
+  summons: { pick(base: Prey, x: number, z: number): Prey } | null = null;
+
+  /** The prey for a group whose middle is at (x, z): the pilot when he's out and near enough, else the mech; or a
+   *  summon nearer the group than either. */
   pick(x: number, z: number): Prey {
+    const base = this.pickOwn(x, z);
+    return this.summons ? this.summons.pick(base, x, z) : base;
+  }
+
+  private pickOwn(x: number, z: number): Prey {
     const m = this.mechPrey, p = this.pilotPrey;
     if (!p.alive) return m;
     if (!m.alive) return p;

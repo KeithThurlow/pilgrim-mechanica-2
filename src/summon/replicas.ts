@@ -77,6 +77,9 @@ export const REPLICA_PAINT = 0xc7d0d4;
 
 interface Replica { unit: MechUnit; body: ReplicaBody; on: boolean; builds: number; clock: number; left: number; side: 1 | -1 }
 
+/** How wide a replica is to the convoy's cars (m), and how far ahead and how finely it looks for one in its way. */
+const BLOCK_R = 2.2, DETOUR_LOOK = 24, DETOUR_STEP = 2;
+
 /** A seeded 0..1 from integers (the weapon roll, rocket scatter). */
 function hash01(a: number, b: number, c = 0) {
   let h = Math.imul(a + 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35) ^ Math.imul(c + 0x7f4a7c15, 0x27d4eb2f);
@@ -93,6 +96,21 @@ export class Replicas {
 
   private from = new THREE.Vector3();
   private buildClock = 0;
+  /** Solid things replicas walk round (the convoy lab: its cars and the plough): (x, z) pushed out of them for a body
+   *  of radius r, or null when clear. */
+  blockers: ((x: number, z: number, r: number) => { x: number; z: number } | null) | null = null;
+
+  /** The first blocked point on the way from (x, z) to (gx, gz), pushed out past the edge (a waypoint), or null. */
+  private detour(x: number, z: number, gx: number, gz: number): { x: number; z: number } | null {
+    const dx = gx - x, dz = gz - z, d = Math.hypot(dx, dz);
+    if (d < 1) return null;
+    for (let t = DETOUR_STEP; t < Math.min(d, DETOUR_LOOK); t += DETOUR_STEP) {
+      const px = x + (dx / d) * t, pz = z + (dz / d) * t;
+      const o = this.blockers!(px, pz, BLOCK_R + 1.5);
+      if (o) return o;
+    }
+    return null;
+  }
   private shots = 0;
 
   constructor(private bf: Battlefield, private scene: THREE.Object3D, readonly v: MechUnitValues & ReplicaValues, private look: ToonLook,
@@ -220,6 +238,14 @@ export class Replicas {
         const lx = gx - P.x, lz = gz - P.z, l = Math.hypot(lx, lz);
         if (l > v.repLeash) { gx = P.x + (lx / l) * v.repLeash; gz = P.z + (lz / l) * v.repLeash; }
       }
+      // Round anything solid in the way (the convoy's cars): the goal moved out of it, and a waypoint off the edge of
+      // the first one on the straight line there.
+      if (this.blockers) {
+        const g = this.blockers(gx, gz, BLOCK_R);
+        if (g) { gx = g.x; gz = g.z; }
+        const w = this.detour(p.x, p.z, gx, gz);
+        if (w) { gx = w.x; gz = w.z; }
+      }
       const walk = Math.max(1, u.v.walkSpeed);
       let mx = (gx - p.x) / 5 + o.sim.vel.x / walk, mz = (gz - p.z) / 5 + o.sim.vel.z / walk;
       const ml = Math.hypot(mx, mz);
@@ -234,6 +260,9 @@ export class Replicas {
       const rockets = r.body.weapon === "rockets";
       u.step(dt, { x: mx, z: mz, sprint: !has && off > v.repCatchUp }, has ? this.aim : null, !rockets && has && dist < u.v.range + 4);
       if (rockets) this.rockets(r, k, dt, has, fx, fz, dist);
+      // Never inside a car.
+      const out = this.blockers?.(u.sim.pos.x, u.sim.pos.z, BLOCK_R);
+      if (out) { u.sim.pos.x = out.x; u.sim.pos.z = out.z; }
     });
     if (!waiting) this.buildClock = 0;
   }
