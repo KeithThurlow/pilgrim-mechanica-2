@@ -22,6 +22,7 @@ import { LOOT_DEFAULTS, rollItem, rollLoot, rollProtocol, makeItem, statRange } 
 import {
   defaultLoadout, emptyLoadout, fit, fitProblem, unfit, problems, resolve, socket, socketProblem, unsocket, bestHeld, SLOTS, LOADOUT_DEFAULTS,
   type Loadout,
+  isBuiltinArm,
 } from "../src/items/loadout";
 import { readBay, bayToJson } from "../src/items/bayState";
 import { choose, cleanPick, loadoutFor, type Pick } from "../src/items/weaponPick";
@@ -115,7 +116,20 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   const lo = defaultLoadout();
   const light = mk("mg-light", "l1"), heavy = mk("mg-heavy", "h1"), med = mk("mg-medium", "m1");
   const armA = mk("arm-rampart", "a1"), armB = mk("arm-rampart", "a2"), missiles = mk("sh-missiles", "s1");
-  must(!!fitProblem(lo, "heldL", light), "a held weapon fitted with a hull weapon on that mount");
+  // Arms come with the hull (Keith 2026-11-03): a held weapon on a hull weapon's side swaps the gun for the hull's arm.
+  {
+    const t = defaultLoadout();
+    must(!fitProblem(t, "heldL", light), "a held weapon refused on a hull weapon's side (the hull's arm should go on)");
+    const off = fit(t, "heldL", mk("mg-light", "lx"));
+    must(isBuiltinArm(t.mountL) && t.heldL?.id === "lx" && off.length === 1 && off[0].id === "default-mg-medium-L", "a held weapon didn't swap the hull weapon for the hull's arm");
+    const back = unfit(t, "heldL");
+    must(back.length === 1 && back[0].id === "lx" && isBuiltinArm(t.mountL), "taking a held weapon off took the arm too");
+    const off2 = fit(t, "mountL", mk("mg-medium", "mx"));
+    must(off2.length === 0 && t.mountL?.id === "mx", "a hull weapon in place of the hull's arm sent the arm to the stash");
+    must(unfit(t, "mountL").length === 1 && isBuiltinArm(t.mountL), "taking a hull weapon off didn't put the hull's arm back");
+    fit(t, "hull", mk("hull-cuirass", "cx"));
+    must(t.mountL?.base === "arm-wildcat" && problems(t).length === 0, "a new hull didn't bring its own arms");
+  }
   // Shoulders sit on the hull top whatever the mount holds (Keith 2026-10-30): no arm needed.
   must(!fitProblem(lo, "shoulderL", missiles) && !fitProblem(lo, "shoulderR", missiles), "a shoulder weapon refused with a hull weapon on that mount");
   for (const id of ["sh-beltfeed", "sh-incendiary", "sh-capacitor", "sh-rpg", "sh-mortar", "sh-linemortar"]) {
@@ -145,7 +159,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     const st0 = readBay(JSON.parse(JSON.stringify(bayToJson({ loadout: d0, stash: { items: [], capacity: Infinity }, cargo: { items: [], capacity: Infinity }, seed: 5 } as never))));
     must(!!st0 && !st0.loadout.shoulderL && !st0.loadout.shoulderR && problems(st0.loadout).length === 0 && resolve(st0.loadout).shoulders.length === 0, "a saved bay without shoulder gear didn't load as it was");
   }
-  must(!!fitProblem(lo, "heldR", heavy), "a two-hander fitted with hull weapons on both mounts");
+  must(!fitProblem(lo, "heldR", heavy), "a two-hander refused with hull weapons on both mounts (the hull's arms go on)");
   must(!!fitProblem(lo, "heldL", med), "a hull weapon was held");
   must(!!fitProblem(lo, "mountL", light), "a Light weapon fitted as a hull weapon");
   must(!!fitProblem(lo, "mountL", heavy), "a Heavy weapon fitted as a hull weapon");
@@ -193,7 +207,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(["a1", "l1"].every((id) => off2.some((i) => i.id === id)) && !lo.heldL && lo.shoulderL === missiles && !off2.some((i) => i.id === "s1"), "a hull weapon in place of an arm didn't bounce the arm and held weapon only");
   // Two-handed: one arm isn't enough; both arms take it in both hands.
   fit(lo, "mountL", armA);
-  must(!!fitProblem(lo, "heldR", heavy) && !!fitProblem(lo, "heldL", heavy), "a two-hander fitted with one arm");
+  must(!fitProblem(lo, "heldR", heavy), "a two-hander refused with one arm (the hull's other arm goes on)");
   fit(lo, "mountR", armB);
   must(!fitProblem(lo, "heldL", heavy) && !fitProblem(lo, "heldR", heavy), "a two-hander refused with both arms");
   fit(lo, "heldL", light);
@@ -221,7 +235,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   // The hull decides the mounts: the Salvager's right mount takes only an arm.
   const sv = defaultLoadout();
   const offH = fit(sv, "hull", mk("hull-salvager"));
-  must(offH.some((i) => i.id === "default-mg-medium-R") && !sv.mountR && !!sv.mountL, "a hull without a hull weapon mount on the right didn't bounce the right hull weapon");
+  must(offH.some((i) => i.id === "default-mg-medium-R") && isBuiltinArm(sv.mountR) && !!sv.mountL, "a hull without a hull weapon mount on the right didn't bounce the right hull weapon");
   must(!!fitProblem(sv, "mountR", med) && !fitProblem(sv, "mountR", armB), "the Salvager's right mount should take an arm and no hull weapon");
   must(!!fitProblem(emptyLoadout(), "mountL", med), "a hull weapon fitted with no hull");
 }

@@ -26,7 +26,7 @@ import { levelOf } from "../items/level";
 import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
 import { itemWeight, type Item } from "../items/item";
 import {
-  SLOTS, SLOT_NAMES, copyLoadout, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
+  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
   type LoadoutValues, type SlotId,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
@@ -167,6 +167,7 @@ export function inventoryScreen(o: InventoryOptions) {
 
   function takeOff(s: SlotId) {
     if (s === "legs" || s === "hull") { say("Legs and hull can only be swapped, not taken off."); return; }
+    if (isBuiltinArm(st.loadout[s])) { say("Arms come with the hull: fit a hull weapon here to replace this one."); return; }
     if (field()) {
       const e = o.exp!, lo = copyLoadout(st.loadout), off = unfit(lo, s);
       const cap = e.capacity === Infinity ? Infinity : resolve(lo, o.tuning).cargoCapacity;
@@ -181,7 +182,10 @@ export function inventoryScreen(o: InventoryOptions) {
   /** Click on an item in a list: into the picked slot if it fits there, else the first slot it fits. */
   function equip(it: Item) {
     if (slot && !fitProblem(st.loadout, slot, it)) { fitInto(slot, it); return; }
-    const s = SLOTS.find((q) => !st.loadout[q] && !fitProblem(st.loadout, q, it)) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
+    // An empty slot first, a hand that already has its arm before one that would take a hull weapon off.
+    const free = (q: SlotId) => !st.loadout[q] && !fitProblem(st.loadout, q, it);
+    const s = SLOTS.find((q) => free(q) && !((q === "heldL" && !isArm(st.loadout.mountL)) || (q === "heldR" && !isArm(st.loadout.mountR))))
+      ?? SLOTS.find(free) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
     if (s) fitInto(s, it); else say(it.kind === "protocol" ? "Protocols go in sockets: open the bay (B)." : `${itemName(it)} doesn't fit anywhere on this mech.`);
   }
 
@@ -473,13 +477,13 @@ export function inventoryScreen(o: InventoryOptions) {
       const t = TILES[s], it = lo[s];
       const heldBy2 = s === "heldL" && isTwoHander(lo.heldR);
       // A hand only exists with an arm on that mount (or the two-hander's other hand).
-      const noHand = (s === "heldL" && !isArm(lo.mountL)) || (s === "heldR" && !isArm(lo.mountR));
+      const noHand = (s === "heldL" && !armable(lo, "L")) || (s === "heldR" && !armable(lo, "R"));
       const tile = el("div", "inv-tile" + (s === slot ? " on" : "") + (it ? "" : " empty") + (noHand && !it ? " off" : ""));
       tile.style.left = `${t.x}px`; tile.style.top = `${t.y}px`;
       if (it) tile.style.borderColor = RARITY[it.rarity].color;
       const kind = s === "mountL" || s === "mountR" ? (isArm(it) ? "Arm" : isHullWeapon(it) ? "Hull weapon" : "") : "";
       tile.append(el("span", "inv-tilelabel", t.label));
-      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "needs an arm" : "empty");
+      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "no arm on this hull" : "empty");
       if (it) name.style.color = RARITY[it.rarity].color;
       tile.append(name);
       if (it) tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}Lv ${levelOf(it)} · P ${itemPower(it)}`));
@@ -488,7 +492,7 @@ export function inventoryScreen(o: InventoryOptions) {
       tile.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         e.preventDefault();
-        const off = it && s !== "legs" && s !== "hull" && !heldBy2;
+        const off = it && s !== "legs" && s !== "hull" && !heldBy2 && !isBuiltinArm(it);
         press = { item: it ?? ({} as Item), from: s, x: e.clientX, y: e.clientY, rot: false, gx: 0, gy: 0 };
         if (!off) press.x = press.y = Number.NaN; // no drag: only the click
       });
