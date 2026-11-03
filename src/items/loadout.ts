@@ -100,6 +100,7 @@ export function hullArm(lo: Loadout, s: MountSide): Item | null {
   if (!base || !lo.hull) return null;
   const it = makeItem(base, "common", `${lo.hull.id}/arm-${s}`);
   it.sockets = 0;
+  it.level = lo.hull.level ?? 1;
   it.tags.push(BUILTIN_TAG);
   return it;
 }

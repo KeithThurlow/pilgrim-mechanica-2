@@ -314,7 +314,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## Changes
 ### 2026-11-03 · Arms come with the hull (Keith; Claude)
 - Arms are no longer items (`Base.arm` on each hull; `src/items/loadout.ts` `hullArm`, `armable`, `armUp` in `settle`): a held weapon on a hand puts the hull's arm on (a hull weapon there comes off), taking a hull weapon off puts it back, a hull swap brings its own; they never reach the stash. Arms don't drop; old saves drop spare arms (`bayState.ts`). Bay's Arm chip picks the hand; rival kits and quick picks just fit the held weapon.
-- Checked: `loadout-check` (swap, take off, new hull's arms, save migration via probe), `weapons-`, `cargo-`, `guns-`, `sword-`, `grid-check`, full `npm test`.
+- Rival kits roll the same parts as before (the arm draw is kept); `duel-check`'s long duel now also tries seeds 23-30 for a state change (21-22 hold engage with the hull's arms).
+- Checked: `loadout-check` (swap, take off, new hull's arms, save migration via probe), `duel-check`, `weapons-`, `cargo-`, `guns-`, `sword-`, `grid-check`, full `npm test`.
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
 ### 2026-11-03 · Enemies go for summons; replicas walk round the train (Keith via the coordinator; Claude on `claude/project-thread-vhklb8`)
