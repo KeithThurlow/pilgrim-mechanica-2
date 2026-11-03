@@ -20,7 +20,7 @@ export interface BayState {
   unlocks?: Record<string, number>;
   /** Where each item sits in the cargo and stash grids (src/items/grid.ts; Keith 2026-11-02). Optional: items
    *  missing here are placed in the first free spot. */
-  grids?: { cargo: Placed[]; stash: Placed[] };
+  grids?: { cargo: Placed[]; stash: Placed[]; v?: number };
   /** What a save migration did (shown once at the top of the bay). */
   notes?: string[];
 }
@@ -109,5 +109,5 @@ function readGrids(g: { cargo?: unknown; stash?: unknown } | undefined): BayStat
     return !!q && typeof q.id === "string" && [q.x, q.y, q.w, q.h].every((n) => Number.isInteger(n)) && typeof q.rot === "boolean";
   };
   const list = (x: unknown) => (Array.isArray(x) ? x.filter(ok) : []);
-  return { cargo: list(g.cargo), stash: list(g.stash) };
+  return { cargo: list(g.cargo), stash: list(g.stash), v: typeof (g as { v?: unknown }).v === "number" ? (g as { v: number }).v : undefined };
 }
