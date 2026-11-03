@@ -40,7 +40,8 @@ export interface MechBody {
   /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
-  showPod?(side: 1 | -1, on: boolean): void;
+  /** rear false hides the pod's rear box (the minigun's feed drum sits there). */
+  showPod?(side: 1 | -1, on: boolean, rear?: boolean): void;
   /** A weapon drives this side's arm (the sword), or null gives it back to the gun's aim; the hull's frame, a
    *  shoulder's place in it, and the hull group (src/mech/rampart.ts). */
   holdPose?(side: 1 | -1, pose: import("../mech/rampart").HeldPose | null): void;
