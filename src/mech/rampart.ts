@@ -554,6 +554,89 @@ export class RampartBody {
    * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
    * along the barrel, origin on the shoulder), a shoulder mount on the hull, or the top of the back mount (+Z forward).
    */
+  /**
+   * Take the cockpit pod off the front of the hull (Keith 2026-11-03, the summoner's replicas: "there's no need for a
+   * pilot in the center"): the fitted hull's triangles ahead of `z` (hull frame, m) within `halfWidth` of the middle go,
+   * and an armour plate closes the front, in the hull's mean colour; the front sensor socket moves back onto the plate.
+   * For a body whose hull won't be swapped again. Cosmetic.
+   */
+  dropCab(z = 0.72, halfWidth = 1.0) {
+    const old = this.torso.children.find((c) => (c as THREE.Mesh).isMesh && c.name === "torso") as THREE.Mesh | undefined;
+    if (!old) return;
+    const src = old.geometry.index ? old.geometry.toNonIndexed() : old.geometry;
+    const pos = src.attributes.position, n = pos.count, keep: number[] = [];
+    let cut = 0, y0 = Infinity, y1 = -Infinity, x0 = Infinity, x1 = -Infinity;
+    const mean = [0, 0, 0];
+    const col = src.attributes.color;
+    for (let t = 0; t < n; t += 3) {
+      let cx = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { cx += pos.getX(t + k); cz += pos.getZ(t + k); }
+      cx /= 3; cz /= 3;
+      if (cz > z && Math.abs(cx) < halfWidth) {
+        cut++;
+        for (let k = 0; k < 3; k++) { const y = pos.getY(t + k), x = pos.getX(t + k); y0 = Math.min(y0, y); y1 = Math.max(y1, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+        continue;
+      }
+      keep.push(t, t + 1, t + 2);
+      if (col) for (let k = 0; k < 3; k++) { mean[0] += col.getX(t + k); mean[1] += col.getY(t + k); mean[2] += col.getZ(t + k); }
+    }
+    if (!cut) return;
+    const g = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(src.attributes)) {
+      const at = a as THREE.BufferAttribute, out = new Float32Array(keep.length * at.itemSize);
+      keep.forEach((v, i) => { for (let c = 0; c < at.itemSize; c++) out[i * at.itemSize + c] = at.getComponent(v, c); });
+      g.setAttribute(name, new THREE.BufferAttribute(out, at.itemSize));
+    }
+    old.removeFromParent();
+    old.geometry.dispose();
+    const m = new THREE.Mesh(g);
+    m.name = "torso";
+    this.look!.apply(m);
+    this.torso.add(m);
+    // The plate over the opening (a box with the hull's mean vertex colour, so paint and bleach treat it alike).
+    const kept = keep.length || 1, c = mean.map((v) => v / kept);
+    const plate = new THREE.BoxGeometry(x1 - x0 + 0.06, y1 - y0 + 0.04, 0.14).translate((x0 + x1) / 2, (y0 + y1) / 2, z - 0.02);
+    const pc = new Float32Array(plate.attributes.position.count * 3);
+    for (let i = 0; i < pc.length; i += 3) { pc[i] = c[0]; pc[i + 1] = c[1]; pc[i + 2] = c[2]; }
+    plate.setAttribute("color", new THREE.BufferAttribute(pc, 3));
+    const pm = new THREE.Mesh(plate);
+    pm.name = "cabPlate";
+    this.look!.apply(pm);
+    this.torso.add(pm);
+    this.frontAt.z = z + 0.1;
+    this.sensorFront.position.z = this.frontAt.z * this.torso.scale.z;
+    this.paints = null;
+    if (this.bleached) for (const mm of [m, pm]) { const a = mm.geometry.attributes.color as THREE.BufferAttribute; this.bleached.push({ attr: a, base: Float32Array.from(a.array as ArrayLike<number>) }); }
+    this.repaint();
+  }
+
+  /** Vertex colours as modelled (bleach keeps them to work from). */
+  private bleached: { attr: THREE.BufferAttribute; base: Float32Array }[] | null = null;
+  /**
+   * Fade the whole model's paint toward pale grey (0: as modelled, 1: fully grey and lifted): each vertex colour is
+   * mixed toward its own brightness and lifted, so panel lines and shading stay. Cosmetic.
+   */
+  bleach(k: number) {
+    if (!this.bleached) {
+      this.bleached = [];
+      this.root.traverse((o) => {
+        const m = o as THREE.Mesh, a = m.isMesh && !m.userData.ink && !m.userData.glow ? m.geometry.attributes.color as THREE.BufferAttribute | undefined : undefined;
+        if (a && !this.bleached!.some((b) => b.attr === a)) this.bleached!.push({ attr: a, base: Float32Array.from(a.array as ArrayLike<number>) });
+      });
+    }
+    const lift = 1 + 1.3 * k;
+    for (const { attr, base } of this.bleached) {
+      const arr = attr.array as Float32Array, s = attr.itemSize;
+      for (let i = 0; i < base.length; i += s) {
+        const r = base[i], g = base[i + 1], b = base[i + 2], l = 0.3 * r + 0.59 * g + 0.11 * b;
+        arr[i] = Math.min(1, (r + (l - r) * k) * lift);
+        arr[i + 1] = Math.min(1, (g + (l - g) * k) * lift);
+        arr[i + 2] = Math.min(1, (b + (l * 1.04 - b) * k) * lift);
+      }
+      attr.needsUpdate = true;
+    }
+  }
+
   /** A slimmer build of the same rig (1: as modelled). */
   private thin: RampartSlim = { leg: 1, foot: 1, hull: [1, 1, 1], gun: 1 };
   /**
@@ -741,7 +824,14 @@ export class RampartBody {
     for (const p of this.pods) {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
-      if (p.armShown) this.reachArm(p, g.yaw - this.twist, g.pitch, upper.v);
+      if (p.armShown) {
+        // The arm points where the sim aims in the world, whatever the hull is doing (Keith 2026-11-03: bent over in
+        // the sprint the arms aimed off): the aim (torso yaw + the gun's, pitch below level) into the hull's own frame,
+        // so the body's lean, the sprint's lean, roll and shake are all taken out.
+        const yw = upper.torsoYaw + g.yaw, pw = g.pitch - upper.lean, c = Math.cos(pw);
+        t.v.set(Math.sin(yw) * c, -Math.sin(pw), Math.cos(yw) * c).applyQuaternion(t.q.copy(this.hull.quaternion).invert());
+        this.reachArm(p, Math.atan2(t.v.x, t.v.z), -Math.asin(Math.max(-1, Math.min(1, t.v.y))), upper.v);
+      }
       else p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
       if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
       p.kick.position.z -= g.kick;
