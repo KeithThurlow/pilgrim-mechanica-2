@@ -104,7 +104,8 @@ export function duelView(t: number, self: MechUnit, kit: readonly KitWeapon[], s
     t, threats, cover, sees, arena,
     self: {
       x: s.pos.x, z: s.pos.z, vx: s.vel.x, vz: s.vel.z, heading: s.heading, torso: self.upper.torsoYaw, health: self.health / self.maxHealth,
-      dashCharges: self.dash.charges, canDash: s.canDash, dashing: self.dash.active, walkSpeed: self.v.walkSpeed, energy: self.reactor.charge, energyCap: self.reactor.cap, kit, weapons: weaponStates(selfArsenal, self, kit),
+      dashCharges: self.dash.charges, canDash: s.canDash, dashing: self.dash.active, walkSpeed: self.v.walkSpeed, energy: self.reactor.charge, energyCap: self.reactor.cap, kit,
+      gear: selfArsenal.shoulders.filter((sh) => sh.gear).map((sh) => ({ key: sh.key, family: sh.gear!.stats.family, gun: sh.mount === "shoulderL" ? 0 : sh.mount === "shoulderR" ? 1 : -1, ready: sh.gear!.cool <= 0, bars: sh.gear!.stats.bars })), weapons: weaponStates(selfArsenal, self, kit),
     },
     foe: {
       x: f.pos.x, y: f.pelvis.y, z: f.pos.z, vx: f.vel.x, vz: f.vel.z, health: foe.health / foe.maxHealth, dashCharges: foe.dash.charges, alive: foe.alive,

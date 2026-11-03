@@ -9,7 +9,7 @@
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand, type Threat } from "../src/combat/rivalAi";
-import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
+import { rollRivalLoadout, applyFitSpec, gearOf, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
 import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
 import { levelPower, levelMul } from "../src/items/level";
@@ -94,6 +94,18 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   }
 }
 
+// ---- Feeds and power (2026-11-03): rivals roll them on their shoulders and press them ----
+{
+  let n = 0;
+  for (let seed = 1; seed <= 300; seed++) if (gearOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS))).length) n++;
+  must(n >= 30, `only ${n} of 300 rolled rivals carry a feed or power on a shoulder`);
+  const feed = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "beltfeed", k2: "incendiary", k3: "pack" }), null], maxTime: 60 });
+  must(feed.gearPresses[0] >= 3, `a rival with two feeds pressed them only ${feed.gearPresses[0]} times in a minute`);
+  const power = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "laser", right: "laser", k1: "capacitor", k2: "none", k3: "pack" }), null], maxTime: 60 });
+  must(power.gearPresses[0] >= 1, "a rival with lasers never discharged its capacitor bank into the reactor");
+  console.log(`gear: ${n}/300 rivals carry feeds or power; feeds pressed ${feed.gearPresses[0]}x, capacitor ${power.gearPresses[0]}x in a minute`);
+}
+
 // ---- Duels between two AIs ----
 const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
 let both = 0, worstStuck = 0, kills = 0, ttk = 0;
@@ -146,8 +158,13 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
     if (changed) console.log(`long duel: state change in ${a}-${b}`);
   }
   must(changed, "long duel: the AI never changed state");
-  // Three bars each (2026-11-03): both rivals use the spare bar to push in at some point of the long duel.
-  r.states.forEach((st, i) => must(st.press > 0, `long duel 21-22: rival ${i} never pressed (pushes ${r.ai?.[i].pushes ?? 0})`));
+  // Three bars each (2026-11-03): every rival but a sniper (rail or lance: it keeps its range) uses the spare bar to
+  // push in at some point of the long duel, and at least one presses.
+  [21, 22].forEach((seed, i) => {
+    const sniper = kitOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), WEAPON_DEFAULTS).some((k) => k.kind === "rail" || k.kind === "lance");
+    if (!sniper) must((r.ai?.[i].pushes ?? 0) > 0 && r.states[i].press > 0, `long duel 21-22: rival ${i} never pushed (pushes ${r.ai?.[i].pushes ?? 0})`);
+  });
+  must(r.states.some((st) => st.press > 0), "long duel 21-22: neither rival pressed");
   worstStuck = Math.max(worstStuck, r.stuckWorst);
 }
 
