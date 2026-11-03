@@ -72,7 +72,8 @@ import { DefenceBody } from "../../src/convoy/defenceBody";
 import { ConvoyGuns, GUARD_DEFAULTS, GUARD_PARAMS, GUARD_GROUPS } from "../../src/convoy/guard";
 import { Guardians, GUARDIAN_DEFAULTS, GUARDIAN_PARAMS, GUARDIAN_GROUPS } from "../../src/convoy/guardians";
 import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC } from "../../src/summon/summons";
-import { applyGear, isSwarmKey } from "../../src/summon/gear";
+import { applyGear } from "../../src/summon/gear";
+import { SummonKeys } from "../../src/summon/summonKeys";
 import { SummonPrey } from "../../src/summon/aggro";
 import type { Resolved } from "../../src/items/loadout";
 import { SAFE_GROUPS } from "../../src/convoy/safeZone";
@@ -267,7 +268,7 @@ escorts.mechs = guardians.spots;
 // while), and summoned again once you're back on the sand. A swarm hive's key (1 or 2) throws the swarm and calls it
 // back.
 const summons = new Summons(bf, scene, V, field, player, enemiesOf(player.team), deaths, { look: toon });
-const swarmKeyWas = [false, false];
+const summonKeys = new SummonKeys(summons);
 // Enemies out there turn on your summons when they're nearer (src/summon/aggro.ts); replicas walk round the cars.
 loop.summonPrey = new SummonPrey(summons, V);
 if (summons.replicas) summons.replicas.blockers = (x, z, r) => {
@@ -719,7 +720,7 @@ const panel = tweakPanel({
     { id: "deck", label: "Deck", groups: ["Deck", "Walk off"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Craters", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
@@ -1037,11 +1038,8 @@ app.onTick((rawDt) => {
   // Counts and build times come from the fitted gear (over any saved slider).
   if (fitted) applyGear(V, fitted);
   summons.setActive(carry.state === "walking" || carry.state === "inRange");
-  for (const k of [1, 2] as const) {
-    const down = keys.has(`Digit${k}`) && driving && !bay.isOpen;
-    if (down && !swarmKeyWas[k - 1] && fitted && isSwarmKey(fitted, k)) summons.sendOrRecall();
-    swarmKeyWas[k - 1] = down;
-  }
+  // A swarm hive's key sends and recalls the swarm, a drone rack's is a drone strike (src/summon/summonKeys.ts).
+  { const can = driving && !bay.isOpen; summonKeys.update(fitted, keys.has("Digit1") && can, keys.has("Digit2") && can); }
   summons.update(dt);
   if (V.repCount || V.droneCount || V.swarmCount) app.hud.set("summons", () => summons.hud());
   costs.mark("summons");
@@ -1075,7 +1073,7 @@ app.onTick((rawDt) => {
   patchSome(1.5);
   costs.mark("plough patch");
 
-  softAim.draw(driving ? pointer ?? cursor : null, lock, player.upper.onTarget && !player.gunsOff);
+  softAim.draw(driving ? pointer ?? cursor : null, lock, player.upper.onTarget && (!player.gunsOff || player.armsFree[0] || player.armsFree[1]));
   reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
   healthBars.update(rawDt);
 
@@ -1145,7 +1143,7 @@ app.onTick((rawDt) => {
   energyHud().update(player.dash, foot.driving);
   reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
   vitals.hideActions = bay.isOpen || inventory.isOpen;
-  vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: arsenal.keySlots(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
+  vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: [...arsenal.keySlots(), ...summonKeys.slots(fitted, !!player.gunsOff)], healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();
   // The mech doll (one hull pool for now: every part shows the hull's share) and the cargo under it.
   syncCarry();

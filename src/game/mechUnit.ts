@@ -71,6 +71,8 @@ export interface MechWeapons {
   /** A round gun (src/weapons/guns.ts) is firing a shot from this side: the weapons set its muzzle (its model's), play
    *  its sound, kick its model and shake the camera. False: no model fitted (the hull's own muzzle stays). */
   gunShot?(side: 1 | -1, muzzle: THREE.Vector3): boolean;
+  /** This side's gun's pellets burst where they end (the flak cannon): the look's scale (×), else 0. */
+  pelletBurst?(side: 1 | -1): number;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
   configure?(r: import("../items/loadout").Resolved): void;
   /** Special rounds loaded into this side's gun now (the incendiary feed's key, src/weapons/gear.ts), or null. */
@@ -244,6 +246,11 @@ export class MechUnit implements Hittable, Solid {
   piloted = false;
   /** Sprinting with the weapons off (src/mech/bound.ts gunsOff): no weapon fires, paints and charges are dropped. */
   gunsOff = false;
+  /** Sprinting, the sides whose held weapon still aims and fires (Keith 2026-11-03: the arms track from the shoulder
+   *  while the hull faces the run; hull weapons, melee and the shoulders stay off). */
+  armsFree: [boolean, boolean] = [false, false];
+  /** This side's weapon is off: the sprint's weapons-off, unless its arm is free. */
+  sideOff(i: number) { return this.gunsOff && !this.armsFree[i]; }
   private fwdAim = { x: 0, y: 0, z: 0 };
   stepTimes: number[] = [];
   private clock = 0;
@@ -439,7 +446,11 @@ export class MechUnit implements Hittable, Solid {
       // Space held past the dash: the sprint (the walker runs its gait).
       this.bound.update(dt / sub, this.dashHold, sim, dash);
       this.gunsOff = this.bound.gunsOff && this.alive;
-      if (this.gunsOff) { trigger = false; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
+      // Held guns (not swords) keep their own aim while sprinting: the torso faces the run, the arm tracks the aim.
+      for (let k = 0; k < 2; k++) { const st = upper.guns[k].stats; this.armsFree[k] = this.gunsOff && !!st?.held && st.cls !== "melee" && upper.guns[k].enabled; }
+      upper.freeArms[0] = this.armsFree[0]; upper.freeArms[1] = this.armsFree[1];
+      upper.armAim = want.aim; upper.armsOnly = this.gunsOff;
+      if (this.gunsOff) { trigger = [this.armsFree[0] && triggerOf(want.trigger, 0), this.armsFree[1] && triggerOf(want.trigger, 1)]; aim = this.travelAim(); } else { trigger = want.trigger; aim = want.aim; }
       upper.leanFwd = this.gunsOff ? v.sprintHullLean * D2R * clamp((sim.speed - v.walkSpeed) / Math.max(0.5, (sim.boundTopNow || v.boundTop) - v.walkSpeed), 0, 1) : 0;
       // The slope along the slide: + uphill. Read a couple of metres either side of the body.
       const gx = dash.dirX * 2, gz = dash.dirZ * 2, f = this.bf.field;
@@ -520,7 +531,8 @@ export class MechUnit implements Hittable, Solid {
       // outward arm turns slower) and the gap between the model's muzzle and the sim's shoulder, so on small targets
       // the left gun's rounds landed off to the left (Keith 2026-10-25). Before that, the barrel's pitch put rounds
       // ~2 m low at 20 m (Keith: "very hard to hit"). The barrel's heading stays the fallback with no aim.
-      const at = shotAt ?? aim;
+      // A free arm while sprinting fires at the real aim, not the run's line.
+      const at = this.armsFree[s === 1 ? 0 : 1] ? shotAt ?? want.aim : shotAt ?? aim;
       if (at) {
         const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
         if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
@@ -535,6 +547,9 @@ export class MechUnit implements Hittable, Solid {
       // (for the minigun's voice) sounding; a round gun's sound came from the weapons (gunShot), so its rounds are quiet.
       const pellets = round ? Math.max(1, own?.pellets ?? 1) : 1;
       const splash = round && (own?.splash ?? 0) > 0 ? own!.splash! : v.roundSplash, splashShare = round && (own?.splash ?? 0) > 0 ? own!.splashShare ?? 0 : v.roundSplashShare;
+      // Flak pellets explode where they end (Keith 2026-11-03): the splash is a blast, and each pops.
+      const flak = own?.cls === "flak" && splash > 0;
+      const burst = flak ? splash * (this.weapons?.pelletBurst?.(s) ?? 1) : 0;
       for (let p = 0; p < pellets; p++) {
         // Pellets spread evenly over the cone (a random point in the disc: sqrt), single rounds as before.
         const r = pellets > 1 ? Math.sqrt(Math.random()) : Math.random();
@@ -543,7 +558,7 @@ export class MechUnit implements Hittable, Solid {
         const first = p === 0;
         this.bf.fire(first ? this.flashSlot + (s === 1 ? 0 : 1) : -1, this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
           ? { eject: first ? this.eject : undefined, outboard: first ? left.clone().multiplyScalar(s) : undefined, voice: "player", silent: round, flashScale: first ? undefined : 0, ally: this.ally,
-            sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, proto, hot: !!special, pierce: ap }
+            sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, splashBlast: flak, burst, proto, hot: !!special, pierce: ap }
           : { voice: round ? "none" : "other", hitScale: 0.7, flashScale: first ? undefined : 0, proto: special ? proto : undefined, hot: !!special, pierce: ap });
       }
     }

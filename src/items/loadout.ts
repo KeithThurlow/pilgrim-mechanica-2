@@ -373,7 +373,7 @@ export interface Resolved {
   /** Summoner gear (Keith 2026-11-02; src/summon/gear.ts): what the pack and shoulders bring out. A replica bay on the
    *  pack builds `replicas`, one every `replicaBuild` s, a lost one rebuilt after `replicaRebuild` s; drone racks on the
    *  shoulders add their drones; swarm hives their scrappers, and their keys (1 or 2) send and recall the swarm. */
-  summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[] };
+  summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[]; droneKeys: (1 | 2)[] };
   /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
   cargoCapacity: number;
   /** Everything fitted (t). */
@@ -434,7 +434,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     const h = lo[m.held];
     if (isArm(mount) && h?.kind === "weapon" && h.size === "L") {
       const a = effectiveStats(mount!), w = effectiveStats(h);
-      return gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, feedOf(s));
+      return { ...gunFrom(h, w, a.arc + (w.arcBonus ?? 0), a.track * (w.handling ?? 1) * trackK, feedOf(s)), held: true };
     }
     return null;
   };
@@ -444,7 +444,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // handling; fed by the bigger of the two waist drums.
     const w = effectiveStats(lo.heldR!), a = effectiveStats(lo.mountL!), b = effectiveStats(lo.mountR!);
     const fl = feedOf("L"), fr = feedOf("R");
-    right = gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, { bonus: Math.max(fl.bonus, fr.bonus), speed: Math.max(fl.speed, fr.speed) });
+    right = { ...gunFrom(lo.heldR!, w, (a.arc + b.arc) / 2, ((a.track + b.track) / 2) * (w.handling ?? 1) * trackK, { bonus: Math.max(fl.bonus, fr.bonus), speed: Math.max(fl.speed, fr.speed) }), held: true };
     left = null;
   }
   const first = right ?? left;
@@ -500,7 +500,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
 /** The summoner gear fitted (Resolved.summons): the pack's replicas, the shoulders' drones and scrappers (rebuild
  *  times: the quickest of the fitted racks or hives). */
 function summonsOf(lo: Loadout): Resolved["summons"] {
-  const out: Resolved["summons"] = { replicas: 0, replicaBuild: 10, replicaRebuild: 25, drones: 0, droneRebuild: 6, scrappers: 0, swarmRebuild: 3, swarmKeys: [] };
+  const out: Resolved["summons"] = { replicas: 0, replicaBuild: 10, replicaRebuild: 25, drones: 0, droneRebuild: 6, scrappers: 0, swarmRebuild: 3, swarmKeys: [], droneKeys: [] };
   const pack = lo.pack, pb = pack ? BASE_BY_ID[pack.base] : undefined;
   if (pack && pb?.summon === "replicas") {
     const w = effectiveStats(pack);
@@ -511,7 +511,7 @@ function summonsOf(lo: Loadout): Resolved["summons"] {
     const it = lo[slot], b = it ? BASE_BY_ID[it.base] : undefined;
     if (!it || !b?.summon) continue;
     const w = effectiveStats(it);
-    if (b.summon === "drones") { out.drones += Math.max(0, Math.round(w.drones ?? 0)); dr = Math.min(dr, w.summonRebuild ?? out.droneRebuild); }
+    if (b.summon === "drones") { out.drones += Math.max(0, Math.round(w.drones ?? 0)); dr = Math.min(dr, w.summonRebuild ?? out.droneRebuild); out.droneKeys.push(key); }
     if (b.summon === "swarm") { out.scrappers += Math.max(0, Math.round(w.scrappers ?? 0)); sr = Math.min(sr, w.summonRebuild ?? out.swarmRebuild); out.swarmKeys.push(key); }
   }
   if (Number.isFinite(dr)) out.droneRebuild = dr;
