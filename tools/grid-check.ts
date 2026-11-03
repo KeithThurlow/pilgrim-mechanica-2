@@ -19,8 +19,8 @@ for (const b of BASES) {
 const cls = (id: string): GridClass => gridClassOfBase(BASES.find((b) => b.id === id)!);
 const sz = (id: string) => { const s = classCells(cls(id)); return `${s.w}x${s.h}`; };
 // Keith's sizes (2026-11-02).
-must(sz("mg-medium") === "2x3", `hull minigun ${sz("mg-medium")}, want 2x3`);
-must(sz("rail-medium") === "2x4", `rail cannon ${sz("rail-medium")}, want 2x4`);
+must(sz("mg-medium") === "4x2", `hull minigun ${sz("mg-medium")}, want 4x2`);
+must(sz("rail-medium") === "6x2", `rail cannon ${sz("rail-medium")}, want 6x2`);
 must(sz("hull-cuirass") === "3x2" && sz("hull-siege") === "4x2", "hulls not 3x2 / 4x2");
 must(sz("pack-standin") === "2x2", "pack not 2x2");
 must(sz("legs-rampart") === "2x3", "legs not 2x3");
@@ -29,8 +29,10 @@ must(sz("smg-light") === "2x2" && sz("rifle-light") === "2x3", "held weapons not
 must(sz("waist-drums") === "2x1", "waist not 2x1");
 must(sz("sh-missiles") === "2x2", "shoulder not 2x2");
 must(sz("sword-heavy") === "2x4" && sz("sword-light") === "1x4" && sz("sword-short") === "1x3", "swords not 2x4 / 1x4 / 1x3");
-// 2x4 is the longest size (Keith 2026-11-02).
-for (const c of GRID_CLASS_IDS) { const s = classCells(c); must(Math.max(s.w, s.h) <= 4, `${c} is ${s.w}x${s.h}, longer than 4`); }
+// Layout (Keith 2026-11-03): hull weapons lie flat, arms and held weapons stand upright.
+for (const c of ["hullGun", "hullGunLong"] as GridClass[]) { const s = classCells(c); must(s.w > s.h, `${c} ${s.w}x${s.h} not flat`); }
+for (const c of ["heldLong", "sword", "swordBig", "swordShort"] as GridClass[]) { const s = classCells(c); must(s.h > s.w, `${c} ${s.w}x${s.h} not upright`); }
+for (const c of ["arm", "held"] as GridClass[]) { const s = classCells(c); must(s.h >= s.w, `${c} ${s.w}x${s.h} lies flat`); }
 must(`${classCells("repairKit").w}x${classCells("repairKit").h}` === "1x2" && classCells("protocol").w * classCells("protocol").h === 1, "repair kit not 1x2 or protocol not 1x1");
 // Every class's sliders exist.
 for (const c of GRID_CLASS_IDS) must(`grid_${c}_w` in GRID_SIZE_DEFAULTS && `grid_${c}_h` in GRID_SIZE_DEFAULTS, `${c} has no sliders`);

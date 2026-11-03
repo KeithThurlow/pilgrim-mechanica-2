@@ -10,10 +10,11 @@ import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, type Base } from "./bases";
 import type { Item } from "./item";
 
-/** The size classes. */
+/** The size classes. Layout (Keith 2026-11-03): hull weapons lie flat (4×2, long ones 6×2), arms and held weapons
+ *  stand upright (an arm 2×2, a held weapon 2×2 or 2×3, swords up to 2×4), so the two read apart at a glance. */
 export const GRID_CLASSES = {
-  hullGun: { label: "Hull weapon", w: 2, h: 3 },
-  hullGunLong: { label: "Long hull weapon", w: 2, h: 4 },
+  hullGun: { label: "Hull weapon", w: 4, h: 2 },
+  hullGunLong: { label: "Long hull weapon", w: 6, h: 2 },
   hull: { label: "Hull", w: 3, h: 2 },
   hullBig: { label: "Big hull", w: 4, h: 2 },
   legs: { label: "Legs", w: 2, h: 3 },

@@ -64,8 +64,15 @@ function shapes(c: GridClass, W: number, H: number): string {
 }
 
 /** The item's grid image as an SVG element sized to its cells (turned 90° when `rot`). */
-export function itemIcon(item: Item, color: string, rot = false, v?: Partial<GridSizeValues>): SVGSVGElement {
-  const { w, h } = itemCells(item, v);
+/** Classes drawn long side down: when their cells lie flat (hull weapons, Keith 2026-11-03), the drawing is turned. */
+const TALL: GridClass[] = ["hullGun", "hullGunLong", "held", "heldLong", "sword", "swordBig", "swordShort", "legs", "arm"];
+
+export function itemIcon(item: Item, color: string, turned = false, v?: Partial<GridSizeValues>): SVGSVGElement {
+  const cells = itemCells(item, v);
+  const flat = TALL.includes(gridClassOf(item)) && cells.w > cells.h;
+  // Draw it tall, then turn it to lie flat (and once more if the player turned it).
+  const w = flat ? cells.h : cells.w, h = flat ? cells.w : cells.h;
+  const rot = flat !== turned;
   const W = w * 10, H = h * 10;
   const svg = document.createElementNS(NS, "svg");
   const VW = rot ? H : W, VH = rot ? W : H;
