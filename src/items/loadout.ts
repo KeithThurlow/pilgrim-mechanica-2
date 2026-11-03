@@ -52,7 +52,7 @@ interface Feed { bonus: number; speed: number }
 
 export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
-  bareDashCharges: 2,
+  bareDashCharges: 3, // Keith 2026-11-03: the default mech starts with at least three energy bars
   bareDashRecharge: 4.6,
   bareRadar: 250,
 };

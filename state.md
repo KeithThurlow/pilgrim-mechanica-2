@@ -312,6 +312,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Default mech starts with three energy bars (Keith via the coordinator; Claude)
+- Bare mech (no pack) dash charges 2 → 3 (`bareDashCharges` in `src/items/loadout.ts`; packs already start at 3 or more). Check added to `tools/loadout-check.ts`. Keith's summoner item report is handled in another thread.
+- Checked: `npm test`. Open for Keith: the bare mech's bar count is the default, so a pack that rolls low still sets its own count.
+
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
 ### 2026-11-03 · Enemies go for summons; replicas walk round the train (Keith via the coordinator; Claude on `claude/project-thread-vhklb8`)
