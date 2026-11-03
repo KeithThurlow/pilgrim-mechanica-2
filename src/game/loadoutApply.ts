@@ -32,7 +32,12 @@ const same = (g: GunStats, v: MechUnit["v"]) =>
   g.damage === v.roundDamage && g.spread === v.spread && g.range === v.range && g.pierce === v.roundPierce &&
   (g.reload ?? v.reloadTime) === v.reloadTime && (g.ap ?? v.roundAp) === v.roundAp && (g.cost ?? 1) === 1 && !g.proto;
 
+/** The loadout last fitted on each unit (the summoner gear reads it: src/summon/summonKeys.ts). */
+const fittedOn = new WeakMap<MechUnit, Resolved>();
+export const fittedLoadout = (unit: MechUnit): Resolved | null => fittedOn.get(unit) ?? null;
+
 export function applyLoadout(unit: MechUnit, r: Resolved) {
+  fittedOn.set(unit, r);
   showLooks(unit, r);
   Object.assign(unit.v, r.values);
   const [left, right] = unit.upper.guns;

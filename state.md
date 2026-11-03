@@ -312,6 +312,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Summoner gear works in every combat lab, with actives (Keith's report via the coordinator; Claude)
+- Fitted in the duel lab the summoner items did nothing: only the swarm and convoy labs built summons. Now `combatLab` (`src/game/combatLab.ts`) makes the summons the first time a fitted loadout brings summoner gear (`fittedLoadout` in `src/game/loadoutApply.ts`), puts the gear's counts on them, steps them and their aggro; the summoner front (`src/game/fronts/summoner.ts`) uses `lab.summons()`. Duel, loadout, swarm, fortress, every combat lab; the Summons topic is in all of them.
+- Actives (`src/summon/summonKeys.ts`, shared with the convoy lab): a drone rack's shoulder key is a **drone strike** (`Summons.strike`: every drone on the lock, else the foe nearest the cursor, else the nearest, for `droneStrikeTime` 6 s at `droneStrikeRate` ×2 fire, `droneStrikeCool` 18 s; Summons › Drones), a swarm hive's key sends and recalls the swarm. Each item gets an action-bar button (Drone strike with drones up, Send/Recall swarm with scrappers, Replicas up and building).
+- Checked: summongear-check section 7 (buttons, no strike with no foe, rounds 34 → 66 in a strike, no second strike in cooldown, swarm key home → sent → home); duel, loadout, swarm and convoy labs load with no errors and the summons up (`window.__lab.summons().hud()`).
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
 ### 2026-11-03 · Enemies go for summons; replicas walk round the train (Keith via the coordinator; Claude on `claude/project-thread-vhklb8`)
