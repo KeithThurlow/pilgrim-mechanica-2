@@ -71,6 +71,8 @@ export interface MechWeapons {
   /** A round gun (src/weapons/guns.ts) is firing a shot from this side: the weapons set its muzzle (its model's), play
    *  its sound, kick its model and shake the camera. False: no model fitted (the hull's own muzzle stays). */
   gunShot?(side: 1 | -1, muzzle: THREE.Vector3): boolean;
+  /** This side's gun's pellets burst where they end (the flak cannon): the look's scale (×), else 0. */
+  pelletBurst?(side: 1 | -1): number;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
   configure?(r: import("../items/loadout").Resolved): void;
   /** Special rounds loaded into this side's gun now (the incendiary feed's key, src/weapons/gear.ts), or null. */
@@ -545,6 +547,9 @@ export class MechUnit implements Hittable, Solid {
       // (for the minigun's voice) sounding; a round gun's sound came from the weapons (gunShot), so its rounds are quiet.
       const pellets = round ? Math.max(1, own?.pellets ?? 1) : 1;
       const splash = round && (own?.splash ?? 0) > 0 ? own!.splash! : v.roundSplash, splashShare = round && (own?.splash ?? 0) > 0 ? own!.splashShare ?? 0 : v.roundSplashShare;
+      // Flak pellets explode where they end (Keith 2026-11-03): the splash is a blast, and each pops.
+      const flak = own?.cls === "flak" && splash > 0;
+      const burst = flak ? splash * (this.weapons?.pelletBurst?.(s) ?? 1) : 0;
       for (let p = 0; p < pellets; p++) {
         // Pellets spread evenly over the cone (a random point in the disc: sqrt), single rounds as before.
         const r = pellets > 1 ? Math.sqrt(Math.random()) : Math.random();
@@ -553,7 +558,7 @@ export class MechUnit implements Hittable, Solid {
         const first = p === 0;
         this.bf.fire(first ? this.flashSlot + (s === 1 ? 0 : 1) : -1, this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
           ? { eject: first ? this.eject : undefined, outboard: first ? left.clone().multiplyScalar(s) : undefined, voice: "player", silent: round, flashScale: first ? undefined : 0, ally: this.ally,
-            sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, proto, hot: !!special, pierce: ap }
+            sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, splashBlast: flak, burst, proto, hot: !!special, pierce: ap }
           : { voice: round ? "none" : "other", hitScale: 0.7, flashScale: first ? undefined : 0, proto: special ? proto : undefined, hot: !!special, pierce: ap });
       }
     }

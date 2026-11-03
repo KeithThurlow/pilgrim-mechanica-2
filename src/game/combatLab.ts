@@ -4,7 +4,11 @@
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
 import { hitStop } from "./hitStop";
-import { applyLoadout } from "./loadoutApply";
+import { applyLoadout, fittedLoadout } from "./loadoutApply";
+import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC, type SummonValues } from "../summon/summons";
+import { SummonKeys } from "../summon/summonKeys";
+import { SummonPrey } from "../summon/aggro";
+import { applyGear } from "../summon/gear";
 import { resolve, LOADOUT_DEFAULTS, type LoadoutValues } from "../items/loadout";
 import { loadoutFor, pickFromParams, type Pick } from "../items/weaponPick";
 import { energyHud, reactorHud } from "../ui/energyBar";
@@ -60,12 +64,13 @@ import { AbilityControl } from "../abilities/abilityUse";
 import { ABILITY_TOPIC } from "../abilities/abilities";
 
 export const BASE_DEFAULTS = {
+  ...SUMMON_DEFAULTS,
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...BAR_DEFAULTS, ...DEATH_DEFAULTS, ...TARGET_DEFAULTS, ...SHELL_FX_DEFAULTS, ...WATER_FX_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...CRATER_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...ON_FOOT_DEFAULTS, ...VITALS_DEFAULTS, biomeOnly: 0, radius: 4, shadowBox: 40,
 };
 export type BaseValues = typeof BASE_DEFAULTS;
-const BASE_PARAMS: Param[] = [...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
+const BASE_PARAMS: Param[] = [...SUMMON_PARAMS, ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS, ...DEATH_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS, ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...SHELL_FX_PARAMS, ...WATER_FX_PARAMS, ...DENT_PARAMS, ...BIOME_PARAMS, ...ROCK_PARAMS, ...SHALLOWS_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS, ...CRATER_PARAMS, ...STREAM_PARAMS, ...LOOK_PARAMS];
 
 export interface SelectEntry { topic: string; label: string; objects: () => THREE.Object3D[] }
 
@@ -136,6 +141,9 @@ export interface CombatLab<E extends object> {
   iso: IsoCamera;
   /** Who an enemy group whose middle is at (x, z) goes for: the mech, or the pilot on foot when he's nearer. */
   prey: (x: number, z: number) => Prey;
+  /** The summoner's units on your side (src/summon/): made the first time a fitted loadout brings summoner gear, or a
+   *  lab asks (the summoner front). The shell steps them, their keys and buttons, and enemies' pick of them. */
+  summons: () => Summons;
 }
 
 export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promise<CombatLab<E>> {
@@ -258,7 +266,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Reactor", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
-      ABILITY_TOPIC,
+      ABILITY_TOPIC, SUMMON_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Hover", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
       { id: "deaths", label: "Deaths", groups: ["Mech wrecks", "Death physics"] },
@@ -332,6 +340,18 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   let clock = 0;
   const frames: ((dt: number) => void)[] = [];
 
+  // Summoner gear (Keith 2026-11-03: fitted in the duel lab, it did nothing): the summons, their keys (a drone rack's
+  // strike, a swarm hive's send and recall) and their buttons, in every combat lab (src/summon/summonKeys.ts).
+  let summons: Summons | null = null, summonKeys: SummonKeys | null = null, gearWas = false;
+  const getSummons = () => {
+    if (!summons) {
+      summons = new Summons(bf, scene, V as unknown as SummonValues, field, player, enemies, deaths, { look: toon });
+      summonKeys = new SummonKeys(summons);
+      foot.quarry.summons = new SummonPrey(summons, V as unknown as SummonValues);
+    }
+    return summons;
+  };
+
   const lab: CombatLab<E> = {
     abilities: abilityCtl,
     app, V, field, bf, toon, player, deaths,
@@ -349,6 +369,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     foot,
     iso,
     prey: (x, z) => foot.quarry.pick(x, z),
+    summons: () => getSummons(),
   };
 
   // The weapon flags in every combat lab (Keith 2026-11-02: "I can't adjust weapon arguments in the URL with the bandit
@@ -448,6 +469,17 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     // Lab only: a killed pilot is back in the mech after the rebuild time.
     if (!foot.sim.alive && foot.deadFor > V.respawn) foot.reset();
     cst?.mark("mech + weapons");
+    // Summoner gear fitted: its counts and build times onto the summons (off again when it comes off).
+    const fit = fittedLoadout(player), sm = fit?.summons, gear = !!sm && sm.replicas + sm.drones + sm.scrappers > 0;
+    if (fit && (gear || gearWas)) { if (gear) getSummons(); applyGear(V as unknown as SummonValues, fit); }
+    gearWas = gear;
+    if (summons && summonKeys) {
+      summonKeys.update(gear ? fit : null, held[0] && driving, held[1] && driving);
+      summons.update(dt);
+      const s = summons;
+      app.hud.set("summons", () => s.hud());
+    }
+    cst?.mark("summons");
     for (const f of frames) f(dt);
     cst?.mark("lab");
     craters.update(dt, groundChanged);
@@ -457,7 +489,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     cst?.mark("deaths physics");
     deadDraw.update();
     cst?.mark("deaths draw");
-    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: arsenal.keySlots(), healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
+    vitals.update(rawDt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: [...arsenal.keySlots(), ...(summonKeys?.slots(gear ? fit : null, !!player.gunsOff) ?? [])], healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, player.sim.pelvis);
     if (vitals.lowNow) kitCtl.warn();
 
     // The reticle (only while driving), and brackets round the lock's centre of mass, facing the camera.

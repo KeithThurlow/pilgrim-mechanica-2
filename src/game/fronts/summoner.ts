@@ -9,12 +9,8 @@
 // 2, replica bay on the pack; counts from the items), ?dismissat=s (dismissed s in, as at a convoy pickup, summoned again
 // 30 s later).
 import { typing } from "../../core/input";
-import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC } from "../../summon/summons";
-import { applyGear, isSwarmKey } from "../../summon/gear";
-import { resolve, type Resolved } from "../../items/loadout";
-import { loadoutFor, pickFromParams, type Pick } from "../../items/weaponPick";
+import type { Summons } from "../../summon/summons";
 import type { Front } from "./front";
-import { SummonPrey } from "../../summon/aggro";
 
 /** Does the URL fit summoner gear (?summoner, or drones/hive on a shoulder key, or the replica bay)? */
 export function summonGearInUrl(q: URLSearchParams): boolean {
@@ -25,47 +21,35 @@ export function summonerFront(q: URLSearchParams, onReady: (s: Summons) => void)
   let summons: Summons | null = null;
   return {
     spec: {
-      defaults: { ...SUMMON_DEFAULTS },
-      params: [...SUMMON_PARAMS],
-      topics: [SUMMON_TOPIC],
+      // The values, sliders and topic are the combat lab's (src/game/combatLab.ts), as are the gear and its keys.
+      defaults: {},
+      params: [],
+      topics: [],
       selectables: [{ topic: "summons", label: "Drones, companions and swarm", objects: () => summons?.meshes ?? [] }],
       actions: [{ label: "Dismiss / summon", onClick: () => summons?.setActive(!summons.active), active: () => !!summons && !summons.active }, { label: "Send the swarm (Z)", onClick: () => summons?.send() }, { label: "Recall (C)", onClick: () => summons?.recall() }],
       report: (): Record<string, unknown> => ({ drones: summons?.hud() ?? "" }),
     },
     async start({ lab }) {
-      const { V, bf, player, field } = lab;
+      const { V, bf, player } = lab;
       if (q.has("drones")) V.droneCount = Number(q.get("drones")) || 0;
       // ?companions=replicas|quads|both: which kind walks with you (replicas by default, Keith 2026-11-02).
       { const c = q.get("companions"); if (c === "quads") { V.compCount = 2; V.repCount = 0; } else if (c === "both") { V.compCount = 2; V.repCount = 2; } }
       if (q.has("comps")) V.compCount = Number(q.get("comps")) || 0;
       if (q.has("replicas")) V.repCount = Number(q.get("replicas")) || 0;
       if (q.has("scrappers")) V.swarmCount = Number(q.get("scrappers")) || 0;
-      // Summoner gear (Keith 2026-11-02): ?summoner (or ?k1=drones|hive, ?k2=drones|hive, ?k3=replicas) fits the items
-      // (the combat lab fits them on the mech), and the summons' counts come from them instead of the sliders; a swarm
-      // hive's key (1 or 2) throws and recalls the swarm.
-      let gear: Resolved | null = null;
-      {
-        const pick: Pick = { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "pack" };
-        if (pickFromParams(pick, q)) {
-          const r = resolve(loadoutFor(pick));
-          if (r.summons.replicas + r.summons.drones + r.summons.scrappers > 0) { gear = r; applyGear(V, r); }
-        }
-      }
+      // Summoner gear (?summoner, ?k1=drones|hive, ...): the combat lab fits it from the URL and takes the counts from it.
       // ?dismissat=s: dismissed s seconds in (as a convoy pickup), summoned again 30 s later.
       const dismissAt = q.has("dismissat") ? Number(q.get("dismissat")) || 10 : -1;
       let clock = 0;
       lab.refresh();
-      const s = new Summons(bf, lab.app.scene, V, field, player, lab.enemies, lab.deaths, { look: lab.toon });
+      const s = lab.summons();
       summons = s;
-      // Every enemy group near one of your ground units may go for it (src/summon/aggro.ts).
-      lab.foot.quarry.summons = new SummonPrey(s, V);
       onReady(s);
       // Z sends the swarm (at the lock, else the cursor), C calls it back.
       addEventListener("keydown", (e) => {
         if (typing(e) || e.repeat) return;
         if (e.code === "KeyZ") s.send();
         if (e.code === "KeyC") s.recall();
-        if (gear && (e.code === "Digit1" || e.code === "Digit2") && isSwarmKey(gear, e.code === "Digit1" ? 1 : 2)) s.sendOrRecall();
       });
       const sendAtStart = q.has("send");
       // The demo throws the swarm at the nearest foe every 12 s.
@@ -74,8 +58,6 @@ export function summonerFront(q: URLSearchParams, onReady: (s: Summons) => void)
         update(dt) {
           clock += dt;
           if (dismissAt >= 0) s.setActive(!(clock >= dismissAt && clock < dismissAt + 30));
-          s.update(dt);
-          lab.hud("summons", s.hud());
           if (sendAtStart && s.allies.sends === 0 && s.allies.scrappers >= Math.min(8, V.swarmCount)) {
             const h = player.sim.heading; s.allies.sendSwarm(player.sim.pos.x + Math.sin(h) * 30, player.sim.pos.z + Math.cos(h) * 30);
           }
