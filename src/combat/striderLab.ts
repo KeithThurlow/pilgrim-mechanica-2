@@ -60,8 +60,9 @@ export class StriderLab {
     L.onFrame((dt) => {
       this.backClock -= dt;
       if (pack.list.length < V.striderCount && this.backClock <= 0) this.spawn();
-      if (!pack.list.length) return;
-      const p0 = pack.list[0].pos();
+      // The field runs on with nobody standing: the last one's core still counts down, its fx and tears settle
+      // (Keith 2026-11-03: the blast waited for the next strider to stand up, 6 s on).
+      const p0 = pack.list.length ? pack.list[0].pos() : L.player.sim.pos;
       sf.update(dt, L.prey(p0.x, p0.z));
       if (!pack.list.length) return;
       const s = pack.list[0];
