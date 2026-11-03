@@ -29,6 +29,10 @@ export const UPPER_DEFAULTS = {
   rateSplit: 0.06,
   fireCone: 4,
   gunSpacing: 1.02,
+  heldTrack: 1.8,
+  heldOutward: 0.9,
+  runArmOut: 75,
+  runArmIn: 25,
   ammoPerGun: 180,
   reloadTime: 2.6,
 };
@@ -46,6 +50,10 @@ export const UPPER_PARAMS: Param[] = [
   { key: "outwardTrack", label: "Outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Torso & guns", tip: "Share of the tracking speed an arm swings outward, away from the torso (inward is full speed; Keith 2026-10-24). When the aim sweeps sideways one arm swings in while the other swings out, so the guns turn at different speeds" },
   { key: "fireCone", label: "Fire cone (°)", min: 0.5, max: 30, step: 0.5, group: "Torso & guns", tip: "A gun fires only once it points this close to the aim" },
   { key: "gunSpacing", label: "Gun spacing (m)", min: 0, max: 3, step: 0.01, group: "Torso & guns", tip: "Each gun aims from its own shoulder, this far from the middle" },
+  { key: "heldTrack", label: "Held weapons: tracking ×", min: 0.5, max: 4, step: 0.05, group: "Held weapons", tip: "Keith 2026-11-03: arms track from the shoulder much faster than hull weapons. Every held weapon's tracking (its arm's × the weapon's handling) times this" },
+  { key: "heldOutward", label: "Held weapons: outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Held weapons", tip: "As Outward swing speed, for arms: share of the tracking an arm swings outward (inward is full speed)" },
+  { key: "runArmOut", label: "Sprinting: arm swings out to (°)", min: 0, max: 120, step: 1, group: "Held weapons", tip: "Keith 2026-11-03: sprinting, the hull faces the run and only the arms track. Each arm swings this far out from straight ahead (left arm to the left), off the hull's facing" },
+  { key: "runArmIn", label: "Sprinting: arm swings across to (°)", min: 0, max: 90, step: 1, group: "Held weapons", tip: "And this far across the chest (left arm to the right). Outside the two, that arm doesn't fire" },
   { key: "spinUp", label: "Spin-up (s)", min: 0.05, max: 2, step: 0.05, group: "Minigun" },
   { key: "spinDown", label: "Spin-down (s)", min: 0.1, max: 4, step: 0.05, group: "Minigun" },
   { key: "spinRpm", label: "Barrel rpm", min: 100, max: 3000, step: 10, group: "Minigun" },
@@ -129,6 +137,9 @@ export interface GunStats {
   own?: Record<string, number> | null;
   /** The weapon item's base id (swords: whose posed keys it swings with, src/weapons/swordPoses.ts). */
   base?: string;
+  /** Held in an arm's hand (src/items/loadout.ts), not a hull weapon: tracks faster (heldTrack) and can fire while
+   *  sprinting (the mech unit frees its arm). */
+  held?: boolean;
   /** Light (a hand weapon) rather than Medium (on the hull). */
   light?: boolean;
   /** Its socketed Protocols' behaviour on every round (src/game/shots.ts). */
@@ -174,6 +185,11 @@ export class UpperSim {
   lean = 0;
   /** Set from outside: lean the hull forward this much (radians; the sprint with the weapons off), eased at the lean rate. */
   leanFwd = 0;
+  /** Set from outside (the sprint, Keith 2026-11-03): these sides' held weapons track `armAim` on their own inside the
+   *  sprint's shoulder arc (runArmOut / runArmIn) while the torso faces the run; only they count for onTarget. */
+  freeArms: [boolean, boolean] = [false, false];
+  armAim: Aim | null = null;
+  armsOnly = false;
 
   constructor(public v: UpperValues) {}
 
@@ -234,9 +250,15 @@ export class UpperSim {
     const shots: (1 | -1)[] = [];
     this.onTarget = false;
     this.spin = 0;
+    const torsoAim = aim;
     for (const g of this.guns) {
-      const own = g.stats;
-      const ymax = (own?.arc ?? v.podYawMax) * D2R, track = own?.track ?? v.podTrack;
+      const own = g.stats, free = this.freeArms[g.side === 1 ? 0 : 1];
+      aim = free ? this.armAim : torsoAim;
+      const ymax = (own?.arc ?? v.podYawMax) * D2R, track = (own?.track ?? v.podTrack) * (own?.held ? v.heldTrack : 1);
+      // The yaw window off the torso, as [low, high] (+ to the mech's left): the gun's arc both ways, or sprinting with a
+      // free arm, the shoulder's own: further out than across the chest.
+      const out = v.runArmOut * D2R, inn = v.runArmIn * D2R;
+      const lo = free ? (g.side === 1 ? -inn : -out) : -ymax, hi = free ? (g.side === 1 ? out : inn) : ymax;
       // Aim from this gun's own shoulder, so the two converge on the aim point.
       const gx = shoulder.x + lx * g.side * v.gunSpacing, gz = shoulder.z + lz * g.side * v.gunSpacing;
       const yawWant = aim ? wrap(Math.atan2(aim.x - gx, aim.z - gz) - this.torsoYaw) : 0;
@@ -245,9 +267,9 @@ export class UpperSim {
       const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) + this.lean : 0;
       // Each arm swings inward (toward the torso) at full speed and outward slower. Yaw grows toward the mech's
       // left, so for the left arm (+1) a rising yaw is outward, and for the right arm (-1) a falling one is.
-      const yawTo = clamp(yawWant, -ymax, ymax);
+      const yawTo = clamp(yawWant, lo, hi);
       const outward = Math.sign(yawTo - g.yaw) === g.side;
-      const kYaw = 1 - Math.exp(-track * (outward ? v.outwardTrack : 1) * dt);
+      const kYaw = 1 - Math.exp(-track * (outward ? (own?.held ? v.heldOutward : v.outwardTrack) : 1) * dt);
       const kPitch = 1 - Math.exp(-track * dt);
       g.yaw += (yawTo - g.yaw) * kYaw;
       const pitchTo = clamp(pitchWant, -pup, pmax);
@@ -257,10 +279,10 @@ export class UpperSim {
       // waits for the torso). Pitch only needs the gun to have reached its limit below: a target close under the guns
       // asks for more depression than they have, and they should still fire (bug 2026-10-24: they never did). Above,
       // a target higher than the guns raise (plus the lean) is out of reach: they don't fire up at it.
-      const inArc = Math.abs(yawWant) <= ymax + cone;
+      const inArc = yawWant >= lo - cone && yawWant <= hi + cone;
       const reachUp = pitchWant >= -pup - cone;
       g.onTarget = g.enabled && !!aim && inArc && reachUp && Math.abs(wrap(yawTo - g.yaw)) <= cone && Math.abs(pitchTo - g.pitch) <= cone * 2;
-      this.onTarget ||= g.onTarget;
+      if (!this.armsOnly || free) this.onTarget ||= g.onTarget;
 
       // The magazine reloads in its own time (a rocket launcher on this side spends it in src/weapons).
       magStep(g.mag, dt);

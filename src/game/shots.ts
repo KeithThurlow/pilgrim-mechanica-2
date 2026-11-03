@@ -97,6 +97,8 @@ export interface ShotCmd {
   sheet?: SheetFire;
   splash?: number;
   splashShare?: number;
+  /** The splash is an explosion (the flak's pellets): units take it as a blast (big robots too, cover shields). */
+  splashBlast?: boolean;
   proto?: ShotProtocols;
   /** The gun's time between rounds (s): fire-rate copies spread over it (else protoRateGap). */
   interval?: number;
@@ -119,6 +121,8 @@ export interface ShotLook {
   ally?: boolean;
   /** Ignited rounds: the tracer glows orange-red. */
   hot?: boolean;
+  /** The round bursts where it ends (the flak's pellets): the pop's radius (m) for the effects; 0 or none: no pop. */
+  burst?: number;
   /** Its side (team) and power (damage × (1 + pierce)), for the tracer's light (src/world/nightLights.ts). */
   team?: number;
   power?: number;
@@ -165,7 +169,7 @@ export interface ShotWorld {
 }
 
 const CAP = 16384;
-const F_SHEET = 1, F_FLAT = 2, F_AIM = 4, F_FIRST = 8, F_TRACER = 16;
+const F_SHEET = 1, F_FLAT = 2, F_AIM = 4, F_FIRST = 8, F_TRACER = 16, F_BLAST = 32;
 const K_ROUND = 0, K_RICOCHET = 1, K_CHAIN = 2;
 
 /** Seeded random (mulberry32): one state per row. */
@@ -258,7 +262,7 @@ export class Shots {
           this.ap[i] = c.pierce ?? UNSET_PIERCE;
           this.splash[i] = splash; this.splashShare[i] = share;
           this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
-          let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 && m === 0 ? F_FIRST : 0);
+          let f = F_TRACER * (look.tracer === false ? 0 : 1) | (r === 0 && s === 0 && m === 0 ? F_FIRST : 0) | (c.splashBlast ? F_BLAST : 0);
           if (c.sheet) {
             f |= F_SHEET | (c.sheet.flat ? F_FLAT : 0);
             this.half[i] = c.sheet.half; this.height[i] = c.sheet.height; this.pen[i] = c.sheet.pen;
@@ -279,7 +283,7 @@ export class Shots {
 
   /** One look per command, shared by its rows (the caller's vectors are reused, so they're copied). */
   private copyLook(l: ShotLook): ShotLook {
-    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own, hot: l.hot, team: l.team, power: l.power,
+    return { slot: l.slot, flashScale: l.flashScale ?? 1, hitScale: l.hitScale ?? 1, voice: l.voice, tracer: l.tracer, own: l.own, hot: l.hot, team: l.team, power: l.power, burst: l.burst,
       eject: l.eject ? l.eject.clone() : null, outboard: l.outboard ? l.outboard.clone() : null };
   }
 
@@ -395,6 +399,7 @@ export class Shots {
     if (this.splash[i] > 0 && this.splashShare[i] > 0) {
       let count = 0;
       this.splashO.pierce = this.ap[i];
+      this.splashO.blast = (f & F_BLAST) !== 0;
       for (const t of w.targets) if (t.alive && t.team !== team && t.splash) count += t.splash(end, this.splash[i], damage * this.splashShare[i], d, this.splashO);
       if (count) this.event("splash", i, -1, -1, damage * this.splashShare[i], end.x, end.y, end.z, count);
     }
@@ -419,7 +424,7 @@ export class Shots {
       const j = this.row(this.family[i], K_RICOCHET, gen + 1, team, end.x + normal.x * 0.15, end.y + normal.y * 0.15, end.z + normal.z * 0.15, rx, ry, rz,
         v.protoRicochetRange, damage * v.protoRicochetKeep, look, hash(this.seed[i] + 7));
       if (j >= 0) {
-        this.ric[j] = this.ric[i] - 1; this.chain[j] = 0; this.flags[j] = f & F_TRACER; this.ap[j] = this.ap[i];
+        this.ric[j] = this.ric[i] - 1; this.chain[j] = 0; this.flags[j] = f & (F_TRACER | F_BLAST); this.ap[j] = this.ap[i];
         this.splash[j] = this.splash[i]; this.splashShare[j] = this.splashShare[i];
         this.event("ricochet", i, -1, -1, this.damage[j], end.x, end.y, end.z);
       }
