@@ -312,6 +312,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Rivals make power cuts; a rival's dodge mid-cut stays a dodge (Claude, thread "Make rival mechs fight at full potential")
+- A sword rival rolls once per cut (`aiPowerCut` 0.3/0.5/0.75 at Recruit/Veteran/Ace, Rival AI) and, with a bar to spare past its dodge reserve, presses for a power cut as the cut starts (new `power` in the AI's commands; the duel lab and the HVT mech call `Arsenal.powerCut`). Before, any dodge dash it sent mid-cut was swallowed as a power cut: `MechUnit.tryDash(x, z, cut)` now takes `cut = false` for AIs. `Arsenal.canPowerCut()` feeds the AI's view.
+- Headless duel: a power cut spends a bar and adds the power damage to the cut just made.
+- Checked: `duel-check` (a sword rival on a standing foe makes power cuts, 3 in 30 s, cut 4441; none at chance 0), npm test.
+
 ### 2026-11-03 · Rivals use the third bar to push (coordinator, after #145; Claude, thread "Make rival mechs fight at full potential")
 - With three bars each, rivals hardly ever saw you "out of dash", so they never pressed; in the long duel (seeds 21-22) one sat in engage the whole 90 s. Two new press triggers in `src/combat/rivalAi.ts` (Rival AI sliders): **bar edge** (`aiBarEdge` 2: you have two fewer bars than it, it presses) and **a push on a spare bar** (`aiPush` chance per s with its bars full, 0.1/0.2/0.35 at Recruit/Veteran/Ace: a dash in on the spare bar, then press for `aiPushTime` 4 s, keeping its dodge reserve). The HUD note says "pushing in on a spare bar". A rival with a rail or nova lance keeps its range and doesn't push.
 - Particle orbs: when every trigger weapon in reach is a slow energy shot (orb, plasma), the rival leads the shot line by its flight. The headless duel now flies orbs out to their range, burning what they pass, then popping (it only counted the landing spot).

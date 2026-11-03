@@ -358,9 +358,10 @@ export class MechUnit implements Hittable, Solid {
   /** Each foot's slide dust carry-over (fractional puffs). */
   private slideAcc = [0, 0];
 
-  tryDash(x: number, z: number): boolean {
-    // Space mid-cut is a sword's power cut instead (Keith 2026-11-02), when there's the energy for it.
-    if (this.alive && !this.gunsOff && this.weapons?.powerCut?.()) return true;
+  tryDash(x: number, z: number, cut = true): boolean {
+    // Space mid-cut is a sword's power cut instead (Keith 2026-11-02), when there's the energy for it. An AI asks for its
+    // power cuts apart (cut false: a dodge mid-cut stays a dodge).
+    if (cut && this.alive && !this.gunsOff && this.weapons?.powerCut?.()) return true;
     if (!this.alive || !this.sim.canDash || !this.dash.start(x, z)) return false;
     this.sim.dash(this.dash.dirX, this.dash.dirZ);
     this.weapons?.dashed?.(this.dash.dirX, this.dash.dirZ);

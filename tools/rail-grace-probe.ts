@@ -6,7 +6,7 @@ import { runDuel } from "../src/combat/duelSim";
 import { loadoutFor } from "../src/items/weaponPick";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 
-const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false });
 export type PlayerMode = "stand" | "strafe" | "reverse" | "dash";
 /** A scripted player: reacts `react` s after the rival's snapshot begins (its rail has `snap` s of charge left). */
 export const player = (m: PlayerMode, snap: number, react = 0.1) => {

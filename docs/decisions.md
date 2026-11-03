@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-03 | Sword rivals make power cuts (a roll per cut, a spare bar only); an AI dodge mid-cut stays a dodge | Keith (rivals at full potential) | Claude | `aiPowerCut` per level is a guess |
 | 2026-11-03 | With three bars each, rivals press when you are two bars behind them, and now and then push on a spare bar (a dash in, then 4 s pressing) | Coordinator (after #145) | Claude | Values are guesses for Keith to feel: `aiBarEdge`, `aiPush`, `aiPushTime` (Rival AI) |
 | 2026-11-03 | Rivals fire energy weapons on their reactor in bursts: until dry, then hold to 60% (`aiReactorResume`); a ready lance or sunder waits for its whole cost | Keith ("rivals not fighting to their fullest potential") | Claude | Open for Keith: the orb is fired at your position with no lead (8 m/s: it mostly area-denies); lance damage in duels looks low next to the laser |
 | 2026-11-03 | Sprinting, held arms swing 50° across the chest (was 25°), and the drawn arm takes out the hull's lean so it points at the target | Keith | Claude (value) | Open: walking, held weapons still use their item's arc both ways (the torso turns to the aim anyway). |
