@@ -141,6 +141,8 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
     if (changed) console.log(`long duel: state change in ${a}-${b}`);
   }
   must(changed, "long duel: the AI never changed state");
+  // Three bars each (2026-11-03): both rivals use the spare bar to push in at some point of the long duel.
+  r.states.forEach((st, i) => must(st.press > 0, `long duel 21-22: rival ${i} never pressed (pushes ${r.ai?.[i].pushes ?? 0})`));
   worstStuck = Math.max(worstStuck, r.stuckWorst);
 }
 
