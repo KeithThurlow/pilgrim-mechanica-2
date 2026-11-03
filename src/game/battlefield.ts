@@ -126,6 +126,10 @@ export interface FireOptions {
   /** Splash at the impact (sand or body): radius (m) and the share of the round's damage to each swarm unit in it. */
   splash?: number;
   splashShare?: number;
+  /** The splash is an explosion (the flak's pellets): taken as a blast. */
+  splashBlast?: boolean;
+  /** The round pops where it ends (the flak's pellets): the pop's radius (m) for the effects (flash, sparks, smoke, wave, sound). */
+  burst?: number;
   /** The round's Protocols (src/game/shots.ts): split, fire rate, area, ricochet, chain. */
   proto?: ShotProtocols;
   /** The gun's time between rounds (s): a fire-rate Protocol's copies spread over it. */
@@ -270,8 +274,8 @@ export class Battlefield {
       this.look?.lights.gun(muzzle.x + d.x * 0.4, muzzle.y + d.y * 0.4, muzzle.z + d.z * 0.4, Math.min(2, o.flashScale ?? 1), famOfTeam(team));
     }
     return this.shots.fire(
-      { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
-      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.silent ? "none" : o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot,
+      { team, origin: muzzle, dir: d, range, damage, sheet: o.sheet, splash: o.splash, splashShare: o.splashShare, splashBlast: o.splashBlast, proto: o.proto, interval: o.interval, seed: o.seed, pierce: o.pierce },
+      { slot, eject: o.eject, outboard: o.outboard, flashScale: o.flashScale, hitScale: o.hitScale, voice: o.silent ? "none" : o.voice, tracer: o.tracer, own: o.voice === "player" && !o.ally, ally: !!o.ally, hot: o.hot, burst: o.burst,
         team, power: damage * (1 + Math.max(0, o.pierce ?? 0)) });
   }
 
@@ -296,8 +300,10 @@ export class Battlefield {
   /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
   private resolveShots(dt: number) {
     this.shots.step(dt);
+    this.pops = 0;
     for (const dr of this.shots.draws) {
       const L = dr.look;
+      if (L.burst) this.pelletPop(dr.to, L.burst, dr.dir, dr.surface === "sand", L.team ?? 0);
       for (const x of dr.exits) this.gunFx.sparksAt(x, dr.dir, 3, 6);
       // Only a command's first round flashes, throws brass and sounds; split rounds and children ride along quietly.
       this.gunFx.shot(dr.first ? L.slot : -1, dr.from, dr.dir, dr.to, dr.first ? L.eject ?? null : null, dr.first ? L.outboard ?? null : null,
@@ -315,6 +321,26 @@ export class Battlefield {
       if (L.voice === "player") this.gunAudio.shot(dr.from);
       else if (L.voice !== "none") this.sfx.play("spit", dr.from, 0.55, 0.7 + Math.random() * 0.15, true);
     }
+  }
+
+  /** Pellet pops played this frame (a flak volley is 14 at once: only the first few sound). */
+  private pops = 0;
+  /**
+   * A flak pellet bursting where it ended (cosmetic, local; its damage is the shot's splash): a hot flash, sparks
+   * thrown out, a puff of dark smoke, a small blast wave and a sharp pop (Keith 2026-11-03: "absolute AoE clearing menaces").
+   */
+  private pelletPop(at: THREE.Vector3, r: number, d: THREE.Vector3, sand: boolean, team: number) {
+    const fam = famOfTeam(team);
+    this.look?.lights.flash(at.x, at.y + 0.4, at.z, r * 0.8, fam);
+    this.gunFx.sparksAt(at, this.hit.set(-d.x * 0.3, 1, -d.z * 0.3).normalize(), Math.round(4 + r * 2), 5 + r * 2.5);
+    const k = Math.min(2, r / 3);
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.6 * k;
+      this.dust.smoke(at.x, at.y + 0.3, at.z, Math.cos(a) * sp, 0.8 + Math.random() * 1.2, Math.sin(a) * sp, 0.25 + 0.2 * k, 0.6 + Math.random() * 0.4, 0.7, 0.8);
+    }
+    if (sand && !this.inWater(at.x, at.z)) this.dust.hit(at.x, at.y, at.z, d.x, d.z, 0.8 + 0.6 * k);
+    this.waves.post("cannon", at.x, at.y + 0.3, at.z, r * 0.6, { ground: sand, fam });
+    if (this.pops++ < 4) this.sfx.playSound("flakPop", at, 1 - this.pops * 0.15, 0.85 + Math.random() * 0.3);
   }
 
   /** A direct-fire sheet from a muzzle (src/game/sheetFire.ts). */
