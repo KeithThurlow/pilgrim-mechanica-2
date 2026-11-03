@@ -16,7 +16,7 @@ import { BASE_BY_ID } from "../../src/items/bases";
 import { PROTOCOL_BY_ID } from "../../src/items/protocols";
 import { itemCadence } from "../../src/items/dps";
 import { makeItem } from "../../src/items/generate";
-import { REF } from "../../src/items/balanceModel";
+import { REF, ENERGY_IDS, MELEE_IDS, wOf } from "../../src/items/balanceModel";
 import {
   MODELLED, SCALING, bestBuilds, focusArea, itemWith, profileOf, protocolsFor, protocolStack, reachCurve, reliabilityCurve, scaleClass,
   type Profile,
@@ -45,7 +45,11 @@ const SOUNDS: Record<string, string[]> = {
   "flak-medium": ["flak", "flakPop"], "cannon-medium": ["breach"], "rail-light": ["railCharge", "rail"], "rail-medium": ["railCharge", "rail"],
   "ac-medium": ["cannon"], "rpg-light": ["rocket"], "rpg-medium": ["rocket"], "sh-rpg": ["rocket"], "sh-missiles": ["rocket"],
   "sh-mortar": ["mortar"], "sh-linemortar": ["mortar"],
+  "laser-medium": ["pulseZap"], "beam-medium": ["beamHum"], "lance-medium": ["lanceCharge", "lanceFire"], "plasma-medium": ["plasmaShot", "plasmaHit"],
+  "orb-medium": ["orbLaunch"], "arc-medium": ["arcZap"], "sunder-medium": ["sunderCharge", "sunderHum"],
+  "sword-light": ["swordSwing", "swordHit", "swordBlock"], "sword-heavy": ["swordSwing", "swordHit", "swordBlock"], "sword-short": ["swordSwing", "swordHit", "swordBlock"],
 };
+const ROUGH = new Set([...ENERGY_IDS, ...MELEE_IDS]);
 
 const params = new URLSearchParams(location.search);
 const state = { base: "mg-medium", protos: [] as string[] };
@@ -68,7 +72,7 @@ const lab = await combatLab({
   setup: (field, V) => { addModifier(field, new RangeGround(V)); ground = (x, z) => field.height(x, z); cfg = V; },
   demo: (t: number) => {
     if (!cfg) return null;
-    const aim = { x: 0, y: (ground?.(0, cfg.lineZ) ?? 0) + 1.2, z: cfg.lineZ };
+    const aim = { x: 0, y: (ground?.(0, cfg.lineZ) ?? 0) + 1.2, z: cfg.lineZ + 0.5 };
     const on = !params.has("nofire") && t % cfg.reviewCycle < cfg.reviewFire;
     const two = BASE_BY_ID[state.base].size === "H";
     if (isShoulder()) return { cmd: { x: 0, z: 0, sprint: false }, aim, trigger: false, keys: [on, false, false, false] };
@@ -78,7 +82,6 @@ const lab = await combatLab({
   onChange: (k) => { if (k in RANGE_DEFAULTS || (k in DUMMY_DEFAULTS && k !== "dpsWindow")) { lab.field.update(); lab.streamer.rebuildAll(); rebuildRange(); } },
 });
 const { V, bf, player, app } = lab;
-player.reset(0, -6, 0);
 
 // ---- The range: the weapons lab's cutouts and posts ----
 const rng = new DummyRange(V, rangeSpots(V));
@@ -102,6 +105,8 @@ lab.onFrame((dt) => {
 });
 
 function refit() {
+  // A sword stands at the line of cutouts (it can't reach them from the shooting spot).
+  player.reset(0, MELEE_IDS.includes(state.base) ? V.lineZ - 4.5 : -6, 0);
   applyLoadout(player, resolve(loadoutForBase(state.base, state.protos), V));
   lab.refresh();
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* private window */ }
@@ -210,7 +215,7 @@ function render() {
   const sounds = SOUNDS[base] ?? [];
 
   let h = `<div class="wr-head"><b>Weapon review</b><select id="wr-w">${MODELLED.map((id) => `<option value="${id}"${id === base ? " selected" : ""}>${esc(BASE_BY_ID[id].name)}</option>`).join("")}</select><button id="wr-shut">${box.classList.contains("shut") ? "open" : "hide"}</button></div>`;
-  h += `<p class="dim">${esc(BASE_BY_ID[base].name)} · ${p.slot === "shoulder" ? "shoulder launcher (key 1)" : `${{ L: "Light", M: "Medium", H: "Heavy" }[p.slot]} weapon`} · level 1 Common, middle rolls. Energy weapons and swords aren't in the balance model yet.</p>`;
+  h += `<p class="dim">${esc(BASE_BY_ID[base].name)} · ${p.slot === "shoulder" ? "shoulder launcher (key 1)" : `${{ L: "Light", M: "Medium", H: "Heavy" }[p.slot]} weapon`} · level 1 Common, middle rolls.${ROUGH.has(base) ? ` <span class="warn">Rough model: ${MELEE_IDS.includes(base) ? "a sword's walk-in and how long a target stays in reach are guesses (REF.closeSpeed, meleeStick)" : "energy weapons fire on the Rampart's reactor (duty " + f2(wOf(item).duty ?? 1) + " of the time); their hits are simplified"}; not held to the sheet's bands yet.</span>` : ""}</p>`;
   h += `<table>
 <tr><td>Card DPS</td><td class="n">${f0(p.card)}</td><td>Damage × rounds × shots/s</td><td class="n">${f0(cad.damage)} × ${cad.rounds} × ${f2(cad.sustained)}</td></tr>
 <tr><td>Focus F</td><td class="n">${f0(p.focus)}</td><td>vs its best single (${p.focusSet})</td><td class="n">${pct(p.focusPct)}</td></tr>
@@ -222,7 +227,7 @@ function render() {
 <tr><td>Scaling</td><td class="n">${cls}</td><td>Ceilings at ${full} sockets</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(sc.focusCeil)}</span> · <span style="color:${C_AREA}">A ×${f2(sc.areaCeil)}</span></td></tr>
 ${mineFA ? `<tr><td>Fitted</td><td class="n" colspan="2">${esc(state.protos.map((x) => PROTOCOL_BY_ID[x].name).join(" + "))}</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(mineFA.focus / Math.max(1e-6, p.focus))}</span> · <span style="color:${C_AREA}">A ×${f2(mineFA.area / Math.max(1e-6, p.area))}</span></td></tr>` : ""}
 </table>`;
-  h += `<h4>Sounds</h4><div class="chips">${sounds.map((n) => `<button data-snd="${n}">▶ ${n}</button>`).join("")}${p.radius > 0 && BASE_BY_ID[base].tags.includes("explosive") ? `<button data-blast="${p.radius}">▶ blast ${p.radius.toFixed(1)} m</button>` : ""}</div>${sounds.length ? "" : `<p class="dim">Miniguns: the sound runs with the spin, so fire to hear it.</p>`}`;
+  h += `<h4>Sounds</h4><div class="chips">${sounds.map((n) => `<button data-snd="${n}">▶ ${n}</button>`).join("")}${p.radius > 0 && (BASE_BY_ID[base].tags.includes("explosive") || p.kind === "lance") ? `<button data-blast="${p.radius}">▶ blast ${p.radius.toFixed(1)} m</button>` : ""}</div>${sounds.length ? "" : `<p class="dim">Miniguns: the sound runs with the spin, so fire to hear it.</p>`}`;
   h += `<h4>Budget map: every weapon (dot), this one in yellow</h4>${budgetMap(all, p, { f: buildF, a: buildA, mine })}<p class="dim">Red: the sheet's 130% caps (flak's swarm 230%, open). Yellow line: proposed Spend = F% + A% ≤ ${SCALING.spendCap}. Arrows: where Protocols take it at ${full} sockets.</p>`;
   if (bf_ && ba) {
     h += `<h4>Protocol scaling: best build by sockets (× the plain weapon)</h4>`;

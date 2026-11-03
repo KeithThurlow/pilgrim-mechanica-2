@@ -16,7 +16,7 @@ import { PROTOCOLS, protocolFits } from "../src/items/protocols";
 import { LOOT_DEFAULTS, makeItem } from "../src/items/generate";
 import { levelPower } from "../src/items/level";
 import { dpsOf, itemDpsPair } from "../src/items/dps";
-import { REF, armourFloor, thru, wOf, withProtos, WEAPON_IDS, targets, OTHERS, eDps, ttk, HULL, RB, WB, type T } from "../src/items/balanceModel";
+import { REF, armourFloor, thru, wOf, withProtos, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, targets, OTHERS, eDps, ttk, HULL, RB, WB, type T } from "../src/items/balanceModel";
 
 const proc = (globalThis as unknown as { process: { argv: string[]; exit(c: number): never } }).process;
 const args = proc.argv.slice(2);
@@ -57,6 +57,17 @@ for (const w of W_) {
   const off = pct.filter((_, i) => i !== bi), offMean = off.reduce((a, b) => a + b, 0) / off.length;
   if (best > (REF.bandOver[w.id]?.[T_[bi].id] ?? 130)) problems.push(`${w.name} ${f0(best)}% of budget vs ${T_[bi].id}`);
   console.log(pad(w.name, 20) + e.map((x, i) => lp(`${f0(x)} [${f0(pct[i])}]`, 14)).join("") + `   ${pad(T_[bi].id, 9)} ${f0(offMean)}%`);
+}
+
+// 2b. Energy weapons (on the reactor: sustained counts it running dry) and swords (the walk-in counted): printed, not
+// held to the bands yet (2026-11-03, open).
+console.log("\n-- Energy weapons and swords (report only: not held to the bands yet); duty = share of the time the reactor lets it fire --");
+for (const id of [...ENERGY_IDS, ...MELEE_IDS]) {
+  const w = wOf(makeItem(id)), budget = REF.budget * REF.slotShare[w.slot];
+  const e = T_.map((t) => eDps(w, t));
+  const pct = e.map((x, i) => (100 * x) / (budget * (REF.setWeight[T_[i].id] ?? 1)));
+  const best = Math.max(...pct), bi = pct.indexOf(best);
+  console.log(pad(w.name, 20) + e.map((x, i) => lp(`${f0(x)} [${f0(pct[i])}]`, 14)).join("") + `   ${pad(T_[bi].id, 9)} card ${f0(dpsOf(w.cad))}${w.duty !== undefined ? ` duty ${w.duty.toFixed(2)}` : ""}`);
 }
 
 // 3. Time to kill.
