@@ -2,7 +2,7 @@
 // the same underlying skeleton, but ... no need for a pilot in the center. The legs can be thinner because it doesn't
 // have to support the same weight. The weapons will in general just be a little bit lighter looking ... a robot in
 // there"). The Rampart's own model on the same rig (src/mech/rampart.ts), slimmed (RampartBody.slim): thin legs and
-// feet, a narrow, low hull, smaller guns, no ammo drums, power pack or back unit, in your mech's paint (a slider tints it paler), a twin-optic sensor head for a head.
+// feet, a narrow, low hull, smaller guns, no ammo drums, power pack or back unit, no cockpit pod (RampartBody.dropCab: the front plated over), bleached to a pale unmanned grey (RampartBody.bleach, a slider), a twin-optic sensor head for a head.
 // The gun is still rolled per build (Keith 2026-11-02, replicas.ts): its minigun pods, or a light rocket rack in their
 // place. The look values are sliders (Summons › Replicas: look) and apply live.
 // The Rampart loads asynchronously; until it has (and in headless checks, where there are no models) the old wire
@@ -71,6 +71,7 @@ export class ReplicaBody implements MechBody {
       kick.add(r.g);
       this.racks.push({ side, ...r });
     }
+    rb.dropCab();
     this.root.remove(this.wire.root);
     this.root.add(rb.root);
     this.applied = "";
@@ -84,10 +85,10 @@ export class ReplicaBody implements MechBody {
     this.looks = v;
     const key = `${v.repLegThin},${v.repFootSize},${v.repHullW},${v.repHullH},${v.repHullL},${v.repGunSize},${v.repShade}`;
     if (!this.rb || key === this.applied) return;
-    const shadeChanged = !this.applied.endsWith(`,${v.repShade}`);
     this.applied = key;
     this.rb.slim({ leg: v.repLegThin, foot: v.repFootSize, hull: [v.repHullW, v.repHullH, v.repHullL], gun: v.repGunSize, back: false });
-    if (shadeChanged && this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
+    this.rb.bleach(v.repShade);
+    if (this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
   }
 
   /** Which gun the pods carry: the Rampart's minigun pods, or the rocket rack in their place. */
@@ -108,14 +109,13 @@ export class ReplicaBody implements MechBody {
   eject(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).eject(side, out); }
   barrel(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).barrel(side, out); }
 
-  /** The Rampart's own paint, tinted paler by `repShade`; the wreck's colour as given. */
+  /** The Rampart's own paint (bleached paler by `repShade` in setLook); the wreck's colour as given. */
   paint(look: ToonLook, color: number | null) {
     this.lastPaint = { look, color };
     if (!this.rb) { this.wire.paint(look, color); return; }
-    const s = this.looks?.repShade ?? 0;
-    const steel = s <= 0 ? null : new THREE.Color().setRGB(0.45 + 0.5 * s, 0.48 + 0.5 * s, 0.5 + 0.5 * s).getHex();
-    this.rb.paint(look, color ?? steel);
-    for (const r of this.racks) for (const m of r.meshes) look.tint(m, m.userData.dark ? 0x2b2d31 : color ?? steel ?? 0x5d6648);
+    this.rb.paint(look, color);
+    const s = this.looks?.repShade ?? 0, rack = new THREE.Color(0x5d6648).lerp(new THREE.Color(0xb4b8b6), Math.min(1, s * 1.2)).getHex();
+    for (const r of this.racks) for (const m of r.meshes) look.tint(m, m.userData.dark ? 0x2b2d31 : color ?? rack);
   }
 
   deadRig(): DeadRig { return this.rb ? this.rb.deadRig() : this.wire.deadRig(); }
