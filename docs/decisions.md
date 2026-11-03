@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-03 | Rivals fire energy weapons on their reactor in bursts: until dry, then hold to 60% (`aiReactorResume`); a ready lance or sunder waits for its whole cost | Keith ("rivals not fighting to their fullest potential") | Claude | Open for Keith: the orb is fired at your position with no lead (8 m/s: it mostly area-denies); lance damage in duels looks low next to the laser |
 | 2026-11-03 | Rival mechs without a pack start with three energy bars too (2 → 3); the long duel check still passes | Keith (away; coordinator's call) | Claude | Open for Keith: the rival AI doesn't press on the spare bar yet; one rival in the long duel still sits in engage. |
 | 2026-11-03 | Replicas look like your own mech, slimmed on the same skeleton (no pilot to carry: thin legs, narrow hull, lighter guns), not a wire frame | Keith | Keith (the look); Claude (the values: legs ×0.55, hull 0.62 × 0.8 × 0.85, guns ×0.72, no drums, pack or back unit) | The cab window is part of the Rampart's one hull mesh, so it stays, only smaller; a hull without it needs a model. |
 | 2026-11-03 | Inventory: items are always placed upright on their own (only the player turns one); doll tiles show the fitted item's footprint; the sort chips order Tidy's layout and Show chips filter the grids | Keith | Keith (upright, footprints); Claude (sort drives Tidy, the filter set) | Old saved layouts reset once to stand weapons up |

@@ -19,6 +19,8 @@ import { DuelGround, DUEL_GROUND_DEFAULTS, lineOfSight } from "../game/duelGroun
 import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand, type Threat, type WeaponState } from "./rivalAi";
 import { kitOf, rollRivalLoadout, type KitWeapon } from "./rivalKit";
 import { DuelScore } from "./duelScore";
+import { EnergySim } from "../weapons/energy/energySim";
+import { Reactor, REACTOR_DEFAULTS } from "../mech/reactor";
 
 const W = WEAPON_DEFAULTS;
 const HIT_R = MECH_DEFAULTS.hitRadius;
@@ -35,6 +37,9 @@ class DuelMech {
   hull: number;
   kit: KitWeapon[];
   guns: Gun[];
+  /** Energy weapons (by kit index) on the hull's reactor, as the arsenal's EnergyGuns. */
+  esim: EnergySim[];
+  reactor: Reactor;
   moved = 0;
   fired = 0;
   hist: { x: number; z: number }[] = [];
@@ -47,6 +52,8 @@ class DuelMech {
     this.hull = this.health = r.values.hull;
     this.kit = kitOf(r, W);
     this.guns = this.kit.map(() => ({ cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
+    this.esim = this.kit.map(() => new EnergySim());
+    this.reactor = new Reactor({ ...REACTOR_DEFAULTS, reactorCap: r.values.reactorCap, reactorRegen: r.values.reactorRegen });
   }
   get alive() { return this.health > 0; }
 }
@@ -160,14 +167,18 @@ export function runDuel(o: DuelOptions): DuelResult {
     // The foe's rails charging: a line from it along its aim.
     f.kit.forEach((k, j) => {
       const g = f.guns[j];
-      if (k.kind !== "rail" || !g.holding || !g.railFrom) return;
+      if ((k.kind !== "rail" && k.kind !== "lance" && k.kind !== "sunder") || !g.holding || !g.railFrom) return;
       const dx = g.railFrom.x - f.sim.pos.x, dz = g.railFrom.z - f.sim.pos.z, l = Math.hypot(dx, dz) || 1;
       threats.push({ id: 100000 + (1 - i) * 10 + j, kind: "line", ax: f.sim.pos.x, az: f.sim.pos.z, x: f.sim.pos.x + dx / l * k.range, z: f.sim.pos.z + dz / l * k.range, r: W.railSheetHalf, t: Infinity, rail: true, charge: g.charge });
     });
-    const weapons: WeaponState[] = m.kit.map((_k, j) => ({ i: j, ready: m.guns[j].cool <= 0, charge: m.guns[j].charge }));
+    const weapons: WeaponState[] = m.kit.map((k, j) => {
+      if (!k.energy) return { i: j, ready: m.guns[j].cool <= 0, charge: m.guns[j].charge };
+      const es = m.esim[j], cost = k.kind === "beam" ? k.energy.energy * 0.15 : k.energy.energy;
+      return { i: j, ready: es.cool <= 0 && es.phase === 0 && m.reactor.charge >= cost, charge: m.guns[j].charge, busy: k.kind === "sunder" ? es.phase > 0 : k.kind === "lance" && es.holding };
+    });
     return {
       t, threats, cover: ground.spots, sees, arena: { x: 0, z: 0, r: gv.duelRadius },
-      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, kit: m.kit, weapons },
+      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, energy: m.reactor.charge, energyCap: m.reactor.cap, kit: m.kit, weapons },
       foe: { x: f.sim.pos.x, y: f.sim.pelvis.y, z: f.sim.pos.z, vx: f.sim.vel.x, vz: f.sim.vel.z, health: f.health / f.hull, dashCharges: f.dash.charges, alive: f.alive, gunsOff: false, airborne: f.sim.airborne, staggered: f.sim.stagger > 0, r: HIT_R },
     };
   }
@@ -219,6 +230,31 @@ export function runDuel(o: DuelOptions): DuelResult {
       g.cool = Math.max(0, g.cool - dt);
       if ("trigger" in k.ctl) {
         const held = cmd.trigger[k.ctl.trigger] && m.alive;
+        if (k.energy) {
+          // Energy weapons on the reactor (src/weapons/energy/energySim.ts, as the arsenal steps them): a dash drops a
+          // charge and stops a beam. Bolts, beam ticks and the sunder's burn hit along the shot line; plasma and orbs fly.
+          const es = m.esim[j], st = k.energy, blocked = m.sim.inDash;
+          if (blocked) es.drop();
+          const out = es.step(dt, held && !blocked, st, m.reactor);
+          g.charge = k.kind === "sunder" ? (es.phase === 1 ? es.charge : 0) : es.charge;
+          g.holding = k.kind === "sunder" ? es.phase === 1 : es.holding;
+          if (cmd.lock && g.holding) g.railFrom = { x: cmd.lock.x, z: cmd.lock.z };
+          const at = cmd.shotAt;
+          if (!at || (!out.shots && !out.power)) return;
+          m.fired++; lastAct[i] = t;
+          const miss = Math.hypot(at.x - f.sim.pos.x, at.z - f.sim.pos.z), reach = see && dist <= st.range;
+          if (k.kind === "plasma" || k.kind === "orb") {
+            // An orb burns about a second in its cloud, then pops.
+            const dmg = k.kind === "orb" ? st.damage + st.blastDamage : st.damage;
+            for (let n = 0; n < out.shots; n++) launch(i, k, k.kind, at, { r: Math.max(0.5, st.radius), blast: st.radius, damage: dmg, land: Math.min(dist, st.range) / Math.max(1, st.speed) });
+          } else if (k.kind === "lance") {
+            if (reach && miss < HIT_R + 0.5) hurt(1 - i, "lance", (st.damage + st.blastDamage) * out.power);
+          } else {
+            const wide = k.kind === "arc" ? st.seek : k.kind === "sunder" ? st.radius : 0;
+            if (reach && miss < HIT_R + wide) hurt(1 - i, k.kind, st.damage * out.shots);
+          }
+          return;
+        }
         if (k.kind === "minigun" || k.kind === "autocannon") {
           g.spin = held ? Math.min(1, g.spin + dt / Math.max(0.05, k.spinUp)) : Math.max(0, g.spin - dt * 2);
           if (!held || g.spin < 1 || !cmd.shotAt || dist > k.range) { g.acc = 0; return; }
@@ -319,6 +355,7 @@ export function runDuel(o: DuelOptions): DuelResult {
     mechs.forEach((m, i) => {
       const cmd = cmds[i];
       if (o.freeDash?.[i]) m.dash.charges = Math.round(m.v.dashCharges);
+      m.reactor.update(dt);
       if (cmd.dash && m.sim.canDash && m.dash.start(cmd.dash.x, cmd.dash.z)) { m.sim.dash(m.dash.dirX, m.dash.dirZ); res.dashes[i]++; }
       for (let s = 0; s < 2; s++) {
         m.dash.update(dt / 2);

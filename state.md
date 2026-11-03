@@ -312,6 +312,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Rivals fire the energy weapons they roll (Keith: "rivals not fighting to their fullest potential"; Claude, thread "Make rival mechs fight at full potential")
+- About 30% of rolled rivals (89 of seeds 1-300) carried an energy weapon on a hull mount that their AI never fired (the kit skipped energy classes); 14 had both guns dead. Now `kitOf` (`src/combat/rivalKit.ts`) reads each energy weapon's own stats (`energyStats`), with liked ranges (laser 34, beam 26, lance 50, plasma 32, orb 24, arc 17, sunder 40 m).
+- The AI (`src/combat/rivalAi.ts`) watches its reactor: fires until dry, then holds until it refills to `aiReactorResume` 0.6 (new slider, Rival AI), so it shoots in bursts; a ready nova lance or sunder waits for its whole cost. The lance charges and snapshots like the rail; the sunder is pressed and then steered after you with the fast shots' tight tracking; neither is thrown away by a dash or sprint. It also dodges your sunder's aim line (as a rail's) and your particle orbs (`src/combat/duelThreats.ts`).
+- Headless duel (`src/combat/duelSim.ts`) runs energy weapons on the same `EnergySim` and a `Reactor` per mech. Duel lab names the kinds.
+- Checked: `duel-check` new section (no rolled trigger weapon missing from the kit over 300 seeds; two of each energy weapon deal >200 with it in a minute: laser ~4000, sunder ~4300, beam ~2400, arc ~960, orb ~670, lance ~600, plasma ~520), npm test.
+
 ### 2026-11-03 · Rival mechs start with three energy bars too (coordinator's call while Keith is away; Claude)
 - `rivalBareDashCharges` 2 → 3 (`src/items/loadout.ts`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`); `tools/loadout-check.ts` now pins 3. With main's latest changes the long duel no longer stalls: one rival still holds engage the whole minute (the check takes either side), the other presses and takes cover. Rival AI itself is unchanged; it doesn't yet use the third bar beyond the sprint-to-reposition rule (needs 3 spare). Checked: `npm test` passes. Open for Keith: whether the rival AI should press on a spare bar.
 

@@ -11,8 +11,11 @@ import { emptyLoadout, fit, fitProblem, hullMount, MOUNTS, SIDES, SLOTS, type Lo
 import { itemName } from "../items/bayState";
 import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
+import { energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
 
-export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword";
+export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | EnergyClass;
+/** An energy weapon (Keith 2026-11-02, on the reactor): pulse laser, beam laser, nova lance, plasma, orb, arc, sunder. */
+export const isEnergyKind = (k: KitKind): k is EnergyClass => isEnergy(k);
 /** Which control fires it: a trigger side (0 left, 1 right) or a shoulder key (1-3). */
 export type KitControl = { trigger: 0 | 1 } | { key: 1 | 2 | 3 };
 
@@ -40,10 +43,14 @@ export interface KitWeapon {
   flight: number;
   /** The range this weapon likes to be fired from (m). */
   ideal: number;
+  /** An energy weapon's numbers (src/weapons/energy/energySim.ts): what it draws on the reactor, its charge and channel. */
+  energy?: EnergyStats;
 }
 
 /** The range each kind likes (m), capped at 80% of its reach. */
-export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4 };
+export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4,
+  // Energy weapons: the hitscan ones mid range, the slow orb and the short arc close, the lance and sunder long.
+  laser: 34, beam: 26, lance: 50, plasma: 32, orb: 24, arc: 17, sunder: 40 };
 
 /** What a resolved loadout carries, as the AI and the headless duel see it. */
 export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
@@ -56,7 +63,11 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     if (!g) return;
     const ctl = { trigger: i } as KitControl, o = g.own;
     // A round gun (src/weapons/guns.ts) fights like a minigun: a pellet shot is its pellets' worth of damage.
-    if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
+    if (isEnergy(g.cls)) {
+      // Energy weapons (rivals rolled them since 2026-11-02 but never fired them): their own stats as the arsenal reads them.
+      const st = energyStats(g.cls, o, v);
+      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, energy: st }));
+    } else if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
     else if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
     else if (g.cls === "rail") {
       const L = !!g.light;

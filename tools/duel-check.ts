@@ -76,6 +76,24 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   must(notes.length === 1, `?rivalfit= with a bad base should leave one note (${notes.length})`);
 }
 
+// ---- Every weapon a rival rolls is one its AI fires (2026-11-03: energy weapons were rolled but never fired) ----
+{
+  let dead = 0;
+  for (let seed = 1; seed <= 300; seed++) {
+    const r = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), kit = kitOf(r, WEAPON_DEFAULTS);
+    for (const [i, g] of [[0, r.guns.left], [1, r.guns.right]] as const) if (g && !kit.some((k) => "trigger" in k.ctl && k.ctl.trigger === i)) dead++;
+  }
+  must(dead === 0, `${dead} rolled trigger weapons over 300 rivals are missing from their kit (the AI never fires them)`);
+  // Each energy weapon on both hull mounts, in a minute's duel: it lands real damage with it, on its reactor.
+  for (const w of ["laser", "beam", "lance", "plasma", "orb", "arc", "sunder"]) {
+    const a = rollRivalLoadout(3, LOOT_DEFAULTS);
+    applyFitSpec(a, `mountL:${w}-medium,mountR:${w}-medium`, LOOT_DEFAULTS, 3);
+    const x = runDuel({ seedA: 3, seedB: 5, loadouts: [a, rollRivalLoadout(5, LOOT_DEFAULTS)], maxTime: 60 });
+    const dealt = (x.score.rounds[0].dealt as Record<string, number>)[w] ?? 0;
+    must(dealt > 200, `a rival with two ${w}s dealt only ${Math.round(dealt)} with them in a minute`);
+  }
+}
+
 // ---- Duels between two AIs ----
 const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
 let both = 0, worstStuck = 0, kills = 0, ttk = 0;
