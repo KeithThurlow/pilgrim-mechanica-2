@@ -158,8 +158,13 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
     if (changed) console.log(`long duel: state change in ${a}-${b}`);
   }
   must(changed, "long duel: the AI never changed state");
-  // Three bars each (2026-11-03): both rivals use the spare bar to push in at some point of the long duel.
-  r.states.forEach((st, i) => must(st.press > 0, `long duel 21-22: rival ${i} never pressed (pushes ${r.ai?.[i].pushes ?? 0})`));
+  // Three bars each (2026-11-03): every rival but a sniper (rail or lance: it keeps its range) uses the spare bar to
+  // push in at some point of the long duel, and at least one presses.
+  [21, 22].forEach((seed, i) => {
+    const sniper = kitOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), WEAPON_DEFAULTS).some((k) => k.kind === "rail" || k.kind === "lance");
+    if (!sniper) must((r.ai?.[i].pushes ?? 0) > 0 && r.states[i].press > 0, `long duel 21-22: rival ${i} never pushed (pushes ${r.ai?.[i].pushes ?? 0})`);
+  });
+  must(r.states.some((st) => st.press > 0), "long duel 21-22: neither rival pressed");
   worstStuck = Math.max(worstStuck, r.stuckWorst);
 }
 
