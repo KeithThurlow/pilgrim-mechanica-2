@@ -312,8 +312,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
-### 2026-11-03 · Grid layout: hull weapons flat, arm weapons upright (Keith; Claude)
-- Hull weapons 4×2 and long ones 6×2 (were 2×3 / 2×4); arms and held weapons unchanged and upright; hull gun pictures lie flat (`src/items/gridSize.ts`, `src/ui/itemIcon.ts`). Checked: `grid-check` (hull guns flat, held upright), one shot of the inventory lab.
+### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
+- Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.
 ### 2026-11-03 · Enemies go for summons; replicas walk round the train (Keith via the coordinator; Claude on `claude/project-thread-vhklb8`)
 - Every enemy kind takes one prey per group (`src/pilot/quarry.ts`, now kind `summon` too); `src/summon/aggro.ts` (`SummonPrey`) puts the summoner's ground units in that pick: a group whose middle is within `summonAggro` 22 m of a replica, companion or scrapper, and that unit nearer it than 0.8 × its prey, goes for the unit (Summons: enemies). Bites and saw strikes land on the unit; rounds resolve on whatever they hit. Dismissed summons draw nothing. Drones stay on the robots' per-robot rule (only shooters).
 - Labs: through `Quarry.summons` (set by the summoner front), so the swarm lab's robots, bandits, war band, droids and crushers all use it. Field: `ExpeditionLoop.summonPrey` (set by the convoy lab) picks per kind from the middle of its awake ones near you (from the register): camp robots, humanoids, striders, crushers, bandit camps and fortresses, war bands. Bandits keep off a summon by its own size.

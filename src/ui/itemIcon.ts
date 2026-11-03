@@ -12,7 +12,7 @@ function shapes(c: GridClass, W: number, H: number): string {
   const r = (x: number, y: number, w: number, h: number, rx = 1) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`;
   const ci = (x: number, y: number, rr: number) => `<circle cx="${x}" cy="${y}" r="${rr}"/>`;
   switch (c) {
-    case "hullGun": case "hullGunLong": {
+    case "hullGun": {
       const bw = Math.min(W * 0.22, 4);
       return r(cx - bw / 2, m, bw, H * 0.62) + r(m + 1, H * 0.55, W - 2 * m - 2, H * 0.38, 2) + ci(cx, H * 0.74, Math.min(W, H) * 0.12);
     }
@@ -65,7 +65,7 @@ function shapes(c: GridClass, W: number, H: number): string {
 
 /** The item's grid image as an SVG element sized to its cells (turned 90° when `rot`). */
 /** Classes drawn long side down: when their cells lie flat (hull weapons, Keith 2026-11-03), the drawing is turned. */
-const TALL: GridClass[] = ["hullGun", "hullGunLong", "held", "heldLong", "sword", "swordBig", "swordShort", "legs", "arm"];
+const TALL: GridClass[] = ["hullGun", "held", "heldLong", "sword", "swordBig", "swordShort", "legs", "arm"];
 
 export function itemIcon(item: Item, color: string, turned = false, v?: Partial<GridSizeValues>): SVGSVGElement {
   const cells = itemCells(item, v);

@@ -85,7 +85,7 @@ const panel = tweakPanel({
     { label: "Reset the mech", onClick: () => { st.loadout = defaultLoadout(); changed(); } },
   ],
   topics: [
-    { id: "grid", label: "Grid", groups: ["Grid", "Item sizes", "Salvage blocks", "Convoy unlocks"] },
+    { id: "grid", label: "Grid", groups: ["Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks", "Convoy unlocks"] },
     { id: "loot", label: "Loot", groups: ["Loot rolls", "Item value", "Bare mech"] },
   ],
   onChange: () => changed(),

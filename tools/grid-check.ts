@@ -19,8 +19,10 @@ for (const b of BASES) {
 const cls = (id: string): GridClass => gridClassOfBase(BASES.find((b) => b.id === id)!);
 const sz = (id: string) => { const s = classCells(cls(id)); return `${s.w}x${s.h}`; };
 // Keith's sizes (2026-11-02).
-must(sz("mg-medium") === "4x2", `hull minigun ${sz("mg-medium")}, want 4x2`);
-must(sz("rail-medium") === "6x2", `rail cannon ${sz("rail-medium")}, want 6x2`);
+// Hull weapons sized by their models (Keith 2026-11-03), every one upright or square.
+const cellsOf = (id: string) => itemCells({ kind: "weapon", base: id });
+must(`${cellsOf("rail-medium").w}x${cellsOf("rail-medium").h}` === "2x8" && `${cellsOf("rpg-medium").w}x${cellsOf("rpg-medium").h}` === "3x3", "rail 2x8 / rocket launcher 3x3 lost");
+for (const b of BASES) if (b.kind === "weapon" && b.size === "M") { const c = cellsOf(b.id); must(c.h >= c.w, `${b.id} ${c.w}x${c.h} lies flat`); }
 must(sz("hull-cuirass") === "3x2" && sz("hull-siege") === "4x2", "hulls not 3x2 / 4x2");
 must(sz("pack-standin") === "2x2", "pack not 2x2");
 must(sz("legs-rampart") === "2x3", "legs not 2x3");
@@ -29,8 +31,7 @@ must(sz("smg-light") === "2x2" && sz("rifle-light") === "2x3", "held weapons not
 must(sz("waist-drums") === "2x1", "waist not 2x1");
 must(sz("sh-missiles") === "2x2", "shoulder not 2x2");
 must(sz("sword-heavy") === "2x4" && sz("sword-light") === "1x4" && sz("sword-short") === "1x3", "swords not 2x4 / 1x4 / 1x3");
-// Layout (Keith 2026-11-03): hull weapons lie flat, arms and held weapons stand upright.
-for (const c of ["hullGun", "hullGunLong"] as GridClass[]) { const s = classCells(c); must(s.w > s.h, `${c} ${s.w}x${s.h} not flat`); }
+// Layout (Keith 2026-11-03): weapons and arms stand upright.
 for (const c of ["heldLong", "sword", "swordBig", "swordShort"] as GridClass[]) { const s = classCells(c); must(s.h > s.w, `${c} ${s.w}x${s.h} not upright`); }
 for (const c of ["arm", "held"] as GridClass[]) { const s = classCells(c); must(s.h >= s.w, `${c} ${s.w}x${s.h} lies flat`); }
 must(`${classCells("repairKit").w}x${classCells("repairKit").h}` === "1x2" && classCells("protocol").w * classCells("protocol").h === 1, "repair kit not 1x2 or protocol not 1x1");
