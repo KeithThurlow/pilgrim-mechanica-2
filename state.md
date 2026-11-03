@@ -312,6 +312,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Arms reach across the chest and aim through the sprint's lean (Keith; Claude on `claude/arm-lean`)
+- Sprinting, an arm now swings 50° across the chest (`runArmIn`, was 25°). The drawn arm points where the sim aims in the world: the aim is taken into the hull's own frame (its body lean, the sprint's forward lean, roll and shake), so a bent-over mech's arms still point at the target (before, the arm's yaw and pitch rode the leaning hull). `src/mech/rampart.ts` (the pods loop), `src/mech/upper.ts`. Checked: `upper-check` (target 70° left: left arm fires, right arm 70° across doesn't), full `npm test`.
 ### 2026-11-03 · Replicas are your own mech, slimmed (Keith; Claude)
 - The replica model is now the Rampart on the same rig, slimmed (`RampartBody.slim` in `src/mech/rampart.ts`; `src/summon/replicaBody.ts`): legs ×0.55 thick, feet ×0.8, hull ×0.62 wide, ×0.8 high, ×0.85 long (the guns and sockets come in with it), guns ×0.72, no ammo drums, pack or back unit, a twin-optic head; your mech's paint (a slider tints it paler). Rocket replicas carry a light four-tube rack in place of each minigun pod. Sliders: Summons › Mech replicas: look (live). The wire frame (`src/summon/replicaWire.ts`) only stands in while the model loads and in headless checks.
 - Checked: replicas-check and summongear-check pass on the stand-in; a game-camera shot of a minigun and a rocket replica beside the mech.

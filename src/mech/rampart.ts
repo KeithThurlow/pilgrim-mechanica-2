@@ -741,7 +741,14 @@ export class RampartBody {
     for (const p of this.pods) {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
-      if (p.armShown) this.reachArm(p, g.yaw - this.twist, g.pitch, upper.v);
+      if (p.armShown) {
+        // The arm points where the sim aims in the world, whatever the hull is doing (Keith 2026-11-03: bent over in
+        // the sprint the arms aimed off): the aim (torso yaw + the gun's, pitch below level) into the hull's own frame,
+        // so the body's lean, the sprint's lean, roll and shake are all taken out.
+        const yw = upper.torsoYaw + g.yaw, pw = g.pitch - upper.lean, c = Math.cos(pw);
+        t.v.set(Math.sin(yw) * c, -Math.sin(pw), Math.cos(yw) * c).applyQuaternion(t.q.copy(this.hull.quaternion).invert());
+        this.reachArm(p, Math.atan2(t.v.x, t.v.z), -Math.asin(Math.max(-1, Math.min(1, t.v.y))), upper.v);
+      }
       else p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
       if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
       p.kick.position.z -= g.kick;
