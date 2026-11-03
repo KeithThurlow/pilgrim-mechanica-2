@@ -223,10 +223,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   // A one-hander back in a hand drops the two-hander.
   const off5 = fit(lo, "heldL", light);
   must(off5.some((i) => i.id === "h1") && lo.heldR === null && lo.heldL === light, "a one-hander in a hand didn't drop the two-hander");
-  // Unfit an arm: its held and shoulder weapons come off with it.
+  // Unfit an arm: the hull's own arm goes back on (Keith 2026-11-03), so the held and shoulder weapons stay.
   fit(lo, "shoulderL", missiles);
   const off6 = unfit(lo, "mountL");
-  must(off6.length === 2 && !lo.heldL && lo.shoulderL === missiles, "taking an arm off didn't take its held weapon only");
+  must(off6.length === 1 && isBuiltinArm(lo.mountL) && lo.heldL === light && lo.shoulderL === missiles, "taking an arm off didn't put the hull's arm back under the held weapon");
+  unfit(lo, "heldL");
   must(unfit(lo, "legs").length === 0 && !!lo.legs, "legs came off");
   // Auto-fit: a new arm gets the rarest one-handed weapon on offer.
   const pool: Item[] = [rollItem(5, L, { base: "mg-light", rarity: "common" }), rollItem(6, L, { base: "rail-light", rarity: "epic" }), rollItem(7, L, { base: "mg-heavy", rarity: "legendary" })];
@@ -351,7 +352,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
     const after = SLOTS.filter((s) => lo[s]).length + st.stash.items.length + st.cargo.items.length;
     // One unknown base dropped; the default drums gained a right-hand twin; the default mast added.
     must(after === before - 1 + 1 + 1, `items lost or made up in the migration (${before} before, ${after} after)`);
-    must(lo.mountL?.base === "mg-medium" && lo.mountR?.id === armR.id && lo.heldR?.id === handR.id && lo.shoulderR?.id === shR.id, "the v1 arm mounts, hands and shoulders didn't land on the new slots");
+    must(lo.mountL?.base === "mg-medium" && isBuiltinArm(lo.mountR) && lo.heldR?.id === handR.id && lo.shoulderR?.id === shR.id, "the v1 arm mounts (now the hull's arm), hands and shoulders didn't land on the new slots");
     must(lo.shoulderL?.id === shL.id, "a v1 shoulder weapon on a side with a hull weapon didn't stay on its shoulder (shoulders need no arm now)");
     must(lo.waistL?.base === "waist-drums" && lo.waistR?.base === "waist-drums" && lo.waistL.kind === "waist", "the v1 back drums didn't become waist drums on both sides");
     must(st.stash.items.some((i) => i.id === fullBack.id && i.base === "waist-fulldrums" && i.kind === "waist"), "a stashed v1 drum wasn't renamed to a waist item");
