@@ -253,6 +253,9 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   r = resolve(lo);
   must(off.some((i) => i.base === "pack-standin") && r.shoulders.some((s) => s.key === 3 && s.weapon === "mortar" && s.mount === "back") && !r.parts.pack, "a back weapon didn't replace the pack on key 3");
   must(r.values.dashCharges === LOADOUT_DEFAULTS.bareDashCharges && r.values.dashRecharge === LOADOUT_DEFAULTS.bareDashRecharge, "no pack doesn't fall back to the bare dash");
+  // Keith 2026-11-03: the default mech starts with at least three energy bars.
+  must(LOADOUT_DEFAULTS.bareDashCharges >= 3, "the bare mech starts with fewer than three energy bars");
+  must(LOADOUT_DEFAULTS.rivalBareDashCharges === 2, "rival bare mechs changed bar count (duel check tuned at two)");
   // No sensor: the bare scope, no seekers.
   unfit(lo, "sensor");
   r = resolve(lo);

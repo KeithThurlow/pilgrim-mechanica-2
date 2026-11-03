@@ -52,7 +52,8 @@ interface Feed { bonus: number; speed: number }
 
 export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
-  bareDashCharges: 2,
+  bareDashCharges: 3, // Keith 2026-11-03: the player's mech starts with at least three energy bars
+  rivalBareDashCharges: 2, // rival mechs (duel, HVT) keep two: the duel check's long fight stalls at three
   bareDashRecharge: 4.6,
   bareRadar: 250,
 };
@@ -60,6 +61,7 @@ export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
   { key: "bareMagBonus", label: "Magazine + without a drum", min: -0.9, max: 2, step: 0.05, group: "Bare mech", tip: "A belt-fed gun's magazine share added when its side's waist mount has no ammo drum (a drum adds its own)" },
   { key: "bareDashCharges", label: "Dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech" },
+  { key: "rivalBareDashCharges", label: "Rival dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech", tip: "Rival mechs (duel, HVT) without a pack; the player's is above" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 1000, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
 ];

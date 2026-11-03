@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Default mech starts with three energy bars (Keith via the coordinator; Claude)
+- Player's bare mech dash charges 2 → 3 (`bareDashCharges`, `src/items/loadout.ts`); rival mechs without a pack stay at 2 (`rivalBareDashCharges`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`). At three, the duel check's long fight (seed 22) stalled with both rivals in engage. Checks: `tools/loadout-check.ts` pins both values; `npm test` passes. Coordinator's call (Keith's card: rivals keep two). Open for Keith: whether rivals should get three once the AI handles the extra bar.
+
 ### 2026-11-03 · Flak cannon: every pellet explodes (Keith; Claude on `claude/project-thread-26fnhs`)
 - Flak pellets 13 → 24 damage; each bursts where it ends (body, sand, or the end of its 38 m) in a 3 m blast (was a 1.5 m shrapnel splash) at 0.85 of the pellet (was 0.5), now taken as a blast (`ShotCmd.splashBlast`, shots.ts `F_BLAST`: medium robots take it in full, big ones by their blast share; before, rounds' splash skipped big robots and gave mediums 0.35). Each pellet pops (`Battlefield.pelletPop`: a light flash, sparks, dark smoke, a dust hit on sand, a small "cannon" blast wave, a new procedural `flakPop` crack, first 4 per frame). Sliders, Weapons › Flak cannon: Pellet blast (m), Pellet blast share, Pellet blast look (×), Pellet blast sound. Files: `guns.ts`, `shots.ts`, `battlefield.ts`, `mechUnit.ts` (`MechWeapons.pelletBurst`), `arsenal.ts`, `weaponSound.ts`. Typecheck, npm test; not run in a browser.
 ### 2026-11-03 · Summoner gear works in every combat lab, with actives (Keith's report via the coordinator; Claude)
