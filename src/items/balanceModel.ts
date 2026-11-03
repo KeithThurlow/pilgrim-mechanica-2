@@ -7,6 +7,10 @@
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
 import { isRoundGun } from "../weapons/guns";
+import { isEnergy } from "../weapons/energy/energySim";
+import { ENERGY_DEFAULTS } from "../weapons/energy/energyTuning";
+import { REACTOR_DEFAULTS } from "../mech/reactor";
+import { SWORD_DEFAULTS } from "../weapons/sword";
 import { BASE_BY_ID } from "./bases";
 import { WEAPON_DEFAULTS } from "../weapons/tuning";
 import { MECH_DEFAULTS } from "../game/mechUnit";
@@ -43,6 +47,16 @@ export const REF = {
   /** Weapons allowed over the 130% band against one set, by base id: the cap there (Keith 2026-11-03: flak is meant
    *  to be a crowd-clearing menace, so about twice its budget against a swarm; Claude's band, open). */
   bandOver: { "flak-medium": { swarm: 230 } } as Record<string, Record<string, number>>,
+  /** Energy weapons (2026-11-03): the Rampart hull's reactor they draw on (its middle roll), and how long the fight
+   *  lasts for the energy budget: fire until the reactor is empty at the busy regen, then wait for it to refill. */
+  reactor: { cap: 4, regen: 0.4, busy: REACTOR_DEFAULTS.reactorBusy, delay: REACTOR_DEFAULTS.reactorDelay },
+  /** Swords: the walk-in. The mech closes at its sprint speed less what the target backs off (speed × juke); swarms
+   *  come to it. A swing that reaches lands this share (the rest dodged or parried; a juking mech dodges more). */
+  closeSpeed: 8.5, swingLands: 0.9, swingLandsJuke: 0.7,
+  /** ...and once in reach it stays there this share of the time, less this × the target's juke (a rival backs off). */
+  meleeStick: 0.5,
+  /** The sunder beam steered across a swarm: metres a second its line sweeps sideways through the pack. */
+  sunderSweep: 3,
 };
 export const armourFloor = WEAPON_DEFAULTS.armourFloor;
 export const thru = (d: number, A: number, ap: number) => armourHit(d, A, ap, armourFloor);
@@ -55,7 +69,7 @@ const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const gauss = () => Math.sqrt(-2 * Math.log(Math.max(1e-9, rnd()))) * Math.cos(2 * Math.PI * rnd());
 
 // ---------------------------------------------------------------- weapons (from items: the cards' cadence)
-export type Kind = "gun" | "rail" | "cannon" | "rocket" | "missiles" | "mortar" | "line";
+export type Kind = "gun" | "rail" | "cannon" | "rocket" | "missiles" | "mortar" | "line" | "lance" | "orb" | "arc" | "sunder" | "melee";
 export interface W {
   id: string; name: string; slot: "L" | "M" | "H" | "shoulder"; kind: Kind;
   /** Damage per round, rounds per volley (missiles, shells; a split's rounds ride in `shot`), seconds per volley
@@ -63,6 +77,10 @@ export interface W {
   dmg: number; n: number; cycle: number; burst: number; latency: number;
   radius: number; share: number; pen: number; spread: number; speed: number; range: number; sheetHalf: number; flight?: number;
   ap: number; scatter: number; stripLength: number;
+  /** Energy weapons and swords (2026-11-03): extra numbers by kind (blast, hops, keep, cleave, arc...). */
+  x?: Record<string, number>;
+  /** Share of the time an energy weapon can fire on the reactor (1: never runs dry). */
+  duty?: number;
   shot: ShotProtocols; cad: Cadence; item: Item;
 }
 const WD = { ...WEAPON_DEFAULTS };
@@ -77,6 +95,12 @@ export function wOf(item: Item): W {
   const common = { id: b.id, name: b.name + (item.socketed.length ? ` +${item.socketed.map((p) => PROTOCOL_BY_ID[p.base].name).join("+")}` : ""), slot: sh ? "shoulder" as const : SLOT[b.size ?? "M"],
     dmg: s.damage, cycle: 1 / cad.sustained, burst: 1 / cad.rate, ap: s.ap ?? 0, shot, cad, item, stripLength: 0 };
   const cls = b.cls ?? (sh ? b.shoulder : "minigun");
+  if (isEnergy(cls)) return energyW(common, cls, s);
+  if (cls === "melee") {
+    const gap = Math.max(0.05, (s.windup ?? 0) + (s.slash ?? 0) + (s.recover ?? 0));
+    return { ...common, kind: "melee", n: 1, cycle: gap, burst: gap, latency: s.windup ?? 0, radius: 0, share: 0, pen: s.cleave ?? SWORD_DEFAULTS.swordCleave, spread: 0, speed: Infinity,
+      range: s.reach ?? SWORD_DEFAULTS.swordReach, sheetHalf: 0.3, scatter: 0, x: { arc: s.swing ?? SWORD_DEFAULTS.swordArc } };
+  }
   // Round guns (src/weapons/guns.ts): the minigun's rounds, n pellets a shot, flak's shrapnel splash on each.
   if (isRoundGun(cls)) return { ...common, kind: "gun", n: Math.max(1, s.pellets ?? 1), latency: 0, radius: s.splash ?? MD.roundSplash, share: s.splash ? s.splashShare ?? 0 : MD.roundSplashShare, pen: roundPenFor(MD, s.pierce),
     spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf, scatter: 0 };
@@ -94,11 +118,43 @@ export function wOf(item: Item): W {
   return { ...common, kind: "line", n: s.shells, cycle: common.cycle + REF.paint, latency: REF.paint + 0.9, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.salvoSpeed, range: WD.salvoMaxRange, sheetHalf: 0, scatter: WD.salvoScatter, stripLength: s.stripLength };
 }
 
+/** Share of the time a weapon drawing `draw` bars/s can fire: until the reactor empties at the busy regen, then it
+ *  waits out the delay and refills at the full regen. */
+export function energyDuty(draw: number): number {
+  const R = REF.reactor, busy = R.regen * R.busy;
+  if (draw <= busy) return 1;
+  const fire = R.cap / (draw - busy), refill = R.delay + R.cap / Math.max(1e-6, R.regen);
+  return fire / (fire + refill);
+}
+
+/** An energy weapon as the model sees it (src/weapons/energy/energyGuns.ts: what each kind does with a shot). */
+function energyW(common: Omit<W, "kind" | "n" | "latency" | "radius" | "share" | "pen" | "spread" | "speed" | "range" | "sheetHalf" | "scatter">, cls: string, s: Record<string, number>): W {
+  const E = ENERGY_DEFAULTS, base = { ...common, n: 1, latency: 0, radius: 0, share: 0, pen: 0, spread: 0, speed: Infinity, range: s.range, sheetHalf: 0.15, scatter: 0 };
+  // Seconds a shot (or a beam tick) and the energy it draws per second while firing.
+  const shotGap = (g: number, draw: number) => { const duty = energyDuty(draw); return { cycle: g / duty, burst: g, duty }; };
+  const rate = s.fireRate ?? 1;
+  switch (cls) {
+    case "laser": return { ...base, kind: "gun", ...shotGap(1 / rate, rate * s.energyShot) };
+    case "beam": return { ...base, kind: "gun", ...shotGap(1 / rate, s.energyDrain) };
+    case "plasma": return { ...base, kind: "cannon", radius: s.splash, share: 0.6, speed: s.shellSpeed, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "orb": return { ...base, kind: "orb", radius: s.splash, speed: s.shellSpeed, x: { pop: s.blastDamage ?? 0 }, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "arc": return { ...base, kind: "arc", x: { hops: Math.round(s.hops ?? E.arcHops), keep: E.arcKeep, splash: 1.2 }, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "lance": { const g = (s.charge ?? 0) + (s.cooldown ?? 0); return { ...base, kind: "lance", latency: s.charge ?? 0, radius: s.blast ?? 0, x: { blast: s.blastDamage ?? 0 }, ...shotGap(g, s.energyShot / g) }; }
+    default: { // sunder: one press is a charge, a channel of ticks, a cooldown
+      const g = (s.charge ?? 0) + (s.channel ?? 0) + (s.cooldown ?? 0);
+      return { ...base, kind: "sunder", latency: s.charge ?? 0, sheetHalf: E.sunderWidth, x: { ticks: rate * (s.channel ?? 0) }, ...shotGap(g, s.energyShot / g) };
+    }
+  }
+}
+
 export const withProtos = (base: string, ids: string[]): Item => {
   const it = makeItem(base);
   for (const id of ids) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
   return it;
 };
+/** Energy weapons and swords (2026-11-03): modelled, printed by the sheet, not held to its bands yet. */
+export const ENERGY_IDS = ["laser-medium", "beam-medium", "lance-medium", "plasma-medium", "orb-medium", "arc-medium", "sunder-medium"];
+export const MELEE_IDS = ["sword-light", "sword-heavy", "sword-short"];
 export const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "cannon-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)
@@ -141,7 +197,7 @@ export const OTHERS: [string, number, number, string][] = [
 
 // ---------------------------------------------------------------- the model
 export const fall = (x: number, r: number) => (x > r ? 0 : 1 - (0.5 * x) / Math.max(1e-6, r));
-export const inRange = (w: W, t: T) => w.range >= t.dist;
+export const inRange = (w: W, t: T) => w.kind === "melee" || w.range >= t.dist;
 export const split = (w: W) => Math.max(1, Math.round(w.shot.split ?? 1));
 export const rate = (w: W) => Math.max(1, Math.round(w.shot.rate ?? 1));
 /** Double shot's side-by-side copies (0.5 m apart: every copy lands where the one would). */
@@ -179,6 +235,18 @@ export function volleySingle(w: W, t: T): number {
     return p * rounds * rate(w) * multi(w) * thru(w.dmg * t.directK, A, ap) * w.n;
   }
   if (w.kind === "rail") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * thru(w.dmg * t.directK, A, ap);
+  const x = w.x ?? {};
+  if (w.kind === "melee") return (t.juke >= 0.5 ? REF.swingLandsJuke : REF.swingLands) * thru(w.dmg * t.directK, A, ap);
+  if (w.kind === "lance") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * (thru(w.dmg * t.directK, A, ap) + thru(x.blast * t.blastK, A, ap));
+  if (w.kind === "sunder") return REF.aimSkill * x.ticks * thru(w.dmg * t.directK, A, ap);
+  if (w.kind === "arc") return thru(w.dmg * t.directK, A, ap); // it seeks the nearest enemy to the aim: no aim error
+  if (w.kind === "orb") {
+    // A slow orb burning everything within its radius as it passes: ticks while the body is inside its path.
+    const sg = sigma(w, t), R = w.radius + t.r, per = thru(w.dmg / ENERGY_DEFAULTS.orbTicks, A, ap);
+    let sum = 0;
+    for (let i = 0; i < REF.mc; i++) { const e = Math.abs(gauss() * sg); if (e < R) sum += (2 * Math.sqrt(R * R - e * e) / w.speed) * ENERGY_DEFAULTS.orbTicks * per; }
+    return sum / REF.mc;
+  }
   // Projectiles and blasts: Monte Carlo over the aim error.
   const s = sigma(w, t);
   let sum = 0;
@@ -241,6 +309,26 @@ export function volleySwarm(w: W, t: T): number {
     return per * split(w) * rate(w) * multi(w) * w.n;
   }
   if (w.kind === "rail") return line(w.dmg, w.pen, w.sheetHalf);
+  const x = w.x ?? {};
+  if (w.kind === "melee") {
+    // One cut sweeps a sector of its reach; the cleave budget stops it after so many bodies.
+    const sector = Math.PI * (w.range + t.r) ** 2 * (x.arc / 360) * sw.rho, cleaveBodies = 1 + w.pen / (((Math.PI * t.r) / 2) * t.penDensity);
+    return REF.swingLands * Math.min(sw.n, sector, cleaveBodies) * cap(w.dmg);
+  }
+  if (w.kind === "lance") return cap(w.dmg) + ringHp(x.blast, w.radius, t, ap, true);
+  if (w.kind === "sunder") {
+    const area = 2 * Rc * (2 * (w.sheetHalf + t.r) + REF.sunderSweep * x.ticks / Math.max(1, ENERGY_DEFAULTS.sunderTicks));
+    return Math.min(sw.n, area * sw.rho) * cap(w.dmg * x.ticks);
+  }
+  if (w.kind === "arc") {
+    let s = 0, d = w.dmg;
+    for (let h = 0; h <= x.hops; h++) { s += ringHp(d, x.splash, t, ap, false); d *= x.keep; }
+    return Math.min(sw.n * t.hp, s);
+  }
+  if (w.kind === "orb") {
+    const bodies = Math.min(sw.n, 2 * (w.radius + t.r) * 2 * Rc * sw.rho);
+    return bodies * cap((w.dmg * (Math.PI / 2) * w.radius) / w.speed);
+  }
   if (w.kind === "cannon") return (line(w.dmg, w.pen, w.sheetHalf) + ringHp(w.dmg * w.share, w.radius, t, ap, true)) * multi(w);
   if (w.kind === "line") {
     const L = Math.min(w.stripLength, 2 * Rc);
@@ -256,7 +344,14 @@ export function volleySwarm(w: W, t: T): number {
 }
 
 /** Uptime over an engagement: spin-up paid once per engagement for guns. */
-export const uptime = (w: W, t: T) => (w.kind === "gun" || w.kind === "cannon" ? t.engage / (t.engage + w.latency) : 1);
+export const uptime = (w: W, t: T) => {
+  // A sword walks in first: the mech at its sprint, less what the target backs off (a swarm runs at it).
+  if (w.kind === "melee") {
+    const gap = Math.max(0, t.dist - w.range), close = gap / Math.max(1, t.swarm ? REF.closeSpeed + t.speed : REF.closeSpeed - t.speed * t.juke);
+    return (t.engage / (t.engage + close + w.latency)) * (t.swarm ? 1 : 1 - REF.meleeStick * t.juke);
+  }
+  return w.kind === "gun" || w.kind === "cannon" ? t.engage / (t.engage + w.latency) : 1;
+};
 /** Effective DPS, sustained (magazines and reloads counted) or within a magazine (`burst`: the Protocols' price tag). */
 export function eDps(w: W, t: T, burst = false): number {
   const v = t.swarm ? volleySwarm(w, t) : volleySingle(w, t);
