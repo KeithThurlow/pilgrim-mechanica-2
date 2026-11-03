@@ -96,6 +96,8 @@ export class Replicas {
 
   private from = new THREE.Vector3();
   private buildClock = 0;
+  /** Seconds until the next one walks out (0: none waiting; the action bar). */
+  building = 0;
   /** Solid things replicas walk round (the convoy lab: its cars and the plough): (x, z) pushed out of them for a body
    *  of radius r, or null when clear. */
   blockers: ((x: number, z: number, r: number) => { x: number; z: number } | null) | null = null;
@@ -265,6 +267,7 @@ export class Replicas {
       if (out) { u.sim.pos.x = out.x; u.sim.pos.z = out.z; }
     });
     if (!waiting) this.buildClock = 0;
+    this.building = waiting ? Math.max(0, v.repBuild - this.buildClock) : 0;
   }
 
   /** Every replica on the field and alive: where it is and its radius (for enemies to turn on). */
