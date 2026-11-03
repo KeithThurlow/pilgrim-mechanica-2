@@ -312,6 +312,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Arms reach across the chest and aim through the sprint's lean (Keith; Claude on `claude/arm-lean`)
+- Sprinting, an arm now swings 50° across the chest (`runArmIn`, was 25°). The drawn arm points where the sim aims in the world: the aim is taken into the hull's own frame (its body lean, the sprint's forward lean, roll and shake), so a bent-over mech's arms still point at the target (before, the arm's yaw and pitch rode the leaning hull). `src/mech/rampart.ts` (the pods loop), `src/mech/upper.ts`. Checked: `upper-check` (target 70° left: left arm fires, right arm 70° across doesn't), full `npm test`.
 ### 2026-11-03 · Replicas: no cockpit pod, pale unmanned paint (Keith via the coordinator; Claude)
 - `RampartBody.dropCab()` (`src/mech/rampart.ts`) cuts the cockpit pod off the hull's front (every triangle ahead of 0.72 m within 1 m of the middle) and closes it with an armour plate in the hull's mean colour; the head sensor moves back onto the plate. `RampartBody.bleach(k)` fades every vertex colour toward its own brightness and lifts it (panel lines kept). The replicas (`src/summon/replicaBody.ts`) use both: `repShade` 0.55 by default (Summons › Mech replicas: look).
 - Checked: typecheck, replicas-check, summongear-check, full npm test; one game-camera shot (pale grey replicas beside your mech).
