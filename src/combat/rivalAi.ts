@@ -16,7 +16,7 @@ import type { MoveCommand } from "../mech/walker";
 import type { Aim } from "../mech/upper";
 import type { TargetCandidate } from "../game/targeting";
 import { rng } from "../items/generate";
-import { preferredRange, type KitWeapon } from "./rivalKit";
+import { isEnergyKind, preferredRange, type KitWeapon } from "./rivalKit";
 
 export const RIVAL_AI_DEFAULTS = {
   aiAggression: 0.5,
@@ -68,6 +68,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiSprintMax: 2.6,
   aiSprintSwerve: 0.5,
   aiSprintMirror: 0.6,
+  aiReactorResume: 0.6,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -135,6 +136,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiSprintMax", label: "Sprint: at most (s)", min: 0.5, max: 6, step: 0.1, group: G },
   { key: "aiSprintSwerve", label: "Sprint: chance to cut back the other way", min: 0, max: 1, step: 0.05, group: G, tip: "Partway through, it flips to the other side of you: a hard change of direction with the sprint's drift" },
   { key: "aiSprintMirror", label: "Sprint: answers your sprint (chance)", min: 0, max: 1, step: 0.05, group: G, tip: "When you start sprinting, it may sprint too, to a new angle on you" },
+  { key: "aiReactorResume", label: "Energy weapons: fires again at reactor share", min: 0.1, max: 1, step: 0.05, group: G, tip: "Its energy weapons fire until the reactor runs dry, then wait for it to refill to this share (regen is slow while it draws), so it shoots in bursts and lets the reactor catch up. A nova lance or sunder beam that's ready waits for its whole cost first" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -145,8 +147,10 @@ export interface WeaponState {
   i: number;
   /** Ready to fire (cooldown over, not mid-volley). */
   ready: boolean;
-  /** A rail's charge 0..1 while held. */
+  /** A rail's charge 0..1 while held (a nova lance's, a sunder beam's while it charges). */
   charge: number;
+  /** A sunder beam charging or burning, a lance charging: a dash or the sprint would drop it. */
+  busy?: boolean;
 }
 
 export interface DuelSelf {
@@ -160,6 +164,9 @@ export interface DuelSelf {
   /** Mid-dash (its steps and the glide after). */
   dashing: boolean;
   walkSpeed: number;
+  /** The reactor energy weapons draw on (bars) and its capacity; absent: no energy weapons to feed. */
+  energy?: number;
+  energyCap?: number;
   kit: readonly KitWeapon[];
   weapons: readonly WeaponState[];
 }
@@ -305,6 +312,8 @@ export class RivalAi {
   private foeSprinting = false;
   /** Sprinting to reposition (HUD, checks). */
   sprinting = false;
+  /** Its energy weapons ran the reactor dry: holding fire until it's back to aiReactorResume (HUD, checks). */
+  dry = false;
 
   constructor(public v: RivalAiValues, seed = 1) {
     this.r = rng(seed * 2654435761 + 7);
@@ -316,7 +325,7 @@ export class RivalAi {
     this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null; this.paintAt = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
     this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
-    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false; this.sprint = null; this.sprinting = false; this.foeSprinting = false;
+    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false; this.sprint = null; this.sprinting = false; this.foeSprinting = false; this.dry = false;
   }
 
   private flipTime() { return this.v.aiStrafeFlip * (0.4 + 1.2 * this.r()); }
@@ -452,6 +461,15 @@ export class RivalAi {
       ox = e3.x + e3.vx * ahead; oz = e3.z + e3.vz * ahead;
       lag = v.aiSwordLag; turn = v.aiSwordTurn;
     }
+    // A sunder beam charging or burning (Keith 2026-11-02: a heavy beam you steer for 2.5 s): it steers it after you
+    // with the fast shots' tight tracking, never frozen.
+    const steer = !fast && acquired && s.weapons.some((w) => w.busy && s.kit[w.i]?.kind === "sunder");
+    if (steer) {
+      const e2 = this.noticed(view.t, v.aiRailReaction) ?? this.hist[0];
+      const ahead = (v.aiRailReaction + v.aiRailLag) * v.aiRailLead;
+      ox = e2.x + e2.vx * ahead; oz = e2.z + e2.vz * ahead;
+      lag = v.aiRailLag; turn = v.aiRailTurn; perr = v.aiRailError * (dist / 30);
+    }
     if (fast) {
       const e2 = this.noticed(view.t, v.aiRailReaction) ?? this.hist[0];
       const flight = fast.kind === "ac" ? dist / Math.max(1, fast.k.speed) : 0;
@@ -569,14 +587,15 @@ export class RivalAi {
     for (const w of s.weapons) {
       const k = s.kit[w.i];
       if (!("trigger" in k.ctl) || dist >= k.range * 0.95 || dist <= k.minRange) continue;
-      if (k.kind === "rail" && (w.ready || w.charge > 0)) return { kind: "rail" as const, k, w };
+      // A nova lance charges and fires like a rail (an instant beam on the release): the same track then snapshot.
+      if ((k.kind === "rail" || k.kind === "lance") && (w.ready || w.charge > 0)) return { kind: "rail" as const, k, w };
       if (k.kind === "autocannon" && !ac) ac = { kind: "ac", k, w };
     }
     return ac;
   }
 
-  /** One of its own rails is charging (a dash would drop the charge). */
-  private railCharging(s: DuelSelf) { return s.weapons.some((w) => w.charge > 0.05 && s.kit[w.i]?.kind === "rail"); }
+  /** One of its own rails or lances is charging, or a sunder beam is up (a dash or the sprint would drop it). */
+  private railCharging(s: DuelSelf) { return s.weapons.some((w) => (w.charge > 0.05 && (s.kit[w.i]?.kind === "rail" || s.kit[w.i]?.kind === "lance")) || (w.busy && s.kit[w.i]?.kind === "sunder")); }
 
   /** Threats it has noticed that cover where it is: walk or dash out. Returns a move to override with, or null. */
   private dodge(view: DuelView, cmd: MechCommand): { x: number; z: number } | null {
@@ -684,14 +703,46 @@ export class RivalAi {
   private fire(view: DuelView, cmd: MechCommand, dist: number, sees: boolean, dt: number) {
     const v = this.v, s = view.self, f = view.foe;
     const press = this.state === "press";
+    // The reactor (energy weapons): fire until it runs dry, then wait for it to refill to aiReactorResume, so it shoots
+    // in bursts and the regen (slow while it draws) catches up. A ready lance or sunder in reach waits for its whole cost.
+    const e = s.energy ?? Infinity, cap = s.energyCap ?? 1;
+    let minCost = Infinity, bigCost = 0;
+    for (const w of s.weapons) {
+      const k = s.kit[w.i], st = k.energy;
+      if (!st) continue;
+      if (k.kind === "lance" || k.kind === "sunder") { if (w.ready && !w.busy && dist < k.range * 0.95 && sees) bigCost = Math.max(bigCost, st.energy); }
+      else minCost = Math.min(minCost, k.kind === "beam" ? st.energy * 0.15 : st.energy);
+    }
+    if (e < minCost * 1.5) this.dry = true;
+    else if (this.dry && e >= Math.min(cap, Math.max(cap * v.aiReactorResume, bigCost))) this.dry = false;
+    const saving = bigCost > 0 && e < bigCost;
     for (const w of s.weapons) {
       const k = s.kit[w.i];
       if (!("trigger" in k.ctl)) continue;
       const side = k.ctl.trigger;
       const inRange = k.kind === "sword" ? dist < k.range + v.aiSwordFrom : dist < k.range * 0.95 && dist > k.minRange;
       if (!sees || !inRange) {
-        // A charged rail keeps its charge while the foe is hidden (released when it shows, or let go after a while).
-        if (k.kind === "rail" && w.charge > 0 && w.charge < 1) cmd.trigger[side] = true;
+        // A charged rail (or lance) keeps its charge while the foe is hidden (released when it shows, or let go after a while).
+        if ((k.kind === "rail" || k.kind === "lance") && w.charge > 0 && w.charge < 1) cmd.trigger[side] = true;
+        if (k.kind === "sunder" && w.busy) cmd.trigger[side] = true;
+        continue;
+      }
+      if (k.kind === "lance") {
+        // Starts only with the whole charge's energy in the reactor; lets go at full, or early (past the least charge
+        // that fires) if the reactor runs out partway.
+        const st = k.energy!, left = (1 - w.charge) * st.energy;
+        if (w.charge <= 0.02) cmd.trigger[side] = w.ready && e >= st.energy;
+        else cmd.trigger[side] = w.charge < 1 && !(e < Math.min(left, 0.02) && w.charge >= st.minCharge);
+        continue;
+      }
+      if (k.kind === "sunder") {
+        // A press commits it; the beam then burns for its channel, steered after the foe (see the aim).
+        cmd.trigger[side] = !!w.busy || (w.ready && e >= k.energy!.energy);
+        continue;
+      }
+      if (isEnergyKind(k.kind)) {
+        // Pulse laser, beam, plasma, orb, arc: held while the reactor lasts (bursts, see above).
+        cmd.trigger[side] = !this.dry && !saving;
         continue;
       }
       if (k.kind === "rail") {

@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-03 | Rivals fire energy weapons on their reactor in bursts: until dry, then hold to 60% (`aiReactorResume`); a ready lance or sunder waits for its whole cost | Keith ("rivals not fighting to their fullest potential") | Claude | Open for Keith: the orb is fired at your position with no lead (8 m/s: it mostly area-denies); lance damage in duels looks low next to the laser |
 | 2026-11-03 | Sprinting, held arms swing 50° across the chest (was 25°), and the drawn arm takes out the hull's lean so it points at the target | Keith | Claude (value) | Open: walking, held weapons still use their item's arc both ways (the torso turns to the aim anyway). |
 | 2026-11-03 | Replicas: the cockpit pod cut off the hull and plated over; paint faded to a pale grey by default | Keith (no pilot in the centre), the coordinator (overnight brief) | Claude (cut at 0.72 m, fade 0.55) | Cut in code from the Rampart's hull, not a new model; a proper unmanned hull model can replace it later. |
 | 2026-11-03 | Rival mechs without a pack start with three energy bars too (2 → 3); the long duel check still passes | Keith (away; coordinator's call) | Claude | Open for Keith: the rival AI doesn't press on the spare bar yet; one rival in the long duel still sits in engage. |
