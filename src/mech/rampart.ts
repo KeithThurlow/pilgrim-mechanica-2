@@ -37,6 +37,11 @@ import { bakeFootFromGeometry } from "../fx/footprintMesh";
  */
 export const MOUNT_STANDIN = {
   armDrop: 0.75, armOut: 0.3, armFwd: 0.35, heldScale: 0.72,
+  // The fist at the end of the forearm (from the elbow, the gun pivot), and where a held weapon's origin sits so its
+  // grip (about 0.3 under its origin, scaled) is in that fist: held in the hand, not lying along the forearm (Keith
+  // 2026-11-03: "they look mounted on the forearm").
+  handAt: [0, -0.14, 0.72] as [number, number, number],
+  gunAt: [0, 0.08, 0.78] as [number, number, number],
   sensorTop: [0, 1.62, -0.55] as [number, number, number],
   sensorFront: [0, 0.78, 1.0] as [number, number, number],
 };
@@ -191,6 +196,8 @@ interface PodRig {
   arm: THREE.Group; forearm: THREE.Group;
   /** Where showParts put the gun pivot, and whether it showed the stand-in arm (put back when a held pose ends). */
   heldAt?: THREE.Vector3; armShown?: boolean;
+  /** Where the weapon pivot (kick) rests: the hand's grip for an arm, the shoulder pivot for a hull weapon. */
+  kickBase?: THREE.Vector3;
   /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
   held?: boolean;
   ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; stub: THREE.Mesh; joint: THREE.Mesh };
@@ -520,6 +527,8 @@ export class RampartBody {
       p.yawPitch.position.copy(p.home);
       if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
       p.kick.scale.setScalar(arm ? S.heldScale : 1);
+      p.kickBase = arm ? new THREE.Vector3(...S.gunAt) : new THREE.Vector3();
+      p.kick.position.copy(p.kickBase);
       p.heldAt = p.yawPitch.position.clone(); p.armShown = arm;
       p.kick.visible = L ? parts.gunLeft : parts.gunRight;
       p.arm.visible = p.forearm.visible = arm;
@@ -674,7 +683,8 @@ export class RampartBody {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
       p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
-      p.kick.position.z = -g.kick;
+      if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
+      p.kick.position.z -= g.kick;
       p.spin.rotation.z = g.spinAngle * -p.side;
     }
   }
@@ -756,14 +766,16 @@ function armUpper(look: ToonLook, side: 1 | -1) {
   g.add(m, joint);
   return g;
 }
-/** Stand-in forearm (box) under the gun pivot, along the aim, with a hand block where the grip is. */
+/** Stand-in forearm (box) from the elbow (the gun pivot) along the aim to a fist (handAt), which holds the weapon's
+ *  grip; the weapon sits ahead of and above the fist (gunAt), not along the forearm. */
 function armFore(look: ToonLook) {
-  const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 1.1));
-  m.position.set(0, -0.22, 0.25);
+  const g = new THREE.Group(), H = MOUNT_STANDIN.handAt;
+  const len = H[2] + 0.1;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, len));
+  m.position.set(0, H[1] - 0.04, H[2] - len / 2);
   look.apply(m); look.tint(m, 0xb7a77c);
-  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.3));
-  hand.position.set(0, -0.1, 0.8);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.3, 0.3));
+  hand.position.set(H[0], H[1], H[2]);
   look.apply(hand); look.tint(hand, 0x3e3c35);
   g.add(m, hand);
   return g;
