@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Replicas: no cockpit pod, pale unmanned paint (Keith via the coordinator; Claude)
+- `RampartBody.dropCab()` (`src/mech/rampart.ts`) cuts the cockpit pod off the hull's front (every triangle ahead of 0.72 m within 1 m of the middle) and closes it with an armour plate in the hull's mean colour; the head sensor moves back onto the plate. `RampartBody.bleach(k)` fades every vertex colour toward its own brightness and lifts it (panel lines kept). The replicas (`src/summon/replicaBody.ts`) use both: `repShade` 0.55 by default (Summons › Mech replicas: look).
+- Checked: typecheck, replicas-check, summongear-check, full npm test; one game-camera shot (pale grey replicas beside your mech).
 ### 2026-11-03 · Rival mechs start with three energy bars too (coordinator's call while Keith is away; Claude)
 - `rivalBareDashCharges` 2 → 3 (`src/items/loadout.ts`, used in `src/combat/duelSim.ts` and `src/quests/hvtMech.ts`); `tools/loadout-check.ts` now pins 3. With main's latest changes the long duel no longer stalls: one rival still holds engage the whole minute (the check takes either side), the other presses and takes cover. Rival AI itself is unchanged; it doesn't yet use the third bar beyond the sprint-to-reposition rule (needs 3 spare). Checked: `npm test` passes. Open for Keith: whether the rival AI should press on a spare bar.
 
