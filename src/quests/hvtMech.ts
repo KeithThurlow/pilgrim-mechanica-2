@@ -91,7 +91,7 @@ export class HvtMech {
     const unit = this.unit!, v = this.rv;
     this.level = Math.max(1, Math.round(level));
     const lo = rollRivalLoadout(lair.seed, v, { level: this.level });
-    const r = resolve(lo, v);
+    const r = resolve(lo, { ...v, bareDashCharges: v.rivalBareDashCharges });
     applyLoadout(unit, r);
     unit.hullOverride = Math.round(r.values.hull * v.hvtHull);
     this.kit = kitOf(r, v);
