@@ -749,6 +749,9 @@ export class Arsenal implements MechWeapons {
     return true;
   }
 
+  /** A sword is driving in or cutting and could still be made a power cut (the rival AI's view). */
+  canPowerCut(): boolean { return this.v.swordPower > 0 && this.sides.some((s) => s.kind === "melee" && s.sword.canPower(this.swordBase(s), this.v)); }
+
   /** A dash started along (x, z) (unit): toward the aim (the lock, else the cursor), a cut starting soon is a power cut. */
   dashed(x: number, z: number) {
     const v = this.v, u = this.unit, at = u.lock ?? u.cursor;

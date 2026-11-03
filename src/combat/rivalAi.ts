@@ -72,6 +72,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiBarEdge: 2,
   aiPush: 0.2,
   aiPushTime: 4,
+  aiPowerCut: 0.5,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -84,9 +85,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiPowerCut: 0.3, aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiPowerCut: 0.5, aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiPowerCut: 0.75, aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -143,6 +144,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiBarEdge", label: "Presses when you have this many fewer bars (0 never)", min: 0, max: 4, step: 1, group: G, tip: "Keith 2026-11-03 (three bars each): a foe two bars down can't dodge as much as it can, so it presses (closes in, everything fires) and dashes in" },
   { key: "aiPush", label: "Pushes on a spare bar (chance per s)", min: 0, max: 2, step: 0.05, group: G, tip: "With its bars full (its dodge reserve plus two), it may take the initiative: a dash in on the spare bar and a press for the push time, keeping the rest for dodges" },
   { key: "aiPushTime", label: "Push lasts (s)", min: 0.5, max: 12, step: 0.25, group: G },
+  { key: "aiPowerCut", label: "Sword: power cut chance (per cut)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-11-02 power cut: one seeded roll per cut; on a yes, with a bar to spare past its dodge reserve, it spends one to make the cut a power cut (quicker, harder, breaks blocks)" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -240,6 +242,8 @@ export interface MechCommand {
   dash: { x: number; z: number } | null;
   /** Space held after the dash: carry on into the sprint. */
   dashHold: boolean;
+  /** Space mid-cut: make the sword's cut a power cut (apart from the dash, so a dodge mid-cut stays a dodge). */
+  power: boolean;
 }
 
 export type RivalState = "engage" | "press" | "cover" | "retreat";
@@ -323,6 +327,10 @@ export class RivalAi {
   private pushDash = false;
   /** Pushes started (checks, HUD). */
   pushes = 0;
+  /** The sword's cut under way (rising edge) and whether this one rolled a power cut; power cuts asked for. */
+  private cutOn = false;
+  private cutPower = false;
+  powerCuts = 0;
   /** Its energy weapons ran the reactor dry: holding fire until it's back to aiReactorResume (HUD, checks). */
   dry = false;
 
@@ -344,7 +352,7 @@ export class RivalAi {
   /** One decision. dt: seconds since the last. */
   decide(view: DuelView, dt: number): MechCommand {
     const v = this.v, s = view.self, f = view.foe;
-    const cmd: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+    const cmd: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
     this.stateFor += dt;
     if (!f.alive) { this.painting = null; this.paintAt = null; return cmd; }
     const dx = f.x - s.x, dz = f.z - s.z, dist = Math.hypot(dx, dz) || 1;
@@ -791,6 +799,9 @@ export class RivalAi {
         const a = cmd.aim!, want = Math.atan2(a.x - s.x, a.z - s.z);
         let off = (s.torso ?? this.ab) - want; off -= Math.round(off / (Math.PI * 2)) * Math.PI * 2;
         cmd.trigger[side] = Math.abs(off) <= v.aiSwordFace * Math.PI / 180;
+        // The power cut: one roll per cut as it starts; on a yes, with a bar to spare past the dodge reserve, Space now.
+        if (w.busy && !this.cutOn) { this.cutPower = this.r() < v.aiPowerCut; if (this.cutPower && s.dashCharges > v.aiDashKeep && !s.dashing) { cmd.power = true; this.powerCuts++; } }
+        this.cutOn = !!w.busy;
       } else if (k.kind === "autocannon" && this.melee) {
         // Up close it fires along its tracking aim, no snapshot.
         cmd.trigger[side] = true;

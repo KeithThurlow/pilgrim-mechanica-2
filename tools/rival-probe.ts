@@ -4,7 +4,7 @@ import { runDuel, DUEL_HULL_MUL } from "../src/combat/duelSim";
 import { RIVAL_LEVELS, RIVAL_LEVEL_IDS, type MechCommand, type DuelView } from "../src/combat/rivalAi";
 import { loadoutFor } from "../src/items/weaponPick";
 
-const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false });
 const mode = (m: string) => (i: number, v: DuelView, t: number): MechCommand | null => {
   if (i !== 0) return null;
   const c = idle();

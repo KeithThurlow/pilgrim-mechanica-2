@@ -38,7 +38,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   const freeze = <T>(o: T): T => { if (o && typeof o === "object") { Object.freeze(o); for (const k of Object.keys(o)) freeze((o as Record<string, unknown>)[k]); } return o; };
   const lo = rollRivalLoadout(3, LOOT_DEFAULTS), kit = kitOf(resolve(lo), WEAPON_DEFAULTS);
   const ai = new RivalAi({ ...RIVAL_AI_DEFAULTS }, 5);
-  const keys = ["move", "aim", "shotAt", "cursor", "lock", "trigger", "keys", "dash", "dashHold"].sort().join();
+  const keys = ["move", "aim", "shotAt", "cursor", "lock", "trigger", "keys", "dash", "dashHold", "power"].sort().join();
   let threw = "", odd = "";
   for (let n = 0; n < 600; n++) {
     const t = n / 60;
@@ -118,10 +118,15 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
 {
   const lo = loadoutFor({ left: "sword", right: "minigun", k1: "none", k2: "none", k3: "pack" });
   must(kitOf(resolve(lo), WEAPON_DEFAULTS).some((k) => k.kind === "sword"), "a rival's sword isn't in its kit");
-  const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+  const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
   const r = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], script: (i) => (i === 0 ? stand : null) });
   const cut = (r.score.rounds[0].taken as Record<string, number>).sword ?? 0;
   must(cut > 1000, `a sword rival cut a standing foe for only ${Math.round(cut)} in 30 s`);
+  // It spends a spare bar on power cuts now and then (2026-11-03), and never below its dodge reserve.
+  must(r.powerCuts[1] > 0, "a sword rival never made a power cut in 30 s of cutting");
+  const none = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], ai: { aiPowerCut: 0 }, script: (i) => (i === 0 ? stand : null) });
+  must(none.powerCuts[1] === 0, "a sword rival made power cuts with the chance at 0");
+  console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts`);
 }
 // A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
 {
@@ -155,7 +160,7 @@ function shooter(kind: "shoulder" | "rail") {
   return (i: number, v: DuelView, t: number): MechCommand | null => {
     if (i !== 0) return null;
     const f = v.foe, at = { x: f.x, y: f.y, z: f.z };
-    const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: at, shotAt: at, cursor: { x: f.x, y: f.y - 1.5, z: f.z }, lock: { x: f.x, y: f.y, z: f.z, r: f.r, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+    const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: at, shotAt: at, cursor: { x: f.x, y: f.y - 1.5, z: f.z }, lock: { x: f.x, y: f.y, z: f.z, r: f.r, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
     const w = v.self.weapons[v.self.kit.findIndex((k) => (kind === "rail" ? k.kind === "rail" : "key" in k.ctl))];
     if (!w) return c;
     if (kind === "rail") {
@@ -210,7 +215,7 @@ for (const k of Object.keys(drills)) {
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
 
-const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false });
 
 // ---- Dodging is a per-threat roll (Keith 2026-10-31: "enemies should only have a chance to dodge your targeted abilities") ----
 // The same drills at each level's own chance: the share of telegraphs it noticed sits near the chance, and the share it
@@ -370,7 +375,7 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     let before = 0, during = 0, after = 0, dashedAt = -1;
     const script = (i: number, vw: DuelView, t: number): MechCommand | null => {
       if (i !== 0) return null;
-      const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: { x: 0, y: 3, z: 30, r: 1.7, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+      const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: { x: 0, y: 3, z: 30, r: 1.7, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
       c.trigger[0] = true;
       const w = vw.self.weapons[vw.self.kit.findIndex((k) => k.kind === "rail")];
       if (t < 0.8) before = Math.max(before, w.charge);

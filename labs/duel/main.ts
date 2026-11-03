@@ -308,7 +308,8 @@ lab.onFrame((dt: number) => {
   rival.cursor = cmd?.cursor ? cursor.set(cmd.cursor.x, field.height(cmd.cursor.x, cmd.cursor.z), cmd.cursor.z) : null;
   rival.lock = cmd?.lock ?? null;
   rival.dashHold = !!cmd?.dashHold;
-  if (cmd?.dash) rival.tryDash(cmd.dash.x, cmd.dash.z);
+  if (cmd?.power) rival.weapons?.powerCut?.();
+    if (cmd?.dash) rival.tryDash(cmd.dash.x, cmd.dash.z, false);
   rival.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
   // (Magazines reload by themselves since 2026-10-31: no more topping the rival up.)
   rivalDraw.update();
