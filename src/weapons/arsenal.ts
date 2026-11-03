@@ -197,6 +197,8 @@ export class Arsenal implements MechWeapons {
     this.energy.onShake = (k) => this.onShake?.(k);
     this.energy.onFire = (k) => this.onFire?.(k);
     addWeaponSounds(bf.sfx, v);
+    // The flak pellets' explosion storm reads its sliders from the first arsenal (the player's).
+    bf.popTuning ??= v;
   }
 
   // ---- What's fitted ----

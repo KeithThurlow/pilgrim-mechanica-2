@@ -111,6 +111,15 @@ const st2 = newGrid(12, 4);
 must(syncGrid(st2, list, true, true).length === 0 && st2.rows > 4, "a growing grid didn't take everything");
 sound(st2, "grow");
 
+// Auto-placing never turns an item (Keith 2026-11-03: weapons stand upright everywhere); only the player does.
+{
+  const narrow = newGrid(8, 3);
+  must(syncGrid(narrow, [{ id: "rail", cells: { w: 2, h: 8 } }]).join() === "rail", "sync turned a 2x8 to fit an 8x3 grid");
+  const tall = newGrid(10, 4);
+  syncGrid(tall, list, true, true);
+  must(tall.placed.every((p) => !p.rot), "a growing sync placed an item turned");
+}
+
 // Salvage compactor: blocks never grow with the level, banking is worth more each level, and the expedition banks at it.
 {
   const area = (l: number) => { const c = itemCells(salvageItem(0, l, 1)); return c.w * c.h; };
