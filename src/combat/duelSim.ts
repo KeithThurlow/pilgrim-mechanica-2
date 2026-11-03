@@ -39,7 +39,7 @@ class DuelMech {
   fired = 0;
   hist: { x: number; z: number }[] = [];
   constructor(readonly v: typeof WALKER_DEFAULTS & typeof DASH_DEFAULTS & typeof BOUND_DEFAULTS & { hull: number; walkSpeed: number }, field: DuneField, lo: Loadout) {
-    const r = resolve(lo, LOADOUT_DEFAULTS);
+    const r = resolve(lo, { ...LOADOUT_DEFAULTS, bareDashCharges: LOADOUT_DEFAULTS.rivalBareDashCharges });
     Object.assign(this.v, r.values);
     this.sim = new WalkerSim(this.v, field);
     this.dash = new Dash(this.v);

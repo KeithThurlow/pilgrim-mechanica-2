@@ -73,6 +73,11 @@ export const GUN_DEFAULTS = {
   // Each pellet bursts where it ends (Keith 2026-11-03): a small blast's look (×) and its pop (sound level).
   flakBurstFx: 1,
   flakPopLevel: 0.8,
+  // The pellets' explosions as a storm (Keith 2026-11-03: "a whole lot of missiles hitting"): each its own boom, spread
+  // over this many seconds; at most this many a volley sound (the rest only show); the volley's loudness grows with
+  // the square root of the count, not the count, so a big crowd doesn't clip.
+  flakPopStagger: 0.14,
+  flakPopMax: 10,
   // Every round gun: how a shot feels.
   gunKick: 0.12,
   gunShake: 0.03,
@@ -136,6 +141,8 @@ export const GUN_PARAMS: Param[] = [
   { key: "flakSplashShare", label: "Pellet blast share", min: 0, max: 1.5, step: 0.01, group: FLAK_GROUP, tip: "Share of the pellet's damage at the blast's centre (half that at its edge)" },
   { key: "flakBurstFx", label: "Pellet blast look (×)", min: 0, max: 3, step: 0.05, group: FLAK_GROUP, tip: "Size of each pellet's flash, sparks, smoke and blast wave (0: none)" },
   { key: "flakPopLevel", label: "Pellet blast sound", min: 0, max: 1.5, step: 0.01, group: FLAK_GROUP },
+  { key: "flakPopStagger", label: "Pellet blasts spread (s)", min: 0, max: 0.5, step: 0.01, group: FLAK_GROUP, tip: "The volley's explosions land over this long, each its own boom (0: all at once)" },
+  { key: "flakPopMax", label: "Pellet blasts heard", min: 1, max: 20, step: 1, group: FLAK_GROUP, tip: "At most this many of a volley's explosions sound; the volley's loudness grows with √count" },
   { key: "gunKick", label: "SMG and rifle: gun kick (m)", min: 0, max: 1, step: 0.01, group: GUN_FEEL_GROUP },
   { key: "gunShake", label: "SMG and rifle: camera shake", min: 0, max: 1, step: 0.01, group: GUN_FEEL_GROUP },
   { key: "shotgunKick", label: "Shotgun: gun kick (m; flak ×1.3)", min: 0, max: 1, step: 0.01, group: GUN_FEEL_GROUP },
@@ -146,5 +153,5 @@ export const GUN_PARAMS: Param[] = [
   { key: "rifleLevel", label: "Rifle sound", min: 0, max: 1.5, step: 0.01, group: GUN_FEEL_GROUP },
   { key: "shotgunLevel", label: "Shotgun sound", min: 0, max: 1.5, step: 0.01, group: GUN_FEEL_GROUP },
   { key: "sniperLevel", label: "Sniper sound", min: 0, max: 1.5, step: 0.01, group: GUN_FEEL_GROUP },
-  { key: "flakLevel", label: "Flak sound", min: 0, max: 1.5, step: 0.01, group: GUN_FEEL_GROUP },
+  { key: "flakLevel", label: "Flak firing sound", min: 0, max: 1.5, step: 0.01, group: GUN_FEEL_GROUP },
 ];

@@ -301,6 +301,8 @@ export class Battlefield {
   private resolveShots(dt: number) {
     this.shots.step(dt);
     this.pops = 0;
+    this.popsDue = 0;
+    for (const dr of this.shots.draws) if (dr.look.burst) this.popsDue++;
     for (const dr of this.shots.draws) {
       const L = dr.look;
       if (L.burst) this.pelletPop(dr.to, L.burst, dr.dir, dr.surface === "sand", L.team ?? 0);
@@ -323,8 +325,11 @@ export class Battlefield {
     }
   }
 
-  /** Pellet pops played this frame (a flak volley is 14 at once: only the first few sound). */
+  /** Pellet explosions sounded this frame, and how many burst this frame (a flak volley is 14 at once). */
   private pops = 0;
+  private popsDue = 0;
+  /** The flak storm's sliders (Weapons › Flak cannon; set by the player's arsenal). */
+  popTuning: { flakPopStagger: number; flakPopMax: number } | null = null;
   /**
    * A flak pellet bursting where it ended (cosmetic, local; its damage is the shot's splash): a hot flash, sparks
    * thrown out, a puff of dark smoke, a small blast wave and a sharp pop (Keith 2026-11-03: "absolute AoE clearing menaces").
@@ -340,7 +345,13 @@ export class Battlefield {
     }
     if (sand && !this.inWater(at.x, at.z)) this.dust.hit(at.x, at.y, at.z, d.x, d.z, 0.8 + 0.6 * k);
     this.waves.post("cannon", at.x, at.y + 0.3, at.z, r * 0.6, { ground: sand, fam });
-    if (this.pops++ < 4) this.sfx.playSound("flakPop", at, 1 - this.pops * 0.15, 0.85 + Math.random() * 0.3);
+    // Each pellet its own boom, spread over the stagger in random order and pitch so they never phase; the volley as a
+    // whole grows by √count (at most flakPopMax heard), so a storm stays under the mix whatever it hits.
+    const pt = this.popTuning, max = Math.max(1, Math.round(pt?.flakPopMax ?? 10));
+    if (this.pops++ >= max) return;
+    const n = Math.min(this.popsDue, max), vol = 1.4 / Math.sqrt(Math.max(1, n));
+    const delay = Math.random() * (pt?.flakPopStagger ?? 0.14) * Math.min(1, n / 4);
+    this.sfx.playSound("flakPop", at, vol * (0.8 + Math.random() * 0.4), 0.8 + Math.random() * 0.4, delay, max + 2);
   }
 
   /** A direct-fire sheet from a muzzle (src/game/sheetFire.ts). */
