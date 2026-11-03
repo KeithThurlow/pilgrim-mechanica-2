@@ -6,6 +6,9 @@
 // 2. out: with the gear on, the drones, swarm and replicas come out, the replicas one at a time `repBuild` s apart.
 // 3. dismissed (picked up): drones and swarm gone at once, the replicas walk on for `sumLinger` s, then gone.
 // 4. summoned again (back on the sand): they all come back.
+// 5. enemies turn on summons; 6. replicas walk round a convoy car.
+// 7. actives (Keith 2026-11-03: "they don't have actives"): the drone rack's key strikes (none with no foe; during it
+//    the drones fire faster), the hive's key sends and recalls the swarm; one action-bar button per item.
 // Run: npm test (or npx tsx tools/summongear-check.ts).
 import * as THREE from "three/webgpu";
 import { resolve, defaultLoadout, fitProblem } from "../src/items/loadout";
@@ -22,7 +25,9 @@ import { LEG_TYPES } from "../src/mech/legTypes";
 import { UPPER_DEFAULTS } from "../src/mech/upper";
 import { DUST_DEFAULTS } from "../src/fx/dust";
 import { ToonLook, TOON_DEFAULTS } from "../src/look/toon";
-import { ROBOT_DEFAULTS } from "../src/combat/robots";
+import { ROBOT_DEFAULTS, RobotSwarm } from "../src/combat/robots";
+import { RobotTarget } from "../src/combat/robotTarget";
+import { SummonKeys } from "../src/summon/summonKeys";
 import { Register } from "../src/game/register";
 import { Solids } from "../src/game/solids";
 import { enemiesOf } from "../src/game/targeting";
@@ -157,6 +162,38 @@ if (back.drones !== r.summons.drones || back.scrappers !== r.summons.scrappers |
   if (inCar) fail("walk round: a replica walked into the car");
   if (reps.units().some((u) => Math.abs(u.sim.pos.z - cz) < hz)) fail("walk round: a replica never got round to the side");
   reps.blockers = null;
+}
+
+// 7. Actives.
+{
+  const keys = new SummonKeys(summons);
+  const press = (k: 1 | 2) => { keys.update(r, k === 1, k === 2); keys.update(r, false, false); };
+  const slots = keys.slots(r, false).map((s) => `${s.key} ${s.name}`);
+  console.log(`keys: buttons ${slots.join(" · ")}; drone keys ${r.summons.droneKeys.join(",")}`);
+  if (slots.length !== 3 || !slots.includes("1 Drone strike") || !slots.includes("2 Send swarm")) fail("keys: the action bar is missing a summoner button");
+  if (keys.slots(bare, false).length) fail("keys: a plain mech shows summoner buttons");
+  press(1);
+  if (summons.strikes) fail("keys: a strike with no foe about");
+  // Frozen robots 20 m ahead.
+  const P = owner.sim.pos, H = owner.sim.heading;
+  const enemy = new RobotSwarm({ ...ROBOT_DEFAULTS, robotRunSpeed: 0, robotMidSpeed: 0, robotQuadSpeed: 0, robotBigSpeed: 0, robotLeapRange: 0 }, field, 5);
+  const et = new RobotTarget(enemy, 3);
+  targets.push(et); register.add(et);
+  for (const i of enemy.spawn(4, P.x + Math.sin(H) * 20, P.z + Math.cos(H) * 20, 2, { mid: 0, big: 0, quad: 0 })) enemy.hp[i] = 1e6;
+  const fire = (sec: number) => { const a = summons.drones.shots; run(sec, () => enemy.update(dt, { x: P.x, y: 3, z: P.z, radius: 2 }, () => {}, () => {})); return summons.drones.shots - a; };
+  fire(3);
+  const plain = fire(V.droneStrikeTime * 0.8);
+  press(1);
+  const struck = summons.strikes, during = fire(V.droneStrikeTime * 0.8);
+  const again = summons.strikes; press(1);
+  console.log(`strike: ${struck} made, rounds ${plain} before, ${during} during (×${V.droneStrikeRate}); pressed again in cooldown: ${summons.strikes - again} more`);
+  if (struck !== 1) fail("strike: the drone key didn't strike");
+  if (!(during > plain * 1.3)) fail("strike: the drones didn't fire faster");
+  if (summons.strikes !== again) fail("strike: struck again while cooling down");
+  (owner as { cursor: unknown }).cursor = new THREE.Vector3(P.x + Math.sin(H) * 20, 0, P.z + Math.cos(H) * 20);
+  const m0 = summons.allies.mode; press(2); const m1 = summons.allies.mode; press(2);
+  console.log(`swarm key: ${m0} -> ${m1} -> ${summons.allies.mode}`);
+  if (m1 !== "sent" || summons.allies.mode !== "home") fail("swarm key: didn't send and recall");
 }
 
 if (failed) { console.log("summoner gear check FAILED"); process.exit(1); }

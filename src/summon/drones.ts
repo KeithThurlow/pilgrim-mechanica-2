@@ -39,6 +39,9 @@ export const DRONE_DEFAULTS = {
   droneHp: 40,
   droneRebuild: 6,
   droneSize: 1.1,
+  droneStrikeTime: 6,
+  droneStrikeCool: 18,
+  droneStrikeRate: 2,
 };
 export type DroneValues = typeof DRONE_DEFAULTS;
 
@@ -49,6 +52,9 @@ export const DRONE_PARAMS: Param[] = [
   { key: "droneHp", label: "Health each", min: 1, max: 400, step: 1, group: G },
   { key: "droneRebuild", label: "Rebuilt after (s)", min: 0.5, max: 60, step: 0.5, group: G, tip: "A drone shot down is rebuilt in the bay and relaunched this long after" },
   { key: "droneSize", label: "Size (m across)", min: 0.4, max: 3, step: 0.05, group: G },
+  { key: "droneStrikeTime", label: "Strike: lasts (s)", min: 0.5, max: 30, step: 0.5, group: G, tip: "The drone rack's key: every drone dives on your lock (or the foe nearest the cursor) for this long" },
+  { key: "droneStrikeCool", label: "Strike: cooldown (s)", min: 0, max: 120, step: 1, group: G },
+  { key: "droneStrikeRate", label: "Strike: fire rate ×", min: 1, max: 5, step: 0.1, group: G, tip: "The drones fire this much faster during a strike" },
   { key: "droneEngage", label: "Picks foes within (m of the mech)", min: 5, max: 120, step: 1, group: G },
   { key: "droneLeash", label: "Never further than (m from the mech)", min: 10, max: 150, step: 1, group: G },
   { key: "droneOrbitR", label: "Orbit radius (m)", min: 2, max: 20, step: 0.1, group: GF },
@@ -97,6 +103,8 @@ export class Drones {
   readonly id = new Uint32Array(DRONE_MAX);
   /** Firing: time to the next round, rounds left in the burst. */
   private fireClock = new Float32Array(DRONE_MAX);
+  /** Fire rate × (a drone strike, src/summon/summons.ts strike()). */
+  frenzy = 1;
   private burstLeft = new Uint8Array(DRONE_MAX);
   /** Its spot on a foe's circle (radians), seeded per launch so they don't all stack. */
   private phase = new Float32Array(DRONE_MAX);
@@ -230,7 +238,7 @@ export class Drones {
       if (f) this.heading[i] = Math.atan2(f.x - this.x[i], f.z - this.z[i]);
       else if (this.vx[i] * this.vx[i] + this.vz[i] * this.vz[i] > 1) this.heading[i] = Math.atan2(this.vx[i], this.vz[i]);
       // Guns: bursts while the foe is in range.
-      this.fireClock[i] -= dt;
+      this.fireClock[i] -= dt * this.frenzy;
       if (!f) { this.burstLeft[i] = 0; continue; }
       const fd = Math.hypot(f.x - this.x[i], f.y - this.y[i], f.z - this.z[i]);
       if (fd > v.droneRange + f.r || this.fireClock[i] > 0) continue;
