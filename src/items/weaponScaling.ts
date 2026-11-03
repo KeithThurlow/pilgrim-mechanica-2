@@ -7,7 +7,8 @@
 //   Area   A = hp per second taken out of a camp-density swarm (36 scrappers, 0.2 per m²)
 //   (Every target is measured no further than 90% of the weapon's range, so short guns aren't zeroed by the sheet's
 //   reference distances, 22-35 m. The sheet itself still uses them.)
-//   Crowd  C = A / (eDPS against one scrapper alone): how many bodies' worth each shot does. 1 = one at a time.
+//   Crowd  C = scrappers' worth of hp one shot (a volley, a swing) takes out of the swarm, at most the pack: how many
+//            bodies each shot does for. A minigun round ~2.5, a rail slug through the pack ~5, a sword cut ~9.
 //   Reliability R(v) = eDPS against a mech-sized body at 35 m (90% of a shorter gun's range) moving (juking) at v m/s ÷ the same body standing still.
 //            Hitscan and rails stay flat; slow shells and blasts fall off with v: projectile speed is in here.
 //   Reach  D½ = the distance where eDPS against a juking rival mech falls under half its best (spread, flight time and
@@ -22,7 +23,7 @@ import { BASE_BY_ID } from "./bases";
 import { PROTOCOLS, protocolFits, type Protocol } from "./protocols";
 import { makeItem, protocolItem } from "./generate";
 import { dpsOf, itemCadence } from "./dps";
-import { REF, WEAPON_IDS, eDps, reseed, targets, wOf, type T, type W } from "./balanceModel";
+import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, eDps, reseed, targets, volleySwarm, wOf, type T, type W } from "./balanceModel";
 import type { Item } from "./item";
 
 export const SCALING = {
@@ -35,7 +36,8 @@ export const SCALING = {
   damageClass: 0.8,
 };
 
-export const MODELLED = WEAPON_IDS;
+/** Every weapon the model covers: the sheet's checked list, then the energy weapons and swords (report only). */
+export const MODELLED = [...WEAPON_IDS, ...ENERGY_IDS, ...MELEE_IDS];
 
 const SINGLE = ["cutter", "excavator", "raider", "rival"];
 
@@ -44,7 +46,7 @@ export interface Profile {
   /** The item card's DPS (damage × rounds × sustained rate, no hit chance). */
   card: number;
   focus: number; focusSet: string; rival: number;
-  area: number; one: number; crowd: number;
+  area: number; crowd: number;
   reliability: number; reach: number;
   focusPct: number; areaPct: number; spend: number;
   range: number; speed: number; radius: number;
@@ -54,7 +56,7 @@ const budgetOf = (w: W) => REF.budget * REF.slotShare[w.slot];
 /** eDPS with the seeded random restarted, so two calls differ only by what they're given (ratios without noise). */
 const e = (w: W, t: T) => { reseed(); return eDps(w, t); };
 /** A target no further than 90% of the weapon's range (short guns are measured where they can reach). */
-const near = (w: W, t: T): T => (t.dist > w.range * 0.9 ? { ...t, dist: Math.floor(w.range * 0.9) } : t);
+const near = (w: W, t: T): T => (w.kind !== "melee" && t.dist > w.range * 0.9 ? { ...t, dist: Math.floor(w.range * 0.9) } : t);
 const tById = () => Object.fromEntries(targets().map((t) => [t.id, t])) as Record<string, T>;
 
 /** A weapon's item with these Protocols socketed (repeats allowed). */
@@ -74,22 +76,25 @@ export function focusArea(item: Item): { focus: number; focusSet: string; area: 
 
 /** The rival mech at distance d moving at v (juke kept). */
 const rivalAt = (T_: Record<string, T>, d: number, v?: number): T => ({ ...T_.rival, dist: d, speed: v ?? T_.rival.speed });
-/** Where reliability is measured: 35 m, or 90% of a shorter gun's range. */
-export const relDist = (w: W) => Math.min(35, Math.floor(w.range * 0.9));
+/** Where reliability is measured: 35 m, or 90% of a shorter gun's range (a sword walks in from 35 m). */
+export const relDist = (w: W) => (w.kind === "melee" ? 35 : Math.min(35, Math.floor(w.range * 0.9)));
 
 export function profileOf(item: Item): Profile {
   const w = wOf(item), T_ = tById(), b = budgetOf(w);
   const { focus, focusSet, area } = focusArea(item);
-  const one = e(w, near(w, { ...T_.swarm, swarm: undefined }));
+  const sw = near(w, T_.swarm);
+  reseed();
+  const crowd = Math.min(sw.swarm!.n, volleySwarm(w, sw) / sw.hp);
   const dRel = relDist(w), still = e(w, rivalAt(T_, dRel, 0)), moving = e(w, rivalAt(T_, dRel, 8));
   const curve = reachCurve(item), peak = Math.max(...curve.map((p) => p.moving));
   let reach = 0;
   for (const p of curve) if (p.moving >= peak * 0.5 && peak > 0) reach = p.d;
+  if (w.kind === "melee") reach = w.range; // it walks in: its reach is the blade's
   const focusPct = (100 * focus) / b, areaPct = (100 * area) / (b * REF.setWeight.swarm);
   const c = itemCadence(item);
   return {
     id: w.id, name: w.name, slot: w.slot, kind: w.kind, card: c ? dpsOf(c) : 0,
-    focus, focusSet, rival: e(w, T_.rival), area, one, crowd: one > 0 ? area / one : 0,
+    focus, focusSet, rival: e(w, T_.rival), area, crowd,
     reliability: still > 0 ? moving / still : 0, reach,
     focusPct, areaPct, spend: focusPct + areaPct,
     range: w.range, speed: w.flight ? T_.rival.dist / w.flight : w.speed, radius: w.radius,

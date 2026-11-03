@@ -262,7 +262,11 @@ Every weapon on five axes from the same model, so area weapons and damage weapon
 - **Spend S = F% + A%** (proposed cap 200, not enforced): today only flak is over (297).
 - **Scaling**: each Protocol stacked 0-4 times, and the best build for F and for A by sockets. A ceiling ÷ F ceiling at
   4 sockets over 1.25 is an area scaler (miniguns, rockets, arm pod), under 0.8 a damage scaler (rifles, scattergun,
-  breach cannon); no fitting Protocol is fixed (rails, missile pod, mortars).
+  breach cannon); no fitting Protocol is fixed (rails, missile pod, mortars, energy weapons, swords).
+- **Energy weapons** (report only): the hull's reactor sets a duty, fire till dry then refill: pulse laser 0.72,
+  beam 0.56, lance 0.55, plasma 0.83, orb 0.56, arc 0.73, sunder 0.58 on the Rampart.
+- **Swords** (report only): walk in at 8.5 m/s less the target's back-off, stay in reach 1 − 0.5 × juke of the time;
+  each cut a sector of its reach until the cleave budget runs out.
 
 ## Questions for Keith
 
