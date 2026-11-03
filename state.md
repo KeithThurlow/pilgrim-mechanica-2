@@ -312,6 +312,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Rivals use the third bar to push (coordinator, after #145; Claude, thread "Make rival mechs fight at full potential")
+- With three bars each, rivals hardly ever saw you "out of dash", so they never pressed; in the long duel (seeds 21-22) one sat in engage the whole 90 s. Two new press triggers in `src/combat/rivalAi.ts` (Rival AI sliders): **bar edge** (`aiBarEdge` 2: you have two fewer bars than it, it presses) and **a push on a spare bar** (`aiPush` chance per s with its bars full, 0.1/0.2/0.35 at Recruit/Veteran/Ace: a dash in on the spare bar, then press for `aiPushTime` 4 s, keeping its dodge reserve). The HUD note says "pushing in on a spare bar".
+- Checked: long duel 21-22 now engage 65 / press 25 s and 54 / 34 (was 90 / 0 and 83 / 3); `duel-check` now wants both rivals of that duel to press; npm test.
+
 ### 2026-11-03 · Rivals fire the energy weapons they roll (Keith: "rivals not fighting to their fullest potential"; Claude, thread "Make rival mechs fight at full potential")
 - About 30% of rolled rivals (89 of seeds 1-300) carried an energy weapon on a hull mount that their AI never fired (the kit skipped energy classes); 14 had both guns dead. Now `kitOf` (`src/combat/rivalKit.ts`) reads each energy weapon's own stats (`energyStats`), with liked ranges (laser 34, beam 26, lance 50, plasma 32, orb 24, arc 17, sunder 40 m).
 - The AI (`src/combat/rivalAi.ts`) watches its reactor: fires until dry, then holds until it refills to `aiReactorResume` 0.6 (new slider, Rival AI), so it shoots in bursts; a ready nova lance or sunder waits for its whole cost. The lance charges and snapshots like the rail; the sunder is pressed and then steered after you with the fast shots' tight tracking; neither is thrown away by a dash or sprint. It also dodges your sunder's aim line (as a rail's) and your particle orbs (`src/combat/duelThreats.ts`).
