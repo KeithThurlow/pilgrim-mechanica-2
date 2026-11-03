@@ -27,6 +27,7 @@ import { LEG_TYPES } from "../src/mech/legTypes";
 import * as THREE from "three/webgpu";
 import { Gates, GATE_DEFAULTS, type GateEvent } from "../src/pois/gates";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD } from "../src/combat/infantry";
+import { Fortresses, FORT_LIFE_DEFAULTS } from "../src/expedition/fortresses";
 import { Hubs, HUB_LIFE_DEFAULTS, type HubEvent } from "../src/expedition/hubs";
 import type { Battlefield } from "../src/game/battlefield";
 
@@ -338,6 +339,29 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   const b2 = H.bearing(hub.x + 900, hub.z);
   if (b2 !== undefined && b !== undefined && Math.abs(b2 - b) < 1e-6) fail("packs still lean to a dead hub");
   console.log(`hubs: asleep nothing · awake ${built} batches in 120 s (${alive} robots, cap ${HV.hubCap}) · ${nf} fabricators down in ${rounds} rounds of 20 · dead: one hubDead, no more batches, the boss out and down once`);
+}
+
+// ---- 4. the convoy's turrets see the garrison (alert yards only) ----
+{
+  const wd = world(), fp = wd.pois.poisIn(-A, -A, A, A).find((q) => q.kind === "fortress")!;
+  const any: unknown = new Proxy(function () {}, { get: (_t, k) => (k === Symbol.toPrimitive ? () => 0 : any), apply: () => any });
+  const bf = { targets: [], register: { add() {} }, canSee: () => true, gunFx: any, sfx: any, dust: any, blast() {}, resolveSheet: () => any, fire: () => 0 } as unknown as Battlefield;
+  const pel = new THREE.Vector3(fp.x, wd.field.height(fp.x, fp.z) + 3, fp.z + 400);
+  const mech = { alive: true, sim: { pelvis: pel, pos: pel, vel: new THREE.Vector3() }, shoveFrom() {} } as never;
+  const F = new Fortresses({ ...FORT_LIFE_DEFAULTS, ...INFANTRY_DEFAULTS } as never, wd.field, bf, new THREE.Scene(), wd.walls, mech, null, () => [fp], () => {});
+  for (let k = 0; k < 30; k++) F.update(1 / 30, true);
+  const pts: THREE.Vector3[] = [];
+  F.threats(fp.x, fp.z, 2000, pts, 1000);
+  if (pts.length) fail(`${pts.length} sleeping garrison bandits counted as turret threats`);
+  const live = [...F.live.values()][0];
+  if (!live) fail("the fortress never streamed in");
+  else {
+    (F as unknown as { alarm(f: unknown, y: unknown): void }).alarm(live, live.yards[0]);
+    F.threats(fp.x, fp.z, 2000, pts, 1000);
+    const want = live.yards.filter((y) => y.state === "alert").reduce((n, y) => n + F.aliveIn(fp.id, y.k), 0);
+    if (!pts.length || pts.length !== want) fail(`alert garrison: ${pts.length} turret threats, ${want} bandits alive in alert yards`);
+    console.log(`fortress threats: asleep 0, alert ${pts.length}`);
+  }
 }
 
 if (problems.length) { console.log(`FAIL ${problems.length} problem(s)`); throw new Error("fortress check failed"); }

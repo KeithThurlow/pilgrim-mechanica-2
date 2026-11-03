@@ -178,6 +178,24 @@ export class Fortresses {
     return this.sw.shove(x, z, radius, dx, dz, speed, damage);
   }
 
+  /** Alert garrison (every yard that is alert) and the warlord within r of (x, z), as points (the convoy's turrets track them). */
+  threats(x: number, z: number, r: number, out: THREE.Vector3[], max = 24) {
+    const sw = this.sw;
+    for (const f of this.live.values()) {
+      for (const y of f.yards) {
+        if (y.state !== "alert") continue;
+        for (let m = 0; m < y.slots.length && out.length < max; m++) {
+          const i = y.slots[m];
+          if (sw.gen[i] !== y.gens[m] || sw.state[i] >= DOWN) continue;
+          if (Math.hypot(sw.px[i] - x, sw.pz[i] - z) <= r) out.push(new THREE.Vector3(sw.px[i], sw.py[i] + 1.2, sw.pz[i]));
+        }
+      }
+    }
+    const w = this.warlord?.unit;
+    if (w && w.alive && out.length < max && this.warlord!.poi && Math.hypot(w.sim.pelvis.x - x, w.sim.pelvis.z - z) <= r) out.push(w.sim.pelvis.clone());
+    return out;
+  }
+
   /** Bandits alive in a fortress's yard (for HUDs and checks). */
   aliveIn(poi: string, yard: number) { const f = this.live.get(poi); return f ? this.alive(f.yards[yard]) : 0; }
 

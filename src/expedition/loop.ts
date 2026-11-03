@@ -455,7 +455,12 @@ export class ExpeditionLoop {
     this.bands.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
     this.droids.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
     this.striders.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
-    return this.crushers.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    this.crushers.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    this.forts.threats(mid.x, mid.z, 250, this.turretPts, this.turretPts.length + max);
+    // The lair's HVT mech, once it is out on the field.
+    const hv = this.quests.hvt.unit;
+    if (hv && hv.alive && this.quests.hvt.lair && Math.hypot(hv.sim.pelvis.x - mid.x, hv.sim.pelvis.z - mid.z) <= 250) this.turretPts.push(hv.sim.pelvis.clone());
+    return this.turretPts;
   }
 
   update(dt: number, inp: LoopInput) {
