@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-03 | Rivals roll feeds and power on their shoulders (not the back) and press them: feeds while that gun fires, the capacitor into a reactor with room | Keith (rivals use their whole kit) | Claude | Was "shoulder gear is the player's" (2026-10-30); open for Keith if rivals should stay launcher-only |
 | 2026-11-03 | Sword rivals make power cuts (a roll per cut, a spare bar only); an AI dodge mid-cut stays a dodge | Keith (rivals at full potential) | Claude | `aiPowerCut` per level is a guess |
 | 2026-11-03 | With three bars each, rivals press when you are two bars behind them, and now and then push on a spare bar (a dash in, then 4 s pressing) | Coordinator (after #145) | Claude | Values are guesses for Keith to feel: `aiBarEdge`, `aiPush`, `aiPushTime` (Rival AI) |
 | 2026-11-03 | Energy weapons and swords join the balance model, report only (not held to the 130% bands): energy weapons by the Rampart reactor's duty, swords by a walk-in and a stay-in-reach share | Coordinator | Claude (the model and its knobs, open) | Open for Keith: the model says swords are 2-2.5× budget on single targets once they connect; is that the intent, or should swords carry a band? The walk-in knobs (`REF.closeSpeed`, `meleeStick`) want numbers from the duel lab |

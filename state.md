@@ -313,6 +313,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Rivals roll feeds and power on their shoulders and press them (Claude, thread "Make rival mechs fight at full potential")
+- A rival's shoulder rolls feeds and power too (belt feed, incendiary feed, capacitor bank; the back slot stays launchers): 68 of seeds 1-300 carry one. Same draws as before, so seeds keep their other parts. `gearOf` (`src/combat/rivalKit.ts`) lists them; the AI's view gets `gear` (key, family, gun, ready, bars).
+- The AI (`src/combat/rivalAi.ts`) presses a feed while that side's gun fires at you (overdrive or ignited rounds), and discharges a capacitor bank into its reactor when it has room for the whole refill (energy weapons only). Headless duel: feeds' passive and overdrive fire rate, the capacitor's refill (`GearSim`); ignited rounds' burn isn't modelled there.
+- `duel-check`: the long duel 21-22 rule is now "every rival but a sniper pushes, and one presses" (the new shoulder pool moved seed 22's kit). New: ≥30 of 300 rivals carry gear; two feeds pressed ≥3 times a minute (6), a laser rival discharges its capacitor (2). npm test.
+
 ### 2026-11-03 · Rivals make power cuts; a rival's dodge mid-cut stays a dodge (Claude, thread "Make rival mechs fight at full potential")
 - A sword rival rolls once per cut (`aiPowerCut` 0.3/0.5/0.75 at Recruit/Veteran/Ace, Rival AI) and, with a bar to spare past its dodge reserve, presses for a power cut as the cut starts (new `power` in the AI's commands; the duel lab and the HVT mech call `Arsenal.powerCut`). Before, any dodge dash it sent mid-cut was swallowed as a power cut: `MechUnit.tryDash(x, z, cut)` now takes `cut = false` for AIs. `Arsenal.canPowerCut()` feeds the AI's view.
 - Headless duel: a power cut spends a bar and adds the power damage to the cut just made.
