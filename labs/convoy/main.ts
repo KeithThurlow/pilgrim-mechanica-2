@@ -73,6 +73,7 @@ import { ConvoyGuns, GUARD_DEFAULTS, GUARD_PARAMS, GUARD_GROUPS } from "../../sr
 import { Guardians, GUARDIAN_DEFAULTS, GUARDIAN_PARAMS, GUARDIAN_GROUPS } from "../../src/convoy/guardians";
 import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC } from "../../src/summon/summons";
 import { applyGear, isSwarmKey } from "../../src/summon/gear";
+import { SummonPrey } from "../../src/summon/aggro";
 import type { Resolved } from "../../src/items/loadout";
 import { SAFE_GROUPS } from "../../src/convoy/safeZone";
 import { PloughBody } from "../../src/convoy/ploughBody";
@@ -267,6 +268,15 @@ escorts.mechs = guardians.spots;
 // back.
 const summons = new Summons(bf, scene, V, field, player, enemiesOf(player.team), deaths, { look: toon });
 const swarmKeyWas = [false, false];
+// Enemies out there turn on your summons when they're nearer (src/summon/aggro.ts); replicas walk round the cars.
+loop.summonPrey = new SummonPrey(summons, V);
+if (summons.replicas) summons.replicas.blockers = (x, z, r) => {
+  let px = x, pz = z, moved = false;
+  for (const p of convoy.platforms) { const o = p.pushOut(px, pz, r); if (o) { px = o.x; pz = o.z; moved = true; } }
+  const o = convoy.plough.pushOut(px, pz, r);
+  if (o) { px = o.x; pz = o.z; moved = true; }
+  return moved ? { x: px, z: pz } : null;
+};
 // For poking at from the console: window.__defence (the guns' shot counts, the guardians, the safe zone).
 (window as unknown as { __defence: unknown }).__defence = { guns: convoyGuns, guardians, zone: loop.zone, defence };
 /** Recovered or lost: back on the lead bay's set-down pad, repaired. */

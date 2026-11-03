@@ -75,4 +75,7 @@ A build that fights through its units rather than its own guns. Everything lives
   Should a rare bay build a third replica? Should a hive's key hold to recall instead of a second tap?
 - Pickup: drones and the swarm fold away at once, the replicas walk on 15 s (`sumLinger`), then fold away; out on the
   sand they're built again from nothing (replicas one every 10 s). They don't yet walk round the train cars.
+- Enemies and summons (2026-11-03): every kind, in the labs and the field, turns a group onto a ground summon within
+  22 m of it and nearer than 0.8 × you (Summons: enemies). Should it be per enemy instead of per group (as the
+  robots' own rule in the swarm lab is)? Replicas now walk round the convoy's cars.
 - Keys: Z send, C recall (free in every lab). Should the swarm instead ride on key 3 (the pack's ability key)?

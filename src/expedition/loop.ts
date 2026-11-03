@@ -25,7 +25,7 @@ import { Hubs, HUB_LIFE_DEFAULTS, HUB_LIFE_PARAMS } from "./hubs";
 import { Warlord } from "./warlord";
 import { Skirmishes, packSource, aftermathSite, clashDrops } from "./fights";
 import { FACTION_DEFAULTS, FACTION_PARAMS, FACTION_GROUPS, Relations, FightDirector, type FightGroup } from "../game/factions";
-import type { Register } from "../game/register";
+import { FLAG, type Register } from "../game/register";
 import { ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../combat/robotTearFx";
 import { POI_PARAMS } from "../world/pois";
 import { SITE_PARAMS } from "../pois/kinds";
@@ -368,16 +368,39 @@ export class ExpeditionLoop {
     return { danger: this.depth.liveDanger(x, z), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth: this.depth.liveDepth(x, z) };
   }
 
+  /** The summoner's units as prey (src/summon/aggro.ts; the lab sets it): each enemy kind's group near one may go for it. */
+  summonPrey: { pick(base: Prey, x: number, z: number): Prey } | null = null;
+  private reg: Register | null = null;
+  private owners = { robots: [] as number[], droids: [] as number[], striders: [] as number[], crushers: [] as number[], bandits: [] as number[], bands: [] as number[] };
+  private mechPrey: Prey | null = null;
+  private mid = { x: 0, z: 0 };
+  private nearList: number[] = [];
+  /** The middle of an enemy kind's awake ones within 200 m of (x, z), from the register (false: none). */
+  private middleOf(owners: number[], x: number, z: number): boolean {
+    const reg = this.reg;
+    if (!reg) return false;
+    let n = 0, sx = 0, sz = 0;
+    for (const owner of owners) {
+      this.nearList.length = 0;
+      reg.near(x, z, 200, { owner, none: FLAG.Asleep | FLAG.Down }, this.nearList);
+      for (const e of this.nearList) { sx += reg.x[e]; sz += reg.z[e]; n++; }
+    }
+    if (!n) return false;
+    this.mid.x = sx / n; this.mid.z = sz / n;
+    return true;
+  }
+
   /** Add the loop's own targets and owners to the battlefield's register (after the player's mech). */
   register(reg: Register) {
-    reg.add(this.swarms.target);
-    for (const t of this.droids.squads.targets) reg.add(t);
-    reg.add(this.striders.sf.target);
-    reg.add(this.crushers.cf.target);
-    reg.add(this.banditCamps.target);
-    reg.add(this.forts.target);
+    this.reg = reg;
+    const o = this.owners;
+    o.robots = [reg.add(this.swarms.target)];
+    o.droids = this.droids.squads.targets.map((t) => reg.add(t));
+    o.striders = [reg.add(this.striders.sf.target)];
+    o.crushers = [reg.add(this.crushers.cf.target)];
+    o.bandits = [reg.add(this.banditCamps.target), reg.add(this.forts.target)];
     reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
-    reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) });
+    o.bands = [reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) })];
     reg.add(mechOwner("hvt", () => this.quests.hvt.list()));
   }
 
@@ -471,12 +494,24 @@ export class ExpeditionLoop {
     }
     const hunting = exp.state === "out" && player.alive && SAND.has(carry.state) && (!foot || pl!.alive);
     this.hubs.update(dt, hunting, foot && pl ? pl : p);
-    this.swarms.update(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
-    this.droids.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
-    this.striders.update(dt, hunting, p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
-    this.crushers.update(dt, hunting, foot && pl ? pl : p, foot ? pl!.prey(mx, mz) : { kind: "mech", alive: player.alive && hunting, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim });
+    // Each enemy kind's prey: the mech, or the pilot on foot when he's nearer (src/pilot/quarry.ts), or one of the
+    // summoner's units its awake ones are nearer (src/summon/aggro.ts; Keith 2026-11-03).
+    const mp = this.mechPrey ??= { kind: "mech", alive: true, at: player.sim.pelvis, radius: 2, unit: player, sim: player.sim };
+    mp.alive = player.alive && hunting;
+    const own = (x: number, z: number): Prey => (foot ? pl!.prey(x, z) : mp);
+    const preyOf = (owners: number[], fx: number, fz: number): Prey => {
+      if (!this.summonPrey || !this.middleOf(owners, p.x, p.z)) return own(fx, fz);
+      const base = own(this.mid.x, this.mid.z);
+      return this.summonPrey.pick(base, this.mid.x, this.mid.z);
+    };
+    const swPrey = preyOf(this.owners.robots, mx, mz);
+    this.swarms.update(dt, hunting, foot || swPrey !== mp ? swPrey : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
+    this.droids.update(dt, hunting, p, preyOf(this.owners.droids, mx, mz));
+    this.striders.update(dt, hunting, p, preyOf(this.owners.striders, mx, mz));
+    this.crushers.update(dt, hunting, foot && pl ? pl : p, preyOf(this.owners.crushers, mx, mz));
     inp.mark?.("swarm camps");
-    this.updateHumans(dt, hunting, foot ? pl!.prey(mx, mz) : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null);
+    const bPrey = preyOf(this.owners.bandits, mx, mz), wPrey = preyOf(this.owners.bands, mx, mz);
+    this.updateHumans(dt, hunting, foot || bPrey !== mp ? bPrey : undefined, foot && pl!.alive ? { x: pl!.x, z: pl!.z, notice: pl!.notice } : null, foot || wPrey !== mp ? wPrey : undefined);
     inp.mark?.("raiders and fights");
     // The mech's body (Keith 2026-10-31): tramples bandits and scrappers, rams war band vehicles; bandits may dive out
     // of a charge or a telegraphed shot. Only while it walks the sand (not hanging from the crane or parked).
@@ -688,7 +723,7 @@ export class ExpeditionLoop {
    * columns wander, hear and come onto the field, the fight director points every live group at its enemies through
    * the register, and groups off the field that meet fight by the numbers and leave wreckage and loot.
    */
-  private updateHumans(dt: number, hunting: boolean, prey: Prey | undefined, pilot: { x: number; z: number; notice: number } | null) {
+  private updateHumans(dt: number, hunting: boolean, prey: Prey | undefined, pilot: { x: number; z: number; notice: number } | null, bandPrey: Prey | undefined = prey) {
     const { v, player, bf } = this, sim = player.sim;
     const m = pilot ?? sim.pelvis;
     this.banditCamps.update(dt, hunting, prey, pilot);
@@ -707,7 +742,7 @@ export class ExpeditionLoop {
     }
     const evs = this.columns.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud });
     for (const e of evs) { this.bands.bring(e.col); this.hud.note(`War band · ${e.col.kinds.length} vehicles`, "#ff7ad0", 4); this.sound.alarm(); }
-    this.bands.update(dt, prey ?? player, hunting, m);
+    this.bands.update(dt, bandPrey ?? player, hunting, m);
     // Who fights whom in view.
     const gl = this.groupList;
     gl.length = 0;

@@ -14,6 +14,8 @@ import { makeItem, rollItem, LOOT_DEFAULTS } from "../src/items/generate";
 import { gridClassOf } from "../src/items/gridSize";
 import { Summons, SUMMON_DEFAULTS } from "../src/summon/summons";
 import { applyGear, isSwarmKey } from "../src/summon/gear";
+import { SummonPrey } from "../src/summon/aggro";
+import type { Prey } from "../src/pilot/quarry";
 import { MECH_DEFAULTS, type MechUnit } from "../src/game/mechUnit";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
@@ -94,6 +96,68 @@ run(Math.max(40, V.repBuild * (r.summons.replicas + 1) + 2));
 const back = count();
 console.log(`summoned again: drones ${back.drones}, scrappers ${back.scrappers}, replicas ${back.replicas}`);
 if (back.drones !== r.summons.drones || back.scrappers !== r.summons.scrappers || back.replicas !== r.summons.replicas) fail("summoned again: not all back");
+
+// 5. Enemies turn on summons (src/summon/aggro.ts): a group nearer a replica or scrapper than the mech goes for it, a
+// group on the far side stays on the mech; dismissed, nothing draws them; bites land on the summon.
+{
+  const sp = new SummonPrey(summons, V);
+  const P = owner.sim.pos;
+  const mech = { kind: "mech", alive: true, at: owner.sim.pelvis, radius: 2, unit: { damage() {} }, sim: owner.sim } as unknown as Prey;
+  const rep = summons.replicas!.units()[0], rp = rep.sim.pos;
+  // A group 4 m past the replica, on its side.
+  const ox = rp.x + (rp.x - P.x) / Math.max(1, Math.hypot(rp.x - P.x, rp.z - P.z)) * 4, oz = rp.z + (rp.z - P.z) / Math.max(1, Math.hypot(rp.x - P.x, rp.z - P.z)) * 4;
+  const H = owner.sim.heading;
+  const near = sp.pick(mech, ox, oz);
+  // A group 14 m ahead of the mech: the replicas walk at its flanks and the swarm trails it, so the mech is nearest.
+  const far = sp.pick(mech, P.x + Math.sin(H) * 14, P.z + Math.cos(H) * 14);
+  const sw = summons.allies.sw, down = new THREE.Vector3(0, -1, 0);
+  const total = () => { let t = 0; for (const u of summons.replicas!.units()) t += u.health; for (let i = 0; i < sw.hi; i++) if (sw.state[i] < 6) t += sw.hp[i]; return t; };
+  const t0 = total();
+  near.unit.damage(15, near.at, down);
+  const t1 = total();
+  console.log(`aggro: group by a replica picks ${near.kind} (${near.unit === rep ? "the replica" : "a unit beside it"}), group ahead of the mech picks ${far.kind}; a bite took the summons ${t0.toFixed(0)} -> ${t1.toFixed(0)}`);
+  if (near.kind !== "summon") fail("aggro: a group by a summon stayed on the mech");
+  if (far.kind !== "mech") fail("aggro: a group ahead of the mech went for a summon");
+  if (!(t1 < t0)) fail("aggro: the bite didn't land on a summon");
+  // By a scrapper of the swarm.
+  let si = -1;
+  for (let i = 0; i < sw.hi; i++) if (sw.state[i] < 6 && sw.kind[i] === 0) { si = i; break; }
+  if (si >= 0) {
+    const q = sp.pick(mech, sw.px[si] + (sw.px[si] - P.x) * 0.2, sw.pz[si] + (sw.pz[si] - P.z) * 0.2);
+    const a = total();
+    q.unit.damage(5, q.at, down);
+    console.log(`aggro: by a scrapper: ${q.kind}, bite ${a.toFixed(0)} -> ${total().toFixed(0)}`);
+    if (q.kind !== "summon" || !(total() < a)) fail("aggro: a group by a scrapper didn't bite it");
+  }
+  summons.setActive(false);
+  if (sp.pick(mech, ox, oz).kind !== "mech") fail("aggro: dismissed summons still drew a group");
+  summons.setActive(true);
+}
+
+// 6. Replicas walk round a blocker (a convoy car, 30 m by 8 m, between a replica and its spot): never inside it, and
+// they get to their spots.
+{
+  const cx = 0, cz = owner.sim.pos.z, hx = 15, hz = 4;
+  const reps = summons.replicas!;
+  const inside = (x: number, z: number, r: number) => Math.abs(x - cx) < hx + r && Math.abs(z - cz) < hz + r;
+  reps.blockers = (x, z, r) => {
+    if (!inside(x, z, r)) return null;
+    // Out through the nearest side.
+    const dx = hx + r - Math.abs(x - cx), dz = hz + r - Math.abs(z - cz);
+    return dx < dz ? { x: cx + Math.sign(x - cx || 1) * (hx + r), z } : { x, z: cz + Math.sign(z - cz || 1) * (hz + r) };
+  };
+  // The mech stands on the "car" (as on its deck), facing +X, so the spots are off its long sides; the replicas start
+  // at the car's far end.
+  owner.sim.heading = Math.PI / 2;
+  for (const u of reps.units()) { u.sim.pos.x = cx + hx + 6; u.sim.pos.z = cz; }
+  let inCar = 0;
+  run(25, () => { for (const u of reps.units()) if (inside(u.sim.pos.x, u.sim.pos.z, 0.5)) inCar++; });
+  const off = reps.units().map((u) => Math.abs(u.sim.pos.z - cz).toFixed(1)).join(", ");
+  console.log(`walk round: frames inside the car ${inCar}, replicas ${off} m off its middle line (sides at ${hz} m)`);
+  if (inCar) fail("walk round: a replica walked into the car");
+  if (reps.units().some((u) => Math.abs(u.sim.pos.z - cz) < hz)) fail("walk round: a replica never got round to the side");
+  reps.blockers = null;
+}
 
 if (failed) { console.log("summoner gear check FAILED"); process.exit(1); }
 console.log("summoner gear check passed");

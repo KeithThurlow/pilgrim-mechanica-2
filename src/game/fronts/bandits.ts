@@ -103,7 +103,7 @@ export function banditsFront(): Front {
           const prey = n ? lab.prey(cx / n, cz / n) : lab.prey(player.sim.pos.x, player.sim.pos.z);
           const p = prey.at;
           for (let i = 0; i < rocketClock.length; i++) rocketClock[i] -= dt;
-          s.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz, i) => {
+          s.update(dt, { x: p.x, y: p.y, z: p.z, radius: prey.kind === "pilot" ? 1 : prey.kind === "summon" ? prey.radius + 1 : contact.body.reach }, (fx, fy, fz, tx, ty, tz, i) => {
             if (!prey.alive) return;
             from.set(fx, fy, fz);
             // Only with a clear line: no shooting through the dunes.
