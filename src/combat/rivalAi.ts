@@ -371,7 +371,9 @@ export class RivalAi {
     // enough behind on bars that it can't answer a push the way the rival can.
     const exposed = f.gunsOff || f.airborne || f.staggered || f.dashCharges === 0 || f.health < 0.3 || (v.aiBarEdge > 0 && s.dashCharges - f.dashCharges >= v.aiBarEdge);
     // A push on a spare bar: bars full (the reserve plus two), the foe in sight, fighting at range: take the initiative.
-    if (this.state === "engage" && acquired && view.t >= this.pushUntil && s.dashCharges >= v.aiDashKeep + 2 && !this.sprint && !this.railCharging(s) && this.r() < v.aiPush * dt) {
+    // (A sniper, with a rail or nova lance, keeps its range: it doesn't push.)
+    const sniper = s.kit.some((k) => k.kind === "rail" || k.kind === "lance");
+    if (!sniper && this.state === "engage" && acquired && view.t >= this.pushUntil && s.dashCharges >= v.aiDashKeep + 2 && !this.sprint && !this.railCharging(s) && this.r() < v.aiPush * dt) {
       this.pushUntil = view.t + v.aiPushTime; this.pushDash = true; this.pushes++;
     }
     const pushing = view.t < this.pushUntil;
@@ -525,6 +527,16 @@ export class RivalAi {
       // The weapon leads nothing itself: the lead is in the point.
       cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: 0, vz: 0 };
     }
+    // Slow energy shots (a particle orb at 8 m/s, plasma): when every trigger weapon in reach is one, the shot line
+    // leads the foe by the slowest one's flight (the guns that hit at once would miss by it, so only then).
+    let slow = 0;
+    if (!fast && !this.melee) for (const w of s.weapons) {
+      const k = s.kit[w.i];
+      if (!("trigger" in k.ctl) || dist >= k.range) continue;
+      if (!k.energy || k.speed === Infinity || k.speed > 60) { slow = 0; break; }
+      slow = Math.max(slow, dist / Math.max(1, k.speed));
+    }
+    if (slow > 0) { hx += this.fvx * slow * v.aiLead; hz += this.fvz * slow * v.aiLead; }
     cmd.shotAt = { x: hx, y: f.y, z: hz };
     cmd.aim = { x: hx, y: f.y, z: hz };
     if (!fast) cmd.lock = { x: hx, y: f.y, z: hz, r: f.r, key: "foe", vx: this.fvx * v.aiLead, vz: this.fvz * v.aiLead };
