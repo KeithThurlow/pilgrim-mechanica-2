@@ -10,10 +10,10 @@ import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, type Base } from "./bases";
 import type { Item } from "./item";
 
-/** The size classes. */
+/** The size classes. Layout (Keith 2026-11-03): every weapon stands upright (w × h, taller than wide or square); hull
+ *  weapons are sized one by one from their models (HULL_GUN_CELLS), the rest by class. */
 export const GRID_CLASSES = {
-  hullGun: { label: "Hull weapon", w: 2, h: 3 },
-  hullGunLong: { label: "Long hull weapon", w: 2, h: 4 },
+  hullGun: { label: "Hull weapon (any not in HULL_GUN_CELLS)", w: 2, h: 4 },
   hull: { label: "Hull", w: 3, h: 2 },
   hullBig: { label: "Big hull", w: 4, h: 2 },
   legs: { label: "Legs", w: 2, h: 3 },
@@ -43,10 +43,29 @@ export const GRID_CLASSES = {
 export type GridClass = keyof typeof GRID_CLASSES;
 export const GRID_CLASS_IDS = Object.keys(GRID_CLASSES) as GridClass[];
 
+/** Hull weapons each sized roughly by their model (Keith 2026-11-03: "base the grid size roughly off the actual
+ *  weapon size"), standing upright like every weapon (Keith 2026-11-03: "weapons should be vertical"): long barrels tall,
+ *  launchers and projectors squat. Claude's picks; every one a slider. */
+export const HULL_GUN_CELLS: Record<string, Cells> = {
+  "mg-medium": { w: 2, h: 4 }, // Minigun: barrel cluster on a drum
+  "ac-medium": { w: 2, h: 5 }, // Autocannon: one long barrel
+  "rpg-medium": { w: 3, h: 3 }, // Rocket launcher: a boxy tube pack
+  "rail-medium": { w: 2, h: 8 }, // Rail cannon: the longest
+  "sniper-medium": { w: 2, h: 7 }, // Longshot rifle
+  "flak-medium": { w: 3, h: 4 }, // Flak cannon: twin stubby barrels
+  "cannon-medium": { w: 3, h: 6 }, // Breach cannon: heavy breech, long tube
+  "laser-medium": { w: 2, h: 4 }, // Pulse laser
+  "beam-medium": { w: 2, h: 5 }, // Beam laser
+  "lance-medium": { w: 2, h: 7 }, // Nova lance
+  "plasma-medium": { w: 3, h: 4 }, // Plasma cannon: fat chamber
+  "orb-medium": { w: 3, h: 3 }, // Particle orb projector: a sphere
+  "arc-medium": { w: 2, h: 4 }, // Arc caster
+  "sunder-medium": { w: 2, h: 8 }, // Sunder beam
+};
+
 /** Bases that aren't what the fallback would give them. */
 export const GRID_CLASS_OF: Record<string, GridClass> = {
   // The long hull guns: barrels that run the length of the hull.
-  "rail-medium": "hullGunLong", "sniper-medium": "hullGunLong", "lance-medium": "hullGunLong", "sunder-medium": "hullGunLong", "cannon-medium": "hullGunLong",
   // The big hulls.
   "hull-rampart": "hullBig", "hull-siege": "hullBig",
   // Long held guns (the heavy minigun, a two-hander, falls back to long too).
@@ -86,6 +105,8 @@ export function gridClassOf(item: Pick<Item, "kind" | "base">): GridClass {
 
 const wKey = (c: GridClass) => `grid_${c}_w`;
 const hKey = (c: GridClass) => `grid_${c}_h`;
+const bwKey = (id: string) => `gridb_${id}_w`;
+const bhKey = (id: string) => `gridb_${id}_h`;
 
 export type GridSizeValues = Record<string, number>;
 
@@ -93,10 +114,18 @@ export const GRID_SIZE_DEFAULTS: GridSizeValues = Object.fromEntries(
   GRID_CLASS_IDS.flatMap((c) => [[wKey(c), GRID_CLASSES[c].w], [hKey(c), GRID_CLASSES[c].h]]),
 );
 
-export const GRID_SIZE_PARAMS: Param[] = GRID_CLASS_IDS.flatMap((c) => [
-  { key: wKey(c), label: `${GRID_CLASSES[c].label} w`, min: 1, max: 8, step: 1, group: "Item sizes", tip: "Columns before turning" },
-  { key: hKey(c), label: `${GRID_CLASSES[c].label} h`, min: 1, max: 8, step: 1, group: "Item sizes", tip: "Rows before turning" },
-]);
+for (const [id, c] of Object.entries(HULL_GUN_CELLS)) { GRID_SIZE_DEFAULTS[bwKey(id)] = c.w; GRID_SIZE_DEFAULTS[bhKey(id)] = c.h; }
+
+export const GRID_SIZE_PARAMS: Param[] = [
+  ...GRID_CLASS_IDS.flatMap((c) => [
+    { key: wKey(c), label: `${GRID_CLASSES[c].label} w`, min: 1, max: 8, step: 1, group: "Item sizes", tip: "Columns before turning" },
+    { key: hKey(c), label: `${GRID_CLASSES[c].label} h`, min: 1, max: 8, step: 1, group: "Item sizes", tip: "Rows before turning" },
+  ]),
+  ...Object.keys(HULL_GUN_CELLS).flatMap((id) => [
+    { key: bwKey(id), label: `${BASE_BY_ID[id]?.name ?? id} w`, min: 1, max: 10, step: 1, group: "Hull weapon sizes", tip: "Columns before turning" },
+    { key: bhKey(id), label: `${BASE_BY_ID[id]?.name ?? id} h`, min: 1, max: 10, step: 1, group: "Hull weapon sizes", tip: "Rows before turning" },
+  ]),
+];
 
 export interface Cells { w: number; h: number }
 
@@ -107,7 +136,14 @@ export function classCells(c: GridClass, v: Partial<GridSizeValues> = GRID_SIZE_
 }
 
 /** An item's size in cells, unturned. */
-export const itemCells = (item: Pick<Item, "kind" | "base">, v?: Partial<GridSizeValues>): Cells => classCells(gridClassOf(item), v);
+export function itemCells(item: Pick<Item, "kind" | "base">, v: Partial<GridSizeValues> = GRID_SIZE_DEFAULTS): Cells {
+  const own = HULL_GUN_CELLS[item.base];
+  if (own) {
+    const w = v[bwKey(item.base)] ?? own.w, h = v[bhKey(item.base)] ?? own.h;
+    return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+  }
+  return classCells(gridClassOf(item), v);
+}
 
 // ---- Salvage blocks (a placeholder: the expedition still counts scrap as a number; the grid shows it as blocks) ----
 export const SALVAGE_LEVELS = 3;
