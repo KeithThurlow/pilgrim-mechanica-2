@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-03 | Inventory: items are always placed upright on their own (only the player turns one); doll tiles show the fitted item's footprint; the sort chips order Tidy's layout and Show chips filter the grids | Keith | Keith (upright, footprints); Claude (sort drives Tidy, the filter set) | Old saved layouts reset once to stand weapons up |
 | 2026-11-03 | Player's bare mech starts with three energy bars (2 → 3); rivals without a pack keep two | Keith | Claude (rivals kept at two, coordinator's call) | Open for Keith: rivals at three need the rival AI to handle the extra bar (duel check's long fight stalled at three). Packs unchanged. |
 | 2026-11-03 | Held weapons sit in the arm's fist, ahead of a shorter forearm, instead of on the elbow along the forearm | Keith | Claude (placement) | Open: one grip point for every held weapon (about 0.3 under its origin); a library model's own Grip socket could set it per weapon. Not sliders yet (stand-in arm geometry, `MOUNT_STANDIN`). |
 | 2026-11-03 | Flak is allowed a higher band against swarms: up to 230% of its slot budget (others 130%); its numbers trimmed to 198% (18 a pellet, 2.5 m blast at 0.75) from the first pass's 339% | Claude (balance check failed) | Claude | Open for Keith: is 2× budget vs swarms the right menace level? The sheet still counts the pellet blast as a round's splash (no big robots), so it reads low on cutters and excavators. |
