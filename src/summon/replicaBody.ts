@@ -2,7 +2,7 @@
 // the same underlying skeleton, but ... no need for a pilot in the center. The legs can be thinner because it doesn't
 // have to support the same weight. The weapons will in general just be a little bit lighter looking ... a robot in
 // there"). The Rampart's own model on the same rig (src/mech/rampart.ts), slimmed (RampartBody.slim): thin legs and
-// feet, a narrow, low hull, smaller guns, no ammo drums or power pack, painted pale steel, a sensor eye for a head.
+// feet, a narrow, low hull, smaller guns, no ammo drums, power pack or back unit, in your mech's paint (a slider tints it paler), a twin-optic sensor head for a head.
 // The gun is still rolled per build (Keith 2026-11-02, replicas.ts): its minigun pods, or a light rocket rack in their
 // place. The look values are sliders (Summons › Replicas: look) and apply live.
 // The Rampart loads asynchronously; until it has (and in headless checks, where there are no models) the old wire
@@ -86,7 +86,7 @@ export class ReplicaBody implements MechBody {
     if (!this.rb || key === this.applied) return;
     const shadeChanged = !this.applied.endsWith(`,${v.repShade}`);
     this.applied = key;
-    this.rb.slim({ leg: v.repLegThin, foot: v.repFootSize, hull: [v.repHullW, v.repHullH, v.repHullL], gun: v.repGunSize });
+    this.rb.slim({ leg: v.repLegThin, foot: v.repFootSize, hull: [v.repHullW, v.repHullH, v.repHullL], gun: v.repGunSize, back: false });
     if (shadeChanged && this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
   }
 
@@ -108,14 +108,14 @@ export class ReplicaBody implements MechBody {
   eject(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).eject(side, out); }
   barrel(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).barrel(side, out); }
 
-  /** Pale steel, lighter for a higher `repShade` (0: the Rampart's own paint); the wreck's colour as given. */
+  /** The Rampart's own paint, tinted paler by `repShade`; the wreck's colour as given. */
   paint(look: ToonLook, color: number | null) {
     this.lastPaint = { look, color };
     if (!this.rb) { this.wire.paint(look, color); return; }
-    const s = this.looks?.repShade ?? 0.75;
+    const s = this.looks?.repShade ?? 0;
     const steel = s <= 0 ? null : new THREE.Color().setRGB(0.45 + 0.5 * s, 0.48 + 0.5 * s, 0.5 + 0.5 * s).getHex();
     this.rb.paint(look, color ?? steel);
-    for (const r of this.racks) for (const m of r.meshes) look.tint(m, m.userData.dark ? 0x2b2d31 : color ?? steel ?? 0x8a8f86);
+    for (const r of this.racks) for (const m of r.meshes) look.tint(m, m.userData.dark ? 0x2b2d31 : color ?? steel ?? 0x5d6648);
   }
 
   deadRig(): DeadRig { return this.rb ? this.rb.deadRig() : this.wire.deadRig(); }

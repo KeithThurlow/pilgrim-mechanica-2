@@ -47,7 +47,7 @@ export const REPLICA_DEFAULTS = {
   repHullH: 0.8,
   repHullL: 0.85,
   repGunSize: 0.72,
-  repShade: 0.6,
+  repShade: 0,
 };
 export type ReplicaValues = typeof REPLICA_DEFAULTS;
 
@@ -84,7 +84,7 @@ export const REPLICA_PARAMS: Param[] = [
   { key: "repHullH", label: "Hull: height ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
   { key: "repHullL", label: "Hull: length ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
   { key: "repGunSize", label: "Guns ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
-  { key: "repShade", label: "Paint: pale steel (0: your mech's paint)", min: 0, max: 1, step: 0.01, group: GL },
+  { key: "repShade", label: "Paint: pale tint (0: your mech's paint)", tip: "Tints the model's own colours toward pale steel (it multiplies, so the camo shows through)", min: 0, max: 1, step: 0.01, group: GL },
 ];
 
 

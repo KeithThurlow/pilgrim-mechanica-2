@@ -187,7 +187,7 @@ function mirrored(g: THREE.BufferGeometry) {
 
 interface Bone { pivot: THREE.Group; restLen: number }
 /** RampartBody.slim: cross-section of the legs and feet, the hull's width, height and length, the guns (1: as modelled). */
-export interface RampartSlim { leg: number; foot: number; hull: [number, number, number]; gun: number }
+export interface RampartSlim { leg: number; foot: number; hull: [number, number, number]; gun: number; /** Show the back unit (default yes). */ back?: boolean }
 interface PodRig {
   yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1;
   /** The pod's rear box (hidden while the feed drum sits in its place). */
@@ -560,7 +560,7 @@ export class RampartBody {
     const [hx, hy, hz] = o.hull, was = this.thin, k = new THREE.Vector3(hx / was.hull[0], hy / was.hull[1], hz / was.hull[2]);
     this.thin = { ...o, hull: [hx, hy, hz] };
     this.torso.scale.set(hx, hy, hz);
-    if (this.back) this.back.scale.set(hx, hy, hz);
+    if (this.back) { this.back.scale.set(hx, hy, hz); this.back.visible = o.back ?? true; }
     for (const p of this.pods) {
       p.home.multiply(k);
       if (!p.held) p.yawPitch.position.copy(p.home);
