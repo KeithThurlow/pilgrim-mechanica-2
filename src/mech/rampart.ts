@@ -8,7 +8,9 @@
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { WalkerSim, LegPose } from "./walker";
-import type { UpperSim } from "./upper";
+import type { UpperSim, UpperValues } from "./upper";
+
+const UP = new THREE.Vector3(0, 1, 0);
 import type { WalkerValues } from "./walkerTuning";
 import type { ToonLook } from "../look/toon";
 import { LEG_TYPES } from "./legTypes";
@@ -245,7 +247,7 @@ export class RampartBody {
   /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
   private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
   private lastParts: BodyParts | null = null;
-  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3() };
+  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3(), e2: new THREE.Vector3(), h2: new THREE.Vector3(), d2: new THREE.Vector3() };
 
   private constructor() { this.root.name = "rampart"; }
 
@@ -527,11 +529,15 @@ export class RampartBody {
       p.yawPitch.position.copy(p.home);
       if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
       p.kick.scale.setScalar(arm ? S.heldScale : 1);
-      p.kickBase = arm ? new THREE.Vector3(...S.gunAt) : new THREE.Vector3();
+      // The gun on the fist (the pivot is the fist now: update reaches the arm to the aim), its grip in it.
+      p.kickBase = arm ? new THREE.Vector3(S.gunAt[0] - S.handAt[0], S.gunAt[1] - S.handAt[1], S.gunAt[2] - S.handAt[2]) : new THREE.Vector3();
       p.kick.position.copy(p.kickBase);
       p.heldAt = p.yawPitch.position.clone(); p.armShown = arm;
       p.kick.visible = L ? parts.gunLeft : parts.gunRight;
-      p.arm.visible = p.forearm.visible = arm;
+      // The old fixed upper arm and forearm stay hidden: the two-bone arm (drawArm) is drawn instead.
+      p.arm.visible = p.forearm.visible = false;
+      if (arm && this.look) (p.ik ?? (p.ik = this.ikArm())).g.visible = true;
+      else if (p.ik && !p.held) p.ik.g.visible = false;
     }
     for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
     if (this.pack) this.pack.visible = parts.pack;
@@ -574,13 +580,11 @@ export class RampartBody {
       if (!p.held) return;
       p.held = false;
       if (p.heldAt) p.yawPitch.position.copy(p.heldAt);
-      p.arm.visible = p.forearm.visible = !!p.armShown;
-      if (p.ik) p.ik.g.visible = false;
+      // An arm goes back to reaching for the aim (update draws it); a hull mount hides the IK arm.
+      if (p.ik) p.ik.g.visible = !!p.armShown;
       return;
     }
     p.held = true;
-    const ik = p.ik ?? (p.ik = this.ikArm());
-    ik.g.visible = true;
     p.arm.visible = p.forearm.visible = false;
     const root = new THREE.Vector3(p.home.x + side * pose.out, p.home.y, p.home.z);
     const r = armIk(root, pose.hand, pose.upper, pose.fore, pose.pole);
@@ -589,21 +593,48 @@ export class RampartBody {
     const x = new THREE.Vector3().crossVectors(y, z).normalize();
     p.yawPitch.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y.crossVectors(z, x), z));
     p.kick.position.set(0, 0, 0);
-    const e = new THREE.Vector3(r.elbow.x, r.elbow.y, r.elbow.z), h = new THREE.Vector3(r.hand.x, r.hand.y, r.hand.z);
+    this.drawArm(p, root, r, pose.out > 0.02);
+  }
+
+  /** The two-bone arm's boxes from the shoulder (root, a stub out to it when `stub`) through the elbow to the fist. */
+  private drawArm(p: PodRig, root: THREE.Vector3, r: { elbow: { x: number; y: number; z: number }; hand: { x: number; y: number; z: number } }, stub: boolean) {
+    const ik = p.ik ?? (p.ik = this.ikArm());
+    ik.g.visible = true;
+    const e = this.tmp.e2.set(r.elbow.x, r.elbow.y, r.elbow.z), h = this.tmp.h2.set(r.hand.x, r.hand.y, r.hand.z);
+    const d = this.tmp.d2;
     const bone = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
-      const d = b.clone().sub(a), len = d.length();
+      d.copy(b).sub(a); const len = d.length();
       m.position.copy(a);
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.divideScalar(Math.max(1e-6, len)));
+      m.quaternion.setFromUnitVectors(UP, d.divideScalar(Math.max(1e-6, len)));
       m.scale.set(1, len, 1);
     };
-    ik.stub.visible = pose.out > 0.02;
-    if (ik.stub.visible) bone(ik.stub, p.home, root);
+    ik.stub.visible = stub;
+    if (stub) bone(ik.stub, p.home, root);
     ik.joint.position.copy(root);
     bone(ik.upper, root, e);
     bone(ik.fore, e, h);
     ik.elbow.position.copy(e);
     ik.hand.position.copy(h);
     ik.hand.quaternion.copy(p.yawPitch.quaternion);
+  }
+
+  /**
+   * An arm holding a gun (Keith 2026-11-03: "the arm almost fully extends and points toward the target... as the arm
+   * gets further back, it stretches out straighter"): the fist goes out from the shoulder along the gun's aim, a little
+   * below the line, bent at the front and straighter as the aim swings out to the side (armStraightAt); the elbow
+   * finds itself (two-bone IK, bending down, out and back). The gun rides the fist. Cosmetic: the sim aims the gun.
+   */
+  private reachArm(p: PodRig, yaw: number, pitch: number, v: UpperValues) {
+    const D = Math.PI / 180, cp = Math.cos(pitch);
+    const u = Math.min(1, Math.max(0, (p.side * yaw) / Math.max(1e-3, v.armStraightAt * D))), s = u * u * (3 - 2 * u);
+    const full = v.armUpper + v.armFore, reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
+    const drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
+    const o = p.home;
+    const hand = { x: o.x + Math.sin(yaw) * cp * reach, y: o.y - Math.sin(pitch) * reach - drop, z: o.z + Math.cos(yaw) * cp * reach };
+    const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * v.armPoleOut, y: -1, z: -v.armPoleBack });
+    p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
+    p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
+    this.drawArm(p, o, r, false);
   }
 
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
@@ -682,7 +713,8 @@ export class RampartBody {
     for (const p of this.pods) {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
-      p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
+      if (p.armShown) this.reachArm(p, g.yaw - this.twist, g.pitch, upper.v);
+      else p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
       if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
       p.kick.position.z -= g.kick;
       p.spin.rotation.z = g.spinAngle * -p.side;
