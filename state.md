@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Replicas: no cockpit pod, pale unmanned paint (Keith via the coordinator; Claude)
+- `RampartBody.dropCab()` (`src/mech/rampart.ts`) cuts the cockpit pod off the hull's front (every triangle ahead of 0.72 m within 1 m of the middle) and closes it with an armour plate in the hull's mean colour; the head sensor moves back onto the plate. `RampartBody.bleach(k)` fades every vertex colour toward its own brightness and lifts it (panel lines kept). The replicas (`src/summon/replicaBody.ts`) use both: `repShade` 0.55 by default (Summons › Mech replicas: look).
+- Checked: typecheck, replicas-check, summongear-check, full npm test; one game-camera shot (pale grey replicas beside your mech).
 ### 2026-11-03 · Replicas are your own mech, slimmed (Keith; Claude)
 - The replica model is now the Rampart on the same rig, slimmed (`RampartBody.slim` in `src/mech/rampart.ts`; `src/summon/replicaBody.ts`): legs ×0.55 thick, feet ×0.8, hull ×0.62 wide, ×0.8 high, ×0.85 long (the guns and sockets come in with it), guns ×0.72, no ammo drums, pack or back unit, a twin-optic head; your mech's paint (a slider tints it paler). Rocket replicas carry a light four-tube rack in place of each minigun pod. Sliders: Summons › Mech replicas: look (live). The wire frame (`src/summon/replicaWire.ts`) only stands in while the model loads and in headless checks.
 - Checked: replicas-check and summongear-check pass on the stand-in; a game-camera shot of a minigun and a rocket replica beside the mech.
