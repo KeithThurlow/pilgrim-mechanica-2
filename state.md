@@ -312,6 +312,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-03 · Convoy guns also see fortress garrisons, the warlord and the HVT mech (coordinator's follow-up; Claude)
+- `Fortresses.threats()` (alert yards' bandits + the keep's warlord) and the lair's HVT mech (`quests.hvt.unit`) join `ExpeditionLoop.turretThreats` (`src/expedition/loop.ts`). Hub robots already count (they join the robot swarm, awake). Duel-lab rival mechs aren't in the expedition, so nothing to add.
+- Checked: `fortress-check` section 4 (sleeping garrison none, alert garrison all). The HVT/warlord points are untested headless (need the loaded mech body).
 ### 2026-11-02 · Swarm lab batch 2: crushers and the summoner's units (Claude, Keith's ask via the coordinator)
 - `?enemy=crusher` (`src/game/fronts/crusher.ts`, the crusher lab moved over) and `?summon` (`src/game/fronts/summoner.ts`: drones, companions, scrap swarm on any swarm; Z/C keys; a panel button). The robots front now lets robots turn on your units (aggro, bites and shots on allies as in the summoner lab) and takes the summoner lab's `?still`. `?enemy=mix` brings crushers too. Big walker beams, pulses and death blasts already go through `wireRobotBlasts` in the robots front, so they go off wherever robots are.
 - `labs/crusher` forwards to `?enemy=crusher`; `labs/summoner` to `?enemy=robots&summon` with its old waves as `?set=` (60 robots, packs of 20 every 6 s from 90 m, gun damage ×1, no striders); `?enemies=`/`?pack=` map to those.
