@@ -345,7 +345,7 @@ export class Arsenal implements MechWeapons {
       // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired. So in a dash (Keith
       // 2026-10-31, rail balance: no dash while a rail is charging or charged; the dash wins and the charge is lost), and
       // no charge builds until the dash is over.
-      const noRail = u.sideOff(i) || u.sim.inDash;
+      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.inDash;
       if (noRail && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
@@ -1254,7 +1254,7 @@ export class Arsenal implements MechWeapons {
   controls(): string[] {
     // Sprinting with the weapons off (src/mech/bound.ts): SPRINT, then the controls dimmed.
     if (this.unit.gunsOff) {
-      const free = this.unit.armsFree[0] || this.unit.armsFree[1];
+      const free = !!(this.unit.armsFree?.[0] || this.unit.armsFree?.[1]);
       return [`<b style="color:#ffb347">SPRINT</b> <span style="opacity:.4">${free ? "arms only" : "weapons off"} · ${this.controlList().join(" · ")}</span>`];
     }
     return this.controlList();
