@@ -938,6 +938,11 @@ export class Arsenal implements MechWeapons {
     return !!s.model?.muzzles.length;
   }
 
+  /** Flak pellets burst where they end: the look's scale (Flak cannon › Pellet blast look), 0 for any other gun. */
+  pelletBurst(side: 1 | -1): number {
+    return this.sides[side === 1 ? 0 : 1].kind === "flak" ? this.v.flakBurstFx : 0;
+  }
+
   /** A gun of another class fired a round on its clock (the autocannon, the breach cannon). */
   shot(side: 1 | -1) {
     const s = this.sides[side === 1 ? 0 : 1];
