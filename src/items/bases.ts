@@ -168,6 +168,9 @@ export interface Base {
   /** Weapons: what kind of gun (default minigun); src/weapons fires the others. Shoulder items: which shoulder weapon. */
   cls?: GunClass;
   shoulder?: ShoulderWeapon;
+  /** Hulls: the arms they come with (Keith 2026-11-03: arms aren't items; each hull brings its own, so they always
+   *  match). An arm base id; the arm is put on any hull mount that takes one and holds no hull weapon. */
+  arm?: string;
   /** Hulls and packs: a timed ability (src/abilities/abilities.ts; Keith 2026-10-31): a pack's on key 3, a hull's on key 4. */
   ability?: import("../abilities/abilities").AbilityId;
   /** Shoulder items: launcher, feed or power (Keith 2026-10-30). */
@@ -236,16 +239,16 @@ export const BASES: Base[] = [
   },
   // Hulls: hull points, torso turn, mounts.
   {
-    id: "hull-rampart", name: "Rampart hull", kind: "hull", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    id: "hull-rampart", name: "Rampart hull", kind: "hull", arm: "arm-rampart", tags: ["hull"], weight: 7, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), armour: s(HULL_ARMOUR, 0.1), torsoTurnRate: s(U.torsoTurnRate, 0.08), reactorCap: s(REACTOR_DEFAULTS.reactorCap, 0.1), reactorRegen: s(REACTOR_DEFAULTS.reactorRegen, 0.1) },
   },
   {
-    id: "hull-siege", name: "Siege hull", kind: "hull", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
+    id: "hull-siege", name: "Siege hull", kind: "hull", arm: "arm-loader", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
     // Armoured all over the front: sensors only up on top.
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(4200, 0.08), armour: s(12, 0.1), torsoTurnRate: s(110, 0.08), reactorCap: s(5.5, 0.1), reactorRegen: s(0.32, 0.1) },
   },
   {
-    id: "hull-salvager", name: "Salvager hull", kind: "hull", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1, ability: "nanite",
+    id: "hull-salvager", name: "Salvager hull", kind: "hull", arm: "arm-loader", tags: ["hull"], weight: 5.5, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-salvager", drop: 1, ability: "nanite",
     // A utility hull: its right mount takes only an arm (a working arm for stripping), no hull weapon; a head at the
     // front to see what it strips, no top mount (the crane rail runs over it).
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(2400, 0.08), armour: s(5, 0.1), torsoTurnRate: s(190, 0.08), carryBonus: s(4, 0.15), reactorCap: s(3, 0.1), reactorRegen: s(0.45, 0.1) },
@@ -253,7 +256,7 @@ export const BASES: Base[] = [
   {
     // A light cuirass (Keith 2026-11-02: hover legs "could support really light cuirasses"): the Stilt's narrow torso,
     // thin plate, quick to turn; both mounts and a front head, no ability.
-    id: "hull-cuirass", name: "Cuirass hull", kind: "hull", tags: ["hull", "light"], weight: 4, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.8,
+    id: "hull-cuirass", name: "Cuirass hull", kind: "hull", arm: "arm-wildcat", tags: ["hull", "light"], weight: 4, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.8,
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front"], pack: true, waist: ["L", "R"] }, stats: { hull: s(1900, 0.08), armour: s(4, 0.1), torsoTurnRate: s(230, 0.08), reactorCap: s(3, 0.1), reactorRegen: s(0.55, 0.1) },
   },
   // Sensors (optional mount, Keith 2026-10-26): the mech radar's range and the seekers (rarer: more modes, longer).
@@ -284,15 +287,15 @@ export const BASES: Base[] = [
   // Arms: on a hull mount in place of a hull weapon; hold a held weapon (their tracking and arc are its) and carry
   // a shoulder weapon on the same mount. Hands strip salvage faster (Keith: arms might make salvaging faster).
   {
-    id: "arm-rampart", name: "Rampart arm", kind: "arm", tags: ["arm"], weight: 1.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    id: "arm-rampart", name: "Rampart arm", kind: "arm", tags: ["arm"], weight: 1.4, makers: ["Stratford-Aegis"], look: "rampart", drop: 0,
     stats: { track: s(18, 0.1), arc: s(40, 0.1), salvage: s(0.25, 0.2) },
   },
   {
-    id: "arm-wildcat", name: "Wildcat arm", kind: "arm", tags: ["arm"], weight: 1.1, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0.7,
+    id: "arm-wildcat", name: "Wildcat arm", kind: "arm", tags: ["arm"], weight: 1.1, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0,
     stats: { track: s(24, 0.1), arc: s(48, 0.1), salvage: s(0.15, 0.2) },
   },
   {
-    id: "arm-loader", name: "Loader arm", kind: "arm", tags: ["arm"], weight: 1.8, makers: ["Suzaku"], look: "rampart-salvager", drop: 0.7,
+    id: "arm-loader", name: "Loader arm", kind: "arm", tags: ["arm"], weight: 1.8, makers: ["Suzaku"], look: "rampart-salvager", drop: 0,
     stats: { track: s(14, 0.1), arc: s(34, 0.1), salvage: s(0.5, 0.2) },
   },
   // Weapons: minigun sizes on the existing gun sim. Held weapons (Light) are smaller than hull weapons but swing

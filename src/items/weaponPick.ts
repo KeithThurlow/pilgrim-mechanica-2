@@ -79,7 +79,7 @@ export function loadoutFor(p: Pick): Loadout {
   for (const [side, s, key] of [["left", "L", p.k1], ["right", "R", p.k2]] as const) {
     const w = p[side], m = MOUNTS[s], shoulder = SHOULDER_BASE[key];
     if (HULL_BASE[w]) put(m.mount, HULL_BASE[w]!);
-    else { put(m.mount, "arm-rampart"); put(m.held, HELD_BASE[w]); }
+    else put(m.held, HELD_BASE[w]); // the hull's arm goes on with it (Keith 2026-11-03)
     // The default mech's own shoulder gear is replaced by the pick (none: bare).
     lo[m.shoulder] = null;
     if (shoulder) put(m.shoulder, shoulder);
