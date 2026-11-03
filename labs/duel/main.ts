@@ -222,7 +222,7 @@ const noteEl = bars.querySelector<HTMLElement>(".note")!;
 const box = document.createElement("div");
 box.className = "duel-box";
 document.body.appendChild(box);
-const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", shrpg: "shoulder rocket", mortar: "big mortar", linemortar: "line mortar", missiles: "missile pod" };
+const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", shrpg: "shoulder rocket", mortar: "big mortar", linemortar: "line mortar", missiles: "missile pod", sword: "sword", laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam" };
 // A fixed rival-number box (type or use the arrows); it never moves with the rival's item list.
 const picker = document.createElement("label");
 picker.style.cssText = "position:fixed;left:12px;top:12px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:4px 8px;border-radius:4px;font:12px sans-serif";
