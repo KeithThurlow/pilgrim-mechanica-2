@@ -312,6 +312,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+- 2026-11-03 **Minigun ammo drum moved forward** (Keith's feedback: it sat too far back, mounted oddly): with the feed fitted the pod's rear box is hidden (the pod mesh is split at 0.62 m behind the shoulder, `showPod`'s new `rear` flag) and the drum stands across in its place, tucked against the housing; a belt chute runs along the pod's outboard flank into the back of the barrels. Files: `src/weapons/build/guns.ts` (`minigunFeedHull`), `src/mech/rampart.ts`, one line in `src/weapons/arsenal.ts`. Checked: weight-check (weight 0.79 m behind the shoulder), one shot from the game camera, `npm test`. Claude.
 - 2026-11-03 **Strider death blast waited for the next strider** (Keith's report): the strider lab (and the swarm lab's `?strider=`) skipped `StriderField.update` while no strider stood, so the last one's core only counted down once the next stood up (`striderBack` 6 s on). The field now updates with nobody standing. File: `src/combat/striderLab.ts`. Checked: `npm test`. Claude.
 ### 2026-11-03 · Grid layout: weapons upright, hull weapons sized by model (Keith; Claude)
 - Every weapon stands upright; hull weapons each get their own size from their model (`HULL_GUN_CELLS` in `src/items/gridSize.ts`, sliders in Hull weapon sizes: rail 2×8, rocket launcher 3×3, minigun 2×4...). Checked: `grid-check` (every hull weapon upright or square), one shot of the inventory lab.

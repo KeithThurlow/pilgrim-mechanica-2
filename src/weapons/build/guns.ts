@@ -58,27 +58,34 @@ export function autocannonHull(sd: 1 | -1 = -1, seed = 10): ModelDef {
 
 /**
  * The Rampart's own minigun pod gets more behind it (Keith 2026-11-02: "even it could have more construction sitting
- * behind"): an ammo drum lying across behind the pod with a belt chute arching into the pod's back, side braces and a
- * counterweight plate. Hangs on the pod's kick pivot (the shoulder); built round the pod's barrel axis, which sits
- * 0.94 m outboard and 0.32 m below the shoulder on the Rampart. No muzzle: the pod fires.
+ * behind"), reshaped 2026-11-03 (Keith: the drum sat too far back; "remove the box at the back of the minigun and put
+ * this thing forward to where that kind of like boxy bit is, and then maybe that ammo feed can go into one of the
+ * minigun drums"). The pod's rear box is hidden while this is fitted (Rampart.showPod's rear flag) and the ammo drum
+ * stands up across in its place, tucked against the pod's housing, on a cradle with a counterweight plate behind; a
+ * belt chute runs from the drum's front along the pod's outboard flank into the back of the barrel cluster. Hangs on
+ * the pod's kick pivot (the shoulder); built round the pod's barrel axis, which sits 0.94 m outboard and 0.32 m below
+ * the shoulder on the Rampart. No muzzle: the pod fires.
  */
 export function minigunFeedHull(sd: 1 | -1 = -1, seed = 16): ModelDef {
   const B = new Build(seed, 1.6, sd), P = B.piece("Body"), o = B.out, rd = B.read;
-  const c = v(0, 0.12, -1.45), R = 0.44, W = 0.62;
+  const c = v(0, 0.1, -0.95), R = 0.42, W = 0.6;
   lathe(P, c.clone().addScaledVector(o, -W / 2), o, [[0, 0], [0, R * 0.9], [0.04, R], [W - 0.04, R], [W, R * 0.9], [W, 0]], "secondary", { n: 18 });
-  for (const t of [0.12, W - 0.16]) lathe(P, c.clone().addScaledVector(o, -W / 2 + t), o, [[0, R], [0, R + 0.035], [0.04, R + 0.035], [0.04, R]], "dark", { n: 18, ring: true });
-  lathe(P, c.clone().addScaledVector(o, W / 2), o, [[0, 0], [0, 0.14], [0.05, 0.12], [0.05, 0]], "mechanical", { n: 10 });
-  boltCircle(P, c.clone().addScaledVector(o, W / 2 + 0.002), o, 0.25, 6, 0.02);
+  for (const t of [0.1, W - 0.14]) lathe(P, c.clone().addScaledVector(o, -W / 2 + t), o, [[0, R], [0, R + 0.035], [0.04, R + 0.035], [0.04, R]], "dark", { n: 18, ring: true });
+  for (const s of [1, -1]) {
+    lathe(P, c.clone().addScaledVector(o, s * W / 2), o.clone().multiplyScalar(s), [[0, 0], [0, 0.14], [0.05, 0.12], [0.05, 0]], "mechanical", { n: 10 });
+    boltCircle(P, c.clone().addScaledVector(o, s * (W / 2 + 0.002)), o.clone().multiplyScalar(s), 0.25, 6, 0.02);
+  }
   stencilDigits(P, c.clone().addScaledVector(o, W / 2 + 0.003).add(v(0, -0.25, 0)), rd, Y(), 0.12, "800");
-  // The belt chute: links arching from the drum's top into the back of the pod.
-  const path = bezier(v(0, c.y + R - 0.05, c.z + 0.05), v(0, c.y + R + 0.25, c.z + 0.3), v(0, 0.75, -0.95), v(0, 0.62, -0.78), 8);
-  sweep(P, path, octRing(0.13, 0.05, 0.015), "dark");
-  for (let i = 1; i < path.length - 1; i++) plate(P, path[i].clone().add(v(0, 0.055, 0)), X(), path[i + 1].clone().sub(path[i - 1]).normalize(), 0.24, 0.05, 0.02, "trim", { bevel: 0 });
-  // Side braces from the pod's back to the drum's hubs, a cradle under it and a counterweight plate behind.
-  for (const s of [1, -1]) plate(P, v(s * (W / 2 + 0.03), 0.02, -1.2), v(s, 0, 0), Z(), 0.6, 0.16, 0.04, "mechanical", { bevel: 0.01 });
-  loftZ(P, [[-1.85, octRing(0.3, 0.06, 0.02)], [-1.0, octRing(0.3, 0.06, 0.02)]], "plating", { y0: c.y - R - 0.04 });
-  plate(P, v(0, c.y, -1.92), X(), Y(), 0.5, 0.6, 0.08, "dark", { bevel: 0.02 });
-  hazard(P, v(sd * 0.32, c.y - R - 0.0, -1.4), rd, Y(), 0.5, 0.05, 6);
+  // The belt chute: from the drum's front, out along the pod's outboard flank and into the back of the barrels.
+  const path = bezier(c.clone().addScaledVector(o, 0.2).add(v(0, 0.02, R * 0.85)), v(0, 0.02, -0.4).addScaledVector(o, 0.52), v(0, -0.02, 0.2).addScaledVector(o, 0.52), v(0, -0.02, 0.5).addScaledVector(o, 0.28), 10);
+  sweep(P, path, octRing(0.05, 0.12, 0.015), "dark");
+  for (let i = 1; i < path.length - 1; i++) plate(P, path[i].clone().addScaledVector(o, 0.05), Y(), path[i + 1].clone().sub(path[i - 1]).normalize(), 0.22, 0.05, 0.02, "trim", { bevel: 0 });
+  lathe(P, path[path.length - 1], path[path.length - 1].clone().sub(path[path.length - 2]).normalize(), [[-0.06, 0], [-0.06, 0.15], [0.02, 0.15], [0.02, 0]], "mechanical", { n: 8 });
+  // Clamps from the pod's housing to the drum's hubs, a cradle under it and a counterweight plate behind.
+  for (const s of [1, -1]) plate(P, v(0, 0.06, -0.72).addScaledVector(o, s * (W / 2 + 0.03)), o.clone().multiplyScalar(s), Z(), 0.45, 0.16, 0.04, "mechanical", { bevel: 0.01 });
+  loftZ(P, [[-1.32, octRing(0.28, 0.05, 0.02)], [-0.6, octRing(0.28, 0.05, 0.02)]], "plating", { y0: c.y - R - 0.04 });
+  plate(P, v(0, c.y - 0.05, -1.42), X(), Y(), 0.48, 0.5, 0.08, "dark", { bevel: 0.02 });
+  hazard(P, v(sd * 0.29, c.y - R - 0.0, -0.95), rd, Y(), 0.5, 0.05, 6);
   // The pod's own muzzle (the feed has none; the arsenal's laser falls back to it).
   B.socket("Muzzle_0", v(0, 0, 2.0), Z());
   B.socket("Mount", v(-sd * 0.94, 0.32, 0));
