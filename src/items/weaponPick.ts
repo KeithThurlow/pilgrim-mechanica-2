@@ -6,6 +6,7 @@
 import { defaultLoadout, fit, MOUNTS, type Loadout, type SlotId } from "./loadout";
 import { makeItem, protocolItem } from "./generate";
 import { PROTOCOL_BY_ID, protocolFits } from "./protocols";
+import { tagsOf } from "./bases";
 
 export const SIDE = { minigun: "Minigun", rail: "Rail cannon", lightmg: "Light minigun (arm)", lightrail: "Light rail (arm)", autocannon: "Autocannon", rpg: "Rocket launcher", rocketpod: "Missile pod (arm)", sword: "Breaker sword (arm)", buster: "Buster sword (arm)", shortsword: "Short sword (arm)", laser: "Pulse laser", beam: "Beam laser", lance: "Nova lance", plasma: "Plasma cannon", orb: "Particle orb", arc: "Arc caster", sunder: "Sunder beam", smg: "SMG (arm)", rifle: "Battle rifle (arm)", shotgun: "Scattergun (arm)", sniper: "Longshot rifle", flak: "Flak cannon", cannon: "Breach cannon" } as const;
 export const SHOULDER = { none: "—", rpg: "Rocket", missiles: "Missile pod", mortar: "Big mortar", linemortar: "Line mortar", beltfeed: "Belt feed (overdrive)", incendiary: "Incendiary feed", capacitor: "Capacitor bank", drones: "Drone rack (summoner)", hive: "Swarm hive (summoner)" } as const;
@@ -73,7 +74,7 @@ export function loadoutFor(p: Pick): Loadout {
   const lo = defaultLoadout();
   const put = (slot: SlotId, base: string) => {
     const it = makeItem(base, "common", `range-${slot}-${base}`);
-    for (const id of p.protos ?? []) if (protocolFits(PROTOCOL_BY_ID[id], it.tags)) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
+    for (const id of p.protos ?? []) if (protocolFits(PROTOCOL_BY_ID[id], tagsOf(it))) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
     fit(lo, slot, it);
   };
   for (const [side, s, key] of [["left", "L", p.k1], ["right", "R", p.k2]] as const) {

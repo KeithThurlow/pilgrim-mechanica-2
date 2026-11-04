@@ -135,14 +135,14 @@ function energyW(common: Omit<W, "kind" | "n" | "latency" | "radius" | "share" |
   const E = ENERGY_DEFAULTS, base = { ...common, n: 1, latency: 0, radius: 0, share: 0, pen: 0, spread: 0, speed: Infinity, range: s.range, sheetHalf: 0.15, scatter: 0 };
   // Seconds a shot (or a beam tick) and the energy it draws per second while firing.
   const shotGap = (g: number, draw: number) => { const duty = energyDuty(draw); return { cycle: g / duty, burst: g, duty }; };
-  const rate = s.fireRate ?? 1;
+  const rate = s.fireRate ?? 1, sh = common.shot, area = sh.area ?? 1, chain = Math.round(sh.chain ?? 0);
   switch (cls) {
     case "laser": return { ...base, kind: "gun", ...shotGap(1 / rate, rate * s.energyShot) };
     case "beam": return { ...base, kind: "gun", ...shotGap(1 / rate, s.energyDrain) };
-    case "plasma": return { ...base, kind: "cannon", radius: s.splash, share: 0.6, speed: s.shellSpeed, ...shotGap(1 / rate, rate * s.energyShot) };
-    case "orb": return { ...base, kind: "orb", radius: s.splash, speed: s.shellSpeed, x: { pop: s.blastDamage ?? 0 }, ...shotGap(1 / rate, rate * s.energyShot) };
-    case "arc": return { ...base, kind: "arc", x: { hops: Math.round(s.hops ?? E.arcHops), keep: E.arcKeep, splash: 1.2 }, ...shotGap(1 / rate, rate * s.energyShot) };
-    case "lance": { const g = (s.charge ?? 0) + (s.cooldown ?? 0); return { ...base, kind: "lance", latency: s.charge ?? 0, radius: s.blast ?? 0, x: { blast: s.blastDamage ?? 0 }, ...shotGap(g, s.energyShot / g) }; }
+    case "plasma": return { ...base, kind: "cannon", radius: s.splash * area, share: 0.6, speed: s.shellSpeed, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "orb": return { ...base, kind: "orb", radius: s.splash * area, speed: s.shellSpeed, x: { pop: s.blastDamage ?? 0, zaps: chain }, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "arc": return { ...base, kind: "arc", x: { hops: Math.round(s.hops ?? E.arcHops) + chain, keep: E.arcKeep, splash: 1.2 }, ...shotGap(1 / rate, rate * s.energyShot) };
+    case "lance": { const g = (s.charge ?? 0) + (s.cooldown ?? 0); return { ...base, kind: "lance", latency: s.charge ?? 0, radius: (s.blast ?? 0) * area, x: { blast: s.blastDamage ?? 0, split: Math.max(1, Math.round(sh.split ?? 1)) }, ...shotGap(g, s.energyShot / g) }; }
     default: { // sunder: one press is a charge, a channel of ticks, a cooldown
       const g = (s.charge ?? 0) + (s.channel ?? 0) + (s.cooldown ?? 0);
       return { ...base, kind: "sunder", latency: s.charge ?? 0, sheetHalf: E.sunderWidth, x: { ticks: rate * (s.channel ?? 0) }, ...shotGap(g, s.energyShot / g) };
@@ -240,14 +240,29 @@ export function volleySingle(w: W, t: T): number {
   if (w.kind === "rail") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * thru(w.dmg * t.directK, A, ap);
   const x = w.x ?? {};
   if (w.kind === "melee") return (t.juke >= 0.5 ? REF.swingLandsJuke : REF.swingLands) * thru(w.dmg * t.directK, A, ap);
-  if (w.kind === "lance") return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * (thru(w.dmg * t.directK, A, ap) + thru(x.blast * t.blastK, A, ap));
+  if (w.kind === "lance") {
+    // Split lances fan protoFan° apart: the slug lands on the body if it passes through it, the burst by distance.
+    const n = x.split ?? 1;
+    let sum = 0;
+    for (let k = 0; k < n; k++) {
+      const o = Math.abs((k - (n - 1) / 2) * fanAt(t.dist));
+      sum += (o < t.r ? thru(w.dmg * t.directK, A, ap) : 0) + thru(x.blast * t.blastK * fall(Math.max(0, o - t.r), w.radius), A, ap);
+    }
+    return REF.aimSkill * (t.juke >= 0.5 ? 0.8 : 1) * sum;
+  }
   if (w.kind === "sunder") return REF.aimSkill * x.ticks * thru(w.dmg * t.directK, A, ap);
   if (w.kind === "arc") return thru(w.dmg * t.directK, A, ap); // it seeks the nearest enemy to the aim: no aim error
   if (w.kind === "orb") {
     // A slow orb burning everything within its radius as it passes: ticks while the body is inside its path.
-    const sg = sigma(w, t), R = w.radius + t.r, per = thru(w.dmg / ENERGY_DEFAULTS.orbTicks, A, ap);
+    // Arc link's zaps (2026-11-04): a body just outside its burn, within reach, is zapped each tick at the keep share.
+    const sg = sigma(w, t), R = w.radius + t.r, per = thru(w.dmg / ENERGY_DEFAULTS.orbTicks, A, ap), ticks = ENERGY_DEFAULTS.orbTicks;
+    const Z = R + ENERGY_DEFAULTS.arcHopRange * 0.6, zap = x.zaps > 0 ? thru((w.dmg / ticks) * ENERGY_DEFAULTS.arcKeep, A, ap) : 0;
     let sum = 0;
-    for (let i = 0; i < REF.mc; i++) { const e = Math.abs(gauss() * sg); if (e < R) sum += (2 * Math.sqrt(R * R - e * e) / w.speed) * ENERGY_DEFAULTS.orbTicks * per; }
+    for (let i = 0; i < REF.mc; i++) {
+      const e = Math.abs(gauss() * sg), inBurn = e < R ? 2 * Math.sqrt(R * R - e * e) : 0;
+      sum += (inBurn / w.speed) * ticks * per;
+      if (zap && e < Z) sum += ((2 * Math.sqrt(Z * Z - e * e) - inBurn) / w.speed) * ticks * zap;
+    }
     return sum / REF.mc;
   }
   // Projectiles and blasts: Monte Carlo over the aim error.
@@ -318,7 +333,7 @@ export function volleySwarm(w: W, t: T): number {
     const sector = Math.PI * (w.range + t.r) ** 2 * (x.arc / 360) * sw.rho, cleaveBodies = 1 + w.pen / (((Math.PI * t.r) / 2) * t.penDensity);
     return REF.swingLands * Math.min(sw.n, sector, cleaveBodies) * cap(w.dmg);
   }
-  if (w.kind === "lance") return cap(w.dmg) + ringHp(x.blast, w.radius, t, ap, true);
+  if (w.kind === "lance") return Math.min(sw.n * t.hp, (x.split ?? 1) * (cap(w.dmg) + ringHp(x.blast, w.radius, t, ap, true)));
   if (w.kind === "sunder") {
     const area = 2 * Rc * (2 * (w.sheetHalf + t.r) + REF.sunderSweep * x.ticks / Math.max(1, ENERGY_DEFAULTS.sunderTicks));
     return Math.min(sw.n, area * sw.rho) * cap(w.dmg * x.ticks);
@@ -329,8 +344,10 @@ export function volleySwarm(w: W, t: T): number {
     return Math.min(sw.n * t.hp, s);
   }
   if (w.kind === "orb") {
-    const bodies = Math.min(sw.n, 2 * (w.radius + t.r) * 2 * Rc * sw.rho);
-    return bodies * cap((w.dmg * (Math.PI / 2) * w.radius) / w.speed);
+    const bodies = Math.min(sw.n, 2 * (w.radius + t.r) * 2 * Rc * sw.rho), burn = bodies * cap((w.dmg * (Math.PI / 2) * w.radius) / w.speed);
+    // Zaps through the pack: each burn tick, x.zaps bodies outside it (at most what the burn left standing).
+    const zaps = x.zaps > 0 ? x.zaps * ENERGY_DEFAULTS.orbTicks * ((2 * Rc) / w.speed) * cap((w.dmg / ENERGY_DEFAULTS.orbTicks) * ENERGY_DEFAULTS.arcKeep) : 0;
+    return Math.min(sw.n * t.hp, burn + Math.min(zaps, (sw.n - bodies) * t.hp));
   }
   if (w.kind === "cannon") return (line(w.dmg, w.pen, w.sheetHalf) + ringHp(w.dmg * w.share, w.radius, t, ap, true)) * multi(w);
   if (w.kind === "line") {

@@ -47,12 +47,32 @@ export interface EnergyStats {
   /** Sunder: how long the blast burns (s). It also uses charge, cooldown, speed (its sweep, °/s) and radius (the cut's
    *  half-width). */
   channel: number;
+  /** Protocols (Keith 2026-11-04, by trait): lances fired at once, fanned (Splitter); extra zaps an orb throws each burn
+   *  tick at bodies just outside it (Arc link). Area and chain fold into radius, blast and hops. */
+  split: number;
+  zaps: number;
+}
+
+/** A weapon's numbers with its Protocols' behaviour (src/items/traits.ts says which fit): area × the plasma's splash,
+ *  the orb's burn and the lance's burst; Splitter fires that many lances; Arc link adds the arc caster's jumps and
+ *  the orb's zaps. */
+export function withProtocols(st: EnergyStats, p: { split?: number; area?: number; chain?: number } | undefined): EnergyStats {
+  if (!p) return st;
+  const area = p.area ?? 1, chain = Math.round(p.chain ?? 0);
+  return {
+    ...st,
+    radius: st.cls === "plasma" || st.cls === "orb" ? st.radius * area : st.radius,
+    blast: st.blast * area,
+    hops: st.cls === "arc" ? st.hops + chain : st.hops,
+    zaps: st.cls === "orb" ? chain : 0,
+    split: st.cls === "lance" ? Math.max(1, Math.round(p.split ?? 1)) : 1,
+  };
 }
 
 /** A weapon's numbers: its rolled stats (own) or the sliders. */
 export function energyStats(cls: EnergyClass, own: Record<string, number> | null | undefined, v: EnergyValues): EnergyStats {
   const o = own ?? {};
-  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0, speed: 0, radius: 0, ticks: 0, hops: 0, hopRange: 0, keep: 0, seek: 0, channel: 0 };
+  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0, speed: 0, radius: 0, ticks: 0, hops: 0, hopRange: 0, keep: 0, seek: 0, channel: 0, split: 1, zaps: 0 };
   if (cls === "plasma") return { ...base, damage: o.damage ?? v.plasmaDamage, ap: o.ap ?? v.plasmaAp, range: o.range ?? v.plasmaRange, rate: o.fireRate ?? v.plasmaRate, energy: o.energyShot ?? v.plasmaEnergy,
     speed: o.shellSpeed ?? v.plasmaSpeed, radius: o.splash ?? v.plasmaSplash };
   // An orb's damage is per second to each body inside it.

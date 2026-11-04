@@ -237,7 +237,7 @@ src/combat/             warband (raider vehicles and bandit mechs) + partyBus (t
                         crusher (the heavy crab quad: a sucking turbine maw, pincers, eats salvage) + crusherBody, crusherTarget, crusherFx, crusherField (glue),
                         rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
-src/items/              item, bases (the part and weapon table), rarity, protocols, balanceModel (the balance sheet's maths) + weaponScaling (focus, area, crowd, reliability, reach, Protocol ceilings), loadout (slots, fit rules, resolve), gridSize (item grid sizes) + grid (the grid inventory),
+src/items/              item, bases (the part and weapon table), traits (weapon traits Protocols fit by), rarity, protocols, balanceModel (the balance sheet's maths) + weaponScaling (focus, area, crowd, reliability, reach, Protocol ceilings), loadout (slots, fit rules, resolve), gridSize (item grid sizes) + grid (the grid inventory),
                         generate (seeded loot), cargo (cargo and stash lists), weaponPick (a quick pick per button and key)
 src/ui/                 bay (the bay screen: fit parts, sockets, loot), vitalsHud (hull bar, kits, red edge, hit arcs)
 src/summon/             the summoner's units: drones (attack drones, pure) + dronesDraw; glue: allies (turret companions and the scrap swarm on the robots' sim), summons (all of them on a battlefield)

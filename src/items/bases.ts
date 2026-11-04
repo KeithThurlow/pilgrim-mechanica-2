@@ -16,6 +16,7 @@ import { cannonNumbers } from "../weapons/cannon";
 import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
 import { ENERGY_BASES, ENERGY_STATS } from "../weapons/energy/energyBases";
+import { traitsOf } from "./traits";
 
 /** Shoulder gear (Keith 2026-10-25, widened 2026-10-30): on a hull's shoulder (keys 1 and 2, whatever its hull mount
  *  holds) or, for launchers, on the pack mount as a back weapon (key 3, in place of the pack). Every one has a key. */
@@ -470,4 +471,8 @@ for (const b of BASES) if (b.shoulder) b.family = SHOULDER_FAMILY[b.shoulder];
 /** Bases renamed since saves were written (src/ui/bay.ts loadBay migrates them). */
 export const RENAMED_BASES: Record<string, string> = { "back-drums": "waist-drums", "back-fulldrums": "waist-fulldrums" };
 
+// Weapon traits join the tags (src/items/traits.ts): what Protocols fit.
+for (const b of BASES) for (const t of traitsOf(b.id)) if (!b.tags.includes(t)) b.tags.push(t);
 export const BASE_BY_ID: Record<string, Base> = Object.fromEntries(BASES.map((b) => [b.id, b]));
+/** An item's tags as its base has them now (an item saved before a trait was added still gets it). */
+export const tagsOf = (item: { base: string; tags: readonly string[] }): readonly string[] => BASE_BY_ID[item.base]?.tags ?? item.tags;
