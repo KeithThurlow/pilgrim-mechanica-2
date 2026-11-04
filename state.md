@@ -313,6 +313,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · The across-chest fist stays by the chest (Claude on `claude/arm-chest`)
+- Reaching across the chest, a held gun's fist now comes at most `armCrossIn` (0.6 m, Held weapons) inboard of the arm's root; the reach shortens to hold it there (fist 0.45 m ahead of the shoulder at 50° across, was 1.06 m and 1.2 m inboard, out past the hull's nose), the gun still on the aim, and a last clamp catches what the forearm alignment adds. `src/mech/rampart.ts` (`reachArm`), `src/mech/upper.ts`. Checked: a node probe of the arm maths at -50/-25/0/45°, `upper-check`, `npm test`.
+
 ### 2026-11-04 · New Protocols: piercing, melee, energy, projectiles (Keith asked; the set is Claude's, open for Keith)
 - `src/items/protocols.ts`, new traits `charged` (rails, lance, sunder), `reflect` (pulse and beam laser), `projectile` (cannon, autocannon, rockets, plasma, orb) in `src/items/traits.ts`.
 - Piercing (fits pierce: rails, sniper, lance, sunder, Buster): Hardened core (+10% armour ignored, +15% damage, 10% slower to fire, charge or swing), Shatter point (+20% armour ignored, −12% damage). Armour negation is the `ap` stat.
