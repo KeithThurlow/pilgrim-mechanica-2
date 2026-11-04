@@ -74,6 +74,34 @@ export const PROTOCOLS: Protocol[] = [
     mods: [{ stat: "range", mul: 0.85, scope: "item" }], shot: { ricochet: 1 } },
   { id: "arcLink", name: "Arc link", text: "Hits jump on to 2 more enemies (60%, then 36%), −15% damage", fits: ["chain"], rarity: "epic", drop: 0.4,
     mods: [{ stat: "damage", mul: 0.85, scope: "item" }], shot: { chain: 2 } },
+  // Piercing (Keith 2026-11-04: "more armour negation, the more piercing there is"): the pierce trait. Armour negation
+  // is the `ap` stat, the share of armour a hit ignores (src/game/armour.ts); the cadence price lands on whichever of
+  // fireRate, charge or windup the weapon has.
+  { id: "hardenedCore", name: "Hardened core", text: "Ignores 10% more armour, +15% damage, 10% slower to fire, charge or swing", fits: ["pierce"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "ap", add: 0.1, scope: "item" }, { stat: "damage", mul: 1.15, scope: "item" }, { stat: "fireRate", mul: 0.9, scope: "item" }, { stat: "charge", mul: 1.1, scope: "item" }, { stat: "windup", mul: 1.1, scope: "item" }] },
+  { id: "shatterPoint", name: "Shatter point", text: "Ignores 20% more armour, −12% damage", fits: ["pierce"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "ap", add: 0.2, scope: "item" }, { stat: "damage", mul: 0.88, scope: "item" }] },
+  // Melee (Keith 2026-11-04): swords' own stats (src/weapons/sword.ts).
+  { id: "honedEdge", name: "Honed edge", text: "+15% cut damage, 15% slower recovery", fits: ["melee"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "damage", mul: 1.15, scope: "item" }, { stat: "recover", mul: 1.15, scope: "item" }] },
+  { id: "longHaft", name: "Long haft", text: "+20% reach, 15% slower wind-up", fits: ["melee"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "reach", mul: 1.2, scope: "item" }, { stat: "windup", mul: 1.15, scope: "item" }] },
+  { id: "quickHands", name: "Quick hands", text: "25% faster wind-up and recovery, −15% damage", fits: ["melee"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "windup", mul: 0.75, scope: "item" }, { stat: "recover", mul: 0.75, scope: "item" }, { stat: "damage", mul: 0.85, scope: "item" }] },
+  { id: "cleaver", name: "Cleaver", text: "Cuts through 50% more bodies, −10% damage", fits: ["melee"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "cleave", mul: 1.5, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
+  // Energy (Keith 2026-11-04): bolts and beams on the reactor, charged shots, light that bends.
+  { id: "efficiencyCoil", name: "Efficiency coil", text: "Draws 25% less energy, −10% damage", fits: ["bolt", "beam"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "energyShot", mul: 0.75, scope: "item" }, { stat: "energyDrain", mul: 0.75, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
+  { id: "focusLens", name: "Focusing lens", text: "+25% range, +10% damage, draws 20% more energy", fits: ["bolt", "beam"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "range", mul: 1.25, scope: "item" }, { stat: "damage", mul: 1.1, scope: "item" }, { stat: "energyShot", mul: 1.2, scope: "item" }, { stat: "energyDrain", mul: 1.2, scope: "item" }] },
+  { id: "overcharge", name: "Overcharge", text: "Charges 30% faster, 20% longer cooldown, draws 25% more energy", fits: ["charged"], rarity: "rare", drop: 0.8,
+    mods: [{ stat: "charge", mul: 0.7, scope: "item" }, { stat: "cooldown", mul: 1.2, scope: "item" }, { stat: "energyShot", mul: 1.25, scope: "item" }] },
+  { id: "prism", name: "Prism", text: "Hits reflect on to the nearest enemy (half damage), −10% damage", fits: ["reflect"], rarity: "epic", drop: 0.5,
+    mods: [{ stat: "damage", mul: 0.9, scope: "item" }], shot: { ricochet: 1 } },
+  // Projectiles (Keith 2026-11-04: "some energy weapons can be considered projectiles"): shots with a flight time.
+  { id: "accelerator", name: "Accelerator", text: "Shots fly 40% faster (easier to land on movers), −10% damage", fits: ["projectile"], rarity: "uncommon", drop: 1,
+    mods: [{ stat: "shellSpeed", mul: 1.4, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
   // Magazines (Keith 2026-10-31): reload speed and cost are stats to build round.
   { id: "quickLoader", name: "Quick loader", text: "Reloads 30% faster, −15% magazine", fits: ["magazine"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "reload", mul: 0.7, scope: "item" }, { stat: "magazine", mul: 0.85, scope: "item" }] },

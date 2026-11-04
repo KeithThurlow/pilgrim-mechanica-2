@@ -5,7 +5,8 @@
 //   How it delivers (one each): rounds, shells, rockets, slug, bolt, beam, blade.
 //   What it does: rapid (many light hits a second), spin (spins up), spread (fires in a cone), splash (its hits burst),
 //   split (one shot that can split), chain (hits can jump to the next enemy), pierce (goes deep through bodies),
-//   ricochet (solid rounds that can bounce), magazine (reloads a magazine or clip), cased (cased ammunition), melee.
+//   ricochet (solid rounds that can bounce), magazine (reloads a magazine or clip), cased (cased ammunition), melee,
+//   charged (charges each shot), reflect (light a Prism can bend), projectile (flies, so it has to lead).
 // Every Protocol fit on a trait must work in the sim for every weapon with that trait (tools/traits-check.ts).
 
 export interface Trait { id: string; name: string; text: string }
@@ -29,6 +30,9 @@ export const TRAITS: Trait[] = [
   { id: "magazine", name: "Magazine", text: "Reloads a magazine or clip" },
   { id: "cased", name: "Cased", text: "Cased ammunition" },
   { id: "melee", name: "Melee", text: "Hits what it reaches" },
+  { id: "charged", name: "Charged", text: "Charges up before each shot" },
+  { id: "reflect", name: "Reflective", text: "Light that can be bent on to another target" },
+  { id: "projectile", name: "Projectile", text: "A shot with a flight time, so it leads moving targets" },
 ];
 export const TRAIT_BY_ID: Record<string, Trait> = Object.fromEntries(TRAITS.map((t) => [t.id, t]));
 
@@ -43,19 +47,19 @@ export const WEAPON_TRAITS: Record<string, string[]> = {
   "shotgun-light": ["rounds", "spread", "magazine", "cased"],
   "sniper-medium": ["rounds", "pierce", "ricochet", "magazine", "cased"],
   "flak-medium": ["rounds", "spread", "splash", "magazine", "cased"],
-  "cannon-medium": ["shells", "splash", "magazine", "cased"],
-  "ac-medium": ["shells", "spin", "splash", "magazine", "cased"],
-  "rail-light": ["slug", "pierce"], "rail-medium": ["slug", "pierce"],
-  "rpg-light": ["rockets", "splash", "split", "magazine"], "rpg-medium": ["rockets", "splash", "split", "magazine"],
-  "sh-rpg": ["rockets", "splash", "split", "magazine"], "sh-missiles": ["rockets", "splash"],
+  "cannon-medium": ["shells", "splash", "magazine", "cased", "projectile"],
+  "ac-medium": ["shells", "spin", "splash", "magazine", "cased", "projectile"],
+  "rail-light": ["slug", "pierce", "charged"], "rail-medium": ["slug", "pierce", "charged"],
+  "rpg-light": ["rockets", "splash", "split", "magazine", "projectile"], "rpg-medium": ["rockets", "splash", "split", "magazine", "projectile"],
+  "sh-rpg": ["rockets", "splash", "split", "magazine", "projectile"], "sh-missiles": ["rockets", "splash"],
   "sh-mortar": ["shells", "splash"], "sh-linemortar": ["shells", "splash"],
-  "laser-medium": ["bolt", "rapid"], "beam-medium": ["beam"],
+  "laser-medium": ["bolt", "rapid", "reflect"], "beam-medium": ["beam", "reflect"],
   // Keith 2026-11-04: the lance takes area and split Protocols but not chain; the arc caster and the orb chain.
-  "lance-medium": ["bolt", "splash", "split", "pierce"],
-  "plasma-medium": ["bolt", "splash"],
-  "orb-medium": ["bolt", "splash", "chain"],
+  "lance-medium": ["bolt", "splash", "split", "pierce", "charged"],
+  "plasma-medium": ["bolt", "splash", "projectile"],
+  "orb-medium": ["bolt", "splash", "chain", "projectile"],
   "arc-medium": ["bolt", "chain"],
-  "sunder-medium": ["beam", "pierce"],
+  "sunder-medium": ["beam", "pierce", "charged"],
   "sword-light": SWORD, "sword-heavy": [...SWORD, "pierce"], "sword-short": [...SWORD, "rapid"],
 };
 
