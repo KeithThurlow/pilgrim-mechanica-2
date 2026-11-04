@@ -136,11 +136,26 @@ export const SWORD_DEFAULTS = {
   swordPowerDashWindow: 0.6,
   swordPowerDashCone: 60,
   swordPowerTrail: 2.2,
+  // The vertical cut (Keith 2026-11-04: "double click on sword attacks, do more of a vertical strike ... a slash
+  // downwards, or if it's on the backhand ... a vertical slash upwards ... more powerful but ... wouldn't do AoE in the
+  // same way"): a second click soon after the first, while the cut is still driving in (or just into it), turns it at
+  // the last moment from the broad sweep into a cut straight down the aim (from the forehand: the drive, so A) or
+  // straight up it (from the backhand: under the far side, so B). One line, not an arc: it hits harder, bites fewer.
+  swordVert: 1,
+  swordDoubleTime: 0.3,
+  swordVertLate: 0.2,
+  swordVertTime: 0.9,
+  swordVertDamage: 1.6,
+  swordVertCleave: 0.6,
+  swordVertHigh: 75,
+  swordVertLow: -40,
+  swordVertIn: 1.1,
+  swordVertCloseIn: 0.6,
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
-export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block", SWORD_POWER_GROUP = "Sword power";
-const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP, GP = SWORD_POWER_GROUP;
+export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block", SWORD_POWER_GROUP = "Sword power", SWORD_VERT_GROUP = "Sword vertical cut";
+const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP, GP = SWORD_POWER_GROUP, GV = SWORD_VERT_GROUP;
 export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one cut takes this (a rolled sword carries its own)" },
   { key: "swordBusterDamage", label: "Buster sword: damage × the Breaker's", min: 0.5, max: 3, step: 0.05, group: G, tip: "The rolled buster's base damage (new rolls; reload the lab)" },
@@ -233,13 +248,30 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordPowerDashWindow", label: "After a dash within (s)", min: 0, max: 2, step: 0.05, group: GP, tip: "A cut that starts this soon after a dash toward the aim is a power cut (the dash's bar pays)" },
   { key: "swordPowerDashCone", label: "Dash counts within (° of the aim)", min: 0, max: 180, step: 5, group: GP, tip: "The dash's way must be this close to the way to the aim (the lock, else the cursor)" },
   { key: "swordPowerTrail", label: "Swish brightness ×", min: 0, max: 5, step: 0.05, group: GP, tip: "The power cut's swish: blue for players, red for enemies" },
+  { key: "swordVert", label: "Double click: vertical cut", min: 0, max: 1, step: 1, group: GV, tip: "1: a second click soon after the first turns the cut into a vertical one (down from the forehand, up from the backhand); 0 off" },
+  { key: "swordDoubleTime", label: "Double click within (s)", min: 0.1, max: 0.6, step: 0.01, group: GV, tip: "The second click must come this soon after the first" },
+  { key: "swordVertLate", label: "Can still turn into the cut (share)", min: 0, max: 0.6, step: 0.01, group: GV, tip: "The cut can still turn vertical this far into its cut (0: only while driving in); after that the click queues the next cut as usual" },
+  { key: "swordVertTime", label: "Cut time ×", min: 0.4, max: 2, step: 0.01, group: GV, tip: "The vertical cut takes this × the sweep's cut time" },
+  { key: "swordVertDamage", label: "Damage ×", min: 0.5, max: 4, step: 0.05, group: GV, tip: "× a sweep's damage at the same reach" },
+  { key: "swordVertCleave", label: "Cleave budget ×", min: 0.1, max: 2, step: 0.05, group: GV, tip: "× the sword's cleave budget: how much it cuts through along its line" },
+  { key: "swordVertHigh", label: "Top of the cut (°)", min: 20, max: 88, step: 1, group: GV, tip: "The blade's angle over level where the cut down starts (the rising cut ends here)" },
+  { key: "swordVertLow", label: "Bottom of the cut (°)", min: -80, max: 10, step: 1, group: GV, tip: "The blade's angle under level where the cut down ends (the rising cut starts here)" },
+  { key: "swordVertIn", label: "Hand in toward the middle (m)", min: 0, max: 1.8, step: 0.05, group: GV, tip: "How far in from its shoulder the hand comes, so the blade falls on the aim's line (about 1.37: dead centre)" },
+  { key: "swordVertCloseIn", label: "Close cut: hand back (m)", min: 0, max: 1.2, step: 0.05, group: GV, tip: "Aimed close, the hand stays this much nearer the hull through the vertical cut" },
 ];
 
 export interface SwordStats { damage: number; ap: number; reach: number; arc: number; windup: number; slash: number; recover: number; cleave: number; parry?: number; heft?: number; /** Rest pose: 0 over the shoulder, 1 katana at the side, 2 buster across the shoulders, 3 short sword out low. */ stance?: number; /** Its base id: whose posed keys it swings with (src/weapons/swordPoses.ts). */ pose?: string }
 
 /** K: knocked back off a parry (up and back, back to rest). P: the block (up across the front, held, back to rest). guard: at rest; A the first cut (outboard across to under the far shoulder); B the back-cut; R the return after A;
- *  S the settle after B. */
-export type SwordClip = "guard" | "A" | "B" | "R" | "S" | "P" | "K";
+ *  S the settle after B. V: A turned vertical (a double click): from the drive straight down the aim, on to under the
+ *  far shoulder as A ends. U: B turned vertical: from under, straight up the aim, on to the cock as B ends. */
+export type SwordClip = "guard" | "A" | "B" | "R" | "S" | "P" | "K" | "V" | "U";
+/** A cut (a move that hits). */
+export const isCut = (c: SwordClip) => c === "A" || c === "B" || c === "V" || c === "U";
+/** A forehand cut (from the drive, ending under the far shoulder: A or V); else a backhand one (B or U). */
+export const isFore = (c: SwordClip) => c === "A" || c === "V";
+/** A vertical cut. */
+export const isVert = (c: SwordClip) => c === "V" || c === "U";
 
 type V = { x: number; y: number; z: number };
 /** A held sword's pose in the hull's frame: where the hand is, the way the blade points, the way its spine faces (the
@@ -435,6 +467,43 @@ function clipKeys(c: SwordClip, st: SwordStats, v: SwordValues, span = 1): { len
         ],
       };
     }
+    case "V": case "U": {
+      // The vertical cut (Keith 2026-11-04): the hand comes in toward the middle (swordVertIn) so the blade falls along
+      // the aim, and the blade turns in the aim's vertical plane, from swordVertHigh over level to swordVertLow under it
+      // (V, from the drive) or back up (U, from under). The spine faces back the way it came, so the edge leads.
+      const down = c === "V", hi = v.swordVertHigh, lo = v.swordVertLow, inX = -v.swordVertIn;
+      const keyOf = (name: string, hand: V, pitch: number, pole: V, t: number) => {
+        const q = pitch * D2R, sp = down ? 1 : -1, up = v3(0, sp * Math.cos(q), -sp * Math.sin(q));
+        const key: Key = { t: 0, hand, yaw: 0, pitch: pitch + v.swordDroop, up, upFix: up, pole };
+        // Close: the hand nearer the hull and a touch lower, the arm bent; never into its front (the top stays well out ahead:
+        // the close drive comes in low and near, and the hand crosses the chest on its way up to it).
+        const n: Near = { hand: v3(hand.x, hand.y - 0.2 * Math.sign(hand.y) * v.swordVertCloseIn, Math.max(hand.y > 1 ? 2.1 : 1.65, hand.z - v.swordVertCloseIn)), yaw: 0, pitch: key.pitch };
+        return cutAt(name, key, n, () => t);
+      };
+      const top = (t: number) => keyOf(down ? "vStart" : "uEnd", v3(inX, 1.5, 1.9), hi, v3(1, 0.2, -0.3), t);
+      const mid = (t: number) => keyOf(down ? "vMid" : "uMid", v3(inX, 0.3, 2.55), (hi + lo) / 2, v3(0.9, -0.6, -0.2), t);
+      const bot = (t: number) => keyOf(down ? "vEnd" : "uStart", v3(inX, -0.9, 2.3), lo, v3(0.8, -1, -0.1), t);
+      const s2 = s * v.swordVertTime;
+      if (down) {
+        const len = w + s2 + f;
+        return {
+          arc, len, cut: [w / len, (w + s2) / len], keys: [
+            { ...g, t: 0 },
+            at(ovK("drive", DRIVE_BY[si] ?? DRIVE), ovN("drive", NEAR_DRIVE_BY[si] ?? NEAR_DRIVE, false), (w * 0.7) / len),
+            top(w / len), mid((w + s2 * 0.5) / len), bot((w + s2) / len),
+            { ...under, t: 1 },
+          ],
+        };
+      }
+      const r = w * 0.45, len = r + s2 + f * 0.8;
+      return {
+        arc, len, cut: [r / len, (r + s2) / len], keys: [
+          { ...under, t: 0 },
+          bot(r / len), mid((r + s2 * 0.5) / len), top((r + s2) / len),
+          { ...cock, t: 1 },
+        ],
+      };
+    }
     case "R": {
       // The return's last key before rest (a stance without one gets it only when it's posed: from the rest itself).
       // A posed rest drops the coded last key (it led into the old shoulder rest), unless that key is posed too.
@@ -589,6 +658,9 @@ export function twistTarget(c: SwordClip, t: number, st: SwordStats, v: SwordVal
   if (c === "R") return lerp(-1, 0, x);
   if (c === "S") return lerp(0.6, 0, x);
   const [c0, c1] = cut!;
+  // The vertical cuts turn the waist only a little through the cut, then on round with the follow-through.
+  if (c === "V") return x < c0 ? lerp(0, 0.3, x / c0) : x < c1 ? lerp(0.3, -0.3, (x - c0) / (c1 - c0)) : lerp(-0.3, -1, (x - c1) / (1 - c1));
+  if (c === "U") return x < c0 ? -1 : x < c1 ? lerp(-1, 0, (x - c0) / (c1 - c0)) : lerp(0, 0.6, (x - c1) / (1 - c1));
   if (c === "A") return x < c0 ? lerp(0, 0.3, x / c0) : lerp(0.3, -1, (x - c0) / (c1 - c0));
   return x < c0 ? -1 : lerp(-1, 0.6, (x - c0) / (c1 - c0));
 }
@@ -628,6 +700,7 @@ export class SwordSim {
   since = 99;
   /** A click during a move: the next cut follows as soon as it may. */
   private queued = false;
+  private vertOn = true;
   private nextSpan = 1;
   private wasHeld = false;
   /** This cut is a power cut (Keith 2026-11-02): quicker, harder, breaks blocks. Set as it starts or mid-cut. */
@@ -636,10 +709,32 @@ export class SwordSim {
   primed = 0;
   /** Became a power cut this step (the sound). */
   powered = false;
+  /** Turned vertical this step (a double click; Keith 2026-11-04). */
+  turned = false;
+  /** The next cut to start is vertical (the double click came before it began). */
+  private vertNext = false;
+  /** Seconds since the last click that could start a double click. */
+  private sincePress = 99;
+  /** In a vertical cut now (V or U). */
+  get vertical() { return isVert(this.clip); }
+
+  /**
+   * Turn the cut vertical now (the second click of a double click): A to V, B to U, while it's still driving in or
+   * within swordVertLate of its cut. The drive is the same move, so the pose carries on (blended over swordBlend).
+   */
+  turnVertical(st: SwordStats, v: SwordValues): boolean {
+    if (v.swordVert <= 0 || (this.clip !== "A" && this.clip !== "B")) return false;
+    const w = this.cutWindow(st, v);
+    if (!w || this.t > w[0] + (w[1] - w[0]) * v.swordVertLate) return false;
+    this.prev = this.clip; this.prevT = this.t; this.prevSpan = this.span; this.since = 0;
+    this.clip = this.clip === "A" ? "V" : "U";
+    this.turned = true; this.queued = false;
+    return true;
+  }
 
   /** In a cut that hasn't finished cutting (driving in or cutting), not yet a power cut. */
   canPower(st: SwordStats, v: SwordValues): boolean {
-    if (this.power || (this.clip !== "A" && this.clip !== "B")) return false;
+    if (this.power || !isCut(this.clip)) return false;
     const w = this.cutWindow(st, v);
     return !!w && this.t < w[1];
   }
@@ -694,15 +789,17 @@ export class SwordSim {
   bite(seconds: number) { this.hitch = Math.max(this.hitch, seconds); }
 
   /** Let go of everything (weapons cold): back at rest, no move. */
-  stop() { this.clip = this.prev = "guard"; this.t = this.prevT = 0; this.since = 99; this.hitch = 0; this.queued = false; this.cutting = false; this.lungeK = 0; this.power = false; this.primed = 0; }
+  stop() { this.clip = this.prev = "guard"; this.t = this.prevT = 0; this.since = 99; this.hitch = 0; this.queued = false; this.cutting = false; this.lungeK = 0; this.power = false; this.primed = 0; this.vertNext = false; this.sincePress = 99; }
 
   private go(c: SwordClip, t: number) {
     this.prev = this.clip; this.prevT = this.t; this.prevSpan = this.span; this.since = 0;
+    // A double click that came before this cut began: it starts vertical.
+    if (isCut(c)) { if (this.vertNext && this.vertOn) c = isFore(c) ? "V" : "U"; this.vertNext = false; }
     this.clip = c; this.t = t;
-    if (c === "A" || c === "B") this.span = this.nextSpan;
-    if (c === "A" || c === "B") this.swings++;
+    if (isCut(c)) this.span = this.nextSpan;
+    if (isCut(c)) this.swings++;
     // A cut starting just after a dash in is a power cut; every other move (and the next cut of a combo) is not.
-    this.power = (c === "A" || c === "B") && this.primed > 0;
+    this.power = isCut(c) && this.primed > 0;
     if (this.power) { this.primed = 0; this.powered = true; }
   }
 
@@ -718,10 +815,18 @@ export class SwordSim {
 
   /** Step on the trigger. Returns the stretch of a cut swept this step (inside the cut window), or null. */
   update(dt: number, held: boolean, st: SwordStats, v: SwordValues, span = 1): Sweep | null {
-    this.started = false; this.powered = false;
+    this.started = false; this.powered = false; this.turned = false;
     this.nextSpan = Math.max(0, Math.min(1, span));
     this.primed = Math.max(0, this.primed - dt);
-    if (held && !this.wasHeld) this.queued = true;
+    this.vertOn = v.swordVert > 0;
+    this.sincePress += dt;
+    if (held && !this.wasHeld) {
+      // The second click of a double click (Keith 2026-11-04): turns the cut vertical, or the cut waiting to start.
+      const second = this.vertOn && this.sincePress <= v.swordDoubleTime;
+      if (second && this.turnVertical(st, v)) this.sincePress = 99;
+      else if (second && this.queued) { this.vertNext = true; this.sincePress = 99; }
+      else { this.queued = true; this.sincePress = 0; }
+    }
     this.wasHeld = held;
     const want = this.queued || held;
     this.blockCool = Math.max(0, this.blockCool - dt);
@@ -736,9 +841,9 @@ export class SwordSim {
     const len = this.length(st, v), win = this.cutWindow(st, v);
     const comboFrom = win ? win[1] + (len - win[1]) * v.swordComboAt : len;
     if (this.clip === "guard" && want) { this.queued = false; this.go("A", 0); }
-    else if ((this.clip === "A" || this.clip === "B") && want && this.t >= comboFrom) {
+    else if (isCut(this.clip) && want && this.t >= comboFrom) {
       this.queued = false;
-      if (this.clip === "A") this.go("B", 0);
+      if (isFore(this.clip)) this.go("B", 0);
       else this.go("A", this.driveAt(st, v));
     } else if ((this.clip === "R" || this.clip === "S" || this.clip === "P" || (this.clip === "K" && this.t > v.swordParryRecoil * 0.5)) && want) { this.queued = false; this.go("A", 0); }
     const t0 = this.t;
@@ -747,7 +852,7 @@ export class SwordSim {
     // The parry window: around the cut, wider for a close cut and a light sword (st.parry), never longer than
     // swordParryMax in all; a window that closes without a parry cools the parry for swordParryMiss.
     const wasOpen = this.parryOpen;
-    if ((this.clip === "A" || this.clip === "B") && w && this.parryCool <= 0) {
+    if (isCut(this.clip) && w && this.parryCool <= 0) {
       const k = this.span, pk = st.parry ?? 1;
       const half = Math.min(v.swordParryMax / 2, (v.swordParryNear + (v.swordParryFar - v.swordParryNear) * k) * pk);
       this.parryOpen = Math.abs(this.t - (w[0] + w[1]) / 2) <= half;
@@ -761,13 +866,13 @@ export class SwordSim {
       sweep = { clip: this.clip, from: Math.max(t0, w[0]), to: Math.min(this.t, w[1]) };
     }
     // The lunge: A from halfway through the drive to the end of the cut; B through its cut.
-    if (this.clip === "A" && w) this.lungeK = this.t > w[0] * 0.5 && this.t < w[1] ? Math.sin(Math.PI * Math.min(1, (this.t - w[0] * 0.5) / (w[1] - w[0] * 0.5))) : 0;
-    else if (this.clip === "B" && w) this.lungeK = this.cutting ? 0.6 : 0;
+    if (isFore(this.clip) && w) this.lungeK = this.t > w[0] * 0.5 && this.t < w[1] ? Math.sin(Math.PI * Math.min(1, (this.t - w[0] * 0.5) / (w[1] - w[0] * 0.5))) : 0;
+    else if (isCut(this.clip) && w) this.lungeK = this.cutting ? 0.6 : 0;
     else this.lungeK = 0;
     if (this.t >= L) {
       const over = this.t - L;
-      if (this.clip === "A") { if (want) { this.queued = false; this.go("B", over); } else this.go("R", over); }
-      else if (this.clip === "B") { if (want) { this.queued = false; this.go("A", this.driveAt(st, v)); } else this.go("S", over); }
+      if (isFore(this.clip)) { if (want) { this.queued = false; this.go("B", over); } else this.go("R", over); }
+      else if (isCut(this.clip)) { if (want) { this.queued = false; this.go("A", this.driveAt(st, v)); } else this.go("S", over); }
       else if (this.clip === "R" || this.clip === "S" || this.clip === "P" || this.clip === "K") this.go("guard", 0);
       else this.t = 0;
     }

@@ -12,7 +12,7 @@
 // Only swords pose for now; any weapon plays.
 //
 // URL flags: ?w=sword|buster|shortsword|minigun|... (the weapon; the weapons lab's names), ?both (the same in both
-// arms), ?pose[=key] (start posing, on that key: rest, drive, aStart, aMid, aEnd, under, bStart, bMid, bEnd, cock,
+// arms), ?pose[=key] (start posing, on that key: rest, drive, aStart, aMid, aEnd, under, bStart, bMid, bEnd, cock, vStart, vMid, vEnd, uStart, uMid, uEnd,
 // preRest, block, recoil), ?close (the close cut's form), ?dunes (dunes instead of flat ground), plus the combat-lab flags.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
@@ -44,7 +44,7 @@ const POSE_PARAMS: Param[] = [
 ];
 const KEY_STORE = "pm2:pose-lab:poses", KEY_STATE = "pm2:pose-lab:state";
 const NAMES: Record<string, string> = { "sword-light": "Breaker sword", "sword-heavy": "Buster sword", "sword-short": "Short sword" };
-const CLIPS: [SwordClip, string][] = [["guard", "Rest"], ["A", "Cut 1"], ["B", "Cut 2"], ["R", "Return"], ["S", "Settle"], ["P", "Block"], ["K", "Recoil"]];
+const CLIPS: [SwordClip, string][] = [["guard", "Rest"], ["A", "Cut 1"], ["B", "Cut 2"], ["V", "Overhead"], ["U", "Rising"], ["R", "Return"], ["S", "Settle"], ["P", "Block"], ["K", "Recoil"]];
 
 const params = new URLSearchParams(location.search);
 // The lab's state: the weapon, both arms, the reach shown.
