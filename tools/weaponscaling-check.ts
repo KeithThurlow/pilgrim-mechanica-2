@@ -36,6 +36,6 @@ for (const id of MODELLED) {
   console.log(p.name.padEnd(20) + lp(f0(p.focus), 6) + "  " + p.focusSet.padEnd(9) + lp(f0(p.area), 6) + lp(p.crowd.toFixed(1), 7) + lp(p.reliability.toFixed(2), 6) + lp(f0(p.reach), 6)
     + lp(f0(p.focusPct), 5) + lp(f0(p.areaPct), 5) + lp(f0(p.spend), 7) + lp(`×${sc.focusCeil.toFixed(2)}`, 7) + lp(`×${sc.areaCeil.toFixed(2)}`, 7) + "  " + sc.cls.padEnd(7) + " " + line);
 }
-console.log(`\nSpend over ${SCALING.spendCap} (proposed rule, not enforced): ${over.join(", ") || "none"}`);
+console.log(`\nWARNING (not a failure; open for Keith): Spend = focus % + area % over ${SCALING.spendCap}: ${over.join(", ") || "none"}`);
 if (failed) { console.error(`weaponscaling check: ${failed} failure(s)`); (globalThis as unknown as { process: { exit(c: number): never } }).process.exit(1); }
 console.log("weaponscaling check passed");

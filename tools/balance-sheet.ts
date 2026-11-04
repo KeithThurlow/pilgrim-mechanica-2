@@ -61,12 +61,14 @@ for (const w of W_) {
 
 // 2b. Energy weapons (on the reactor: sustained counts it running dry) and swords (the walk-in counted): printed, not
 // held to the bands yet (2026-11-03, open).
-console.log("\n-- Energy weapons and swords (report only: not held to the bands yet); duty = share of the time the reactor lets it fire --");
+console.log("\n-- Energy weapons (report only) and swords (their own band, " + REF.meleeBand + "%); duty = share of the time the reactor lets it fire --");
 for (const id of [...ENERGY_IDS, ...MELEE_IDS]) {
   const w = wOf(makeItem(id)), budget = REF.budget * REF.slotShare[w.slot];
   const e = T_.map((t) => eDps(w, t));
   const pct = e.map((x, i) => (100 * x) / (budget * (REF.setWeight[T_[i].id] ?? 1)));
   const best = Math.max(...pct), bi = pct.indexOf(best);
+  // Swords are held to their own looser band; energy weapons are report only for now.
+  if (MELEE_IDS.includes(id) && best > REF.meleeBand) problems.push(`${w.name} ${f0(best)}% of budget vs ${T_[bi].id} (sword band ${REF.meleeBand}%)`);
   console.log(pad(w.name, 20) + e.map((x, i) => lp(`${f0(x)} [${f0(pct[i])}]`, 14)).join("") + `   ${pad(T_[bi].id, 9)} card ${f0(dpsOf(w.cad))}${w.duty !== undefined ? ` duty ${w.duty.toFixed(2)}` : ""}`);
 }
 

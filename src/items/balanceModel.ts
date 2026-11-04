@@ -47,6 +47,9 @@ export const REF = {
   /** Weapons allowed over the 130% band against one set, by base id: the cap there (Keith 2026-11-03: flak is meant
    *  to be a crowd-clearing menace, so about twice its budget against a swarm; Claude's band, open). */
   bandOver: { "flak-medium": { swarm: 230 } } as Record<string, Record<string, number>>,
+  /** Swords' own band (2026-11-04, Claude's default, open for Keith): a sword that connects should hit far harder than a
+   *  gun, so it is held to this % of a Light weapon's budget against its best set instead of 130. */
+  meleeBand: 230,
   /** Energy weapons (2026-11-03): the Rampart hull's reactor they draw on (its middle roll), and how long the fight
    *  lasts for the energy budget: fire until the reactor is empty at the busy regen, then wait for it to refill. */
   reactor: { cap: 4, regen: 0.4, busy: REACTOR_DEFAULTS.reactorBusy, delay: REACTOR_DEFAULTS.reactorDelay },

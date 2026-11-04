@@ -313,6 +313,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Balance defaults while Keith is away: Spend a warning, flak's band kept, swords their own band (coordinator; Claude)
+- Spend (focus % + area % ≤ 200) prints as a WARNING in `tools/weaponscaling-check.ts`, never a failure. Flak keeps its 230% swarm band (the deliberate area outlier).
+- Swords get their own band in the balance sheet (`REF.meleeBand` 230% of a Light weapon's budget vs their best set; `--check` fails over it), and come down a little: `swordDamage` 450 → 420, new sliders `swordBusterDamage` (1.7 → 1.5) and `swordShortDamage` (0.6) in Weapons › Sword (`src/weapons/sword.ts`, used by `src/items/bases.ts`). Breaker 210% → 196%, Buster 252% → 208%, short sword 171%; card DPS 523 → 488, 625 → 515.
+- Checked: balance-sheet --check, weaponscaling, sword, duel, pose, loadout, weapons checks; full npm test.
 ### 2026-11-04 · Rivals use summoner gear: drones, the scrap swarm and replicas on the rival's team (Keith away: "push forward"; coordinator's ask; Claude, thread "Make rival mechs fight at full potential")
 - Duel lab (`labs/duel/main.ts`): a rival whose loadout brings summoner gear gets its own `Summons` on its team (hunting you and your summons), on its own copy of the summon sliders with its gear's counts (`applyGear`), driven by a `SummonKeys` fed from the AI's key commands. HUD line "rival summons".
 - AI (`src/combat/rivalAi.ts`, Rival AI sliders): with you in sight it calls a drone strike within `aiStrikeRange` 32 m, throws its swarm within `aiSwarmRange` 30 m once half is up, and calls it back after `aiSwarmFor` 10 s, when it backs off hurt or you're far; `aiSummonUse` 0.4/0.8/1.5 at Recruit/Veteran/Ace. The view gets `self.summon`.
