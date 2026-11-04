@@ -313,6 +313,13 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Rivals use summoner gear: drones, the scrap swarm and replicas on the rival's team (Keith away: "push forward"; coordinator's ask; Claude, thread "Make rival mechs fight at full potential")
+- Duel lab (`labs/duel/main.ts`): a rival whose loadout brings summoner gear gets its own `Summons` on its team (hunting you and your summons), on its own copy of the summon sliders with its gear's counts (`applyGear`), driven by a `SummonKeys` fed from the AI's key commands. HUD line "rival summons".
+- AI (`src/combat/rivalAi.ts`, Rival AI sliders): with you in sight it calls a drone strike within `aiStrikeRange` 32 m, throws its swarm within `aiSwarmRange` 30 m once half is up, and calls it back after `aiSwarmFor` 10 s, when it backs off hurt or you're far; `aiSummonUse` 0.4/0.8/1.5 at Recruit/Veteran/Ace. The view gets `self.summon`.
+- Rolls (`src/combat/rivalKit.ts`): a rival's shoulder can roll a drone rack or a swarm hive; 55 of seeds 1-300 carry summoner gear (with the replica bay they already rolled, which did nothing before).
+- Headless duel: a crude stand-in (drones chip at a foe in reach, faster in a strike; a sent swarm bites; replicas not modelled), for the AI's rules.
+- Checked: `duel-check` new section (≥20 of 300 rivals carry it; a summoner rival strikes and throws and recalls the swarm in a minute: 2 strikes, 4 out, 4 back; nothing at use 0); the duel lab loads in headless Chromium with `?rivalfit=shoulderL:sh-drones,shoulderR:sh-hive,pack:pack-replica` with no errors, the rival's drones up and its swarm and replicas building (the browser here runs too slowly to watch a strike); npm test. Rough: the HVT mech doesn't bring its summons yet; rival replicas share the player's replicas' flash slots and uids.
+
 ### 2026-11-03 · Rivals roll feeds and power on their shoulders and press them (Claude, thread "Make rival mechs fight at full potential")
 - A rival's shoulder rolls feeds and power too (belt feed, incendiary feed, capacitor bank; the back slot stays launchers): 68 of seeds 1-300 carry one. Same draws as before, so seeds keep their other parts. `gearOf` (`src/combat/rivalKit.ts`) lists them; the AI's view gets `gear` (key, family, gun, ready, bars).
 - The AI (`src/combat/rivalAi.ts`) presses a feed while that side's gun fires at you (overdrive or ignited rounds), and discharges a capacitor bank into its reactor when it has room for the whole refill (energy weapons only). Headless duel: feeds' passive and overdrive fire rate, the capacitor's refill (`GearSim`); ignited rounds' burn isn't modelled there.

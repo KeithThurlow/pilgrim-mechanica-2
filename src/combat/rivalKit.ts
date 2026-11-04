@@ -128,8 +128,9 @@ function pickBase(r: () => number, pool: Base[]): Base {
   return pool[pool.length - 1];
 }
 
-// A rival's back weapon is a launcher; its shoulders roll feeds and power too (2026-11-03: its AI presses them).
-const ofKind = (kind: string, size?: string, gear = false) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher" || (gear && (b.family === "feed" || b.family === "power"))));
+// A rival's back weapon is a launcher; its shoulders roll feeds and power too (2026-11-03: its AI presses them), and
+// summoner gear (a drone rack, a swarm hive: 2026-11-04, its summons fight on its team).
+const ofKind = (kind: string, size?: string, gear = false) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher" || (gear && (b.family === "feed" || b.family === "power" || !!b.summon))));
 
 /**
  * A random rival loadout from a seed (the same seed always rolls the same mech): legs, hull, a sensor that fits it, each
