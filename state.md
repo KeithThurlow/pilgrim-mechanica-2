@@ -313,6 +313,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Diminishing returns on stacked Efficiency coils and Wide bores (coordinator, after Keith's "nothing massively outshines"; Claude)
+- New `Protocol.stack` (`src/items/protocols.ts`, `stackWeights`, `weighMod`; `effectiveStats` and `shotProtocolsOf` use them): each extra copy on one item does that share of the one before. Efficiency coil 0.5, Wide bore 0.35.
+- Area ceilings at 4 sockets: plasma ×6.6 → ×4.0, flak ×5.4 → ×3.3; energy weapons' best builds ×1.3-2.1 (were up to ×2.4). `tools/weaponscaling-check.ts` now fails a weapon whose full build passes ×5 area or ×2.5 focus (the highest now: arm missile pod ×4.65 area, orb ×2.0 focus).
+- Try: `/labs/weaponreview/?w=plasma-medium&protos=wideBore,wideBore,wideBore`, `?w=laser-medium&protos=efficiencyCoil,efficiencyCoil`.
 ### 2026-11-04 · New Protocols: piercing, melee, energy, projectiles (Keith asked; the set is Claude's, open for Keith)
 - `src/items/protocols.ts`, new traits `charged` (rails, lance, sunder), `reflect` (pulse and beam laser), `projectile` (cannon, autocannon, rockets, plasma, orb) in `src/items/traits.ts`.
 - Piercing (fits pierce: rails, sniper, lance, sunder, Buster): Hardened core (+10% armour ignored, +15% damage, 10% slower to fire, charge or swing), Shatter point (+20% armour ignored, −12% damage). Armour negation is the `ap` stat.

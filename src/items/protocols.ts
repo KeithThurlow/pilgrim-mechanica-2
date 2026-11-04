@@ -43,6 +43,9 @@ export interface Protocol {
   /** Energy weapons (later, Keith 2026-10-31): the energy each shot draws ×. A data hook: nothing reads it yet. */
   draw?: number;
   drop: number;
+  /** Diminishing returns (2026-11-04, so nothing stacks far past the rest): each extra copy on one item does this share
+   *  of the one before (0.5: the second half as much, the third a quarter). Unset: every copy in full. */
+  stack?: number;
 }
 
 export const PROTOCOLS: Protocol[] = [
@@ -68,7 +71,7 @@ export const PROTOCOLS: Protocol[] = [
     mods: [{ stat: "damage", mul: 0.6, scope: "item" }, { stat: "spread", mul: 1.4, scope: "item" }], shot: { rate: 2 }, cost: 2 },
   { id: "doubleShot", name: "Double shot", text: "Fires two rounds side by side at 70% damage; uses twice the munitions", fits: ["rapid"], also: ["rounds"], rarity: "rare", drop: 0.7,
     mods: [{ stat: "damage", mul: 0.7, scope: "item" }], shot: { multi: 2 }, cost: 2 },
-  { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −12% damage, −15% range", fits: ["splash"], also: ["rounds", "bolt"], rarity: "uncommon", drop: 0.9,
+  { id: "wideBore", name: "Wide bore", text: "Rounds splash 1.6× wider, −12% damage, −15% range", fits: ["splash"], also: ["rounds", "bolt"], rarity: "uncommon", drop: 0.9, stack: 0.35,
     mods: [{ stat: "damage", mul: 0.88, scope: "item" }, { stat: "range", mul: 0.85, scope: "item" }], shot: { area: 1.6 } },
   { id: "ricochet", name: "Ricochet rounds", text: "Rounds bounce once off what they hit (half damage), −15% range", fits: ["ricochet"], rarity: "uncommon", drop: 0.9,
     mods: [{ stat: "range", mul: 0.85, scope: "item" }], shot: { ricochet: 1 } },
@@ -91,7 +94,7 @@ export const PROTOCOLS: Protocol[] = [
   { id: "cleaver", name: "Cleaver", text: "Cuts through 50% more bodies, −10% damage", fits: ["melee"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "cleave", mul: 1.5, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
   // Energy (Keith 2026-11-04): bolts and beams on the reactor, charged shots, light that bends.
-  { id: "efficiencyCoil", name: "Efficiency coil", text: "Draws 25% less energy, −10% damage", fits: ["bolt", "beam"], rarity: "uncommon", drop: 1,
+  { id: "efficiencyCoil", name: "Efficiency coil", text: "Draws 25% less energy, −10% damage", fits: ["bolt", "beam"], rarity: "uncommon", drop: 1, stack: 0.5,
     mods: [{ stat: "energyShot", mul: 0.75, scope: "item" }, { stat: "energyDrain", mul: 0.75, scope: "item" }, { stat: "damage", mul: 0.9, scope: "item" }] },
   { id: "focusLens", name: "Focusing lens", text: "+25% range, +10% damage, draws 20% more energy", fits: ["bolt", "beam"], rarity: "rare", drop: 0.8,
     mods: [{ stat: "range", mul: 1.25, scope: "item" }, { stat: "damage", mul: 1.1, scope: "item" }, { stat: "energyShot", mul: 1.2, scope: "item" }, { stat: "energyDrain", mul: 1.2, scope: "item" }] },
@@ -113,17 +116,33 @@ export const PROTOCOLS: Protocol[] = [
 
 export const PROTOCOL_BY_ID: Record<string, Protocol> = Object.fromEntries(PROTOCOLS.map((p) => [p.id, p]));
 
-/** What an item's socketed Protocols do to its rounds (undefined: nothing). Split, rate, multi and area multiply. */
+/** Each socketed Protocol's weight on its item: 1, or `stack` to the power of the copies before it. */
+export function stackWeights(socketed: readonly { base: string }[]): number[] {
+  const seen: Record<string, number> = {};
+  return socketed.map((pi) => {
+    const n = seen[pi.base] ?? 0, st = PROTOCOL_BY_ID[pi.base]?.stack;
+    seen[pi.base] = n + 1;
+    return st === undefined ? 1 : Math.pow(st, n);
+  });
+}
+
+/** A mod at a weight: its change from nothing scaled (mul 0.75 at 0.5 is 0.875; add 0.2 is 0.1). */
+export const weighMod = (m: StatMod, w: number): StatMod =>
+  w === 1 ? m : { ...m, mul: m.mul === undefined ? undefined : 1 + (m.mul - 1) * w, add: m.add === undefined ? undefined : m.add * w };
+
+/** What an item's socketed Protocols do to its rounds (undefined: nothing). Split, rate, multi and area multiply
+ *  (area at its stack weight). */
 export function shotProtocolsOf(socketed: readonly { base: string }[]): ShotProtocols | undefined {
   let p: ShotProtocols | undefined;
-  for (const pi of socketed) {
-    const s = PROTOCOL_BY_ID[pi.base]?.shot;
+  const ws = stackWeights(socketed);
+  for (let i = 0; i < socketed.length; i++) {
+    const s = PROTOCOL_BY_ID[socketed[i].base]?.shot, w = ws[i];
     if (!s) continue;
     p ??= {};
     if (s.split) p.split = (p.split ?? 1) * s.split;
     if (s.rate) p.rate = (p.rate ?? 1) * s.rate;
     if (s.multi) p.multi = (p.multi ?? 1) * s.multi;
-    if (s.area) p.area = (p.area ?? 1) * s.area;
+    if (s.area) p.area = (p.area ?? 1) * (1 + (s.area - 1) * w);
     if (s.ricochet) p.ricochet = (p.ricochet ?? 0) + s.ricochet;
     if (s.chain) p.chain = (p.chain ?? 0) + s.chain;
   }
