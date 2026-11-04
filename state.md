@@ -313,6 +313,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Diminishing returns on stacked Efficiency coils and Wide bores (coordinator, after Keith's "nothing massively outshines"; Claude)
+- New `Protocol.stack` (`src/items/protocols.ts`, `stackWeights`, `weighMod`; `effectiveStats` and `shotProtocolsOf` use them): each extra copy on one item does that share of the one before. Efficiency coil 0.5, Wide bore 0.35.
+- Area ceilings at 4 sockets: plasma ×6.6 → ×4.0, flak ×5.4 → ×3.3; energy weapons' best builds ×1.3-2.1 (were up to ×2.4). `tools/weaponscaling-check.ts` now fails a weapon whose full build passes ×5 area or ×2.5 focus (the highest now: arm missile pod ×4.65 area, orb ×2.0 focus).
+- Try: `/labs/weaponreview/?w=plasma-medium&protos=wideBore,wideBore,wideBore`, `?w=laser-medium&protos=efficiencyCoil,efficiencyCoil`.
 ### 2026-11-04 · Rivals make vertical sword cuts (Keith via the coordinator; Claude on `claude/project-thread-pooipi`)
 - A sword rival turns some cuts vertical with a double click as the cut drives in (lets the trigger up a frame, presses again): `aiVertCut` 0.35 per cut (Recruit 0.15, Veteran 0.35, Ace 0.5), Rival › AI group. Drawn off the power cut's own roll, so the seeded stream (and every other duel) is unchanged.
 - The headless duel (`src/combat/duelSim.ts`) counts it (`vertCuts`) and lands the extra damage (× `swordVertDamage`). `tools/duel-check.ts`: a sword rival makes vertical cuts, none at chance 0. Checked: npm test.
