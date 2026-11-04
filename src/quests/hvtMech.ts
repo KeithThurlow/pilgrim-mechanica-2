@@ -1,7 +1,9 @@
 // A high value target on the field (glue; docs/proposal-quests.md): one rival Rampart, the duel lab's brain
 // (src/combat/rivalAi.ts) and rolled loadouts (src/combat/rivalKit.ts), put down where hvt.ts summons it and fighting
 // the player's mech inside its lair's circle. Its body loads on the first summon (one extra Rampart, reused after).
-// Host owned (rule 12): its health, its loadout (seeded by the lair) and its brain; drawing is cosmetic.
+// Summoner gear it rolls (a drone rack, a swarm hive, a replica bay) brings its summons on its side, aimed at the
+// player's team only (2026-11-04, as the duel lab's rival), its brain pressing the keys; dismissed when it goes.
+// Host owned (rule 12): its health, its loadout (seeded by the lair), its brain and its summons; drawing is cosmetic.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "../game/battlefield";
 import { MechUnit, type MechUnitValues } from "../game/mechUnit";
@@ -18,6 +20,12 @@ import { ThreatIds, duelView, threatsFrom } from "../combat/duelThreats";
 import { resolve, type LOADOUT_DEFAULTS } from "../items/loadout";
 import type { LootValues } from "../items/generate";
 import type { Lair, HvtValues } from "./hvt";
+import { Summons, type SummonValues } from "../summon/summons";
+import { SummonKeys } from "../summon/summonKeys";
+import { applyGear } from "../summon/gear";
+import { FLAG } from "../game/register";
+import type { Resolved } from "../items/loadout";
+import type { DeathPhysics } from "../physics/deaths";
 
 /** HVT paint: soot black (the rival military is blue-grey, bandits red). */
 export const HVT_PAINT = 0x2b2622;
@@ -27,6 +35,8 @@ export interface HvtSetup {
   loadBody: () => Promise<RampartBody>;
   /** The player's weapons, for the brain's dodging (what's in the air). */
   threat: () => { arsenal: Arsenal; wv: WeaponValues } | null;
+  /** For summoner gear: the summons' sliders (copied, the gear's counts put in) and the death physics. Left out: none. */
+  summons?: { values: SummonValues; deaths: DeathPhysics | null };
 }
 
 type Values = MechUnitValues & WeaponValues & LootValues & HvtValues & typeof LOADOUT_DEFAULTS;
@@ -51,6 +61,11 @@ export class HvtMech {
   died = false;
   /** Alive as of the last step (whatever kills it, inside its step or not, is seen on the next). */
   private wasAlive = false;
+  /** Its summons (made on the first spawn with summoner gear, reused after) and the keys its brain presses. */
+  summons: Summons | null = null;
+  private summonKeys: SummonKeys | null = null;
+  private sv = {} as SummonValues;
+  private fit: Resolved | null = null;
 
   constructor(private bf: Battlefield, private scene: THREE.Scene, v: Values, private player: MechUnit) {
     this.rv = { ...v, ...RIVAL_AI_DEFAULTS, ...(RIVAL_LEVELS.veteran as Partial<RivalAiValues>) } as Values & RivalAiValues;
@@ -95,6 +110,8 @@ export class HvtMech {
     applyLoadout(unit, r);
     unit.hullOverride = Math.round(r.values.hull * v.hvtHull);
     this.kit = kitOf(r, v);
+    this.fit = r;
+    this.fitSummons(r);
     unit.reset(x, z, Math.atan2(lair.x - x, lair.z - z));
     unit.health = unit.maxHealth;
     unit.body.paint(this.setup.look, HVT_PAINT);
@@ -110,8 +127,25 @@ export class HvtMech {
     return true;
   }
 
+  /** Summoner gear on: its summons out (made the first time), the gear's counts in. None fitted: dismissed. */
+  private fitSummons(r: Resolved) {
+    const ss = this.setup?.summons, sm = r.summons, u = this.unit!;
+    const gear = sm.replicas + sm.drones + sm.scrappers > 0;
+    if (!ss || (!gear && !this.summons)) return;
+    Object.assign(this.sv, ss.values);
+    applyGear(this.sv, r);
+    if (!this.summons) {
+      // Only the player's side (their mech, pilot and summons), not the robots and bandits round the lair.
+      const foes = { all: FLAG.Hittable, none: FLAG.Down, team: this.player.team };
+      this.summons = new Summons(this.bf, this.scene, this.sv, this.bf.field, u, foes, ss.deaths, { look: this.setup!.look });
+      this.summonKeys = new SummonKeys(this.summons);
+    }
+    this.summons.setActive(gear);
+  }
+
   /** Off the field (gone to ground, or its wreck cleared). */
   despawn() {
+    this.summons?.setActive(false);
     const u = this.unit;
     if (u) {
       u.goCold();
@@ -136,6 +170,8 @@ export class HvtMech {
       const field = this.bf.field;
       const sees = (ax: number, az: number, bx: number, bz: number) => lineOfSight((x, z) => field.height(x, z), [], ax, az, bx, bz);
       const view = duelView(this.t, u, this.kit, this.arsenal!, p, threats, [], sees, { x: lair.x, z: lair.z, r: v.hvtArena });
+      const rs = this.summons, sm = this.fit?.summons;
+      if (rs && sm && rs.active) view.self.summon = { droneKeys: sm.droneKeys, swarmKeys: sm.swarmKeys, strikeReady: rs.strikeCool <= 0, drones: rs.drones.flying, swarmOut: rs.allies.mode === "sent", scrappers: rs.allies.scrappers, swarmMax: this.sv.swarmCount };
       cmd = this.ai.decide(view, dt);
     }
     this.arsenal!.railSnapped = this.ai.snapped;
@@ -146,10 +182,14 @@ export class HvtMech {
     if (cmd?.power) u.weapons?.powerCut?.();
     if (cmd?.dash) u.tryDash(cmd.dash.x, cmd.dash.z, false);
     u.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
+    this.summonKeys?.update(this.fit, !!cmd?.keys[0], !!cmd?.keys[1]);
     this.draw!.update();
-    if (this.wasAlive && !u.alive) this.died = true;
+    if (this.wasAlive && !u.alive) { this.died = true; this.summons?.setActive(false); }
     this.wasAlive = u.alive;
   }
+
+  /** Its summons' frame, every frame whether it's on the field or not (dismissed ones finish going). */
+  stepSummons(dt: number) { this.summons?.update(dt); }
 
   /** Its meshes (hold-V). */
   objects(): THREE.Object3D[] { return this.body && this.lair ? [this.body.root] : []; }
