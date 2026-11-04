@@ -313,6 +313,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Held guns kick the arm; forearms in line with the gun (Keith; Claude on `claude/arm-recoil`)
+- Forearms now point along the aim, in line with the gun (`armAlign` 0.75: the elbow pulled toward a forearm's length behind the fist, kept an upper arm from the shoulder): 5 to 7° off the aim (was 21 to 30°), the elbow back and under the shoulder ahead. Each shot drives the fist back along the forearm by the gun's kick × its kind (`armKickMinigun` 3, `armKickRifle` 4, `armKickSmg` 0.3, `armKickOther` 2.5); the held gun no longer slides on its own. The held minigun sits 0.55 m further back on the forearm (`minigunGripBack`), the SMG draws 1.4× (`smgScale`). Sliders in Your mech › Held weapons. `src/mech/rampart.ts` (`reachArm`), `src/mech/upper.ts`. Checked: node IK probe (numbers above), full `npm test`; the look is Keith's call.
 ### 2026-11-04 · Weapon review lab: raw vs eDPS, an armour slider, fitted Protocols with − (Keith's first look; Claude)
 - `labs/weaponreview/`: a raw (card) DPS vs eDPS map of every weapon, an armour curve for the picked one (raw and eDPS on the rival body by its armour), "What eDPS means" in the panel, an armour slider for every single target (`?armour=N`; −1 each its own; `SCALING.armour` in `src/items/weaponScaling.ts`), and the fitted Protocols as their own list with − on each (and clear all).
 - Checked: lab loaded headless (fitted list, − removes, armour 10), weaponscaling-check; full npm test.
