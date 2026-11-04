@@ -221,7 +221,8 @@ export class QuestLoop {
       }
     }
     lairs.events.length = 0;
-    // The HVT: its step, its death (drops, the bounty), its wreck cleared after a while.
+    // The HVT: its step, its death (drops, the bounty), its wreck cleared after a while; its summons every frame.
+    hvt.stepSummons(dt);
     if (hvt.lair) {
       hvt.step(dt);
       if (hvt.died) {

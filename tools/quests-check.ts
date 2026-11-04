@@ -9,6 +9,11 @@
 // Run: npm test (or npx tsx tools/quests-check.ts).
 import { ContractBoard, CONTRACT_DEFAULTS, type OfferSources, type ContractEvent } from "../src/quests/contracts";
 import { Lairs, HVT_DEFAULTS, type CampRef } from "../src/quests/hvt";
+import { rollRivalLoadout } from "../src/combat/rivalKit";
+import { LOOT_DEFAULTS } from "../src/items/generate";
+import { resolve } from "../src/items/loadout";
+import { SUMMON_DEFAULTS, type SummonValues } from "../src/summon/summons";
+import { applyGear } from "../src/summon/gear";
 import { TowCable, TOW_DEFAULTS, podsInReach } from "../src/quests/tow";
 
 const problems: string[] = [];
@@ -192,6 +197,24 @@ const dones = (evs: ContractEvent[]) => evs.filter((e) => e.type === "done");
   r = null;
   for (let t = 0; t < TOW_DEFAULTS.towHook + 0.1 && !r; t += 0.05) r = tow.holdE(0.05, true, "c1");
   must(r === "dropped" && !tow.on && tow.slow === 1, "holding E again didn't drop the hulk");
+}
+
+// The HVT rolls the rivals' loadouts (seeded by its lair), summoner gear included: some lairs' mechs bring summons,
+// and the gear's counts reach the summons it fights with (src/quests/hvtMech.ts, 2026-11-04).
+{
+  const lairs = new Lairs(HVT_DEFAULTS);
+  let n = 0, seen = 0;
+  for (let k = 0; k < 400; k++) {
+    const l = lairs.at({ id: `camp${k}`, x: 0, z: 0, faction: "robot" });
+    if (!l) continue;
+    seen++;
+    const r = resolve(rollRivalLoadout(l.seed, LOOT_DEFAULTS, { level: 3 }));
+    const g = { ...SUMMON_DEFAULTS } as unknown as SummonValues;
+    applyGear(g, r);
+    if (g.droneCount + g.swarmCount + g.repCount > 0) n++;
+  }
+  must(seen > 20 && n > 0, `no HVT of ${seen} lairs rolled summoner gear`);
+  console.log(`  HVTs with summons: ${n} of ${seen} lairs`);
 }
 
 if (problems.length) { console.log("FAIL\n  " + problems.join("\n  ")); throw new Error("quests check failed"); }

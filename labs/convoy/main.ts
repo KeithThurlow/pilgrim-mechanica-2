@@ -306,7 +306,7 @@ const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, en
 // The bandits may dive out of the mech's telegraphed shots (Keith 2026-10-31, src/game/bodyContact.ts).
 loop.threatSource = { arsenal, wv: V };
 // High value targets get their own Rampart (loaded on the first summon) and see the player's weapons for dodging.
-loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource });
+loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource, summons: { values: V, deaths } });
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
