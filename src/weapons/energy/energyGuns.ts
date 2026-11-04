@@ -40,6 +40,8 @@ export interface BeamView { on: boolean; from: Vec3; to: Vec3; hit: boolean; age
 export interface ChargeView { on: boolean; at: Vec3; k: number }
 /** A plasma bolt or a particle orb in flight (host: its damage; the draw reads pos). */
 export interface Orb { cls: "plasma" | "orb"; pos: THREE.Vector3; dir: THREE.Vector3; speed: number; left: number; damage: number; ap: number; radius: number; pop: number; tick: number; ticks: number; zaps: number; age: number; seed: number }
+/** A lance's burst of light where it landed (cosmetic): r the burst's radius, ground the sand's height under it. */
+export interface Nova { at: Vec3; ground: number; r: number; power: number; age: number; life: number; seed: number }
 /** A lightning strike for the draw: the chain of points from the muzzle through each target (or to the sand). */
 export interface Arc { pts: Vec3[]; age: number; life: number; seed: number }
 
@@ -71,6 +73,7 @@ export class EnergyGuns {
   /** Plasma bolts and particle orbs in flight, and recent lightning. */
   readonly orbs: Orb[] = [];
   readonly arcs: Arc[] = [];
+  readonly novas: Nova[] = [];
   /** Damage dealt by the last shot or tick per kind (the weapons lab's readout). */
   readonly last: Record<string, number> = {};
   /** Camera shake and the per-shot readout (the arsenal's hooks). */
@@ -147,6 +150,8 @@ export class EnergyGuns {
     for (let k = this.bolts.length - 1; k >= 0; k--) if (this.bolts[k].age > this.bolts[k].life) this.bolts.splice(k, 1);
     for (const a of this.arcs) a.age += dt;
     for (let k = this.arcs.length - 1; k >= 0; k--) if (this.arcs[k].age > this.arcs[k].life) this.arcs.splice(k, 1);
+    for (const n of this.novas) n.age += dt;
+    for (let k = this.novas.length - 1; k >= 0; k--) if (this.novas[k].age > this.novas[k].life) this.novas.splice(k, 1);
     for (let k = this.orbs.length - 1; k >= 0; k--) if (!this.fly(this.orbs[k], dt)) this.orbs.splice(k, 1);
   }
 
@@ -426,11 +431,12 @@ export class EnergyGuns {
     for (let k = 0; k < n; k++) {
       const a = (k - (n - 1) / 2) * fan, c = Math.cos(a), sn = Math.sin(a);
       dir.set(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c).normalize();
-      this.lanceOne(st, power, muzzle, dir, gi);
+      this.lanceOne(st, power, muzzle, dir, gi, k > 0);
     }
   }
 
-  private lanceOne(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number) {
+  /** One lance; `extra` for a split's second and third: no second release sound or shake, a quieter landing. */
+  private lanceOne(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number, extra = false) {
     const bf = this.bf, u = this.unit, v = this.v;
     this.onFire?.("lance");
     const tr = this.trace(muzzle, d, st.range);
@@ -442,10 +448,29 @@ export class EnergyGuns {
     if (tr.ground) bf.heat?.spot(at.x, at.z, 0.8 + r * 0.25, v.beamHeat * (0.6 + 0.4 * power));
     this.bolts.push({ cls: "lance", from: set3(v3(), muzzle), to: set3(v3(), at), age: 0, life: 0.35 + 0.25 * power, power, hit: !!tr.target });
     bf.gunFx.sparksAt(muzzle, d, Math.round(6 + 10 * power), 10);
-    bf.sfx.playSound("lanceFire", muzzle, 0.6 + 0.4 * power, 1.1 - 0.15 * power);
+    if (!extra) bf.sfx.playSound("lanceFire", muzzle, 0.6 + 0.4 * power, 1.1 - 0.15 * power);
+    bf.sfx.playSound("lanceHit", at, (0.5 + 0.5 * power) * (extra ? 0.45 : 1), 1.15 - 0.2 * power);
+    this.nova(at, Math.max(1.5, r), power);
     u.upper.guns[gi].kick = v.railKick * (0.5 + 0.5 * power);
-    u.upper.shake = Math.min(0.08, u.upper.shake + 0.04 * power);
+    if (!extra) u.upper.shake = Math.min(0.08, u.upper.shake + 0.04 * power);
     this.onShake?.(v.lanceShake * power);
+  }
+
+  /** The lance's burst of light (cosmetic): the flash, shell, ring and column for the draw, and arcs out to the sand. */
+  private nova(at: THREE.Vector3, r: number, power: number) {
+    const v = this.v, bf = this.bf;
+    if (v.lanceNovaSize <= 0 && v.lanceNovaPillar <= 0 && v.lanceNovaArcs <= 0) return;
+    const ground = bf.field.height(at.x, at.z);
+    this.novas.push({ at: set3(v3(), at), ground, r, power, age: 0, life: v.lanceNovaLife * (0.6 + 0.4 * power), seed: Math.random() * 1000 });
+    if (this.novas.length > 4) this.novas.shift();
+    const n = Math.round(v.lanceNovaArcs * (0.4 + 0.6 * power));
+    for (let i = 0; i < n; i++) {
+      const a = (i / Math.max(1, n)) * Math.PI * 2 + Math.random() * 0.8, d1 = r * (0.35 + 0.25 * Math.random()), d2 = r * (0.8 + 0.5 * Math.random());
+      const mx = at.x + Math.cos(a) * d1, mz = at.z + Math.sin(a) * d1, ex = at.x + Math.cos(a + 0.3) * d2, ez = at.z + Math.sin(a + 0.3) * d2;
+      this.arcs.push({ pts: [set3(v3(), at), { x: mx, y: Math.max(bf.field.height(mx, mz) + 0.4, at.y - 0.3), z: mz }, { x: ex, y: bf.field.height(ex, ez) + 0.05, z: ez }],
+        age: 0, life: v.arcShow * (1.5 + Math.random()) + 0.1 * i / Math.max(1, n), seed: Math.random() * 1000 });
+    }
+    bf.gunFx.sparksAt(at, this.n.set(0, 1, 0), Math.round(10 + 16 * power), 14);
   }
 
   // ---- The sunder beam ----
@@ -492,7 +517,7 @@ export class EnergyGuns {
     if (!s.beam.on) {
       s.beam.age = 0; s.charge.on = false; s.tele.on = false;
       this.onFire?.("sunder");
-      bf.sfx.playSound("lanceFire", muzzle, 1, 0.75);
+      bf.sfx.playSound("sunderRelease", muzzle, 1, 0.75);
       bf.gunFx.sparksAt(muzzle, d, 18, 12);
       this.onShake?.(v.sunderShake * 3);
     }

@@ -36,6 +36,15 @@ for (const id of MODELLED) {
   console.log(p.name.padEnd(20) + lp(f0(p.focus), 6) + "  " + p.focusSet.padEnd(9) + lp(f0(p.area), 6) + lp(p.crowd.toFixed(1), 7) + lp(p.reliability.toFixed(2), 6) + lp(f0(p.reach), 6)
     + lp(f0(p.focusPct), 5) + lp(f0(p.areaPct), 5) + lp(f0(p.spend), 7) + lp(`×${sc.focusCeil.toFixed(2)}`, 7) + lp(`×${sc.areaCeil.toFixed(2)}`, 7) + "  " + sc.cls.padEnd(7) + " " + line);
 }
+// Keith 2026-11-04: lighter, faster hits read higher on the card but land less. The short sword has the highest raw
+// (card) DPS of the swords, and its focus eDPS stays at or under the Buster's.
+{
+  const sw = ["sword-light", "sword-heavy", "sword-short"].map((id) => profileOf(makeItem(id)));
+  const [, bus, sho] = sw;
+  if (sho.card <= Math.max(sw[0].card, bus.card)) fail(`short sword card ${f0(sho.card)} not the swords' highest (${sw.map((p) => f0(p.card)).join(", ")})`);
+  if (sho.focus > bus.focus) fail(`short sword focus ${f0(sho.focus)} over the Buster's ${f0(bus.focus)}`);
+  console.log(`swords raw (card) / focus eDPS: ${sw.map((p) => `${p.name} ${f0(p.card)}/${f0(p.focus)}`).join(", ")}`);
+}
 console.log(`\nWARNING (not a failure; open for Keith): Spend = focus % + area % over ${SCALING.spendCap}: ${over.join(", ") || "none"}`);
 if (failed) { console.error(`weaponscaling check: ${failed} failure(s)`); (globalThis as unknown as { process: { exit(c: number): never } }).process.exit(1); }
 console.log("weaponscaling check passed");
