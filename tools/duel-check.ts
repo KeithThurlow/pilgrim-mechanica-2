@@ -152,7 +152,11 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
   must(r.powerCuts[1] > 0, "a sword rival never made a power cut in 30 s of cutting");
   const none = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], ai: { aiPowerCut: 0 }, script: (i) => (i === 0 ? stand : null) });
   must(none.powerCuts[1] === 0, "a sword rival made power cuts with the chance at 0");
-  console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts`);
+  // And turns some cuts vertical with a double click (2026-11-04); none with the chance at 0.
+  must(r.vertCuts[1] > 0, "a sword rival never made a vertical cut in 30 s of cutting");
+  const flat = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], ai: { aiVertCut: 0 }, script: (i) => (i === 0 ? stand : null) });
+  must(flat.vertCuts[1] === 0, "a sword rival made vertical cuts with the chance at 0");
+  console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts, ${r.vertCuts[1]} vertical`);
 }
 // A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
 {
