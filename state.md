@@ -313,6 +313,14 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · New Protocols: piercing, melee, energy, projectiles (Keith asked; the set is Claude's, open for Keith)
+- `src/items/protocols.ts`, new traits `charged` (rails, lance, sunder), `reflect` (pulse and beam laser), `projectile` (cannon, autocannon, rockets, plasma, orb) in `src/items/traits.ts`.
+- Piercing (fits pierce: rails, sniper, lance, sunder, Buster): Hardened core (+10% armour ignored, +15% damage, 10% slower to fire, charge or swing), Shatter point (+20% armour ignored, −12% damage). Armour negation is the `ap` stat.
+- Melee (swords): Honed edge (+15% damage, slower recovery), Long haft (+20% reach, slower wind-up), Quick hands (25% faster wind-up and recovery, −15% damage), Cleaver (+50% bodies a cut, −10% damage).
+- Energy: Efficiency coil (−25% energy, −10% damage; bolts and beams), Focusing lens (+25% range, +10% damage, +20% energy), Overcharge (charged: 30% faster charge, longer cooldown, more energy), Prism (lasers: a hit reflects on to the nearest enemy at the ricochet keep, `energyGuns.reflect`).
+- Projectiles: Accelerator (+40% shell speed, −10% damage).
+- Checks: traits-check (every fit changes one of the weapon's own stats and the model's numbers; swords take the melee set, lasers Prism), energy-check (Prism reflects on a laser and a beam), balance sheet, weaponscaling. Best area builds for energy weapons now stack Efficiency coils (they are reactor-bound); plasma's area ceiling ×6.6 (was ×5.9), open for Keith.
+- Try: `/labs/weaponreview/?w=laser-medium&protos=prism`, `?w=sword-short&protos=quickHands,cleaver`, `?w=rail-medium&protos=hardenedCore&armour=12`.
 ### 2026-11-04 · Weapon traits: Protocols fit by what a weapon does (Keith asked for traits; the set is Claude's, open for Keith)
 - `src/items/traits.ts`: one delivery trait each (rounds, shells, rockets, slug, bolt, beam, blade) plus what it does (rapid, spin, spread, splash, split, chain "Conductive", pierce, ricochet, magazine, cased, melee). Traits join each base's tags; `tagsOf(item)` reads the base's (old saves get new traits). Protocols' `fits` now name traits (`also` for a second need: Overclock and Double shot want rapid + rounds; Wide bore splash + rounds or bolt).
 - What changed in fits: the Nova lance takes Splitter (3 lances fanned, 40% each, burst too) and Wide bore (bigger burst), not Arc link; the arc caster takes Arc link (+2 jumps); the particle orb takes Arc link (zaps 2 bodies just outside its burn each tick) and Wide bore; plasma Wide bore; smg/rifle gain Splitter and Ricochet, flak Wide bore, sniper Ricochet, mortars and missiles Overpressure; rails, lasers, beams and swords take none yet (the pierce trait is on rails, the sniper, the sunder beam and the Buster, nothing fits it yet).

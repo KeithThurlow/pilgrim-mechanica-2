@@ -222,10 +222,34 @@ export class EnergyGuns {
     const tr = this.trace(muzzle, d, st.range);
     const at = this.at.copy(muzzle).addScaledVector(d, tr.t);
     this.last.laser = this.strike(tr, at, d, st.damage, st.ap, 1);
+    if (st.reflect > 0 && tr.target) this.reflect(st, at, st.damage, 1, this.v.pulseFlash);
     if (tr.ground) bf.heat?.spot(at.x, at.z, 0.35, this.v.beamHeat * 0.6);
     this.bolts.push({ cls: "laser", from: set3(v3(), muzzle), to: set3(v3(), at), age: 0, life: this.v.pulseFlash, power: 1, hit: !!tr.target });
     bf.sfx.playSound("pulseZap", muzzle, 0.8, 1);
     u.upper.guns[gi].kick = Math.max(u.upper.guns[gi].kick, 0.05);
+  }
+
+  /** Prism: the hit reflects from `from` to the nearest enemies past it (the rounds' ricochet range and keep), each a
+   *  trace so cover still stops it, `n` hits of `damage` each; a bolt shows each leg. */
+  private reflect(st: EnergyStats, from: THREE.Vector3, damage: number, n: number, life: number) {
+    const sv = (this.bf.v ?? {}) as { protoRicochetRange?: number; protoRicochetKeep?: number };
+    const range = sv.protoRicochetRange ?? 25, keepK = sv.protoRicochetKeep ?? 0.5;
+    const o = new THREE.Vector3().copy(from), dir = new THREE.Vector3(), hitAt = new THREE.Vector3();
+    let dmg = damage;
+    for (let b = 0; b < st.reflect; b++) {
+      const next = this.enemiesNear(o.x, o.z, range, this.found)
+        .map((e) => ({ e, d: Math.hypot(e.x - o.x, e.z - o.z) })).filter((x) => x.d > 1).sort((a, c) => a.d - c.d)[0];
+      if (!next) return;
+      dir.set(next.e.x - o.x, next.e.y + 0.6 - o.y, next.e.z - o.z).normalize();
+      o.addScaledVector(dir, 0.6);
+      const tr = this.trace(o, dir, range);
+      hitAt.copy(o).addScaledVector(dir, tr.t);
+      dmg *= keepK;
+      for (let k = 0; k < n; k++) this.strike(tr, hitAt, dir, dmg, st.ap, k === 0 ? 0.6 : 0);
+      this.bolts.push({ cls: "laser", from: set3(v3(), o), to: set3(v3(), hitAt), age: 0, life, power: 0.7, hit: !!tr.target });
+      if (!tr.target) return;
+      o.copy(hitAt);
+    }
   }
 
   private stepBeam(s: ESide, st: EnergyStats, dt: number, muzzle: THREE.Vector3, want: THREE.Vector3, ticks: number) {
@@ -247,6 +271,7 @@ export class EnergyGuns {
     set3(s.beam.from, muzzle); set3(s.beam.to, at);
     let dealt = 0;
     for (let k = 0; k < ticks; k++) dealt += this.strike(tr, at, d, st.damage, st.ap, k === 0 ? 0.7 : 0);
+    if (st.reflect > 0 && tr.target && ticks) this.reflect(st, at, st.damage, ticks, dt * 2.5);
     if (ticks) this.last.beam = dealt;
     // The sand where it touches glows, held there; a wisp of smoke now and then.
     if (tr.ground) {
