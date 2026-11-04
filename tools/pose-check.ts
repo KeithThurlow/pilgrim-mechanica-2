@@ -11,7 +11,7 @@ const problems: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
 const V = SWORD_DEFAULTS, ZERO = { x: 0, y: 0, z: 0 };
 const base: SwordStats = { damage: V.swordDamage, ap: V.swordAp, reach: V.swordReach, arc: V.swordArc, windup: V.swordWindup, slash: V.swordSlash, recover: V.swordRecover, cleave: V.swordCleave };
-const CLIPS: SwordClip[] = ["guard", "A", "B", "R", "S", "P", "K"];
+const CLIPS: SwordClip[] = ["guard", "A", "B", "V", "U", "R", "S", "P", "K"];
 const d3 = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const poseDiff = (a: SwordPose, b: SwordPose) => Math.max(d3(a.hand, b.hand), d3(a.fwd, b.fwd), d3(a.up, b.up));
 /** Every clip sampled, at a reach. */

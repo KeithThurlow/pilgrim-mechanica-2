@@ -36,7 +36,7 @@ import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
 import type { ShotProtocols } from "../game/shots";
 import { famOfTeam } from "../world/lamps";
-import { SwordSim, cutDamage, powerStats, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose, type SwordClip } from "./sword";
+import { SwordSim, isCut, isFore, isVert, cutDamage, powerStats, lungeIntent, sweepTimes, swordCuts, clipPose, clipLength, twistTarget, springStep, type SwordStats, type SwordPose, type SwordClip } from "./sword";
 import { SwordSwish } from "./swordSwish";
 import type { HeldPose } from "../mech/rampart";
 import { sheetHits } from "../game/sheetFire";
@@ -525,7 +525,9 @@ export class Arsenal implements MechWeapons {
       : v.swordScrub > 0 ? { clip: (v.swordScrub <= 1 ? "A" : "B") as "A" | "B", share: v.swordScrub <= 1 ? v.swordScrub : v.swordScrub - 1, span: this.reachShare() } : null;
     const sweep = scrub ? null : sw.update(dt, held, st, v, this.reachShare());
     if (scrub) sw.lungeK = 0;
-    if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave; s.bit = false; }
+    if (sw.swings !== s.swingSeen) { s.swingSeen = sw.swings; s.swordHits.clear(); s.cleave = st.cleave * (sw.vertical ? v.swordVertCleave : 1); s.bit = false; }
+    // Turned vertical by a double click (Keith 2026-11-04): it bites fewer along its line.
+    if (sw.turned) s.cleave = Math.min(s.cleave, st.cleave * v.swordVertCleave);
     // The hull's frame and this side's shoulder in it (a body without them: a frame on the pelvis along the torso).
     const frame = this.frame;
     if (body.hullFrame) body.hullFrame(frame);
@@ -557,14 +559,14 @@ export class Arsenal implements MechWeapons {
     const hand = this.tmp;
     const m = s.model, ms = m?.sword;
     if (m) m.root.getWorldPosition(hand); else hand.set(pose.hand.x, pose.hand.y, pose.hand.z).applyMatrix4(frame);
-    if (sw.started) bf.sfx.playSound("swordSwing", hand, sw.power ? 1.2 : 0.9, (sw.power ? 0.7 : 0.85) + Math.random() * 0.25);
+    if (sw.started) bf.sfx.playSound("swordSwing", hand, sw.power ? 1.2 : sw.vertical ? 1.05 : 0.9, (sw.power ? 0.7 : sw.vertical ? 0.72 : 0.85) + Math.random() * 0.25);
     // A power cut (Keith 2026-11-02): the hydraulics bang and a low whoosh as it kicks in.
     if (sw.powered && u.alive) { bf.sfx.play("brap", u.sim.pelvis, 0.8, 0.3, false); if (!sw.started) bf.sfx.playSound("swordSwing", hand, 1.1, 0.7 + Math.random() * 0.15); }
     // The swish (src/weapons/swordSwish.ts): in the hull's frame, so the blade's length there is the reach over the
     // hull's scale. Fed every pose the cut sweeps (smooth however fast), and the blade's pose just after the cut.
     const hullG = body.hullGroup?.();
     const hs = this.tmp2.setFromMatrixScale(frame).x || 1, bladeL = (st.reach * v.swordLength) / hs;
-    const fast = sw.cutting || ((sw.clip === "A" || sw.clip === "B") && sw.t < (sw.cutWindow(st, v)?.[1] ?? 0) + v.swordSwishAfter);
+    const fast = sw.cutting || (isCut(sw.clip) && sw.t < (sw.cutWindow(st, v)?.[1] ?? 0) + v.swordSwishAfter);
     if (hullG && v.swordTrail > 0 && !s.swish) s.swish = new SwordSwish();
     const swish = hullG && v.swordTrail > 0 ? s.swish : null;
     if (swish && swish.mesh.parent !== hullG) hullG!.add(swish.mesh);
@@ -583,15 +585,18 @@ export class Arsenal implements MechWeapons {
     if (fast && u.alive && !sweep) feed(pose, s.swishT);
     if (sweep && u.alive) {
       const fw = this.dir, hw = this.sh2;
-      // Which way the edge travels across the aim: the first cut toward the far side, the back-cut toward its own.
-      const dir = sw.side * (sweep.clip === "A" ? 1 : -1);
+      // Which way the edge travels across the aim: the first cut toward the far side, the back-cut toward its own; a
+      // vertical cut doesn't cross it.
+      const vert = isVert(sweep.clip), dir = vert ? 0 : sw.side * (isFore(sweep.clip) ? 1 : -1);
       for (const t of sweepTimes(sweep)) {
         const p = clipPose(sweep.clip, t, sw.side, shoulder, aimYaw, st, v, sw.span);
         feed(p, s.swishT - (sweep.to - t));
         if (s.cleave <= 0) continue;
         hw.set(p.hand.x, p.hand.y, p.hand.z).applyMatrix4(frame);
         fw.set(p.fwd.x, p.fwd.y, p.fwd.z).transformDirection(frame);
-        this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, dir);
+        // A vertical cut's sheet reaches only as far out as the blade does over the ground (Keith 2026-11-04): raised,
+        // it cuts near the hand; level, its full reach.
+        this.swordSheet(s, hw, Math.atan2(fw.x, fw.z), st, dir, vert ? st.reach * Math.hypot(fw.x, fw.z) : st.reach);
       }
     }
     // A power cut's swish (Keith 2026-11-02): blue for players, red for enemies, brighter.
@@ -612,11 +617,11 @@ export class Arsenal implements MechWeapons {
   }
 
   /** One sheet of the blade at a world yaw: hit what it crosses that this swing hasn't hit yet. */
-  private swordSheet(s: Side, hand: THREE.Vector3, yaw: number, st: SwordStats, dir: number) {
+  private swordSheet(s: Side, hand: THREE.Vector3, yaw: number, st: SwordStats, dir: number, reach = st.reach) {
     const u = this.unit, v = this.v, bf = this.bf, field = bf.field;
     const dx = Math.sin(yaw), dz = Math.cos(yaw);
     const sheet = {
-      ox: hand.x, oz: hand.z, dx, dz, from: 0, len: st.reach, half: v.swordHalf, under: v.sheetUnder,
+      ox: hand.x, oz: hand.z, dx, dz, from: 0, len: reach, half: v.swordHalf, under: v.sheetUnder,
       top: (t: number) => field.height(hand.x + dx * t, hand.z + dz * t) + v.swordHeight,
       ground: (x: number, z: number) => field.height(x, z),
     };
@@ -635,7 +640,7 @@ export class Arsenal implements MechWeapons {
       // A mech facing the cut with a free sword blocks it (Keith 2026-11-01): less damage and knock, the blade stalls.
       const power = s.sword.power;
       const met = t.parry?.(u.sim.pos.x, u.sim.pos.z, power) ?? { take: 1 }, take = met.take, blocked = take < 1 && !met.broke;
-      t.damage(cutDamage(st, v, s.sword.span) * (power ? v.swordPowerDamage : 1) * u.damageScale * take, at, kd, st.ap);
+      t.damage(cutDamage(st, v, s.sword.span) * (power ? v.swordPowerDamage : 1) * (s.sword.vertical ? v.swordVertDamage : 1) * u.damageScale * take, at, kd, st.ap);
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       if (met.parried) {
         // The blades met (Keith 2026-11-01): a clash of sparks and light, a bend in the air, a loud ching; my blade
@@ -1296,7 +1301,7 @@ export class Arsenal implements MechWeapons {
       if (!s.kind) { out.push(`${b} —`); return; }
       const g = u.upper.guns[i];
       let state = "";
-      if (s.kind === "melee") state = (s.sword.power ? `<b style="color:#6cc4ff">power</b> ` : "") + (s.sword.clip === "guard" ? "click to cut, again to cut back; Space mid-cut: power cut" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : "recover");
+      if (s.kind === "melee") state = (s.sword.power ? `<b style="color:#6cc4ff">power</b> ` : "") + (s.sword.clip === "guard" ? "click to cut, again to cut back; double click: vertical cut; Space mid-cut: power cut" : s.sword.clip === "A" ? "cut" : s.sword.clip === "B" ? "back-cut" : s.sword.clip === "V" ? "<b>overhead cut</b>" : s.sword.clip === "U" ? "<b>rising cut</b>" : "recover");
       else if (s.kind === "energy") state = this.energy.stateText(i);
       else if (s.kind === "rail") state = s.rail.cooldown > 0 ? `${s.rail.cooldown.toFixed(1)} s` : s.rail.holding ? `charge ${Math.round(s.rail.charge * 100)}%` : "hold to charge";
       else if (g.mag.reloading > 0) state = `<b style="color:#ffb347">reload ${g.mag.reloading.toFixed(1)} s</b>`;

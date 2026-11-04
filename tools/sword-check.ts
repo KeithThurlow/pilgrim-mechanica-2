@@ -4,7 +4,8 @@
 // the Rampart's torso and pelvis in every move; the edge leads each cut; at rest the blade points back and up over the
 // shoulder; the arm's bones keep their lengths; the blade's sheets cut every body in the arc and reach once per cut
 // (none behind or out of reach), nearest first, until the cleave budget is spent; the item fits an arm's hand and
-// resolves to a melee gun with the reach as its range.
+// resolves to a melee gun with the reach as its range; a double click turns a cut vertical (down from the forehand, up
+// from the backhand), along the aim's line, the edge leading, a late second click doesn't.
 // Run: npm test (or npx tsx tools/sword-check.ts).
 import { SwordSim, SWORD_DEFAULTS, powerStats, swordCuts, clipPose, armIk, moveWarp, twistTarget, springStep, clipLength, clipCut, lungeIntent, type SwordStats, type SwordClip } from "../src/weapons/sword";
 import { sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../src/game/sheet";
@@ -66,9 +67,9 @@ for (const stance of [0, 1, 2, 3]) {
   { const st = { ...st0, stance };
   for (const span of [0, 0.5, 1])
   for (const side of [1, -1] as const) {
-    const lens = Object.fromEntries((["A", "B", "R", "S", "P", "K", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
+    const lens = Object.fromEntries((["A", "B", "V", "U", "R", "S", "P", "K", "guard"] as SwordClip[]).map((c) => [c, clipLength(c, st, V, span)])) as Record<SwordClip, number>;
     const sh = SH(side);
-    for (const c of ["guard", "A", "B", "R", "S", "P", "K"] as SwordClip[]) {
+    for (const c of ["guard", "A", "B", "V", "U", "R", "S", "P", "K"] as SwordClip[]) {
       let worst = 0, clash = "", lead = 0, lag = 0;
       let prevTip: number[] | null = null;
       for (let i = 0; i <= 60; i++) {
@@ -362,6 +363,68 @@ for (const stance of [0, 1, 2, 3]) {
   must(ok1 && Math.abs(d.energy - (e0 - V.swordPowerCost)) < 1e-6, "a power cut didn't spend its energy");
   d.charges = 0;
   must(!d.spend(V.swordPowerCost) && d.energy === 0, "a power cut went through with no energy");
+}
+
+// ---- The vertical cut (Keith 2026-11-04): a double click turns the cut vertical at the last moment ----
+{
+  // Clicks at frame numbers (one frame down each); the clips the swings went through and the sweeps' blade pitches.
+  const run = (clicks: number[], span = 1, frames = 600) => {
+    const sw = new SwordSim(1), cuts: SwordClip[] = [];
+    let seen = 0, turned = -1, hiP = -90, loP = 90, firstP: number | null = null, lastP = 0, yawMost = 0;
+    for (let i = 0; i < frames; i++) {
+      const sweep = sw.update(dt, clicks.includes(i), st, V, span);
+      if (sw.turned) turned = i;
+      if (sw.swings !== seen) { seen = sw.swings; cuts.push(sw.clip); }
+      if (sweep && (sweep.clip === "V" || sweep.clip === "U")) {
+        cuts[cuts.length - 1] = sweep.clip;
+        const p = clipPose(sweep.clip, sweep.to, 1, SH(1), 0, st, V, span), pitch = Math.asin(p.fwd.y) / D2R;
+        firstP ??= pitch; lastP = pitch; hiP = Math.max(hiP, pitch); loP = Math.min(loP, pitch);
+        yawMost = Math.max(yawMost, Math.abs(Math.atan2(p.fwd.x, p.fwd.z)) / D2R);
+      }
+    }
+    return { cuts, turned, hiP, loP, firstP, lastP, yawMost, sw };
+  };
+  const gap = Math.round((V.swordDoubleTime * 0.5) / dt);
+  // From rest: click, click → the overhead cut, one swing, from high to low, along the aim.
+  const d = run([0, gap]);
+  must(d.turned === gap && d.cuts.join(",") === "V", `a double click from rest cut ${d.cuts.join(",")}, not V`);
+  must(d.firstP !== null && d.firstP > 20 && d.lastP < -20 && d.firstP > d.lastP, `the overhead cut ran from ${d.firstP?.toFixed(0)}° to ${d.lastP.toFixed(0)}°, not high to low`);
+  must(d.yawMost < 15, `the overhead cut's blade strayed ${d.yawMost.toFixed(0)}° off the aim (a vertical cut stays on its line)`);
+  console.log(`  overhead cut: ${d.firstP?.toFixed(0)}° down to ${d.lastP.toFixed(0)}°, blade within ${d.yawMost.toFixed(1)}° of the aim`);
+  // Close, too (the close cut's drive is short).
+  const dc = run([0, Math.min(gap, Math.round(0.12 / dt))], 0);
+  must(dc.cuts.join(",") === "V", `a quick double click aimed close cut ${dc.cuts.join(",")}, not V`);
+  // Single click: the broad cut, as before.
+  must(run([0]).cuts.join(",") === "A", "a single click didn't cut A");
+  // A second click too late (past the double-click time): the back-cut queued, both broad.
+  const late = run([0, Math.round((V.swordDoubleTime + 0.15) / dt)], 1, 900);
+  must(late.cuts.join(",") === "A,B", `click, wait, click cut ${late.cuts.join(",")}, not A,B`);
+  // Clicked once mid-cut (queues B), then double-clicked before B starts: B starts as the rising cut.
+  const wA = clipCut("A", st, V, 1)!;
+  const q = Math.round(((wA[0] + wA[1]) / 2) / dt);
+  const up = run([0, q, q + gap], 1, 900);
+  must(up.cuts.join(",") === "A,U", `a double click mid-cut cut ${up.cuts.join(",")}, not A then the rising cut`);
+  must(up.firstP !== null && up.firstP < -10 && up.lastP > 20, `the rising cut ran from ${up.firstP?.toFixed(0)}° to ${up.lastP.toFixed(0)}°, not low to high`);
+  // A double click into a cut already past swordVertLate: no turn (the second click queues the next cut).
+  { const sw = new SwordSim(1); sw.update(dt, true, st, V, 1); while (sw.clip === "A" && sw.t < wA[0] + (wA[1] - wA[0]) * (V.swordVertLate + 0.1)) sw.update(dt, false, st, V, 1);
+    must(!sw.turnVertical(st, V) && sw.clip === "A", "a cut past swordVertLate into its cut still turned vertical"); }
+  // Off: no vertical cut.
+  { const sw = new SwordSim(1), off = { ...V, swordVert: 0 }; for (let i = 0; i < 300; i++) sw.update(dt, i === 0 || i === gap, st, off, 1); must(sw.swings >= 1 && !sw.turned, "a double click turned the cut with swordVert at 0"); }
+  // The edge leads in the blade's own plane (the spine faces back the way the blade came), every stance and reach.
+  for (const c of ["V", "U"] as SwordClip[]) for (const span of [0, 1]) {
+    const cw = clipCut(c, st, V, span)!;
+    let lead = 0, lag = 0, prev: { x: number; y: number; z: number } | null = null;
+    for (let i = 0; i <= 40; i++) {
+      const p = clipPose(c, cw[0] + ((cw[1] - cw[0]) * i) / 40, 1, SH(1), 0, st, V, span);
+      if (prev) { const m = (p.fwd.x - prev.x) * p.up.x + (p.fwd.y - prev.y) * p.up.y + (p.fwd.z - prev.z) * p.up.z; if (m < 0) lead++; else lag++; }
+      prev = p.fwd;
+    }
+    must(lead > lag * 3, `${c} span ${span}: the edge didn't lead the vertical cut (${lead} leading, ${lag} trailing)`);
+  }
+  // The vertical cut sweeps far less ground across than the broad one (its AoE is a line).
+  const across = (c: SwordClip) => { const cw = clipCut(c, st, V, 1)!; let lo = 99, hi = -99; for (let i = 0; i <= 40; i++) { const p = clipPose(c, cw[0] + ((cw[1] - cw[0]) * i) / 40, 1, SH(1), 0, st, V, 1); const x = p.hand.x + p.fwd.x * st.reach; lo = Math.min(lo, x); hi = Math.max(hi, x); } return hi - lo; };
+  must(across("V") < across("A") * 0.25, `the overhead cut's tip swept ${across("V").toFixed(1)} m across, near the broad cut's ${across("A").toFixed(1)} m`);
+  console.log(`  tip swept across: broad ${across("A").toFixed(1)} m, overhead ${across("V").toFixed(1)} m, rising ${across("U").toFixed(1)} m`);
 }
 
 if (problems.length) { console.error("sword-check FAILED:\n  " + problems.join("\n  ")); process.exit(1); }

@@ -20,7 +20,7 @@ export interface KeyPose { hand?: P3; fwd?: P3; up?: P3; pole?: P3 }
 export type PoseSet = Record<string, KeyPose>;
 
 /** The keys a pose can change, in the order a swing passes them. `span`: the key has a close cut form too. */
-export const SWORD_KEYS: { name: string; label: string; clip: "guard" | "A" | "B" | "R" | "P" | "K"; span: boolean }[] = [
+export const SWORD_KEYS: { name: string; label: string; clip: "guard" | "A" | "B" | "R" | "P" | "K" | "V" | "U"; span: boolean }[] = [
   { name: "rest", label: "Rest", clip: "guard", span: false },
   { name: "drive", label: "Cut 1: drive in", clip: "A", span: true },
   { name: "aStart", label: "Cut 1: start", clip: "A", span: true },
@@ -31,6 +31,13 @@ export const SWORD_KEYS: { name: string; label: string; clip: "guard" | "A" | "B
   { name: "bMid", label: "Cut 2: middle", clip: "B", span: true },
   { name: "bEnd", label: "Cut 2: end", clip: "B", span: true },
   { name: "cock", label: "Cut 2: ends up (cocked)", clip: "B", span: true },
+  // The vertical cuts (Keith 2026-11-04: a double click). Overhead: the drive is Cut 1's; it ends up under as Cut 1 does.
+  { name: "vStart", label: "Overhead: top", clip: "V", span: true },
+  { name: "vMid", label: "Overhead: middle", clip: "V", span: true },
+  { name: "vEnd", label: "Overhead: bottom", clip: "V", span: true },
+  { name: "uStart", label: "Rising: bottom", clip: "U", span: true },
+  { name: "uMid", label: "Rising: middle", clip: "U", span: true },
+  { name: "uEnd", label: "Rising: top", clip: "U", span: true },
   { name: "ret1", label: "Return: coming back up", clip: "R", span: false },
   { name: "ret2", label: "Return: across the front", clip: "R", span: false },
   { name: "preRest", label: "Return: last before rest", clip: "R", span: false },

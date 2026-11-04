@@ -735,7 +735,7 @@ export class RampartBody {
    * below the line, bent at the front and straighter as the aim swings out to the side (armStraightAt); the elbow
    * finds itself (two-bone IK, bending down, out and back). The gun rides the fist. Cosmetic: the sim aims the gun.
    */
-  private reachArm(p: PodRig, yaw: number, pitch: number, v: UpperValues) {
+  private reachArm(p: PodRig, yaw: number, pitch: number, v: UpperValues, g: UpperSim["guns"][number]) {
     const D = Math.PI / 180, cp = Math.cos(pitch);
     const u = Math.min(1, Math.max(0, (p.side * yaw) / Math.max(1e-3, v.armStraightAt * D))), s = u * u * (3 - 2 * u);
     const full = v.armUpper + v.armFore, reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
@@ -744,9 +744,33 @@ export class RampartBody {
     const o = this.tmp.o2.set(p.home.x + p.side * v.armShoulderOut, p.home.y, p.home.z);
     const hand = { x: o.x + Math.sin(yaw) * cp * reach, y: o.y - Math.sin(pitch) * reach - drop, z: o.z + Math.cos(yaw) * cp * reach };
     const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * v.armPoleOut, y: -1, z: -v.armPoleBack });
-    p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
+    // The forearm turned toward the aim, in line with the gun (Keith 2026-11-04: "the forearm just point a little more
+    // towards the target... the elbows could come back"): the elbow is moved toward the point a forearm's length
+    // behind the fist along the aim (armAlign of the way), kept an upper arm's length from the shoulder, and the fist
+    // is put a forearm's length on from it, between the IK's forearm and the aim.
+    const fx = Math.sin(yaw) * cp, fy = -Math.sin(pitch), fz = Math.cos(yaw) * cp, k = v.armAlign;
+    let ex = r.elbow.x + ((r.hand.x - fx * v.armFore) - r.elbow.x) * k, ey = r.elbow.y + ((r.hand.y - fy * v.armFore) - r.elbow.y) * k, ez = r.elbow.z + ((r.hand.z - fz * v.armFore) - r.elbow.z) * k;
+    const eu = v.armUpper / Math.max(1e-6, Math.hypot(ex - o.x, ey - o.y, ez - o.z));
+    ex = o.x + (ex - o.x) * eu; ey = o.y + (ey - o.y) * eu; ez = o.z + (ez - o.z) * eu;
+    let dx = (r.hand.x - r.elbow.x) / v.armFore, dy = (r.hand.y - r.elbow.y) / v.armFore, dz = (r.hand.z - r.elbow.z) / v.armFore;
+    dx += (fx - dx) * k; dy += (fy - dy) * k; dz += (fz - dz) * k;
+    const dl = Math.hypot(dx, dy, dz) || 1;
+    dx /= dl; dy /= dl; dz /= dl;
+    // The arm's kick (Keith 2026-11-04): each shot drives the fist back along the forearm, by the gun's own kick times
+    // its kind's (minigun heavy, rifle less, SMG almost none).
+    const cls = g.stats?.cls ?? "minigun";
+    const kick = g.kick * (cls === "minigun" ? v.armKickMinigun : cls === "rifle" ? v.armKickRifle : cls === "smg" ? v.armKickSmg : v.armKickOther);
+    const fore = v.armFore - Math.min(kick, v.armFore * 0.5);
+    const r2 = { elbow: { x: ex - dx * kick * 0.4, y: ey - dy * kick * 0.4, z: ez - dz * kick * 0.4 }, hand: { x: 0, y: 0, z: 0 } };
+    r2.hand.x = r2.elbow.x + dx * fore; r2.hand.y = r2.elbow.y + dy * fore; r2.hand.z = r2.elbow.z + dz * fore;
+    p.yawPitch.position.set(r2.hand.x, r2.hand.y, r2.hand.z);
     p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
-    this.drawArm(p, o, r, v.armShoulderOut > 0.02);
+    this.drawArm(p, o, r2, v.armShoulderOut > 0.02);
+    // Where the gun sits in the fist and how big it draws, by kind: the minigun further back (its handle up by the
+    // barrels), the SMG bigger.
+    const S = MOUNT_STANDIN;
+    p.kick.scale.setScalar(S.heldScale * (cls === "smg" ? v.smgScale : 1));
+    p.kickBase!.set(S.gunAt[0] - S.handAt[0], S.gunAt[1] - S.handAt[1], S.gunAt[2] - S.handAt[2] - (cls === "minigun" ? v.minigunGripBack : 0));
   }
 
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
@@ -831,11 +855,14 @@ export class RampartBody {
         // so the body's lean, the sprint's lean, roll and shake are all taken out.
         const yw = upper.torsoYaw + g.yaw, pw = g.pitch - upper.lean, c = Math.cos(pw);
         t.v.set(Math.sin(yw) * c, -Math.sin(pw), Math.cos(yw) * c).applyQuaternion(t.q.copy(this.hull.quaternion).invert());
-        this.reachArm(p, Math.atan2(t.v.x, t.v.z), -Math.asin(Math.max(-1, Math.min(1, t.v.y))), upper.v);
+        this.reachArm(p, Math.atan2(t.v.x, t.v.z), -Math.asin(Math.max(-1, Math.min(1, t.v.y))), upper.v, g);
+        // The arm took the kick (reachArm): the gun rides the fist.
+        p.kick.position.copy(p.kickBase!);
+      } else {
+        p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
+        if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
+        p.kick.position.z -= g.kick;
       }
-      else p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
-      if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
-      p.kick.position.z -= g.kick;
       p.spin.rotation.z = g.spinAngle * -p.side;
     }
   }

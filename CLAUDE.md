@@ -116,7 +116,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   (Keith 2026-10-27): a dash empties a full bar, the sprint drains the rest (so it needs two), no hull weapons while sprinting: held guns' arms still track and fire inside a shoulder arc (out to 5° behind side-on) while the hull faces the run, the arm reaching from the shoulder (Keith 2026-11-03; Your mech › Held weapons).
   Energy weapons draw on the hull's reactor instead, a separate cyan bar beside them (Keith 2026-11-02; Your mech › Reactor).
   Space while a sword cut drives in or cuts is a power cut instead (a bar; quicker, blue swish, breaks blocks, parryable), and so
-  is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power).
+  is a cut right after a dash toward the aim (Keith 2026-11-02; Weapons › Sword power). A double click turns a cut vertical at the
+  last moment: overhead down from the forehand, rising up from the backhand, harder but one line (Keith 2026-11-04; Weapons › Sword vertical cut).
 - Terrain lab: `?shot` (marker parked), `?view=high` (overhead, no haze), `?seed=N`.
 - Swarm lab (Keith 2026-11-02; the robots, bandits, warband, droids, crusher, summoner and strider labs forward here with their flags):
   `?enemy=robots|bandits|warband|droids|crusher` (robots by default), a list (`?enemy=robots,bandits`) or `?enemy=mix` (all at once);

@@ -6,7 +6,7 @@
 import type { Param } from "../core/tweaks";
 import { PEN_DEFAULTS, PEN_PARAMS } from "../game/sheet";
 import { ARMOUR_DEFAULTS, ARMOUR_PARAMS } from "../game/armour";
-import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP } from "./sword";
+import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP } from "./sword";
 import { ENERGY_DEFAULTS, ENERGY_PARAMS, ENERGY_GROUPS } from "./energy/energyTuning";
 import { GUN_DEFAULTS, GUN_PARAMS, GUN_GROUPS } from "./guns";
 import { CANNON_DEFAULTS, CANNON_PARAMS, CANNON_GROUP } from "./cannon";
@@ -375,4 +375,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, R, A, ...GUN_GROUPS, CANNON_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, R, A, ...GUN_GROUPS, CANNON_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
