@@ -23,7 +23,8 @@ import type { MechUnit } from "../../game/mechUnit";
 import type { WeaponValues } from "../tuning";
 import type { Vec3 } from "../painter";
 import { rayGround } from "../../world/raycast";
-import { EnergySim, energyStats, type EnergyClass, type EnergyStats } from "./energySim";
+import { EnergySim, energyStats, withProtocols, type EnergyClass, type EnergyStats } from "./energySim";
+import type { ShotProtocols } from "../../game/shots";
 import { addEnergySounds } from "./energySound";
 import type { Loop } from "../../audio/sfx";
 import { splashBlast } from "../../game/splash";
@@ -38,7 +39,7 @@ export interface Bolt { cls: EnergyClass; from: Vec3; to: Vec3; age: number; lif
 export interface BeamView { on: boolean; from: Vec3; to: Vec3; hit: boolean; age: number }
 export interface ChargeView { on: boolean; at: Vec3; k: number }
 /** A plasma bolt or a particle orb in flight (host: its damage; the draw reads pos). */
-export interface Orb { cls: "plasma" | "orb"; pos: THREE.Vector3; dir: THREE.Vector3; speed: number; left: number; damage: number; ap: number; radius: number; pop: number; tick: number; ticks: number; age: number; seed: number }
+export interface Orb { cls: "plasma" | "orb"; pos: THREE.Vector3; dir: THREE.Vector3; speed: number; left: number; damage: number; ap: number; radius: number; pop: number; tick: number; ticks: number; zaps: number; age: number; seed: number }
 /** A lance's burst of light where it landed (cosmetic): r the burst's radius, ground the sand's height under it. */
 export interface Nova { at: Vec3; ground: number; r: number; power: number; age: number; life: number; seed: number }
 /** A lightning strike for the draw: the chain of points from the muzzle through each target (or to the sand). */
@@ -47,6 +48,8 @@ export interface Arc { pts: Vec3[]; age: number; life: number; seed: number }
 interface ESide {
   cls: EnergyClass | null;
   own: Record<string, number> | null;
+  /** Its Protocols' behaviour (split, area, chain), or none. */
+  proto?: ShotProtocols;
   sim: EnergySim;
   /** The beam's direction now (it swings after the aim). */
   dir: THREE.Vector3;
@@ -92,13 +95,13 @@ export class EnergyGuns {
     addEnergySounds(bf.sfx, v);
   }
 
-  configure(i: number, cls: EnergyClass | null, own: Record<string, number> | null) {
+  configure(i: number, cls: EnergyClass | null, own: Record<string, number> | null, proto?: ShotProtocols) {
     const s = this.sides[i];
     this.quiet(s);
-    s.cls = cls; s.own = own; s.sim = new EnergySim();
+    s.cls = cls; s.own = own; s.proto = proto; s.sim = new EnergySim();
   }
 
-  stats(i: number): EnergyStats | null { const s = this.sides[i]; return s.cls ? energyStats(s.cls, s.own, this.v) : null; }
+  stats(i: number): EnergyStats | null { const s = this.sides[i]; return s.cls ? withProtocols(energyStats(s.cls, s.own, this.v), s.proto) : null; }
 
   /**
    * One step of side i: `held` its trigger, `blocked` a dash or the sprint (any charge is lost, the beam stops), the
@@ -107,7 +110,7 @@ export class EnergyGuns {
   step(i: number, dt: number, held: boolean, blocked: boolean, muzzle: THREE.Vector3, flat: THREE.Vector3, aim: Vec3 | null) {
     const s = this.sides[i], u = this.unit, v = this.v;
     if (!s.cls) return;
-    const st = energyStats(s.cls, s.own, v);
+    const st = withProtocols(energyStats(s.cls, s.own, v), s.proto);
     if (blocked) { s.sim.drop(); held = false; }
     const out = s.sim.step(dt, held, st, u.reactor, v.energyCost < 0.5);
     // Where it points: at the aim point (a body's height over the cursor's sand, so it meets what stands there), else
@@ -264,7 +267,7 @@ export class EnergyGuns {
     const dir = d.clone();
     if (orb) { dir.y = 0; dir.normalize(); }
     this.orbs.push({ cls: orb ? "orb" : "plasma", pos: muzzle.clone(), dir, speed: st.speed, left: st.range, damage: st.damage, ap: st.ap, radius: st.radius,
-      pop: st.blastDamage, tick: 0, ticks: st.ticks, age: 0, seed: Math.random() * 100 });
+      pop: st.blastDamage, tick: 0, ticks: st.ticks, zaps: st.zaps, age: 0, seed: Math.random() * 100 });
     bf.sfx.playSound(orb ? "orbLaunch" : "plasmaShot", muzzle, 0.8, 1);
     bf.gunFx.sparksAt(muzzle, dir, orb ? 4 : 3, 4);
     u.upper.guns[gi].kick = Math.max(u.upper.guns[gi].kick, orb ? 0.12 : 0.08);
@@ -299,6 +302,7 @@ export class EnergyGuns {
       o.tick += gap;
       splashBlast(bf.targets, team, o.pos, o.radius, o.damage * gap, o.dir, null, o.ap);
       bf.heat?.spot(o.pos.x, o.pos.z, o.radius * 0.35, this.v.beamHeat * 0.4, gap);
+      if (o.zaps > 0) this.orbZaps(o, gap);
     }
     if (o.left <= 1e-3) {
       // Its pop: a small burst of everything it held.
@@ -404,7 +408,35 @@ export class EnergyGuns {
     u.upper.guns[gi].kick = Math.max(u.upper.guns[gi].kick, 0.04);
   }
 
+  /** Arc link on an orb (Keith 2026-11-04): each burn tick it zaps the nearest bodies just outside it, × keep each. */
+  private orbZaps(o: Orb, gap: number) {
+    const bf = this.bf, v = this.v, reach = o.radius + v.arcHopRange * 0.6;
+    const near = this.enemiesNear(o.pos.x, o.pos.z, reach, this.found)
+      .map((e) => ({ e, d: Math.hypot(e.x - o.pos.x, e.z - o.pos.z) }))
+      .filter((x) => x.d > o.radius).sort((a, b) => a.d - b.d).slice(0, o.zaps);
+    let k = v.arcKeep;
+    for (const { e } of near) {
+      const p = this.at.set(e.x, e.y, e.z);
+      splashBlast(bf.targets, this.unit.team, p, 0.8, o.damage * gap * k, this.d.set(p.x - o.pos.x, 0, p.z - o.pos.z).normalize(), null, o.ap);
+      this.arcs.push({ pts: [set3(v3(), o.pos), set3(v3(), p)], age: 0, life: v.arcShow * 0.6, seed: Math.random() * 1000 });
+      k *= v.arcKeep;
+    }
+  }
+
+  /** The lance, split into `st.split` fanned across the aim (Splitter), each at its share (the Protocol's stat mods). */
   private lance(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number) {
+    const n = Math.max(1, st.split), fan = (((this.bf.v as { protoFan?: number } | undefined)?.protoFan ?? 6) * Math.PI) / 180;
+    if (n === 1) return this.lanceOne(st, power, muzzle, d, gi);
+    const dir = new THREE.Vector3();
+    for (let k = 0; k < n; k++) {
+      const a = (k - (n - 1) / 2) * fan, c = Math.cos(a), sn = Math.sin(a);
+      dir.set(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c).normalize();
+      this.lanceOne(st, power, muzzle, dir, gi, k > 0);
+    }
+  }
+
+  /** One lance; `extra` for a split's second and third: no second release sound or shake, a quieter landing. */
+  private lanceOne(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number, extra = false) {
     const bf = this.bf, u = this.unit, v = this.v;
     this.onFire?.("lance");
     const tr = this.trace(muzzle, d, st.range);
@@ -416,11 +448,11 @@ export class EnergyGuns {
     if (tr.ground) bf.heat?.spot(at.x, at.z, 0.8 + r * 0.25, v.beamHeat * (0.6 + 0.4 * power));
     this.bolts.push({ cls: "lance", from: set3(v3(), muzzle), to: set3(v3(), at), age: 0, life: 0.35 + 0.25 * power, power, hit: !!tr.target });
     bf.gunFx.sparksAt(muzzle, d, Math.round(6 + 10 * power), 10);
-    bf.sfx.playSound("lanceFire", muzzle, 0.6 + 0.4 * power, 1.1 - 0.15 * power);
-    bf.sfx.playSound("lanceHit", at, 0.5 + 0.5 * power, 1.15 - 0.2 * power);
+    if (!extra) bf.sfx.playSound("lanceFire", muzzle, 0.6 + 0.4 * power, 1.1 - 0.15 * power);
+    bf.sfx.playSound("lanceHit", at, (0.5 + 0.5 * power) * (extra ? 0.45 : 1), 1.15 - 0.2 * power);
     this.nova(at, Math.max(1.5, r), power);
     u.upper.guns[gi].kick = v.railKick * (0.5 + 0.5 * power);
-    u.upper.shake = Math.min(0.08, u.upper.shake + 0.04 * power);
+    if (!extra) u.upper.shake = Math.min(0.08, u.upper.shake + 0.04 * power);
     this.onShake?.(v.lanceShake * power);
   }
 

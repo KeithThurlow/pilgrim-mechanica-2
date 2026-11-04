@@ -16,7 +16,7 @@
 import { isEnergy } from "../weapons/energy/energySim";
 import { REACTOR_DEFAULTS } from "../mech/reactor";
 import type { Param } from "../core/tweaks";
-import { BASE_BY_ID, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
+import { BASE_BY_ID, tagsOf, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
 import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf } from "./protocols";
 import { itemWeight, lookFor, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
@@ -294,7 +294,7 @@ function socketProblemOf(item: Item, proto: Item, already: boolean): string | nu
   const p = PROTOCOL_BY_ID[proto.base];
   if (!p) return "unknown Protocol";
   if (!already && item.socketed.length >= item.sockets) return item.sockets ? "all sockets full" : "no sockets (Common)";
-  if (!protocolFits(p, item.tags)) return `fits ${p.fits.join(" or ")} items`;
+  if (!protocolFits(p, tagsOf(item))) return `fits ${p.fits.join(" or ")} items`;
   if (!already && item.socketed.some((q) => q.base === proto.base)) return "already socketed";
   return null;
 }
@@ -410,7 +410,8 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // an unrolled base item runs on the weapon sliders (own: null).
     // Other swords than the Breaker always run on their own stats (Keith 2026-11-01: "they all just have the same
     // animation"), so a quick pick of a buster or a short sword is that sword, not the Breaker's sliders.
-    const own = item.seed || (cls === "melee" && item.base !== "sword-light") ? w : null, light = item.size === "L";
+    // An item with Protocols socketed runs on its own stats too, so their stat mods (Splitter's 40% on a lance) count.
+    const own = item.seed || item.socketed.length || (cls === "melee" && item.base !== "sword-light") ? w : null, light = item.size === "L";
     if (cls === "rpg") return { fireRate: 1 / Math.max(0.1, w.cooldown), spinUp: 0.1, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: 0, range: 70, pierce: 0, ap: w.ap, cls, own, light, proto };
     // The rail charges on energy-tagged coils but spends nothing yet (the energy hook, later): no magazine.
     // The sword (src/weapons/sword.ts): no magazine; its "rate" is one swing per wind-up, slash and recovery, its range
@@ -420,7 +421,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     // its ticks, a lance's one shot per charge and cooldown.
     if (isEnergy(cls)) {
       const rate = w.fireRate ?? 1 / Math.max(0.1, (w.charge ?? 0) + (w.cooldown ?? 0));
-      return { fireRate: rate, spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: w.energyShot ?? w.energyDrain ?? 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 0, ap: w.ap, cls, own, light };
+      return { fireRate: rate, spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: w.energyShot ?? w.energyDrain ?? 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 0, ap: w.ap, cls, own, light, proto };
     }
     // A round gun (src/weapons/guns.ts): the minigun's path with its own pellets and splash; magazine-fed (no drum).
     if (isRoundGun(cls)) return { fireRate: w.fireRate, spinUp: 0.05, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, cls, own, light, proto,

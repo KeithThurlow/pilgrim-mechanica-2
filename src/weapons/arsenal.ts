@@ -219,7 +219,7 @@ export class Arsenal implements MechWeapons {
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null, mk !== "minigunFeed");
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
-      this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null);
+      this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null, g?.proto);
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });

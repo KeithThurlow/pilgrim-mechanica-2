@@ -14,6 +14,7 @@ import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutForBase } from "../../src/items/weaponPick";
 import { BASE_BY_ID } from "../../src/items/bases";
 import { PROTOCOL_BY_ID } from "../../src/items/protocols";
+import { TRAIT_BY_ID, traitsOf } from "../../src/items/traits";
 import { itemCadence } from "../../src/items/dps";
 import { makeItem } from "../../src/items/generate";
 import { REF, ENERGY_IDS, MELEE_IDS, wOf } from "../../src/items/balanceModel";
@@ -139,6 +140,7 @@ css.textContent = `
 .wr svg { display: block; width: 100%; height: auto; }
 .wr svg text { font: 10px var(--sans); fill: var(--muted); }
 .wr .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+.wr .chip { border: 1px solid var(--muted); border-radius: 3px; padding: 1px 6px; cursor: help; }
 .wr .key { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
 .wr p { margin: 3px 0; }
 `;
@@ -248,6 +250,8 @@ function render() {
 <tr><td>Scaling</td><td class="n">${cls}</td><td>Ceilings at ${full} sockets</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(sc.focusCeil)}</span> · <span style="color:${C_AREA}">A ×${f2(sc.areaCeil)}</span></td></tr>
 ${mineFA ? `<tr><td>Fitted</td><td class="n" colspan="2">${esc(state.protos.map((x) => PROTOCOL_BY_ID[x].name).join(" + "))}</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(mineFA.focus / Math.max(1e-6, p.focus))}</span> · <span style="color:${C_AREA}">A ×${f2(mineFA.area / Math.max(1e-6, p.area))}</span></td></tr>` : ""}
 </table>`;
+  // Keith 2026-11-04: its traits first (what Protocols fit by), then what's fitted, then the Protocol table.
+  h += `<h4>Traits <span class="dim">Protocols fit by these</span></h4><div class="chips">${traitsOf(base).map((t) => `<span class="chip" title="${esc(TRAIT_BY_ID[t].text)}">${esc(TRAIT_BY_ID[t].name)}</span>`).join("") || '<span class="dim">none</span>'}</div>`;
   h += `<h4>Fitted Protocols (${state.protos.length}/${full}) <span class="dim">on the weapon the mech fires; + in the Protocol table adds one</span></h4>`;
   h += state.protos.length ? `<div class="chips">${state.protos.map((x, i) => `<button data-del="${i}" title="take it off">${esc(PROTOCOL_BY_ID[x].name)} −</button>`).join("")}<button id="wr-clear">clear all</button></div>` : `<p class="dim">None fitted.${protos.length ? "" : " No Protocol fits this weapon."}</p>`;
   h += `<h4>Armour on the targets: <b>${state.armour < 0 ? "each its own" : state.armour}</b></h4><input id="wr-arm" type="range" min="-1" max="16" step="0.5" value="${state.armour}" style="width:100%"><p class="dim">−1 (far left): cutter 3, excavator 6.5, raider 2, rival mech 8. Otherwise every single target gets this armour (the swarm keeps 0). Every number and chart here follows it.</p>`;
