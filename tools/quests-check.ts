@@ -12,7 +12,7 @@ import { Lairs, HVT_DEFAULTS, type CampRef } from "../src/quests/hvt";
 import { rollRivalLoadout } from "../src/combat/rivalKit";
 import { LOOT_DEFAULTS } from "../src/items/generate";
 import { resolve } from "../src/items/loadout";
-import { SUMMON_DEFAULTS } from "../src/summon/summons";
+import { SUMMON_DEFAULTS, type SummonValues } from "../src/summon/summons";
 import { applyGear } from "../src/summon/gear";
 import { TowCable, TOW_DEFAULTS, podsInReach } from "../src/quests/tow";
 
@@ -209,7 +209,7 @@ const dones = (evs: ContractEvent[]) => evs.filter((e) => e.type === "done");
     if (!l) continue;
     seen++;
     const r = resolve(rollRivalLoadout(l.seed, LOOT_DEFAULTS, { level: 3 }));
-    const g = { ...SUMMON_DEFAULTS };
+    const g = { ...SUMMON_DEFAULTS } as unknown as SummonValues;
     applyGear(g, r);
     if (g.droneCount + g.swarmCount + g.repCount > 0) n++;
   }
