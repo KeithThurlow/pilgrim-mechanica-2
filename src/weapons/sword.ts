@@ -24,7 +24,10 @@ import type { PenMaterial, SheetHit } from "../game/sheet";
 import { posesFor, type P3 } from "./swordPoses";
 
 export const SWORD_DEFAULTS = {
-  swordDamage: 450,
+  swordDamage: 420, // was 450 (2026-11-04: the balance model put the Breaker at 210% of a Light weapon's budget)
+  /** The sword line's damage × the Breaker's (src/items/bases.ts): the buster (was 1.7) and the short sword. */
+  swordBusterDamage: 1.5,
+  swordShortDamage: 0.6,
   swordAp: 0.5,
   swordReach: 4.7,
   swordArc: 210,
@@ -140,6 +143,8 @@ export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_G
 const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP, GP = SWORD_POWER_GROUP;
 export const SWORD_PARAMS: Param[] = [
   { key: "swordDamage", label: "Damage per hit", min: 0, max: 3000, step: 5, group: G, tip: "Every body the blade crosses in one cut takes this (a rolled sword carries its own)" },
+  { key: "swordBusterDamage", label: "Buster sword: damage × the Breaker's", min: 0.5, max: 3, step: 0.05, group: G, tip: "The rolled buster's base damage (new rolls; reload the lab)" },
+  { key: "swordShortDamage", label: "Short sword: damage × the Breaker's", min: 0.2, max: 2, step: 0.05, group: G, tip: "The rolled short sword's base damage (new rolls; reload the lab)" },
   { key: "swordAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: G },
   { key: "swordReach", label: "Reach from the hand (m)", min: 2, max: 14, step: 0.1, group: G, tip: "The blade's sheet runs from the hand out to this; the model's blade is drawn to match" },
   { key: "swordArc", label: "Cut arc (°)", min: 30, max: 270, step: 1, group: G, tip: "How far the blade turns through a cut, centred on the aim" },

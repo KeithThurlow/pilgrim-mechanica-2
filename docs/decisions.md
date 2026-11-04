@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-04 | Defaults while Keith is away: Spend ≤ 200 is a test warning, not a failure; flak keeps its 230% swarm band as the deliberate area outlier; swords get their own 230% band and come down a little (Breaker 450 → 420, Buster ×1.7 → ×1.5, sliders) | Claude (open questions) | Claude, on the coordinator's defaults (open for Keith) | Open for Keith: enforce Spend? flak's band? the sword band and the trims (Breaker 196%, Buster 208% of budget on single targets once they connect) |
 | 2026-11-03 | Rivals roll feeds and power on their shoulders (not the back) and press them: feeds while that gun fires, the capacitor into a reactor with room | Keith (rivals use their whole kit) | Claude | Was "shoulder gear is the player's" (2026-10-30); open for Keith if rivals should stay launcher-only |
 | 2026-11-03 | Sword rivals make power cuts (a roll per cut, a spare bar only); an AI dodge mid-cut stays a dodge | Keith (rivals at full potential) | Claude | `aiPowerCut` per level is a guess |
 | 2026-11-03 | With three bars each, rivals press when you are two bars behind them, and now and then push on a spare bar (a dash in, then 4 s pressing) | Coordinator (after #145) | Claude | Values are guesses for Keith to feel: `aiBarEdge`, `aiPush`, `aiPushTime` (Rival AI) |

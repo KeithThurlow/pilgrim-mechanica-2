@@ -313,6 +313,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Balance defaults while Keith is away: Spend a warning, flak's band kept, swords their own band (coordinator; Claude)
+- Spend (focus % + area % ≤ 200) prints as a WARNING in `tools/weaponscaling-check.ts`, never a failure. Flak keeps its 230% swarm band (the deliberate area outlier).
+- Swords get their own band in the balance sheet (`REF.meleeBand` 230% of a Light weapon's budget vs their best set; `--check` fails over it), and come down a little: `swordDamage` 450 → 420, new sliders `swordBusterDamage` (1.7 → 1.5) and `swordShortDamage` (0.6) in Weapons › Sword (`src/weapons/sword.ts`, used by `src/items/bases.ts`). Breaker 210% → 196%, Buster 252% → 208%, short sword 171%; card DPS 523 → 488, 625 → 515.
+- Checked: balance-sheet --check, weaponscaling, sword, duel, pose, loadout, weapons checks; full npm test.
 ### 2026-11-03 · Rivals roll feeds and power on their shoulders and press them (Claude, thread "Make rival mechs fight at full potential")
 - A rival's shoulder rolls feeds and power too (belt feed, incendiary feed, capacitor bank; the back slot stays launchers): 68 of seeds 1-300 carry one. Same draws as before, so seeds keep their other parts. `gearOf` (`src/combat/rivalKit.ts`) lists them; the AI's view gets `gear` (key, family, gun, ready, bars).
 - The AI (`src/combat/rivalAi.ts`) presses a feed while that side's gun fires at you (overdrive or ignited rounds), and discharges a capacitor bank into its reactor when it has room for the whole refill (energy weapons only). Headless duel: feeds' passive and overdrive fire rate, the capacitor's refill (`GearSim`); ignited rounds' burn isn't modelled there.
