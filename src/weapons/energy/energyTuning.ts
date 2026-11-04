@@ -36,6 +36,13 @@ export const ENERGY_DEFAULTS = {
   lanceBlast: 6,
   lanceBlastDamage: 220,
   lanceShake: 0.35,
+  /** The burst's light (Keith 2026-11-04: "a more lasery explosion"): a white-cyan flash and shell, a ring on the sand, a
+   *  column of light and arcs crackling out, over the dust and crater. */
+  lanceNovaSize: 1,
+  lanceNovaLife: 0.75,
+  lanceNovaArcs: 6,
+  lanceNovaPillar: 14,
+  lanceHitLevel: 0.9,
   // Plasma cannon: glowing bolts that fly (not hitscan) and splash where they burst.
   plasmaDamage: 55,
   plasmaAp: 0.3,
@@ -124,6 +131,11 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "lanceBlast", label: "Burst radius (m, full)", min: 0, max: 15, step: 0.1, group: LN },
   { key: "lanceBlastDamage", label: "Burst damage (full)", min: 0, max: 1000, step: 5, group: LN },
   { key: "lanceShake", label: "Camera shake", min: 0, max: 1, step: 0.01, group: LN },
+  { key: "lanceNovaSize", label: "Burst light size (× radius)", min: 0, max: 3, step: 0.05, group: LN, tip: "The flash, the shell and the ring on the sand where it lands; 0 off (only the dust and crater)" },
+  { key: "lanceNovaLife", label: "Burst light time (s)", min: 0.1, max: 2, step: 0.05, group: LN },
+  { key: "lanceNovaArcs", label: "Burst arcs", min: 0, max: 16, step: 1, group: LN, tip: "Lightning crackling out from where it lands to the sand round it (by the charge)" },
+  { key: "lanceNovaPillar", label: "Burst column height (m)", min: 0, max: 40, step: 0.5, group: LN, tip: "A column of light standing up from where it lands; 0 off" },
+  { key: "lanceHitLevel", label: "Hit crack level", min: 0, max: 2, step: 0.05, group: LN, tip: "The electric crack where it lands, over the blast's boom" },
   { key: "plasmaDamage", label: "Damage per bolt", min: 1, max: 300, step: 1, group: PL, tip: "The body it bursts on takes this; the splash round it a share by distance" },
   { key: "plasmaAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: PL },
   { key: "plasmaRate", label: "Bolts/s", min: 0.2, max: 10, step: 0.1, group: PL },
