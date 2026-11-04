@@ -313,6 +313,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Gun roles: the SMG hits hardest up close, the rifle is steadier and reaches further (Keith; Claude)
+- `smgDamage` 9 → 12, `smgSpread` 5 → 6°, `rifleDamage` 32 → 30 (Weapons › SMG / Rifle, `src/weapons/guns.ts`). SMG card 94 → 126, focus eDPS 71 → 97 at its 25 m (nothing past 28 m, 15% through a rival's armour); rifle card 97 → 91, focus 92 → 86, keeps 72% through armour, out to 55 m.
+- Checked: balance-sheet --check, weaponscaling, guns checks; full npm test.
+- Try: `/labs/weaponreview/?w=smg-light`, `?w=rifle-light`, both with `&armour=8`.
 ### 2026-11-04 · Weapon traits: Protocols fit by what a weapon does (Keith asked for traits; the set is Claude's, open for Keith)
 - `src/items/traits.ts`: one delivery trait each (rounds, shells, rockets, slug, bolt, beam, blade) plus what it does (rapid, spin, spread, splash, split, chain "Conductive", pierce, ricochet, magazine, cased, melee). Traits join each base's tags; `tagsOf(item)` reads the base's (old saves get new traits). Protocols' `fits` now name traits (`also` for a second need: Overclock and Double shot want rapid + rounds; Wide bore splash + rounds or bolt).
 - What changed in fits: the Nova lance takes Splitter (3 lances fanned, 40% each, burst too) and Wide bore (bigger burst), not Arc link; the arc caster takes Arc link (+2 jumps); the particle orb takes Arc link (zaps 2 bodies just outside its burn each tick) and Wide bore; plasma Wide bore; smg/rifle gain Splitter and Ricochet, flak Wide bore, sniper Ricochet, mortars and missiles Overpressure; rails, lasers, beams and swords take none yet (the pierce trait is on rails, the sniper, the sunder beam and the Buster, nothing fits it yet).
