@@ -1,7 +1,8 @@
 // Draws a mech's energy weapons (src/weapons/energy/energyGuns.ts): pulse bolts (a thin red line with a white core
 // that fades in a blink, a spark of light where it lands), the beam laser (a flickering orange-red beam with a white
 // core, a glow at the muzzle and a pulsing spot where it burns), the nova lance (a cyan ball swelling at the muzzle as it
-// charges; the shot a thick white-cyan beam that thins and fades), plasma bolts (a green-white ball, stretched along its
+// charges; the shot a thick white-cyan beam that thins and fades, and where it lands a burst of light: a white flash, a
+// cyan shell swelling out, a ring racing over the sand, a column of light and arcs crackling out), plasma bolts (a green-white ball, stretched along its
 // flight, with a short glowing tail), particle orbs (a violet ball with a wobbling halo and motes swirling round it)
 // lightning (jagged blue-white bolts through every target, re-jagged every frame so they crackle) and the sunder beam
 // (a thin flickering gold aim line while it charges, then a thick gold-white beam that swells in and pulses). Cosmetic.
@@ -21,6 +22,8 @@ export class EnergyDraw {
   private beams: (Line & { muzzle: THREE.Mesh })[] = [];
   private charges: { ball: THREE.Mesh; halo: THREE.Mesh }[] = [];
   private teles: Line[] = [];
+  /** The lance's bursts of light (src/weapons/energy/energyGuns.ts Nova). */
+  private novas: { flash: THREE.Mesh; shell: THREE.Mesh; ring: THREE.Mesh; ring2: THREE.Mesh; pillar: THREE.Mesh; pillarCore: THREE.Mesh }[] = [];
   /** Plasma bolts and orbs (instanced: core, glow, tail) and the orbs' motes; lightning segments. */
   private cores: THREE.InstancedMesh;
   private glows: THREE.InstancedMesh;
@@ -54,6 +57,9 @@ export class EnergyDraw {
     this.motes = inst(ball, 0xffffff, MAX_MOTES);
     this.segs = inst(unitBox, 0xffffff, MAX_SEGS);
     this.segGlow = inst(unitBox, 0xffffff, MAX_SEGS);
+    const ring = new THREE.RingGeometry(0.82, 1, 56).rotateX(-Math.PI / 2), column = new THREE.CylinderGeometry(1, 1, 1, 16, 1, true).translate(0, 0.5, 0);
+    for (let i = 0; i < 4; i++)
+      this.novas.push({ flash: mesh(ball, 0xffffff), shell: mesh(ball, COL.lance), ring: mesh(ring, COL.lance), ring2: mesh(ring, 0xe8fbff), pillar: mesh(column, COL.lance), pillarCore: mesh(column, 0xffffff) });
     for (let i = 0; i < 2; i++) {
       this.beams.push({ ...line(COL.beam), muzzle: mesh(ball, 0xffd2a0) });
       this.charges.push({ ball: mesh(ball, 0xe8fbff), halo: mesh(ball, COL.lance) });
@@ -120,6 +126,45 @@ export class EnergyDraw {
     }
   }
 
+  /**
+   * The lance's burst of light: a white flash that blinks out, a cyan shell swelling to the burst's edge, two rings
+   * racing out over the sand (the second slower and paler), and a column of light standing up and thinning away.
+   */
+  private drawNovas() {
+    const g = this.guns, v = g.v, list = g.novas;
+    this.novas.forEach((N, i) => {
+      const n = list[i];
+      if (!n || v.lanceNovaSize <= 0 && v.lanceNovaPillar <= 0) { N.flash.visible = N.shell.visible = N.ring.visible = N.ring2.visible = N.pillar.visible = N.pillarCore.visible = false; return; }
+      const k = Math.min(1, n.age / Math.max(1e-3, n.life)), f = 1 - k, R = n.r * v.lanceNovaSize, P = 0.5 + 0.5 * n.power;
+      const out = 1 - Math.pow(1 - k, 3), fl = 0.85 + 0.15 * Math.sin(this.t * 70 + n.seed);
+      // The flash: full in the first tenth, gone by a quarter.
+      const blink = Math.max(0, 1 - n.age / (0.18 * n.life + 0.04));
+      this.ball(N.flash, n.at, R * (0.5 + 0.5 * out) * P, blink * fl);
+      this.ball(N.shell, n.at, R * 2 * (0.25 + 0.85 * out), f * f * 0.55 * P);
+      const gy = n.ground + 0.08;
+      this.flat(N.ring, n.at.x, gy, n.at.z, R * (0.3 + 1.5 * out), f * 0.9 * P);
+      this.flat(N.ring2, n.at.x, gy + 0.02, n.at.z, R * (0.2 + 1.0 * Math.pow(k, 0.7)), f * f * 0.6 * P);
+      // The column: up fast, then thinning while it fades.
+      const H = v.lanceNovaPillar * P * Math.min(1, n.age * 12), w = Math.max(0.05, R * 0.22 * (1 - 0.8 * k));
+      this.column(N.pillar, n.at.x, n.ground, n.at.z, w, H, f * f * 0.7 * fl);
+      this.column(N.pillarCore, n.at.x, n.ground, n.at.z, w * 0.35, H * 1.1, f * f * fl);
+    });
+  }
+
+  private flat(m: THREE.Mesh, x: number, y: number, z: number, r: number, opacity: number) {
+    if (r <= 0.01 || opacity <= 0.01) { m.visible = false; return; }
+    m.position.set(x, y, z); m.quaternion.identity(); m.scale.set(r, 1, r);
+    (m.material as THREE.MeshBasicMaterial).opacity = Math.min(1, opacity);
+    m.visible = true;
+  }
+
+  private column(m: THREE.Mesh, x: number, y: number, z: number, w: number, h: number, opacity: number) {
+    if (h <= 0.05 || opacity <= 0.01) { m.visible = false; return; }
+    m.position.set(x, y, z); m.quaternion.identity(); m.scale.set(w, h, w);
+    (m.material as THREE.MeshBasicMaterial).opacity = Math.min(1, opacity);
+    m.visible = true;
+  }
+
   /** Lightning: each link between two points broken into jagged segments, re-jagged every frame. */
   private drawArcs() {
     const g = this.guns;
@@ -177,6 +222,7 @@ export class EnergyDraw {
     });
     this.drawOrbs();
     this.drawArcs();
+    this.drawNovas();
     // Beams: flickering width, the burn spot pulsing.
     g.sides.forEach((s, i) => {
       const B = this.beams[i], c = this.charges[i];
