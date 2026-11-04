@@ -313,6 +313,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · The across-chest fist stays by the chest (Claude on `claude/arm-chest`)
+- Reaching across the chest, a held gun's fist now comes at most `armCrossIn` (0.6 m, Held weapons) inboard of the arm's root; the reach shortens to hold it there (fist 0.45 m ahead of the shoulder at 50° across, was 1.06 m and 1.2 m inboard, out past the hull's nose), the gun still on the aim, and a last clamp catches what the forearm alignment adds. `src/mech/rampart.ts` (`reachArm`), `src/mech/upper.ts`. Checked: a node probe of the arm maths at -50/-25/0/45°, `upper-check`, `npm test`.
+
 ### 2026-11-04 · Weapon traits: Protocols fit by what a weapon does (Keith asked for traits; the set is Claude's, open for Keith)
 - `src/items/traits.ts`: one delivery trait each (rounds, shells, rockets, slug, bolt, beam, blade) plus what it does (rapid, spin, spread, splash, split, chain "Conductive", pierce, ricochet, magazine, cased, melee). Traits join each base's tags; `tagsOf(item)` reads the base's (old saves get new traits). Protocols' `fits` now name traits (`also` for a second need: Overclock and Double shot want rapid + rounds; Wide bore splash + rounds or bolt).
 - What changed in fits: the Nova lance takes Splitter (3 lances fanned, 40% each, burst too) and Wide bore (bigger burst), not Arc link; the arc caster takes Arc link (+2 jumps); the particle orb takes Arc link (zaps 2 bodies just outside its burn each tick) and Wide bore; plasma Wide bore; smg/rifle gain Splitter and Ricochet, flak Wide bore, sniper Ricochet, mortars and missiles Overpressure; rails, lasers, beams and swords take none yet (the pierce trait is on rails, the sniper, the sunder beam and the Buster, nothing fits it yet).

@@ -738,7 +738,12 @@ export class RampartBody {
   private reachArm(p: PodRig, yaw: number, pitch: number, v: UpperValues, g: UpperSim["guns"][number]) {
     const D = Math.PI / 180, cp = Math.cos(pitch);
     const u = Math.min(1, Math.max(0, (p.side * yaw) / Math.max(1e-3, v.armStraightAt * D))), s = u * u * (3 - 2 * u);
-    const full = v.armUpper + v.armFore, reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
+    const full = v.armUpper + v.armFore;
+    let reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
+    // Across the chest the fist stops armCrossIn inboard of the arm's root (it poked out past the hull's nose): the
+    // reach shortens so the fist sits by the chest, the gun still on the aim.
+    const inward = -p.side * Math.sin(yaw) * cp;
+    if (inward * reach > v.armCrossIn) reach = Math.max(v.armFore * 0.6, v.armCrossIn / inward);
     const drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
     // The arm's root out from the gun's shoulder point, as the sword's arm (a stub joins them).
     const o = this.tmp.o2.set(p.home.x + p.side * v.armShoulderOut, p.home.y, p.home.z);
@@ -763,6 +768,8 @@ export class RampartBody {
     const fore = v.armFore - Math.min(kick, v.armFore * 0.5);
     const r2 = { elbow: { x: ex - dx * kick * 0.4, y: ey - dy * kick * 0.4, z: ez - dz * kick * 0.4 }, hand: { x: 0, y: 0, z: 0 } };
     r2.hand.x = r2.elbow.x + dx * fore; r2.hand.y = r2.elbow.y + dy * fore; r2.hand.z = r2.elbow.z + dz * fore;
+    const over = p.side * (o.x - r2.hand.x) - v.armCrossIn; // the align step can carry the fist a little further in
+    if (over > 0) { r2.hand.x += p.side * over; r2.elbow.x += p.side * over; }
     p.yawPitch.position.set(r2.hand.x, r2.hand.y, r2.hand.z);
     p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
     this.drawArm(p, o, r2, v.armShoulderOut > 0.02);
