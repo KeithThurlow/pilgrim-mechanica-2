@@ -313,6 +313,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Weapon review lab: raw vs eDPS, an armour slider, fitted Protocols with − (Keith's first look; Claude)
+- `labs/weaponreview/`: a raw (card) DPS vs eDPS map of every weapon, an armour curve for the picked one (raw and eDPS on the rival body by its armour), "What eDPS means" in the panel, an armour slider for every single target (`?armour=N`; −1 each its own; `SCALING.armour` in `src/items/weaponScaling.ts`), and the fitted Protocols as their own list with − on each (and clear all).
+- Checked: lab loaded headless (fitted list, − removes, armour 10), weaponscaling-check; full npm test.
 ### 2026-11-04 · Balance defaults while Keith is away: Spend a warning, flak's band kept, swords their own band (coordinator; Claude)
 - Spend (focus % + area % ≤ 200) prints as a WARNING in `tools/weaponscaling-check.ts`, never a failure. Flak keeps its 230% swarm band (the deliberate area outlier).
 - Swords get their own band in the balance sheet (`REF.meleeBand` 230% of a Light weapon's budget vs their best set; `--check` fails over it), and come down a little: `swordDamage` 450 → 420, new sliders `swordBusterDamage` (1.7 → 1.5) and `swordShortDamage` (0.6) in Weapons › Sword (`src/weapons/sword.ts`, used by `src/items/bases.ts`). Breaker 210% → 196%, Buster 252% → 208%, short sword 171%; card DPS 523 → 488, 625 → 515.
