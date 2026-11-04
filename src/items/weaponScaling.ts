@@ -27,6 +27,11 @@ import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, eDps, reseed, targets, volleySw
 import type { Item } from "./item";
 
 export const SCALING = {
+  /** Armour on every single target (the lab's armour slider); below 0 each keeps its own (cutter 3, excavator 6.5,
+   *  raider 2, rival mech 8). The swarm keeps its own (scrappers 0). */
+  armour: -1,
+  /** Armour values for the armour curve. */
+  armours: [0, 2, 4, 6, 8, 10, 12, 14, 16],
   /** Distances (m) for the reach curve and speeds (m/s) for the reliability curve. */
   distances: [5, 10, 15, 20, 25, 30, 35, 45, 55, 65, 75, 90, 110],
   speeds: [0, 2, 4, 6, 8, 10, 12, 15],
@@ -57,7 +62,7 @@ const budgetOf = (w: W) => REF.budget * REF.slotShare[w.slot];
 const e = (w: W, t: T) => { reseed(); return eDps(w, t); };
 /** A target no further than 90% of the weapon's range (short guns are measured where they can reach). */
 const near = (w: W, t: T): T => (w.kind !== "melee" && t.dist > w.range * 0.9 ? { ...t, dist: Math.floor(w.range * 0.9) } : t);
-const tById = () => Object.fromEntries(targets().map((t) => [t.id, t])) as Record<string, T>;
+const tById = () => Object.fromEntries(targets().map((t) => [t.id, !t.swarm && SCALING.armour >= 0 ? { ...t, armour: SCALING.armour } : t])) as Record<string, T>;
 
 /** A weapon's item with these Protocols socketed (repeats allowed). */
 export function itemWith(base: string, protos: string[]): Item {
@@ -154,4 +159,10 @@ export function scaleClass(base: string): { areaCeil: number; focusCeil: number;
   const a = bestBuilds(base, "area")[SCALING.sockets].area, f = bestBuilds(base, "focus")[SCALING.sockets].focus;
   const r = a / Math.max(1e-6, f);
   return { areaCeil: a, focusCeil: f, cls: r > SCALING.areaClass ? "area" : r < SCALING.damageClass ? "damage" : "even" };
+}
+
+/** Raw (card) DPS and eDPS on the rival-sized body standing still at relDist, by its armour: what armour takes. */
+export function armourCurve(item: Item): { a: number; e: number }[] {
+  const w = wOf(item), T_ = tById(), d = relDist(w);
+  return SCALING.armours.map((a) => ({ a, e: e(w, { ...rivalAt(T_, d, 0), armour: a }) }));
 }

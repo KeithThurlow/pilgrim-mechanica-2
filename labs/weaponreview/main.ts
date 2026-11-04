@@ -4,7 +4,7 @@
 // the mech firing it at the range's cutouts, and its sounds on buttons. Click + on a Protocol to socket it into the
 // weapon the mech fires (repeats allowed, up to 4), and the charts mark that build.
 // Flags: ?w=<base id> (mg-medium, flak-medium, sh-mortar...), ?protos=splitter,splitter (socketed at the start),
-// ?nofire (the demo aims but holds fire), ?panel=0 (the review panel shut), plus the combat-lab flags.
+// ?armour=N (every single target's armour; -1 their own), ?nofire (the demo aims but holds fire), ?panel=0 (the review panel shut), plus the combat-lab flags.
 import "../../src/core/lab.css";
 import * as THREE from "three/webgpu";
 import type { Param } from "../../src/core/tweaks";
@@ -14,11 +14,12 @@ import { resolve, LOADOUT_DEFAULTS } from "../../src/items/loadout";
 import { loadoutForBase } from "../../src/items/weaponPick";
 import { BASE_BY_ID } from "../../src/items/bases";
 import { PROTOCOL_BY_ID } from "../../src/items/protocols";
+import { TRAIT_BY_ID, traitsOf } from "../../src/items/traits";
 import { itemCadence } from "../../src/items/dps";
 import { makeItem } from "../../src/items/generate";
 import { REF, ENERGY_IDS, MELEE_IDS, wOf } from "../../src/items/balanceModel";
 import {
-  MODELLED, SCALING, bestBuilds, focusArea, itemWith, profileOf, protocolsFor, protocolStack, reachCurve, reliabilityCurve, scaleClass,
+  MODELLED, SCALING, armourCurve, relDist, bestBuilds, focusArea, itemWith, profileOf, protocolsFor, protocolStack, reachCurve, reliabilityCurve, scaleClass,
   type Profile,
 } from "../../src/items/weaponScaling";
 import { DummyRange, DUMMY_DEFAULTS, DUMMY_PARAMS } from "../../src/game/dummies";
@@ -52,9 +53,10 @@ const SOUNDS: Record<string, string[]> = {
 const ROUGH = new Set([...ENERGY_IDS, ...MELEE_IDS]);
 
 const params = new URLSearchParams(location.search);
-const state = { base: "mg-medium", protos: [] as string[] };
+const state = { base: "mg-medium", protos: [] as string[], armour: -1 };
 try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch { /* none saved */ }
 if (params.get("w")) state.base = params.get("w")!;
+if (params.has("armour")) state.armour = Number(params.get("armour"));
 if (params.has("protos")) state.protos = params.get("protos")!.split(",").filter((p) => PROTOCOL_BY_ID[p]);
 if (!MODELLED.includes(state.base)) state.base = "mg-medium";
 const isShoulder = () => BASE_BY_ID[state.base].kind === "shoulder";
@@ -138,6 +140,7 @@ css.textContent = `
 .wr svg { display: block; width: 100%; height: auto; }
 .wr svg text { font: 10px var(--sans); fill: var(--muted); }
 .wr .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+.wr .chip { border: 1px solid var(--muted); border-radius: 3px; padding: 1px 6px; cursor: help; }
 .wr .key { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
 .wr p { margin: 3px 0; }
 `;
@@ -199,8 +202,28 @@ function budgetMap(all: Profile[], sel: Profile, builds: { f: Profile | null; a:
   return s;
 }
 
-let all: Profile[] | null = null;
+let all: Profile[] | null = null, allArmour = NaN;
+
+/** Raw (card) DPS against eDPS for every weapon: under the line is what misses, armour and waiting cost it. */
+function rawMap(all: Profile[], sel: Profile): string {
+  const W = 420, H = 230, L = 34, R = 10, T = 10, B = 24;
+  const max = Math.max(...all.map((p) => Math.max(p.card, p.focus))) * 1.05;
+  const X = (x: number) => L + (x / max) * (W - L - R), Y = (y: number) => T + (1 - y / max) * (H - T - B);
+  let s = `<svg viewBox="0 0 ${W} ${H}">`;
+  for (let v = 0; v <= max; v += 100) s += `<line x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H - B}" stroke="${C_GRID}"/><line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="${C_GRID}"/><text x="${X(v)}" y="${H - 11}" text-anchor="middle">${v}</text><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${v}</text>`;
+  s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(max)}" y2="${Y(max)}" stroke="${C_SEL}" stroke-dasharray="2 3"/><text x="${X(max * 0.8)}" y="${Y(max * 0.8) - 5}" style="fill:${C_SEL}">eDPS = raw</text>`;
+  for (const p of all) {
+    const me = p.id === sel.id;
+    s += `<circle cx="${X(p.card)}" cy="${Y(p.focus)}" r="${me ? 5 : 3.2}" fill="${me ? C_SEL : p.slot === "shoulder" ? "#9a958c" : "#e8e4dc"}" opacity="${me ? 1 : 0.75}"><title>${esc(p.name)}: raw ${f0(p.card)}, eDPS ${f0(p.focus)} (${p.focusSet})</title></circle>`;
+    if (me) s += `<text x="${X(p.card) + 6}" y="${Y(p.focus) + 3}" style="fill:${C_SEL}">${esc(p.name)}</text>`;
+  }
+  s += `<text x="${W - R}" y="${H - 1}" text-anchor="end">raw DPS (the item card)</text><text x="2" y="${T + 2}" transform="rotate(90 2 ${T + 2})">eDPS vs its best single</text></svg>`;
+  return s;
+}
+
 function render() {
+  SCALING.armour = state.armour;
+  if (allArmour !== state.armour) { all = null; allArmour = state.armour; }
   const base = state.base, item = makeItem(base), p = profileOf(item), cad = itemCadence(item)!;
   all ??= MODELLED.map((id) => profileOf(makeItem(id)));
   const protos = protocolsFor(base), sc = scaleClass(base);
@@ -227,6 +250,12 @@ function render() {
 <tr><td>Scaling</td><td class="n">${cls}</td><td>Ceilings at ${full} sockets</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(sc.focusCeil)}</span> · <span style="color:${C_AREA}">A ×${f2(sc.areaCeil)}</span></td></tr>
 ${mineFA ? `<tr><td>Fitted</td><td class="n" colspan="2">${esc(state.protos.map((x) => PROTOCOL_BY_ID[x].name).join(" + "))}</td><td class="n"><span style="color:${C_FOCUS}">F ×${f2(mineFA.focus / Math.max(1e-6, p.focus))}</span> · <span style="color:${C_AREA}">A ×${f2(mineFA.area / Math.max(1e-6, p.area))}</span></td></tr>` : ""}
 </table>`;
+  // Keith 2026-11-04: its traits first (what Protocols fit by), then what's fitted, then the Protocol table.
+  h += `<h4>Traits <span class="dim">Protocols fit by these</span></h4><div class="chips">${traitsOf(base).map((t) => `<span class="chip" title="${esc(TRAIT_BY_ID[t].text)}">${esc(TRAIT_BY_ID[t].name)}</span>`).join("") || '<span class="dim">none</span>'}</div>`;
+  h += `<h4>Fitted Protocols (${state.protos.length}/${full}) <span class="dim">on the weapon the mech fires; + in the Protocol table adds one</span></h4>`;
+  h += state.protos.length ? `<div class="chips">${state.protos.map((x, i) => `<button data-del="${i}" title="take it off">${esc(PROTOCOL_BY_ID[x].name)} −</button>`).join("")}<button id="wr-clear">clear all</button></div>` : `<p class="dim">None fitted.${protos.length ? "" : " No Protocol fits this weapon."}</p>`;
+  h += `<h4>Armour on the targets: <b>${state.armour < 0 ? "each its own" : state.armour}</b></h4><input id="wr-arm" type="range" min="-1" max="16" step="0.5" value="${state.armour}" style="width:100%"><p class="dim">−1 (far left): cutter 3, excavator 6.5, raider 2, rival mech 8. Otherwise every single target gets this armour (the swarm keeps 0). Every number and chart here follows it.</p>`;
+  h += `<details><summary class="dim">What eDPS means</summary><p>Raw DPS is the item card: damage × rounds a shot × shots a second over the magazine (or reactor) and reload. eDPS is what the model expects to land: raw × the share that hits (spread, and lead error from shell speed against a dodging target) × what armour lets through each hit (max(15%, damage − armour × (1 − pierce))) × the time it is firing (spin-up, charge, a sword's walk-in, the reactor running dry). Area eDPS adds what splash, blasts, penetration and chains do to the bodies round the one hit, each capped at that body's hp. Light, fast hits lose most to armour; big hits lose little.</p></details>`;
   h += `<h4>Sounds</h4><div class="chips">${sounds.map((n) => `<button data-snd="${n}">▶ ${n}</button>`).join("")}${p.radius > 0 && (BASE_BY_ID[base].tags.includes("explosive") || p.kind === "lance") ? `<button data-blast="${p.radius}">▶ blast ${p.radius.toFixed(1)} m</button>` : ""}</div>${sounds.length ? "" : `<p class="dim">Miniguns: the sound runs with the spin, so fire to hear it.</p>`}`;
   h += `<h4>Budget map: every weapon (dot), this one in yellow</h4>${budgetMap(all, p, { f: buildF, a: buildA, mine })}<p class="dim">Red: the sheet's 130% caps (flak's swarm 230%, open). Yellow line: proposed Spend = F% + A% ≤ ${SCALING.spendCap}. Arrows: where Protocols take it at ${full} sockets.</p>`;
   if (bf_ && ba) {
@@ -242,8 +271,13 @@ ${mineFA ? `<tr><td>Fitted</td><td class="n" colspan="2">${esc(state.protos.map(
       const col = (x: number) => `<span class="${x > 1.005 ? "ok" : x < 0.995 ? "bad" : "dim"}">×${f2(x)}</span>`;
       h += `<tr><td>${esc(pr.name)}</td><td class="n">${col(one.focus)} / ${col(one.area)}</td><td class="n">${col(four.focus)} / ${col(four.area)}</td><td class="n"><button data-add="${pr.id}">+</button></td></tr>`;
     }
-    h += `</table><div class="chips"><button id="wr-clear">clear Protocols</button><span class="dim">${state.protos.length}/${full} fitted (repeats allowed; the lab ignores the item's own sockets)</span></div>`;
+    h += `</table><p class="dim">${state.protos.length}/${full} fitted (repeats allowed; the lab ignores the item's own sockets). A fifth replaces the oldest.</p>`;
   } else h += `<h4>Protocol scaling</h4><p class="dim">No Protocol fits this weapon yet: it doesn't scale with sockets (only with level, like everything).</p>`;
+  const arm = armourCurve(item);
+  h += `<h4>Raw DPS vs eDPS: every weapon</h4>${rawMap(all, p)}<p class="dim">The further under the line, the more it loses to misses, armour and waiting.</p>`;
+  h += `<h4>Armour: raw and eDPS on the rival mech (standing, ${relDist(wOf(item))} m) by its armour</h4>${lineChart({ xs: SCALING.armours, xLabel: "armour", yLabel: "DPS", yMin: 0, series: [
+    { pts: arm.map((r) => [r.a, p.card]), color: "#e8e4dc", dash: "4 3", width: 1 }, { pts: arm.map((r) => [r.a, r.e]), color: C_FOCUS },
+  ], marks: state.armour >= 0 ? [{ x: state.armour, label: "slider" }] : [{ x: 8, label: "rival 8" }] })}<p class="dim">Dashed: raw. Solid: eDPS. Pierce ${f2(wOf(item).ap)}.</p>`;
   h += `<h4>Reach: eDPS vs the rival mech by distance</h4>${lineChart({ xs: SCALING.distances.filter((_, i) => i % 2 === 0), xLabel: "metres", yLabel: "eDPS", series: [
     { pts: reach.map((r) => [r.d, r.still]), color: C_FOCUS, dash: "4 3", width: 1.5 }, { pts: reach.map((r) => [r.d, r.moving]), color: C_FOCUS },
   ], marks: [{ x: Math.min(p.range, 110), label: "range" }] })}<p class="dim">Solid: the rival juking at 6 m/s; dashed: standing still. The gap is lead error from shell speed.</p>`;
@@ -254,6 +288,8 @@ ${mineFA ? `<tr><td>Fitted</td><td class="n" colspan="2">${esc(state.protos.map(
   box.querySelector<HTMLSelectElement>("#wr-w")!.onchange = (e) => { state.base = (e.target as HTMLSelectElement).value; state.protos = []; refit(); render(); };
   box.querySelector<HTMLButtonElement>("#wr-shut")!.onclick = () => { box.classList.toggle("shut"); render(); };
   box.querySelector<HTMLButtonElement>("#wr-clear")?.addEventListener("click", () => { state.protos = []; refit(); render(); });
+  box.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((b) => (b.onclick = () => { state.protos.splice(Number(b.dataset.del), 1); refit(); render(); }));
+  box.querySelector<HTMLInputElement>("#wr-arm")!.onchange = (e) => { state.armour = Number((e.target as HTMLInputElement).value); render(); };
   box.querySelectorAll<HTMLButtonElement>("[data-add]").forEach((b) => (b.onclick = () => {
     if (state.protos.length >= full) state.protos.shift();
     state.protos.push(b.dataset.add!); refit(); render();
