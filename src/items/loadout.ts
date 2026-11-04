@@ -17,7 +17,7 @@ import { isEnergy } from "../weapons/energy/energySim";
 import { REACTOR_DEFAULTS } from "../mech/reactor";
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, tagsOf, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
-import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf } from "./protocols";
+import { PROTOCOL_BY_ID, protocolFits, shotProtocolsOf, shotCostOf, stackWeights, weighMod } from "./protocols";
 import { itemWeight, lookFor, type Item, type SeekerMode } from "./item";
 import { makeItem } from "./generate";
 import type { GunStats } from "../mech/upper";
@@ -315,9 +315,11 @@ export function unsocket(item: Item, i: number): Item | null {
 /** An item's stats with its Protocols' item-scope changes applied. */
 export function effectiveStats(item: Item): Record<string, number> {
   const out = { ...item.stats };
-  for (const pi of item.socketed) {
-    for (const m of PROTOCOL_BY_ID[pi.base]?.mods ?? []) {
-      if (m.scope !== "item" || !(m.stat in out)) continue;
+  const ws = stackWeights(item.socketed);
+  for (let i = 0; i < item.socketed.length; i++) {
+    for (const m0 of PROTOCOL_BY_ID[item.socketed[i].base]?.mods ?? []) {
+      if (m0.scope !== "item" || !(m0.stat in out)) continue;
+      const m = weighMod(m0, ws[i]);
       let x = out[m.stat] * (m.mul ?? 1) + (m.add ?? 0);
       if (STATS[m.stat]?.whole) x = Math.round(x);
       out[m.stat] = x;

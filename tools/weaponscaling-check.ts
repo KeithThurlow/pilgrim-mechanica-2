@@ -24,6 +24,9 @@ for (const id of MODELLED) {
   const w = wOf(makeItem(id)), sw = eDps(w, targets()[0]);
   if (w.range * 0.9 >= 25 && Math.abs(sw - p.area) > 1e-6 * Math.max(1, sw)) fail(`${id} area ${p.area} vs the sheet's ${sw}`);
   const sc = scaleClass(id);
+  // Keith 2026-11-04: nothing should massively outshine the rest. A full Protocol build stays within ×5 area, ×2.5 focus.
+  if (sc.areaCeil > 5) fail(`${id} area ceiling ×${sc.areaCeil.toFixed(2)} over ×5`);
+  if (sc.focusCeil > 2.5) fail(`${id} focus ceiling ×${sc.focusCeil.toFixed(2)} over ×2.5`);
   let line = "";
   if (protocolsFor(id).length) {
     for (const axis of ["focus", "area"] as const) {
