@@ -23,7 +23,7 @@ import { BASE_BY_ID } from "./bases";
 import { PROTOCOLS, protocolFits, type Protocol } from "./protocols";
 import { makeItem, protocolItem } from "./generate";
 import { dpsOf, itemCadence } from "./dps";
-import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, eDps, reseed, targets, volleySwarm, wOf, type T, type W } from "./balanceModel";
+import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, eDps, reseed, targets, ttk, volleySwarm, wOf, type T, type W } from "./balanceModel";
 import type { Item } from "./item";
 
 export const SCALING = {
@@ -165,4 +165,19 @@ export function scaleClass(base: string): { areaCeil: number; focusCeil: number;
 export function armourCurve(item: Item): { a: number; e: number }[] {
   const w = wOf(item), T_ = tById(), d = relDist(w);
   return SCALING.armours.map((a) => ({ a, e: e(w, { ...rivalAt(T_, d, 0), armour: a }) }));
+}
+
+/** The test swarm as the model sees it (Keith 2026-11-04: measuring clear): a swarm of n bodies of this hp, armour
+ *  and hit radius at density rho, standing still at dist (or 90% of a shorter gun's range). Area eDPS (hp/s taken
+ *  out, capped per body), Crowd (bodies' worth a shot) and the time to clear the whole pack. Fodder at the swarm's
+ *  own speed gives the profile's Area A; the lab's pen stands still, so pass speed 0 to compare with it. */
+export function swarmModel(item: Item, s: { n: number; hp: number; armour: number; r: number; rho: number; dist: number; speed?: number }): { area: number; crowd: number; clear: number } {
+  const w = wOf(item), sw = targets().find((t) => t.id === "swarm")!;
+  const t = near(w, { ...sw, hp: s.hp, armour: s.armour, r: s.r, dist: s.dist, speed: s.speed ?? 0, juke: s.speed ? sw.juke : 0, swarm: { n: Math.max(1, s.n), rho: s.rho } });
+  reseed();
+  const area = eDps(w, t);
+  reseed();
+  const crowd = Math.min(t.swarm!.n, volleySwarm(w, t) / t.hp);
+  reseed();
+  return { area, crowd, clear: ttk(w, t, t.hp) };
 }
