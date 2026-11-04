@@ -312,6 +312,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+- 2026-11-04 **Hull turns slower again (Keith via coordinator: still too fast, so the arms' faster tracking while sprinting doesn't show):** walk `legTurnRate` 270 → 180°/s, sprint `turnRate` 90 → 50°/s (`walkerTuning.ts`, Move group). Arm tracking untouched. Checked: `npm test`. Claude.
 ### 2026-11-03 · Summoner gear works in every combat lab, with actives (Keith's report via the coordinator; Claude)
 - Fitted in the duel lab the summoner items did nothing: only the swarm and convoy labs built summons. Now `combatLab` (`src/game/combatLab.ts`) makes the summons the first time a fitted loadout brings summoner gear (`fittedLoadout` in `src/game/loadoutApply.ts`), puts the gear's counts on them, steps them and their aggro; the summoner front (`src/game/fronts/summoner.ts`) uses `lab.summons()`. Duel, loadout, swarm, fortress, every combat lab; the Summons topic is in all of them.
 - Actives (`src/summon/summonKeys.ts`, shared with the convoy lab): a drone rack's shoulder key is a **drone strike** (`Summons.strike`: every drone on the lock, else the foe nearest the cursor, else the nearest, for `droneStrikeTime` 6 s at `droneStrikeRate` ×2 fire, `droneStrikeCool` 18 s; Summons › Drones), a swarm hive's key sends and recalls the swarm. Each item gets an action-bar button (Drone strike with drones up, Send/Recall swarm with scrappers, Replicas up and building).

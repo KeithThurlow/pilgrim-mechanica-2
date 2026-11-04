@@ -15,14 +15,14 @@ export const WALKER_DEFAULTS = {
   walkSpeed: 6,
   sprintSpeed: 8.5,
   accel: 4,
-  // Keith 2026-11-03: lower the hull's turn a bit (about 25%) so hull weapons up close feel slightly awkward (was 120).
-  turnRate: 90,
+  // Keith 2026-11-03: lower the hull turn (was 120, then 90); Keith 2026-11-04: still too fast, so the arms' faster tracking while sprinting shows.
+  turnRate: 50,
   // The walk, twin-stick (Keith 2026-10-31): the body goes where the stick points, the legs follow.
   walkAccel: 30,
   walkStop: 40,
   walkWeight: 0.5,
-  // Keith 2026-11-03: the hull's walk turn, about 25% lower (was 360).
-  legTurnRate: 270,
+  // Keith 2026-11-04: the hull's walk turn lower again (was 360, then 270).
+  legTurnRate: 180,
   backArc: 125,
   backSpeed: 0.9,
   turnSlow: 0,
