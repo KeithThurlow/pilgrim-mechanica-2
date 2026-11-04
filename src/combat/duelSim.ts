@@ -32,7 +32,7 @@ const HIT_R = MECH_DEFAULTS.hitRadius;
 interface Flying { id: number; from: 0 | 1; kind: string; x: number; z: number; ax?: number; az?: number; r: number; land: number; damage: number; blast: number; homing: number;
   /** Would it have hit where the target stood when it was fired? (for the dodge count) */ wouldHit: boolean; dealt: number; parts: number; partsLeft: number; spacing: number; length: number }
 
-interface Gun { /** A sword's last cut (its damage dealt) and whether it was made a power cut. */ lastCut: number; powered: boolean; cool: number; charge: number; holding: boolean; spin: number; acc: number; prevKey: boolean; railFrom: { x: number; z: number } | null }
+interface Gun { /** A sword's last cut (its damage dealt) and whether it was made a power cut. */ lastCut: number; powered: boolean; /** Turned vertical by a double click, and the trigger last step (a press is an edge). */ vert: boolean; wasHeld: boolean; cool: number; charge: number; holding: boolean; spin: number; acc: number; prevKey: boolean; railFrom: { x: number; z: number } | null }
 
 class DuelMech {
   sim: WalkerSim;
@@ -64,7 +64,7 @@ class DuelMech {
     this.dash.charges = Math.round(this.v.dashCharges);
     this.hull = this.health = r.values.hull;
     this.kit = kitOf(r, W);
-    this.guns = this.kit.map(() => ({ lastCut: 0, powered: false, cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
+    this.guns = this.kit.map(() => ({ lastCut: 0, powered: false, vert: false, wasHeld: false, cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
     this.esim = this.kit.map(() => new EnergySim());
     this.summon = r.summons;
     const gk = gearOf(r);
@@ -88,6 +88,8 @@ export interface DuelResult {
   summonUses: [number, number];
   /** Power cuts made (a sword's cut with a bar spent). */
   powerCuts: [number, number];
+  /** Sword cuts turned vertical by a double click (2026-11-04). */
+  vertCuts: [number, number];
   /** Threatened / dodged by weapon kind (both sides). */
   byKind: Record<string, [number, number]>;
   /** Rail slugs fired and slugs that hurt, by shooter. */
@@ -147,7 +149,7 @@ export function runDuel(o: DuelOptions): DuelResult {
   /** Particle orbs drifting out to their range, burning whatever they pass, then popping (as EnergyGuns.fly). */
   const orbs: { id: number; from: 0 | 1; x: number; z: number; dx: number; dz: number; speed: number; left: number; dps: number; r: number; pop: number }[] = [];
   let nextId = 1;
-  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], powerCuts: [0, 0], summonUses: [0, 0], gearPresses: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
+  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], powerCuts: [0, 0], vertCuts: [0, 0], summonUses: [0, 0], gearPresses: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
   const dt = 1 / 60, maxT = o.maxTime ?? 90;
   let t = 0;
   const lastAct = [0, 0], lastPos = mechs.map((m) => ({ x: m.sim.pos.x, z: m.sim.pos.z }));
@@ -349,14 +351,21 @@ export function runDuel(o: DuelOptions): DuelResult {
           if (held && g.cool <= 0 && cmd.cursor && dist < k.range) { g.cool = k.cooldown; launch(i, k, "rocket", cmd.cursor); }
         } else if (k.kind === "sword") {
           // A cut every cooldown while held; it lands when the foe is within the blade's reach (the arc is wide).
+          const press = held && !g.wasHeld; g.wasHeld = held;
           if (held && g.cool <= 0) {
             // A swing whose parry window passes unused cools the parry (set ahead; a parry in the window resets it).
             if (t >= parryAt[i]) { swungAt[i] = t; parryAt[i] = t + W.swordParryMax + W.swordParryMiss; }
-            g.cool = k.cooldown; g.powered = false; g.lastCut = 0; m.fired++; lastAct[i] = t; if (dist < k.range) { cutterGun = j; g.lastCut = hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos, i)); } }
+            g.cool = k.cooldown; g.powered = false; g.vert = false; g.lastCut = 0; m.fired++; lastAct[i] = t; if (dist < k.range) { cutterGun = j; g.lastCut = hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos, i)); } }
           // A power cut (Space mid-cut, a bar): the cut just made lands harder (as the arsenal's powerUp, simplified).
           if (cmd.power && !g.powered && g.cool > k.cooldown - 0.25 && m.dash.spend(W.swordPowerCost)) {
             g.powered = true; res.powerCuts[i]++;
             if (g.lastCut > 0) hurt(1 - i, "sword", g.lastCut * (W.swordPowerDamage - 1));
+          }
+          // A vertical cut (a second press soon after the cut began, as the arsenal's double click, simplified): the cut
+          // just made lands harder (it's one line, but the duel has one target).
+          else if (press && W.swordVert > 0 && !g.vert && g.cool > k.cooldown - W.swordDoubleTime && g.cool < k.cooldown) {
+            g.vert = true; res.vertCuts[i]++;
+            if (g.lastCut > 0) hurt(1 - i, "sword", g.lastCut * (W.swordVertDamage - 1));
           }
         }
         return;

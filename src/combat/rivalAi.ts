@@ -73,6 +73,7 @@ export const RIVAL_AI_DEFAULTS = {
   aiPush: 0.2,
   aiPushTime: 4,
   aiPowerCut: 0.5,
+  aiVertCut: 0.35,
   aiSummonUse: 0.8,
   aiStrikeRange: 32,
   aiSwarmRange: 30,
@@ -89,9 +90,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiSummonUse: 0.4, aiPowerCut: 0.3, aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiSummonUse: 0.8, aiPowerCut: 0.5, aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiSummonUse: 1.5, aiPowerCut: 0.75, aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiSummonUse: 0.4, aiPowerCut: 0.3, aiVertCut: 0.15, aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiSummonUse: 0.8, aiPowerCut: 0.5, aiVertCut: 0.35, aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiSummonUse: 1.5, aiPowerCut: 0.75, aiVertCut: 0.5, aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -149,6 +150,7 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiPush", label: "Pushes on a spare bar (chance per s)", min: 0, max: 2, step: 0.05, group: G, tip: "With its bars full (its dodge reserve plus two), it may take the initiative: a dash in on the spare bar and a press for the push time, keeping the rest for dodges" },
   { key: "aiPushTime", label: "Push lasts (s)", min: 0.5, max: 12, step: 0.25, group: G },
   { key: "aiPowerCut", label: "Sword: power cut chance (per cut)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-11-02 power cut: one seeded roll per cut; on a yes, with a bar to spare past its dodge reserve, it spends one to make the cut a power cut (quicker, harder, breaks blocks)" },
+  { key: "aiVertCut", label: "Sword: vertical cut chance (per cut)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-11-04 vertical cut: on a yes it double-clicks as the cut drives in (lets the trigger up a frame, presses again), so the cut comes straight down (or up) the aim: harder, but one line" },
   { key: "aiSummonUse", label: "Summoner gear: use (chance per s when it fits)", min: 0, max: 4, step: 0.05, group: G, tip: "2026-11-04: a rival's drone rack, swarm hive and replica bay bring their summons on its team. How readily it calls a drone strike or throws its swarm once the moment fits (you in range and in sight, its units up)" },
   { key: "aiStrikeRange", label: "Drone strike: within (m)", min: 5, max: 60, step: 1, group: G },
   { key: "aiSwarmRange", label: "Swarm: thrown within (m)", min: 5, max: 70, step: 1, group: G },
@@ -344,6 +346,9 @@ export class RivalAi {
   private cutOn = false;
   private cutPower = false;
   powerCuts = 0;
+  /** A vertical cut's double click under way (2026-11-04): 1 let the trigger up this frame, 2 press again. */
+  private vertStep = 0;
+  vertCuts = 0;
   /** A gear key pressed last frame (let up this one, so the next press is a new press); presses made. */
   private gearDown = [false, false, false];
   gearPresses = 0;
@@ -821,7 +826,15 @@ export class RivalAi {
         let off = (s.torso ?? this.ab) - want; off -= Math.round(off / (Math.PI * 2)) * Math.PI * 2;
         cmd.trigger[side] = Math.abs(off) <= v.aiSwordFace * Math.PI / 180;
         // The power cut: one roll per cut as it starts; on a yes, with a bar to spare past the dodge reserve, Space now.
-        if (w.busy && !this.cutOn) { this.cutPower = this.r() < v.aiPowerCut; if (this.cutPower && s.dashCharges > v.aiDashKeep && !s.dashing) { cmd.power = true; this.powerCuts++; } }
+        if (w.busy && !this.cutOn) {
+          const u = this.r();
+          this.cutPower = u < v.aiPowerCut; if (this.cutPower && s.dashCharges > v.aiDashKeep && !s.dashing) { cmd.power = true; this.powerCuts++; }
+          // The vertical cut (Keith 2026-11-04): a second, independent share off the same roll (so the seeded stream
+          // is unchanged); on a yes, a double click while it still drives in.
+          if (((u * 7919) % 1) < v.aiVertCut) this.vertStep = 1;
+        }
+        if (this.vertStep === 1) { cmd.trigger[side] = false; this.vertStep = 2; }
+        else if (this.vertStep === 2) { cmd.trigger[side] = true; this.vertStep = 0; this.vertCuts++; }
         this.cutOn = !!w.busy;
       } else if (k.kind === "autocannon" && this.melee) {
         // Up close it fires along its tracking aim, no snapshot.
