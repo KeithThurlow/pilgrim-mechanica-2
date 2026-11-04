@@ -420,7 +420,7 @@ export class EnergyGuns {
 
   /** The lance, split into `st.split` fanned across the aim (Splitter), each at its share (the Protocol's stat mods). */
   private lance(st: EnergyStats, power: number, muzzle: THREE.Vector3, d: THREE.Vector3, gi: number) {
-    const n = Math.max(1, st.split), fan = (((this.bf.v as { protoFan?: number }).protoFan ?? 6) * Math.PI) / 180;
+    const n = Math.max(1, st.split), fan = (((this.bf.v as { protoFan?: number } | undefined)?.protoFan ?? 6) * Math.PI) / 180;
     if (n === 1) return this.lanceOne(st, power, muzzle, d, gi);
     const dir = new THREE.Vector3();
     for (let k = 0; k < n; k++) {
