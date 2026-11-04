@@ -313,6 +313,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+- 2026-11-04 **Hull turns slower again (Keith via coordinator: still too fast, so the arms' faster tracking while sprinting doesn't show):** walk `legTurnRate` 270 → 180°/s, sprint `turnRate` 90 → 50°/s (`walkerTuning.ts`, Move group). Arm tracking untouched. Checked: `npm test`. Claude.
 ### 2026-11-04 · Nova lance: a huge release sound and a laser-like burst (Keith; Claude)
 - Release (`lanceFire`, `src/weapons/energy/energySound.ts`): a 2.4 s roar in place of the 0.9 s pew: electric snap, 7 detuned saws diving 2.6 kHz → 55 Hz, a sub boom 120 → 24 Hz, a beating 52 Hz discharge hum, a rumble and crackle tail. A crack and sizzle where it lands (`lanceHit`). Charge-up unchanged; the sunder beam keeps the old release (`sunderRelease`).
 - Burst of light over the dust and crater (`energyGuns.ts` nova, `energyDraw.ts` drawNovas): white flash, cyan shell to 2× the burst radius, two rings racing over the sand, a column of light (14 m), 6 arcs crackling out, sparks up. Sliders in Weapons › Nova lance: `lanceNovaSize`, `lanceNovaLife`, `lanceNovaArcs`, `lanceNovaPillar`, `lanceHitLevel`.
