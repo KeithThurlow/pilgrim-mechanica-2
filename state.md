@@ -313,6 +313,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · Rivals make vertical sword cuts (Keith via the coordinator; Claude on `claude/project-thread-pooipi`)
+- A sword rival turns some cuts vertical with a double click as the cut drives in (lets the trigger up a frame, presses again): `aiVertCut` 0.35 per cut (Recruit 0.15, Veteran 0.35, Ace 0.5), Rival › AI group. Drawn off the power cut's own roll, so the seeded stream (and every other duel) is unchanged.
+- The headless duel (`src/combat/duelSim.ts`) counts it (`vertCuts`) and lands the extra damage (× `swordVertDamage`). `tools/duel-check.ts`: a sword rival makes vertical cuts, none at chance 0. Checked: npm test.
 ### 2026-11-04 · Weapon traits: Protocols fit by what a weapon does (Keith asked for traits; the set is Claude's, open for Keith)
 - `src/items/traits.ts`: one delivery trait each (rounds, shells, rockets, slug, bolt, beam, blade) plus what it does (rapid, spin, spread, splash, split, chain "Conductive", pierce, ricochet, magazine, cased, melee). Traits join each base's tags; `tagsOf(item)` reads the base's (old saves get new traits). Protocols' `fits` now name traits (`also` for a second need: Overclock and Double shot want rapid + rounds; Wide bore splash + rounds or bolt).
 - What changed in fits: the Nova lance takes Splitter (3 lances fanned, 40% each, burst too) and Wide bore (bigger burst), not Arc link; the arc caster takes Arc link (+2 jumps); the particle orb takes Arc link (zaps 2 bodies just outside its burn each tick) and Wide bore; plasma Wide bore; smg/rifle gain Splitter and Ricochet, flak Wide bore, sniper Ricochet, mortars and missiles Overpressure; rails, lasers, beams and swords take none yet (the pierce trait is on rails, the sniper, the sunder beam and the Buster, nothing fits it yet).
