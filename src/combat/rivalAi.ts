@@ -73,6 +73,10 @@ export const RIVAL_AI_DEFAULTS = {
   aiPush: 0.2,
   aiPushTime: 4,
   aiPowerCut: 0.5,
+  aiSummonUse: 0.8,
+  aiStrikeRange: 32,
+  aiSwarmRange: 30,
+  aiSwarmFor: 10,
 };
 export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 
@@ -85,9 +89,9 @@ export type RivalAiValues = typeof RIVAL_AI_DEFAULTS;
 export type RivalLevel = "recruit" | "veteran" | "ace";
 export const RIVAL_LEVEL_IDS: RivalLevel[] = ["recruit", "veteran", "ace"];
 export const RIVAL_LEVELS: Record<RivalLevel, Partial<RivalAiValues> & { rivalHull: number }> = {
-  recruit: { aiPowerCut: 0.3, aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
-  veteran: { aiPowerCut: 0.5, aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
-  ace: { aiPowerCut: 0.75, aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
+  recruit: { aiSummonUse: 0.4, aiPowerCut: 0.3, aiPush: 0.1, aiSprintUse: 0.35, aiSprintMirror: 0.4, aiAimSweep: 8, aiSwordReaction: 0.25, aiSwordLag: 0.15, aiSwordTurn: 150, aiSwordLead: 0.6, aiReaction: 0.45, aiAimLag: 0.5, aiAimTurn: 50, aiAimLead: 0.3, aiAimError: 1, aiMoveError: 0.25, aiReacquire: 1.2, aiRailReaction: 0.15, aiRailLag: 0.08, aiRailTurn: 180, aiRailLead: 0.9, aiRailError: 0.5, aiSnapshot: 0.6, aiRailDodge: 0.95, aiDodgeChance: 0.3, aiDashUse: 0.5, aiAggression: 0.5, aiLead: 0.35, rivalHull: 1 },
+  veteran: { aiSummonUse: 0.8, aiPowerCut: 0.5, aiPush: 0.2, aiSprintUse: 0.5, aiSprintMirror: 0.6, aiAimSweep: 12, aiSwordReaction: 0.18, aiSwordLag: 0.1, aiSwordTurn: 220, aiSwordLead: 0.8, aiReaction: 0.3, aiAimLag: 0.25, aiAimTurn: 90, aiAimLead: 0.6, aiAimError: 0.8, aiMoveError: 0.15, aiReacquire: 0.7, aiRailReaction: 0.12, aiRailLag: 0.06, aiRailTurn: 220, aiRailLead: 0.95, aiRailError: 0.4, aiSnapshot: 0.55, aiRailDodge: 0.9, aiDodgeChance: 0.5, aiDashUse: 0.75, aiAggression: 0.6, aiLead: 0.85, rivalHull: 1.15 },
+  ace: { aiSummonUse: 1.5, aiPowerCut: 0.75, aiPush: 0.35, aiSprintUse: 0.7, aiSprintMirror: 0.8, aiAimSweep: 18, aiSwordReaction: 0.12, aiSwordLag: 0.06, aiSwordTurn: 300, aiSwordLead: 1, aiReaction: 0.2, aiAimLag: 0.12, aiAimTurn: 160, aiAimLead: 0.9, aiAimError: 0.4, aiMoveError: 0.08, aiReacquire: 0.35, aiRailReaction: 0.08, aiRailLag: 0.04, aiRailTurn: 280, aiRailLead: 1, aiRailError: 0.25, aiSnapshot: 0.35, aiRailDodge: 0.85, aiDodgeChance: 0.75, aiDashUse: 0.9, aiAggression: 0.7, aiLead: 1, rivalHull: 1.3 },
 };
 
 const G = "Rival AI";
@@ -145,6 +149,10 @@ export const RIVAL_AI_PARAMS: Param[] = [
   { key: "aiPush", label: "Pushes on a spare bar (chance per s)", min: 0, max: 2, step: 0.05, group: G, tip: "With its bars full (its dodge reserve plus two), it may take the initiative: a dash in on the spare bar and a press for the push time, keeping the rest for dodges" },
   { key: "aiPushTime", label: "Push lasts (s)", min: 0.5, max: 12, step: 0.25, group: G },
   { key: "aiPowerCut", label: "Sword: power cut chance (per cut)", min: 0, max: 1, step: 0.05, group: G, tip: "Keith 2026-11-02 power cut: one seeded roll per cut; on a yes, with a bar to spare past its dodge reserve, it spends one to make the cut a power cut (quicker, harder, breaks blocks)" },
+  { key: "aiSummonUse", label: "Summoner gear: use (chance per s when it fits)", min: 0, max: 4, step: 0.05, group: G, tip: "2026-11-04: a rival's drone rack, swarm hive and replica bay bring their summons on its team. How readily it calls a drone strike or throws its swarm once the moment fits (you in range and in sight, its units up)" },
+  { key: "aiStrikeRange", label: "Drone strike: within (m)", min: 5, max: 60, step: 1, group: G },
+  { key: "aiSwarmRange", label: "Swarm: thrown within (m)", min: 5, max: 70, step: 1, group: G },
+  { key: "aiSwarmFor", label: "Swarm: called back after (s)", min: 2, max: 30, step: 0.5, group: G, tip: "Or sooner when it backs off hurt, or you get far away" },
   { key: "aiPressRange", label: "Pressing: range share", min: 0.2, max: 1, step: 0.05, group: G, tip: "When the foe is exposed it closes to this share of its preferred range" },
 ];
 
@@ -177,6 +185,9 @@ export interface DuelSelf {
   energyCap?: number;
   kit: readonly KitWeapon[];
   weapons: readonly WeaponState[];
+  /** Summoner gear (its summons on its team): the shoulder keys of its drone racks and swarm hives, a strike ready, its
+   *  drones up, its swarm sent out or home and how many scrappers are up of how many. */
+  summon?: { droneKeys: readonly number[]; swarmKeys: readonly number[]; strikeReady: boolean; drones: number; swarmOut: boolean; scrappers: number; swarmMax: number };
   /** Feeds and power on its shoulders (a press each; ready: off cooldown) and, for power, the bars a discharge refills. */
   gear?: readonly (KitGear & { ready: boolean; bars: number })[];
 }
@@ -336,6 +347,11 @@ export class RivalAi {
   /** A gear key pressed last frame (let up this one, so the next press is a new press); presses made. */
   private gearDown = [false, false, false];
   gearPresses = 0;
+  /** Summoner gear: drone strikes called, swarm throws and recalls; when the swarm went out. */
+  strikes = 0;
+  swarmThrows = 0;
+  swarmRecalls = 0;
+  private swarmSince = -1;
   /** Its energy weapons ran the reactor dry: holding fire until it's back to aiReactorResume (HUD, checks). */
   dry = false;
 
@@ -349,7 +365,7 @@ export class RivalAi {
     this.state = "engage"; this.stateFor = 0; this.seen.clear(); this.evade = null; this.unstick = null; this.painting = null; this.paintAt = null;
     this.coverAt = null; this.slow = 0; this.hidFor = 0; this.blindFor = 0; this.peekUntil = 0; this.fvx = 0; this.fvz = 0; this.fx = NaN; this.fz = NaN;
     this.hist.length = 0; this.aimInit = false; this.seenAt = -1e9; this.prevSees = true; this.railSince = -1;
-    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false; this.sprint = null; this.sprinting = false; this.foeSprinting = false; this.dry = false; this.pushUntil = -1; this.pushDash = false;
+    this.frozen = null; this.acPhase = "aim"; this.acUntil = 0; this.snapped = false; this.sprint = null; this.sprinting = false; this.foeSprinting = false; this.dry = false; this.pushUntil = -1; this.pushDash = false; this.swarmSince = -1;
   }
 
   private flipTime() { return this.v.aiStrafeFlip * (0.4 + 1.2 * this.r()); }
@@ -826,6 +842,23 @@ export class RivalAi {
         ? g.gun >= 0 && cmd.trigger[g.gun] && sees && s.kit.some((w) => "trigger" in w.ctl && w.ctl.trigger === g.gun && w.kind !== "sword" && !w.energy)
         : s.energy !== undefined && s.kit.some((w) => !!w.energy) && (s.energyCap ?? 0) - s.energy >= g.bars * 0.9;
       if (press) { cmd.keys[k] = true; this.gearDown[k] = true; this.gearPresses++; }
+    }
+    // Summoner gear (2026-11-04): a drone strike when you're in range and sight with its drones up; the swarm thrown
+    // at you in range with most of it up, called back after aiSwarmFor, when it backs off, or you get far off.
+    const sm = s.summon;
+    if (sm) {
+      const press = (key: number) => { const k = key - 1; if (this.gearDown[k]) return false; cmd.keys[k] = true; this.gearDown[k] = true; return true; };
+      for (const key of [...sm.droneKeys, ...sm.swarmKeys]) if (this.gearDown[key - 1] && !cmd.keys[key - 1]) { this.gearDown[key - 1] = false; }
+      const roll = this.r() < v.aiSummonUse * dt * 2;
+      if (sm.strikeReady && sm.drones > 0 && sees && dist < v.aiStrikeRange && roll) for (const key of sm.droneKeys) { if (press(key)) { this.strikes++; break; } }
+      for (const key of sm.swarmKeys) {
+        if (!sm.swarmOut && sm.scrappers >= Math.max(1, sm.swarmMax * 0.5) && sees && dist < v.aiSwarmRange && this.state !== "retreat" && roll) {
+          if (press(key)) { this.swarmThrows++; this.swarmSince = view.t; }
+        } else if (sm.swarmOut && this.swarmSince >= 0 && (view.t - this.swarmSince > v.aiSwarmFor || this.state === "retreat" || dist > v.aiSwarmRange * 2)) {
+          if (press(key)) { this.swarmRecalls++; this.swarmSince = -1; }
+        }
+        break;
+      }
     }
     // Shoulder weapons: one painted at a time, held long enough to read, then released.
     if (this.painting) {

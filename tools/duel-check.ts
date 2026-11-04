@@ -106,6 +106,20 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   console.log(`gear: ${n}/300 rivals carry feeds or power; feeds pressed ${feed.gearPresses[0]}x, capacitor ${power.gearPresses[0]}x in a minute`);
 }
 
+// ---- Summoner gear (2026-11-04): rivals roll it, and their AI calls drone strikes and throws and recalls its swarm ----
+{
+  let n = 0;
+  for (let seed = 1; seed <= 300; seed++) { const sm = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)).summons; if (sm.drones + sm.scrappers + sm.replicas > 0) n++; }
+  must(n >= 20, `only ${n} of 300 rolled rivals carry summoner gear`);
+  const x = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "drones", k2: "hive", k3: "replicas" }), null], maxTime: 60 });
+  const a = x.ai![0];
+  must(a.strikes >= 1, `a summoner rival called only ${a.strikes} drone strikes in a minute (18 s cooldown)`);
+  must(a.swarmThrows >= 1 && a.swarmRecalls >= 1, `a summoner rival threw its swarm ${a.swarmThrows}x and called it back ${a.swarmRecalls}x in a minute`);
+  const off = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "drones", k2: "hive", k3: "replicas" }), null], maxTime: 30, aiEach: [{ aiSummonUse: 0 }, undefined] });
+  must(off.summonUses[0] === 0, "a summoner rival used its gear with the use chance at 0");
+  console.log(`summoner: ${n}/300 rivals carry it; in a minute ${a.strikes} strikes, swarm out ${a.swarmThrows}x, back ${a.swarmRecalls}x`);
+}
+
 // ---- Duels between two AIs ----
 const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
 let both = 0, worstStuck = 0, kills = 0, ttk = 0;
