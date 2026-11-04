@@ -27,7 +27,7 @@ export const SWORD_DEFAULTS = {
   swordDamage: 420, // was 450 (2026-11-04: the balance model put the Breaker at 210% of a Light weapon's budget)
   /** The sword line's damage × the Breaker's (src/items/bases.ts): the buster (was 1.7) and the short sword. */
   swordBusterDamage: 1.5,
-  swordShortDamage: 0.6,
+  swordShortDamage: 0.72,
   swordAp: 0.5,
   swordReach: 4.7,
   swordArc: 210,

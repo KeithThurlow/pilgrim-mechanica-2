@@ -249,7 +249,7 @@ export class RampartBody {
   /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
   private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
   private lastParts: BodyParts | null = null;
-  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3(), e2: new THREE.Vector3(), h2: new THREE.Vector3(), d2: new THREE.Vector3() };
+  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3(), e2: new THREE.Vector3(), h2: new THREE.Vector3(), d2: new THREE.Vector3(), o2: new THREE.Vector3() };
 
   private constructor() { this.root.name = "rampart"; }
 
@@ -740,12 +740,13 @@ export class RampartBody {
     const u = Math.min(1, Math.max(0, (p.side * yaw) / Math.max(1e-3, v.armStraightAt * D))), s = u * u * (3 - 2 * u);
     const full = v.armUpper + v.armFore, reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
     const drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
-    const o = p.home;
+    // The arm's root out from the gun's shoulder point, as the sword's arm (a stub joins them).
+    const o = this.tmp.o2.set(p.home.x + p.side * v.armShoulderOut, p.home.y, p.home.z);
     const hand = { x: o.x + Math.sin(yaw) * cp * reach, y: o.y - Math.sin(pitch) * reach - drop, z: o.z + Math.cos(yaw) * cp * reach };
     const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * v.armPoleOut, y: -1, z: -v.armPoleBack });
     p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
     p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
-    this.drawArm(p, o, r, false);
+    this.drawArm(p, o, r, v.armShoulderOut > 0.02);
   }
 
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
