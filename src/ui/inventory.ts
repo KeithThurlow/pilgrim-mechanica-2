@@ -26,7 +26,7 @@ import { levelOf } from "../items/level";
 import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
 import { itemWeight, type Item } from "../items/item";
 import {
-  SLOTS, SLOT_NAMES, copyLoadout, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
+  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
   type LoadoutValues, type SlotId,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
@@ -39,7 +39,7 @@ import type { LootValues } from "../items/generate";
 import type { Expedition } from "../expedition/expedition";
 import { dollSvg, paintPart, DOLL_PARTS, type DollPart } from "./mechDoll";
 import { GRID_SIZE_DEFAULTS, isSalvage, itemCells, salvageBlocks, type GridSizeValues } from "../items/gridSize";
-import { GRID_DEFAULTS, fitsAt, footprint, placeAt, syncGrid, type Grid, type GridValues } from "../items/grid";
+import { GRID_DEFAULTS, autoPlace, fitsAt, footprint, placeAt, syncGrid, type Grid, type GridValues } from "../items/grid";
 import { itemIcon } from "./itemIcon";
 
 export interface InventoryOptions {
@@ -167,6 +167,7 @@ export function inventoryScreen(o: InventoryOptions) {
 
   function takeOff(s: SlotId) {
     if (s === "legs" || s === "hull") { say("Legs and hull can only be swapped, not taken off."); return; }
+    if (isBuiltinArm(st.loadout[s])) { say("Arms come with the hull: fit a hull weapon here to replace this one."); return; }
     if (field()) {
       const e = o.exp!, lo = copyLoadout(st.loadout), off = unfit(lo, s);
       const cap = e.capacity === Infinity ? Infinity : resolve(lo, o.tuning).cargoCapacity;
@@ -181,7 +182,10 @@ export function inventoryScreen(o: InventoryOptions) {
   /** Click on an item in a list: into the picked slot if it fits there, else the first slot it fits. */
   function equip(it: Item) {
     if (slot && !fitProblem(st.loadout, slot, it)) { fitInto(slot, it); return; }
-    const s = SLOTS.find((q) => !st.loadout[q] && !fitProblem(st.loadout, q, it)) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
+    // An empty slot first, a hand that already has its arm before one that would take a hull weapon off.
+    const free = (q: SlotId) => !st.loadout[q] && !fitProblem(st.loadout, q, it);
+    const s = SLOTS.find((q) => free(q) && !((q === "heldL" && !isArm(st.loadout.mountL)) || (q === "heldR" && !isArm(st.loadout.mountR))))
+      ?? SLOTS.find(free) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
     if (s) fitInto(s, it); else say(it.kind === "protocol" ? "Protocols go in sockets: open the bay (B)." : `${itemName(it)} doesn't fit anywhere on this mech.`);
   }
 
@@ -235,6 +239,13 @@ export function inventoryScreen(o: InventoryOptions) {
   // ---- the grids ----
 
   type GridId = "cargo" | "stash";
+  const GRID_LAYOUT_V = 2;
+  // Filter chips (Keith 2026-11-03): items outside the filter are dimmed in the grids.
+  type Filter = "all" | "hullWeapon" | "held" | "parts" | "gear" | "protocol";
+  const FILTERS: [Filter, string][] = [["all", "All"], ["hullWeapon", "Hull weapons"], ["held", "Held weapons"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
+  let filter: Filter = "all";
+  const passes = (x: Item) => filter === "all" || isSalvage(x) || (filter === "hullWeapon" ? isHullWeapon(x) : filter === "held" ? x.kind === "weapon" && !isHullWeapon(x)
+    : filter === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : filter === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol");
   const gv = (): GridValues & GridSizeValues => {
     const t = o.tuning as Record<string, number | undefined>, out: Record<string, number> = { ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
     for (const k in out) if (typeof t[k] === "number") out[k] = t[k]!;
@@ -248,7 +259,8 @@ export function inventoryScreen(o: InventoryOptions) {
   /** A grid in step with its items (saved positions kept); `over`: the items with no room. */
   function gridOf(g: GridId): { grid: Grid; over: Item[] } {
     const v = gv();
-    st.grids ??= { cargo: [], stash: [] };
+    // Layout version 2 (2026-11-03): layouts saved before were auto-placed turned; lay them out upright once.
+    if (!st.grids || st.grids.v !== GRID_LAYOUT_V) st.grids = { cargo: [], stash: [], v: GRID_LAYOUT_V };
     const grid: Grid = g === "cargo" ? { cols: v.cargoCols, rows: v.cargoRows, placed: st.grids.cargo } : { cols: v.stashCols, rows: v.stashRows, placed: st.grids.stash };
     if (g === "stash") grid.rows = Math.max(grid.rows, ...grid.placed.map((p) => p.y + footprint(p, p.rot).h));
     const items = gridItems(g);
@@ -418,7 +430,7 @@ export function inventoryScreen(o: InventoryOptions) {
       const it = findItem(p.id);
       if (!it) continue;
       const f = footprint(p, p.rot), col = isSalvage(it) ? "#e6c86a" : RARITY[it.rarity].color;
-      const cell = el("div", "inv-gitem" + (slot && !fitProblem(st.loadout, slot, it) ? " fits" : "") + (scrapArmed === it.id ? " armed" : ""));
+      const cell = el("div", "inv-gitem" + (slot && !fitProblem(st.loadout, slot, it) ? " fits" : "") + (scrapArmed === it.id ? " armed" : "") + (passes(it) ? "" : " dim"));
       cell.style.left = `${p.x * px}px`; cell.style.top = `${p.y * px}px`;
       cell.style.width = `${f.w * px}px`; cell.style.height = `${f.h * px}px`;
       cell.style.borderColor = col;
@@ -449,7 +461,21 @@ export function inventoryScreen(o: InventoryOptions) {
     return wrap;
   }
   /** Lay a grid out afresh, biggest first. */
-  function tidy(g: GridId) { st.grids![g] = []; changed(); }
+  /** Lay a grid out afresh in the sort order (Keith 2026-11-03: the sort chips sort the grids too). If the cargo
+   *  can't take everything that way, biggest first instead. */
+  function tidy(g: GridId) {
+    const v = gv(), { grid } = gridOf(g);
+    const items = sorted(gridItems(g)).filter((x) => !isSalvage(x)).concat(gridItems(g).filter(isSalvage));
+    const fresh = { ...grid, rows: g === "stash" ? v.stashRows : grid.rows, placed: [] as typeof grid.placed };
+    let left = 0;
+    for (const it of items) {
+      const c = itemCells(it, v);
+      while (!autoPlace(fresh, it.id, c, false) && g === "stash" && fresh.rows < 400) fresh.rows++;
+      if (!fresh.placed.some((p) => p.id === it.id)) left++;
+    }
+    st.grids![g] = left ? [] : fresh.placed;
+    changed();
+  }
   const zone = (z: "bin" | "sand", text: string) => { const b = el("div", "inv-zone", text); b.dataset.zone = z; return b; };
 
   // ---- pieces ----
@@ -473,22 +499,35 @@ export function inventoryScreen(o: InventoryOptions) {
       const t = TILES[s], it = lo[s];
       const heldBy2 = s === "heldL" && isTwoHander(lo.heldR);
       // A hand only exists with an arm on that mount (or the two-hander's other hand).
-      const noHand = (s === "heldL" && !isArm(lo.mountL)) || (s === "heldR" && !isArm(lo.mountR));
+      const noHand = (s === "heldL" && !armable(lo, "L")) || (s === "heldR" && !armable(lo, "R"));
       const tile = el("div", "inv-tile" + (s === slot ? " on" : "") + (it ? "" : " empty") + (noHand && !it ? " off" : ""));
       tile.style.left = `${t.x}px`; tile.style.top = `${t.y}px`;
       if (it) tile.style.borderColor = RARITY[it.rarity].color;
       const kind = s === "mountL" || s === "mountR" ? (isArm(it) ? "Arm" : isHullWeapon(it) ? "Hull weapon" : "") : "";
       tile.append(el("span", "inv-tilelabel", t.label));
-      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "needs an arm" : "empty");
+      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "no arm on this hull" : "empty");
       if (it) name.style.color = RARITY[it.rarity].color;
       tile.append(name);
-      if (it) tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}Lv ${levelOf(it)} · P ${itemPower(it)}`));
+      if (it && !heldBy2) {
+        // Its grid footprint (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid
+        // spaces that item needs"): a small block of its cells with its picture, and w × h.
+        const c = itemCells(it, gv()), px = 5;
+        const foot = el("div", "inv-tilefoot");
+        foot.style.width = `${c.w * px}px`; foot.style.height = `${c.h * px}px`; foot.style.backgroundSize = `${px}px ${px}px`;
+        foot.style.borderColor = RARITY[it.rarity].color;
+        foot.title = `${c.w} × ${c.h} cells`;
+        const pic = itemIcon(it, RARITY[it.rarity].color, false, gv());
+        pic.style.width = "100%"; pic.style.height = "100%"; pic.style.display = "block";
+        foot.append(pic);
+        if (!isBuiltinArm(it)) tile.append(foot);
+        tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}${isBuiltinArm(it) ? "comes with the hull" : `${c.w}×${c.h} · Lv ${levelOf(it)}`}`));
+      }
       tile.dataset.slot = s;
       // Press: a click picks the slot; dragging it off onto a grid takes it off (legs and hull only swap).
       tile.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         e.preventDefault();
-        const off = it && s !== "legs" && s !== "hull" && !heldBy2;
+        const off = it && s !== "legs" && s !== "hull" && !heldBy2 && !isBuiltinArm(it);
         press = { item: it ?? ({} as Item), from: s, x: e.clientX, y: e.clientY, rot: false, gx: 0, gy: 0 };
         if (!off) press.x = press.y = Number.NaN; // no drag: only the click
       });
@@ -601,9 +640,13 @@ export function inventoryScreen(o: InventoryOptions) {
     btns.append(btn("Close (I)", () => close(), "small"));
     head.append(btns);
     const bar = el("div", "inv-sort");
-    bar.append(el("span", "dim", "Sort:"));
+    bar.append(el("span", "dim", "Sort (Tidy lays the grids out in this order; it also orders the list of what fits a slot):"));
     for (const k of SORT_KEYS) bar.append(btn(SORT_NAMES[k] + (k === sortKey ? (sortUp ? " ▲" : " ▼") : ""), () => setSort(k), "small chip" + (k === sortKey ? " on" : "")));
-    const kids: HTMLElement[] = [head, bar];
+    bar.append(btn("Tidy both", () => { tidy("cargo"); if (!field()) tidy("stash"); }, "small"));
+    const fbar = el("div", "inv-sort");
+    fbar.append(el("span", "dim", "Show:"));
+    for (const [f, label] of FILTERS) fbar.append(btn(label, () => { filter = f; render(); }, "small chip" + (f === filter ? " on" : "")));
+    const kids: HTMLElement[] = [head, bar, fbar];
     if (message && messageT > 0) kids.push(el("div", "inv-msg", message));
     const body = el("div", "inv-body");
     const left = el("div", "inv-left");

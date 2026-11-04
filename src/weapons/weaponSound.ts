@@ -110,14 +110,25 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("smg", variants(4, 61, (r) => S.mix(S.tick(r, 0.02, 0.7), S.noise(r, 0.07, 5200, 0.55, 0.0003), S.thump(0.08, 280, 130, 0.45))), () => v.smgLevel);
   // Rifle: a harder crack, a firm thump and a short rolling tail.
   sfx.addSound("rifle", variants(3, 62, (r) => S.mix(S.tick(r, 0.025, 0.9), S.noise(r, 0.12, 3600, 0.7, 0.0003), S.thump(0.2, 190, 70, 0.75), S.delay(S.lowPass(S.noise(r, 0.45, 600, 0.3, 0.01), 800), 0.03))), () => v.rifleLevel);
-  // Shotgun: a broad, boomy blast with no snap to speak of, and the pump racking after it.
-  sfx.addSound("shotgun", variants(3, 63, (r) => S.mix(S.thump(0.35, 130, 48, 1.1), S.noise(r, 0.3, 1700, 0.9, 0.0008), S.delay(S.lowPass(S.noise(r, 0.6, 500, 0.35, 0.02), 700), 0.04),
+  // Shotgun: the flak's old voice (Keith 2026-11-03): a heavy cough and the shot's rattle spreading out, then the pump
+  // racking after it; with samples on, the flak recording (src/audio/samples.ts).
+  sfx.addSound("shotgun", variants(3, 63, (r) => S.mix(S.thump(0.4, 105, 44, 1.2), S.noise(r, 0.32, 1100, 0.85, 0.001), S.delay(S.scale(S.crackle(r, 0.35, 0.35), 0.8), 0.06),
     S.delay(S.scale(S.clang(r, 0.08, 0.2), 0.6), 0.42), S.delay(S.scale(S.clang(r, 0.07, 0.2), 0.5), 0.55))), () => v.shotgunLevel);
   // Sniper: a supersonic crack, a deep punch and a long tail rolling off the dunes; the bolt cycles after.
   sfx.addSound("sniper", variants(2, 64, (r) => S.mix(S.tick(r, 0.03, 1), S.noise(r, 0.07, 6500, 0.85, 0.0002), S.thump(0.5, 115, 34, 1.2),
     S.delay(S.lowPass(S.noise(r, 1.6, 450, 0.5, 0.01), 650), 0.05), S.delay(S.scale(S.clang(r, 0.1, 0.25), 0.45), 0.75))), () => v.sniperLevel);
-  // Flak: a heavy cough and the shrapnel's rattle spreading out after it.
-  sfx.addSound("flak", variants(3, 65, (r) => S.mix(S.thump(0.4, 105, 44, 1.2), S.noise(r, 0.32, 1100, 0.85, 0.001), S.delay(S.scale(S.crackle(r, 0.35, 0.35), 0.8), 0.06))), () => v.flakLevel);
+  // Flak firing (Keith 2026-11-03: the old cough and the flak recording went to the scattergun): a deep launch thump
+  // and the rush of a salvo leaving, like a rocket pod's ripple at once; the noise is where its pellets land (flakPop).
+  sfx.addSound("flak", variants(3, 65, (r) => S.mix(S.thump(0.35, 120, 50, 1.1), S.noise(r, 0.08, 2200, 0.6, 0.0005),
+    S.delay(S.noise(r, 0.45, 1800 + r() * 600, 0.5, 0.02), 0.02), S.delay(S.noise(r, 0.35, 900, 0.3, 0.05), 0.06))), () => v.flakLevel);
+  // A flak pellet's explosion (Keith 2026-11-03: "a storm of missiles hitting at once"): a small missile blast, a crack,
+  // a low punch, a short roar and rattle; six variants pitched apart so a volley of them never lines up.
+  sfx.addSound("flakPop", variants(6, 67, (r) => {
+    const f = 0.85 + r() * 0.3;
+    return S.mix(S.tick(r, 0.02, 0.7), S.thump(0.32, 120 * f, 48 * f, 0.9), S.lowPass(S.noise(r, 0.3, 1200 * f, 0.8, 0.002), 1600),
+      S.delay(S.band(r, 0.05, 1800, 5000, 0.1, 0.001, -200), 0.03), S.delay(S.scale(S.crackle(r, 0.4, 0.3), 0.5), 0.05),
+      S.band(r, 0.5, 150, 900, 0.2, 0.01, -40));
+  }), () => v.flakPopLevel);
   // Breach cannon (src/weapons/cannon.ts): a big, deep gun report: a sharp crack in front, a heavy low punch and a
   // long rumble rolling off; its shell's explosion is the shared blast, scaled by its radius.
   sfx.addSound("breach", variants(3, 66, (r) => S.mix(S.tick(r, 0.03, 0.9), S.noise(r, 0.12, 3000, 0.75, 0.0003), S.thump(0.6, 95, 30, 1.3), S.lowPass(S.noise(r, 0.4, 900, 0.8, 0.002), 1200),

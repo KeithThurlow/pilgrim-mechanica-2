@@ -5,7 +5,7 @@ import { BASE_BY_ID, RENAMED_BASES } from "./bases";
 import { PROTOCOL_BY_ID } from "./protocols";
 import type { Item } from "./item";
 import { seekersFor } from "./generate";
-import { SLOTS, V1_SLOTS, defaultLoadout, emptyLoadout, settle, type Loadout } from "./loadout";
+import { BUILTIN_TAG, SLOTS, V1_SLOTS, defaultLoadout, emptyLoadout, settle, type Loadout } from "./loadout";
 import type { Bag } from "./cargo";
 import type { Placed } from "./grid";
 
@@ -20,7 +20,7 @@ export interface BayState {
   unlocks?: Record<string, number>;
   /** Where each item sits in the cargo and stash grids (src/items/grid.ts; Keith 2026-11-02). Optional: items
    *  missing here are placed in the first free spot. */
-  grids?: { cargo: Placed[]; stash: Placed[] };
+  grids?: { cargo: Placed[]; stash: Placed[]; v?: number };
   /** What a save migration did (shown once at the top of the bay). */
   notes?: string[];
 }
@@ -85,6 +85,11 @@ export function readBay(raw: unknown): BayState | null {
     // The old default mech had no sensor; today's carries the Rampart visor head.
     lo.sensor = defaultLoadout().sensor;
   } else for (const s of SLOTS) lo[s] = fix(saved[s]);
+  // Arms come with the hull (Keith 2026-11-03): fitted arms become the hull's own, found arms are gone.
+  let arms = 0;
+  for (const s of ["mountL", "mountR"] as const) if (lo[s]?.kind === "arm" && !lo[s]!.tags.includes(BUILTIN_TAG)) lo[s] = null;
+  for (const bag of [stash, cargo]) { const n = bag.items.length; bag.items = bag.items.filter((i) => i.kind !== "arm"); arms += n - bag.items.length; }
+  if (arms) notes.push(`Arms now come with the hull: ${arms} spare arm${arms > 1 ? "s were" : " was"} taken out of the stash and cargo.`);
   const def = defaultLoadout();
   if (!lo.legs) lo.legs = def.legs;
   if (!lo.hull) lo.hull = def.hull;
@@ -104,5 +109,5 @@ function readGrids(g: { cargo?: unknown; stash?: unknown } | undefined): BayStat
     return !!q && typeof q.id === "string" && [q.x, q.y, q.w, q.h].every((n) => Number.isInteger(n)) && typeof q.rot === "boolean";
   };
   const list = (x: unknown) => (Array.isArray(x) ? x.filter(ok) : []);
-  return { cargo: list(g.cargo), stash: list(g.stash) };
+  return { cargo: list(g.cargo), stash: list(g.stash), v: typeof (g as { v?: unknown }).v === "number" ? (g as { v: number }).v : undefined };
 }

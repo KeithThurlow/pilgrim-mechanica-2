@@ -720,7 +720,7 @@ const panel = tweakPanel({
     { id: "deck", label: "Deck", groups: ["Deck", "Walk off"] },
     { id: "plough", label: "Plough and wake", groups: ["Plough", "Wake", "Plough sand", "Road"] },
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Craters", "Streaming"] },
-    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Sensor head", "Minigun", "Move"] },
+    { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
@@ -1073,7 +1073,7 @@ app.onTick((rawDt) => {
   patchSome(1.5);
   costs.mark("plough patch");
 
-  softAim.draw(driving ? pointer ?? cursor : null, lock, player.upper.onTarget && !player.gunsOff);
+  softAim.draw(driving ? pointer ?? cursor : null, lock, player.upper.onTarget && (!player.gunsOff || player.armsFree[0] || player.armsFree[1]));
   reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
   healthBars.update(rawDt);
 

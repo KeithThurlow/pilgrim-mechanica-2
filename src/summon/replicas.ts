@@ -1,7 +1,7 @@
 // Mech replicas (Keith 2026-11-02: "something that looks more like a robotic mech, roughly the same size and
 // proportions as the player's mech, but very clearly thin and robotic. Lighter. And when you sprint, it would sprint
-// with you"). The second kind of companion beside the turret quads (allies.ts). Glue: a wire-frame mech of its own
-// (replicaBody.ts; Keith 2026-11-02: "way more wireframey ... builds with rockets or miniguns, sort of random"), on the
+// with you"). The second kind of companion beside the turret quads (allies.ts). Glue: its own model
+// (replicaBody.ts: your own mech slimmed, Keith 2026-11-03; each built with rockets or miniguns at random, Keith 2026-11-02), on the
 // owner's walk values, on the owner's team, with a small hit size and a soft body (the owner walks through it and it's
 // nudged aside; enemy mechs still bump it), each built with miniguns or a rocket rack (seeded roll), and a brain like the convoy's guardians (src/convoy/guardians.ts): it walks a station at the owner's flank,
 // turns on the owner's lock or the nearest foe in reach, stepping out to holding range but never past the leash, and
@@ -41,11 +41,18 @@ export const REPLICA_DEFAULTS = {
   repRocketArc: 3,
   repRocketSpeed: 26,
   repRocketScatter: 2,
+  repLegThin: 0.55,
+  repFootSize: 0.8,
+  repHullW: 0.62,
+  repHullH: 0.8,
+  repHullL: 0.85,
+  repGunSize: 0.72,
+  repShade: 0.55,
 };
 export type ReplicaValues = typeof REPLICA_DEFAULTS;
 
-const G = "Mech replicas", GR = "Mech replicas: rockets";
-export const REPLICA_GROUPS = [G, GR];
+const G = "Mech replicas", GR = "Mech replicas: rockets", GL = "Mech replicas: look";
+export const REPLICA_GROUPS = [G, GR, GL];
 export const REPLICA_PARAMS: Param[] = [
   { key: "repCount", label: "Mech replicas", min: 0, max: 4, step: 1, group: G, tip: "Thin robot copies of your mech on stilt legs, walking at your flanks" },
   { key: "repHull", label: "Hit points", min: 100, max: 20000, step: 100, group: G },
@@ -70,10 +77,16 @@ export const REPLICA_PARAMS: Param[] = [
   { key: "repRocketArc", label: "Arc height (m)", min: 0, max: 20, step: 0.5, group: GR },
   { key: "repRocketSpeed", label: "Speed (m/s)", min: 5, max: 80, step: 1, group: GR },
   { key: "repRocketScatter", label: "Scatter (m)", min: 0, max: 8, step: 0.1, group: GR },
+  // Keith 2026-11-03: your own mech, slimmed: no pilot to carry, so thinner legs, a narrow hull, lighter guns.
+  { key: "repLegThin", label: "Legs: thickness ×", min: 0.2, max: 1.2, step: 0.01, group: GL, tip: "The Rampart's legs, this much as thick (their length is the walk's)" },
+  { key: "repFootSize", label: "Feet ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
+  { key: "repHullW", label: "Hull: width ×", min: 0.3, max: 1.2, step: 0.01, group: GL, tip: "The guns and sockets come in with the hull's sides" },
+  { key: "repHullH", label: "Hull: height ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
+  { key: "repHullL", label: "Hull: length ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
+  { key: "repGunSize", label: "Guns ×", min: 0.3, max: 1.2, step: 0.01, group: GL },
+  { key: "repShade", label: "Paint: faded to pale grey (0: your mech's paint)", tip: "Each colour of the model mixed toward its own brightness and lifted: an unmanned grey with the panel lines kept", min: 0, max: 1, step: 0.01, group: GL },
 ];
 
-/** Their paint: pale robot steel. */
-export const REPLICA_PAINT = 0xc7d0d4;
 
 interface Replica { unit: MechUnit; body: ReplicaBody; on: boolean; builds: number; clock: number; left: number; side: 1 | -1 }
 
@@ -134,7 +147,6 @@ export class Replicas {
     unit.uid = `replica:${k}`;
     unit.ally = true;
     unit.softSolid = true;
-    unit.paint = REPLICA_PAINT;
     body.root.visible = false;
     this.list.push({ unit, body, on: false, builds: 0, clock: 0, left: 0, side: 1 });
   }
@@ -215,6 +227,7 @@ export class Replicas {
       // Built one at a time, `repBuild` s apart.
       if (!r.on) { if (o.alive && !built && this.buildClock >= v.repBuild) { this.place(r, k); this.buildClock = 0; built = true; } else waiting = true; return; }
       this.tune(u);
+      r.body.setLook(v);
       if (!u.alive) {
         u.step(dt, { x: 0, z: 0, sprint: false }, null, false);
         if (u.deadFor > v.repRebuild && o.alive) this.place(r, k);

@@ -91,7 +91,7 @@ export class HvtMech {
     const unit = this.unit!, v = this.rv;
     this.level = Math.max(1, Math.round(level));
     const lo = rollRivalLoadout(lair.seed, v, { level: this.level });
-    const r = resolve(lo, v);
+    const r = resolve(lo, { ...v, bareDashCharges: v.rivalBareDashCharges });
     applyLoadout(unit, r);
     unit.hullOverride = Math.round(r.values.hull * v.hvtHull);
     this.kit = kitOf(r, v);
@@ -143,7 +143,8 @@ export class HvtMech {
     u.cursor = cmd?.cursor ? this.cursor.set(cmd.cursor.x, this.bf.field.height(cmd.cursor.x, cmd.cursor.z), cmd.cursor.z) : null;
     u.lock = cmd?.lock ?? null;
     u.dashHold = !!cmd?.dashHold;
-    if (cmd?.dash) u.tryDash(cmd.dash.x, cmd.dash.z);
+    if (cmd?.power) u.weapons?.powerCut?.();
+    if (cmd?.dash) u.tryDash(cmd.dash.x, cmd.dash.z, false);
     u.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
     this.draw!.update();
     if (this.wasAlive && !u.alive) this.died = true;

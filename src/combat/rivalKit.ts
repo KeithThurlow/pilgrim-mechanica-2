@@ -11,8 +11,11 @@ import { emptyLoadout, fit, fitProblem, hullMount, MOUNTS, SIDES, SLOTS, type Lo
 import { itemName } from "../items/bayState";
 import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
+import { energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
 
-export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword";
+export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | EnergyClass;
+/** An energy weapon (Keith 2026-11-02, on the reactor): pulse laser, beam laser, nova lance, plasma, orb, arc, sunder. */
+export const isEnergyKind = (k: KitKind): k is EnergyClass => isEnergy(k);
 /** Which control fires it: a trigger side (0 left, 1 right) or a shoulder key (1-3). */
 export type KitControl = { trigger: 0 | 1 } | { key: 1 | 2 | 3 };
 
@@ -40,10 +43,14 @@ export interface KitWeapon {
   flight: number;
   /** The range this weapon likes to be fired from (m). */
   ideal: number;
+  /** An energy weapon's numbers (src/weapons/energy/energySim.ts): what it draws on the reactor, its charge and channel. */
+  energy?: EnergyStats;
 }
 
 /** The range each kind likes (m), capped at 80% of its reach. */
-export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4 };
+export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4,
+  // Energy weapons: the hitscan ones mid range, the slow orb and the short arc close, the lance and sunder long.
+  laser: 34, beam: 26, lance: 50, plasma: 32, orb: 24, arc: 17, sunder: 40 };
 
 /** What a resolved loadout carries, as the AI and the headless duel see it. */
 export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
@@ -56,7 +63,11 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     if (!g) return;
     const ctl = { trigger: i } as KitControl, o = g.own;
     // A round gun (src/weapons/guns.ts) fights like a minigun: a pellet shot is its pellets' worth of damage.
-    if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
+    if (isEnergy(g.cls)) {
+      // Energy weapons (rivals rolled them since 2026-11-02 but never fired them): their own stats as the arsenal reads them.
+      const st = energyStats(g.cls, o, v);
+      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, energy: st }));
+    } else if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
     else if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
     else if (g.cls === "rail") {
       const L = !!g.light;
@@ -88,6 +99,13 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
   return out;
 }
 
+/** Shoulder gear that isn't a launcher (feeds, power), as the AI sees it: its key, and the gun a feed feeds (0, 1; -1 none). */
+export interface KitGear { key: 1 | 2 | 3; family: "feed" | "power"; gun: number }
+export function gearOf(r: Resolved): KitGear[] {
+  return r.shoulders.filter((s) => s.family === "feed" || s.family === "power")
+    .map((s) => ({ key: s.key, family: s.family as "feed" | "power", gun: s.mount === "shoulderL" ? 0 : s.mount === "shoulderR" ? 1 : -1 }));
+}
+
 /**
  * The range a kit likes (m): the mean of its weapons' (the trigger guns count double: they do most of the work). A kit
  * with a sword is pulled in toward the sword's (`swordPull` of the way: it wants to be in your face).
@@ -110,8 +128,9 @@ function pickBase(r: () => number, pool: Base[]): Base {
   return pool[pool.length - 1];
 }
 
-// A rival's shoulders are launchers (its AI knows no feeds or power yet, Keith 2026-10-30: shoulder gear is the player's).
-const ofKind = (kind: string, size?: string) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher"));
+// A rival's back weapon is a launcher; its shoulders roll feeds and power too (2026-11-03: its AI presses them), and
+// summoner gear (a drone rack, a swarm hive: 2026-11-04, its summons fight on its team).
+const ofKind = (kind: string, size?: string, gear = false) => BASES.filter((b) => b.kind === kind && (!size || b.size === size) && (kind !== "shoulder" || b.family === "launcher" || (gear && (b.family === "feed" || b.family === "power" || !!b.summon))));
 
 /**
  * A random rival loadout from a seed (the same seed always rolls the same mech): legs, hull, a sensor that fits it, each
@@ -144,9 +163,11 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     if (!mount) continue;
     const gun = mount.takes.includes("hullWeapon") && (!mount.takes.includes("arm") || r() < 0.5);
     if (gun) { put(m.mount, pickBase(r, ofKind("weapon", "M")).id); continue; }
-    put(m.mount, pickBase(r, ofKind("arm")).id);
+    // Arms come with the hull (Keith 2026-11-03): a held weapon puts the hull's arm on. The draw that used to pick the
+    // arm is kept so every seed still rolls the same rival.
+    r();
     put(m.held, pickBase(r, ofKind("weapon", "L")).id);
-    if (r() < 0.6) put(m.shoulder, pickBase(r, ofKind("shoulder")).id);
+    if (r() < 0.6) put(m.shoulder, pickBase(r, ofKind("shoulder", undefined, true)).id);
   }
   // Arms on both mounts: now and then a two-hander across them.
   if (lo.mountL?.kind === "arm" && lo.mountR?.kind === "arm" && r() < 0.25) put("heldR", pickBase(r, ofKind("weapon", "H")).id);

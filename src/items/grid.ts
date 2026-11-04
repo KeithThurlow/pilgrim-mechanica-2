@@ -84,7 +84,7 @@ export const usedCells = (g: Grid) => g.placed.reduce((n, p) => n + p.w * p.h, 0
  * Lay a list out afresh, biggest first (a tidy pack; also after the sizes change). Returns the ids that didn't fit
  * (left out of the grid).
  */
-export function repack(g: Grid, items: { id: string; cells: Cells }[], turn = true): string[] {
+export function repack(g: Grid, items: { id: string; cells: Cells }[], turn = false): string[] {
   g.placed = [];
   const order = [...items].sort((a, b) => b.cells.w * b.cells.h - a.cells.w * a.cells.h || Math.max(b.cells.w, b.cells.h) - Math.max(a.cells.w, a.cells.h) || (a.id < b.id ? -1 : 1));
   const left: string[] = [];
@@ -97,7 +97,7 @@ export function repack(g: Grid, items: { id: string; cells: Cells }[], turn = tr
  * out, items whose size changed (a slider) are placed again, new items go in the first free spot. `grow`: add rows
  * until everything fits (the stash). Returns the ids that have no room (shown apart, as over the grid).
  */
-export function syncGrid(g: Grid, items: { id: string; cells: Cells }[], turn = true, grow = false): string[] {
+export function syncGrid(g: Grid, items: { id: string; cells: Cells }[], _turn = false, grow = false): string[] {
   const want = new Map(items.map((i) => [i.id, i.cells]));
   g.placed = g.placed.filter((p) => {
     const c = want.get(p.id);
@@ -113,7 +113,8 @@ export function syncGrid(g: Grid, items: { id: string; cells: Cells }[], turn = 
     .sort((a, b) => b.cells.w * b.cells.h - a.cells.w * a.cells.h || (a.id < b.id ? -1 : 1));
   const left: string[] = [];
   for (const it of fresh) {
-    while (!autoPlace(g, it.id, it.cells, turn) && grow && g.rows < 400) g.rows++;
+    // Placed upright as sized (Keith 2026-11-03: weapons stand upright everywhere); only the player turns an item.
+    while (!autoPlace(g, it.id, it.cells, false) && grow && g.rows < 400) g.rows++;
     if (!g.placed.some((p) => p.id === it.id)) left.push(it.id);
   }
   return left;
@@ -140,7 +141,7 @@ export const GRID_PARAMS: Param[] = [
   { key: "cargoRows", label: "Cargo rows", min: 4, max: 20, step: 1, group: G },
   { key: "stashCols", label: "Stash columns", min: 6, max: 30, step: 1, group: G, tip: "The convoy's stash grid: as wide as this, at least this tall, and it grows to take everything (no limit yet)" },
   { key: "stashRows", label: "Stash rows", min: 6, max: 30, step: 1, group: G },
-  { key: "gridTurn", label: "Items can turn", min: 0, max: 1, step: 1, group: G, tip: "1: R (or right click) turns an item 90° while you hold it, and auto-placing tries it turned" },
+  { key: "gridTurn", label: "Items can turn", min: 0, max: 1, step: 1, group: G, tip: "1: R (or right click) turns an item 90° while you hold it. Items are always placed upright on their own" },
   { key: "gridCellPx", label: "Cell size (px)", min: 16, max: 64, step: 1, group: G },
   { key: "salvagePerBlock", label: "Scrap per salvage block", min: 5, max: 200, step: 5, group: "Salvage blocks", tip: "Out in the field the scrap at risk shows in the cargo grid as blocks of this much" },
   { key: "salvageLevel", label: "Compactor level (labs without a convoy)", min: 0, max: 3, step: 1, group: "Salvage blocks", tip: "Stand-in for the convoy's Salvage compactor unlock where there's no convoy (the inventory lab); the convoy lab uses what's bought" },

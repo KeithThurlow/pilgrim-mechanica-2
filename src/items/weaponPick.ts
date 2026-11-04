@@ -79,7 +79,7 @@ export function loadoutFor(p: Pick): Loadout {
   for (const [side, s, key] of [["left", "L", p.k1], ["right", "R", p.k2]] as const) {
     const w = p[side], m = MOUNTS[s], shoulder = SHOULDER_BASE[key];
     if (HULL_BASE[w]) put(m.mount, HULL_BASE[w]!);
-    else { put(m.mount, "arm-rampart"); put(m.held, HELD_BASE[w]); }
+    else put(m.held, HELD_BASE[w]); // the hull's arm goes on with it (Keith 2026-11-03)
     // The default mech's own shoulder gear is replaced by the pick (none: bare).
     lo[m.shoulder] = null;
     if (shoulder) put(m.shoulder, shoulder);
@@ -87,5 +87,23 @@ export function loadoutFor(p: Pick): Loadout {
   if (p.k3 === "replicas") put("pack", "pack-replica");
   else if (SHOULDER_BASE[p.k3]) put("pack", SHOULDER_BASE[p.k3]);
   else if (p.k3 === "none") lo.pack = null;
+  return lo;
+}
+
+/**
+ * One weapon by its base id on the left side (a shoulder launcher on key 1), with these Protocols socketed (repeats
+ * allowed, whatever its sockets): the weapon review lab's mech (labs/weaponreview/). Hull weapons on the left hull
+ * mount, held ones in the left arm (a two-hander in both), launchers on the left shoulder. The right side keeps a
+ * minigun (or an arm, for a two-hander), not fired by the review.
+ */
+export function loadoutForBase(base: string, protos: readonly string[] = []): Loadout {
+  const hull = Object.entries(HULL_BASE).find(([, b]) => b === base)?.[0] as SidePick | undefined;
+  const held = (Object.entries(HELD_BASE) as [SidePick, string][]).find(([k, b]) => b === base && !HULL_BASE[k])?.[0];
+  const sh = Object.entries(SHOULDER_BASE).find(([, b]) => b === base)?.[0] as ShoulderPick | undefined;
+  const pick: Pick = { left: hull ?? held ?? "lightmg", right: hull || sh ? "minigun" : "lightmg", k1: sh ?? "none", k2: "none", k3: "pack" };
+  const lo = loadoutFor(pick);
+  let it = Object.values(lo).find((x) => x?.base === base) ?? null;
+  if (!it) { it = makeItem(base, "common", `review-${base}`); fit(lo, "heldL", it); }
+  for (const id of protos) if (PROTOCOL_BY_ID[id]) it.socketed.push(protocolItem(PROTOCOL_BY_ID[id], 1));
   return lo;
 }

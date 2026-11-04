@@ -17,8 +17,14 @@ import { rng, LOOT_DEFAULTS } from "../items/generate";
 import { resolve, LOADOUT_DEFAULTS, type Loadout } from "../items/loadout";
 import { DuelGround, DUEL_GROUND_DEFAULTS, lineOfSight } from "../game/duelGround";
 import { RivalAi, RIVAL_AI_DEFAULTS, type DuelView, type MechCommand, type Threat, type WeaponState } from "./rivalAi";
-import { kitOf, rollRivalLoadout, type KitWeapon } from "./rivalKit";
+import { gearOf, kitOf, rollRivalLoadout, type KitWeapon } from "./rivalKit";
+import { GearSim, gearStats } from "../weapons/gear";
+import { DRONE_DEFAULTS } from "../summon/drones";
+import { ALLY_DEFAULTS } from "../summon/allies";
+import type { Resolved } from "../items/loadout";
 import { DuelScore } from "./duelScore";
+import { EnergySim } from "../weapons/energy/energySim";
+import { Reactor, REACTOR_DEFAULTS } from "../mech/reactor";
 
 const W = WEAPON_DEFAULTS;
 const HIT_R = MECH_DEFAULTS.hitRadius;
@@ -26,7 +32,7 @@ const HIT_R = MECH_DEFAULTS.hitRadius;
 interface Flying { id: number; from: 0 | 1; kind: string; x: number; z: number; ax?: number; az?: number; r: number; land: number; damage: number; blast: number; homing: number;
   /** Would it have hit where the target stood when it was fired? (for the dodge count) */ wouldHit: boolean; dealt: number; parts: number; partsLeft: number; spacing: number; length: number }
 
-interface Gun { cool: number; charge: number; holding: boolean; spin: number; acc: number; prevKey: boolean; railFrom: { x: number; z: number } | null }
+interface Gun { /** A sword's last cut (its damage dealt) and whether it was made a power cut. */ lastCut: number; powered: boolean; cool: number; charge: number; holding: boolean; spin: number; acc: number; prevKey: boolean; railFrom: { x: number; z: number } | null }
 
 class DuelMech {
   sim: WalkerSim;
@@ -35,18 +41,35 @@ class DuelMech {
   hull: number;
   kit: KitWeapon[];
   guns: Gun[];
+  /** Energy weapons (by kit index) on the hull's reactor, as the arsenal's EnergyGuns. */
+  esim: EnergySim[];
+  /** Feeds and power on the shoulders (their key, the gun a feed feeds). */
+  gear: { key: 1 | 2 | 3; gun: number; sim: GearSim; prev: boolean }[];
+  reactor: Reactor;
+  /** Summoner gear, as a crude stand-in (the AI's rules, not balance): drones that chip at a foe in reach (faster in a
+   *  strike), a swarm that bites while it's sent out; replicas aren't modelled. */
+  summon: Resolved["summons"];
+  strikeCool = 0;
+  strikeLeft = 0;
+  swarmOut = false;
+  summonPrev = [false, false];
   moved = 0;
   fired = 0;
   hist: { x: number; z: number }[] = [];
   constructor(readonly v: typeof WALKER_DEFAULTS & typeof DASH_DEFAULTS & typeof BOUND_DEFAULTS & { hull: number; walkSpeed: number }, field: DuneField, lo: Loadout) {
-    const r = resolve(lo, LOADOUT_DEFAULTS);
+    const r = resolve(lo, { ...LOADOUT_DEFAULTS, bareDashCharges: LOADOUT_DEFAULTS.rivalBareDashCharges });
     Object.assign(this.v, r.values);
     this.sim = new WalkerSim(this.v, field);
     this.dash = new Dash(this.v);
     this.dash.charges = Math.round(this.v.dashCharges);
     this.hull = this.health = r.values.hull;
     this.kit = kitOf(r, W);
-    this.guns = this.kit.map(() => ({ cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
+    this.guns = this.kit.map(() => ({ lastCut: 0, powered: false, cool: 0, charge: 0, holding: false, spin: 0, acc: 0, prevKey: false, railFrom: null }));
+    this.esim = this.kit.map(() => new EnergySim());
+    this.summon = r.summons;
+    const gk = gearOf(r);
+    this.gear = r.shoulders.filter((s) => s.family === "feed" || s.family === "power").map((s, n) => ({ key: s.key, gun: gk[n].gun, sim: new GearSim(gearStats(s.weapon, s.own, W)), prev: false }));
+    this.reactor = new Reactor({ ...REACTOR_DEFAULTS, reactorCap: r.values.reactorCap, reactorRegen: r.values.reactorRegen });
   }
   get alive() { return this.health > 0; }
 }
@@ -59,6 +82,12 @@ export interface DuelResult {
   threatened: [number, number];
   dodged: [number, number];
   dashes: [number, number];
+  /** Feed and power presses made. */
+  gearPresses: [number, number];
+  /** Summoner gear used (drone strikes, swarm throws and recalls). */
+  summonUses: [number, number];
+  /** Power cuts made (a sword's cut with a bar spent). */
+  powerCuts: [number, number];
   /** Threatened / dodged by weapon kind (both sides). */
   byKind: Record<string, [number, number]>;
   /** Rail slugs fired and slugs that hurt, by shooter. */
@@ -115,8 +144,10 @@ export function runDuel(o: DuelOptions): DuelResult {
   const score = new DuelScore();
   score.start(0);
   const flying: Flying[] = [];
+  /** Particle orbs drifting out to their range, burning whatever they pass, then popping (as EnergyGuns.fly). */
+  const orbs: { id: number; from: 0 | 1; x: number; z: number; dx: number; dz: number; speed: number; left: number; dps: number; r: number; pop: number }[] = [];
   let nextId = 1;
-  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
+  const res: DuelResult = { winner: -1, time: 0, score, threatened: [0, 0], dodged: [0, 0], dashes: [0, 0], powerCuts: [0, 0], summonUses: [0, 0], gearPresses: [0, 0], byKind: {}, rail: [[0, 0], [0, 0]], stuckWorst: 0, nan: false, states: [] };
   const dt = 1 / 60, maxT = o.maxTime ?? 90;
   let t = 0;
   const lastAct = [0, 0], lastPos = mechs.map((m) => ({ x: m.sim.pos.x, z: m.sim.pos.z }));
@@ -154,20 +185,29 @@ export function runDuel(o: DuelOptions): DuelResult {
   function view(i: number): DuelView {
     const m = mechs[i], f = mechs[1 - i];
     const threats: Threat[] = [];
+    for (const o of orbs) if (o.from !== i) { const L = Math.min(o.left, o.speed * 3); threats.push({ id: o.id, kind: "line", ax: o.x, az: o.z, x: o.x + o.dx * L, z: o.z + o.dz * L, r: o.r, t: 1.5 }); }
     for (const fl of flying) if (fl.from !== i) threats.push(fl.ax !== undefined
       ? { id: fl.id, kind: "line", ax: fl.ax, az: fl.az, x: fl.x, z: fl.z, r: fl.r, t: Math.max(0, fl.land - t) }
       : { id: fl.id, kind: "ring", x: fl.x, z: fl.z, r: fl.r, t: Math.max(0, fl.land - t), homing: !!fl.homing });
     // The foe's rails charging: a line from it along its aim.
     f.kit.forEach((k, j) => {
       const g = f.guns[j];
-      if (k.kind !== "rail" || !g.holding || !g.railFrom) return;
+      if ((k.kind !== "rail" && k.kind !== "lance" && k.kind !== "sunder") || !g.holding || !g.railFrom) return;
       const dx = g.railFrom.x - f.sim.pos.x, dz = g.railFrom.z - f.sim.pos.z, l = Math.hypot(dx, dz) || 1;
       threats.push({ id: 100000 + (1 - i) * 10 + j, kind: "line", ax: f.sim.pos.x, az: f.sim.pos.z, x: f.sim.pos.x + dx / l * k.range, z: f.sim.pos.z + dz / l * k.range, r: W.railSheetHalf, t: Infinity, rail: true, charge: g.charge });
     });
-    const weapons: WeaponState[] = m.kit.map((_k, j) => ({ i: j, ready: m.guns[j].cool <= 0, charge: m.guns[j].charge }));
+    const weapons: WeaponState[] = m.kit.map((k, j) => {
+      // A sword is mid-cut for a quarter second after the swing (its power-cut window).
+      if (k.kind === "sword") return { i: j, ready: m.guns[j].cool <= 0, charge: 0, busy: m.guns[j].cool > k.cooldown - 0.25 && !m.guns[j].powered };
+      if (!k.energy) return { i: j, ready: m.guns[j].cool <= 0, charge: m.guns[j].charge };
+      const es = m.esim[j], cost = k.kind === "beam" ? k.energy.energy * 0.15 : k.energy.energy;
+      return { i: j, ready: es.cool <= 0 && es.phase === 0 && m.reactor.charge >= cost, charge: m.guns[j].charge, busy: k.kind === "sunder" ? es.phase > 0 : k.kind === "lance" && es.holding };
+    });
     return {
       t, threats, cover: ground.spots, sees, arena: { x: 0, z: 0, r: gv.duelRadius },
-      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, kit: m.kit, weapons },
+      self: { x: m.sim.pos.x, z: m.sim.pos.z, vx: m.sim.vel.x, vz: m.sim.vel.z, heading: m.sim.heading, health: m.health / m.hull, dashCharges: m.dash.charges, canDash: m.sim.canDash, dashing: m.dash.active, walkSpeed: m.v.walkSpeed, energy: m.reactor.charge, energyCap: m.reactor.cap, kit: m.kit, weapons,
+        summon: m.summon.drones + m.summon.scrappers + m.summon.replicas > 0 ? { droneKeys: m.summon.droneKeys, swarmKeys: m.summon.swarmKeys, strikeReady: m.strikeCool <= 0, drones: m.summon.drones, swarmOut: m.swarmOut, scrappers: m.summon.scrappers, swarmMax: m.summon.scrappers } : undefined,
+        gear: m.gear.map((g) => ({ key: g.key, family: g.sim.stats.family, gun: g.gun, ready: g.sim.cool <= 0, bars: g.sim.stats.bars })) },
       foe: { x: f.sim.pos.x, y: f.sim.pelvis.y, z: f.sim.pos.z, vx: f.sim.vel.x, vz: f.sim.vel.z, health: f.health / f.hull, dashCharges: f.dash.charges, alive: f.alive, gunsOff: false, airborne: f.sim.airborne, staggered: f.sim.stagger > 0, r: HIT_R },
     };
   }
@@ -213,16 +253,64 @@ export function runDuel(o: DuelOptions): DuelResult {
     const m = mechs[i], f = mechs[1 - i];
     const dist = Math.hypot(f.sim.pos.x - m.sim.pos.x, f.sim.pos.z - m.sim.pos.z);
     const see = sees(m.sim.pos.x, m.sim.pos.z, f.sim.pos.x, f.sim.pos.z);
+    // Feeds and power: a press on the key (rising edge), as the arsenal's stepGear.
+    // Summoner gear (crude): the keys, then the drones' and the swarm's chip damage on the foe.
+    const sm = m.summon;
+    [0, 1].forEach((k) => {
+      const down = cmd.keys[k] && m.alive, pressed = down && !m.summonPrev[k];
+      m.summonPrev[k] = down;
+      if (!pressed) return;
+      if ((sm.droneKeys as number[]).includes(k + 1) && m.strikeCool <= 0 && sm.drones > 0) { m.strikeLeft = DRONE_DEFAULTS.droneStrikeTime; m.strikeCool = DRONE_DEFAULTS.droneStrikeCool + DRONE_DEFAULTS.droneStrikeTime; res.summonUses[i]++; }
+      if ((sm.swarmKeys as number[]).includes(k + 1)) { m.swarmOut = !m.swarmOut; res.summonUses[i]++; }
+    });
+    m.strikeCool = Math.max(0, m.strikeCool - dt); m.strikeLeft = Math.max(0, m.strikeLeft - dt);
+    if (m.alive && sm.drones > 0 && dist < DRONE_DEFAULTS.droneEngage && see) hurt(1 - i, "drones", sm.drones * DRONE_DEFAULTS.droneDamage * DRONE_DEFAULTS.droneRate * 0.4 * (m.strikeLeft > 0 ? DRONE_DEFAULTS.droneStrikeRate : 1) * dt);
+    if (m.alive && m.swarmOut && sm.scrappers > 0) hurt(1 - i, "swarm", sm.scrappers * ALLY_DEFAULTS.swarmBite * 0.5 * dt);
+    for (const q of m.gear) {
+      q.sim.update(dt);
+      const down = cmd.keys[q.key - 1] && m.alive, pressed = down && !q.prev;
+      q.prev = down;
+      if (pressed && q.sim.press()) { res.gearPresses[i]++; if (q.sim.stats.family === "power") m.reactor.refillNow(q.sim.stats.bars); }
+    }
     aimAt[i] = cmd.cursor ?? cmd.lock ?? null;
     m.kit.forEach((k, j) => {
       const g = m.guns[j];
       g.cool = Math.max(0, g.cool - dt);
       if ("trigger" in k.ctl) {
         const held = cmd.trigger[k.ctl.trigger] && m.alive;
+        if (k.energy) {
+          // Energy weapons on the reactor (src/weapons/energy/energySim.ts, as the arsenal steps them): a dash drops a
+          // charge and stops a beam. Bolts, beam ticks and the sunder's burn hit along the shot line; plasma and orbs fly.
+          const es = m.esim[j], st = k.energy, blocked = m.sim.inDash;
+          if (blocked) es.drop();
+          const out = es.step(dt, held && !blocked, st, m.reactor);
+          g.charge = k.kind === "sunder" ? (es.phase === 1 ? es.charge : 0) : es.charge;
+          g.holding = k.kind === "sunder" ? es.phase === 1 : es.holding;
+          if (cmd.lock && g.holding) g.railFrom = { x: cmd.lock.x, z: cmd.lock.z };
+          const at = cmd.shotAt;
+          if (!at || (!out.shots && !out.power)) return;
+          m.fired++; lastAct[i] = t;
+          const miss = Math.hypot(at.x - f.sim.pos.x, at.z - f.sim.pos.z), reach = see && dist <= st.range;
+          if (k.kind === "orb") {
+            const dx = at.x - m.sim.pos.x, dz = at.z - m.sim.pos.z, l = Math.hypot(dx, dz) || 1;
+            for (let n = 0; n < out.shots; n++) orbs.push({ id: nextId++, from: i as 0 | 1, x: m.sim.pos.x, z: m.sim.pos.z, dx: dx / l, dz: dz / l, speed: st.speed, left: st.range, dps: st.damage, r: st.radius, pop: st.blastDamage });
+          } else if (k.kind === "plasma") {
+            for (let n = 0; n < out.shots; n++) launch(i, k, k.kind, at, { r: Math.max(0.5, st.radius), blast: st.radius, damage: st.damage, land: Math.min(dist, st.range) / Math.max(1, st.speed) });
+          } else if (k.kind === "lance") {
+            if (reach && miss < HIT_R + 0.5) hurt(1 - i, "lance", (st.damage + st.blastDamage) * out.power);
+          } else {
+            const wide = k.kind === "arc" ? st.seek : k.kind === "sunder" ? st.radius : 0;
+            if (reach && miss < HIT_R + wide) hurt(1 - i, k.kind, st.damage * out.shots);
+          }
+          return;
+        }
         if (k.kind === "minigun" || k.kind === "autocannon") {
           g.spin = held ? Math.min(1, g.spin + dt / Math.max(0.05, k.spinUp)) : Math.max(0, g.spin - dt * 2);
           if (!held || g.spin < 1 || !cmd.shotAt || dist > k.range) { g.acc = 0; return; }
-          g.acc += k.rate * dt;
+          // Feeds on this gun: the passive rate and an overdrive while it lasts (ignited rounds' burn isn't modelled).
+          let mul = 1;
+          for (const q of m.gear) if (q.gun === k.ctl.trigger && q.sim.stats.family === "feed") mul *= q.sim.rateMul;
+          g.acc += k.rate * mul * dt;
           while (g.acc >= 1) {
             g.acc -= 1; m.fired++; lastAct[i] = t;
             const spread = Math.tan(k.spread * Math.PI / 180) * dist * r();
@@ -264,7 +352,12 @@ export function runDuel(o: DuelOptions): DuelResult {
           if (held && g.cool <= 0) {
             // A swing whose parry window passes unused cools the parry (set ahead; a parry in the window resets it).
             if (t >= parryAt[i]) { swungAt[i] = t; parryAt[i] = t + W.swordParryMax + W.swordParryMiss; }
-            g.cool = k.cooldown; m.fired++; lastAct[i] = t; if (dist < k.range) { cutterGun = j; hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos, i)); } }
+            g.cool = k.cooldown; g.powered = false; g.lastCut = 0; m.fired++; lastAct[i] = t; if (dist < k.range) { cutterGun = j; g.lastCut = hurt(1 - i, "sword", k.damage * blockTake(1 - i, m.sim.pos, i)); } }
+          // A power cut (Space mid-cut, a bar): the cut just made lands harder (as the arsenal's powerUp, simplified).
+          if (cmd.power && !g.powered && g.cool > k.cooldown - 0.25 && m.dash.spend(W.swordPowerCost)) {
+            g.powered = true; res.powerCuts[i]++;
+            if (g.lastCut > 0) hurt(1 - i, "sword", g.lastCut * (W.swordPowerDamage - 1));
+          }
         }
         return;
       }
@@ -285,6 +378,16 @@ export function runDuel(o: DuelOptions): DuelResult {
         launch(i, k, "linemortar", { x: c.x + dx / l * L / 2, z: c.z + dz / l * L / 2 }, { ax, az, r: k.blast, parts: k.count, partsLeft: k.count, spacing: W.salvoLandGap, land: Math.hypot(ax - m.sim.pos.x, az - m.sim.pos.z) / k.speed + 0.8, length: L });
       }
     });
+  }
+
+  function flyOrbs() {
+    for (let n = orbs.length - 1; n >= 0; n--) {
+      const o = orbs[n], ti = 1 - o.from, tgt = mechs[ti], step = Math.min(o.left, o.speed * dt);
+      o.x += o.dx * step; o.z += o.dz * step; o.left -= step;
+      const d = Math.hypot(tgt.sim.pos.x - o.x, tgt.sim.pos.z - o.z);
+      if (d < o.r + HIT_R) hurt(ti, "orb", o.dps * dt);
+      if (o.left <= 1e-3) { if (o.pop > 0) blastOn(ti, o.x, o.z, o.r * 0.9, o.pop, "orb"); orbs.splice(n, 1); }
+    }
   }
 
   function land() {
@@ -319,6 +422,7 @@ export function runDuel(o: DuelOptions): DuelResult {
     mechs.forEach((m, i) => {
       const cmd = cmds[i];
       if (o.freeDash?.[i]) m.dash.charges = Math.round(m.v.dashCharges);
+      m.reactor.update(dt);
       if (cmd.dash && m.sim.canDash && m.dash.start(cmd.dash.x, cmd.dash.z)) { m.sim.dash(m.dash.dirX, m.dash.dirZ); res.dashes[i]++; }
       for (let s = 0; s < 2; s++) {
         m.dash.update(dt / 2);
@@ -337,6 +441,7 @@ export function runDuel(o: DuelOptions): DuelResult {
     });
     mechs.forEach((_, i) => weapons(i, cmds[i]));
     land();
+    flyOrbs();
     if (res.nan) break;
   }
   res.time = t;

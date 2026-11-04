@@ -53,6 +53,16 @@ export function threatsFrom(a: Arsenal, team: number, shells: Shells, v: WeaponV
       out.push({ id: ids.of(m, m.p0.x * 3.1 + m.launchAt), kind: "ring", x: m.p3.x, z: m.p3.z, r: m.blast, t, homing: m.key !== null && m.key !== undefined });
     }
   }
+  // A sunder beam charging: its aim line (as the rail's: dash across it late). Particle orbs: slow, a line ahead of each.
+  a.energy.sides.forEach((s, i) => {
+    if (s.cls !== "sunder" || !s.tele.on) return;
+    out.push({ id: 1_000_100 + team * 10 + i, kind: "line", ax: s.tele.from.x, az: s.tele.from.z, x: s.tele.to.x, z: s.tele.to.z, r: Math.max(1, v.sunderWidth), t: Infinity, rail: true, charge: s.tele.k });
+  });
+  for (const o of a.energy.orbs) {
+    if (o.cls !== "orb") continue;
+    const L = Math.min(o.left, o.speed * 3);
+    out.push({ id: ids.of(o, o.seed), kind: "line", ax: o.pos.x, az: o.pos.z, x: o.pos.x + o.dir.x * L, z: o.pos.z + o.dir.z * L, r: o.radius, t: 1.5 });
+  }
   // A rail charging: its line on the sand out to where the slug would stop.
   a.sides.forEach((s, i) => {
     if (s.kind !== "rail" || !s.rail.holding || s.aimLine.length < 2) return;
@@ -68,7 +78,14 @@ export function weaponStates(a: Arsenal, unit: MechUnit, kit: readonly KitWeapon
     if ("trigger" in k.ctl) {
       const s = a.sides[k.ctl.trigger], g = unit.upper.guns[k.ctl.trigger];
       if (k.kind === "rail") return { i, ready: s.rail.cooldown <= 0, charge: s.rail.charge };
-      if (k.kind === "sword") return { i, ready: true, charge: 0 };
+      if (k.energy) {
+        // Energy weapons: ready when cooled and the reactor can pay a shot (a lance or sunder: its whole cost).
+        const sim = a.energy.sides[k.ctl.trigger].sim, st = k.energy, e = unit.reactor.charge;
+        const cost = k.kind === "beam" ? st.energy * 0.15 : st.energy;
+        const busy = k.kind === "sunder" ? sim.phase > 0 : k.kind === "lance" && sim.holding;
+        return { i, ready: sim.cool <= 0 && sim.phase === 0 && e >= cost, charge: k.kind === "sunder" ? (sim.phase === 1 ? sim.charge : 0) : sim.charge, busy };
+      }
+      if (k.kind === "sword") return { i, ready: true, charge: 0, busy: a.canPowerCut() };
       if (k.kind === "rpg") return { i, ready: s.cool <= 0, charge: 0 };
       return { i, ready: g.ammo > 0, charge: 0 };
     }
@@ -87,7 +104,8 @@ export function duelView(t: number, self: MechUnit, kit: readonly KitWeapon[], s
     t, threats, cover, sees, arena,
     self: {
       x: s.pos.x, z: s.pos.z, vx: s.vel.x, vz: s.vel.z, heading: s.heading, torso: self.upper.torsoYaw, health: self.health / self.maxHealth,
-      dashCharges: self.dash.charges, canDash: s.canDash, dashing: self.dash.active, walkSpeed: self.v.walkSpeed, kit, weapons: weaponStates(selfArsenal, self, kit),
+      dashCharges: self.dash.charges, canDash: s.canDash, dashing: self.dash.active, walkSpeed: self.v.walkSpeed, energy: self.reactor.charge, energyCap: self.reactor.cap, kit,
+      gear: selfArsenal.shoulders.filter((sh) => sh.gear).map((sh) => ({ key: sh.key, family: sh.gear!.stats.family, gun: sh.mount === "shoulderL" ? 0 : sh.mount === "shoulderR" ? 1 : -1, ready: sh.gear!.cool <= 0, bars: sh.gear!.stats.bars })), weapons: weaponStates(selfArsenal, self, kit),
     },
     foe: {
       x: f.pos.x, y: f.pelvis.y, z: f.pos.z, vx: f.vel.x, vz: f.vel.z, health: foe.health / foe.maxHealth, dashCharges: foe.dash.charges, alive: foe.alive,

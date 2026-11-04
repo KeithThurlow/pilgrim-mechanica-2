@@ -37,6 +37,11 @@ import { loadBay } from "../../src/ui/bay";
 import type { Param } from "../../src/core/tweaks";
 import { LEG_SHAPE_KEYS } from "../../src/mech/legTypes";
 import { lookFor } from "../../src/items/item";
+import { Summons, type SummonValues } from "../../src/summon/summons";
+import { SummonKeys } from "../../src/summon/summonKeys";
+import { applyGear } from "../../src/summon/gear";
+import { enemiesOf } from "../../src/game/targeting";
+import type { Resolved } from "../../src/items/loadout";
 
 const DUEL_DEFAULTS = { rivalHull: RIVAL_LEVELS.recruit.rivalHull, duelHull: DUEL_HULL_MUL, rivalUp: 0, duelAutoRestart: 3.5 };
 const DUEL_PARAMS: Param[] = [
@@ -102,6 +107,9 @@ rival.weapons = rivalArsenal;
 const rivalDraw = new ArsenalDraw(rivalArsenal, field, () => bf.nightLights);
 app.scene.add(rivalDraw.group);
 const ai: RivalAi = new RivalAi(V, 1);
+/** The rival's summons (made the first time its loadout brings summoner gear) and their values. */
+const RSV = {} as SummonValues;
+let rivalSummons: Summons | null = null, rivalSummonKeys: SummonKeys | null = null, rivalFit: Resolved | null = null;
 const ids = new ThreatIds();
 let kit: KitWeapon[] = [];
 let rivalLo: Loadout | null = null;
@@ -121,6 +129,12 @@ function fitRival() {
   rival.hullOverride = Math.round(r.values.hull * V.rivalHull * V.duelHull);
   applyLoadout(rival, r);
   kit = kitOf(r, RV);
+  // Summoner gear (2026-11-04): the rival's drones, scrap swarm and replicas fight on its team, on their own values (the
+  // lab's summon sliders, with the rival's gear counts) so yours and its never mix.
+  rivalFit = r;
+  const sm = r.summons, gear = sm.replicas + sm.drones + sm.scrappers > 0;
+  Object.assign(RSV, V); applyGear(RSV, r);
+  if (gear && !rivalSummons) { rivalSummons = new Summons(bf, app.scene, RSV, field, rival, enemiesOf(rival.team), lab.deaths, { look: toon }); rivalSummonKeys = new SummonKeys(rivalSummons); }
   ai.reset();
   board();
 }
@@ -222,7 +236,7 @@ const noteEl = bars.querySelector<HTMLElement>(".note")!;
 const box = document.createElement("div");
 box.className = "duel-box";
 document.body.appendChild(box);
-const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", shrpg: "shoulder rocket", mortar: "big mortar", linemortar: "line mortar", missiles: "missile pod" };
+const KIND_NAME: Record<string, string> = { minigun: "minigun", rail: "rail cannon", autocannon: "autocannon", rpg: "rocket launcher", shrpg: "shoulder rocket", mortar: "big mortar", linemortar: "line mortar", missiles: "missile pod", sword: "sword", laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam" };
 // A fixed rival-number box (type or use the arrows); it never moves with the rival's item list.
 const picker = document.createElement("label");
 picker.style.cssText = "position:fixed;left:12px;top:12px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:4px 8px;border-radius:4px;font:12px sans-serif";
@@ -301,6 +315,11 @@ lab.onFrame((dt: number) => {
   const t = clock - roundStart;
   const threats = threatsFrom(lab.arsenal, player.team, bf.shells, V, ids);
   const view = duelView(t, rival, kit, rivalArsenal!, player, threats, ground!.spots, sees, { x: 0, z: 0, r: V.duelRadius });
+  const rs = rivalSummons, sm = rivalFit?.summons;
+  if (rs && sm && sm.replicas + sm.drones + sm.scrappers > 0) {
+    view.self.summon = { droneKeys: sm.droneKeys, swarmKeys: sm.swarmKeys, strikeReady: rs.active && rs.strikeCool <= 0, drones: rs.drones.flying,
+      swarmOut: rs.allies.mode === "sent", scrappers: rs.allies.scrappers, swarmMax: RSV.swarmCount };
+  }
   const cmd = rival.alive ? ai.decide(view, dt) : null;
   last = cmd;
   rivalArsenal!.railSnapped = ai.snapped;
@@ -308,8 +327,14 @@ lab.onFrame((dt: number) => {
   rival.cursor = cmd?.cursor ? cursor.set(cmd.cursor.x, field.height(cmd.cursor.x, cmd.cursor.z), cmd.cursor.z) : null;
   rival.lock = cmd?.lock ?? null;
   rival.dashHold = !!cmd?.dashHold;
-  if (cmd?.dash) rival.tryDash(cmd.dash.x, cmd.dash.z);
+  if (cmd?.power) rival.weapons?.powerCut?.();
+    if (cmd?.dash) rival.tryDash(cmd.dash.x, cmd.dash.z, false);
   rival.step(dt, cmd?.move ?? { x: 0, z: 0, sprint: false }, cmd?.aim ?? null, cmd?.trigger ?? false, cmd?.shotAt ?? null);
+  if (rs && rivalSummonKeys) {
+    rivalSummonKeys.update(rivalFit, !!cmd?.keys[0], !!cmd?.keys[1]);
+    rs.update(dt);
+    lab.hud("rival summons", `${rs.hud()} · strikes ${ai.strikes} · swarm out ${ai.swarmThrows}, back ${ai.swarmRecalls}`);
+  }
   // (Magazines reload by themselves since 2026-10-31: no more topping the rival up.)
   rivalDraw.update();
 

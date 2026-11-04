@@ -9,7 +9,7 @@
 //   to stand its ground; it gets out of a good share, and a rival that never notices gets out of none.
 // Run: npm test (or npx tsx tools/duel-check.ts).
 import { RivalAi, RIVAL_AI_DEFAULTS, RIVAL_LEVELS, RIVAL_LEVEL_IDS, type DuelView, type MechCommand, type Threat } from "../src/combat/rivalAi";
-import { rollRivalLoadout, applyFitSpec, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
+import { rollRivalLoadout, applyFitSpec, gearOf, kitOf, describeLoadout, loadoutDps, loadoutLevel } from "../src/combat/rivalKit";
 import { runDuel as runDuelRaw, type DuelOptions } from "../src/combat/duelSim";
 import { LOOT_DEFAULTS } from "../src/items/generate";
 import { levelPower, levelMul } from "../src/items/level";
@@ -38,7 +38,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   const freeze = <T>(o: T): T => { if (o && typeof o === "object") { Object.freeze(o); for (const k of Object.keys(o)) freeze((o as Record<string, unknown>)[k]); } return o; };
   const lo = rollRivalLoadout(3, LOOT_DEFAULTS), kit = kitOf(resolve(lo), WEAPON_DEFAULTS);
   const ai = new RivalAi({ ...RIVAL_AI_DEFAULTS }, 5);
-  const keys = ["move", "aim", "shotAt", "cursor", "lock", "trigger", "keys", "dash", "dashHold"].sort().join();
+  const keys = ["move", "aim", "shotAt", "cursor", "lock", "trigger", "keys", "dash", "dashHold", "power"].sort().join();
   let threw = "", odd = "";
   for (let n = 0; n < 600; n++) {
     const t = n / 60;
@@ -76,6 +76,50 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
   must(notes.length === 1, `?rivalfit= with a bad base should leave one note (${notes.length})`);
 }
 
+// ---- Every weapon a rival rolls is one its AI fires (2026-11-03: energy weapons were rolled but never fired) ----
+{
+  let dead = 0;
+  for (let seed = 1; seed <= 300; seed++) {
+    const r = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), kit = kitOf(r, WEAPON_DEFAULTS);
+    for (const [i, g] of [[0, r.guns.left], [1, r.guns.right]] as const) if (g && !kit.some((k) => "trigger" in k.ctl && k.ctl.trigger === i)) dead++;
+  }
+  must(dead === 0, `${dead} rolled trigger weapons over 300 rivals are missing from their kit (the AI never fires them)`);
+  // Each energy weapon on both hull mounts, in a minute's duel: it lands real damage with it, on its reactor.
+  for (const w of ["laser", "beam", "lance", "plasma", "orb", "arc", "sunder"]) {
+    const a = rollRivalLoadout(3, LOOT_DEFAULTS);
+    applyFitSpec(a, `mountL:${w}-medium,mountR:${w}-medium`, LOOT_DEFAULTS, 3);
+    const x = runDuel({ seedA: 3, seedB: 5, loadouts: [a, rollRivalLoadout(5, LOOT_DEFAULTS)], maxTime: 60 });
+    const dealt = (x.score.rounds[0].dealt as Record<string, number>)[w] ?? 0;
+    must(dealt > 200, `a rival with two ${w}s dealt only ${Math.round(dealt)} with them in a minute`);
+  }
+}
+
+// ---- Feeds and power (2026-11-03): rivals roll them on their shoulders and press them ----
+{
+  let n = 0;
+  for (let seed = 1; seed <= 300; seed++) if (gearOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS))).length) n++;
+  must(n >= 30, `only ${n} of 300 rolled rivals carry a feed or power on a shoulder`);
+  const feed = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "beltfeed", k2: "incendiary", k3: "pack" }), null], maxTime: 60 });
+  must(feed.gearPresses[0] >= 3, `a rival with two feeds pressed them only ${feed.gearPresses[0]} times in a minute`);
+  const power = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "laser", right: "laser", k1: "capacitor", k2: "none", k3: "pack" }), null], maxTime: 60 });
+  must(power.gearPresses[0] >= 1, "a rival with lasers never discharged its capacitor bank into the reactor");
+  console.log(`gear: ${n}/300 rivals carry feeds or power; feeds pressed ${feed.gearPresses[0]}x, capacitor ${power.gearPresses[0]}x in a minute`);
+}
+
+// ---- Summoner gear (2026-11-04): rivals roll it, and their AI calls drone strikes and throws and recalls its swarm ----
+{
+  let n = 0;
+  for (let seed = 1; seed <= 300; seed++) { const sm = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)).summons; if (sm.drones + sm.scrappers + sm.replicas > 0) n++; }
+  must(n >= 20, `only ${n} of 300 rolled rivals carry summoner gear`);
+  const x = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "drones", k2: "hive", k3: "replicas" }), null], maxTime: 60 });
+  const a = x.ai![0];
+  must(a.strikes >= 1, `a summoner rival called only ${a.strikes} drone strikes in a minute (18 s cooldown)`);
+  must(a.swarmThrows >= 1 && a.swarmRecalls >= 1, `a summoner rival threw its swarm ${a.swarmThrows}x and called it back ${a.swarmRecalls}x in a minute`);
+  const off = runDuel({ seedA: 3, seedB: 5, loadouts: [loadoutFor({ left: "minigun", right: "minigun", k1: "drones", k2: "hive", k3: "replicas" }), null], maxTime: 30, aiEach: [{ aiSummonUse: 0 }, undefined] });
+  must(off.summonUses[0] === 0, "a summoner rival used its gear with the use chance at 0");
+  console.log(`summoner: ${n}/300 rivals carry it; in a minute ${a.strikes} strikes, swarm out ${a.swarmThrows}x, back ${a.swarmRecalls}x`);
+}
+
 // ---- Duels between two AIs ----
 const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
 let both = 0, worstStuck = 0, kills = 0, ttk = 0;
@@ -100,10 +144,15 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
 {
   const lo = loadoutFor({ left: "sword", right: "minigun", k1: "none", k2: "none", k3: "pack" });
   must(kitOf(resolve(lo), WEAPON_DEFAULTS).some((k) => k.kind === "sword"), "a rival's sword isn't in its kit");
-  const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+  const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
   const r = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], script: (i) => (i === 0 ? stand : null) });
   const cut = (r.score.rounds[0].taken as Record<string, number>).sword ?? 0;
   must(cut > 1000, `a sword rival cut a standing foe for only ${Math.round(cut)} in 30 s`);
+  // It spends a spare bar on power cuts now and then (2026-11-03), and never below its dodge reserve.
+  must(r.powerCuts[1] > 0, "a sword rival never made a power cut in 30 s of cutting");
+  const none = runDuel({ seedA: 1, seedB: 101, maxTime: 30, cover: 0, aiSeed: 1, loadouts: [null, lo], ai: { aiPowerCut: 0 }, script: (i) => (i === 0 ? stand : null) });
+  must(none.powerCuts[1] === 0, "a sword rival made power cuts with the chance at 0");
+  console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts`);
 }
 // A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
 {
@@ -111,7 +160,25 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
   must(r.stuckWorst < 12, `long duel: a mech went ${r.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
   // (Either side: which one changes state depends on the rolled kits, and those move whenever a base joins the pool.
   // Seed 22 rolls hover legs since 2026-11-02, so this also runs a hover rival for a minute and a half.)
-  must(r.states.some((st) => Object.values(st).filter((x) => x > 0).length >= 2), "long duel: the AI never changed state");
+  // 2026-11-03: arms come with the hull, which moved the kits again; seeds 21-22 now hold "engage" all the way, so the
+  // state-change half also tries a few more long duels and wants a change in at least one.
+  const changes = (x: typeof r) => x.states.some((st) => Object.values(st).filter((v) => v > 0).length >= 2);
+  let changed = changes(r);
+  for (const [a, b] of [[23, 24], [25, 26], [27, 28], [29, 30]]) {
+    if (changed) break;
+    const x = runDuel({ seedA: a, seedB: b, maxTime: 90, hull: 1e6 });
+    must(x.stuckWorst < 12, `long duel ${a}-${b}: a mech went ${x.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
+    changed = changes(x);
+    if (changed) console.log(`long duel: state change in ${a}-${b}`);
+  }
+  must(changed, "long duel: the AI never changed state");
+  // Three bars each (2026-11-03): every rival but a sniper (rail or lance: it keeps its range) uses the spare bar to
+  // push in at some point of the long duel, and at least one presses.
+  [21, 22].forEach((seed, i) => {
+    const sniper = kitOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), WEAPON_DEFAULTS).some((k) => k.kind === "rail" || k.kind === "lance");
+    if (!sniper) must((r.ai?.[i].pushes ?? 0) > 0 && r.states[i].press > 0, `long duel 21-22: rival ${i} never pushed (pushes ${r.ai?.[i].pushes ?? 0})`);
+  });
+  must(r.states.some((st) => st.press > 0), "long duel 21-22: neither rival pressed");
   worstStuck = Math.max(worstStuck, r.stuckWorst);
 }
 
@@ -124,7 +191,7 @@ function shooter(kind: "shoulder" | "rail") {
   return (i: number, v: DuelView, t: number): MechCommand | null => {
     if (i !== 0) return null;
     const f = v.foe, at = { x: f.x, y: f.y, z: f.z };
-    const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: at, shotAt: at, cursor: { x: f.x, y: f.y - 1.5, z: f.z }, lock: { x: f.x, y: f.y, z: f.z, r: f.r, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+    const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: at, shotAt: at, cursor: { x: f.x, y: f.y - 1.5, z: f.z }, lock: { x: f.x, y: f.y, z: f.z, r: f.r, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
     const w = v.self.weapons[v.self.kit.findIndex((k) => (kind === "rail" ? k.kind === "rail" : "key" in k.ctl))];
     if (!w) return c;
     if (kind === "rail") {
@@ -179,7 +246,7 @@ for (const k of Object.keys(drills)) {
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
 
-const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false });
+const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false });
 
 // ---- Dodging is a per-threat roll (Keith 2026-10-31: "enemies should only have a chance to dodge your targeted abilities") ----
 // The same drills at each level's own chance: the share of telegraphs it noticed sits near the chance, and the share it
@@ -339,7 +406,7 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     let before = 0, during = 0, after = 0, dashedAt = -1;
     const script = (i: number, vw: DuelView, t: number): MechCommand | null => {
       if (i !== 0) return null;
-      const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: { x: 0, y: 3, z: 30, r: 1.7, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false };
+      const c: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: { x: 0, y: 3, z: 30, r: 1.7, key: "foe" }, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
       c.trigger[0] = true;
       const w = vw.self.weapons[vw.self.kit.findIndex((k) => k.kind === "rail")];
       if (t < 0.8) before = Math.max(before, w.charge);

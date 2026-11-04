@@ -8,7 +8,9 @@
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { WalkerSim, LegPose } from "./walker";
-import type { UpperSim } from "./upper";
+import type { UpperSim, UpperValues } from "./upper";
+
+const UP = new THREE.Vector3(0, 1, 0);
 import type { WalkerValues } from "./walkerTuning";
 import type { ToonLook } from "../look/toon";
 import { LEG_TYPES } from "./legTypes";
@@ -37,6 +39,11 @@ import { bakeFootFromGeometry } from "../fx/footprintMesh";
  */
 export const MOUNT_STANDIN = {
   armDrop: 0.75, armOut: 0.3, armFwd: 0.35, heldScale: 0.72,
+  // The fist at the end of the forearm (from the elbow, the gun pivot), and where a held weapon's origin sits so its
+  // grip (about 0.3 under its origin, scaled) is in that fist: held in the hand, not lying along the forearm (Keith
+  // 2026-11-03: "they look mounted on the forearm").
+  handAt: [0, -0.14, 0.72] as [number, number, number],
+  gunAt: [0, 0.08, 0.78] as [number, number, number],
   sensorTop: [0, 1.62, -0.55] as [number, number, number],
   sensorFront: [0, 0.78, 1.0] as [number, number, number],
 };
@@ -134,6 +141,10 @@ function boneQuat(a: THREE.Vector3, b: THREE.Vector3, side: THREE.Vector3, out: 
 }
 
 /** Split a rest-space geometry into the triangles behind and ahead of z (by each triangle's centre). */
+/** Where the minigun pod's rear box starts, behind its shoulder (m; the Rampart's pod: a box round the barrel axis from
+ *  -1.0 to -0.62, the housing ahead of it). */
+const POD_REAR_Z = -0.62;
+
 function splitAtZ(g: THREE.BufferGeometry, z: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const src = g.index ? g.toNonIndexed() : g;
   const pos = src.attributes.position;
@@ -177,14 +188,20 @@ function mirrored(g: THREE.BufferGeometry) {
 }
 
 interface Bone { pivot: THREE.Group; restLen: number }
+/** RampartBody.slim: cross-section of the legs and feet, the hull's width, height and length, the guns (1: as modelled). */
+export interface RampartSlim { leg: number; foot: number; hull: [number, number, number]; gun: number; /** Show the back unit (default yes). */ back?: boolean }
 interface PodRig {
   yawPitch: THREE.Group; kick: THREE.Group; spin: THREE.Group; muzzle: THREE.Object3D; eject: THREE.Object3D; side: 1 | -1;
+  /** The pod's rear box (hidden while the feed drum sits in its place). */
+  rear: THREE.Mesh;
   /** The gun pivot's rest place on the shoulder (an arm moves it to its hand). */
   home: THREE.Vector3;
   /** Stand-in arm: the upper arm (fixed to the hull) and the forearm (turns with the aim). */
   arm: THREE.Group; forearm: THREE.Group;
   /** Where showParts put the gun pivot, and whether it showed the stand-in arm (put back when a held pose ends). */
   heldAt?: THREE.Vector3; armShown?: boolean;
+  /** Where the weapon pivot (kick) rests: the hand's grip for an arm, the shoulder pivot for a hull weapon. */
+  kickBase?: THREE.Vector3;
   /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
   held?: boolean;
   ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; stub: THREE.Mesh; joint: THREE.Mesh };
@@ -232,7 +249,7 @@ export class RampartBody {
   /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
   private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
   private lastParts: BodyParts | null = null;
-  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3() };
+  private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3(), e2: new THREE.Vector3(), h2: new THREE.Vector3(), d2: new THREE.Vector3(), o2: new THREE.Vector3() };
 
   private constructor() { this.root.name = "rampart"; }
 
@@ -322,7 +339,10 @@ export class RampartBody {
       this.hull.add(yawPitch);
       const kick = new THREE.Group();
       yawPitch.add(kick);
-      this.mesh(sd === -1 ? podR : mirrored(podR), `pod_${sd}`, kick, frame(shoulder));
+      // The pod's rear box (behind PodRearZ) is its own mesh so the minigun's ammo drum can take its place (Keith 2026-11-03).
+      const [podBack, podMain] = splitAtZ(sd === -1 ? podR : mirrored(podR), shoulder.z + POD_REAR_Z);
+      this.mesh(podMain, `pod_${sd}`, kick, frame(shoulder));
+      const rear = this.mesh(podBack, `podRear_${sd}`, kick, frame(shoulder));
       // Barrel cluster spins about its own axis (along +Z in the rest pose).
       const spin = new THREE.Group();
       spin.position.copy(axis).sub(shoulder);
@@ -336,7 +356,7 @@ export class RampartBody {
       arm.visible = forearm.visible = false;
       this.hull.add(arm);
       yawPitch.add(forearm);
-      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: new THREE.Vector3(), arm, forearm });
+      this.pods.push({ yawPitch, kick, spin, muzzle, eject, side: sd, home: new THREE.Vector3(), arm, forearm, rear });
       // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
       const sm = new THREE.Group();
       this.hull.add(sm);
@@ -511,9 +531,15 @@ export class RampartBody {
       p.yawPitch.position.copy(p.home);
       if (arm) p.yawPitch.position.add(new THREE.Vector3(p.side * S.armOut, -S.armDrop, S.armFwd));
       p.kick.scale.setScalar(arm ? S.heldScale : 1);
+      // The gun on the fist (the pivot is the fist now: update reaches the arm to the aim), its grip in it.
+      p.kickBase = arm ? new THREE.Vector3(S.gunAt[0] - S.handAt[0], S.gunAt[1] - S.handAt[1], S.gunAt[2] - S.handAt[2]) : new THREE.Vector3();
+      p.kick.position.copy(p.kickBase);
       p.heldAt = p.yawPitch.position.clone(); p.armShown = arm;
       p.kick.visible = L ? parts.gunLeft : parts.gunRight;
-      p.arm.visible = p.forearm.visible = arm;
+      // The old fixed upper arm and forearm stay hidden: the two-bone arm (drawArm) is drawn instead.
+      p.arm.visible = p.forearm.visible = false;
+      if (arm && this.look) (p.ik ?? (p.ik = this.ikArm())).g.visible = true;
+      else if (p.ik && !p.held) p.ik.g.visible = false;
     }
     for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
     if (this.pack) this.pack.visible = parts.pack;
@@ -528,6 +554,115 @@ export class RampartBody {
    * Where a stand-in weapon hangs (src/weapons/models.ts): a gun side's pivot (it turns and kicks with the gun; +Z
    * along the barrel, origin on the shoulder), a shoulder mount on the hull, or the top of the back mount (+Z forward).
    */
+  /**
+   * Take the cockpit pod off the front of the hull (Keith 2026-11-03, the summoner's replicas: "there's no need for a
+   * pilot in the center"): the fitted hull's triangles ahead of `z` (hull frame, m) within `halfWidth` of the middle go,
+   * and an armour plate closes the front, in the hull's mean colour; the front sensor socket moves back onto the plate.
+   * For a body whose hull won't be swapped again. Cosmetic.
+   */
+  dropCab(z = 0.72, halfWidth = 1.0) {
+    const old = this.torso.children.find((c) => (c as THREE.Mesh).isMesh && c.name === "torso") as THREE.Mesh | undefined;
+    if (!old) return;
+    const src = old.geometry.index ? old.geometry.toNonIndexed() : old.geometry;
+    const pos = src.attributes.position, n = pos.count, keep: number[] = [];
+    let cut = 0, y0 = Infinity, y1 = -Infinity, x0 = Infinity, x1 = -Infinity;
+    const mean = [0, 0, 0];
+    const col = src.attributes.color;
+    for (let t = 0; t < n; t += 3) {
+      let cx = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { cx += pos.getX(t + k); cz += pos.getZ(t + k); }
+      cx /= 3; cz /= 3;
+      if (cz > z && Math.abs(cx) < halfWidth) {
+        cut++;
+        for (let k = 0; k < 3; k++) { const y = pos.getY(t + k), x = pos.getX(t + k); y0 = Math.min(y0, y); y1 = Math.max(y1, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+        continue;
+      }
+      keep.push(t, t + 1, t + 2);
+      if (col) for (let k = 0; k < 3; k++) { mean[0] += col.getX(t + k); mean[1] += col.getY(t + k); mean[2] += col.getZ(t + k); }
+    }
+    if (!cut) return;
+    const g = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(src.attributes)) {
+      const at = a as THREE.BufferAttribute, out = new Float32Array(keep.length * at.itemSize);
+      keep.forEach((v, i) => { for (let c = 0; c < at.itemSize; c++) out[i * at.itemSize + c] = at.getComponent(v, c); });
+      g.setAttribute(name, new THREE.BufferAttribute(out, at.itemSize));
+    }
+    old.removeFromParent();
+    old.geometry.dispose();
+    const m = new THREE.Mesh(g);
+    m.name = "torso";
+    this.look!.apply(m);
+    this.torso.add(m);
+    // The plate over the opening (a box with the hull's mean vertex colour, so paint and bleach treat it alike).
+    const kept = keep.length || 1, c = mean.map((v) => v / kept);
+    const plate = new THREE.BoxGeometry(x1 - x0 + 0.06, y1 - y0 + 0.04, 0.14).translate((x0 + x1) / 2, (y0 + y1) / 2, z - 0.02);
+    const pc = new Float32Array(plate.attributes.position.count * 3);
+    for (let i = 0; i < pc.length; i += 3) { pc[i] = c[0]; pc[i + 1] = c[1]; pc[i + 2] = c[2]; }
+    plate.setAttribute("color", new THREE.BufferAttribute(pc, 3));
+    const pm = new THREE.Mesh(plate);
+    pm.name = "cabPlate";
+    this.look!.apply(pm);
+    this.torso.add(pm);
+    this.frontAt.z = z + 0.1;
+    this.sensorFront.position.z = this.frontAt.z * this.torso.scale.z;
+    this.paints = null;
+    if (this.bleached) for (const mm of [m, pm]) { const a = mm.geometry.attributes.color as THREE.BufferAttribute; this.bleached.push({ attr: a, base: Float32Array.from(a.array as ArrayLike<number>) }); }
+    this.repaint();
+  }
+
+  /** Vertex colours as modelled (bleach keeps them to work from). */
+  private bleached: { attr: THREE.BufferAttribute; base: Float32Array }[] | null = null;
+  /**
+   * Fade the whole model's paint toward pale grey (0: as modelled, 1: fully grey and lifted): each vertex colour is
+   * mixed toward its own brightness and lifted, so panel lines and shading stay. Cosmetic.
+   */
+  bleach(k: number) {
+    if (!this.bleached) {
+      this.bleached = [];
+      this.root.traverse((o) => {
+        const m = o as THREE.Mesh, a = m.isMesh && !m.userData.ink && !m.userData.glow ? m.geometry.attributes.color as THREE.BufferAttribute | undefined : undefined;
+        if (a && !this.bleached!.some((b) => b.attr === a)) this.bleached!.push({ attr: a, base: Float32Array.from(a.array as ArrayLike<number>) });
+      });
+    }
+    const lift = 1 + 1.3 * k;
+    for (const { attr, base } of this.bleached) {
+      const arr = attr.array as Float32Array, s = attr.itemSize;
+      for (let i = 0; i < base.length; i += s) {
+        const r = base[i], g = base[i + 1], b = base[i + 2], l = 0.3 * r + 0.59 * g + 0.11 * b;
+        arr[i] = Math.min(1, (r + (l - r) * k) * lift);
+        arr[i + 1] = Math.min(1, (g + (l - g) * k) * lift);
+        arr[i + 2] = Math.min(1, (b + (l * 1.04 - b) * k) * lift);
+      }
+      attr.needsUpdate = true;
+    }
+  }
+
+  /** A slimmer build of the same rig (1: as modelled). */
+  private thin: RampartSlim = { leg: 1, foot: 1, hull: [1, 1, 1], gun: 1 };
+  /**
+   * A slimmer build on the same skeleton (Keith 2026-11-03, the summoner's replicas: "looks like my mech, but like
+   * very thin ... no need for a pilot in the center. The legs can be thinner ... the weapons ... a little bit lighter"):
+   * the legs' and feet's cross-section, the hull (width, height, length, about the waist; the shoulders, gun pivots and
+   * sockets come in with it) and the guns scaled. The walk is the sim's, untouched. Cosmetic; call again to change.
+   */
+  slim(o: RampartSlim) {
+    const [hx, hy, hz] = o.hull, was = this.thin, k = new THREE.Vector3(hx / was.hull[0], hy / was.hull[1], hz / was.hull[2]);
+    this.thin = { ...o, hull: [hx, hy, hz] };
+    this.torso.scale.set(hx, hy, hz);
+    if (this.back) { this.back.scale.set(hx, hy, hz); this.back.visible = o.back ?? true; }
+    for (const p of this.pods) {
+      p.home.multiply(k);
+      if (!p.held) p.yawPitch.position.copy(p.home);
+      if (p.heldAt) p.heldAt.multiply(k);
+      p.arm.position.multiply(k);
+      p.yawPitch.scale.setScalar(o.gun);
+    }
+    for (const m of this.shoulderMounts) m.g.position.multiply(k);
+    this.frontAt.multiply(k);
+    this.sensorFront.position.multiply(k);
+    this.sensorTop.position.multiply(k);
+  }
+
   mount(slot: MountSocket): THREE.Object3D {
     switch (slot) {
       case "back": case "Pack": return this.backTop;
@@ -556,13 +691,11 @@ export class RampartBody {
       if (!p.held) return;
       p.held = false;
       if (p.heldAt) p.yawPitch.position.copy(p.heldAt);
-      p.arm.visible = p.forearm.visible = !!p.armShown;
-      if (p.ik) p.ik.g.visible = false;
+      // An arm goes back to reaching for the aim (update draws it); a hull mount hides the IK arm.
+      if (p.ik) p.ik.g.visible = !!p.armShown;
       return;
     }
     p.held = true;
-    const ik = p.ik ?? (p.ik = this.ikArm());
-    ik.g.visible = true;
     p.arm.visible = p.forearm.visible = false;
     const root = new THREE.Vector3(p.home.x + side * pose.out, p.home.y, p.home.z);
     const r = armIk(root, pose.hand, pose.upper, pose.fore, pose.pole);
@@ -571,21 +704,49 @@ export class RampartBody {
     const x = new THREE.Vector3().crossVectors(y, z).normalize();
     p.yawPitch.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y.crossVectors(z, x), z));
     p.kick.position.set(0, 0, 0);
-    const e = new THREE.Vector3(r.elbow.x, r.elbow.y, r.elbow.z), h = new THREE.Vector3(r.hand.x, r.hand.y, r.hand.z);
+    this.drawArm(p, root, r, pose.out > 0.02);
+  }
+
+  /** The two-bone arm's boxes from the shoulder (root, a stub out to it when `stub`) through the elbow to the fist. */
+  private drawArm(p: PodRig, root: THREE.Vector3, r: { elbow: { x: number; y: number; z: number }; hand: { x: number; y: number; z: number } }, stub: boolean) {
+    const ik = p.ik ?? (p.ik = this.ikArm());
+    ik.g.visible = true;
+    const e = this.tmp.e2.set(r.elbow.x, r.elbow.y, r.elbow.z), h = this.tmp.h2.set(r.hand.x, r.hand.y, r.hand.z);
+    const d = this.tmp.d2;
     const bone = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
-      const d = b.clone().sub(a), len = d.length();
+      d.copy(b).sub(a); const len = d.length();
       m.position.copy(a);
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.divideScalar(Math.max(1e-6, len)));
+      m.quaternion.setFromUnitVectors(UP, d.divideScalar(Math.max(1e-6, len)));
       m.scale.set(1, len, 1);
     };
-    ik.stub.visible = pose.out > 0.02;
-    if (ik.stub.visible) bone(ik.stub, p.home, root);
+    ik.stub.visible = stub;
+    if (stub) bone(ik.stub, p.home, root);
     ik.joint.position.copy(root);
     bone(ik.upper, root, e);
     bone(ik.fore, e, h);
     ik.elbow.position.copy(e);
     ik.hand.position.copy(h);
     ik.hand.quaternion.copy(p.yawPitch.quaternion);
+  }
+
+  /**
+   * An arm holding a gun (Keith 2026-11-03: "the arm almost fully extends and points toward the target... as the arm
+   * gets further back, it stretches out straighter"): the fist goes out from the shoulder along the gun's aim, a little
+   * below the line, bent at the front and straighter as the aim swings out to the side (armStraightAt); the elbow
+   * finds itself (two-bone IK, bending down, out and back). The gun rides the fist. Cosmetic: the sim aims the gun.
+   */
+  private reachArm(p: PodRig, yaw: number, pitch: number, v: UpperValues) {
+    const D = Math.PI / 180, cp = Math.cos(pitch);
+    const u = Math.min(1, Math.max(0, (p.side * yaw) / Math.max(1e-3, v.armStraightAt * D))), s = u * u * (3 - 2 * u);
+    const full = v.armUpper + v.armFore, reach = full * (v.armReachFront + (v.armReachSide - v.armReachFront) * s);
+    const drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
+    // The arm's root out from the gun's shoulder point, as the sword's arm (a stub joins them).
+    const o = this.tmp.o2.set(p.home.x + p.side * v.armShoulderOut, p.home.y, p.home.z);
+    const hand = { x: o.x + Math.sin(yaw) * cp * reach, y: o.y - Math.sin(pitch) * reach - drop, z: o.z + Math.cos(yaw) * cp * reach };
+    const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * v.armPoleOut, y: -1, z: -v.armPoleBack });
+    p.yawPitch.position.set(r.hand.x, r.hand.y, r.hand.z);
+    p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
+    this.drawArm(p, o, r, v.armShoulderOut > 0.02);
   }
 
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
@@ -613,9 +774,10 @@ export class RampartBody {
   hullGroup() { return this.hull; }
 
   /** Show or hide a side's minigun pod itself (another weapon's stand-in takes its place on the same pivot). */
-  showPod(side: 1 | -1, on: boolean) {
+  showPod(side: 1 | -1, on: boolean, rear = true) {
     const p = this.pods.find((q) => q.side === side)!;
     for (const o of p.kick.children) if ((o as THREE.Mesh).isMesh || o === p.spin) o.visible = on;
+    p.rear.visible = on && rear;
   }
 
   /** Has guns (the battlefield's mech unit fires them). */
@@ -663,8 +825,17 @@ export class RampartBody {
     for (const p of this.pods) {
       if (p.held) continue;
       const g = upper.guns[p.side === 1 ? 0 : 1];
-      p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
-      p.kick.position.z = -g.kick;
+      if (p.armShown) {
+        // The arm points where the sim aims in the world, whatever the hull is doing (Keith 2026-11-03: bent over in
+        // the sprint the arms aimed off): the aim (torso yaw + the gun's, pitch below level) into the hull's own frame,
+        // so the body's lean, the sprint's lean, roll and shake are all taken out.
+        const yw = upper.torsoYaw + g.yaw, pw = g.pitch - upper.lean, c = Math.cos(pw);
+        t.v.set(Math.sin(yw) * c, -Math.sin(pw), Math.cos(yw) * c).applyQuaternion(t.q.copy(this.hull.quaternion).invert());
+        this.reachArm(p, Math.atan2(t.v.x, t.v.z), -Math.asin(Math.max(-1, Math.min(1, t.v.y))), upper.v);
+      }
+      else p.yawPitch.rotation.set(g.pitch, g.yaw - this.twist, 0, "YXZ");
+      if (p.kickBase) p.kick.position.copy(p.kickBase); else p.kick.position.set(0, 0, 0);
+      p.kick.position.z -= g.kick;
       p.spin.rotation.z = g.spinAngle * -p.side;
     }
   }
@@ -673,13 +844,14 @@ export class RampartBody {
     const set = (b: Bone, a: THREE.Vector3, c: THREE.Vector3) => {
       b.pivot.position.copy(a);
       boneQuat(a, c, side, b.pivot.quaternion);
-      b.pivot.scale.set(1, a.distanceTo(c) / b.restLen, 1);
+      b.pivot.scale.set(this.thin.leg, a.distanceTo(c) / b.restLen, this.thin.leg);
     };
     set(L.thigh, P.hip, P.knee);
     set(L.shin, P.knee, P.hock);
     set(L.cannon, P.hock, P.ankle);
     L.foot.position.copy(P.foot);
     L.foot.quaternion.copy(P.footQ);
+    L.foot.scale.setScalar(this.thin.foot);
     // Toe bend relative to the foot: toeQ = footQ * bend.
     L.toe.quaternion.copy(L.foot.quaternion).invert().multiply(P.toeQ);
   }
@@ -746,14 +918,16 @@ function armUpper(look: ToonLook, side: 1 | -1) {
   g.add(m, joint);
   return g;
 }
-/** Stand-in forearm (box) under the gun pivot, along the aim, with a hand block where the grip is. */
+/** Stand-in forearm (box) from the elbow (the gun pivot) along the aim to a fist (handAt), which holds the weapon's
+ *  grip; the weapon sits ahead of and above the fist (gunAt), not along the forearm. */
 function armFore(look: ToonLook) {
-  const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 1.1));
-  m.position.set(0, -0.22, 0.25);
+  const g = new THREE.Group(), H = MOUNT_STANDIN.handAt;
+  const len = H[2] + 0.1;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, len));
+  m.position.set(0, H[1] - 0.04, H[2] - len / 2);
   look.apply(m); look.tint(m, 0xb7a77c);
-  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.3));
-  hand.position.set(0, -0.1, 0.8);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.3, 0.3));
+  hand.position.set(H[0], H[1], H[2]);
   look.apply(hand); look.tint(hand, 0x3e3c35);
   g.add(m, hand);
   return g;

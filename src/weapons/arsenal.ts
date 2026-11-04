@@ -197,6 +197,8 @@ export class Arsenal implements MechWeapons {
     this.energy.onShake = (k) => this.onShake?.(k);
     this.energy.onFire = (k) => this.onFire?.(k);
     addWeaponSounds(bf.sfx, v);
+    // The flak pellets' explosion storm reads its sliders from the first arsenal (the player's).
+    bf.popTuning ??= v;
   }
 
   // ---- What's fitted ----
@@ -214,7 +216,7 @@ export class Arsenal implements MechWeapons {
       body.setTwist?.(0);
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.base = g?.base; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
-      body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null);
+      body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null, mk !== "minigunFeed");
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
       this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null);
@@ -345,7 +347,7 @@ export class Arsenal implements MechWeapons {
       // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired. So in a dash (Keith
       // 2026-10-31, rail balance: no dash while a rail is charging or charged; the dash wins and the charge is lost), and
       // no charge builds until the dash is over.
-      const noRail = u.gunsOff || u.sim.inDash;
+      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.inDash;
       if (noRail && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
@@ -747,6 +749,9 @@ export class Arsenal implements MechWeapons {
     return true;
   }
 
+  /** A sword is driving in or cutting and could still be made a power cut (the rival AI's view). */
+  canPowerCut(): boolean { return this.v.swordPower > 0 && this.sides.some((s) => s.kind === "melee" && s.sword.canPower(this.swordBase(s), this.v)); }
+
   /** A dash started along (x, z) (unit): toward the aim (the lock, else the cursor), a cut starting soon is a power cut. */
   dashed(x: number, z: number) {
     const v = this.v, u = this.unit, at = u.lock ?? u.cursor;
@@ -936,6 +941,11 @@ export class Arsenal implements MechWeapons {
     this.onFire?.(s.kind);
     this.onShake?.(feel.shake);
     return !!s.model?.muzzles.length;
+  }
+
+  /** Flak pellets burst where they end: the look's scale (Flak cannon › Pellet blast look), 0 for any other gun. */
+  pelletBurst(side: 1 | -1): number {
+    return this.sides[side === 1 ? 0 : 1].kind === "flak" ? this.v.flakBurstFx : 0;
   }
 
   /** A gun of another class fired a round on its clock (the autocannon, the breach cannon). */
@@ -1253,7 +1263,10 @@ export class Arsenal implements MechWeapons {
   /** The controls and their state, for the HUD: which button or key fires what, and cooldowns. */
   controls(): string[] {
     // Sprinting with the weapons off (src/mech/bound.ts): SPRINT, then the controls dimmed.
-    if (this.unit.gunsOff) return [`<b style="color:#ffb347">SPRINT</b> <span style="opacity:.4">weapons off · ${this.controlList().join(" · ")}</span>`];
+    if (this.unit.gunsOff) {
+      const free = !!(this.unit.armsFree?.[0] || this.unit.armsFree?.[1]);
+      return [`<b style="color:#ffb347">SPRINT</b> <span style="opacity:.4">${free ? "arms only" : "weapons off"} · ${this.controlList().join(" · ")}</span>`];
+    }
     return this.controlList();
   }
 
