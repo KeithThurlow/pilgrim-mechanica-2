@@ -30,21 +30,29 @@ const want = (base: string, yes: string[], no: string[]) => {
 want("lance-medium", ["splitter", "wideBore"], ["arcLink"]);
 want("arc-medium", ["arcLink"], []);
 want("orb-medium", ["arcLink"], []);
-for (const b of ["sword-light", "sword-heavy", "sword-short"]) want(b, [], PROTOCOLS.map((p) => p.id));
-want("mg-medium", PROTOCOLS.filter((p) => p.shot).map((p) => p.id), []);
+const MELEE = ["honedEdge", "longHaft", "quickHands", "cleaver"];
+for (const b of ["sword-light", "sword-heavy", "sword-short"]) want(b, MELEE, PROTOCOLS.map((p) => p.id).filter((id) => !MELEE.includes(id) && !(b === "sword-heavy" && ["hardenedCore", "shatterPoint"].includes(id))));
+want("sword-heavy", ["hardenedCore", "shatterPoint"], []);
+want("laser-medium", ["prism", "efficiencyCoil", "focusLens"], ["ricochet"]);
+want("rail-medium", ["hardenedCore", "shatterPoint", "overcharge"], []);
+want("plasma-medium", ["accelerator"], []);
+want("mg-medium", PROTOCOLS.filter((p) => p.shot && p.id !== "prism").map((p) => p.id), ["prism"]);
 
-// A shot Protocol must move the model's focus or area on every weapon it fits.
+// Every Protocol that fits a weapon changes one of its own stats (effectiveStats skips stats an item hasn't got), or
+// how its shots behave, and moves the model's focus or area.
 let pairs = 0;
 for (const base of MODELLED) {
   reseed(); const b0 = focusArea(itemWith(base, []));
   for (const p of PROTOCOLS) {
-    if (!p.shot || !protocolFits(p, BASE_BY_ID[base].tags)) continue;
+    if (!protocolFits(p, BASE_BY_ID[base].tags)) continue;
+    const stats = BASE_BY_ID[base].stats;
+    if (!p.shot && !p.cost && !p.mods.some((m) => m.scope === "item" && m.stat in stats)) fail(`${p.id} fits ${base} but none of its stats are the weapon's`);
     reseed(); const b1 = focusArea(itemWith(base, [p.id]));
     pairs++;
     if (Math.abs(b1.focus - b0.focus) < 1e-6 && Math.abs(b1.area - b0.area) < 1e-6) fail(`${p.id} fits ${base} but changes nothing`);
   }
 }
-console.log(`traits: ${Object.keys(WEAPON_TRAITS).length} weapons, ${pairs} shot Protocol fits all do something`);
+console.log(`traits: ${Object.keys(WEAPON_TRAITS).length} weapons, ${pairs} Protocol fits all do something`);
 for (const base of ["lance-medium", "plasma-medium", "orb-medium", "arc-medium", "rail-medium", "sniper-medium", "sword-short"])
   console.log(`  ${base}: ${WEAPON_TRAITS[base].join(" ")} | fits ${fits(base).join(" ") || "-"}`);
 if (failed) { console.error(`traits check: ${failed} failure(s)`); (globalThis as unknown as { process: { exit(c: number): never } }).process.exit(1); }
