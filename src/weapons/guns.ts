@@ -23,8 +23,8 @@ export const isRoundGun = (cls: string | undefined | null): cls is RoundGun => !
 export const GUN_DEFAULTS = {
   // SMG
   smgRate: 15,
-  smgDamage: 9,
-  smgSpread: 5,
+  smgDamage: 12,
+  smgSpread: 6,
   smgRange: 28,
   smgPierce: 1,
   smgAp: 0,
@@ -32,7 +32,7 @@ export const GUN_DEFAULTS = {
   smgReload: 1.5,
   // Rifle
   rifleRate: 4,
-  rifleDamage: 32,
+  rifleDamage: 30,
   rifleSpread: 0.6,
   rifleRange: 55,
   riflePierce: 3,
