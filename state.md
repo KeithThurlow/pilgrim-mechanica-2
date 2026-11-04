@@ -313,6 +313,14 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-04 · New Protocols: piercing, melee, energy, projectiles (Keith asked; the set is Claude's, open for Keith)
+- `src/items/protocols.ts`, new traits `charged` (rails, lance, sunder), `reflect` (pulse and beam laser), `projectile` (cannon, autocannon, rockets, plasma, orb) in `src/items/traits.ts`.
+- Piercing (fits pierce: rails, sniper, lance, sunder, Buster): Hardened core (+10% armour ignored, +15% damage, 10% slower to fire, charge or swing), Shatter point (+20% armour ignored, −12% damage). Armour negation is the `ap` stat.
+- Melee (swords): Honed edge (+15% damage, slower recovery), Long haft (+20% reach, slower wind-up), Quick hands (25% faster wind-up and recovery, −15% damage), Cleaver (+50% bodies a cut, −10% damage).
+- Energy: Efficiency coil (−25% energy, −10% damage; bolts and beams), Focusing lens (+25% range, +10% damage, +20% energy), Overcharge (charged: 30% faster charge, longer cooldown, more energy), Prism (lasers: a hit reflects on to the nearest enemy at the ricochet keep, `energyGuns.reflect`).
+- Projectiles: Accelerator (+40% shell speed, −10% damage).
+- Checks: traits-check (every fit changes one of the weapon's own stats and the model's numbers; swords take the melee set, lasers Prism), energy-check (Prism reflects on a laser and a beam), balance sheet, weaponscaling. Best area builds for energy weapons now stack Efficiency coils (they are reactor-bound); plasma's area ceiling ×6.6 (was ×5.9), open for Keith.
+- Try: `/labs/weaponreview/?w=laser-medium&protos=prism`, `?w=sword-short&protos=quickHands,cleaver`, `?w=rail-medium&protos=hardenedCore&armour=12`.
 ### 2026-11-04 · Gun roles: the SMG hits hardest up close, the rifle is steadier and reaches further (Keith; Claude)
 - `smgDamage` 9 → 12, `smgSpread` 5 → 6°, `rifleDamage` 32 → 30 (Weapons › SMG / Rifle, `src/weapons/guns.ts`). SMG card 94 → 126, focus eDPS 71 → 97 at its 25 m (nothing past 28 m, 15% through a rival's armour); rifle card 97 → 91, focus 92 → 86, keeps 72% through armour, out to 55 m.
 - Checked: balance-sheet --check, weaponscaling, guns checks; full npm test.

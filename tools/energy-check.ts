@@ -161,13 +161,13 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   });
   const mkUnit = () => ({ team: 0, dash: new Dash({ ...DASH_DEFAULTS }), reactor: new Reactor({ ...REACTOR_DEFAULTS }), lock: null, upper: { guns: [{ kick: 0 }, { kick: 0 }], shake: 0 } });
   const muzzle = new THREE.Vector3(0, 3.5, 0), flatDir = new THREE.Vector3(0, 0, 1);
-  const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc" | "sunder", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0) => {
+  const fire = (cls: "laser" | "beam" | "lance" | "plasma" | "orb" | "arc" | "sunder", ground: (x: number, z: number) => number, aimZ: number, secs: number, spots: { x: number; z: number }[], after = 0, aimX = 0, proto?: { ricochet?: number; split?: number }) => {
     const range = new DummyRange({ ...DUMMY_DEFAULTS }, spots);
     const unit = mkUnit();
     // Candidates (the register is empty on this stand-in): each live dummy's middle.
     const cands = () => range.dummies.filter((d) => d.alive).map((d) => ({ x: d.x, y: d.y + 1, z: d.z, r: 0.6, key: d }));
     const guns = new EnergyGuns(mkBf(range, ground) as never, unit as never, V, cands);
-    guns.configure(1, cls, null);
+    guns.configure(1, cls, null, proto);
     const aim = { x: aimX, y: ground(aimX, aimZ), z: aimZ };
     for (let t = 0; t < secs; t += dt) { guns.step(1, dt, true, false, muzzle, flatDir, aim); guns.age(dt); }
     guns.step(1, dt, false, false, muzzle, flatDir, aim);
@@ -182,6 +182,14 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     must(on > V.pulseDamage * 2 && off === 0, `the pulse laser didn't hurt the cutout on its line only (on ${on.toFixed(0)}, off ${off.toFixed(0)})`);
     must(unit.reactor.energy < REACTOR_DEFAULTS.reactorCap - V.pulseEnergy * 3, "the pulse laser didn't draw on the reactor");
     must(near(unit.dash.energy, DASH_DEFAULTS.dashCharges), "the pulse laser spent the dash's kinetic bars");
+  }
+  {
+    // Prism (Keith 2026-11-04): the bolt reflects on to the cutout 6 m off its line, at the ricochet keep.
+    const { range } = fire("laser", flat, 25, 1, spots, 0, 0, { ricochet: 1 });
+    const on = taken(range.dummies[0]), off = taken(range.dummies[1]);
+    must(on > V.pulseDamage * 2 && off > on * 0.3 && off < on * 0.7, `a Prism laser didn't reflect half on to the next cutout (on ${on.toFixed(0)}, off ${off.toFixed(0)})`);
+    const b = fire("beam", flat, 25, 1, spots, 0, 0, { ricochet: 1 }).range;
+    must(taken(b.dummies[1]) > 0, "a Prism beam didn't reflect on to the next cutout");
   }
   {
     const { range, guns } = fire("beam", flat, 25, 1, spots);
