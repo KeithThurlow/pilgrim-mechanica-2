@@ -64,7 +64,7 @@ export class FireGuns {
       const len = Math.min(s.range, s.reach);
       // The thin emissive cone out of the nozzle (Keith 2026-11-05; src/fx/flameBlobs.ts), on the live muzzle.
       if (fuel) s.from.copy(fuel);
-      if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold);
+      if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, Math.min(len * v.flameCone, v.flameConeMax * (big ? 1.3 : 1)), v.flameConeWidth * (big ? 1.4 : 1), cold);
       if (L && P > 0 && len > 1) {
         const col = cold ? 0x9fd8ff : 0xff8a35;
         for (const t of [0.45, 0.95]) L.hold(s.from.x + s.dir.x * len * t, s.from.y + s.dir.y * len * t + 0.5, s.from.z + s.dir.z * len * t, P * (t > 0.5 ? 1 : 0.7), 6 + len * 0.35, col, 1.1, 1.5 + len * 0.08);
@@ -95,8 +95,10 @@ export class FireGuns {
       const up = Math.abs(dir.y) < 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
       const ax = new THREE.Vector3().crossVectors(dir, up).normalize(), ay = new THREE.Vector3().crossVectors(ax, dir);
       const dd = new THREE.Vector3().copy(dir).addScaledVector(ax, d.x).addScaledVector(ay, d.y).normalize();
-      const speed = v.flameSpeed * (0.88 + Math.random() * 0.24);
-      const life = range / Math.max(1, v.flameSpeed) * 1.15 + 0.25 + Math.random() * 0.2;
+      // The look's gobs fly faster than the damage's reach grows (Keith 2026-11-05: a short cone, the fire racing out).
+      const fast = v.flameSpeed * v.flameGobFast;
+      const speed = fast * (0.9 + Math.random() * 0.2);
+      const life = range / Math.max(1, fast) * 1.2 + 0.2 + Math.random() * 0.15;
       const t0 = Math.random() * (1 / 60);
       bf.flames.gob(fuel.x + dd.x * speed * t0, fuel.y + dd.y * speed * t0, fuel.z + dd.z * speed * t0, dd.x * speed + (mv?.x ?? 0), dd.y * speed, dd.z * speed + (mv?.z ?? 0),
         life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6), cold, goal);

@@ -100,7 +100,7 @@ export class FlameBlobs {
     const i = this.nb++;
     this.p.set(x, y, z);
     const sp = Math.hypot(vx, vy, vz);
-    const st = Math.min(1.8, 1 + sp * 0.03);
+    const st = Math.min(1.4, 1 + sp * 0.012);
     if (sp > 0.5) this.q.setFromUnitVectors(FlameBlobs.UP, this.d.set(vx / sp, vy / sp, vz / sp));
     else this.q.identity();
     // Flat on the sand: the ball spreads into a low lump (applied along world Y, so only when it isn't flying).

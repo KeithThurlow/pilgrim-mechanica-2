@@ -34,7 +34,7 @@ export interface FlameLook {
 }
 const LOOK: FlameLook = {
   flameRise: 3, flameDrag: 1.6, flameGravity: 4, flameFall: 4, flameLicks: 1.5, flameBlob: 1, flameLump: 0.3, flameHalo: 0.25, flameGroundLife: 1.4,
-  flameSlide: 0.8, flameGroundDrag: 1.2, flameDownhill: 5, flamePull: 16, flamePullRange: 2.2,
+  flameSlide: 0.9, flameGroundDrag: 1.6, flameDownhill: 5, flamePull: 16, flamePullRange: 2.2,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
   flameFlow: 3, flameFlowSpeed: 9, flameSeparate: 6, flameSepDist: 0.9,
 };
@@ -218,8 +218,10 @@ export class FlameFx {
         // direction"): steered to the flow speed along the stream's line, past the aim and on, never back.
         const nx = this.gnx[i], nz = this.gnz[i];
         if (L.flameFlow > 0 && (nx !== 0 || nz !== 0)) {
-          const has = this.vx[i] * nx + this.vz[i] * nz, a = Math.max(0, L.flameFlowSpeed - has) * L.flameFlow;
-          ax += nx * a; az += nz * a;
+          // Turned onto the stream's line at the speed it has (never sped up again: no second wind, Keith 2026-11-05);
+          // a gob slower than the flow speed creeps on at that.
+          const sp = Math.max(Math.hypot(this.vx[i], this.vz[i]), L.flameFlowSpeed * 0.3);
+          ax += (nx * sp - this.vx[i]) * L.flameFlow; az += (nz * sp - this.vz[i]) * L.flameFlow;
         }
         if (na) { this.around(i, R, ax, az); ax = this.ax; az = this.az; }
         // Spacing: pushed off neighbours closer than the spacing distance.
@@ -238,7 +240,7 @@ export class FlameFx {
         this.vx[i] = this.vx[i] * dr + ax * dt; this.vz[i] = this.vz[i] * dr + az * dt;
         this.vy[i] = 0;
       } else {
-        const drag = Math.exp(-(k === GOB ? (lit ? L.flameDrag * 1.6 : L.flameDrag * 0.3) : 1.5) * dt);
+        const drag = Math.exp(-(k === GOB ? (lit ? L.flameDrag * 0.5 : L.flameDrag * 0.3) : 1.5) * dt);
         this.vx[i] *= drag; this.vz[i] *= drag;
         if (k === GOB && lit) {
           // Burning fuel is heavy gel (and the freeze ray's mist dense cold air): it arcs on down to the sand (the flames licking off it rise; Flame look › Burning
