@@ -13,7 +13,7 @@ import {
 } from "three/tsl";
 import type { FuelLine } from "./flameStream";
 
-const RING = 8, MAXP = 1600, MAXV = MAXP * RING, FUEL_STRIP = 128;
+const RING = 8, MAXP = 4000, MAXV = MAXP * RING, FUEL_STRIP = 128, SUB = 3;
 
 export interface TubeLook { flameTube: number; flameTubeNear: number; flameTubeFar: number; flameTubeLump: number }
 
@@ -30,8 +30,10 @@ export class FlameTube {
   private aPos: THREE.BufferAttribute; private aNrm: THREE.BufferAttribute; private aDat: THREE.BufferAttribute;
   private aCld: THREE.BufferAttribute; private aIdx: THREE.BufferAttribute;
   // Scratch for one strip.
-  private sx = new Float32Array(FUEL_STRIP); private sy = new Float32Array(FUEL_STRIP); private sz = new Float32Array(FUEL_STRIP);
-  private su = new Float32Array(FUEL_STRIP);
+  private sx = new Float32Array(FUEL_STRIP * SUB); private sy = new Float32Array(FUEL_STRIP * SUB); private sz = new Float32Array(FUEL_STRIP * SUB);
+  private su = new Float32Array(FUEL_STRIP * SUB);
+  private cx = new Float32Array(FUEL_STRIP); private cy = new Float32Array(FUEL_STRIP); private cz = new Float32Array(FUEL_STRIP);
+  private cu = new Float32Array(FUEL_STRIP);
   private lump = uniform(0.6);
 
   constructor() {
@@ -100,8 +102,25 @@ export class FlameTube {
   }
 
   /** One strip of k points (oldest first) as a tube. */
-  private strip(k: number, l: FuelLine, L: TubeLook) {
-    if (k < 2 || this.nv + k * RING > MAXV) return;
+  private strip(k0: number, l: FuelLine, L: TubeLook) {
+    if (k0 < 2) return;
+    // Rounded between the points (Catmull-Rom, SUB samples a span; PC render 2026-11-05: swung, the line read as sharp
+    // zigzags with hard corners, like lightning, not a bending hose).
+    this.cx.set(this.sx.subarray(0, k0)); this.cy.set(this.sy.subarray(0, k0)); this.cz.set(this.sz.subarray(0, k0)); this.cu.set(this.su.subarray(0, k0));
+    let k = 0;
+    const cr = (a: Float32Array, j: number, t: number) => {
+      const p0 = a[Math.max(0, j - 1)], p1 = a[j], p2 = a[j + 1], p3 = a[Math.min(k0 - 1, j + 2)];
+      const t2 = t * t, t3 = t2 * t;
+      return 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3);
+    };
+    for (let j = 0; j < k0 - 1; j++) for (let q = 0; q < SUB; q++) {
+      const t = q / SUB;
+      this.sx[k] = cr(this.cx, j, t); this.sy[k] = cr(this.cy, j, t); this.sz[k] = cr(this.cz, j, t);
+      this.su[k] = this.cu[j] + (this.cu[j + 1] - this.cu[j]) * t;
+      k++;
+    }
+    this.sx[k] = this.cx[k0 - 1]; this.sy[k] = this.cy[k0 - 1]; this.sz[k] = this.cz[k0 - 1]; this.su[k] = this.cu[k0 - 1]; k++;
+    if (this.nv + k * RING > MAXV) return;
     const base = this.nv;
     let along = 0;
     // Metres from the nozzle end, for the noise to run down (counted from the newest end).

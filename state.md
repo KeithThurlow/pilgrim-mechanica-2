@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Swung flamer line bends like a hose, not lightning (PC render: "sharp, flat zigzags with hard corners"; Claude on `claude/project-thread-q7b0ap`)
+- Cause: the throw changed only on the gun's shots (a few a second) as the aim jumped from target to target, so runs of fuel points went out in a few straight directions with hard corners between, and the tube joined its points with straight spans. `src/weapons/fire/fireGuns.ts`: the throw poured each frame eases toward the last shot's over 0.12 s (Flame stream › Line swings over). `src/fx/flameTube.ts`: the tube is rounded between points (Catmull-Rom, 3 rings a span). Checked: typecheck, `flamefx-check`, `fire-check`, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · Flamer line on top in a crowd, joined when swung, fire where it ends (PC render: "hard to find in crowds", "a short curved piece stops before the fire"; Claude on `claude/project-thread-q7b0ap`)
 - `src/fx/flameTube.ts`: the line draws after the flames, halos, smoke and blobs (render order 7), so burning bandits and robots don't cover it. `src/fx/flameStream.ts`: a point leaving from the middle of the line (landing out of order when swung) no longer breaks it; it joins across. Ground fire where 85% of points land (was 60%), so the fire meets the line's end. New `flamefx-check` rule: a swung line stays drawn (it passed before the change too, so the stub Keith saw may be the old fire lagging where the line was; re-render to see). Checked: typecheck, full `npm test`.
 

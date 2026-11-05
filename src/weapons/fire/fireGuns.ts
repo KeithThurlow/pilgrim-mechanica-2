@@ -16,7 +16,9 @@ import { lobVy } from "../../fx/flameFx";
 
 interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number; press: number;
   /** The line's throw from the last shot (vx, vy, vz, burn s, width), poured every frame from the live muzzle. */
-  pv: number[] | null }
+  pv: number[] | null;
+  /** The throw actually poured: eases toward pv, so the line bends round instead of jumping at each shot. */
+  pc: number[] | null }
 
 /** After this long with no jet the stream has stopped: the next one starts from the nozzle again. */
 const STOPPED = 0.2;
@@ -25,7 +27,7 @@ export class FireGuns {
   readonly sides: [FSide, FSide];
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues) {
-    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0, press: 0, pv: null });
+    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0, press: 0, pv: null, pc: null });
     this.sides = [side(), side()];
     addFireSounds(bf, v);
   }
@@ -70,7 +72,13 @@ export class FireGuns {
       // The thin emissive cone out of the nozzle (Keith 2026-11-05; src/fx/flameBlobs.ts), on the live muzzle.
       if (fuel) s.from.copy(fuel);
       // The line pours every frame from the live muzzle, not only on the gun's shots (a few a second).
-      if (s.pv) this.bf.flames.pour(s, s.from.x, s.from.y, s.from.z, s.pv[0], s.pv[1], s.pv[2], s.pv[3], s.pv[4], cold);
+      if (s.pv) {
+        // The throw eases toward the last shot's (Flame stream › Line swings over): the aim jumps from target to target
+        // on the shots, a few a second, and the line drew those jumps as hard corners (PC render 2026-11-05).
+        if (!s.pc) s.pc = s.pv.slice();
+        else { const k = 1 - Math.exp(-dt / Math.max(0.005, v.flameSwing)); for (let j = 0; j < 5; j++) s.pc[j] += (s.pv[j] - s.pc[j]) * k; }
+        this.bf.flames.pour(s, s.from.x, s.from.y, s.from.z, s.pc[0], s.pc[1], s.pc[2], s.pc[3], s.pc[4], cold);
+      }
       if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold, v.flameConeCut);
       // (Fire: the lights now hang in among the fireballs themselves, src/fx/flameFx.ts: a light every so many; these
       // two on the aim line ran out ahead of the arcing balls, Keith 2026-11-05. The freeze rays keep them.)
@@ -78,7 +86,7 @@ export class FireGuns {
         const col = cold ? 0x9fd8ff : 0xff8a35;
         for (const t of [0.45, 0.95]) L.hold(s.from.x + s.dir.x * len * t, s.from.y + s.dir.y * len * t + 0.5, s.from.z + s.dir.z * len * t, P * (t > 0.5 ? 1 : 0.7), 6 + len * 0.35, col, 1.1, 1.5 + len * 0.08);
       }
-    } else this.quiet(s);
+    } else { this.quiet(s); s.pc = null; }
   }
 
   /** A jet left side i's fuel nozzle along `dir` (its pellets, cone and range): gobs for the look, the splash on the sand. */
@@ -112,7 +120,7 @@ export class FireGuns {
       const p = 1 - (1 - s.press) * (1 - s.press), k = v.flamePressMin + (1 - v.flamePressMin) * p;
       const vh = vh0 * (0.5 + 0.5 * k), vy = lobVy(ty - fuel.y, dist * k, vh, G);
       s.pv = [hx * vh + (mv?.x ?? 0), vy, hz * vh + (mv?.z ?? 0), burnT, big];
-      bf.flames.pour(s, fuel.x, fuel.y, fuel.z, s.pv[0], s.pv[1], s.pv[2], burnT, big, cold);
+      if (!s.pc) s.pc = s.pv.slice();
     }
     for (let k = 0; k < n; k++) {
       // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).
