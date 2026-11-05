@@ -52,15 +52,17 @@ export class FlameTube {
     const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, toneMapped: false });
     mat.positionNode = positionLocal.add(normalLocal.mul(r.mul(nz.mul(0.7).add(fine.mul(0.3))).mul(u.mul(0.9).add(0.15)).mul(lump)));
     const face = abs(dot(normalize(normalView), normalize(positionView.negate())));
-    const blue = vec3(0.45, 0.62, 1.0), white = vec3(1.0, 0.96, 0.78), yellow = vec3(1.0, 0.78, 0.25), orange = vec3(1.0, 0.5, 0.1), deep = vec3(0.85, 0.28, 0.06);
-    const along1 = mix(blue, white, smoothstep(0.0, 0.08, u));
-    const along2 = mix(along1, yellow, smoothstep(0.12, 0.4, u));
-    const along3 = mix(along2, orange, smoothstep(0.4, 0.75, u));
-    const fire = mix(along3, deep, smoothstep(0.75, 1.0, u));
+    // PC render 2026-11-05: the line read pale cream. White only just out of the nozzle, yellow within a fifth of its
+    // burn, orange by halfway, deep orange at the end.
+    const blue = vec3(0.45, 0.62, 1.0), white = vec3(1.0, 0.9, 0.55), yellow = vec3(1.0, 0.7, 0.16), orange = vec3(1.0, 0.42, 0.06), deep = vec3(0.78, 0.2, 0.04);
+    const along1 = mix(blue, white, smoothstep(0.0, 0.04, u));
+    const along2 = mix(along1, yellow, smoothstep(0.05, 0.2, u));
+    const along3 = mix(along2, orange, smoothstep(0.22, 0.5, u));
+    const fire = mix(along3, deep, smoothstep(0.65, 1.0, u));
     // Hotter core where you look straight in, more orange at the rim (more so further along).
     const core = smoothstep(0.55, 1, face).mul(float(1).sub(u.mul(0.6)));
     const rimCol = mix(fire, orange, float(1).sub(smoothstep(0.1, 0.6, face)).mul(0.6));
-    const hot = mix(rimCol, white, core.mul(0.7));
+    const hot = mix(rimCol, white, core.mul(0.35));
     const ice = mix(vec3(0.85, 0.95, 1.0), vec3(0.62, 0.8, 0.95), u);
     mat.colorNode = clamp(mix(hot, ice, cold).mul(fine.mul(0.12).add(1)), 0, 1);
     mat.opacityNode = smoothstep(0.0, 0.45, face).mul(d.w).mul(mix(float(0.95), float(0.4), cold)).mul(nz.mul(0.12).add(0.95));
