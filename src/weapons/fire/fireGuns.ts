@@ -64,8 +64,10 @@ export class FireGuns {
       const len = Math.min(s.range, s.reach);
       // The thin emissive cone out of the nozzle (Keith 2026-11-05; src/fx/flameBlobs.ts), on the live muzzle.
       if (fuel) s.from.copy(fuel);
-      if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, Math.min(len * v.flameCone, v.flameConeMax * (big ? 1.3 : 1)), v.flameConeWidth * (big ? 1.4 : 1), cold);
-      if (L && P > 0 && len > 1) {
+      if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold, v.flameConeCut);
+      // (Fire: the lights now hang in among the fireballs themselves, src/fx/flameFx.ts: a light every so many; these
+      // two on the aim line ran out ahead of the arcing balls, Keith 2026-11-05. The freeze rays keep them.)
+      if (L && P > 0 && len > 1 && cold) {
         const col = cold ? 0x9fd8ff : 0xff8a35;
         for (const t of [0.45, 0.95]) L.hold(s.from.x + s.dir.x * len * t, s.from.y + s.dir.y * len * t + 0.5, s.from.z + s.dir.z * len * t, P * (t > 0.5 ? 1 : 0.7), 6 + len * 0.35, col, 1.1, 1.5 + len * 0.08);
       }
@@ -89,7 +91,8 @@ export class FireGuns {
     const goal = { x: gxz.x, z: gxz.z, nx: gxz.x - fuel.x, nz: gxz.z - fuel.z };
     if (Math.hypot(goal.nx, goal.nz) < 0.5) { goal.nx = dir.x; goal.nz = dir.z; }
     for (let k = 0; k < n; k++) {
-      const r = Math.sqrt(Math.random()) * Math.tan(sp), a = Math.random() * Math.PI * 2;
+      // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).
+      const r = Math.sqrt(Math.random()) * Math.tan(sp) * v.flameLookSpread, a = Math.random() * Math.PI * 2;
       const d = this.d.set(Math.cos(a) * r, Math.sin(a) * r, 0);
       // A perpendicular jitter of the aim direction.
       const up = Math.abs(dir.y) < 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);

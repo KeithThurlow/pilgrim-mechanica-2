@@ -52,7 +52,10 @@ export class FlameBlobs {
       mat.colorNode = mix(fire, ice, cd.x);
       // Softer at the rim (seen side on, the tube's edge is where it is thinnest), fading out toward the end.
       const face = abs(dot(normalize(normalView), normalize(positionView.negate())));
+      // Cut short (Keith 2026-11-05: the old look, just less of it): the tube keeps its full length and colours and
+      // ends softly at cd.z of the way along, so the blue stays as it was and the orange tail goes.
       mat.opacityNode = clamp(face.mul(1.3), 0, 1).mul(float(1).sub(smoothstep(0.55, 1, t))).mul(smoothstep(0, 0.04, t))
+        .mul(float(1).sub(smoothstep(cd.z.sub(0.1), cd.z, t)))
         .mul(n.mul(0.35).add(0.75)).mul(cd.y).mul(0.55);
       this.cones = new THREE.InstancedMesh(cg, mat, CONE_MAX);
     }
@@ -81,7 +84,7 @@ export class FlameBlobs {
   }
 
   /** A pouring nozzle this frame: from (x, y, z) along unit (dx, dy, dz), `len` m long, `r` m wide at its far end. */
-  cone(x: number, y: number, z: number, dx: number, dy: number, dz: number, len: number, r: number, bright: number, cold: boolean) {
+  cone(x: number, y: number, z: number, dx: number, dy: number, dz: number, len: number, r: number, bright: number, cold: boolean, cut = 1) {
     if (this.nc >= CONE_MAX || len < 0.2) return;
     const i = this.nc++;
     this.p.set(x, y, z);
@@ -89,7 +92,7 @@ export class FlameBlobs {
     this.m.compose(this.p, this.q, this.s.set(r, len, r));
     this.cones.setMatrixAt(i, this.m);
     const a = this.coneData.array as Float32Array, o = i * 4;
-    a[o] = cold ? 1 : 0; a[o + 1] = bright;
+    a[o] = cold ? 1 : 0; a[o + 1] = bright; a[o + 2] = cut;
   }
 
   /** A blob this frame: centre, radius, its flight (stretches it along that), how flat it lies (0 round, 1 a puddle),
