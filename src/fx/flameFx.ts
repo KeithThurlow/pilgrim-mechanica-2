@@ -107,7 +107,8 @@ export class FlameFx {
       1.6 + Math.random() * 1.4, L.flameSmokeSize * 0.3 * k * (0.7 + Math.random() * 0.6), 3.3, -1);
   }
 
-  constructor(private ground: Ground) {
+  /** Where the particles land: the battlefield hands in its look ground (the drawn chunks) once it has one. */
+  constructor(public ground: Ground) {
     const mk = (data: THREE.InstancedBufferAttribute, additive: boolean) => {
       data.setUsage(THREE.DynamicDrawUsage);
       const d = instancedBufferAttribute<"vec4">(data);

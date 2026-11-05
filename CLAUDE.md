@@ -92,14 +92,15 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ## Commands
 
-- `npm run dev`: dev server with hot reload, opens the lab hub. `npm run check`: typecheck. `npm test`: headless checks.
+- `npm run dev`: dev server with hot reload, opens the lab hub. `npm run check`: typecheck. `npm test`: headless checks (every `tools/*-check.ts`, found by itself, side by side on all cores;
+  output only for failures, `npm test -- --verbose` for all, `npm test -- duel fortress` for some, `npm run test:serial` one at a time).
 - `npm run build`: typecheck + production build to `dist/`. `npm run shots`: screenshots of the labs into `shots/`
   (needs a build; `npx playwright install chromium` once).
 
 ## Lab URL flags
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
-  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing).
+  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
 - Walker lab: `?cam=game|close|side|back|feet|head` (head: face to face with the hull), `?sensor=<sensor base id>|none` (the sensor on the hull; default the visor head), `?model=standin` (box walker), `?flat` (no dunes),

@@ -3,8 +3,9 @@
 
 export class Noise2 {
   private perm = new Uint8Array(512);
-  private gx = new Float32Array(256);
-  private gz = new Float32Array(256);
+  // Float64 holding float32-rounded values (Math.fround): the same numbers as the old Float32Array, read faster.
+  private gx = new Float64Array(256);
+  private gz = new Float64Array(256);
 
   constructor(seed: number) {
     let s = (seed >>> 0) || 1;
@@ -13,7 +14,7 @@ export class Noise2 {
     for (let i = 0; i < 256; i++) p[i] = i;
     for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; }
     for (let i = 0; i < 512; i++) this.perm[i] = p[i & 255];
-    for (let i = 0; i < 256; i++) { const a = rnd() * Math.PI * 2; this.gx[i] = Math.cos(a); this.gz[i] = Math.sin(a); }
+    for (let i = 0; i < 256; i++) { const a = rnd() * Math.PI * 2; this.gx[i] = Math.fround(Math.cos(a)); this.gz[i] = Math.fround(Math.sin(a)); }
   }
 
   /** Gradient noise, roughly -1..1. */
@@ -32,11 +33,24 @@ export class Noise2 {
     return (x0 + v * (x1 - x0)) * 1.4;
   }
 
-  /** Fractal sum of octaves, roughly -1..1. */
+  /** Fractal sum of octaves, roughly -1..1. (get() inlined: the hottest loop in the game's ground; same maths.) */
   fbm(x: number, z: number, octaves = 4, lacunarity = 2.03, gain = 0.5): number {
+    const P = this.perm, gx = this.gx, gz = this.gz;
     let sum = 0, amp = 1, norm = 0;
     for (let i = 0; i < octaves; i++) {
-      sum += this.get(x, z) * amp;
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const xf = x - xi, zf = z - zi;
+      const X = xi & 255, Z = zi & 255;
+      const pa = P[X], pb = P[X + 1];
+      const a = P[pa + Z], b = P[pb + Z], c = P[pa + Z + 1], d = P[pb + Z + 1];
+      const u = xf * xf * xf * (xf * (xf * 6 - 15) + 10);
+      const v = zf * zf * zf * (zf * (zf * 6 - 15) + 10);
+      const n00 = gx[a] * xf + gz[a] * zf;
+      const n10 = gx[b] * (xf - 1) + gz[b] * zf;
+      const n01 = gx[c] * xf + gz[c] * (zf - 1);
+      const n11 = gx[d] * (xf - 1) + gz[d] * (zf - 1);
+      const x0 = n00 + u * (n10 - n00), x1 = n01 + u * (n11 - n01);
+      sum += (x0 + v * (x1 - x0)) * 1.4 * amp;
       norm += amp;
       amp *= gain;
       x = x * lacunarity + 17.3;
