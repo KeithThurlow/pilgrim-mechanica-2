@@ -33,6 +33,9 @@ export const FX_BUDGET_DEFAULTS = {
   fxMergeCell: 1.5,
   fxMergeSize: 0.25,
   fxMergeCount: 0.5,
+  fxUnderFireNear: 6,
+  fxUnderFireDust: 0.25,
+  fxUnderFireBlast: 0.35,
   fxGpuBits: 1,
   fxGpuTracers: 1,
   fxGpuDust: 1,
@@ -59,6 +62,9 @@ export const FX_BUDGET_PARAMS: Param[] = [
   { key: "fxMergeCell", label: "Merge hits within (m)", min: 0, max: 6, step: 0.1, group: GE, tip: "Hits in the same cell in the same frame become one bigger effect (not yours). 0: no merging" },
   { key: "fxMergeSize", label: "Merged hit: size × count ^", min: 0, max: 1, step: 0.01, group: GE, tip: "A merge of n hits is this much bigger: n ^ this" },
   { key: "fxMergeCount", label: "Merged hit: puffs × count ^", min: 0, max: 1, step: 0.01, group: GE, tip: "And throws this many more puffs, sparks and grit: n ^ this" },
+  { key: "fxUnderFireNear", label: "Under fire: round your mech (m)", min: 0, max: 20, step: 0.5, group: GE, tip: "Others' rounds and blasts landing this close to your mech (or on it) throw less dust and smoke, so a crowd shooting at you doesn't bury the mech; sparks stay full (Claude 2026-11-05). 0 off" },
+  { key: "fxUnderFireDust", label: "Under fire: dust and smoke kept (share)", min: 0, max: 1, step: 0.01, group: GE, tip: "Share of the dust and smoke kept from others' rounds hitting your mech or the sand round it; 1 as before" },
+  { key: "fxUnderFireBlast", label: "Under fire: blast dust kept (share)", min: 0, max: 1, step: 0.01, group: GE, tip: "Share of the dust kept from blasts (bandit rockets, shells) going off round your mech; 1 as before" },
 ];
 
 /** Part ranks: what goes first under pressure (0 never). */
@@ -122,6 +128,18 @@ export class FxBudget {
     if (this.seq < keep) return true;
     this.stats.thinned++;
     return false;
+  }
+
+  /**
+   * Under fire (Claude 2026-11-05: a crowd's fire buried the mech in dust): the share of dust and smoke kept for an
+   * effect at (x, z) that isn't the local player's own, when it lands within fxUnderFireNear of their mech. 1 elsewhere.
+   * blast: a blast's dust (fxUnderFireBlast) rather than a round's (fxUnderFireDust).
+   */
+  underFire(x: number, z: number, own = false, blast = false): number {
+    const v = this.v, o = this.own;
+    if (own || !o || v.fxUnderFireNear <= 0) return 1;
+    if ((x - o.x) ** 2 + (z - o.z) ** 2 > v.fxUnderFireNear * v.fxUnderFireNear) return 1;
+    return blast ? v.fxUnderFireBlast : v.fxUnderFireDust;
   }
 
   /** What share of a part of this rank the last admitted request keeps (1 when it's at full). */

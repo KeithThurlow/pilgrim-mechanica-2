@@ -272,14 +272,16 @@ export class MinigunFx {
     if (k <= 0) return;
     // The dust and smoke these call for were admitted here: the dust pool doesn't ask again (hold).
     b.hold++;
-    if (surface === "metal") this.steel(at, dir, normal, k, n);
+    // Others' rounds on or round your mech keep only a share of their dust and smoke (sparks stay): src/fx/budget.ts underFire.
+    const keep = b.underFire(at.x, at.z, own);
+    if (surface === "metal") this.steel(at, dir, normal, k, n, keep);
     else if (surface === "flesh") this.onFleshHit?.(at, new THREE.Vector3(dir.x, 0, dir.z).normalize());
-    else this.sand(at, dir, k, n);
+    else this.sand(at, dir, k, n, keep);
     b.hold--;
   }
 
   /** A round into sand: the dust (via onSandHit) and grit. */
-  private sand(at: THREE.Vector3, dir: THREE.Vector3, k: number, n = 1) {
+  private sand(at: THREE.Vector3, dir: THREE.Vector3, k: number, n = 1, keep = 1) {
     const v = this.v;
     const fwd = this.s.set(dir.x, 0, dir.z);
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, 1);
@@ -287,7 +289,7 @@ export class MinigunFx {
     const along = fwd.clone();
     const down = Math.max(0, -dir.y) / Math.max(1e-6, dir.length());
     // The dust itself (the low layer torn up and pushed downrange, and the dust thrown up) is the shared dust system.
-    this.onSandHit?.(at, along, k, n, down);
+    this.onSandHit?.(at, along, k, n * keep, down);
     // Grit: sand thrown up in an arc, mostly on downrange.
     const gpu = this.gpuB;
     for (let i = 0; i < Math.round(v.sandGrit * Math.min(1, k / Math.max(1e-3, v.hitDust)) * n * this.budget.part(RANK.grit)); i++) {
@@ -304,7 +306,7 @@ export class MinigunFx {
   }
 
   /** A round off steel: sparks mostly on along the round (a ricochet spread), a few back off the face; a little smoke. */
-  private steel(at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3, k: number, mul = 1) {
+  private steel(at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3, k: number, mul = 1, keep = 1) {
     const v = this.v;
     const n = Math.round(v.metalSparks * Math.min(2, k) * mul);
     // Reflect the round off the face for the ricochet cone; the rest spray back off the face.
@@ -319,7 +321,9 @@ export class MinigunFx {
       this.spark(at.x + normal.x * 0.05, at.y + normal.y * 0.05, at.z + normal.z * 0.05, sv.x, sv.y, sv.z, 0.18 + Math.random() * 0.3);
     }
     // Smoke off the steel goes to the soft dust (the battlefield), not solid balls (they read as rocks, Keith's shot).
-    if (v.metalSmoke > 0) this.onSteelSmoke?.(at, normal, v.metalSmoke, k);
+    // keep < 1 (under fire): a share of the puffs, rounded at random so the average holds.
+    const puffs = v.metalSmoke * keep, whole = Math.floor(puffs) + (Math.random() < puffs - Math.floor(puffs) ? 1 : 0);
+    if (whole > 0) this.onSteelSmoke?.(at, normal, whole, k);
   }
 
   /**

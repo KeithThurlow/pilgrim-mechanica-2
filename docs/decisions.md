@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-05 | Under fire, the mech stays readable: others' dust and smoke round it cut to a quarter (blast dust a third), blast orbs fade out over it, bandit rockets get a rocket's wave. Sparks and hit arcs show the hits. Open for Keith: the shares and the 3.5 m clear spot are guesses; whether the player's own blasts should also clear over the mech (they do now) | Keith (PC render) | Claude | `fxUnderFire*`, `waveClear*` sliders |
 | 2026-11-05 | Freeze rays get their own models rather than the flamers' in new paint: cold kit reads as pale insulated pressure vessels (a dewar on the held one, two spheres on the hull one) and a glowing coiled barrel; open for Keith to judge in game | Coordinator (Keith: "push on visuals") | Claude | `frostModel`, `cryoModel` |
 | 2026-11-05 | Sword notes: the swipe rises Buster, Breaker, Short; the ring after a hit is deepest on the Buster, highest on the Breaker, the Short between | Keith | Keith (order), Claude (values) | Sword sound sliders. |
 | 2026-11-05 | The "tracks moving" recording goes on the convoy first, heard from the nearest car; the crusher and moving excavators are the next fits. The flamer's ignite stays procedural for now (the recording's clean ignition is at 10 s if Keith wants it cut) | Keith | Claude (open for Keith) | |

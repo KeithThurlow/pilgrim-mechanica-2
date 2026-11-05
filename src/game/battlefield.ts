@@ -616,15 +616,17 @@ export class Battlefield {
       splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
       return;
     }
-    for (let i = 0; i < 18 * k; i++) {
+    // Round your mech only a share of the dust goes up, so a rain of rockets doesn't bury it (src/fx/budget.ts underFire).
+    const keep = this.fx.underFire(p.x, p.z, false, true);
+    for (let i = 0; i < 18 * k * keep; i++) {
       const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6 * k;
       this.dust.emit(1, p.x, p.y + Math.random() * 0.5, p.z, Math.cos(a) * sp, 2 + Math.random() * 5 * k, Math.sin(a) * sp, 0.5 + Math.random() * 0.7, 2.5 + Math.random() * 3, 0.9);
     }
-    for (let i = 0; i < 20 * k; i++) {
+    for (let i = 0; i < 20 * k * keep; i++) {
       const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 9;
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
-    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
+    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k * Math.sqrt(keep)); this.marks.blast(p.x, p.z, s.radius); }
     // Explosions are barely warm (Keith 2026-11-01): at most a brief dull ember in the middle.
     if (low) this.heat?.spot(p.x, p.z, Math.max(0.5, s.radius * 0.3), (this.v as { heatBlast?: number }).heatBlast ?? 0);
     this.sfx.play("brap", p, 1.8, 0.4, false);
@@ -756,7 +758,7 @@ export class Battlefield {
     c?.mark("dust");
     // Blast waves and heat shimmer (the frame copy only runs while one is live).
     if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-      this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600);
+      this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600, this.fx.own);
     } else this.waves.update(dt);
     c?.mark("blast waves");
   }
