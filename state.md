@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer line warmer and thicker (PC render: "pale cream-white and thin"; Claude on `claude/project-thread-q7b0ap`)
+- `src/fx/flameTube.ts`: white only just out of the nozzle (4% of its burn), yellow by 20%, orange by half, deep orange at the end, all more saturated; the hot core mixes in a third as much white. Width 0.1 m at the nozzle (was 0.06) to 1 m (was 0.75). Checked: typecheck, `flamefx-check`, full `npm test`.
+
 ### 2026-11-05 · Flamer line actually draws; flamer night lights toned down (PC render on WebGPU: only the cone and the landing fire, "light huge at night"; Claude on `claude/project-thread-q7b0ap`)
 - Cause: the guns pour only on their shots (a few a second), and the line counted any frame without a pour as stopped, so every fuel point started a new strip of one point and no tube was drawn (the check poured every frame, so it passed). Now a line keeps pouring 0.15 s after the last pour (`src/fx/flameStream.ts`), and FireGuns pours every frame from the live muzzle with the last shot's throw (`fireGuns.ts`). The tube hides when it has nothing to draw (the WebGPU "index count of 0" warning). New `flamefx-check` rule: a line poured every 6th frame stays joined (0% joined before the fix, now passes).
 - Night lights: fireball and line lights 260 power (was 700), at most 4 (was 6), smaller reach (3.5 m + 1.2 × size, was 5 + 2 ×) and less glow; the line hangs one every 16 points (was 10). Checked: typecheck, `flamefx-check`, full `npm test`.

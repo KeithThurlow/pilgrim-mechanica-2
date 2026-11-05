@@ -47,7 +47,7 @@ const LOOK: FlameLook = {
   flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 1.2,
   flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
-  flameTube: 1, flameTubeNear: 0.06, flameTubeFar: 0.75, flameTubeLump: 0.6, flameTubeEvery: 0.025,
+  flameTube: 1, flameTubeNear: 0.1, flameTubeFar: 1, flameTubeLump: 0.6, flameTubeEvery: 0.025,
   flameShed: 2.5, flameEndFire: 0.6, flameEndSize: 0.75,
 };
 
