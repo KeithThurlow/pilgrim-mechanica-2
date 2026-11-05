@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer roar and convoy tracks on recordings (Keith asked; Claude on `claude/flame-track-sounds`)
+- `flamethrower` loops as `flameRoar` (the steadiest 3 s, from 5.3 s after onset). `tanktracks` loops as `tankTracks` (12 s from 3.3 s), played by `ConvoySound` (`src/convoy/convoySound.ts`) at the car nearest the listener: full level within 25 m, silent past 260 m, pitch by speed, sliders in Tracks and trail › Convoy sound. Only the convoy lab has it so far.
+- The cut loops are limited by a few peaks: the roar sits 2 dB and the tracks 6 dB under their procedural loops' punch. `tools/samples-check.ts` now covers fire and convoy sounds and checks loops hold their level and meet at the join. `npm test`.
 ### 2026-11-05 · Fortress gates quicker to break, bandits hit harder (Keith's playtest: "takes a long time to knock down... never felt dangerous"; Claude on `claude/project-thread-exzrkr`)
 - Measured: two base miniguns do 245 dps through gate armour; the old gates (3000 hp, armour 3, +35% per ring) took 14 / 19 / 23 s. Now 1500 hp, armour 2, +30% per ring: 6 / 8 / 10 s, and blasts (rockets, shells, mortars) do ×1.75 on gates (`gateBlast`). Fortress bandits' rounds 1 → 2 damage (a bandit fires about 1.9 rounds/s, so twenty in sight now take a 3000 hull in about 40 s, before the towers' rockets). Files: `src/pois/gates.ts`, `src/expedition/fortresses.ts`.
 - Checked: `fortress-check` (new rule: an outer gate falls to two miniguns in 3 to 10 s, a keep gate under 15 s). Full `npm test` passes. The fortress fun pass is done; its handoff note is deleted.

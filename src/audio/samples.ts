@@ -54,6 +54,10 @@ export const SAMPLES: SampleDef[] = [
   // The sword (Keith 2026-11-05). The swipe is a turbine blade's sweep: its one big pass, sped up 3 semitones as he asked,
   // and each sword's pitch goes on top (Sword sound). The scrape is the loudest half second of a recording he marked too long.
   { id: "SwordSwing", file: "bladeswipe", sound: "swordSwing", label: "Sword swipe (bladeswipe)", start: 0.05, len: 0.75, fade: 0.3, pitch: 3, spread: 1, lowpass: 20000, highpass: 60, gain: 0, under: 0 },
+  // Long sounds that loop (Keith 2026-11-05). The flamer's is the steadiest 3 s of the recording's first burst, the tracks'
+  // the steadiest 12 s of a 46 s take, long enough that the ear doesn't catch the repeat on a slow walk past.
+  { id: "FlameRoar", file: "flamethrower", sound: "flameRoar", label: "Flamer roar (flamethrower)", loop: 0.4, start: 5.3, len: 3, fade: 0.4, pitch: 0, spread: 0, lowpass: 20000, highpass: 40, gain: 0, under: 0 },
+  { id: "TankTracks", file: "tanktracks", sound: "tankTracks", label: "Convoy tracks (tanktracks)", loop: 1, start: 3.3, len: 12, fade: 1, pitch: 0, spread: 0, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
   { id: "SwordScrape", file: "bladeonmetal", sound: "swordScrape", label: "Sword scrape on metal (bladeonmetal)", start: 0.5, len: 0.6, fade: 0.3, pitch: 0, spread: 2, lowpass: 20000, highpass: 200, gain: 0, under: 0 },
 ];
 

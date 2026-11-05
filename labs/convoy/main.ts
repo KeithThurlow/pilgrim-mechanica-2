@@ -62,6 +62,7 @@ import { PlatformBody } from "../../src/convoy/platformBody";
 import { CraneBody } from "../../src/convoy/craneBody";
 import { TRAIN_DEFAULTS, TRAIN_PARAMS, bridgeSpans, type Span } from "../../src/convoy/train";
 import { TRACK_DEFAULTS, TRACK_PARAMS } from "../../src/convoy/tracks";
+import { ConvoySound, CONVOY_SOUND_DEFAULTS, CONVOY_SOUND_PARAMS, CONVOY_SOUND_GROUP } from "../../src/convoy/convoySound";
 import { PIPE_DEFAULTS, PIPE_PARAMS } from "../../src/convoy/pipes";
 import { ConvoyTrail, TRAIL_DEFAULTS, TRAIL_PARAMS } from "../../src/convoy/trail";
 import { EscortGroup, ESCORT_DEFAULTS, ESCORT_PARAMS } from "../../src/convoy/escort";
@@ -131,7 +132,7 @@ const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
-  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
+  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...CONVOY_SOUND_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
   ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
@@ -143,7 +144,7 @@ const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...SUMMON_PARAMS,
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
-  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...CONVOY_SOUND_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS,
 ];
@@ -350,6 +351,7 @@ const kitCtl = new KitControl(player, foot, bf.sfx);
 player.uid = "player";
 const abilityCtl = new AbilityControl(player, foot, scene, (x, z) => walkable.floorBelow(x, z, sim.pelvis.y + 2).y, bf.sfx);
 addRepairSounds(bf.sfx, () => V.kitSound);
+const convoySound = new ConvoySound(bf.sfx, V);
 foot.showHealth = false;
 /** Was the crane armed when the pilot got out on the sand (it mustn't come for the empty mech; restored on getting in). */
 let armedWhenOut = true;
@@ -711,7 +713,7 @@ const panel = tweakPanel({
     ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
-    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
+    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", CONVOY_SOUND_GROUP, "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
     { id: "defence", label: "Convoy defence", groups: ["Defences", ...GUARD_GROUPS, ...GUARDIAN_GROUPS, ...SAFE_GROUPS] },
@@ -993,6 +995,8 @@ app.onTick((rawDt) => {
   }
   trail.update(convoy.platforms);
   costs.mark("trail");
+  // The crawler tracks heard from the nearest car (Keith 2026-11-05).
+  convoySound.update(convoy.platforms, convoy.bay.speed, foot.mount.onFoot ? foot.sim.pos : sim.pelvis);
   // ?threat: a marker circling the train 60 m out, for the turrets to track (and shoot at).
   if (threatOn) {
     const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
