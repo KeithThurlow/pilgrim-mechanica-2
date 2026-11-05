@@ -19,6 +19,8 @@ export interface SampleDef {
   level?: string;
   /** The robot remix's defaults (sampleCut.ts alienize); robots only. */
   alien?: AlienOptions;
+  /** A seamless loop with this many seconds of crossfade (Fade is unused); played with startSoundLoop. */
+  loop?: number;
   start: number; len: number; fade: number; pitch: number; spread: number; lowpass: number; highpass: number; gain: number; under: number;
 }
 
@@ -89,7 +91,8 @@ for (const d of SAMPLES) {
     { key: sampleKey(d, "On"), label: "Use the recording", min: 0, max: 1, step: 1, group: g, tip: "0: the procedural sound" },
     { key: sampleKey(d, "Start"), label: "Start after onset (s)", min: -0.05, max: 1.5, step: 0.005, group: g },
     { key: sampleKey(d, "Len"), label: "Length (s)", min: 0.05, max: 7, step: 0.01, group: g, tip: "How much of the recording is kept (at its own pitch)" },
-    { key: sampleKey(d, "Fade"), label: "Fade out (s)", min: 0.01, max: 4, step: 0.01, group: g },
+    d.loop ? { key: sampleKey(d, "Fade"), label: "Loop crossfade (s)", min: 0.01, max: 2, step: 0.01, group: g, tip: "The end runs into the start over this long, so the loop has no seam" }
+      : { key: sampleKey(d, "Fade"), label: "Fade out (s)", min: 0.01, max: 4, step: 0.01, group: g },
     { key: sampleKey(d, "Pitch"), label: "Pitch (semitones)", min: -24, max: 12, step: 0.1, group: g, tip: "Lower is slower and longer, like tape" },
     { key: sampleKey(d, "Spread"), label: "Variant spread (semitones)", min: 0, max: 6, step: 0.1, group: g, tip: `The ${SAMPLE_VARIANTS} variants sit this far apart in pitch, so repeats don't sound the same` },
     { key: sampleKey(d, "Lp"), label: "Low-pass (Hz)", min: 200, max: 20000, step: 50, group: g, tip: "Darker; 18000 and up is off" },
