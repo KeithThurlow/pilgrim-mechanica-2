@@ -1,7 +1,8 @@
 // The flame stream's solid look (Keith 2026-11-05; src/fx/flameFx.ts, flameBlobs.ts): things that must never happen.
 // - Gobs never sink under the sand; lit ones that land burn on for a while and slide on.
-// - Fire on the sand near a burning thing gathers round it (closer than without it, but not on top of it); between two
-//   burning things close together it runs between them.
+// - Fire on the sand is a swarm (Keith 2026-11-05): it keeps on in the fire's direction, past the aim, swerving round
+//   burning things (fewer on top of one than with nothing there) and between two close together; it never turns back
+//   onto them; frost the same.
 // - Lit flames throw smoke, and smoke rises.
 // - The blobs and cones stay inside their pools.
 // Run: npm test (or npx tsx tools/flamefx-check.ts).
@@ -19,7 +20,7 @@ const cam = new THREE.PerspectiveCamera();
 const slope = { height: (x: number, z: number) => 0.05 * x + 0.02 * z };
 const flat = { height: () => 0 };
 
-type Raw = { n: number; px: Float32Array; py: Float32Array; pz: Float32Array; kind: Uint8Array; onG: Float32Array; vy: Float32Array };
+type Raw = { n: number; px: Float32Array; py: Float32Array; pz: Float32Array; kind: Uint8Array; onG: Float32Array; vy: Float32Array; vz: Float32Array };
 const raw = (f: FlameFx) => f as unknown as Raw;
 
 /** Pours a stream along +Z from 1.5 m up for `pour` s, burning things at `att`, then runs on to `total` s. */
@@ -60,26 +61,20 @@ must(free.maxBlobs > 0 && free.maxBlobs <= BLOB_MAX, `blobs drawn ${free.maxBlob
 const slid = run(slope, [], 1, 1.6);
 must(slid.under === 0, `gobs under a slope (${slid.under})`);
 
-// One burning thing 11 m out, a little off the line: gobs on the sand gather round it.
-const T: [number, number] = [1.8, 11];
-const band = (f: FlameFx) => near(f, ...T, 3).inR;
-const without = { inR: band(run(flat, [], 1, 1.6).f) }, withF = run(flat, [T], 1, 1.6).f, withT = { inR: band(withF), mean: near(withF, ...T, 99).mean };
-must(withT.inR > without.inR, `fire doesn't gather round a burning thing (${withT.inR} vs ${without.inR} within 3 m)`);
-must(withT.mean > 0.3, `fire piles onto the burning thing's centre (${withT.mean.toFixed(2)} m)`);
-
-// The swarm (Keith 2026-11-05): fire on the sand flows on toward the plane through the aim, square to the line to it,
-// and round a burning thing in its way rather than through it; frost the same.
+// The swarm: fire on the sand flows on along the stream's line, round a burning thing in its way and on; frost the same.
 const G: FlowGoal = { x: 0, z: 18, nx: 0, nz: 1 };
 const meanZ = (f: FlameFx) => { const g = raw(f); let s = 0, n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { s += g.pz[i]; n++; } return n ? s / n : -1; };
 const noGoal = meanZ(run(flat, [], 1, 2).f), toGoal = meanZ(run(flat, [], 1, 2, G).f);
 const frostFree = meanZ(run(flat, [], 1, 2, null, true).f), frost = meanZ(run(flat, [], 1, 2, G, true).f);
 must(toGoal > noGoal + 1, `fire doesn't flow on to the aim's plane (mean ${toGoal.toFixed(2)} vs ${noGoal.toFixed(2)} m out)`);
 must(frost > frostFree + 1, `frost doesn't flow on to the aim's plane (mean ${frost.toFixed(2)} vs ${frostFree.toFixed(2)} m out)`);
-must(toGoal < G.z + 1, `fire runs on past the aim's plane (mean ${toGoal.toFixed(2)} m)`);
-const O: [number, number] = [0, 12.5], rIn = F.flameRing * 0.6;
+const O: [number, number] = [0, 12.5], rIn = 0.7;
 const blocked = run(flat, [O], 1, 2, G).f, open = run(flat, [], 1, 2, G).f;
 const inO = near(blocked, ...O, rIn).inR, ringIn = near(open, ...O, rIn).inR;
-const past = (() => { const g = raw(blocked); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && g.pz[i] > O[1] + F.flameRing) n++; return n; })();
+const past = (() => { const g = raw(blocked); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && g.pz[i] > O[1] + 1) n++; return n; })();
+// Never back: no gob on the sand heads back toward the shooter (the old pull dragged them back onto what burned).
+const back = (() => { const g = raw(blocked) as Raw & { vz: Float32Array }; let n = 0, all = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { all++; if (g.vz[i] < -0.5) n++; } return { n, all }; })();
+must(back.n <= back.all * 0.02, `fire turns back (${back.n} of ${back.all} heading back)`);
 must(past > 0, "fire doesn't flow on past a burning thing in its way");
 must(inO < ringIn, `fire runs through a burning thing (${inO} inside vs ${ringIn} with nothing there)`);
 // Two burning things 3 m apart across its way: it flows between them (and on), not only round the outside.
@@ -98,6 +93,6 @@ console.log(`flamefx swarm: mean out ${noGoal.toFixed(1)} → ${toGoal.toFixed(1
   must(up === n, `smoke sinking (${n - up} of ${n})`);
 }
 
-console.log(`flamefx: landed ${free.landed} gob-frames, blobs ≤${free.maxBlobs}; gathered ${without.inR} → ${withT.inR}`);
+console.log(`flamefx: landed ${free.landed} gob-frames, blobs ≤${free.maxBlobs}; ${back.n}/${back.all} heading back`);
 if (fails.length) { console.error("flamefx check FAILED:\n  " + fails.join("\n  ")); process.exit(1); }
 console.log("flamefx check passed");
