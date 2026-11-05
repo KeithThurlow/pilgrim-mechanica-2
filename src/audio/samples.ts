@@ -23,6 +23,8 @@ export interface SampleDef {
   loop?: number;
   /** How many variants it is cut into (default SAMPLE_VARIANTS). */
   variants?: number;
+  /** Each variant starts this much further into the recording (default 0), so they aren't all the same stretch. */
+  step?: number;
   start: number; len: number; fade: number; pitch: number; spread: number; lowpass: number; highpass: number; gain: number; under: number;
 }
 
@@ -51,9 +53,9 @@ export const SAMPLES: SampleDef[] = [
     alien: { ring: 70, ringMix: 0.35, comb: 6, combFb: 0.6, sweepFrom: 2000, sweepTo: 200, sweepQ: 6, sweepMix: 0.4 } },
   { id: "RobotBigDeath", file: "largerrobotalienexplosion", sound: "robotBigDeath", ref: "blast", level: "robotSoundLevel", label: "Big robot death (largerrobotalienexplosion)", start: 0, len: 3.0, fade: 1.6, pitch: -5, spread: 1.5, lowpass: 20000, highpass: 25, gain: 0, under: 0,
     alien: { ring: 45, ringMix: 0.3, comb: 9, combFb: 0.65, sweepFrom: 1500, sweepTo: 120, sweepQ: 6, sweepMix: 0.4 } },
-  // The sword (Keith 2026-11-05). The swipe is a turbine blade's sweep: its one big pass, sped up 3 semitones as he asked,
-  // and each sword's pitch goes on top (Sword sound). The scrape is the loudest half second of a recording he marked too long.
-  { id: "SwordSwing", file: "bladeswipe", sound: "swordSwing", label: "Sword swipe (bladeswipe)", start: 0.05, len: 0.75, fade: 0.3, pitch: 3, spread: 1, lowpass: 20000, highpass: 60, gain: 0, under: 0 },
+  // The sword (Keith 2026-11-05). The swipe is a turbine blade's sweep: its one big pass, raised well above its match to
+  // the faint procedural whoosh so it's heard, and each sword's pitch goes on top (Sword sound: buster lowest, short highest). The scrape is the loudest half second of a recording he marked too long.
+  { id: "SwordSwing", file: "bladeswipe", sound: "swordSwing", label: "Sword swipe (bladeswipe)", variants: 5, start: 0.05, len: 0.75, fade: 0.3, pitch: 0, spread: 2.5, lowpass: 20000, highpass: 60, gain: 12, under: 0 },
   // Long sounds that loop (Keith 2026-11-05). The flamer's is the steadiest 3 s of the recording's first burst, the tracks'
   // the steadiest 12 s of a 46 s take, long enough that the ear doesn't catch the repeat on a slow walk past.
   { id: "FlameRoar", file: "flamethrower", sound: "flameRoar", label: "Flamer roar (flamethrower)", loop: 0.4, start: 5.3, len: 3, fade: 0.4, pitch: 0, spread: 0, lowpass: 20000, highpass: 40, gain: 0, under: 0 },
@@ -61,13 +63,13 @@ export const SAMPLES: SampleDef[] = [
   // A bullet on metal (Keith: "needs variations"): the ricochet's hit, a full second into the file (onset finds it), cut
   // five ways across 5 semitones; each play bends the pitch again and lands at its own moment (src/audio/minigunAudio.ts).
   { id: "MetalHit", file: "metalhit", sound: "bulletMetal", label: "Bullet on metal (metalhit)", variants: 5, start: -0.005, len: 0.5, fade: 0.25, pitch: 0, spread: 5, lowpass: 20000, highpass: 150, gain: 0, under: 0 },
-  { id: "SwordScrape", file: "bladeonmetal", sound: "swordScrape", label: "Sword scrape on metal (bladeonmetal)", start: 0.5, len: 0.6, fade: 0.3, pitch: 0, spread: 2, lowpass: 20000, highpass: 200, gain: 0, under: 0 },
+  { id: "SwordScrape", file: "bladeonmetal", sound: "swordScrape", label: "Sword scrape on metal (bladeonmetal)", variants: 5, step: 0.15, start: 0.2, len: 0.6, fade: 0.3, pitch: 0, spread: 3, lowpass: 20000, highpass: 200, gain: 0, under: 0 },
 ];
 
 /** How many variants each sample is cut into (pitches spread evenly across its spread). */
 export const SAMPLE_VARIANTS = 3;
 
-const FIELDS = ["On", "Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const;
+const FIELDS = ["On", "Start", "Step", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const;
 export type SampleField = (typeof FIELDS)[number];
 export const sampleKey = (d: SampleDef, f: SampleField) => `smp${d.id}${f}`;
 
@@ -98,11 +100,12 @@ const params: Param[] = [
 ];
 for (const d of SAMPLES) {
   const g = sampleGroup(d);
-  const v: Record<SampleField, number> = { On: 1, Start: d.start, Len: d.len, Fade: d.fade, Pitch: d.pitch, Spread: d.spread, Lp: d.lowpass, Hp: d.highpass, Gain: d.gain, Under: d.under };
+  const v: Record<SampleField, number> = { On: 1, Start: d.start, Step: d.step ?? 0, Len: d.len, Fade: d.fade, Pitch: d.pitch, Spread: d.spread, Lp: d.lowpass, Hp: d.highpass, Gain: d.gain, Under: d.under };
   for (const f of FIELDS) defaults[sampleKey(d, f)] = v[f];
   params.push(
     { key: sampleKey(d, "On"), label: "Use the recording", min: 0, max: 1, step: 1, group: g, tip: "0: the procedural sound" },
     { key: sampleKey(d, "Start"), label: "Start after onset (s)", min: -0.05, max: Math.max(1.5, d.start * 2), step: 0.005, group: g },
+    { key: sampleKey(d, "Step"), label: "Each variant starts later by (s)", min: 0, max: 0.5, step: 0.005, group: g, tip: "Variants cut from different stretches of the recording; 0: all from the same place" },
     { key: sampleKey(d, "Len"), label: "Length (s)", min: 0.05, max: Math.max(7, d.len * 2), step: 0.01, group: g, tip: "How much of the recording is kept (at its own pitch)" },
     d.loop ? { key: sampleKey(d, "Fade"), label: "Loop crossfade (s)", min: 0.01, max: 2, step: 0.01, group: g, tip: "The end runs into the start over this long, so the loop has no seam" }
       : { key: sampleKey(d, "Fade"), label: "Fade out (s)", min: 0.01, max: 4, step: 0.01, group: g },

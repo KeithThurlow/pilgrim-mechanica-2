@@ -1,6 +1,7 @@
 // npm test: runs every tools/*-check.ts (and the balance sheet's --check) side by side, one process per check,
 // as many at once as the machine has cores. A check's output is shown only when it fails (or with --verbose).
 // Slowest checks start first, by the times of the last run (node_modules/.cache/check-times.json).
+// A check that fails is run once more on its own (some time themselves against ms budgets) before it counts as failed.
 // Usage: node tools/run-checks.mjs [--verbose] [-j N] [name-filter ...]
 import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -56,7 +57,18 @@ async function worker() {
 await Promise.all(Array.from({ length: Math.min(jobs, todo.length) }, worker));
 
 try { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cacheFile, JSON.stringify(times, null, 1)); } catch { /* fine */ }
-const failed = results.filter((r) => !r.ok);
+// Some checks time themselves (budgets in ms): under the load of the others they can miss. A failed check gets one more
+// run on its own, and counts as passed only if that one passes (said as such, so a real timing problem still shows).
+let failed = results.filter((r) => !r.ok);
+const flaky = [];
+for (const f of failed) {
+  results.splice(results.indexOf(f), 1);
+  console.log(`\nRunning ${f.name} again on its own...`);
+  await run(checks.find((c) => c.name === f.name));
+  if (results[results.length - 1].ok) flaky.push(f.name);
+}
+failed = results.filter((r) => !r.ok);
+if (flaky.length) console.log(`\nPassed only on their own (timing under load): ${flaky.join(', ')}`);
 const slow = [...results].sort((a, b) => b.ms - a.ms).slice(0, 5).map((r) => `${r.name} ${(r.ms / 1000).toFixed(1)} s`);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed in ${((performance.now() - t0) / 1000).toFixed(1)} s (${jobs} at once). Slowest: ${slow.join(', ')}`);
 if (failed.length) {

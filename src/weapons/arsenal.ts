@@ -50,7 +50,7 @@ import { EnergyGuns } from "./energy/energyGuns";
 import { isEnergy } from "./energy/energySim";
 import type { EnergyKind } from "./models";
 
-import { gunFeel, gunNumbers, isFlameGun, isRoundGun, type RoundGun } from "./guns";
+import { gunFeel, gunNumbers, isColdGun, isFlameGun, isRoundGun, type RoundGun } from "./guns";
 import { FireGuns } from "./fire/fireGuns";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | "cannon" | RoundGun | null;
@@ -341,13 +341,16 @@ export class Arsenal implements MechWeapons {
     return s.base === "sword-heavy" ? v.swordSwingBuster : s.base === "sword-short" ? v.swordSwingShort : v.swordSwingBreaker;
   }
 
-  /** An unblocked cut landing (Keith 2026-11-05): the smash with the old slam under it, then blade on metal (softer on flesh). */
+  /** An unblocked cut landing (Keith 2026-11-05): the smash with the old slam under it, then blade on metal (softer on
+   *  flesh), and the blade ringing on after the cut's first hit. Each layer drawn apart, so no two hits stack up alike. */
   private hitSound(s: Side, at: THREE.Vector3, material: string, volume: number) {
-    const v = this.v, sfx = this.bf.sfx, p = Math.pow(this.swingPitch(s), v.swordHitPitch), j = () => 0.92 + Math.random() * 0.16;
+    const v = this.v, sfx = this.bf.sfx, p = Math.pow(this.swingPitch(s) / Math.max(0.01, v.swordSwingBreaker), v.swordHitPitch), j = () => 0.86 + Math.random() * 0.28;
     if (v.swordSmashLevel > 0) sfx.playSound("swordSmash", at, volume, p * j());
-    if (v.swordHitUnder > 0) sfx.playSound("swordHit", at, volume * (v.swordSmashLevel > 0 ? v.swordHitUnder : 1), p * (0.88 + Math.random() * 0.3));
+    if (v.swordHitUnder > 0) sfx.playSound("swordHit", at, volume * (v.swordSmashLevel > 0 ? v.swordHitUnder * (0.6 + Math.random() * 0.8) : 1), p * (0.88 + Math.random() * 0.3));
     const scrape = material === "flesh" ? v.swordScrapeSoft : 1;
     if (scrape > 0 && v.swordScrapeLevel > 0) sfx.playSound("swordScrape", at, volume * 0.8 * scrape, p * j(), v.swordScrapeDelay);
+    const ring = material === "flesh" ? v.swordRingSoft : 1;
+    if (!s.bit && ring > 0 && v.swordRingLevel > 0) sfx.playSound("swordRing", at, ring, s.base === "sword-heavy" ? v.swordRingBuster : s.base === "sword-short" ? v.swordRingShort : v.swordRingBreaker, v.swordRingDelay);
   }
 
   /** A side's sword stats before a power cut's (src/weapons/sword.ts powerStats). */
@@ -383,7 +386,7 @@ export class Arsenal implements MechWeapons {
       // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired. So in a dash (Keith
       // 2026-10-31, rail balance: no dash while a rail is charging or charged; the dash wins and the charge is lost), and
       // no charge builds until the dash is over.
-      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.inDash;
+      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.dashCancels;
       if (noRail && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
@@ -413,6 +416,8 @@ export class Arsenal implements MechWeapons {
         const ig = s.model && s.model.muzzles.length > 1 ? s.model.muzzles[1].getWorldPosition(this.tmp3) : null;
         const fuel = s.model?.muzzles.length ? this.muzzleOf(s, side, this.tmp2, 0) : null;
         this.fire.step(i, dt, ig, alive && !(u.sideOff?.(i) ?? u.gunsOff), fuel);
+        // A freeze ray's condenser coil and lens glow up while the trigger is held.
+        if (isColdGun(s.kind)) for (const mat of glows) mat.opacity = held && alive ? 1 : 0.4;
         clearPaint(s.paint);
         return;
       }
