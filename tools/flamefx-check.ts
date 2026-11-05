@@ -46,13 +46,6 @@ function run(ground: { height(x: number, z: number): number }, att: [number, num
   return { f, under, maxBlobs, landed };
 }
 
-/** Mean distance of grounded gobs from (x, z), and how many are within `r`. */
-function near(f: FlameFx, x: number, z: number, r: number) {
-  const g = raw(f);
-  let sum = 0, n = 0, inR = 0;
-  for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { const d = Math.hypot(g.px[i] - x, g.pz[i] - z); sum += d; n++; if (d < r) inR++; }
-  return { mean: n ? sum / n : Infinity, n, inR };
-}
 
 const free = run(flat, [], 1, 1.6);
 must(free.under === 0, `gobs under the sand (${free.under})`);
@@ -85,7 +78,9 @@ must(frost > frostFree + 1, `frost doesn't turn onto the stream's line (mean x $
 }
 const O: [number, number] = [0, 18], rIn = 0.7;
 const blocked = run(flat, [O], 1, 2, G).f, open = run(flat, [], 1, 2, G).f;
-const inO = near(blocked, ...O, rIn).inR, ringIn = near(open, ...O, rIn).inR;
+// Low down only: risen fire drifts on over what burns (Keith 2026-11-05), so it may pass above it.
+const lowIn = (f: FlameFx) => { const g = raw(f); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && g.py[i] < 0.6 && Math.hypot(g.px[i] - O[0], g.pz[i] - O[1]) < rIn) n++; return n; };
+const inO = lowIn(blocked), ringIn = lowIn(open);
 const past = (() => { const g = raw(blocked); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && g.pz[i] > O[1] + 1) n++; return n; })();
 // Never back: no gob on the sand heads back toward the shooter (the old pull dragged them back onto what burned).
 const back = (() => { const g = raw(blocked) as Raw & { vz: Float32Array }; let n = 0, all = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { all++; if (g.vz[i] < -0.5) n++; } return { n, all }; })();
@@ -101,7 +96,7 @@ console.log(`flamefx swarm: turned onto a 30° line: mean x ${noGoal.toFixed(1)}
 
 // Smoke: lit flames throw it, and it rises.
 {
-  const { f } = run(flat, [], 1, 1.4), g = raw(f);
+  const { f } = run(flat, [], 1, 2.2), g = raw(f);
   let n = 0, up = 0;
   for (let i = 0; i < g.n; i++) if (g.kind[i] === 3) { n++; if (g.vy[i] > 0) up++; }
   must(n > 5, `too little smoke (${n})`);
