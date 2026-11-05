@@ -733,7 +733,6 @@ export class Battlefield {
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
     this.flames.tune(this.v as object);
-    for (const b of this.burns.list) if (b.left > 0) this.flames.attract(b.x, b.y, b.z);
     this.flames.update(dt, camera);
     // A light in among the fireballs every so many (Keith 2026-11-05; Flame look › A light every).
     { const L = this.look?.lights, fl = this.flames, P = (this.v as { flameBallLight?: number }).flameBallLight ?? 0;

@@ -12,6 +12,7 @@ import type { WeaponValues } from "../tuning";
 import { isColdGun, type FlameGun } from "../guns";
 import type { Loop } from "../../audio/sfx";
 import { Synth, rng } from "../../audio/synth";
+import { lobVy } from "../../fx/flameFx";
 
 interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number }
 
@@ -20,7 +21,6 @@ const STOPPED = 0.2;
 
 export class FireGuns {
   readonly sides: [FSide, FSide];
-  private d = new THREE.Vector3();
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues) {
     const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0 });
@@ -86,28 +86,32 @@ export class FireGuns {
     const sp = (spread * Math.PI) / 180;
     // The muzzle's own drift (the mech walking) carries into the stream.
     const mv = this.unit.sim.vel;
-    // Fire (and frost) on the sand flows on toward a line through the aim, square to the shooter's line to it.
-    const gxz = aim ?? { x: fuel.x + dir.x * range, z: fuel.z + dir.z * range };
-    const goal = { x: gxz.x, z: gxz.z, nx: gxz.x - fuel.x, nz: gxz.z - fuel.z };
-    if (Math.hypot(goal.nx, goal.nz) < 0.5) { goal.nx = dir.x; goal.nz = dir.z; }
+    // Burning fuel thrown under gravity (Keith 2026-11-05, the rebuild): each gob is aimed to come down on the aim (on
+    // the sand, or the stream's end along the barrel with no aim), out to Flame look › Lobs out to × the reach; it
+    // burns for about the time it takes to fly the reach (Burns for), so aimed further it burns out in the air and
+    // rises instead of landing. The damage is the gun's rays, as before.
+    const G = v.flameGravity, vh0 = v.flameSpeed * v.flameGobFast;
+    const tx = aim ? aim.x : fuel.x + dir.x * range, tz = aim ? aim.z : fuel.z + dir.z * range;
+    const ty = aim ? aim.y : bf.field.height(tx, tz);
+    let hx = tx - fuel.x, hz = tz - fuel.z;
+    const hd = Math.hypot(hx, hz) || 1;
+    hx /= hd; hz /= hd;
+    const dist = Math.min(Math.max(hd, 2), range * v.flameLob);
+    const burnT = range / vh0 * v.flameBurnFor;
     const startAt = cold ? 0 : Math.min(range, s.reach) * v.flameCone * v.flameConeCut * v.flameStartAt;
     for (let k = 0; k < n; k++) {
       // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).
-      const r = Math.sqrt(Math.random()) * Math.tan(sp) * v.flameLookSpread, a = Math.random() * Math.PI * 2;
-      const d = this.d.set(Math.cos(a) * r, Math.sin(a) * r, 0);
-      // A perpendicular jitter of the aim direction.
-      const up = Math.abs(dir.y) < 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-      const ax = new THREE.Vector3().crossVectors(dir, up).normalize(), ay = new THREE.Vector3().crossVectors(ax, dir);
-      const dd = new THREE.Vector3().copy(dir).addScaledVector(ax, d.x).addScaledVector(ay, d.y).normalize();
-      // The look's gobs fly faster than the damage's reach grows (Keith 2026-11-05: a short cone, the fire racing out).
-      const fast = v.flameSpeed * v.flameGobFast;
-      const speed = fast * (0.9 + Math.random() * 0.2);
-      const life = range / Math.max(1, fast) * 1.2 + 0.2 + Math.random() * 0.15;
-      // Out of the end of the nozzle's flame (Keith 2026-11-05: "emit from the end of the initial flame burst"), not
-      // the muzzle: the shown cone's length × Flame look › Fireballs start along it.
-      const t0 = Math.random() * (1 / 60) + startAt / Math.max(1, speed);
-      bf.flames.gob(fuel.x + dd.x * speed * t0, fuel.y + dd.y * speed * t0, fuel.z + dd.z * speed * t0, dd.x * speed + (mv?.x ?? 0), dd.y * speed, dd.z * speed + (mv?.z ?? 0),
-        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, startAt > 0.3 ? 0 : v.flameIgnite * (0.7 + Math.random() * 0.6), cold, goal); // lit already where the cone ends
+      const sa = (Math.random() - 0.5) * 2 * sp * v.flameLookSpread, ca = Math.cos(sa), sn = Math.sin(sa);
+      const dx = hx * ca - hz * sn, dz = hx * sn + hz * ca;
+      const vh = vh0 * (0.93 + Math.random() * 0.14);
+      // Up enough to come down on the aim, at most a 35° lob; a little scatter up and down.
+      const vy = lobVy(ty - fuel.y, dist, vh, G) + (Math.random() - 0.5) * vh * Math.tan(sp * v.flameLookSpread);
+      // Out of the end of the nozzle's flame, not the muzzle (Flame look › Fireballs start along the cone).
+      const t0 = Math.random() * (1 / 60) + startAt / vh;
+      bf.flames.gob(fuel.x + dx * vh * t0, fuel.y + vy * t0 - 0.5 * G * t0 * t0, fuel.z + dz * vh * t0,
+        dx * vh + (mv?.x ?? 0), vy - G * t0, dz * vh + (mv?.z ?? 0),
+        burnT * (0.85 + Math.random() * 0.3), v.flameSize * big * (0.8 + Math.random() * 0.4),
+        startAt > 0.3 ? 0 : v.flameIgnite * (0.7 + Math.random() * 0.6), cold);
     }
     if (cold) return; // no burning splash from a freeze ray
     // Where the stream meets the sand (the aim on the ground, if the stream reaches it): a small short pool.
