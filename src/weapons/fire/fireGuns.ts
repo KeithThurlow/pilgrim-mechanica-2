@@ -14,7 +14,7 @@ import type { Loop } from "../../audio/sfx";
 import { Synth, rng } from "../../audio/synth";
 import { lobVy } from "../../fx/flameFx";
 
-interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number }
+interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number; press: number }
 
 /** After this long with no jet the stream has stopped: the next one starts from the nozzle again. */
 const STOPPED = 0.2;
@@ -23,7 +23,7 @@ export class FireGuns {
   readonly sides: [FSide, FSide];
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues) {
-    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0 });
+    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0, press: 0 });
     this.sides = [side(), side()];
     addFireSounds(bf, v);
   }
@@ -54,6 +54,9 @@ export class FireGuns {
       }
     }
     const pouring = s.idle < 0.12 && alive;
+    // Pressure builds while it pours (Keith 2026-11-05: "as it builds pressure it arcs out further"; Flame stream ›
+    // Pressure builds over); it's gone the moment it stops.
+    s.press = pouring ? Math.min(1, s.press + dt / Math.max(0.05, v.flamePressTime)) : 0;
     if (pouring) {
       const cold = isColdGun(s.kind), snd = cold ? "cryoHiss" : "flameRoar", big = s.kind === "inferno" || s.kind === "cryo";
       if (!s.loop) { s.loop = this.bf.sfx.startSoundLoop(snd, Math.random()); if (!cold) this.bf.sfx.playSound("flameIgnite", igniter ?? this.unit.sim.pelvis, 0.8, big ? 0.8 : 1); }
@@ -99,6 +102,13 @@ export class FireGuns {
     const dist = Math.min(Math.max(hd, 2), range * v.flameLob);
     const burnT = range / vh0 * v.flameBurnFor;
     const startAt = cold ? 0 : Math.min(range, s.reach) * v.flameCone * v.flameConeCut * v.flameStartAt;
+    // The line (Keith 2026-11-05, the flame tank reference: one continuous line, not bits): fuel thrown from the nozzle to
+    // come down on the aim, but only as far as the pressure carries it yet, slower and shorter at first.
+    {
+      const p = 1 - (1 - s.press) * (1 - s.press), k = v.flamePressMin + (1 - v.flamePressMin) * p;
+      const vh = vh0 * (0.5 + 0.5 * k), vy = lobVy(ty - fuel.y, dist * k, vh, G);
+      bf.flames.pour(s, fuel.x, fuel.y, fuel.z, hx * vh + (mv?.x ?? 0), vy, hz * vh + (mv?.z ?? 0), burnT, big, cold);
+    }
     for (let k = 0; k < n; k++) {
       // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).
       const sa = (Math.random() - 0.5) * 2 * sp * v.flameLookSpread, ca = Math.cos(sa), sn = Math.sin(sa);

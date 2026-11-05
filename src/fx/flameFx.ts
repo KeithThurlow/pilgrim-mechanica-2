@@ -12,6 +12,8 @@
 import * as THREE from "three/webgpu";
 import { instancedBufferAttribute, uv, smoothstep, float, sin, positionWorld, time } from "three/tsl";
 import { FlameBlobs } from "./flameBlobs";
+import { FlameStreams } from "./flameStream";
+import { FlameTube } from "./flameTube";
 
 export const FLAME_MAX = 4096;
 
@@ -36,6 +38,8 @@ export interface FlameLook {
   flameStretch: number; flameGrowFly: number; flameGrowGround: number; flameGrowRise: number; flameLicks: number;
   flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
   flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number;
+  flameTube: number; flameTubeNear: number; flameTubeFar: number; flameTubeLump: number; flameTubeEvery: number;
+  flameShed: number; flameEndFire: number; flameEndSize: number;
 }
 const LOOK: FlameLook = {
   flameRise: 3, flameGravity: 9.8, flameDrag: 0.15, flameBreak: 1.2, flameSplashDrops: 2,
@@ -43,6 +47,8 @@ const LOOK: FlameLook = {
   flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 1.2,
   flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
+  flameTube: 1, flameTubeNear: 0.06, flameTubeFar: 0.75, flameTubeLump: 0.6, flameTubeEvery: 0.025,
+  flameShed: 2.5, flameEndFire: 0.6, flameEndSize: 0.75,
 };
 
 export class FlameFx {
@@ -85,6 +91,9 @@ export class FlameFx {
   nLight = 0;
   private litN = 0;
   readonly blobs = new FlameBlobs();
+  /** The flamers' fuel lines (Keith 2026-11-05: one continuous line arcing out, not bits) and their tube. */
+  readonly streams = new FlameStreams();
+  readonly tube = new FlameTube();
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private p = new THREE.Vector3();
@@ -135,7 +144,7 @@ export class FlameFx {
     this.hot = mk(this.hotData, true);
     this.lit = mk(this.litData, false, false);
     this.lit.renderOrder = 5;
-    this.group.add(this.dark, this.lit, this.hot, this.blobs.group);
+    this.group.add(this.dark, this.lit, this.hot, this.blobs.group, this.tube.mesh);
   }
 
   private add(k: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, heat = 1, cold = 0): number {
@@ -153,6 +162,12 @@ export class FlameFx {
   gob(x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, size: number, ign: number, cold = false) {
     const i = this.add(GOB, x, y, z, vx, vy, vz, burn + this.look.flameRiseLife, size, 1, cold ? -1 : ign, 1, cold ? 1 : 0);
     if (i >= 0) this.burn[i] = burn;
+  }
+
+  /** A nozzle pours this frame (`key`: the gun's side, kept across frames): the line's near end is at (x, y, z) and it
+   *  throws fuel at (vx, vy, vz) that burns `burn` s; `width` scales the line (the hull guns' is bigger). */
+  pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold = false) {
+    this.streams.pour(key, x, y, z, vx, vy, vz, burn, width, cold);
   }
 
   /** A wisp of freezing mist (chilled things, the freeze ray's nozzle). */
@@ -280,8 +295,37 @@ export class FlameFx {
     this.pend.length = 0;
     for (let j = 0; j < this.pendL.length; j += 4) this.lick(this.pendL[j], this.pendL[j + 1], this.pendL[j + 2], this.pendL[j + 3], 0.95);
     this.pendL.length = 0;
+    this.stepLines(dt);
     this.nLight = 0;
+    // Lights hang along the lines too (every 10th point), before the ground fires and fireballs take the rest.
+    for (const l of this.streams.lines.values()) {
+      if (l.cold) continue;
+      for (let i = l.n - 4; i >= 0 && this.nLight < L.flameBallLights; i -= 10) {
+        const o = this.nLight++ * 4; this.lightPts[o] = l.px[i]; this.lightPts[o + 1] = l.py[i] + 0.5; this.lightPts[o + 2] = l.pz[i]; this.lightPts[o + 3] = 1.2 * l.width;
+      }
+    }
     this.draw(camera);
+  }
+
+  /** The fuel lines fly on: where a point lands a ground fire splashes (some of them), where one burns out in the air a
+   *  fireball rises; flames and, near the far end, smoke come off the line as it goes. */
+  private stepLines(dt: number) {
+    const L = this.look;
+    this.streams.step(dt, L.flameGravity, L.flameDrag, L.flameTubeEvery, this.ground, (line, what, x, y, z, vx, vy, vz) => {
+      const sz = L.flameEndSize * line.width * (0.8 + Math.random() * 0.4);
+      if (what === "land") { if (Math.random() < L.flameEndFire) this.gob(x, y + 0.04, z, vx, Math.min(vy, -1), vz, 9, sz, 0, line.cold); }
+      else this.gob(x, y, z, vx, vy, vz, 1e-4, sz, 0, line.cold);
+    });
+    for (const l of this.streams.lines.values()) for (let i = 0; i < l.n; i++) {
+      const u = l.age[i] / Math.max(0.05, l.burn[i]);
+      if (u < 0.12) continue;
+      if (L.flameShed > 0 && Math.random() < dt * L.flameShed) {
+        if (l.cold) this.mist(l.px[i], l.py[i], l.pz[i], 0.6 * l.width);
+        else this.add(LICK, l.px[i], l.py[i], l.pz[i], l.vx[i] * 0.35 + (Math.random() - 0.5), l.vy[i] * 0.2 + 0.8 + Math.random(), l.vz[i] * 0.35 + (Math.random() - 0.5),
+          0.25 + Math.random() * 0.25, (0.25 + u * 0.6) * l.width, 2.2, -1, 0.95);
+      }
+      if (!l.cold && u > 0.6 && L.flameSmoke > 0 && Math.random() < dt * L.flameSmoke * 0.7) this.smoke(l.px[i], l.py[i] + 0.3, l.pz[i], 0.6 + u * 0.6);
+    }
   }
 
   /** A gob's size now (m), by its state: grows a little in flight, more as a ground fire or a rising fireball. */
@@ -392,6 +436,7 @@ export class FlameFx {
     }
     this.glows.length = 0;
     this.blobs.flush();
+    this.tube.draw(this.streams.lines.values(), L);
     for (const [mesh, data, n] of [[this.hot, this.hotData, nh], [this.dark, this.darkData, nd], [this.lit, this.litData, nl]] as const) {
       mesh.count = n;
       if (n) {
