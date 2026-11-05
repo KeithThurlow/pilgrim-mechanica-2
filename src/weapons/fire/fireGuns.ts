@@ -132,7 +132,7 @@ export class FireGuns {
 /** Fire's sounds, generated: the flamers' roar (a loop of low rushing noise and crackle), the igniter's whoomp as the
  *  stream catches, napalm canisters bursting into flame. Level: Flame stream › Sound level. */
 const added = new WeakSet<object>();
-function addFireSounds(bf: Battlefield, v: WeaponValues) {
+export function addFireSounds(bf: Pick<Battlefield, "sfx">, v: WeaponValues) {
   const sfx = bf.sfx;
   if (added.has(sfx)) return;
   added.add(sfx);
