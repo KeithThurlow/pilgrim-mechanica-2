@@ -13,6 +13,7 @@ import { POI_DEFAULTS, POI_PARAMS, PoiField, type PoiKind, type PoiPlacement } f
 import { PoiPads, rawGround } from "../../src/world/poiPads";
 import { addModifier } from "../../src/world/modifiers";
 import { SiegeWalls } from "../../src/pois/fortressGround";
+import { ringR, ringSpan } from "../../src/pois/fortress";
 import { SITE_DEFAULTS, KIND_PARAMS, buildSite } from "../../src/pois/kinds";
 import { PoiDraw } from "../../src/pois/poiDraw";
 import { SalvageSim, SALVAGE_DEFAULTS, SALVAGE_PARAMS } from "../../src/pois/salvage";
@@ -172,11 +173,11 @@ function startPose() {
   hubs?.update(0, false, player.sim.pelvis);
   if (ringN >= 0) {
     // Just inside the first gate of ring N, facing in.
-    const g = rings[ringN].gates[0], d = rings[ringN].r - rings[ringN].top - rings[ringN].face - 6;
+    const g = rings[ringN].gates[0], d = ringR(rings[ringN], g.a) - ringSpan(rings[ringN]) - 4;
     const x = place.x + Math.sin(g.a) * d, z = place.z + Math.cos(g.a) * d;
     player.reset(x, z, g.a + Math.PI);
   } else if (params.has("near")) {
-    const g = rings[0].gates[0], d = rings[0].r + 25;
+    const g = rings[0].gates[0], d = ringR(rings[0], g.a) + 25;
     player.reset(place.x + Math.sin(g.a) * d, place.z + Math.cos(g.a) * d, g.a + Math.PI);
   } else player.reset(0, 0, 0);
 }

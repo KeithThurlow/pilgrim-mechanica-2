@@ -349,7 +349,9 @@ export class Fortresses {
     for (const ring of rings) for (const g of ring.gates) {
       if (!g.barred) continue;
       const hp = kept?.hp.get(g.id);
-      const s = this.gates.add(p.id, g, ring, floor, 1, this.walls.down.has(g.id));
+      // Each gate on the ground under it (a fortress's ground rolls, Keith 2026-11-05).
+      const gf = this.field.height(g.x, g.z) - wallHeight(L, g.x, g.z, this.walls.down);
+      const s = this.gates.add(p.id, g, ring, gf, 1, this.walls.down.has(g.id));
       if (hp !== undefined) s.hp = hp;
       f.gates.push(s);
     }
