@@ -938,6 +938,7 @@ app.onTick((rawDt) => {
   if (loop.quests.noSprint) { const k = loop.quests.moveScale; cmd = { x: cmd.x * k, z: cmd.z * k, sprint: false }; dashPressed = false; }
   if (sel.active || (carry.state !== "walking" && carry.state !== "inRange")) { trigger = false; held = [false, false, false, false]; }
   player.keys = held;
+  player.clickAim = !auto;
   player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
   player.lock = lock?.target ?? null;
   if (deployAsked) {
