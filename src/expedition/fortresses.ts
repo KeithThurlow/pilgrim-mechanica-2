@@ -25,7 +25,7 @@ import type { MechUnit } from "../game/mechUnit";
 import type { Prey } from "../pilot/quarry";
 import { TEAM } from "../game/factions";
 import { hash4, rng, type PoiPlacement } from "../world/pois";
-import { fenced, gateBox, regionOf, routeVia, wallHeight, type SiegeWalls } from "../pois/fortressGround";
+import { fenced, flowStep, gateBox, regionOf, routeVia, wallHeight, type SiegeWalls } from "../pois/fortressGround";
 import { ringR, ringSpan } from "../pois/fortress";
 import type { Layout } from "../pois/fortress";
 import { Gates, GATE_DEFAULTS, GATE_PARAMS, type GateEvent, type GateValues, type GateState } from "../pois/gates";
@@ -55,6 +55,7 @@ export const FORT_LIFE_DEFAULTS = {
   fortHear: 1,
   fortHurt: 1.5,
   fortDamage: 1,
+  fortFlowNear: 28,
 };
 export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues;
 
@@ -68,6 +69,7 @@ export const FORT_LIFE_PARAMS: Param[] = [
   { key: "fortSentries", label: "Share on the walls as sentries", min: 0, max: 1, step: 0.01, group: G, tip: "Posted on their yard's outer wall, shooting down at the mech outside", onRelease: true },
   { key: "fortHurt", label: "Bandit health × (garrison)", min: 0.2, max: 6, step: 0.05, group: G, tip: "Fortress bandits are picked fighters", onRelease: true },
   { key: "fortDamage", label: "Damage per round", min: 0, max: 10, step: 0.05, group: G },
+  { key: "fortFlowNear", label: "Path round the shacks past (m)", min: 0, max: 120, step: 1, group: G, tip: "Alert bandits further than this from the mech in its yard find their way round the shacks; nearer they come straight" },
   { key: "fortWake", label: "Outer yard wakes within (m of its wall)", min: 0, max: 500, step: 5, group: G },
   { key: "fortActive", label: "Stir within (m)", min: 50, max: 1500, step: 10, group: G },
   { key: "fortSally", label: "Comes out after the mech within (m of the wall)", min: 0, max: 400, step: 5, group: G, tip: "An alert yard leaves through an open gate to chase the mech this close outside; further off it holds" },
@@ -225,6 +227,7 @@ export class Fortresses {
         if (y.state === "alert" && (!hunting || d > v.fortGiveUp)) y.state = "idle";
         if (y.state === "asleep" && d < v.fortActive) y.state = "idle";
         else if (y.state === "idle" && d > v.fortActive * 1.3) y.state = "asleep";
+        const town = f.L.blocks.length > 0;
         const mr = regionOf(f.L, p.x, p.z), sallyOk = mr > 0 || d < R(0) + v.fortSally;
         for (let n = 0; n < y.slots.length; n++) {
           const i = y.slots[n];
@@ -244,7 +247,15 @@ export class Fortresses {
           // The rest: at the mech when it's on their side of the walls; round to an open gate and through it when it's
           // one wall away (and not far off outside); else they hold their posts.
           const br = regionOf(f.L, sw.px[i], sw.pz[i]);
-          if (br === mr) { sw.hold[i] = 0; continue; }
+          if (br === mr) {
+            sw.hold[i] = 0;
+            // In a town, further off than a fight: down the flow field round the shacks to it (straight once near).
+            if (town && mr > 0 && Math.hypot(sw.px[i] - p.x, sw.pz[i] - p.z) > v.fortFlowNear) {
+              const st = flowStep(f.L, sw.px[i], sw.pz[i], p.x, p.z, this.walls.down);
+              if (st) { sw.setTarget(i, st.x, sw.py[i], st.z, 0, true); sw.hurry[i] = 1; }
+            }
+            continue;
+          }
           const via = Math.abs(br - mr) === 1 && sallyOk ? routeVia(f.L, sw.px[i], sw.pz[i], p.x, p.z, this.walls.down) : null;
           if (via) { sw.hold[i] = 0; sw.setTarget(i, via.x, sw.py[i], via.z, 0, true); sw.hurry[i] = 1; continue; }
           sw.hold[i] = 1;
@@ -349,7 +360,9 @@ export class Fortresses {
     for (const ring of rings) for (const g of ring.gates) {
       if (!g.barred) continue;
       const hp = kept?.hp.get(g.id);
-      const s = this.gates.add(p.id, g, ring, floor, 1, this.walls.down.has(g.id));
+      // Each gate on the ground under it (a fortress's ground rolls, Keith 2026-11-05).
+      const gf = this.field.height(g.x, g.z) - wallHeight(L, g.x, g.z, this.walls.down);
+      const s = this.gates.add(p.id, g, ring, gf, 1, this.walls.down.has(g.id));
       if (hp !== undefined) s.hp = hp;
       f.gates.push(s);
     }
