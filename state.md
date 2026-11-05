@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Fortress sand no longer shows through container roofs (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-sand-under-containers`)
+- The solid core in the ground under the containers follows the rolling pad, the containers lie level, so along a 6 m container one end's core rose through the roof (jagged sand notches on the walls and shacks). The core now stays further under them: walls 4.4 m (`fortWallH`, was 5; the lowest stack tops out at 5.03), shacks 1 m under their top (was 0.6), loose stacks 0.8 (was 0.3). Lookout towers' core stands 0.7 m in from the footprint (`Block.inset`), so it stays inside the crossed middle level instead of showing as a sand face on the tower's side. Containers don't move: they're placed from the floor. The drawn wall and what you see are the same height; rounds and the walker meet the core 0.6 m lower.
+- Still there, in `Known gaps` terms: sand saw-teeth along container bases (the 1 m ground grid against the core's 0.35 m face). Would need the ground mesh to leave the core out.
+- Checked: fortress lab `?ring=0&manual&zoom=55` and `?ring=2` before and after on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · Fortress gates square to the straight walls (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-gates-square-to-walls`)
 - The gates faced the fortress's centre, as they did on round rings. On a straight wall that crosses the line from the centre at a slant the steel stood skewed in its gap and the sand plug in the ground showed as a wall-high wedge beside it. `GatesDraw` now turns the gate to the wall's line (`along`, exported from `src/pois/fortress.ts`), widens it by 1 / cos of the slant to fill the gap, stands the plates 6% over the plug's height and runs them 1 m into the rolling floor. Look only; the gate's sim, health and plug are unchanged.
 - Checked: fortress lab `?near&manual&zoom=70` before and after on the RTX 3080, full `npm test`.
