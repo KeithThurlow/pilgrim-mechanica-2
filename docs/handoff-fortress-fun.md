@@ -9,7 +9,7 @@ dangerous; bandits pop in from nowhere. Asks, in order (each its own PR, merged 
    `src/pois/fortress.ts` (polygon walls, main streets, back streets, lanes, shacks, back rows, compounds, cover),
    `src/world/poiPads.ts` (relief), `flowStep` in `src/pois/fortressGround.ts` (bandits round the shacks).
    Plans: `npx tsx tools/fortlayout-probe.ts --svg out.svg`.
-2. **Spawner containers**: bandits come out of particular containers (doors swing open, a stream runs out), instead of
+2. **Spawner containers** (done: `src/pois/spawners.ts`, `spawnersDraw.ts`, waves in `fortresses.ts`): bandits come out of particular containers (doors swing open, a stream runs out), instead of
    appearing in a heap; the waves and alarms use them. Destroyable later?
 3. **Lookout towers**: stacked containers standing up (3-4 high) with 1-2 bandits on top with grenades, rockets or guns;
    destructible (a target with health; the stack falls, the bandits with it).

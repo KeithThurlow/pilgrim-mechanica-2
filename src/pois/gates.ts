@@ -134,7 +134,7 @@ export class Gates implements Hittable {
 }
 
 /** Ray against a box with two horizontal axes (u, w) and y: distance or -1. */
-function slab(o: THREE.Vector3, d: THREE.Vector3, b: { cx: number; cy: number; cz: number; ux: number; uz: number; wx: number; wz: number; hu: number; hw: number; hy: number }, maxDist: number) {
+export function slab(o: THREE.Vector3, d: THREE.Vector3, b: { cx: number; cy: number; cz: number; ux: number; uz: number; wx: number; wz: number; hu: number; hw: number; hy: number }, maxDist: number) {
   const ox = o.x - b.cx, oy = o.y - b.cy, oz = o.z - b.cz;
   const axes: [number, number, number][] = [
     [ox * b.ux + oz * b.uz, d.x * b.ux + d.z * b.uz, b.hu],

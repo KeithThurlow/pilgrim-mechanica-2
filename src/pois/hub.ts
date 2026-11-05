@@ -58,7 +58,7 @@ export function hubLayout(p: PoiPlacement, v: HubValues): HubLayout {
     const a = f0 + (i / nf) * Math.PI * 2;
     return { id: `${p.id}/f${i}`, a, x: p.x + Math.sin(a) * v.hubFabR, z: p.z + Math.cos(a) * v.hubFabR };
   });
-  return { poi: p.id, x: p.x, z: p.z, rings: [roundRing(R, v.hubWallH, top, face, gates)], blocks: [], streets: [], reach: R + top + face, fabs };
+  return { poi: p.id, x: p.x, z: p.z, rings: [roundRing(R, v.hubWallH, top, face, gates)], blocks: [], streets: [], spawners: [], reach: R + top + face, fabs };
 }
 
 export function buildHub(p: PoiPlacement, v: HubValues): PoiSite {
