@@ -25,8 +25,6 @@ export const CONVOY_SOUND_PARAMS: Param[] = [
   { key: "tracksPitchBend", label: "Pitch follows speed", min: 0, max: 1, step: 0.01, group: G, tip: "0: one pitch whatever the speed; 1: twice as fast is an octave up" },
 ];
 
-const NAME = "tankTracks";
-
 /** A 2 s procedural loop: a low engine and ground rumble, the tread's plates clanking over the sprockets, a gravel hiss. */
 function tracksLoop(rate: number): Float32Array {
   const S = new Synth(rate), r = rng(9071), n = S.n(2), out = new Float32Array(n);
@@ -56,7 +54,7 @@ export class ConvoySound {
   private at = new THREE.Vector3();
 
   constructor(private sfx: Sfx, private v: ConvoySoundValues) {
-    if (!sfx.hasSound(NAME)) sfx.addSound(NAME, [tracksLoop(sfx.rate)], () => v.tracksLevel);
+    if (!sfx.hasSound("tankTracks")) sfx.addSound("tankTracks", [tracksLoop(sfx.rate)], () => v.tracksLevel);
   }
 
   /** Each frame: where the cars are, how fast the train rolls (m/s) and where the listener is. */
@@ -69,11 +67,11 @@ export class ConvoySound {
     const fall = d <= v.tracksNear ? 1 : Math.max(0, 1 - (d - v.tracksNear) / Math.max(1, v.tracksFar - v.tracksNear)) ** 2;
     const volume = fall * moving;
     // A recording swapped in (or out) since the loop started: start it again on the new sound.
-    if (this.loop && this.ver !== sfx.soundVersion(NAME)) { sfx.stopLoop(this.loop, 0.3); this.loop = null; }
+    if (this.loop && this.ver !== sfx.soundVersion("tankTracks")) { sfx.stopLoop(this.loop, 0.3); this.loop = null; }
     if (volume <= 0.001) { if (this.loop) { sfx.stopLoop(this.loop, 0.4); this.loop = null; } return; }
-    if (!this.loop) { this.loop = sfx.startSoundLoop(NAME, Math.random()); this.ver = sfx.soundVersion(NAME); if (!this.loop) return; }
+    if (!this.loop) { this.loop = sfx.startSoundLoop("tankTracks", Math.random()); this.ver = sfx.soundVersion("tankTracks"); if (!this.loop) return; }
     const pitch = Math.pow(Math.max(0.05, speed) / Math.max(0.1, v.tracksSpeedRef), v.tracksPitchBend);
-    sfx.setSoundLoop(this.loop, NAME, this.at.set(best.x, best.y + 1, best.z), volume, Math.max(0.5, Math.min(2, pitch)));
+    sfx.setSoundLoop(this.loop, "tankTracks", this.at.set(best.x, best.y + 1, best.z), volume, Math.max(0.5, Math.min(2, pitch)));
   }
 
   stop() { if (this.loop) { this.sfx.stopLoop(this.loop, 0.3); this.loop = null; } }

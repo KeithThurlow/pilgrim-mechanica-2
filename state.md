@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer roar and convoy tracks on recordings (Keith asked; Claude on `claude/flame-track-sounds`)
+- `flamethrower` loops as `flameRoar` (the steadiest 3 s, from 5.3 s after onset). `tanktracks` loops as `tankTracks` (12 s from 3.3 s), played by `ConvoySound` (`src/convoy/convoySound.ts`) at the car nearest the listener: full level within 25 m, silent past 260 m, pitch by speed, sliders in Tracks and trail › Convoy sound. Only the convoy lab has it so far.
+- The cut loops are limited by a few peaks: the roar sits 2 dB and the tracks 6 dB under their procedural loops' punch. `tools/samples-check.ts` now covers fire and convoy sounds and checks loops hold their level and meet at the join. `npm test`.
 ### 2026-11-05 · Sword sounds: the smash shaped on Keith's clip, recorded swipe and scrape, a pitch per sword (Keith asked; Claude on `claude/sword-sounds`)
 - Every unblocked cut now plays `swordSmash` over the old slam (0.55), then the scrape on metal (× 0.25 on flesh). The smash recipe (`src/weapons/weaponSound.ts`) was retuned to the car drop in Keith's video at 1:48: a flat noise wall that holds 0.12 s and falls about 40 dB/s, 0.8 s long, nearly no ring or low thump.
 - Recordings `bladeswipe` (+3 semitones) and `bladeonmetal` (0.6 s of it) in `src/audio/samples.ts`. Swipe pitch by sword: Breaker 1, Buster 0.68, Short 1.4; hits follow half of that (`Sword sound` group). `cutSample` gained seamless loops, `SampleDef.variants` a variant count.
