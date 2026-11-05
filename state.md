@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer fire sits on the drawn ground: a third of the swarm lab's CPU back (overnight perf pass; Claude on `claude/project-thread-4kcrrl-perf`)
+- Every flame gob, lick, ember and smoke puff asked the full ground function (`DuneField`) every frame: with both flamers going that was ~11% of the main thread. `FlameFx.ground` is now the battlefield's look ground (`ChunkGround`, the chunks' own triangles, as dust and small robots' feet already use), set in the new `Battlefield.useLookGround` (called by `useDents`). Fire is cosmetic, so no rules change; it may sit a few cm differently over fresh dents.
+- `?norender` in the combat labs now skips the GPU dent layer and GPU effects as the convoy lab does (a software GPU spent ~1.6 s a frame on them, so headless CPU numbers were meaningless), but keeps the look ground.
+- Measured (cloud box, `labs/swarm/?norender&dt=0.0167&left=flamer&right=flamer&swarm=200`, 15 s after 15 s warm-up, CPU tick): mean 10.6 → 6.8 ms, p95 15.2 → 11.4 ms. Checks: fire, flamefx, dents, crater, robots; full `npm test`.
 ### 2026-11-05 · The ground height function caches repeats (overnight perf pass; Claude on `claude/project-thread-4kcrrl-ground`)
 - `DuneField.sample` keeps a 1024-slot exact-match cache of the ground before the modifier and dents: 40% of calls in a duel are repeats of a point asked that tick (feet, normals, AI). Any field's `update()` empties every cache. `Noise2.fbm` has `get()` inlined (gradients as Float64 of the same float32 values).
 - Heights are bit-identical: `tools/terrain-bench.ts --write/--compare` over 800k points (desert and biomes), and the duel sim's result is the same. A 30 s duel: 745 → 484 ms. duel-check 194 → 136 s, `npm test` 3 min 32 s → 2 min 16 s. All-miss sampling (chunk builds) is within noise (+0–5%). Terrain check covers the cache.
