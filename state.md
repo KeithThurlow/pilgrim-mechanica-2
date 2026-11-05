@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Convoy lab CPU near a camp down a quarter: POI cells by number, summons' sliders read live (overnight perf pass; Claude on `claude/project-thread-4kcrrl-convoy`)
+- `PoiField.cell` (`src/world/pois.ts`) built a string key per level for every ground sample near POIs (the pads and the fortress walls both ask it): now a number key, plus the last cell per level remembered (cleared by `reset()`). poiPads.at + SiegeWalls.near: ~1.4 s → ~0.5 s of a 12 s profile.
+- `Allies` (`src/summon/allies.ts`) copied the whole lab values object (thousands of keys) into its robots' values every frame: its values now have the lab's as their prototype (read live, same answers), the companion and swarm overrides set on top each frame as before.
+- Convoy lab `?norender` keeps the look ground (`bf.useLookGround`), as the combat labs now do, so headless profiles match the drawn game.
+- Measured (cloud box, `labs/convoy/?norender&dt=0.0167&nearcamp`, 15 s after 20 s, 2 runs each, CPU tick): mean 15.6 → 11.5 ms, p95 26.7 → 19.2 ms. Checks: allies, summongear, replicas, drones, poi, fortress, convoy, expedition; full `npm test`.
 ### 2026-11-05 · duel-check runs in six parts side by side: npm test 2 min 22 s → 1 min 45 s (overnight perf pass; Claude on `claude/project-thread-4kcrrl-fort`)
 - A check can say `// @shards N`; `tools/run-checks.mjs` then runs it as N processes with `CHECK_SHARD=i/N`. `tools/duel-check.ts` (130 s on its own, the floor of `npm test`) gates its sections with `part(k)`: 0 rules and item levels, 1 AI duels and drills, 2 dodge chance per level, 3 painted spot, aim lag and cover, 4 scripted-player duels, 5 rail hit rates. Same checks, same values; summary lines print with their part. Run alone (`npx tsx tools/duel-check.ts`) it still runs everything (checked: passes).
 - `npm test` on 4 cores: 85/85 in 1 min 45 s (was 2 min 22 s). It is now CPU-bound (6 min 39 s of CPU), longest part 31 s; convoy-check (39 s) is the longest single check.

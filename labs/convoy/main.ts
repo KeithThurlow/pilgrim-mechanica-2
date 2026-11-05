@@ -176,6 +176,7 @@ const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
 // Ruts and prints as dents on a fine patch (Keith 2026-10-25).
 if (!app.params.has("norender")) bf.useDents(app.renderer, streamer);
+else bf.useLookGround(streamer);
 scene.add(bf.group);
 // Blast craters as real ground, as in the combat labs (Keith 2026-11-01: the labs' work in the convoy): the big walkers'
 // pulse and beam trenches, shells and rockets dent the sand (never the road: it is hard). Changed ground is queued and

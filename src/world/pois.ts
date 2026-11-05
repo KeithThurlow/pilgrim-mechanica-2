@@ -168,7 +168,11 @@ export function padSize(kind: PoiKind, v: PoiValues): { r: number; half: number 
  * cached as they're asked for; `reset()` after changing any value or the ground.
  */
 export class PoiField {
-  private cache = new Map<string, PoiPlacement | null>();
+  private cache = new Map<number, PoiPlacement | null>();
+  /** The last cell asked for at each level (height lookups come in runs inside one cell). */
+  private lastI: number[] = [];
+  private lastJ: number[] = [];
+  private lastP: (PoiPlacement | null)[] = [];
   /** Hand-placed POIs (a lab's showcase); kept clear of the generated ones by `keepClear`. */
   readonly extra: PoiPlacement[] = [];
   /** Circles no generated POI may reach into (x, z, radius). */
@@ -179,16 +183,20 @@ export class PoiField {
     this.biomeAt = biomeAt ?? ALL_DESERT;
   }
 
-  reset() { this.cache.clear(); }
+  reset() { this.cache.clear(); this.lastI.length = this.lastJ.length = this.lastP.length = 0; }
 
   /** Cell size of a level (m). */
   cellSize(level: number) { return this.v.poiCell * POI_LEVELS[level].scale; }
 
   /** The POI in cell (i, j) of a level, or null. */
   cell(level: number, i: number, j: number): PoiPlacement | null {
-    const key = level + ":" + i + ":" + j;
+    if (this.lastI[level] === i && this.lastJ[level] === j) return this.lastP[level];
+    // A number key (a string per lookup was most of a ground sample's cost near POIs): level, then i and j offset
+    // into 2^21 each, exact while |i|, |j| < 2^20 cells.
+    const key = (level * 2097152 + (i + 1048576)) * 2097152 + (j + 1048576);
     let p = this.cache.get(key);
     if (p === undefined) { p = this.place(level, i, j); this.cache.set(key, p); }
+    this.lastI[level] = i; this.lastJ[level] = j; this.lastP[level] = p;
     return p;
   }
 
