@@ -386,7 +386,7 @@ export class FlameFx {
       this.m.compose(this.p, this.q, this.s.set(sz, sz, sz));
       this.hot.setMatrixAt(nh, this.m);
       const o = nh * 4;
-      if (this.glows[g + 5]) { ha[o] = 0.3 + 0.5 * h; ha[o + 1] = 0.55 + 0.4 * h; ha[o + 2] = 0.9 + 0.4 * h; ha[o + 3] = 0.2 + 0.35 * h; }
+      if (this.glows[g + 5]) { ha[o] = 0.04 + 0.1 * h; ha[o + 1] = 0.15 + 0.2 * h; ha[o + 2] = 0.4 + 0.35 * h; ha[o + 3] = 0.2 + 0.35 * h; } // cold: a blue haze, not added white
       else { ha[o] = 0.9 + 0.6 * h; ha[o + 1] = 0.12 + 0.45 * h * h; ha[o + 2] = 0.03 + 0.15 * h * h * h; ha[o + 3] = 0.25 + 0.45 * h; }
       nh++;
     }
