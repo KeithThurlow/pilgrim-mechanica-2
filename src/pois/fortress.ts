@@ -137,6 +137,8 @@ export interface Ring { r: number; h: number; top: number; face: number; gates: 
  */
 export interface Block {
   x: number; z: number; a: number; len: number; dep: number; h: number; stack: number;
+  /** How far the solid core stands in from the footprint (m; 0.4 unless given). */
+  inset?: number;
   cols: number; door: number; drift: number; driftW: number;
   /** Which yard it stands in (0 the outer). */
   yard: number;
@@ -546,7 +548,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       } else { const a = r() * TAU, d0 = yIn(k, a, 4), d1 = yOut(k, a, 4); if (d1 - d0 < 2) continue; c = at(a, d0 + (d1 - d0) * r()); }
       if (towers.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < 30)) continue;
       const a = r() * Math.PI, id = `${p.id}/t${towers.length}`;
-      const b: Block = { x: c.x, z: c.z, a, len: BOX.long, dep: 2 * BOX.wide, h: 3 * BOX.high - 0.3, stack: 3, cols: 2, door: 0, drift: 0.8, driftW: 2.5, yard: k, kind: "tower", id };
+      const b: Block = { x: c.x, z: c.z, a, len: BOX.long, dep: 2 * BOX.wide, h: 3 * BOX.high - 0.3, inset: 0.7, stack: 3, cols: 2, door: 0, drift: 0.8, driftW: 2.5, yard: k, kind: "tower", id };
       if (yardAt(c.x, c.z, 4) !== k || !fits(b)) continue;
       blocks.push(b);
       towers.push({ id, block: blocks.length - 1, x: c.x, z: c.z, a, h: b.h, yard: k });
