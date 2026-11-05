@@ -315,6 +315,22 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer fuel and frost mist keep their colour on the sand (Keith's render pass: fuel "almost pure white", mist "opaque cotton wool"; Claude on `claude/project-thread-q7b0ap`)
+- The fuel blobs, licks, halos and mist were added on top in HDR (up to 2.2) with tone mapping off, so on bright sand they clipped to white. Now the blobs (`src/fx/flameBlobs.ts`) and a new over-drawn billboard layer in `src/fx/flameFx.ts` (licks, halos, mist) draw over the scene in colours inside 0..1: fuel pale yellow off the cone, orange-yellow along the arc, orange to deep red on the sand and in the burnt-out fireballs. Mist is pale blue at 0.3 alpha (was 0.55 added). Embers, heat glows and the nozzle cone stay added. Checked: typecheck, `flamefx-check`, full `npm test`; not seen rendered here.
+
+### 2026-11-05 · Shack doors and awnings at the right height (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-shack-doors`)
+- Door plates and awnings took off the shack's core height, but they stand at its face, off the core, so they went into the ground: doors buried, two-high awnings under the sand and one-high ones 1.3 m up. Doors now sit on the face's sand (`FACE_DRIFT`), awnings at 2.7 m, door-end plates the same (`box`'s `doorCy`). Look only. `src/pois/fortress.ts`.
+- Checked: fortress lab `?ring=0&manual&zoom=40` on the RTX 3080, full `npm test`.
+
+### 2026-11-05 · Fortress sand no longer shows through container roofs (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-sand-under-containers`)
+- The solid core in the ground under the containers follows the rolling pad, the containers lie level, so along a 6 m container one end's core rose through the roof (jagged sand notches on the walls and shacks). The core now stays further under them: walls 4.4 m (`fortWallH`, was 5; the lowest stack tops out at 5.03), shacks 1 m under their top (was 0.6), loose stacks 0.8 (was 0.3). Lookout towers' core stands 0.7 m in from the footprint (`Block.inset`), so it stays inside the crossed middle level instead of showing as a sand face on the tower's side. Containers don't move: they're placed from the floor. The drawn wall and what you see are the same height; rounds and the walker meet the core 0.6 m lower.
+- Still there, in `Known gaps` terms: sand saw-teeth along container bases (the 1 m ground grid against the core's 0.35 m face). Would need the ground mesh to leave the core out.
+- Checked: fortress lab `?ring=0&manual&zoom=55` and `?ring=2` before and after on the RTX 3080, full `npm test`.
+
+### 2026-11-05 · Fortress gates square to the straight walls (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-gates-square-to-walls`)
+- The gates faced the fortress's centre, as they did on round rings. On a straight wall that crosses the line from the centre at a slant the steel stood skewed in its gap and the sand plug in the ground showed as a wall-high wedge beside it. `GatesDraw` now turns the gate to the wall's line (`along`, exported from `src/pois/fortress.ts`), widens it by 1 / cos of the slant to fill the gap, stands the plates 6% over the plug's height and runs them 1 m into the rolling floor. Look only; the gate's sim, health and plug are unchanged.
+- Checked: fortress lab `?near&manual&zoom=70` before and after on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · Convoy lab CPU near a camp down a quarter: POI cells by number, summons' sliders read live (overnight perf pass; Claude on `claude/project-thread-4kcrrl-convoy`)
 - `PoiField.cell` (`src/world/pois.ts`) built a string key per level for every ground sample near POIs (the pads and the fortress walls both ask it): now a number key, plus the last cell per level remembered (cleared by `reset()`). poiPads.at + SiegeWalls.near: ~1.4 s → ~0.5 s of a 12 s profile.
 - `Allies` (`src/summon/allies.ts`) copied the whole lab values object (thousands of keys) into its robots' values every frame: its values now have the lab's as their prototype (read live, same answers), the companion and swarm overrides set on top each frame as before.

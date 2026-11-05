@@ -27,7 +27,7 @@ export const FORT_DEFAULTS = {
   fortBackStreets: 4,
   fortCompounds: 6,
   fortShift: 0.25,
-  fortWallH: 5,
+  fortWallH: 4.4, // under the lowest stack (5.03 m) by more than the pad rolls along a container, or sand shows through its roof
   fortWallTop: 0.8,
   fortWallFace: 0.35,
   fortDrift: 2.2,
@@ -91,7 +91,7 @@ export const FORT_PARAMS: Param[] = [
   { key: "fortTowers", label: "Lookout towers in the outer yard", min: 0, max: 12, step: 1, group: T, tip: "Stacked containers with a crew on top; one less per yard inward (the keep at least 1)", onRelease: true },
   { key: "fortCover", label: "Loose container stacks per yard", min: 0, max: 20, step: 1, group: T, onRelease: true },
   { key: "fortClutter", label: "Clutter in the yards", min: 0, max: 300, step: 1, group: T, onRelease: true },
-  { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The containers' solid height: the lowest stack (two lying, 5.2 m) must stay above it", onRelease: true },
+  { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The solid core under the containers: the lowest stack (two lying, 5 m on level ground, down to 4.5 at one end on the rolling pad) must stay above it", onRelease: true },
   { key: "fortWallTop", label: "Container footprint half-width (m)", min: 0.3, max: 1.2, step: 0.05, group: W, tip: "The solid part under each container; keep it inside the box (1.2)", onRelease: true },
   { key: "fortWallFace", label: "Container face slope width (m)", min: 0.1, max: 1, step: 0.05, group: W, onRelease: true },
   { key: "fortDrift", label: "Sand drift height (m)", min: 0, max: 4, step: 0.1, group: W, tip: "Banked against both sides of the containers", onRelease: true },
@@ -106,6 +106,8 @@ export const FORT_PARAMS: Param[] = [
 
 /** Container sizes (m): long side, short side, height. */
 export const BOX = { long: 6.06, wide: 2.44, high: 2.59 };
+/** How high the sand drift stands at a shack's face: what a prop there sits on, off the solid core under the shack. */
+const FACE_DRIFT = 0.55;
 
 /** A way through a ring: a steel barricade until it's down, then a gap. */
 export interface Gate {
@@ -137,6 +139,8 @@ export interface Ring { r: number; h: number; top: number; face: number; gates: 
  */
 export interface Block {
   x: number; z: number; a: number; len: number; dep: number; h: number; stack: number;
+  /** How far the solid core stands in from the footprint (m; 0.4 unless given). */
+  inset?: number;
   cols: number; door: number; drift: number; driftW: number;
   /** Which yard it stands in (0 the outer). */
   yard: number;
@@ -477,7 +481,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
     const stack = r() < v.fortTwoHigh ? 2 : 1;
     // across: the containers' long sides run away from the street (their door ends to it); else along it.
     const a = across ? face + Math.PI : face + Math.PI / 2;
-    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 0.6, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack", endOn: across };
+    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 1, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack", endOn: across };
   };
   const maxB = Math.round(v.fortBuildings);
   const inAny = (x: number, z: number, m: number) => blocks.some((b) => Math.hypot(b.x - x, b.z - z) < Math.hypot(b.len, b.dep) / 2 + m);
@@ -546,7 +550,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       } else { const a = r() * TAU, d0 = yIn(k, a, 4), d1 = yOut(k, a, 4); if (d1 - d0 < 2) continue; c = at(a, d0 + (d1 - d0) * r()); }
       if (towers.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < 30)) continue;
       const a = r() * Math.PI, id = `${p.id}/t${towers.length}`;
-      const b: Block = { x: c.x, z: c.z, a, len: BOX.long, dep: 2 * BOX.wide, h: 3 * BOX.high - 0.3, stack: 3, cols: 2, door: 0, drift: 0.8, driftW: 2.5, yard: k, kind: "tower", id };
+      const b: Block = { x: c.x, z: c.z, a, len: BOX.long, dep: 2 * BOX.wide, h: 3 * BOX.high - 0.3, inset: 0.7, stack: 3, cols: 2, door: 0, drift: 0.8, driftW: 2.5, yard: k, kind: "tower", id };
       if (yardAt(c.x, c.z, 4) !== k || !fits(b)) continue;
       blocks.push(b);
       towers.push({ id, block: blocks.length - 1, x: c.x, z: c.z, a, h: b.h, yard: k });
@@ -561,7 +565,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       if (d1 - d0 < 3) continue;
       const c = at(a, d0 + (d1 - d0) * r());
       const stack = r() < 0.5 ? 1 : 2;
-      const b: Block = { x: c.x, z: c.z, a: r() * Math.PI, len: BOX.long, dep: BOX.wide, h: stack * BOX.high - 0.3, stack, cols: 1, door: 0, drift: 0.9, driftW: 3, yard: k, kind: "cover" };
+      const b: Block = { x: c.x, z: c.z, a: r() * Math.PI, len: BOX.long, dep: BOX.wide, h: stack * BOX.high - 0.8, stack, cols: 1, door: 0, drift: 0.9, driftW: 3, yard: k, kind: "cover" };
       if (!fits(b)) continue;
       blocks.push(b); n++;
     }
@@ -602,7 +606,7 @@ function runK(ring: Ring, a: number) {
 }
 
 /** Heading of the ring's line at heading a (the tangent, for laying containers along it). */
-function along(ring: Ring, a: number) {
+export function along(ring: Ring, a: number) {
   const e = 1e-3, R = ringR(ring, a), dR = (ringR(ring, a + e) - ringR(ring, a - e)) / (2 * e);
   const tx = Math.cos(a) * R + Math.sin(a) * dR, tz = -Math.sin(a) * R + Math.cos(a) * dR;
   return Math.atan2(tx, tz);
@@ -625,11 +629,11 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
   const ca = Math.cos(p.yaw), sa = Math.sin(p.yaw);
   const loc = (x: number, z: number): [number, number] => { const dx = x - p.x, dz = z - p.z; return [dx * ca - dz * sa, dx * sa + dz * ca]; };
   // A prop's y is from the ground under its centre; on a wall's line that ground is the container plug (h).
-  const box = (x: number, z: number, cy: number, size: [number, number, number], tone: Tone, yaw: number, pitch = 0, roll = 0, door = 1) => {
+  const box = (x: number, z: number, cy: number, size: [number, number, number], tone: Tone, yaw: number, pitch = 0, roll = 0, door = 1, doorCy = cy) => {
     const [lx, lz] = loc(x, z);
     b.prop("box", lx, lz, cy, size, tone, yaw - p.yaw, pitch, roll);
     // The doors' end: a darker plate (door 1: at +z of the box, -1: at -z, 0: none).
-    if (size[2] > 4 && door) b.prop("box", lx + door * Math.sin(yaw - p.yaw) * (size[2] / 2 + 0.02), lz + door * Math.cos(yaw - p.yaw) * (size[2] / 2 + 0.02), cy, [size[0] * 0.96, size[1] * 0.94, 0.06], "dark", yaw - p.yaw, pitch, roll);
+    if (size[2] > 4 && door) b.prop("box", lx + door * Math.sin(yaw - p.yaw) * (size[2] / 2 + 0.02), lz + door * Math.cos(yaw - p.yaw) * (size[2] / 2 + 0.02), doorCy, [size[0] * 0.96, size[1] * 0.94, 0.06], "dark", yaw - p.yaw, pitch, roll);
   };
 
   // The walls: containers along every ring's line, stood on end or stacked two high lying along it, leaving the gates.
@@ -677,7 +681,7 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
       for (let c = 0; c < n; c++) {
         const off = (c - (k.cols - 1) / 2) * BOX.wide;
         const t = k.kind === "shack" && b.r() < 0.6 ? tone : b.one(BOX_TONES);
-        box(k.x + wx * off + b.jit(0.08), k.z + wz * off + b.jit(0.08), BOX.high * (j + 0.5) - 0.15 - k.h, [BOX.wide, BOX.high, BOX.long], t, k.a + b.jit(0.04), 0, 0, endOn && j === 0 ? Math.sign(fu) : 0);
+        box(k.x + wx * off + b.jit(0.08), k.z + wz * off + b.jit(0.08), BOX.high * (j + 0.5) - 0.15 - k.h, [BOX.wide, BOX.high, BOX.long], t, k.a + b.jit(0.04), 0, 0, endOn && j === 0 ? Math.sign(fu) : 0, BOX.high * (j + 0.5) - 0.15 - FACE_DRIFT);
       }
     }
     if (k.kind !== "shack") continue;
@@ -687,13 +691,13 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
       // Door plates cut in the long side facing the street.
       for (let c = 0; c < Math.min(2, k.cols); c++) {
         const [lx, lz] = loc(k.x + dx * (depth / 2 + 0.02) + ux * b.jit(1.5), k.z + dz * (depth / 2 + 0.02) + uz * b.jit(1.5));
-        b.prop("box", lx, lz, BOX.high / 2 - 0.2 - k.h, [1.4, 2.1, 0.06], "dark", k.door - p.yaw, 0, 0);
+        b.prop("box", lx, lz, BOX.high / 2 - 0.2 - FACE_DRIFT, [1.4, 2.1, 0.06], "dark", k.door - p.yaw, 0, 0);
       }
     }
     if (b.r() < 0.45) {
       // An awning out over the street side.
       const [lx, lz] = loc(k.x + dx * (depth / 2 + 1.1), k.z + dz * (depth / 2 + 1.1));
-      b.prop("cloth", lx, lz, BOX.high + 0.1 - k.h + 0.6, [width * 0.9, 0.05, 2.4], "cloth", k.door - p.yaw, -0.25, b.jit(0.08));
+      b.prop("cloth", lx, lz, BOX.high + 0.1, [width * 0.9, 0.05, 2.4], "cloth", k.door - p.yaw, -0.25, b.jit(0.08));
     }
     if (b.r() < 0.35) {
       const [lx, lz] = loc(k.x + dx * (depth / 2 + 0.8) + ux * b.jit(width / 2), k.z + dz * (depth / 2 + 0.8) + uz * b.jit(width / 2));

@@ -49,6 +49,10 @@ export class FlameFx {
   readonly group = new THREE.Group();
   private hot: THREE.InstancedMesh;
   private dark: THREE.InstancedMesh;
+  /** Flame and mist billboards drawn over the scene, not added to it (Keith's render pass 2026-11-05: added HDR fire
+   *  clipped to white on the bright sand), so their colour survives in daylight. */
+  private lit: THREE.InstancedMesh;
+  private litData = new THREE.InstancedBufferAttribute(new Float32Array(FLAME_MAX * 4), 4);
   private hotData = new THREE.InstancedBufferAttribute(new Float32Array(FLAME_MAX * 4), 4);
   private darkData = new THREE.InstancedBufferAttribute(new Float32Array(FLAME_MAX * 4), 4);
   // Particles (structure of arrays).
@@ -109,7 +113,7 @@ export class FlameFx {
 
   /** Where the particles land: the battlefield hands in its look ground (the drawn chunks) once it has one. */
   constructor(public ground: Ground) {
-    const mk = (data: THREE.InstancedBufferAttribute, additive: boolean) => {
+    const mk = (data: THREE.InstancedBufferAttribute, additive: boolean, fray = !additive) => {
       data.setUsage(THREE.DynamicDrawUsage);
       const d = instancedBufferAttribute<"vec4">(data);
       const r = uv().mul(2).sub(1).length();
@@ -118,8 +122,8 @@ export class FlameFx {
       const soft = float(1).sub(smoothstep(additive ? 0.15 : 0.35, 1, r)).mul(d.w);
       // Smoke and soot billow: noise in world space frays the dark puffs as they drift through it.
       // (Cheap: a couple of sines in world space, no per-pixel noise; Keith 2026-11-05 saw the frame rate drop.)
-      const pw = positionWorld, fray = sin(pw.x.mul(2.3).add(time.mul(0.7))).mul(sin(pw.z.mul(2.1).sub(pw.y.mul(1.7)))).mul(0.3).add(0.85);
-      mat.opacityNode = additive ? soft : soft.mul(fray);
+      const pw = positionWorld, frayN = sin(pw.x.mul(2.3).add(time.mul(0.7))).mul(sin(pw.z.mul(2.1).sub(pw.y.mul(1.7)))).mul(0.3).add(0.85);
+      mat.opacityNode = fray ? soft.mul(frayN) : soft;
       if (additive) mat.blending = THREE.AdditiveBlending;
       const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, FLAME_MAX);
       mesh.count = 0;
@@ -129,7 +133,9 @@ export class FlameFx {
     };
     this.dark = mk(this.darkData, false);
     this.hot = mk(this.hotData, true);
-    this.group.add(this.dark, this.hot, this.blobs.group);
+    this.lit = mk(this.litData, false, false);
+    this.lit.renderOrder = 5;
+    this.group.add(this.dark, this.lit, this.hot, this.blobs.group);
   }
 
   private add(k: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, heat = 1, cold = 0): number {
@@ -289,8 +295,8 @@ export class FlameFx {
   private draw(camera: THREE.Camera) {
     const L = this.look;
     this.q.copy(camera.quaternion);
-    const ha = this.hotData.array as Float32Array, da = this.darkData.array as Float32Array;
-    let nh = 0, nd = 0;
+    const ha = this.hotData.array as Float32Array, da = this.darkData.array as Float32Array, la = this.litData.array as Float32Array;
+    let nh = 0, nd = 0, nl = 0;
     for (let i = 0; i < this.n; i++) {
       const t = this.age[i] / this.life[i], k = this.kind[i];
       this.p.set(this.px[i], this.py[i], this.pz[i]);
@@ -337,7 +343,7 @@ export class FlameFx {
           ba = u < 0.6 ? 0.9 : 0.9 * (1 - (u - 0.6) / 0.4);
         }
         r = br * 0.7; gg = bg * 0.6; b = bb * 0.5; a = ba * 0.8;
-        if (cold) { r = 0.45 + 0.35 * u; gg = 0.7 + 0.2 * u; b = 1.15 - 0.2 * u; a = 0.55 * (1 - u * u); sz *= st === FLY ? 1.6 : 2; }
+        if (cold) { r = 0.62 + 0.2 * u; gg = 0.8 + 0.1 * u; b = 0.95; a = 0.3 * (1 - u * u); sz *= st === FLY ? 1.6 : 2; }
         else if (L.flameBlob > 0) {
           // The solid ball: stretched along its flight by its speed (a stream of fuel), flat as a ground fire.
           const sp = Math.hypot(this.vx[i], this.vy[i], this.vz[i]);
@@ -347,23 +353,31 @@ export class FlameFx {
             const o = this.nLight++ * 4; this.lightPts[o] = this.px[i]; this.lightPts[o + 1] = this.py[i] + 0.6; this.lightPts[o + 2] = this.pz[i]; this.lightPts[o + 3] = sz;
           }
           this.blobs.blob(this.px[i], this.py[i] + sz * 0.25 * L.flameBlob * (1 - flat * 0.6), this.pz[i], sz * 0.42 * L.flameBlob / Math.sqrt(stretch),
-            this.vx[i], this.vy[i], this.vz[i], flat, br * h, bg * h, bb * h, ba, this.seed[i], L.flameLump * (st === FLY ? 0.6 : 1.2), core, stretch);
+            this.vx[i], this.vy[i], this.vz[i], flat, Math.min(1, br * h / 2.2), Math.min(1, bg * h / 2.2), Math.min(1, bb * h / 2.2), ba, this.seed[i], L.flameLump * (st === FLY ? 0.6 : 1.2), core, stretch);
           a *= L.flameHalo;
         }
       } else {
         // Licks, embers, mist: the flat particles.
         sz = this.size[i] * (1 + (this.grow[i] - 1) * Math.sqrt(t));
-        if (cold) { r = 0.45 + 0.35 * t; gg = 0.7 + 0.2 * t; b = 1.15 - 0.2 * t; a = 0.55 * (1 - t * t); }
+        if (cold) { r = 0.62 + 0.2 * t; gg = 0.8 + 0.1 * t; b = 0.95; a = 0.3 * (1 - t * t); }
         else if (k === EMBER) { r = 1.6; gg = 0.7; b = 0.25; a = 1 - t; }
         else if (t < 0.15) { const u = t / 0.15; r = 1.8; gg = 1.5 - 0.5 * u; b = 0.8 - 0.6 * u; a = 0.9; }
         else if (t < 0.6) { const u = (t - 0.15) / 0.45; r = 1.8 - 0.6 * u; gg = 1.0 - 0.65 * u; b = 0.2 - 0.15 * u; a = 0.9 - 0.3 * u; }
         else { const u = (t - 0.6) / 0.4; r = 1.2 - 0.9 * u; gg = 0.35 - 0.3 * u; b = 0.05; a = 0.6 * (1 - u); }
       }
-      if (a > 0.01 && nh < FLAME_MAX) {
-        this.m.compose(this.p, this.q, this.s.set(sz, sz * (k === LICK ? 1.4 : 1), sz));
+      if (a > 0.01 && k === EMBER && nh < FLAME_MAX) {
+        // Embers stay added (tiny sparks, they should glow).
+        this.m.compose(this.p, this.q, this.s.set(sz, sz, sz));
         this.hot.setMatrixAt(nh, this.m);
         const o = nh * 4; ha[o] = r * h; ha[o + 1] = gg * h; ha[o + 2] = b * h; ha[o + 3] = a;
         nh++;
+      } else if (a > 0.01 && k !== EMBER && nl < FLAME_MAX) {
+        // Licks, halos and mist: drawn over, in colours that fit 0..1 (the fire's HDR values over 1.8 as full).
+        this.m.compose(this.p, this.q, this.s.set(sz, sz * (k === LICK ? 1.4 : 1), sz));
+        this.lit.setMatrixAt(nl, this.m);
+        const o = nl * 4, f = cold ? 1 : h / 1.8;
+        la[o] = Math.min(1, r * f); la[o + 1] = Math.min(1, gg * f); la[o + 2] = Math.min(1, b * f); la[o + 3] = cold ? a : a * 0.85;
+        nl++;
       }
     }
     for (let g = 0; g + 5 < this.glows.length + 1 && nh < FLAME_MAX; g += 6) {
@@ -378,7 +392,7 @@ export class FlameFx {
     }
     this.glows.length = 0;
     this.blobs.flush();
-    for (const [mesh, data, n] of [[this.hot, this.hotData, nh], [this.dark, this.darkData, nd]] as const) {
+    for (const [mesh, data, n] of [[this.hot, this.hotData, nh], [this.dark, this.darkData, nd], [this.lit, this.litData, nl]] as const) {
       mesh.count = n;
       if (n) {
         mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, n * 16); mesh.instanceMatrix.needsUpdate = true;

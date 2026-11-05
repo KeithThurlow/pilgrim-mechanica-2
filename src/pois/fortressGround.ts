@@ -61,7 +61,7 @@ export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<st
     const bx = x - b.x, bz = z - b.z;
     const ca = Math.cos(b.a), sa = Math.sin(b.a);
     // Box frame: long side along heading a.
-    const u = Math.abs(bx * sa + bz * ca) - (b.len / 2 - 0.4), w = Math.abs(bx * ca - bz * sa) - (b.dep / 2 - 0.4);
+    const ins = b.inset ?? 0.4, u = Math.abs(bx * sa + bz * ca) - (b.len / 2 - ins), w = Math.abs(bx * ca - bz * sa) - (b.dep / 2 - ins);
     const out = Math.hypot(Math.max(0, u), Math.max(0, w));
     if (out > b.driftW) continue;
     const core = b.h * (1 - smooth(0, 0.35, out));
