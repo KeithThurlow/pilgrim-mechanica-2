@@ -159,6 +159,8 @@ export class InfantrySwarm {
   private nextUid = 1;
   /** Asleep: skipped by the step (a camp that has not woken, or one the player left; bodies and the downed still settle). */
   readonly frozen = new Uint8Array(INFANTRY_MAX);
+  /** Chill (src/game/chill.ts, host): 1 at full speed, less while chilled, 0 frozen solid (no thinking, no moving, still hittable). */
+  readonly pace = new Float32Array(INFANTRY_MAX).fill(1);
   /** Calm: walks to its target spot and stands there, never shooting or afraid (a patrol, or the way home to the camp). */
   readonly calm = new Uint8Array(INFANTRY_MAX);
   /** Calm but hurrying (a fortress's garrison on its way round to a gate): walks to its target spot at a run. */
@@ -250,7 +252,7 @@ export class InfantrySwarm {
       this.range[i] = this.rand();
       this.flank[i] = this.rand() * 2 - 1;
       this.slope[i] = 0; this.fallYaw[i] = 0;
-      this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0; this.hold[i] = 0; this.hurry[i] = 0;
+      this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0; this.hold[i] = 0; this.hurry[i] = 0; this.pace[i] = 1;
       this.diveT[i] = 0; this.evadeT[i] = 0; this.rolledFor[i] = 0; this.trampleCd[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
@@ -339,7 +341,7 @@ export class InfantrySwarm {
       const s = state[i];
       cx[i] = 0; cz[i] = 0;
       if (s === EMPTY) continue;
-      if (this.frozen[i] && s < DOWN) continue;
+      if ((this.frozen[i] || this.pace[i] < 0.02) && s < DOWN) continue;
       stateTime[i] += dt;
       if (this.trampleCd[i] > 0) this.trampleCd[i] -= dt;
       if (this.evadeT[i] > 0) this.evadeT[i] -= dt;
@@ -472,10 +474,10 @@ export class InfantrySwarm {
     // Move, apply the hard gaps, keep clear of the mech, stand on the sand.
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
-      if (s >= DEAD || (this.frozen[i] && s < DOWN)) continue;
+      if (s >= DEAD || ((this.frozen[i] || this.pace[i] < 0.02) && s < DOWN)) continue;
       const target = this.targetOf(i, base), calm = this.calm[i] === 1;
-      const ox = px[i], oz = pz[i], oy = py[i];
-      let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
+      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i];
+      let x = ox + vx[i] * pdt + cx[i], z = oz + vz[i] * pdt + cz[i];
       // Never inside the mech's body (keepOut is a soft steer above, so the body can reach them: trample).
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = calm ? 0 : target.radius + BODY_SKIN;
       if (d < m) {

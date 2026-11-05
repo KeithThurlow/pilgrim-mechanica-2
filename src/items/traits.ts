@@ -22,6 +22,7 @@ export const TRAITS: Trait[] = [
   { id: "blade", name: "Blade", text: "A blade" },
   { id: "stream", name: "Stream", text: "Sprays a stream of burning fuel" },
   { id: "fire", name: "Fire", text: "Sets what it hits burning; heats metal" },
+  { id: "cold", name: "Cold", text: "Chills what it hits: slows it, then freezes it solid" },
   { id: "rapid", name: "Rapid", text: "Many light hits a second" },
   { id: "spin", name: "Spin-up", text: "Spins up before it fires" },
   { id: "spread", name: "Spread", text: "Fires in a cone" },
@@ -67,6 +68,7 @@ export const WEAPON_TRAITS: Record<string, string[]> = {
   // canisters take Overpressure like any shell. No fire Protocols yet (open for Keith).
   "flamer-light": ["stream", "fire", "spread", "magazine"], "inferno-medium": ["stream", "fire", "spread", "magazine"],
   "sh-napalm": ["shells", "fire"],
+  "frost-light": ["stream", "cold", "spread", "magazine"], "cryo-medium": ["stream", "cold", "spread", "magazine"],
   "sword-light": SWORD, "sword-heavy": [...SWORD, "pierce"], "sword-short": [...SWORD, "rapid"],
 };
 

@@ -101,8 +101,16 @@ export class RobotsDraw {
   private hm: ReadonlyMap<number, number> | null = null;
   private static HOT = new THREE.Color(2.4, 0.55, 0.12);
   private static WHITE_HOT = new THREE.Color(2.6, 1.6, 0.7);
+  /** Chill (src/game/chill.ts): each robot's chill 0..1 by index, 2 when frozen solid. */
+  chillMap: (() => ReadonlyMap<number, number> | null) | null = null;
+  private cm: ReadonlyMap<number, number> | null = null;
+  private static ICY = new THREE.Color(0.55, 0.85, 1.25);
+  private static FROZEN = new THREE.Color(1.05, 1.25, 1.45);
   /** Tint a body's colour toward red, then orange-white, by its heat. */
   private heatTint(i: number, c: THREE.Color) {
+    const ch = this.cm?.get(i) ?? 0;
+    // Chilled bodies frost over toward pale blue; frozen solid, near white ice.
+    if (ch > 0.02) c.lerp(ch >= 2 ? RobotsDraw.FROZEN : RobotsDraw.ICY, ch >= 2 ? 0.8 : Math.min(1, ch) * 0.6);
     const h = this.hm?.get(i) ?? 0;
     if (h <= 0.01 || this.heatGlow <= 0) return;
     const k = Math.min(1, h * this.heatGlow);
@@ -207,6 +215,7 @@ export class RobotsDraw {
     this.time += dt;
     this.eyeN = 0;
     this.hm = this.heatMap?.() ?? null;
+    this.cm = this.chillMap?.() ?? null;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;

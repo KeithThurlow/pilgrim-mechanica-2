@@ -29,6 +29,8 @@ export class FlameFx {
   private ign = new Float32Array(FLAME_MAX);
   private kind = new Uint8Array(FLAME_MAX);
   private heat = new Float32Array(FLAME_MAX);
+  /** The freeze ray's mist (Keith 2026-11-05): drawn icy blue-white instead of fire. */
+  private cold = new Uint8Array(FLAME_MAX);
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private p = new THREE.Vector3();
@@ -58,17 +60,23 @@ export class FlameFx {
     this.group.add(this.dark, this.hot);
   }
 
-  private add(k: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, heat = 1): number {
+  private add(k: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, heat = 1, cold = 0): number {
     if (this.n >= FLAME_MAX) return -1;
     const i = this.n++;
+    this.cold[i] = cold;
     this.kind[i] = k; this.px[i] = x; this.py[i] = y; this.pz[i] = z; this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
     this.age[i] = 0; this.life[i] = life; this.size[i] = size; this.grow[i] = grow; this.ign[i] = ign; this.heat[i] = heat;
     return i;
   }
 
   /** A gob of the stream: leaves at (x, y, z) at velocity v, dark until `ign` s, then flame (growing `grow` × over life). */
-  gob(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number) {
-    this.add(GOB, x, y, z, vx, vy, vz, life, size, grow, ign);
+  gob(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, cold = false) {
+    this.add(GOB, x, y, z, vx, vy, vz, life, size, grow, cold ? -1 : ign, 1, cold ? 1 : 0);
+  }
+
+  /** A wisp of freezing mist (chilled things, the freeze ray's nozzle). */
+  mist(x: number, y: number, z: number, k = 1) {
+    this.add(LICK, x, y, z, (Math.random() - 0.5) * 0.5, -0.2 + Math.random() * 0.5, (Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.5, (0.3 + Math.random() * 0.3) * k, 2.4, -1, 0.6, 1);
   }
 
   /** The igniter's pilot flame: a tiny lick at the nozzle (every frame while fitted). */
@@ -82,7 +90,9 @@ export class FlameFx {
   }
 
   /** Hot metal glowing at a point this frame: `size` m across, heat 0..1 (red, then orange-white). */
-  glow(x: number, y: number, z: number, size: number, heat: number) { if (this.glows.length < 4 * 512) this.glows.push(x, y, z, size * (0.6 + 0.4 * heat), heat); }
+  glow(x: number, y: number, z: number, size: number, heat: number) { if (this.glows.length < 6 * 512) this.glows.push(x, y, z, size * (0.6 + 0.4 * heat), heat, 0); }
+  /** Frost on a chilled thing this frame: k 0..1 (1: frozen solid, brighter). */
+  frost(x: number, y: number, z: number, size: number, k: number) { if (k > 0.03 && this.glows.length < 6 * 512) this.glows.push(x, y, z, size * (0.6 + 0.4 * k), k, 1); }
 
   ember(x: number, y: number, z: number) {
     this.add(EMBER, x, y, z, (Math.random() - 0.5) * 2, 1.5 + Math.random() * 3, (Math.random() - 0.5) * 2, 0.6 + Math.random() * 0.9, 0.06 + Math.random() * 0.05, 1, -1);
@@ -94,10 +104,11 @@ export class FlameFx {
     for (let i = 0; i < this.n; i++) {
       this.age[i] += dt;
       if (this.age[i] >= this.life[i]) continue;
-      const k = this.kind[i], lit = this.age[i] >= this.ign[i];
+      const k = this.kind[i], lit = this.age[i] >= this.ign[i], cold = this.cold[i] === 1;
       const drag = Math.exp(-(k === GOB ? (lit ? this.drag * 1.6 : this.drag * 0.3) : 1.5) * dt);
       this.vx[i] *= drag; this.vz[i] *= drag;
-      this.vy[i] = this.vy[i] * drag + (k === GOB && !lit ? -this.gravity : k === EMBER ? -0.5 : this.rise) * dt;
+      // Mist sinks a little where flames rise.
+      this.vy[i] = this.vy[i] * drag + (k === GOB && !lit ? -this.gravity : k === EMBER ? -0.5 : cold ? -0.6 : this.rise) * dt;
       this.px[i] += this.vx[i] * dt; this.py[i] += this.vy[i] * dt; this.pz[i] += this.vz[i] * dt;
       const gy = g.height(this.px[i], this.pz[i]);
       if (this.py[i] < gy + 0.05) {
@@ -131,7 +142,8 @@ export class FlameFx {
       const sz = this.size[i] * (1 + (this.grow[i] - 1) * Math.sqrt(lt));
       const h = this.heat[i];
       let r: number, gg: number, b: number, a: number;
-      if (k === EMBER) { r = 1.6; gg = 0.7; b = 0.25; a = 1 - t; }
+      if (this.cold[i]) { const u = lt; r = 0.45 + 0.35 * u; gg = 0.7 + 0.2 * u; b = 1.15 - 0.2 * u; a = 0.55 * (1 - u * u); }
+      else if (k === EMBER) { r = 1.6; gg = 0.7; b = 0.25; a = 1 - t; }
       else if (lt < 0.15) { const u = lt / 0.15; r = 1.8; gg = 1.5 - 0.5 * u; b = 0.8 - 0.6 * u; a = 0.9; }
       else if (lt < 0.6) { const u = (lt - 0.15) / 0.45; r = 1.8 - 0.6 * u; gg = 1.0 - 0.65 * u; b = 0.2 - 0.15 * u; a = 0.9 - 0.3 * u; }
       else { const u = (lt - 0.6) / 0.4; r = 1.2 - 0.9 * u; gg = 0.35 - 0.3 * u; b = 0.05; a = 0.6 * (1 - u); }
@@ -140,7 +152,7 @@ export class FlameFx {
       const o = nh * 4; ha[o] = r * h; ha[o + 1] = gg * h; ha[o + 2] = b * h; ha[o + 3] = a;
       nh++;
       // The tail of a big flame leaves a puff of soot over it.
-      if (k !== EMBER && lt > 0.7 && sz > 0.8 && nd < FLAME_MAX) {
+      if (k !== EMBER && !this.cold[i] && lt > 0.7 && sz > 0.8 && nd < FLAME_MAX) {
         this.p.y += sz * 0.4;
         this.m.compose(this.p, this.q, this.s.set(sz * 0.9, sz * 0.9, sz * 0.9));
         this.dark.setMatrixAt(nd, this.m);
@@ -148,12 +160,14 @@ export class FlameFx {
         nd++;
       }
     }
-    for (let g = 0; g + 4 < this.glows.length + 1 && nh < FLAME_MAX; g += 5) {
+    for (let g = 0; g + 5 < this.glows.length + 1 && nh < FLAME_MAX; g += 6) {
       const h = this.glows[g + 4], sz = this.glows[g + 3];
       this.p.set(this.glows[g], this.glows[g + 1], this.glows[g + 2]);
       this.m.compose(this.p, this.q, this.s.set(sz, sz, sz));
       this.hot.setMatrixAt(nh, this.m);
-      const o = nh * 4; ha[o] = 0.9 + 0.6 * h; ha[o + 1] = 0.12 + 0.45 * h * h; ha[o + 2] = 0.03 + 0.15 * h * h * h; ha[o + 3] = 0.25 + 0.45 * h;
+      const o = nh * 4;
+      if (this.glows[g + 5]) { ha[o] = 0.3 + 0.5 * h; ha[o + 1] = 0.55 + 0.4 * h; ha[o + 2] = 0.9 + 0.4 * h; ha[o + 3] = 0.2 + 0.35 * h; }
+      else { ha[o] = 0.9 + 0.6 * h; ha[o + 1] = 0.12 + 0.45 * h * h; ha[o + 2] = 0.03 + 0.15 * h * h * h; ha[o + 3] = 0.25 + 0.45 * h; }
       nh++;
     }
     this.glows.length = 0;
@@ -169,6 +183,6 @@ export class FlameFx {
   private copy(a: number, b: number) {
     this.kind[a] = this.kind[b]; this.px[a] = this.px[b]; this.py[a] = this.py[b]; this.pz[a] = this.pz[b];
     this.vx[a] = this.vx[b]; this.vy[a] = this.vy[b]; this.vz[a] = this.vz[b]; this.age[a] = this.age[b]; this.life[a] = this.life[b];
-    this.size[a] = this.size[b]; this.grow[a] = this.grow[b]; this.ign[a] = this.ign[b]; this.heat[a] = this.heat[b];
+    this.size[a] = this.size[b]; this.grow[a] = this.grow[b]; this.ign[a] = this.ign[b]; this.heat[a] = this.heat[b]; this.cold[a] = this.cold[b];
   }
 }

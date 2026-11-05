@@ -37,6 +37,31 @@ export const FIRE_DEFAULTS = {
   infernoReload: 4,
   infernoBurnTime: 4,
   infernoBurnDps: 60,
+  // Freeze rays (Keith 2026-11-05): the Frost thrower (held) and the Cryo projector (hull), stream guns whose jets chill
+  // (src/game/chill.ts): chill per jet, cold damage per second at full chill.
+  frostRate: 12,
+  frostPellets: 2,
+  frostDamage: 3,
+  frostSpread: 6,
+  frostRange: 14,
+  frostPierce: 6,
+  frostAp: 0,
+  frostMag: 90,
+  frostReload: 3,
+  frostChill: 0.025,
+  frostColdDps: 20,
+  cryoRate: 14,
+  cryoPellets: 3,
+  cryoDamage: 3,
+  cryoSpread: 8,
+  cryoRange: 20,
+  cryoPierce: 10,
+  cryoAp: 0,
+  cryoMag: 160,
+  cryoReload: 4,
+  cryoChill: 0.02,
+  cryoColdDps: 30,
+  freezeLevel: 0.7,
   // The stream (both flamers): how fast the fuel flies (the damage's reach grows at this from the trigger), how soon
   // after the fuel nozzle the igniter's flame catches it (s), gobs drawn per jet, size, growth, buoyancy, drag.
   flameSpeed: 26,
@@ -81,9 +106,10 @@ export const FIRE_DEFAULTS = {
 export type FireValues = typeof FIRE_DEFAULTS;
 
 export const FLAMER_GROUP = "Flamer (held)", INFERNO_GROUP = "Inferno (hull flamer)", STREAM_GROUP = "Flame stream", NAPALM_GROUP = "Napalm launcher", HEAT_GROUP = "Burning and heat";
-export const FIRE_GROUPS = [FLAMER_GROUP, INFERNO_GROUP, STREAM_GROUP, NAPALM_GROUP, HEAT_GROUP];
+export const FROST_GROUP = "Frost thrower (held freeze ray)", CRYO_GROUP = "Cryo projector (hull freeze ray)", CHILL_GROUP = "Chill and freezing";
+export const FIRE_GROUPS = [FLAMER_GROUP, INFERNO_GROUP, STREAM_GROUP, NAPALM_GROUP, HEAT_GROUP, FROST_GROUP, CRYO_GROUP, CHILL_GROUP];
 
-const gun = (p: string, group: string, o: { rate: number; range: number; mag: number }): Param[] => [
+const gun = (p: string, group: string, o: { rate: number; range: number; mag: number }, cold = false): Param[] => [
   { key: `${p}Rate`, label: "Jets/s", min: 1, max: o.rate, step: 0.5, group },
   { key: `${p}Pellets`, label: "Jets per shot (the cone)", min: 1, max: 8, step: 1, group },
   { key: `${p}Damage`, label: "Damage per jet (on contact)", min: 0, max: 40, step: 0.5, group, tip: "Most of a flamer's damage is the burn it leaves; this is the touch of the flame itself" },
@@ -93,13 +119,29 @@ const gun = (p: string, group: string, o: { rate: number; range: number; mag: nu
   { key: `${p}Ap`, label: "Armour pierce", min: 0, max: 1, step: 0.01, group },
   { key: `${p}Mag`, label: "Fuel (jets)", min: 5, max: o.mag, step: 1, group },
   { key: `${p}Reload`, label: "Refuel (s)", min: 0.2, max: 10, step: 0.1, group },
-  { key: `${p}BurnTime`, label: "Sets alight for (s)", min: 0, max: 15, step: 0.1, group, tip: "Each jet that touches renews it" },
-  { key: `${p}BurnDps`, label: "Burn damage per second", min: 0, max: 300, step: 1, group, tip: "Per burning target or part, × Damage types (fire vs flesh / metal)" },
+  ...(cold ? [
+    { key: `${p}Chill`, label: "Chill per jet (0..1)", min: 0, max: 0.3, step: 0.001, group, tip: "Full chill freezes solid; it ebbs at Chill and freezing › ebbs" },
+    { key: `${p}ColdDps`, label: "Cold damage per second (at full chill)", min: 0, max: 200, step: 1, group, tip: "× the target's chill, × Damage types (cold)" },
+  ] : [
+    { key: `${p}BurnTime`, label: "Sets alight for (s)", min: 0, max: 15, step: 0.1, group, tip: "Each jet that touches renews it" },
+    { key: `${p}BurnDps`, label: "Burn damage per second", min: 0, max: 300, step: 1, group, tip: "Per burning target or part, × Damage types (fire vs flesh / metal)" },
+  ]),
 ];
 
 export const FIRE_PARAMS: Param[] = [
   ...gun("flamer", FLAMER_GROUP, { rate: 30, range: 40, mag: 300 }),
   ...gun("inferno", INFERNO_GROUP, { rate: 30, range: 50, mag: 500 }),
+  ...gun("frost", FROST_GROUP, { rate: 30, range: 40, mag: 300 }, true),
+  ...gun("cryo", CRYO_GROUP, { rate: 30, range: 50, mag: 500 }, true),
+  { key: "freezeLevel", label: "Freeze ray sound", min: 0, max: 1.5, step: 0.01, group: CHILL_GROUP },
+  { key: "chillDecay", label: "Chill ebbs (/s)", min: 0, max: 2, step: 0.01, group: CHILL_GROUP },
+  { key: "chillSlow", label: "Slows by (× chill)", min: 0, max: 1, step: 0.01, group: CHILL_GROUP, tip: "A unit at chill c moves at 1 − this × c of its speed (robots and bandits so far)" },
+  { key: "freezeTime", label: "Frozen solid for (s)", min: 0, max: 10, step: 0.1, group: CHILL_GROUP, tip: "At full chill: no walking, no attacking" },
+  { key: "thawTo", label: "Thaws to chill", min: 0, max: 1, step: 0.01, group: CHILL_GROUP },
+  { key: "freezeGrace", label: "Can't refreeze for (s)", min: 0, max: 10, step: 0.1, group: CHILL_GROUP },
+  { key: "chillTick", label: "Cold damage tick (s)", min: 0.05, max: 1, step: 0.01, group: CHILL_GROUP },
+  { key: "chillMax", label: "Chilled targets at most", min: 8, max: 1000, step: 8, group: CHILL_GROUP },
+  { key: "shockDamage", label: "Thermal shock (damage × heat)", min: 0, max: 600, step: 5, group: CHILL_GROUP, tip: "Cold on hot metal cracks it at once and takes its heat; fire thaws the frozen" },
   { key: "flameSpeed", label: "Fuel speed (m/s)", min: 5, max: 80, step: 0.5, group: STREAM_GROUP, tip: "The stream flies this fast; the flame's damage reaches only as far as the stream has got since the trigger went down" },
   { key: "flameIgnite", label: "Igniter catches the fuel after (s)", min: 0, max: 0.3, step: 0.005, group: STREAM_GROUP, tip: "Keith 2026-11-05: one nozzle sprays fuel, the other lights it; the fuel flies dark this long, then the flame runs along it" },
   { key: "flameGobs", label: "Look: gobs per jet", min: 0, max: 8, step: 1, group: STREAM_GROUP },

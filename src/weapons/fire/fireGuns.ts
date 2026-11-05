@@ -9,7 +9,7 @@ import * as THREE from "three/webgpu";
 import type { Battlefield } from "../../game/battlefield";
 import type { MechUnit } from "../../game/mechUnit";
 import type { WeaponValues } from "../tuning";
-import type { FlameGun } from "../guns";
+import { isColdGun, type FlameGun } from "../guns";
 import type { Loop } from "../../audio/sfx";
 import { Synth, rng } from "../../audio/synth";
 
@@ -46,12 +46,18 @@ export class FireGuns {
     else s.reach += v.flameSpeed * dt;
     if (igniter && alive) {
       s.pilotT -= dt;
-      if (s.pilotT <= 0) { s.pilotT = 0.05; this.bf.flames.pilot(igniter.x, igniter.y, igniter.z, s.kind === "inferno" ? 1.5 : 1); }
+      // A freeze ray's lower nozzle vents a little cold mist instead of a pilot flame.
+      if (s.pilotT <= 0) {
+        s.pilotT = isColdGun(s.kind) ? 0.12 : 0.05;
+        if (isColdGun(s.kind)) this.bf.flames.mist(igniter.x, igniter.y, igniter.z, s.kind === "cryo" ? 0.7 : 0.5);
+        else this.bf.flames.pilot(igniter.x, igniter.y, igniter.z, s.kind === "inferno" ? 1.5 : 1);
+      }
     }
     const pouring = s.idle < 0.12 && alive;
     if (pouring) {
-      if (!s.loop) { s.loop = this.bf.sfx.startSoundLoop("flameRoar", Math.random()); this.bf.sfx.playSound("flameIgnite", igniter ?? this.unit.sim.pelvis, 0.8, s.kind === "inferno" ? 0.8 : 1); }
-      if (s.loop) this.bf.sfx.setSoundLoop(s.loop, "flameRoar", igniter ?? this.unit.sim.pelvis, s.kind === "inferno" ? 1 : 0.75, s.kind === "inferno" ? 0.85 : 1.05);
+      const cold = isColdGun(s.kind), snd = cold ? "cryoHiss" : "flameRoar", big = s.kind === "inferno" || s.kind === "cryo";
+      if (!s.loop) { s.loop = this.bf.sfx.startSoundLoop(snd, Math.random()); if (!cold) this.bf.sfx.playSound("flameIgnite", igniter ?? this.unit.sim.pelvis, 0.8, big ? 0.8 : 1); }
+      if (s.loop) this.bf.sfx.setSoundLoop(s.loop, snd, igniter ?? this.unit.sim.pelvis, big ? 1 : 0.75, big ? 0.85 : 1.05);
     } else this.quiet(s);
   }
 
@@ -61,7 +67,7 @@ export class FireGuns {
     const s = this.sides[i], v = this.v, bf = this.bf;
     if (!s.kind) return;
     s.idle = 0;
-    const big = s.kind === "inferno" ? 1.35 : 1;
+    const big = s.kind === "inferno" || s.kind === "cryo" ? 1.35 : 1, cold = isColdGun(s.kind);
     const n = Math.round(v.flameGobs * Math.max(1, pellets));
     const sp = (spread * Math.PI) / 180;
     // The muzzle's own drift (the mech walking) carries into the stream.
@@ -77,8 +83,9 @@ export class FireGuns {
       const life = range / Math.max(1, v.flameSpeed) * 1.15 + 0.25 + Math.random() * 0.2;
       const t0 = Math.random() * (1 / 60);
       bf.flames.gob(fuel.x + dd.x * speed * t0, fuel.y + dd.y * speed * t0, fuel.z + dd.z * speed * t0, dd.x * speed + (mv?.x ?? 0), dd.y * speed, dd.z * speed + (mv?.z ?? 0),
-        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6));
+        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6), cold);
     }
+    if (cold) return; // no burning splash from a freeze ray
     // Where the stream meets the sand (the aim on the ground, if the stream reaches it): a small short pool.
     if (v.flameSplash > 0 && aim && s.splashT <= 0) {
       const g = bf.field.height(aim.x, aim.z), dist = Math.hypot(aim.x - fuel.x, aim.z - fuel.z);
@@ -105,6 +112,8 @@ function addFireSounds(bf: Battlefield, v: WeaponValues) {
   const variants = (n: number, seed: number, make: (r: () => number) => Float32Array) => Array.from({ length: n }, (_, i) => make(rng(seed * 137 + i)));
   sfx.addSound("flameRoar", variants(1, 91, (r) => S.mix(S.band(r, 1.5, 40, 650, 0.6, 0.02, 0), S.band(r, 1.5, 300, 2200, 0.2, 0.02, 0), steadyCrackle(S.n(1.5), r, 0.3), S.whine(1.5, 55, 55, 0.08))), () => v.flameLevel);
   sfx.addSound("flameIgnite", variants(2, 92, (r) => S.mix(S.thump(0.4, 140, 45, 0.7), S.lowPass(S.noise(r, 0.5, 900, 0.5, 0.01), 800), S.scale(S.crackle(r, 0.4, 0.3), 1))), () => v.flameLevel);
+  // The freeze rays: a high pressurised hiss with a faint crystalline ring (Chill and freezing › Freeze ray sound).
+  sfx.addSound("cryoHiss", variants(1, 94, (r) => S.mix(S.band(r, 1.5, 1800, 7000, 0.35, 0.02, 0), S.band(r, 1.5, 200, 900, 0.15, 0.02, 0), S.whine(1.5, 1320, 1320, 0.03))), () => v.freezeLevel);
   sfx.addSound("napalmBurst", variants(3, 93, (r) => S.mix(S.thump(0.5, 110, 38, 0.8), S.lowPass(S.noise(r, 1.1, 650, 0.6, 0.005), 600), S.scale(S.crackle(r, 1.0, 0.45), 1), S.band(r, 0.8, 250, 1400, 0.25, 0.01, -6))), () => v.flameLevel);
 }
 

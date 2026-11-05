@@ -52,7 +52,7 @@ const SOUNDS: Record<string, string[]> = {
   "flak-medium": ["flak", "flakPop"], "cannon-medium": ["breach"], "rail-light": ["railCharge", "rail"], "rail-medium": ["railCharge", "rail"],
   "ac-medium": ["cannon"], "rpg-light": ["rocket"], "rpg-medium": ["rocket"], "sh-rpg": ["rocket"], "sh-missiles": ["rocket"],
   "sh-mortar": ["mortar"], "sh-linemortar": ["mortar"],
-  "flamer-light": ["flameIgnite", "flameRoar"], "inferno-medium": ["flameIgnite", "flameRoar"], "sh-napalm": ["mortar", "napalmBurst"],
+  "flamer-light": ["flameIgnite", "flameRoar"], "inferno-medium": ["flameIgnite", "flameRoar"], "sh-napalm": ["mortar", "napalmBurst"], "frost-light": ["cryoHiss"], "cryo-medium": ["cryoHiss"],
   "laser-medium": ["pulseZap"], "beam-medium": ["beamHum"], "lance-medium": ["lanceCharge", "lanceFire"], "plasma-medium": ["plasmaShot", "plasmaHit"],
   "orb-medium": ["orbLaunch"], "arc-medium": ["arcZap"], "sunder-medium": ["sunderCharge", "sunderHum"],
   "sword-light": ["swordSwing", "swordHit", "swordBlock"], "sword-heavy": ["swordSwing", "swordHit", "swordBlock"], "sword-short": ["swordSwing", "swordHit", "swordBlock"],

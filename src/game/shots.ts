@@ -44,7 +44,7 @@ export interface ShotProtocols {
   /** Hops from a struck enemy to the nearest others not yet hit by this shot, within protoChainRange. */
   chain?: number;
   /** Ignited (Keith 2026-10-30, the incendiary feed): what it hits burns for `time` seconds at `dps` (src/game/burn.ts). */
-  burn?: { time: number; dps: number };
+  burn?: { time: number; dps: number; cold?: boolean };
 }
 
 export const SHOT_DEFAULTS = {
@@ -165,7 +165,7 @@ export interface ShotWorld {
   register: Register;
   v: PenValues & ShotValues;
   /** An ignited round hit a target (key = the part): set it burning (src/game/burn.ts). */
-  ignite?: (target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number) => void;
+  ignite?: (target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number, cold?: boolean) => void;
 }
 
 const CAP = 16384;
@@ -196,6 +196,8 @@ export class Shots {
   readonly seed = new Uint32Array(CAP);
   /** Ignited rounds: burn time (s) and damage per second (0: plain). */
   readonly burnT = new Float32Array(CAP); readonly burnD = new Float32Array(CAP);
+  /** Cold rounds (Keith 2026-11-05, the freeze ray): 1 when the "burn" is a chill (time: chill per hit, dps: cold dps). */
+  readonly burnC = new Float32Array(CAP);
   /** Armour pierce (src/game/armour.ts; 1 for a command that names none). */
   readonly ap = new Float32Array(CAP);
   readonly id = new Float64Array(CAP); readonly family = new Float64Array(CAP);
@@ -258,7 +260,7 @@ export class Shots {
           const i = this.row(family, K_ROUND, 0, c.team, ox, c.origin.y, oz, dxr, c.dir.y, dzr, c.range, c.damage, lk, hash(seed + r * 977 + s * 131 + m * 7919));
           if (i < 0) return family;
           this.wait[i] = r * gap;
-          this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0;
+          this.burnT[i] = pr?.burn?.time ?? 0; this.burnD[i] = pr?.burn?.dps ?? 0; this.burnC[i] = pr?.burn?.cold ? 1 : 0;
           this.ap[i] = c.pierce ?? UNSET_PIERCE;
           this.splash[i] = splash; this.splashShare[i] = share;
           this.ric[i] = Math.max(0, Math.round(pr?.ricochet ?? 0)); this.chain[i] = Math.max(0, Math.round(pr?.chain ?? 0));
@@ -295,7 +297,7 @@ export class Shots {
     const l = Math.hypot(dx, dy, dz) || 1;
     this.ox[i] = x; this.oy[i] = y; this.oz[i] = z; this.dx[i] = dx / l; this.dy[i] = dy / l; this.dz[i] = dz / l;
     this.range[i] = range; this.damage[i] = damage; this.wait[i] = 0; this.splash[i] = 0; this.splashShare[i] = 0;
-    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0; this.burnT[i] = 0; this.burnD[i] = 0; this.ap[i] = UNSET_PIERCE;
+    this.team[i] = team; this.gen[i] = gen; this.kind[i] = kind; this.ric[i] = 0; this.chain[i] = 0; this.flags[i] = 0; this.burnT[i] = 0; this.burnD[i] = 0; this.burnC[i] = 0; this.ap[i] = UNSET_PIERCE;
     this.seed[i] = seed; this.id[i] = this.nextId++; this.family[i] = family; this.look[i] = look;
     return i;
   }
@@ -329,7 +331,7 @@ export class Shots {
   private move(a: number, b: number) {
     for (const arr of [this.ox, this.oy, this.oz, this.dx, this.dy, this.dz, this.range, this.damage, this.wait, this.splash, this.splashShare,
       this.half, this.height, this.line, this.pen, this.knock, this.ax, this.ay, this.az, this.team, this.gen, this.kind, this.ric, this.chain,
-      this.flags, this.seed, this.burnT, this.burnD, this.ap, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
+      this.flags, this.seed, this.burnT, this.burnD, this.burnC, this.ap, this.id, this.family] as Float32Array[]) arr[b] = arr[a];
     this.look[b] = this.look[a];
   }
 
@@ -437,7 +439,7 @@ export class Shots {
     const time = this.burnT[i];
     if (!(time > 0) || !this.world.ignite) return;
     this.event("ignite", i, this.world.targets.indexOf(t), key, this.burnD[i], x, y, z);
-    this.world.ignite(t, key, time, this.burnD[i], x, y, z);
+    this.world.ignite(t, key, time, this.burnD[i], x, y, z, this.burnC[i] > 0);
   }
 
   private nearD = 0;

@@ -147,7 +147,7 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", flamer: "flamer", inferno: "inferno projector", napalm: "napalm launcher", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", flamer: "flamer", inferno: "inferno projector", frost: "frost thrower", cryo: "cryo projector", napalm: "napalm launcher", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
 const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", napalm: "Napalm", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
@@ -371,7 +371,7 @@ export class Arsenal implements MechWeapons {
       // An unrolled round gun (the picker's) runs on its sliders, live, like the autocannon.
       if (isRoundGun(s.kind) && !s.own && g.stats) {
         const n = gunNumbers(s.kind, v);
-        Object.assign(g.stats, { fireRate: n.fireRate, damage: n.damage, spread: n.spread, range: n.range, pierce: n.pierce, ap: n.ap, ammo: n.magazine, reload: n.reload, pellets: n.pellets, splash: n.splash, splashShare: n.splashShare, burnTime: n.burnTime, burnDps: n.burnDps });
+        Object.assign(g.stats, { fireRate: n.fireRate, damage: n.damage, spread: n.spread, range: n.range, pierce: n.pierce, ap: n.ap, ammo: n.magazine, reload: n.reload, pellets: n.pellets, splash: n.splash, splashShare: n.splashShare, burnTime: n.burnTime, burnDps: n.burnDps, chill: n.chill, coldDps: n.coldDps });
         u.upper.sizeMag(g);
       }
       // Targeting laser on the minigun, the rocket launcher, the rifle and the sniper rifle, along the gun.

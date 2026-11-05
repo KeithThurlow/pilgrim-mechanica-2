@@ -97,7 +97,7 @@ export interface MechWeapons {
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { Reactor, REACTOR_DEFAULTS, REACTOR_PARAMS } from "../mech/reactor";
-import { isFlameGun, isRoundGun } from "../weapons/guns";
+import { isColdGun, isFlameGun, isRoundGun } from "../weapons/guns";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
 import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
 import type { DustValues } from "../fx/dust";
@@ -547,7 +547,9 @@ export class MechUnit implements Hittable, Solid {
       // Flamers (Keith 2026-11-05, src/weapons/fire/): every jet sets alight; the jets are invisible (the arsenal draws
       // the stream) and reach only as far as the stream has flown since the trigger went down.
       const flame = isFlameGun(own?.cls);
-      const fireBurn = flame ? { time: Math.max(own!.burnTime ?? 0, special?.burnTime ?? 0), dps: Math.max(own!.burnDps ?? 0, special?.burnDps ?? 0) } : null;
+      // Freeze rays' jets chill instead (src/game/chill.ts): the "burn" carries the chill and the cold damage.
+      const fireBurn = !flame ? null : isColdGun(own?.cls) ? { time: own!.chill ?? 0, dps: own!.coldDps ?? 0, cold: true }
+        : { time: Math.max(own!.burnTime ?? 0, special?.burnTime ?? 0), dps: Math.max(own!.burnDps ?? 0, special?.burnDps ?? 0) };
       const proto = fireBurn ? { ...own?.proto, burn: fireBurn } : special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
       const reach = flame ? Math.min(own?.range ?? v.range, this.weapons?.flameReach?.(s) ?? Infinity) : own?.range ?? v.range;
       // Armour pierce: the gun's own (an item's), else the slider; special rounds add theirs (armour-piercing, later).

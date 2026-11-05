@@ -87,6 +87,9 @@ export class InfantryTarget implements Hittable, Owner {
     return k;
   }
 
+  /** Chill (src/game/chill.ts): the bandit moves at k of their speed, 0 frozen solid. */
+  slow(key: number, k: number) { this.swarm.pace[key] = k; }
+
   damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3) {
     if (this.last < 0) return;
     if (this.swarm.damage(this.last, amount, dir.x, dir.z)) this.kills++;
