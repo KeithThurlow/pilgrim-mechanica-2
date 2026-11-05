@@ -383,6 +383,36 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
       if (Math.hypot(q.x - sp.x, q.z - sp.z) > 2.5) fail(`a bandit came out ${Math.hypot(q.x - sp.x, q.z - sp.z).toFixed(1)} m from its door`);
       if (wallHeight(L, q.x, q.z, wd.walls.down) > 0.7) { fail("a bandit came out on top of something"); break; }
     }
+    // ---- 8. lookout towers: crews on top; alert, the grenadiers and rocketeers lob at the mech; shot down, the stack
+    // leaves the ground and the crew dies ----
+    {
+      if (!L.towers.length) fail("a fortress with no lookout towers");
+      const lobs: number[] = [];
+      const bfl = bf as unknown as { lob: (...a: unknown[]) => unknown };
+      bfl.lob = (...a: unknown[]) => { lobs.push(Math.hypot((a[2] as number) - pel.x, (a[3] as number) - pel.z)); return any; };
+      // Stand the mech 30 m off the first tower with a bomb-thrower or rocketeer (outside, if the tower's in the outer yard).
+      const t0 = F.towers.list.find((t) => t.crew.some((c) => c.kind !== "gun")) ?? F.towers.list[0];
+      const top = t0 ? wd.field.height(t0.b.x, t0.b.z) - t0.floor : 0;
+      if (t0 && top < t0.t.h * 0.9) fail(`a tower stands only ${top.toFixed(1)} m (${t0.t.h.toFixed(1)})`);
+      const crewUp = t0 ? t0.crew.every((c) => F.sw.py[c.i] - t0.floor > t0.t.h * 0.9) : false;
+      if (t0 && !crewUp) fail("a tower's crew isn't up on top");
+      const keepP = pel.clone();
+      if (t0) { pel.set(t0.b.x + 30, wd.field.height(t0.b.x + 30, t0.b.z), t0.b.z); for (const y of live.yards) (F as unknown as { alarm(f: unknown, y: unknown): void }).alarm(live, y); }
+      for (let k = 0; k < 30 * 12; k++) F.update(1 / 30, true);
+      const special = t0?.crew.filter((c) => c.kind !== "gun").length ?? 0;
+      if (special && !lobs.length) fail("a tower's grenadier or rocketeer never fired in 12 s");
+      if (lobs.some((d) => d > 0.5)) fail("a tower shot landed off the mech");
+      // Down: off the ground, crew dead.
+      let tdowns = 0;
+      F.onTower = (e) => { if (e.type === "towerDown") tdowns++; };
+      if (t0) { for (let n = 0; n < 500 && !t0.down; n++) F.towers.hurt(t0, 100); F.towers.hurt(t0, 100); }
+      const after = t0 ? wd.field.height(t0.b.x, t0.b.z) - t0.floor : 0;
+      const crewDead = t0 ? t0.crew.every((c) => F.sw.gen[c.i] !== c.gen || F.sw.state[c.i] >= DEAD - 1) : true;
+      if (t0 && (tdowns !== 1 || after > 1)) fail(`tower down: ${tdowns} towerDown, ${after.toFixed(1)} m of it still in the ground`);
+      if (!crewDead) fail("a toppled tower's crew lived");
+      pel.copy(keepP);
+      console.log(`towers: ${L.towers.length}, top ${top.toFixed(1)} m, crew ${t0?.crew.map((c) => c.kind).join("+")} up there · alert: ${lobs.length} shots at the mech 30 m off in 12 s · shot down: one towerDown, gone from the ground (${after.toFixed(2)} m), crew down`);
+    }
     // Shoot every spawner down: one spawnerDown each, and no more pour.
     let downs = 0;
     F.onSpawner = (e) => { if (e.type === "spawnerDown") downs++; };
