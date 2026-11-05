@@ -203,7 +203,7 @@ export class FlameFx {
           // seeded, with no goal), so fire wraps round it, pools there and flows on past it.
           const f = L.flamePull * (1 - d / R) * (d > ring ? 1 : (d - ring) / Math.max(0.1, ring) * 3);
           const tx = -dz / d, tz = dx / d, gn = this.gnx[i] * tx + this.gnz[i] * tz;
-          const sw = (L.flamePull * 0.35 + (d < ring * 2 ? L.flameFlow * L.flameFlowSpeed * 0.5 : 0)) * (1 - d / R) *
+          const sw = (L.flamePull * 0.35 + (d < ring * 2 && gn !== 0 ? L.flameFlow * L.flameFlowSpeed * 0.5 : 0)) * (1 - d / R) *
             (gn !== 0 ? Math.sign(gn) : this.seed[i] > 50 ? 1 : -1);
           ax += (dx / d) * f + tx * sw; az += (dz / d) * f + tz * sw;
         }

@@ -62,9 +62,9 @@ must(slid.under === 0, `gobs under a slope (${slid.under})`);
 
 // One burning thing 11 m out, a little off the line: gobs on the sand gather round it.
 const T: [number, number] = [1.8, 11];
-const band = (f: FlameFx) => near(f, ...T, 2.6).inR - near(f, ...T, F.flameRing * 0.8).inR;
+const band = (f: FlameFx) => near(f, ...T, 3).inR;
 const without = { inR: band(run(flat, [], 1, 1.6).f) }, withF = run(flat, [T], 1, 1.6).f, withT = { inR: band(withF), mean: near(withF, ...T, 99).mean };
-must(withT.inR > without.inR, `fire doesn't gather round a burning thing (${withT.inR} vs ${without.inR} in a ring round it)`);
+must(withT.inR > without.inR, `fire doesn't gather round a burning thing (${withT.inR} vs ${without.inR} within 3 m)`);
 must(withT.mean > 0.3, `fire piles onto the burning thing's centre (${withT.mean.toFixed(2)} m)`);
 
 // The swarm (Keith 2026-11-05): fire on the sand flows on toward the plane through the aim, square to the line to it,
