@@ -35,6 +35,14 @@ const loud = matchLoudness(Float32Array.from(cut), 44100, 5, 12);
 ok(Math.max(...loud.map(Math.abs)) <= 0.981, "never past the ceiling");
 ok(mixUnder(cut, new Float32Array(50000), 0.5).length === 50000, "mix under lengthens to the longer");
 
+// A loop: as long as asked, and the wrap from its last sample to its first is no bigger than a step inside it.
+const tone = new Float32Array(sr * 3);
+for (let i = 0; i < tone.length; i++) tone[i] = 0.5 * Math.sin(2 * Math.PI * 97.3 * i / sr);
+const lp = cutSample(tone, sr, 44100, { start: 0.2, len: 1, fade: 0.3, rate: 1, lowpass: 20000, highpass: 20, loop: 0.3 });
+let step = 0; for (let i = 1; i < lp.length; i++) step = Math.max(step, Math.abs(lp[i] - lp[i - 1]));
+ok(lp.length === 44100, `loop length ${lp.length}`);
+ok(Math.abs(lp[0] - lp[lp.length - 1]) <= step * 1.5, "loop joins without a click");
+
 // The robot remix: every stage on at once stays finite and bounded, and does change the sound.
 const al = alienize(Float32Array.from(cut), 44100, { ring: 90, ringMix: 0.5, comb: 5, combFb: 0.9, sweepFrom: 3000, sweepTo: 100, sweepQ: 12, sweepMix: 0.8 });
 ok(al.every(Number.isFinite) && Math.max(...al.map(Math.abs)) < 50, "remix finite and bounded");
@@ -70,7 +78,7 @@ if (ff) {
     const vs = cutVariants(d, D, x, 44100, 44100, ref);
     const peak = Math.max(...vs.map((v) => v.reduce((a, s) => Math.max(a, Math.abs(s)), 0)));
     const lens = vs.map((v) => (v.length / 44100).toFixed(2)).join("/");
-    const punch = 20 * Math.log10(punchRms(vs[1], 44100) / refRms);
+    const punch = 20 * Math.log10(punchRms(vs[vs.length >> 1], 44100) / refRms);
     const refPeak = Math.max(...ref.map((v) => v.reduce((a, s) => Math.max(a, Math.abs(s)), 0)));
     ok(vs.every((v) => v.every(Number.isFinite)) && peak > 0.01 && peak <= 0.981, `${d.id} cut finite, audible, under full scale`);
     console.log(`  ${d.id.padEnd(11)} ${(x.length / 44100).toFixed(2)} s recording → ${lens} s cuts · peak ${peak.toFixed(2)} (procedural ${refPeak.toFixed(2)}) · punch ${punch >= 0 ? "+" : ""}${punch.toFixed(1)} dB vs procedural`);
