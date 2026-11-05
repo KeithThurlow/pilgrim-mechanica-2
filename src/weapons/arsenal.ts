@@ -386,7 +386,7 @@ export class Arsenal implements MechWeapons {
       // Sprinting with the weapons off (src/mech/bound.ts): a rail's charge is dropped, not fired. So in a dash (Keith
       // 2026-10-31, rail balance: no dash while a rail is charging or charged; the dash wins and the charge is lost), and
       // no charge builds until the dash is over.
-      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.inDash;
+      const noRail = (u.sideOff?.(i) ?? u.gunsOff) || u.sim.dashCancels;
       if (noRail && s.rail.holding) { s.rail.holding = false; s.rail.charge = 0; s.whined = false; }
       const pressed = held && !this.prevTrig[i];
       this.prevTrig[i] = held;
