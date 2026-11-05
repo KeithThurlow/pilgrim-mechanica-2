@@ -106,6 +106,8 @@ export const FORT_PARAMS: Param[] = [
 
 /** Container sizes (m): long side, short side, height. */
 export const BOX = { long: 6.06, wide: 2.44, high: 2.59 };
+/** How high the sand drift stands at a shack's face: what a prop there sits on, off the solid core under the shack. */
+const FACE_DRIFT = 0.55;
 
 /** A way through a ring: a steel barricade until it's down, then a gap. */
 export interface Gate {
@@ -627,11 +629,11 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
   const ca = Math.cos(p.yaw), sa = Math.sin(p.yaw);
   const loc = (x: number, z: number): [number, number] => { const dx = x - p.x, dz = z - p.z; return [dx * ca - dz * sa, dx * sa + dz * ca]; };
   // A prop's y is from the ground under its centre; on a wall's line that ground is the container plug (h).
-  const box = (x: number, z: number, cy: number, size: [number, number, number], tone: Tone, yaw: number, pitch = 0, roll = 0, door = 1) => {
+  const box = (x: number, z: number, cy: number, size: [number, number, number], tone: Tone, yaw: number, pitch = 0, roll = 0, door = 1, doorCy = cy) => {
     const [lx, lz] = loc(x, z);
     b.prop("box", lx, lz, cy, size, tone, yaw - p.yaw, pitch, roll);
     // The doors' end: a darker plate (door 1: at +z of the box, -1: at -z, 0: none).
-    if (size[2] > 4 && door) b.prop("box", lx + door * Math.sin(yaw - p.yaw) * (size[2] / 2 + 0.02), lz + door * Math.cos(yaw - p.yaw) * (size[2] / 2 + 0.02), cy, [size[0] * 0.96, size[1] * 0.94, 0.06], "dark", yaw - p.yaw, pitch, roll);
+    if (size[2] > 4 && door) b.prop("box", lx + door * Math.sin(yaw - p.yaw) * (size[2] / 2 + 0.02), lz + door * Math.cos(yaw - p.yaw) * (size[2] / 2 + 0.02), doorCy, [size[0] * 0.96, size[1] * 0.94, 0.06], "dark", yaw - p.yaw, pitch, roll);
   };
 
   // The walls: containers along every ring's line, stood on end or stacked two high lying along it, leaving the gates.
@@ -679,7 +681,7 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
       for (let c = 0; c < n; c++) {
         const off = (c - (k.cols - 1) / 2) * BOX.wide;
         const t = k.kind === "shack" && b.r() < 0.6 ? tone : b.one(BOX_TONES);
-        box(k.x + wx * off + b.jit(0.08), k.z + wz * off + b.jit(0.08), BOX.high * (j + 0.5) - 0.15 - k.h, [BOX.wide, BOX.high, BOX.long], t, k.a + b.jit(0.04), 0, 0, endOn && j === 0 ? Math.sign(fu) : 0);
+        box(k.x + wx * off + b.jit(0.08), k.z + wz * off + b.jit(0.08), BOX.high * (j + 0.5) - 0.15 - k.h, [BOX.wide, BOX.high, BOX.long], t, k.a + b.jit(0.04), 0, 0, endOn && j === 0 ? Math.sign(fu) : 0, BOX.high * (j + 0.5) - 0.15 - FACE_DRIFT);
       }
     }
     if (k.kind !== "shack") continue;
@@ -689,13 +691,13 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
       // Door plates cut in the long side facing the street.
       for (let c = 0; c < Math.min(2, k.cols); c++) {
         const [lx, lz] = loc(k.x + dx * (depth / 2 + 0.02) + ux * b.jit(1.5), k.z + dz * (depth / 2 + 0.02) + uz * b.jit(1.5));
-        b.prop("box", lx, lz, BOX.high / 2 - 0.2 - k.h, [1.4, 2.1, 0.06], "dark", k.door - p.yaw, 0, 0);
+        b.prop("box", lx, lz, BOX.high / 2 - 0.2 - FACE_DRIFT, [1.4, 2.1, 0.06], "dark", k.door - p.yaw, 0, 0);
       }
     }
     if (b.r() < 0.45) {
       // An awning out over the street side.
       const [lx, lz] = loc(k.x + dx * (depth / 2 + 1.1), k.z + dz * (depth / 2 + 1.1));
-      b.prop("cloth", lx, lz, BOX.high + 0.1 - k.h + 0.6, [width * 0.9, 0.05, 2.4], "cloth", k.door - p.yaw, -0.25, b.jit(0.08));
+      b.prop("cloth", lx, lz, BOX.high + 0.1, [width * 0.9, 0.05, 2.4], "cloth", k.door - p.yaw, -0.25, b.jit(0.08));
     }
     if (b.r() < 0.35) {
       const [lx, lz] = loc(k.x + dx * (depth / 2 + 0.8) + ux * b.jit(width / 2), k.z + dz * (depth / 2 + 0.8) + uz * b.jit(width / 2));
