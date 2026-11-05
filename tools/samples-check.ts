@@ -59,7 +59,7 @@ const keys = new Set(SAMPLE_PARAMS.map((p) => p.key));
 const D = SAMPLE_DEFAULTS as unknown as Record<string, number>;
 for (const d of SAMPLES) {
   ok(existsSync(`public/sounds/pixabay/${d.file}.mp3`), `${d.file}.mp3 in public/sounds/pixabay`);
-  for (const f of ["On", "Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const) ok(keys.has(sampleKey(d, f)) && Number.isFinite(D[sampleKey(d, f)]), `${d.id} ${f} slider`);
+  for (const f of ["On", "Start", "Step", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const) ok(keys.has(sampleKey(d, f)) && Number.isFinite(D[sampleKey(d, f)]), `${d.id} ${f} slider`);
   if (d.alien) for (const [f] of ALIEN_FIELDS) ok(keys.has(alienKey(d, f)) && Number.isFinite(D[alienKey(d, f)]), `${d.id} remix ${f} slider`);
   ok(procedural.includes(`addSound("${d.ref ?? d.sound}"`), `${d.id} matches a procedural sound (${d.ref ?? d.sound})`);
 }
@@ -73,6 +73,13 @@ const fake = { rate: 44100, onUpdate: [], addSound: (n: string, d: Float32Array[
 addWeaponSounds(fake, WEAPON_DEFAULTS);
 addFireSounds({ sfx: fake }, WEAPON_DEFAULTS);
 new ConvoySound(fake, CONVOY_SOUND_DEFAULTS);
+// The sword's hit sounds: the smashes differ from each other, the ring sings on and dies away.
+const rms = (x: Float32Array, a: number, b: number) => { let s = 0; const i0 = Math.round(a * 44100), i1 = Math.min(x.length, Math.round(b * 44100)); for (let i = i0; i < i1; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, i1 - i0)); };
+const smashes = proc.get("swordSmash")!, rings = proc.get("swordRing")!;
+ok(smashes.length >= 10, `${smashes.length} smashes`);
+ok(new Set(smashes.map((x) => x.length)).size >= 5, "smashes differ in length");
+for (const x of smashes) ok(x.every(Number.isFinite) && Math.max(...x.map(Math.abs)) <= 1, "smash finite, under full scale");
+for (const x of rings) ok(rms(x, 0.5, 0.7) > rms(x, 0.02, 0.2) * 0.05 && rms(x, 0.5, 0.7) < rms(x, 0.02, 0.2) && Math.abs(x[x.length - 1]) < 0.01, "ring sings on and dies away");
 if (ff) {
   for (const d of SAMPLES) {
     const raw = execFileSync("ffmpeg", ["-v", "quiet", "-i", `public/sounds/pixabay/${d.file}.mp3`, "-ac", "1", "-ar", "44100", "-f", "f32le", "-"], { maxBuffer: 1 << 26 });

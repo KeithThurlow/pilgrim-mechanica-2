@@ -341,13 +341,16 @@ export class Arsenal implements MechWeapons {
     return s.base === "sword-heavy" ? v.swordSwingBuster : s.base === "sword-short" ? v.swordSwingShort : v.swordSwingBreaker;
   }
 
-  /** An unblocked cut landing (Keith 2026-11-05): the smash with the old slam under it, then blade on metal (softer on flesh). */
+  /** An unblocked cut landing (Keith 2026-11-05): the smash with the old slam under it, then blade on metal (softer on
+   *  flesh), and the blade ringing on after the cut's first hit. Each layer drawn apart, so no two hits stack up alike. */
   private hitSound(s: Side, at: THREE.Vector3, material: string, volume: number) {
-    const v = this.v, sfx = this.bf.sfx, p = Math.pow(this.swingPitch(s), v.swordHitPitch), j = () => 0.92 + Math.random() * 0.16;
+    const v = this.v, sfx = this.bf.sfx, p = Math.pow(this.swingPitch(s) / Math.max(0.01, v.swordSwingBreaker), v.swordHitPitch), j = () => 0.86 + Math.random() * 0.28;
     if (v.swordSmashLevel > 0) sfx.playSound("swordSmash", at, volume, p * j());
-    if (v.swordHitUnder > 0) sfx.playSound("swordHit", at, volume * (v.swordSmashLevel > 0 ? v.swordHitUnder : 1), p * (0.88 + Math.random() * 0.3));
+    if (v.swordHitUnder > 0) sfx.playSound("swordHit", at, volume * (v.swordSmashLevel > 0 ? v.swordHitUnder * (0.6 + Math.random() * 0.8) : 1), p * (0.88 + Math.random() * 0.3));
     const scrape = material === "flesh" ? v.swordScrapeSoft : 1;
     if (scrape > 0 && v.swordScrapeLevel > 0) sfx.playSound("swordScrape", at, volume * 0.8 * scrape, p * j(), v.swordScrapeDelay);
+    const ring = material === "flesh" ? v.swordRingSoft : 1;
+    if (!s.bit && ring > 0 && v.swordRingLevel > 0) sfx.playSound("swordRing", at, ring, s.base === "sword-heavy" ? v.swordRingBuster : s.base === "sword-short" ? v.swordRingShort : v.swordRingBreaker, v.swordRingDelay);
   }
 
   /** A side's sword stats before a power cut's (src/weapons/sword.ts powerStats). */
