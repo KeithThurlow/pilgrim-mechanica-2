@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Fortress gates square to the straight walls (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-gates-square-to-walls`)
+- The gates faced the fortress's centre, as they did on round rings. On a straight wall that crosses the line from the centre at a slant the steel stood skewed in its gap and the sand plug in the ground showed as a wall-high wedge beside it. `GatesDraw` now turns the gate to the wall's line (`along`, exported from `src/pois/fortress.ts`), widens it by 1 / cos of the slant to fill the gap, stands the plates 6% over the plug's height and runs them 1 m into the rolling floor. Look only; the gate's sim, health and plug are unchanged.
+- Checked: fortress lab `?near&manual&zoom=70` before and after on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · Freeze ray models: the Frost thrower and Cryo projector get their own rigs (coordinator, Keith asleep; Claude on `claude/project-thread-ja1xma`)
 - They were the flamer and Inferno in frost paint. Now `frostModel` (held: compressor with top fins, one fat banded dewar behind the grip with a lit gauge, a pilot bottle, a barrel wound with five glowing coil rings, a bell and ice lens) and `cryoModel` (hull: finned slate housing, two pale spherical pressure vessels in a cradle with a manifold and gauge, a thick coiled barrel, three prongs round the emitter) in `src/weapons/models.ts`. Same sockets (muzzle 0 the stream, muzzle 1 the cold vent). The coil and lens glow 0.4 idle, full while the trigger is held (`src/weapons/arsenal.ts`). Flamer and Inferno models unchanged.
 - Checked: typecheck, `npm test`, two game-camera screenshots in the weapons lab.
