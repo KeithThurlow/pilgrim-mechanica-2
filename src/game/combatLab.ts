@@ -445,6 +445,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     if (!driving) softAim.release();
     if (sel.active) { trigger = false; held = [false, false, false, false]; }
     player.keys = held;
+    player.clickAim = !own && !auto;
     player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
     player.lock = lock?.target ?? demoLock;
 

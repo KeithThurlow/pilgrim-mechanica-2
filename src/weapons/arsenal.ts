@@ -21,6 +21,10 @@ import type { ToonLook } from "../look/toon";
 import type { TargetCandidate } from "../game/targeting";
 import type { WeaponValues } from "./tuning";
 import { newPaint, clearPaint, type Paint, type Strip, type Vec3 } from "./painter";
+import { LineAim } from "./lineAim";
+
+/** The shoulder weapons that paint a strip (line mortar, napalm launcher): click-and-drag aim. */
+const isLine = (w: string) => w === "linemortar" || w === "napalm";
 import { SalvoSim, planStrip, type SalvoStats } from "./salvo";
 import { RailSim, railSheet, coilGlow, type RailStats } from "./rail";
 import type { Sheet } from "../game/sheet";
@@ -136,6 +140,8 @@ export interface Shoulder {
   proto?: ShotProtocols;
   cost?: number;
   line: SalvoSim;
+  /** Line weapons: click-and-drag aiming (src/weapons/lineAim.ts). */
+  aim: LineAim;
   mortar: MortarSim;
   swarm: SwarmSim;
   strip: Strip | null;
@@ -236,7 +242,7 @@ export class Arsenal implements MechWeapons {
       const gear = x.family === "launcher" ? null : new GearSim(gearStats(x.weapon, x.own, this.v));
       const mag = newMag(x.own?.magazine ?? this.v.rpgShoulderMag, x.own?.reload ?? this.v.rpgShoulderReload);
       if (model) model.clip = x.weapon === "rpg" ? mag : null;
-      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
+      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), aim: new LineAim(), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
     // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
     // sliders stay live), a capacitor's faster refill.
@@ -447,7 +453,7 @@ export class Arsenal implements MechWeapons {
     // Sprinting with the weapons off, a painted shot is dropped, not fired (stepShoulder).
     for (const sh of this.shoulders) {
       if (sh.gear) this.stepGear(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1]);
-      else this.stepShoulder(sh, dt, alive && !u.gunsOff && u.keys[sh.key - 1] && !!u.cursor, laserK);
+      else this.stepShoulder(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1], laserK);
     }
     // Each side's guns run on their feeds' passives and overdrives (a side with two feeds multiplies them).
     this.unit.upper.guns.forEach((g, gi) => {
@@ -815,7 +821,7 @@ export class Arsenal implements MechWeapons {
     this.prevTrig[0] = this.prevTrig[1] = false;
     this.energy.stop();
     for (const sh of this.shoulders) {
-      sh.held = false; sh.strip = null; sh.laser.on = false;
+      sh.held = false; sh.strip = null; sh.laser.on = false; sh.aim.reset();
       clearPaint(sh.paint);
       if (sh.gear) { sh.gear.left = 0; sh.held = false; }
     }
@@ -843,8 +849,43 @@ export class Arsenal implements MechWeapons {
     this.onShake?.(0.03);
   }
 
-  private stepShoulder(sh: Shoulder, dt: number, held: boolean, laserK: number) {
+  /**
+   * The line weapons' aim (src/weapons/lineAim.ts, Keith 2026-11-05): hold and release as before, or tap the key, click
+   * the sand where the line starts and drag the way it runs; a double tap fires the default strip at once.
+   */
+  private stepLine(sh: Shoulder, dt: number, down: boolean, launch: THREE.Vector3) {
+    const u = this.unit, bf = this.bf, v = this.v, p = sh.paint, cur = u.cursor;
+    const alive = u.alive && !u.gunsOff;
+    const out = sh.aim.step(dt, { key: down, click: alive && u.click, cursor: cur, enabled: alive && u.clickAim }, v);
+    const nap = sh.weapon === "napalm", st = this.lineStats(sh.own, nap);
+    // The napalm strip is as wide as its pools.
+    const width = nap ? 2 * (sh.own?.poolRadius ?? v.napalmPool) : st.blast * v.salvoWidth / Math.max(0.1, v.salvoBlast);
+    if ((out === "paint" || out === "fireDefault") && cur) sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates(), width);
+    if (out === "drag" || out === "fireDrag") sh.strip = sh.aim.strip(u.sim.pos, cur, st.length, width, v.salvoMinRange, v.salvoMaxRange, v.lineDragMin);
+    sh.held = out === "paint" || out === "drag";
+    if (sh.held && sh.strip) {
+      p.on = true; p.held += dt; p.charge = 1; p.tint = null; p.ring = null; p.arc.length = 0;
+      p.beamFrom = { x: launch.x, y: launch.y, z: launch.z };
+      p.strip = sh.strip; p.ready = sh.line.ready;
+      // Armed (tapped, waiting for the click): no laser, just the strip, so it reads as "click to place".
+      const armed = sh.aim.state === "armed";
+      p.beamScale = armed ? 0 : 1;
+      const to = out === "drag" ? { x: sh.strip.ax, z: sh.strip.az } : cur ?? { x: sh.strip.ax, z: sh.strip.az };
+      p.beamTo = { x: to.x, y: bf.field.height(to.x, to.z) + 0.1, z: to.z };
+    } else clearPaint(p);
+    if ((out === "fireDefault" || out === "fireDrag") && sh.strip && alive) {
+      if (sh.line.fire(sh.strip, st, bf.field, sh.line.fired + 1)) { this.onFire?.(sh.weapon); sh.fired.strip = { ...sh.strip }; sh.fired.held = 0; }
+      sh.strip = null;
+      clearPaint(p);
+    }
+  }
+
+  /** The left button is a line weapon's aim now (armed or dragging): the left gun doesn't fire on it. */
+  claimsClick(): boolean { return this.shoulders.some((sh) => isLine(sh.weapon) && !sh.gear && sh.aim.claimsClick()); }
+
+  private stepShoulder(sh: Shoulder, dt: number, down: boolean, laserK: number) {
     const u = this.unit, bf = this.bf, v = this.v;
+    const held = down && !!u.cursor;
     sh.cool = Math.max(0, sh.cool - dt);
     if (sh.weapon === "rpg" && !sh.own) magResize(sh.mag, v.rpgShoulderMag, v.rpgShoulderReload);
     magStep(sh.mag, dt);
@@ -855,18 +896,12 @@ export class Arsenal implements MechWeapons {
     // The shoulder rocket's faint laser runs to the cursor while it's fitted.
     sh.laser.on = sh.weapon === "rpg" && !!cur && u.alive && laserK > 0;
     if (sh.laser.on) { if (sh.model?.laserFrom) sh.model.laserFrom.getWorldPosition(sh.laser.from); else sh.laser.from.copy(launch); sh.laser.to.copy(this.rpgPoint(launch, cur!)); sh.laser.k = laserK; }
-    if (held && cur) {
+    if (isLine(sh.weapon)) this.stepLine(sh, dt, down, launch);
+    else if (held && cur) {
       p.on = true; p.held += dt; p.charge = 1; p.beamScale = 1; p.tint = null;
       p.beamFrom = { x: launch.x, y: launch.y, z: launch.z };
       p.strip = null; p.ring = null; p.arc.length = 0;
-      if (sh.weapon === "linemortar" || sh.weapon === "napalm") {
-        const nap = sh.weapon === "napalm", st = this.lineStats(sh.own, nap);
-        // The napalm strip is as wide as its pools.
-        const width = nap ? 2 * (sh.own?.poolRadius ?? v.napalmPool) : st.blast * v.salvoWidth / Math.max(0.1, v.salvoBlast);
-        sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates(), width);
-        p.strip = sh.strip; p.ready = sh.line.ready;
-        p.beamTo = { x: cur.x, y: bf.field.height(cur.x, cur.z) + 0.1, z: cur.z };
-      } else if (sh.weapon === "mortar") {
+      if (sh.weapon === "mortar") {
         const st = this.mortarStats(sh.own);
         const c = mortarAim(u.sim.pos, cur, u.lock ? { x: u.lock.x, z: u.lock.z, vx: u.lock.vx, vz: u.lock.vz } : null, v);
         sh.at = c;
@@ -888,9 +923,7 @@ export class Arsenal implements MechWeapons {
       }
     } else if (sh.held && u.alive && !u.gunsOff) {
       // Released: fire at what was painted (if ready).
-      if ((sh.weapon === "linemortar" || sh.weapon === "napalm") && sh.strip) {
-        if (sh.line.fire(sh.strip, this.lineStats(sh.own, sh.weapon === "napalm"), bf.field, sh.line.fired + 1)) { this.onFire?.(sh.weapon); sh.fired.strip = { ...sh.strip }; sh.fired.held = 0; }
-      } else if (sh.weapon === "mortar") {
+      if (sh.weapon === "mortar") {
         if (sh.mortar.fire(sh.at.x, sh.at.z, this.mortarStats(sh.own))) this.onFire?.("mortar");
       } else if (sh.weapon === "missiles") {
         const picks = this.candidates().map((c) => ({ x: c.x, y: c.y, z: c.z, key: c.key }));
@@ -905,7 +938,7 @@ export class Arsenal implements MechWeapons {
       }
       clearPaint(p);
     } else clearPaint(p);
-    sh.held = held;
+    if (!isLine(sh.weapon)) sh.held = held;
 
     // The line mortar's strip stays painted (dimmer, no laser) until its shells are down.
     const fp = sh.fired;
@@ -1371,7 +1404,8 @@ export class Arsenal implements MechWeapons {
       }
       const cd = sh.weapon === "linemortar" || sh.weapon === "napalm" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
       const left = sh.weapon === "rpg" ? ` ${Math.ceil(sh.mag.left)}/${sh.mag.size}` : "";
-      out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon}${left} ${cd > 0 ? `${sh.mag.reloading > 0 ? "reload " : ""}${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready"}`);
+      const how = isLine(sh.weapon) ? (sh.aim.state === "armed" ? "<b>click and drag on the sand</b> (tap again: fire ahead)" : sh.aim.state === "drag" ? "<b>drag the line, let go to fire</b>" : null) : null;
+      out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon}${left} ${how ?? (cd > 0 ? `${sh.mag.reloading > 0 ? "reload " : ""}${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready")}`);
     }
     return out;
   }
