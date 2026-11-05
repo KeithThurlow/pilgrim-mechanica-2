@@ -212,10 +212,15 @@ export class Sfx {
       this.extra.set(name, e);
     }
     if (level) e.level = level;
+    this.versions.set(name, (this.versions.get(name) ?? 0) + 1);
     const use = data ?? e.proc;
     e.buffers = use.length ? this.toBuffers(use) : [];
     e.swapped = !!data;
   }
+
+  private versions = new Map<string, number>();
+  /** Bumped whenever a sound's variants are swapped: a long-running loop restarts on a change to pick up the recording. */
+  soundVersion(name: string) { return this.versions.get(name) ?? 0; }
 
   /** Play a sound added with addSound (a few voices at most, `voices` for a crowd of them; the oldest is cut), `delay` s from now. */
   playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1, delay = 0, voices = PER_KIND) {
