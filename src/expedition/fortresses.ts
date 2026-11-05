@@ -32,11 +32,14 @@ import { Gates, GATE_DEFAULTS, GATE_PARAMS, type GateEvent, type GateValues, typ
 import { GatesDraw } from "../pois/gatesDraw";
 import { Spawners, SPAWNER_DEFAULTS, SPAWNER_PARAMS, type SpawnerEvent, type SpawnerState, type SpawnerValues } from "../pois/spawners";
 import { SpawnersDraw } from "../pois/spawnersDraw";
+import { Towers, TOWER_DEFAULTS, TOWER_PARAMS, type CrewKind, type TowerEvent, type TowerState, type TowerValues } from "../pois/towers";
+import { TowersDraw } from "../pois/towersDraw";
 import { WARLORD_DEFAULTS, WARLORD_PARAMS, type Warlord } from "./warlord";
 
 export const FORT_LIFE_DEFAULTS = {
   ...GATE_DEFAULTS,
   ...SPAWNER_DEFAULTS,
+  ...TOWER_DEFAULTS,
   ...WARLORD_DEFAULTS,
   fortGuardsOuter: 30,
   fortGuardsInner: 22,
@@ -57,15 +60,16 @@ export const FORT_LIFE_DEFAULTS = {
   fortReinforceAfter: 20,
   fortHear: 1,
   fortHurt: 1.5,
-  fortDamage: 1,
+  fortDamage: 2,
   fortFlowNear: 28,
 };
-export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues & SpawnerValues;
+export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues & SpawnerValues & TowerValues;
 
 const G = "Fortress: garrison";
 export const FORT_LIFE_PARAMS: Param[] = [
   ...GATE_PARAMS,
   ...SPAWNER_PARAMS,
+  ...TOWER_PARAMS,
   ...WARLORD_PARAMS,
   { key: "fortGuardsOuter", label: "Bandits in the outer yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
   { key: "fortGuardsInner", label: "Bandits in the inner yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
@@ -100,7 +104,7 @@ interface Yard {
   /** Inner and outer radius of its floor (m from the centre). */
   r0: number; r1: number;
 }
-interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[]; spawners: SpawnerState[]; wave: number; waved: number }
+interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[]; spawners: SpawnerState[]; towers: TowerState[]; wave: number; waved: number }
 interface Kept { left: number[]; hp: Map<string, number>; waved: number }
 
 export class Fortresses {
@@ -111,6 +115,10 @@ export class Fortresses {
   readonly gatesDraw: GatesDraw;
   readonly spawners: Spawners;
   readonly spawnersDraw: SpawnersDraw;
+  readonly towers: Towers;
+  readonly towersDraw: TowersDraw;
+  /** Tower hits and downs, plain data. */
+  onTower: ((e: TowerEvent) => void) | null = null;
   /** Spawner hits and downs, plain data. */
   onSpawner: ((e: SpawnerEvent) => void) | null = null;
   readonly live = new Map<string, LiveFort>();
@@ -155,6 +163,11 @@ export class Fortresses {
     scene.add(this.spawnersDraw.group);
     this.spawners.onEvent = (e) => this.spawnerEvent(e);
     this.spawners.onPour = (s, x, z, a) => this.pour(s, x, z, a);
+    this.towers = new Towers(v, TEAM.raiders);
+    bf.targets.push(this.towers);
+    this.towersDraw = new TowersDraw(this.towers);
+    scene.add(this.towersDraw.group);
+    this.towers.onEvent = (e) => this.towerEvent(e);
     this.sw.onDeath = (i) => this.onKill?.(i, this.sw.gen[i], this.sw.px[i], this.sw.pz[i]);
     // Nobody on foot climbs a wall: a step that gains wall height is refused (sentries walk its top, anyone may drop off).
     this.sw.fence = (x0, z0, x1, z1) => {
@@ -279,9 +292,12 @@ export class Fortresses {
     this.gatesDraw.update();
     this.spawners.step(dt);
     this.spawnersDraw.update(dt);
+    this.towers.step(dt);
+    this.towersDraw.update(dt);
     const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
     const T = q.at;
     this.stepWarlord(dt, hunting, q);
+    if (hunting && q.alive) this.crewFire(dt, q.at);
     if (!sw.hi) return;
     const bf = this.bf;
     sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.kind === "pilot" ? 1 : q.kind === "summon" ? q.radius + 1 : this.mechReach }, (fx, fy, fz, tx, ty, tz, i) => {
@@ -364,6 +380,41 @@ export class Fortresses {
     y.hp = this.hp(y);
   }
 
+  /** Tower crews on alert: grenadiers lob, rocketeers fire (both telegraphed shells, dodgeable); riflemen are plain bandits. */
+  private crewFire(dt: number, T: THREE.Vector3) {
+    const v = this.v, sw = this.sw;
+    for (const f of this.live.values()) for (const t of f.towers) {
+      if (t.down || f.yards[Math.min(t.t.yard, f.yards.length - 1)].state !== "alert") continue;
+      for (const c of t.crew) {
+        if (c.kind === "gun" || sw.gen[c.i] !== c.gen || sw.state[c.i] >= DOWN) continue;
+        if ((c.clock -= dt) > 0) continue;
+        const from = this.from.set(sw.px[c.i], sw.py[c.i] + 1.6, sw.pz[c.i]);
+        const d = Math.hypot(T.x - from.x, T.z - from.z);
+        const range = c.kind === "grenade" ? v.towerGrenadeRange : v.towerRocketRange;
+        if (d > range || !this.bf.canSee(from, T)) { c.clock = 0.5; continue; }
+        c.clock = (c.kind === "grenade" ? v.towerGrenadeEvery : v.towerRocketEvery) * (0.8 + 0.4 * Math.random());
+        if (c.kind === "grenade") this.bf.lob(TEAM.raiders, from, T.x, T.z, v.towerGrenadeFlight, 7, v.towerGrenadeRadius, v.towerGrenadeDamage);
+        else this.bf.lob(TEAM.raiders, from, T.x, T.z, Math.max(0.3, d / Math.max(1, v.towerRocketSpeed)), 0.8, v.towerRocketRadius, v.towerRocketDamage);
+      }
+    }
+  }
+
+  private towerEvent(e: TowerEvent) {
+    const f = this.live.get(e.poi);
+    if (f) this.alarm(f, f.yards[Math.min(e.yard, f.yards.length - 1)]);
+    if (e.type === "towerDown") {
+      this.walls.down.add(e.id);
+      const t = this.towers.list.find((s) => s.t.id === e.id);
+      if (t) {
+        this.rebuildGround(t.b.x - 8, t.b.z - 8, t.b.x + 8, t.b.z + 8);
+        // The crew falls with it.
+        for (const c of t.crew) if (this.sw.gen[c.i] === c.gen && this.sw.state[c.i] < DOWN) this.sw.damage(c.i, 1e9, Math.sin(t.fallA), Math.cos(t.fallA));
+      }
+      this.bf.blast(TEAM.raiders, new THREE.Vector3(e.x, e.y, e.z), 5, 0);
+    }
+    this.onTower?.(e);
+  }
+
   private spawnerEvent(e: SpawnerEvent) {
     const f = this.live.get(e.poi);
     if (f) this.alarm(f, f.yards[Math.min(e.yard, f.yards.length - 1)]);
@@ -390,7 +441,12 @@ export class Fortresses {
     const v = this.v, sw = this.sw, L = this.walls.layout(p);
     const rings = L.rings, kept = this.kept.get(p.id);
     const floor = this.field.height(p.x, p.z) - wallHeight(L, p.x, p.z, this.walls.down);
-    const f: LiveFort = { p, L, floor, yards: [], gates: [], spawners: [], wave: 0, waved: kept?.waved ?? 0 };
+    const f: LiveFort = { p, L, floor, yards: [], gates: [], spawners: [], towers: [], wave: 0, waved: kept?.waved ?? 0 };
+    // Lookout towers (their crews after the yards).
+    for (const tw of L.towers) {
+      const b = L.blocks[tw.block];
+      f.towers.push(this.towers.add(p.id, tw, b, this.field.height(b.x, b.z) - wallHeight(L, b.x, b.z, this.walls.down), kept?.hp.get(tw.id)));
+    }
     // Spawner shacks (their health kept by id with the gates').
     for (const sp of L.spawners) {
       const b = L.blocks[sp.block];
@@ -447,14 +503,34 @@ export class Fortresses {
       y.hp = this.hp(y);
       f.yards.push(y);
     }
+    // Tower crews: one or two on top of each standing tower, holding there; a rocket launcher, grenades or a rifle each.
+    const rt = rng(hash4(p.seed, 31, 37, 41));
+    const KINDS: CrewKind[] = ["rocket", "grenade", "gun"];
+    for (const t of f.towers) {
+      const n = 1 + (rt() < 0.5 ? 1 : 0), kinds = [KINDS[Math.floor(rt() * 3)], KINDS[Math.floor(rt() * 3)]];
+      if (t.down || kept) continue; // a fortress streamed back in keeps its yards' counts; its crews are in them
+      const y = f.yards[Math.min(t.t.yard, f.yards.length - 1)], ux = Math.sin(t.b.a), uz = Math.cos(t.b.a);
+      const slots = sw.spawn(n, t.b.x, t.b.z, 0);
+      slots.forEach((i, m) => {
+        const s2 = (m - (slots.length - 1) / 2) * 2.2, x = t.b.x + ux * s2, z = t.b.z + uz * s2;
+        sw.px[i] = x; sw.pz[i] = z; sw.py[i] = this.field.height(x, z);
+        sw.hp[i] *= v.fortHurt * v.towerCrewHurt;
+        sw.frozen[i] = 1; sw.hold[i] = 1;
+        this.postX[i] = x; this.postZ[i] = z;
+        y.slots.push(i); y.gens.push(sw.gen[i]); y.sentry.push(1);
+        t.crew.push({ i, gen: sw.gen[i], kind: kinds[m], clock: 1 + rt() * 2 });
+      });
+      y.hp = this.hp(y);
+    }
     this.live.set(p.id, f);
   }
 
   private despawn(f: LiveFort, keep: boolean) {
-    if (keep) this.kept.set(f.p.id, { left: f.yards.map((y) => this.alive(y)), hp: new Map([...f.gates.map((s) => [s.gate.id, s.hp] as [string, number]), ...f.spawners.map((s) => [s.sp.id, s.hp] as [string, number])]), waved: f.waved });
+    if (keep) this.kept.set(f.p.id, { left: f.yards.map((y) => this.alive(y)), hp: new Map([...f.gates.map((s) => [s.gate.id, s.hp] as [string, number]), ...f.spawners.map((s) => [s.sp.id, s.hp] as [string, number]), ...f.towers.map((s) => [s.t.id, s.hp] as [string, number])]), waved: f.waved });
     for (const y of f.yards) for (let n = 0; n < y.slots.length; n++) if (this.sw.gen[y.slots[n]] === y.gens[n]) this.sw.remove(y.slots[n]);
     this.gates.removePoi(f.p.id);
     this.spawners.removePoi(f.p.id);
+    this.towers.removePoi(f.p.id);
     if (this.warlord?.poi === f.p.id) this.warlord.leave();
     this.live.delete(f.p.id);
   }

@@ -57,6 +57,7 @@ export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<st
   for (const ring of L.rings) best = Math.max(best, ringHeight(ring, d, a, down, steel));
   for (const n of blocksNear(L, x, z)) {
     const b = L.blocks[n];
+    if (b.id && down.has(b.id)) continue; // a toppled tower
     const bx = x - b.x, bz = z - b.z;
     const ca = Math.cos(b.a), sa = Math.sin(b.a);
     // Box frame: long side along heading a.
@@ -149,6 +150,7 @@ function solidAt(L: Layout, x: number, z: number, down: ReadonlySet<string>) {
   }
   for (const n of blocksNear(L, x, z)) {
     const b = L.blocks[n], bx = x - b.x, bz = z - b.z, ca = Math.cos(b.a), sa = Math.sin(b.a);
+    if (b.id && down.has(b.id)) continue;
     if (Math.abs(bx * sa + bz * ca) < b.len / 2 + 0.9 && Math.abs(bx * ca - bz * sa) < b.dep / 2 + 0.9) return true;
   }
   return false;
@@ -159,7 +161,7 @@ function flowGrid(L: Layout, down: ReadonlySet<string>) {
   let f = L.flow;
   // Which of this fortress's gates are open (only changes when a gate goes down or everything is reset).
   if (!f || f.size !== down.size) {
-    const key = L.rings.flatMap((r) => r.gates).filter((g) => down.has(g.id)).map((g) => g.id).join(",");
+    const key = [...L.rings.flatMap((r) => r.gates).map((g) => g.id), ...L.towers.map((t) => t.id)].filter((id) => down.has(id)).join(",");
     if (!f || f.downKey !== key) f = L.flow = { downKey: key, size: down.size, solid: null, fields: new Map() };
     else f.size = down.size;
   }
