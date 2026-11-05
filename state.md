@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · npm test runs the checks side by side (overnight perf pass; Claude on `claude/project-thread-4kcrrl`)
+- `tools/run-checks.mjs` finds every `tools/*-check.ts` (plus `balance-sheet.ts --check`) and runs them as separate processes, one per core, slowest first by the last run's times (`node_modules/.cache/check-times.json`). Output only for failures; it ends with the slowest five. Flags: `--verbose`, `-j N`, name filters (`npm test -- duel`). `npm run test:serial` is the old one-at-a-time order.
+- Before: 7 min 00 s on 4 cores. After: 3 min 32 s, all 80 pass; duel-check alone (194 s) is now the floor.
 ### 2026-11-05 · Bullets on metal: the ricochet recording with variations, and fortress containers now count as metal (Keith asked; Claude on `claude/metal-hit-sound`)
 - Rounds on metal play `bulletMetal` (`src/audio/minigunAudio.ts`): `metalhit` cut 5 ways across 5 semitones, each play at its own pitch, level and up to 0.03 s late, at most one every 0.05 s (Sound sliders). Bumps, salvage and droid hits keep the old `metalHit` tick.
 - Fortress and hub containers are part of the ground, so rounds hitting them counted as sand (dust, craters, dirt sound). `GroundModifier.metalAt` and `wallMetal` (`src/pois/fortressGround.ts`) now make them metal, with the sand drift banked against them still sand. Fortress check covers both. `npm test`.

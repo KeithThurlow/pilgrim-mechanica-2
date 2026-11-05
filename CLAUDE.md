@@ -92,7 +92,8 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ## Commands
 
-- `npm run dev`: dev server with hot reload, opens the lab hub. `npm run check`: typecheck. `npm test`: headless checks.
+- `npm run dev`: dev server with hot reload, opens the lab hub. `npm run check`: typecheck. `npm test`: headless checks (every `tools/*-check.ts`, found by itself, side by side on all cores;
+  output only for failures, `npm test -- --verbose` for all, `npm test -- duel fortress` for some, `npm run test:serial` one at a time).
 - `npm run build`: typecheck + production build to `dist/`. `npm run shots`: screenshots of the labs into `shots/`
   (needs a build; `npx playwright install chromium` once).
 
