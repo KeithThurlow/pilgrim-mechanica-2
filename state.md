@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword sounds, second pass: louder turbine swipe by sword, a blade ring, more varied hits (Keith asked; Claude on `claude/sword-ring-variations`)
+- The swipe (`bladeswipe`) was in but faint: it matched a quiet procedural whoosh (peak 0.11), now +12 dB (peak 0.55). Pitch at the recording's own, then Buster × 1.2, Breaker × 1.5, Short × 1.9. Hits follow half of that against the Breaker.
+- New `swordRing`: about a second of struck-steel partials after a cut's first hit, pitch by sword (Buster 0.6, Short 1, Breaker 1.25), 0.5 on flesh (`Sword sound` sliders).
+- Ten smashes (was six) with sharpness, hollowness, hold and a torn-steel shriek drawn per variant; wider pitch and layer level per hit; swipe and scrape in five cuts each, the scrape from five stretches of the recording (new sample slider "Each variant starts later by"). Smash still measures close to the clip. `npm test`.
 ### 2026-11-05 · Sword lunges no longer cancel charges (Keith asked; Claude on `claude/project-thread-n01dm9`)
 - A sword's lunge pushes the walker, which started a dash and so dropped rail and energy (Nova Lance etc.) charges. The walker now marks a push-started dash (`dashCancels` in `src/mech/walker.ts`); `src/weapons/arsenal.ts` drops charges only for a pressed dash or sprint. Checked: `npm test`.
 ### 2026-11-05 · Bullets on metal: the ricochet recording with variations, and fortress containers now count as metal (Keith asked; Claude on `claude/metal-hit-sound`)

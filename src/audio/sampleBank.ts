@@ -53,7 +53,7 @@ export class SampleBank {
     const v = this.v, on = (v.samplesOn ?? 1) > 0.5 && (v[sampleKey(d, "On")] ?? 1) > 0.5;
     if (!on) return "off";
     // Recut once the sound it is matched to has been added (the flamers add theirs when one is first fitted).
-    return (this.sfx.procedural(d.ref ?? d.sound)?.length ? "on:p:" : "on:") + (["Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const).map((f) => v[sampleKey(d, f)]).join(",")
+    return (this.sfx.procedural(d.ref ?? d.sound)?.length ? "on:p:" : "on:") + (["Start", "Step", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const).map((f) => v[sampleKey(d, f)]).join(",")
       + (d.alien ? ":" + ALIEN_FIELDS.map(([f]) => v[alienKey(d, f)]).join(",") : "");
   }
 
@@ -91,7 +91,7 @@ export function cutVariants(d: SampleDef, v: V, src: Float32Array, srcRate: numb
   for (let i = 0; i < n; i++) {
     const semis = k("Pitch") + (n > 1 ? (i / (n - 1) - 0.5) * k("Spread") : 0);
     const rate = Math.pow(2, semis / 12);
-    const cut = cutSample(src, srcRate, outRate, { start: k("Start"), len: k("Len") / rate, fade: k("Fade") / rate, rate, lowpass: k("Lp"), highpass: k("Hp"), loop: d.loop ? k("Fade") / rate : 0 });
+    const cut = cutSample(src, srcRate, outRate, { start: k("Start") + i * k("Step"), len: k("Len") / rate, fade: k("Fade") / rate, rate, lowpass: k("Lp"), highpass: k("Hp"), loop: d.loop ? k("Fade") / rate : 0 });
     if (d.alien) {
       const a = {} as AlienOptions;
       for (const [f] of ALIEN_FIELDS) a[f] = v[alienKey(d, f)] ?? d.alien[f];
