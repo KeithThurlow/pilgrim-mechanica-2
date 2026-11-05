@@ -1,13 +1,14 @@
-// Fire's look (Keith 2026-11-05; cosmetic, local, Math.random allowed): flame particles for the flamers' stream (fuel
-// that flies dark from the fuel nozzle until the igniter's flame catches it, then burns along it), flames licking off
-// burning things and pools, embers. Camera-facing quads in two instanced meshes: the flames added on (bright, no depth
-// write), the unlit fuel and soot drawn over (dark). One draw call each. The battlefield owns one (bf.flames) and feeds
-// it burning targets and pools every frame; the flamers emit their gobs into it.
-// The solid look (Keith 2026-11-05): each pouring nozzle draws a thin emissive cone and each lit gob a boiling ball of
-// flame (src/fx/flameBlobs.ts), the flat particles round them as a glow. A landing gob burns on and slides along the
-// sand, runs downhill, and flows toward burning things near it (the battlefield hands those in as attractors each
-// frame), ringing round them and running between ones close together; a gob flying into one splats there. Lit flames
-// throw dirty smoke that billows up. All cheap per-particle maths on the gobs already alive; no fluid grid.
+// Fire's look (Keith 2026-11-05; cosmetic, local, Math.random allowed): the flamers' stream, flames licking off burning
+// things and pools, embers, smoke. Camera-facing quads in two instanced meshes (the flames added on, the smoke drawn
+// over) plus the solid flame balls and the nozzle cone (src/fx/flameBlobs.ts). The battlefield owns one (bf.flames)
+// and feeds it burning targets and pools every frame; the flamers emit their gobs into it.
+// The stream is burning fuel thrown under gravity (Keith 2026-11-05, the rebuild: "arcing out from the mech,
+// accounting for gravity ... it can either hit the ground and splash ... or if it's really far out ... it just
+// starts igniting and rising up into the air, because it's burnt out before it's hit the ground"). Each gob flies a
+// real ballistic arc (fireGuns aims it to come down on the aim) and breaks up into branches as it goes; one that comes
+// down while still burning splashes (droplets thrown on) and burns on the sand as a low fire licking flames up; one
+// that runs out of fuel in the air (aimed past the reach) lets go of its arc and rises as a growing fireball that
+// turns to smoke. Smoke only from fire that's burning down.
 import * as THREE from "three/webgpu";
 import { instancedBufferAttribute, uv, smoothstep, float, sin, positionWorld, time } from "three/tsl";
 import { FlameBlobs } from "./flameBlobs";
@@ -16,27 +17,32 @@ export const FLAME_MAX = 4096;
 
 interface Ground { height(x: number, z: number): number }
 
-/** Particle kinds: a stream gob (dark fuel, then flame), a flame lick (burning thing, pool), an ember. */
-const GOB = 0, LICK = 1, EMBER = 2, SMOKE = 3;
-const ATTRACT_MAX = 96;
-/** Where a stream's fire on the sand flows to (Keith 2026-11-05): the plane through the aim point (x, z), square to the
- *  shooter's line to it (nx, nz: from the shooter toward the aim). */
-export interface FlowGoal { x: number; z: number; nx: number; nz: number }
-/** The neighbour grid for the swarm's spacing: cells this wide (m), a hash table this big. */
-const CELL = 1, HASH = 1024;
+/** Particle kinds: a stream gob, a flame lick (burning thing, pool), an ember, a smoke puff, a splash droplet. */
+const GOB = 0, LICK = 1, EMBER = 2, SMOKE = 3, DROP = 4;
+/** A gob's state: flying (burning fuel on its arc), on the sand (a ground fire), burnt out in the air (rising). */
+export const FLY = 0, GROUND = 1, RISE = 2;
+
+/** The upward speed that brings fuel thrown at horizontal speed `vh` down `dy` m higher (negative: lower), `dist` m
+ *  off, under gravity `G`: at most a 35° lob (Keith 2026-11-05: the fuel arcs out and lands on the aim). */
+export function lobVy(dy: number, dist: number, vh: number, G: number) {
+  const T = dist / Math.max(1, vh);
+  return Math.min(vh * 0.7, dy / T + 0.5 * G * T);
+}
 
 /** The look values (Flame look sliders; the battlefield hands them in with tune()). */
 export interface FlameLook {
-  flameRise: number; flameDrag: number; flameGravity: number; flameFall: number; flameLicks: number; flameBuoy: number; flameLiftAfter: number; flameGrowLate: number; flameGrowEnd: number; flameStretch: number; flameWobble: number; flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
-  flameGroundLife: number; flameSlide: number; flameGroundDrag: number; flameDownhill: number; flamePull: number;
-  flamePullRange: number; flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number;
-  flameFlow: number; flameFlowSpeed: number; flameSeparate: number; flameSepDist: number;
+  flameRise: number; flameGravity: number; flameDrag: number; flameBreak: number; flameSplashDrops: number;
+  flameGroundLife: number; flameSlide: number; flameGroundDrag: number; flameRiseLife: number; flameBuoy: number;
+  flameStretch: number; flameGrowFly: number; flameGrowGround: number; flameGrowRise: number; flameLicks: number;
+  flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
+  flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number;
 }
 const LOOK: FlameLook = {
-  flameRise: 3, flameDrag: 1.6, flameGravity: 4, flameFall: 4, flameLicks: 0.8, flameBuoy: 6, flameLiftAfter: 0.35, flameGrowLate: 1.8, flameGrowEnd: 1.2, flameStretch: 3, flameWobble: 0.5, flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.6, flameHalo: 0.25, flameGroundLife: 0.9,
-  flameSlide: 0.9, flameGroundDrag: 2.4, flameDownhill: 5, flamePull: 16, flamePullRange: 2.2,
+  flameRise: 3, flameGravity: 9.8, flameDrag: 0.15, flameBreak: 1.2, flameSplashDrops: 2,
+  flameGroundLife: 1.2, flameSlide: 0.3, flameGroundDrag: 4, flameRiseLife: 0.9, flameBuoy: 6,
+  flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 1.2,
+  flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
-  flameFlow: 3, flameFlowSpeed: 9, flameSeparate: 3, flameSepDist: 0.9,
 };
 
 export class FlameFx {
@@ -57,19 +63,18 @@ export class FlameFx {
   private heat = new Float32Array(FLAME_MAX);
   /** The freeze ray's mist (Keith 2026-11-05): drawn icy blue-white instead of fire. */
   private cold = new Uint8Array(FLAME_MAX);
-  /** Seconds since a gob landed on the sand (-1: still flying). */
-  private onG = new Float32Array(FLAME_MAX);
+  /** Gobs: FLY, GROUND or RISE; when it got there (s of age); its size then (m); how long it burns in the air (s);
+   *  whether it has split off a branch yet. */
+  private st = new Uint8Array(FLAME_MAX);
+  private tS = new Float32Array(FLAME_MAX);
+  private s0 = new Float32Array(FLAME_MAX);
+  private burn = new Float32Array(FLAME_MAX);
+  private split = new Uint8Array(FLAME_MAX);
   private seed = new Float32Array(FLAME_MAX);
-  /** Each gob's flow goal (see FlowGoal; gnx = gnz = 0: none). */
-  private gx = new Float32Array(FLAME_MAX); private gz = new Float32Array(FLAME_MAX);
-  private gnx = new Float32Array(FLAME_MAX); private gnz = new Float32Array(FLAME_MAX);
-  /** The neighbour grid of gobs on the sand (built at the top of each update from last frame's places). */
-  private head = new Int32Array(HASH); private next = new Int32Array(FLAME_MAX);
-  /** Burning things this frame (x, y, z), that fire on the sand gathers round. */
-  private att = new Float32Array(ATTRACT_MAX * 3);
-  private na = 0;
   private pend: number[] = [];
   private pendL: number[] = [];
+  private pendD: number[] = [];
+  private pendB: number[] = [];
   /** Lights in among the fireballs this frame (x, y, z, size): one every flameLightEvery lit balls, flameBallLights at most;
    *  the battlefield hangs a night light on each (Keith 2026-11-05). */
   readonly lightPts = new Float32Array(16 * 4);
@@ -84,15 +89,11 @@ export class FlameFx {
   private glows: number[] = [];
   /** Look values (the Flame stream sliders; the arsenal sets them). */
   look: FlameLook = { ...LOOK };
+  /** For the headless check: told where each gob lands (GROUND) or burns out in the air (RISE). */
+  probe: ((what: number, x: number, y: number, z: number) => void) | null = null;
 
   /** Takes the Flame stream and Flame look sliders (any values object holding them; missing keys keep the default). */
   tune(v: Partial<FlameLook>) { for (const k in LOOK) { const x = (v as Record<string, number>)[k]; (this.look as unknown as Record<string, number>)[k] = typeof x === "number" ? x : LOOK[k as keyof FlameLook]; } }
-
-  /** A burning thing at (x, y, z) this frame: fire on the sand near it flows to it. */
-  attract(x: number, y: number, z: number) {
-    if (this.na >= ATTRACT_MAX) return;
-    const o = this.na++ * 3; this.att[o] = x; this.att[o + 1] = y; this.att[o + 2] = z;
-  }
 
   /** A pouring nozzle's cone this frame (src/fx/flameBlobs.ts). */
   cone(from: THREE.Vector3, dir: THREE.Vector3, len: number, r: number, cold: boolean, cut = 1) {
@@ -135,17 +136,16 @@ export class FlameFx {
     const i = this.n++;
     this.cold[i] = cold;
     this.kind[i] = k; this.px[i] = x; this.py[i] = y; this.pz[i] = z; this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
-    this.onG[i] = -1; this.seed[i] = Math.random() * 100; this.gnx[i] = 0; this.gnz[i] = 0;
+    this.st[i] = FLY; this.tS[i] = 0; this.s0[i] = size; this.burn[i] = life; this.split[i] = 0; this.seed[i] = Math.random() * 100;
     this.age[i] = 0; this.life[i] = life; this.size[i] = size; this.grow[i] = grow; this.ign[i] = ign; this.heat[i] = heat;
     return i;
   }
 
-  /** A gob of the stream: leaves at (x, y, z) at velocity v, dark until `ign` s, then flame (growing `grow` × over life). */
-  gob(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, ign: number, cold = false,
-    goal: FlowGoal | null = null) {
-    // Its whole life from the start, its burn on the sand included, so its look runs on smoothly through the landing.
-    const i = this.add(GOB, x, y, z, vx, vy, vz, life + this.look.flameGroundLife * (0.7 + Math.random() * 0.6), size, grow, cold ? -1 : ign, 1, cold ? 1 : 0);
-    if (i >= 0 && goal) { const h = Math.hypot(goal.nx, goal.nz) || 1; this.gx[i] = goal.x; this.gz[i] = goal.z; this.gnx[i] = goal.nx / h; this.gnz[i] = goal.nz / h; }
+  /** A gob of the stream: thrown from (x, y, z) at velocity v, burning `burn` s in the air before its fuel is spent,
+   *  `size` m across, dark until `ign` s (the fuel nozzle's gel before the igniter catches it). */
+  gob(x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, size: number, ign: number, cold = false) {
+    const i = this.add(GOB, x, y, z, vx, vy, vz, burn + this.look.flameRiseLife, size, 1, cold ? -1 : ign, 1, cold ? 1 : 0);
+    if (i >= 0) this.burn[i] = burn;
   }
 
   /** A wisp of freezing mist (chilled things, the freeze ray's nozzle). */
@@ -172,131 +172,121 @@ export class FlameFx {
     this.add(EMBER, x, y, z, (Math.random() - 0.5) * 2, 1.5 + Math.random() * 3, (Math.random() - 0.5) * 2, 0.6 + Math.random() * 0.9, 0.06 + Math.random() * 0.05, 1, -1);
   }
 
-  private ax = 0; private az = 0;
-  /** Swerving round burning things (the swarm's obstacles): within `R` of one, pushed out from it and along its side
-   *  the gob is already heading, so the flow parts round it and closes behind. Adds to (ax, az) into this.ax, this.az. */
-  private around(i: number, R: number, ax: number, az: number) {
-    const att = this.att, push = this.look.flamePull, x = this.px[i], z = this.pz[i];
-    const vx = this.vx[i] || this.gnx[i], vz = this.vz[i] || this.gnz[i];
-    for (let j = 0; j < this.na; j++) {
-      const dx = x - att[j * 3], dz = z - att[j * 3 + 2], d2 = dx * dx + dz * dz;
-      if (d2 > R * R || d2 < 1e-6) continue;
-      const d = Math.sqrt(d2), ux = dx / d, uz = dz / d, k = push * (1 - d / R);
-      // The side it passes on: the tangent that goes with its heading.
-      const tx = -uz, tz = ux, sg = tx * vx + tz * vz >= 0 ? 1 : -1;
-      ax += (ux + tx * sg * 0.8) * k; az += (uz + tz * sg * 0.8) * k;
-    }
-    this.ax = ax; this.az = az;
-  }
-
   update(dt: number, camera: THREE.Camera) {
-    const g = this.ground, L = this.look;
-    const R = L.flamePullRange, na = this.na;
-    // The swarm's neighbour grid: gobs on the sand by cell (last frame's places; indices hold until the compaction).
-    const head = this.head, next = this.next, sepD = L.flameSepDist;
-    head.fill(-1);
-    if (L.flameSeparate > 0) for (let i = 0; i < this.n; i++) if (this.kind[i] === GOB && this.onG[i] >= 0) {
-      const h = cellHash(Math.floor(this.px[i] / CELL), Math.floor(this.pz[i] / CELL));
-      next[i] = head[h]; head[h] = i;
-    }
+    const g = this.ground, L = this.look, G = L.flameGravity;
     let keep = 0;
-    for (let i = 0; i < this.n; i++) {
+    const nIn = this.n;
+    for (let i = 0; i < nIn; i++) {
       this.age[i] += dt;
+      const k = this.kind[i], cold = this.cold[i] === 1;
       if (this.age[i] >= this.life[i]) {
-        // A burnt-out fireball turns into smoke where it rose to (Keith 2026-11-05: smoke only at the end).
-        if (this.kind[i] === GOB && !this.cold[i] && L.flameSmoke > 0 && Math.random() < 0.5 * L.flameSmoke) this.pend.push(this.px[i], this.py[i] + 0.3, this.pz[i], 1.3);
+        // A ground fire or a burnt-out fireball goes up in smoke where it ends (smoke only from fire burning down).
+        if (k === GOB && !cold && this.st[i] !== FLY && L.flameSmoke > 0 && Math.random() < 0.6 * L.flameSmoke) this.pend.push(this.px[i], this.py[i] + 0.4, this.pz[i], this.st[i] === RISE ? 1.5 : 1.1);
         continue;
       }
-      const k = this.kind[i], lit = this.age[i] >= this.ign[i], cold = this.cold[i] === 1;
-      const grounded = this.onG[i] >= 0;
+      const lit = this.age[i] >= this.ign[i], st = this.st[i];
       if (k === SMOKE) {
         const dr = Math.exp(-0.9 * dt);
         this.vx[i] *= dr; this.vz[i] *= dr; this.vy[i] = this.vy[i] * dr + L.flameSmokeRise * 0.45 * dt;
-      } else if (k === GOB && grounded) {
-        // On the sand, a swarm (Keith 2026-11-05: "a swarm that will try to navigate ... towards a plane that's
-        // perpendicular to the cursor from the player"): each gob steers on toward its stream's goal plane, keeps
-        // its distance from its neighbours, flows round burning things (and gathers at them), runs downhill.
-        this.onG[i] += dt;
+      } else if (k === GOB && st === GROUND) {
+        // A ground fire: slides a little from where it splashed, then burns in place.
         const dr = Math.exp(-L.flameGroundDrag * dt);
-        let ax = 0, az = 0;
-        if (L.flameDownhill > 0) {
-          const h0 = g.height(this.px[i], this.pz[i]);
-          ax -= (g.height(this.px[i] + 0.5, this.pz[i]) - h0) * 2 * L.flameDownhill;
-          az -= (g.height(this.px[i], this.pz[i] + 0.5) - h0) * 2 * L.flameDownhill;
+        this.vx[i] *= dr; this.vz[i] *= dr; this.vy[i] = 0;
+      } else if (k === GOB && st === RISE) {
+        // Burnt out in the air: the heat lifts it, it slows along and spreads.
+        const dr = Math.exp(-1.5 * dt);
+        this.vx[i] *= dr; this.vz[i] *= dr;
+        this.vy[i] = this.vy[i] * Math.exp(-0.6 * dt) + (cold ? -0.4 : L.flameBuoy) * dt;
+      } else if (k === GOB || k === DROP) {
+        // Flying fuel (and splash droplets): a ballistic arc, a little air drag.
+        const dr = Math.exp(-L.flameDrag * dt);
+        this.vx[i] *= dr; this.vz[i] *= dr; this.vy[i] = this.vy[i] * dr - G * dt;
+        if (k === GOB && this.age[i] >= this.burn[i]) {
+          // Its fuel spent before it came down: it lets go of the arc and rises.
+          this.st[i] = RISE; this.tS[i] = this.age[i]; this.s0[i] = this.drawnSize(i);
+          this.probe?.(RISE, this.px[i], this.py[i], this.pz[i]);
+          this.vy[i] = Math.max(this.vy[i] * 0.2, 0); this.vx[i] *= 0.6; this.vz[i] *= 0.6;
+          this.life[i] = this.age[i] + L.flameRiseLife * (0.7 + Math.random() * 0.6);
+        } else if (k === GOB && lit && !this.split[i] && this.age[i] > 0.1 && L.flameBreak > 0 && Math.random() < dt * L.flameBreak) {
+          // The stream breaks up: a branch splits off a little to the side.
+          this.split[i] = 1;
+          this.pendB.push(this.px[i], this.py[i], this.pz[i], this.vx[i] + (Math.random() - 0.5) * 3, this.vy[i] + (Math.random() - 0.3) * 1.5, this.vz[i] + (Math.random() - 0.5) * 3,
+            this.life[i], this.size[i] * 0.65, this.age[i], this.burn[i] * (0.8 + Math.random() * 0.3), this.cold[i]);
         }
-        // On in the fire's direction (Keith 2026-11-05: "path through things, but then continue moving in that general
-        // direction"): steered to the flow speed along the stream's line, past the aim and on, never back.
-        const nx = this.gnx[i], nz = this.gnz[i];
-        if (L.flameFlow > 0 && (nx !== 0 || nz !== 0)) {
-          // Turned onto the stream's line at the speed it has (never sped up again: no second wind, Keith 2026-11-05);
-          // a gob slower than the flow speed creeps on at that.
-          const sp = Math.max(Math.hypot(this.vx[i], this.vz[i]), L.flameFlowSpeed * 0.3);
-          ax += (nx * sp - this.vx[i]) * L.flameFlow; az += (nz * sp - this.vz[i]) * L.flameFlow;
-        }
-        // Swerving round things only while low: risen fire drifts on over them (Keith 2026-11-05).
-        if (na && this.vy[i] < 0.6) { this.around(i, R, ax, az); ax = this.ax; az = this.az; }
-        // Spacing: pushed off neighbours closer than the spacing distance.
-        if (L.flameSeparate > 0) {
-          const cx = Math.floor(this.px[i] / CELL), cz = Math.floor(this.pz[i] / CELL);
-          for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) {
-            for (let j = head[cellHash(cx + ox, cz + oz)], c = 0; j >= 0 && c < 6; j = next[j], c++) {
-              if (j === i) continue;
-              const dx = this.px[i] - this.px[j], dz = this.pz[i] - this.pz[j], d2 = dx * dx + dz * dz;
-              if (d2 > sepD * sepD || d2 < 1e-6) continue;
-              const d = Math.sqrt(d2), f = L.flameSeparate * (1 - d / sepD) / d;
-              ax += dx * f; az += dz * f;
-            }
-          }
-        }
-        this.vx[i] = this.vx[i] * dr + ax * dt; this.vz[i] = this.vz[i] * dr + az * dt;
-        // Heat lifts it (Keith 2026-11-05: "the heat to take the particles upwards over time"): after a while on the
-        // sand a burning gob lets go and drifts up as it flows on; frost's mist stays down.
-        this.vy[i] = !cold && this.onG[i] > L.flameLiftAfter ? this.vy[i] * Math.exp(-0.8 * dt) + L.flameBuoy * 0.7 * dt : 0;
       } else {
-        const drag = Math.exp(-(k === GOB ? (lit ? L.flameDrag * 0.5 : L.flameDrag * 0.3) : 1.5) * dt);
+        const drag = Math.exp(-1.5 * dt);
         this.vx[i] *= drag; this.vz[i] *= drag;
-        if (k === GOB && lit) {
-          // Burning fuel is heavy gel (and the freeze ray's mist dense cold air): it arcs on down to the sand (the flames licking off it rise; Flame look › Burning
-          // fuel falls), slowed less up and down than along.
-          // Heavy at first, lighter as it burns: the heat takes it up over its life (Flame look › Heat lifts it).
-          const buoy = cold ? 0 : L.flameBuoy * Math.min(1, this.age[i] / Math.max(0.1, this.life[i]) * 1.6);
-          this.vy[i] = this.vy[i] * Math.exp(-L.flameDrag * 0.4 * dt) + (buoy - L.flameFall) * dt;
-        } else
         // Mist sinks a little where flames rise.
-        this.vy[i] = this.vy[i] * drag + (k === GOB && !lit ? -L.flameGravity : k === EMBER ? -0.5 : cold ? -0.6 : L.flameRise) * dt;
-        // A lit gob flying at something burning swerves round it and flies on (the damage is the gun's rays, not this).
-        if (k === GOB && lit && na) { this.around(i, R, 0, 0); this.vx[i] += this.ax * dt; this.vz[i] += this.az * dt; }
+        this.vy[i] = this.vy[i] * drag + (k === EMBER ? -0.5 : cold ? -0.6 : L.flameRise) * dt;
       }
       this.px[i] += this.vx[i] * dt; this.py[i] += this.vy[i] * dt; this.pz[i] += this.vz[i] * dt;
       const gy = g.height(this.px[i], this.pz[i]);
       if (k === SMOKE) { if (this.py[i] < gy + 0.3) this.py[i] = gy + 0.3; }
-      else if (this.py[i] < gy + 0.05 || (grounded && this.vy[i] <= 0)) {
-        // On the sand: a lit gob lands, keeps much of its speed sliding, and burns on a while; the rest splash.
+      else if (this.py[i] < gy + 0.05 || (k === GOB && st === GROUND)) {
         this.py[i] = gy + 0.05;
-        if (k === GOB && lit && !grounded) {
-          this.onG[i] = 0;
-          this.vx[i] *= L.flameSlide; this.vz[i] *= L.flameSlide;
-        } else if (!grounded) {
-          if (this.vy[i] < 0) this.vy[i] = k === GOB ? 0.6 : 0;
+        if (k === GOB && st === FLY) {
+          // Came down still burning: it splashes (droplets thrown on and up) and burns on the sand.
+          if (lit && !cold) {
+            const sp = Math.hypot(this.vx[i], this.vz[i]);
+            for (let d = Math.round(L.flameSplashDrops * (0.6 + Math.random() * 0.8)); d > 0; d--) {
+              const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 2.5;
+              this.pendD.push(this.px[i], gy + 0.15, this.pz[i], this.vx[i] * 0.35 + Math.cos(a) * r, 2 + Math.random() * 3 + sp * 0.05, this.vz[i] * 0.35 + Math.sin(a) * r, this.size[i] * 0.45);
+            }
+          }
+          this.st[i] = GROUND; this.tS[i] = this.age[i]; this.s0[i] = this.drawnSize(i);
+          this.probe?.(GROUND, this.px[i], this.py[i], this.pz[i]);
+          this.vx[i] *= L.flameSlide; this.vz[i] *= L.flameSlide; this.vy[i] = 0;
+          this.life[i] = this.age[i] + L.flameGroundLife * (0.7 + Math.random() * 0.6) * (lit ? 1 : 0.4);
+        } else if (k === DROP) {
+          // A droplet lands: a little flame where it fell.
+          if (Math.random() < 0.6) this.pendL.push(this.px[i], gy + 0.1, this.pz[i], this.size[i] * 2);
+          continue;
+        } else if (k !== GOB) {
+          if (this.vy[i] < 0) this.vy[i] = 0;
           this.vx[i] *= 0.5; this.vz[i] *= 0.5;
         }
       }
-      // Fire on the sand licks flames up off it.
-      if (k === GOB && this.onG[i] >= 0 && L.flameLicks > 0 && Math.random() < dt * L.flameLicks) this.pendL.push(this.px[i], this.py[i] + 0.1, this.pz[i], this.size[i] * 1.6);
-      // Lit flames throw dirty smoke as they burn down.
-      if (L.flameSmoke > 0 && !cold && (k === GOB ? lit : k === LICK) && this.age[i] > this.life[i] * (k === GOB ? 0.75 : 0.35) &&
-        Math.random() < dt * L.flameSmoke * (k === LICK ? 0.5 : 2.5)) this.pend.push(this.px[i], this.py[i] + this.size[i] * this.grow[i] * 0.4, this.pz[i], k === LICK ? 0.8 : 1);
+      if (k === GOB && !cold && st !== FLY) {
+        const u = (this.age[i] - this.tS[i]) / Math.max(0.05, this.life[i] - this.tS[i]);
+        // A ground fire licks flames up off it; fire burning down (past halfway) throws dirty smoke.
+        if (st === GROUND && L.flameLicks > 0 && Math.random() < dt * L.flameLicks) this.pendL.push(this.px[i], this.py[i] + 0.1, this.pz[i], this.s0[i] * 1.2);
+        if (L.flameSmoke > 0 && u > 0.5 && Math.random() < dt * L.flameSmoke * (st === RISE ? 2.5 : 0.8)) this.pend.push(this.px[i], this.py[i] + this.s0[i] * 0.6, this.pz[i], st === RISE ? 1.2 : 0.9);
+      }
+      if (k === LICK && !cold && L.flameSmoke > 0 && this.age[i] > this.life[i] * 0.35 && Math.random() < dt * L.flameSmoke * 0.5) this.pend.push(this.px[i], this.py[i] + this.size[i], this.pz[i], 0.8);
       if (keep !== i) this.copy(keep, i);
       keep++;
     }
+    // What the step made waits in the pending lists (nothing is added mid-loop): branches, droplets, smoke, licks.
     this.n = keep;
+    for (let q = 0; q < this.pendB.length; q += 11) {
+      const B = this.pendB;
+      const j = this.add(GOB, B[q], B[q + 1], B[q + 2], B[q + 3], B[q + 4], B[q + 5], B[q + 6], B[q + 7], 1, -1, 1, B[q + 10]);
+      if (j >= 0) { this.age[j] = B[q + 8]; this.burn[j] = B[q + 9]; this.split[j] = 1; }
+    }
+    this.pendB.length = 0;
+    for (let j = 0; j < this.pendD.length; j += 7) {
+      const d = this.pendD;
+      this.add(DROP, d[j], d[j + 1], d[j + 2], d[j + 3], d[j + 4], d[j + 5], 0.35 + Math.random() * 0.3, d[j + 6], 1, -1);
+    }
+    this.pendD.length = 0;
     for (let j = 0; j < this.pend.length; j += 4) this.smoke(this.pend[j], this.pend[j + 1], this.pend[j + 2], this.pend[j + 3]);
     this.pend.length = 0;
     for (let j = 0; j < this.pendL.length; j += 4) this.lick(this.pendL[j], this.pendL[j + 1], this.pendL[j + 2], this.pendL[j + 3], 0.95);
     this.pendL.length = 0;
-    this.na = 0;
     this.nLight = 0;
-    // Draw: hot (lit gobs, licks, embers) and dark (unlit fuel, soot from old flames).
+    this.draw(camera);
+  }
+
+  /** A gob's size now (m), by its state: grows a little in flight, more as a ground fire or a rising fireball. */
+  private drawnSize(i: number) {
+    const L = this.look, st = this.st[i];
+    if (st === FLY) return this.size[i] * (1 + (L.flameGrowFly - 1) * Math.min(1, this.age[i] / Math.max(0.05, this.burn[i])));
+    const u = Math.min(1, (this.age[i] - this.tS[i]) / Math.max(0.05, this.life[i] - this.tS[i]));
+    return this.s0[i] * (1 + ((st === GROUND ? L.flameGrowGround : L.flameGrowRise) - 1) * Math.sqrt(u));
+  }
+
+  private draw(camera: THREE.Camera) {
+    const L = this.look;
     this.q.copy(camera.quaternion);
     const ha = this.hotData.array as Float32Array, da = this.darkData.array as Float32Array;
     let nh = 0, nd = 0;
@@ -323,56 +313,56 @@ export class FlameFx {
         nd++;
         continue;
       }
-      // Lit: from the moment it caught (gobs) or was made.
-      const lt = k === GOB ? Math.min(1, (this.age[i] - Math.max(0, this.ign[i])) / Math.max(0.05, this.life[i] - Math.max(0, this.ign[i]))) : t;
-      const sz = this.size[i] * (1 + (this.grow[i] - 1) * Math.sqrt(lt));
-      const h = this.heat[i];
-      let r: number, gg: number, b: number, a: number;
-      if (this.cold[i]) { const u = lt; r = 0.45 + 0.35 * u; gg = 0.7 + 0.2 * u; b = 1.15 - 0.2 * u; a = 0.55 * (1 - u * u); }
-      else if (k === EMBER) { r = 1.6; gg = 0.7; b = 0.25; a = 1 - t; }
-      else if (lt < 0.15) { const u = lt / 0.15; r = 1.8; gg = 1.5 - 0.5 * u; b = 0.8 - 0.6 * u; a = 0.9; }
-      else if (lt < 0.6) { const u = (lt - 0.15) / 0.45; r = 1.8 - 0.6 * u; gg = 1.0 - 0.65 * u; b = 0.2 - 0.15 * u; a = 0.9 - 0.3 * u; }
-      else { const u = (lt - 0.6) / 0.4; r = 1.2 - 0.9 * u; gg = 0.35 - 0.3 * u; b = 0.05; a = 0.6 * (1 - u); }
-      // The stream's lit gobs: a solid boiling ball (blue at the nozzle, white-yellow, orange, dying red), the flat
-      // particle round it as a glow.
-      let halo = 1;
-      if (k === GOB && !this.cold[i] && L.flameBlob > 0) {
-        halo = L.flameHalo;
-        let br: number, bg: number, bb: number;
-        // Keith 2026-11-05: start bluer, go very white-hot yellow, then yellow (orange only as it dies).
-        if (lt < 0.12) { const u = lt / 0.12; br = 0.3 + 1.9 * u; bg = 0.5 + 1.5 * u; bb = 2.0 - 0.8 * u; }
-        else if (lt < 0.5) { const u = (lt - 0.12) / 0.38; br = 2.2 - 0.2 * u; bg = 2.0 - 0.5 * u; bb = 1.2 - 0.9 * u; }
-        else { const u = (lt - 0.5) / 0.5; br = 2.0 - 0.6 * u; bg = 1.5 - 0.8 * u; bb = 0.3 - 0.2 * u; }
-        // Tight spray up close, big engulfing balls late (Flame look › Grows late), darkening toward smoke as they burn out.
-        const late = lt > 0.75 ? 1 - (lt - 0.75) / 0.25 * 0.65 : 1;
-        br *= late; bg *= late * late; bb *= late * late;
-        const ba = lt < 0.7 ? 0.95 : 0.95 * (1 - (lt - 0.7) / 0.3);
-        // Grows fast, and faster still right at the end (Keith 2026-11-05), so the end of the flame is big and engulfing.
-        const big = 1 + L.flameGrowLate * Math.pow(lt, 1.5) + L.flameGrowEnd * Math.max(0, (lt - 0.75) / 0.25) ** 2;
-        // Long and wobbling at first, a flame blast, then rounding out (Flame look › Stretch at first, Wobble).
-        const young = (1 - lt) * (1 - lt), stretch = 1 + L.flameStretch * young;
-        const wob = L.flameWobble * sz * young, ph = this.age[i] * 14 + this.seed[i];
-        const wx = Math.sin(ph) * wob, wy = Math.sin(ph * 1.3 + 2) * wob * 0.6, wz = Math.cos(ph * 0.9 + 1) * wob;
-        if (this.nLight < L.flameBallLights && lt > 0.15 && lt < 0.8 && (this.litN++ % Math.max(1, L.flameLightEvery)) === 0) {
-          const o = this.nLight++ * 4; this.lightPts[o] = this.px[i]; this.lightPts[o + 1] = this.py[i] + 0.6; this.lightPts[o + 2] = this.pz[i]; this.lightPts[o + 3] = sz * big;
+      const h = this.heat[i], cold = this.cold[i] === 1;
+      let sz: number, r: number, gg: number, b: number, a: number;
+      if (k === GOB || k === DROP) {
+        const st = k === DROP ? FLY : this.st[i];
+        sz = k === DROP ? this.size[i] : this.drawnSize(i);
+        // How far through its part: along its burn in flight, through its ground fire or its rise after.
+        const u = st === FLY ? (k === DROP ? t : Math.min(1, this.age[i] / Math.max(0.05, this.burn[i])))
+          : Math.min(1, (this.age[i] - this.tS[i]) / Math.max(0.05, this.life[i] - this.tS[i]));
+        // Fire: blue just out of the cone, white-hot yellow along the arc; a ground fire yellow-orange; a burnt-out
+        // fireball orange, darkening to smoke.
+        let br: number, bg: number, bb: number, ba = 0.95, core: number;
+        if (st === FLY) {
+          if (u < 0.08) { const w = u / 0.08; br = 0.4 + 1.8 * w; bg = 0.6 + 1.4 * w; bb = 2.0 - 0.8 * w; }
+          else { const w = (u - 0.08) / 0.92; br = 2.2 - 0.2 * w; bg = 2.0 - 0.6 * w; bb = 1.2 - 0.9 * w; }
+          core = 1 - u * 0.5;
+        } else if (st === GROUND) {
+          br = 2.0 - 0.9 * u; bg = 1.3 - 0.95 * u; bb = 0.3 - 0.25 * u; core = 0.5 * (1 - u);
+          ba = u < 0.7 ? 0.95 : 0.95 * (1 - (u - 0.7) / 0.3);
+        } else {
+          br = 1.9 - 1.3 * u; bg = 1.1 - 0.95 * u; bb = 0.22 - 0.18 * u; core = 0.3 * (1 - u);
+          ba = u < 0.6 ? 0.9 : 0.9 * (1 - (u - 0.6) / 0.4);
         }
-        const flat = this.onG[i] >= 0 ? Math.min(1, this.onG[i] * 5) * Math.max(0, 1 - this.vy[i]) : 0;
-        this.blobs.blob(this.px[i] + wx, this.py[i] + wy + sz * big * 0.25 * L.flameBlob * (1 - flat * 0.5), this.pz[i] + wz, sz * big * 0.42 * L.flameBlob / Math.sqrt(stretch),
-          this.vx[i], this.vy[i], this.vz[i], flat, br * h, bg * h, bb * h, ba, this.seed[i], L.flameLump * (0.5 + lt), Math.max(0, 1 - lt * 1.4), stretch);
+        r = br * 0.7; gg = bg * 0.6; b = bb * 0.5; a = ba * 0.8;
+        if (cold) { r = 0.45 + 0.35 * u; gg = 0.7 + 0.2 * u; b = 1.15 - 0.2 * u; a = 0.55 * (1 - u * u); sz *= st === FLY ? 1.6 : 2; }
+        else if (L.flameBlob > 0) {
+          // The solid ball: stretched along its flight by its speed (a stream of fuel), flat as a ground fire.
+          const sp = Math.hypot(this.vx[i], this.vy[i], this.vz[i]);
+          const stretch = st === FLY ? 1 + Math.min(3.5, sp * L.flameStretch) : 1;
+          const flat = st === GROUND ? Math.min(1, (this.age[i] - this.tS[i]) * 6) * 0.8 : 0;
+          if (k === GOB && this.nLight < L.flameBallLights && (this.litN++ % Math.max(1, L.flameLightEvery)) === 0) {
+            const o = this.nLight++ * 4; this.lightPts[o] = this.px[i]; this.lightPts[o + 1] = this.py[i] + 0.6; this.lightPts[o + 2] = this.pz[i]; this.lightPts[o + 3] = sz;
+          }
+          this.blobs.blob(this.px[i], this.py[i] + sz * 0.25 * L.flameBlob * (1 - flat * 0.6), this.pz[i], sz * 0.42 * L.flameBlob / Math.sqrt(stretch),
+            this.vx[i], this.vy[i], this.vz[i], flat, br * h, bg * h, bb * h, ba, this.seed[i], L.flameLump * (st === FLY ? 0.6 : 1.2), core, stretch);
+          a *= L.flameHalo;
+        }
+      } else {
+        // Licks, embers, mist: the flat particles.
+        sz = this.size[i] * (1 + (this.grow[i] - 1) * Math.sqrt(t));
+        if (cold) { r = 0.45 + 0.35 * t; gg = 0.7 + 0.2 * t; b = 1.15 - 0.2 * t; a = 0.55 * (1 - t * t); }
+        else if (k === EMBER) { r = 1.6; gg = 0.7; b = 0.25; a = 1 - t; }
+        else if (t < 0.15) { const u = t / 0.15; r = 1.8; gg = 1.5 - 0.5 * u; b = 0.8 - 0.6 * u; a = 0.9; }
+        else if (t < 0.6) { const u = (t - 0.15) / 0.45; r = 1.8 - 0.6 * u; gg = 1.0 - 0.65 * u; b = 0.2 - 0.15 * u; a = 0.9 - 0.3 * u; }
+        else { const u = (t - 0.6) / 0.4; r = 1.2 - 0.9 * u; gg = 0.35 - 0.3 * u; b = 0.05; a = 0.6 * (1 - u); }
       }
-      if (halo > 0.01) {
+      if (a > 0.01 && nh < FLAME_MAX) {
         this.m.compose(this.p, this.q, this.s.set(sz, sz * (k === LICK ? 1.4 : 1), sz));
         this.hot.setMatrixAt(nh, this.m);
-        const o = nh * 4; ha[o] = r * h; ha[o + 1] = gg * h; ha[o + 2] = b * h; ha[o + 3] = a * halo;
+        const o = nh * 4; ha[o] = r * h; ha[o + 1] = gg * h; ha[o + 2] = b * h; ha[o + 3] = a;
         nh++;
-      }
-      // The tail of a big flame leaves a puff of soot over it.
-      if (k === LICK && !this.cold[i] && lt > 0.7 && sz > 0.8 && nd < FLAME_MAX) {
-        this.p.y += sz * 0.4;
-        this.m.compose(this.p, this.q, this.s.set(sz * 0.9, sz * 0.9, sz * 0.9));
-        this.dark.setMatrixAt(nd, this.m);
-        const od = nd * 4; da[od] = 0.08; da[od + 1] = 0.07; da[od + 2] = 0.06; da[od + 3] = 0.35 * (1 - (lt - 0.7) / 0.3);
-        nd++;
       }
     }
     for (let g = 0; g + 5 < this.glows.length + 1 && nh < FLAME_MAX; g += 6) {
@@ -400,9 +390,7 @@ export class FlameFx {
     this.kind[a] = this.kind[b]; this.px[a] = this.px[b]; this.py[a] = this.py[b]; this.pz[a] = this.pz[b];
     this.vx[a] = this.vx[b]; this.vy[a] = this.vy[b]; this.vz[a] = this.vz[b]; this.age[a] = this.age[b]; this.life[a] = this.life[b];
     this.size[a] = this.size[b]; this.grow[a] = this.grow[b]; this.ign[a] = this.ign[b]; this.heat[a] = this.heat[b]; this.cold[a] = this.cold[b];
-    this.onG[a] = this.onG[b]; this.seed[a] = this.seed[b];
-    this.gx[a] = this.gx[b]; this.gz[a] = this.gz[b]; this.gnx[a] = this.gnx[b]; this.gnz[a] = this.gnz[b];
+    this.st[a] = this.st[b]; this.tS[a] = this.tS[b]; this.s0[a] = this.s0[b]; this.burn[a] = this.burn[b]; this.split[a] = this.split[b]; this.seed[a] = this.seed[b];
   }
 }
 
-function cellHash(x: number, z: number) { return ((x * 73856093) ^ (z * 19349663)) & (HASH - 1); }
