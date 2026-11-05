@@ -27,13 +27,13 @@ const CELL = 1, HASH = 1024;
 
 /** The look values (Flame look sliders; the battlefield hands them in with tune()). */
 export interface FlameLook {
-  flameRise: number; flameDrag: number; flameGravity: number; flameFall: number; flameLicks: number; flameBuoy: number; flameLiftAfter: number; flameGrowLate: number; flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
+  flameRise: number; flameDrag: number; flameGravity: number; flameFall: number; flameLicks: number; flameBuoy: number; flameLiftAfter: number; flameGrowLate: number; flameGrowEnd: number; flameStretch: number; flameWobble: number; flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
   flameGroundLife: number; flameSlide: number; flameGroundDrag: number; flameDownhill: number; flamePull: number;
   flamePullRange: number; flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number;
   flameFlow: number; flameFlowSpeed: number; flameSeparate: number; flameSepDist: number;
 }
 const LOOK: FlameLook = {
-  flameRise: 3, flameDrag: 1.6, flameGravity: 4, flameFall: 4, flameLicks: 0.8, flameBuoy: 6, flameLiftAfter: 0.35, flameGrowLate: 1.2, flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.6, flameHalo: 0.25, flameGroundLife: 0.9,
+  flameRise: 3, flameDrag: 1.6, flameGravity: 4, flameFall: 4, flameLicks: 0.8, flameBuoy: 6, flameLiftAfter: 0.35, flameGrowLate: 1.8, flameGrowEnd: 1.2, flameStretch: 3, flameWobble: 0.5, flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.6, flameHalo: 0.25, flameGroundLife: 0.9,
   flameSlide: 0.9, flameGroundDrag: 2.4, flameDownhill: 5, flamePull: 16, flamePullRange: 2.2,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
   flameFlow: 3, flameFlowSpeed: 9, flameSeparate: 3, flameSepDist: 0.9,
@@ -347,13 +347,18 @@ export class FlameFx {
         const late = lt > 0.75 ? 1 - (lt - 0.75) / 0.25 * 0.65 : 1;
         br *= late; bg *= late * late; bb *= late * late;
         const ba = lt < 0.7 ? 0.95 : 0.95 * (1 - (lt - 0.7) / 0.3);
-        const big = 1 + L.flameGrowLate * lt * lt;
+        // Grows fast, and faster still right at the end (Keith 2026-11-05), so the end of the flame is big and engulfing.
+        const big = 1 + L.flameGrowLate * Math.pow(lt, 1.5) + L.flameGrowEnd * Math.max(0, (lt - 0.75) / 0.25) ** 2;
+        // Long and wobbling at first, a flame blast, then rounding out (Flame look › Stretch at first, Wobble).
+        const young = (1 - lt) * (1 - lt), stretch = 1 + L.flameStretch * young;
+        const wob = L.flameWobble * sz * young, ph = this.age[i] * 14 + this.seed[i];
+        const wx = Math.sin(ph) * wob, wy = Math.sin(ph * 1.3 + 2) * wob * 0.6, wz = Math.cos(ph * 0.9 + 1) * wob;
         if (this.nLight < L.flameBallLights && lt > 0.15 && lt < 0.8 && (this.litN++ % Math.max(1, L.flameLightEvery)) === 0) {
           const o = this.nLight++ * 4; this.lightPts[o] = this.px[i]; this.lightPts[o + 1] = this.py[i] + 0.6; this.lightPts[o + 2] = this.pz[i]; this.lightPts[o + 3] = sz * big;
         }
         const flat = this.onG[i] >= 0 ? Math.min(1, this.onG[i] * 5) * Math.max(0, 1 - this.vy[i]) : 0;
-        this.blobs.blob(this.px[i], this.py[i] + sz * big * 0.25 * L.flameBlob * (1 - flat * 0.5), this.pz[i], sz * big * 0.42 * L.flameBlob,
-          this.vx[i], this.vy[i], this.vz[i], flat, br * h, bg * h, bb * h, ba, this.seed[i], L.flameLump * (0.5 + lt), Math.max(0, 1 - lt * 1.4));
+        this.blobs.blob(this.px[i] + wx, this.py[i] + wy + sz * big * 0.25 * L.flameBlob * (1 - flat * 0.5), this.pz[i] + wz, sz * big * 0.42 * L.flameBlob / Math.sqrt(stretch),
+          this.vx[i], this.vy[i], this.vz[i], flat, br * h, bg * h, bb * h, ba, this.seed[i], L.flameLump * (0.5 + lt), Math.max(0, 1 - lt * 1.4), stretch);
       }
       if (halo > 0.01) {
         this.m.compose(this.p, this.q, this.s.set(sz, sz * (k === LICK ? 1.4 : 1), sz));

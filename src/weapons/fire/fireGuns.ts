@@ -90,6 +90,7 @@ export class FireGuns {
     const gxz = aim ?? { x: fuel.x + dir.x * range, z: fuel.z + dir.z * range };
     const goal = { x: gxz.x, z: gxz.z, nx: gxz.x - fuel.x, nz: gxz.z - fuel.z };
     if (Math.hypot(goal.nx, goal.nz) < 0.5) { goal.nx = dir.x; goal.nz = dir.z; }
+    const startAt = cold ? 0 : Math.min(range, s.reach) * v.flameCone * v.flameConeCut * v.flameStartAt;
     for (let k = 0; k < n; k++) {
       // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).
       const r = Math.sqrt(Math.random()) * Math.tan(sp) * v.flameLookSpread, a = Math.random() * Math.PI * 2;
@@ -102,9 +103,11 @@ export class FireGuns {
       const fast = v.flameSpeed * v.flameGobFast;
       const speed = fast * (0.9 + Math.random() * 0.2);
       const life = range / Math.max(1, fast) * 1.2 + 0.2 + Math.random() * 0.15;
-      const t0 = Math.random() * (1 / 60);
+      // Out of the end of the nozzle's flame (Keith 2026-11-05: "emit from the end of the initial flame burst"), not
+      // the muzzle: the shown cone's length × Flame look › Fireballs start along it.
+      const t0 = Math.random() * (1 / 60) + startAt / Math.max(1, speed);
       bf.flames.gob(fuel.x + dd.x * speed * t0, fuel.y + dd.y * speed * t0, fuel.z + dd.z * speed * t0, dd.x * speed + (mv?.x ?? 0), dd.y * speed, dd.z * speed + (mv?.z ?? 0),
-        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6), cold, goal);
+        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, startAt > 0.3 ? 0 : v.flameIgnite * (0.7 + Math.random() * 0.6), cold, goal); // lit already where the cone ends
     }
     if (cold) return; // no burning splash from a freeze ray
     // Where the stream meets the sand (the aim on the ground, if the stream reaches it): a small short pool.

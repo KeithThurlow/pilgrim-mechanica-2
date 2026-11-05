@@ -95,15 +95,15 @@ export class FlameBlobs {
     a[o] = cold ? 1 : 0; a[o + 1] = bright; a[o + 2] = cut;
   }
 
-  /** A blob this frame: centre, radius, its flight (stretches it along that), how flat it lies (0 round, 1 a puddle),
-   *  colour and alpha, noise seed and lumpiness, how hot its core is. */
+  /** A blob this frame: centre, radius, its flight (it's stretched `stretch` × along that), how flat it lies (0 round,
+   *  1 a puddle), colour and alpha, noise seed and lumpiness, how hot its core is. */
   blob(x: number, y: number, z: number, r: number, vx: number, vy: number, vz: number, flat: number,
-    cr: number, cg: number, cb: number, a: number, seed: number, lump: number, core: number) {
+    cr: number, cg: number, cb: number, a: number, seed: number, lump: number, core: number, stretch = 1) {
     if (this.nb >= BLOB_MAX) return;
     const i = this.nb++;
     this.p.set(x, y, z);
     const sp = Math.hypot(vx, vy, vz);
-    const st = Math.min(1.4, 1 + sp * 0.012);
+    const st = sp > 0.5 ? stretch : 1;
     if (sp > 0.5) this.q.setFromUnitVectors(FlameBlobs.UP, this.d.set(vx / sp, vy / sp, vz / sp));
     else this.q.identity();
     // Flat on the sand: the ball spreads into a low lump (applied along world Y, so only when it isn't flying).
