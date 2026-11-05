@@ -19,7 +19,7 @@ import { POI_DEFAULTS, PoiField, type PoiPlacement } from "../src/world/pois";
 import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
-import { SiegeWalls, isSiege, wallHeight, fenced, routeVia } from "../src/pois/fortressGround";
+import { SiegeWalls, isSiege, wallHeight, wallMetal, fenced, routeVia } from "../src/pois/fortressGround";
 import { ringR, type Layout } from "../src/pois/fortress";
 import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
@@ -112,6 +112,10 @@ for (const p of sieges.slice(0, 6)) {
       if (smoothAt(ring, a)) continue;
       const sx = Math.sin(a), sz = Math.cos(a), R = ringR(ring, a);
       const top = w.field.height(p.x + sx * R, p.z + sz * R) - floor(p.x + sx * R, p.z + sz * R);
+      // Rounds ring on the containers and puff on the sand banked against them.
+      if (!wallMetal(L, p.x + sx * R, p.z + sz * R, w.walls.down) || !w.field.metalAt(p.x + sx * R, p.z + sz * R)) fail(`${p.id}: a container at ${R.toFixed(0)} m is not metal to rounds`);
+      const dr = R + ring.top + ring.face + ring.driftW * 0.5;
+      if (ring.drift > 0 && wallMetal(L, p.x + sx * dr, p.z + sz * dr, w.walls.down)) fail(`${p.id}: the drift at ${dr.toFixed(0)} m is metal to rounds`);
       if (top < ring.h * 0.95) { fail(`${p.id}: ring at ${R.toFixed(0)} m only ${top.toFixed(1)} m high at ${(a * 57.3).toFixed(0)} deg`); break; }
       // The container face: the rise from the drift at its foot to the top, over the face's width, either side (the
       // least of the two sides counts).
