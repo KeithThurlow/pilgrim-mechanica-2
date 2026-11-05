@@ -315,6 +315,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword lunges no longer cancel charges (Keith asked; Claude on `claude/project-thread-n01dm9`)
+- A sword's lunge pushes the walker, which started a dash and so dropped rail and energy (Nova Lance etc.) charges. The walker now marks a push-started dash (`dashCancels` in `src/mech/walker.ts`); `src/weapons/arsenal.ts` drops charges only for a pressed dash or sprint. Checked: `npm test`.
 ### 2026-11-05 · Bullets on metal: the ricochet recording with variations, and fortress containers now count as metal (Keith asked; Claude on `claude/metal-hit-sound`)
 - Rounds on metal play `bulletMetal` (`src/audio/minigunAudio.ts`): `metalhit` cut 5 ways across 5 semitones, each play at its own pitch, level and up to 0.03 s late, at most one every 0.05 s (Sound sliders). Bumps, salvage and droid hits keep the old `metalHit` tick.
 - Fortress and hub containers are part of the ground, so rounds hitting them counted as sand (dust, craters, dirt sound). `GroundModifier.metalAt` and `wallMetal` (`src/pois/fortressGround.ts`) now make them metal, with the sand drift banked against them still sand. Fortress check covers both. `npm test`.
