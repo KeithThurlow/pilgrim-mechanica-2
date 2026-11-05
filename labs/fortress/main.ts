@@ -61,7 +61,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
   defaults: LAB_DEFAULTS,
   params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...HUB_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: garrison", "Fortress: warlord", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: warlord", "Pads"] },
     { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
@@ -71,6 +71,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     { topic: "hub", label: "Fabricators", objects: () => hubs?.draw.meshes() ?? [] },
     { topic: "fortress", label: "Gates", objects: () => forts?.gatesDraw.meshes() ?? [] },
     { topic: "fortress", label: "Spawner shacks", objects: () => forts?.spawnersDraw.meshes() ?? [] },
+    { topic: "fortress", label: "Lookout towers", objects: () => forts?.towersDraw.meshes() ?? [] },
     { topic: "bandits", label: "Garrison", objects: () => forts ? [forts.draw.group] : [] },
     { topic: "salvage", label: "Salvage spots", objects: () => salvageDraw?.objects() ?? [] },
   ],
@@ -258,5 +259,5 @@ lab.onFrame((dt) => {
     lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · boss ${boss} · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
     return;
   }
-  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
+  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · towers ${F.towers.list.filter((s) => !s.down).length}/${F.towers.list.length} up · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
 });

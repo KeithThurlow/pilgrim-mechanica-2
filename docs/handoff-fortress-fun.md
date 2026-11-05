@@ -11,7 +11,7 @@ dangerous; bandits pop in from nowhere. Asks, in order (each its own PR, merged 
    Plans: `npx tsx tools/fortlayout-probe.ts --svg out.svg`.
 2. **Spawner containers** (done: `src/pois/spawners.ts`, `spawnersDraw.ts`, waves in `fortresses.ts`): bandits come out of particular containers (doors swing open, a stream runs out), instead of
    appearing in a heap; the waves and alarms use them. Destroyable later?
-3. **Lookout towers**: stacked containers standing up (3-4 high) with 1-2 bandits on top with grenades, rockets or guns;
+3. **Lookout towers** (done: `src/pois/towers.ts`, `towersDraw.ts`, crews in `fortresses.ts` `crewFire`): stacked containers standing up (3-4 high) with 1-2 bandits on top with grenades, rockets or guns;
    destructible (a target with health; the stack falls, the bandits with it).
 4. **Walls and danger**: measure mech DPS vs gate health, make gates quicker (or walls breachable), make the raid
    dangerous (towers, rockets, crossfire).
@@ -21,7 +21,11 @@ Outer 118 m, middle 74 m (60%), keep 26 m, pad 140 m, relief 5 m; walls 8-11 / 6
 streets 10 m, lanes 7 m, 4 back streets and 6 compounds per yard, up to 220 shacks, 30% two high; middle gates barred
 half the time (one always); bandits path past 28 m from the mech.
 
+## Values chosen (3)
+Towers 3 in the outer yard, one less inward (keep ≥ 1), 7.5 m, 1800 hp, armour 2; grenade 50 m / 3.2 s / 4.5 m / 60; rocket 95 m / 4.5 s / 3.5 m / 110; rifle 70 m.
+
 ## Known rough edges
+- Tower crews come back whole when a fortress streams back in (tower hp is kept, crews aren't).
 - Shacks are solid ground boxes: not destructible, the mech can't push through.
 - Not seen rendered in a real browser (cloud box too slow); props on slopes may float or sink a little.
 - Idle bandits walking back to posts still go straight (snag on shacks); only alert ones and gate routes use the flow.
