@@ -54,7 +54,9 @@ export class FuelLine {
       this.age[j] = this.age[j + 1]; this.burn[j] = this.burn[j + 1]; this.brk[j] = this.brk[j + 1];
     }
     this.n--;
-    if (breakNext && i < this.n && i > 0) this.brk[i] = 1;
+    // (PC render 2026-11-05: swung, points aimed at different distances land out of order, and breaking the line at each
+    // one cut it into pieces too short to draw, so a curved stub stopped short of the fire. The line now joins across.)
+    void breakNext;
     if (i === 0 && this.n > 0) this.brk[0] = 1;
   }
 

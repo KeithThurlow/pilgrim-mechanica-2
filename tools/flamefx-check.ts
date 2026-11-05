@@ -62,21 +62,28 @@ must(Math.abs(mean(far.burnt) - RANGE) < RANGE * 0.4, `fuel burns out at ${mean(
 must(far.riseN > 0 && far.riseUp >= far.riseN * 0.95, `burnt-out fireballs don't rise (${far.riseUp} of ${far.riseN})`);
 
 // The line (Keith 2026-11-05: one continuous line arcing out): fuel points poured from a nozzle along +Z.
-function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1) {
+function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1, swing = 0) {
   const f = new FlameFx(flat); f.tune(F);
   const key = {}, dt = 1 / 60, ends: { land: number[]; burnout: number[] } = { land: [], burnout: [] };
   let gap = 0, worstN = 0, under = 0, joined = 0, points = 0, frame = 0;
-  const vh = VH, dist = Math.min(aimAt, RANGE * F.flameLob), vy = lobVy(-Y0, dist, vh, F.flameGravity);
+  const vh = VH, dist = Math.min(aimAt, RANGE * F.flameLob);
   const orig = f.streams.step.bind(f.streams);
   f.streams.step = (d, G, drag, every, ground, end) => orig(d, G, drag, every, ground, (l, w, x, y, z, a, b, c) => { ends[w].push(z); end(l, w, x, y, z, a, b, c); });
   for (let t = 0; t < secs; t += dt) {
-    if (t < pourFor && frame++ % pourEvery === 0) f.pour(key, 0, Y0, 0, 0, vy, vh, BURN, 1);
+    if (t < pourFor && frame++ % pourEvery === 0) {
+      // Swung: the aim's distance and side wander, so points land out of order.
+      const d = dist * (1 + swing * Math.sin(t * 9)), a = swing * Math.sin(t * 5), vys = lobVy(-Y0, d, vh, F.flameGravity);
+      f.pour(key, 0, Y0, 0, Math.sin(a) * vh, vys, Math.cos(a) * vh, BURN, 1);
+    }
     f.update(dt, cam);
     for (const l of f.streams.lines.values()) {
       worstN = Math.max(worstN, l.n);
       for (let i = 0; i < l.n; i++) {
         if (l.py[i] < -1e-3) under++;
-        points++; if (!l.brk[i]) joined++;
+        // Drawn: in a run of two or more (a lone point between breaks draws nothing; the newest joins the nozzle).
+        points++;
+        const prevJoined = i > 0 && !l.brk[i], nextJoined = i + 1 < l.n ? !l.brk[i + 1] : l.pouring;
+        if (prevJoined || nextJoined) joined++;
         if (i > 0 && !l.brk[i]) gap = Math.max(gap, Math.hypot(l.px[i] - l.px[i - 1], l.py[i] - l.py[i - 1], l.pz[i] - l.pz[i - 1]));
       }
     }
@@ -92,6 +99,9 @@ must(ln.gap < 1.2 && lf.gap < 1.2, `line has gaps between joined points (${ln.ga
 // A gun pours on its shots, a few a second (the PC render, 2026-11-05: no line at all): the line stays joined.
 const ls = line(12, 2, 1, 6);
 must(ls.joined > 0.9 && ls.land.length > 20, `line poured only every 6th frame breaks up (${(ls.joined * 100).toFixed(0)}% joined, ${ls.land.length} landed)`);
+// Swung (PC render 2026-11-05: a short stub stopped short of the fire): the line stays joined as points land out of order.
+const lw = line(12, 2, 1, 1, 0.4);
+must(lw.joined > 0.97, `swung line breaks into pieces (${(lw.joined * 100).toFixed(0)}% joined)`);
 must(ln.left === 0 && lf.left === 0, `lines left over after they stopped (${ln.left}, ${lf.left})`);
 
 console.log(`flamefx line: aimed 12 m lands at ${mean(ln.land).toFixed(1)} m (${ln.land.length} points, widest gap ${ln.gap.toFixed(2)} m, ${ln.worstN} points at most); aimed 60 m burns out at ${mean(lf.burnout).toFixed(1)} m`);

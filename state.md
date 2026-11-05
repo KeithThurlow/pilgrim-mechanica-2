@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer line on top in a crowd, joined when swung, fire where it ends (PC render: "hard to find in crowds", "a short curved piece stops before the fire"; Claude on `claude/project-thread-q7b0ap`)
+- `src/fx/flameTube.ts`: the line draws after the flames, halos, smoke and blobs (render order 7), so burning bandits and robots don't cover it. `src/fx/flameStream.ts`: a point leaving from the middle of the line (landing out of order when swung) no longer breaks it; it joins across. Ground fire where 85% of points land (was 60%), so the fire meets the line's end. New `flamefx-check` rule: a swung line stays drawn (it passed before the change too, so the stub Keith saw may be the old fire lagging where the line was; re-render to see). Checked: typecheck, full `npm test`.
+
 ### 2026-11-05 · Flamer no longer blows the night out to white (PC render at `?time=22`; Claude on `claude/project-thread-q7b0ap`)
 - Cause: a flamer lays a small splash pool every 0.15 s on the same spot, and each lit at half the napalm pool light (900) with its own glow; eight or more a gun stacked (merged lights add up) into a white disc that swallowed the line and the fire. `src/game/battlefield.ts`: flamer splash pools now light at 0.06 of the pool light (napalm pools unchanged) with 0.6× the reach and no faked glow; the fireball and line lights lose their glow too. Checked: typecheck, full `npm test`.
 
