@@ -388,7 +388,8 @@ function breachModel(look: ToonLook): WeaponModel {
 function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLook): WeaponModel {
   const { m, recoil, add, glow, muzzle } = kit(kind, look);
   const big = kind === "inferno" || kind === "cryo";
-  const k = big ? 1.45 : 1, long = big ? 1.25 : 1;
+  // Keith 2026-11-05: the hull ones stuck out too far forward; a shorter fuel barrel (was 1.25 × the held one's).
+  const k = big ? 1.45 : 1, long = big ? 0.9 : 1;
   // The freeze rays (Keith 2026-11-05) are the same rig in frost paint: pale coolant tanks, cyan bands and nozzle lamp
   // (the lower nozzle is the coolant vent: a cold mist rather than a pilot flame).
   const cold = kind === "frost" || kind === "cryo";
@@ -406,6 +407,13 @@ function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLo
   } else {
     add(recoil, cyl, KHAKI, [0.32, 0.8, 0.32], [0, -0.33, 0.25], ALONG);
     add(recoil, cyl, HOT, [0.34, 0.06, 0.34], [0, -0.33, 0.45], ALONG);
+    // Two fuel tanks standing out behind the grip as a counterweight (Keith 2026-11-05), banded, capped, piped forward.
+    for (const x of [-0.17, 0.17]) {
+      add(recoil, cyl, KHAKI, [0.3, 0.75, 0.3], [x, 0.02, -0.5], ALONG);
+      add(recoil, cyl, HOT, [0.32, 0.05, 0.32], [x, 0.02, -0.3], ALONG);
+      add(recoil, cyl, DARK, [0.14, 0.1, 0.14], [x, 0.02, -0.92], ALONG);
+    }
+    add(recoil, box, DARK, [0.5, 0.08, 0.12], [0, 0.02, -0.1]);
   }
   // The hose from the tank up into the fuel nozzle's breech.
   add(recoil, ring, DARK, [0.28 * k, 0.28 * k, 0.5 * k], [0.2 * k, -0.12 * k, 0.75 * k], [0, Math.PI / 2, 0]);

@@ -30,7 +30,7 @@ export const FIRE_DEFAULTS = {
   infernoPellets: 3,
   infernoDamage: 4,
   infernoSpread: 8,
-  infernoRange: 44, // Keith 2026-11-05: "twice as long" (was 22)
+  infernoRange: 55, // Keith 2026-11-05: "twice as long" (was 22), then "a little bit further" (was 44)
   infernoPierce: 12,
   infernoAp: 0,
   infernoMag: 160,
@@ -159,7 +159,7 @@ const gun = (p: string, group: string, o: { rate: number; range: number; mag: nu
 
 export const FIRE_PARAMS: Param[] = [
   ...gun("flamer", FLAMER_GROUP, { rate: 30, range: 40, mag: 300 }),
-  ...gun("inferno", INFERNO_GROUP, { rate: 30, range: 50, mag: 500 }),
+  ...gun("inferno", INFERNO_GROUP, { rate: 30, range: 80, mag: 500 }),
   ...gun("frost", FROST_GROUP, { rate: 30, range: 40, mag: 300 }, true),
   ...gun("cryo", CRYO_GROUP, { rate: 30, range: 50, mag: 500 }, true),
   { key: "streamHullOut", label: "Hull nozzle out (× the minigun's)", min: 0, max: 2, step: 0.05, group: STREAM_GROUP, tip: "How far out the Inferno and Cryo projector sit on the hull mount: 1 is where the minigun's barrels are" },
