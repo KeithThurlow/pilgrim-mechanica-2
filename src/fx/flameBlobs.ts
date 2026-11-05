@@ -68,13 +68,15 @@ export class FlameBlobs {
       // A white-hot core where you look straight in, the instance colour at the rim; the rim fades to nothing.
       // White-hot where you look straight in; at the Fresnel rim a yellow that grows as the blob burns on (bn.w falls
       // from 1 at the nozzle to 0), so the old flame reads yellow at its edges (Keith 2026-11-05).
-      const bright = bc.xyz.length().mul(0.45).add(0.15);
-      const core = smoothstep(0.6, 1, face).mul(bn.w.mul(0.6).add(0.4));
+      // Keith's render pass (2026-11-05): added on top in HDR, the fuel clipped to flat white on the sand. Now drawn over
+      // the scene in colours inside 0..1 (the instance colour is the body), so the orange and yellow survive in daylight;
+      // at night they still read as the brightest thing about. The brightness scales the rim and core with the body.
+      const bright = clamp(bc.xyz.length().mul(0.8), 0, 1);
+      const core = smoothstep(0.6, 1, face).mul(bn.w.mul(0.6).add(0.2));
       const rim = float(1).sub(smoothstep(0.15, 0.7, face)).mul(float(1).sub(bn.w).mul(0.8).add(0.2));
-      const body = mix(bc.xyz, vec3(2.0, 1.5, 0.32).mul(bright), rim);
-      mat.colorNode = mix(body, vec3(2.2, 2.0, 1.3).mul(bright), core).mul(nz.mul(0.2).add(1));
+      const body = mix(bc.xyz, vec3(1.0, 0.72, 0.16).mul(bright), rim);
+      mat.colorNode = clamp(mix(body, vec3(1.0, 0.94, 0.72).mul(bright), core).mul(nz.mul(0.15).add(1)), 0, 1);
       mat.opacityNode = smoothstep(0.0, 0.4, face).mul(bc.w);
-      mat.blending = THREE.AdditiveBlending;
       this.blobs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), mat, BLOB_MAX);
     }
     for (const [mesh, order] of [[this.cones, 6], [this.blobs, 5]] as const) {

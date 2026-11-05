@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer fuel and frost mist keep their colour on the sand (Keith's render pass: fuel "almost pure white", mist "opaque cotton wool"; Claude on `claude/project-thread-q7b0ap`)
+- The fuel blobs, licks, halos and mist were added on top in HDR (up to 2.2) with tone mapping off, so on bright sand they clipped to white. Now the blobs (`src/fx/flameBlobs.ts`) and a new over-drawn billboard layer in `src/fx/flameFx.ts` (licks, halos, mist) draw over the scene in colours inside 0..1: fuel pale yellow off the cone, orange-yellow along the arc, orange to deep red on the sand and in the burnt-out fireballs. Mist is pale blue at 0.3 alpha (was 0.55 added). Embers, heat glows and the nozzle cone stay added. Checked: typecheck, `flamefx-check`, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · duel-check runs in six parts side by side: npm test 2 min 22 s → 1 min 45 s (overnight perf pass; Claude on `claude/project-thread-4kcrrl-fort`)
 - A check can say `// @shards N`; `tools/run-checks.mjs` then runs it as N processes with `CHECK_SHARD=i/N`. `tools/duel-check.ts` (130 s on its own, the floor of `npm test`) gates its sections with `part(k)`: 0 rules and item levels, 1 AI duels and drills, 2 dodge chance per level, 3 painted spot, aim lag and cover, 4 scripted-player duels, 5 rail hit rates. Same checks, same values; summary lines print with their part. Run alone (`npx tsx tools/duel-check.ts`) it still runs everything (checked: passes).
 - `npm test` on 4 cores: 85/85 in 1 min 45 s (was 2 min 22 s). It is now CPU-bound (6 min 39 s of CPU), longest part 31 s; convoy-check (39 s) is the longest single check.
