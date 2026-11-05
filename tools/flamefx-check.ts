@@ -61,6 +61,36 @@ must(far.burnt.length > far.landed.length, `fuel aimed past the reach lands inst
 must(Math.abs(mean(far.burnt) - RANGE) < RANGE * 0.4, `fuel burns out at ${mean(far.burnt).toFixed(1)} m (reach ${RANGE})`);
 must(far.riseN > 0 && far.riseUp >= far.riseN * 0.95, `burnt-out fireballs don't rise (${far.riseUp} of ${far.riseN})`);
 
+// The line (Keith 2026-11-05: one continuous line arcing out): fuel points poured from a nozzle along +Z.
+function line(aimAt: number, secs = 2, pourFor = 1) {
+  const f = new FlameFx(flat); f.tune(F);
+  const key = {}, dt = 1 / 60, ends: { land: number[]; burnout: number[] } = { land: [], burnout: [] };
+  let gap = 0, worstN = 0, under = 0;
+  const vh = VH, dist = Math.min(aimAt, RANGE * F.flameLob), vy = lobVy(-Y0, dist, vh, F.flameGravity);
+  const orig = f.streams.step.bind(f.streams);
+  f.streams.step = (d, G, drag, every, ground, end) => orig(d, G, drag, every, ground, (l, w, x, y, z, a, b, c) => { ends[w].push(z); end(l, w, x, y, z, a, b, c); });
+  for (let t = 0; t < secs; t += dt) {
+    if (t < pourFor) f.pour(key, 0, Y0, 0, 0, vy, vh, BURN, 1);
+    f.update(dt, cam);
+    for (const l of f.streams.lines.values()) {
+      worstN = Math.max(worstN, l.n);
+      for (let i = 0; i < l.n; i++) {
+        if (l.py[i] < -1e-3) under++;
+        if (i > 0 && !l.brk[i]) gap = Math.max(gap, Math.hypot(l.px[i] - l.px[i - 1], l.py[i] - l.py[i - 1], l.pz[i] - l.pz[i - 1]));
+      }
+    }
+  }
+  return { ...ends, gap, worstN, under, left: f.streams.lines.size };
+}
+const ln = line(12), lf = line(60);
+must(ln.under === 0 && lf.under === 0, `line points under the sand (${ln.under}, ${lf.under})`);
+must(ln.land.length > 20 && Math.abs(mean(ln.land) - 12) < 1.5, `line aimed 12 m lands at ${mean(ln.land).toFixed(1)} m (${ln.land.length} points)`);
+must(ln.burnout.length === 0, `line aimed inside the reach burns out in the air (${ln.burnout.length})`);
+must(lf.burnout.length > lf.land.length && Math.abs(mean(lf.burnout) - RANGE) < RANGE * 0.4, `line aimed 60 m: ${lf.land.length} landed, ${lf.burnout.length} burnt out at ${mean(lf.burnout).toFixed(1)} m (reach ${RANGE})`);
+must(ln.gap < 1.2 && lf.gap < 1.2, `line has gaps between joined points (${ln.gap.toFixed(2)}, ${lf.gap.toFixed(2)} m)`);
+must(ln.left === 0 && lf.left === 0, `lines left over after they stopped (${ln.left}, ${lf.left})`);
+
+console.log(`flamefx line: aimed 12 m lands at ${mean(ln.land).toFixed(1)} m (${ln.land.length} points, widest gap ${ln.gap.toFixed(2)} m, ${ln.worstN} points at most); aimed 60 m burns out at ${mean(lf.burnout).toFixed(1)} m`);
 console.log(`flamefx: aimed 12 m: ${near.landed.length} landed at ${mean(near.landed).toFixed(1)} m, ${near.burnt.length} burnt out, ${near.drops} droplet-frames, ${near.smoke} smoke-frames; ` +
   `aimed 60 m: ${far.landed.length} landed, ${far.burnt.length} burnt out at ${mean(far.burnt).toFixed(1)} m (reach ${RANGE})`);
 if (fails.length) { console.error("flamefx check FAILED:\n  " + fails.join("\n  ")); process.exit(1); }
