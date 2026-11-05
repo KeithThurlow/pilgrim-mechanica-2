@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer fuel and frost mist keep their colour on the sand (Keith's render pass: fuel "almost pure white", mist "opaque cotton wool"; Claude on `claude/project-thread-q7b0ap`)
+- The fuel blobs, licks, halos and mist were added on top in HDR (up to 2.2) with tone mapping off, so on bright sand they clipped to white. Now the blobs (`src/fx/flameBlobs.ts`) and a new over-drawn billboard layer in `src/fx/flameFx.ts` (licks, halos, mist) draw over the scene in colours inside 0..1: fuel pale yellow off the cone, orange-yellow along the arc, orange to deep red on the sand and in the burnt-out fireballs. Mist is pale blue at 0.3 alpha (was 0.55 added). Embers, heat glows and the nozzle cone stay added. Checked: typecheck, `flamefx-check`, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · Shack doors and awnings at the right height (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-shack-doors`)
 - Door plates and awnings took off the shack's core height, but they stand at its face, off the core, so they went into the ground: doors buried, two-high awnings under the sand and one-high ones 1.3 m up. Doors now sit on the face's sand (`FACE_DRIFT`), awnings at 2.7 m, door-end plates the same (`box`'s `doorCy`). Look only. `src/pois/fortress.ts`.
 - Checked: fortress lab `?ring=0&manual&zoom=40` on the RTX 3080, full `npm test`.
