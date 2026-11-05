@@ -73,6 +73,7 @@ export function warbandFront(): Front {
       lab.app.scene.add(rd.group);
       const riderTarget = new InfantryTarget(riders, 2);
       bf.targets.push(riderTarget);
+      rd.chillMap = () => { rd.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(riderTarget) ?? null; };
       bf.register.add(riderTarget);
       hook(player, "onStomp", (x, z, k) => riders.stomp(x, z, V.riderStomp * Math.min(1.5, k)));
       hook(player, "onDash", (x, z, dx, dz) => { riders.shove(x, z, V.dashShoveRadius, dx, dz, V.dashShove, V.dashShoveDamage); });

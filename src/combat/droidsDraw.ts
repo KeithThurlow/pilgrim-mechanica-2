@@ -5,9 +5,9 @@
 // laser lies from the gun to the target through the tell before each burst; its blue pulses streak out on a burst.
 // The dead fall as white ragdolls (droidRagdoll, for the death physics). Cosmetic.
 import * as THREE from "three/webgpu";
-import { attribute, instancedBufferAttribute, uniformArray, floor, int, vec3, mix, smoothstep, fract, float, step, max, min } from "three/tsl";
+import { attribute, instancedBufferAttribute, uniformArray, int, vec3, mix, smoothstep, fract, float, step, max, min } from "three/tsl";
 import { InfantryDraw, type BanditLookValues } from "./infantryDraw";
-import type { BanditVatData } from "./banditVat";
+import { type BanditVatData, unpackLook, FROST_RGB } from "./banditVat";
 import type { PartSpec, JointSpec } from "../physics/deaths";
 import { BANDIT_PARTS, BANDIT_JOINTS } from "../physics/bodies";
 import { DEAD, EMPTY, FIRING } from "./infantry";
@@ -77,7 +77,7 @@ export class DroidsDraw {
     const mat = mesh.material as THREE.MeshStandardNodeMaterial;
     const c = attribute<"vec4">("vatColour", "vec4"), rest = attribute<"vec3">("position", "vec3");
     const b = instancedBufferAttribute<"vec4">(animB);
-    const look = floor(b.w.div(4)), shade = b.w.sub(look.mul(4));
+    const { look, shade, frost } = unpackLook(b.w);
     const lum = c.r.mul(0.3).add(c.g.mul(0.59)).add(c.b.mul(0.11));
     // Plates: the armour mask, and anything the bake had pale; the rest is joint and webbing.
     const plate = max(smoothstep(0.25, 0.6, c.a), smoothstep(0.12, 0.3, lum));
@@ -86,7 +86,7 @@ export class DroidsDraw {
     const seam = step(band, float(0.045)).mul(plate);
     const white = mix(col(V === BRUTE ? P.joint : P.plateDim), col(V === BRUTE ? P.plateDim : P.plate), smoothstep(0.9, 1.6, rest.y).mul(0.6).add(0.4));
     const base = mix(col(P.joint), white, plate).mul(float(1).sub(seam.mul(0.55)));
-    mat.colorNode = base.mul(min(shade, 1.15));
+    mat.colorNode = mix(base.mul(min(shade, 1.15)), vec3(...FROST_RGB), frost.mul(0.85));
     // The visor: a slit across the front of the head (the bake faces +Z; the head sits about 1.45-1.62 m in its rest pose).
     const visor = smoothstep(1.47, 1.5, rest.y).mul(float(1).sub(smoothstep(1.56, 1.59, rest.y))).mul(smoothstep(0.2, 0.25, rest.z));
     const tint = vec3(uniformArray(tints, "color").element(int(look)) as unknown as THREE.Node<"vec3">);

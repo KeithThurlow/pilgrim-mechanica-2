@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Frozen bandits frost over (Keith's render pass: "a frozen bandit just stops"; Claude on `claude/project-thread-q7b0ap`)
+- Bandits (and the humanoid robots, which share the draw) now tint toward the robots' glacier blue: up to 0.6 × 0.85 chilled, 0.85 frozen solid, by the Frozen look slider. `src/combat/infantryDraw.ts` reads the chill map (as RobotsDraw does) and packs the frost into the baked mesh's per-instance word (`packFrost`/`unpackLook` in `src/combat/banditVat.ts`: frost × 16 + look × 4 + shade; `droidsDraw.ts` decodes it too); the box stand-ins lerp their colour. Hooked up in the bandits and warband fronts, the convoy lab's humans and fortresses, and droid fights. Checked: typecheck, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · Frozen robots read as frozen (Keith's render pass: "white on white"; Claude on `claude/project-thread-q7b0ap`)
 - `src/combat/robotsDraw.ts`: chilled robots tint toward a clear pale blue (0.42, 0.68, 1.15) up to 0.7; frozen solid ones go a deep glacier blue (0.16, 0.48, 1.0) at 0.9, with a pale glint passing over now and then, instead of the near-white HDR ice that vanished on white plate. The cold glow on chilled things (`src/fx/flameFx.ts`) is a blue haze instead of added white. Frozen look slider unchanged. Checked: typecheck, full `npm test`; not seen rendered here.
 
