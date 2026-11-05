@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Fire and freeze playtest fixes (Keith's feedback; Claude on `claude/project-thread-u0bsc9`)
+- Inferno projector reaches 44 m (was 22), the Flamer 22.5 m (was 15). The hull Inferno and Cryo projector sit out where the minigun's barrels do (`Arsenal.configure`, Flame stream › Hull nozzle out). Frozen robots go bright ice white-blue with a glint, chilled ones frost harder (Chill and freezing › Frozen look); freezing solid cracks (a sound) and bursts frost. Burning pools light the ground (Napalm launcher › Burning pool light, reach) and a pouring stream carries two lights (Flame stream › Stream light), through the night lights' `hold`. Night lights: merged lights keep more of their sum (`clusterCurve` 0.65, was 0.5), tracer lights 320 (was 240); merge radius kept at 8 m (the nightlights check holds the merge for cost).
+- Files: `src/weapons/fire/fireTuning.ts`, `fireGuns.ts`, `src/weapons/arsenal.ts`, `src/game/battlefield.ts`, `src/game/chill.ts`, `src/combat/robotsDraw.ts`, `src/world/nightLights.ts`. Checked: chill, fire, nightlights checks; full `npm test`. Open: the napalm launcher's "negative knockback" (not reproduced yet, asked Keith).
+
 ### 2026-11-05 · Click-and-drag aim for line strikes (Keith asked; Claude on `claude/project-thread-irzjlc`)
 - Line mortar and napalm launcher: tap the key (under 0.25 s) to arm, press the left button on the sand where the line starts, drag the way it runs, let go fires; a double tap fires the default strip; hold and release works as before. The left gun holds fire while the button is the aim's. Pure state machine `src/weapons/lineAim.ts`, run by `Arsenal.stepLine`; `MechUnit.click`/`clickAim` (the player's only; AIs hold and release). Sliders: Weapons › Line aim (click and drag).
 - Checked: `tools/lineaim-check.ts` (hold, AI tap, tap/click/drag/release, double tap, short drag runs away from the mech, disarm after 6 s, a gun already firing keeps its button); full `npm test`.

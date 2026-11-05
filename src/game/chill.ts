@@ -48,6 +48,8 @@ export class Chills {
   /** Hot metal's heat at this target and part, and a call to cool it (src/game/burn.ts; the battlefield wires them). */
   heatAt: ((t: Hittable, key: number) => number) | null = null;
   quench: ((t: Hittable, key: number) => void) | null = null;
+  /** Called the moment something freezes solid (the battlefield: the crack, the burst of frost). */
+  onFreeze: ((c: Chilled) => void) | null = null;
 
   constructor(private v: Partial<ChillValues & DamageTypeValues> = CHILL_DEFAULTS) {}
   private n<K extends keyof ChillValues>(k: K): number { return this.v[k] ?? CHILL_DEFAULTS[k]; }
@@ -79,7 +81,7 @@ export class Chills {
     c.dps = Math.max(c.dps, dps); c.x = x; c.y = y; c.z = z;
     if (c.frozen > 0) return;
     c.chill = Math.min(1, c.chill + amount);
-    if (c.chill >= 1 && c.grace <= 0) { c.frozen = this.n("freezeTime"); this.freezes++; }
+    if (c.chill >= 1 && c.grace <= 0) { c.frozen = this.n("freezeTime"); this.freezes++; this.onFreeze?.(c); }
   }
 
   /** Fire on it: it thaws (no longer frozen, half its chill gone). */

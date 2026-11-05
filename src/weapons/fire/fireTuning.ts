@@ -18,7 +18,7 @@ export const FIRE_DEFAULTS = {
   flamerPellets: 2,
   flamerDamage: 4,
   flamerSpread: 6,
-  flamerRange: 15,
+  flamerRange: 22.5, // Keith 2026-11-05: "another half as far" (was 15)
   flamerPierce: 8,
   flamerAp: 0,
   flamerMag: 90,
@@ -30,7 +30,7 @@ export const FIRE_DEFAULTS = {
   infernoPellets: 3,
   infernoDamage: 4,
   infernoSpread: 8,
-  infernoRange: 22,
+  infernoRange: 44, // Keith 2026-11-05: "twice as long" (was 22)
   infernoPierce: 12,
   infernoAp: 0,
   infernoMag: 160,
@@ -62,6 +62,11 @@ export const FIRE_DEFAULTS = {
   cryoChill: 0.02,
   cryoColdDps: 30,
   freezeLevel: 0.7,
+  streamHullOut: 1,
+  flameLight: 700,
+  poolLight: 900,
+  poolLightRange: 12,
+  frostLook: 1,
   // The stream (both flamers): how fast the fuel flies (the damage's reach grows at this from the trigger), how soon
   // after the fuel nozzle the igniter's flame catches it (s), gobs drawn per jet, size, growth, buoyancy, drag.
   flameSpeed: 26,
@@ -133,6 +138,11 @@ export const FIRE_PARAMS: Param[] = [
   ...gun("inferno", INFERNO_GROUP, { rate: 30, range: 50, mag: 500 }),
   ...gun("frost", FROST_GROUP, { rate: 30, range: 40, mag: 300 }, true),
   ...gun("cryo", CRYO_GROUP, { rate: 30, range: 50, mag: 500 }, true),
+  { key: "streamHullOut", label: "Hull nozzle out (× the minigun's)", min: 0, max: 2, step: 0.05, group: STREAM_GROUP, tip: "How far out the Inferno and Cryo projector sit on the hull mount: 1 is where the minigun's barrels are" },
+  { key: "flameLight", label: "Stream light", min: 0, max: 4000, step: 10, group: STREAM_GROUP, tip: "Two lights along a pouring stream (night, or by day with Light › Blast flash by day)" },
+  { key: "poolLight", label: "Burning pool light", min: 0, max: 4000, step: 10, group: NAPALM_GROUP, tip: "Each burning pool lights the ground round it; a flamer's splash at half" },
+  { key: "poolLightRange", label: "Pool light reach (m)", min: 2, max: 40, step: 0.5, group: NAPALM_GROUP },
+  { key: "frostLook", label: "Frozen look (0 off)", min: 0, max: 1, step: 0.05, group: CHILL_GROUP, tip: "How strongly chilled robots frost over; frozen ones go bright ice with a glint" },
   { key: "freezeLevel", label: "Freeze ray sound", min: 0, max: 1.5, step: 0.01, group: CHILL_GROUP },
   { key: "chillDecay", label: "Chill ebbs (/s)", min: 0, max: 2, step: 0.01, group: CHILL_GROUP },
   { key: "chillSlow", label: "Slows by (× chill)", min: 0, max: 1, step: 0.01, group: CHILL_GROUP, tip: "A unit at chill c moves at 1 − this × c of its speed (robots and bandits so far)" },

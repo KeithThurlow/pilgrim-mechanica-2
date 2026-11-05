@@ -231,6 +231,14 @@ export class Arsenal implements MechWeapons {
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
       this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null, g?.proto);
       this.fire.configure(i, isFlameGun(kind) ? kind : null);
+      // The hull stream guns sit out where the minigun's barrels do (Keith 2026-11-05: "mounted too close to the arm"):
+      // the model goes out along the mount by the pod muzzle's sideways offset × Flame stream › Hull nozzle out.
+      if (s.model && (kind === "inferno" || kind === "cryo") && body.mount && body.muzzle) {
+        const mount = body.mount(i === 0 ? "left" : "right");
+        mount.updateWorldMatrix(true, false);
+        const at = mount.worldToLocal(body.muzzle(i === 0 ? 1 : -1, this.tmp));
+        s.model.root.position.set(at.x * this.v.streamHullOut, 0, 0);
+      } else if (s.model) s.model.root.position.set(0, 0, 0);
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
