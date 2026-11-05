@@ -48,6 +48,7 @@ export const FORT_DEFAULTS = {
   fortBuildGap: 2.5,
   fortTwoHigh: 0.3,
   fortCover: 3,
+  fortSpawners: 3,
   fortYardSpots: 5,
   fortSpotValue: 70,
   fortSpotTime: 4,
@@ -85,6 +86,7 @@ export const FORT_PARAMS: Param[] = [
   { key: "fortInfill", label: "Back-row shacks", min: 0, max: 80, step: 1, group: T, tip: "Set back behind the street fronts", onRelease: true },
   { key: "fortBuildGap", label: "Gap between shacks (m, mean)", min: 0.5, max: 12, step: 0.1, group: T, tip: "Alleys bandits run through", onRelease: true },
   { key: "fortTwoHigh", label: "Shacks two high (share)", min: 0, max: 1, step: 0.05, group: T, onRelease: true },
+  { key: "fortSpawners", label: "Spawner shacks per yard", min: 0, max: 10, step: 1, group: T, tip: "Shacks the bandits pour out of when the fortress is alert (shoot one to shut it)", onRelease: true },
   { key: "fortCover", label: "Loose container stacks per yard", min: 0, max: 20, step: 1, group: T, onRelease: true },
   { key: "fortClutter", label: "Clutter in the yards", min: 0, max: 300, step: 1, group: T, onRelease: true },
   { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The containers' solid height: the lowest stack (two lying, 5.2 m) must stay above it", onRelease: true },
@@ -137,7 +139,15 @@ export interface Block {
   /** Which yard it stands in (0 the outer). */
   yard: number;
   kind: "shack" | "cover";
+  /** The containers' door ends face the street (else their long side does). */
+  endOn?: boolean;
 }
+
+/**
+ * A spawner: a shack whose container doors swing open and bandits pour out (Keith 2026-11-05: "containers that
+ * bandits just swarmed out of"). The door's centre on the shack's face (x, z), the heading out of it (a), its yard.
+ */
+export interface Spawner { id: string; block: number; x: number; z: number; a: number; yard: number }
 
 /** A street or lane (world points), `yard` the yard a lane runs in (-1: a main street, from a gate to the keep). */
 export interface Street { pts: { x: number; z: number }[]; w: number; main: boolean; yard: number }
@@ -151,6 +161,8 @@ export interface Layout {
   blocks: Block[];
   /** Streets from the gates to the keep and the lanes off them (nothing stands on them). */
   streets: Street[];
+  /** Shacks bandits come out of. */
+  spawners: Spawner[];
   /** Furthest any wall reaches from the centre (m). */
   reach: number;
   /** Blocks by 8 m cell (lazily built by blocksNear). */
@@ -456,7 +468,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
     const stack = r() < v.fortTwoHigh ? 2 : 1;
     // across: the containers' long sides run away from the street (their door ends to it); else along it.
     const a = across ? face + Math.PI : face + Math.PI / 2;
-    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 0.6, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack" };
+    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 0.6, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack", endOn: across };
   };
   const maxB = Math.round(v.fortBuildings);
   const inAny = (x: number, z: number, m: number) => blocks.some((b) => Math.hypot(b.x - x, b.z - z) < Math.hypot(b.len, b.dep) / 2 + m);
@@ -525,9 +537,23 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       blocks.push(b); n++;
     }
   }
+  // Spawners: door-end shacks by the streets, spread round each yard (not the keep), the doors of the middle container.
+  const spawners: Spawner[] = [];
+  for (let k = 0; k < last; k++) {
+    const cand = blocks.map((_, n) => n).filter((n) => {
+      const b = blocks[n];
+      return b.yard === k && b.kind === "shack" && b.endOn && b.cols % 2 === 1 && streets.some((st) => streetDist(st, b.x + Math.sin(b.door) * (b.len / 2 + 3), b.z + Math.cos(b.door) * (b.len / 2 + 3)) < st.w / 2 + 1);
+    });
+    for (let t = 0; t < 40 && spawners.filter((q) => q.yard === k).length < v.fortSpawners && cand.length; t++) {
+      const n = cand.splice(Math.floor(r() * cand.length), 1)[0], b = blocks[n];
+      const x = b.x + Math.sin(b.door) * (b.len / 2), z = b.z + Math.cos(b.door) * (b.len / 2);
+      if (spawners.some((q) => Math.hypot(q.x - x, q.z - z) < 28)) continue;
+      spawners.push({ id: `${p.id}/s${spawners.length}`, block: n, x, z, a: b.door, yard: k });
+    }
+  }
   let reach = 0;
   for (const ring of rings) reach = Math.max(reach, ringExtent(ring)[1] + ringSpan(ring));
-  return { poi: p.id, x: p.x, z: p.z, rings, blocks, streets, reach: reach + 1 };
+  return { poi: p.id, x: p.x, z: p.z, rings, blocks, streets, spawners, reach: reach + 1 };
 }
 
 const BOX_TONES: Tone[] = ["rust", "olive", "steel", "rust", "dark", "hazard", "hull", "olive"];

@@ -363,6 +363,36 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
     const want = live.yards.filter((y) => y.state === "alert").reduce((n, y) => n + F.aliveIn(fp.id, y.k), 0);
     if (!pts.length || pts.length !== want) fail(`alert garrison: ${pts.length} turret threats, ${want} bandits alive in alert yards`);
     console.log(`fortress threats: asleep 0, alert ${pts.length}`);
+    // ---- 7. spawner shacks: alert, waves pour out of their doors; shot down, nobody comes out of them again ----
+    const L = live.L, poured: { x: number; z: number; id: string }[] = [];
+    if (!L.spawners.length) fail("a fortress with no spawner shacks");
+    for (let k = 0; k < L.rings.length - 1; k++) if (!L.spawners.some((q) => q.yard === k)) fail(`no spawner in yard ${k}`);
+    for (const q of L.spawners) {
+      const b = L.blocks[q.block];
+      const out = (m: number) => wallHeight(L, q.x + Math.sin(q.a) * m, q.z + Math.cos(q.a) * m, wd.walls.down);
+      if (out(-1) < b.h * 0.8) fail(`${q.id}: its door isn't on its shack's face`);
+      if (out(3) > 0.7) fail(`${q.id}: its door opens onto something solid (${out(3).toFixed(2)} m)`);
+    }
+    const pourOrig = F.spawners.onPour!;
+    F.spawners.onPour = (sp, x, z, a) => { poured.push({ x, z, id: sp.sp.id }); pourOrig(sp, x, z, a); };
+    for (let k = 0; k < 30 * 8; k++) F.update(1 / 30, true);
+    const first = poured.length;
+    if (first < FORT_LIFE_DEFAULTS.fortTrickle) fail(`alert, only ${first} bandits poured out in 8 s`);
+    for (const q of poured) {
+      const sp = L.spawners.find((s) => s.id === q.id)!;
+      if (Math.hypot(q.x - sp.x, q.z - sp.z) > 2.5) fail(`a bandit came out ${Math.hypot(q.x - sp.x, q.z - sp.z).toFixed(1)} m from its door`);
+      if (wallHeight(L, q.x, q.z, wd.walls.down) > 0.7) { fail("a bandit came out on top of something"); break; }
+    }
+    // Shoot every spawner down: one spawnerDown each, and no more pour.
+    let downs = 0;
+    F.onSpawner = (e) => { if (e.type === "spawnerDown") downs++; };
+    for (const st of F.spawners.list) for (let n = 0; n < 200 && !st.down; n++) F.spawners.hurt(st, 100);
+    F.spawners.hurt(F.spawners.list[0], 100);
+    const before = poured.length;
+    for (let k = 0; k < 30 * 40; k++) F.update(1 / 30, true);
+    if (downs !== F.spawners.list.length) fail(`spawnerDown fired ${downs} times for ${F.spawners.list.length} spawners`);
+    if (poured.length !== before) fail(`${poured.length - before} poured out of shot-down spawners`);
+    console.log(`spawners: ${L.spawners.length} (every yard), doors on their faces onto open ground · alert: ${first} out of the doors in 8 s · all shot down: ${downs} downs, none out after`);
   }
 }
 

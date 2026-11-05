@@ -22,7 +22,7 @@ for (const seed of [3, 1, 2, 4, 5, 6]) {
   const site = buildSite(p, V);
   const lanes = L.streets.filter((s) => !s.main).length;
   const per = L.rings.map((_, k) => L.blocks.filter((b) => b.yard === k && b.kind === "shack").length);
-  console.log(`seed ${seed}: rings ${L.rings.length} (${L.rings.map((r) => r.r.toFixed(0) + ":" + r.gates.map((g) => (g.barred ? "B" : "o")).join("")).join(" ")}) streets ${L.streets.length - lanes} lanes ${lanes} shacks ${per.join("/")} cover ${L.blocks.filter((b) => b.kind === "cover").length} props ${site.props.length} spots ${site.sections.map((s) => s.spots.length).join("/")} floor relief ${(hi - lo).toFixed(1)} m · ${ms.toFixed(2)} us/sample`);
+  console.log(`seed ${seed}: rings ${L.rings.length} (${L.rings.map((r) => r.r.toFixed(0) + ":" + r.gates.map((g) => (g.barred ? "B" : "o")).join("")).join(" ")}) streets ${L.streets.length - lanes} lanes ${lanes} shacks ${per.join("/")} spawners ${L.spawners.length} cover ${L.blocks.filter((b) => b.kind === "cover").length} props ${site.props.length} spots ${site.sections.map((s) => s.spots.length).join("/")} floor relief ${(hi - lo).toFixed(1)} m · ${ms.toFixed(2)} us/sample`);
 }
 
 // ?svg: a plan of each seed into the scratchpad (rings, gates, streets, shacks).
