@@ -38,6 +38,10 @@ import { splashBlast, firstBody, blastCover } from "./splash";
 import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
+import { FirePools } from "./firePools";
+import { FlameFx } from "../fx/flameFx";
+import { FIRE_DEFAULTS } from "../weapons/fire/fireTuning";
+import { DAMAGE_TYPE_DEFAULTS } from "./damageType";
 import { famOfTeam } from "../world/lamps";
 import { BlastWaves, BLAST_WAVE_DEFAULTS, type BlastWaveValues, type WaveKind } from "../fx/blastWaves";
 import { BlastWavesDraw } from "../fx/blastWavesDraw";
@@ -76,6 +80,11 @@ export interface Hittable {
   pick?(key: number): void;
   /** What it's made of, for penetration when it has no sheet of its own (default: by surface). */
   material?: PenMaterial;
+  /** What it's made of for damage types (src/game/damageType.ts; default: flesh by surface, else metal). */
+  matter?: import("./damageType").Matter;
+  /** A swarm: which unit a sheet/pick key names (robots pack the part in the low bits); default the key itself.
+   *  Burning and heat are per part; the glow is drawn per unit (src/game/burn.ts heatOf). */
+  unitOf?(key: number): number;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
@@ -200,6 +209,10 @@ export class Battlefield {
   /** Targets set burning by ignited rounds (the incendiary feed, Keith 2026-10-30): damage over time, flames drawn at them. */
   readonly burns: Burns;
   private flameT = 0;
+  /** Burning pools on the ground (Keith 2026-11-05: napalm, the flamers' splashes; src/game/firePools.ts). */
+  readonly pools: FirePools;
+  /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
+  readonly flames: FlameFx;
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     // Labs that don't list the dent or penetration sliders still get their defaults.
@@ -207,11 +220,15 @@ export class Battlefield {
     for (const [k, val] of Object.entries(DENT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(PEN_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(SHOT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    for (const [k, val] of Object.entries(FIRE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    for (const [k, val] of Object.entries(DAMAGE_TYPE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     this.lookGround = field;
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
     this.burns = new Burns(v as never);
+    this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
+    this.flames = new FlameFx(field);
     this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z) => this.burns.ignite(t, k, time, dps, x, y, z) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
@@ -234,6 +251,7 @@ export class Battlefield {
     for (const [k, val] of Object.entries(HEAT_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.waves = new BlastWaves(v as unknown as BlastWaveValues);
     this.wavesDraw = new BlastWavesDraw(this.waves, field);
+    this.group.add(this.flames.group);
     this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group, this.wavesDraw.group);
     if (wrecks) this.group.add(wrecks.group);
     this.sfx = new Sfx(v, camera);
@@ -285,15 +303,46 @@ export class Battlefield {
     if (!bn.list.length) return;
     bn.step(dt);
     const k = (this.v as { burnFlames?: number }).burnFlames ?? 1;
+    // Flames licking off what burns (Keith 2026-11-05), hot metal throwing the odd ember as it cools.
+    const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
+    if (fk > 0) for (const b of bn.list) {
+      if (b.left > 0) { if (Math.random() < dt * 14 * fk) this.flames.lick(b.x + (Math.random() - 0.5) * 0.8, b.y - 0.3 + Math.random() * 0.6, b.z + (Math.random() - 0.5) * 0.8, 0.9 + b.heat * 0.6, 0.8 + b.heat * 0.3); }
+      else if (b.heat > 0.2 && Math.random() < dt * 4 * b.heat * fk) this.flames.ember(b.x + (Math.random() - 0.5) * 0.8, b.y + Math.random() * 0.5, b.z + (Math.random() - 0.5) * 0.8);
+    }
     this.flameT += dt;
     if (k <= 0 || this.flameT < 0.08) return;
     this.flameT = 0;
     const up = this.hit.set(0, 1, 0);
     for (const b of bn.list) {
+      if (b.left <= 0) continue;
       if (Math.random() > 0.6 * k) continue;
       this.back.set(b.x + (Math.random() - 0.5) * 0.6, b.y + Math.random() * 0.4, b.z + (Math.random() - 0.5) * 0.6);
       this.gunFx.sparksAt(this.back, up, 1, 1.5 + Math.random() * 2);
       if (Math.random() < 0.5) this.dust.smoke(this.back.x, this.back.y + 0.3, this.back.z, (Math.random() - 0.5) * 0.4, 1 + Math.random(), (Math.random() - 0.5) * 0.4, 0.28, 1.1, 0.5, 0.85);
+    }
+  }
+
+  /** Burning pools: damage and ignition (host), flames, embers, smoke and red-hot sand over them (cosmetic). */
+  private stepPools(dt: number) {
+    const ps = this.pools;
+    if (!ps.list.length) return;
+    ps.step(dt);
+    const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
+    for (const p of ps.list) {
+      const fade = Math.min(1, p.left / Math.min(1.5, p.life * 0.4));
+      const n = dt * p.r * p.r * (p.napalm ? 7 : 10) * fk * fade;
+      for (let k = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); k > 0; k--) {
+        const a = Math.random() * Math.PI * 2, rr = p.r * Math.sqrt(Math.random()) * 0.95;
+        const x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr;
+        this.flames.lick(x, this.field.height(x, z) + 0.1, z, (p.napalm ? 1.4 : 0.8) * (0.6 + 0.4 * fade), 0.9);
+      }
+      if (p.napalm && Math.random() < dt * p.r * 2 * fk) {
+        const a = Math.random() * Math.PI * 2, rr = p.r * Math.sqrt(Math.random());
+        const x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr, y = this.field.height(x, z);
+        this.dust.smoke(x, y + 1.2, z, (Math.random() - 0.5) * 0.6, 1.4 + Math.random(), (Math.random() - 0.5) * 0.6, 0.6, 2.2, 0.25, 0.7);
+        if (Math.random() < 0.5) this.flames.ember(x, y + 0.4, z);
+      }
+      this.heat?.spot(p.x, p.z, p.r * 0.8, (p.napalm ? 750 : 450) * fade, dt);
     }
   }
 
@@ -621,6 +670,7 @@ export class Battlefield {
     this.lightShells(look);
     this.resolveShots(dt);
     this.stepBurns(dt);
+    this.stepPools(dt);
     c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
@@ -637,6 +687,8 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
+    this.flames.update(dt, camera);
+    c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
     // Everything this frame has asked for its effects: roll the budget's pressure on (against the pool in use).

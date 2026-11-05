@@ -8,14 +8,15 @@ import { resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
 import { itemCadence, dpsOf } from "../src/items/dps";
 import { CANNON_DEFAULTS as GUN_DEFAULTS_C } from "../src/weapons/cannon";
-import { GUN_DEFAULTS, ROUND_GUNS, gunNumbers, type RoundGun } from "../src/weapons/guns";
+import { ROUND_GUNS, gunNumbers, type RoundGun } from "../src/weapons/guns";
+import { WEAPON_DEFAULTS as GUN_DEFAULTS } from "../src/weapons/tuning";
 
 const fails: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) fails.push(msg); };
 const out: string[] = [];
 
-const HELD: RoundGun[] = ["smg", "rifle", "shotgun"], HULL: RoundGun[] = ["sniper", "flak"];
-const BASE: Record<RoundGun, string> = { smg: "smg-light", rifle: "rifle-light", shotgun: "shotgun-light", sniper: "sniper-medium", flak: "flak-medium" };
+const HELD: RoundGun[] = ["smg", "rifle", "shotgun", "flamer"], HULL: RoundGun[] = ["sniper", "flak", "inferno"];
+const BASE: Record<RoundGun, string> = { smg: "smg-light", rifle: "rifle-light", shotgun: "shotgun-light", sniper: "sniper-medium", flak: "flak-medium", flamer: "flamer-light", inferno: "inferno-medium" };
 
 for (const kind of ROUND_GUNS) {
   const pick: Pick = { left: kind, right: "minigun", k1: "none", k2: "none", k3: "pack" };

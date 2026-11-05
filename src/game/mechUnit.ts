@@ -72,6 +72,8 @@ export interface MechWeapons {
   /** A round gun (src/weapons/guns.ts) is firing a shot from this side: the weapons set its muzzle (its model's), play
    *  its sound, kick its model and shake the camera. False: no model fitted (the hull's own muzzle stays). */
   gunShot?(side: 1 | -1, muzzle: THREE.Vector3): boolean;
+  /** A flamer on this side: how far its stream has flown since the trigger went down (m; the jets reach no further). */
+  flameReach?(side: 1 | -1): number;
   /** This side's gun's pellets burst where they end (the flak cannon): the look's scale (×), else 0. */
   pelletBurst?(side: 1 | -1): number;
   /** A loadout was fitted (src/game/loadoutApply.ts): build the sims and stand-in models for it. */
@@ -95,7 +97,7 @@ export interface MechWeapons {
 }
 import { Dash, DASH_DEFAULTS, DASH_PARAMS } from "../mech/dash";
 import { Reactor, REACTOR_DEFAULTS, REACTOR_PARAMS } from "../mech/reactor";
-import { isRoundGun } from "../weapons/guns";
+import { isFlameGun, isRoundGun } from "../weapons/guns";
 import { HEAD_DEFAULTS, HEAD_PARAMS, type HeadValues } from "../mech/head";
 import { Bound, BOUND_DEFAULTS, BOUND_PARAMS } from "../mech/bound";
 import type { DustValues } from "../fx/dust";
@@ -539,10 +541,15 @@ export class MechUnit implements Hittable, Solid {
         const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
         if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
       }
-      if (this.player) body.eject(s, this.eject);
+      if (this.player && !isFlameGun(own?.cls)) body.eject(s, this.eject);
       // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
       const special = this.weapons?.rounds?.(s) ?? null;
-      const proto = special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
+      // Flamers (Keith 2026-11-05, src/weapons/fire/): every jet sets alight; the jets are invisible (the arsenal draws
+      // the stream) and reach only as far as the stream has flown since the trigger went down.
+      const flame = isFlameGun(own?.cls);
+      const fireBurn = flame ? { time: Math.max(own!.burnTime ?? 0, special?.burnTime ?? 0), dps: Math.max(own!.burnDps ?? 0, special?.burnDps ?? 0) } : null;
+      const proto = fireBurn ? { ...own?.proto, burn: fireBurn } : special ? { ...own?.proto, burn: { time: special.burnTime, dps: special.burnDps } } : own?.proto;
+      const reach = flame ? Math.min(own?.range ?? v.range, this.weapons?.flameReach?.(s) ?? Infinity) : own?.range ?? v.range;
       // Armour pierce: the gun's own (an item's), else the slider; special rounds add theirs (armour-piercing, later).
       const ap = Math.min(1, (own?.ap ?? v.roundAp) + (special?.ap ?? 0));
       // A shotgun or flak shot is a cone of pellets: each its own round, only the first flashing, throwing brass and
@@ -558,6 +565,12 @@ export class MechUnit implements Hittable, Solid {
         const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * r);
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
         const first = p === 0;
+        if (flame) {
+          if (reach < 0.5) break;
+          this.bf.fire(-1, this.team, this.muzzle, d, reach, (own?.damage ?? 0) * this.damageScale, { voice: "none", silent: true, flashScale: 0, hitScale: 0, tracer: false, ally: this.ally,
+            sheet: this.player ? { half: v.roundSheetHalf * 1.5, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at } : undefined, proto, pierce: ap });
+          continue;
+        }
         this.bf.fire(first ? this.flashSlot + (s === 1 ? 0 : 1) : -1, this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
           ? { eject: first ? this.eject : undefined, outboard: first ? left.clone().multiplyScalar(s) : undefined, voice: "player", silent: round, flashScale: first ? undefined : 0, ally: this.ally,
             sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, splashBlast: flak, burst, proto, hot: !!special, pierce: ap }
