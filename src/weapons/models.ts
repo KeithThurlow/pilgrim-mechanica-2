@@ -11,11 +11,11 @@ import { libraryModel, KIND_MODELS } from "./modelSwap";
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
 /** Energy weapons (Keith 2026-11-02, src/weapons/energy/): the library's laser projector and plasma cannon stand-ins. */
 export type EnergyKind = "laser" | "beam" | "lance" | "plasma" | "orb" | "arc" | "sunder";
-export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar" | EnergyKind;
+export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLight" | "shoulderRpg" | "missiles" | "mortar" | "linemortar" | "napalm" | EnergyKind;
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
-export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach";
+export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach" | "flamer" | "inferno";
 /** The drum and chute behind the Rampart's own minigun pod (Keith 2026-11-02). */
 export type FeedKind = "minigunFeed";
 export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind | FeedKind;
@@ -378,6 +378,66 @@ function breachModel(look: ToonLook): WeaponModel {
   return m;
 }
 
+/**
+ * Flamers (Keith 2026-11-05: "a dual nozzle ... one nozzle launching flammable material, and the second nozzle applying
+ * flames to it"): a fuel nozzle on top (muzzle 0: the stream leaves here) and a short igniter nozzle under it with a
+ * pilot flame always lit (glow; muzzle 1: where the flame catches the fuel), a fuel tank and a hose. The held flamer
+ * carries one tank under the body; the hull Inferno two big tanks behind the breech, a thicker finned fuel barrel.
+ */
+function flamerModel(kind: "flamer" | "inferno", look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit(kind, look);
+  const k = kind === "inferno" ? 1.45 : 1, long = kind === "inferno" ? 1.25 : 1;
+  // Body and grip block.
+  add(recoil, box, OLIVE, [0.42 * k, 0.4 * k, 0.9 * k], [0, 0, 0.3 * k]);
+  add(recoil, box, DARK, [0.3 * k, 0.12 * k, 0.6 * k], [0, 0.25 * k, 0.3 * k]);
+  // Fuel tank(s): the held one slung under the body; the Inferno's two standing behind it.
+  if (kind === "inferno") {
+    for (const x of [-0.28, 0.28]) {
+      add(recoil, cyl, KHAKI, [0.44 * k, 0.95 * k, 0.44 * k], [x * k, 0.05 * k, -0.35 * k], ALONG);
+      add(recoil, cyl, HOT, [0.46 * k, 0.07 * k, 0.46 * k], [x * k, 0.05 * k, -0.15 * k], ALONG);
+      add(recoil, cyl, DARK, [0.2 * k, 0.12 * k, 0.2 * k], [x * k, 0.05 * k, -0.86 * k], ALONG);
+    }
+  } else {
+    add(recoil, cyl, KHAKI, [0.32, 0.8, 0.32], [0, -0.33, 0.25], ALONG);
+    add(recoil, cyl, HOT, [0.34, 0.06, 0.34], [0, -0.33, 0.45], ALONG);
+  }
+  // The hose from the tank up into the fuel nozzle's breech.
+  add(recoil, ring, DARK, [0.28 * k, 0.28 * k, 0.5 * k], [0.2 * k, -0.12 * k, 0.75 * k], [0, Math.PI / 2, 0]);
+  // Fuel nozzle: a long barrel with heat fins and a flared tip.
+  const fz = 0.75 * k, fl = 1.1 * k * long;
+  add(recoil, cyl, STEEL, [0.17 * k, fl, 0.17 * k], [0, 0.08 * k, fz + fl / 2], ALONG);
+  for (let i = 0; i < 4; i++) add(recoil, cyl, DARK, [0.27 * k, 0.04 * k, 0.27 * k], [0, 0.08 * k, fz + 0.15 * k + i * 0.14 * k], ALONG);
+  add(recoil, cyl, DARK, [0.24 * k, 0.16 * k, 0.24 * k], [0, 0.08 * k, fz + fl + 0.04 * k], ALONG);
+  muzzle(recoil, [0, 0.08 * k, fz + fl + 0.14 * k]);
+  // Igniter nozzle under it, a little shorter, with its pilot flame (always lit).
+  const iz = fz + fl * 0.78;
+  add(recoil, cyl, DARK, [0.09 * k, fl * 0.75, 0.09 * k], [0, -0.1 * k, fz + fl * 0.4], ALONG);
+  add(recoil, box, STEEL, [0.12 * k, 0.16 * k, 0.1 * k], [0, -0.03 * k, fz + fl * 0.6]);
+  glow(recoil, box, HOT, [0.07 * k, 0.07 * k, 0.14 * k], [0, -0.1 * k, iz + 0.06 * k]);
+  muzzle(recoil, [0, -0.1 * k, iz + 0.12 * k]);
+  return m;
+}
+
+/** Napalm launcher (shoulder, Keith 2026-11-05): a line-mortar rack of three fat canister tubes banded in orange, tilted
+ *  up and forward, with the gel drum behind. */
+function napalmModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("napalm", look);
+  add(recoil, box, DARK, [1.2, 0.25, 0.75], [0, 0.12, 0]);
+  add(recoil, cyl, KHAKI, [0.55, 0.9, 0.55], [0, 0.45, -0.35], [0, 0, Math.PI / 2]);
+  add(recoil, cyl, HOT, [0.57, 0.08, 0.57], [0.25, 0.45, -0.35], [0, 0, Math.PI / 2]);
+  const rack = group(recoil, [0, 0.35, 0.1], [-0.9, 0, 0]);
+  add(rack, box, OLIVE, [1.15, 0.45, 0.55], [0, 0, 0.1]);
+  for (let i = 0; i < 3; i++) {
+    const x = -0.36 + i * 0.36;
+    add(rack, cyl, OLIVE, [0.32, 1.0, 0.32], [x, 0, 0.6], ALONG);
+    add(rack, cyl, HOT, [0.34, 0.08, 0.34], [x, 0, 0.85], ALONG);
+    add(rack, cyl, DARK, [0.36, 0.1, 0.36], [x, 0, 1.1], ALONG);
+    muzzle(rack, [x, 0, 1.15]);
+  }
+  glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.55, 0.26, 0.38]);
+  return m;
+}
+
 /** The box stand-ins, by kind (the fallback). */
 export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   rail: (l) => railModel("rail", l),
@@ -389,6 +449,7 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   missiles: missilesModel,
   mortar: mortarModel,
   linemortar: lineMortarModel,
+  napalm: napalmModel,
   beltfeed: beltFeedModel,
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
@@ -402,6 +463,8 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   sniper: sniperModel,
   flak: flakModel,
   breach: breachModel,
+  flamer: (l) => flamerModel("flamer", l),
+  inferno: (l) => flamerModel("inferno", l),
   minigunFeed: (l) => { const m = kit("minigunFeed", l).m; return m; },
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),

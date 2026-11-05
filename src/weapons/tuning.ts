@@ -11,6 +11,8 @@ import { ENERGY_DEFAULTS, ENERGY_PARAMS, ENERGY_GROUPS } from "./energy/energyTu
 import { GUN_DEFAULTS, GUN_PARAMS, GUN_GROUPS } from "./guns";
 import { CANNON_DEFAULTS, CANNON_PARAMS, CANNON_GROUP } from "./cannon";
 import { SAMPLE_DEFAULTS, SAMPLE_PARAMS } from "../audio/samples";
+import { FIRE_DEFAULTS, FIRE_PARAMS, FIRE_GROUPS } from "./fire/fireTuning";
+import { DAMAGE_TYPE_DEFAULTS, DAMAGE_TYPE_PARAMS, DAMAGE_TYPE_GROUP } from "../game/damageType";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -195,6 +197,8 @@ export const WEAPON_DEFAULTS = {
   ...ENERGY_DEFAULTS,
   ...GUN_DEFAULTS,
   ...CANNON_DEFAULTS,
+  ...FIRE_DEFAULTS,
+  ...DAMAGE_TYPE_DEFAULTS,
   ...SAMPLE_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
@@ -371,8 +375,10 @@ export const WEAPON_PARAMS: Param[] = [
   ...ENERGY_PARAMS,
   ...GUN_PARAMS,
   ...CANNON_PARAMS,
+  ...FIRE_PARAMS,
+  ...DAMAGE_TYPE_PARAMS,
   ...SAMPLE_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, R, A, ...GUN_GROUPS, CANNON_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

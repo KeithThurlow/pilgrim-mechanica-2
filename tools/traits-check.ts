@@ -11,7 +11,7 @@ import { reseed } from "../src/items/balanceModel";
 
 let failed = 0;
 const fail = (m: string) => { failed++; console.error("FAIL traits: " + m); };
-const DELIVERY = ["rounds", "shells", "rockets", "slug", "bolt", "beam", "blade"];
+const DELIVERY = ["rounds", "shells", "rockets", "slug", "bolt", "beam", "blade", "stream"];
 const fits = (base: string) => PROTOCOLS.filter((p) => protocolFits(p, BASE_BY_ID[base].tags)).map((p) => p.id);
 
 for (const [base, ts] of Object.entries(WEAPON_TRAITS)) {

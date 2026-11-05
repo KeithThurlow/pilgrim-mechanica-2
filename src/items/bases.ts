@@ -20,7 +20,7 @@ import { traitsOf } from "./traits";
 
 /** Shoulder gear (Keith 2026-10-25, widened 2026-10-30): on a hull's shoulder (keys 1 and 2, whatever its hull mount
  *  holds) or, for launchers, on the pack mount as a back weapon (key 3, in place of the pack). Every one has a key. */
-export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar" | "beltfeed" | "incendiary" | "capacitor";
+export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar" | "napalm" | "beltfeed" | "incendiary" | "capacitor";
 /** What a shoulder item is (Keith 2026-10-30): a launcher (its key paints and fires it), a feed (boosts its own side's
  *  gun; its key overdrives it or loads special rounds) or power (faster energy refill; its key discharges a bar). */
 export type ShoulderFamily = "launcher" | "feed" | "power";
@@ -29,7 +29,7 @@ export type ShoulderFamily = "launcher" | "feed" | "power";
 export type RoundType = "incendiary";
 /** A shoulder weapon's family. */
 export const SHOULDER_FAMILY: Record<ShoulderWeapon, ShoulderFamily> = {
-  rpg: "launcher", missiles: "launcher", mortar: "launcher", linemortar: "launcher", beltfeed: "feed", incendiary: "feed", capacitor: "power",
+  rpg: "launcher", missiles: "launcher", mortar: "launcher", linemortar: "launcher", napalm: "launcher", beltfeed: "feed", incendiary: "feed", capacitor: "power",
 };
 
 export interface StatInfo {
@@ -117,6 +117,10 @@ export const STATS: Record<string, StatInfo> = {
   effectTime: { label: "Key effect lasts (s)", better: 1, decimals: 1 },
   burnTime: { label: "Burns for (s)", better: 1, decimals: 1 },
   burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
+  // Fire (Keith 2026-11-05): the napalm launcher's pools.
+  poolRadius: { label: "Pool radius (m)", better: 1, decimals: 1 },
+  poolTime: { label: "Pool burns (s)", better: 1, decimals: 1 },
+  poolDps: { label: "Pool damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
   // Summoner gear (Keith 2026-11-02, src/summon/gear.ts): the pack builds mech replicas, the shoulders carry drones and
   // the scrap swarm.
@@ -206,6 +210,7 @@ function roundGun(id: string, name: string, size: Size, cls: RoundGun, tags: str
   };
   if (g.pellets > 1) stats.pellets = s(g.pellets, 0.1);
   if (g.splash > 0) { stats.splash = s(g.splash, 0.1); stats.splashShare = s(g.splashShare, 0); }
+  if (g.burnDps > 0) { stats.burnTime = s(g.burnTime, 0.12); stats.burnDps = s(g.burnDps, 0.12); }
   return { id, name, kind: "weapon", size, cls, tags, weight, makers, look, drop, stats };
 }
 
@@ -367,6 +372,9 @@ export const BASES: Base[] = [
   // The breach cannon (Keith 2026-11-02: cannons "that fire explosive rounds", src/weapons/cannon.ts): one big shell at a
   // time, leading a lock, bursting through the shared blast. Base values from the Breach cannon sliders.
   breachCannon(),
+  // Flamers (Keith 2026-11-05, src/weapons/fire/): a held flamethrower and a hull one, dual nozzle (fuel and igniter).
+  roundGun("flamer-light", "Flamer", "L", "flamer", ["weapon", "fire", "flamer"], 1.3, ["Suzaku", "Stratford-Aegis"], "rampart", 0.9, { handling: s(1.2, 0.08), arcBonus: s(10, 0.2) }),
+  roundGun("inferno-medium", "Inferno projector", "M", "inferno", ["weapon", "fire", "flamer"], 2.4, ["Suzaku"], "rampart-turret", 0.8, { arc: s(32, 0.08), track: s(11, 0.08) }),
   roundGun("flak-medium", "Flak cannon", "M", "flak", ["weapon", "ballistic", "flak"], 2.6, ["Suzaku", "Stratford-Aegis"], "rampart-turret", 0.9, { arc: s(30, 0.08), track: s(10, 0.08) }),
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
@@ -384,6 +392,13 @@ export const BASES: Base[] = [
   {
     id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.8,
     stats: { shells: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), ap: s(WD.salvoAp, 0), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
+  },
+  // The napalm launcher (Keith 2026-11-05: "a lot like line mortar ... shoulder mounted"): canisters up a painted strip,
+  // each a small burst and a pool of burning gel (src/game/firePools.ts). Base values from the Napalm launcher sliders.
+  {
+    id: "sh-napalm", name: "Napalm launcher", kind: "shoulder", shoulder: "napalm", tags: ["shoulder", "fire", "mortar", "napalm"], weight: 2.6, makers: ["Suzaku"], look: "rampart-siege", drop: 0.8,
+    stats: { shells: s(WD.napalmShells, 0.2), damage: s(WD.napalmDamage, 0.1), ap: s(WD.napalmAp, 0), cooldown: s(WD.napalmCooldown, 0.1), stripLength: s(WD.napalmLength, 0.1), blast: s(WD.napalmBlast, 0.08),
+      poolRadius: s(WD.napalmPool, 0.1), poolTime: s(WD.napalmPoolTime, 0.12), poolDps: s(WD.napalmPoolDps, 0.12), burnTime: s(WD.napalmBurnTime, 0.12), burnDps: s(WD.napalmBurnDps, 0.12) },
   },
   // Feeds (Keith 2026-10-30): always boost their own side's gun (the passive), and their key (1 or 2) does more: the
   // belt feed overdrives it, the incendiary feed loads ignited rounds. Unrolled ones run on the "Shoulder gear" sliders.

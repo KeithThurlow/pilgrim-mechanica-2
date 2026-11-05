@@ -48,7 +48,12 @@ export function cadenceOf(s: Record<string, number>, shot?: ShotProtocols, cost 
   let bonus = 0, k = 1;
   for (let i = 0; i < (shot?.chain ?? 0); i++) { k *= CHAIN_KEEP; bonus += k; }
   bonus += (shot?.ricochet ?? 0) > 0 ? RICOCHET_KEEP : 0;
-  return { damage: s.damage, rounds, rate, sustained, magazine, reload, cost, bonus };
+  // Fire (Keith 2026-11-05): a flamer's burn on one target while it pours, as a share of each round; a napalm canister's
+  // pool and burn on a body passing through it (about 40% of the pool's time in it). Before damage types and heat.
+  let damage = s.damage;
+  if (s.fireRate !== undefined && (s.burnDps ?? 0) > 0) damage += s.burnDps / (rate * Math.max(1, rounds));
+  if ((s.poolDps ?? 0) > 0) damage += (s.poolDps * (s.poolTime ?? 0) * 0.4 + (s.burnDps ?? 0) * (s.burnTime ?? 0));
+  return { damage, rounds, rate, sustained, magazine, reload, cost, bonus };
 }
 
 export const dpsOf = (c: Cadence) => c.damage * c.rounds * c.sustained;

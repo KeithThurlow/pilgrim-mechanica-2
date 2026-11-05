@@ -130,7 +130,7 @@ const dealt = (s: Shots) => s.events.filter((e) => e.kind === "hit").reduce((a, 
 // ---- Ignited rounds: burn for their time, renew, stop on death, never from a plain round ----
 {
   const balls = [new Ball(0, 1, 10), new Ball(5, 1, 10)];
-  const burns = new Burns({ burnTick: 0.25, burnMax: 8 });
+  const burns = new Burns({ burnTick: 0.25, burnMax: 8, heatRise: 0, fireVsMetal: 1, fireVsFlesh: 1 }); // heat and damage types: tools/fire-check.ts
   const s = world(balls, undefined, (t, k, time, dps, x, y, z) => burns.ignite(t, k, time, dps, x, y, z));
   fire(s, 0, 1);
   s.step(1 / 30);

@@ -123,6 +123,8 @@ export function robotsFront(params0: URLSearchParams): Front {
       lab.app.scene.add(d.group);
       const target = new RobotTarget(sw, 3);
       bf.targets.push(target);
+      // Hot metal glows (Keith 2026-11-05, src/game/burn.ts).
+      d.heatMap = () => { d.heatGlow = (bf.v as { heatGlow?: number }).heatGlow ?? 1; return bf.burns.heatsOf(target); };
       hook(player, "onStomp", (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k)));
       // Deaths go to the physics: the body and its leg parts fall apart loosely (small ones fly, walkers fold where they
       // stand, excavators topple from height).

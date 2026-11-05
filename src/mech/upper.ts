@@ -184,6 +184,9 @@ export interface GunStats {
   pellets?: number;
   splash?: number;
   splashShare?: number;
+  /** Flamers (src/weapons/fire/): what each jet sets alight (s, damage/s). */
+  burnTime?: number;
+  burnDps?: number;
 }
 
 export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass | import("../weapons/guns").RoundGun | "cannon";

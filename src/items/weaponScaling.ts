@@ -23,7 +23,7 @@ import { BASE_BY_ID } from "./bases";
 import { PROTOCOLS, protocolFits, type Protocol } from "./protocols";
 import { makeItem, protocolItem } from "./generate";
 import { dpsOf, itemCadence } from "./dps";
-import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, eDps, reseed, targets, ttk, volleySwarm, wOf, type T, type W } from "./balanceModel";
+import { REF, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, FIRE_IDS, eDps, reseed, targets, ttk, volleySwarm, wOf, type T, type W } from "./balanceModel";
 import type { Item } from "./item";
 
 export const SCALING = {
@@ -42,7 +42,7 @@ export const SCALING = {
 };
 
 /** Every weapon the model covers: the sheet's checked list, then the energy weapons and swords (report only). */
-export const MODELLED = [...WEAPON_IDS, ...ENERGY_IDS, ...MELEE_IDS];
+export const MODELLED = [...WEAPON_IDS, ...ENERGY_IDS, ...MELEE_IDS, ...FIRE_IDS];
 
 const SINGLE = ["cutter", "excavator", "raider", "rival"];
 

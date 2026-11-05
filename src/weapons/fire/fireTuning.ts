@@ -1,0 +1,137 @@
+// Fire weapons' feel values (Keith 2026-11-05: a flamethrower and a napalm launcher, hull and handheld; burning; metal
+// that heats up). Every number is a slider (Weapons topic, groups below). A rolled item carries its own damage, rate,
+// fuel and burn; an unrolled one (the weapons lab's picker) runs on these.
+//
+//   Flamer (held, Light) and Inferno (hull, Medium): round guns (src/weapons/guns.ts) that fire invisible short jets on
+//     their clock through the minigun's path: a cone (pellets, spread) that washes through a crowd (penetration) and
+//     sets everything it touches burning. The jets reach only as far as the stream has flown since the trigger went
+//     down (flameSpeed), so the damage arrives with the fire. Their magazine is the fuel tank.
+//   Napalm launcher (shoulder, keys 1-2; Keith 2026-11-05: "a lot like line mortar ... shoulder mounted"): paint a
+//     strip, release, canisters land in order up it (the line mortar's sim, src/weapons/salvo.ts), each bursting into a
+//     pool of burning gel (src/game/firePools.ts) that burns what stands in it and sets it alight.
+//   Burning and heat (src/game/burn.ts): burn damage is fire damage (Damage types); metal heats while it burns and cooks.
+import type { Param } from "../../core/tweaks";
+
+export const FIRE_DEFAULTS = {
+  // Flamer (held): the round gun numbers, read by gunNumbers("flamer").
+  flamerRate: 12,
+  flamerPellets: 2,
+  flamerDamage: 4,
+  flamerSpread: 6,
+  flamerRange: 15,
+  flamerPierce: 8,
+  flamerAp: 0,
+  flamerMag: 90,
+  flamerReload: 3,
+  flamerBurnTime: 3,
+  flamerBurnDps: 40,
+  // Inferno (hull flamer)
+  infernoRate: 14,
+  infernoPellets: 3,
+  infernoDamage: 4,
+  infernoSpread: 8,
+  infernoRange: 22,
+  infernoPierce: 12,
+  infernoAp: 0,
+  infernoMag: 160,
+  infernoReload: 4,
+  infernoBurnTime: 4,
+  infernoBurnDps: 60,
+  // The stream (both flamers): how fast the fuel flies (the damage's reach grows at this from the trigger), how soon
+  // after the fuel nozzle the igniter's flame catches it (s), gobs drawn per jet, size, growth, buoyancy, drag.
+  flameSpeed: 26,
+  flameIgnite: 0.05,
+  flameGobs: 3,
+  flameSize: 0.55,
+  flameGrow: 3.2,
+  flameRise: 3,
+  flameDrag: 1.6,
+  flameGravity: 4,
+  flameSplash: 1,
+  flameLevel: 0.8,
+  flameKick: 0.02,
+  flameShake: 0.01,
+  // Napalm launcher (shoulder): canisters up a strip like the line mortar (its ripple, flight and arc sliders), each a
+  // small burst and a burning pool.
+  napalmShells: 6,
+  napalmLength: 30,
+  napalmDamage: 40,
+  napalmBlast: 2.5,
+  napalmAp: 0.2,
+  napalmCooldown: 9,
+  napalmPool: 3.6,
+  napalmPoolTime: 7,
+  napalmPoolDps: 35,
+  napalmBurnTime: 4,
+  napalmBurnDps: 30,
+  // Pools (napalm, and a flamer's stream where it splashes on the sand: flameSplash × a small short pool).
+  poolTick: 0.25,
+  poolMax: 64,
+  poolMerge: 0.6,
+  splashPool: 1.1,
+  splashPoolTime: 1.2,
+  splashPoolDps: 10,
+  // Burning and heat (src/game/burn.ts)
+  heatRise: 0.4,
+  heatCool: 0.15,
+  heatDps: 50,
+  heatGlow: 1,
+  fireFlames: 1,
+};
+export type FireValues = typeof FIRE_DEFAULTS;
+
+export const FLAMER_GROUP = "Flamer (held)", INFERNO_GROUP = "Inferno (hull flamer)", STREAM_GROUP = "Flame stream", NAPALM_GROUP = "Napalm launcher", HEAT_GROUP = "Burning and heat";
+export const FIRE_GROUPS = [FLAMER_GROUP, INFERNO_GROUP, STREAM_GROUP, NAPALM_GROUP, HEAT_GROUP];
+
+const gun = (p: string, group: string, o: { rate: number; range: number; mag: number }): Param[] => [
+  { key: `${p}Rate`, label: "Jets/s", min: 1, max: o.rate, step: 0.5, group },
+  { key: `${p}Pellets`, label: "Jets per shot (the cone)", min: 1, max: 8, step: 1, group },
+  { key: `${p}Damage`, label: "Damage per jet (on contact)", min: 0, max: 40, step: 0.5, group, tip: "Most of a flamer's damage is the burn it leaves; this is the touch of the flame itself" },
+  { key: `${p}Spread`, label: "Cone (°)", min: 0, max: 30, step: 0.5, group },
+  { key: `${p}Range`, label: "Range (m)", min: 4, max: o.range, step: 0.5, group },
+  { key: `${p}Pierce`, label: "Washes through (as minigun pierce)", min: 0, max: 30, step: 0.5, group, tip: "Read against the minigun's 2: how deep into a crowd the flame reaches" },
+  { key: `${p}Ap`, label: "Armour pierce", min: 0, max: 1, step: 0.01, group },
+  { key: `${p}Mag`, label: "Fuel (jets)", min: 5, max: o.mag, step: 1, group },
+  { key: `${p}Reload`, label: "Refuel (s)", min: 0.2, max: 10, step: 0.1, group },
+  { key: `${p}BurnTime`, label: "Sets alight for (s)", min: 0, max: 15, step: 0.1, group, tip: "Each jet that touches renews it" },
+  { key: `${p}BurnDps`, label: "Burn damage per second", min: 0, max: 300, step: 1, group, tip: "Per burning target or part, × Damage types (fire vs flesh / metal)" },
+];
+
+export const FIRE_PARAMS: Param[] = [
+  ...gun("flamer", FLAMER_GROUP, { rate: 30, range: 40, mag: 300 }),
+  ...gun("inferno", INFERNO_GROUP, { rate: 30, range: 50, mag: 500 }),
+  { key: "flameSpeed", label: "Fuel speed (m/s)", min: 5, max: 80, step: 0.5, group: STREAM_GROUP, tip: "The stream flies this fast; the flame's damage reaches only as far as the stream has got since the trigger went down" },
+  { key: "flameIgnite", label: "Igniter catches the fuel after (s)", min: 0, max: 0.3, step: 0.005, group: STREAM_GROUP, tip: "Keith 2026-11-05: one nozzle sprays fuel, the other lights it; the fuel flies dark this long, then the flame runs along it" },
+  { key: "flameGobs", label: "Look: gobs per jet", min: 0, max: 8, step: 1, group: STREAM_GROUP },
+  { key: "flameSize", label: "Look: gob size at the nozzle (m)", min: 0.05, max: 2, step: 0.01, group: STREAM_GROUP },
+  { key: "flameGrow", label: "Look: flame grows (× over its life)", min: 1, max: 8, step: 0.1, group: STREAM_GROUP },
+  { key: "flameRise", label: "Look: flames rise (m/s²)", min: 0, max: 10, step: 0.1, group: STREAM_GROUP },
+  { key: "flameDrag", label: "Look: drag (/s)", min: 0, max: 6, step: 0.05, group: STREAM_GROUP },
+  { key: "flameGravity", label: "Look: unlit fuel falls (m/s²)", min: 0, max: 20, step: 0.1, group: STREAM_GROUP },
+  { key: "flameSplash", label: "Splashes burn on the sand", min: 0, max: 2, step: 0.05, group: STREAM_GROUP, tip: "Where the stream meets the sand it leaves a small short pool (× its size); 0: none" },
+  { key: "flameLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: STREAM_GROUP },
+  { key: "flameKick", label: "Gun kick (m)", min: 0, max: 0.3, step: 0.005, group: STREAM_GROUP },
+  { key: "flameShake", label: "Camera shake", min: 0, max: 0.2, step: 0.005, group: STREAM_GROUP },
+  { key: "napalmShells", label: "Canisters", min: 1, max: 20, step: 1, group: NAPALM_GROUP },
+  { key: "napalmLength", label: "Strip length (m)", min: 5, max: 80, step: 1, group: NAPALM_GROUP },
+  { key: "napalmDamage", label: "Burst damage", min: 0, max: 300, step: 1, group: NAPALM_GROUP, tip: "Each canister's small blast where it lands" },
+  { key: "napalmBlast", label: "Burst radius (m)", min: 0.5, max: 8, step: 0.1, group: NAPALM_GROUP },
+  { key: "napalmAp", label: "Burst armour pierce", min: 0, max: 1, step: 0.01, group: NAPALM_GROUP },
+  { key: "napalmCooldown", label: "Cooldown (s)", min: 0.5, max: 40, step: 0.5, group: NAPALM_GROUP },
+  { key: "napalmPool", label: "Pool radius (m)", min: 0.5, max: 10, step: 0.1, group: NAPALM_GROUP },
+  { key: "napalmPoolTime", label: "Pool burns for (s)", min: 0.5, max: 30, step: 0.5, group: NAPALM_GROUP },
+  { key: "napalmPoolDps", label: "Pool damage per second", min: 0, max: 300, step: 1, group: NAPALM_GROUP, tip: "To everything standing in it, × Damage types; armour-ignoring" },
+  { key: "napalmBurnTime", label: "Sets alight for (s)", min: 0, max: 15, step: 0.1, group: NAPALM_GROUP, tip: "What walks out of the pool burns on this long" },
+  { key: "napalmBurnDps", label: "Burn damage per second", min: 0, max: 300, step: 1, group: NAPALM_GROUP },
+  { key: "poolTick", label: "Pools: tick (s)", min: 0.05, max: 1, step: 0.01, group: NAPALM_GROUP },
+  { key: "poolMax", label: "Pools: at most", min: 4, max: 256, step: 1, group: NAPALM_GROUP },
+  { key: "poolMerge", label: "Pools: merge closer than (× radius)", min: 0, max: 1.5, step: 0.05, group: NAPALM_GROUP, tip: "A new pool this close to a burning one tops that one up instead" },
+  { key: "splashPool", label: "Stream splash: pool radius (m)", min: 0.2, max: 4, step: 0.05, group: STREAM_GROUP },
+  { key: "splashPoolTime", label: "Stream splash: burns for (s)", min: 0.1, max: 6, step: 0.1, group: STREAM_GROUP },
+  { key: "splashPoolDps", label: "Stream splash: damage per second", min: 0, max: 100, step: 1, group: STREAM_GROUP },
+  { key: "heatRise", label: "Metal heats while burning (/s)", min: 0, max: 3, step: 0.01, group: HEAT_GROUP, tip: "Heat 0..1; hosing a robot for 1/this seconds brings it to full glow" },
+  { key: "heatCool", label: "Metal cools (/s)", min: 0.01, max: 2, step: 0.01, group: HEAT_GROUP },
+  { key: "heatDps", label: "Hot metal cooks (damage/s at full heat)", min: 0, max: 300, step: 1, group: HEAT_GROUP, tip: "heat² × this, on top of the burn and still while it cools" },
+  { key: "heatGlow", label: "Look: heat glow", min: 0, max: 3, step: 0.05, group: HEAT_GROUP, tip: "Hot robots and mechs glow red to orange" },
+  { key: "fireFlames", label: "Look: flames on burning things and pools", min: 0, max: 3, step: 0.05, group: HEAT_GROUP },
+];

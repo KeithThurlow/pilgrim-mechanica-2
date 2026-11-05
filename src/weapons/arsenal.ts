@@ -46,7 +46,8 @@ import { EnergyGuns } from "./energy/energyGuns";
 import { isEnergy } from "./energy/energySim";
 import type { EnergyKind } from "./models";
 
-import { gunFeel, gunNumbers, isRoundGun, type RoundGun } from "./guns";
+import { gunFeel, gunNumbers, isFlameGun, isRoundGun, type RoundGun } from "./guns";
+import { FireGuns } from "./fire/fireGuns";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | "cannon" | RoundGun | null;
 
@@ -146,9 +147,9 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", flamer: "flamer", inferno: "inferno projector", napalm: "napalm launcher", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
-const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
+const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", napalm: "Napalm", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
 export interface KeySlot { key: string; name: string; cool: number; coolMax?: number; left: number; leftMax?: number; aiming: boolean; off: boolean; rounds?: string; reloading?: boolean }
 const newLaser = (): Laser => ({ on: false, from: new THREE.Vector3(), to: new THREE.Vector3(), k: 0 });
@@ -162,6 +163,8 @@ export class Arsenal implements MechWeapons {
   readonly railShots: RailShot[] = [];
   /** Energy weapons on either side (Keith 2026-11-02, src/weapons/energy/): pulse laser, beam laser, nova lance. */
   readonly energy: EnergyGuns;
+  /** Flamers on either side (Keith 2026-11-05, src/weapons/fire/): the stream's reach, roar, gobs and splashes. */
+  readonly fire: FireGuns;
   /** Camera shake asked for (the lab decays it). */
   onShake: ((k: number) => void) | null = null;
   /** Called as a weapon fires (its kind), before its damage lands: the lab's per-shot readout. */
@@ -196,6 +199,7 @@ export class Arsenal implements MechWeapons {
     this.energy = new EnergyGuns(bf, unit, v, () => this.candidates());
     this.energy.onShake = (k) => this.onShake?.(k);
     this.energy.onFire = (k) => this.onFire?.(k);
+    this.fire = new FireGuns(bf, unit, v);
     addWeaponSounds(bf.sfx, v);
     // The flak pellets' explosion storm reads its sliders from the first arsenal (the player's).
     bf.popTuning ??= v;
@@ -220,6 +224,7 @@ export class Arsenal implements MechWeapons {
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
       this.energy.configure(i, kind === "energy" && isEnergy(g!.cls) ? g!.cls : null, g?.own ?? null, g?.proto);
+      this.fire.configure(i, isFlameGun(kind) ? kind : null);
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
     });
@@ -273,8 +278,10 @@ export class Arsenal implements MechWeapons {
   }
   /** Penetration (m): the slider, the Light rail's share of it (items carry none of their own yet). */
   private railPen(s: Side) { return this.v.railPen * (s.light ? this.v.railLightPen : 1); }
-  lineStats(o: Record<string, number> | null): SalvoStats {
+  lineStats(o: Record<string, number> | null, napalm = false): SalvoStats {
     const v = this.v;
+    if (napalm) return o ? { rockets: o.shells, damage: o.damage, cooldown: o.cooldown, length: o.stripLength, blast: o.blast }
+      : { rockets: v.napalmShells, damage: v.napalmDamage, cooldown: v.napalmCooldown, length: v.napalmLength, blast: v.napalmBlast };
     return o ? { rockets: o.shells, damage: o.damage, cooldown: o.cooldown, length: o.stripLength, blast: o.blast }
       : { rockets: v.salvoRockets, damage: v.salvoDamage, cooldown: v.salvoCooldown, length: v.salvoLength, blast: v.salvoBlast };
   }
@@ -364,13 +371,21 @@ export class Arsenal implements MechWeapons {
       // An unrolled round gun (the picker's) runs on its sliders, live, like the autocannon.
       if (isRoundGun(s.kind) && !s.own && g.stats) {
         const n = gunNumbers(s.kind, v);
-        Object.assign(g.stats, { fireRate: n.fireRate, damage: n.damage, spread: n.spread, range: n.range, pierce: n.pierce, ap: n.ap, ammo: n.magazine, reload: n.reload, pellets: n.pellets, splash: n.splash, splashShare: n.splashShare });
+        Object.assign(g.stats, { fireRate: n.fireRate, damage: n.damage, spread: n.spread, range: n.range, pierce: n.pierce, ap: n.ap, ammo: n.magazine, reload: n.reload, pellets: n.pellets, splash: n.splash, splashShare: n.splashShare, burnTime: n.burnTime, burnDps: n.burnDps });
         u.upper.sizeMag(g);
       }
       // Targeting laser on the minigun, the rocket launcher, the rifle and the sniper rifle, along the gun.
       s.laser.on = alive && (s.kind === "minigun" || s.kind === "rpg" || s.kind === "rifle" || s.kind === "sniper") && laserK > 0;
       if (s.laser.on) this.laserAlong(s.laser, s.model?.laserFrom ? s.model.laserFrom.getWorldPosition(this.tmp) : this.muzzleOf(s, side, this.tmp), u.body.barrel(side, this.dir), laserK);
       if (s.kind === "melee") { this.stepSword(s, held, dt); clearPaint(s.paint); return; }
+      if (isFlameGun(s.kind)) {
+        // Flamers: the stream's reach, the roar, the pilot flame at the igniter (muzzle 1); the jets fire on the gun's
+        // clock through the unit (gunShot below).
+        const ig = s.model && s.model.muzzles.length > 1 ? s.model.muzzles[1].getWorldPosition(this.tmp3) : null;
+        this.fire.step(i, dt, ig, alive && !(u.sideOff?.(i) ?? u.gunsOff));
+        clearPaint(s.paint);
+        return;
+      }
       if (s.kind === "energy") {
         // Energy weapons (src/weapons/energy/energyGuns.ts): a dash or the sprint drops a charge and stops a beam. The
         // lamps follow a lance's charge and a beam.
@@ -788,6 +803,7 @@ export class Arsenal implements MechWeapons {
    * glow, painter strips and rings, lasers, the arm pod's channel, feed and power effects. Rounds already flying go on.
    */
   stop() {
+    this.fire.stop();
     for (const s of this.sides) {
       s.rail.holding = false; s.rail.charge = 0; s.whined = false;
       s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; s.channel = false; s.laser.on = false;
@@ -843,9 +859,11 @@ export class Arsenal implements MechWeapons {
       p.on = true; p.held += dt; p.charge = 1; p.beamScale = 1; p.tint = null;
       p.beamFrom = { x: launch.x, y: launch.y, z: launch.z };
       p.strip = null; p.ring = null; p.arc.length = 0;
-      if (sh.weapon === "linemortar") {
-        const st = this.lineStats(sh.own);
-        sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates(), st.blast * v.salvoWidth / Math.max(0.1, v.salvoBlast));
+      if (sh.weapon === "linemortar" || sh.weapon === "napalm") {
+        const nap = sh.weapon === "napalm", st = this.lineStats(sh.own, nap);
+        // The napalm strip is as wide as its pools.
+        const width = nap ? 2 * (sh.own?.poolRadius ?? v.napalmPool) : st.blast * v.salvoWidth / Math.max(0.1, v.salvoBlast);
+        sh.strip = planStrip(u.sim.pos, cur, st.length, v, this.candidates(), width);
         p.strip = sh.strip; p.ready = sh.line.ready;
         p.beamTo = { x: cur.x, y: bf.field.height(cur.x, cur.z) + 0.1, z: cur.z };
       } else if (sh.weapon === "mortar") {
@@ -870,8 +888,8 @@ export class Arsenal implements MechWeapons {
       }
     } else if (sh.held && u.alive && !u.gunsOff) {
       // Released: fire at what was painted (if ready).
-      if (sh.weapon === "linemortar" && sh.strip) {
-        if (sh.line.fire(sh.strip, this.lineStats(sh.own), bf.field, sh.line.fired + 1)) { this.onFire?.("linemortar"); sh.fired.strip = { ...sh.strip }; sh.fired.held = 0; }
+      if ((sh.weapon === "linemortar" || sh.weapon === "napalm") && sh.strip) {
+        if (sh.line.fire(sh.strip, this.lineStats(sh.own, sh.weapon === "napalm"), bf.field, sh.line.fired + 1)) { this.onFire?.(sh.weapon); sh.fired.strip = { ...sh.strip }; sh.fired.held = 0; }
       } else if (sh.weapon === "mortar") {
         if (sh.mortar.fire(sh.at.x, sh.at.z, this.mortarStats(sh.own))) this.onFire?.("mortar");
       } else if (sh.weapon === "missiles") {
@@ -896,7 +914,8 @@ export class Arsenal implements MechWeapons {
 
     // Line mortar shells, big mortar shells, missiles.
     sh.line.update(dt, (i, out) => { const m = this.shoulderMuzzle(sh, i, this.tmp); out.x = m.x; out.y = m.y; out.z = m.z; }, (r) => {
-      this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, sh.own?.ap ?? v.salvoAp, "lineMortar");
+      if (sh.weapon === "napalm") this.napalmBurst(sh, r.pos, r.blast, r.damage);
+      else this.blast(this.tmp.set(r.pos.x, r.pos.y, r.pos.z), r.blast, r.damage, sh.own?.ap ?? v.salvoAp, "lineMortar");
     }, (r) => {
       bf.sfx.playSound("mortar", this.tmp.set(r.p0.x, r.p0.y, r.p0.z), 0.7, 1.2 + Math.random() * 0.2);
       bf.dust.smoke(r.p0.x, r.p0.y, r.p0.z, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.35, 0.9, 0.7, 0.4);
@@ -925,8 +944,24 @@ export class Arsenal implements MechWeapons {
     }, this.bodyHit);
     for (const m of sh.swarm.missiles) if (m.live && m.launched) this.trail(m.prev, m.pos, 0.16 * v.rpgSmoke, 2);
     if (sh.model) { sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 6); sh.model.recoil.position.z += (0 - sh.model.recoil.position.z) * Math.min(1, dt * 8); }
-    const ready = sh.weapon === "linemortar" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0 && magReady(sh.mag);
+    const ready = sh.weapon === "linemortar" || sh.weapon === "napalm" ? sh.line.ready : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0 && magReady(sh.mag);
     for (const mat of sh.model?.glow ?? []) mat.opacity = ready ? 0.95 : 0.15;
+  }
+
+  /** A napalm canister lands (Keith 2026-11-05): a small burst, then a pool of burning gel that sets what's in it alight
+   *  (src/game/firePools.ts). */
+  private napalmBurst(sh: Shoulder, at: { x: number; y: number; z: number }, blast: number, damage: number) {
+    const bf = this.bf, v = this.v, o = sh.own;
+    if (damage > 0) this.blast(this.tmp.set(at.x, at.y, at.z), blast, damage, o?.ap ?? v.napalmAp, "lineMortar");
+    bf.pools.add(this.unit.team, at.x, at.z, o?.poolRadius ?? v.napalmPool, o?.poolTime ?? v.napalmPoolTime, o?.poolDps ?? v.napalmPoolDps, o?.burnTime ?? v.napalmBurnTime, o?.burnDps ?? v.napalmBurnDps, true);
+    bf.sfx.playSound("napalmBurst", this.tmp.set(at.x, at.y, at.z), 1, 0.9 + Math.random() * 0.2);
+    // A rolling fireball over the splash.
+    const g = bf.field.height(at.x, at.z), R = o?.poolRadius ?? v.napalmPool;
+    for (let k = 0; k < 14; k++) {
+      const a = Math.random() * Math.PI * 2, rr = R * Math.sqrt(Math.random()) * 0.8;
+      bf.flames.lick(at.x + Math.cos(a) * rr, g + 0.3 + Math.random() * 1.2, at.z + Math.sin(a) * rr, 2 + Math.random() * 1.5, 1);
+    }
+    for (let k = 0; k < 8; k++) bf.flames.ember(at.x, g + 0.5, at.z);
   }
 
   /** A round gun fires a shot (src/weapons/guns.ts; the unit fires its rounds): its model's muzzle, sound, kick, shake. */
@@ -934,6 +969,7 @@ export class Arsenal implements MechWeapons {
     const s = this.sides[side === 1 ? 0 : 1];
     if (!isRoundGun(s.kind)) return false;
     const feel = gunFeel(s.kind, this.v);
+    if (isFlameGun(s.kind)) return this.flameShot(s, side, muzzle, feel);
     if (s.model?.muzzles.length) this.muzzleOf(s, side, muzzle, s.tube++);
     if (s.model) s.model.recoil.position.z = -feel.kick;
     this.bf.sfx.playSound(s.kind, muzzle, 1);
@@ -947,6 +983,23 @@ export class Arsenal implements MechWeapons {
     this.onShake?.(feel.shake);
     return !!s.model?.muzzles.length;
   }
+
+  /** A flamer's jet (src/weapons/fire/fireGuns.ts): from the fuel nozzle (muzzle 0), gobs into the flames, a splash
+   *  where the stream meets the sand; a light kick, no flash, no brass, no per-shot sound (the roar is a loop). */
+  private flameShot(s: Side, side: 1 | -1, muzzle: THREE.Vector3, feel: { kick: number; shake: number }): boolean {
+    const i = side === 1 ? 0 : 1, g = this.unit.upper.guns[i].stats;
+    if (s.model?.muzzles.length) this.muzzleOf(s, side, muzzle, 0);
+    if (s.model) s.model.recoil.position.z = -feel.kick;
+    const { d, aim } = this.railAim(side, muzzle);
+    const n = g ? null : gunNumbers(s.kind as RoundGun, this.v);
+    this.fire.shot(i, muzzle, d, g?.range ?? n!.range, g?.spread ?? n!.spread, g?.pellets ?? n!.pellets, aim, { time: g?.burnTime ?? n!.burnTime, dps: g?.burnDps ?? n!.burnDps });
+    this.onFire?.(s.kind!);
+    this.onShake?.(feel.shake);
+    return !!s.model?.muzzles.length;
+  }
+
+  /** A flamer's stream on this side: how far it has flown since the trigger went down (Infinity: no flamer). */
+  flameReach(side: 1 | -1): number { return this.fire.reach(side === 1 ? 0 : 1); }
 
   /** Flak pellets burst where they end: the look's scale (Flak cannon › Pellet blast look), 0 for any other gun. */
   pelletBurst(side: 1 | -1): number {
@@ -1288,7 +1341,7 @@ export class Arsenal implements MechWeapons {
         const g = sh.gear, st = g.stats;
         return { key: String(sh.key), name, cool: g.cool, coolMax: st.cooldown, left: g.left, leftMax: st.time, aiming: false, off };
       }
-      const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
+      const cd = sh.weapon === "linemortar" || sh.weapon === "napalm" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
       return { key: String(sh.key), name, cool: cd, left: 0, aiming: sh.held, off, rounds: sh.weapon === "rpg" ? `${Math.ceil(sh.mag.left)}/${sh.mag.size}` : undefined, reloading: sh.mag.reloading > 0 };
     });
   }
@@ -1316,7 +1369,7 @@ export class Arsenal implements MechWeapons {
         out.push(`${sh.key} ${NAMES[sh.weapon]} ${g.left > 0 ? `<b style="color:#ffb347">${what} ${g.left.toFixed(1)} s</b>` : g.cool > 0 ? `${g.cool.toFixed(1)} s` : "ready"}`);
         continue;
       }
-      const cd = sh.weapon === "linemortar" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
+      const cd = sh.weapon === "linemortar" || sh.weapon === "napalm" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
       const left = sh.weapon === "rpg" ? ` ${Math.ceil(sh.mag.left)}/${sh.mag.size}` : "";
       out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon}${left} ${cd > 0 ? `${sh.mag.reloading > 0 ? "reload " : ""}${cd.toFixed(1)} s` : sh.held ? "aiming" : "ready"}`);
     }

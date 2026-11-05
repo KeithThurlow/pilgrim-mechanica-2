@@ -6,7 +6,9 @@
 // Cadence (damage, rounds per shot, sustained shots/s over the magazine and reload) comes from src/items/dps.ts, the
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
-import { isRoundGun } from "../weapons/guns";
+import { isFlameGun, isRoundGun } from "../weapons/guns";
+import { FIRE_DEFAULTS as FD } from "../weapons/fire/fireTuning";
+import { DAMAGE_TYPE_DEFAULTS as DT } from "../game/damageType";
 import { isEnergy } from "../weapons/energy/energySim";
 import { ENERGY_DEFAULTS } from "../weapons/energy/energyTuning";
 import { REACTOR_DEFAULTS } from "../mech/reactor";
@@ -104,6 +106,15 @@ export function wOf(item: Item): W {
     return { ...common, kind: "melee", n: 1, cycle: gap, burst: gap, latency: s.windup ?? 0, radius: 0, share: 0, pen: s.cleave ?? SWORD_DEFAULTS.swordCleave, spread: 0, speed: Infinity,
       range: s.reach ?? SWORD_DEFAULTS.swordReach, sheetHalf: 0.3, scatter: 0, x: { arc: s.swing ?? SWORD_DEFAULTS.swordArc } };
   }
+  // Flamers (Keith 2026-11-05, src/weapons/fire/; rough, report only): the jets' touch plus the burn they keep on a body
+  // (on metal: × fire vs metal, plus the cooking of its heat at about half the full rate while it's hosed), shared over
+  // the shot's pellets and the gap between shots; no afterburn counted.
+  if (isFlameGun(cls)) {
+    const n = Math.max(1, s.pellets ?? 1), rate = 1 / Math.max(1e-3, common.burst);
+    const perS = (s.burnDps ?? 0) * DT.fireVsMetal + FD.heatDps * 0.5;
+    return { ...common, dmg: s.damage + perS / (rate * n), kind: "gun", n, latency: 0, radius: 0, share: 0, pen: roundPenFor(MD, s.pierce),
+      spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf * 1.5, scatter: 0 };
+  }
   // Round guns (src/weapons/guns.ts): the minigun's rounds, n pellets a shot, flak's shrapnel splash on each.
   if (isRoundGun(cls)) return { ...common, kind: "gun", n: Math.max(1, s.pellets ?? 1), latency: 0, radius: s.splash ?? MD.roundSplash, share: s.splash ? s.splashShare ?? 0 : MD.roundSplashShare, pen: roundPenFor(MD, s.pierce),
     spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf, scatter: 0 };
@@ -118,6 +129,13 @@ export function wOf(item: Item): W {
   if (cls === "rpg") return { ...common, kind: "rocket", n: 1, cycle: common.cycle + (sh ? REF.paint / Math.max(1, s.magazine ?? 1) : 0), latency: sh ? REF.paint : 0, radius: s.blast, share: 1, pen: 0, spread: 0, speed: s.shellSpeed, range: WD.rpgRange, sheetHalf: 0, scatter: 0.5 };
   if (cls === "missiles") return { ...common, kind: "missiles", n: s.rockets, cycle: common.cycle + REF.paint, latency: REF.paint + 1, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.swarmSpeed, range: 70, sheetHalf: 0, scatter: WD.swarmFan * 0.5 };
   if (cls === "mortar") return { ...common, kind: "mortar", n: WD.mortarShells, cycle: common.cycle + REF.paint, latency: REF.paint + WD.mortarFlight, radius: s.blast, share: 1, pen: 0, spread: 0, speed: Infinity, flight: WD.mortarFlight, range: WD.mortarMaxRange, sheetHalf: 0, scatter: WD.mortarRing * 0.5 };
+  // The napalm launcher (rough, report only): the line mortar's canisters, each a pool as wide as its radius; a body
+  // passing through stands in it for about 40% of its time, then burns on (× fire vs metal).
+  if (cls === "napalm") {
+    const fire = ((s.poolDps ?? 0) * (s.poolTime ?? 0) * 0.4 + (s.burnDps ?? 0) * (s.burnTime ?? 0)) * DT.fireVsMetal;
+    return { ...common, dmg: s.damage + fire, kind: "line", n: s.shells, cycle: common.cycle + REF.paint, latency: REF.paint + 0.9, radius: Math.max(s.blast, s.poolRadius ?? 0), share: 1, pen: 0, spread: 0,
+      speed: WD.salvoSpeed, range: WD.salvoMaxRange, sheetHalf: 0, scatter: WD.salvoScatter, stripLength: s.stripLength };
+  }
   return { ...common, kind: "line", n: s.shells, cycle: common.cycle + REF.paint, latency: REF.paint + 0.9, radius: s.blast, share: 1, pen: 0, spread: 0, speed: WD.salvoSpeed, range: WD.salvoMaxRange, sheetHalf: 0, scatter: WD.salvoScatter, stripLength: s.stripLength };
 }
 
@@ -158,6 +176,8 @@ export const withProtos = (base: string, ids: string[]): Item => {
 /** Energy weapons and swords (2026-11-03): modelled, printed by the sheet, not held to its bands yet. */
 export const ENERGY_IDS = ["laser-medium", "beam-medium", "lance-medium", "plasma-medium", "orb-medium", "arc-medium", "sunder-medium"];
 export const MELEE_IDS = ["sword-light", "sword-heavy", "sword-short"];
+/** Fire weapons (Keith 2026-11-05): modelled roughly (the burn folded into each hit), printed, not held to the bands yet. */
+export const FIRE_IDS = ["flamer-light", "inferno-medium", "sh-napalm"];
 export const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "cannon-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)
