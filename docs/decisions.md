@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-05 | Freeze rays get their own models rather than the flamers' in new paint: cold kit reads as pale insulated pressure vessels (a dewar on the held one, two spheres on the hull one) and a glowing coiled barrel; open for Keith to judge in game | Coordinator (Keith: "push on visuals") | Claude | `frostModel`, `cryoModel` |
 | 2026-11-05 | Sword notes: the swipe rises Buster, Breaker, Short; the ring after a hit is deepest on the Buster, highest on the Breaker, the Short between | Keith | Keith (order), Claude (values) | Sword sound sliders. |
 | 2026-11-05 | The "tracks moving" recording goes on the convoy first, heard from the nearest car; the crusher and moving excavators are the next fits. The flamer's ignite stays procedural for now (the recording's clean ignition is at 10 s if Keith wants it cut) | Keith | Claude (open for Keith) | |
 | 2026-11-05 | Sword smash stays synthetic, shaped on the car drop in Keith's video (1:48): the clip's a YouTube capture, not cleared for the game, so it is a measuring reference only and stays out of the repo. Its narration is on the centre channel, so the side channels are clean. The tail is cut to 0.8 s (the clip's runs about 1.8 s) so fast cuts don't pile up | Keith | Claude (open for Keith) | Clip on his PC: `reference/sounds/smash-1m40-1m55-no-narration.wav`, impact at 8.08 s. |

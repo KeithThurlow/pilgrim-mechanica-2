@@ -47,6 +47,9 @@ const HOT_FIRE = HOT, KHAKI_PAINT = KHAKI, OLIVE_PAINT = OLIVE;
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const ring = new THREE.TorusGeometry(0.5, 0.12, 6, 16);
+const sphere = new THREE.SphereGeometry(0.5, 14, 10);
+/** A flared cone: narrow at -Y, wide at +Y (+Z after ALONG). */
+const bell = new THREE.CylinderGeometry(0.5, 0.28, 1, 14);
 const ALONG: [number, number, number] = [Math.PI / 2, 0, 0]; // cylinders along +Z
 type V3 = [number, number, number];
 
@@ -385,15 +388,12 @@ function breachModel(look: ToonLook): WeaponModel {
  * pilot flame always lit (glow; muzzle 1: where the flame catches the fuel), a fuel tank and a hose. The held flamer
  * carries one tank under the body; the hull Inferno two big tanks behind the breech, a thicker finned fuel barrel.
  */
-function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLook): WeaponModel {
+function flamerModel(kind: "flamer" | "inferno", look: ToonLook): WeaponModel {
   const { m, recoil, add, glow, muzzle } = kit(kind, look);
-  const big = kind === "inferno" || kind === "cryo";
+  const big = kind === "inferno";
   // Keith 2026-11-05: the hull ones stuck out too far forward; a shorter fuel barrel (was 1.25 × the held one's).
   const k = big ? 1.45 : 1, long = big ? 0.9 : 1;
-  // The freeze rays (Keith 2026-11-05) are the same rig in frost paint: pale coolant tanks, cyan bands and nozzle lamp
-  // (the lower nozzle is the coolant vent: a cold mist rather than a pilot flame).
-  const cold = kind === "frost" || kind === "cryo";
-  const HOT = cold ? GLOW : HOT_FIRE, KHAKI = cold ? 0xd6dde0 : KHAKI_PAINT, OLIVE = cold ? 0x5d6a72 : OLIVE_PAINT;
+  const HOT = HOT_FIRE, KHAKI = KHAKI_PAINT, OLIVE = OLIVE_PAINT;
   // Body and grip block.
   add(recoil, box, OLIVE, [0.42 * k, 0.4 * k, 0.9 * k], [0, 0, 0.3 * k]);
   add(recoil, box, DARK, [0.3 * k, 0.12 * k, 0.6 * k], [0, 0.25 * k, 0.3 * k]);
@@ -429,6 +429,91 @@ function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLo
   add(recoil, box, STEEL, [0.12 * k, 0.16 * k, 0.1 * k], [0, -0.03 * k, fz + fl * 0.6]);
   glow(recoil, box, HOT, [0.07 * k, 0.07 * k, 0.14 * k], [0, -0.1 * k, iz + 0.06 * k]);
   muzzle(recoil, [0, -0.1 * k, iz + 0.12 * k]);
+  return m;
+}
+
+// ---- Freeze rays (Keith 2026-11-05; models 2026-11-05 overnight, agent): their own rigs, not the flamer in new paint ----
+// Same sockets as the flamers (muzzle 0: the stream leaves here; muzzle 1: the coolant vent's cold mist), but read as
+// cold kit from the game camera: pale insulated pressure vessels for weight behind the mount, a barrel wound with a
+// glowing condenser coil (lit while the trigger is held), a flared emitter with an ice-blue lens. Slate and frost white
+// where the flamers are olive and khaki.
+const PALE = 0xd6dde0, SLATE = 0x5d6a72, ICE = 0x8fd3e8;
+
+/** Frost thrower (Light, held): a squat compressor with a finned heat exchanger on top, one fat dewar flask behind the
+ *  grip (domed, banded, a lit gauge) and a pilot bottle beside it, a short coiled barrel ending in a bell. */
+function frostModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("frost", look);
+  // Compressor body and the heat exchanger's fins along its top.
+  add(recoil, box, SLATE, [0.44, 0.44, 0.85], [0, 0, 0.3]);
+  add(recoil, box, DARK, [0.12, 0.08, 0.72], [0, 0.25, 0.3]);
+  for (let i = 0; i < 5; i++) add(recoil, box, STEEL, [0.38, 0.13, 0.04], [0, 0.3, 0.02 + i * 0.14]);
+  // The dewar: a fat insulated flask behind the grip, domed at the back, two ice bands, a neck into the compressor.
+  add(recoil, cyl, PALE, [0.48, 0.78, 0.48], [0, 0.04, -0.47], ALONG);
+  add(recoil, sphere, PALE, [0.48, 0.48, 0.34], [0, 0.04, -0.86]);
+  for (const z of [-0.25, -0.68]) add(recoil, cyl, ICE, [0.5, 0.06, 0.5], [0, 0.04, z], ALONG);
+  add(recoil, cyl, DARK, [0.3, 0.12, 0.3], [0, 0.04, -0.06], ALONG);
+  // Its gauge on top, lit.
+  add(recoil, cyl, DARK, [0.15, 0.08, 0.15], [0, 0.31, -0.45]);
+  glow(recoil, cyl, GLOW, [0.11, 0.02, 0.11], [0, 0.355, -0.45]);
+  // The pilot bottle strapped along the left flank, piped forward.
+  add(recoil, cyl, PALE, [0.18, 0.62, 0.18], [0.3, -0.12, -0.32], ALONG);
+  add(recoil, cyl, DARK, [0.1, 0.08, 0.1], [0.3, -0.12, -0.67], ALONG);
+  add(recoil, cyl, DARK, [0.05, 0.5, 0.05], [0.26, -0.12, 0.15], ALONG);
+  // The barrel with its condenser coil, then the bell and the lens.
+  add(recoil, cyl, STEEL, [0.15, 1.0, 0.15], [0, 0.04, 1.22], ALONG);
+  for (let i = 0; i < 5; i++) glow(recoil, ring, GLOW, [0.28, 0.28, 0.55], [0, 0.04, 0.86 + i * 0.15]);
+  add(recoil, cyl, DARK, [0.24, 0.08, 0.24], [0, 0.04, 1.6], ALONG);
+  add(recoil, bell, DARK, [0.36, 0.26, 0.36], [0, 0.04, 1.82], ALONG);
+  glow(recoil, cyl, GLOW, [0.24, 0.02, 0.24], [0, 0.04, 1.94], ALONG);
+  muzzle(recoil, [0, 0.04, 2.02]);
+  // The coolant vent under the barrel.
+  add(recoil, box, STEEL, [0.12, 0.14, 0.1], [0, -0.1, 0.95]);
+  add(recoil, cyl, DARK, [0.08, 0.55, 0.08], [0, -0.17, 1.12], ALONG);
+  glow(recoil, cyl, GLOW, [0.07, 0.03, 0.07], [0, -0.17, 1.4], ALONG);
+  muzzle(recoil, [0, -0.17, 1.44]);
+  return m;
+}
+
+/** Cryo projector (Medium, hull): a finned compressor housing, two big spherical pressure vessels in a cradle behind it
+ *  joined by a manifold with a gauge, a thick coiled barrel and a three-pronged emitter round the lens. */
+function cryoModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("cryo", look);
+  // Housing, its top plate, radiator fins down both flanks.
+  add(recoil, box, SLATE, [0.8, 0.7, 1.2], [0, 0, 0.35]);
+  add(recoil, box, DARK, [0.56, 0.14, 0.9], [0, 0.41, 0.35]);
+  for (const x of [-1, 1]) for (let i = 0; i < 5; i++) add(recoil, box, STEEL, [0.16, 0.56, 0.05], [x * 0.47, 0, -0.08 + i * 0.2]);
+  // The two pressure vessels in their cradle, banded, the manifold across their tops and down into the housing.
+  add(recoil, box, DARK, [1.5, 0.12, 0.86], [0, -0.3, -0.62]);
+  add(recoil, box, DARK, [1.42, 0.1, 0.1], [0, 0.1, -1.0]);
+  for (const x of [-0.37, 0.37]) {
+    add(recoil, sphere, PALE, [0.74, 0.74, 0.74], [x, 0.1, -0.62]);
+    add(recoil, ring, ICE, [0.76, 0.76, 0.6], [x, 0.1, -0.62], [Math.PI / 2, 0, 0]);
+    add(recoil, cyl, DARK, [0.14, 0.12, 0.14], [x, 0.5, -0.62]);
+  }
+  add(recoil, cyl, STEEL, [0.1, 0.74, 0.1], [0, 0.55, -0.62], [0, 0, Math.PI / 2]);
+  add(recoil, cyl, STEEL, [0.1, 0.5, 0.1], [0, 0.55, -0.37], ALONG);
+  add(recoil, cyl, DARK, [0.18, 0.1, 0.18], [0, 0.63, -0.62]);
+  glow(recoil, cyl, GLOW, [0.13, 0.02, 0.13], [0, 0.69, -0.62]);
+  // The barrel: a collar, then the coil wound along it.
+  add(recoil, cyl, DARK, [0.5, 0.18, 0.5], [0, 0.02, 1.02], ALONG);
+  add(recoil, cyl, STEEL, [0.3, 1.25, 0.3], [0, 0.02, 1.68], ALONG);
+  for (let i = 0; i < 6; i++) glow(recoil, ring, GLOW, [0.46, 0.46, 0.7], [0, 0.02, 1.18 + i * 0.16]);
+  add(recoil, cyl, DARK, [0.44, 0.16, 0.44], [0, 0.02, 2.18], ALONG);
+  // The emitter: three prongs leaning in round a bell, the lens inside.
+  for (let i = 0; i < 3; i++) {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / 3, r = 0.24;
+    const x = Math.cos(a) * r, y = 0.02 + Math.sin(a) * r;
+    const prong = add(recoil, box, STEEL, [0.08, 0.08, 0.5], [x, y, 2.45]);
+    prong.rotation.set(Math.sin(a) * 0.18, -Math.cos(a) * 0.18, 0);
+  }
+  add(recoil, bell, DARK, [0.34, 0.22, 0.34], [0, 0.02, 2.36], ALONG);
+  glow(recoil, cyl, GLOW, [0.24, 0.02, 0.24], [0, 0.02, 2.47], ALONG);
+  muzzle(recoil, [0, 0.02, 2.56]);
+  // The coolant vent under the housing's nose.
+  add(recoil, box, STEEL, [0.16, 0.2, 0.14], [0, -0.3, 0.9]);
+  add(recoil, cyl, DARK, [0.12, 0.7, 0.12], [0, -0.32, 1.25], ALONG);
+  glow(recoil, cyl, GLOW, [0.1, 0.03, 0.1], [0, -0.32, 1.6], ALONG);
+  muzzle(recoil, [0, -0.32, 1.64]);
   return m;
 }
 
@@ -479,8 +564,8 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   breach: breachModel,
   flamer: (l) => flamerModel("flamer", l),
   inferno: (l) => flamerModel("inferno", l),
-  frost: (l) => flamerModel("frost", l),
-  cryo: (l) => flamerModel("cryo", l),
+  frost: frostModel,
+  cryo: cryoModel,
   minigunFeed: (l) => { const m = kit("minigunFeed", l).m; return m; },
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),
