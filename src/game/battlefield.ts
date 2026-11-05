@@ -459,6 +459,15 @@ export class Battlefield {
    * Draw ground marks as dents (Keith 2026-10-25): a GPU dent layer around the camera focus and the fine patch of
    * ground that shows them (the chunks leave it a hole). Needs the renderer, so headless stages skip it (no marks).
    */
+  /** Perf pass 1: what only draws reads the chunks' triangles instead of the full height function (useDents calls it). */
+  useLookGround(streamer: TerrainStreamer) {
+    this.lookGround = new ChunkGround(streamer, this.field);
+    this.dust.ground = this.lookGround;
+    this.dustDraw.ground = this.lookGround;
+    // The flamers' fire is cosmetic too (every gob, lick and puff asked the full height function every frame).
+    this.flames.ground = this.lookGround;
+  }
+
   useDents(renderer: THREE.WebGPURenderer, streamer: TerrainStreamer) {
     const v = this.v as BattlefieldValues & DentValues;
     this.dents = new DentLayer(renderer, this.field, v);
@@ -466,10 +475,7 @@ export class Battlefield {
     this.patch = new DetailPatch(this.field, streamer, this.dents, v, this.heatTex);
     this.marks.dents = this.dents;
     this.group.add(this.patch.group);
-    // Perf pass 1: what only draws reads the chunks' triangles instead of the full height function.
-    this.lookGround = new ChunkGround(streamer, this.field);
-    this.dust.ground = this.lookGround;
-    this.dustDraw.ground = this.lookGround;
+    this.useLookGround(streamer);
     // Scale step 5: sparks, grit, casings and tracers on the GPU (fxGpuBits, fxGpuTracers pick them over the CPU's).
     this.renderer = renderer;
     const bits = new GpuBits(this.patch.gpuGround), tracers = new GpuTracers(ROUNDS_IN_FLIGHT);
