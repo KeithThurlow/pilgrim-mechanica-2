@@ -396,7 +396,8 @@ export class Arsenal implements MechWeapons {
         // Flamers: the stream's reach, the roar, the pilot flame at the igniter (muzzle 1); the jets fire on the gun's
         // clock through the unit (gunShot below).
         const ig = s.model && s.model.muzzles.length > 1 ? s.model.muzzles[1].getWorldPosition(this.tmp3) : null;
-        this.fire.step(i, dt, ig, alive && !(u.sideOff?.(i) ?? u.gunsOff));
+        const fuel = s.model?.muzzles.length ? this.muzzleOf(s, side, this.tmp2, 0) : null;
+        this.fire.step(i, dt, ig, alive && !(u.sideOff?.(i) ?? u.gunsOff), fuel);
         clearPaint(s.paint);
         return;
       }
