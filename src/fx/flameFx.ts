@@ -48,7 +48,7 @@ const LOOK: FlameLook = {
   flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
   flameTube: 1, flameTubeNear: 0.1, flameTubeFar: 1, flameTubeLump: 0.6, flameTubeEvery: 0.025,
-  flameShed: 2.5, flameEndFire: 0.6, flameEndSize: 0.75,
+  flameShed: 2.5, flameEndFire: 0.85, flameEndSize: 0.75,
 };
 
 export class FlameFx {

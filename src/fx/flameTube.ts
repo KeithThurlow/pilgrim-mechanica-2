@@ -68,7 +68,8 @@ export class FlameTube {
     mat.opacityNode = smoothstep(0.0, 0.45, face).mul(d.w).mul(mix(float(0.95), float(0.4), cold)).mul(nz.mul(0.12).add(0.95));
     this.mesh = new THREE.Mesh(this.geo, mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 5;
+    // Over the flames, halos and smoke (all drawn before it), so it reads in a crowd of burning things.
+    this.mesh.renderOrder = 7;
   }
 
   private nv = 0; private ni = 0;

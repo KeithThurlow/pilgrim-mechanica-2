@@ -80,7 +80,7 @@ export const FIRE_DEFAULTS = {
   flameTubeLump: 0.6,
   flameTubeEvery: 0.025,
   flameShed: 2.5,
-  flameEndFire: 0.6,
+  flameEndFire: 0.85,
   flameEndSize: 0.75,
   flameSize: 0.55,
   flameRise: 3,
