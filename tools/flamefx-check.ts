@@ -63,12 +63,27 @@ must(slid.under === 0, `gobs under a slope (${slid.under})`);
 
 // The swarm: fire on the sand flows on along the stream's line, round a burning thing in its way and on; frost the same.
 const G: FlowGoal = { x: 0, z: 18, nx: 0, nz: 1 };
-const meanZ = (f: FlameFx) => { const g = raw(f); let s = 0, n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { s += g.pz[i]; n++; } return n ? s / n : -1; };
-const noGoal = meanZ(run(flat, [], 1, 2).f), toGoal = meanZ(run(flat, [], 1, 2, G).f);
-const frostFree = meanZ(run(flat, [], 1, 2, null, true).f), frost = meanZ(run(flat, [], 1, 2, G, true).f);
-must(toGoal > noGoal + 1, `fire doesn't flow on to the aim's plane (mean ${toGoal.toFixed(2)} vs ${noGoal.toFixed(2)} m out)`);
-must(frost > frostFree + 1, `frost doesn't flow on to the aim's plane (mean ${frost.toFixed(2)} vs ${frostFree.toFixed(2)} m out)`);
-const O: [number, number] = [0, 12.5], rIn = 0.7;
+// A stream's line turned 30° off the way the gobs flew (the mech swung): on the sand they turn onto it, at the speed
+// they have (Keith 2026-11-05: never a second wind).
+const Gt: FlowGoal = { x: 0, z: 18, nx: 0.5, nz: 0.866 };
+const meanX = (f: FlameFx) => { const g = raw(f); let s = 0, n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0) { s += g.px[i]; n++; } return n ? s / n : -1; };
+const noGoal = meanX(run(flat, [], 1, 2).f), toGoal = meanX(run(flat, [], 1, 2, Gt).f);
+const frostFree = meanX(run(flat, [], 1, 2, null, true).f), frost = meanX(run(flat, [], 1, 2, Gt, true).f);
+must(toGoal > noGoal + 1, `fire doesn't turn onto the stream's line (mean x ${toGoal.toFixed(2)} vs ${noGoal.toFixed(2)} m)`);
+must(frost > frostFree + 1, `frost doesn't turn onto the stream's line (mean x ${frost.toFixed(2)} vs ${frostFree.toFixed(2)} m)`);
+// Never sped up on the sand: a gob there is never faster than it landed.
+{
+  const f = new FlameFx(flat); f.tune(F); const g = raw(f) as Raw & { vx: Float32Array }; let land = -1, worst = 0;
+  f.gob(0, 3, 0, 0, -4.5, 39, 1, 0.55, 3.2, 0.05, false, Gt);
+  for (let t = 0; t < 2 && g.n && g.kind[0] === 0; t += 1 / 60) {
+    f.update(1 / 60, cam);
+    if (!g.n || g.kind[0] !== 0) break;
+    const v = Math.hypot(g.vx[0], g.vz[0]);
+    if (g.onG[0] >= 0) { if (land < 0) land = v; worst = Math.max(worst, v - land); }
+  }
+  must(land > 0 && worst < 0.5, `a gob speeds up on the sand (landed ${land.toFixed(1)} m/s, then +${worst.toFixed(1)})`);
+}
+const O: [number, number] = [0, 18], rIn = 0.7;
 const blocked = run(flat, [O], 1, 2, G).f, open = run(flat, [], 1, 2, G).f;
 const inO = near(blocked, ...O, rIn).inR, ringIn = near(open, ...O, rIn).inR;
 const past = (() => { const g = raw(blocked); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && g.pz[i] > O[1] + 1) n++; return n; })();
@@ -78,11 +93,11 @@ must(back.n <= back.all * 0.02, `fire turns back (${back.n} of ${back.all} headi
 must(past > 0, "fire doesn't flow on past a burning thing in its way");
 must(inO < ringIn, `fire runs through a burning thing (${inO} inside vs ${ringIn} with nothing there)`);
 // Two burning things 3 m apart across its way: it flows between them (and on), not only round the outside.
-const A: [number, number] = [1.5, 12.5], B: [number, number] = [-1.5, 12.5];
-const between = (() => { const g = raw(run(flat, [A, B], 1, 2, G).f); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && Math.abs(g.px[i]) < 0.8 && g.pz[i] > 12.5) n++; return n; })();
+const A: [number, number] = [1.5, 18], B: [number, number] = [-1.5, 18];
+const between = (() => { const g = raw(run(flat, [A, B], 1, 2, G).f); let n = 0; for (let i = 0; i < g.n; i++) if (g.kind[i] === 0 && g.onG[i] >= 0 && Math.abs(g.px[i]) < 0.8 && g.pz[i] > 18) n++; return n; })();
 must(between > 0, "fire doesn't flow between two burning things");
 console.log(`flamefx swarm: ${between} between and past a pair;`);
-console.log(`flamefx swarm: mean out ${noGoal.toFixed(1)} → ${toGoal.toFixed(1)} m (frost ${frostFree.toFixed(1)} → ${frost.toFixed(1)}), plane at ${G.z}; inside a burning thing ${ringIn} → ${inO}, ${past} flowed past it`);
+console.log(`flamefx swarm: turned onto a 30° line: mean x ${noGoal.toFixed(1)} → ${toGoal.toFixed(1)} m (frost ${frostFree.toFixed(1)} → ${frost.toFixed(1)}); inside a burning thing ${ringIn} → ${inO}, ${past} flowed past it`);
 
 // Smoke: lit flames throw it, and it rises.
 {
