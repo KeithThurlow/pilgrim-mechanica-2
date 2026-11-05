@@ -742,7 +742,7 @@ export class Battlefield {
     this.flames.update(dt, camera);
     // A light in among the fireballs every so many (Keith 2026-11-05; Flame look › A light every).
     { const L = this.look?.lights, fl = this.flames, P = (this.v as { flameBallLight?: number }).flameBallLight ?? 0;
-      if (L && P > 0) for (let j = 0; j < fl.nLight; j++) { const o = j * 4, sz = fl.lightPts[o + 3]; L.hold(fl.lightPts[o], fl.lightPts[o + 1], fl.lightPts[o + 2], P * (0.8 + 0.4 * Math.random()) * Math.min(2, 0.5 + sz * 0.5), 5 + sz * 2, 0xff9a40, 1, 1); } }
+      if (L && P > 0) for (let j = 0; j < fl.nLight; j++) { const o = j * 4, sz = fl.lightPts[o + 3]; L.hold(fl.lightPts[o], fl.lightPts[o + 1], fl.lightPts[o + 2], P * (0.85 + 0.3 * Math.random()) * Math.min(1.3, 0.5 + sz * 0.4), 3.5 + sz * 1.2, 0xff9a40, 1, 0.6); } }
     c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);

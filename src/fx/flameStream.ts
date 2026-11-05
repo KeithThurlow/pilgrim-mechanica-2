@@ -27,6 +27,9 @@ export class FuelLine {
   width = 1; cold = false;
   /** Pouring this frame, and last frame (a new pour starts a new line). */
   live = false; wasLive = false;
+  /** Seconds since the nozzle last said it pours: a gun that pours only on its shots (a few a second) still pours in
+   *  between, so the line stays joined (the PC render, 2026-11-05: every point was its own one-point strip, no line). */
+  since = 0;
   /** Poured this step (for the drawing: the line runs on to the nozzle). */
   pouring = false;
   private acc = 0;
@@ -83,13 +86,15 @@ export class FuelLine {
 
 /** Every nozzle's line, by a key the gun keeps (its side). */
 export class FlameStreams {
+  /** How long a line keeps pouring after the nozzle last said so (s). */
+  static readonly HOLD = 0.15;
   readonly lines = new Map<object, FuelLine>();
 
   /** A nozzle pours this frame: at (x, y, z), throwing fuel at (vx, vy, vz) that burns `burn` s. */
   pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold: boolean) {
     let l = this.lines.get(key);
     if (!l) { l = new FuelLine(); this.lines.set(key, l); }
-    l.live = true; l.nx = x; l.ny = y; l.nz = z; l.nvx = vx; l.nvy = vy; l.nvz = vz; l.nBurn = burn; l.width = width; l.cold = cold;
+    l.live = true; l.since = 0; l.nx = x; l.ny = y; l.nz = z; l.nvx = vx; l.nvy = vy; l.nvz = vz; l.nBurn = burn; l.width = width; l.cold = cold;
   }
 
   step(dt: number, G: number, drag: number, every: number, ground: StreamGround,
@@ -98,7 +103,9 @@ export class FlameStreams {
       l.step(dt, G, drag, Math.max(0.005, every), ground, (w, x, y, z, vx, vy, vz) => end(l, w, x, y, z, vx, vy, vz));
       // The nozzle must say it pours again next frame.
       const was = l.live;
-      l.pouring = was; l.live = false;
+      l.pouring = was;
+      l.since += dt;
+      l.live = l.since < FlameStreams.HOLD;
       if (!was && l.n === 0) this.lines.delete(key);
     }
   }

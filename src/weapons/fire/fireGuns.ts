@@ -14,7 +14,9 @@ import type { Loop } from "../../audio/sfx";
 import { Synth, rng } from "../../audio/synth";
 import { lobVy } from "../../fx/flameFx";
 
-interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number; press: number }
+interface FSide { kind: FlameGun | null; reach: number; idle: number; splashT: number; loop: Loop | null; pilotT: number; from: THREE.Vector3; dir: THREE.Vector3; range: number; press: number;
+  /** The line's throw from the last shot (vx, vy, vz, burn s, width), poured every frame from the live muzzle. */
+  pv: number[] | null }
 
 /** After this long with no jet the stream has stopped: the next one starts from the nozzle again. */
 const STOPPED = 0.2;
@@ -23,7 +25,7 @@ export class FireGuns {
   readonly sides: [FSide, FSide];
 
   constructor(private bf: Battlefield, private unit: MechUnit, readonly v: WeaponValues) {
-    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0, press: 0 });
+    const side = (): FSide => ({ kind: null, reach: 0, idle: 9, splashT: 0, loop: null, pilotT: 0, from: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), range: 0, press: 0, pv: null });
     this.sides = [side(), side()];
     addFireSounds(bf, v);
   }
@@ -67,6 +69,8 @@ export class FireGuns {
       const len = Math.min(s.range, s.reach);
       // The thin emissive cone out of the nozzle (Keith 2026-11-05; src/fx/flameBlobs.ts), on the live muzzle.
       if (fuel) s.from.copy(fuel);
+      // The line pours every frame from the live muzzle, not only on the gun's shots (a few a second).
+      if (s.pv) this.bf.flames.pour(s, s.from.x, s.from.y, s.from.z, s.pv[0], s.pv[1], s.pv[2], s.pv[3], s.pv[4], cold);
       if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold, v.flameConeCut);
       // (Fire: the lights now hang in among the fireballs themselves, src/fx/flameFx.ts: a light every so many; these
       // two on the aim line ran out ahead of the arcing balls, Keith 2026-11-05. The freeze rays keep them.)
@@ -107,7 +111,8 @@ export class FireGuns {
     {
       const p = 1 - (1 - s.press) * (1 - s.press), k = v.flamePressMin + (1 - v.flamePressMin) * p;
       const vh = vh0 * (0.5 + 0.5 * k), vy = lobVy(ty - fuel.y, dist * k, vh, G);
-      bf.flames.pour(s, fuel.x, fuel.y, fuel.z, hx * vh + (mv?.x ?? 0), vy, hz * vh + (mv?.z ?? 0), burnT, big, cold);
+      s.pv = [hx * vh + (mv?.x ?? 0), vy, hz * vh + (mv?.z ?? 0), burnT, big];
+      bf.flames.pour(s, fuel.x, fuel.y, fuel.z, s.pv[0], s.pv[1], s.pv[2], burnT, big, cold);
     }
     for (let k = 0; k < n; k++) {
       // The look's spread is a share of the gun's (Flame look › Look spread; the damage's cone is the gun's).

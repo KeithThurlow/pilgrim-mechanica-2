@@ -90,6 +90,8 @@ export class FlameTube {
       if (k > 0) this.strip(k, l, L);
     }
     this.geo.setDrawRange(0, this.ni);
+    // Nothing to draw: hidden, so WebGPU isn't asked for a draw with no indices.
+    this.mesh.visible = this.ni > 0;
     for (const a of [this.aPos, this.aNrm, this.aDat, this.aCld]) { a.clearUpdateRanges(); a.addUpdateRange(0, this.nv * a.itemSize); a.needsUpdate = true; }
     this.aIdx.clearUpdateRanges(); this.aIdx.addUpdateRange(0, this.ni); this.aIdx.needsUpdate = true;
   }
