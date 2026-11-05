@@ -217,6 +217,7 @@ export class Battlefield {
   readonly pools: FirePools;
   /** Chilled and frozen targets (Keith 2026-11-05: the freeze ray; src/game/chill.ts). */
   readonly chills: Chills;
+  private tmpFreeze = new THREE.Vector3();
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
 
@@ -236,6 +237,13 @@ export class Battlefield {
     this.burns = new Burns(v as never);
     this.chills = new Chills(v as never);
     this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
+    // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
+    // burst of frost over the body, so the moment reads.
+    this.chills.onFreeze = (c) => {
+      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(c.x, c.y, c.z), 1, 0.9 + Math.random() * 0.25);
+      for (let k = 0; k < 14; k++) this.flames.mist(c.x + (Math.random() - 0.5) * 2, c.y + (Math.random() - 0.3) * 1.5, c.z + (Math.random() - 0.5) * 2, 0.9);
+      this.flames.frost(c.x, c.y, c.z, 4, 1);
+    };
     this.chills.quench = (t, k) => this.burns.quench(t, k);
     this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
     this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
@@ -370,6 +378,13 @@ export class Battlefield {
         if (Math.random() < 0.5) this.flames.ember(x, y + 0.4, z);
       }
       this.heat?.spot(p.x, p.z, p.r * 0.8, (p.napalm ? 750 : 450) * fade, dt);
+      // The fire lights the ground round it (Keith 2026-11-05: "the fire doesn't emit any light"), flickering.
+      const V = this.v as { poolLight?: number; poolLightRange?: number };
+      if (this.look && (V.poolLight ?? 0) > 0) {
+        const size = p.r / 3.6, flick = 0.8 + 0.35 * Math.random();
+        this.look.lights.hold(p.x, this.field.height(p.x, p.z) + 1 + 0.4 * size, p.z, (V.poolLight ?? 0) * fade * flick * size * (p.napalm ? 1 : 0.5),
+          (V.poolLightRange ?? 12) * (0.5 + 0.5 * size), 0xff7a2a, 1.2, p.r * 2.2);
+      }
     }
   }
 
@@ -648,6 +663,8 @@ export class Battlefield {
 
   /** The look last seen in update(): blasts light the ground through its night lights. */
   private look: DesertLook | null = null;
+  /** The night lights, once a look has been seen (cosmetic). */
+  get lights() { return this.look?.lights ?? null; }
   /** The night lights (rockets, launches and blasts ask them for light; cosmetic), once a look has been seen. */
   get nightLights() { return this.look?.lights ?? null; }
 
