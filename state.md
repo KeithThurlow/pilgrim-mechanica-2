@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · duel-check runs in six parts side by side: npm test 2 min 22 s → 1 min 45 s (overnight perf pass; Claude on `claude/project-thread-4kcrrl-fort`)
+- A check can say `// @shards N`; `tools/run-checks.mjs` then runs it as N processes with `CHECK_SHARD=i/N`. `tools/duel-check.ts` (130 s on its own, the floor of `npm test`) gates its sections with `part(k)`: 0 rules and item levels, 1 AI duels and drills, 2 dodge chance per level, 3 painted spot, aim lag and cover, 4 scripted-player duels, 5 rail hit rates. Same checks, same values; summary lines print with their part. Run alone (`npx tsx tools/duel-check.ts`) it still runs everything (checked: passes).
+- `npm test` on 4 cores: 85/85 in 1 min 45 s (was 2 min 22 s). It is now CPU-bound (6 min 39 s of CPU), longest part 31 s; convoy-check (39 s) is the longest single check.
+- Fortress lab measured while here (`labs/fortress/?norender&dt=0.0167`, demo walking in): CPU 3.2 ms a frame on this box, worst 17 ms; nothing to fix.
 ### 2026-11-05 · Flamer fire sits on the drawn ground: a third of the swarm lab's CPU back (overnight perf pass; Claude on `claude/project-thread-4kcrrl-perf`)
 - Every flame gob, lick, ember and smoke puff asked the full ground function (`DuneField`) every frame: with both flamers going that was ~11% of the main thread. `FlameFx.ground` is now the battlefield's look ground (`ChunkGround`, the chunks' own triangles, as dust and small robots' feet already use), set in the new `Battlefield.useLookGround` (called by `useDents`). Fire is cosmetic, so no rules change; it may sit a few cm differently over fresh dents.
 - `?norender` in the combat labs now skips the GPU dent layer and GPU effects as the convoy lab does (a software GPU spent ~1.6 s a frame on them, so headless CPU numbers were meaningless), but keeps the look ground.
