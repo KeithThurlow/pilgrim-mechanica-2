@@ -131,19 +131,19 @@ export function routeVia(L: Layout, x: number, z: number, tx: number, tz: number
 const FLOW_CELL = 2;
 const FLOW_MAX = 8;
 
-/** Is (x, z) solid for anyone on foot: a container core (wall, shack, standing gate), not the sand drifts? */
+/** Is (x, z) solid for anyone on foot (a container core: wall, shack, standing gate, with a metre's margin so paths keep off the faces), not the sand drifts? */
 function solidAt(L: Layout, x: number, z: number, down: ReadonlySet<string>) {
   const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
   for (const ring of L.rings) {
     const R = ringR(ring, a), e = Math.abs(d - R);
-    if (e > ring.top + ring.face + 0.3) continue;
+    if (e > ring.top + ring.face + 1.2) continue;
     let open = false;
-    for (const g of ring.gates) if (Math.abs(wrap(a - g.a)) * R < g.w / 2 - 0.3 && (!g.barred || down.has(g.id))) open = true;
+    for (const g of ring.gates) if (Math.abs(wrap(a - g.a)) * R < g.w / 2 - 1 && (!g.barred || down.has(g.id))) open = true;
     if (!open) return true;
   }
   for (const n of blocksNear(L, x, z)) {
     const b = L.blocks[n], bx = x - b.x, bz = z - b.z, ca = Math.cos(b.a), sa = Math.sin(b.a);
-    if (Math.abs(bx * sa + bz * ca) < b.len / 2 + 0.4 && Math.abs(bx * ca - bz * sa) < b.dep / 2 + 0.4) return true;
+    if (Math.abs(bx * sa + bz * ca) < b.len / 2 + 0.9 && Math.abs(bx * ca - bz * sa) < b.dep / 2 + 0.9) return true;
   }
   return false;
 }

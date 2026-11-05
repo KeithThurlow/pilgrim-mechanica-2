@@ -444,8 +444,8 @@ export class InfantrySwarm {
           const ko = this.ko, w = this.keepOut.weight(px[i], pz[i], ko);
           if (w > 0) { steerOut(w, ko.x, ko.z, this.keepOut.push, wx, wz, ko); wx = ko.x; wz = ko.z; }
         }
-        // Don't press into the mech.
-        if (dist < keep + 1.5) {
+        // Don't press into the mech (a calm target is a spot to walk to, often a near waypoint: walk right up to it).
+        if (!calm && dist < keep + 1.5) {
           const into = wx * ux + wz * uz;
           if (into > 0) { wx -= ux * into; wz -= uz * into; }
         }
