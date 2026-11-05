@@ -49,6 +49,7 @@ export const FORT_DEFAULTS = {
   fortTwoHigh: 0.3,
   fortCover: 3,
   fortSpawners: 3,
+  fortTowers: 3,
   fortYardSpots: 5,
   fortSpotValue: 70,
   fortSpotTime: 4,
@@ -87,6 +88,7 @@ export const FORT_PARAMS: Param[] = [
   { key: "fortBuildGap", label: "Gap between shacks (m, mean)", min: 0.5, max: 12, step: 0.1, group: T, tip: "Alleys bandits run through", onRelease: true },
   { key: "fortTwoHigh", label: "Shacks two high (share)", min: 0, max: 1, step: 0.05, group: T, onRelease: true },
   { key: "fortSpawners", label: "Spawner shacks per yard", min: 0, max: 10, step: 1, group: T, tip: "Shacks the bandits pour out of when the fortress is alert (shoot one to shut it)", onRelease: true },
+  { key: "fortTowers", label: "Lookout towers in the outer yard", min: 0, max: 12, step: 1, group: T, tip: "Stacked containers with a crew on top; one less per yard inward (the keep at least 1)", onRelease: true },
   { key: "fortCover", label: "Loose container stacks per yard", min: 0, max: 20, step: 1, group: T, onRelease: true },
   { key: "fortClutter", label: "Clutter in the yards", min: 0, max: 300, step: 1, group: T, onRelease: true },
   { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The containers' solid height: the lowest stack (two lying, 5.2 m) must stay above it", onRelease: true },
@@ -138,7 +140,9 @@ export interface Block {
   cols: number; door: number; drift: number; driftW: number;
   /** Which yard it stands in (0 the outer). */
   yard: number;
-  kind: "shack" | "cover";
+  kind: "shack" | "cover" | "tower";
+  /** A tower's id: when it's in the walls' down set the stack is gone from the ground. */
+  id?: string;
   /** The containers' door ends face the street (else their long side does). */
   endOn?: boolean;
 }
@@ -147,6 +151,9 @@ export interface Block {
  * A spawner: a shack whose container doors swing open and bandits pour out (Keith 2026-11-05: "containers that
  * bandits just swarmed out of"). The door's centre on the shack's face (x, z), the heading out of it (a), its yard.
  */
+/** A lookout tower: containers three levels high, crossed (Keith 2026-11-05); its block, top height (m), yard. */
+export interface Tower { id: string; block: number; x: number; z: number; a: number; h: number; yard: number }
+
 export interface Spawner { id: string; block: number; x: number; z: number; a: number; yard: number }
 
 /** A street or lane (world points), `yard` the yard a lane runs in (-1: a main street, from a gate to the keep). */
@@ -163,6 +170,8 @@ export interface Layout {
   streets: Street[];
   /** Shacks bandits come out of. */
   spawners: Spawner[];
+  /** Lookout towers. */
+  towers: Tower[];
   /** Furthest any wall reaches from the centre (m). */
   reach: number;
   /** Blocks by 8 m cell (lazily built by blocksNear). */
@@ -524,6 +533,26 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       if (put >= 2) n++;
     }
   }
+  // Lookout towers: by the gates first (inside, overlooking the way in), then anywhere open; spread apart.
+  const towers: Tower[] = [];
+  for (let k = 0; k <= last; k++) {
+    const want = Math.max(k === last ? 1 : 0, Math.round(v.fortTowers) - k);
+    const near = gates.filter((g) => g.ring === k || g.ring === k + 1);
+    for (let n = 0, tries = 0; n < want && tries < 60 * want; tries++) {
+      let c: { x: number; z: number };
+      if (near.length && tries < 30 * want) {
+        const g = near[Math.floor(r() * near.length)], side = g.ring === k ? -1 : 1, R = ringR(rings[g.ring], g.a) + side * (ringSpan(rings[g.ring]) + range(5, 14));
+        c = at(g.a + ((r() < 0.5 ? -1 : 1) * range(g.w / 2 + 6, g.w / 2 + 16)) / Math.max(10, R), R);
+      } else { const a = r() * TAU, d0 = yIn(k, a, 4), d1 = yOut(k, a, 4); if (d1 - d0 < 2) continue; c = at(a, d0 + (d1 - d0) * r()); }
+      if (towers.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < 30)) continue;
+      const a = r() * Math.PI, id = `${p.id}/t${towers.length}`;
+      const b: Block = { x: c.x, z: c.z, a, len: BOX.long, dep: 2 * BOX.wide, h: 3 * BOX.high - 0.3, stack: 3, cols: 2, door: 0, drift: 0.8, driftW: 2.5, yard: k, kind: "tower", id };
+      if (yardAt(c.x, c.z, 4) !== k || !fits(b)) continue;
+      blocks.push(b);
+      towers.push({ id, block: blocks.length - 1, x: c.x, z: c.z, a, h: b.h, yard: k });
+      n++;
+    }
+  }
   // Loose stacks: cover out in the open.
   for (let k = 0; k <= last; k++) {
     const want = Math.round(v.fortCover * (k === last ? 0.5 : 1));
@@ -553,7 +582,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
   }
   let reach = 0;
   for (const ring of rings) reach = Math.max(reach, ringExtent(ring)[1] + ringSpan(ring));
-  return { poi: p.id, x: p.x, z: p.z, rings, blocks, streets, spawners, reach: reach + 1 };
+  return { poi: p.id, x: p.x, z: p.z, rings, blocks, streets, spawners, towers, reach: reach + 1 };
 }
 
 const BOX_TONES: Tone[] = ["rust", "olive", "steel", "rust", "dark", "hazard", "hull", "olive"];
@@ -638,6 +667,7 @@ export function buildFortress(p: PoiPlacement, v: FortValues): PoiSite {
   // The shacks and stacks: containers side by side (cols) and stacked, door ends or a door plate to the street, an
   // awning or a lean-to sheet now and then, a barrel by the door.
   for (const k of L.blocks) {
+    if (k.kind === "tower") continue; // drawn live (src/pois/towersDraw.ts): they topple
     const ux = Math.sin(k.a), uz = Math.cos(k.a), wx = Math.cos(k.a), wz = -Math.sin(k.a);
     // Does the door face +u (the long axis' far end), or the side (the street runs along the long side)?
     const fu = Math.sin(k.door) * ux + Math.cos(k.door) * uz, endOn = Math.abs(fu) > 0.7;
