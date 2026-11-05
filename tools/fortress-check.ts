@@ -142,7 +142,7 @@ for (const p of sieges.slice(0, 6)) {
   for (let k = 0; k <= L.rings.length; k++) {
     const can = flood(w.field, L);
     // Everything inside ring k (k < count) must be out of reach while ring k's gates stand.
-    if (k < L.rings.length && L.rings[k].gates.some((g) => g.barred)) {
+    if (k < L.rings.length && L.rings[k].gates.every((g) => g.barred)) {
       for (let t = 0; t < 40; t++) {
         const a = t * 2.4, d = (ringR(L.rings[k], a) - L.rings[k].top - L.rings[k].face - 2) * Math.sqrt((t + 0.5) / 40);
         const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
@@ -203,7 +203,8 @@ console.log(`walls: ${rings} rings, ${gatesTried} gates, ${shapes.size} shapes (
 const fort = sieges.find((p) => p.kind === "fortress")!;
 {
   const L = w.walls.layout(fort), ring = L.rings[0], g = ring.gates[0];
-  const floor = w.field.height(fort.x, fort.z) - wallHeight(L, fort.x, fort.z, w.walls.down);
+  // The ground rolls: the floor at the gate (as the glue takes it).
+  const floor = w.field.height(g.x, g.z) - wallHeight(L, g.x, g.z, w.walls.down);
   const gates = new Gates({ ...GATE_DEFAULTS }, 2);
   const s = gates.add(fort.id, g, ring, floor);
   const events: GateEvent[] = [];
@@ -230,7 +231,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   if (downs !== 1 || events.filter((e) => e.type === "gateDown").length !== 1) fail(`gateDown fired ${downs} times`);
   if (gates.hitRay(o, d, 100) >= 0) fail("a downed gate still stops rounds");
   if (!w.walls.down.has(g.id)) fail("gateDown didn't open the gap");
-  const gap = w.field.height(g.x, g.z) - floor;
+  const gap = w.field.height(g.x, g.z) - s.floor;
   if (Math.abs(gap) > 0.3) fail(`a downed gate's gap is ${gap.toFixed(2)} m off the floor`);
   // A fresh gate: a blast next to it wears it.
   const s2 = gates.add(fort.id, ring.gates[ring.gates.length - 1], ring, floor);
@@ -280,9 +281,10 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   const T2 = { x: fort.x + Math.sin(g.a) * (ringR(ring, g.a) + 40), y: 0, z: fort.z + Math.cos(g.a) * (ringR(ring, g.a) + 40), radius: 2.5 };
   T2.y = w.field.height(T2.x, T2.z) + 3;
   let through = 0;
-  // The glue's routing (routeVia): round the yard to the open gate, through it, then at the mech.
+  // The glue's routing (routeVia): round the yard to the open gate (round the shacks), through it, then at the mech;
+  // the town's yards are wide (the outer wall about 120 m out), so they get 100 s.
   let worstWait = 0;
-  for (let t = 0; t < 60 * 60; t++) {
+  for (let t = 0; t < 100 * 60; t++) {
     for (const i of yard) {
       if (sw.state[i] >= DEAD) continue;
       const via = routeVia(L, sw.px[i], sw.pz[i], T2.x, T2.z, w.walls.down);
@@ -293,7 +295,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   }
   for (const i of yard) if (sw.state[i] < DEAD && outside(i)) through++;
   w.walls.down.clear();
-  if (through < 36) fail(`with a gate down only ${through} of 40 came round and out through it in 60 s`);
+  if (through < 36) fail(`with a gate down only ${through} of 40 came round and out through it in 100 s`);
   console.log(`fence: 40 bandits held in the yard for 30 s (${out} out, ${climbed} on the wall), sentries kept to the wall's top (moved up to ${sentryMoved.toFixed(2)} m) · a gate down: ${through} of 40 came round and out through it${worstWait ? ` (all out by ${worstWait.toFixed(0)} s)` : ""}`);
 }
 
@@ -361,6 +363,36 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
     const want = live.yards.filter((y) => y.state === "alert").reduce((n, y) => n + F.aliveIn(fp.id, y.k), 0);
     if (!pts.length || pts.length !== want) fail(`alert garrison: ${pts.length} turret threats, ${want} bandits alive in alert yards`);
     console.log(`fortress threats: asleep 0, alert ${pts.length}`);
+    // ---- 7. spawner shacks: alert, waves pour out of their doors; shot down, nobody comes out of them again ----
+    const L = live.L, poured: { x: number; z: number; id: string }[] = [];
+    if (!L.spawners.length) fail("a fortress with no spawner shacks");
+    for (let k = 0; k < L.rings.length - 1; k++) if (!L.spawners.some((q) => q.yard === k)) fail(`no spawner in yard ${k}`);
+    for (const q of L.spawners) {
+      const b = L.blocks[q.block];
+      const out = (m: number) => wallHeight(L, q.x + Math.sin(q.a) * m, q.z + Math.cos(q.a) * m, wd.walls.down);
+      if (out(-1) < b.h * 0.8) fail(`${q.id}: its door isn't on its shack's face`);
+      if (out(3) > 0.7) fail(`${q.id}: its door opens onto something solid (${out(3).toFixed(2)} m)`);
+    }
+    const pourOrig = F.spawners.onPour!;
+    F.spawners.onPour = (sp, x, z, a) => { poured.push({ x, z, id: sp.sp.id }); pourOrig(sp, x, z, a); };
+    for (let k = 0; k < 30 * 8; k++) F.update(1 / 30, true);
+    const first = poured.length;
+    if (first < FORT_LIFE_DEFAULTS.fortTrickle) fail(`alert, only ${first} bandits poured out in 8 s`);
+    for (const q of poured) {
+      const sp = L.spawners.find((s) => s.id === q.id)!;
+      if (Math.hypot(q.x - sp.x, q.z - sp.z) > 2.5) fail(`a bandit came out ${Math.hypot(q.x - sp.x, q.z - sp.z).toFixed(1)} m from its door`);
+      if (wallHeight(L, q.x, q.z, wd.walls.down) > 0.7) { fail("a bandit came out on top of something"); break; }
+    }
+    // Shoot every spawner down: one spawnerDown each, and no more pour.
+    let downs = 0;
+    F.onSpawner = (e) => { if (e.type === "spawnerDown") downs++; };
+    for (const st of F.spawners.list) for (let n = 0; n < 200 && !st.down; n++) F.spawners.hurt(st, 100);
+    F.spawners.hurt(F.spawners.list[0], 100);
+    const before = poured.length;
+    for (let k = 0; k < 30 * 40; k++) F.update(1 / 30, true);
+    if (downs !== F.spawners.list.length) fail(`spawnerDown fired ${downs} times for ${F.spawners.list.length} spawners`);
+    if (poured.length !== before) fail(`${poured.length - before} poured out of shot-down spawners`);
+    console.log(`spawners: ${L.spawners.length} (every yard), doors on their faces onto open ground · alert: ${first} out of the doors in 8 s · all shot down: ${downs} downs, none out after`);
   }
 }
 

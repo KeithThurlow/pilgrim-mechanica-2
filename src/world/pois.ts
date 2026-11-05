@@ -32,6 +32,8 @@ export interface PoiKindDef {
   padKey?: string;
   /** Values key for the pad's half-length (a capsule along its heading, e.g. a line of vehicles). */
   padHalfKey?: string;
+  /** Values key for the pad's relief (m): the floor keeps a gentle rise and roll instead of being level. */
+  reliefKey?: string;
 }
 
 export const POI_KINDS: Record<PoiKind, PoiKindDef> = {
@@ -42,7 +44,7 @@ export const POI_KINDS: Record<PoiKind, PoiKindDef> = {
   deadConvoy: { kind: "deadConvoy", label: "Dead convoy", tier: 2, biome: { desert: 1.2, rocky: 0.5, shallows: 0.3 }, footprint: 28, padKey: "convoyPad", padHalfKey: "convoyPadHalf" },
   // Tier 5 (Keith 2026-10-31, docs/proposal-fortresses.md): where the bandits and war bands gather, and where the robots
   // are built. Footprints cover their pads (the walls stand inside).
-  fortress: { kind: "fortress", label: "Bandit fortress", tier: 5, biome: { desert: 1.2, rocky: 0.8, shallows: 0 }, footprint: 112, padKey: "fortPad" },
+  fortress: { kind: "fortress", label: "Bandit fortress", tier: 5, biome: { desert: 1.2, rocky: 0.8, shallows: 0 }, footprint: 150, padKey: "fortPad", reliefKey: "fortRelief" },
   hub: { kind: "hub", label: "Manufacturing hub", tier: 5, biome: { desert: 0.6, rocky: 1.5, shallows: 0 }, footprint: 75, padKey: "hubPad" },
 };
 export const POI_KIND_LIST = Object.keys(POI_KINDS) as PoiKind[];
@@ -71,7 +73,8 @@ export const POI_DEFAULTS = {
   debrisPad: 20,
   convoyPad: 8,
   convoyPadHalf: 18,
-  fortPad: 104,
+  fortPad: 140,
+  fortRelief: 5,
   hubPad: 68,
   siegeClear: 900,
 };
@@ -104,6 +107,12 @@ export interface Pad {
    */
   s0: number; sx: number; sz: number; sxx: number; szz: number; sxz: number;
   rough: number;
+  /**
+   * Relief (m, 0: level): the floor rises toward the middle by 0.7 x this and rolls by 0.3 x this in two crossing
+   * waves (wavenumbers and phases in rk), so a fortress sits on its own uneven ground (Keith 2026-11-05).
+   */
+  relief: number;
+  rk: [number, number, number, number];
 }
 
 export interface PoiPlacement {
@@ -288,10 +297,19 @@ export class PoiField {
     const pp = g.swell(x + e, z + e), pm = g.swell(x + e, z - e), mp = g.swell(x - e, z + e), mm = g.swell(x - e, z - e);
     return {
       x, z, yaw, r, half, blend: this.v.padBlend, h: s / n, rough: this.v.padRough,
+      relief: Math.max(0, (POI_KINDS[kind].reliefKey ? (this.v as unknown as Record<string, number>)[POI_KINDS[kind].reliefKey!] : 0) ?? 0),
+      rk: reliefWaves(x, z),
       s0, sx: (xp - xm) / (2 * e), sz: (zp - zm) / (2 * e),
       sxx: (xp - 2 * s0 + xm) / (2 * e * e), szz: (zp - 2 * s0 + zm) / (2 * e * e), sxz: (pp - pm - mp + mm) / (4 * e * e),
     };
   }
+}
+
+/** Seeded wave numbers and phases for a pad's relief (from where it is, so it's the same in any order). */
+function reliefWaves(x: number, z: number): [number, number, number, number] {
+  const r = rng(hash4(Math.round(x * 8), Math.round(z * 8), 71, 5));
+  const k = (Math.PI * 2) / 90;
+  return [k * (0.7 + 0.6 * r()), r() * Math.PI * 2, k * (0.7 + 0.6 * r()), r() * Math.PI * 2];
 }
 
 /** Sample ring: the centre and two rings (angle, share of the radius). */
