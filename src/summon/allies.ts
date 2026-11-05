@@ -128,7 +128,11 @@ export class Allies {
 
   constructor(private bf: Battlefield, scene: THREE.Object3D, private V: AllyValues & RobotValues, ground: Ground, private owner: MechUnit,
     enemies: Filter, deaths: DeathPhysics | null = null) {
-    this.av = { ...ROBOT_DEFAULTS, ...V } as RobotValues;
+    // The sliders show through live (V is the prototype), the companion and swarm ones set over them each frame
+    // (refreshValues). Copying all of V every frame was ~5% of the convoy lab's main thread (thousands of keys).
+    const av = Object.create(V) as Record<string, number>;
+    for (const [k, x] of Object.entries(ROBOT_DEFAULTS)) if (!(k in V)) av[k] = x;
+    this.av = av as unknown as RobotValues;
     this.refreshValues();
     this.sw = new RobotSwarm(this.av, ground, 21);
     this.sw.lookGround = bf.lookGround;
@@ -156,8 +160,7 @@ export class Allies {
 
   /** The allies' values: the robots' sliders with the companion and swarm ones over them. */
   private refreshValues() {
-    const a = this.av as Record<string, number>, V = this.V;
-    Object.assign(a, V);
+    const a = this.av as unknown as Record<string, number>, V = this.V;
     a.robotQuadHp = V.compHp; a.robotQuadSize = V.compSize; a.robotQuadSpeed = V.compSpeed;
     a.robotQuadNear = V.compNear; a.robotQuadFar = Math.max(V.compNear, V.compFar);
     a.robotQuadMiniDamage = V.compMiniDamage; a.robotQuadMiniPause = V.compMiniPause;
