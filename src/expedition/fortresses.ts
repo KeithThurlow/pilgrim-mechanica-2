@@ -152,6 +152,7 @@ export class Fortresses {
     scene.add(this.draw.group);
     this.target = new InfantryTarget(this.sw, TEAM.raiders);
     bf.targets.push(this.target);
+    this.draw.chillMap = () => { this.draw.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(this.target) ?? null; };
     this.gates = new Gates(v, TEAM.raiders);
     bf.targets.push(this.gates);
     this.gatesDraw = new GatesDraw(this.gates);

@@ -32,6 +32,7 @@ export class DroidFight {
     scene.add(this.draw.group);
     this.target = new InfantryTarget(this.sw, TEAM.robots, { name: `humanoid robots: ${DROID_VARIANT_NAMES[variant]}`, surface: "metal", material: "cutter" });
     bf.targets.push(this.target);
+    { const d = this.draw.body, t = this.target; d.chillMap = () => { d.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(t) ?? null; }; }
     if (register) bf.register.add(this.target);
     const sw = this.sw;
     if (deaths) {

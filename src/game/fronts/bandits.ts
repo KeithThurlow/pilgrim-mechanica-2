@@ -72,6 +72,7 @@ export function banditsFront(): Front {
       lab.app.scene.add(d.group);
       const target = new InfantryTarget(s, 2);
       bf.targets.push(target);
+      d.chillMap = () => { d.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(target) ?? null; };
       // The mech's body tramples them, and they may dive out of a charge or a telegraphed shot (Keith 2026-10-31).
       hook(player, "onStomp", (x, z, k) => s.stomp(x, z, V.stompReach * Math.min(1.5, k)));
       // Deaths go to the physics as ragdolls (Keith 2026-10-24), in the bandit's cloth colour.
