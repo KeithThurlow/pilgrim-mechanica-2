@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Fortress sand no longer shows through container roofs (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-sand-under-containers`)
+- The solid core in the ground under the containers follows the rolling pad, the containers lie level, so along a 6 m container one end's core rose through the roof (jagged sand notches on the walls and shacks). The core now stays further under them: walls 4.4 m (`fortWallH`, was 5; the lowest stack tops out at 5.03), shacks 1 m under their top (was 0.6), loose stacks 0.8 (was 0.3). Containers don't move: they're placed from the floor. The drawn wall and what you see are the same height; rounds and the walker meet the core 0.6 m lower.
+- Still there, in `Known gaps` terms: sand saw-teeth along container bases (the 1 m ground grid against the core's 0.35 m face). Would need the ground mesh to leave the core out.
+- Checked: fortress lab `?ring=0&manual&zoom=55` and `?ring=2` before and after on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · Freeze ray models: the Frost thrower and Cryo projector get their own rigs (coordinator, Keith asleep; Claude on `claude/project-thread-ja1xma`)
 - They were the flamer and Inferno in frost paint. Now `frostModel` (held: compressor with top fins, one fat banded dewar behind the grip with a lit gauge, a pilot bottle, a barrel wound with five glowing coil rings, a bell and ice lens) and `cryoModel` (hull: finned slate housing, two pale spherical pressure vessels in a cradle with a manifold and gauge, a thick coiled barrel, three prongs round the emitter) in `src/weapons/models.ts`. Same sockets (muzzle 0 the stream, muzzle 1 the cold vent). The coil and lens glow 0.4 idle, full while the trigger is held (`src/weapons/arsenal.ts`). Flamer and Inferno models unchanged.
 - Checked: typecheck, `npm test`, two game-camera screenshots in the weapons lab.

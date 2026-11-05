@@ -27,7 +27,7 @@ export const FORT_DEFAULTS = {
   fortBackStreets: 4,
   fortCompounds: 6,
   fortShift: 0.25,
-  fortWallH: 5,
+  fortWallH: 4.4, // under the lowest stack (5.03 m) by more than the pad rolls along a container, or sand shows through its roof
   fortWallTop: 0.8,
   fortWallFace: 0.35,
   fortDrift: 2.2,
@@ -91,7 +91,7 @@ export const FORT_PARAMS: Param[] = [
   { key: "fortTowers", label: "Lookout towers in the outer yard", min: 0, max: 12, step: 1, group: T, tip: "Stacked containers with a crew on top; one less per yard inward (the keep at least 1)", onRelease: true },
   { key: "fortCover", label: "Loose container stacks per yard", min: 0, max: 20, step: 1, group: T, onRelease: true },
   { key: "fortClutter", label: "Clutter in the yards", min: 0, max: 300, step: 1, group: T, onRelease: true },
-  { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The containers' solid height: the lowest stack (two lying, 5.2 m) must stay above it", onRelease: true },
+  { key: "fortWallH", label: "Wall height (m)", min: 2.6, max: 6, step: 0.1, group: W, tip: "The solid core under the containers: the lowest stack (two lying, 5 m on level ground, down to 4.5 at one end on the rolling pad) must stay above it", onRelease: true },
   { key: "fortWallTop", label: "Container footprint half-width (m)", min: 0.3, max: 1.2, step: 0.05, group: W, tip: "The solid part under each container; keep it inside the box (1.2)", onRelease: true },
   { key: "fortWallFace", label: "Container face slope width (m)", min: 0.1, max: 1, step: 0.05, group: W, onRelease: true },
   { key: "fortDrift", label: "Sand drift height (m)", min: 0, max: 4, step: 0.1, group: W, tip: "Banked against both sides of the containers", onRelease: true },
@@ -477,7 +477,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
     const stack = r() < v.fortTwoHigh ? 2 : 1;
     // across: the containers' long sides run away from the street (their door ends to it); else along it.
     const a = across ? face + Math.PI : face + Math.PI / 2;
-    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 0.6, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack", endOn: across };
+    return { x: cx, z: cz, a: a + range(-0.08, 0.08), len: BOX.long, dep: cols * BOX.wide, h: stack * BOX.high - 1, stack, cols, door: face, drift: 0.6, driftW: 2, yard, kind: "shack", endOn: across };
   };
   const maxB = Math.round(v.fortBuildings);
   const inAny = (x: number, z: number, m: number) => blocks.some((b) => Math.hypot(b.x - x, b.z - z) < Math.hypot(b.len, b.dep) / 2 + m);
@@ -561,7 +561,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
       if (d1 - d0 < 3) continue;
       const c = at(a, d0 + (d1 - d0) * r());
       const stack = r() < 0.5 ? 1 : 2;
-      const b: Block = { x: c.x, z: c.z, a: r() * Math.PI, len: BOX.long, dep: BOX.wide, h: stack * BOX.high - 0.3, stack, cols: 1, door: 0, drift: 0.9, driftW: 3, yard: k, kind: "cover" };
+      const b: Block = { x: c.x, z: c.z, a: r() * Math.PI, len: BOX.long, dep: BOX.wide, h: stack * BOX.high - 0.8, stack, cols: 1, door: 0, drift: 0.9, driftW: 3, yard: k, kind: "cover" };
       if (!fits(b)) continue;
       blocks.push(b); n++;
     }
