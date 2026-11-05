@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · The ground height function caches repeats (overnight perf pass; Claude on `claude/project-thread-4kcrrl-ground`)
+- `DuneField.sample` keeps a 1024-slot exact-match cache of the ground before the modifier and dents: 40% of calls in a duel are repeats of a point asked that tick (feet, normals, AI). Any field's `update()` empties every cache. `Noise2.fbm` has `get()` inlined (gradients as Float64 of the same float32 values).
+- Heights are bit-identical: `tools/terrain-bench.ts --write/--compare` over 800k points (desert and biomes), and the duel sim's result is the same. A 30 s duel: 745 → 484 ms. duel-check 194 → 136 s, `npm test` 3 min 32 s → 2 min 16 s. All-miss sampling (chunk builds) is within noise (+0–5%). Terrain check covers the cache.
 ### 2026-11-05 · Freeze ray models: the Frost thrower and Cryo projector get their own rigs (coordinator, Keith asleep; Claude on `claude/project-thread-ja1xma`)
 - They were the flamer and Inferno in frost paint. Now `frostModel` (held: compressor with top fins, one fat banded dewar behind the grip with a lit gauge, a pilot bottle, a barrel wound with five glowing coil rings, a bell and ice lens) and `cryoModel` (hull: finned slate housing, two pale spherical pressure vessels in a cradle with a manifold and gauge, a thick coiled barrel, three prongs round the emitter) in `src/weapons/models.ts`. Same sockets (muzzle 0 the stream, muzzle 1 the cold vent). The coil and lens glow 0.4 idle, full while the trigger is held (`src/weapons/arsenal.ts`). Flamer and Inferno models unchanged.
 - Checked: typecheck, `npm test`, two game-camera screenshots in the weapons lab.
