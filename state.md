@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer nozzle cone off by default; the line starts blue itself (PC render: swung, the cone "fans out into large, faceted flat shards round the nozzle, like broken glass"; Claude on `claude/project-thread-q7b0ap`)
+- `fireTuning.ts`: Cone length 0 by default (the slider still brings it back). `src/fx/flameTube.ts`: the line holds blue a little longer at the nozzle (to 8% of its burn), yellow by 22%. Checked: typecheck, `flamefx-check`, `fire-check`, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · Swung flamer line bends like a hose, not lightning (PC render: "sharp, flat zigzags with hard corners"; Claude on `claude/project-thread-q7b0ap`)
 - Cause: the throw changed only on the gun's shots (a few a second) as the aim jumped from target to target, so runs of fuel points went out in a few straight directions with hard corners between, and the tube joined its points with straight spans. `src/weapons/fire/fireGuns.ts`: the throw poured each frame eases toward the last shot's over 0.12 s (Flame stream › Line swings over). `src/fx/flameTube.ts`: the tube is rounded between points (Catmull-Rom, 3 rings a span). Checked: typecheck, `flamefx-check`, `fire-check`, full `npm test`; not seen rendered here.
 
