@@ -19,8 +19,10 @@ export interface SampleDef {
   level?: string;
   /** The robot remix's defaults (sampleCut.ts alienize); robots only. */
   alien?: AlienOptions;
-  /** A seamless loop with this many seconds of crossfade (Fade is unused); played with startSoundLoop. */
+  /** A seamless loop with this many seconds of crossfade (Fade is unused); played with startSoundLoop, so cut once. */
   loop?: number;
+  /** How many variants it is cut into (default SAMPLE_VARIANTS). */
+  variants?: number;
   start: number; len: number; fade: number; pitch: number; spread: number; lowpass: number; highpass: number; gain: number; under: number;
 }
 
@@ -49,6 +51,10 @@ export const SAMPLES: SampleDef[] = [
     alien: { ring: 70, ringMix: 0.35, comb: 6, combFb: 0.6, sweepFrom: 2000, sweepTo: 200, sweepQ: 6, sweepMix: 0.4 } },
   { id: "RobotBigDeath", file: "largerrobotalienexplosion", sound: "robotBigDeath", ref: "blast", level: "robotSoundLevel", label: "Big robot death (largerrobotalienexplosion)", start: 0, len: 3.0, fade: 1.6, pitch: -5, spread: 1.5, lowpass: 20000, highpass: 25, gain: 0, under: 0,
     alien: { ring: 45, ringMix: 0.3, comb: 9, combFb: 0.65, sweepFrom: 1500, sweepTo: 120, sweepQ: 6, sweepMix: 0.4 } },
+  // The sword (Keith 2026-11-05). The swipe is a turbine blade's sweep: its one big pass, sped up 3 semitones as he asked,
+  // and each sword's pitch goes on top (Sword sound). The scrape is the loudest half second of a recording he marked too long.
+  { id: "SwordSwing", file: "bladeswipe", sound: "swordSwing", label: "Sword swipe (bladeswipe)", start: 0.05, len: 0.75, fade: 0.3, pitch: 3, spread: 1, lowpass: 20000, highpass: 60, gain: 0, under: 0 },
+  { id: "SwordScrape", file: "bladeonmetal", sound: "swordScrape", label: "Sword scrape on metal (bladeonmetal)", start: 0.5, len: 0.6, fade: 0.3, pitch: 0, spread: 2, lowpass: 20000, highpass: 200, gain: 0, under: 0 },
 ];
 
 /** How many variants each sample is cut into (pitches spread evenly across its spread). */
@@ -89,12 +95,12 @@ for (const d of SAMPLES) {
   for (const f of FIELDS) defaults[sampleKey(d, f)] = v[f];
   params.push(
     { key: sampleKey(d, "On"), label: "Use the recording", min: 0, max: 1, step: 1, group: g, tip: "0: the procedural sound" },
-    { key: sampleKey(d, "Start"), label: "Start after onset (s)", min: -0.05, max: 1.5, step: 0.005, group: g },
-    { key: sampleKey(d, "Len"), label: "Length (s)", min: 0.05, max: 7, step: 0.01, group: g, tip: "How much of the recording is kept (at its own pitch)" },
+    { key: sampleKey(d, "Start"), label: "Start after onset (s)", min: -0.05, max: Math.max(1.5, d.start * 2), step: 0.005, group: g },
+    { key: sampleKey(d, "Len"), label: "Length (s)", min: 0.05, max: Math.max(7, d.len * 2), step: 0.01, group: g, tip: "How much of the recording is kept (at its own pitch)" },
     d.loop ? { key: sampleKey(d, "Fade"), label: "Loop crossfade (s)", min: 0.01, max: 2, step: 0.01, group: g, tip: "The end runs into the start over this long, so the loop has no seam" }
       : { key: sampleKey(d, "Fade"), label: "Fade out (s)", min: 0.01, max: 4, step: 0.01, group: g },
     { key: sampleKey(d, "Pitch"), label: "Pitch (semitones)", min: -24, max: 12, step: 0.1, group: g, tip: "Lower is slower and longer, like tape" },
-    { key: sampleKey(d, "Spread"), label: "Variant spread (semitones)", min: 0, max: 6, step: 0.1, group: g, tip: `The ${SAMPLE_VARIANTS} variants sit this far apart in pitch, so repeats don't sound the same` },
+    { key: sampleKey(d, "Spread"), label: "Variant spread (semitones)", min: 0, max: 6, step: 0.1, group: g, tip: `The ${d.variants ?? SAMPLE_VARIANTS} variants sit this far apart in pitch, so repeats don't sound the same` },
     { key: sampleKey(d, "Lp"), label: "Low-pass (Hz)", min: 200, max: 20000, step: 50, group: g, tip: "Darker; 18000 and up is off" },
     { key: sampleKey(d, "Hp"), label: "High-pass (Hz)", min: 20, max: 2000, step: 5, group: g, tip: "Thinner; 25 and under is off" },
     { key: sampleKey(d, "Gain"), label: "Gain (dB)", min: -24, max: 12, step: 0.5, group: g, tip: "0: as loud in its first quarter second as the procedural sound it replaces" },

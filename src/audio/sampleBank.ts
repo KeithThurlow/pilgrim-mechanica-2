@@ -87,9 +87,9 @@ export class SampleBank {
 export function cutVariants(d: SampleDef, v: V, src: Float32Array, srcRate: number, outRate: number, proc?: Float32Array[]): Float32Array[] {
   const k = (f: Parameters<typeof sampleKey>[1]) => v[sampleKey(d, f)];
   const refRms = proc?.length ? proc.reduce((a, p) => a + punchRms(p, outRate), 0) / proc.length : 0.25;
-  const out: Float32Array[] = [];
-  for (let i = 0; i < SAMPLE_VARIANTS; i++) {
-    const semis = k("Pitch") + (SAMPLE_VARIANTS > 1 ? (i / (SAMPLE_VARIANTS - 1) - 0.5) * k("Spread") : 0);
+  const out: Float32Array[] = [], n = d.loop ? 1 : d.variants ?? SAMPLE_VARIANTS;
+  for (let i = 0; i < n; i++) {
+    const semis = k("Pitch") + (n > 1 ? (i / (n - 1) - 0.5) * k("Spread") : 0);
     const rate = Math.pow(2, semis / 12);
     const cut = cutSample(src, srcRate, outRate, { start: k("Start"), len: k("Len") / rate, fade: k("Fade") / rate, rate, lowpass: k("Lp"), highpass: k("Hp"), loop: d.loop ? k("Fade") / rate : 0 });
     if (d.alien) {

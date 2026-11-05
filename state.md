@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword sounds: the smash shaped on Keith's clip, recorded swipe and scrape, a pitch per sword (Keith asked; Claude on `claude/sword-sounds`)
+- Every unblocked cut now plays `swordSmash` over the old slam (0.55), then the scrape on metal (× 0.25 on flesh). The smash recipe (`src/weapons/weaponSound.ts`) was retuned to the car drop in Keith's video at 1:48: a flat noise wall that holds 0.12 s and falls about 40 dB/s, 0.8 s long, nearly no ring or low thump.
+- Recordings `bladeswipe` (+3 semitones) and `bladeonmetal` (0.6 s of it) in `src/audio/samples.ts`. Swipe pitch by sword: Breaker 1, Buster 0.68, Short 1.4; hits follow half of that (`Sword sound` group). `cutSample` gained seamless loops, `SampleDef.variants` a variant count.
+- Checked: smash against the clip by octave band (within about 6 dB from 125 Hz up in the first 0.25 s; level down 5 dB at 120 ms, 9 at 200, 12 at 280, the clip 5, 8, 11). `npm test`.
 ### 2026-11-05 · Flames: fireballs out of the cone's end, long wobbling streaks rounding out, bigger at the end (Keith's playtest; Claude on `claude/project-thread-q7b0ap`)
 - Fireballs start 80% of the way along the shown nozzle cone (Flame look › Fireballs start along the cone), already lit, so they come out of the end of the flame burst instead of the muzzle and stay on it when the mech turns. Young balls are long streaks along their flight (×4 long at birth, Stretch at first) wobbling about (Wobble at first, half their size), rounding out as they age; they grow faster (Grows late 1.8, on lt^1.5) and more again in the last quarter (Grows more right at the end, 1.2).
 - Files: `src/fx/flameFx.ts`, `flameBlobs.ts`, `src/weapons/fire/fireGuns.ts`, `fireTuning.ts`. Checked: flamefx, fire checks; full `npm test`.
