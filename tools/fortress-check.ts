@@ -26,6 +26,8 @@ import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import * as THREE from "three/webgpu";
 import { Gates, GATE_DEFAULTS, type GateEvent } from "../src/pois/gates";
+import { armourHit } from "../src/game/armour";
+import { BASE_BY_ID } from "../src/items/bases";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD } from "../src/combat/infantry";
 import { Fortresses, FORT_LIFE_DEFAULTS } from "../src/expedition/fortresses";
 import { Hubs, HUB_LIFE_DEFAULTS, type HubEvent } from "../src/expedition/hubs";
@@ -238,6 +240,13 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   const n = gates.splash(new THREE.Vector3(s2.gate.x + ux * 3, floor + 2, s2.gate.z + uz * 3), 6, 200, d, { blast: true });
   if (n !== 1 || s2.hp >= s2.max) fail(`a blast beside a gate hit ${n} gates, health ${s2.hp}/${s2.max}`);
   console.log(`gates: a round meets the slab at ${hit.toFixed(1)} m (sand at ${sand < 0 ? "-" : sand.toFixed(1)} m) · down after ${rounds} rounds of 9 (${s.max} hp, armour ${GATE_DEFAULTS.gateArmour}) · one gateDown · the gap at the floor (${gap.toFixed(2)} m)`);
+  // Breach time (Keith 2026-11-05: walls took too long): two base miniguns on one gate, per ring inward.
+  const mg = BASE_BY_ID["mg-medium"].stats, perRound = armourHit(mg.damage.base, GATE_DEFAULTS.gateArmour, mg.ap.base);
+  const dps = 2 * mg.fireRate.base * perRound;
+  const times = [0, 1, 2].map((r) => GATE_DEFAULTS.gateHp * (1 + GATE_DEFAULTS.gateRingHp * r) / dps);
+  if (times[0] < 3 || times[0] > 10) fail(`two miniguns take ${times[0].toFixed(1)} s on an outer gate (want 3 to 10)`);
+  if (times[2] > 15) fail(`two miniguns take ${times[2].toFixed(1)} s on a keep gate (want under 15)`);
+  console.log(`gates: two miniguns (${dps.toFixed(0)} dps through armour) break the rings' gates in ${times.map((t) => t.toFixed(1)).join(" / ")} s; blasts ×${GATE_DEFAULTS.gateBlast}`);
   w.walls.down.clear();
 }
 
