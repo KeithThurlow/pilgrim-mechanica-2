@@ -7,7 +7,7 @@ import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 import { sampleBank, sampleBankOf } from "../audio/sampleBank";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "bulletMetal" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -131,6 +131,8 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
       S.whine(0.7, hi * 1.47, hi * 1.4, 0.035),
       S.grind(r, 0.6, 0.3));
   }), () => v.swordLevel * v.swordScrapeLevel);
+  // A round on metal (src/audio/minigunAudio.ts): the Sfx's metal tick as a sound the ricochet recording can swap over.
+  sfx.addSound("bulletMetal", variants(4, 56, (r) => S.mix(S.noise(r, 0.05, 5000, 0.35, 0.001), S.clang(r, 0.08, 0.12 + r() * 0.06))), () => sfx.v.metalLevel);
   // Round guns (Keith 2026-11-02, src/weapons/guns.ts), one voice each, levels on the Round guns: feel sliders.
   // SMG: a light, bright snap with a small thump; played many times a second, so short.
   sfx.addSound("smg", variants(4, 61, (r) => S.mix(S.tick(r, 0.02, 0.7), S.noise(r, 0.07, 5200, 0.55, 0.0003), S.thump(0.08, 280, 130, 0.45))), () => v.smgLevel);

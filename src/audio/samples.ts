@@ -58,6 +58,9 @@ export const SAMPLES: SampleDef[] = [
   // the steadiest 12 s of a 46 s take, long enough that the ear doesn't catch the repeat on a slow walk past.
   { id: "FlameRoar", file: "flamethrower", sound: "flameRoar", label: "Flamer roar (flamethrower)", loop: 0.4, start: 5.3, len: 3, fade: 0.4, pitch: 0, spread: 0, lowpass: 20000, highpass: 40, gain: 0, under: 0 },
   { id: "TankTracks", file: "tanktracks", sound: "tankTracks", label: "Convoy tracks (tanktracks)", loop: 1, start: 3.3, len: 12, fade: 1, pitch: 0, spread: 0, lowpass: 20000, highpass: 20, gain: 0, under: 0 },
+  // A bullet on metal (Keith: "needs variations"): the ricochet's hit, a full second into the file (onset finds it), cut
+  // five ways across 5 semitones; each play bends the pitch again and lands at its own moment (src/audio/minigunAudio.ts).
+  { id: "MetalHit", file: "metalhit", sound: "bulletMetal", label: "Bullet on metal (metalhit)", variants: 5, start: -0.005, len: 0.5, fade: 0.25, pitch: 0, spread: 5, lowpass: 20000, highpass: 150, gain: 0, under: 0 },
   { id: "SwordScrape", file: "bladeonmetal", sound: "swordScrape", label: "Sword scrape on metal (bladeonmetal)", start: 0.5, len: 0.6, fade: 0.3, pitch: 0, spread: 2, lowpass: 20000, highpass: 200, gain: 0, under: 0 },
 ];
 

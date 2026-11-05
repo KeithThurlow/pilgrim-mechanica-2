@@ -34,6 +34,8 @@ import { dashAcross, dashBeats, dashBurst, dashBurstEnd, dashDip, dashHoldEnd, d
 export interface Ground {
   height(x: number, z: number): number;
   normal(x: number, z: number, out?: number[]): number[];
+  /** Steel, not sand, here (fortress containers); absent on plain ground. */
+  metalAt?(x: number, z: number): boolean;
 }
 
 /** Desired move direction in world x/z; length 0..1 is the stick amount. */

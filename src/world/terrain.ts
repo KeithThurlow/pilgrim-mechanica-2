@@ -73,6 +73,8 @@ export interface GroundSample {
 export interface GroundModifier {
   /** Fill out for (x, z); return false (fast) where it has no effect. */
   at(x: number, z: number, out: ModifierSample): boolean;
+  /** Whether the ground here is steel rather than sand (fortress containers), for what a round hitting it does. */
+  metalAt?(x: number, z: number): boolean;
 }
 export interface ModifierSample {
   /** 0: the dunes untouched .. 1: the flat floor. */
@@ -96,6 +98,8 @@ export const NORMAL_E = 0.35;
 export class DuneField {
   /** Optional reshaping (the convoy road). Null: plain dunes. */
   modifier: GroundModifier | null = null;
+  /** Whether the ground at (x, z) is steel, not sand (GroundModifier.metalAt). */
+  metalAt(x: number, z: number) { return this.modifier?.metalAt?.(x, z) ?? false; }
   /** Optional dents added after the modifier (blast craters). Null: none. */
   dents: GroundLayer | null = null;
   private mod: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };

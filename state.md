@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Bullets on metal: the ricochet recording with variations, and fortress containers now count as metal (Keith asked; Claude on `claude/metal-hit-sound`)
+- Rounds on metal play `bulletMetal` (`src/audio/minigunAudio.ts`): `metalhit` cut 5 ways across 5 semitones, each play at its own pitch, level and up to 0.03 s late, at most one every 0.05 s (Sound sliders). Bumps, salvage and droid hits keep the old `metalHit` tick.
+- Fortress and hub containers are part of the ground, so rounds hitting them counted as sand (dust, craters, dirt sound). `GroundModifier.metalAt` and `wallMetal` (`src/pois/fortressGround.ts`) now make them metal, with the sand drift banked against them still sand. Fortress check covers both. `npm test`.
 ### 2026-11-05 · Flamer roar and convoy tracks on recordings (Keith asked; Claude on `claude/flame-track-sounds`)
 - `flamethrower` loops as `flameRoar` (the steadiest 3 s, from 5.3 s after onset). `tanktracks` loops as `tankTracks` (12 s from 3.3 s), played by `ConvoySound` (`src/convoy/convoySound.ts`) at the car nearest the listener: full level within 25 m, silent past 260 m, pitch by speed, sliders in Tracks and trail › Convoy sound. Only the convoy lab has it so far.
 - The cut loops are limited by a few peaks: the roar sits 2 dB and the tracks 6 dB under their procedural loops' punch. `tools/samples-check.ts` now covers fire and convoy sounds and checks loops hold their level and meet at the join. `npm test`.

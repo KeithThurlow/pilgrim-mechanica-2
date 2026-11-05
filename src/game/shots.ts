@@ -380,7 +380,7 @@ export class Shots {
       d.copy(end).sub(o).normalize();
     } else {
       let reach = range;
-      if (rayGround(o, d, w.field, range, this.hit)) { reach = o.distanceTo(this.hit); end.copy(this.hit); surface = "sand"; this.groundNormal(end, normal); }
+      if (rayGround(o, d, w.field, range, this.hit)) { reach = o.distanceTo(this.hit); end.copy(this.hit); surface = w.field.metalAt?.(end.x, end.z) ? "metal" : "sand"; this.groundNormal(end, normal); }
       else { end.copy(o).addScaledVector(d, range); normal.set(0, 1, 0); }
       if (w.wrecks?.hit(o, d, reach, this.steelAt, this.steelN)) { reach = o.distanceTo(this.steelAt); end.copy(this.steelAt); surface = "metal"; normal.copy(this.steelN); }
       const near = this.nearestOnRay(team, o, d, reach);

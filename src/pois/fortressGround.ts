@@ -26,7 +26,7 @@ export function siegeLayout(p: PoiPlacement, v: SiegeValues): Layout {
 }
 
 /** Height one ring adds at distance d from the centre at heading a (gates in `down` open). */
-function ringHeight(ring: Ring, d: number, a: number, down: ReadonlySet<string>) {
+function ringHeight(ring: Ring, d: number, a: number, down: ReadonlySet<string>, steel = false) {
   const R = ringR(ring, a), e = Math.abs(d - R), span = ringSpan(ring);
   if (e >= span) return 0;
   const coreW = ring.top + ring.face;
@@ -43,18 +43,18 @@ function ringHeight(ring: Ring, d: number, a: number, down: ReadonlySet<string>)
     // A standing barricade: a plug of the wall's height across the whole cut.
     if (g.barred && !down.has(g.id) && arc < g.w / 2 + ring.face) plug = Math.max(plug, ring.h * (1 - smooth(g.t / 2, g.t / 2 + 0.5, e)));
   }
-  return Math.max(core, drift, plug);
+  return steel ? Math.max(core, plug) : Math.max(core, drift, plug);
 }
 
-/** Height a layout's walls and cover add at (x, z), with the gates in `down` open. */
-export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<string>): number {
+/** Height a layout's walls and cover add at (x, z), with the gates in `down` open; `steel`: the containers alone, no sand drift. */
+export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<string>, steel = false): number {
   const dx = x - L.x, dz = z - L.z;
   if (Math.abs(dx) > L.reach || Math.abs(dz) > L.reach) return 0;
   const d = Math.hypot(dx, dz);
   if (d > L.reach) return 0;
   const a = Math.atan2(dx, dz);
   let best = 0;
-  for (const ring of L.rings) best = Math.max(best, ringHeight(ring, d, a, down));
+  for (const ring of L.rings) best = Math.max(best, ringHeight(ring, d, a, down, steel));
   for (const b of L.blocks) {
     const bx = x - b.x, bz = z - b.z;
     if (Math.abs(bx) > 8 || Math.abs(bz) > 8) continue;
@@ -64,9 +64,15 @@ export function wallHeight(L: Layout, x: number, z: number, down: ReadonlySet<st
     const out = Math.hypot(Math.max(0, u), Math.max(0, w));
     const core = b.h * (1 - smooth(0, 0.35, out));
     const drift = 0.9 * (1 - smooth(0, 3, out));
-    best = Math.max(best, core, drift);
+    best = Math.max(best, core, steel ? 0 : drift);
   }
   return best;
+}
+
+/** Whether a round landing at (x, z) strikes a container rather than the sand banked against it. */
+export function wallMetal(L: Layout, x: number, z: number, down: ReadonlySet<string>): boolean {
+  const steel = wallHeight(L, x, z, down, true);
+  return steel > 0.3 && steel >= wallHeight(L, x, z, down) - 1e-6;
 }
 
 /**
@@ -158,4 +164,6 @@ export class SiegeWalls implements GroundModifier {
     out.w = 0; out.berm = h; out.lift = 0; out.rough = 0;
     return true;
   }
+
+  metalAt(x: number, z: number) { return this.near(x, z, this.list).some((p) => wallMetal(this.layout(p), x, z, this.down)); }
 }

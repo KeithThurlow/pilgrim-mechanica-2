@@ -8,7 +8,7 @@ import type { HitSurface } from "../fx/minigun";
 import { groundRises, penetrate, type GroundRise, type PenMaterial, type PenResult, type PenValues, type Sheet, type SheetHit } from "./sheet";
 import { FLAG, MEASURE, RayHits, type Filter, type Register } from "./register";
 
-interface Ground { height(x: number, z: number): number }
+interface Ground { height(x: number, z: number): number; metalAt?(x: number, z: number): boolean }
 /** Steel that isn't a target (wreck stand-ins): costs budget and stops rounds. */
 export interface Steel { hit(from: THREE.Vector3, dir: THREE.Vector3, maxDist: number, at: THREE.Vector3, normal: THREE.Vector3): boolean }
 
@@ -190,6 +190,6 @@ export function resolveSheet(field: Ground, targets: readonly Hittable[], steel:
   const stopped = !!last?.stopped;
   const end = new THREE.Vector3(s.ox + s.dx * result.end, 0, s.oz + s.dz * result.end);
   end.y = stopped ? last.hit.y : field.height(end.x, end.z);
-  const surface: HitSurface = stopped ? (last.hit.target ? last.hit.target.surface : "metal") : "sand";
+  const surface: HitSurface = stopped ? (last.hit.target ? last.hit.target.surface : "metal") : field.metalAt?.(end.x, end.z) ? "metal" : "sand";
   return { result, end, surface, dealt, exits };
 }
