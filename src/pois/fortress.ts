@@ -604,7 +604,7 @@ function runK(ring: Ring, a: number) {
 }
 
 /** Heading of the ring's line at heading a (the tangent, for laying containers along it). */
-function along(ring: Ring, a: number) {
+export function along(ring: Ring, a: number) {
   const e = 1e-3, R = ringR(ring, a), dR = (ringR(ring, a + e) - ringR(ring, a - e)) / (2 * e);
   const tx = Math.cos(a) * R + Math.sin(a) * dR, tz = -Math.sin(a) * R + Math.cos(a) * dR;
   return Math.atan2(tx, tz);
