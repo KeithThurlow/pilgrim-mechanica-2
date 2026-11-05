@@ -165,7 +165,9 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const bf = new Battlefield(field, V, camera, o.wrecks?.(field, V) ?? null);
   scene.add(bf.group);
   // Ground marks as dents on a fine patch (Keith 2026-10-25).
-  bf.useDents(app.renderer, streamer);
+  // ?norender skips the GPU dent layer and GPU effects too (a software GPU spends seconds a frame on them), as the convoy lab does.
+  if (!app.params.has("norender")) bf.useDents(app.renderer, streamer);
+  else bf.useLookGround(streamer);
   await initPhysics();
   const deaths = new DeathPhysics(V, field);
   // Blast craters as real ground: a layer in the height function; the chunks under a new one are patched in place.
