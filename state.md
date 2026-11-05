@@ -209,6 +209,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Sword, flamer, tank-tracks and metal-hit sounds (Claude, 2026-11-05): code on `wip/sword-flame-tank-sounds`, waiting on the recordings from Keith's PC; `docs/handoff-sword-flame-tank-sounds.md`.
+
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, compaction as an upgrade, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
 - Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batches 1 and 2 merged (robots, bandits, warband, droids, crusher, summoner's units in `labs/swarm/`). **Edit the robot, bandit, war band, droid, crusher and summoner lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Open questions in `docs/decisions.md` (2026-11-02 swarm lab rows).
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
