@@ -57,8 +57,9 @@ export class FlameTube {
     // PC render 2026-11-05: the line read pale cream. White only just out of the nozzle, yellow within a fifth of its
     // burn, orange by halfway, deep orange at the end.
     const blue = vec3(0.45, 0.62, 1.0), white = vec3(1.0, 0.9, 0.55), yellow = vec3(1.0, 0.7, 0.16), orange = vec3(1.0, 0.42, 0.06), deep = vec3(0.78, 0.2, 0.04);
-    const along1 = mix(blue, white, smoothstep(0.0, 0.04, u));
-    const along2 = mix(along1, yellow, smoothstep(0.05, 0.2, u));
+    // Blue for the first few metres (the old nozzle cone's job, now the line's own; the cone is off by default).
+    const along1 = mix(blue, white, smoothstep(0.02, 0.08, u));
+    const along2 = mix(along1, yellow, smoothstep(0.08, 0.22, u));
     const along3 = mix(along2, orange, smoothstep(0.22, 0.5, u));
     const fire = mix(along3, deep, smoothstep(0.65, 1.0, u));
     // Hotter core where you look straight in, more orange at the rim (more so further along).

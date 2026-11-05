@@ -90,7 +90,7 @@ export const FIRE_DEFAULTS = {
   flameSplash: 1,
   // The look (Keith 2026-11-05, rebuilt; src/fx/flameBlobs.ts, src/fx/flameFx.ts): the nozzle's cone, the fuel thrown
   // under gravity, splashing into ground fires or burning out in the air and rising, the dirty smoke.
-  flameCone: 0.4,
+  flameCone: 0, // off (PC render 2026-11-05: swung, it fanned into big flat shards round the nozzle); the line's own blue start does its job
   flameConeCut: 0.4,
   flameLookSpread: 0.5,
   flameBuoy: 6,
@@ -212,7 +212,7 @@ export const FIRE_PARAMS: Param[] = [
   { key: "flameRise", label: "Look: flames rise (m/s²)", min: 0, max: 10, step: 0.1, group: STREAM_GROUP },
   { key: "flameDrag", label: "Look: air drag on the fuel (/s)", min: 0, max: 3, step: 0.01, group: STREAM_GROUP },
   { key: "flameGravity", label: "Look: gravity on the fuel (m/s²)", min: 0, max: 30, step: 0.1, group: STREAM_GROUP, tip: "Keith 2026-11-05: the fuel arcs out under gravity and comes down on the aim" },
-  { key: "flameCone", label: "Cone length (share of the stream)", min: 0, max: 1, step: 0.01, group: FLAME_LOOK_GROUP, tip: "The thin emissive cone out of the nozzle, blue to yellow to orange; 0: none" },
+  { key: "flameCone", label: "Cone length (share of the stream)", min: 0, max: 1, step: 0.01, group: FLAME_LOOK_GROUP, tip: "The old emissive cone out of the nozzle (off by default: the line starts blue itself); 0: none" },
   { key: "flameConeCut", label: "Cone shown (share of it)", min: 0.05, max: 1, step: 0.01, group: FLAME_LOOK_GROUP, tip: "Keith 2026-11-05: the cone keeps its length and colours and is cut off this far along, so the blue stays and the orange tail goes" },
   { key: "flameLookSpread", label: "Look spread (× the gun's)", min: 0, max: 2, step: 0.01, group: FLAME_LOOK_GROUP, tip: "How wide the fireballs fan out; the damage keeps the gun's spread" },
   { key: "flameBuoy", label: "Burnt out: heat lifts it (m/s²)", min: 0, max: 20, step: 0.1, group: FLAME_LOOK_GROUP },
