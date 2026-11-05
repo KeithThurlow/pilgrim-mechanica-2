@@ -20,13 +20,20 @@ import { railRates } from "./rail-grace-probe";
 
 const fails: string[] = [];
 const must = (ok: boolean, why: string) => { if (!ok) fails.push(why); };
+// Run in parts side by side (tools/run-checks.mjs reads the line below): CHECK_SHARD=i/n runs only the parts k with
+// k % n === i; without it, everything. Parts: 0 rules and item levels, 1 AI duels and drills, 2 dodge chance per level,
+// 3 painted spot, aim lag and cover, 4 scripted-player duels, 5 rail hit rates.
+// @shards 6
+const SHARD = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env.CHECK_SHARD;
+const part = (k: number) => { if (!SHARD) return true; const [i, n] = SHARD.split("/").map(Number); return k % n === i; };
+const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;
 // The rules checks below run Veteran against Veteran; the level checks at the end
 // use the levels themselves.
 const { rivalHull: _h, ...VET } = RIVAL_LEVELS.veteran;
 const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } });
 
 // ---- The AI only issues commands ----
-{
+if (part(0)) {
   // (node:fs through the process, so the typecheck needs no node types)
   const fs = (globalThis as unknown as { process: { getBuiltinModule(m: string): { readFileSync(p: URL, e: string): string } } }).process.getBuiltinModule("node:fs");
   const src = fs.readFileSync(new URL("../src/combat/rivalAi.ts", import.meta.url), "utf8");
@@ -58,7 +65,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
 }
 
 // ---- Seeded rival loadouts ----
-{
+if (part(0)) {
   const seen = new Set<string>();
   for (let s = 1; s <= 30; s++) {
     const a = JSON.stringify(rollRivalLoadout(s, LOOT_DEFAULTS)), b = JSON.stringify(rollRivalLoadout(s, LOOT_DEFAULTS));
@@ -77,7 +84,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
 }
 
 // ---- Every weapon a rival rolls is one its AI fires (2026-11-03: energy weapons were rolled but never fired) ----
-{
+if (part(0)) {
   let dead = 0;
   for (let seed = 1; seed <= 300; seed++) {
     const r = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)), kit = kitOf(r, WEAPON_DEFAULTS);
@@ -95,7 +102,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
 }
 
 // ---- Feeds and power (2026-11-03): rivals roll them on their shoulders and press them ----
-{
+if (part(0)) {
   let n = 0;
   for (let seed = 1; seed <= 300; seed++) if (gearOf(resolve(rollRivalLoadout(seed, LOOT_DEFAULTS))).length) n++;
   must(n >= 30, `only ${n} of 300 rolled rivals carry a feed or power on a shoulder`);
@@ -107,7 +114,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
 }
 
 // ---- Summoner gear (2026-11-04): rivals roll it, and their AI calls drone strikes and throws and recalls its swarm ----
-{
+if (part(0)) {
   let n = 0;
   for (let seed = 1; seed <= 300; seed++) { const sm = resolve(rollRivalLoadout(seed, LOOT_DEFAULTS)).summons; if (sm.drones + sm.scrappers + sm.replicas > 0) n++; }
   must(n >= 20, `only ${n} of 300 rolled rivals carry summoner gear`);
@@ -124,6 +131,7 @@ const runDuel = (o: DuelOptions) => runDuelRaw({ ...o, ai: { ...VET, ...o.ai } }
 const pairs: [number, number][] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]];
 let both = 0, worstStuck = 0, kills = 0, ttk = 0;
 const thr = [0, 0];
+if (part(1)) {
 for (const [a, b] of pairs) {
   const r = runDuel({ seedA: a, seedB: b, maxTime: 90 });
   const rd = r.score.rounds[0];
@@ -140,8 +148,10 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
   const a = runDuel({ seedA: 5, seedB: 6, maxTime: 60 }), b = runDuel({ seedA: 5, seedB: 6, maxTime: 60 });
   must(a.time === b.time && JSON.stringify(a.score.rounds) === JSON.stringify(b.score.rounds), "the same seeds fought two different duels");
 }
+console.log(`duels ${pairs.length}: both damaged in ${both}, ${kills} kills (mean ${(ttk / Math.max(1, kills)).toFixed(1)} s), telegraphed shots dodged ${thr[1]}/${thr[0]} (${pct(thr[1], thr[0])}), worst idle ${worstStuck.toFixed(1)} s`);
+}
 // A rival with a sword (Keith 2026-11-01: in your face): it closes to blade range on a foe and lands its cuts.
-{
+if (part(1)) {
   const lo = loadoutFor({ left: "sword", right: "minigun", k1: "none", k2: "none", k3: "pack" });
   must(kitOf(resolve(lo), WEAPON_DEFAULTS).some((k) => k.kind === "sword"), "a rival's sword isn't in its kit");
   const stand: MechCommand = { move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false };
@@ -159,7 +169,7 @@ must(worstStuck < 12, `a mech went ${worstStuck.toFixed(1)} s without moving 3 m
   console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts, ${r.vertCuts[1]} vertical`);
 }
 // A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
-{
+if (part(1)) {
   const r = runDuel({ seedA: 21, seedB: 22, maxTime: 90, hull: 1e6 });
   must(r.stuckWorst < 12, `long duel: a mech went ${r.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
   // (Either side: which one changes state depends on the rolled kits, and those move whenever a base joins the pool.
@@ -222,9 +232,10 @@ const drill = (pick: Parameters<typeof loadoutFor>[0], kind: "shoulder" | "rail"
   return { thr: r.threatened[1], dodged: r.dodged[1], dashes: r.dashes[1], taken: Object.values(r.score.rounds[0].dealt).reduce((a, b) => a + b, 0) };
 };
 type Drill = ReturnType<typeof drill>;
+const KITS = { mortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "mortar" }, linemortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "linemortar" }, missiles: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "missiles" }, rail: { left: "rail", right: "minigun", k1: "none", k2: "none", k3: "pack" } } as const;
+if (part(1)) {
 const drills: Record<string, Drill> = {};
 const blind: Record<string, Drill> = {};
-const KITS = { mortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "mortar" }, linemortar: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "linemortar" }, missiles: { left: "minigun", right: "minigun", k1: "none", k2: "none", k3: "missiles" }, rail: { left: "rail", right: "minigun", k1: "none", k2: "none", k3: "pack" } } as const;
 for (const [name, pick] of Object.entries(KITS)) {
   const kind = name === "rail" ? "rail" : "shoulder";
   drills[name] = drill(pick, kind, STAND);
@@ -249,13 +260,18 @@ for (const k of Object.keys(drills)) {
   must(d.dodged >= d.thr * 0.4, `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
+console.log(`rail drill: damage ${Math.round(railTaken[0])} dashing vs ${Math.round(railTaken[1])} blind`);
+console.log(`missiles drill: damage ${Math.round(missileTaken[0])} bracing vs ${Math.round(missileTaken[1])} blind`);
+console.log("drills (dodged/threatened, dashes; blind):", Object.entries(drills).map(([k, d]) => `${k} ${d.dodged}/${d.thr} ${d.dashes}d (${blind[k].dodged}/${blind[k].thr})`).join(" · "), `· total ${pct(dOk, dThr)} vs blind ${pct(bOk, bThr)}`);
+}
 
 const idle = (): MechCommand => ({ move: { x: 0, z: 0, sprint: false }, aim: null, shotAt: null, cursor: null, lock: null, trigger: [false, false], keys: [false, false, false, false], dash: null, dashHold: false, power: false });
 
 // ---- Dodging is a per-threat roll (Keith 2026-10-31: "enemies should only have a chance to dodge your targeted abilities") ----
+const lvlShare: Record<string, { chance: number; seen: number; noticed: number; thr: number; dodged: number }> = {};
+if (part(2)) {
 // The same drills at each level's own chance: the share of telegraphs it noticed sits near the chance, and the share it
 // got out of is no more than that.
-const lvlShare: Record<string, { chance: number; seen: number; noticed: number; thr: number; dodged: number }> = {};
 for (const lvl of RIVAL_LEVEL_IDS) {
   const L = RIVAL_LEVELS[lvl], acc = { chance: L.aiDodgeChance!, seen: 0, noticed: 0, thr: 0, dodged: 0 };
   for (const [name, pick] of Object.entries(KITS)) {
@@ -278,10 +294,11 @@ for (const lvl of RIVAL_LEVEL_IDS) {
   must(acc.dodged <= acc.thr * (acc.chance + 0.15), `${lvl}: dodged ${acc.dodged}/${acc.thr}, more than its chance ${acc.chance} allows`);
 }
 must(lvlShare.recruit.dodged / Math.max(1, lvlShare.recruit.thr) < lvlShare.ace.dodged / Math.max(1, lvlShare.ace.thr), "Recruit dodges as much as the Ace");
+}
 
 // ---- The painted spot (Keith 2026-10-31: a line mortar's strip flicked all over while it painted) ----
 // While a shoulder key is held the cursor never jumps (> N m a frame) and every paint ends in one release.
-{
+if (part(3)) {
   const MAXJUMP = 0.5; // m per frame (aiPaintSlew x dt is ~0.05)
   const worst: Record<string, string> = {};
   for (const [name, pick] of Object.entries(KITS)) {
@@ -315,7 +332,7 @@ must(lvlShare.recruit.dodged / Math.max(1, lvlShare.recruit.thr) < lvlShare.ace.
   }
   console.log("painted spot (jinking foe, 3 levels x 3 seeds):", Object.entries(worst).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
-console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):", Object.entries(lvlShare).map(([k, a]) => `${k} ${a.chance}: ${a.noticed}/${a.seen} ${a.dodged}/${a.thr}`).join(" · "));
+if (part(2)) console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):", Object.entries(lvlShare).map(([k, a]) => `${k} ${a.chance}: ${a.noticed}/${a.seen} ${a.dodged}/${a.thr}`).join(" · "));
 
 // ---- Aim lag and cover (Keith 2026-10-31: "way too hard and insanely accurate") ----
 {
@@ -327,6 +344,7 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     threats: [],
   });
   const { rivalHull: _r, ...REC } = RIVAL_LEVELS.recruit;
+  if (part(3)) {
   // Track, then snapshot (Keith 2026-10-31): a rail leads a strafing foe while it charges, then freezes aiSnapshot s before
   // the shot: the line does not follow a change of direction after that, and the trigger goes up the moment it is full.
   {
@@ -425,7 +443,9 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     must(after > 0, "rail: the trigger still held, the rail never charged again after the dash");
     console.log(`rail vs dash: the rival dashed across a foe's rail ${free}× with nothing charging, ${keeping}× with its own charging · a dash dropped a ${before.toFixed(2)} charge (${during.toFixed(2)} through it, ${after.toFixed(2)} after)`);
   }
+  }
 
+  if (part(4)) {
   // Duels against a scripted player who stands or strafes (cover 0): Recruit misses a strafing player most of the time,
   // still punishes one who stands; Ace hits more; Recruit's time to kill with the default pick is 8-25 s.
   const mode = (strafe: boolean) => (i: number, _v: DuelView, t: number): MechCommand | null => { if (i !== 0) return null; const m = idle(); if (strafe) m.move.x = Math.sin(t * 0.5) >= 0 ? 1 : -1; return m; };
@@ -449,6 +469,9 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
   }
   must(wins >= 6, `a Veteran-proxy player beat the Recruit in only ${wins} of 8`);
   must(wins > 0 && tt / wins > 8 && tt / wins < 25, `Recruit time to kill ${(tt / Math.max(1, wins)).toFixed(1)} s (want 8-25)`);
+  console.log(`levels (${RIVAL_LEVEL_IDS.join("/")}): damage to a standing player ${stand.map(Math.round)} vs strafing ${strafe.map(Math.round)} per 30 s; Recruit dies in ${(tt / Math.max(1, wins)).toFixed(1)} s (${wins}/8)`);
+  }
+  if (part(0)) {
   // Per level: the same Veteran-proxy player against each rival, time to kill it and the damage the player took.
   const perLevel = RIVAL_LEVEL_IDS.map((lvl) => {
     let w = 0, t2 = 0, dmg = 0, ran = 0;
@@ -460,9 +483,10 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     return `${lvl}: kill ${w ? (t2 / w).toFixed(1) : "-"} s (${w}/8), player took ${Math.round(dmg / ran)}`;
   });
   console.log("Veteran-proxy player vs each level:", perLevel.join(" · "));
+  }
   // Rail hit rates (tools/rail-grace-probe.ts): the rival's slugs against a player who stands, strafes in a line, reverses
   // or dashes 0.15 s after the snapshot starts (a dodger with a dash charge for every shot).
-  {
+if (part(5))   {
     const rows: string[] = [];
     for (const lvl of RIVAL_LEVEL_IDS) {
       const r: Record<string, number> = {};
@@ -475,12 +499,12 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
     }
     console.log("rail hit rate (stand / strafe in a line / reverse / dash at the snapshot):", rows.join(" · "));
   }
-  console.log(`levels (${RIVAL_LEVEL_IDS.join("/")}): damage to a standing player ${stand.map(Math.round)} vs strafing ${strafe.map(Math.round)} per 30 s; Recruit dies in ${(tt / Math.max(1, wins)).toFixed(1)} s (${wins}/8)`);
+
 }
 
 
 // ---- Rival item level (Keith 2026-10-31: ?rivalup=N rolls its items N levels above the player's, on the shared curve) ----
-{
+if (part(3)) {
   // Items' own curve (2026-10-31: items 0.05 a level, hull at 0.6 of it; enemies have their own, enemyGrowth).
   const up = 5, g = LOOT_DEFAULTS.levelGrowth ?? 0.05, k = levelPower(1 + up, g) / levelPower(1, g), kh = levelMul("hull", 1 + up, g);
   must(Math.abs(k - (1 + g * up)) < 1e-9, `the item curve isn't 1 + ${g} x (level - 1) (${k})`);
@@ -499,10 +523,5 @@ console.log("dodge chance per level (chance: noticed/seen, dodged/threatened):",
   must(RIVAL_LEVELS.recruit.rivalHull < RIVAL_LEVELS.veteran.rivalHull && RIVAL_LEVELS.veteran.rivalHull < RIVAL_LEVELS.ace.rivalHull, "rival hull shares aren't ordered by level");
 }
 
-const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;
-console.log(`duels ${pairs.length}: both damaged in ${both}, ${kills} kills (mean ${(ttk / Math.max(1, kills)).toFixed(1)} s), telegraphed shots dodged ${thr[1]}/${thr[0]} (${pct(thr[1], thr[0])}), worst idle ${worstStuck.toFixed(1)} s`);
-console.log(`rail drill: damage ${Math.round(railTaken[0])} dashing vs ${Math.round(railTaken[1])} blind`);
-console.log(`missiles drill: damage ${Math.round(missileTaken[0])} bracing vs ${Math.round(missileTaken[1])} blind`);
-console.log("drills (dodged/threatened, dashes; blind):", Object.entries(drills).map(([k, d]) => `${k} ${d.dodged}/${d.thr} ${d.dashes}d (${blind[k].dodged}/${blind[k].thr})`).join(" · "), `· total ${pct(dOk, dThr)} vs blind ${pct(bOk, bThr)}`);
 if (fails.length) { console.log("FAIL\n  " + fails.join("\n  ")); throw new Error("duel check failed"); }
 console.log("duel check passed");

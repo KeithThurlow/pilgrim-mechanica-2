@@ -14,9 +14,15 @@ const jIdx = args.indexOf('-j');
 const jobs = jIdx >= 0 ? Number(args[jIdx + 1]) : Math.max(1, cpus().length);
 const filters = args.filter((a, i) => !a.startsWith('-') && !(jIdx >= 0 && i === jIdx + 1));
 
+// A check with a "// @shards N" line runs as N processes, each with CHECK_SHARD=i/N (it runs its own share of parts).
 const checks = readdirSync('tools')
   .filter((f) => f.endsWith('-check.ts'))
-  .map((f) => ({ name: f.slice(0, -3), argv: [join('tools', f)] }));
+  .flatMap((f) => {
+    const name = f.slice(0, -3), argv = [join('tools', f)];
+    const n = Number(/^\/\/ @shards (\d+)/m.exec(readFileSync(join('tools', f), 'utf8'))?.[1] ?? 1);
+    if (n <= 1) return [{ name, argv }];
+    return Array.from({ length: n }, (_, i) => ({ name: `${name}[${i}/${n}]`, argv, env: { CHECK_SHARD: `${i}/${n}` } }));
+  });
 checks.push({ name: 'balance-sheet', argv: [join('tools', 'balance-sheet.ts'), '--check'] });
 const todo = filters.length ? checks.filter((c) => filters.some((f) => c.name.includes(f))) : checks;
 
@@ -34,7 +40,7 @@ let next = 0;
 function run(check) {
   return new Promise((resolve) => {
     const start = performance.now();
-    const child = spawn(tsx, check.argv, { shell: process.platform === 'win32', env: process.env });
+    const child = spawn(tsx, check.argv, { shell: process.platform === 'win32', env: { ...process.env, ...check.env } });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { out += d; });
