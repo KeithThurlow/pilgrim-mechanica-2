@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Shack doors and awnings at the right height (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-shack-doors`)
+- Door plates and awnings took off the shack's core height, but they stand at its face, off the core, so they went into the ground: doors buried, two-high awnings under the sand and one-high ones 1.3 m up. Doors now sit on the face's sand (`FACE_DRIFT`), awnings at 2.7 m, door-end plates the same (`box`'s `doorCy`). Look only. `src/pois/fortress.ts`.
+- Checked: fortress lab `?ring=0&manual&zoom=40` on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · Freeze ray models: the Frost thrower and Cryo projector get their own rigs (coordinator, Keith asleep; Claude on `claude/project-thread-ja1xma`)
 - They were the flamer and Inferno in frost paint. Now `frostModel` (held: compressor with top fins, one fat banded dewar behind the grip with a lit gauge, a pilot bottle, a barrel wound with five glowing coil rings, a bell and ice lens) and `cryoModel` (hull: finned slate housing, two pale spherical pressure vessels in a cradle with a manifold and gauge, a thick coiled barrel, three prongs round the emitter) in `src/weapons/models.ts`. Same sockets (muzzle 0 the stream, muzzle 1 the cold vent). The coil and lens glow 0.4 idle, full while the trigger is held (`src/weapons/arsenal.ts`). Flamer and Inferno models unchanged.
 - Checked: typecheck, `npm test`, two game-camera screenshots in the weapons lab.
