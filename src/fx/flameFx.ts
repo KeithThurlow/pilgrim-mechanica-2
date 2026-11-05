@@ -300,8 +300,8 @@ export class FlameFx {
     // Lights hang along the lines too (every 10th point), before the ground fires and fireballs take the rest.
     for (const l of this.streams.lines.values()) {
       if (l.cold) continue;
-      for (let i = l.n - 4; i >= 0 && this.nLight < L.flameBallLights; i -= 10) {
-        const o = this.nLight++ * 4; this.lightPts[o] = l.px[i]; this.lightPts[o + 1] = l.py[i] + 0.5; this.lightPts[o + 2] = l.pz[i]; this.lightPts[o + 3] = 1.2 * l.width;
+      for (let i = l.n - 6; i >= 0 && this.nLight < L.flameBallLights; i -= 16) {
+        const o = this.nLight++ * 4; this.lightPts[o] = l.px[i]; this.lightPts[o + 1] = l.py[i] + 0.5; this.lightPts[o + 2] = l.pz[i]; this.lightPts[o + 3] = 0.8 * l.width;
       }
     }
     this.draw(camera);
