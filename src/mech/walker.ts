@@ -298,6 +298,10 @@ export class WalkerSim {
   get dashing() { return this.dashMove !== null; }
   /** In a dash at all: its steps or the rest of its burst (Keith 2026-10-31: no rail charge through it). */
   get inDash() { return this.dashMove !== null || this.burst || (this.hovering && this.hov.dashing); }
+  /** The current dash began from an outside push (a sword's lunge), not a dash press (Keith 2026-11-05). */
+  private pushedDash = false;
+  /** In a dash the player pressed (or its burst): what drops a rail or energy charge. A sword lunge's push-off does not. */
+  get dashCancels() { return this.inDash && !this.pushedDash; }
   /** Seconds since the dash was pressed (its steps or the rest of its burst); -1 out of a dash. */
   get dashClock() { return this.hovering ? this.hov.dashT : this.dashMove ? this.dashMove.t : this.burst ? this.burstT : -1; }
   /** The burst's hold ends this long after the press: Space still down then, the sprint; else the hard stop. */
@@ -606,7 +610,8 @@ export class WalkerSim {
     }
     this.pushPrev.copy(this.push);
     // A dash's shove (from outside, src/mech/dash.ts) starting: the steps.
-    if (!this.dashMove && !this.running && this.push.lengthSq() > 4) this.dashBegin(this.push.x, this.push.z);
+    if (!this.dashMove && !this.running && this.push.lengthSq() > 4) { this.dashBegin(this.push.x, this.push.z); this.pushedDash = true; }
+    if (!this.inDash) this.pushedDash = false;
 
     this.skidSteered = false;
     if (this.running) this.runSteer(dt, cmd);
@@ -1667,7 +1672,7 @@ export class WalkerSim {
     if (this.v.hover >= 0.5) { if (!this.hovering) this.hoverBegin(); hoverDash(this.hov, this.hoverBody(), x, z, this.v); return true; }
     if (this.running) this.runEnd();
     // Mid-dash: the new one starts from the feet as they are (a swinging one carries on into the new plan).
-    this.dashMove = null;
+    this.dashMove = null; this.pushedDash = false;
     this.burst = false; this.boostTo = 0;
     this.dashBegin(x, z);
     return true;
