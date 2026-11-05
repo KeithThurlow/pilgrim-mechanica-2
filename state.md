@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Fortress gates square to the straight walls (first render of the shanty town, on Keith's PC; Claude on `claude/fortress-gates-square-to-walls`)
+- The gates faced the fortress's centre, as they did on round rings. On a straight wall that crosses the line from the centre at a slant the steel stood skewed in its gap and the sand plug in the ground showed as a wall-high wedge beside it. `GatesDraw` now turns the gate to the wall's line (`along`, exported from `src/pois/fortress.ts`), widens it by 1 / cos of the slant to fill the gap, stands the plates 6% over the plug's height and runs them 1 m into the rolling floor. Look only; the gate's sim, health and plug are unchanged.
+- Checked: fortress lab `?near&manual&zoom=70` before and after on the RTX 3080, full `npm test`.
+
 ### 2026-11-05 · duel-check runs in six parts side by side: npm test 2 min 22 s → 1 min 45 s (overnight perf pass; Claude on `claude/project-thread-4kcrrl-fort`)
 - A check can say `// @shards N`; `tools/run-checks.mjs` then runs it as N processes with `CHECK_SHARD=i/N`. `tools/duel-check.ts` (130 s on its own, the floor of `npm test`) gates its sections with `part(k)`: 0 rules and item levels, 1 AI duels and drills, 2 dodge chance per level, 3 painted spot, aim lag and cover, 4 scripted-player duels, 5 rail hit rates. Same checks, same values; summary lines print with their part. Run alone (`npx tsx tools/duel-check.ts`) it still runs everything (checked: passes).
 - `npm test` on 4 cores: 85/85 in 1 min 45 s (was 2 min 22 s). It is now CPU-bound (6 min 39 s of CPU), longest part 31 s; convoy-check (39 s) is the longest single check.
