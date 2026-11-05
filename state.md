@@ -316,6 +316,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword poses from the pose lab: rising and vertical cuts, close variants (Keith; Claude on `claude/project-thread-nri3l4`)
+- `src/weapons/swordPoses.ts`: sword-light, sword-short and sword-heavy replaced with Keith's exported keys exactly (all keys listed, none dropped). Checked: `npm test`.
 ### 2026-11-05 · Bandits pour out of spawner shacks (Keith's playtest: "containers that bandits just swarmed out of"; Claude on `claude/project-thread-exzrkr`)
 - Each fortress yard (not the keep) gets 3 spawner shacks; while alert the waves pour out of the ones nearest the mech (doors swing open with a flashing lamp, then one bandit every 0.28 s runs out into the street). Spawners are targets: shot down, nobody comes out again; with none left the waves stop. Waves 6 every 12 s, 60 at most (were 4 / 16 s / 32 out of thin air). Files: `src/pois/spawners.ts`, `spawnersDraw.ts`, `fortress.ts` (`Spawner`), `src/expedition/fortresses.ts`, labs fortress and convoy (hold-V).
 - Checked: `fortress-check` section 7 (a spawner in every yard, doors on their shack's face onto open ground, 6 out of the doors within 8 s of the alarm, all within 2.5 m of a door and none on top of anything, all shot down: one spawnerDown each and none out after). Full `npm test` passes.
