@@ -60,7 +60,7 @@ export const FORT_LIFE_DEFAULTS = {
   fortReinforceAfter: 20,
   fortHear: 1,
   fortHurt: 1.5,
-  fortDamage: 1,
+  fortDamage: 2,
   fortFlowNear: 28,
 };
 export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues & SpawnerValues & TowerValues;
