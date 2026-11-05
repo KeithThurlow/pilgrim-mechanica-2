@@ -316,6 +316,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword poses from the pose lab: rising and vertical cuts, close variants (Keith; Claude on `claude/project-thread-nri3l4`)
+- `src/weapons/swordPoses.ts`: sword-light, sword-short and sword-heavy replaced with Keith's exported keys exactly (all keys listed, none dropped). Checked: `npm test`.
 ### 2026-11-05 · Lookout towers on the fortress (Keith's playtest: "a vertical container that's built up... a bandit or two at the top"; Claude on `claude/project-thread-exzrkr`)
 - Stacked-container towers (3 levels crossed, 7.5 m) by the gates, 3 in the outer yard and one less per yard inward (keep at least 1), each with a crew of 1-2 on top: rifles (70 m), grenadiers (lobs every 3.2 s, 50 m, 60 damage) or rocketeers (every 4.5 s, 95 m, 110 damage), shells telegraphed by `bf.lob`. A tower is a target (1800 hp, armour 2); down, it topples, drops out of the ground (the flow field reroutes) and its crew dies. Files: `src/pois/towers.ts`, `towersDraw.ts`, `fortress.ts` (`Tower`, tower blocks), `fortressGround.ts`, `src/expedition/fortresses.ts`, labs fortress and convoy (hold-V, Fortress: towers topic).
 - Checked: `fortress-check` section 8 (towers in the layout, tops 7.5 m, crews fire at the mech, shot down: gone from the ground). Full `npm test` passes.
