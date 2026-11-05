@@ -16,6 +16,9 @@ export interface CutOptions {
   lowpass: number;
   /** High-pass corner in Hz (at or under 25 Hz: off). */
   highpass: number;
+  /** A seamless loop (the flamer's roar, tank tracks): read this many seconds past `len` and crossfade them into the
+   *  start, so the end runs on into the beginning; no fade in or out. 0 or absent: a one-shot. */
+  loop?: number;
 }
 
 /** First sample louder than `db` below the peak (the mp3's lead-in and any silence skipped). */
@@ -56,14 +59,23 @@ function biquad(x: Float32Array, sr: number, hz: number, high: boolean) {
  */
 export function cutSample(src: Float32Array, srcRate: number, outRate: number, o: CutOptions): Float32Array {
   const n = Math.max(1, Math.round(o.len * outRate));
-  const out = new Float32Array(n);
+  const xf = o.loop && o.loop > 0 ? Math.min(n, Math.round(o.loop * outRate)) : 0;
+  const out = new Float32Array(n + xf);
   const step = (o.rate * srcRate) / outRate;
   let p = onset(src) + o.start * srcRate;
-  for (let i = 0; i < n; i++, p += step) {
+  for (let i = 0; i < n + xf; i++, p += step) {
     const k = Math.floor(p);
     if (k < 0) continue;
     if (k + 1 >= src.length) break;
     out[i] = src[k] + (src[k + 1] - src[k]) * (p - k);
+  }
+  if (xf) {
+    // Filter first (so the filters' state carries over the join), then fold the run-on into the start: equal power.
+    if (o.lowpass < 18000) biquad(out, outRate, o.lowpass, false);
+    if (o.highpass > 25) biquad(out, outRate, o.highpass, true);
+    const loop = out.slice(0, n);
+    for (let i = 0; i < xf; i++) { const t = i / xf; loop[i] = out[i] * Math.sin(t * Math.PI * 0.5) + out[n + i] * Math.cos(t * Math.PI * 0.5); }
+    return loop;
   }
   const fin = Math.min(n, Math.round(0.002 * outRate));
   for (let i = 0; i < fin; i++) out[i] *= i / fin;
