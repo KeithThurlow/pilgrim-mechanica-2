@@ -38,7 +38,7 @@ export class FireGuns {
   reach(i: number) { const s = this.sides[i]; return s.kind ? s.reach : Infinity; }
 
   /** Each frame: the stream grows while it pours and stops when it doesn't; the pilot flame burns at the igniter. */
-  step(i: number, dt: number, igniter: THREE.Vector3 | null, alive: boolean) {
+  step(i: number, dt: number, igniter: THREE.Vector3 | null, alive: boolean, fuel: THREE.Vector3 | null = null) {
     const s = this.sides[i], v = this.v;
     if (!s.kind) return;
     s.idle += dt; s.splashT -= dt;
@@ -62,6 +62,9 @@ export class FireGuns {
       // orange for fire, pale blue for a freeze ray (Flame stream › Stream light).
       const L = this.bf.lights, P = v.flameLight * (big ? 1.4 : 1) * (cold ? 0.45 : 1) * (0.85 + 0.3 * Math.random());
       const len = Math.min(s.range, s.reach);
+      // The thin emissive cone out of the nozzle (Keith 2026-11-05; src/fx/flameBlobs.ts), on the live muzzle.
+      if (fuel) s.from.copy(fuel);
+      if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold);
       if (L && P > 0 && len > 1) {
         const col = cold ? 0x9fd8ff : 0xff8a35;
         for (const t of [0.45, 0.95]) L.hold(s.from.x + s.dir.x * len * t, s.from.y + s.dir.y * len * t + 0.5, s.from.z + s.dir.z * len * t, P * (t > 0.5 ? 1 : 0.7), 6 + len * 0.35, col, 1.1, 1.5 + len * 0.08);
@@ -81,6 +84,10 @@ export class FireGuns {
     const sp = (spread * Math.PI) / 180;
     // The muzzle's own drift (the mech walking) carries into the stream.
     const mv = this.unit.sim.vel;
+    // Fire (and frost) on the sand flows on toward a line through the aim, square to the shooter's line to it.
+    const gxz = aim ?? { x: fuel.x + dir.x * range, z: fuel.z + dir.z * range };
+    const goal = { x: gxz.x, z: gxz.z, nx: gxz.x - fuel.x, nz: gxz.z - fuel.z };
+    if (Math.hypot(goal.nx, goal.nz) < 0.5) { goal.nx = dir.x; goal.nz = dir.z; }
     for (let k = 0; k < n; k++) {
       const r = Math.sqrt(Math.random()) * Math.tan(sp), a = Math.random() * Math.PI * 2;
       const d = this.d.set(Math.cos(a) * r, Math.sin(a) * r, 0);
@@ -92,7 +99,7 @@ export class FireGuns {
       const life = range / Math.max(1, v.flameSpeed) * 1.15 + 0.25 + Math.random() * 0.2;
       const t0 = Math.random() * (1 / 60);
       bf.flames.gob(fuel.x + dd.x * speed * t0, fuel.y + dd.y * speed * t0, fuel.z + dd.z * speed * t0, dd.x * speed + (mv?.x ?? 0), dd.y * speed, dd.z * speed + (mv?.z ?? 0),
-        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6), cold);
+        life, v.flameSize * big * (0.8 + Math.random() * 0.4), v.flameGrow, v.flameIgnite * (0.7 + Math.random() * 0.6), cold, goal);
     }
     if (cold) return; // no burning splash from a freeze ray
     // Where the stream meets the sand (the aim on the ground, if the stream reaches it): a small short pool.

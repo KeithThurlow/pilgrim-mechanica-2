@@ -732,7 +732,8 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
-    { const fv = this.v as { flameRise?: number; flameDrag?: number; flameGravity?: number }; this.flames.rise = fv.flameRise ?? 3; this.flames.drag = fv.flameDrag ?? 1.6; this.flames.gravity = fv.flameGravity ?? 4; }
+    this.flames.tune(this.v as object);
+    for (const b of this.burns.list) if (b.left > 0) this.flames.attract(b.x, b.y, b.z);
     this.flames.update(dt, camera);
     c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);

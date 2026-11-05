@@ -78,6 +78,29 @@ export const FIRE_DEFAULTS = {
   flameDrag: 1.6,
   flameGravity: 4,
   flameSplash: 1,
+  // The solid look (Keith 2026-11-05; src/fx/flameBlobs.ts, src/fx/flameFx.ts): the nozzle's cone, the blobs, how they
+  // run along the sand and gather round what burns, the dirty smoke.
+  flameCone: 0.4,
+  flameConeWidth: 0.3,
+  flameBlob: 1,
+  flameLump: 0.3,
+  flameHalo: 0.35,
+  flameFall: 4,
+  flameLicks: 3,
+  flameGroundLife: 1.4,
+  flameSlide: 0.8,
+  flameGroundDrag: 1.2,
+  flameDownhill: 5,
+  flamePull: 6,
+  flamePullRange: 4.5,
+  flameRing: 1.1,
+  flameSmoke: 1.2,
+  flameFlow: 3,
+  flameFlowSpeed: 9,
+  flameSeparate: 6,
+  flameSepDist: 0.9,
+  flameSmokeRise: 1.6,
+  flameSmokeSize: 2.6,
   flameLevel: 0.8,
   flameKick: 0.02,
   flameShake: 0.01,
@@ -112,7 +135,8 @@ export type FireValues = typeof FIRE_DEFAULTS;
 
 export const FLAMER_GROUP = "Flamer (held)", INFERNO_GROUP = "Inferno (hull flamer)", STREAM_GROUP = "Flame stream", NAPALM_GROUP = "Napalm launcher", HEAT_GROUP = "Burning and heat";
 export const FROST_GROUP = "Frost thrower (held freeze ray)", CRYO_GROUP = "Cryo projector (hull freeze ray)", CHILL_GROUP = "Chill and freezing";
-export const FIRE_GROUPS = [FLAMER_GROUP, INFERNO_GROUP, STREAM_GROUP, NAPALM_GROUP, HEAT_GROUP, FROST_GROUP, CRYO_GROUP, CHILL_GROUP];
+export const FLAME_LOOK_GROUP = "Flame look (cone, blobs, smoke)";
+export const FIRE_GROUPS = [FLAMER_GROUP, INFERNO_GROUP, STREAM_GROUP, FLAME_LOOK_GROUP, NAPALM_GROUP, HEAT_GROUP, FROST_GROUP, CRYO_GROUP, CHILL_GROUP];
 
 const gun = (p: string, group: string, o: { rate: number; range: number; mag: number }, cold = false): Param[] => [
   { key: `${p}Rate`, label: "Jets/s", min: 1, max: o.rate, step: 0.5, group },
@@ -160,6 +184,27 @@ export const FIRE_PARAMS: Param[] = [
   { key: "flameRise", label: "Look: flames rise (m/s²)", min: 0, max: 10, step: 0.1, group: STREAM_GROUP },
   { key: "flameDrag", label: "Look: drag (/s)", min: 0, max: 6, step: 0.05, group: STREAM_GROUP },
   { key: "flameGravity", label: "Look: unlit fuel falls (m/s²)", min: 0, max: 20, step: 0.1, group: STREAM_GROUP },
+  { key: "flameCone", label: "Cone length (share of the stream)", min: 0, max: 1, step: 0.01, group: FLAME_LOOK_GROUP, tip: "The thin emissive cone out of the nozzle, blue to yellow to orange; 0: none" },
+  { key: "flameConeWidth", label: "Cone width at its end (m)", min: 0.05, max: 1.5, step: 0.01, group: FLAME_LOOK_GROUP },
+  { key: "flameBlob", label: "Blob size (× the gob)", min: 0, max: 2, step: 0.01, group: FLAME_LOOK_GROUP, tip: "The stream's lit gobs as solid boiling balls of flame; 0: the flat particles only" },
+  { key: "flameLump", label: "Blob lumpiness", min: 0, max: 0.8, step: 0.01, group: FLAME_LOOK_GROUP },
+  { key: "flameHalo", label: "Particle glow round the blobs", min: 0, max: 1.5, step: 0.01, group: FLAME_LOOK_GROUP, tip: "The old flat flame particles drawn round each blob, as a glow" },
+  { key: "flameFall", label: "Burning fuel falls (m/s²)", min: 0, max: 20, step: 0.1, group: FLAME_LOOK_GROUP, tip: "The lit stream arcs down to the sand; the flames licking off it rise (Flame stream › flames rise)" },
+  { key: "flameLicks", label: "Flames off fire on the sand (/s a blob)", min: 0, max: 12, step: 0.1, group: FLAME_LOOK_GROUP },
+  { key: "flameGroundLife", label: "Burns on after landing (s)", min: 0, max: 4, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameSlide", label: "Keeps its speed on landing", min: 0, max: 1, step: 0.01, group: FLAME_LOOK_GROUP, tip: "How much of its speed a landing blob keeps sliding along the sand" },
+  { key: "flameGroundDrag", label: "Sand drag (/s)", min: 0, max: 8, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameDownhill", label: "Runs downhill (m/s² per slope)", min: 0, max: 20, step: 0.1, group: FLAME_LOOK_GROUP },
+  { key: "flamePull", label: "Gathers round what burns (m/s²)", min: 0, max: 30, step: 0.1, group: FLAME_LOOK_GROUP, tip: "Fire on the sand flows toward burning things near it, rings round them and runs between ones close together" },
+  { key: "flamePullRange", label: "Gathers from (m)", min: 0.5, max: 12, step: 0.1, group: FLAME_LOOK_GROUP },
+  { key: "flameRing", label: "Rings round them at (m)", min: 0, max: 4, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameFlow", label: "Swarm: steers to the aim's line (/s)", min: 0, max: 12, step: 0.05, group: FLAME_LOOK_GROUP, tip: "Keith 2026-11-05: fire (and frost) on the sand is a swarm that flows on toward a line through the aim, square to your line to it, round and between what it hits; 0: it just slides" },
+  { key: "flameFlowSpeed", label: "Swarm: flow speed (m/s)", min: 0, max: 20, step: 0.1, group: FLAME_LOOK_GROUP },
+  { key: "flameSeparate", label: "Swarm: spreads apart (m/s²)", min: 0, max: 30, step: 0.1, group: FLAME_LOOK_GROUP, tip: "Gobs on the sand push off each other, so the fire spreads into a sheet and squeezes between things" },
+  { key: "flameSepDist", label: "Swarm: spacing (m)", min: 0.2, max: 3, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameSmoke", label: "Dirty smoke (puffs/s a flame)", min: 0, max: 6, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameSmokeRise", label: "Smoke rises (m/s)", min: 0, max: 6, step: 0.05, group: FLAME_LOOK_GROUP },
+  { key: "flameSmokeSize", label: "Smoke size (m)", min: 0.2, max: 8, step: 0.05, group: FLAME_LOOK_GROUP },
   { key: "flameSplash", label: "Splashes burn on the sand", min: 0, max: 2, step: 0.05, group: STREAM_GROUP, tip: "Where the stream meets the sand it leaves a small short pool (× its size); 0: none" },
   { key: "flameLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: STREAM_GROUP },
   { key: "flameKick", label: "Gun kick (m)", min: 0, max: 0.3, step: 0.005, group: STREAM_GROUP },
