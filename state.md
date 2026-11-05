@@ -316,6 +316,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Sword sounds: the smash shaped on Keith's clip, recorded swipe and scrape, a pitch per sword (Keith asked; Claude on `claude/sword-sounds`)
+- Every unblocked cut now plays `swordSmash` over the old slam (0.55), then the scrape on metal (× 0.25 on flesh). The smash recipe (`src/weapons/weaponSound.ts`) was retuned to the car drop in Keith's video at 1:48: a flat noise wall that holds 0.12 s and falls about 40 dB/s, 0.8 s long, nearly no ring or low thump.
+- Recordings `bladeswipe` (+3 semitones) and `bladeonmetal` (0.6 s of it) in `src/audio/samples.ts`. Swipe pitch by sword: Breaker 1, Buster 0.68, Short 1.4; hits follow half of that (`Sword sound` group). `cutSample` gained seamless loops, `SampleDef.variants` a variant count.
+- Checked: smash against the clip by octave band (within about 6 dB from 125 Hz up in the first 0.25 s; level down 5 dB at 120 ms, 9 at 200, 12 at 280, the clip 5, 8, 11). `npm test`.
 ### 2026-11-05 · Sword poses from the pose lab: rising and vertical cuts, close variants (Keith; Claude on `claude/project-thread-nri3l4`)
 - `src/weapons/swordPoses.ts`: sword-light, sword-short and sword-heavy replaced with Keith's exported keys exactly (all keys listed, none dropped). Checked: `npm test`.
 ### 2026-11-05 · Lookout towers on the fortress (Keith's playtest: "a vertical container that's built up... a bandit or two at the top"; Claude on `claude/project-thread-exzrkr`)

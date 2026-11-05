@@ -335,6 +335,21 @@ export class Arsenal implements MechWeapons {
     const st = this.swordBase(s);
     return s.sword.power ? powerStats(st, this.v) : st;
   }
+  /** The swipe's playback rate for this side's sword (Sword sound sliders, by its base). */
+  private swingPitch(s: Side) {
+    const v = this.v;
+    return s.base === "sword-heavy" ? v.swordSwingBuster : s.base === "sword-short" ? v.swordSwingShort : v.swordSwingBreaker;
+  }
+
+  /** An unblocked cut landing (Keith 2026-11-05): the smash with the old slam under it, then blade on metal (softer on flesh). */
+  private hitSound(s: Side, at: THREE.Vector3, material: string, volume: number) {
+    const v = this.v, sfx = this.bf.sfx, p = Math.pow(this.swingPitch(s), v.swordHitPitch), j = () => 0.92 + Math.random() * 0.16;
+    if (v.swordSmashLevel > 0) sfx.playSound("swordSmash", at, volume, p * j());
+    if (v.swordHitUnder > 0) sfx.playSound("swordHit", at, volume * (v.swordSmashLevel > 0 ? v.swordHitUnder : 1), p * (0.88 + Math.random() * 0.3));
+    const scrape = material === "flesh" ? v.swordScrapeSoft : 1;
+    if (scrape > 0 && v.swordScrapeLevel > 0) sfx.playSound("swordScrape", at, volume * 0.8 * scrape, p * j(), v.swordScrapeDelay);
+  }
+
   /** A side's sword stats before a power cut's (src/weapons/sword.ts powerStats). */
   private swordBase(s: Side): SwordStats {
     const v = this.v, o = s.own;
@@ -589,9 +604,11 @@ export class Arsenal implements MechWeapons {
     const hand = this.tmp;
     const m = s.model, ms = m?.sword;
     if (m) m.root.getWorldPosition(hand); else hand.set(pose.hand.x, pose.hand.y, pose.hand.z).applyMatrix4(frame);
-    if (sw.started) bf.sfx.playSound("swordSwing", hand, sw.power ? 1.2 : sw.vertical ? 1.05 : 0.9, (sw.power ? 0.7 : sw.vertical ? 0.72 : 0.85) + Math.random() * 0.25);
+    // The swipe at the sword's own pitch (Keith 2026-11-05: deeper and slower for the buster, higher and faster for the short sword).
+    const sp = this.swingPitch(s);
+    if (sw.started) bf.sfx.playSound("swordSwing", hand, sw.power ? 1.2 : sw.vertical ? 1.05 : 0.9, sp * ((sw.power ? 0.7 : sw.vertical ? 0.72 : 0.85) + Math.random() * 0.25));
     // A power cut (Keith 2026-11-02): the hydraulics bang and a low whoosh as it kicks in.
-    if (sw.powered && u.alive) { bf.sfx.play("brap", u.sim.pelvis, 0.8, 0.3, false); if (!sw.started) bf.sfx.playSound("swordSwing", hand, 1.1, 0.7 + Math.random() * 0.15); }
+    if (sw.powered && u.alive) { bf.sfx.play("brap", u.sim.pelvis, 0.8, 0.3, false); if (!sw.started) bf.sfx.playSound("swordSwing", hand, 1.1, sp * (0.7 + Math.random() * 0.15)); }
     // The swish (src/weapons/swordSwish.ts): in the hull's frame, so the blade's length there is the reach over the
     // hull's scale. Fed every pose the cut sweeps (smooth however fast), and the blade's pose just after the cut.
     const hullG = body.hullGroup?.();
@@ -701,7 +718,7 @@ export class Arsenal implements MechWeapons {
         s.sword.bite(v.swordBlockStall);
       }
       bf.dust.smoke(at.x, at.y, at.z, kd.x * 2, 0.6, kd.z * 2, 0.5, 0.7, 0.75, 0.35);
-      if (!blocked) bf.sfx.playSound("swordHit", at, s.bit ? 0.7 : 1.1, 0.88 + Math.random() * 0.3);
+      if (!blocked) this.hitSound(s, at, h.material, s.bit ? 0.7 : 1.1);
       if (!s.bit) {
         s.bit = true;
         s.sword.bite(v.swordHitch);
