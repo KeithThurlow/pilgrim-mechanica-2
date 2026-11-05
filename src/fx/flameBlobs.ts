@@ -45,8 +45,9 @@ export class FlameBlobs {
       mat.blending = THREE.AdditiveBlending;
       // The tube ripples: the radius breathes with the noise, more toward the end.
       mat.positionNode = positionLocal.add(vec3(positionLocal.x, 0, positionLocal.z).mul(n.mul(0.35).mul(t.add(0.2))));
-      const blue = vec3(0.25, 0.45, 1.7), white = vec3(1.9, 1.6, 0.8), orange = vec3(1.9, 0.75, 0.18);
-      const fire = mix(mix(blue, white, smoothstep(0.05, 0.3, t)), orange, smoothstep(0.35, 0.95, t));
+      // Keith 2026-11-05: bluer for longer, then very white-hot yellow, yellower toward the end.
+      const blue = vec3(0.2, 0.45, 2.0), white = vec3(2.2, 2.0, 1.25), yellow = vec3(2.0, 1.45, 0.3);
+      const fire = mix(mix(blue, white, smoothstep(0.12, 0.42, t)), yellow, smoothstep(0.5, 1, t));
       const ice = mix(vec3(0.6, 0.85, 1.5), vec3(0.35, 0.55, 1.1), t);
       mat.colorNode = mix(fire, ice, cd.x);
       // Softer at the rim (seen side on, the tube's edge is where it is thinnest), fading out toward the end.
@@ -62,11 +63,16 @@ export class FlameBlobs {
       mat.positionNode = positionLocal.add(normalLocal.mul(nz.mul(bn.y)));
       const face = abs(dot(normalize(normalView), normalize(positionView.negate())));
       // A white-hot core where you look straight in, the instance colour at the rim; the rim fades to nothing.
-      const core = smoothstep(0.55, 1, face).mul(bn.w);
-      mat.colorNode = mix(bc.xyz, vec3(2.0, 1.75, 1.0).mul(bc.xyz.length().mul(0.6).add(0.2)), core).mul(nz.mul(0.25).add(1));
-      mat.opacityNode = smoothstep(0.05, 0.55, face).mul(bc.w);
+      // White-hot where you look straight in; at the Fresnel rim a yellow that grows as the blob burns on (bn.w falls
+      // from 1 at the nozzle to 0), so the old flame reads yellow at its edges (Keith 2026-11-05).
+      const bright = bc.xyz.length().mul(0.45).add(0.15);
+      const core = smoothstep(0.6, 1, face).mul(bn.w.mul(0.6).add(0.4));
+      const rim = float(1).sub(smoothstep(0.15, 0.7, face)).mul(float(1).sub(bn.w).mul(0.8).add(0.2));
+      const body = mix(bc.xyz, vec3(2.0, 1.5, 0.32).mul(bright), rim);
+      mat.colorNode = mix(body, vec3(2.2, 2.0, 1.3).mul(bright), core).mul(nz.mul(0.2).add(1));
+      mat.opacityNode = smoothstep(0.0, 0.4, face).mul(bc.w);
       mat.blending = THREE.AdditiveBlending;
-      this.blobs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), mat, BLOB_MAX);
+      this.blobs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), mat, BLOB_MAX);
     }
     for (const [mesh, order] of [[this.cones, 6], [this.blobs, 5]] as const) {
       mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = order;
