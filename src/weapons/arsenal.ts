@@ -50,7 +50,7 @@ import { EnergyGuns } from "./energy/energyGuns";
 import { isEnergy } from "./energy/energySim";
 import type { EnergyKind } from "./models";
 
-import { gunFeel, gunNumbers, isFlameGun, isRoundGun, type RoundGun } from "./guns";
+import { gunFeel, gunNumbers, isColdGun, isFlameGun, isRoundGun, type RoundGun } from "./guns";
 import { FireGuns } from "./fire/fireGuns";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | "cannon" | RoundGun | null;
@@ -413,6 +413,8 @@ export class Arsenal implements MechWeapons {
         const ig = s.model && s.model.muzzles.length > 1 ? s.model.muzzles[1].getWorldPosition(this.tmp3) : null;
         const fuel = s.model?.muzzles.length ? this.muzzleOf(s, side, this.tmp2, 0) : null;
         this.fire.step(i, dt, ig, alive && !(u.sideOff?.(i) ?? u.gunsOff), fuel);
+        // A freeze ray's condenser coil and lens glow up while the trigger is held.
+        if (isColdGun(s.kind)) for (const mat of glows) mat.opacity = held && alive ? 1 : 0.4;
         clearPaint(s.paint);
         return;
       }
