@@ -229,6 +229,9 @@ export class Battlefield {
     this.burns = new Burns(v as never);
     this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
     this.flames = new FlameFx(field);
+    // window.__fire() in the console: what burns now and the fire damage so far.
+    (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
+      maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
     this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z) => this.burns.ignite(t, k, time, dps, x, y, z) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
@@ -309,6 +312,9 @@ export class Battlefield {
       if (b.left > 0) { if (Math.random() < dt * 14 * fk) this.flames.lick(b.x + (Math.random() - 0.5) * 0.8, b.y - 0.3 + Math.random() * 0.6, b.z + (Math.random() - 0.5) * 0.8, 0.9 + b.heat * 0.6, 0.8 + b.heat * 0.3); }
       else if (b.heat > 0.2 && Math.random() < dt * 4 * b.heat * fk) this.flames.ember(b.x + (Math.random() - 0.5) * 0.8, b.y + Math.random() * 0.5, b.z + (Math.random() - 0.5) * 0.8);
     }
+    // Hot metal glows where it burned (mechs, vehicles, crushers; the robots' plates also tint, src/combat/robotsDraw.ts).
+    const gk = (this.v as { heatGlow?: number }).heatGlow ?? 1;
+    if (gk > 0) for (const b of bn.list) if (b.heat > 0.05) this.flames.glow(b.x, b.y, b.z, 2.2 * gk, Math.min(1, b.heat * gk));
     this.flameT += dt;
     if (k <= 0 || this.flameT < 0.08) return;
     this.flameT = 0;
@@ -687,6 +693,7 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
+    { const fv = this.v as { flameRise?: number; flameDrag?: number; flameGravity?: number }; this.flames.rise = fv.flameRise ?? 3; this.flames.drag = fv.flameDrag ?? 1.6; this.flames.gravity = fv.flameGravity ?? 4; }
     this.flames.update(dt, camera);
     c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);

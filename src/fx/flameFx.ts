@@ -33,6 +33,8 @@ export class FlameFx {
   private q = new THREE.Quaternion();
   private p = new THREE.Vector3();
   private s = new THREE.Vector3();
+  /** This frame's heat glows (hot metal: a soft red-orange halo where it burned; drawn once, then cleared). */
+  private glows: number[] = [];
   /** Look values (the Flame stream sliders; the arsenal sets them). */
   rise = 3; drag = 1.6; gravity = 4;
 
@@ -78,6 +80,9 @@ export class FlameFx {
   lick(x: number, y: number, z: number, k = 1, heat = 1) {
     this.add(LICK, x, y, z, (Math.random() - 0.5) * 0.6, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.6, 0.35 + Math.random() * 0.35, (0.35 + Math.random() * 0.35) * k, 2.2, -1, heat);
   }
+
+  /** Hot metal glowing at a point this frame: `size` m across, heat 0..1 (red, then orange-white). */
+  glow(x: number, y: number, z: number, size: number, heat: number) { if (this.glows.length < 4 * 512) this.glows.push(x, y, z, size * (0.6 + 0.4 * heat), heat); }
 
   ember(x: number, y: number, z: number) {
     this.add(EMBER, x, y, z, (Math.random() - 0.5) * 2, 1.5 + Math.random() * 3, (Math.random() - 0.5) * 2, 0.6 + Math.random() * 0.9, 0.06 + Math.random() * 0.05, 1, -1);
@@ -143,6 +148,15 @@ export class FlameFx {
         nd++;
       }
     }
+    for (let g = 0; g + 4 < this.glows.length + 1 && nh < FLAME_MAX; g += 5) {
+      const h = this.glows[g + 4], sz = this.glows[g + 3];
+      this.p.set(this.glows[g], this.glows[g + 1], this.glows[g + 2]);
+      this.m.compose(this.p, this.q, this.s.set(sz, sz, sz));
+      this.hot.setMatrixAt(nh, this.m);
+      const o = nh * 4; ha[o] = 0.9 + 0.6 * h; ha[o + 1] = 0.12 + 0.45 * h * h; ha[o + 2] = 0.03 + 0.15 * h * h * h; ha[o + 3] = 0.25 + 0.45 * h;
+      nh++;
+    }
+    this.glows.length = 0;
     for (const [mesh, data, n] of [[this.hot, this.hotData, nh], [this.dark, this.darkData, nd]] as const) {
       mesh.count = n;
       if (n) {

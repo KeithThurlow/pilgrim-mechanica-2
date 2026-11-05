@@ -160,10 +160,10 @@ desert look direction. What came from where: `docs/decisions.md`.
   `npx tsx tools/partgen/run.ts --kind hull|hullweapon|shoulder|wreck` (`--prompt`, `--seed`, `--lane a|b|both`, `--image`, `--from x.ply|x.glb`; header of `run.ts`).
 - Armoury lab: `?model=<id>`, `?view=rampart|turntable|lineup`, `?cam=game|close`, `?zoom=metres`, `?dt=0.033`, `?t=seconds`
   (start the firing cycle there), `?still` (no cycle), `?mech=<variant>`.
-- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword|laser|beam|lance|plasma|orb|arc|sunder|smg|rifle|shotgun|sniper|flak|cannon` (smg, rifle, shotgun: held round guns; sniper, flak, cannon (the breach cannon, explosive shells): hull; energy weapons on the reactor: pulse laser, beam laser, nova lance, plasma cannon, particle orb, arc caster, sunder beam (click: charges, then a heavy beam you steer for 2.5 s); `&set=energyCost:0` makes them free) (rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
+- Weapons lab: `?left=`/`?right=minigun|lightmg|rail|lightrail|autocannon|rpg|rocketpod|sword|laser|beam|lance|plasma|orb|arc|sunder|smg|rifle|shotgun|sniper|flak|cannon|flamer|inferno` (flamer: the held flamethrower, inferno: the hull one; both set things burning and heat metal, Keith 2026-11-05; smg, rifle, shotgun: held round guns; sniper, flak, cannon (the breach cannon, explosive shells): hull; energy weapons on the reactor: pulse laser, beam laser, nova lance, plasma cannon, particle orb, arc caster, sunder beam (click: charges, then a heavy beam you steer for 2.5 s); `&set=energyCost:0` makes them free) (rocketpod: an arm holding the missile pod: hold to channel its clip of 8; sword: an arm holding the Breaker sword, click to swing, hold to keep swinging), `?barrage` (rocket
   launchers on both hull mounts, the shoulder rocket on key 1, missile pods on keys 2 and 3; `?barrage=arms`: arm rocket pods
-  instead; works wherever `?left=` does: robots, weapons, duel, convoy labs; add `&proto=splitter&time=22` for the night show), `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|beltfeed|incendiary|capacitor`
-  (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar` (a back
+  instead; works wherever `?left=` does: robots, weapons, duel, convoy labs; add `&proto=splitter&time=22` for the night show), `?k1=`/`?k2=none|rpg|missiles|mortar|linemortar|napalm|beltfeed|incendiary|capacitor` (napalm: the napalm launcher, painted like the line mortar, each canister a burning pool)
+  (shoulders sit on the hull top whatever the gun, Keith 2026-10-30; feeds and power are pressed, not painted), `?k3=pack|rpg|missiles|mortar|linemortar|napalm` (a back
   weapon in place of the pack), `?hold=N:x,z` (hold key N aimed there), `?lmb=x,z` / `?rmb=x,z` (hold a mouse button
   aimed there), `?aim=x,z`, `?fireat=N` (let go after N frames), `?lockcar` (guns on the first truck with the lock on
   it), `?start=x,z` (where the mech stands), plus the combat-lab flags.
@@ -258,7 +258,9 @@ src/weapons/            the new weapons, each with its own targeting: tuning (sl
                         projectileDraw, weaponSound, ribbon (ground-hugging marks).
                         Models: library (by id: GLB at public/models/weapons/<id>.glb, else a code stand-in), catalog, parts,
                         weaponModel, weaponLook + palette (paint sections, schemes, heat, lamps), laserSight, mounts (on the
-                        Rampart), demo; kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins)
+                        Rampart), demo; kit/ (the old Blender weapon kit ported to TS), build/ (stand-ins); fire/ (the flamers
+                        and napalm: tuning, fireGuns glue; burning in src/game/burn.ts, pools firePools.ts, damage types
+                        damageType.ts, the look src/fx/flameFx.ts)
 src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bodies (ragdoll layouts), deadDraw
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots; partgen/ (generated parts: ComfyUI client, splat to mesh,

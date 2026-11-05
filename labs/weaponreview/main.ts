@@ -20,7 +20,7 @@ import { PROTOCOL_BY_ID } from "../../src/items/protocols";
 import { TRAIT_BY_ID, traitsOf } from "../../src/items/traits";
 import { itemCadence } from "../../src/items/dps";
 import { makeItem } from "../../src/items/generate";
-import { REF, ENERGY_IDS, MELEE_IDS, wOf } from "../../src/items/balanceModel";
+import { REF, ENERGY_IDS, MELEE_IDS, FIRE_IDS, wOf } from "../../src/items/balanceModel";
 import {
   MODELLED, SCALING, armourCurve, relDist, bestBuilds, focusArea, itemWith, profileOf, protocolsFor, protocolStack, reachCurve, reliabilityCurve, scaleClass,
   type Profile,
@@ -52,11 +52,12 @@ const SOUNDS: Record<string, string[]> = {
   "flak-medium": ["flak", "flakPop"], "cannon-medium": ["breach"], "rail-light": ["railCharge", "rail"], "rail-medium": ["railCharge", "rail"],
   "ac-medium": ["cannon"], "rpg-light": ["rocket"], "rpg-medium": ["rocket"], "sh-rpg": ["rocket"], "sh-missiles": ["rocket"],
   "sh-mortar": ["mortar"], "sh-linemortar": ["mortar"],
+  "flamer-light": ["flameIgnite", "flameRoar"], "inferno-medium": ["flameIgnite", "flameRoar"], "sh-napalm": ["mortar", "napalmBurst"],
   "laser-medium": ["pulseZap"], "beam-medium": ["beamHum"], "lance-medium": ["lanceCharge", "lanceFire"], "plasma-medium": ["plasmaShot", "plasmaHit"],
   "orb-medium": ["orbLaunch"], "arc-medium": ["arcZap"], "sunder-medium": ["sunderCharge", "sunderHum"],
   "sword-light": ["swordSwing", "swordHit", "swordBlock"], "sword-heavy": ["swordSwing", "swordHit", "swordBlock"], "sword-short": ["swordSwing", "swordHit", "swordBlock"],
 };
-const ROUGH = new Set([...ENERGY_IDS, ...MELEE_IDS]);
+const ROUGH = new Set([...ENERGY_IDS, ...MELEE_IDS, ...FIRE_IDS]);
 
 const params = new URLSearchParams(location.search);
 const state = { base: "mg-medium", protos: [] as string[], armour: -1, target: "cutouts" as "cutouts" | "swarm", tier: "fodder" };

@@ -16,7 +16,7 @@ import { PROTOCOLS, protocolFits } from "../src/items/protocols";
 import { LOOT_DEFAULTS, makeItem } from "../src/items/generate";
 import { levelPower } from "../src/items/level";
 import { dpsOf, itemDpsPair } from "../src/items/dps";
-import { REF, armourFloor, thru, wOf, withProtos, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, targets, OTHERS, eDps, ttk, HULL, RB, WB, type T } from "../src/items/balanceModel";
+import { REF, armourFloor, thru, wOf, withProtos, WEAPON_IDS, ENERGY_IDS, MELEE_IDS, FIRE_IDS, targets, OTHERS, eDps, ttk, HULL, RB, WB, type T } from "../src/items/balanceModel";
 
 const proc = (globalThis as unknown as { process: { argv: string[]; exit(c: number): never } }).process;
 const args = proc.argv.slice(2);
@@ -61,8 +61,8 @@ for (const w of W_) {
 
 // 2b. Energy weapons (on the reactor: sustained counts it running dry) and swords (the walk-in counted): printed, not
 // held to the bands yet (2026-11-03, open).
-console.log("\n-- Energy weapons (report only) and swords (their own band, " + REF.meleeBand + "%); duty = share of the time the reactor lets it fire --");
-for (const id of [...ENERGY_IDS, ...MELEE_IDS]) {
+console.log("\n-- Energy and fire weapons (report only) and swords (their own band, " + REF.meleeBand + "%); duty = share of the time the reactor lets it fire --");
+for (const id of [...ENERGY_IDS, ...MELEE_IDS, ...FIRE_IDS]) {
   const w = wOf(makeItem(id)), budget = REF.budget * REF.slotShare[w.slot];
   const e = T_.map((t) => eDps(w, t));
   const pct = e.map((x, i) => (100 * x) / (budget * (REF.setWeight[T_[i].id] ?? 1)));

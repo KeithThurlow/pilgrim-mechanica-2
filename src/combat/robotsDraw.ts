@@ -95,6 +95,20 @@ export class RobotsDraw {
   private p = new THREE.Vector3(); private s = new THREE.Vector3();
   private m = new THREE.Matrix4(); private ml = new THREE.Matrix4(); private m2 = new THREE.Matrix4(); private mb = new THREE.Matrix4();
   private c = new THREE.Color(); private beacon = new THREE.Color(); private white = new THREE.Color(1, 1, 1);
+  /** Hot metal (Keith 2026-11-05, src/game/burn.ts): each robot's heat 0..1 by index, read once a frame; glow strength. */
+  heatMap: (() => ReadonlyMap<number, number> | null) | null = null;
+  heatGlow = 1;
+  private hm: ReadonlyMap<number, number> | null = null;
+  private static HOT = new THREE.Color(2.4, 0.55, 0.12);
+  private static WHITE_HOT = new THREE.Color(2.6, 1.6, 0.7);
+  /** Tint a body's colour toward red, then orange-white, by its heat. */
+  private heatTint(i: number, c: THREE.Color) {
+    const h = this.hm?.get(i) ?? 0;
+    if (h <= 0.01 || this.heatGlow <= 0) return;
+    const k = Math.min(1, h * this.heatGlow);
+    c.lerp(RobotsDraw.HOT, Math.min(1, k * 1.3) * 0.75);
+    if (k > 0.7) c.lerp(RobotsDraw.WHITE_HOT, (k - 0.7) / 0.3 * 0.5);
+  }
   private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3(); private tip = new THREE.Vector3();
   private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3();
   private va = new THREE.Vector3(); private vb = new THREE.Vector3(); private d1 = new THREE.Vector3(); private d2 = new THREE.Vector3();
@@ -192,6 +206,7 @@ export class RobotsDraw {
     const sw = this.swarm;
     this.time += dt;
     this.eyeN = 0;
+    this.hm = this.heatMap?.() ?? null;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
@@ -253,6 +268,7 @@ export class RobotsDraw {
     m.compose(p, q, s.set(S, S, S));
     c.copy(this.white).multiplyScalar(0.86 + sw.seed[i] * 0.2);
     if (dead) c.multiplyScalar(0.4); else if (st === DOWN) c.multiplyScalar(0.85);
+    this.heatTint(i, c);
     this.smallBodies.put(m, c);
     // No searchlight on the small ones (Keith 2026-11-01): a red eye, brighter while attacking.
     this.lamp(m, 0, HUB_H * 0.22, HUB_R * 0.99, 0.06, 0.03, 0.02, dead ? OFF : st === FIRE ? ALARM : EYE_RED);
@@ -322,6 +338,7 @@ export class RobotsDraw {
   /** A weapon quad's drum and weapons, red eyes, the laser's or rail's lens glowing blue as it charges. */
   private quadTop(i: number, body: THREE.Matrix4, m: THREE.Matrix4, c: THREE.Color, alarm: boolean, dead: boolean) {
     const sw = this.swarm, st = sw.state[i], w = sw.weapon[i];
+    this.heatTint(i, c);
     this.quadBodies.put(body, c);
     this.quadTurrets.put(m, c);
     this.quadGuns[w].put(m, c);
@@ -341,6 +358,7 @@ export class RobotsDraw {
   /** A small quad's shell, its blue cutter (brighter as it spins up), red eyes in the visor, a red tip on the mast. */
   private smallQuadTop(i: number, m: THREE.Matrix4, c: THREE.Color, q: THREE.Quaternion, p: THREE.Vector3, S: number, spin: number, alarm: boolean, dead: boolean) {
     const sw = this.swarm, st = sw.state[i], { qa, s } = this;
+    this.heatTint(i, c);
     this.midBodies.put(m, c);
     this.qb.copy(q).multiply(qa.setFromAxisAngle(this.ax, this.sawA[i]));
     this.local(this.tmp, p, MID_SAW_X * S, MID_SAW_Y * S, MID_SAW_Z * S);
@@ -406,6 +424,7 @@ export class RobotsDraw {
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
     c.copy(this.white).multiplyScalar(0.92 + sw.seed[i] * 0.1); if (dead) c.multiplyScalar(0.4);
+    this.heatTint(i, c);
     this.bigBodies.put(m, c);
     // The eye in the head's visor, red lamps round the rim, slowly chasing (fast and bright when attacking).
     const flash = (tell || pt >= 0) && Math.sin(this.time * 24) > -0.2;

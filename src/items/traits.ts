@@ -2,7 +2,8 @@
 // them"). Pure data. A trait says what a weapon is or does; a Protocol fits a weapon that has any of the traits in its
 // `fits` (src/items/protocols.ts). Traits are joined onto each base's tags (src/items/bases.ts), so items, the bay and
 // the balance model all read them the same way. Claude's set (2026-11-04, open for Keith):
-//   How it delivers (one each): rounds, shells, rockets, slug, bolt, beam, blade.
+//   How it delivers (one each): rounds, shells, rockets, slug, bolt, beam, blade, stream (the flamers, 2026-11-05).
+//   Fire (2026-11-05): sets what it hits burning (the flamers, the napalm launcher); for fire Protocols later.
 //   What it does: rapid (many light hits a second), spin (spins up), spread (fires in a cone), splash (its hits burst),
 //   split (one shot that can split), chain (hits can jump to the next enemy), pierce (goes deep through bodies),
 //   ricochet (solid rounds that can bounce), magazine (reloads a magazine or clip), cased (cased ammunition), melee,
@@ -19,6 +20,8 @@ export const TRAITS: Trait[] = [
   { id: "bolt", name: "Bolt", text: "Fires energy bolts" },
   { id: "beam", name: "Beam", text: "A continuous beam" },
   { id: "blade", name: "Blade", text: "A blade" },
+  { id: "stream", name: "Stream", text: "Sprays a stream of burning fuel" },
+  { id: "fire", name: "Fire", text: "Sets what it hits burning; heats metal" },
   { id: "rapid", name: "Rapid", text: "Many light hits a second" },
   { id: "spin", name: "Spin-up", text: "Spins up before it fires" },
   { id: "spread", name: "Spread", text: "Fires in a cone" },
@@ -60,6 +63,10 @@ export const WEAPON_TRAITS: Record<string, string[]> = {
   "orb-medium": ["bolt", "splash", "chain", "projectile"],
   "arc-medium": ["bolt", "chain"],
   "sunder-medium": ["beam", "pierce", "charged"],
+  // Fire (Keith 2026-11-05): Choke tightens a flamer's cone, Quick loader refuels it faster; the napalm launcher's
+  // canisters take Overpressure like any shell. No fire Protocols yet (open for Keith).
+  "flamer-light": ["stream", "fire", "spread", "magazine"], "inferno-medium": ["stream", "fire", "spread", "magazine"],
+  "sh-napalm": ["shells", "fire"],
   "sword-light": SWORD, "sword-heavy": [...SWORD, "pierce"], "sword-short": [...SWORD, "rapid"],
 };
 
