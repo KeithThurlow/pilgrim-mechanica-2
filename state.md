@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Frozen robots read as frozen (Keith's render pass: "white on white"; Claude on `claude/project-thread-q7b0ap`)
+- `src/combat/robotsDraw.ts`: chilled robots tint toward a clear pale blue (0.42, 0.68, 1.15) up to 0.7; frozen solid ones go a deep glacier blue (0.16, 0.48, 1.0) at 0.9, with a pale glint passing over now and then, instead of the near-white HDR ice that vanished on white plate. The cold glow on chilled things (`src/fx/flameFx.ts`) is a blue haze instead of added white. Frozen look slider unchanged. Checked: typecheck, full `npm test`; not seen rendered here.
+
 ### 2026-11-05 · Flamer fuel and frost mist keep their colour on the sand (Keith's render pass: fuel "almost pure white", mist "opaque cotton wool"; Claude on `claude/project-thread-q7b0ap`)
 - The fuel blobs, licks, halos and mist were added on top in HDR (up to 2.2) with tone mapping off, so on bright sand they clipped to white. Now the blobs (`src/fx/flameBlobs.ts`) and a new over-drawn billboard layer in `src/fx/flameFx.ts` (licks, halos, mist) draw over the scene in colours inside 0..1: fuel pale yellow off the cone, orange-yellow along the arc, orange to deep red on the sand and in the burnt-out fireballs. Mist is pale blue at 0.3 alpha (was 0.55 added). Embers, heat glows and the nozzle cone stay added. Checked: typecheck, `flamefx-check`, full `npm test`; not seen rendered here.
 
