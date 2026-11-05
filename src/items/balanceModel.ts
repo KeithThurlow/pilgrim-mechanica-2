@@ -6,7 +6,7 @@
 // Cadence (damage, rounds per shot, sustained shots/s over the magazine and reload) comes from src/items/dps.ts, the
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
-import { isFlameGun, isRoundGun } from "../weapons/guns";
+import { isColdGun, isFlameGun, isRoundGun } from "../weapons/guns";
 import { FIRE_DEFAULTS as FD } from "../weapons/fire/fireTuning";
 import { DAMAGE_TYPE_DEFAULTS as DT } from "../game/damageType";
 import { isEnergy } from "../weapons/energy/energySim";
@@ -111,7 +111,8 @@ export function wOf(item: Item): W {
   // the shot's pellets and the gap between shots; no afterburn counted.
   if (isFlameGun(cls)) {
     const n = Math.max(1, s.pellets ?? 1), rate = 1 / Math.max(1e-3, common.burst);
-    const perS = (s.burnDps ?? 0) * DT.fireVsMetal + FD.heatDps * 0.5;
+    // Freeze rays: their cold damage at about half chill on average (the slow and freeze not counted).
+    const perS = isColdGun(cls) ? (s.coldDps ?? 0) * 0.5 * DT.coldVsMetal : (s.burnDps ?? 0) * DT.fireVsMetal + FD.heatDps * 0.5;
     return { ...common, dmg: s.damage + perS / (rate * n), kind: "gun", n, latency: 0, radius: 0, share: 0, pen: roundPenFor(MD, s.pierce),
       spread: s.spread, speed: Infinity, range: s.range, sheetHalf: MD.roundSheetHalf * 1.5, scatter: 0 };
   }
@@ -177,7 +178,7 @@ export const withProtos = (base: string, ids: string[]): Item => {
 export const ENERGY_IDS = ["laser-medium", "beam-medium", "lance-medium", "plasma-medium", "orb-medium", "arc-medium", "sunder-medium"];
 export const MELEE_IDS = ["sword-light", "sword-heavy", "sword-short"];
 /** Fire weapons (Keith 2026-11-05): modelled roughly (the burn folded into each hit), printed, not held to the bands yet. */
-export const FIRE_IDS = ["flamer-light", "inferno-medium", "sh-napalm"];
+export const FIRE_IDS = ["flamer-light", "inferno-medium", "sh-napalm", "frost-light", "cryo-medium"];
 export const WEAPON_IDS = ["mg-light", "mg-medium", "mg-heavy", "smg-light", "rifle-light", "shotgun-light", "sniper-medium", "flak-medium", "cannon-medium", "rail-light", "rail-medium", "ac-medium", "rpg-light", "rpg-medium", "sh-rpg", "sh-missiles", "sh-mortar", "sh-linemortar"];
 
 // ---------------------------------------------------------------- targets (live hp and armour)

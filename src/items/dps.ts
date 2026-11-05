@@ -52,6 +52,8 @@ export function cadenceOf(s: Record<string, number>, shot?: ShotProtocols, cost 
   // pool and burn on a body passing through it (about 40% of the pool's time in it). Before damage types and heat.
   let damage = s.damage;
   if (s.fireRate !== undefined && (s.burnDps ?? 0) > 0) damage += s.burnDps / (rate * Math.max(1, rounds));
+  // A freeze ray's cold damage at about half chill.
+  if (s.fireRate !== undefined && (s.coldDps ?? 0) > 0) damage += (s.coldDps * 0.5) / (rate * Math.max(1, rounds));
   if ((s.poolDps ?? 0) > 0) damage += (s.poolDps * (s.poolTime ?? 0) * 0.4 + (s.burnDps ?? 0) * (s.burnTime ?? 0));
   return { damage, rounds, rate, sustained, magazine, reload, cost, bonus };
 }

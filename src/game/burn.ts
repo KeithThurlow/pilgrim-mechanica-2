@@ -54,6 +54,7 @@ export class Burns {
   ignite(target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number) {
     if (!(time > 0) || !(dps > 0)) return;
     this.ignitions++;
+    this.onIgnite?.(target, key);
     for (const b of this.list) {
       if (b.target === target && b.key === key) { b.left = Math.max(b.left, time); b.dps = b.left > 0 && b.dps > 0 ? Math.max(b.dps, dps) : dps; b.x = x; b.y = y; b.z = z; return; }
     }
@@ -99,6 +100,12 @@ export class Burns {
     }
     this.list.length = keep;
   }
+
+  /** Heat at one target and part (the freeze ray's thermal shock reads it), and cooling it at once. */
+  heatAtKey(target: Hittable, key: number): number { let h = 0; for (const b of this.list) if (b.target === target && (b.key === key || key < 0) && b.heat > h) h = b.heat; return h; }
+  quench(target: Hittable, key: number) { for (const b of this.list) if (b.target === target && (b.key === key || key < 0)) { b.heat = 0; b.left = 0; } }
+  /** Called on every ignition (the chill system thaws what fire touches). */
+  onIgnite: ((target: Hittable, key: number) => void) | null = null;
 
   /** Is this target burning (any part)? */
   burning(target: Hittable) { return this.list.some((b) => b.target === target && b.left > 0); }

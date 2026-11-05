@@ -38,6 +38,7 @@ import { splashBlast, firstBody, blastCover } from "./splash";
 import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
+import { Chills, CHILL_DEFAULTS } from "./chill";
 import { FirePools } from "./firePools";
 import { FlameFx } from "../fx/flameFx";
 import { FIRE_DEFAULTS } from "../weapons/fire/fireTuning";
@@ -85,6 +86,9 @@ export interface Hittable {
   /** A swarm: which unit a sheet/pick key names (robots pack the part in the low bits); default the key itself.
    *  Burning and heat are per part; the glow is drawn per unit (src/game/burn.ts heatOf). */
   unitOf?(key: number): number;
+  /** The freeze ray (src/game/chill.ts): set the pace of the unit this key names (1 normal, 0 frozen solid). Swarms
+   *  that move themselves read it; others ignore it. */
+  slow?(key: number, pace: number): void;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
@@ -211,6 +215,8 @@ export class Battlefield {
   private flameT = 0;
   /** Burning pools on the ground (Keith 2026-11-05: napalm, the flamers' splashes; src/game/firePools.ts). */
   readonly pools: FirePools;
+  /** Chilled and frozen targets (Keith 2026-11-05: the freeze ray; src/game/chill.ts). */
+  readonly chills: Chills;
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
 
@@ -222,17 +228,22 @@ export class Battlefield {
     for (const [k, val] of Object.entries(SHOT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(FIRE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(DAMAGE_TYPE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    for (const [k, val] of Object.entries(CHILL_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     this.lookGround = field;
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
     this.burns = new Burns(v as never);
+    this.chills = new Chills(v as never);
+    this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
+    this.chills.quench = (t, k) => this.burns.quench(t, k);
+    this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
     this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
     this.flames = new FlameFx(field);
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
-      maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z) => this.burns.ignite(t, k, time, dps, x, y, z) });
+      maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold) => cold ? this.chills.hit(t, k, time, dps, x, y, z) : this.burns.ignite(t, k, time, dps, x, y, z) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -326,6 +337,16 @@ export class Battlefield {
       this.gunFx.sparksAt(this.back, up, 1, 1.5 + Math.random() * 2);
       if (Math.random() < 0.5) this.dust.smoke(this.back.x, this.back.y + 0.3, this.back.z, (Math.random() - 0.5) * 0.4, 1 + Math.random(), (Math.random() - 0.5) * 0.4, 0.28, 1.1, 0.5, 0.85);
     }
+  }
+
+  /** Chilled targets: slow, cold damage, freezing (host); frost glints over them (cosmetic). */
+  private stepChills(dt: number) {
+    const cs = this.chills;
+    if (!cs.list.length) return;
+    cs.step(dt);
+    const gk = (this.v as { heatGlow?: number }).heatGlow ?? 1;
+    if (gk > 0) for (const c of cs.list) this.flames.frost(c.x, c.y, c.z, 2.2 * gk, c.frozen > 0 ? 1 : c.chill * 0.7);
+    for (const c of cs.list) if (Math.random() < dt * 6 * (c.frozen > 0 ? 1 : c.chill)) this.flames.mist(c.x + (Math.random() - 0.5) * 1.2, c.y + Math.random() * 0.6, c.z + (Math.random() - 0.5) * 1.2, 0.5);
   }
 
   /** Burning pools: damage and ignition (host), flames, embers, smoke and red-hot sand over them (cosmetic). */
@@ -677,6 +698,7 @@ export class Battlefield {
     this.resolveShots(dt);
     this.stepBurns(dt);
     this.stepPools(dt);
+    this.stepChills(dt);
     c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);

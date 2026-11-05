@@ -119,6 +119,8 @@ export const STATS: Record<string, StatInfo> = {
   burnDps: { label: "Burn damage/s", better: 1, decimals: 0 },
   // Fire (Keith 2026-11-05): the napalm launcher's pools.
   poolRadius: { label: "Pool radius (m)", better: 1, decimals: 1 },
+  chill: { label: "Chill per hit", better: 1, decimals: 3 },
+  coldDps: { label: "Cold damage/s", better: 1, decimals: 0 },
   poolTime: { label: "Pool burns (s)", better: 1, decimals: 1 },
   poolDps: { label: "Pool damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
@@ -211,6 +213,7 @@ function roundGun(id: string, name: string, size: Size, cls: RoundGun, tags: str
   if (g.pellets > 1) stats.pellets = s(g.pellets, 0.1);
   if (g.splash > 0) { stats.splash = s(g.splash, 0.1); stats.splashShare = s(g.splashShare, 0); }
   if (g.burnDps > 0) { stats.burnTime = s(g.burnTime, 0.12); stats.burnDps = s(g.burnDps, 0.12); }
+  if (g.chill > 0) { stats.chill = s(g.chill, 0.12); stats.coldDps = s(g.coldDps, 0.12); }
   return { id, name, kind: "weapon", size, cls, tags, weight, makers, look, drop, stats };
 }
 
@@ -375,6 +378,9 @@ export const BASES: Base[] = [
   // Flamers (Keith 2026-11-05, src/weapons/fire/): a held flamethrower and a hull one, dual nozzle (fuel and igniter).
   roundGun("flamer-light", "Flamer", "L", "flamer", ["weapon", "fire", "flamer"], 1.3, ["Suzaku", "Stratford-Aegis"], "rampart", 0.9, { handling: s(1.2, 0.08), arcBonus: s(10, 0.2) }),
   roundGun("inferno-medium", "Inferno projector", "M", "inferno", ["weapon", "fire", "flamer"], 2.4, ["Suzaku"], "rampart-turret", 0.8, { arc: s(32, 0.08), track: s(11, 0.08) }),
+  // Freeze rays (Keith 2026-11-05): a held one and a hull one; the jets chill, slow and freeze (src/game/chill.ts).
+  roundGun("frost-light", "Frost thrower", "L", "frost", ["weapon", "cold", "freeze"], 1.3, ["Novus-Lux"], "rampart", 0.7, { handling: s(1.2, 0.08), arcBonus: s(10, 0.2) }),
+  roundGun("cryo-medium", "Cryo projector", "M", "cryo", ["weapon", "cold", "freeze"], 2.5, ["Novus-Lux", "Stratford-Aegis"], "rampart-turret", 0.6, { arc: s(32, 0.08), track: s(11, 0.08) }),
   roundGun("flak-medium", "Flak cannon", "M", "flak", ["weapon", "ballistic", "flak"], 2.6, ["Suzaku", "Stratford-Aegis"], "rampart-turret", 0.9, { arc: s(30, 0.08), track: s(10, 0.08) }),
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {

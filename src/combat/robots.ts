@@ -680,6 +680,8 @@ export class RobotSwarm {
    * the sand (the expedition lab). The dead still collapse.
    */
   readonly frozen = new Uint8Array(ROBOT_MAX);
+  /** Chill (src/game/chill.ts, host): 1 at full speed, less while chilled, 0 frozen solid (no thinking, no moving, still hittable). */
+  readonly pace = new Float32Array(ROBOT_MAX).fill(1);
   /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
   keepOut: KeepOut | null = null;
   private ko = { x: 0, z: 0 };
@@ -781,7 +783,7 @@ export class RobotSwarm {
       const i = this.freeSlot();
       if (i < 0) return made;
       made.push(i);
-      this.frozen[i] = 0; this.hasT[i] = 0;
+      this.frozen[i] = 0; this.hasT[i] = 0; this.pace[i] = 1;
       const kind = plan[k], big = kind === BIG, mid = kind === MID;
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -1014,7 +1016,7 @@ export class RobotSwarm {
       const s = state[i];
       cx[i] = 0; cz[i] = 0;
       if (s === EMPTY) continue;
-      if (this.frozen[i] && s < DEAD) continue;
+      if ((this.frozen[i] || this.pace[i] < 0.02) && s < DEAD) continue;
       stateTime[i] += dt;
       const target = this.targetOf(i, base), own = this.hasT[i] === 1, keep = target.radius + v.robotKeepOut;
       const kind = this.kind[i], big = kind === BIG, mid = kind === MID, walker = big || mid;
@@ -1305,10 +1307,10 @@ export class RobotSwarm {
     // Move, apply the hard gaps, keep clear of the mech, stand on the sand, trot.
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
-      if (!this.grounded(s) || this.frozen[i]) continue;
+      if (!this.grounded(s) || this.frozen[i] || this.pace[i] < 0.02) continue;
       const target = this.targetOf(i, base), keep = target.radius + v.robotKeepOut;
-      const ox = px[i], oz = pz[i], oy = py[i];
-      let x = ox + vx[i] * dt + cx[i], z = oz + vz[i] * dt + cz[i];
+      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i];
+      let x = ox + vx[i] * pdt + cx[i], z = oz + vz[i] * pdt + cz[i];
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = keep + this.rad(i) * 0.5;
       if (d < m) {
         if (d > 1e-5) {

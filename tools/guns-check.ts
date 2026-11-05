@@ -15,8 +15,8 @@ const fails: string[] = [];
 const must = (ok: boolean, msg: string) => { if (!ok) fails.push(msg); };
 const out: string[] = [];
 
-const HELD: RoundGun[] = ["smg", "rifle", "shotgun", "flamer"], HULL: RoundGun[] = ["sniper", "flak", "inferno"];
-const BASE: Record<RoundGun, string> = { smg: "smg-light", rifle: "rifle-light", shotgun: "shotgun-light", sniper: "sniper-medium", flak: "flak-medium", flamer: "flamer-light", inferno: "inferno-medium" };
+const HELD: RoundGun[] = ["smg", "rifle", "shotgun", "flamer", "frost"], HULL: RoundGun[] = ["sniper", "flak", "inferno", "cryo"];
+const BASE: Record<RoundGun, string> = { smg: "smg-light", rifle: "rifle-light", shotgun: "shotgun-light", sniper: "sniper-medium", flak: "flak-medium", flamer: "flamer-light", inferno: "inferno-medium", frost: "frost-light", cryo: "cryo-medium" };
 
 for (const kind of ROUND_GUNS) {
   const pick: Pick = { left: kind, right: "minigun", k1: "none", k2: "none", k3: "pack" };

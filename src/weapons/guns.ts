@@ -17,9 +17,13 @@ import type { Param } from "../core/tweaks";
 
 export type RoundGun = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | FlameGun;
 /** The flamers (Keith 2026-11-05, src/weapons/fire/fireTuning.ts): round guns whose invisible jets set things burning. */
-export type FlameGun = "flamer" | "inferno";
-export const ROUND_GUNS: readonly RoundGun[] = ["smg", "rifle", "shotgun", "sniper", "flak", "flamer", "inferno"];
-export const isFlameGun = (cls: string | undefined | null): cls is FlameGun => cls === "flamer" || cls === "inferno";
+/** The freeze rays (Keith 2026-11-05) are stream guns too: the Frost thrower (held) and the Cryo projector (hull), whose
+ *  jets chill instead of burning (src/game/chill.ts). */
+export type FlameGun = "flamer" | "inferno" | "frost" | "cryo";
+export const ROUND_GUNS: readonly RoundGun[] = ["smg", "rifle", "shotgun", "sniper", "flak", "flamer", "inferno", "frost", "cryo"];
+/** A stream gun (flamer or freeze ray): invisible jets, a stream that has to reach (src/weapons/fire/fireGuns.ts). */
+export const isFlameGun = (cls: string | undefined | null): cls is FlameGun => cls === "flamer" || cls === "inferno" || cls === "frost" || cls === "cryo";
+export const isColdGun = (cls: string | undefined | null): cls is "frost" | "cryo" => cls === "frost" || cls === "cryo";
 /** A gun class that fires rounds on its clock through the minigun's path (not the minigun itself). */
 export const isRoundGun = (cls: string | undefined | null): cls is RoundGun => !!cls && (ROUND_GUNS as readonly string[]).includes(cls);
 
@@ -100,7 +104,9 @@ export type GunValues = typeof GUN_DEFAULTS;
 /** One round gun's numbers, as a weapon item's stats name them. */
 export interface GunNumbers { fireRate: number; damage: number; spread: number; range: number; pierce: number; ap: number; magazine: number; reload: number; pellets: number; splash: number; splashShare: number;
   /** Flamers: what each jet sets alight (s, damage/s); 0 for the rest. */
-  burnTime: number; burnDps: number }
+  burnTime: number; burnDps: number;
+  /** Freeze rays: chill each jet adds (0..1) and cold damage per second at full chill; 0 for the rest. */
+  chill: number; coldDps: number }
 
 /** A round gun's numbers from the sliders (the base table's values and an unrolled item's live values). */
 export function gunNumbers(kind: RoundGun, v: GunValues): GunNumbers {
@@ -108,7 +114,7 @@ export function gunNumbers(kind: RoundGun, v: GunValues): GunNumbers {
   const k = (name: string) => r[`${kind}${name}`];
   return {
     fireRate: k("Rate"), damage: k("Damage"), spread: k("Spread"), range: k("Range"), pierce: k("Pierce"), ap: k("Ap"), magazine: k("Mag"), reload: k("Reload"),
-    pellets: k("Pellets") ?? 1, splash: k("Splash") ?? 0, splashShare: k("SplashShare") ?? 0, burnTime: k("BurnTime") ?? 0, burnDps: k("BurnDps") ?? 0,
+    pellets: k("Pellets") ?? 1, splash: k("Splash") ?? 0, splashShare: k("SplashShare") ?? 0, burnTime: k("BurnTime") ?? 0, burnDps: k("BurnDps") ?? 0, chill: k("Chill") ?? 0, coldDps: k("ColdDps") ?? 0,
   };
 }
 
@@ -117,7 +123,7 @@ export function gunFeel(kind: RoundGun, v: GunValues) {
   if (kind === "sniper") return { kick: v.sniperKick, shake: v.sniperShake };
   if (kind === "shotgun") return { kick: v.shotgunKick, shake: v.shotgunShake };
   if (kind === "flak") return { kick: v.shotgunKick * 1.3, shake: v.shotgunShake * 1.4 };
-  if (isFlameGun(kind)) { const f = v as unknown as { flameKick: number; flameShake: number }; return { kick: f.flameKick ?? 0.02, shake: (f.flameShake ?? 0.01) * (kind === "inferno" ? 1.5 : 1) }; }
+  if (isFlameGun(kind)) { const f = v as unknown as { flameKick: number; flameShake: number }; return { kick: f.flameKick ?? 0.02, shake: (f.flameShake ?? 0.01) * (kind === "inferno" || kind === "cryo" ? 1.5 : 1) }; }
   return { kick: v.gunKick, shake: v.gunShake };
 }
 

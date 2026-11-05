@@ -15,7 +15,7 @@ export type LauncherKind = "rail" | "railLight" | "autocannon" | "rpg" | "rpgLig
 /** Melee (Keith 2026-11-01): the sword, a code stand-in only. */
 export type MeleeKind = "sword";
 /** Round guns (Keith 2026-11-02, src/weapons/guns.ts): code stand-ins only. */
-export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach" | "flamer" | "inferno";
+export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach" | "flamer" | "inferno" | "frost" | "cryo";
 /** The drum and chute behind the Rampart's own minigun pod (Keith 2026-11-02). */
 export type FeedKind = "minigunFeed";
 export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind | FeedKind;
@@ -43,6 +43,7 @@ export interface WeaponModel {
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;
+const HOT_FIRE = HOT, KHAKI_PAINT = KHAKI, OLIVE_PAINT = OLIVE;
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const ring = new THREE.TorusGeometry(0.5, 0.12, 6, 16);
@@ -384,14 +385,19 @@ function breachModel(look: ToonLook): WeaponModel {
  * pilot flame always lit (glow; muzzle 1: where the flame catches the fuel), a fuel tank and a hose. The held flamer
  * carries one tank under the body; the hull Inferno two big tanks behind the breech, a thicker finned fuel barrel.
  */
-function flamerModel(kind: "flamer" | "inferno", look: ToonLook): WeaponModel {
+function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLook): WeaponModel {
   const { m, recoil, add, glow, muzzle } = kit(kind, look);
-  const k = kind === "inferno" ? 1.45 : 1, long = kind === "inferno" ? 1.25 : 1;
+  const big = kind === "inferno" || kind === "cryo";
+  const k = big ? 1.45 : 1, long = big ? 1.25 : 1;
+  // The freeze rays (Keith 2026-11-05) are the same rig in frost paint: pale coolant tanks, cyan bands and nozzle lamp
+  // (the lower nozzle is the coolant vent: a cold mist rather than a pilot flame).
+  const cold = kind === "frost" || kind === "cryo";
+  const HOT = cold ? GLOW : HOT_FIRE, KHAKI = cold ? 0xd6dde0 : KHAKI_PAINT, OLIVE = cold ? 0x5d6a72 : OLIVE_PAINT;
   // Body and grip block.
   add(recoil, box, OLIVE, [0.42 * k, 0.4 * k, 0.9 * k], [0, 0, 0.3 * k]);
   add(recoil, box, DARK, [0.3 * k, 0.12 * k, 0.6 * k], [0, 0.25 * k, 0.3 * k]);
   // Fuel tank(s): the held one slung under the body; the Inferno's two standing behind it.
-  if (kind === "inferno") {
+  if (big) {
     for (const x of [-0.28, 0.28]) {
       add(recoil, cyl, KHAKI, [0.44 * k, 0.95 * k, 0.44 * k], [x * k, 0.05 * k, -0.35 * k], ALONG);
       add(recoil, cyl, HOT, [0.46 * k, 0.07 * k, 0.46 * k], [x * k, 0.05 * k, -0.15 * k], ALONG);
@@ -465,6 +471,8 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   breach: breachModel,
   flamer: (l) => flamerModel("flamer", l),
   inferno: (l) => flamerModel("inferno", l),
+  frost: (l) => flamerModel("frost", l),
+  cryo: (l) => flamerModel("cryo", l),
   minigunFeed: (l) => { const m = kit("minigunFeed", l).m; return m; },
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),

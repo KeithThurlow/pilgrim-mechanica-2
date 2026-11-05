@@ -427,7 +427,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     }
     // A round gun (src/weapons/guns.ts): the minigun's path with its own pellets and splash; magazine-fed (no drum).
     if (isRoundGun(cls)) return { fireRate: w.fireRate, spinUp: 0.05, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: w.pierce, ap: w.ap, cls, own, light, proto,
-      pellets: Math.max(1, Math.round(w.pellets ?? 1)), splash: w.splash ?? 0, splashShare: w.splashShare ?? 0, burnTime: w.burnTime ?? 0, burnDps: w.burnDps ?? 0 };
+      pellets: Math.max(1, Math.round(w.pellets ?? 1)), splash: w.splash ?? 0, splashShare: w.splashShare ?? 0, burnTime: w.burnTime ?? 0, burnDps: w.burnDps ?? 0, chill: w.chill ?? 0, coldDps: w.coldDps ?? 0 };
     if (cls === "rail") return { fireRate: 1 / Math.max(0.1, w.charge + w.cooldown), spinUp: 0.1, ammo: 1, reload: 0, cost: 0, energy: 0, arc, track, damage: w.damage, spread: 0, range: w.range, pierce: 99, ap: w.ap, cls, own, light };
     return { fireRate: w.fireRate, spinUp: w.spinUp ?? 0.15, ammo, reload, cost, energy: 0, arc, track, damage: w.damage, spread: w.spread, range: w.range, pierce: 0, ap: w.ap, cls, own, light, proto };
   };

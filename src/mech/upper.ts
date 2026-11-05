@@ -187,6 +187,9 @@ export interface GunStats {
   /** Flamers (src/weapons/fire/): what each jet sets alight (s, damage/s). */
   burnTime?: number;
   burnDps?: number;
+  /** Freeze rays: chill per jet and cold damage per second at full chill. */
+  chill?: number;
+  coldDps?: number;
 }
 
 export type GunClass = "minigun" | "rail" | "autocannon" | "rpg" | "melee" | import("../weapons/energy/energySim").EnergyClass | import("../weapons/guns").RoundGun | "cannon";
