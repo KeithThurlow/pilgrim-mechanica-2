@@ -381,9 +381,11 @@ export class Battlefield {
       // The fire lights the ground round it (Keith 2026-11-05: "the fire doesn't emit any light"), flickering.
       const V = this.v as { poolLight?: number; poolLightRange?: number };
       if (this.look && (V.poolLight ?? 0) > 0) {
+        // A flamer lays a small splash pool every 0.15 s on the same spot, so they stack (eight or more a gun): each lights
+        // at a fraction and without its own glow, or together they blew the night out to white (PC render 2026-11-05).
         const size = p.r / 3.6, flick = 0.8 + 0.35 * Math.random();
-        this.look.lights.hold(p.x, this.field.height(p.x, p.z) + 1 + 0.4 * size, p.z, (V.poolLight ?? 0) * fade * flick * size * (p.napalm ? 1 : 0.5),
-          (V.poolLightRange ?? 12) * (0.5 + 0.5 * size), 0xff7a2a, 1.2, p.r * 2.2);
+        this.look.lights.hold(p.x, this.field.height(p.x, p.z) + 1 + 0.4 * size, p.z, (V.poolLight ?? 0) * fade * flick * size * (p.napalm ? 1 : 0.06),
+          (V.poolLightRange ?? 12) * (0.5 + 0.5 * size) * (p.napalm ? 1 : 0.6), 0xff7a2a, 1.2, p.napalm ? p.r * 2.2 : 0);
       }
     }
   }
@@ -742,7 +744,7 @@ export class Battlefield {
     this.flames.update(dt, camera);
     // A light in among the fireballs every so many (Keith 2026-11-05; Flame look › A light every).
     { const L = this.look?.lights, fl = this.flames, P = (this.v as { flameBallLight?: number }).flameBallLight ?? 0;
-      if (L && P > 0) for (let j = 0; j < fl.nLight; j++) { const o = j * 4, sz = fl.lightPts[o + 3]; L.hold(fl.lightPts[o], fl.lightPts[o + 1], fl.lightPts[o + 2], P * (0.85 + 0.3 * Math.random()) * Math.min(1.3, 0.5 + sz * 0.4), 3.5 + sz * 1.2, 0xff9a40, 1, 0.6); } }
+      if (L && P > 0) for (let j = 0; j < fl.nLight; j++) { const o = j * 4, sz = fl.lightPts[o + 3]; L.hold(fl.lightPts[o], fl.lightPts[o + 1], fl.lightPts[o + 2], P * (0.85 + 0.3 * Math.random()) * Math.min(1.3, 0.5 + sz * 0.4), 3.5 + sz * 1.2, 0xff9a40, 1, 0); } }
     c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);

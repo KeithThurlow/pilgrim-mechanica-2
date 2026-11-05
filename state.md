@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-05 · Flamer no longer blows the night out to white (PC render at `?time=22`; Claude on `claude/project-thread-q7b0ap`)
+- Cause: a flamer lays a small splash pool every 0.15 s on the same spot, and each lit at half the napalm pool light (900) with its own glow; eight or more a gun stacked (merged lights add up) into a white disc that swallowed the line and the fire. `src/game/battlefield.ts`: flamer splash pools now light at 0.06 of the pool light (napalm pools unchanged) with 0.6× the reach and no faked glow; the fireball and line lights lose their glow too. Checked: typecheck, full `npm test`.
+
 ### 2026-11-05 · Flamer line warmer and thicker (PC render: "pale cream-white and thin"; Claude on `claude/project-thread-q7b0ap`)
 - `src/fx/flameTube.ts`: white only just out of the nozzle (4% of its burn), yellow by 20%, orange by half, deep orange at the end, all more saturated; the hot core mixes in a third as much white. Width 0.1 m at the nozzle (was 0.06) to 1 m (was 0.75). Checked: typecheck, `flamefx-check`, full `npm test`.
 
