@@ -315,6 +315,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Main-pass batching (#246) backed out: no gain on Keith's PC (Claude on `claude/project-thread-lzdcwr`)
+- `src/look/mainBatches.ts` drew plain parts that share a Material through one BatchedMesh each. In the convoy siege only ~30 of 195 objects share a material with others in view (most parts have their own material; the 34 ink outlines can't batch), and keeping ~1,170 parts' matrices and visibility in step cost about as much as the 30 objects saved (PC profile 4: its update 3.5% of the frame, renderObject unchanged; `/mnt/project-files/pc-profile-siege-4.md`). A real gain needs fewer materials (parts merged per model at load), not batching at draw time.
 ### 2026-11-06 · Empty effect pools aren't drawn (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
 - Keith's PC after #238/#244 (`/mnt/project-files/pc-profile-siege-2.md`): convoy siege 16.1 ms (was 19.9), sim 6.6, submit 7.9; the renderer's per-object work is now about a third of the frame.
 - `src/core/instanceUploads.ts`: instanced meshes with count 0 (and no children) are hidden for the render and shown again right after (`restoreEmptyPools`, called by `createApp`); they drew nothing but each cost the renderer a full object. Their pending upload ranges are kept. HUD details: "empty pools not drawn".
