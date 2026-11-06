@@ -1,7 +1,7 @@
 // One renderer, scene, camera and loop for every lab and, later, the game.
 // WebGPU first; Three.js falls back to WebGL 2 by itself. ?webgl in the URL forces WebGL (used by headless shots).
 import * as THREE from "three/webgpu";
-import { trimInstanceUploads } from "./instanceUploads";
+import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
@@ -58,12 +58,12 @@ export async function createApp(container: HTMLElement): Promise<App> {
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
   const noRender = params.has("norender");
-  let up = { trimmed: 0, savedKB: 0 };
+  let up = { trimmed: 0, savedKB: 0, empty: 0 };
   hud.set("shaders", () => `shaders: ${shaders.total} pipelines built (${shaders.async ? "in the background" : "sync, ?syncshaders"}), ${shaders.totalMs.toFixed(0)} ms in frames (code ${shaders.totalGenMs.toFixed(0)}), worst frame ${shaders.worstMs.toFixed(0)} ms`);
   // Batched shadow casters (src/look/shadowProxies.ts); ?noproxy draws every part into the shadow map as before.
   const proxies = params.has("noproxy") ? null : new ShadowProxies();
   if (proxies) hud.set("shadow batches", () => { const p = proxies.stats; return `shadow batches: ${p.shown} of ${p.parts} parts cast through ${p.batches} batches (${p.released} handed back)`; });
-  hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent`);
+  hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent; ${up.empty} empty pools not drawn`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const raw = (now - prev) / 1000;
@@ -78,6 +78,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
       // The batches copy world matrices, so they bring them up to date first and the render needn't do it again.
       if (proxies && renderer.shadowMap.enabled) { proxies.update(scene); scene.matrixWorldAutoUpdate = false; renderer.render(scene, camera); scene.matrixWorldAutoUpdate = true; }
       else renderer.render(scene, camera);
+      restoreEmptyPools();
     }
     const t2 = performance.now();
     hud.note(shaders.frameNew || shaders.frameGenMs > 1 ? `new shaders ${shaders.frameNew} (code ${shaders.frameGenMs.toFixed(0)} ms, GPU ${shaders.frameMs.toFixed(0)} ms)` : "");
