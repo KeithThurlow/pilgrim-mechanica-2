@@ -56,10 +56,26 @@ export const CRUSHER_DEFAULTS = {
   crusherEatReach: 12,
   crusherEatTime: 2.5,
   crusherEatHeal: 250,
+  // Its death (Keith 2026-11-06: "a massive explosion ... that's essentially what should summon these swarms"): the
+  // turbine core spits sparks a moment, then goes up, huge, slow and shattering (the tall walkers' nova, bigger).
+  crusherDeathOn: 1,
+  crusherDeathDelay: 1.6,
+  crusherDeathRadius: 34,
+  crusherDeathDamage: 140,
+  crusherDeathOwnDamage: 900,
+  crusherDeathPierce: 0.5,
+  crusherDeathShove: 28,
+  crusherDeathNova: 2,
+  crusherDeathSlow: 1.9,
+  crusherDeathShatter: 1.6,
+  crusherDeathBoom: 2.6,
+  crusherDeathCrater: 0.55,
+  crusherDeathCraterDepth: 4.5,
+  crusherDeathHeight: 4,
 };
 export type CrusherValues = typeof CRUSHER_DEFAULTS;
 
-const G = "Crushers", GM = "Crushers: maw", GC = "Crushers: pincers", GE = "Crushers: eating";
+const G = "Crushers", GM = "Crushers: maw", GC = "Crushers: pincers", GE = "Crushers: eating", GD = "Crushers: death";
 export const CRUSHER_PARAMS: Param[] = [
   { key: "crusherSize", label: "Body width (m)", min: 2, max: 14, step: 0.1, group: G, tip: "The carapace across; legs, maw and pincers scale with it. A weapon quad is 3.6" },
   { key: "crusherHeight", label: "Body height (m above the sand)", min: 1, max: 8, step: 0.1, group: G },
@@ -96,6 +112,20 @@ export const CRUSHER_PARAMS: Param[] = [
   { key: "crusherEatReach", label: "Eats salvage within (m of the maw)", min: 1, max: 40, step: 0.5, group: GE },
   { key: "crusherEatTime", label: "Eating a heap takes (s)", min: 0.2, max: 15, step: 0.1, group: GE },
   { key: "crusherEatHeal", label: "A heap heals it (hp)", min: 0, max: 3000, step: 10, group: GE },
+  { key: "crusherDeathOn", label: "Death blast on", min: 0, max: 1, step: 1, group: GD, tip: "Keith 2026-11-06: a massive explosion when it dies, the signal that calls the swarm (Crusher sites)" },
+  { key: "crusherDeathDelay", label: "Goes up after (s)", min: 0, max: 6, step: 0.05, group: GD, tip: "Its core spits sparks and whines this long first: get clear" },
+  { key: "crusherDeathRadius", label: "Blast radius (m)", min: 2, max: 80, step: 0.5, group: GD },
+  { key: "crusherDeathDamage", label: "Damage to the mech", min: 0, max: 800, step: 5, group: GD, tip: "And anything else not a robot. Full at the centre, half at the edge" },
+  { key: "crusherDeathOwnDamage", label: "Damage to robots", min: 0, max: 4000, step: 10, group: GD },
+  { key: "crusherDeathPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GD },
+  { key: "crusherDeathShove", label: "Shove (m/s)", min: 0, max: 80, step: 0.5, group: GD },
+  { key: "crusherDeathHeight", label: "Goes up at (m above the ground)", min: 0, max: 20, step: 0.1, group: GD, tip: "Where the nova sits: a little over the wreck" },
+  { key: "crusherDeathNova", label: "Nova look (×)", min: 0, max: 3, step: 0.05, group: GD },
+  { key: "crusherDeathSlow", label: "Nova slowed (×)", min: 0.3, max: 4, step: 0.05, group: GD },
+  { key: "crusherDeathShatter", label: "Hull shatters (×)", min: 0, max: 3, step: 0.05, group: GD, tip: "Shards and sparks (Reactor nova: shatter)" },
+  { key: "crusherDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD },
+  { key: "crusherDeathCrater", label: "Crater radius (share of blast)", min: 0, max: 1.5, step: 0.05, group: GD },
+  { key: "crusherDeathCraterDepth", label: "Crater depth (m)", min: 0, max: 8, step: 0.1, group: GD },
 ];
 
 /**

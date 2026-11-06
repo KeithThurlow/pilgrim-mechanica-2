@@ -19,7 +19,9 @@ let failed = false;
 const fail = (m: string) => { console.log(`FAIL: ${m}`); failed = true; };
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
 const any: unknown = new Proxy(function () {}, { get: (_t, k) => (k === Symbol.toPrimitive ? () => 0 : any), apply: () => any });
-const bf = { targets: [], register: { add() {} }, canSee: () => true, gunFx: any, sfx: any, dust: any, blast() {} } as unknown as Battlefield;
+// Anything else the death blast touches (novas, craters, lights...) answers as a no-op.
+const bf = new Proxy({ targets: [], register: { add() {} }, canSee: () => true, gunFx: any, sfx: any, dust: any, blast() {}, blastOwn: () => 0 } as Record<PropertyKey, unknown>,
+  { get: (t, k) => (k in t ? t[k] : any) }) as unknown as Battlefield;
 const v = { ...CRUSHER_SITE_DEFAULTS };
 
 // 1. How common: the share of 2000 site ids with a crusher.
@@ -47,7 +49,7 @@ const swarms = {
   addGroup(id: string, n: number, x: number, z: number, _s?: unknown, _h?: number, goal?: { x: number; z: number }) { groups.push({ id, n, x, z, goal }); },
 } as unknown as SwarmCamps;
 const at = new THREE.Vector3(0, field.height(0, 0) + 3, 0);
-const mechUnit = { sim: { pos: at, carry() {} }, alive: true } as unknown as MechUnit;
+const mechUnit = { sim: { pos: at, carry() {} }, alive: true, shoveFrom() {} } as unknown as MechUnit;
 const cs = new CrusherSites(v, bf, new THREE.Scene(), field, mechUnit, sites, swarms);
 const mech = { x: 0, z: 0 };
 const prey = { kind: "mech", alive: true, at, radius: 2.5, unit: { damage() {} }, sim: { pelvis: at, pos: at, vel: new THREE.Vector3() } } as unknown as Prey;
@@ -73,8 +75,12 @@ step(1);
 const c1 = cs.cf.pack.list.find((c) => c.alive);
 if (!c1 || Math.round(c1.health) !== 1234) fail(`came back with ${c1 ? Math.round(c1.health) : "none"} hp (left with 1234)`);
 // 5. Killed: stays dead, wakes camps, calls a swarm headed for the wreck.
+// Keith 2026-11-06: the call comes with its core going up, a moment after it falls (crusherDeathDelay).
 if (c1) cs.cf.pack.hit(c1, 1e6);
+step(Math.max(0, v.crusherDeathDelay - 0.3));
+if (cs.calls || cs.cf.deathBlasts) fail("the swarm was called (or the core went up) before the death delay ran out");
 step(1);
+if (cs.cf.deathBlasts !== 1) fail(`${cs.cf.deathBlasts} death blasts from one kill (want 1)`);
 const g = groups[0];
 console.log(`kill: noise ${noise}, swarms called ${cs.calls}${g ? ` (${g.n} robots from ${Math.round(Math.hypot(g.x - c1!.x, g.z - c1!.z))} m, heading for the wreck ${g.goal ? Math.round(Math.hypot(g.goal.x - c1!.x, g.goal.z - c1!.z)) : "-"} m off)` : ""}`);
 if (!noise) fail("the kill woke no camps");
@@ -86,7 +92,7 @@ pois = [mkPoi(pick(false), -200, 0)];
 step(1);
 const c2 = cs.cf.pack.list.find((c) => c.alive);
 if (!c2) fail("no crusher at the second site");
-else { cs.cf.pack.hit(c2, 1e6); step(0.5); if (cs.calls !== 1) fail("a no-call site called a swarm"); }
+else { cs.cf.pack.hit(c2, 1e6); step(v.crusherDeathDelay + 0.5); if (cs.calls !== 1) fail("a no-call site called a swarm"); }
 // Off: none.
 pois = [mkPoi(pick(true), 0, 200)];
 v.crushersOn = 0;
