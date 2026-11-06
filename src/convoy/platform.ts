@@ -71,6 +71,9 @@ class Spring {
   }
 }
 
+/** Fixed steps between plane fits under a car's supports. */
+const FIT_EVERY = 4;
+
 export class Platform {
   /** Ground-plane origin under the middle (y = the sprung ride height). */
   x = 0; y = 0; z = 0;
@@ -98,6 +101,9 @@ export class Platform {
   private hRoll = new Spring();
   private hPitch = new Spring();
   private started = false;
+  /** The last plane fit (a, b, k) and the steps until the next. */
+  private fit = [0, 0, 0];
+  private fitK = 0;
   private moved = false;
   private pf: RoutePoint = { x: 0, z: 0, heading: 0 };
   private pb: RoutePoint = { x: 0, z: 0, heading: 0 };
@@ -114,7 +120,7 @@ export class Platform {
   }
 
   /** Forget the motion (after the route resets). */
-  reset() { this.started = false; this.moved = false; this.maxTilt = 0; this.travelled = 0; this.vel = { x: 0, y: 0, z: 0 }; }
+  reset() { this.started = false; this.fitK = 0; this.moved = false; this.maxTilt = 0; this.travelled = 0; this.vel = { x: 0, y: 0, z: 0 }; }
 
   /** Deck top above the origin. */
   get deck() { return this.spec.tracked ? this.v.convoyBayDeck : this.v.convoyDeckHeight; }
@@ -135,13 +141,19 @@ export class Platform {
     const s = Math.sin(this.heading), c = Math.cos(this.heading);
 
     // Fit a plane h = a + b * lx + k * lz through the ground under the supports (they're symmetric about the middle).
-    let sum = 0, sxh = 0, sxx = 0, szh = 0, szz = 0;
-    for (const [lx, lz] of this.supports) {
-      const h = this.field.height(this.x + c * lx + s * lz, this.z - s * lx + c * lz);
-      sum += h; sxh += lx * h; sxx += lx * lx; szh += lz * h; szz += lz * lz;
+    // Every FIT_EVERY steps (the springs smooth it anyway; the car moves centimetres between fits): the supports were
+    // a ground sample each per car per 120 Hz step (perf, 2026-11-06).
+    if (!this.started || --this.fitK < 0) {
+      this.fitK = FIT_EVERY - 1;
+      let sum = 0, sxh = 0, sxx = 0, szh = 0, szz = 0;
+      for (const [lx, lz] of this.supports) {
+        const h = this.field.height(this.x + c * lx + s * lz, this.z - s * lx + c * lz);
+        sum += h; sxh += lx * h; sxx += lx * lx; szh += lz * h; szz += lz * lz;
+      }
+      const n = this.supports.length;
+      this.fit[0] = sum / n; this.fit[1] = sxh / sxx; this.fit[2] = szh / szz;
     }
-    const n = this.supports.length;
-    const a = sum / n, b = sxh / sxx, k = szh / szz;
+    const a = this.fit[0], b = this.fit[1], k = this.fit[2];
     const hz = this.v.convoySpringHz * (this.spec.tracked ? this.v.convoyTrackSprings : 1), zeta = this.v.convoyDamping;
     if (!this.started) { this.hY.x = a; this.hRoll.x = b; this.hPitch.x = k; this.started = true; }
     else { this.hY.step(a, hz, zeta, dt); this.hRoll.step(b, hz, zeta, dt); this.hPitch.step(k, hz, zeta, dt); }

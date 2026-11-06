@@ -97,6 +97,29 @@ p4.ragdoll(BANDIT_PARTS(0), BANDIT_JOINTS, 0, 0, 0, 0, { x: 0, y: 0, z: 0 }, 0, 
 for (let i = 0; i < 60 * 7; i++) p4.step(1 / 60);
 if (p4.dead.length) problems.push("a body was never cleared");
 
+// A floor moved along reuses the heights it shares with the last; a changed box is sampled again: every node must still
+// be the height function's (perf, 2026-11-06).
+{
+  const f5 = new DuneField({ ...TERRAIN_DEFAULTS });
+  const p5 = new DeathPhysics(v, f5);
+  type G = { heights: Float32Array; i0: number; j0: number; n: number; step: number };
+  const grid = () => (p5 as unknown as { grid: G }).grid;
+  const exact = (label: string) => {
+    const g = grid();
+    let bad = 0;
+    for (let c = 0; c <= g.n; c++) for (let r = 0; r <= g.n; r++) if (g.heights[r * (g.n + 1) + c] !== Math.fround(f5.height((g.i0 + r) * g.step, (g.j0 + c) * g.step))) bad++;
+    if (bad) problems.push(`floor ${label}: ${bad} nodes off the height function`);
+  };
+  p5.follow(0, 0); exact("first");
+  p5.follow(40, -35); exact("moved");
+  // A crater on the floor: the ground dips in a box, the floor is told, and rebuilds after half a second.
+  f5.dents = { at: (x: number, z: number) => (Math.abs(x - 45) < 4 && Math.abs(z + 30) < 4 ? -1.5 : 0) } as unknown as typeof f5.dents;
+  p5.groundChanged(41, -34, 49, -26);
+  const now = performance.now; const t = now.call(performance); performance.now = () => t + 600;
+  p5.follow(40, -35); exact("after a crater");
+  performance.now = now;
+}
+
 console.log(`floor: boxes rest within ${worst.toFixed(2)} m of their resting height · ragdoll thrown +X lies at x=${torso.x.toFixed(2)}, torso ${torso.y.toFixed(2)} m up, parts within ${spread.toFixed(2)} m · cap 5 of 9 moving, ${ms.toFixed(2)} ms/step`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("deaths check failed"); }
 console.log("deaths check passed");
