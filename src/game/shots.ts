@@ -165,7 +165,7 @@ export interface ShotWorld {
   register: Register;
   v: PenValues & ShotValues;
   /** An ignited round hit a target (key = the part): set it burning (src/game/burn.ts). */
-  ignite?: (target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number, cold?: boolean) => void;
+  ignite?: (target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number, cold?: boolean, dx?: number, dz?: number) => void;
 }
 
 const CAP = 16384;
@@ -439,7 +439,8 @@ export class Shots {
     const time = this.burnT[i];
     if (!(time > 0) || !this.world.ignite) return;
     this.event("ignite", i, this.world.targets.indexOf(t), key, this.burnD[i], x, y, z);
-    this.world.ignite(t, key, time, this.burnD[i], x, y, z, this.burnC[i] > 0);
+    // The round's way in plan goes with it: what the burn or the cold kills is thrown on along it.
+    this.world.ignite(t, key, time, this.burnD[i], x, y, z, this.burnC[i] > 0, this.dx[i], this.dz[i]);
   }
 
   private nearD = 0;

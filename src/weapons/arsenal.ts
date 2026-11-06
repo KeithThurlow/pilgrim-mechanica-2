@@ -52,6 +52,7 @@ import type { EnergyKind } from "./models";
 
 import { gunFeel, gunNumbers, isColdGun, isFlameGun, isRoundGun, type RoundGun } from "./guns";
 import { FireGuns } from "./fire/fireGuns";
+import { shotLine } from "./shotLine";
 
 type SideKind = "rail" | "autocannon" | "rpg" | "minigun" | "melee" | "energy" | "cannon" | RoundGun | null;
 
@@ -224,6 +225,11 @@ export class Arsenal implements MechWeapons {
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
       body.setTwist?.(0);
+      // A new weapon on this side starts as if fitted fresh (Keith 2026-11-06: no weapon inherits another's state;
+      // tools/weaponswap-check.ts): its missiles, swing counters, rail whine and meter, tube, all from scratch.
+      if (s.kind !== kind || s.light !== !!g?.light) { s.swarm = new SwarmSim({ ...this.v }); s.sv = { ...this.v }; }
+      s.whined = false; s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; s.tube = 0;
+      s.swingSeen = 0; s.cleave = 0; s.bit = false; s.swishT = 0; s.swishAir = 0;
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.base = g?.base; s.proto = g?.proto; s.cost = g?.cost ?? 1;
       if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null, mk !== "minigunFeed");
@@ -1206,8 +1212,9 @@ export class Arsenal implements MechWeapons {
     const u = this.unit;
     const aim: Vec3 | null = u.lock ? { x: u.lock.x, y: u.lock.y, z: u.lock.z } : u.cursor ? { x: u.cursor.x, y: u.cursor.y, z: u.cursor.z } : null;
     const d = this.dir;
-    if (aim && Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z) > 2) d.set(aim.x - muzzle.x, 0, aim.z - muzzle.z).normalize();
-    else { u.body.barrel(side, d); d.y = 0; d.normalize(); }
+    // Never back against the barrel: a target closer than a held rail's muzzle gets the slug along the barrel
+    // (src/weapons/shotLine.ts).
+    shotLine(muzzle, u.body.barrel(side, this.tmp3), aim, 0, this.tmp2, d, true, 2);
     return { d, aim };
   }
 
