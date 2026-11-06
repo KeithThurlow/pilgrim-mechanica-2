@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Convoy guns hit striders (Keith reported; Claude on `claude/project-thread-7lrsuj`)
+The striders' turret threat point was `s.up(5)`: 5 sim metres over the pelvis, ×1.7 scale, so ~15.7 m up, 7 m over the disc (8.9 m). Every convoy turret, escort gun and guardian aimed there and missed (thin rays). Now the disc's middle (`s.head()`, the same centre mass the register uses). `src/expedition/striderCamps.ts`. Probe, 1.2° spread from 5 m up: hits 0% → 98 / 61 / 45% at 30 / 60 / 90 m. Big walkers were already fine (hub point: 100 / 91 / 76%). `stridercamps-check` now fires turret rounds at the point from 30-90 m (24 of 24 hit; 0 of 24 before). npm test passes.
 ### 2026-11-06 · Sim worker: the ground recorder's values diff made cheap (Claude on `claude/project-thread-2assf4`)
 - `src/sim/groundEvents.ts`: the values (~3000 keys) were diffed on every recorded call, ~0.3 ms each; with the escorts' commands that was ~2 ms a frame in the convoy lab's `escorts` and `convoy` stages. Now diffed at the first event after each take and at the take (a value code sets mid-frame goes at the frame's end), over a cached key list (read again every 30 frames). Also fixes `tools/escortworker-check.ts`'s typecheck error (broke `npm run build`).
 - Checked: headless convoy lab `?nearcamp=40&norender`: escorts 1.95 → 0.01 ms, convoy 2.27 → 1.37, simworker 1.09 → 0.57, trail 0.48 → 0.14; parity ok. `groundmirror-check`, `escortworker-check`, `terrainworker-check` and `npm test` pass.
