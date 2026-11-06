@@ -378,7 +378,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
 // ---- Sockets and Protocols ----
 {
   for (const r of RARITIES) must(rollItem(7, L, { base: "mg-medium", rarity: r }).sockets === RARITY[r].sockets, `${r} item has the wrong number of sockets`);
-  must(RARITIES.map((r) => RARITY[r].sockets).join() === "0,1,2,3,4", "sockets aren't 0-4 by rarity");
+  must(RARITIES.map((r) => RARITY[r].sockets).join() === "0,1,2,3,4,5", "sockets aren't 0-5 by rarity");
   const over = rollProtocol(1, "overpressure"), coolant = rollProtocol(2, "coolant"), shred = rollProtocol(3, "shredder"), choke = rollProtocol(4, "choke");
   const common = makeItem("mg-medium");
   must(!!socketProblem(common, over), "a Protocol socketed into a Common item (no sockets)");

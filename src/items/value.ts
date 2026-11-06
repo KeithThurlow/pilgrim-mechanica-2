@@ -12,7 +12,7 @@ export type ValueValues = typeof VALUE_DEFAULTS;
 const G = "Item value";
 export const VALUE_PARAMS: Param[] = [
   { key: "valueBase", label: "Scrap value: Common level 1", min: 1, max: 200, step: 1, group: G, tip: "What a weightless Common level 1 item is worth in scrap (shown and sorted in the inventory; nothing pays it out yet)" },
-  { key: "valueRarity", label: "Scrap value × per rarity tier", min: 1, max: 6, step: 0.1, group: G, tip: "2.5: Uncommon 2.5×, Rare 6×, Epic 16×, Legendary 39×" },
+  { key: "valueRarity", label: "Scrap value × per rarity tier", min: 1, max: 6, step: 0.1, group: G, tip: "2.5: Uncommon 2.5×, Rare 6×, Epic 16×, Legendary 39×, Mythic 98×" },
   { key: "valuePerLevel", label: "Scrap value + per level", min: 0, max: 0.5, step: 0.01, group: G, tip: "Share added per item level over 1" },
   { key: "valuePerTonne", label: "Scrap value + per tonne", min: 0, max: 1, step: 0.01, group: G, tip: "Heavier parts hold more steel" },
 ];

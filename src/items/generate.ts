@@ -10,11 +10,13 @@ import { levelMul } from "./level";
 export const LOOT_DEFAULTS = {
   rarityWiden: 0.5,
   rarityLift: 0.15,
-  weightCommon: 50,
-  weightUncommon: 28,
-  weightRare: 14,
-  weightEpic: 6,
-  weightLegendary: 2,
+  // Steeply weighted (Keith 2026-11-06: everything dropped about equally; Legendary far rarer): each tier ~3-5x rarer.
+  weightCommon: 60,
+  weightUncommon: 24,
+  weightRare: 8,
+  weightEpic: 2,
+  weightLegendary: 0.4,
+  weightMythic: 0.06,
   protocolShare: 0.2,
   sensorRangePerTier: 0.1,
   levelGrowth: 0.05,
@@ -31,7 +33,8 @@ export const LOOT_PARAMS: Param[] = [
   { key: "weightUncommon", label: "Uncommon weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightRare", label: "Rare weight", min: 0, max: 100, step: 1, group: G },
   { key: "weightEpic", label: "Epic weight", min: 0, max: 100, step: 1, group: G },
-  { key: "weightLegendary", label: "Legendary weight", min: 0, max: 100, step: 1, group: G },
+  { key: "weightLegendary", label: "Legendary weight", min: 0, max: 100, step: 0.05, group: G },
+  { key: "weightMythic", label: "Mythic (red) weight", min: 0, max: 100, step: 0.01, group: G },
   { key: "sensorRangePerTier", label: "Sensor range per rarity tier", min: 0, max: 0.5, step: 0.01, group: G, tip: "Each tier above Common reaches this share further on a sensor's radar range (rarer sensors also carry one more seeker mode per tier)" },
   { key: "levelGrowth", label: "Item power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "An item's damage and hull grow by this share per level above 1 (P(n) = 1 + this × (n − 1); hull by 0.6 of it, a few utility stats by part of it, rate and feel not at all). 0.05 (Keith 2026-10-31: items scaled too fast; was 0.075): a level-7 drop from 850 m out hits 1.3× a level-1 one" },
   { key: "enemyGrowth", label: "Enemy power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "Robots spawned at an area's level (1 + depth / item level per m) take 1 + this × (level − 1) on health and damage. Above the item curve, so going deeper is harder even with the loot found there (0.075: 1.43× at 850 m against the items' 1.3×)" },
@@ -59,7 +62,7 @@ function pick<T>(r: () => number, list: readonly T[], weight: (t: T) => number):
 }
 
 const weightOf = (v: LootValues, r: Rarity) =>
-  ({ common: v.weightCommon, uncommon: v.weightUncommon, rare: v.weightRare, epic: v.weightEpic, legendary: v.weightLegendary })[r];
+  ({ common: v.weightCommon, uncommon: v.weightUncommon, rare: v.weightRare, epic: v.weightEpic, legendary: v.weightLegendary, mythic: v.weightMythic })[r];
 
 /** A stat's roll range in its own units for a base and rarity. */
 export function statRange(base: Base, stat: string, rarity: Rarity, t: WidenTuning): [number, number] {
