@@ -154,13 +154,15 @@ export class StriderField {
       if (!s) return;
       // Its reactor goes up as it falls (in update: a kill inside a blast mustn't blow up mid-loop). It tips along the
       // way it faced.
+      // Off by default (Keith 2026-11-06, round 2): it just tips over and falls, the core still there for the fall's way.
       const core = makeReactor(e.id, e.x, e.z, e.y, s.face, this.field,
         { delay: v.striderDeathDelay, min: v.striderDeathMin, share: v.striderDeathAt, spin: v.striderDeathTip, radius: v.striderDeathRadius });
-      this.cores.push(core);
+      const blows = v.striderDeathOn > 0.5;
+      if (blows) this.cores.push(core);
       if (this.deaths) {
         const r = striderRagdoll(s, this.field.height(s.pos(AT).x, AT.z));
         const d = this.deaths.ragdoll(r.parts, r.joints, r.x, r.y, r.z, r.yaw, { x: 0, y: 0, z: 0 }, core.fx, core.fz, 0.3, core.angV);
-        this.wrecks?.add(e.id, d);
+        if (blows) this.wrecks?.add(e.id, d);
       }
       this.remove(s);
       this.onDown?.(s);

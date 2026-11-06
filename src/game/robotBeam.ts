@@ -182,7 +182,8 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
   if (e.craterR > 0.5 && e.craterDepth > 0 && !bf.inWater(e.at.x, e.at.z)) bf.crater(e.at.x, e.at.z, e.craterR, e.craterDepth);
   cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatDeath ?? 1500, 0.45);
   const hy = Math.max(e.at.y + 1, e.hubY), air = hy - e.at.y, nova = e.nova ?? 0;
-  bf.novas.post(e.at.x, hy, e.at.z, e.at.y, e.radius, nova);
+  const slow = Math.max(0.3, e.slow ?? 1);
+  bf.novas.post(e.at.x, hy, e.at.z, e.at.y, e.radius, nova, slow, e.shatter ?? 0);
   bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * (0.6 + 0.4 * Math.min(1, nova)), { ground: false, fam: 2 });
   bf.nightLights?.flash(e.at.x, hy, e.at.z, e.radius * (1.5 + ((bf.v as { novaLight?: number }).novaLight ?? 0) * Math.min(1.5, nova) * 0.5), famOfTeam(ROBOTS));
   // Debris and smoke thrown out every way from the hull (an airburst: some of it straight down onto the sand), and a
@@ -203,9 +204,11 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
   }
   if (e.boom > 0) {
     from.set(e.at.x, hy, e.at.z);
-    bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1);
-    if (live(bf, "robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), 0.95 + Math.random() * 0.1);
-    else bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1);
+    // A slowed nova sounds a touch deeper (a square root of the slow-down: not a drawl).
+    const deep = 1 / Math.sqrt(slow);
+    bf.sfx.playSound("blastBoom", from, e.boom, (0.7 + Math.random() * 0.1) * deep);
+    if (live(bf, "robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), (0.95 + Math.random() * 0.1) * Math.max(0.8, deep));
+    else bf.sfx.playSound("blast", from, e.boom * 0.5, (0.55 + Math.random() * 0.1) * deep);
   }
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
 }

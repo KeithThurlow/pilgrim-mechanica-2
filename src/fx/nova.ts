@@ -4,6 +4,7 @@
 // the blast's edge, a thin shockwave ring racing out flat from the hull's height past the blast, and a ring of dust
 // rolling out along the ground under it. Drawing: novaDraw.ts.
 import type { Param } from "../core/tweaks";
+import { NovaDebris, NOVA_DEBRIS_DEFAULTS, NOVA_DEBRIS_PARAMS } from "./novaDebris";
 
 export const NOVA_DEFAULTS = {
   novaOn: 1,
@@ -15,6 +16,7 @@ export const NOVA_DEFAULTS = {
   novaGround: 1.1,
   novaBright: 1.6,
   novaLight: 2.2,
+  ...NOVA_DEBRIS_DEFAULTS,
 };
 export type NovaValues = typeof NOVA_DEFAULTS;
 
@@ -30,23 +32,33 @@ export const NOVA_PARAMS: Param[] = [
   { key: "novaGround", label: "Ground ring (× blast radius)", min: 0, max: 3, step: 0.05, group: G, tip: "A ring of light rolling out over the sand under it" },
   { key: "novaBright", label: "Brightness", min: 0, max: 4, step: 0.05, group: G },
   { key: "novaLight", label: "Light on the ground (×)", min: 0, max: 6, step: 0.05, group: G, tip: "The flash of light it throws (at night most of all)" },
+  ...NOVA_DEBRIS_PARAMS,
 ];
 
 export interface Nova {
   x: number; y: number; z: number;
   /** The ground under it, the blast radius (m), its size × and age (s). */
   gy: number; R: number; k: number; age: number;
+  /** Its time runs at this rate (1 / the kind's slow-down, Keith 2026-11-06: the tall walkers' slower, more epic). */
+  rate: number;
 }
 
 export class Novas {
   readonly list: Nova[] = [];
-  constructor(public v: NovaValues) {}
+  /** The hull shattering: plates and sparks thrown out (src/fx/novaDebris.ts). */
+  readonly debris: NovaDebris;
+  constructor(public v: NovaValues) { this.debris = new NovaDebris(v); }
 
-  /** A reactor going up at (x, y, z) over ground at gy, blast radius R, look × k. At most 8 live: the oldest go. */
-  post(x: number, y: number, z: number, gy: number, R: number, k: number) {
+  /**
+   * A reactor going up at (x, y, z) over ground at gy, blast radius R, look × k. At most 8 live: the oldest go.
+   * slow: its time stretched by this (1: as tuned); shatter: the hull's plates and sparks thrown out (×; 0 none).
+   */
+  post(x: number, y: number, z: number, gy: number, R: number, k: number, slow = 1, shatter = 0) {
     if (!(this.v.novaOn > 0.5) || !(k > 0) || !(R > 0)) return;
     if (this.list.length >= 8) this.list.shift();
-    this.list.push({ x, y, z, gy, R, k, age: 0 });
+    const s = Math.max(0.2, slow);
+    this.list.push({ x, y, z, gy, R, k, age: 0, rate: 1 / s });
+    if (shatter > 0) this.debris.emit(x, y, z, R, k * shatter, s);
   }
 
   /** The life of a nova of look × k. */
@@ -55,7 +67,7 @@ export class Novas {
   update(dt: number) {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const n = this.list[i];
-      if ((n.age += dt) >= this.life(n)) this.list.splice(i, 1);
+      if ((n.age += dt * n.rate) >= this.life(n)) this.list.splice(i, 1);
     }
   }
 }

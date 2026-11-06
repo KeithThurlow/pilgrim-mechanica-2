@@ -72,6 +72,8 @@ export const STRIDER_DEFAULTS = {
   // clear the swarm round it): a blast that hurts robots too.
   // Keith 2026-11-06: it tips over and the reactor in its chest goes up as it falls, sooner and a bit smaller than a
   // big walker's.
+  // Keith 2026-11-06 (round 2): "not all robots should be exploding ... a bit much": off, only the tall walkers go up.
+  striderDeathOn: 0,
   striderDeathDelay: 1.5,
   striderDeathMin: 0.35,
   striderDeathAt: 0.6,
@@ -139,6 +141,7 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderSlamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GS },
   { key: "striderSlamEvery", label: "A slam at most every (s)", min: 1, max: 60, step: 0.5, group: GS },
   { key: "striderSlamRecover", label: "Stands after it (s)", min: 0, max: 5, step: 0.1, group: GS },
+  { key: "striderDeathOn", label: "Reactor blast on", min: 0, max: 1, step: 1, group: GD, tip: "Keith 2026-11-06: off, only the tall walkers' reactors go up; on, a strider tips over and its chest reactor goes up as it falls" },
   { key: "striderDeathDelay", label: "Goes up at the latest (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Keith 2026-11-06: it tips over and its chest reactor goes up as it falls (when the chest is down to the height share below), or at the latest after this. Less warning than a big walker's" },
   { key: "striderDeathMin", label: "Not before (s)", min: 0, max: 4, step: 0.05, group: GD },
   { key: "striderDeathAt", label: "Goes up at chest height (share)", min: 0, max: 1, step: 0.01, group: GD },
