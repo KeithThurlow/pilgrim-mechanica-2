@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · A/B frame-time bench: `labs/convoy/?siege&manual&bench` (Keith: judging the worker by eye isn't a test; Claude)
+- `src/core/bench.ts` (new): `?bench` plays the page once per variant (here with the sim worker, then `?noworker`) at a fixed 1/120 s step so both simulate the same frames, warms 8 s and measures 30 s of sim time each (`?benchtime=warm,measure`), reloading between runs (sessionStorage), then shows average, p95 and worst frame, tick, submit, GPU/wait and the CPU stages side by side, copied to the clipboard (click the box if the copy needs a click) and in `window.__bench`. `FrameHud.onFrame` listeners. Convoy lab calls `runBench`. Checked: headless run of both variants end to end.
 ### 2026-11-06 · Replica footprints at their feet's size (Keith reported: "large round footprints"; Claude)
 - The replica body gave no foot shape, so every step stamped the plain full-size Rampart oval. `src/summon/replicaBody.ts` now hands on the Rampart's baked sole and a print scale; `RampartBody.printScale()` is the slimmed feet's size (`repFootSize`, 0.8); `src/game/mechUnit.ts` passes it to `marks.print` and `marks.skid` (`src/fx/groundMarks.ts`, a scale argument).
 - Checked: `replicas-check` (prints × 0.8 = feet × 0.8), full `npm test`.

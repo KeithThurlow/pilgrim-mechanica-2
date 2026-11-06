@@ -75,12 +75,16 @@ export class FrameHud {
     this.frameStages = frame;
   }
 
+  /** Told of every frame (ms, the tick's ms, the submit's ms, this frame's CPU stages): the bench (src/core/bench.ts). */
+  readonly onFrame: ((ms: number, sim: number, draw: number, stages: Map<string, number> | null) => void)[] = [];
+
   /** A note for this frame's spike entry (e.g. new shaders built), "" for none; set before frame(). */
   note(text: string) { this.frameNote = text; }
   private frameNote = "";
 
   /** sim: ms the lab's tick took (CPU). draw: ms to submit the frame to the GPU (CPU side of rendering). */
   frame(ms: number, drawCalls: number, triangles: number, sim = 0, draw = 0) {
+    for (const f of this.onFrame) f(ms, sim, draw, this.frameStages);
     this.samples.push(ms);
     this.simSum += sim;
     this.drawSum += draw;

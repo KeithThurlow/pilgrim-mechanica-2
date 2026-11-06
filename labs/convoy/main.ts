@@ -88,6 +88,7 @@ import { PLOUGH_BASE_LENGTH, BLADE_AHEAD } from "../../src/convoy/plough";
 import { WAKE_PARAMS } from "../../src/convoy/wake";
 import { ExpeditionLoop, LOOP_DEFAULTS, LOOP_PARAMS, LOOP_TOPICS } from "../../src/expedition/loop";
 import { GroundRecorder } from "../../src/sim/groundEvents";
+import { runBench } from "../../src/core/bench";
 import { SwarmCamps } from "../../src/expedition/swarmCamps";
 import { SimHost, SIM_DEFAULTS, SIM_PARAMS, workerWanted } from "../../src/sim/host";
 import { POI_PARAMS } from "../../src/world/pois";
@@ -930,6 +931,8 @@ function holdOnBucket() {
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
+// ?bench: the same scene played with the sim worker and with ?noworker, measured, side by side (src/core/bench.ts).
+runBench(app.hud, [{ label: "worker", flag: "" }, { label: "noworker", flag: "noworker" }]);
 app.onTick((rawDt) => {
   if (bigClose) holdOnBucket();
   // A heavy melee hit slows the fight a moment (src/game/hitStop.ts).
