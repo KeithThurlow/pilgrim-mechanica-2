@@ -315,9 +315,6 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
-### 2026-11-06 · Plain parts sharing a material drawn as one batch (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
-- New `src/look/mainBatches.ts` (wired in `src/core/app.ts`): meshes that share one Material object (a weapon model's parts, an escort's hull plates, a car body's panels) and are plain (opaque, no positionNode, no onBeforeRender, not mirrored or sheared, under 20k vertices, unchanging) go into one BatchedMesh per material, shadow flag and vertex layout, on layer 5, which only the game camera sees. The parts stay in the scene; only the game camera's layer test skips them, so shadows, raycasts, the hold-V selector and other cameras are untouched. Each batch is culled by the bounds of its shown parts. A material needs 2+ parts. `?nobatch` turns it off; HUD details "main batches"; `window.__mainBatches.bypass` for A/B.
-- Checked (cloud box, WebGL, held frame, batched vs bypass): objects the game camera draws, convoy `?siege&manual` 195 → 165, weapons lab 197 → 162, duel 146 → 107; pixels differ only where dust, smoke and the robots' animation move between frames anyway. Update cost 0.1 ms a frame here. npm test passes.
 ### 2026-11-06 · Empty effect pools aren't drawn (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
 - Keith's PC after #238/#244 (`/mnt/project-files/pc-profile-siege-2.md`): convoy siege 16.1 ms (was 19.9), sim 6.6, submit 7.9; the renderer's per-object work is now about a third of the frame.
 - `src/core/instanceUploads.ts`: instanced meshes with count 0 (and no children) are hidden for the render and shown again right after (`restoreEmptyPools`, called by `createApp`); they drew nothing but each cost the renderer a full object. Their pending upload ranges are kept. HUD details: "empty pools not drawn".

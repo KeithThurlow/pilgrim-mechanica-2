@@ -3,7 +3,6 @@
 import * as THREE from "three/webgpu";
 import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
-import { MainBatches } from "../look/mainBatches";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 
@@ -64,9 +63,6 @@ export async function createApp(container: HTMLElement): Promise<App> {
   // Batched shadow casters (src/look/shadowProxies.ts); ?noproxy draws every part into the shadow map as before.
   const proxies = params.has("noproxy") ? null : new ShadowProxies();
   if (proxies) hud.set("shadow batches", () => { const p = proxies.stats; return `shadow batches: ${p.shown} of ${p.parts} parts cast through ${p.batches} batches (${p.released} handed back)`; });
-  // Plain parts sharing a material drawn through one batch each (src/look/mainBatches.ts); ?nobatch draws them one by one.
-  const batches = params.has("nobatch") ? null : new MainBatches(camera);
-  if (batches) hud.set("main batches", () => { const b = batches.stats; return `main batches: ${b.shown} of ${b.parts} parts drawn through ${b.batches} batches (${b.released} handed back)`; });
   hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent; ${up.empty} empty pools not drawn`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -80,10 +76,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
     // ?norender: run the ticks without drawing (headless CPU measurements, e.g. the stress lab on a software GPU).
     if (!noRender) { up = trimInstanceUploads(scene);
       // The batches copy world matrices, so they bring them up to date first and the render needn't do it again.
-      const shadows = proxies && renderer.shadowMap.enabled;
-      if (shadows) proxies.update(scene);
-      if (batches) { if (!shadows) scene.updateMatrixWorld(); batches.update(scene); }
-      if (shadows || batches) { scene.matrixWorldAutoUpdate = false; renderer.render(scene, camera); scene.matrixWorldAutoUpdate = true; }
+      if (proxies && renderer.shadowMap.enabled) { proxies.update(scene); scene.matrixWorldAutoUpdate = false; renderer.render(scene, camera); scene.matrixWorldAutoUpdate = true; }
       else renderer.render(scene, camera);
       restoreEmptyPools();
     }
@@ -108,6 +101,5 @@ export async function createApp(container: HTMLElement): Promise<App> {
   // For agents' probes in a headless browser (scene contents, triangle counts): window.__app.
   (window as unknown as { __app: App }).__app = app;
   (window as unknown as { __shadowBatches: ShadowProxies | null }).__shadowBatches = proxies;
-  (window as unknown as { __mainBatches: MainBatches | null }).__mainBatches = batches;
   return app;
 }
