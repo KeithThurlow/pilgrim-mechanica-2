@@ -827,9 +827,11 @@ for (const lanes of [1, 2]) {
 }
 
 // 11. Escorts: three minutes alongside a turning convoy, a mech walking beside the train and then standing in their way.
-{
-  console.log("-- escorts");
+// Then again with every escort at half rate (escortLodDist 1 m: as they drive when far off screen).
+for (const lod of [ESCORT_DEFAULTS.escortLodDist, 1]) {
+  console.log(`-- escorts (half rate past ${lod} m)`);
   const w = world();
+  w.V.escortLodDist = lod;
   for (let i = 0; i < 240; i++) w.convoy.update(DT);
   const esc = new EscortGroup(w.V, w.convoy, w.field);
   esc.reset();
