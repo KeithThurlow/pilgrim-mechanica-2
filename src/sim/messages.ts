@@ -4,6 +4,8 @@
 import type { GroundEvent, GroundInit } from "./groundEvents";
 import type { BuildResult, PatchResult, TerrainRemote } from "../world/chunks";
 import type { FineRemote } from "../world/groundWindow";
+import type { RobotEvent } from "../combat/robots";
+import type { RobotSnapshot } from "./robotsRemote";
 
 export type FineRequest = Parameters<FineRemote["fine"]>[0];
 
@@ -29,7 +31,9 @@ export type FromWorker =
    * the escorts' snapshot (src/sim/escortsRemote.ts) and the worker's convoy poses (x, y, z, heading per platform,
    * then the plough's x, z), for the parity check; null before they exist.
    */
-  | { type: "frame"; id: number; heights: Float64Array; ms: number; escorts: Float64Array | null; convoy: Float64Array | null }
+  | { type: "frame"; id: number; heights: Float64Array; ms: number; escorts: Float64Array | null; convoy: Float64Array | null;
+      /** Step 4: the robot swarm's frame (its steps' events, a snapshot after them, the steps' ms), or null. */
+      robots: { events: RobotEvent[]; snap: RobotSnapshot; ms: number } | null }
   | { type: "chunk"; res: BuildResult }
   | { type: "patch"; res: PatchResult }
   | { type: "fine"; req: FineRequest; heights: Float32Array }

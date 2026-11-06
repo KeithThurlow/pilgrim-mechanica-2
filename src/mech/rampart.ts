@@ -287,6 +287,8 @@ export class RampartBody {
 
   /** The fitted legs' print in the sand: side 1 the left foot, -1 the right (null: the plain oval). */
   footprint(side: 1 | -1): FootShape | null { return this.feet[side === 1 ? 0 : 1]; }
+  /** Slimmed feet (slim) print smaller. */
+  printScale() { return this.thin.foot; }
 
   /** The legs and hull looks on show (a look is a model in public/models: "rampart" or a variant id). */
   get looks() { return { legs: this.legsLook, hull: this.hullLook }; }

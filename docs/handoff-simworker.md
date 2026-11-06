@@ -46,14 +46,26 @@ Plan, one PR each:
   the same handlers after it (`drain(handlers)`), `spawn` can take the slots to use. Behaviour changes only in that a
   handler's own effect on the swarm (a beam hurting robots) lands after the step instead of inside it. Checks:
   robots-check, robot-danger, robotweak, testswarm, the swarm and convoy labs' checks unchanged.
-- **4b, the swarm in the worker** (convoy lab only, `?noworker` as now): main keeps a RobotSwarm as a view; its
+- ~~4b~~ (done, design below) **4b, the swarm in the worker** (convoy lab only, `?noworker` as now): main keeps a RobotSwarm as a view; its
   mutating methods apply to the view (so same-frame readers, e.g. damage's "killed", still work) and are recorded as
   commands in the ground's stream (`GroundRecorder.command`, as the escorts'); `update` is a command (dt, the prey);
   spawn picks slots on main and sends them. The worker answers each frame with the arrays drawing and targeting read
   (0..hi, transferables) and the queued events, which main hands to the handlers. `keepOut` is rebuilt in the worker
   on its own convoy (src/convoy/safeZone.ts); `reactors` positions go over as a command each frame (a frame late).
   The view's RNG state comes back in the snapshot.
-- **4c, the parity check** (`tools/robotworker-check.ts`): a camp fight headless both ways, bit for bit (as the
+- **4b design, as built (Claude 2026-11-06; src/sim/robotsRemote.ts):**
+  - Known edge: at a lag of 2+ frames a call on the view acts on a state missing the worker's latest step (it can hit a
+    robot the worker already killed); the death goes out once (uid) and the next snapshot puts the view right.
+  - Snapshot = every typed array the swarm owns (private ones too, sliced to `hi`; per-leg ones `hi × 4`; fixed-size
+    ones like the hash in full) plus its number/boolean fields and `cores`, found generically (`Object.keys`), so a new
+    field needs no snapshot code. Main overwrites the view with it when it arrives.
+  - Main-side ops (spawn, remove, damage, setFrozen...) apply to the view at once (their events, e.g. a death, are
+    handed out there and then) and go to the worker as commands; the worker applies them silently (its hooks are null).
+  - The step: `update` on main hands out the events queued from the worker's answers (with this call's handlers), then
+    records the step; the worker runs the frame's steps after the frame's other commands.
+  - Late snapshots: ops recorded after the snapshot's frame are replayed on the view, silently, after it's applied.
+  - One random stream; its state comes back in the snapshot, so replayed calls draw what the worker's did.
+- ~~4c~~ (done with 4b) **4c, the parity check** (`tools/robotworker-check.ts`): a camp fight headless both ways, bit for bit (as the
   escorts'), with damage, trample, stomps, spawns and a pack calming down.
 - Then striders, crushers and droids (their own fields) the same way, if the PC profile says so.
 

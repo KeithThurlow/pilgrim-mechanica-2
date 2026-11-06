@@ -103,6 +103,10 @@ function stage(over: Partial<typeof REPLICA_DEFAULTS> = {}, seed = 1) {
   const u = s.reps.units()[0];
   console.log(`size: hit ${u.v.hitRadius} m, body ${u.v.bodyRadius} m, soft ${u.softSolid}`);
   if (u.v.hitRadius !== s.V.repHitSize || u.v.bodyRadius !== s.V.repBodySize || !u.softSolid) fail("size: replica sizes not applied");
+  // Their footprints at their feet's size (Keith 2026-11-06: "large round footprints").
+  const ps = s.reps.list[0].body.printScale();
+  console.log(`size: prints × ${ps} (feet × ${s.V.repFootSize})`);
+  if (ps !== s.V.repFootSize) fail("size: prints not at the replica's foot size");
 }
 
 // 5. Reach.
