@@ -238,6 +238,9 @@ export class Arsenal implements MechWeapons {
         mount.updateWorldMatrix(true, false);
         const at = mount.worldToLocal(body.muzzle(i === 0 ? 1 : -1, this.tmp));
         s.model.root.position.set(at.x * this.v.streamHullOut, 0, 0);
+        // Its bridge reaches back to the hull (Keith 2026-11-06): the hull's side is about 0.1 m out from the joint.
+        const br = s.model.bridge;
+        if (br) { const reach = Math.abs(at.x) * this.v.streamHullOut - br.from + 0.05; br.g.visible = reach > 0.05; br.g.scale.x = Math.max(0.05, reach / br.reach); }
       } else if (s.model) s.model.root.position.set(0, 0, 0);
       // A clip-fed launcher shows its magazine (src/weapons/clip.ts).
       if (s.model) s.model.clip = kind === "rpg" ? this.unit.upper.guns[i].mag : null;
