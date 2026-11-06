@@ -6,3 +6,5 @@ Reports from the labs, newest last. Answer in replies.md; when one is fixed, del
 - [x] 2026-10-27T01-44-50-stress: | stage | 25% avg / worst | 50% avg / worst | 100% avg / worst | 150% avg / worst | | --- | --- | --- | --- | --- | | frame | 7.33 / 22.6 | 12.0 / 42.5 | 19.8 / 33.5 | 25.4 / 59.4 | | tick (all sim) | (2026-10-27T01-44-50-stress.md)
 - [x] 2026-10-27T01-46-23-stress: | stage | 25% avg / worst | 50% avg / worst | 100% avg / worst | 150% avg / worst | | --- | --- | --- | --- | --- | | frame | 11.7 / 33.3 | 17.7 / 41.5 | 28.8 / 54.9 | 45.7 / 74.2 | | tick (all sim) | (2026-10-27T01-46-23-stress.md)
 - [x] 2026-10-27T02-04-36-stress: | stage | 25% avg / worst | 50% avg / worst | 100% avg / worst | 150% avg / worst | | --- | --- | --- | --- | --- | | frame | 12.6 / 28.9 | 17.5 / 32.1 | 27.9 / 48.9 | 44.7 / 61.5 | | tick (all sim) | (2026-10-27T02-04-36-stress.md)
+- [ ] 2026-11-06T22-16-49-convoy: http://localhost:4173/labs/convoy/?siege&manual (2026-11-06T22-16-49-convoy.md)
+- [ ] 2026-11-06T22-17-40-convoy: http://localhost:4173/labs/convoy/?siege&manual&noworker (2026-11-06T22-17-40-convoy.md)
