@@ -19,7 +19,7 @@ import { POI_DEFAULTS, PoiField, type PoiPlacement } from "../src/world/pois";
 import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
-import { SiegeWalls, isSiege, wallHeight, wallMetal, fenced, routeVia } from "../src/pois/fortressGround";
+import { SiegeWalls, isSiege, wallHeight, wallMetal, fenced, routeVia, regionOf } from "../src/pois/fortressGround";
 import { ringR, type Layout } from "../src/pois/fortress";
 import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
@@ -390,7 +390,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
     F.spawners.onPour = (sp, x, z, a) => { poured.push({ x, z, id: sp.sp.id }); pourOrig(sp, x, z, a); };
     for (let k = 0; k < 30 * 8; k++) F.update(1 / 30, true);
     const first = poured.length;
-    if (first < FORT_LIFE_DEFAULTS.fortTrickle) fail(`alert, only ${first} bandits poured out in 8 s`);
+    if (first < Math.floor(FORT_LIFE_DEFAULTS.fortWave * (1 - FORT_LIFE_DEFAULTS.fortGateShare))) fail(`alert, only ${first} bandits poured out of the spawners in 8 s`);
     for (const q of poured) {
       const sp = L.spawners.find((s) => s.id === q.id)!;
       if (Math.hypot(q.x - sp.x, q.z - sp.z) > 2.5) fail(`a bandit came out ${Math.hypot(q.x - sp.x, q.z - sp.z).toFixed(1)} m from its door`);
@@ -436,6 +436,24 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
     if (downs !== F.spawners.list.length) fail(`spawnerDown fired ${downs} times for ${F.spawners.list.length} spawners`);
     if (poured.length !== before) fail(`${poured.length - before} poured out of shot-down spawners`);
     console.log(`spawners: ${L.spawners.length} (every yard), doors on their faces onto open ground · alert: ${first} out of the doors in 8 s · all shot down: ${downs} downs, none out after`);
+    // ---- 9. gate surges: a wave streams out through the open gate nearest the mech (Keith 2026-11-06); with the
+    // spawners all down, the whole wave ----
+    {
+      const g = L.rings[0].gates[0];
+      wd.walls.down.add(g.id);
+      const ox = g.x - live.L.x, oz = g.z - live.L.z, ol = Math.hypot(ox, oz);
+      pel.set(g.x + (ox / ol) * 40, 0, g.z + (oz / ol) * 40); pel.y = wd.field.height(pel.x, pel.z) + 3;
+      const lf = live as unknown as { wave: number; waved: number };
+      lf.wave = 0; lf.waved = 0;
+      const y0 = live.yards[0], had = y0.slots.length;
+      for (let k = 0; k < 30 * 4; k++) F.update(1 / 30, true);
+      const fresh = y0.slots.slice(had), gens = y0.gens.slice(had);
+      if (fresh.length < FORT_LIFE_DEFAULTS.fortWave) fail(`a gate surge brought ${fresh.length} in 4 s (want ${FORT_LIFE_DEFAULTS.fortWave})`);
+      for (let k = 0; k < 30 * 16; k++) F.update(1 / 30, true);
+      const out = fresh.filter((i, n) => F.sw.gen[i] === gens[n] && regionOf(live.L, F.sw.px[i], F.sw.pz[i]) === 0).length;
+      if (out < fresh.length / 3) fail(`only ${out} of ${fresh.length} from a gate surge came out of the gate in 16 s`);
+      console.log(`gate surge: ${fresh.length} through the blown gate in 4 s, ${out} out on the sand after 20 s`);
+    }
   }
 }
 

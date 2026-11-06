@@ -60,7 +60,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
   defaults: LAB_DEFAULTS,
   params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...HUB_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: mechs", "Fortress: warlord", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: waves", "Fortress: mechs", "Fortress: warlord", "Pads"] },
     { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
