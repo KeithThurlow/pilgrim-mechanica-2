@@ -77,7 +77,7 @@ export class FireGuns {
         // on the shots, a few a second, and the line drew those jumps as hard corners (PC render 2026-11-05).
         if (!s.pc) s.pc = s.pv.slice();
         else { const k = 1 - Math.exp(-dt / Math.max(0.005, v.flameSwing)); for (let j = 0; j < 5; j++) s.pc[j] += (s.pv[j] - s.pc[j]) * k; }
-        this.bf.flames.pour(s, s.from.x, s.from.y, s.from.z, s.pc[0], s.pc[1], s.pc[2], s.pc[3], s.pc[4], cold);
+        this.bf.flames.pour(s, s.from.x, s.from.y, s.from.z, s.pc[0], s.pc[1], s.pc[2], s.pc[3], s.pc[4], cold, this.unit.team);
       }
       if (v.flameCone > 0) this.bf.flames.cone(s.from, s.dir, len * v.flameCone, v.flameConeWidth * (big ? 1.4 : 1), cold, v.flameConeCut);
       // (Fire: the lights now hang in among the fireballs themselves, src/fx/flameFx.ts: a light every so many; these
@@ -118,7 +118,7 @@ export class FireGuns {
     // come down on the aim, but only as far as the pressure carries it yet, slower and shorter at first.
     {
       const p = 1 - (1 - s.press) * (1 - s.press), k = v.flamePressMin + (1 - v.flamePressMin) * p;
-      const vh = vh0 * (0.5 + 0.5 * k), vy = lobVy(ty - fuel.y, dist * k, vh, G);
+      const vh = vh0 * (0.5 + 0.5 * k), vy = lobVy(ty - fuel.y, dist * k, vh, G, v.flameLobUp);
       s.pv = [hx * vh + (mv?.x ?? 0), vy, hz * vh + (mv?.z ?? 0), burnT, big];
       if (!s.pc) s.pc = s.pv.slice();
     }
@@ -128,7 +128,7 @@ export class FireGuns {
       const dx = hx * ca - hz * sn, dz = hx * sn + hz * ca;
       const vh = vh0 * (0.93 + Math.random() * 0.14);
       // Up enough to come down on the aim, at most a 35° lob; a little scatter up and down.
-      const vy = lobVy(ty - fuel.y, dist, vh, G) + (Math.random() - 0.5) * vh * Math.tan(sp * v.flameLookSpread);
+      const vy = lobVy(ty - fuel.y, dist, vh, G, v.flameLobUp) + (Math.random() - 0.5) * vh * Math.tan(sp * v.flameLookSpread);
       // Out of the end of the nozzle's flame, not the muzzle (Flame look › Fireballs start along the cone).
       const t0 = Math.random() * (1 / 60) + startAt / vh;
       bf.flames.gob(fuel.x + dx * vh * t0, fuel.y + vy * t0 - 0.5 * G * t0 * t0, fuel.z + dz * vh * t0,

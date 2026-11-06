@@ -62,9 +62,11 @@ must(Math.abs(mean(far.burnt) - RANGE) < RANGE * 0.4, `fuel burns out at ${mean(
 must(far.riseN > 0 && far.riseUp >= far.riseN * 0.95, `burnt-out fireballs don't rise (${far.riseUp} of ${far.riseN})`);
 
 // The line (Keith 2026-11-05: one continuous line arcing out): fuel points poured from a nozzle along +Z.
-function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1, swing = 0) {
+function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1, swing = 0, wallAt = 0) {
   const f = new FlameFx(flat); f.tune(F);
-  const key = {}, dt = 1 / 60, ends: { land: number[]; burnout: number[] } = { land: [], burnout: [] };
+  // A wall of someone else's (team 1) across the line wallAt m out, 6 m tall: the fuel (team 0) splashes on it.
+  if (wallAt > 0) f.hitter = (_x, y, z, team) => team !== 1 && z >= wallAt && z <= wallAt + 1.5 && y < 6;
+  const key = {}, dt = 1 / 60, ends: { land: number[]; burnout: number[]; hit: number[] } = { land: [], burnout: [], hit: [] };
   let gap = 0, worstN = 0, under = 0, joined = 0, points = 0, frame = 0;
   const vh = VH, dist = Math.min(aimAt, RANGE * F.flameLob);
   const orig = f.streams.step.bind(f.streams);
@@ -73,7 +75,7 @@ function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1, swing = 0) {
     if (t < pourFor && frame++ % pourEvery === 0) {
       // Swung: the aim's distance and side wander, so points land out of order.
       const d = dist * (1 + swing * Math.sin(t * 9)), a = swing * Math.sin(t * 5), vys = lobVy(-Y0, d, vh, F.flameGravity);
-      f.pour(key, 0, Y0, 0, Math.sin(a) * vh, vys, Math.cos(a) * vh, BURN, 1);
+      f.pour(key, 0, Y0, 0, Math.sin(a) * vh, vys, Math.cos(a) * vh, BURN, 1, false, 0);
     }
     f.update(dt, cam);
     for (const l of f.streams.lines.values()) {
@@ -88,7 +90,7 @@ function line(aimAt: number, secs = 2, pourFor = 1, pourEvery = 1, swing = 0) {
       }
     }
   }
-  return { ...ends, gap, worstN, under, joined: joined / Math.max(1, points), left: f.streams.lines.size };
+  return { ...ends, flames: f.n, gap, worstN, under, joined: joined / Math.max(1, points), left: f.streams.lines.size };
 }
 const ln = line(12), lf = line(60, 2.5);
 must(ln.under === 0 && lf.under === 0, `line points under the sand (${ln.under}, ${lf.under})`);
@@ -102,9 +104,16 @@ must(ls.joined > 0.9 && ls.land.length > 20, `line poured only every 6th frame b
 // Swung (PC render 2026-11-05: a short stub stopped short of the fire): the line stays joined as points land out of order.
 const lw = line(12, 2, 1, 1, 0.4);
 must(lw.joined > 0.97, `swung line breaks into pieces (${(lw.joined * 100).toFixed(0)}% joined)`);
+// Run into something (Keith 2026-11-06: a splash on whatever it's thrown onto): the line ends on it, none goes through.
+const lh = line(16, 0.6, 0.5, 1, 0, 10);
+must(lh.hit.length > 10 && lh.land.filter((z) => z > 10).length === 0 && lh.burnout.length === 0, `line into a wall at 10 m: ${lh.hit.length} hit, ${lh.land.filter((z) => z > 10).length} landed past it, ${lh.burnout.length} burnt out`);
+must(lh.flames > 10, `no splash where the line hits (${lh.flames} flames)`);
+// Aimed up at a strider's hull (8 m up, 15 m off; Keith 2026-11-06: "a very strong launch"): the throw is capped.
+const vyUp = lobVy(8 - Y0, 15, VH, F.flameGravity, F.flameLobUp), peak = Y0 + vyUp * vyUp / (2 * F.flameGravity);
+must(peak < 6, `aimed up at a strider the fuel climbs to ${peak.toFixed(1)} m`);
 must(ln.left === 0 && lf.left === 0, `lines left over after they stopped (${ln.left}, ${lf.left})`);
 
-console.log(`flamefx line: aimed 12 m lands at ${mean(ln.land).toFixed(1)} m (${ln.land.length} points, widest gap ${ln.gap.toFixed(2)} m, ${ln.worstN} points at most); aimed 60 m burns out at ${mean(lf.burnout).toFixed(1)} m`);
+console.log(`flamefx line: aimed 12 m lands at ${mean(ln.land).toFixed(1)} m (${ln.land.length} points, widest gap ${ln.gap.toFixed(2)} m, ${ln.worstN} points at most); aimed 60 m burns out at ${mean(lf.burnout).toFixed(1)} m; into a wall at 10 m: ${lh.hit.length} hit, ${lh.flames} flames; aimed up at a strider peaks at ${peak.toFixed(1)} m`);
 console.log(`flamefx: aimed 12 m: ${near.landed.length} landed at ${mean(near.landed).toFixed(1)} m, ${near.burnt.length} burnt out, ${near.drops} droplet-frames, ${near.smoke} smoke-frames; ` +
   `aimed 60 m: ${far.landed.length} landed, ${far.burnt.length} burnt out at ${mean(far.burnt).toFixed(1)} m (reach ${RANGE})`);
 if (fails.length) { console.error("flamefx check FAILED:\n  " + fails.join("\n  ")); process.exit(1); }
