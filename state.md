@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · More crushers (crabs) out in the field (Keith asked; Claude on `claude/more-crushers`)
+- `crusherSiteChance` 0.45→0.75 (share of salvage sites with a crusher grazing; still the "Salvage sites with one" slider). Only crushers near you stand up, so cost is bounded by `crusherSiteNear`.
+- Files: `src/expedition/crusherSites.ts`. Checked: full `npm test`.
 ### 2026-11-06 · Robot swarms: fewer big walkers, more small units and gun quads (Keith asked; Claude on `claude/robots-mix`)
 - Defaults only (all still sliders): `robotBigShare` 0.035→0.015, `robotMidShare` 0.15→0.22, `robotQuadShare` 0.3→0.55 (so ~12% of a pack are weapon quads), camps `campMin/Max` 6–24→8–32, `campBigFar` 0.12→0.05, `campBigMin` 2→1.
 - Files: `src/combat/robots.ts`, `src/expedition/camps.ts`; checks `balance-check` (pins quad 0), `scaling-check` (excavator floors relaxed), `robots-check` (walk test pins the old mix).

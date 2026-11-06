@@ -29,7 +29,7 @@ export const CRUSHER_SITE_DEFAULTS = {
   // Out in the world it minds its salvage more than you.
   crusherHunt: 28,
   crusherEatTime: 8,
-  crushersOn: 1, crusherSiteChance: 0.45, crusherSiteDamage: 0.6, crusherSiteNear: 550, crusherSiteFar: 750,
+  crushersOn: 1, crusherSiteChance: 0.75, crusherSiteDamage: 0.6, crusherSiteNear: 550, crusherSiteFar: 750,
   crusherCall: 0.75, crusherCallSize: 30, crusherCallFrom: 160, crusherCallWake: 250,
 };
 export type CrusherSiteValues = typeof CRUSHER_SITE_DEFAULTS;
