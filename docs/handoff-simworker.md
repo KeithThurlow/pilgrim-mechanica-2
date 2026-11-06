@@ -53,6 +53,17 @@ Plan, one PR each:
   (0..hi, transferables) and the queued events, which main hands to the handlers. `keepOut` is rebuilt in the worker
   on its own convoy (src/convoy/safeZone.ts); `reactors` positions go over as a command each frame (a frame late).
   The view's RNG state comes back in the snapshot.
+- **4b design, as built (Claude 2026-11-06):**
+  - Snapshot = every typed array the swarm owns (private ones too, sliced to `hi`; per-leg ones `hi × 4`; fixed-size
+    ones like the hash in full) plus its number/boolean fields and `cores`, found generically (`Object.keys`), so a new
+    field needs no snapshot code. Main overwrites the view with it when it arrives.
+  - Main-side ops (spawn, remove, damage, setFrozen...) apply to the view at once (their events, e.g. a death, are
+    handed out there and then) and go to the worker as commands; the worker applies them silently (its hooks are null).
+  - The step: `update` on main hands out the events queued from the worker's answers (with this call's handlers), then
+    records the step; the worker runs the frame's steps after the frame's other commands.
+  - Late snapshots: ops recorded after the snapshot's frame are replayed on the view, silently, after it's applied.
+  - Randomness outside a step (spawn, kill) comes from a stream that only those ops use, so view and worker draw the
+    same numbers; the step's own stream lives in the worker.
 - **4c, the parity check** (`tools/robotworker-check.ts`): a camp fight headless both ways, bit for bit (as the
   escorts'), with damage, trample, stomps, spawns and a pack calming down.
 - Then striders, crushers and droids (their own fields) the same way, if the PC profile says so.
