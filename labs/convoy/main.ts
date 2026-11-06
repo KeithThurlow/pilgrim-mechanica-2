@@ -117,7 +117,8 @@ import { AbilityControl } from "../../src/abilities/abilityUse";
 import { ABILITY_TOPIC } from "../../src/abilities/abilities";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, type SlotId } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
-import { newBag, addTo, bagWeight } from "../../src/items/cargo";
+import { newBag, addTo, bagCells } from "../../src/items/cargo";
+import { cargoCapacity, cargoSizing } from "../../src/items/cargoSpace";
 import { rollLoot, makeItem } from "../../src/items/generate";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { itemName } from "../../src/expedition/drops";
@@ -402,8 +403,8 @@ function refit() {
   fitted = r;
   // Summoner gear (Keith 2026-11-02): the pack's replicas, the shoulders' drones and swarm.
   applyGear(V, r);
-  bayState.cargo.capacity = r.cargoCapacity;
-  loop.exp.capacity = V.cargoLimit ? r.cargoCapacity : Infinity;
+  bayState.cargo.capacity = cargoCapacity(V, r.cargoRackRows);
+  loop.exp.capacity = V.cargoLimit ? bayState.cargo.capacity : Infinity;
   applyLoadout(player, r);
   // The sensor's seekers (its radar range already went into V.mechRadar through the loadout's values).
   loop.seeker.setModes(r.seekers);
@@ -1156,12 +1157,13 @@ app.onTick((rawDt) => {
   // The mech doll (one hull pool for now: every part shows the hull's share) and the cargo under it.
   syncCarry();
   loop.exp.capacity = V.cargoLimit ? bayState.cargo.capacity : Infinity;
+  loop.exp.sizing = cargoSizing(V, loop.unlocks.level("compactor"));
   inventory.update(dt);
   const lo = bayState.loadout, isOut = loop.exp.state === "out";
   doll.update(dt, {
     parts: partsFromHull(player.health / Math.max(1, player.maxHealth), { sensor: !!lo.sensor, pack: !!lo.pack, armL: !!lo.mountL, armR: !!lo.mountR }),
     cargo: isOut ? { load: loop.exp.load, capacity: loop.exp.capacity, scrap: loop.exp.scrapAtRisk, items: loop.exp.itemsAtRisk, warn: V.cargoWarn }
-      : { load: bagWeight(bayState.cargo), capacity: V.cargoLimit ? bayState.cargo.capacity : Infinity, scrap: 0, items: bayState.cargo.items.length, warn: V.cargoWarn },
+      : { load: bagCells(bayState.cargo, loop.exp.sizing), capacity: V.cargoLimit ? bayState.cargo.capacity : Infinity, scrap: 0, items: bayState.cargo.items.length, warn: V.cargoWarn },
     onFoot: !foot.driving,
   });
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))

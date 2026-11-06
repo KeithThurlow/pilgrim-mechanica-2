@@ -11,7 +11,8 @@
 // Fitted gear is never touched here: losing a run loses what was carried, not what the mech wears. Recovery is
 // instant for now (Claude's default): a fade, and the mech is back on the deck.
 import type { Param } from "../core/tweaks";
-import { itemWeight, type Item } from "../items/item";
+import type { Item } from "../items/item";
+import { DEFAULT_SIZING, scrapCells, type CargoSizing } from "../items/cargoSpace";
 
 export const EXPEDITION_DEFAULTS = {
   recallHold: 1.5,
@@ -87,13 +88,13 @@ export class Expedition {
   readonly events: ExpEvent[] = [];
 
   /**
-   * Cargo limit (Keith 2026-11-01: "you have to manage what's in your cargo and potentially drop things"): the mech's
-   * cargo capacity in tonnes (the loadout's cargoCapacity; Infinity: no limit) and what one scrap weighs. The at-risk
-   * list is the cargo while out. The glue sets both; pick-ups ask `fits` first, `add` itself never refuses (refunds and
-   * lab starts may go over, which the HUD shows in red).
+   * Cargo limit (Keith 2026-11-01: "you have to manage what's in your cargo and potentially drop things"; 2026-11-06:
+   * by grid space, not weight): the cargo grid's size in cells (Infinity: no limit) and how the cells are counted
+   * (`sizing`). The at-risk list is the cargo while out. The glue sets both; pick-ups ask `fits` first, `add` itself
+   * never refuses (refunds and lab starts may go over, which the HUD shows in red).
    */
   capacity = Infinity;
-  scrapWeight = 0;
+  sizing: CargoSizing = DEFAULT_SIZING;
   /** What one scrap at risk banks for (the Salvage compactor unlock; 1: as found). The glue sets it. */
   scrapValueMul = 1;
   /** Loot the mech takes out with it (the bay's cargo list): joins the at-risk list at the launch, without events. */
@@ -101,16 +102,24 @@ export class Expedition {
 
   constructor(public v: ExpeditionValues) {}
 
-  /** What a line weighs (t). */
-  weightOf(l: Loot) { return l.kind === "item" ? itemWeight(l.item) : l.amount * this.scrapWeight; }
-  /** The cargo's weight now (t). */
-  get load() { let w = 0; for (const l of this.atRisk) w += this.weightOf(l); return w; }
-  /** Tonnes left before the cargo is full (negative when over). */
+  /** Cells a line takes in the cargo grid. */
+  cellsOf(l: Loot) { return l.kind === "item" ? this.sizing.itemCells(l.item) : scrapCells(this.sizing, l.amount); }
+  /** Cells the cargo takes now (scrap counted as a whole: its blocks, the last one part full). */
+  get load() { let c = 0, scrap = 0; for (const l of this.atRisk) { if (l.kind === "scrap") scrap += l.amount; else c += this.cellsOf(l); } return c + scrapCells(this.sizing, scrap); }
+  /** Cells left before the cargo is full (negative when over). */
   get room() { return this.capacity - this.load; }
-  /** Whether this would fit in the cargo now. */
-  fits(l: Loot) { return this.weightOf(l) <= this.room + 1e-9; }
-  /** How much scrap still fits (Infinity with no limit or weightless scrap). */
-  get scrapRoom() { return this.scrapWeight > 0 ? Math.max(0, Math.floor((this.room + 1e-9) / this.scrapWeight)) : Infinity; }
+  /** Whether this would fit in the cargo now (scrap: with the blocks already carried). */
+  fits(l: Loot) {
+    if (l.kind === "item") return this.cellsOf(l) <= this.room;
+    return this.load - scrapCells(this.sizing, this.scrapAtRisk) + scrapCells(this.sizing, this.scrapAtRisk + l.amount) <= this.capacity;
+  }
+  /** How much scrap still fits (Infinity with no limit). */
+  get scrapRoom() {
+    if (this.capacity === Infinity) return Infinity;
+    const z = this.sizing, other = this.load - scrapCells(z, this.scrapAtRisk);
+    const blocks = Math.floor((this.capacity - other) / z.blockCells);
+    return Math.max(0, blocks * z.scrapPerBlock - Math.floor(this.scrapAtRisk));
+  }
 
   /** Take an item out of the cargo (to fit it, or to drop it); null if it isn't carried. */
   takeItem(id: string): Item | null {
