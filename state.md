@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+- 2026-11-06 Small enemies 5x per group (Keith feedback; Claude): every camp, pack, raid and bandit camp turns up with 5x the scrappers / bandits on foot (cutters, excavators, striders keep their counts: shares divided by the multiplier, strider camps count n/mult). How often groups appear is unchanged. Sliders: Expedition › Small enemies (smallRobotMult, smallBanditMult; 1 = old). Files: depth.ts, camps.ts, threats.ts, banditCamps.ts, swarmCamps.ts, fights.ts, striderCamps.ts, loop.ts. Checked: npm test 95/95; headless robot sim (scrappers only, 2 steps/frame): 60 → 0.4 ms, 300 → 1.0 ms, 1000 → 4.9 ms (bandits not timed; render cost not measured). War band columns (vehicles) unchanged. Slots cap at 1024 each.
 ### 2026-11-06 · Loot rarer, and a red Mythic tier above Legendary (Keith asked; Claude on `claude/project-thread-brfzo0`)
 Rarity weights now steep (common 60, uncommon 24, rare 8, epic 2, legendary 0.4, mythic 0.06; was 50/28/14/6/2); drop counts down (`dropSpot` 0.3→0.2, `dropPerThreat` 1→0.65). New tier `mythic` (red #ff3b3b, 5 sockets, scrap value ×98); name is a placeholder for Keith. Files: `src/items/rarity.ts`, `generate.ts`, `src/expedition/drops.ts`, `src/audio/lootSound.ts` (Mythic volume slider; plays the Legendary riff), `tools/loadout-check.ts`. Checked: `npm test` (loadout-check updated for 6 tiers). Try `convoy?out&drop=all`.
 
