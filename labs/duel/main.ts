@@ -71,7 +71,7 @@ const lab = await combatLab({
     { topic: "rival", label: "Rival", objects: () => { if (!rivalBody) return []; const r = rivalBody.regions(); return [...r.legs, ...r.hull, ...r.gunLeft, ...r.gunRight, ...(rivalArsenal?.meshes() ?? [])]; } },
     { topic: "arena", label: "Cover", objects: () => wrecks?.meshes ?? [] },
   ],
-  actions: [...RIVAL_LEVEL_IDS.map((id) => ({ label: id[0].toUpperCase() + id.slice(1), onClick: () => setLevel(id) })), { label: "Reroll rival", onClick: () => reroll(1) }, { label: "Restart (R)", onClick: () => startRound() }],
+  actions: [...RIVAL_LEVEL_IDS.map((id) => ({ label: id[0].toUpperCase() + id.slice(1), onClick: () => setLevel(id) })), { label: "Reroll rival", onClick: () => reroll(1) }, { label: "Restart (Shift+< / Shift+>)", onClick: () => startRound() }],
   setup: (field, V) => { ground = new DuelGround(V); addModifier(field, ground); },
   wrecks: (field, V) => (wrecks = new WreckStandIns(field, wreckSpots(ground!.spots, V))),
   report: (): Record<string, unknown> => ({ rivalSeed, rivalfit: fitSpec, rivalState: ai.state, ...score.tally() }),
@@ -278,7 +278,7 @@ function startRound() {
   roundStart = clock; roundOver = -1;
   score.start(clock, String(rivalSeed));
 }
-addEventListener("keydown", (e) => { if (e.code === "KeyR" && !e.repeat && !typing(e)) startRound(); });
+addEventListener("keydown", (e) => { if ((e.code === "Comma" || e.code === "Period") && e.shiftKey && !e.repeat && !typing(e)) startRound(); });
 
 // Who hurt whom with what: each weapon's work runs inside a tag (the arsenal's rail, shells, rockets and shoulders, the
 // battlefield's lobbed shells); what lands outside any is the miniguns' rounds (resolved with the battlefield's shots).
