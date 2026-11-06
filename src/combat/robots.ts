@@ -142,7 +142,8 @@ export const ROBOT_DEFAULTS = {
   robotBigSize: 4,
   robotBigHeight: 15,
   robotBigSizeJitter: 0.1,
-  robotBigHp: 1800,
+  // Keith 2026-11-06: stronger, so the tall walkers feel special and scary (was 1800 hp, shots 45).
+  robotBigHp: 2600,
   robotBigSpeed: 3,
   robotBigAccel: 1.5,
   robotBigTurn: 45,
@@ -178,7 +179,7 @@ export const ROBOT_DEFAULTS = {
   robotBigLobRadius: 3.5,
   robotBigLobLead: 0.7,
   robotBigLobScatter: 2,
-  robotBigShotDamage: 45,
+  robotBigShotDamage: 55,
   // The charging beam (Keith 2026-10-31): a second attack beside the volley. The aim tracks the mech, locks partway
   // through the charge (a side step after the lock takes you clear), then a beam burns down the line.
   robotBeamOn: 1,
@@ -260,6 +261,9 @@ export const ROBOT_DEFAULTS = {
   robotBigDeathAt: 0.6,
   robotBigDeathTip: 0.35,
   robotBigDeathNova: 1,
+  // Keith 2026-11-06: slower and more epic, the hull shattering and novaing out (src/fx/novaDebris.ts).
+  robotBigDeathSlow: 1.7,
+  robotBigDeathShatter: 1,
   robotBigDeathRadius: 22,
   robotBigDeathDamage: 90,
   robotBigDeathOwnDamage: 450,
@@ -269,7 +273,8 @@ export const ROBOT_DEFAULTS = {
   robotBigDeathCrater: 0.75,
   robotBigDeathCraterDepth: 3.5,
   // A weapon quad's reactor (Keith 2026-11-06): smaller, sooner, the same way (it tips and goes up).
-  robotQuadDeathOn: 1,
+  // Keith 2026-11-06 (round 2): "not all robots should be exploding ... a bit much": off, only the tall walkers go up.
+  robotQuadDeathOn: 0,
   robotQuadDeathDelay: 1.3,
   robotQuadDeathMin: 0.4,
   robotQuadDeathAt: 0.6,
@@ -506,6 +511,8 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigDeathAt", label: "Goes up at hull height (share)", min: 0, max: 1, step: 0.01, group: GD, tip: "Of its standing height: high is an airburst early in the fall, 0 waits for it to land (then the latest delay)" },
   { key: "robotBigDeathTip", label: "Tip-over push (rad/s)", min: 0, max: 2, step: 0.01, group: GD, tip: "How hard the wreck starts to topple along the killing shot; more falls sooner" },
   { key: "robotBigDeathNova", label: "Nova look (×)", min: 0, max: 3, step: 0.05, group: GD, tip: "The airburst's flash, glowing shell and shockwave ring (src/fx/nova.ts); 0 off" },
+  { key: "robotBigDeathSlow", label: "Nova slowed (×)", min: 0.3, max: 4, step: 0.05, group: GD, tip: "Keith 2026-11-06: slowed down a little to feel more epic: the nova's flash, shell and rings take this much longer, the sparks spit out over longer, the boom a touch deeper. 1: the nova as tuned (Reactor nova)" },
+  { key: "robotBigDeathShatter", label: "Hull shatters (×)", min: 0, max: 3, step: 0.05, group: GD, tip: "Keith 2026-11-06: shards of hull plate and long sparks thrown out as it goes up (Reactor nova: shatter); 0 none" },
   { key: "robotBigDeathRadius", label: "Blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
   { key: "robotBigDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot (the pilot, bandits). Full at the centre, half at the edge" },
   { key: "robotBigDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Robots in reach, full at the centre, half at the edge; medium and big ones take their blast share. Enough kills another big one: a chain" },
@@ -618,6 +625,9 @@ export interface RobotDeathBlastEvent {
   craterR: number; craterDepth: number;
   /** The nova look's size (×; 0 none, src/fx/nova.ts). The hull's height above the ground is hubY − at.y. */
   nova?: number;
+  /** Its nova's time stretched by this (×; 1 as tuned) and the hull's shards and sparks (×; 0 none). Keith 2026-11-06:
+   *  only the tall walkers' is slow and shatters. */
+  slow?: number; shatter?: number;
 }
 /** A big one's leg shot through (plain data, rule 12): which robot and leg, where it broke (the knee), how many are gone. */
 export interface RobotLegLostEvent { id: number; robot: number; leg: number; at: V3; lost: number; fell: boolean }
@@ -2027,6 +2037,7 @@ export class RobotSwarm {
         shove: b ? v.robotBigDeathShove : v.robotQuadDeathShove, boom: b ? v.robotBigDeathBoom : v.robotQuadDeathBoom,
         craterR: c.radius * (b ? v.robotBigDeathCrater : v.robotQuadDeathCrater), craterDepth: b ? v.robotBigDeathCraterDepth : v.robotQuadDeathCraterDepth,
         nova: b ? v.robotBigDeathNova : v.robotQuadDeathNova,
+        slow: b ? v.robotBigDeathSlow : 1, shatter: b ? v.robotBigDeathShatter : 0,
       });
     }
   }

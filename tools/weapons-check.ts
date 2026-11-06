@@ -557,7 +557,9 @@ const dt = 1 / 120;
       w.fire(s, w.shots);
       const got = s.lost(0);
       cells.push(`${kind} ${(one.lost(0) * 100).toFixed(0).padStart(3)}% / ${(got * 100).toFixed(0).padStart(3)}%`);
-      must(got >= w.want[kind] - 1e-6, `${w.name} x${w.shots} from 25 m took ${(got * 100).toFixed(0)}% of a ${kind} robot's health (want ${(w.want[kind] * 100).toFixed(0)}%)`);
+      // The big shares were set at 1800 hp (Keith 2026-11-06: tall walkers made tougher): the same damage, not share.
+      const want = kind === "big" ? w.want.big * 1800 / ROBOT_DEFAULTS.robotBigHp : w.want[kind];
+      must(got >= want - 1e-6, `${w.name} x${w.shots} from 25 m took ${(got * 100).toFixed(0)}% of a ${kind} robot's health (want ${(want * 100).toFixed(0)}%)`);
     }
     rows.push(`${w.name.padEnd(12)} x${String(w.shots).padEnd(3)} ${cells.join("  ")}`);
   }
