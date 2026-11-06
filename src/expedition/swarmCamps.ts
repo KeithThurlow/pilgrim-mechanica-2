@@ -132,9 +132,9 @@ export class SwarmCamps {
       const n = this.left.get(c.id) ?? c.size;
       if (n <= 0) continue;
       const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: (v.robotMidShare + c.mid) * shareK(v), big: (v.robotBigShare + c.big) * shareK(v), bigMin: c.bigs } : undefined, this.power?.(c.x, c.z) ?? 1);
-      for (const i of slots) sw.frozen[i] = 1;
+      for (const i of slots) sw.setFrozen(i, 1);
       const hurt = this.hurt.get(c.id) ?? 0;
-      if (hurt > 0) for (const i of slots) sw.hp[i] *= 1 - hurt;
+      if (hurt > 0) for (const i of slots) sw.scaleHp(i, 1 - hurt);
       const l: Live = { camp: c, slots, gens: slots.map((i) => sw.gen[i]), awake: false, hp: 0, group: this.groupFor(c.id) };
       l.hp = this.hp(l);
       this.live.set(c.id, l);
@@ -164,17 +164,17 @@ export class SwarmCamps {
       for (const i of this.own(l)) {
         if (l.goal && !l.group.fighting && !sw.hasT[i]) sw.setTarget(i, l.goal.x, 0, l.goal.z, 4);
         else if (!l.goal && !l.group.fighting && sw.hasT[i] && l.roam) sw.clearTarget(i);
-        if (l.awake) { sw.frozen[i] = 0; continue; }
+        if (l.awake) { sw.setFrozen(i, 0); continue; }
         // Calming down: clingers shaken off first, then frozen where they land.
-        if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
-        sw.frozen[i] = isAirborne(sw.state[i]) ? 0 : 1;
+        if (sw.state[i] === LATCHED) sw.shakeOff(i);
+        sw.setFrozen(i, !isAirborne(sw.state[i]));
       }
     }
     if (!sw.hi) return;
     const bf = this.bf;
     // The mech, or the pilot on foot (a change of prey shakes the clingers off the old one).
     const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
-    if (this.lastPrey && q.kind !== this.lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
+    if (this.lastPrey && q.kind !== this.lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shakeOff(i);
     this.lastPrey = q.kind;
     const T = q.at;
     sw.update(dt, { x: T.x, y: T.y, z: T.z, radius: q.radius, vx: q.sim.vel.x, vz: q.sim.vel.z, latchLow: q.latchLow, latchHigh: q.latchHigh },
@@ -217,7 +217,7 @@ export class SwarmCamps {
     if (this.live.has(id)) return;
     const radius = 6 + Math.sqrt(n) * 2.5;
     const slots = this.sw.spawn(n, x, z, radius, shares, this.power?.(x, z) ?? 1);
-    if (hurt > 0) for (const i of slots) this.sw.hp[i] *= 1 - hurt;
+    if (hurt > 0) for (const i of slots) this.sw.scaleHp(i, 1 - hurt);
     const camp: Camp = { id, x, z, size: n, guess: n, radius, seed: 0, danger: 0, mid: 0, big: 0, bigs: shares?.bigMin ?? 0 };
     const l: Live = { camp, slots, gens: slots.map((i) => this.sw.gen[i]), awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };
     l.hp = this.hp(l);
@@ -233,7 +233,7 @@ export class SwarmCamps {
     const slots = this.sw.spawn(1, x, z, 0, { mid: 0, big: 1 }, powerK * (this.power?.(x, z) ?? 1), sizeK);
     if (!slots.length) return -1;
     const i = slots[0];
-    this.sw.hp[i] *= hpK / Math.max(0.01, powerK); this.sw.maxHp[i] = this.sw.hp[i];
+    this.sw.setHealth(i, this.sw.hp[i] * hpK / Math.max(0.01, powerK));
     const camp: Camp = { id, x, z, size: 1, guess: 1, radius: 6, seed: 0, danger: 0, mid: 0, big: 1, bigs: 1 };
     const l: Live = { camp, slots, gens: [this.sw.gen[i]], awake: true, hp: 0, roam: true, group: this.groupFor(id), goal };
     l.hp = this.hp(l);
@@ -315,7 +315,7 @@ export class SwarmCamps {
     const sw = this.sw, r2 = radius * radius;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
-      if (st === LATCHED) { sw.shake[i] = 1e3; continue; }
+      if (st === LATCHED) { sw.shakeOff(i); continue; }
       if (st >= DOWN || sw.kind[i] !== SMALL) continue;
       const ox = sw.px[i] - x, oz = sw.pz[i] - z;
       if (ox * ox + oz * oz < r2) sw.damage(i, damage, dx, dz);
