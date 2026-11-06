@@ -60,7 +60,9 @@ export class StriderCamps {
     for (const s of this.sf.pack.list) {
       if (!s.alive || s.frozen || out.length >= max) continue;
       const p = s.pos();
-      if (Math.hypot(p.x - x, p.z - z) <= r) out.push(new THREE.Vector3(p.x, s.up(5).y, p.z));
+      // At the disc, its centre mass (the turrets fire thin rays): up(5) was 5 sim m over the pelvis, ×1.7, so the guns
+      // aimed ~7 m over the disc and never hit (Keith 2026-11-06).
+      if (Math.hypot(p.x - x, p.z - z) <= r) out.push(s.head(new THREE.Vector3()));
     }
     return out;
   }

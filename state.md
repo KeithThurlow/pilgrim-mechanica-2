@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Convoy guns hit striders (Keith reported; Claude on `claude/project-thread-7lrsuj`)
+The striders' turret threat point was `s.up(5)`: 5 sim metres over the pelvis, ×1.7 scale, so ~15.7 m up, 7 m over the disc (8.9 m). Every convoy turret, escort gun and guardian aimed there and missed (thin rays). Now the disc's middle (`s.head()`, the same centre mass the register uses). `src/expedition/striderCamps.ts`. Probe, 1.2° spread from 5 m up: hits 0% → 98 / 61 / 45% at 30 / 60 / 90 m. Big walkers were already fine (hub point: 100 / 91 / 76%). `stridercamps-check` now fires turret rounds at the point from 30-90 m (24 of 24 hit; 0 of 24 before). npm test passes.
 ### 2026-11-06 · Loot rarer, and a red Mythic tier above Legendary (Keith asked; Claude on `claude/project-thread-brfzo0`)
 Rarity weights now steep (common 60, uncommon 24, rare 8, epic 2, legendary 0.4, mythic 0.06; was 50/28/14/6/2); drop counts down (`dropSpot` 0.3→0.2, `dropPerThreat` 1→0.65). New tier `mythic` (red #ff3b3b, 5 sockets, scrap value ×98); name is a placeholder for Keith. Files: `src/items/rarity.ts`, `generate.ts`, `src/expedition/drops.ts`, `src/audio/lootSound.ts` (Mythic volume slider; plays the Legendary riff), `tools/loadout-check.ts`. Checked: `npm test` (loadout-check updated for 6 tiers). Try `convoy?out&drop=all`.
 

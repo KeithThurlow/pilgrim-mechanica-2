@@ -45,7 +45,20 @@ if (!woke) fail("shooting a sleeping strider didn't wake its camp");
 step(8);
 if (s0 && (s0.frozen || s0.pos().distanceTo(p0!) < 5)) fail(`awake: frozen ${s0.frozen}, moved ${s0.pos().distanceTo(p0!).toFixed(1)} m`);
 // The convoy's turrets can see it (awake, in range); a sleeping one is not a threat.
-{ const pts: THREE.Vector3[] = []; sc.threats(0, 0, 400, pts); if (pts.length !== sc.count) fail(`turret threats ${pts.length}, striders ${sc.count}`); }
+{
+  const pts: THREE.Vector3[] = []; sc.threats(0, 0, 400, pts);
+  if (pts.length !== sc.count) fail(`turret threats ${pts.length}, striders ${sc.count}`);
+  // A turret's round straight at the point hits the strider (Keith 2026-11-06: the points were 7 m over the disc),
+  // from 30, 60 and 90 m off at deck height, all round.
+  let shots = 0, hits = 0;
+  for (const q of pts) for (const dist of [30, 60, 90]) for (let a = 0; a < 8; a++) {
+    const ox = q.x + Math.sin(a * 0.785) * dist, oz = q.z + Math.cos(a * 0.785) * dist;
+    const o = new THREE.Vector3(ox, field.height(ox, oz) + 5, oz), d = new THREE.Vector3().subVectors(q, o).normalize();
+    shots++; if (sc.sf.target.hitRay(o, d, dist + 20) >= 0) hits++;
+  }
+  console.log(`turret aim: ${hits} of ${shots} rounds straight at the threat point hit the strider`);
+  if (hits < shots) fail(`${shots - hits} of ${shots} rounds at the turret threat point missed the strider`);
+}
 // The camp's robots all gone: it fights on near the mech.
 camps.delete("c1");
 step(1);
