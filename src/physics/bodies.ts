@@ -69,9 +69,12 @@ export function robotRagdoll(sw: RobotSwarm, i: number, body: number, leg: numbe
       sw.legPose(i, k, hip, knee, tip, foot);
       const a = toLocal(hip), kn = toLocal(knee), tp = toLocal(tip), ft = toLocal(foot);
       const first = parts.length;
-      parts.push(segPart(a, kn, (big ? 0.13 : 0.07) * S, leg, 500), segPart(kn, tp, (big ? 0.1 : 0.055) * S, leg, 500));
+      // A leg shot through (src/combat/robotWeakPoints.ts): the thigh and a short dark stub, no shin or foot.
+      const stump = big && (sw.legLost[i] & (1 << k)) !== 0;
+      const shinEnd: [number, number, number] = stump ? [kn[0] + (tp[0] - kn[0]) * 0.16, kn[1] + (tp[1] - kn[1]) * 0.16, kn[2] + (tp[2] - kn[2]) * 0.16] : tp;
+      parts.push(segPart(a, kn, (big ? 0.13 : 0.07) * S, leg, 500), segPart(kn, shinEnd, (big ? 0.1 : 0.055) * S, stump ? 0x22252a : leg, 500));
       joints.push({ a: 0, b: first, at: a }, { a: first, b: first + 1, at: kn });
-      if (big) {
+      if (big && !stump) {
         // The foot: a small pad from the shin's end down to the sand.
         parts.push(segPart(tp, ft, 0.12 * S, 0x3a3d42, 700));
         joints.push({ a: first + 1, b: first + 2, at: tp });

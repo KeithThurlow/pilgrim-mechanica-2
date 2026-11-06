@@ -180,6 +180,13 @@ export function robotsFront(params0: URLSearchParams): Front {
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
+      // ?weak[=still]: no packs, one big walker 28 m ahead coming in (still: frozen there), to shoot its legs off or hit
+      // its reactor (Keith 2026-11-06, src/combat/robotWeakPoints.ts): Tab-lock it and point at a leg or the orb on top.
+      if (params0.has("weak")) {
+        V.robotSwarmSize = 0;
+        const p = player.sim.pos, still = params0.get("weak") === "still";
+        for (const i of sw.spawn(1, p.x + 2, p.z + 28, 0, { mid: 0, big: 1 })) { if (still) sw.frozen[i] = 1; sw.pulseClock[i] = 8; sw.beamClock[i] = 8; }
+      }
       // ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
       if (params0.has("lineup")) {
         V.robotSwarmSize = 0;

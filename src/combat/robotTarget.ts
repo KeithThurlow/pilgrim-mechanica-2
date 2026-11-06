@@ -107,11 +107,13 @@ export class RobotTarget implements Hittable, Owner {
         r = S * (big ? 0.5 : 0.44) * k; const hh = S * (big ? BIG_BODY_H * 0.75 : MID_BODY_H) * k;
         cy = sw.hubY[i] + S * 0.05; y0 = cy - hh; y1 = cy + hh;
       }
-      // A big one's reactor on its mast, ahead of the body (robotWeakPoints.ts).
+      // A big one's reactor on its mast, ahead of the body (robotWeakPoints.ts): when the shot itself flies through it
+      // (the sheet reaches from the sand up past everything, so its line's height says what it was aimed at).
       const cr = sw.v.robotBigCoreHit;
-      if (kind === BIG && cr > 0) {
+      if (kind === BIG && cr > 0 && s.line) {
         const c = sheetCircle(s, sw.px[i], sw.pz[i], cr), ccy = sw.hubY[i] + S * BIG_CORE_Y;
-        if (c && inBand(s, c.along, s.ox + s.dx * c.along, s.oz + s.dz * c.along, ccy - cr, ccy + cr)) {
+        const ly = c ? s.line(c.along + c.chord / 2) : 0;
+        if (c && ly >= cy && Math.abs(ly - ccy) <= cr) {
           out.push({ target: this, key: RobotTarget.key(i, PART_CORE), along: c.along, chord: c.chord, material, x: s.ox + s.dx * c.along, y: ccy, z: s.oz + s.dz * c.along });
           continue;
         }

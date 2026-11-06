@@ -16,7 +16,7 @@ import type { Param } from "../core/tweaks";
 export const BIG_CORE_Y = 0.36, BIG_CORE_R = 0.1;
 
 export const WEAK_DEFAULTS = {
-  robotBigLegHp: 0.22,
+  robotBigLegHp: 0.3,
   robotBigLegLossHurt: 0.08,
   robotBigLegSlow: 0.55,
   robotBigLegsToFall: 2,
