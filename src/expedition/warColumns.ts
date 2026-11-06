@@ -13,7 +13,7 @@ import type { CarKind } from "../vehicles/car";
 export const COLUMN_DEFAULTS = {
   colSeed: 9,
   colCell: 800,
-  colChance: 0.5,
+  colChance: 0.7,
   colClear: 300,
   colMin: 2,
   colMax: 5,
