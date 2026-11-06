@@ -40,6 +40,8 @@ export interface SwarmBlob { id: string; x: number; z: number; guess: number; aw
 
 export class SwarmCamps {
   readonly sw: RobotSwarm;
+  /** The swarm's seed (the sim worker's copy is made with it too). */
+  static readonly SEED = 11;
   readonly draw: RobotsDraw;
   readonly target: RobotTarget;
   private tear: RobotTearFx;
@@ -60,7 +62,7 @@ export class SwarmCamps {
     /** True where a camp shouldn't be (the road). */
     private blocked: (x: number, z: number) => boolean,
   ) {
-    this.sw = new RobotSwarm(v, field, 11);
+    this.sw = new RobotSwarm(v, field, SwarmCamps.SEED);
     this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw);
     coreWarnFx(bf, this.draw.coreWarn);
