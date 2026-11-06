@@ -22,7 +22,7 @@ import { WarColumns, COLUMN_DEFAULTS, COLUMN_PARAMS } from "./warColumns";
 import { BanditCamps, WarBands } from "./humans";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "./fortresses";
 import { Hubs, HUB_LIFE_DEFAULTS, HUB_LIFE_PARAMS } from "./hubs";
-import { Warlord } from "./warlord";
+import type { RivalSetup } from "../game/fieldRival";
 import { Skirmishes, packSource, aftermathSite, clashDrops } from "./fights";
 import { FACTION_DEFAULTS, FACTION_PARAMS, FACTION_GROUPS, Relations, FightDirector, type FightGroup } from "../game/factions";
 import { FLAG, type Register } from "../game/register";
@@ -100,7 +100,7 @@ export const LOOP_TOPICS = [
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
-  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
+  { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: mechs", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
   { id: "loot", label: "Loot and cargo", groups: ["Loot", "Cargo", "Item value", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
@@ -341,17 +341,17 @@ export class ExpeditionLoop {
   private bf: Battlefield;
 
   /**
-   * Hand the fortresses their warlord (a red Rampart the lab has loaded; the loop can't wait for a model). Killed, it
-   * drops warlordDrops items rolled as if from deep, hot ground.
+   * Hand the fortresses' bandit mechs what they need to come out (the toon look, a Rampart loader, the player's level);
+   * without it no mechs. Killed, the warlord drops warlordDrops items rolled as if from deep, hot ground; the others
+   * fortMechDrops.
    */
-  attachWarlord(unit: MechUnit, scene: THREE.Object3D) {
-    const w = new Warlord(this.v, this.bf, scene, unit);
-    this.forts.warlord = w;
-    w.onEvent = (e) => {
-      if (e.type !== "warlordDown") return;
-      this.hud.note("Warlord down", "#ffb347", 4);
-      if (this.exp.state !== "out") return;
-      this.hotDrops(`warlord:${e.poi}`, this.v.warlordDrops, e.x, e.z);
+  setupFortMechs(s: RivalSetup) {
+    const m = this.forts.mechs;
+    m.setup = s;
+    m.onEvent = (e) => {
+      const boss = e.role === "boss";
+      this.hud.note(boss ? "Warlord down" : "Bandit mech down", "#ffb347", boss ? 4 : 3);
+      this.hotDrops(`fortmech:${e.id}`, boss ? this.v.warlordDrops : this.v.fortMechDrops, e.x, e.z);
     };
   }
 
@@ -399,7 +399,7 @@ export class ExpeditionLoop {
     o.striders = [reg.add(this.striders.sf.target)];
     o.crushers = [reg.add(this.crushers.cf.target)];
     o.bandits = [reg.add(this.banditCamps.target), reg.add(this.forts.target)];
-    reg.add({ name: "warlord", publish: (r) => this.forts.warlord?.publish(r) });
+    reg.add(mechOwner("fortress mechs", () => this.forts.mechs.list()));
     o.bands = [reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) })];
     reg.add(mechOwner("hvt", () => this.quests.hvt.list()));
   }

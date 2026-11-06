@@ -139,7 +139,7 @@ const FLOW_CELL = 2;
 const FLOW_MAX = 8;
 
 /** Is (x, z) solid for anyone on foot (a container core: wall, shack, standing gate, with a metre's margin so paths keep off the faces), not the sand drifts? */
-function solidAt(L: Layout, x: number, z: number, down: ReadonlySet<string>) {
+export function solidAt(L: Layout, x: number, z: number, down: ReadonlySet<string>) {
   const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
   for (const ring of L.rings) {
     const R = ringR(ring, a), e = Math.abs(d - R);
