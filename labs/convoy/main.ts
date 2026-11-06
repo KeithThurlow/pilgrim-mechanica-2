@@ -31,7 +31,7 @@ import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
-import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
+import { PATCH_PAD, TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
 import { CraterLayer, CRATER_DEFAULTS, CRATER_PARAMS } from "../../src/world/craters";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../../src/physics/deaths";
 import { DeadDraw } from "../../src/physics/deadDraw";
@@ -163,14 +163,22 @@ scene.add(streamer.group);
 // under a time budget (the craters' way), nearest first is not needed as they come in order behind the blade.
 const patchQueue: [number, number, number, number][] = [];
 // Craters re-read their hardness as the road is cut (none on the road), so the patch covers both.
-route.onChange = (x0, z0, x1, z1) => { craters.invalidate(x0, z0, x1, z1); patchQueue.push([x0, z0, x1, z1]); };
+// Each box is padded as patchArea pads it, then cut into strips PATCH_STRIP m across (perf, Keith 2026-11-06: one box
+// could take 5 ms on his PC, well over the budget), patched with no more padding: the same vertices, done once each.
+const PATCH_STRIP = 4;
+route.onChange = (x0, z0, x1, z1) => {
+  craters.invalidate(x0, z0, x1, z1);
+  const a = x0 - PATCH_PAD, b = x1 + PATCH_PAD, c = z0 - PATCH_PAD, d = z1 + PATCH_PAD, eps = 1e-4;
+  if (b - a >= d - c) for (let s = a; s <= b; s += PATCH_STRIP) patchQueue.push([s, c, Math.min(b, s + PATCH_STRIP - eps), d]);
+  else for (let s = c; s <= d; s += PATCH_STRIP) patchQueue.push([a, s, b, Math.min(d, s + PATCH_STRIP - eps)]);
+};
 let patchMs = 0, patchVerts = 0;
 function patchSome(budgetMs: number) {
   const t0 = performance.now();
   patchVerts = 0;
   while (patchQueue.length && (patchVerts === 0 || performance.now() - t0 < budgetMs)) {
     const b = patchQueue.shift()!;
-    patchVerts += streamer.patchArea(b[0], b[1], b[2], b[3]);
+    patchVerts += streamer.patchArea(b[0], b[1], b[2], b[3], 0);
   }
   patchMs = performance.now() - t0;
 }
