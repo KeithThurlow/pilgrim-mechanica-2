@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Far escorts step at half rate (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
+- `src/convoy/escort.ts`: escorts farther than `escortLodDist` (90 m, slider "Half rate past", Convoy › Escort driving; 0 = off) from the mech step at 60 Hz (every other fixed step, alternate escorts each step, with both steps' time). Aboard the convoy (no mech on the sand) all run at full rate. The car sim at 60 Hz drives within a metre of 120 Hz over 250 m (node probe).
+- Checked: `tools/convoy-check.ts` escorts section now runs twice, at the default and with every escort at half rate (1 m): same rules pass (on station 97%, no flips, platform/plough/mech clearances). Escort update cost per step 0.22 → 0.13-0.17 ms with all of them far. npm test.
+- Multiplayer note: the rate is picked from the host's mech for now (host-owned convoy); with more players it should be the nearest player.
 ### 2026-11-06 · The canvas's page rect kept instead of read every frame (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
 - New `src/core/canvasRect.ts`: the canvas's bounding rect cached, read again on canvas or window resize, scroll, and at most a second later. Used by the per-frame readers: aim (`src/game/playerAim.ts`, `src/world/raycast.ts` screenToGround), drop labels, threat marks, the convoy lab's `?bigclose`. getBoundingClientRect forced a page layout each frame after the HUD's DOM changed (1.5% of the frame in the PC production profile, `pc-profile-siege-prod.md`).
 - Checked: npm run check, npm test. The production profile also showed no hidden dev-server cost (16.2 ms, sim 7.8, submit 7.3).

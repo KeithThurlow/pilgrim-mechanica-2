@@ -48,6 +48,7 @@ export const ESCORT_DEFAULTS = {
   escortMechClear: 10,
   escortSteep: 26,
   escortRoll: 18,
+  escortLodDist: 90,
 };
 export type EscortValues = typeof ESCORT_DEFAULTS;
 
@@ -67,6 +68,7 @@ export const ESCORT_PARAMS: Param[] = [
   { key: "escortPlatformClear", label: "Clear of platforms (m)", min: 1, max: 12, step: 0.1, group: "Escort driving", tip: "Margin kept round every platform's footprint" },
   { key: "escortMechClear", label: "Clear of the mech (m)", min: 4, max: 20, step: 0.5, group: "Escort driving", tip: "Never drives inside this distance of the mech: grazes round it, or turns out" },
   { key: "escortSteep", label: "Avoid climbs over (°)", min: 10, max: 45, step: 0.5, group: "Escort driving", tip: "Picks lines round dune faces steeper than this to climb (descents it takes up to this plus 12°, straight down)" },
+  { key: "escortLodDist", label: "Half rate past (m)", min: 0, max: 300, step: 5, group: "Escort driving", tip: "Escorts farther than this from the mech step at 60 Hz instead of 120 (a cost saving off screen; the drive comes out within a metre over 250 m). 0: always full rate" },
   { key: "escortRoll", label: "Avoid side slopes over (°)", min: 5, max: 40, step: 0.5, group: "Escort driving", tip: "Picks lines that don't cross a face sideways steeper than this (what rolls a truck)" },
 ];
 
@@ -95,6 +97,8 @@ export class Escort {
   phase: number;
   /** Distance moved in the last step (for dust). */
   moved = 0;
+  /** Time not yet stepped (far escorts step every other fixed step, with both steps' time). */
+  owed = 0;
   /** The line it picked over the dunes: an offset from the heading it wants (rad), re-picked every PLAN_EVERY s. */
   planOff = 0;
   planT = 0;
@@ -212,12 +216,21 @@ export class EscortGroup {
   mechs: { x: number; z: number }[] = [];
 
   /** One fixed step. mech: the player's mech position (or null when it's aboard or held). */
+  private k = 0;
   update(dt: number, mech: { x: number; z: number } | null) {
     this.t += dt;
     this.memo.now = this.t;
     this.sync();
     this.stations();
-    for (const e of this.list) this.drive(e, dt, this.nearestMech(e, mech));
+    // Far from the mech (off screen), escorts step at half rate, alternate ones each step so the cost spreads evenly.
+    this.k++;
+    const far2 = mech && this.v.escortLodDist > 0 ? this.v.escortLodDist ** 2 : Infinity;
+    for (let i = 0; i < this.list.length; i++) {
+      const e = this.list[i], far = mech !== null && (e.sim.pos.x - mech.x) ** 2 + (e.sim.pos.z - mech.z) ** 2 > far2;
+      if (far && ((this.k + i) & 1)) { e.owed += dt; e.moved = 0; continue; }
+      this.drive(e, dt + e.owed, this.nearestMech(e, mech));
+      e.owed = 0;
+    }
   }
 
   /** The nearest mech to keep clear of: the player's or a guardian. */
