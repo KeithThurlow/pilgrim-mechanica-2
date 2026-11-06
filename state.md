@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+- 2026-11-06 Rebalance robots vs bandits (Keith feedback; Claude): fewer big walkers (camp/pack/raid big shares halved, guaranteed bigs 2→1 / 1.5→1, strider camps one per 30 (packs 45), max 1); out-of-view clashes less lopsided (cutter 4→3, excavator 12→8, bandit 1.2→2.2, bandit mech 20→30 power). Files: factions.ts, camps.ts, threats.ts, striderCamps.ts, stridercamps-check. npm test 95/95. Open for Keith: tune via the Factions / Clashes sliders if bandits still lose too often.
 ### 2026-11-06 · Sim worker step 3: the escorts drive in the worker (Keith approved the plan; Claude on `claude/project-thread-2assf4`)
 - New `src/sim/escortsRemote.ts` (worker side `EscortsWorker`: the group, moved summed, `snapshot()`; main side `escortsRemote(rec)`, `applyEscorts`, `convoyPoses`). `src/sim/groundEvents.ts`: `convoy(c)` (taps reset/jump/update; route.update now replays inside them), `command(t, m, a)`. `src/sim/groundMirror.ts`: the worker's `convoy` and `escorts`. `src/convoy/escort.ts`: `remote`, `invalidate`, `makeEscort`. Frame answers carry the snapshot and the convoy poses; the HUD line shows escorts and the convoy parity. `labs/convoy/main.ts`: wired (with `?noworker` all as before).
 - Checked: `tools/escortworker-check.ts`: 90 s of driving with the mech weaving through the escorts, a guardian, blasts, count changes, a jump: every escort's pose and wheels equal the main thread's bit for bit, convoy poses equal; a missed step is caught. Escorts cost ~1 ms a frame headless, now off the main thread. `npm test` passes.
