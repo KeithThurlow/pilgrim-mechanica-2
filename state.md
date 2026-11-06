@@ -317,6 +317,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Sim worker: the ground recorder's values diff made cheap (Claude on `claude/project-thread-2assf4`)
+- `src/sim/groundEvents.ts`: the values (~3000 keys) were diffed on every recorded call, ~0.3 ms each; with the escorts' commands that was ~2 ms a frame in the convoy lab's `escorts` and `convoy` stages. Now diffed at the first event after each take and at the take (a value code sets mid-frame goes at the frame's end), over a cached key list (read again every 30 frames). Also fixes `tools/escortworker-check.ts`'s typecheck error (broke `npm run build`).
+- Checked: headless convoy lab `?nearcamp=40&norender`: escorts 1.95 → 0.01 ms, convoy 2.27 → 1.37, simworker 1.09 → 0.57, trail 0.48 → 0.14; parity ok. `groundmirror-check`, `escortworker-check`, `terrainworker-check` and `npm test` pass.
 
 - 2026-11-06 Rebalance robots vs bandits (Keith feedback; Claude): fewer big walkers (camp/pack/raid big shares halved, guaranteed bigs 2→1 / 1.5→1, strider camps one per 30 (packs 45), max 1); out-of-view clashes less lopsided (cutter 4→3, excavator 12→8, bandit 1.2→2.2, bandit mech 20→30 power). Files: factions.ts, camps.ts, threats.ts, striderCamps.ts, stridercamps-check. npm test 95/95. Open for Keith: tune via the Factions / Clashes sliders if bandits still lose too often.
 ### 2026-11-06 · Loot rarer, and a red Mythic tier above Legendary (Keith asked; Claude on `claude/project-thread-brfzo0`)
