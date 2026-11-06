@@ -2,6 +2,7 @@
 // choice, so every drop near you says what it is: its name in its rarity's colour, its level and power, DPS for a
 // weapon, and ▲/▼ against the weakest fitted item of its kind. The drop E would take now gets a bright frame and
 // "E take" (or "cargo full"). Nearest first, at most labelMax, out to labelRange.
+import { canvasRect } from "../core/canvasRect";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Item } from "../items/item";
@@ -59,7 +60,7 @@ export class DropLabels {
     o.sort((a, b) => a.dist - b.dist);
     if (o.length > v.labelMax) o.length = Math.max(1, Math.round(v.labelMax));
     if (target && !o.some((q) => q.d === target)) o.push({ d: target, dist: 0 });
-    const r = canvas.getBoundingClientRect();
+    const r = canvasRect(canvas);
     const seen = new Set<string>();
     for (const { d, dist } of o) {
       const p = this.p.set(d.x, this.ground(d.x, d.z) + v.labelLift, d.z).project(camera);

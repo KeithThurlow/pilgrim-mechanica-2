@@ -1,5 +1,6 @@
 // Ray against the ground height function: march, then bisect. Exact on any streamed or unstreamed ground and
 // far cheaper than raycasting chunk triangles.
+import { canvasRect } from "../core/canvasRect";
 import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
 
@@ -28,7 +29,7 @@ export function rayGround(origin: THREE.Vector3, dir: THREE.Vector3, ground: Gro
 
 /** Ground point under a screen position (client pixels) for this camera. */
 export function screenToGround(cx: number, cy: number, canvas: HTMLCanvasElement, camera: THREE.Camera, ground: Ground, out = new THREE.Vector3()) {
-  const r = canvas.getBoundingClientRect();
+  const r = canvasRect(canvas);
   const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera(ndc, camera);

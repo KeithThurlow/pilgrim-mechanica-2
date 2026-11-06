@@ -19,6 +19,7 @@
 // (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it), ?crusher[=metres] (that close to the nearest salvage site a crusher grazes on); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
+import { canvasRect } from "../../src/core/canvasRect";
 import { hitStop } from "../../src/game/hitStop";
 import { energyHud, reactorHud } from "../../src/ui/energyBar";
 import { isEnergy } from "../../src/weapons/energy/energySim";
@@ -900,7 +901,7 @@ function holdOnBucket() {
   const sw = loop.swarms.sw;
   for (let i = 0; i < sw.hi; i++) {
     if (sw.kind[i] !== BIG || sw.state[i] >= DOWN) continue;
-    const r = canvas.getBoundingClientRect(), f = i * WALK_LEGS + 1;
+    const r = canvasRect(canvas), f = i * WALK_LEGS + 1;
     footPt.set(sw.footX[f], sw.footY[f], sw.footZ[f]).project(camera);
     buttons.mouse = { x: r.left + (footPt.x + 1) / 2 * r.width, y: r.top + (1 - footPt.y) / 2 * r.height };
     buttons.left = buttons.right = true;
