@@ -100,7 +100,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 ## Lab URL flags
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
-  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
+  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?nobatch`: plain parts sharing a material drawn one by one instead of as a batch (`src/look/mainBatches.ts`). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
 - Walker lab: `?cam=game|close|side|back|feet|head` (head: face to face with the hull), `?sensor=<sensor base id>|none` (the sensor on the hull; default the visor head), `?model=standin` (box walker), `?flat` (no dunes),
