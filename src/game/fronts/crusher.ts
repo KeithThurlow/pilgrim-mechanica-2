@@ -33,7 +33,7 @@ export function crusherFront(q: URLSearchParams): Front {
     spec: {
       defaults: { ...CRUSHER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...LAB_DEFAULTS },
       params: [...LAB_PARAMS, ...CRUSHER_PARAMS, ...ROBOT_TEAR_PARAMS],
-      topics: [{ id: "crushers", label: "Crushers", groups: [GL, "Crushers", "Crushers: maw", "Crushers: pincers", "Crushers: eating"] }],
+      topics: [{ id: "crushers", label: "Crushers", groups: [GL, "Crushers", "Crushers: maw", "Crushers: pincers", "Crushers: eating", "Crushers: death"] }],
       selectables: [{ topic: "crushers", label: "Crushers", objects: () => (cf ? [...cf.bodies.values()].map((b) => b.root) : []) }],
       actions: [{ label: "Crusher now", onClick: () => spawnNow?.() }, { label: "Stand them up again", onClick: () => restartNow?.() }],
       report: (): Record<string, unknown> => (cf ? { crushers: cf.pack.alive, sucks: cf.pack.sucks, claws: cf.pack.claws, clawHits: cf.pack.clawHits, ground: Math.round(cf.pack.ground), eaten: cf.pack.eaten, crusherKills: cf.pack.kills } : {}),

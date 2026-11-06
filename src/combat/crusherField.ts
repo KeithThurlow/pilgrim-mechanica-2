@@ -1,7 +1,8 @@
 // Crushers on a battlefield (shared by the crusher lab and the expedition's CrusherSites): the pack, its hit target,
 // its drawing and suction, and its events resolved: the grind and the pincers' damage on the prey (× damageK), the
 // pull on the mech (it slides toward the maw), footfalls as dust and shake, eating salvage (the caller's food list
-// and onAte), a death as a blast with the wreck left lying a while. Host for the damage; drawing cosmetic.
+// and onAte), a death as a massive blast a moment later (Keith 2026-11-06: the signal that calls the swarm; onDown then),
+// the wreck shattered by it. Host for the damage; drawing cosmetic.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
@@ -13,6 +14,8 @@ import { CrusherTarget } from "./crusherTarget";
 import { CrusherFx } from "./crusherFx";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
 import { bakeDiscFoot, footShapeOr } from "../fx/footprint";
+import { fireRobotDeathBlast } from "../game/robotBeam";
+import { famOfTeam } from "../world/lamps";
 
 export type CrusherFieldValues = CrusherValues & RobotTearValues;
 
@@ -27,7 +30,7 @@ export class CrusherField {
   damageK = 1;
   /** Called when one eats a heap (the caller takes it off its food list). */
   onAte: ((food: number, c: Crusher) => void) | null = null;
-  /** Called when one goes down (before its wreck is taken off). */
+  /** Called when one goes down (with the death blast on: when it goes up, before its wreck is taken off). */
   onDown: ((c: Crusher) => void) | null = null;
   /** The pull on the mech this frame (m/s, all crushers). */
   readonly pull = { x: 0, z: 0 };
@@ -36,6 +39,10 @@ export class CrusherField {
   private hunted: Prey | null = null;
   private cp: CrusherPrey = { x: 0, y: 0, z: 0, vx: 0, vz: 0, alive: false };
   private wrecks: { c: Crusher; t: number }[] = [];
+  /** Dead ones whose core is about to go up: seconds left, till the next spit of sparks. Host state. */
+  private cores: { c: Crusher; t: number; spit: number }[] = [];
+  /** Death blasts gone off since construction. */
+  deathBlasts = 0;
 
   constructor(v: CrusherFieldValues, private bf: Battlefield, private scene: THREE.Scene, private field: DuneField,
     private mech: MechUnit, public shake: (k: number) => void = () => {}, seed = 1, register = true) {
@@ -63,6 +70,7 @@ export class CrusherField {
     const b = this.bodies.get(c.id);
     if (b) { this.scene.remove(b.root); this.bodies.delete(c.id); }
     this.wrecks = this.wrecks.filter((w) => w.c !== c);
+    this.cores = this.cores.filter((k) => k.c !== c);
   }
 
   /** One frame: they hunt `prey` (null: nobody) and eat from `food`. */
@@ -82,10 +90,43 @@ export class CrusherField {
       s.carry(dx, dy, dz, 0, 0, 0);
       this.shake(0.03);
     }
+    this.tickCores(dt);
     for (const w of [...this.wrecks]) if ((w.t -= dt) <= 0) this.remove(w.c);
     for (const c of this.pack.list) this.bodies.get(c.id)?.update(c, dt);
     this.fx.update(dt, this.pack.list);
     this.tear.update(dt);
+  }
+
+  /** Cores counting down spit sparks, faster toward the end; due ones go up (the blast, then onDown, wreck gone). */
+  private tickCores(dt: number) {
+    if (!this.cores.length) return;
+    const v = this.pack.v, bf = this.bf;
+    for (const k of [...this.cores]) {
+      const c = k.c;
+      k.t -= dt; k.spit -= dt;
+      if (k.spit <= 0 && k.t > 0) {
+        const u = 1 - k.t / Math.max(0.05, v.crusherDeathDelay);
+        k.spit = 0.35 - 0.25 * u;
+        HIT.set(c.x, c.bodyY + 0.5, c.z);
+        bf.gunFx.sparksAt(HIT, UP, Math.round(10 + 30 * u), 6 + 8 * u);
+        bf.sfx.playSound("coreBeep", HIT, 0.6 + 0.6 * u, 0.8 + 0.5 * u);
+        bf.nightLights?.flash(c.x, c.bodyY, c.z, 4 + 8 * u, famOfTeam(3));
+      }
+      if (k.t > 0) continue;
+      this.cores.splice(this.cores.indexOf(k), 1);
+      this.deathBlasts++;
+      const gy = this.field.height(c.x, c.z), hy = Math.max(c.bodyY, gy + v.crusherDeathHeight);
+      fireRobotDeathBlast(bf, {
+        id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: hy, radius: v.crusherDeathRadius, damage: v.crusherDeathDamage,
+        pierce: v.crusherDeathPierce, shove: v.crusherDeathShove, boom: v.crusherDeathBoom,
+        craterR: v.crusherDeathRadius * v.crusherDeathCrater, craterDepth: v.crusherDeathCraterDepth,
+        nova: v.crusherDeathNova, slow: v.crusherDeathSlow, shatter: v.crusherDeathShatter,
+      }, (x, z, r, sp) => { if (this.mech.alive) this.mech.shoveFrom(x, z, r, sp); });
+      bf.blastOwn(3, HIT.set(c.x, gy, c.z), v.crusherDeathRadius, v.crusherDeathOwnDamage, v.crusherDeathPierce);
+      this.shake(1.2);
+      this.onDown?.(c);
+      this.remove(c);
+    }
   }
 
   private event(e: CrusherEvent) {
@@ -117,10 +158,17 @@ export class CrusherField {
       bf.blast(3, HIT.set(e.x, e.y, e.z), 6, 0, 0, "death");
       const c = this.pack.list.find((x) => x.id === e.id);
       if (!c) return;
+      if (this.pack.v.crusherDeathOn > 0.5) {
+        // The core goes up a moment later: a whine, sparks spat faster and faster, then the blast (tickCores).
+        this.cores.push({ c, t: Math.max(0, this.pack.v.crusherDeathDelay), spit: 0 });
+        bf.sfx.playSound("coreWhine", HIT.set(c.x, c.bodyY + 1, c.z), 1, Math.max(0.4, Math.min(2.5, 2.8 / Math.max(0.1, this.pack.v.crusherDeathDelay))));
+        this.wrecks.push({ c, t: WRECK_TIME + this.pack.v.crusherDeathDelay });
+        return;
+      }
       this.wrecks.push({ c, t: WRECK_TIME });
       this.onDown?.(c);
     }
   }
 }
 
-const HIT = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0);
+const HIT = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0), UP = new THREE.Vector3(0, 1, 0);
