@@ -70,7 +70,7 @@ export const ROBOT_DEFAULTS = {
   robotShotSpread: 5,
   robotShotDamage: 1.8,
   // Medium cutters.
-  robotMidShare: 0.15,
+  robotMidShare: 0.22,
   robotMidSize: 2.2,
   robotMidHeight: 1.5,
   robotMidSizeJitter: 0.1,
@@ -102,7 +102,7 @@ export const ROBOT_DEFAULTS = {
   // Weapon quads (Keith 2026-11-01, the roster's third size): a share of the medium walkers come bigger, a cylinder
   // turret on four legs with a weapon on each side (minigun, rockets, laser or rail), always holding at range; they drop
   // their weapon.
-  robotQuadShare: 0.3,
+  robotQuadShare: 0.55,
   robotQuadSize: 3.6,
   robotQuadHp: 700,
   robotQuadSpeed: 4.5,
@@ -137,7 +137,7 @@ export const ROBOT_DEFAULTS = {
   // type things on them"): weapon quads roll minigun, laser or rail, not the rocket pod, unless this is on.
   robotQuadRocketsOn: 0,
   // Big excavators.
-  robotBigShare: 0.035,
+  robotBigShare: 0.015,
   robotBigSize: 4,
   robotBigHeight: 15,
   robotBigSizeJitter: 0.1,
@@ -370,7 +370,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotMidCutDamage", label: "Saw damage", min: 0, max: 60, step: 0.5, group: GM },
   { key: "robotMidCutRecover", label: "Saw recovery (s)", min: 0, max: 4, step: 0.05, group: GM },
   { key: "robotMidSplash", label: "Splash taken (×)", min: 0, max: 1, step: 0.01, group: GM, tip: "Share of a round's splash (minigun rounds) a medium one takes (small ones take it all, big ones none); blasts use the hit-part sliders" },
-  { key: "robotBigShare", label: "Big ones (share)", min: 0, max: 0.5, step: 0.005, group: G2, tip: "About one in a pack of 30 at 0.035" },
+  { key: "robotBigShare", label: "Big ones (share)", min: 0, max: 0.5, step: 0.005, group: G2, tip: "About one in a pack of 30 at 0.035; 0.015 by default (Keith 2026-11-06: fewer big walkers)" },
   { key: "robotBigSize", label: "Chassis size (m)", min: 1, max: 10, step: 0.05, group: G2 },
   { key: "robotBigHeight", label: "Chassis height (m)", min: 4, max: 20, step: 0.1, group: G2, tip: "How high the excavator carries its chassis; the arm legs scale with it" },
   { key: "robotBigSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G2 },
