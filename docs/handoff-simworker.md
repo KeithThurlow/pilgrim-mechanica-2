@@ -20,6 +20,12 @@ Plan and rules: `docs/proposal-simworker.md`. Worker path on by default; `?nowor
   frame from the snapshot's moved total (was per substep). Commands bypass the recorder's depth rule: use them for calls
   the mirror doesn't make by itself (route.onChange's memo invalidation is nested inside convoy.update).
 
+- Step 4a (robot swarm worker-ready): `RobotEvent` queue in `src/combat/robots.ts` (`step(dt, base)` returns the step's
+  events, `dispatch(events, onShot, onBite, onCut)` hands them out; `update` = both); outside writes are methods
+  (`setFrozen`, `shakeOff`, `scaleHp`, `setHealth`, `setPace`, `setShooter`, `primeAttacks`; plus `setTarget`,
+  `clearTarget`, `damage`, `hitAt`, `hurtLeg`, `hurtOwn`, `trample`, `stomp`, `spawn`, `remove` as before). Tools still
+  poke `hp[]` (headless only). `reactors.at` is still a synchronous read inside the step (4b: positions as a command).
+
 ## Next, in order
 Step 4: the robot swarm (`src/combat/robots.ts` RobotSwarm, 2172 lines), specced 2026-11-06 (Claude). Keith's PC: far from
 the convoy fighting robots the sim alone is ~20 ms (2026-11-06), so this is next. Headless (`?siege=120&manual&norender`,
@@ -35,7 +41,7 @@ things: `onShot`/`onBite`/`onCut` (args of update), `onLob`, `onBeam`, `onPulse`
 physics' falling cores: a synchronous read of Rapier, main thread), `lookGround`.
 
 Plan, one PR each:
-- **4a, worker-ready, nothing moved** (pure refactor): every outside write goes through a method (`setFrozen`,
+- ~~4a~~ (done) **4a, worker-ready, nothing moved** (pure refactor): every outside write goes through a method (`setFrozen`,
   `shakeOff`, ...: no more array pokes), every callback becomes a plain-data event queued during update and handed to
   the same handlers after it (`drain(handlers)`), `spawn` can take the slots to use. Behaviour changes only in that a
   handler's own effect on the swarm (a beam hurting robots) lands after the step instead of inside it. Checks:

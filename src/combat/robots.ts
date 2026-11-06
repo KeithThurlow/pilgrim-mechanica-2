@@ -634,6 +634,26 @@ export interface RobotLegLostEvent { id: number; robot: number; leg: number; at:
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
 
+/**
+ * Everything the swarm does to the world in a step, as plain data (rule 12; step 4 of docs/proposal-simworker.md). Events
+ * raised inside update() queue up and go to the handlers (update's onShot, onBite, onCut and the on* hooks) once the step
+ * is done, in the order they happened, so a handler's own effect on the swarm (a beam burning robots) lands after the
+ * step, never inside it. Events raised outside update (a hit killing one) go to their handler at once.
+ */
+export type RobotEvent =
+  | { t: "shot"; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number; kind: number; robot: number }
+  | { t: "bite"; robot: number; damage: number }
+  | { t: "cut"; robot: number; damage: number; x: number; y: number; z: number }
+  | { t: "lob"; robot: number; fx: number; fy: number; fz: number; x: number; z: number; flight: number }
+  | { t: "beam"; e: RobotBeamEvent }
+  | { t: "pulse"; e: RobotPulseEvent }
+  | { t: "deathBlast"; e: RobotDeathBlastEvent }
+  | { t: "legLost"; e: RobotLegLostEvent }
+  | { t: "death"; robot: number; nx: number; nz: number; speed: number }
+  | { t: "footfall"; robot: number; x: number; y: number; z: number; leg: number }
+  /** A wreck's reactor going up where the host's death physics has it (reactors.blow). */
+  | { t: "blow"; id: number; x: number; y: number; z: number; radius: number };
+
 /** True while a robot is off the ground on purpose (leaping, latched, flung). */
 export const isAirborne = (s: number) => s === LEAP || s === LATCHED || s === FLUNG;
 
@@ -782,6 +802,22 @@ export class RobotSwarm {
   readonly tgx = new Float32Array(ROBOT_MAX); readonly tgy = new Float32Array(ROBOT_MAX);
   readonly tgz = new Float32Array(ROBOT_MAX); readonly tgr = new Float32Array(ROBOT_MAX);
   private slotT: RobotTarget = { x: 0, y: 0, z: 0, radius: 0 };
+  // Writes from outside go through methods, never array pokes, so a swarm stepped elsewhere (the sim worker) can take
+  // them as commands (docs/handoff-simworker.md step 4).
+  /** Frozen: stands still, does nothing (a camp asleep). */
+  setFrozen(i: number, on: boolean | number) { this.frozen[i] = on ? 1 : 0; }
+  /** A latched one lets go at its next shake check. */
+  shakeOff(i: number) { this.shake[i] = 1e3; }
+  /** Health × k (a camp hurt before it streamed out). */
+  scaleHp(i: number, k: number) { this.hp[i] *= k; }
+  /** Health and full health (a boss, a test robot that mustn't die). */
+  setHealth(i: number, hp: number, full = true) { this.hp[i] = hp; if (full) this.maxHp[i] = hp; }
+  /** Chill (src/game/chill.ts): 1 full speed, 0 frozen solid. */
+  setPace(i: number, k: number) { this.pace[i] = k; }
+  /** A medium one holds at range and shoots (1) or closes to saw (0). */
+  setShooter(i: number, on: boolean | number) { this.shooter[i] = on ? 1 : 0; }
+  /** A big one's attack clocks (seconds to its next beam and pulse; undefined leaves one alone): lab set-ups. */
+  primeAttacks(i: number, beam?: number, pulse?: number) { if (beam !== undefined) this.beamClock[i] = beam; if (pulse !== undefined) this.pulseClock[i] = pulse; }
   setTarget(i: number, x: number, y: number, z: number, radius: number) { this.hasT[i] = 1; this.tgx[i] = x; this.tgy[i] = y; this.tgz[i] = z; this.tgr[i] = radius; }
   clearTarget(i: number) { this.hasT[i] = 0; }
   private targetOf(i: number, base: RobotTarget): RobotTarget {
@@ -1080,7 +1116,53 @@ export class RobotSwarm {
 
   private tmp = [0, 0, 0];
 
+  /** Events raised during the step in progress (see RobotEvent); handed out when it ends. */
+  private events: RobotEvent[] = [];
+  private stepping = false;
+  private emit(e: RobotEvent) {
+    if (this.stepping) this.events.push(e);
+    else this.handle(e, null, null, null);
+  }
+  /** Hand events to their handlers: update's for shots, bites and cuts (none outside a step), the on* hooks for the rest. */
+  dispatch(events: readonly RobotEvent[], onShot: RobotShotFn | null, onBite?: RobotBiteFn | null, onCut?: RobotCutFn | null) {
+    for (const e of events) this.handle(e, onShot, onBite ?? null, onCut ?? null);
+  }
+  private handle(e: RobotEvent, onShot: RobotShotFn | null, onBite: RobotBiteFn | null, onCut: RobotCutFn | null) {
+    switch (e.t) {
+      case "shot": onShot?.(e.fx, e.fy, e.fz, e.tx, e.ty, e.tz, e.kind, e.robot); break;
+      case "bite": onBite?.(e.robot, e.damage); break;
+      case "cut": onCut?.(e.robot, e.damage, e.x, e.y, e.z); break;
+      case "lob": this.onLob?.(e.robot, e.fx, e.fy, e.fz, e.x, e.z, e.flight); break;
+      case "beam": this.onBeam?.(e.e); break;
+      case "pulse": this.onPulse?.(e.e); break;
+      case "deathBlast": this.onDeathBlast?.(e.e); break;
+      case "legLost": this.onLegLost?.(e.e); break;
+      case "death": this.onDeath?.(e.robot, e.nx, e.nz, e.speed); break;
+      case "footfall": this.onFootfall?.(e.robot, e.x, e.y, e.z, e.leg); break;
+      case "blow": this.reactors?.blow(e.id, e.x, e.y, e.z, e.radius); break;
+    }
+  }
+
+  /**
+   * One step against base (the mech, or whoever the swarm hunts). Shots, bites, cuts and every other event raised in
+   * the step go to their handlers once it's done (RobotEvent).
+   */
   update(dt: number, base: RobotTarget, onShot: RobotShotFn, onBite?: RobotBiteFn, onCut?: RobotCutFn): void {
+    const evs = this.step(dt, base);
+    this.dispatch(evs, onShot, onBite, onCut);
+    evs.length = 0;
+  }
+
+  /** The step itself: returns its events, not yet handed out (the worker ships them; update hands them out). Valid
+   *  until the next step. */
+  step(dt: number, base: RobotTarget): RobotEvent[] {
+    this.events.length = 0;
+    this.stepping = true;
+    try { this.stepBody(dt, base); } finally { this.stepping = false; }
+    return this.events;
+  }
+
+  private stepBody(dt: number, base: RobotTarget): void {
     const v = this.v, { px, py, pz, vx, vy, vz, state, stateTime, size } = this;
     if (dt <= 0) return;
     // The mech's motion: given, or measured from its last position.
@@ -1161,7 +1243,7 @@ export class RobotSwarm {
         if (this.fireClock[i] <= 0) {
           this.fireClock[i] += v.robotBiteInterval;
           this.bites++;
-          onBite?.(i, v.robotBiteDamage * this.power[i]);
+          this.emit({ t: "bite", robot: i, damage: v.robotBiteDamage * this.power[i] });
         }
         // A fast mech works it loose; a slow one lets the clock fade.
         if (tSpeed > v.robotShakeSpeed) this.shake[i] += dt;
@@ -1188,7 +1270,7 @@ export class RobotSwarm {
           const edge = dist - size[i] * (MID_SAW_Z + MID_SAW_R) - target.radius;
           if (edge < v.robotMidCutReach) {
             this.cuts++;
-            onCut?.(i, v.robotMidCutDamage * this.power[i], target.x - ux * target.radius * 0.8, this.hubY[i], target.z - uz * target.radius * 0.8);
+            this.emit({ t: "cut", robot: i, damage: v.robotMidCutDamage * this.power[i], x: target.x - ux * target.radius * 0.8, y: this.hubY[i], z: target.z - uz * target.radius * 0.8 });
           }
         }
         if (stateTime[i] >= w + L + v.robotMidCutRecover) { st = RUN; this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
@@ -1345,7 +1427,7 @@ export class RobotSwarm {
       // On another faction's target a small runner can't leap: it bites what it reaches.
       if (own && !walker && !this.shooter[i] && st === RUN && dist - target.radius < 1.8) {
         this.fireClock[i] -= dt;
-        if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; onBite?.(i, v.robotBiteDamage * this.power[i]); }
+        if (this.fireClock[i] <= 0) { this.fireClock[i] += v.robotBiteInterval; this.bites++; this.emit({ t: "bite", robot: i, damage: v.robotBiteDamage * this.power[i] }); }
       }
 
       // A weapon quad's turret swivels toward the target on its own, within its arc off the body.
@@ -1389,7 +1471,7 @@ export class RobotSwarm {
           }
           this.tell[i] = this.burstLeft[i] > 0 || this.fireClock[i] <= v.robotBigWindup ? 1 : 0;
         } else if (mid && this.variant[i] === QUAD_WEAPON) {
-          this.quadGuns(i, dt, target, dh, onShot);
+          this.quadGuns(i, dt, target, dh);
         } else if (mid) {
           // The tell: the aim fixes on where the mech is, lamps flash and it rears back; then the slug goes there.
           if (this.burstLeft[i] === 0 && this.fireClock[i] <= v.robotMidShotWindup) {
@@ -1399,13 +1481,13 @@ export class RobotSwarm {
           if (this.fireClock[i] <= 0 && this.burstLeft[i] === 1) {
             const aim = this.aim;
             aim.x = this.ax[i]; aim.y = this.ay[i]; aim.z = this.az[i]; aim.radius = target.radius;
-            this.fire(i, aim, v.robotMidShotSpread * DEG, this.hubY[i] + size[i] * 0.08, size[i] * 0.45, MID, onShot);
+            this.fire(i, aim, v.robotMidShotSpread * DEG, this.hubY[i] + size[i] * 0.08, size[i] * 0.45, MID);
             this.burstLeft[i] = 0;
             this.fireClock[i] = v.robotMidShotInterval * (0.7 + 0.6 * this.rand());
           }
           this.tell[i] = this.burstLeft[i];
         } else if (this.fireClock[i] <= 0 && dh < 0.5) {
-          this.fire(i, target, v.robotShotSpread * DEG, this.hubY[i] + size[i] * HUB_H * 0.3, size[i] * 0.25, SMALL, onShot);
+          this.fire(i, target, v.robotShotSpread * DEG, this.hubY[i] + size[i] * HUB_H * 0.3, size[i] * 0.25, SMALL);
           this.fireClock[i] = v.robotShotInterval * (0.7 + 0.6 * this.rand());
         }
       }
@@ -1486,7 +1568,7 @@ export class RobotSwarm {
           this.stepT[f] = -1;
           this.waitStep[f] = 1;
           this.footY[f] = this.ground.height(this.footX[f], this.footZ[f]);
-          this.onFootfall?.(i, this.footX[f], this.footY[f], this.footZ[f], k);
+          this.emit({ t: "footfall", robot: i, x: this.footX[f], y: this.footY[f], z: this.footZ[f], leg: k });
         } else stepping++;
       } else {
         // A big one's planted feet follow the ground (its own pulse craters the sand under them).
@@ -1605,7 +1687,7 @@ export class RobotSwarm {
     const lead = v.robotBigLobLead * flight, r = v.robotBigLobScatter * Math.sqrt(this.rand()), a = this.rand() * Math.PI * 2;
     const x = t.x + this.tvx * lead + Math.cos(a) * r, z = t.z + this.tvz * lead + Math.sin(a) * r;
     this.lobs++; this.shots++;
-    this.onLob?.(i, fx, fy, fz, x, z, flight);
+    this.emit({ t: "lob", robot: i, fx, fy, fz, x, z, flight });
   }
 
   /** A medium walker's walk speed (weapon quads have their own). */
@@ -1645,7 +1727,7 @@ export class RobotSwarm {
    * A weapon quad's guns: a tell (eyes flash, it braces), then a minigun burst from both pods or a rocket volley; or a
    * laser or rail charge down the beam path (the aim follows, locks, fires).
    */
-  private quadGuns(i: number, dt: number, target: RobotTarget, dh: number, onShot: RobotShotFn) {
+  private quadGuns(i: number, dt: number, target: RobotTarget, dh: number) {
     const v = this.v, w = this.weapon[i], S = this.size[i];
     if (w === Q_LASER || w === Q_RAIL) {
       if (this.beamT[i] >= 0) { this.chargeBeam(i, dt, target); this.tell[i] = 0; return; }
@@ -1660,7 +1742,7 @@ export class RobotSwarm {
       if (w === Q_MINI) {
         if (this.burstLeft[i] === 0) this.burstLeft[i] = Math.max(1, Math.round(v.robotQuadMiniBurst));
         const side = (this.burstLeft[i] & 1 ? 1 : -1) * S * QUAD_GUN_X;
-        this.fire(i, target, v.robotQuadMiniSpread * DEG, this.hubY[i] + S * QUAD_TURRET_Y, S * 0.5, MID, onShot, side);
+        this.fire(i, target, v.robotQuadMiniSpread * DEG, this.hubY[i] + S * QUAD_TURRET_Y, S * 0.5, MID, side);
         this.burstLeft[i]--;
         this.fireClock[i] = this.burstLeft[i] > 0 ? v.robotQuadMiniRate : v.robotQuadMiniPause * (0.7 + 0.6 * this.rand());
       } else {
@@ -1705,10 +1787,10 @@ export class RobotSwarm {
       const e = this.beamFrom(i, this.bf3), ax = this.pax[i], az = this.paz[i], gy = this.ground.height(ax, az);
       this.pulses++;
       this.hurtOwn(ax, az, v.robotPulseRadius, v.robotPulseOwnDamage * this.power[i], v.robotPulsePierce, this.uid[i], v.robotPulseLatched);
-      this.onPulse?.({
+      this.emit({ t: "pulse", e: {
         robot: i, id: this.uid[i], from: { x: e.x, y: e.y, z: e.z }, at: { x: ax, y: gy, z: az },
         radius: v.robotPulseRadius, damage: v.robotPulseDamage * this.power[i], pierce: v.robotPulsePierce, shove: v.robotPulseShove,
-      });
+      } });
     }
     if (now >= C + v.robotPulseHold) {
       this.pulseT[i] = -1;
@@ -1784,12 +1866,12 @@ export class RobotSwarm {
       beamTicks(was, now, sh, (k, tk, release) => {
         const b = this.beamLine(i, this.bl), p = beamPower(tk, sh);
         if (release) this.beams++;
-        this.onBeam?.({
+        this.emit({ t: "beam", e: {
           robot: i, id: this.uid[i],
           from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
           width: spec.width * beamWidthShare(tk, sh), damage: beamTickDamage(tk, spec.damage, sh), pierce: v.robotBeamPierce, tick: k,
           heat: v.robotBeamHeat * p, power: p, release,
-        });
+        } });
       });
       if (now >= beamLive(sh) + v.robotBeamBurn) this.endBeam(i, spec.cooldown);
       return;
@@ -1798,11 +1880,11 @@ export class RobotSwarm {
     if (was < C && now >= C) {
       const b = this.beamLine(i, this.bl);
       this.beams++;
-      this.onBeam?.({
+      this.emit({ t: "beam", e: {
         robot: i, id: this.uid[i],
         from: { x: b.ex, y: b.ey, z: b.ez }, start: { x: b.sx, y: b.sy, z: b.sz }, end: { x: b.x1, y: b.y1, z: b.z1 },
         width: spec.width, damage: spec.damage, pierce: v.robotBeamPierce, tick: 0, heat: v.robotBeamHeat, power: 1, release: true,
-      });
+      } });
     }
     if (now >= C + v.robotBeamBurn) this.endBeam(i, spec.cooldown);
   }
@@ -1815,7 +1897,7 @@ export class RobotSwarm {
   }
 
   /** One round from the front of the body: muzzle at world height fy, fwd metres ahead of the centre. */
-  private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, kind: number, onShot: RobotShotFn, side = 0) {
+  private fire(i: number, t: RobotTarget, spread: number, fy: number, fwd: number, kind: number, side = 0) {
     const h = this.aimYaw(i);
     const fx = this.px[i] + Math.sin(h) * fwd + Math.cos(h) * side, fz = this.pz[i] + Math.cos(h) * fwd - Math.sin(h) * side;
     let dx = t.x - fx, dy = t.y - fy, dz = t.z - fz;
@@ -1830,7 +1912,7 @@ export class RobotSwarm {
     const el = Math.hypot(ex, ey, ez); ex /= el; ey /= el; ez /= el;
     const reach = L * 1.5;
     this.shots++;
-    onShot(fx, fy, fz, fx + ex * reach, fy + ey * reach, fz + ez * reach, kind, i);
+    this.emit({ t: "shot", fx, fy, fz, tx: fx + ex * reach, ty: fy + ey * reach, tz: fz + ez * reach, kind, robot: i });
   }
 
   /**
@@ -1963,7 +2045,7 @@ export class RobotSwarm {
     const n = legsLost(this.legLost[i]), fall = v.robotBigLegsToFall >= 1 && n >= v.robotBigLegsToFall;
     const at = { x: 0, y: 0, z: 0 }, tmp = this.v3a;
     this.legPose(i, leg, tmp, at, this.tp3, this.ft3);
-    this.onLegLost?.({ id: this.uid[i], robot: i, leg, at, lost: n, fell: fall });
+    this.emit({ t: "legLost", e: { id: this.uid[i], robot: i, leg, at, lost: n, fell: fall } });
     if (fall) {
       // It goes down toward the stumps.
       const w = stumpWay(this.legLost[i], this.heading[i], BIG_SPEC.angles, { x: 0, z: 0 });
@@ -2013,7 +2095,7 @@ export class RobotSwarm {
       const r = makeReactor(this.uid[i], this.px[i], this.pz[i], this.hubY[i], this.fallYaw[i], this.ground, spec);
       this.cores.push(Object.assign(r, { power: this.power[i], big }));
     }
-    this.onDeath?.(i, push ? nx : 0, push ? nz : 0, Math.hypot(this.vx[i], this.vz[i]));
+    this.emit({ t: "death", robot: i, nx: push ? nx : 0, nz: push ? nz : 0, speed: Math.hypot(this.vx[i], this.vz[i]) });
   }
 
   /** Reactors in falling wrecks; those due go up: their robots hurt here, the rest (the battlefield) by the event. */
@@ -2030,15 +2112,15 @@ export class RobotSwarm {
       const b = c.big;
       // Hurting robots can kill more of them: their reactors queue up and go off as they fall in turn (a chain).
       this.hurtOwn(c.x, c.z, c.radius, (b ? v.robotBigDeathOwnDamage : v.robotQuadDeathOwnDamage) * c.power, v.robotBigDeathPierce, c.id);
-      R?.blow(c.id, c.x, c.hy, c.z, c.radius);
-      this.onDeathBlast?.({
+      if (R) this.emit({ t: "blow", id: c.id, x: c.x, y: c.hy, z: c.z, radius: c.radius });
+      this.emit({ t: "deathBlast", e: {
         id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: c.hy,
         radius: c.radius, damage: (b ? v.robotBigDeathDamage : v.robotQuadDeathDamage) * c.power, pierce: v.robotBigDeathPierce,
         shove: b ? v.robotBigDeathShove : v.robotQuadDeathShove, boom: b ? v.robotBigDeathBoom : v.robotQuadDeathBoom,
         craterR: c.radius * (b ? v.robotBigDeathCrater : v.robotQuadDeathCrater), craterDepth: b ? v.robotBigDeathCraterDepth : v.robotQuadDeathCraterDepth,
         nova: b ? v.robotBigDeathNova : v.robotQuadDeathNova,
         slow: b ? v.robotBigDeathSlow : 1, shatter: b ? v.robotBigDeathShatter : 0,
-      });
+      } });
     }
   }
 
