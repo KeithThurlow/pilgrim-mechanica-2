@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Bandits and war bands have more presence (Keith asked; Claude on `claude/more-bandits`)
+- Defaults only (sliders unchanged): bandit camps `banditMin/Max` 3–9→6–24, chance per POI kind up ~0.15 (rock 0.2, pod 0.35, wreck 0.5, debris 0.65, convoy 0.75); war columns `colChance` 0.5→0.7, `colMin/Max` 2–5→4–9. Average camp by the road ~4.5→10.5 bandits, 47 at 2500 m.
+- Files: `banditCamps.ts`, `warColumns.ts`; `scaling-check` ceiling for roadside bandit groups 6→12. Checked: full `npm test`.
+- Frame cost: bandits are the cheap instanced infantry but a camp is now ~2x bigger, and more camps; open question for Keith: if frame time hurts near camps, lower `banditMax` or `banditSpawn` (stream-in radius) first.
 ### 2026-11-06 · More crushers (crabs) out in the field (Keith asked; Claude on `claude/more-crushers`)
 - `crusherSiteChance` 0.45→0.75 (share of salvage sites with a crusher grazing; still the "Salvage sites with one" slider). Only crushers near you stand up, so cost is bounded by `crusherSiteNear`.
 - Files: `src/expedition/crusherSites.ts`. Checked: full `npm test`.

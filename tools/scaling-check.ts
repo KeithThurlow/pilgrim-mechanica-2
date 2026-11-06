@@ -61,7 +61,7 @@ if (!(rows[1500].camp.bigs >= 0.2)) fail(`camps round full depth hold ${rows[150
 if (!(rows[2500].camp.bigs >= 0.9)) fail(`camps past full depth hold ${rows[2500].camp.bigs.toFixed(1)} sure excavators, want 1`);
 if (!(rows[100].camp.bigs === 0)) fail("camps by the road hold sure excavators");
 if (!(rows[1500].camp.size > rows[100].camp.size * 1.6)) fail("robot camps don't grow with depth");
-if (!(rows[100].band <= 6)) fail(`bandit groups by the road average ${rows[100].band.toFixed(1)}: should be small`);
+if (!(rows[100].band <= 12)) fail(`bandit groups by the road average ${rows[100].band.toFixed(1)}: should be small`);
 if (!(rows[1500].band >= rows[100].band * 3)) fail("bandits don't grow into warbands");
 if (!(rows[2500].col.size > rows[100].col.size * 1.8)) fail("war bands don't get longer with depth");
 if (failed) process.exit(1);
