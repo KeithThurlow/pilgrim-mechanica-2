@@ -43,16 +43,16 @@ export const FACTION_DEFAULTS = {
   clashLoot: 0.5,
   clashScrap: 6,
   powScrapper: 1,
-  powCutter: 4,
-  powExcavator: 12,
-  powBandit: 1.2,
+  powCutter: 3,
+  powExcavator: 8,
+  powBandit: 2.2,
   powTechnical: 4,
   powGunTruck: 9,
   powSixWheeler: 14,
   powWarRig: 30,
   powTurretTruck: 28,
   powPartyBus: 24,
-  powBanditMech: 20,
+  powBanditMech: 30,
 };
 export type FactionValues = typeof FACTION_DEFAULTS;
 

@@ -32,9 +32,9 @@ const prey = { kind: "mech", alive: true, at, radius: 2.5, unit: { damage() {} }
 const step = (s: number, hunting = true) => { for (let k = 0; k < s * 60; k++) sc.update(1 / 60, hunting, mech, prey); };
 const list = () => sc.sf.pack.list;
 
-camps.set("c1", { x: 120, z: 0, n: 20, awake: false, roam: false });
+camps.set("c1", { x: 120, z: 0, n: 32, awake: false, roam: false });
 step(1);
-if (sc.count !== 1) fail(`a camp of 20 brought ${sc.count} striders (want 1)`);
+if (sc.count !== 1) fail(`a camp of 32 brought ${sc.count} striders (want 1)`);
 const s0 = list()[0], p0 = s0?.pos().clone();
 step(2);
 if (s0 && (!s0.frozen || s0.pos().distanceTo(p0!) > 0.01)) fail("a sleeping camp's strider moved");
@@ -45,7 +45,20 @@ if (!woke) fail("shooting a sleeping strider didn't wake its camp");
 step(8);
 if (s0 && (s0.frozen || s0.pos().distanceTo(p0!) < 5)) fail(`awake: frozen ${s0.frozen}, moved ${s0.pos().distanceTo(p0!).toFixed(1)} m`);
 // The convoy's turrets can see it (awake, in range); a sleeping one is not a threat.
-{ const pts: THREE.Vector3[] = []; sc.threats(0, 0, 400, pts); if (pts.length !== sc.count) fail(`turret threats ${pts.length}, striders ${sc.count}`); }
+{
+  const pts: THREE.Vector3[] = []; sc.threats(0, 0, 400, pts);
+  if (pts.length !== sc.count) fail(`turret threats ${pts.length}, striders ${sc.count}`);
+  // A turret's round straight at the point hits the strider (Keith 2026-11-06: the points were 7 m over the disc),
+  // from 30, 60 and 90 m off at deck height, all round.
+  let shots = 0, hits = 0;
+  for (const q of pts) for (const dist of [30, 60, 90]) for (let a = 0; a < 8; a++) {
+    const ox = q.x + Math.sin(a * 0.785) * dist, oz = q.z + Math.cos(a * 0.785) * dist;
+    const o = new THREE.Vector3(ox, field.height(ox, oz) + 5, oz), d = new THREE.Vector3().subVectors(q, o).normalize();
+    shots++; if (sc.sf.target.hitRay(o, d, dist + 20) >= 0) hits++;
+  }
+  console.log(`turret aim: ${hits} of ${shots} rounds straight at the threat point hit the strider`);
+  if (hits < shots) fail(`${shots - hits} of ${shots} rounds at the turret threat point missed the strider`);
+}
 // The camp's robots all gone: it fights on near the mech.
 camps.delete("c1");
 step(1);
@@ -59,15 +72,15 @@ mech.x = 0; at.set(0, field.height(0, 0) + 3, 0);
 camps.set("c1", { x: 120, z: 0, n: 0, awake: false, roam: false });
 step(0.5);
 if (sc.count !== before) fail(`came back with ${sc.count}, left with ${before}`);
-// Sizes: a camp of 10 none, 40 the most (2), a raid of 26 one.
+// Sizes: a camp of 10 none, 70 the most (1), a raid of 48 one.
 const n0 = sc.count;
 camps.set("small", { x: 0, z: 200, n: 10, awake: false, roam: false });
-camps.set("big", { x: 0, z: -200, n: 40, awake: false, roam: false });
-camps.set("raid", { x: -150, z: 40, n: 26, awake: true, roam: true });
+camps.set("big", { x: 0, z: -200, n: 70, awake: false, roam: false });
+camps.set("raid", { x: -150, z: 40, n: 48, awake: true, roam: true });
 step(0.2);
 const added = sc.count - n0;
-if (added !== 3) fail(`camps of 10 and 40 and a raid of 26 brought ${added} (want 0 + 2 + 1)`);
-console.log(`strider camps: camp of 20 → ${before}, small/big/raid → ${added}, woke ${woke}`);
+if (added !== 2) fail(`camps of 10 and 70 and a raid of 48 brought ${added} (want 0 + 1 + 1)`);
+console.log(`strider camps: camp of 32 → ${before}, small/big/raid → ${added}, woke ${woke}`);
 // Off: they go and none come.
 v.stridersOn = 0;
 step(0.2);

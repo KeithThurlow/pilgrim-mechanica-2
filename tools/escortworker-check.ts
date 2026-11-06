@@ -13,7 +13,7 @@ import { SHALLOWS_DEFAULTS } from "../src/world/shallows";
 import { ConvoyRoute, ROUTE_DEFAULTS } from "../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS } from "../src/convoy/platform";
 import { TRAIN_DEFAULTS } from "../src/convoy/train";
-import { EscortGroup, ESCORT_DEFAULTS } from "../src/convoy/escort";
+import { EscortGroup, ESCORT_DEFAULTS, type EscortRemote } from "../src/convoy/escort";
 import { CraterLayer, CRATER_DEFAULTS } from "../src/world/craters";
 import { GroundRecorder, type GroundEvent } from "../src/sim/groundEvents";
 import { GroundMirror } from "../src/sim/groundMirror";
@@ -73,7 +73,7 @@ function run(opts: { frames: number; dropStep?: number }): Run {
       ref.update(dt / 2, aboard ? null : mech);
       r.refMs += performance.now() - t0;
       if (opts.dropStep === ++steps) {
-        const keep: typeof view.remote = view.remote; view.remote = { ...keep!, update: () => {} }; view.update(dt / 2, mech); view.remote = keep;
+        const keep: EscortRemote = view.remote!; view.remote = { ...keep, update: () => {} }; view.update(dt / 2, mech); view.remote = keep;
       } else view.update(dt / 2, aboard ? null : mech);
     }
     // Blasts round the escorts now and then (their planning copy forgets the ground there).
