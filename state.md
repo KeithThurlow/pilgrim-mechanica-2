@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Empty effect pools aren't drawn (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
+- Keith's PC after #238/#244 (`/mnt/project-files/pc-profile-siege-2.md`): convoy siege 16.1 ms (was 19.9), sim 6.6, submit 7.9; the renderer's per-object work is now about a third of the frame.
+- `src/core/instanceUploads.ts`: instanced meshes with count 0 (and no children) are hidden for the render and shown again right after (`restoreEmptyPools`, called by `createApp`); they drew nothing but each cost the renderer a full object. Their pending upload ranges are kept. HUD details: "empty pools not drawn".
+- Checked (cloud box, convoy `?siege&manual`): main-pass objects 259 → 195 (64 empty pools). npm test 92/92.
+
 ### 2026-11-06 · Big walkers' legs and reactor are targets (Keith asked; Claude on `claude/project-thread-2vnrf3`)
 - Each of a big walker's four legs has its own health (0.3 of the walker's, `robotBigLegHp`): rounds on a leg (thigh, shin, foot; blasts at its feet too) wear it down as well as their usual share on the body. Shot through, it breaks below the knee (a charred stub, sparks and a crack, `onLegLost` event): the walker loses 8% health, walks at ×0.55 per lost leg and leans 7° toward the stump; two gone and it falls toward the stumps, a kill, and its reactor goes up as it tips (#236). Wrecks keep the stumps.
 - The reactor: a cyan orb on a mast on top of the thorax (flickers as health runs low). Rounds through it count ×2.5 through 0.35 of the armour, ahead of the disc in front of it; a kill through it breaches the reactor: it goes up 0.35 s later, standing (an airburst at full height). Rounds aimed at the body's centre never graze it. Sheets (the player's rounds) strike it by their flight line; the flat rail can't reach it.

@@ -10,7 +10,9 @@ import * as THREE from "three/webgpu";
 const seen = new WeakMap<THREE.BufferAttribute, number>();
 /** Ranges this pass set and three hasn't uploaded yet: the end (in array elements). */
 const mine = new WeakMap<THREE.BufferAttribute, number>();
-const stats = { trimmed: 0, savedKB: 0 };
+const stats = { trimmed: 0, savedKB: 0, empty: 0 };
+/** Instanced meshes with nothing in them, hidden for this frame's render (restoreEmptyPools puts them back). */
+const hidden: THREE.Object3D[] = [];
 
 function trim(a: THREE.BufferAttribute, count: number) {
   const v = a.version, was = seen.get(a);
@@ -28,9 +30,14 @@ function trim(a: THREE.BufferAttribute, count: number) {
   stats.savedKB += ((a.array.length - end) * (a.array as Float32Array).BYTES_PER_ELEMENT) / 1024;
 }
 
-/** Call once a frame before rendering: trims the visible instanced meshes' uploads. */
+/**
+ * Call once a frame before rendering: trims the visible instanced meshes' uploads, and hides the ones with no
+ * instances (count 0) for the render: they draw nothing, but each still cost the renderer a full object's work (perf,
+ * 2026-11-06: 64 of the 259 objects the convoy siege drew were empty effect pools). Call restoreEmptyPools() right
+ * after rendering; a hidden pool's pending upload range is kept and goes up when it next draws.
+ */
 export function trimInstanceUploads(scene: THREE.Object3D) {
-  stats.trimmed = 0; stats.savedKB = 0;
+  stats.trimmed = 0; stats.savedKB = 0; stats.empty = 0;
   scene.traverseVisible((o) => {
     const m = o as THREE.InstancedMesh;
     if (!m.isInstancedMesh) return;
@@ -41,6 +48,15 @@ export function trimInstanceUploads(scene: THREE.Object3D) {
       const a = g.attributes[k] as THREE.InstancedBufferAttribute;
       if (a.isInstancedBufferAttribute && !(a as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) trim(a, m.count);
     }
+    if (m.count === 0 && m.children.length === 0) hidden.push(m);
   });
+  for (const m of hidden) m.visible = false;
+  stats.empty = hidden.length;
   return stats;
+}
+
+/** Show the pools trimInstanceUploads hid for the render. */
+export function restoreEmptyPools() {
+  for (const m of hidden) m.visible = true;
+  hidden.length = 0;
 }
