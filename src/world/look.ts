@@ -11,6 +11,7 @@
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { SHADOW_ONLY_LAYER } from "./chunks";
+import { SHADOW_PROXY_LAYER } from "../look/shadowProxies";
 import { DayClock, skyAt, DAYNIGHT_DEFAULTS, DAYNIGHT_PARAMS, type Sky } from "./daynight";
 import { NightLights, NIGHT_LIGHT_DEFAULTS, NIGHT_LIGHT_PARAMS, NIGHT_LIGHT_GROUPS } from "./nightLights";
 import { BLAST_WAVE_DEFAULTS, BLAST_WAVE_PARAMS, BLAST_WAVE_GROUPS } from "../fx/blastWaves";
@@ -163,6 +164,7 @@ export class DesertLook {
     this.sun.shadow.radius = 2;
     // The shadow map also draws what only casts (the terrain's coarse shadow copy); the camera never sees that layer.
     this.sun.shadow.camera.layers.enable(SHADOW_ONLY_LAYER);
+    this.sun.shadow.camera.layers.enable(SHADOW_PROXY_LAYER); // merged shadow casters (src/look/shadowProxies.ts)
     scene.add(this.sun, this.sun.target);
 
     const sd = starDome();
