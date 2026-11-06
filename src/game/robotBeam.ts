@@ -10,7 +10,7 @@
 // flagged release, and every other tick blasts the sand by the beam's power, little while it charges, most once full.
 import * as THREE from "three/webgpu";
 import type { Battlefield } from "./battlefield";
-import { SMALL, BIG, type RobotBeamEvent, type RobotDeathBlastEvent, type RobotPulseEvent, type RobotSwarm } from "../combat/robots";
+import { SMALL, BIG, type RobotBeamEvent, type RobotDeathBlastEvent, type RobotLegLostEvent, type RobotPulseEvent, type RobotSwarm } from "../combat/robots";
 import { sampleBankOf } from "../audio/sampleBank";
 import { famOfTeam } from "../world/lamps";
 import type { CoreWarnDraw } from "../fx/coreWarnDraw";
@@ -211,6 +211,26 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
 }
 
 const SPARK_AT = new THREE.Vector3(), SPARK_UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * A big one's leg shot through (src/combat/robotWeakPoints.ts; cosmetic): a crack and a spray of sparks at the knee,
+ * smoke, the broken shin's dust where it hits the sand, a flicker of light. Louder when it brings the walker down.
+ */
+export function fireRobotLegLost(bf: Battlefield, e: RobotLegLostEvent) {
+  SPARK_AT.set(e.at.x, e.at.y, e.at.z);
+  bf.gunFx.sparksAt(SPARK_AT, SPARK_UP, 40, 12);
+  bf.sfx.playSound("blast", SPARK_AT, e.fell ? 0.9 : 0.55, 1.25 + Math.random() * 0.15);
+  for (let k = 0; k < 14; k++) {
+    const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 4;
+    bf.dust.emit(1, e.at.x, e.at.y, e.at.z, Math.cos(a) * sp, Math.random() * 3 - 1, Math.sin(a) * sp, 1, 2 + Math.random() * 2, 0.9);
+  }
+  const gy = bf.field.height(e.at.x, e.at.z);
+  for (let k = 0; k < 16; k++) {
+    const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5;
+    bf.dust.emit(1, e.at.x, gy + 0.3, e.at.z, Math.cos(a) * sp, 2 + Math.random() * 4, Math.sin(a) * sp, 1.2, 2 + Math.random() * 2, 0.9);
+  }
+  bf.nightLights?.flash(e.at.x, e.at.y, e.at.z, 8, famOfTeam(ROBOTS));
+}
 /**
  * A dying walker's core going unstable (src/fx/coreWarnDraw.ts), heard and seen on the battlefield (cosmetic): a
  * rising whine stretched over the countdown when it starts, and on each blink a beep (higher toward the end), a spit
@@ -236,5 +256,6 @@ export function wireRobotBlasts(bf: Battlefield, sw: RobotSwarm, warn: CoreWarnD
   sw.onBeam = (e) => fireRobotBeam(bf, e, beamReach);
   sw.onPulse = (e) => fireRobotPulse(bf, e, shove);
   sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, shove);
+  sw.onLegLost = (e) => fireRobotLegLost(bf, e);
   coreWarnFx(bf, warn);
 }

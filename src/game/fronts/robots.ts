@@ -65,7 +65,7 @@ export function robotsFront(params0: URLSearchParams): Front {
     spec: {
       defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...DROID_ALL_DEFAULTS, ...STRIDER_LAB_DEFAULTS, ...LAB_GUN_DEFAULTS },
       params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS, ...STRIDER_LAB_PARAMS, ...LAB_GUN_PARAMS],
-      topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: terraform pulse", "Robots: weapon quads", "Robots: hit parts", "Lab: your guns"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
+      topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: terraform pulse", "Robots: weapon quads", "Robots: hit parts", "Robots: big weak points", "Robots: big death", "Lab: your guns"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
       selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }, striders.selectable],
       actions: [{ label: "Pack now", onClick: () => pack?.() }, ...striders.actions],
       report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0, ...striders.report() }),
@@ -273,7 +273,7 @@ export function robotsFront(params0: URLSearchParams): Front {
         },
         touch() {
           contact.robots(sw, target);
-          lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+          lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]} reactor ${target.partHits[3]} · legs shot through ${sw.legsBroken}`);
           const rl = lab.arsenal.last;
           if (rl.railHits !== undefined) lab.hud("rail", `last rail slug: ${rl.railHits} bodies, ${Math.round(rl.rail ?? 0)} damage${rl.railGround ? " · stopped in a dune" : ""}`);
         },

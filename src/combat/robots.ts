@@ -23,6 +23,7 @@ import {
   QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
 import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
+import { WEAK_DEFAULTS, WEAK_PARAMS, BIG_CORE_Y, crippleK, legsLost, raySphere, stumpWay } from "./robotWeakPoints";
 
 export const ROBOT_DEFAULTS = {
   // Small ones: the pack.
@@ -294,6 +295,8 @@ export const ROBOT_DEFAULTS = {
   robotHitScale: 1.25,
   robotBodyLife: 10,
   robotSinkTime: 2.5,
+  // Big walkers' legs and reactor as targets (Keith 2026-11-06; src/combat/robotWeakPoints.ts).
+  ...WEAK_DEFAULTS,
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
@@ -536,6 +539,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotHitScale", label: "Hit size (× body)", min: 0.5, max: 2.5, step: 0.05, group: G1, tip: "Rounds test an ellipsoid round the hub (small) or the body (medium, big), its size times this" },
   { key: "robotBodyLife", label: "Wrecks stay (s)", min: 1, max: 60, step: 0.5, group: G1 },
   { key: "robotSinkTime", label: "Sink at the end (s)", min: 0.1, max: 10, step: 0.1, group: G1 },
+  ...WEAK_PARAMS,
 ];
 
 export const ROBOT_MAX = 1024;
@@ -545,8 +549,8 @@ export const RUN = 0, LEAP = 1, LATCHED = 2, FIRE = 3, FLUNG = 4, CUT = 5, DOWN 
 export const EMPTY = 255;
 /** Kinds: small scrappers, big excavators, medium cutters. */
 export const SMALL = 0, BIG = 1, MID = 2;
-/** Parts a round can hit (walkers): the body (chassis or hub), a leg, a foot. */
-export const PART_BODY = 0, PART_LEG = 1, PART_FOOT = 2;
+/** Parts a round can hit (walkers): the body (chassis or hub), a leg, a foot, a big one's reactor (robotWeakPoints.ts). */
+export const PART_BODY = 0, PART_LEG = 1, PART_FOOT = 2, PART_CORE = 3;
 /** Medium and big walk on planted feet. */
 export const isWalker = (kind: number) => kind !== SMALL;
 /** Who shoves whom on the ground: heavier ranks push lighter ones aside. */
@@ -615,6 +619,8 @@ export interface RobotDeathBlastEvent {
   /** The nova look's size (×; 0 none, src/fx/nova.ts). The hull's height above the ground is hubY − at.y. */
   nova?: number;
 }
+/** A big one's leg shot through (plain data, rule 12): which robot and leg, where it broke (the knee), how many are gone. */
+export interface RobotLegLostEvent { id: number; robot: number; leg: number; at: V3; lost: number; fell: boolean }
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
 
@@ -737,6 +743,17 @@ export class RobotSwarm {
   /** Set by hitRay: the last hit was on a walker's leg or foot (not its body), and which part (PART_*). */
   hitLeg = false;
   hitPart = PART_BODY;
+  /** Set by hitRay: which leg (0-3) a leg or foot hit struck, -1 none. */
+  hitLegNo = -1;
+  /** Big ones' legs (robotWeakPoints.ts): each leg's health (robot × 4 + leg), the legs shot through (a bit per leg), and
+   *  whether the killing hit went through the reactor (it goes up at once, standing). Host state. */
+  readonly legHp = new Float32Array(ROBOT_MAX * WALK_LEGS);
+  readonly legLost = new Uint8Array(ROBOT_MAX);
+  readonly breach = new Uint8Array(ROBOT_MAX);
+  /** A big one's leg shot through (plain-data event). */
+  onLegLost: ((e: RobotLegLostEvent) => void) | null = null;
+  /** Legs shot through since construction. */
+  legsBroken = 0;
   /**
    * Frozen robots stand where they are and do nothing (not stepped, no attacks) until cleared: a camp asleep out in
    * the sand (the expedition lab). The dead still collapse.
@@ -865,6 +882,8 @@ export class RobotSwarm {
       this.size[i] *= sizeK;
       this.hp[i] = (big ? v.robotBigHp : quad ? v.robotQuadHp : mid ? v.robotMidHp : v.robotHp) * power;
       this.maxHp[i] = this.hp[i]; this.power[i] = power;
+      this.legLost[i] = 0; this.breach[i] = 0;
+      for (let g = 0; g < WALK_LEGS; g++) this.legHp[i * WALK_LEGS + g] = big ? this.hp[i] * v.robotBigLegHp : 0;
       this.state[i] = RUN; this.stateTime[i] = 0;
       this.gait[i] = this.rand() * Math.PI * 2;
       this.tumble[i] = 0; this.spin[i] = 0; this.fallYaw[i] = 0; this.slope[i] = 0;
@@ -1202,7 +1221,7 @@ export class RobotSwarm {
       this.tell[i] = st === CUT && stateTime[i] < v.robotMidCutWindup + v.robotMidLungeTime ? 1 : 0;
       const hill = Math.max(0.3, Math.min(1 + v.robotDownhill, 1 - this.slope[i] * v.robotUphill));
       if (st === RUN) {
-        const spd = (big ? v.robotBigSpeed : mid ? this.midSpeed(i) : v.robotRunSpeed) * this.speedK[i] * hill;
+        const spd = (big ? v.robotBigSpeed * crippleK(this.legLost[i], v) : mid ? this.midSpeed(i) : v.robotRunSpeed) * this.speedK[i] * hill;
         if (!walker && !own && !this.shooter[i] && full && dist < keep + v.robotWaitDist * 1.4 + 2) {
           // Every spot is taken: circle the mech, waiting for one to come free.
           // A band, not a ring, so the waiting pack doesn't pile up on one circle.
@@ -1225,7 +1244,7 @@ export class RobotSwarm {
         face = this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
         const near = big ? v.robotBigNear : mid ? (this.variant[i] === QUAD_WEAPON ? v.robotQuadNear : v.robotMidNear) : v.robotShootNear;
         if (big && this.pulseT[i] >= 0) { /* planted for the pulse */ }
-        else if (dist < near) { const back = (big ? v.robotBigSpeed : mid ? this.midSpeed(i) : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
+        else if (dist < near) { const back = (big ? v.robotBigSpeed * crippleK(this.legLost[i], v) : mid ? this.midSpeed(i) : v.robotRunSpeed) * 0.35; wx = -ux * back; wz = -uz * back; }
       } else if (st === CUT) {
         // It tracks the mech through the wind-up, then lunges where the mech was: a dash in time takes you clear.
         const t = stateTime[i], w = v.robotMidCutWindup;
@@ -1811,12 +1830,12 @@ export class RobotSwarm {
    * the arm legs (boom and stick) and a fatter one round each bucket (its foot). part says which (PART_*); leg is true
    * for a leg or a foot. only: test just these robots (the register's candidates), else every one.
    */
-  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number; leg: boolean; part: number } | null {
+  hitRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, only: readonly number[] | null = null): { index: number; dist: number; leg: boolean; part: number; legNo: number } | null {
     const L = Math.hypot(dx, dy, dz);
     if (L < 1e-9) return null;
     dx /= L; dy /= L; dz /= L;
     const k = this.v.robotHitScale;
-    let best = -1, bestT = maxDist, bestPart = PART_BODY;
+    let best = -1, bestT = maxDist, bestPart = PART_BODY, bestLeg = -1;
     const hip = this.hp3, knee = this.kn3, tip = this.tp3, foot = this.ft3, low = this.lw3;
     for (let j = 0, n = only ? only.length : this.hi; j < n; j++) {
       const i = only ? only[j] : j;
@@ -1831,17 +1850,27 @@ export class RobotSwarm {
         const b0 = qx * dx + qy * dy + qz * dz, c0 = qx * qx + qy * qy + qz * qz - R * R;
         if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
         const t = rayEllipsoid(ox - this.px[i], oy - this.hubY[i] - S * 0.05, oz - this.pz[i], dx, dy, dz, S * 0.45 * k, S * BIG_BODY_H * 0.75 * k, S * 0.55 * k);
-        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
+        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; bestLeg = -1; }
+        // The reactor on its mast (robotWeakPoints.ts): proud of the disc, so a round through it strikes it even when
+        // it clipped the disc's rim first (from below, the rim is in the way of the orb), ahead of the body behind it.
+        const cr = this.v.robotBigCoreHit;
+        if (cr > 0) {
+          const tc = raySphere(ox, oy, oz, dx, dy, dz, this.px[i], this.hubY[i] + S * BIG_CORE_Y, this.pz[i], cr);
+          if (tc >= 0 && tc < maxDist && (tc < bestT || (best === i && bestPart === PART_BODY))) { bestT = tc; best = i; bestPart = PART_CORE; bestLeg = -1; }
+        }
         const r = this.v.robotBigLegHit;
         if (r <= 0) continue;
+        const lost = this.legLost[i];
         for (let g = 0; g < WALK_LEGS; g++) {
           this.legPose(i, g, hip, knee, tip, foot);
           let tl = raySegment(ox, oy, oz, dx, dy, dz, hip, knee, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; bestLeg = g; }
+          // A leg shot through ends at the knee (its stump).
+          if (lost & (1 << g)) continue;
           tl = raySegment(ox, oy, oz, dx, dy, dz, knee, tip, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; bestLeg = g; }
           tl = raySegment(ox, oy, oz, dx, dy, dz, tip, foot, r * 1.6);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; bestLeg = g; }
         }
         continue;
       }
@@ -1853,19 +1882,19 @@ export class RobotSwarm {
         const b0 = sx * dx + sy * dy + sz * dz, c0 = sx * sx + sy * sy + sz * sz - R * R;
         if ((c0 > 0 && b0 > 0) || b0 * b0 - c0 < 0) continue;
         const t = rayEllipsoid(ox - this.px[i], oy - (this.hubY[i] + S * 0.05), oz - this.pz[i], dx, dy, dz, S * 0.38 * k, S * MID_BODY_H * k, S * 0.5 * k);
-        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
+        if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; bestLeg = -1; }
         const r = this.v.robotMidLegHit;
         if (r <= 0 || s === DOWN) continue;
         for (let g = 0; g < WALK_LEGS; g++) {
           this.legPose(i, g, hip, knee, tip, foot);
           let tl = raySegment(ox, oy, oz, dx, dy, dz, hip, knee, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; bestLeg = g; }
           // The shin; its low quarter is the foot.
           low.x = knee.x + (tip.x - knee.x) * 0.75; low.y = knee.y + (tip.y - knee.y) * 0.75; low.z = knee.z + (tip.z - knee.z) * 0.75;
           tl = raySegment(ox, oy, oz, dx, dy, dz, knee, low, r);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_LEG; bestLeg = g; }
           tl = raySegment(ox, oy, oz, dx, dy, dz, low, tip, r * 1.2);
-          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; }
+          if (tl >= 0 && tl < bestT) { bestT = tl; best = i; bestPart = PART_FOOT; bestLeg = g; }
         }
         continue;
       }
@@ -1880,16 +1909,59 @@ export class RobotSwarm {
       const t = flat
         ? rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.45 * k, S * (tall ? 0.32 : 0.22) * k, S * 0.45 * k)
         : rayEllipsoid(qx, qy, qz, dx, dy, dz, S * 0.34 * k, S * 0.34 * k, S * 0.34 * k);
-      if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; }
+      if (t >= 0 && t < bestT) { bestT = t; best = i; bestPart = PART_BODY; bestLeg = -1; }
     }
     this.hitPart = best >= 0 ? bestPart : PART_BODY;
-    this.hitLeg = best >= 0 && bestPart !== PART_BODY;
-    return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg, part: this.hitPart };
+    this.hitLeg = best >= 0 && (bestPart === PART_LEG || bestPart === PART_FOOT);
+    this.hitLegNo = best >= 0 ? bestLeg : -1;
+    return best < 0 ? null : { index: best, dist: bestT, leg: this.hitLeg, part: this.hitPart, legNo: this.hitLegNo };
   }
   /** Flat armour of robot i (by its kind: the sliders), for src/game/armour.ts. */
   armourOf(i: number) { const k = this.kind[i], v = this.v; return k === SMALL ? v.robotArmour : k === MID ? v.robotMidArmour : v.robotBigArmour; }
   /** Damage share of a round into a part (PART_*): legs and feet take less than the body (sliders). */
-  partShare(part: number) { return part === PART_LEG ? this.v.robotLegDamage : part === PART_FOOT ? this.v.robotFootDamage : 1; }
+  partShare(part: number) { return part === PART_LEG ? this.v.robotLegDamage : part === PART_FOOT ? this.v.robotFootDamage : part === PART_CORE ? this.v.robotBigCoreDamage : 1; }
+  /** The armour a hit on robot i's part meets: the reactor's is a share of the body's. */
+  partArmour(i: number, part: number) { return this.armourOf(i) * (part === PART_CORE ? this.v.robotBigCoreArmour : 1); }
+
+  /**
+   * A hit of `amount` (after armour) on big one i's part (PART_*), on leg `leg` for a leg or foot: wears the leg down
+   * (robotWeakPoints.ts), then the body takes its share (share: the part's damage share; the caller's armour already
+   * spent). Returns true if this killed it. Rounds, sheets and burning go through here; splash through hurtLeg and damage.
+   */
+  hitAt(i: number, part: number, leg: number, amount: number, legAmount: number, dirX: number, dirZ: number): boolean {
+    if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
+    if (this.kind[i] === BIG) {
+      if ((part === PART_LEG || part === PART_FOOT) && leg >= 0 && this.hurtLeg(i, leg, legAmount, dirX, dirZ)) return true;
+      if (part === PART_CORE && this.hp[i] - amount <= 0) this.breach[i] = 1;
+    }
+    return this.damage(i, amount, dirX, dirZ);
+  }
+
+  /**
+   * Big one i's leg takes amount: shot through (its health gone), it breaks below the knee, the walker loses
+   * robotBigLegLossHurt of its health, and with robotBigLegsToFall gone it falls toward the stumps (a kill). Returns
+   * true if this killed it.
+   */
+  hurtLeg(i: number, leg: number, amount: number, dirX: number, dirZ: number): boolean {
+    if (i < 0 || i >= this.hi || this.state[i] >= DEAD || this.kind[i] !== BIG || leg < 0 || leg >= WALK_LEGS) return false;
+    const bit = 1 << leg;
+    if (this.legLost[i] & bit || amount <= 0) return false;
+    const f = i * WALK_LEGS + leg;
+    if ((this.legHp[f] -= amount) > 0) return false;
+    const v = this.v;
+    this.legHp[f] = 0; this.legLost[i] |= bit; this.legsBroken++;
+    const n = legsLost(this.legLost[i]), fall = v.robotBigLegsToFall >= 1 && n >= v.robotBigLegsToFall;
+    const at = { x: 0, y: 0, z: 0 }, tmp = this.v3a;
+    this.legPose(i, leg, tmp, at, this.tp3, this.ft3);
+    this.onLegLost?.({ id: this.uid[i], robot: i, leg, at, lost: n, fell: fall });
+    if (fall) {
+      // It goes down toward the stumps.
+      const w = stumpWay(this.legLost[i], this.heading[i], BIG_SPEC.angles, { x: 0, z: 0 });
+      this.kill(i, w.x || dirX, w.z || dirZ);
+      return true;
+    }
+    return this.damage(i, this.maxHp[i] * v.robotBigLegLossHurt, dirX, dirZ);
+  }
   private lw3: V3 = { x: 0, y: 0, z: 0 };
   private hp3: V3 = { x: 0, y: 0, z: 0 }; private kn3: V3 = { x: 0, y: 0, z: 0 };
   private ft3: V3 = { x: 0, y: 0, z: 0 }; private tp3: V3 = { x: 0, y: 0, z: 0 };
@@ -1921,7 +1993,11 @@ export class RobotSwarm {
     this.count--;
     const big = this.kind[i] === BIG, quad = this.kind[i] === MID && this.variant[i] === QUAD_WEAPON;
     if (big ? v.robotBigDeathOn > 0.5 : quad && v.robotQuadDeathOn > 0.5) {
-      const spec = big
+      // A kill through the reactor (robotWeakPoints.ts) breaches it: it goes up at once, standing, high up.
+      const br = big && this.breach[i] ? Math.max(0, v.robotBigCoreBreach) : -1;
+      const spec = br >= 0
+        ? { delay: br, min: br, share: 1, spin: v.robotBigDeathTip, radius: v.robotBigDeathRadius }
+        : big
         ? { delay: v.robotBigDeathDelay, min: v.robotBigDeathMin, share: v.robotBigDeathAt, spin: v.robotBigDeathTip, radius: v.robotBigDeathRadius }
         : { delay: v.robotQuadDeathDelay, min: v.robotQuadDeathMin, share: v.robotQuadDeathAt, spin: v.robotQuadDeathTip, radius: v.robotQuadDeathRadius };
       const r = makeReactor(this.uid[i], this.px[i], this.pz[i], this.hubY[i], this.fallYaw[i], this.ground, spec);

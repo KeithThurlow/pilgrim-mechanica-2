@@ -22,6 +22,7 @@ import {
   WHITE, WHITE_DIM, JOINT, DARK, CHROME, ROBOT_PALETTE,
 } from "./robotShapes";
 import { LAMP_ROBOT, LAMP_ROBOT_GLOW, type LampEmit } from "../world/lamps";
+import { BIG_CORE_Y, BIG_CORE_R, stumpWay } from "./robotWeakPoints";
 import { RobotBeamDraw } from "./robotBeamDraw";
 
 /** Look values that aren't feel (kept here; promote any to sliders if they need tuning). */
@@ -86,7 +87,7 @@ export class RobotsDraw {
   readonly group = new THREE.Group();
   private smallBodies: Pool; private midBodies: Pool; private bigBodies: Pool; private quadBodies: Pool; private quadTurrets: Pool; private quadGuns: Pool[];
   private mt = new THREE.Matrix4(); private qt = new THREE.Quaternion();
-  private saws: Pool; private buckets: Pool; private beams: Pool; private limbs: Pool; private pipes: Pool; private cables: Pool; private knuckles: Pool; private lamps: Pool;
+  private saws: Pool; private buckets: Pool; private beams: Pool; private limbs: Pool; private pipes: Pool; private cables: Pool; private knuckles: Pool; private lamps: Pool; private cores: Pool;
   private roll = new Float32Array(ROBOT_MAX);
   private sawA = new Float32Array(ROBOT_MAX);
   private gen = new Uint32Array(ROBOT_MAX);
@@ -132,6 +133,7 @@ export class RobotsDraw {
   }
   private hip = new THREE.Vector3(); private foot = new THREE.Vector3(); private knee = new THREE.Vector3(); private tip = new THREE.Vector3();
   private bend = new THREE.Vector3(); private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3();
+  private way = { x: 0, z: 0 }; private tilt = new THREE.Vector3(); private coreHot = new THREE.Color(0.5, 1.45, 1.9);
   private va = new THREE.Vector3(); private vb = new THREE.Vector3(); private d1 = new THREE.Vector3(); private d2 = new THREE.Vector3();
   private n1 = new THREE.Vector3(); private sp = new THREE.Vector3(); private tg = new THREE.Vector3();
   private bx = new THREE.Vector3(); private by = new THREE.Vector3(); private bz = new THREE.Vector3();
@@ -182,6 +184,8 @@ export class RobotsDraw {
     this.cables = pool(pipeGeometry(5), M * 12);
     this.knuckles = pool(knuckleGeometry(), M * 8);
     this.lamps = pool(new THREE.BoxGeometry(1, 1, 1), M * 3, lamp, false);
+    // Big ones' reactors on top (src/combat/robotWeakPoints.ts): a glowing orb.
+    this.cores = pool(new THREE.IcosahedronGeometry(1, 1), cap(256), lamp, false);
     // After dark every working robot sweeps a red beam where it looks; the night lights (src/world/nightLights.ts)
     // find this on the group and draw the beams (faked, a real red light on the nearest few).
     this.group.userData.lampSource = (emit: LampEmit, time: number, v: { readonly [k: string]: number }) => this.emitEyes(emit, time, v);
@@ -236,7 +240,7 @@ export class RobotsDraw {
       const k = sw.kind[i];
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
     }
-    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, this.quadTurrets, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps]) p.finish();
+    for (const p of [this.smallBodies, this.midBodies, this.bigBodies, this.quadBodies, this.quadTurrets, ...this.quadGuns, this.saws, this.buckets, this.beams, this.limbs, this.pipes, this.cables, this.knuckles, this.lamps, this.cores]) p.finish();
     this.beamDraw.update(dt);
     this.coreWarn.update(dt, sw.cores);
   }
@@ -443,11 +447,28 @@ export class RobotsDraw {
     const pt = sw.pulseT[i], pc = Math.max(0.05, v.robotPulseCharge);
     const pu = pt >= 0 ? Math.min(1, pt / pc) : 0;
     q.setFromAxisAngle(this.ay, h); qa.setFromAxisAngle(this.ax, -pitch); q.multiply(qa);
+    // Legs shot through (robotWeakPoints.ts): it leans toward the stumps.
+    const lost = sw.legLost[i];
+    if (lost && v.robotBigLegTilt > 0) {
+      const w = stumpWay(lost, h, BIG_SPEC.angles, this.way);
+      const n = (lost & 1) + ((lost >> 1) & 1) + ((lost >> 2) & 1) + ((lost >> 3) & 1);
+      if (w.x || w.z) { qa.setFromAxisAngle(this.tilt.set(w.z, 0, -w.x), Math.min(1.2, n * v.robotBigLegTilt * Math.PI / 180)); q.premultiply(qa); }
+    }
     p.set(sw.px[i], y, sw.pz[i]);
     m.compose(p, q, s.set(S, S, S));
     c.copy(this.white).multiplyScalar(0.92 + sw.seed[i] * 0.1); if (dead) c.multiplyScalar(0.4);
     this.heatTint(i, c);
     this.bigBodies.put(m, c);
+    // The reactor on its mast: cyan, flickering as its health runs down; dark once it's dead.
+    {
+      const share = sw.maxHp[i] > 0 ? Math.max(0, sw.hp[i] / sw.maxHp[i]) : 1;
+      const flick = share < 0.4 ? 0.55 + 0.45 * Math.max(0, Math.sin(this.time * (30 - share * 40) + sw.seed[i] * 7)) : 0.85 + 0.15 * Math.sin(this.time * 3 + sw.seed[i] * 7);
+      this.ml.compose(this.tmp.set(0, BIG_CORE_Y, 0), this.qa.identity(), this.s.setScalar(BIG_CORE_R));
+      this.mb.multiplyMatrices(m, this.ml);
+      if (dead) c.setRGB(0.05, 0.06, 0.07);
+      else c.copy(this.coreHot).multiplyScalar(Math.max(0, v.robotBigCoreGlow) * flick);
+      this.cores.put(this.mb, c);
+    }
     // The eye in the head's visor, red lamps round the rim, slowly chasing (fast and bright when attacking).
     const flash = (tell || pt >= 0) && Math.sin(this.time * 24) > -0.2;
     this.lamp(m, 0, BIG_BODY_H * 0.04, 0.715, 0.1, 0.03, 0.012, dead ? OFF : flash ? ALARM : EYE_RED);
@@ -476,6 +497,15 @@ export class RobotsDraw {
       const dim = dead ? 0.45 : 1;
       c.copy(lin(WHITE)).multiplyScalar(dim);
       this.beam(this.limbs, hip, knee, S * 0.15, S * 0.15, tg, c);
+      if (lost & (1 << k)) {
+        // Shot through: a short charred stub below the knee, nothing below.
+        va.copy(knee).addScaledVector(d2, Math.min(shin * 0.16, S * 0.5));
+        c.copy(lin(DARK)).multiplyScalar(0.6);
+        this.beam(this.limbs, knee, va, S * 0.1, S * 0.1, tg, c);
+        this.knuckle(knee, S * 0.17, c);
+        this.knuckle(hip, S * 0.12, c);
+        continue;
+      }
       va.copy(knee).addScaledVector(d2, shin * 0.6);
       this.beam(this.limbs, knee, va, S * 0.12, S * 0.12, tg, c);
       c.copy(lin(JOINT)).multiplyScalar(dim);

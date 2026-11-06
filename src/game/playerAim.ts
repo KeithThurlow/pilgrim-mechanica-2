@@ -20,7 +20,7 @@ import type { Battlefield } from "./battlefield";
 import type { MechUnit } from "./mechUnit";
 import { Targeting, type TargetValues, type Lock } from "./targeting";
 import { TargetLock, type LockChange } from "./targetLock";
-import { EntryList, type Filter, type Register } from "./register";
+import { EntryList, Register as Reg, type Filter, type Register } from "./register";
 import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
 import { playBlast } from "../weapons/weaponSound";
@@ -127,7 +127,7 @@ export class SoftAim {
    */
   pick(mouse: { x: number; y: number } | null, reg: Register, enemies: Filter, from: THREE.Vector3, v: TargetValues & { range: number }, lockCmd = false): AimPick {
     const out: AimPick = { cursor: null, pointer: null, change: null, aim: null, shotAt: null, lock: null };
-    let soft: Lock | null = null;
+    let soft: Lock | null = null, rayOk = false;
     if (mouse && screenToGround(mouse.x, mouse.y, this.canvas, this.camera, this.field, this.ground)) {
       const g = this.ground;
       out.pointer = out.cursor = out.aim = { x: g.x, y: g.y + 1, z: g.z };
@@ -135,6 +135,7 @@ export class SoftAim {
       this.ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
       this.caster.setFromCamera(this.ndc, this.camera);
       const ray = this.caster.ray;
+      rayOk = true;
       soft = this.targeting.pick(reg, enemies, { rayO: ray.origin, rayD: ray.direction, from, cursor: g, range: v.range }, v);
     }
     if (lockCmd) out.change = this.held.toggle(soft ? (soft.target.key as number) : null);
@@ -151,7 +152,13 @@ export class SoftAim {
     if (out.lock) {
       const t = out.lock.target, L = v.lockLead;
       out.shotAt = { x: t.x, y: t.y, z: t.z };
-      out.aim = { x: t.x + (t.vx ?? 0) * L, y: t.y, z: t.z + (t.vz ?? 0) * L };
+      // The part of it under the cursor, when that's worth aiming at (a big walker's leg or reactor): the guns go there.
+      const ray = this.caster.ray, id = t.key as number, owner = rayOk ? reg.owners[Reg.ownerOf(id) - 1] : undefined;
+      if (owner?.aimPart && owner.aimPart(id - Reg.idOf(Reg.ownerOf(id), 0), ray.origin.x, ray.origin.y, ray.origin.z, ray.direction.x, ray.direction.y, ray.direction.z, PART_AT)) {
+        out.shotAt = { x: PART_AT.x, y: PART_AT.y, z: PART_AT.z };
+      }
+      const a = out.shotAt;
+      out.aim = { x: a.x + (t.vx ?? 0) * L, y: a.y, z: a.z + (t.vz ?? 0) * L };
     }
     return out;
   }
@@ -190,6 +197,8 @@ export class SoftAim {
     }
   }
 }
+
+const PART_AT = { x: 0, y: 0, z: 0 };
 
 /** Camera shake: kicks take the biggest, and settle at shakeDecay per second. */
 export class CameraShake {

@@ -48,7 +48,7 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   must(sw.kind[c] === MID && sw.kind[e] === BIG, "couldn't spawn a cutter and an excavator");
   const at = new THREE.Vector3(), dir = new THREE.Vector3(0, 0, 1);
   // (hp is Float32: compare to 1e-3.)
-  const hit = (i: number, d: number, ap?: number) => { const h0 = sw.hp[i]; t.pick(i * 4 + PART_BODY); t.damage(d, at, dir, ap); return Math.round((h0 - sw.hp[i]) * 1000) / 1000; };
+  const hit = (i: number, d: number, ap?: number) => { const h0 = sw.hp[i]; t.pick(RobotTarget.key(i, PART_BODY)); t.damage(d, at, dir, ap); return Math.round((h0 - sw.hp[i]) * 1000) / 1000; };
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   must(hit(c, 12, 0.1) === r3(12 - v.robotMidArmour * 0.9), `a minigun round on a cutter took ${hit(c, 12, 0.1)} (want 12 − 3 × 0.9)`);
   must(hit(e, 5, 0) === r3(F * 5), "a 5-damage round on an excavator (armour 6.5) didn't fall to the floor");

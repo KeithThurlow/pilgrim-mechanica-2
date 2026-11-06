@@ -10,7 +10,8 @@
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, type RobotSwarm } from "./robots";
+import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, PART_CORE, type RobotSwarm } from "./robots";
+import { BIG_CORE_Y } from "./robotWeakPoints";
 import { BIG_BODY_H, MID_BODY_H, WALK_LEGS, type V3 } from "./robotLegs";
 import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
@@ -24,10 +25,12 @@ export class RobotTarget implements Hittable, Owner {
   readonly spares = true;
   alive = true;
   kills = 0;
-  /** Rounds that landed on each part since construction (body, leg, foot), for HUDs and checks. */
-  readonly partHits = [0, 0, 0];
+  /** Rounds that landed on each part since construction (body, leg, foot, reactor), for HUDs and checks. */
+  readonly partHits = [0, 0, 0, 0];
   private last = -1;
   private lastPart = PART_BODY;
+  /** Which leg the last hit struck (0-3), -1 none. */
+  private lastLeg = -1;
   /** The register's candidates for each hit test (null until added to a register: every robot is tested). */
   readonly cull = new SwarmCull();
 
@@ -41,13 +44,33 @@ export class RobotTarget implements Hittable, Owner {
     const h = only && only.length === 0 ? null : this.swarm.hitRay(o.x, o.y, o.z, d.x, d.y, d.z, maxDist, only);
     this.last = h ? h.index : -1;
     this.lastPart = h ? h.part : PART_BODY;
+    this.lastLeg = h ? h.legNo : -1;
     return h ? h.dist : -1;
   }
 
-  /** A sheet hit's key: robot index × 4 + part. */
-  pick(key: number) { this.last = key >> 2; this.lastPart = key & 3; }
+  /**
+   * The cursor's ray on a big one's leg or reactor (robotWeakPoints.ts): the guns aim there, not at its body's centre.
+   * The reactor's centre, or the point on the leg's bone nearest where the ray struck it. serial: the robot's uid.
+   */
+  aimPart(serial: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, out: V3): boolean {
+    const sw = this.swarm;
+    let i = -1;
+    for (let j = 0; j < sw.hi; j++) if (sw.uid[j] === serial && sw.state[j] < DEAD) { i = j; break; }
+    if (i < 0 || sw.kind[i] !== BIG) return false;
+    this.only[0] = i;
+    const h = sw.hitRay(ox, oy, oz, dx, dy, dz, 1e4, this.only);
+    if (!h || h.part === PART_BODY) return false;
+    if (h.part === PART_CORE) { out.x = sw.px[i]; out.y = sw.hubY[i] + sw.size[i] * BIG_CORE_Y; out.z = sw.pz[i]; return true; }
+    out.x = ox + dx * h.dist; out.y = oy + dy * h.dist; out.z = oz + dz * h.dist;
+    return true;
+  }
+  private only = [0];
+
+  /** A sheet hit's key: robot index × 32 + (leg + 1) × 4 + part (leg -1 for none). */
+  static key(i: number, part: number, leg = -1) { return i * 32 + (leg + 1) * 4 + part; }
+  pick(key: number) { this.last = key >> 5; this.lastLeg = ((key >> 2) & 7) - 1; this.lastPart = key & 3; }
   /** The robot a key names (burning and heat are per part, the glow per robot). */
-  unitOf(key: number) { return key >> 2; }
+  unitOf(key: number) { return key >> 5; }
   /** Chill (src/game/chill.ts): the robot moves at k of its speed, 0 frozen solid. */
   slow(key: number, k: number) { this.swarm.pace[key >> 2] = k; }
 
@@ -84,9 +107,18 @@ export class RobotTarget implements Hittable, Owner {
         r = S * (big ? 0.5 : 0.44) * k; const hh = S * (big ? BIG_BODY_H * 0.75 : MID_BODY_H) * k;
         cy = sw.hubY[i] + S * 0.05; y0 = cy - hh; y1 = cy + hh;
       }
+      // A big one's reactor on its mast, ahead of the body (robotWeakPoints.ts).
+      const cr = sw.v.robotBigCoreHit;
+      if (kind === BIG && cr > 0) {
+        const c = sheetCircle(s, sw.px[i], sw.pz[i], cr), ccy = sw.hubY[i] + S * BIG_CORE_Y;
+        if (c && inBand(s, c.along, s.ox + s.dx * c.along, s.oz + s.dz * c.along, ccy - cr, ccy + cr)) {
+          out.push({ target: this, key: RobotTarget.key(i, PART_CORE), along: c.along, chord: c.chord, material, x: s.ox + s.dx * c.along, y: ccy, z: s.oz + s.dz * c.along });
+          continue;
+        }
+      }
       const b = sheetCircle(s, sw.px[i], sw.pz[i], r);
       if (b && inBand(s, b.along, s.ox + s.dx * b.along, s.oz + s.dz * b.along, y0, y1)) {
-        out.push({ target: this, key: i * 4 + PART_BODY, along: b.along, chord: b.chord, material, x: s.ox + s.dx * b.along, y: Math.min(Math.max(cy, y0), y1), z: s.oz + s.dz * b.along });
+        out.push({ target: this, key: RobotTarget.key(i, PART_BODY), along: b.along, chord: b.chord, material, x: s.ox + s.dx * b.along, y: Math.min(Math.max(cy, y0), y1), z: s.oz + s.dz * b.along });
         continue;
       }
       if (kind === SMALL || (kind === MID && st === DOWN)) continue;
@@ -94,7 +126,7 @@ export class RobotTarget implements Hittable, Owner {
       const big = kind === BIG, lr = big ? sw.v.robotBigLegHit : sw.v.robotMidLegHit;
       if (lr <= 0) continue;
       let best: SheetHit<Hittable> | null = null;
-      const bone = (a: V3, e: V3, rr: number, part: number) => {
+      const bone = (a: V3, e: V3, rr: number, part: number, g: number) => {
         const q = sheetSegment(s, a.x, a.y, a.z, e.x, e.y, e.z);
         if (!q) return;
         const R = rr + s.half;
@@ -103,16 +135,18 @@ export class RobotTarget implements Hittable, Owner {
         if (!inBand(s, q.along, px, pz, q.y - rr, q.y + rr)) return;
         if (best && best.along <= q.along) return;
         const chord = Math.max(0.2 * rr, 2 * Math.sqrt(R * R - q.across * q.across) * (rr / R));
-        best = { target: this, key: i * 4 + part, along: Math.max(s.from, q.along - chord / 2), chord, material, x: px, y: q.y, z: pz };
+        best = { target: this, key: RobotTarget.key(i, part, g), along: Math.max(s.from, q.along - chord / 2), chord, material, x: px, y: q.y, z: pz };
       };
       const hip = this.hp, knee = this.kn, tip = this.tp, foot = this.ft, low = this.lw;
       for (let g = 0; g < WALK_LEGS; g++) {
         sw.legPose(i, g, hip, knee, tip, foot);
-        bone(hip, knee, lr, PART_LEG);
-        if (big) { bone(knee, tip, lr, PART_LEG); bone(tip, foot, lr * 1.6, PART_FOOT); }
-        else {
+        bone(hip, knee, lr, PART_LEG, g);
+        if (big) {
+          if (sw.legLost[i] & (1 << g)) continue; // a stump: the thigh only
+          bone(knee, tip, lr, PART_LEG, g); bone(tip, foot, lr * 1.6, PART_FOOT, g);
+        } else {
           low.x = knee.x + (tip.x - knee.x) * 0.75; low.y = knee.y + (tip.y - knee.y) * 0.75; low.z = knee.z + (tip.z - knee.z) * 0.75;
-          bone(knee, low, lr, PART_LEG); bone(low, tip, lr * 1.2, PART_FOOT);
+          bone(knee, low, lr, PART_LEG, g); bone(low, tip, lr * 1.2, PART_FOOT, g);
         }
       }
       if (best) out.push(best);
@@ -144,6 +178,8 @@ export class RobotTarget implements Hittable, Owner {
       if (o?.cover?.(sw.px[i], sw.hubY[i], sw.pz[i])) continue;
       // Blasts throw wrecks away from the blast; rounds along their flight.
       const dx = blast ? sw.px[i] - at.x : dir.x, dz = blast ? sw.pz[i] - at.z : dir.z;
+      // A big one's legs in a blast's reach wear down too (robotWeakPoints.ts): a leg shot through can fell it.
+      if (blast && kind === BIG && this.blastLegs(i, at.x, at.y, at.z, radius, damage, o?.pierce, dx, dz)) { this.kills++; n++; continue; }
       if (sw.damage(i, armourHit(damage * kk * best, sw.armourOf(i), o?.pierce), dx, dz)) this.kills++;
       n++;
     }
@@ -192,6 +228,21 @@ export class RobotTarget implements Hittable, Owner {
     return best;
   }
 
+  /** A blast's damage to each of big one i's standing legs in reach (full at the leg, half at the edge); true: killed. */
+  private blastLegs(i: number, x: number, y: number, z: number, radius: number, damage: number, pierce: number | undefined, dx: number, dz: number): boolean {
+    const sw = this.swarm, v = sw.v, k = v.robotBigLegBlast;
+    if (k <= 0) return false;
+    const lr = Math.max(0.05, v.robotBigLegHit), hip = this.hp, knee = this.kn, tip = this.tp, foot = this.ft;
+    for (let g = 0; g < WALK_LEGS; g++) {
+      if (sw.legLost[i] & (1 << g)) continue;
+      sw.legPose(i, g, hip, knee, tip, foot);
+      const d = Math.max(0, Math.min(segDist(x, y, z, hip, knee), segDist(x, y, z, knee, tip), segDist(x, y, z, tip, foot)) - lr);
+      if (d > radius) continue;
+      if (sw.hurtLeg(i, g, armourHit(damage * k * (1 - (0.5 * d) / radius), sw.armourOf(i), pierce), dx, dz)) return true;
+    }
+    return false;
+  }
+
   /** The mech's body (trample): robot i takes amount (no armour: it's crushed), thrown along (dirX, dirZ). */
   crush(i: number, amount: number, dirX: number, dirZ: number): boolean {
     const k = this.swarm.damage(i, amount, dirX, dirZ);
@@ -199,12 +250,17 @@ export class RobotTarget implements Hittable, Owner {
     return k;
   }
 
-  /** The round's damage, scaled by the part it struck (body full, legs and feet a share). */
+  /**
+   * The round's damage, scaled by the part it struck (body full, legs and feet a share, a big one's reactor more
+   * through less armour); a big one's leg also wears down by the whole hit (robotWeakPoints.ts).
+   */
   damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     if (this.last < 0) return;
     this.partHits[this.lastPart]++;
-    const sw = this.swarm;
-    if (sw.damage(this.last, armourHit(amount * sw.partShare(this.lastPart), sw.armourOf(this.last), pierce), dir.x, dir.z)) this.kills++;
+    const sw = this.swarm, i = this.last, part = this.lastPart;
+    const body = armourHit(amount * sw.partShare(part), sw.partArmour(i, part), pierce);
+    const leg = part === PART_LEG || part === PART_FOOT ? armourHit(amount, sw.armourOf(i), pierce) : 0;
+    if (sw.hitAt(i, part, this.lastLeg, body, leg, dir.x, dir.z)) this.kills++;
   }
 
   /** The armour of the robot last struck (0 with none). */
