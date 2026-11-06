@@ -18,7 +18,7 @@ export const CAMP_DEFAULTS = {
   campChanceFar: 1.5,
   campSizeFar: 2,
   campMidFar: 0.4,
-  campBigFar: 0.05,
+  campBigFar: 0.025,
   campBigMin: 1,
   campBigRadar: 8,
   fogCell: 1100,

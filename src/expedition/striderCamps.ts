@@ -17,7 +17,7 @@ import { StriderField, type StriderFieldValues } from "../combat/striderField";
 import type { SwarmCamps, SwarmCampValues } from "./swarmCamps";
 import { hash4 } from "../world/pois";
 
-export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 18, striderPackEvery: 25, striderCampMax: 2 };
+export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 30, striderPackEvery: 45, striderCampMax: 1 };
 export type StriderCampValues = typeof STRIDER_CAMP_DEFAULTS;
 const G = "Striders: in the field";
 export const STRIDER_CAMP_GROUP = G;
