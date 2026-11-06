@@ -35,7 +35,7 @@ export interface Obstacle {
 }
 
 export const ESCORT_DEFAULTS = {
-  escortCount: 8,
+  escortCount: 12,
   escortOut: 25,
   escortSpread: 5,
   escortBand: 7,

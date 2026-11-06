@@ -40,10 +40,6 @@ export interface Furn {
 
 /** A vehicle tied down on the deck: local position on the deck and heading relative to the platform. */
 export interface CarSlot { kind: CarKind; x: number; z: number; heading: number }
-/** A mech carried on the deck, knelt (deckMechs.ts): local position and heading relative to the platform. */
-export interface MechSlot { x: number; z: number; heading: number }
-/** Half size of a knelt mech's footprint on the deck (across, along), for walkways. */
-export const MECH_SLOT_HALF = { x: 2.2, z: 2.4 };
 
 /** An axis-aligned box in the platform frame: centre and half sizes. */
 export interface Box { x: number; y: number; z: number; hx: number; hy: number; hz: number }
@@ -62,12 +58,11 @@ export const CAB_LEN = 3;
  * The furniture on a platform with deck top at D. The mech bay's (`bay` values from the deck and crane) keeps its
  * walking deck clear apart from the cab, the tool hut and the crates aft (deck.ts walks round the same boxes).
  */
-export function furniture(spec: PlatformSpec, D: number): { items: Furn[]; cars: CarSlot[]; mechs: MechSlot[] } {
+export function furniture(spec: PlatformSpec, D: number): { items: Furn[]; cars: CarSlot[] } {
   const { length: L, width: W, kind } = spec;
   const paint = KIND_PAINT[kind];
   const items: Furn[] = [];
   const cars: CarSlot[] = [];
-  const mechs: MechSlot[] = [];
   const box = (size: V3, at: V3, color: number, mount = false) => items.push({ shape: "box", size, at, color, mount });
   const cyl = (r: number, len: number, at: V3, color: number, axis: "y" | "z" = "z") => items.push({ shape: "cyl", size: [r, len, 0], at, color, axis });
   /** A machinery module (pump, compressor, generator): a block with a cap, pipes run between these. */
@@ -109,13 +104,11 @@ export function furniture(spec: PlatformSpec, D: number): { items: Furn[]; cars:
     machine(-2.6, 7.5, 1.6, 1.6, 1.6, PAL.steel);
     machine(0, -L / 2 + 2.2, 3, 1.2, 1.4, PAL.steel);
   } else if (kind === "motorpool") {
-    // A vehicle tied down behind the cab and two mechs knelt aft of it (Keith 2026-11-06: the convoy carries mechs),
-    // a bowser module and lockers.
-    cars.push({ kind: "technical", x: -1.6, z: 5.6, heading: 0 });
-    mechs.push({ x: -1.2, z: -1.6, heading: 0 }, { x: -1.2, z: -8.2, heading: 0 });
+    // Two vehicles tied down nose to tail, a bowser module and lockers.
+    cars.push({ kind: "technical", x: -1.6, z: 4.5, heading: 0 }, { kind: "gunTruck", x: -1.4, z: -5, heading: 0 });
     box([1.2, 2.2, 5], [W / 2 - 1.2, D + 1.1, -4], PAL.olive, true);
     machine(W / 2 - 1.5, 4.5, 1.8, 1.5, 2.4, PAL.steel);
-    machine(W / 2 - 1.5, -L / 2 + 2, 2, 1.2, 1.4, PAL.ochre);
+    machine(-(W / 2 - 1.6), -L / 2 + 2, 2, 1.2, 1.4, PAL.ochre);
   }
-  return { items, cars, mechs };
+  return { items, cars };
 }

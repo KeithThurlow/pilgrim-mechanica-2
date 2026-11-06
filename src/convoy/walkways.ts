@@ -8,7 +8,7 @@ import type { Param } from "../core/tweaks";
 import type { Frame, Surface, Vec3, Walkable } from "../world/walkable";
 import type { Platform, Convoy } from "./platform";
 import { outside } from "./outline";
-import { furniture, furnBox, MECH_SLOT_HALF } from "./furniture";
+import { furniture, furnBox } from "./furniture";
 import { deckLayout, terminalSpot, TERMINAL_HALF, type DeckValues } from "./deck";
 import { bridgeSpans, landingEnds, landingLayout, LANDING_HALF, CAB_ROOF, type Span, type TrainValues } from "./train";
 import { carValues } from "../vehicles/car";
@@ -158,10 +158,9 @@ export class ConvoyWalkways {
         this.add({ name: `${name} ${what}`, frame, solid, bound, top: (x, z) => { const q = p.toLocal(x, z, l); return Math.abs(q.x - cx) <= ex && Math.abs(q.z - cz) <= ez ? plane(x, z) + h : NaN; } });
       };
       // Furniture: walls (the cab's roof is walkable at roof height; huts and machines too high to step on anyway).
-      const { items, cars, mechs } = furniture(p.spec, D);
+      const { items, cars } = furniture(p.spec, D);
       items.forEach((f, k) => { const b = furnBox(f); box(k === 0 ? "cab" : "furniture", b.x, b.z, b.hx, b.hz, k === 0 ? CAB_ROOF : b.y + b.hy - D); });
       for (const c of cars) { const cv = carValues(c.kind); box("vehicle", c.x, c.z, cv.track / 2 + 0.3, cv.wheelbase / 2 + 1.1, 2); }
-      for (const m of mechs) box("mech aboard", m.x, m.z, MECH_SLOT_HALF.x, MECH_SLOT_HALF.z, 4);
       // A mech bay's crane ring, service tower and terminal.
       if (p.spec.kind === "bay") {
         const lay = deckLayout(p, v);
