@@ -14,6 +14,7 @@
 // and drives round dune faces too steep to climb.
 // Their guns (Keith 2026-11-01) are src/convoy/guard.ts: they shoot from station; `mode` is still the hook for breaking
 // station toward threats (not built).
+import { HeightMemo } from "../world/heightMemo";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { CarSim, carValues, type CarKind, type CarValues } from "../vehicles/car";
@@ -141,7 +142,11 @@ export class EscortGroup {
   private t = 0;
   private pt = { x: 0, z: 0, heading: 0 };
 
-  constructor(readonly v: EscortValues, readonly convoy: Convoy, readonly field: DuneField) {}
+  /** The ground as the escorts plan over it (lines, lanes, steepness): a remembered coarse copy, not the ground they
+   *  drive on (src/world/heightMemo.ts). Owners tell it where the ground changes (memo.invalidate). */
+  readonly memo: HeightMemo;
+
+  constructor(readonly v: EscortValues, readonly convoy: Convoy, readonly field: DuneField) { this.memo = new HeightMemo(field); }
 
   /** Make or drop escorts to match the slider; returns true if the list changed. */
   sync(): boolean {
@@ -209,6 +214,7 @@ export class EscortGroup {
   /** One fixed step. mech: the player's mech position (or null when it's aboard or held). */
   update(dt: number, mech: { x: number; z: number } | null) {
     this.t += dt;
+    this.memo.now = this.t;
     this.sync();
     this.stations();
     for (const e of this.list) this.drive(e, dt, this.nearestMech(e, mech));
@@ -374,13 +380,13 @@ export class EscortGroup {
   private gr = { x: 0, z: 0 };
   /** Ground rise per metre along +x and +z at (x, z). */
   private gradAt(x: number, z: number) {
-    const g = this.field, h0 = g.height(x, z);
+    const g = this.memo, h0 = g.height(x, z);
     this.gr.x = (g.height(x + 1.2, z) - h0) / 1.2; this.gr.z = (g.height(x, z + 1.2) - h0) / 1.2;
     return this.gr;
   }
 
   private slopeAt(x: number, z: number) {
-    const g = this.field, h0 = g.height(x, z);
+    const g = this.memo, h0 = g.height(x, z);
     return Math.atan(Math.hypot(g.height(x + 1.2, z) - h0, g.height(x, z + 1.2) - h0) / 1.2);
   }
 

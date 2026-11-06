@@ -495,7 +495,8 @@ export class CarSim {
     // higher: in a hollow (the foot of a dune, a trough) the middle's ground is lower than the wheels', and pulling the
     // body down to it bottomed the wheels and stalled trucks on the next gentle climb (2026-10-26, escorts driving the
     // dunes beside the convoy). Over a crest, as before.
-    const gap = this.pos.y - (Math.max(this.ground.height(this.pos.x, this.pos.z), this.planeUnder()) + v.rideHeight);
+    const hc = this.ground.height(this.pos.x, this.pos.z), hcx = this.pos.x, hcz = this.pos.z;
+    const gap = this.pos.y - (Math.max(hc, this.planeUnder()) + v.rideHeight);
     if (gap > 0 && this.vy < 6) this.vy -= v.stick * GRAV * smooth(0, 0.4, gap) * (1 - smooth(v.stickRange * 0.6, v.stickRange, gap)) * dt;
     this.pitchRate += (tp / Ip) * dt;
     this.rollRate += (tr / Ir) * dt;
@@ -564,7 +565,7 @@ export class CarSim {
     }
     if (this.vy > MAX_RISE) this.vy = MAX_RISE;
     // The body centre never into the ground.
-    const centreFloor = this.ground.height(this.pos.x, this.pos.z) + MIN_CENTRE_CLEAR;
+    const centreFloor = (this.pos.x === hcx && this.pos.z === hcz ? hc : this.ground.height(this.pos.x, this.pos.z)) + MIN_CENTRE_CLEAR;
     if (this.pos.y < centreFloor) { this.pos.y = centreFloor; if (this.vy < 0) this.vy = 0; }
 
     // Bumps cost forward speed, so hold the slide angle again.

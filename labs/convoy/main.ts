@@ -166,8 +166,11 @@ const patchQueue: [number, number, number, number][] = [];
 // Each box is padded as patchArea pads it, then cut into strips PATCH_STRIP m across (perf, Keith 2026-11-06: one box
 // could take 5 ms on his PC, well over the budget), patched with no more padding: the same vertices, done once each.
 const PATCH_STRIP = 4;
+let deathsRef: DeathPhysics | null = null, escortsRef: EscortGroup | null = null;
 route.onChange = (x0, z0, x1, z1) => {
   craters.invalidate(x0, z0, x1, z1);
+  deathsRef?.groundChanged(x0, z0, x1, z1); // the plough's cut under the death physics' floor
+  escortsRef?.memo.invalidate(x0, z0, x1, z1); // and under the escorts' planning copy
   const a = x0 - PATCH_PAD, b = x1 + PATCH_PAD, c = z0 - PATCH_PAD, d = z1 + PATCH_PAD, eps = 1e-4;
   if (b - a >= d - c) for (let s = a; s <= b; s += PATCH_STRIP) patchQueue.push([s, c, Math.min(b, s + PATCH_STRIP - eps), d]);
   else for (let s = c; s <= d; s += PATCH_STRIP) patchQueue.push([a, s, b, Math.min(d, s + PATCH_STRIP - eps)]);
@@ -197,10 +200,11 @@ bf.craters = craters;
 // The dead go to the death physics (ragdolls, wrecks; src/physics/deaths.ts), as in the combat labs.
 await initPhysics();
 const deaths = new DeathPhysics(V, field);
+deathsRef = deaths;
 const deadDraw = new DeadDraw(deaths);
 scene.add(deadDraw.group);
 let craterPatches = 0;
-const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(); };
+const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(x0, z0, x1, z1); escortsRef?.memo.invalidate(x0, z0, x1, z1); };
 const flushGround = () => { if (craterPatches) { streamer.flushPatches(); craterPatches = 0; } };
 bf.onGround = groundChanged;
 
@@ -225,6 +229,7 @@ const bridges = new BridgeBody();
 scene.add(bridges.group);
 let spans: Span[] = [];
 const escorts = new EscortGroup(V, convoy, field);
+escortsRef = escorts;
 const escortBodies = new EscortBodies(escorts);
 scene.add(escortBodies.group);
 const trail = new ConvoyTrail(V, bf, field);
@@ -259,7 +264,7 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(); }, deaths });
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.memo.invalidate(x0, z0, x1, z1); }, deaths });
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).

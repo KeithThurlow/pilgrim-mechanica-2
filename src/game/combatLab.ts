@@ -181,7 +181,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   const groundChanged = (x0: number, z0: number, x1: number, z1: number) => {
     streamer.queuePatch(x0, z0, x1, z1);
     patchAsked++;
-    deaths.groundChanged();
+    deaths.groundChanged(x0, z0, x1, z1);
   };
   const flushGround = () => {
     if (!patchAsked) return;
