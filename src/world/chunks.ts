@@ -48,6 +48,19 @@ interface Chunk {
    *  vertices are first patched (NaN: not yet). Dents are added on last (DuneField.sample), so a patch only re-reads them. */
   base?: Float32Array;
 }
+/**
+ * A chunk being built over several frames (perf, Keith 2026-11-06: one chunk was ~25 ms on his PC, a dropped frame
+ * whenever the convoy lab streamed one in). Rows are filled under the frame budget; j is the next row to fill. A patch
+ * or rebuild over rows already filled winds j back to the first row it touched, so the finished chunk is the same as
+ * one built in a single go.
+ */
+interface Building {
+  cx: number; cz: number; j: number; frames: number;
+  pos: Float32Array; nor: Float32Array; col: Float32Array; hs: Float32Array; wsA: Float32Array | null;
+}
+/** Chunks this close to the focus (chunk units) are always finished in the frame they're asked for, as are builds
+ *  that have run this many frames (so a patched-over build can't starve). */
+const BUILD_NOW_RADIUS = 1.5, BUILD_MAX_FRAMES = 30;
 /** Patch cache layout per vertex: h, h at ±e on x and z (normal), at ±2 m (the colour's wide normal), crest, flat, wr, ws, rock. */
 const BASE_N = 14, WIDE_E = 2;
 /** out = (x, y, z) normalised, as DuneField.normal does it. */
@@ -81,6 +94,8 @@ export class TerrainStreamer {
   private c3 = new THREE.Color();
   private c4 = new THREE.Color();
   private dirty = new Set<string>();
+  /** Chunks part built (missing ones and dirty ones being rebuilt), by key. */
+  private building = new Map<string, Building>();
   /** Patching: chunks touched since the last finishPatch, those that now need a water sheet, cells queued by row. */
   private patched = new Map<string, Chunk>();
   private patchWater = new Set<string>();
@@ -159,6 +174,7 @@ export class TerrainStreamer {
     for (const c of this.chunks.values()) this.dispose(c);
     this.chunks.clear();
     this.dirty.clear();
+    this.building.clear();
     for (const f of this.onRebuild) f(null);
   }
 
@@ -173,6 +189,8 @@ export class TerrainStreamer {
     for (let cz = c; cz <= d; cz++) for (let cx = a; cx <= b; cx++) {
       const k = cx + "," + cz;
       if (this.chunks.has(k)) this.dirty.add(k);
+      const b = this.building.get(k);
+      if (b) b.j = 0;
     }
     for (const f of this.onRebuild) f([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
   }
@@ -202,8 +220,9 @@ export class TerrainStreamer {
     }
 
     for (const [k, c] of this.chunks) {
-      if (Math.hypot(c.cx - ccx, c.cz - ccz) > r + 1.5) { this.dispose(c); this.chunks.delete(k); }
+      if (Math.hypot(c.cx - ccx, c.cz - ccz) > r + 1.5) { this.dispose(c); this.chunks.delete(k); this.dirty.delete(k); }
     }
+    for (const [k, b] of this.building) if (Math.hypot(b.cx - ccx, b.cz - ccz) > r + 1.5) this.building.delete(k);
 
     const missing: [number, number, number][] = [];
     for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
@@ -214,29 +233,37 @@ export class TerrainStreamer {
     }
     missing.sort((a, b) => a[0] - b[0]);
 
-    const t0 = performance.now();
-    let built = 0;
-    for (const [, cx, cz] of missing) {
-      // Always build the nearest one, so the ground under the focus is never missing.
-      if (built > 0 && performance.now() - t0 > this.v.budgetMs) break;
-      this.chunks.set(cx + "," + cz, this.build(cx, cz));
+    const t0 = performance.now(), end = t0 + this.v.budgetMs;
+    let built = 0, worked = false;
+    // Nearest first, rows under the budget (a chunk can take a few frames); one near the focus is always finished now,
+    // so the ground under it is never missing, and the first one asked for always gets at least a row.
+    for (const [d, cx, cz] of missing) {
+      const now = d <= BUILD_NOW_RADIUS;
+      if (worked && !now && performance.now() > end) break;
+      const k = cx + "," + cz;
+      const c = this.advance(k, cx, cz, now ? Infinity : end);
+      worked = true;
+      if (!c) continue;
+      this.chunks.set(k, c);
       built++;
     }
-    // Chunks whose ground changed: rebuilt in place, nearest first, at least one a frame.
+    // Chunks whose ground changed: rebuilt in place (the old one draws until the new one is done), nearest first.
     if (this.dirty.size) {
+      worked = false; // these get their row a frame too
       const order = [...this.dirty].map((k) => { const c = this.chunks.get(k); return { k, c, d: c ? Math.hypot(c.cx - ccx, c.cz - ccz) : 0 }; });
       order.sort((p, q) => p.d - q.d);
-      let redone = 0;
-      for (const { k, c } of order) {
-        if (redone > 0 && performance.now() - t0 > this.v.budgetMs) break;
+      for (const { k, c, d } of order) {
+        const now = d <= BUILD_NOW_RADIUS;
+        if (worked && !now && performance.now() > end) break;
+        if (!c) { this.dirty.delete(k); continue; }
+        const fresh = this.advance(k, c.cx, c.cz, now ? Infinity : end);
+        worked = true;
+        if (!fresh) continue;
         this.dirty.delete(k);
-        if (!c) continue;
-        const fresh = this.build(c.cx, c.cz);
         this.dispose(c);
         this.chunks.set(k, fresh);
-        redone++;
+        built++;
       }
-      built += redone;
     }
     this.stats.built = built;
     this.stats.buildMs = performance.now() - t0;
@@ -359,6 +386,12 @@ export class TerrainStreamer {
     let count = 0;
     for (let cz = c; cz <= d; cz++) for (let cx = a; cx <= b; cx++) {
       const key = cx + "," + cz, ch = this.chunks.get(key);
+      const bl = this.building.get(key);
+      if (bl) {
+        // Part built: rows from the first one this box touches are filled again.
+        const j0 = Math.max(0, Math.ceil((z0 - cz * size) / step));
+        if (j0 <= n && Math.ceil((x0 - cx * size) / step) <= n && Math.floor((x1 - cx * size) / step) >= 0 && Math.floor((z1 - cz * size) / step) >= 0) bl.j = Math.min(bl.j, j0);
+      }
       if (!ch || this.dirty.has(key)) continue;
       const ox = cx * size, oz = cz * size;
       const k0 = Math.max(0, Math.ceil((x0 - ox) / step)), k1 = Math.min(n, Math.floor((x1 - ox) / step));
@@ -420,29 +453,58 @@ export class TerrainStreamer {
     fade[i] = smooth(0.15, 0.6, ws) * (d > -0.05 ? 1 : 0);
   }
 
-  private build(cx: number, cz: number): Chunk {
+  /** Carry on building chunk k until the deadline (performance.now() ms): the chunk when it's done, else null. */
+  private advance(k: string, cx: number, cz: number, deadline: number): Chunk | null {
+    let b = this.building.get(k);
+    if (!b) { b = this.startBuild(cx, cz); this.building.set(k, b); }
+    if (++b.frames > BUILD_MAX_FRAMES) deadline = Infinity;
+    if (!this.fillRows(b, deadline)) return null;
+    this.building.delete(k);
+    return this.finishBuild(b);
+  }
+
+  private startBuild(cx: number, cz: number): Building {
+    const n = Math.round(this.v.segments), row = n + 1, count = row * row;
+    return {
+      cx, cz, j: 0, frames: 0,
+      pos: new Float32Array(count * 3), nor: new Float32Array(count * 3), col: new Float32Array(count * 3),
+      hs: new Float32Array(count), wsA: this.field.waterLevel !== null ? new Float32Array(count) : null,
+    };
+  }
+
+  /** Fill rows from b.j on, at least one, until the deadline; true when every row is filled. */
+  private fillRows(b: Building, deadline: number): boolean {
     const n = Math.round(this.v.segments), size = this.v.chunkSize, step = size / n, row = n + 1;
-    const count = row * row;
-    const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3);
+    const ox = b.cx * size, oz = b.cz * size;
+    const s = this.bs, nn = this.bn, tmp = this.bc;
+    const { pos, nor, col, hs, wsA } = b;
+    while (b.j < row) {
+      const j = b.j;
+      for (let k = 0, i = j * row; k < row; k++, i++) {
+        const x = ox + k * step, z = oz + j * step;
+        this.vertex(x, z, s, nn, tmp);
+        pos[i * 3] = k * step; pos[i * 3 + 1] = s.h; pos[i * 3 + 2] = j * step;
+        nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
+        col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+        if (wsA) wsA[i] = s.ws ?? 0;
+        hs[i] = s.h;
+      }
+      b.j++;
+      if (b.j < row && performance.now() > deadline) return false;
+    }
+    return true;
+  }
+  private bs: GroundSample = { h: 0, crest: 0, flat: 0 };
+  private bn = [0, 1, 0];
+  private bc = new THREE.Color();
+
+  private finishBuild(b: Building): Chunk {
+    const n = Math.round(this.v.segments), size = this.v.chunkSize, step = size / n;
+    const { cx, cz, pos, nor, col, hs, wsA } = b;
     const ox = cx * size, oz = cz * size;
-    const s: GroundSample = { h: 0, crest: 0, flat: 0 };
-    const nn = [0, 1, 0];
-    const tmp = new THREE.Color();
     const water = this.field.waterLevel;
     let maxWs = 0;
-    const wsA = water !== null ? new Float32Array(count) : null;
-    const hs = new Float32Array(count);
-    for (let j = 0, i = 0; j < row; j++) for (let k = 0; k < row; k++, i++) {
-      const x = ox + k * step, z = oz + j * step;
-      this.vertex(x, z, s, nn, tmp);
-      pos[i * 3] = k * step; pos[i * 3 + 1] = s.h; pos[i * 3 + 2] = j * step;
-      nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
-      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
-      const ws = s.ws ?? 0;
-      if (water !== null && ws > 0 && s.h - water < 0.3) maxWs = Math.max(maxWs, ws);
-      if (wsA) wsA[i] = ws;
-      hs[i] = s.h;
-    }
+    if (water !== null && wsA) for (let i = 0; i < hs.length; i++) { const ws = wsA[i]; if (ws > 0 && hs[i] - water < 0.3) maxWs = Math.max(maxWs, ws); }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
