@@ -5,7 +5,7 @@
 //
 // Flags: ?kind=fortress|hub, ?seed=N (the layout), ?ring=N (start in yard N with the gates out to it down),
 // ?gates=open (every gate down from the start), ?near (start just outside the outer wall), plus the combat-lab flags
-// (?manual, ?zoom, ?dt, ?flat, ?left= ?right= ?k1-3= for the weapons). Shift+R puts it all back up. The demo (until you
+// (?manual, ?zoom, ?dt, ?flat, ?left= ?right= ?k1-3= for the weapons). Shift+< or Shift+> puts it all back up. The demo (until you
 // take over) shoots the nearest gate down from 30 m and walks in.
 import "../../src/core/lab.css";
 import { combatLab, type CombatLab } from "../../src/game/combatLab";
@@ -75,7 +75,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     { topic: "bandits", label: "Garrison", objects: () => forts ? [forts.draw.group] : [] },
     { topic: "salvage", label: "Salvage spots", objects: () => salvageDraw?.objects() ?? [] },
   ],
-  actions: [{ label: "Put it back up (Shift+R)", onClick: () => restart() }],
+  actions: [{ label: "Put it back up (Shift+< / Shift+>)", onClick: () => restart() }],
   report: () => ({ kind: KIND, seed: SEED, scrap: salvage.scrap, gatesDown: [...walls.down] }),
   setup: (field, V) => {
     // Only the hand-placed one: nothing generated (the chances off on the field's own copy).
@@ -232,7 +232,7 @@ function fabDemo() {
 addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.code === "KeyE") eHeld = true;
-  if (e.code === "KeyR" && !e.repeat && e.shiftKey) restart();
+  if ((e.code === "Comma" || e.code === "Period") && !e.repeat && e.shiftKey) restart();
 });
 addEventListener("keyup", (e) => { if (e.code === "KeyE") eHeld = false; });
 addEventListener("blur", () => { eHeld = false; });
@@ -256,8 +256,8 @@ lab.onFrame((dt) => {
   const gates = F.gates.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ");
   if (KIND === "hub") {
     const h = H.live.get(place.id);
-    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · boss ${boss} · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+R: put it back up`);
+    lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · boss ${boss} · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+< or shift+>: put it back up`);
     return;
   }
-  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · towers ${F.towers.list.filter((s) => !s.down).length}/${F.towers.list.length} up · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+R: put it back up`);
+  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · towers ${F.towers.list.filter((s) => !s.down).length}/${F.towers.list.length} up · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+< or shift+>: put it back up`);
 });

@@ -147,7 +147,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?gates=open`, `?near` (just outside the outer wall), plus the combat-lab flags; the demo shoots the nearest gate down
   and walks in (with `?kind=hub`, it shoots the fabricators down while they build robots, then fights the boss that
   rolls out of the core); the keep holds the warlord; every `?seed=N` rolls a different shape;
-  Shift+R puts it all back up.
+  Shift+< or Shift+> puts it all back up.
 - Inventory (Keith 2026-11-01; convoy and loadout labs): I anywhere (or click the mech doll at the bottom right) opens it; `?inv[=slot]` starts with it open (on that slot). In the field its cargo is the at-risk list, limited by weight (Loot and cargo › Cargo).
 - Inventory lab (Keith 2026-11-02; the grid inventory and the doll): `?roll=N` (N items into the stash), `?out[=scrap]` (out in the field with that much salvage, 120; Grid › Salvage blocks › Compactor level stands in for the convoy's Salvage compactor unlock), `?inv=slot`, `?fresh`. In every inventory: drag items, R or right click while dragging turns one, drop on a doll slot fits it, drag a slot off onto a grid takes it off, right click sends across, bin (twice) scraps, sand drops; Sort chips order Tidy, Show chips dim all but one kind; doll tiles show each fitted item's footprint. Sizes: Grid topic (`src/items/gridSize.ts`).
 - Loadout lab: `?bay=slot` (open the bay on a slot; rolls a few items into an empty stash), `?hover=N` (preview the Nth
@@ -177,7 +177,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   from the start, for shots of getting out).
 - Duel lab: `?rival=seed` (which rival mech; Reroll steps on), `?rivalfit=slot:base[:rarity],...` (fit these over its roll,
   as the loadout lab's `?fit=`), `?left= ?right= ?k1= ?k2= ?k3=` (your weapons, as the weapons lab; else the loadout lab's bay
-  save, else the weapons lab's last pick), `?bay` (use the bay save), `?rivallevel=recruit|veteran|ace` (the rival's difficulty preset, Recruit by default; also buttons in the panel), `?wreck[=s]` (the rival is destroyed that long into each round, 2 s by default, to watch its wreck fall; R for another), `?rivalup=N` (the rival's items roll N levels above yours, or below with a negative N; slider in the Rival group; the panel shows both levels and loadout DPS), a rival's summoner gear brings its summons on its team (`?rivalfit=shoulderL:sh-drones,shoulderR:sh-hive,pack:pack-replica`), plus the combat-lab flags; R restarts the round.
+  save, else the weapons lab's last pick), `?bay` (use the bay save), `?rivallevel=recruit|veteran|ace` (the rival's difficulty preset, Recruit by default; also buttons in the panel), `?wreck[=s]` (the rival is destroyed that long into each round, 2 s by default, to watch its wreck fall; Shift+< or Shift+> for another), `?rivalup=N` (the rival's items roll N levels above yours, or below with a negative N; slider in the Rival group; the panel shows both levels and loadout DPS), a rival's summoner gear brings its summons on its team (`?rivalfit=shoulderL:sh-drones,shoulderR:sh-hive,pack:pack-replica`), plus the combat-lab flags; Shift+< or Shift+> restarts the round (not R: too easy to hit by accident, Keith 2026-11-06).
 - Stress lab: `?run` (start the ramp once loaded), `?steps=25,50,100,150`, `?settle=s`, `?hold=s`, `?worst` (the co-op worst
   case: three AI allies, max-Protocol stand-ins, effects ×4), plus the combat-lab flags.
   Results go to the screen, the console and `window.__stress`.

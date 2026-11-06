@@ -315,6 +315,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+- 2026-11-06: Duel round restart and fortress "put it back up" moved off R / Shift+R (too easy to hit by accident, lost a run) onto Shift+< or Shift+> (Shift+Comma/Period). R still refills magazines. Files: `labs/duel/`, `labs/fortress/`, CLAUDE.md. Checked: npm run check/test. Raised by Keith, built by Claude.
 ### 2026-11-06 · Flamer's fuel leaves the nozzle faster and follows the turn sooner (Keith: "the velocity out of the nozzle could maybe be a tiny bit more, but not by much ... when you kind of like rotate the mech around ... it lags behind"; Claude on `claude/project-thread-q7b0ap`)
 - The fuel flies at 1.25× the fuel speed (Flame look › Fuel flies, was 1), so it reaches the aim sooner on a flatter arc and slows under drag and gravity after; the line's throw follows the barrel in 0.05 s (Flame stream › Line swings over, was 0.12), so the bend when the mech turns is about half as deep, mostly right at the nozzle. Burn time scales with it, so reach is unchanged. Checked: `flamefx-check` (aimed 12 m lands at 12.0 m, widest gap 0.83 m; far line burns out at 23.7 m), full `npm test`.
 ### 2026-11-06 · Flamer's burning ground lasts 4-5× longer (Keith: "leave burning ground ... maybe 4 or 5 times longer where the napalm has hit"; Claude on `claude/project-thread-q7b0ap`)
