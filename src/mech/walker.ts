@@ -517,6 +517,26 @@ export class WalkerSim {
   }
 
   /**
+   * A blast's knockback (Keith 2026-11-06: "drifting too much"): the body skids at (vx, vz) × knockTake, the planted feet
+   * sliding, and the feet dig in at knockGrip until the skid is gone (not the sprint's low grip at that speed).
+   */
+  knock(vx: number, vz: number) {
+    const k = this.v.knockTake;
+    if (this.airborne) { this.airVel.x += vx * k; this.airVel.z += vz * k; return; }
+    this.skid.x += vx * k; this.skid.z += vz * k;
+    this.knocked = true;
+  }
+  /** Knocked by a blast, its skid not yet gone. */
+  private knocked = false;
+  /** Strides of the sprint fly at g; everything else in the air at airGravity. */
+  private strideLeap = false;
+  /** Grip for the walk's and skid's braking: the speed's, or knockGrip while a blast's skid lasts. */
+  private skidGripAt(speed: number) {
+    const g = this.gripAt(speed);
+    return this.knocked && !this.running ? Math.max(g, this.v.knockGrip) : g;
+  }
+
+  /**
    * A heavy landing (after a drop): the hips start sink metres low and spring back up on the body's height spring,
    * and the plant-thud spring is hit downward at kick m/s on top (the hocks squash with it).
    */
@@ -546,6 +566,7 @@ export class WalkerSim {
     }
     this.airVel.set(vx, vy, vz);
     this.skid.set(0, 0, 0);
+    this.knocked = false; this.strideLeap = false;
   }
 
   /** Hips below standing height now from a landing squat (m; negative while overshooting). */
@@ -622,11 +643,12 @@ export class WalkerSim {
     // A skid the walk didn't steer this step (it takes skids off at the grip for the speed): dies off at that grip.
     const sk = this.skid.length();
     if (sk > 1e-4) {
-      if (!this.skidSteered) this.skid.multiplyScalar(Math.max(0, sk - this.gripAt(sk + this.speed) * dt) / sk);
+      if (!this.skidSteered) this.skid.multiplyScalar(Math.max(0, sk - this.skidGripAt(sk + this.speed) * dt) / sk);
       // A skid into a wall dies against it.
       this.faceScrub(this.skid.x, this.skid.z, Math.min(1, v.wallScrub * dt), false);
       this.skid.x = this.t.a.x; this.skid.z = this.t.a.z;
     }
+    if (this.knocked && (this.running || this.skid.lengthSq() < 1e-4)) this.knocked = false;
     // A shove (the dash) up a slope covers less ground across it, and into a wall none (Keith 2026-10-26: dashing at a
     // steep wall flung the mech into the sky).
     let px = this.push.x, pz = this.push.z;
@@ -773,7 +795,7 @@ export class WalkerSim {
     // steered as one, braked off the stick at the grip for its speed (2026-10-31: the skid used to die at a fixed 3 m/s²,
     // a flat low-grip window after every sprint), then split again below.
     const vx = this.vel.x + this.skid.x, vz = this.vel.z + this.skid.z;
-    const up = v.walkAccel * wk * dt, brake = this.gripAt(Math.hypot(vx, vz)) * dt;
+    const up = v.walkAccel * wk * dt, brake = this.skidGripAt(Math.hypot(vx, vz)) * dt;
     // Speed past the walk's (handed on by the sprint or a dash) rolls off gently with the stick held on, as it always has;
     // let go, the walk stops as quickly as ever. Past what the legs can step with (cap) it's the feet sliding: taken off
     // at the grip for the speed, so it too comes back as the mech slows.
@@ -1150,7 +1172,7 @@ export class WalkerSim {
       const drift = wrap(this.heading - this.course), m = v.boundDriftMax * D2R;
       if (Math.abs(drift) > m) this.heading = wrap(this.course + Math.sign(drift) * m);
     }
-    a.y -= G * dt;
+    a.y -= G * (this.strideLeap ? 1 : Math.max(0.1, v.airGravity)) * dt;
     // A booster's glide: falling slower out of a leap.
     if (this.bLeap && this.boundGlide > 0 && a.y < 0) a.y += G * this.boundGlide * dt;
     let px = this.push.x, pz = this.push.z;
@@ -1186,6 +1208,9 @@ export class WalkerSim {
       this.toesClear(f, 0.5);
     }
     void lf;
+    // A foot down lands it only if both legs can stand where they are (off a steep face, one foot on the lip and the
+    // other over the drop: fly on until the hips come down; Keith 2026-11-06, heavier air met that sooner).
+    if (touch && this.feet.some((f) => this.airY - f.groundY > v.hipHeight * 1.05)) touch = false;
     if (this.airT > AIR_MIN) {
       // Against a face while still rising (a leap or a shove into a steep slope): the speed going into it goes, so the
       // body can't fly on into the ground; and if the hips come down to the ground whichever way it's moving, it lands.
@@ -1220,9 +1245,11 @@ export class WalkerSim {
     }
     // How hard it hits is the speed into the ground: landing along a slip face it was flying down is gentle.
     n.normalize();
-    const impact = Math.max(0, -(a.x * n.x + a.y * n.y + a.z * n.z));
+    const hit = Math.max(0, -(a.x * n.x + a.y * n.y + a.z * n.z));
+    // Graded as if it had fallen at g (airGravity only makes the fall quicker, not the same jump harder).
+    const impact = this.strideLeap ? hit : hit / Math.sqrt(Math.max(0.1, v.airGravity));
     // What's left runs on along the ground (a slope turns some of the fall into speed down it).
-    const tx = a.x + n.x * impact, ty = a.y + n.y * impact, tz = a.z + n.z * impact;
+    const tx = a.x + n.x * hit, ty = a.y + n.y * hit, tz = a.z + n.z * hit;
     const tl = Math.hypot(tx, ty, tz), hl = Math.hypot(tx, tz);
     const gx = hl > 1e-6 ? (tx / hl) * tl : 0, gz = hl > 1e-6 ? (tz / hl) * tl : 0;
     // Sprinting, a landing the legs can take is just the next stride.
@@ -1255,7 +1282,7 @@ export class WalkerSim {
     // Dropping into the squat at about the speed it hit with, rising slower from deeper ones.
     this.squatState = {
       depth,
-      down: Math.max(0.06, (depth * Math.PI) / (2 * Math.max(0.5, impact))),
+      down: Math.max(0.06, (depth * Math.PI) / (2 * Math.max(0.5, hit))),
       up: v.landRecover * (0.4 + 0.6 * depth / Math.max(0.1, v.landSquatMax)),
       t: 0,
     };
@@ -1410,6 +1437,7 @@ export class WalkerSim {
     const wasAir = this.airborne;
     this.launch(cx * this.boundSpeed, vy, cz * this.boundSpeed);
     if (!wasAir) this.stats.takeoffs--; // a stride, not a take-off
+    this.strideLeap = true;
     this.bLeap = true;
     for (const f of this.feet) { f.bState = 0; f.swinging = false; }
   }
@@ -2775,7 +2803,8 @@ export class WalkerSim {
       // thigh angles out to the side instead of standing straight up and down (Keith 2026-10-24, side slopes).
       const rest = Math.max(0.5, v.hipHeight - v.ankleHeight);
       const squash = f.swinging || this.lofted ? 0 : clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.6);
-      f.splay += ((v.thighSplay * squash) - f.splay) * 0.15;
+      // Eased by time (was 0.15 a call: twice as quick at 240 fps as at 120).
+      f.splay += ((v.thighSplay * squash) - f.splay) * Math.min(1, 18 * this.poseDt);
       forwardOf(this.heading + this.hipOpen + f.side * (v.kneeOut + f.splay) * D2R + f.kneeYaw, P.legFwd);
       const reach = v.femur + v.shin - 0.002;
 

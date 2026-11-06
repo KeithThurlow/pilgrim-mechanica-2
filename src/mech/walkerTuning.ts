@@ -118,6 +118,9 @@ export const WALKER_DEFAULTS = {
   airFold: 25,
   airPitch: 0.3,
   airSteer: 0.25,
+  // Keith 2026-11-06 ("floaty"): flights off crests, blasts and drops fall this much harder than g; landings are graded
+  // as if at g, so the same jump hurts the same. Sprint strides keep g (their timing is the gait's).
+  airGravity: 1.4,
   landSoft: 3,
   landDip: 0.12,
   landSquat: 0.14,
@@ -131,6 +134,10 @@ export const WALKER_DEFAULTS = {
   landDamage: 40,
   landFriction: 3,
   landShake: 0.5,
+  // Knockback (Keith 2026-11-06: "on explosions... you can end up drifting too much"): a blast's shove takes this share
+  // (the mech's weight) and the feet dig in at knockGrip until it's gone, not the sprint's low grip at that speed.
+  knockTake: 0.8,
+  knockGrip: 25,
   // Walls (Keith 2026-10-26: a dash at a steep wall flung the mech into the sky): faces steeper than wallGrade take
   // speed into them away, fully at wallStop; nothing takes off upward faster than launchUpMax.
   wallGrade: 0.9,
@@ -363,6 +370,9 @@ export const WALKER_PARAMS: Param[] = [
   { key: "airFold", label: "Hocks fold when tucked (°)", min: 0, max: 80, step: 1, group: "Air" },
   { key: "airPitch", label: "Pitch with the flight path", min: 0, max: 1, step: 0.01, group: "Air", tip: "Share of the climb or fall angle the body tips to: nose up rising, nose down falling" },
   { key: "airSteer", label: "Steering in the air (× turn rate)", min: 0, max: 1, step: 0.01, group: "Air" },
+  { key: "airGravity", label: "Gravity in the air (× g)", min: 1, max: 3, step: 0.05, group: "Air", tip: "Keith 2026-11-06 (floaty): crest jumps, blasts and drops fall this much harder. 1 is real g (looks slow on a 4 m mech from the high camera). Landings are graded as if at g, so a jump hurts the same. Sprint strides keep g. Crests still take off at Leaves the ground" },
+  { key: "knockTake", label: "Knockback: share taken", min: 0, max: 1.5, step: 0.05, group: "Move", tip: "Keith 2026-11-06: the mech's weight against a blast's shove (pulses, big deaths, strider strikes): it's pushed at this share of the blast's speed" },
+  { key: "knockGrip", label: "Knockback: feet dig in at (m/s²)", min: 3, max: 80, step: 1, group: "Move", tip: "A blast's skid is braked at least this hard until it's gone (it used to get the sprint's low grip at that speed and drift 20 m from a 22 m/s shove). 25: 22 m/s × 0.8 goes about 6 m" },
   { key: "landSoft", label: "Soft landing under (m/s)", min: 0.5, max: 8, step: 0.1, group: "Landing", tip: "Hitting the ground slower than this is a small dip (a 0.5 m drop hits at 3.1 m/s, 1 m at 4.4, 3 m at 7.7, 6 m at 10.8)" },
   { key: "landDip", label: "Dip at a soft landing (m)", min: 0, max: 0.6, step: 0.01, group: "Landing" },
   { key: "landSquat", label: "Squat per m/s over soft (m)", min: 0, max: 0.4, step: 0.005, group: "Landing", tip: "Harder than soft: the hips drop this much more per m/s, the knees fold and the hull pitches forward, then it springs back" },

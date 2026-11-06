@@ -300,8 +300,11 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
 // Own blasts (Keith 2026-11-02): a big one's pulse hurts robots under it but not itself; its death blast goes off after
 // the delay, hurts robots round it and can set off another big one (a chain).
 {
-  const big = (seed: number) => new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1, robotPulseFirst: 0 }, field, seed);
-  const sw = big(21);
+  const big = (seed: number, o: Partial<typeof ROBOT_DEFAULTS> = {}) => new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1, robotPulseFirst: 0, ...o }, field, seed);
+  // Small ones packed round it and the mech: the pulse hurts them (latched ones too when robotPulseLatched is 1). With
+  // the dodge on (2026-11-06: the pulse is thrown at the mech's spot) the ones not latched step out of the ring first.
+  const ownPulse = (o: Partial<typeof ROBOT_DEFAULTS>) => {
+  const sw = big(21, o);
   sw.spawn(1, 160, 160, 0);
   const b = 0, hp0 = sw.hp[b];
   const mech = { x: 160 + 6, y: field.height(166, 160) + 3, z: 160, radius: 2 };
@@ -315,10 +318,15 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   const smallLeft = sw.count - (sw.state[b] < DEAD ? 1 : 0);
   console.log(`own pulse: ${pulses} pulse, ${small0 - smallLeft} of ${small0} small ones under it killed, its own hp ${Math.round(sw.hp[b])}/${Math.round(hp0)}, ownKills ${sw.ownKills}`);
   if (!pulses) fail("the big one never pulsed with the mech beside it");
-  else {
-    if (sw.ownKills === 0) fail("its pulse hurt none of the robots under it");
-    if (sw.hp[b] < hp0) fail("its pulse hurt itself");
-  }
+  else if (sw.hp[b] < hp0) fail("its pulse hurt itself");
+  return pulses ? sw.ownKills : -1;
+  };
+  const hurt = ownPulse({ robotPulseDodge: 0, robotPulseLatched: 1 });
+  if (hurt === 0) fail("its pulse hurt none of the robots under it");
+  const stay = ownPulse({ robotPulseDodge: 0, robotMaxLatched: 0 }), clear = ownPulse({ robotPulseDodge: 1, robotMaxLatched: 0 });
+  console.log(`  none latched: ${stay} killed standing in the ring, ${clear} with the dodge`);
+  if (stay === 0) fail("none latched, dodge off: the pulse killed none round the mech");
+  if (stay > 0 && clear > stay * 0.5) fail(`with the dodge on, ${clear} robots still died in the ring (${stay} with it off): they don't clear it`);
   // Death: two big ones 8 m apart; kill one, its core goes up after the delay and takes the other with it.
   const d = big(22);
   d.spawn(1, 220, 220, 0); d.spawn(1, 228, 220, 0);
@@ -326,13 +334,19 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   d.update(dt, far, () => {});
   const blasts: number[] = [];
   let t = 0;
-  d.onDeathBlast = (e) => { blasts.push(t); if (!(e.radius > 0 && e.damage > 0)) fail("death blast event without radius or damage"); };
+  const airs: number[] = [];
+  d.onDeathBlast = (e) => { blasts.push(t); airs.push(e.hubY - e.at.y); if (!(e.radius > 0 && e.damage > 0)) fail("death blast event without radius or damage"); };
   d.v.robotBigDeathOwnDamage = 5000;
   d.damage(0, 1e6, 1, 0);
   for (let s = 0; s < (2 * ROBOT_DEFAULTS.robotBigDeathDelay + 1) * 120; s++) { d.update(dt, far, () => {}); t += dt; }
-  console.log(`death blast: ${blasts.length} blasts at ${blasts.map((x) => x.toFixed(2)).join(", ")} s, ${d.count} big ones left`);
+  console.log(`death blast: ${blasts.length} blasts at ${blasts.map((x) => x.toFixed(2)).join(", ")} s, hull ${airs.map((x) => x.toFixed(1)).join(", ")} m up, ${d.count} big ones left`);
   if (blasts.length < 1) fail("a big one died with no death blast");
-  else if (Math.abs(blasts[0] - ROBOT_DEFAULTS.robotBigDeathDelay) > 0.05) fail("the death blast didn't wait its delay");
+  else {
+    // Keith 2026-11-06: it tips over and the reactor goes up as it falls, high up (an airburst), after the warning.
+    if (blasts[0] < ROBOT_DEFAULTS.robotBigDeathMin - 0.01) fail("the reactor went up before its warning");
+    if (blasts[0] > ROBOT_DEFAULTS.robotBigDeathDelay + 0.02) fail("the reactor went up after its latest delay");
+    if (!(airs[0] > 4)) fail(`the big one's reactor went up ${airs[0].toFixed(1)} m up, not an airburst`);
+  }
   if (blasts.length < 2 || d.count !== 0) fail("the death blast didn't set off the big one beside it");
   // Off: no blast.
   const o = big(23);
@@ -342,6 +356,19 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   o.damage(0, 1e6, 1, 0);
   for (let s = 0; s < (ROBOT_DEFAULTS.robotBigDeathDelay + 1) * 120; s++) o.update(dt, far, () => {});
   if (n) fail("death blast went off with robotBigDeathOn 0");
+  // A weapon quad's reactor: smaller and sooner (Keith 2026-11-06); a small quad (the cutter) has none.
+  const q = big(24);
+  const [wq] = q.spawn(1, 300, 300, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
+  const [cq] = q.spawn(1, 330, 300, 0, { mid: 1, big: 0, quad: 0 });
+  q.update(dt, far, () => {});
+  const qb: { t: number; r: number; id: number }[] = [];
+  let qt = 0;
+  q.onDeathBlast = (e) => qb.push({ t: qt, r: e.radius, id: e.id });
+  q.damage(wq, 1e6, 1, 0); q.damage(cq, 1e6, 1, 0);
+  for (let s = 0; s < (ROBOT_DEFAULTS.robotQuadDeathDelay + 1) * 120; s++) { q.update(dt, far, () => {}); qt += dt; }
+  console.log(`weapon quad reactor: ${qb.map((b) => `${b.t.toFixed(2)} s, ${b.r} m`).join("; ")}`);
+  if (qb.length !== 1) fail(`${qb.length} reactor blasts from a weapon quad and a cutter dying (want 1, the weapon quad's)`);
+  else if (qb[0].t > ROBOT_DEFAULTS.robotQuadDeathDelay + 0.02 || qb[0].t < ROBOT_DEFAULTS.robotQuadDeathMin - 0.01) fail("the weapon quad's reactor went off outside its window");
 }
 
 // No grenades by default (Keith 2026-11-02): with the defaults no big one lobs and no weapon quad rolls rockets.

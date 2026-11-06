@@ -14,6 +14,7 @@ import { SHADOW_ONLY_LAYER } from "./chunks";
 import { DayClock, skyAt, DAYNIGHT_DEFAULTS, DAYNIGHT_PARAMS, type Sky } from "./daynight";
 import { NightLights, NIGHT_LIGHT_DEFAULTS, NIGHT_LIGHT_PARAMS, NIGHT_LIGHT_GROUPS } from "./nightLights";
 import { BLAST_WAVE_DEFAULTS, BLAST_WAVE_PARAMS, BLAST_WAVE_GROUPS } from "../fx/blastWaves";
+import { NOVA_DEFAULTS, NOVA_PARAMS, NOVA_GROUPS } from "../fx/nova";
 import { HEAT_DEFAULTS, HEAT_PARAMS, HEAT_GROUPS } from "../fx/groundHeat";
 
 export const LOOK_DEFAULTS = {
@@ -32,12 +33,13 @@ export const LOOK_DEFAULTS = {
   ...DAYNIGHT_DEFAULTS,
   ...NIGHT_LIGHT_DEFAULTS,
   ...BLAST_WAVE_DEFAULTS,
+  ...NOVA_DEFAULTS,
   ...HEAT_DEFAULTS,
 };
 export type LookValues = typeof LOOK_DEFAULTS;
 
 /** The slider groups a lab's Light topic should list. */
-export const LIGHT_GROUPS = ["Look", "Time of day", ...NIGHT_LIGHT_GROUPS, ...BLAST_WAVE_GROUPS, ...HEAT_GROUPS];
+export const LIGHT_GROUPS = ["Look", "Time of day", ...NIGHT_LIGHT_GROUPS, ...BLAST_WAVE_GROUPS, ...NOVA_GROUPS, ...HEAT_GROUPS];
 
 export const LOOK_PARAMS: Param[] = [
   { key: "sunAzimuth", label: "Sun direction", min: 0, max: 360, step: 1, group: "Look", tip: "With the day cycle on: the noon sun's direction" },
@@ -53,6 +55,7 @@ export const LOOK_PARAMS: Param[] = [
   ...DAYNIGHT_PARAMS,
   ...NIGHT_LIGHT_PARAMS,
   ...BLAST_WAVE_PARAMS,
+  ...NOVA_PARAMS,
   ...HEAT_PARAMS,
 ];
 

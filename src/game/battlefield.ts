@@ -46,6 +46,8 @@ import { DAMAGE_TYPE_DEFAULTS } from "./damageType";
 import { famOfTeam } from "../world/lamps";
 import { BlastWaves, BLAST_WAVE_DEFAULTS, type BlastWaveValues, type WaveKind } from "../fx/blastWaves";
 import { BlastWavesDraw } from "../fx/blastWavesDraw";
+import { Novas, NOVA_DEFAULTS, type NovaValues } from "../fx/nova";
+import { NovaDraw } from "../fx/novaDraw";
 import { Solids } from "./solids";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
@@ -199,6 +201,9 @@ export class Battlefield {
   /** Blast waves on every explosion and heat shimmer behind rockets (Keith 2026-10-31; cosmetic: src/fx/blastWaves.ts). */
   readonly waves: BlastWaves;
   readonly wavesDraw: BlastWavesDraw;
+  /** Reactors going up (Keith 2026-11-06; cosmetic: src/fx/nova.ts). */
+  readonly novas: Novas;
+  readonly novaDraw: NovaDraw;
   /** Ripples and splashes on the shallows' water (null where the ground has no water). */
   readonly water: WaterFx | null = null;
   private waterDraw: WaterDraw | null = null;
@@ -273,6 +278,10 @@ export class Battlefield {
     for (const [k, val] of Object.entries(HEAT_DEFAULTS)) if (!(k in sv)) sv[k] = val;
     this.waves = new BlastWaves(v as unknown as BlastWaveValues);
     this.wavesDraw = new BlastWavesDraw(this.waves, field);
+    for (const [k, val] of Object.entries(NOVA_DEFAULTS)) if (!(k in sv)) sv[k] = val;
+    this.novas = new Novas(v as unknown as NovaValues);
+    this.novaDraw = new NovaDraw(this.novas, field);
+    this.group.add(this.novaDraw.group);
     this.group.add(this.flames.group);
     this.group.add(this.gunFx.group, this.dustDraw.group, this.shellsDraw.group, this.wavesDraw.group);
     if (wrecks) this.group.add(wrecks.group);
@@ -761,5 +770,6 @@ export class Battlefield {
       this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600, this.fx.own);
     } else this.waves.update(dt);
     c?.mark("blast waves");
+    this.novaDraw.update(dt);
   }
 }

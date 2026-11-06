@@ -16,6 +16,8 @@ import { striderRagdoll } from "./striderRagdoll";
 import { footShape } from "../fx/footprint";
 import { cookGround, coreWarnFx, fireRobotBeam, fireRobotDeathBlast } from "../game/robotBeam";
 import { CoreWarnDraw } from "../fx/coreWarnDraw";
+import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
+import { ReactorWrecks } from "../game/reactorWrecks";
 import { RobotTearFx, type RobotTearValues } from "./robotTearFx";
 
 export type StriderFieldValues = StriderValues & RobotTearValues & { striderBeamReach: number };
@@ -44,6 +46,7 @@ export class StriderField {
     this.fx = new StriderFx(field);
     this.fx.look = bf.v as unknown as { readonly [k: string]: number | undefined };
     scene.add(this.fx.group);
+    this.wrecks = deaths ? new ReactorWrecks(deaths) : null;
     this.warn = new CoreWarnDraw(field);
     coreWarnFx(bf, this.warn);
     scene.add(this.warn.group);
@@ -83,8 +86,10 @@ export class StriderField {
     this.warn.update(dt, this.cores);
   }
 
-  /** Dead striders' cores waiting to go up. */
-  cores: { id: number; x: number; y: number; hy: number; z: number; t: number; delay: number; radius: number }[] = [];
+  /** Dead striders' reactors waiting to go up as they fall (src/combat/reactorFall.ts). */
+  cores: Reactor[] = [];
+  /** Their ragdolls (the chest holds the reactor). */
+  private wrecks: ReactorWrecks | null;
   /** The cores drawn going unstable. */
   readonly warn: CoreWarnDraw;
   /** Death blasts gone off since construction. */
@@ -94,18 +99,21 @@ export class StriderField {
    *  queues its own core: a chain, one delay apart). */
   private tickCores(dt: number) {
     if (!this.cores.length) return;
-    const v = this.v, bf = this.bf, due = this.cores.filter((c) => (c.t -= dt) <= 0);
-    if (!due.length) return;
-    this.cores = this.cores.filter((c) => c.t > 0);
+    const v = this.v, bf = this.bf, W = this.wrecks, due: Reactor[] = [];
+    this.cores = this.cores.filter((c) => {
+      const go = stepReactor(c, dt, this.field, W ? (out) => W.at(c.id, out) : null);
+      if (go) due.push(c);
+      return !go;
+    });
     for (const c of due) {
       this.deathBlasts++;
-      const gy = this.field.height(c.x, c.z);
+      W?.blow(c.id, c.x, c.hy, c.z, c.radius);
       fireRobotDeathBlast(bf, {
-        id: c.id, at: { x: c.x, y: gy, z: c.z }, hubY: Math.max(gy + 2, c.hy), radius: c.radius, damage: v.striderDeathDamage,
+        id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: Math.max(c.y + 1, c.hy), radius: c.radius, damage: v.striderDeathDamage,
         pierce: v.striderDeathPierce, shove: v.striderDeathShove, boom: v.striderDeathBoom,
-        craterR: c.radius * v.striderDeathCrater, craterDepth: v.striderDeathCraterDepth,
+        craterR: c.radius * v.striderDeathCrater, craterDepth: v.striderDeathCraterDepth, nova: v.striderDeathNova,
       }, (x, z, r, sp) => { if (this.mech.alive) this.mech.shoveFrom(x, z, r, sp); });
-      bf.blastOwn(3, AT.set(c.x, gy, c.z), c.radius, v.striderDeathOwnDamage, v.striderDeathPierce);
+      bf.blastOwn(3, AT.set(c.x, c.y, c.z), c.radius, v.striderDeathOwnDamage, v.striderDeathPierce);
     }
   }
 
@@ -144,12 +152,16 @@ export class StriderField {
     } else if (e.type === "down") {
       const s = pack.list.find((x) => x.id === e.id);
       if (!s) return;
+      // Its reactor goes up as it falls (in update: a kill inside a blast mustn't blow up mid-loop). It tips along the
+      // way it faced.
+      const core = makeReactor(e.id, e.x, e.z, e.y, s.face, this.field,
+        { delay: v.striderDeathDelay, min: v.striderDeathMin, share: v.striderDeathAt, spin: v.striderDeathTip, radius: v.striderDeathRadius });
+      this.cores.push(core);
       if (this.deaths) {
         const r = striderRagdoll(s, this.field.height(s.pos(AT).x, AT.z));
-        this.deaths.ragdoll(r.parts, r.joints, r.x, r.y, r.z, r.yaw, { x: 0, y: 0, z: 0 }, 0, 0, 1);
+        const d = this.deaths.ragdoll(r.parts, r.joints, r.x, r.y, r.z, r.yaw, { x: 0, y: 0, z: 0 }, core.fx, core.fz, 0.3, core.angV);
+        this.wrecks?.add(e.id, d);
       }
-      // Its core goes up a moment later (in update: a kill inside a blast mustn't blow up mid-loop).
-      this.cores.push({ id: e.id, x: e.x, y: this.field.height(e.x, e.z), hy: e.y, z: e.z, t: v.striderDeathDelay, delay: v.striderDeathDelay, radius: v.striderDeathRadius });
       this.remove(s);
       this.onDown?.(s);
     }
