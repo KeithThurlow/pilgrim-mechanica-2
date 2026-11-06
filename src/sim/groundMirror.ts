@@ -2,10 +2,17 @@
 // craters and the expedition's pads and walls, built from the same values and kept in step by replaying the main
 // thread's ground events (src/sim/groundEvents.ts) in order. Same objects, same calls, so the same heights bit for
 // bit; tools/groundmirror-check.ts and the convoy lab's parity sampling hold it to that. Pure: no scene, no DOM.
+// Step 3: it also holds the worker's copy of the convoy (its reset, jump and update replayed the same way) and the
+// escorts driving beside it (src/sim/escortsRemote.ts, stepped by the main thread's commands in the same stream).
 import { DuneField } from "../world/terrain";
 import { ConvoyRoute, type RouteValues } from "../convoy/route";
 import { CraterLayer, type CraterValues } from "../world/craters";
 import { SitesGround, roadBlocks } from "../expedition/sitesGround";
+import { Convoy } from "../convoy/platform";
+import type { TrainValues } from "../convoy/train";
+import type { PlatformValues } from "../convoy/platform";
+import type { EscortValues } from "../convoy/escort";
+import { EscortsWorker } from "./escortsRemote";
 import type { GroundEvent, GroundInit, Values } from "./groundEvents";
 
 export class GroundMirror {
@@ -14,6 +21,8 @@ export class GroundMirror {
   readonly route: ConvoyRoute;
   readonly craters: CraterLayer;
   sites: SitesGround | null = null;
+  convoy: Convoy | null = null;
+  escorts: EscortsWorker | null = null;
   /** Events applied in all. */
   applied = 0;
 
@@ -53,9 +62,15 @@ export class GroundMirror {
     this.sites = new SitesGround(this.V as unknown as ConstructorParameters<typeof SitesGround>[0], this.field, roadBlocks(this.route));
   }
 
+  convoyMade() { this.convoy = new Convoy(this.route, this.V as unknown as PlatformValues & TrainValues, this.field); }
+
   private target(e: GroundEvent): object {
     switch (e.t) {
-      case "mirror": return e.m === "sites" ? { sites: () => this.sitesMade() } : this;
+      case "mirror": return e.m === "sites" ? { sites: () => this.sitesMade() } : e.m === "convoy" ? { convoy: () => this.convoyMade() } : this;
+      case "convoy": if (!this.convoy) throw new Error(`ground mirror: convoy.${e.m} before the convoy was made`); return this.convoy;
+      case "escorts":
+        if (!this.convoy) throw new Error(`ground mirror: escorts.${e.m} before the convoy was made`);
+        return (this.escorts ??= new EscortsWorker(this.V as unknown as EscortValues, this.convoy, this.field));
       case "field": return this.field;
       case "route": return this.route;
       case "wake": return this.route.wake;

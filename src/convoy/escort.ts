@@ -14,6 +14,9 @@
 // and drives round dune faces too steep to climb.
 // Their guns (Keith 2026-11-01) are src/convoy/guard.ts: they shoot from station; `mode` is still the hook for breaking
 // station toward threats (not built).
+// In the sim worker (docs/proposal-simworker.md step 3; not with ?noworker): the convoy lab's group is a view; `remote`
+// takes its update, reset and invalidate as commands to the worker's own group, and the list is written from the
+// worker's snapshots a frame late (src/sim/escortsRemote.ts). Ownership: host (the escorts are convoy state).
 import { HeightMemo } from "../world/heightMemo";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
@@ -141,8 +144,20 @@ export class Escort {
   }
 }
 
+/** Where a worker-run group's calls go instead (src/sim/escortsRemote.ts). */
+export interface EscortRemote {
+  update(dt: number, mech: { x: number; z: number } | null, mechs: { x: number; z: number }[]): void;
+  reset(): void;
+  invalidate(x0: number, z0: number, x1: number, z1: number): void;
+}
+
+/** Escort i of a group (its kind from the list of kinds in turn). */
+export const makeEscort = (i: number, ground: DuneField) => new Escort(KINDS[i % KINDS.length], i, ground);
+
 export class EscortGroup {
   readonly list: Escort[] = [];
+  /** Set: the group runs in the sim worker and this one only shows it (the list from its snapshots). */
+  remote: EscortRemote | null = null;
   private t = 0;
   private pt = { x: 0, z: 0, heading: 0 };
 
@@ -158,7 +173,7 @@ export class EscortGroup {
     if (n === this.list.length) return false;
     while (this.list.length > n) this.list.pop();
     while (this.list.length < n) {
-      const e = new Escort(KINDS[this.list.length % KINDS.length], this.list.length, this.field);
+      const e = makeEscort(this.list.length, this.field);
       this.list.push(e);
       this.stations();
       this.place(e);
@@ -193,8 +208,14 @@ export class EscortGroup {
     });
   }
 
+  /** The ground changed in the box: the planning copy forgets it. */
+  invalidate(x0: number, z0: number, x1: number, z1: number) {
+    if (this.remote) this.remote.invalidate(x0, z0, x1, z1);
+    else this.memo.invalidate(x0, z0, x1, z1);
+  }
+
   /** Put every escort on its station, at the convoy's speed. */
-  reset() { this.sync(); this.stations(); for (const e of this.list) this.place(e); }
+  reset() { if (this.remote) { this.remote.reset(); return; } this.sync(); this.stations(); for (const e of this.list) this.place(e); }
 
   private place(e: Escort) {
     const r = this.convoy.route;
@@ -218,6 +239,7 @@ export class EscortGroup {
   /** One fixed step. mech: the player's mech position (or null when it's aboard or held). */
   private k = 0;
   update(dt: number, mech: { x: number; z: number } | null) {
+    if (this.remote) { this.remote.update(dt, mech, this.mechs); return; }
     this.t += dt;
     this.memo.now = this.t;
     this.sync();
