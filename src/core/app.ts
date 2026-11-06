@@ -2,6 +2,7 @@
 // WebGPU first; Three.js falls back to WebGL 2 by itself. ?webgl in the URL forces WebGL (used by headless shots).
 import * as THREE from "three/webgpu";
 import { trimInstanceUploads } from "./instanceUploads";
+import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 
@@ -21,6 +22,8 @@ export interface App {
   capture(): Promise<string>;
   /** The last frame: its times (ms: the whole frame, the ticks, the render call's CPU submit), draw calls, triangles. */
   last: { frame: number; tick: number; render: number; calls: number; tris: number };
+  /** For probes: true skips the ticks, so frames redraw the same moment (e.g. to compare render settings). */
+  hold: boolean;
 }
 
 export async function createApp(container: HTMLElement): Promise<App> {
@@ -57,6 +60,9 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const noRender = params.has("norender");
   let up = { trimmed: 0, savedKB: 0 };
   hud.set("shaders", () => `shaders: ${shaders.total} pipelines built (${shaders.async ? "in the background" : "sync, ?syncshaders"}), ${shaders.totalMs.toFixed(0)} ms in frames (code ${shaders.totalGenMs.toFixed(0)}), worst frame ${shaders.worstMs.toFixed(0)} ms`);
+  // Batched shadow casters (src/look/shadowProxies.ts); ?noproxy draws every part into the shadow map as before.
+  const proxies = params.has("noproxy") ? null : new ShadowProxies();
+  if (proxies) hud.set("shadow batches", () => { const p = proxies.stats; return `shadow batches: ${p.shown} of ${p.parts} parts cast through ${p.batches} batches (${p.released} handed back)`; });
   hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
@@ -65,10 +71,14 @@ export async function createApp(container: HTMLElement): Promise<App> {
     const dt = Math.min(raw, 1 / 20);
     time += dt;
     const t0 = performance.now();
-    for (const t of ticks) t(dt, time);
+    if (!app.hold) for (const t of ticks) t(dt, time);
     const t1 = performance.now();
     // ?norender: run the ticks without drawing (headless CPU measurements, e.g. the stress lab on a software GPU).
-    if (!noRender) { up = trimInstanceUploads(scene); renderer.render(scene, camera); }
+    if (!noRender) { up = trimInstanceUploads(scene);
+      // The batches copy world matrices, so they bring them up to date first and the render needn't do it again.
+      if (proxies && renderer.shadowMap.enabled) { proxies.update(scene); scene.matrixWorldAutoUpdate = false; renderer.render(scene, camera); scene.matrixWorldAutoUpdate = true; }
+      else renderer.render(scene, camera);
+    }
     const t2 = performance.now();
     hud.note(shaders.frameNew || shaders.frameGenMs > 1 ? `new shaders ${shaders.frameNew} (code ${shaders.frameGenMs.toFixed(0)} ms, GPU ${shaders.frameMs.toFixed(0)} ms)` : "");
     shaderFrameDone(shaders, now > 5000);
@@ -83,11 +93,12 @@ export async function createApp(container: HTMLElement): Promise<App> {
   });
 
   const app: App = {
-    renderer, scene, camera, hud, backend, params, last,
+    renderer, scene, camera, hud, backend, params, last, hold: false,
     onTick: (fn) => ticks.push(fn),
     capture: () => new Promise<string>((res) => captures.push(res)),
   };
   // For agents' probes in a headless browser (scene contents, triangle counts): window.__app.
   (window as unknown as { __app: App }).__app = app;
+  (window as unknown as { __shadowBatches: ShadowProxies | null }).__shadowBatches = proxies;
   return app;
 }
