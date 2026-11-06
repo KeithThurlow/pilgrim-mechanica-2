@@ -32,6 +32,7 @@
 // the rest). Brightness by rounds/s × power, colour by family; faint by day (the core only), strong at night. Most drawn
 // tracers carry a light too, each weaker so a stream's total stays about the same.
 import * as THREE from "three/webgpu";
+import { SHADOW_PROXY_LAYER } from "../look/shadowProxies";
 import type { Param } from "../core/tweaks";
 import { LampDraw } from "../fx/lampDraw";
 import { GunStreams, type GunStream } from "../fx/gunStreams";
@@ -532,6 +533,8 @@ export class NightLights implements ShortLights {
       this.spot = new THREE.SpotLight(0xfff1dc, 0, 40, 0.5, 0.6, 2);
       this.spot.shadow.bias = -0.0006;
       this.spot.shadow.normalBias = 0.03;
+      // The camera's layer plus the merged shadow casters (src/look/shadowProxies.ts).
+      this.spot.shadow.camera.layers.enable(SHADOW_PROXY_LAYER);
       this.group.add(this.spot, this.spot.target);
     }
     this.made = true;
