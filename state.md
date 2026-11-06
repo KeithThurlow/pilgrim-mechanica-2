@@ -317,6 +317,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+- 2026-11-06 Rebalance robots vs bandits (Keith feedback; Claude): fewer big walkers (camp/pack/raid big shares halved, guaranteed bigs 2→1 / 1.5→1, strider camps one per 30 (packs 45), max 1); out-of-view clashes less lopsided (cutter 4→3, excavator 12→8, bandit 1.2→2.2, bandit mech 20→30 power). Files: factions.ts, camps.ts, threats.ts, striderCamps.ts, stridercamps-check. npm test 95/95. Open for Keith: tune via the Factions / Clashes sliders if bandits still lose too often.
 ### 2026-11-06 · Loot rarer, and a red Mythic tier above Legendary (Keith asked; Claude on `claude/project-thread-brfzo0`)
 Rarity weights now steep (common 60, uncommon 24, rare 8, epic 2, legendary 0.4, mythic 0.06; was 50/28/14/6/2); drop counts down (`dropSpot` 0.3→0.2, `dropPerThreat` 1→0.65). New tier `mythic` (red #ff3b3b, 5 sockets, scrap value ×98); name is a placeholder for Keith. Files: `src/items/rarity.ts`, `generate.ts`, `src/expedition/drops.ts`, `src/audio/lootSound.ts` (Mythic volume slider; plays the Legendary riff), `tools/loadout-check.ts`. Checked: `npm test` (loadout-check updated for 6 tiers). Try `convoy?out&drop=all`.
 
