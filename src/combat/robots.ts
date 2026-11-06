@@ -1814,7 +1814,10 @@ export class RobotSwarm {
 
   private kill(i: number, dirX: number, dirZ: number) {
     const v = this.v, l = Math.hypot(dirX, dirZ);
-    const nx = l > 1e-6 ? dirX / l : Math.sin(this.heading[i]), nz = l > 1e-6 ? dirZ / l : Math.cos(this.heading[i]);
+    // No way in plan (fire and cold ticking it down: straight up): it drops where it stands, falling along its heading,
+    // not thrown along it (Keith 2026-11-06: burning robots flew at the mech).
+    const push = l > 1e-6;
+    const nx = push ? dirX / l : Math.sin(this.heading[i]), nz = push ? dirZ / l : Math.cos(this.heading[i]);
     const wasAir = isAirborne(this.state[i]);
     this.setState(i, DEAD);
     this.hp[i] = 0;
@@ -1823,7 +1826,7 @@ export class RobotSwarm {
       // Walkers just collapse where they stand.
       this.vx[i] = 0; this.vz[i] = 0; this.vy[i] = 0; this.spin[i] = 0;
     } else {
-      const s = v.robotDeathThrow * (0.6 + 0.8 * this.rand());
+      const rr = this.rand(), s = push ? v.robotDeathThrow * (0.6 + 0.8 * rr) : 0;
       this.vx[i] = nx * s + (wasAir ? this.tvx : 0); this.vz[i] = nz * s + (wasAir ? this.tvz : 0);
       this.vy[i] = v.robotDeathPop * (0.5 + this.rand());
       this.spin[i] = (this.rand() < 0.5 ? -1 : 1) * (6 + this.rand() * 8);
@@ -1832,7 +1835,7 @@ export class RobotSwarm {
     if (this.kind[i] === BIG && v.robotBigDeathOn > 0.5) {
       this.cores.push({ x: this.px[i], z: this.pz[i], y: this.ground.height(this.px[i], this.pz[i]), hubY: this.hubY[i], id: this.uid[i], power: this.power[i], t: v.robotBigDeathDelay, delay: v.robotBigDeathDelay, radius: v.robotBigDeathRadius });
     }
-    this.onDeath?.(i, nx, nz, Math.hypot(this.vx[i], this.vz[i]));
+    this.onDeath?.(i, push ? nx : 0, push ? nz : 0, Math.hypot(this.vx[i], this.vz[i]));
   }
 
   /** Big ones' cores counting down; those due go up: their robots hurt here, the rest (the battlefield) by the event. */

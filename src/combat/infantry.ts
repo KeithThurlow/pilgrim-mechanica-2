@@ -575,14 +575,17 @@ export class InfantrySwarm {
 
   private kill(i: number, dirX: number, dirZ: number, throwSpeed: number) {
     const l = Math.hypot(dirX, dirZ);
-    const nx = l > 1e-6 ? dirX / l : Math.sin(this.heading[i]), nz = l > 1e-6 ? dirZ / l : Math.cos(this.heading[i]);
-    const s = throwSpeed * (0.6 + 0.8 * this.rand());
+    // No way in plan (fire and cold ticking them down: straight up): they drop where they stand, falling along their
+    // heading, not thrown along it (Keith 2026-11-06: burning bodies flew at the mech).
+    const push = l > 1e-6;
+    const nx = push ? dirX / l : Math.sin(this.heading[i]), nz = push ? dirZ / l : Math.cos(this.heading[i]);
+    const r = this.rand(), s = push ? throwSpeed * (0.6 + 0.8 * r) : 0;
     this.state[i] = DEAD; this.stateTime[i] = 0; this.hp[i] = 0;
     this.vx[i] = nx * s; this.vz[i] = nz * s;
     this.fallYaw[i] = Math.atan2(nx, nz);
     this.count--;
     if (this.evN < EVENTS_MAX) { this.evX[this.evN] = this.px[i]; this.evZ[this.evN] = this.pz[i]; this.evN++; }
-    this.onDeath?.(i, nx, nz, s);
+    this.onDeath?.(i, push ? nx : 0, push ? nz : 0, s);
   }
 
   /** Into the register (src/game/register.ts): every standing bandit at its centre of mass, light (rounds carry on). */

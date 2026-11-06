@@ -114,6 +114,7 @@ import type { HealTarget } from "../abilities/zones";
 import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, mechWreckSpec, mechWreckThrow, mechWreckThuds, seedOf, legPart, BODY, type MechPose } from "../physics/mechWreck";
 import { MechWreckRig } from "../physics/mechWreckDraw";
 import type { Dead } from "../physics/deaths";
+import { shotLine } from "../weapons/shotLine";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
@@ -266,6 +267,7 @@ export class MechUnit implements Hittable, Solid {
   private shoulder = new THREE.Vector3();
   private muzzle = new THREE.Vector3();
   private dir = new THREE.Vector3();
+  private barrelDir = new THREE.Vector3();
   private eject = new THREE.Vector3();
   private a = new THREE.Vector3();
   private b = new THREE.Vector3();
@@ -546,10 +548,10 @@ export class MechUnit implements Hittable, Solid {
       // ~2 m low at 20 m (Keith: "very hard to hit"). The barrel's heading stays the fallback with no aim.
       // A free arm while sprinting fires at the real aim, not the run's line.
       const at = this.armsFree[s === 1 ? 0 : 1] ? shotAt ?? want.aim : shotAt ?? aim;
-      if (at) {
-        const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
-        if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
-      }
+      // Point blank (an enemy closer than a held gun's muzzle): the round starts further back along the barrel so it
+      // still flies outward, not back at the mech (Keith 2026-11-06: "negative knockback"; src/weapons/shotLine.ts).
+      this.barrelDir.copy(this.dir);
+      shotLine(this.muzzle, this.barrelDir, at ?? null, v.shotPullBack, this.muzzle, this.dir);
       if (this.player && !isFlameGun(own?.cls)) body.eject(s, this.eject);
       // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
       const special = this.weapons?.rounds?.(s) ?? null;

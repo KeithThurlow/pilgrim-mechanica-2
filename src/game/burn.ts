@@ -31,9 +31,19 @@ export interface Burning {
   metal: boolean;
   /** Where it burns (the last ignition; the flames are drawn here). */
   x: number; y: number; z: number;
+  /** The way the fire came (the last ignition, in plan): a body the burn kills is thrown this way, away from the
+   *  weapon, not along its own heading (Keith 2026-11-06: burning robots fell toward the mech). */
+  dx: number; dz: number;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+
+/** The direction a damage-over-time tick hands the target (a kill throws the body along it): the way the fire or cold
+ *  came, level; straight up with none (the swarms then drop the body where it stands, src/combat/robots.ts kill). */
+export function pushDir(out: THREE.Vector3, dx: number, dz: number): THREE.Vector3 {
+  const l = Math.hypot(dx, dz);
+  return l > 1e-6 ? out.set(dx / l, 0, dz / l) : out.copy(UP);
+}
 
 export class Burns {
   readonly list: Burning[] = [];
@@ -42,6 +52,7 @@ export class Burns {
   heatTotal = 0;
   ignitions = 0;
   private at = new THREE.Vector3();
+  private dir = new THREE.Vector3();
   /** Heat by target and unit, rebuilt each step (the draw's glow). */
   private heats = new Map<Hittable, Map<number, number>>();
 
@@ -51,14 +62,14 @@ export class Burns {
   private get max() { return Math.max(1, Math.floor(this.v.burnMax ?? BURN_FALLBACK.burnMax)); }
 
   /** Set a target alight at a point (renews it if it already burns there). */
-  ignite(target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number) {
+  ignite(target: Hittable, key: number, time: number, dps: number, x: number, y: number, z: number, dx = 0, dz = 0) {
     if (!(time > 0) || !(dps > 0)) return;
     this.ignitions++;
     this.onIgnite?.(target, key);
     for (const b of this.list) {
-      if (b.target === target && b.key === key) { b.left = Math.max(b.left, time); b.dps = b.left > 0 && b.dps > 0 ? Math.max(b.dps, dps) : dps; b.x = x; b.y = y; b.z = z; return; }
+      if (b.target === target && b.key === key) { b.left = Math.max(b.left, time); b.dps = b.left > 0 && b.dps > 0 ? Math.max(b.dps, dps) : dps; b.x = x; b.y = y; b.z = z; if (dx || dz) { b.dx = dx; b.dz = dz; } return; }
     }
-    const b: Burning = { target, key, left: time, dps, acc: 0, heat: 0, metal: matterOf(target) === "metal", x, y, z };
+    const b: Burning = { target, key, left: time, dps, acc: 0, heat: 0, metal: matterOf(target) === "metal", x, y, z, dx, dz };
     if (this.list.length < this.max) { this.list.push(b); return; }
     // Full: a cooling one (least heat), else the one with least time left, makes room (unless it's the longer).
     let k = 0;
@@ -85,7 +96,7 @@ export class Burns {
         const burn = lit ? b.dps * tick * mul : 0, cook = b.metal ? b.heat * b.heat * hdps * tick : 0;
         if (burn + cook <= 0) continue;
         if (b.key >= 0) b.target.pick?.(b.key);
-        b.target.damage(burn + cook, this.at.set(b.x, b.y, b.z), UP);
+        b.target.damage(burn + cook, this.at.set(b.x, b.y, b.z), pushDir(this.dir, b.dx, b.dz));
         this.total += burn + cook; this.heatTotal += cook;
       }
       if ((b.left > 0 || b.heat > 0.01) && b.target.alive) {
