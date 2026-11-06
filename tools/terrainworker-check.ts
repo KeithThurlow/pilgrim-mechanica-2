@@ -20,6 +20,7 @@ import { TerrainStreamer, STREAM_DEFAULTS, PATCH_PAD, type BuildResult, type Pat
 import { chunkArrays, fillChunkRows, patchBlocks } from "../src/world/chunkFill";
 import { GroundRecorder } from "../src/sim/groundEvents";
 import { GroundMirror } from "../src/sim/groundMirror";
+import { GroundWindow } from "../src/world/groundWindow";
 
 const problems: string[] = [];
 const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
@@ -29,6 +30,8 @@ const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 42
 const V = {
   ...TERRAIN_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS,
   ...TRAIN_DEFAULTS, ...CRATER_DEFAULTS, ...SITES_DEFAULTS, ...STREAM_DEFAULTS, radius: 3, segments: 32,
+  // Craters keep slumping below the 3 cm that asks for a redraw, so whichever copy sampled later looks closer: hold them still.
+  craterSlump: 1e7,
 };
 const field = new DuneField(V);
 const route = new ConvoyRoute(V, 0, 0);
@@ -38,9 +41,12 @@ field.dents = craters;
 const rec = new GroundRecorder({ V, field, route, craters, routeAt: [0, 0] });
 const local = new TerrainStreamer(field, { ...V });
 const remote = new TerrainStreamer(field, { ...V });
+// The detail patch's ground window, the same way (step 2b): its fine rows here, or asked of the worker.
+const winL = new GroundWindow(field, 40, 0.25, V.chunkSize / V.segments, 3), winR = new GroundWindow(field, 40, 0.25, V.chunkSize / V.segments, 3);
 route.onChange = (x0, z0, x1, z1) => {
   craters.invalidate(x0, z0, x1, z1);
   for (const st of [local, remote]) st.patchArea(x0, z0, x1, z1);
+  for (const w of [winL, winR]) w.invalidate([x0 - PATCH_PAD, z0 - PATCH_PAD, x1 + PATCH_PAD, z1 + PATCH_PAD]);
 };
 const convoy = new Convoy(route, V, field);
 convoy.reset(0, 0);
@@ -71,11 +77,30 @@ remote.remote = {
     });
   },
 };
+let fineAsked = 0;
+winR.remote = {
+  fine: (q) => {
+    flush();
+    fineAsked += q.runs.length;
+    queue.push(() => {
+      let len = 0;
+      for (const r of q.runs) len += r.i1 - r.i0 + 1;
+      const h = new Float32Array(len);
+      let o = 0;
+      for (const r of q.runs) for (let i = r.i0; i <= r.i1; i++) h[o++] = mirror.field.height(i * q.f, r.j * q.f);
+      const req = structuredClone(q);
+      return () => winR.takeFine(req.runs, h);
+    });
+  },
+};
 /** The worker runs what was asked this frame; its answers arrive before the next frame. */
 const workerFrame = () => { flush(); const q = queue; queue = []; for (const a of answers) a(); answers = q.map((j) => j()); };
 
 const dt = 1 / 60, p = { x: 0, z: 0, heading: 0 };
-const changed = (x0: number, z0: number, x1: number, z1: number) => { for (const st of [local, remote]) st.queuePatch(x0, z0, x1, z1); };
+const changed = (x0: number, z0: number, x1: number, z1: number) => { for (const st of [local, remote]) st.queuePatch(x0, z0, x1, z1); for (const w of [winL, winR]) w.invalidate([x0, z0, x1, z1], true); };
+const q = { x: 0, z: 0, heading: 0 };
+/** The mech walking beside the convoy, the window following it. */
+const follow = () => { route.offsetAt(route.s + 10, 18, q); for (const w of [winL, winR]) w.follow(q.x, q.z, 2); };
 for (let f = 0; f < 900; f++) {
   for (let i = 0; i < 2; i++) convoy.update(dt / 2);
   if (f % 7 === 0) {
@@ -89,10 +114,11 @@ for (let f = 0; f < 900; f++) {
   route.pointAt(route.s, p);
   local.update(p.x, p.z);
   remote.update(p.x, p.z);
+  follow();
   workerFrame();
 }
 // Settle: nothing changes; the remote one catches up.
-for (let f = 0; f < 40; f++) { route.pointAt(route.s, p); local.update(p.x, p.z); remote.update(p.x, p.z); workerFrame(); }
+for (let f = 0; f < 40; f++) { route.pointAt(route.s, p); local.update(p.x, p.z); remote.update(p.x, p.z); follow(); workerFrame(); }
 
 let worse = 0, worst = 0, differ = 0;
 let chunks = 0, verts = 0, dh = 0, dn = 0, dc = 0, missing = 0;
@@ -139,6 +165,24 @@ const pa = patchBlocks(field, p.x - 10, p.z - 10, p.x + 10 + PATCH_PAD, p.z + 10
 for (let k = 0; k < pa.length; k++) for (let i = 0; i < pa[k].h.length; i++) if (pa[k].h[i] !== pb[k].h[i]) exact++;
 console.log(`  copy vs main thread, three chunks and a patch: ${exact} values differ`);
 if (exact) fail(`${exact} chunk values from the worker's copy differ from the main thread's`);
+
+// The window: where the two differ, the worker-fed one is no further from the ground than the one filled here.
+{
+  let n = 0, differ = 0, worse = 0, worst = 0, largest = 0;
+  const S = winL.sub, f = winL.fine;
+  if (!winL.ready || !winR.ready) fail(`a ground window isn't ready after settling (here ${winL.ready}, worker ${winR.ready})`);
+  if (winL.gx !== winR.gx || winL.gz !== winR.gz) fail("the two ground windows aren't in the same place");
+  for (let j = winL.gz * S; j <= (winL.gz + winL.nc) * S; j++) for (let i = winL.gx * S; i <= (winL.gx + winL.nc) * S; i++) {
+    const a = winL.fineAt(i, j), b = winR.fineAt(i, j), t = field.height(i * f, j * f);
+    n++;
+    if (Math.abs(a - b) > 1e-3) { differ++; largest = Math.max(largest, Math.abs(a - b)); }
+    if (Math.abs(b - t) > Math.abs(a - t) + 1e-3) { worse++; worst = Math.max(worst, Math.abs(b - t) - Math.abs(a - t)); }
+  }
+  console.log(`  ground window: ${n} fine samples, ${differ} differ by over 1 mm (largest ${largest.toFixed(3)} m), ${worse} further from the ground than here (by up to ${worst.toFixed(3)} m); ${fineAsked} rows asked of the worker, ${winR.stats.inflight} out`);
+  if (fineAsked < 500) fail(`only ${fineAsked} fine rows went to the worker`);
+  if (worse) fail(`${worse} of the worker-fed window's samples are further from the ground than the main thread's (by up to ${worst} m)`);
+  if (differ > n * 0.01) fail(`${differ} of ${n} window samples differ between the two`);
+}
 
 if (problems.length) { console.log(`terrainworker-check: ${problems.length} problem(s)`); process.exit(1); }
 console.log("terrainworker-check: ok");

@@ -10,6 +10,7 @@ import type { Param } from "../core/tweaks";
 import type { ConvoyRoute } from "../convoy/route";
 import type { GroundRecorder } from "./groundEvents";
 import type { TerrainStreamer } from "../world/chunks";
+import type { DetailPatch } from "../world/detailPatch";
 import type { FromWorker, ToWorker } from "./messages";
 
 export const SIM_DEFAULTS = {
@@ -78,7 +79,7 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
@@ -97,6 +98,14 @@ export class SimHost {
     };
   }
 
+  /** The detail patch's fine ground rows from now on sampled in the worker (step 2b). */
+  detail(patch: DetailPatch) {
+    this.patch = patch;
+    (this.stats as Record<string, unknown>).detail = patch.win.stats;
+    patch.setFineRemote({ fine: (req) => { this.flush(); this.send({ type: "fine", req }); } });
+  }
+
+  private patch: DetailPatch | null = null;
   private streamer: TerrainStreamer | null = null;
   private frameEvents = 0;
   private applyMs = 0;
@@ -116,10 +125,12 @@ export class SimHost {
     const s = this.stats;
     if (m.type === "ready") { s.ready = true; return; }
     if (m.type === "error") { s.error = m.message; console.error("sim worker:", m.message); return; }
-    if (m.type === "chunk" || m.type === "patch") {
+    if (m.type === "chunk" || m.type === "patch" || m.type === "fine") {
       // Copied into the chunks' geometry here, between frames: counted as the main thread's share.
       const t0 = performance.now();
-      if (m.type === "chunk") this.streamer?.takeBuild(m.res); else this.streamer?.takePatch(m.res);
+      if (m.type === "chunk") this.streamer?.takeBuild(m.res);
+      else if (m.type === "patch") this.streamer?.takePatch(m.res);
+      else this.patch?.win.takeFine(m.req.runs, m.heights);
       this.applyMs += performance.now() - t0;
       return;
     }
