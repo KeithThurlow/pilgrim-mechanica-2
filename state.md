@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Walker checked at 20 fps against 144: frame-rate independent (Keith: "legs end up dragging behind... might be frame rate"; Claude on `claude/project-thread-a6vlpg`)
+- New `tools/framerate-check.ts`: the same 14 s over the dunes (walk, Shift run, a turn, a 14 m/s shove, a jump) stepped as the game steps it (ceil(frame × 120) steps a frame) at 144, 60, 30 and 20 fps. Result: ends within 0.31 m (a frame's sampling), planted feet 0.43-0.45 m behind the hips on average at every rate, same landings. So the drag isn't the walker's frame rate; under 20 fps the whole game slows down instead (the frame cap in `src/core/app.ts`).
+- The one per-call ease found (the squashed thigh's splay, `pose()` in `src/mech/walker.ts`) now eases by time.
+- Checked: `framerate-check`, full `npm test`.
+
 ### 2026-11-06 · Instance pools upload only what's in use; the convoy lab stops copying every slider each frame (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
 - A CPU profile on Keith's PC (`/mnt/project-files/pc-profile-siege.md`, convoy lab `?siege&manual`): `writeBuffer` 9% of the frame, `cargoSizing` 3%.
 - `src/core/instanceUploads.ts` (called by `createApp` before each render): an instanced mesh's per-instance attribute that changed, with no update range of its own, gets one range over the instances in use (count), growing until three uploads it, so pools stop sending their whole capacity (e.g. 488 of 12288). Code that sets its own ranges (robots, flames, tracers) is left alone. The HUD details show "instance uploads trimmed" (cloud box, convoy `?siege&manual`: 32 buffers, ~870 KB a frame not sent).
