@@ -27,28 +27,32 @@ import { TEAM } from "../game/factions";
 import { hash4, rng, type PoiPlacement } from "../world/pois";
 import { fenced, flowStep, gateBox, regionOf, routeVia, wallHeight, type SiegeWalls } from "../pois/fortressGround";
 import { ringR, ringSpan } from "../pois/fortress";
-import type { Layout } from "../pois/fortress";
+import type { Gate, Layout } from "../pois/fortress";
 import { Gates, GATE_DEFAULTS, GATE_PARAMS, type GateEvent, type GateValues, type GateState } from "../pois/gates";
 import { GatesDraw } from "../pois/gatesDraw";
 import { Spawners, SPAWNER_DEFAULTS, SPAWNER_PARAMS, type SpawnerEvent, type SpawnerState, type SpawnerValues } from "../pois/spawners";
 import { SpawnersDraw } from "../pois/spawnersDraw";
 import { Towers, TOWER_DEFAULTS, TOWER_PARAMS, type CrewKind, type TowerEvent, type TowerState, type TowerValues } from "../pois/towers";
 import { TowersDraw } from "../pois/towersDraw";
-import { WARLORD_DEFAULTS, WARLORD_PARAMS, type Warlord } from "./warlord";
+import { FortMechs } from "./fortMechs";
+import { FORT_MECH_DEFAULTS, FORT_MECH_PARAMS } from "./fortMechPosts";
 
 export const FORT_LIFE_DEFAULTS = {
   ...GATE_DEFAULTS,
   ...SPAWNER_DEFAULTS,
   ...TOWER_DEFAULTS,
-  ...WARLORD_DEFAULTS,
+  ...FORT_MECH_DEFAULTS,
   fortGuardsOuter: 30,
   fortGuardsInner: 22,
   fortGuardsKeep: 14,
   fortAlarmAll: 1,
   fortVaultItems: 4,
-  fortTrickle: 6,
-  fortTrickleEvery: 12,
-  fortTrickleMax: 60,
+  fortWave: 18,
+  fortWaveRing: 8,
+  fortWaveEvery: 20,
+  fortWaveMax: 300,
+  fortGateShare: 0.5,
+  fortGatePour: 0.12,
   fortSentries: 0.35,
   fortSpawn: 700,
   fortDrop: 1000,
@@ -65,12 +69,12 @@ export const FORT_LIFE_DEFAULTS = {
 };
 export type FortLifeValues = typeof FORT_LIFE_DEFAULTS & GateValues & SpawnerValues & TowerValues;
 
-const G = "Fortress: garrison";
+const G = "Fortress: garrison", W = "Fortress: waves";
 export const FORT_LIFE_PARAMS: Param[] = [
   ...GATE_PARAMS,
   ...SPAWNER_PARAMS,
   ...TOWER_PARAMS,
-  ...WARLORD_PARAMS,
+  ...FORT_MECH_PARAMS,
   { key: "fortGuardsOuter", label: "Bandits in the outer yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
   { key: "fortGuardsInner", label: "Bandits in the inner yard", min: 0, max: 120, step: 1, group: G, onRelease: true },
   { key: "fortGuardsKeep", label: "Bandits in the keep", min: 0, max: 120, step: 1, group: G, onRelease: true },
@@ -83,9 +87,12 @@ export const FORT_LIFE_PARAMS: Param[] = [
   { key: "fortSally", label: "Comes out after the mech within (m of the wall)", min: 0, max: 400, step: 5, group: G, tip: "An alert yard leaves through an open gate to chase the mech this close outside; further off it holds" },
   { key: "fortVaultItems", label: "Items in the vault", min: 0, max: 12, step: 1, group: G, tip: "Rolled hot and deep when the vault is stripped" },
   { key: "fortAlarmAll", label: "One alarm wakes every yard", min: 0, max: 1, step: 1, group: G, tip: "1: the inner walls' sentries open up as soon as the outer yard fights" },
-  { key: "fortTrickle", label: "Bandits out of the spawners per wave", min: 0, max: 30, step: 1, group: G, tip: "While it's alert, fresh bandits pour out of the nearest spawner shacks in the mech's yard (0: none); shoot a spawner to shut it" },
-  { key: "fortTrickleEvery", label: "A wave every (s)", min: 2, max: 120, step: 1, group: G },
-  { key: "fortTrickleMax", label: "Waves bring at most (bandits per fortress)", min: 0, max: 200, step: 1, group: G },
+  { key: "fortWave", label: "Bandits per wave (outer ring)", min: 0, max: 120, step: 1, group: W, tip: "While it's alert, a wave pours out of the spawner shacks in the mech's yard and through the open gates nearest it (0: none); shoot the spawners to shut them" },
+  { key: "fortWaveRing", label: "More per wave each ring inward", min: 0, max: 60, step: 1, group: W, tip: "The waves grow as the mech gets deeper in" },
+  { key: "fortWaveEvery", label: "A wave every (s)", min: 2, max: 120, step: 1, group: W, tip: "The first comes with the alarm" },
+  { key: "fortWaveMax", label: "Waves bring at most (bandits per fortress)", min: 0, max: 1000, step: 5, group: W },
+  { key: "fortGateShare", label: "Share of a wave out through the gates", min: 0, max: 1, step: 0.05, group: W, tip: "Through the open gates in the wall just inward of the mech (outside: the outer wall's); the rest from the spawners" },
+  { key: "fortGatePour", label: "Through a gate one every (s)", min: 0.02, max: 1, step: 0.01, group: W },
   { key: "fortReinforce", label: "War band sent when it's attacked (vehicles)", min: 0, max: 12, step: 1, group: G, tip: "Once per fortress per expedition, a column rolls out from it after the first alarm (0: none)" },
   { key: "fortReinforceAfter", label: "War band rolls out after (s)", min: 0, max: 180, step: 1, group: G },
   { key: "fortGiveUp", label: "Stand down past (m from the centre)", min: 100, max: 2000, step: 10, group: G },
@@ -104,7 +111,7 @@ interface Yard {
   /** Inner and outer radius of its floor (m from the centre). */
   r0: number; r1: number;
 }
-interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[]; spawners: SpawnerState[]; towers: TowerState[]; wave: number; waved: number }
+interface LiveFort { p: PoiPlacement; L: Layout; floor: number; yards: Yard[]; gates: GateState[]; spawners: SpawnerState[]; towers: TowerState[]; wave: number; waved: number; gq: { g: Gate; n: number; t: number; i: number }[] }
 interface Kept { left: number[]; hp: Map<string, number>; waved: number }
 
 export class Fortresses {
@@ -133,9 +140,8 @@ export class Fortresses {
   onKill: ((i: number, gen: number, x: number, z: number) => void) | null = null;
   /** Gate hits and gates down, plain data (after the ground and the yards have taken it). */
   onGate: ((e: GateEvent) => void) | null = null;
-  /** The keep's warlord (a red Rampart the lab loads and hands over; null: no boss). */
-  warlord: Warlord | null = null;
-  private warlordHp = 0;
+  /** The bandit mechs: one or two in the yards, the warlord and its flankers in the keep (src/expedition/fortMechs.ts; the lab hands over their setup). */
+  readonly mechs: FortMechs;
   /** A yard woke. */
   onAlert: ((poi: string, yard: number) => void) | null = null;
 
@@ -151,6 +157,7 @@ export class Fortresses {
     this.draw = new InfantryDraw(this.sw, v, vat);
     scene.add(this.draw.group);
     this.target = new InfantryTarget(this.sw, TEAM.raiders);
+    this.mechs = new FortMechs(v as never, bf, scene, player);
     bf.targets.push(this.target);
     this.draw.chillMap = () => { this.draw.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(this.target) ?? null; };
     this.gates = new Gates(v, TEAM.raiders);
@@ -190,7 +197,7 @@ export class Fortresses {
     for (const f of this.live.values()) this.despawn(f, false);
     this.live.clear(); this.kept.clear();
     this.walls.down.clear();
-    this.warlord?.reset();
+    this.mechs.reset();
   }
 
   /** Salvage noise at (x, z) heard within radius: yards in it wake. */
@@ -221,8 +228,7 @@ export class Fortresses {
         }
       }
     }
-    const w = this.warlord?.unit;
-    if (w && w.alive && out.length < max && this.warlord!.poi && Math.hypot(w.sim.pelvis.x - x, w.sim.pelvis.z - z) <= r) out.push(w.sim.pelvis.clone());
+    for (const { unit: w } of this.mechs.live()) if (out.length < max && Math.hypot(w.sim.pelvis.x - x, w.sim.pelvis.z - z) <= r) out.push(w.sim.pelvis.clone());
     return out;
   }
 
@@ -297,7 +303,7 @@ export class Fortresses {
     this.towersDraw.update(dt);
     const q: Prey = prey ?? { kind: "mech", alive: this.player.alive, at: p, radius: 2, unit: this.player, sim: this.player.sim };
     const T = q.at;
-    this.stepWarlord(dt, hunting, q);
+    this.stepMechs(dt, hunting);
     if (hunting && q.alive) this.crewFire(dt, q.at);
     if (!sw.hi) return;
     const bf = this.bf;
@@ -314,24 +320,13 @@ export class Fortresses {
     this.draw.update(dt);
   }
 
-  /** The warlord fights when its keep is alerted; hitting it alerts the keep. */
-  private stepWarlord(dt: number, hunting: boolean, q: Prey) {
-    const w = this.warlord, m = w?.unit;
-    if (!w || !m) return;
-    // Stand it in the nearest live keep it hasn't died in.
-    if (!w.poi || !this.live.has(w.poi)) {
-      let best: LiveFort | null = null, bd = Infinity;
-      const P = this.player.sim.pelvis;
-      for (const f of this.live.values()) { const d = Math.hypot(f.L.x - P.x, f.L.z - P.z); if (d < bd && !w.isDead(f.p.id)) { bd = d; best = f; } }
-      if (!best) { if (w.poi) w.leave(); return; }
-      const keep = best.L.rings[best.L.rings.length - 1];
-      w.place(best.p.id, best.L.x, best.L.z, keep.r * 0.8 - ringSpan(keep), best.p.yaw);
-      this.warlordHp = m.health;
-    }
-    const f = this.live.get(w.poi!)!, keep = f.yards[f.yards.length - 1];
-    if (m.alive && m.health < this.warlordHp - 1e-3) this.alarm(f, keep);
-    this.warlordHp = m.health;
-    w.update(dt, { x: q.at.x, y: q.at.y, z: q.at.z, alive: q.alive }, hunting && keep.state === "alert");
+  /** The bandit mechs, for the nearest live fortress: each fights when its yard is alerted; hitting one alerts its yard. */
+  private stepMechs(dt: number, hunting: boolean) {
+    const P = this.player.sim.pelvis;
+    let best: LiveFort | null = null, bd = Infinity;
+    for (const f of this.live.values()) { const d = Math.hypot(f.L.x - P.x, f.L.z - P.z); if (d < bd) { bd = d; best = f; } }
+    const f = best;
+    this.mechs.update(dt, f ? { poi: f.p.id, L: f.L, seed: f.p.seed, alert: (k) => f.yards[Math.min(k, f.yards.length - 1)].state === "alert", alarm: (k) => this.alarm(f, f.yards[Math.min(k, f.yards.length - 1)]) } : null, hunting);
   }
 
   private alarm(f: LiveFort, y: Yard) {
@@ -342,33 +337,69 @@ export class Fortresses {
   }
 
   /**
-   * While any yard is alert: every fortTrickleEvery s a wave pours out of the spawner shacks nearest the mech in its
-   * yard (the outer yard while it's outside; the next yard if its own are all shot down), the doors swinging open
-   * first, until fortTrickleMax came. No spawners left standing: no more waves.
+   * While any yard is alert (Keith 2026-11-06: "giant waves of bandits... swarming out of the gates"): the first wave
+   * with the alarm, then one every fortWaveEvery s, fortWave bandits plus fortWaveRing for each ring the mech is in
+   * past the outer one, until fortWaveMax came. fortGateShare of it streams out through the open gates (gaps or blown)
+   * in the wall just inward of the mech, the nearest two; the rest pours out of the spawner shacks nearest the mech in
+   * its yard (the outer yard while it's outside; the next yard if its own are shot down), the doors swinging open
+   * first. No spawners left: the whole wave through the gates; no open gate either, none.
    */
   private waves(dt: number, f: LiveFort, _am: number) {
     const v = this.v;
-    if (!f.yards.some((y) => y.state === "alert") || v.fortTrickle <= 0 || f.waved >= v.fortTrickleMax) return;
+    this.gatePour(dt, f);
+    if (!f.yards.some((y) => y.state === "alert") || v.fortWave <= 0 || f.waved >= v.fortWaveMax) return;
     f.wave -= dt;
     if (f.wave > 0) return;
-    f.wave = v.fortTrickleEvery;
-    const p = this.player.sim.pelvis, k = Math.max(0, Math.min(f.yards.length - 1, regionOf(f.L, p.x, p.z) - 1));
+    f.wave = v.fortWaveEvery;
+    const p = this.player.sim.pelvis, mr = regionOf(f.L, p.x, p.z), k = Math.max(0, Math.min(f.yards.length - 1, mr - 1));
+    let n = Math.max(0, Math.min(Math.round(v.fortWave + v.fortWaveRing * Math.max(0, mr - 1)), Math.round(v.fortWaveMax - f.waved)));
+    // Through the open gates (open gaps or blown) in the wall just inward of the mech, the nearest two within 160 m.
+    const ring = f.L.rings[mr], d = (g: Gate) => Math.hypot(g.x - p.x, g.z - p.z);
+    const open = ring ? ring.gates.filter((g) => (!g.barred || this.walls.down.has(g.id)) && d(g) < 160).sort((a, b) => d(a) - d(b)).slice(0, 2) : [];
     const up = f.spawners.filter((s) => !s.down);
-    if (!up.length) return;
-    // Its own yard's first, then the nearest yards'; within a yard the nearest, not right on top of the mech.
+    let gn = open.length ? (up.length ? Math.round(n * v.fortGateShare) : n) : 0;
+    for (let j = 0; j < open.length && gn > 0; j++) {
+      const m = j === open.length - 1 ? gn : Math.ceil(gn / 2);
+      const q = f.gq.find((e) => e.g === open[j]);
+      if (q) q.n += m; else f.gq.push({ g: open[j], n: m, t: 0, i: 0 });
+      gn -= m; n -= m; f.waved += m;
+    }
+    if (!up.length || n <= 0) return;
+    // The rest out of the spawners: its own yard's first, then the nearest yards'; within a yard the nearest, not right on top of the mech.
     const score = (s: SpawnerState) => Math.abs(s.sp.yard - k) * 1000 + Math.abs(Math.hypot(s.sp.x - p.x, s.sp.z - p.z) - 30);
     up.sort((a, b) => score(a) - score(b));
     const pick = up.slice(0, up.length > 1 && Math.abs(up[1].sp.yard - k) === Math.abs(up[0].sp.yard - k) ? 2 : 1);
-    let n = Math.min(Math.round(v.fortTrickle), Math.round(v.fortTrickleMax - f.waved));
     f.waved += n;
     for (let i = 0; n > 0; i = (i + 1) % pick.length, n--) pick[i].want++;
   }
 
+  /** Waves queued at gates: one bandit every fortGatePour s per gate, from just inside it, running out through it. */
+  private gatePour(dt: number, f: LiveFort) {
+    for (const q of f.gq) {
+      q.t -= dt;
+      while (q.t <= 0 && q.n > 0) {
+        q.t += this.v.fortGatePour;
+        const g = q.g, ix = f.L.x - g.x, iz = f.L.z - g.z, il = Math.hypot(ix, iz) || 1;
+        const ux = ix / il, uz = iz / il;
+        // Across the gap by a golden-ratio walk (seeded by the count: plain data, the same on every peer).
+        const side = (((q.i++ * 0.618034) % 1) - 0.5) * Math.max(0, g.w - 3);
+        const x = g.x + ux * 5 + uz * side, z = g.z + uz * 5 - ux * side;
+        this.addBandit(f, Math.min(g.ring, f.yards.length - 1), x, z, Math.atan2(-ux, -uz), 0);
+        q.n--;
+      }
+    }
+    f.gq = f.gq.filter((q) => q.n > 0);
+  }
+
   /** One bandit out of a spawner's door, running out into the street and on at the mech. */
   private pour(s: SpawnerState, x: number, z: number, a: number) {
-    const f = this.live.get(s.poi), sw = this.sw;
-    if (!f) return;
-    const y = f.yards[Math.min(s.sp.yard, f.yards.length - 1)];
+    const f = this.live.get(s.poi);
+    if (f) this.addBandit(f, Math.min(s.sp.yard, f.yards.length - 1), x, z, a, 6);
+  }
+
+  /** A fresh bandit of yard k at (x, z) running along heading a; its post `post` m on along it. */
+  private addBandit(f: LiveFort, k: number, x: number, z: number, a: number, post: number) {
+    const sw = this.sw, y = f.yards[k];
     const [i] = sw.spawn(1, x, z, 0);
     if (i === undefined) return;
     sw.px[i] = x; sw.pz[i] = z; sw.py[i] = this.field.height(x, z);
@@ -376,7 +407,7 @@ export class Fortresses {
     sw.hold[i] = 0; sw.frozen[i] = 0;
     sw.vx[i] = Math.sin(a) * this.v.runSpeed; sw.vz[i] = Math.cos(a) * this.v.runSpeed;
     sw.heading[i] = a;
-    this.postX[i] = x + Math.sin(a) * 6; this.postZ[i] = z + Math.cos(a) * 6;
+    this.postX[i] = x + Math.sin(a) * post; this.postZ[i] = z + Math.cos(a) * post;
     y.slots.push(i); y.gens.push(sw.gen[i]); y.sentry.push(0);
     y.hp = this.hp(y);
   }
@@ -442,7 +473,7 @@ export class Fortresses {
     const v = this.v, sw = this.sw, L = this.walls.layout(p);
     const rings = L.rings, kept = this.kept.get(p.id);
     const floor = this.field.height(p.x, p.z) - wallHeight(L, p.x, p.z, this.walls.down);
-    const f: LiveFort = { p, L, floor, yards: [], gates: [], spawners: [], towers: [], wave: 0, waved: kept?.waved ?? 0 };
+    const f: LiveFort = { p, L, floor, yards: [], gates: [], spawners: [], towers: [], wave: 0, waved: kept?.waved ?? 0, gq: [] };
     // Lookout towers (their crews after the yards).
     for (const tw of L.towers) {
       const b = L.blocks[tw.block];
@@ -532,7 +563,7 @@ export class Fortresses {
     this.gates.removePoi(f.p.id);
     this.spawners.removePoi(f.p.id);
     this.towers.removePoi(f.p.id);
-    if (this.warlord?.poi === f.p.id) this.warlord.leave();
+    if (this.mechs.poi === f.p.id) this.mechs.leave();
     this.live.delete(f.p.id);
   }
 
