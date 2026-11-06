@@ -1,6 +1,7 @@
 // Marks at the edge of the screen for things happening out of view (DOM): a dust plume of a moving pack, a raid
 // coming, a blast just now. Each sits on the screen's edge the way the thing lies, with a word and its distance; things
 // on screen get no mark (their dust is there to see).
+import { canvasRect } from "../core/canvasRect";
 import * as THREE from "three/webgpu";
 
 export interface Mark { id: string; x: number; y: number; z: number; text: string; color: string; strength: number }
@@ -16,7 +17,7 @@ export class ThreatMarks {
   }
 
   update(camera: THREE.Camera, canvas: HTMLCanvasElement, marks: Mark[], from: { x: number; z: number }) {
-    const r = canvas.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const r = canvasRect(canvas), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const seen = new Set<string>();
     for (const m of marks) {
       const p = this.p.set(m.x, m.y, m.z).project(camera);

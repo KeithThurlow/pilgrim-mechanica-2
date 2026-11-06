@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · The canvas's page rect kept instead of read every frame (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
+- New `src/core/canvasRect.ts`: the canvas's bounding rect cached, read again on canvas or window resize, scroll, and at most a second later. Used by the per-frame readers: aim (`src/game/playerAim.ts`, `src/world/raycast.ts` screenToGround), drop labels, threat marks, the convoy lab's `?bigclose`. getBoundingClientRect forced a page layout each frame after the HUD's DOM changed (1.5% of the frame in the PC production profile, `pc-profile-siege-prod.md`).
+- Checked: npm run check, npm test. The production profile also showed no hidden dev-server cost (16.2 ms, sim 7.8, submit 7.3).
 ### 2026-11-06 · Escort wheels read the ground only when drawn (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
 - `src/vehicles/car.ts`: a grounded wheel's contact height (`Wheel.pos.y`) is looked up when first read (drawing, dust, ruts) instead of at every 120 Hz step; same (x, z), same answer. Ground lookups per car step 9 → 7 at 60 fps (a node probe reading the wheels once a frame); 12 escorts plus the war band's cars.
 - Checked: car-check, convoy-check; npm test.

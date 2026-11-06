@@ -11,6 +11,7 @@
 //   by size and distance.
 // Ownership: the cursor, lock and buttons are the player's own input (they become commands to the mech); the marks
 // and shake are cosmetic.
+import { canvasRect } from "../core/canvasRect";
 import * as THREE from "three/webgpu";
 import type { DuneField } from "../world/terrain";
 import { screenToGround } from "../world/raycast";
@@ -131,7 +132,7 @@ export class SoftAim {
     if (mouse && screenToGround(mouse.x, mouse.y, this.canvas, this.camera, this.field, this.ground)) {
       const g = this.ground;
       out.pointer = out.cursor = out.aim = { x: g.x, y: g.y + 1, z: g.z };
-      const r = this.canvas.getBoundingClientRect();
+      const r = canvasRect(this.canvas);
       this.ndc.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1);
       this.caster.setFromCamera(this.ndc, this.camera);
       const ray = this.caster.ray;
