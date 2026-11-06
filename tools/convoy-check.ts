@@ -369,6 +369,22 @@ function pickUp(w: World, label = "") {
   void p;
 }
 
+// 3a. Standing still ahead of the bay (Keith 2026-11-06): a mech that walks out in front of the mech bay and stops is
+// picked up as the convoy rolls past (the crane tracks it instead of waiting for it to stand still relative to the deck).
+{
+  console.log("-- pick-up standing still");
+  const row: string[] = [];
+  for (const [side, ahead] of [[9, 20], [-12, 30], [15, 40], [18, 20]]) {
+    const w = world();
+    place(w, side, ahead);
+    let t = 0;
+    for (; t < 40 && w.carry.state !== "aboard"; t += DT) tick(w, still);
+    row.push(`(${side}, ${ahead}) ${w.carry.state === "aboard" ? t.toFixed(1) + " s" : "missed"}`);
+    if (w.carry.state !== "aboard") fail(`mech standing at (${side}, ${ahead}) m off the crane not picked up (ended ${w.carry.state})`);
+  }
+  console.log(`  ${row.join(" · ")}`);
+}
+
 // 3b. The rear mech bay (Keith 2026-10-25): a mech beside it is picked up by its own crane (the nearer one), set on
 // its set-down pad, and launched again from its launch pad.
 {

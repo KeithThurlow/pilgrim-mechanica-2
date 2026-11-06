@@ -462,12 +462,12 @@ export class CraneCarry {
     const off = Math.hypot(cr.cradle.x - sim.pelvis.x, cr.cradle.z - sim.pelvis.z);
     if (this.phase === "reach") {
       cr.steadying = true;
-      cr.aim(r.slew, r.radius, gripY + 3);
+      cr.track(r.slew, r.radius, gripY + 3);
       if (off < 1.2 && cr.settled(4 * D2R, 1)) this.phase = "lower";
       return false;
     }
     cr.steadying = true;
-    cr.aim(r.slew, r.radius, gripY);
+    cr.track(r.slew, r.radius, gripY);
     if (off > 3) this.phase = "reach";
     return off < v.craneGripTol && Math.abs(cr.cradle.y - gripY) < 0.35;
   }
