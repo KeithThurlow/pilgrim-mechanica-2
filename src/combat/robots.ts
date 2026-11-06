@@ -243,9 +243,9 @@ export const ROBOT_DEFAULTS = {
   robotBigDeathOn: 1,
   // Keith 2026-11-06: the reactor in the hull goes up as the wreck tips over, high up: an airburst with a nova ring.
   robotBigDeathDelay: 2.4,
-  robotBigDeathMin: 0.8,
+  robotBigDeathMin: 1.4,
   robotBigDeathAt: 0.6,
-  robotBigDeathTip: 0.45,
+  robotBigDeathTip: 0.35,
   robotBigDeathNova: 1,
   robotBigDeathRadius: 22,
   robotBigDeathDamage: 90,

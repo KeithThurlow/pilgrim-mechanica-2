@@ -171,6 +171,15 @@ export function robotsFront(params0: URLSearchParams): Front {
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
+      // ?quaddeath[=s]: the same with a weapon quad 9 m off (Keith 2026-11-06: its reactor, smaller and sooner).
+      if (params0.has("quaddeath")) {
+        V.robotSwarmSize = 0;
+        const p = player.sim.pos, at = Number(params0.get("quaddeath")) || 1;
+        const [b] = sw.spawn(1, p.x + 3, p.z + 9, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
+        sw.frozen[b] = 1;
+        let t = 0;
+        lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
+      }
       // ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
       if (params0.has("lineup")) {
         V.robotSwarmSize = 0;
