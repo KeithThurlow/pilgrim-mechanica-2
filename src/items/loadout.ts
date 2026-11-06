@@ -378,10 +378,8 @@ export interface Resolved {
    *  pack builds `replicas`, one every `replicaBuild` s, a lost one rebuilt after `replicaRebuild` s; drone racks on the
    *  shoulders add their drones; swarm hives their scrappers, and their keys (1 or 2) send and recall the swarm. */
   summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[]; droneKeys: (1 | 2)[] };
-  /** Cargo the mech can carry (t): the legs' carry plus the hull's and the waist racks. */
-  cargoCapacity: number;
-  /** Everything fitted (t). */
-  weight: number;
+  /** Rows the waist racks add to the cargo grid (cargoCapacity in src/items/cargoSpace.ts turns it into cells). */
+  cargoRackRows: number;
 }
 
 export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Resolved {
@@ -497,8 +495,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
       return a && (slot !== "pack" || lo.pack?.kind === "pack") ? [{ key, id: a }] : [];
     }),
     summons: summonsOf(lo),
-    cargoCapacity: legs.carry + (hull.carryBonus ?? 0) + racks,
-    weight: SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0),
+    cargoRackRows: Math.round(racks),
   };
 }
 
@@ -541,7 +538,7 @@ export function summary(r: Resolved): SummaryLine[] {
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
     line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),
-    line("cargo", "Cargo (t)", r.cargoCapacity, 1, 1), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
+    line("cargo", "Cargo rack rows", r.cargoRackRows, 1, 0), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
     line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),

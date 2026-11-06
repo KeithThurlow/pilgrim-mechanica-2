@@ -3,13 +3,13 @@ import { tierOf } from "./rarity";
 import { levelOf } from "./level";
 import { itemPower, itemDps } from "./power";
 import { itemValue, VALUE_DEFAULTS, type ValueValues } from "./value";
-import { itemWeight, type Item } from "./item";
+import type { Item } from "./item";
 import { itemName } from "./bayState";
 
-export const SORT_KEYS = ["rarity", "dps", "power", "value", "valuePerTonne", "weight", "level"] as const;
+export const SORT_KEYS = ["rarity", "dps", "power", "value", "level"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export const SORT_NAMES: Record<SortKey, string> = {
-  rarity: "Rarity", dps: "DPS", power: "Power", value: "Scrap value", valuePerTonne: "Value per tonne", weight: "Weight", level: "Level",
+  rarity: "Rarity", dps: "DPS", power: "Power", value: "Scrap value", level: "Level",
 };
 
 /** The number an item sorts by (higher is "more"); null when it has none (DPS of a non-weapon). */
@@ -19,8 +19,6 @@ export function sortValue(it: Item, key: SortKey, v: ValueValues = VALUE_DEFAULT
     case "dps": return itemDps(it);
     case "power": return itemPower(it);
     case "value": return itemValue(it, v);
-    case "valuePerTonne": return itemValue(it, v) / Math.max(0.05, itemWeight(it));
-    case "weight": return itemWeight(it);
     case "level": return levelOf(it);
   }
 }
