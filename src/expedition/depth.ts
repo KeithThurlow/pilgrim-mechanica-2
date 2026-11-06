@@ -17,6 +17,8 @@ export const DEPTH_DEFAULTS = {
   depthRings: 1,
   depthLive: 1,
   depthTrain: 130,
+  smallRobotMult: 5,
+  smallBanditMult: 5,
 };
 export type DepthValues = typeof DEPTH_DEFAULTS;
 export const DEPTH_PARAMS: Param[] = [
@@ -31,6 +33,16 @@ export const DEPTH_PARAMS: Param[] = [
   { key: "depthLive", label: "Live depth from convoy (0-1)", min: 0, max: 1, step: 0.05, group: DEPTH_GROUP, tip: "For what happens live (roaming packs, raids, the salvage heat's answer): 1 measures depth from the convoy as it is now, 0 from the road. Camps and scrap are placed in the world, so they always use the road" },
   { key: "depthTrain", label: "Convoy length for depth (m)", min: 0, max: 400, step: 5, group: DEPTH_GROUP, tip: "Depth from the convoy is the distance to the stretch of road this long behind its head" },
 ];
+
+export const SMALL_GROUP = "Small enemies";
+DEPTH_PARAMS.push(
+  { key: "smallRobotMult", label: "Small robots per group ×", min: 1, max: 10, step: 0.25, group: SMALL_GROUP, tip: "Every camp, pack and raid turns up with this many times the scrappers (Keith 2026-11-06: 5x). Cutters, excavators and striders keep their counts. How often groups appear is unchanged", onRelease: true },
+  { key: "smallBanditMult", label: "Bandits on foot per group ×", min: 1, max: 10, step: 0.25, group: SMALL_GROUP, tip: "Every bandit camp turns up with this many times the bandits on foot (Keith 2026-11-06: 5x)", onRelease: true },
+);
+/** Shares of cutters and excavators shrink by this when a group's head count grows, so their counts stay put. */
+export const robotMult = (v: object) => Math.max(1, (v as { smallRobotMult?: number }).smallRobotMult ?? 1);
+export const banditMult = (v: object) => Math.max(1, (v as { smallBanditMult?: number }).smallBanditMult ?? 1);
+export const shareK = (v: object) => 1 / robotMult(v);
 
 export type Ring = "Near" | "Out" | "Deep" | "Far";
 export const RING_NAMES: Ring[] = ["Near", "Out", "Deep", "Far"];

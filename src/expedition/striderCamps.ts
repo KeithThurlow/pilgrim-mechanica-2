@@ -16,6 +16,7 @@ import { ROBOT_TEAR_DEFAULTS } from "../combat/robotTearFx";
 import { StriderField, type StriderFieldValues } from "../combat/striderField";
 import type { SwarmCamps, SwarmCampValues } from "./swarmCamps";
 import { hash4 } from "../world/pois";
+import { robotMult } from "./depth";
 
 export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 18, striderPackEvery: 25, striderCampMax: 2 };
 export type StriderCampValues = typeof STRIDER_CAMP_DEFAULTS;
@@ -75,7 +76,7 @@ export class StriderCamps {
       let g = this.live.get(id);
       if (!g) {
         const every = Math.max(1, roam ? v.striderPackEvery : v.striderCampEvery);
-        const want = this.left.get(id) ?? Math.min(v.striderCampMax, Math.floor(n / every));
+        const want = this.left.get(id) ?? Math.min(v.striderCampMax, Math.floor(n / robotMult(v) / every));
         g = { members: [], awake, hp: 0, spawned: want > 0 };
         const seed = (hash4(id.length, id.charCodeAt(0) | 0, id.charCodeAt(id.length - 1) | 0, n + 17) >>> 0) / 4294967296;
         for (let k = 0; k < want; k++) {

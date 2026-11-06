@@ -5,7 +5,7 @@
 // Both on square cells: each cell's hash decides 0-1 of them, where (inset in the cell), and how big.
 import type { Param } from "../core/tweaks";
 import { hash4, rng } from "../world/pois";
-import { DEPTH_GROUP, scaled, type DangerFn } from "./depth";
+import { DEPTH_GROUP, robotMult, scaled, type DangerFn } from "./depth";
 
 export const CAMP_DEFAULTS = {
   campSeed: 7,
@@ -137,7 +137,7 @@ export class CampField {
     if (Math.hypot(x - this.start.x, z - this.start.z) < v.campClear) return null;
     const lo = Math.min(v.campMin, v.campMax), hi = Math.max(v.campMin, v.campMax);
     // Sizes lean small: most camps a handful, a few big; deeper ones are bigger.
-    const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * scaled(v.campSizeFar, d)));
+    const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * scaled(v.campSizeFar, d) * robotMult(v)));
     const bigs = Math.min(size, Math.floor(v.campBigMin * d));
     // The radar reads heat: an excavator glows like campBigRadar robots.
     const guess = Math.max(1, (size + bigs * (v.campBigRadar - 1)) * (1 + (r() * 2 - 1) * v.campGuess));
