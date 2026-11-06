@@ -3,6 +3,9 @@
 // in the order it is asked, and the ground's changes always go before a request that reads the ground.
 import type { GroundEvent, GroundInit } from "./groundEvents";
 import type { BuildResult, PatchResult, TerrainRemote } from "../world/chunks";
+import type { FineRemote } from "../world/groundWindow";
+
+export type FineRequest = Parameters<FineRemote["fine"]>[0];
 
 export type BuildRequest = Parameters<TerrainRemote["build"]>[0];
 export type PatchRequest = Parameters<TerrainRemote["patch"]>[0];
@@ -15,7 +18,9 @@ export type ToWorker =
   | { type: "frame"; id: number; sample: Float64Array }
   /** Terrain (step 2): a chunk's vertices, a changed box's vertices. */
   | { type: "chunk"; req: BuildRequest }
-  | { type: "patch"; req: PatchRequest };
+  | { type: "patch"; req: PatchRequest }
+  /** Step 2b: fine rows of the ground window under the detail patch. */
+  | { type: "fine"; req: FineRequest };
 
 export type FromWorker =
   | { type: "ready" }
@@ -23,4 +28,5 @@ export type FromWorker =
   | { type: "frame"; id: number; heights: Float64Array; ms: number }
   | { type: "chunk"; res: BuildResult }
   | { type: "patch"; res: PatchResult }
+  | { type: "fine"; req: FineRequest; heights: Float32Array }
   | { type: "error"; message: string };

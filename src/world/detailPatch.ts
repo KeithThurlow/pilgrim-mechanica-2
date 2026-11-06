@@ -11,7 +11,7 @@ import {
 } from "three/tsl";
 import type { DuneField } from "./terrain";
 import type { TerrainStreamer } from "./chunks";
-import { GroundWindow } from "./groundWindow";
+import { GroundWindow, type FineRemote } from "./groundWindow";
 import type { DentLayer, DentValues } from "../fx/dents";
 import type { GroundHeatTex } from "../fx/groundHeatTex";
 
@@ -44,6 +44,10 @@ export class DetailPatch {
     origin: uniform(new THREE.Vector2()), step: uniform(1), cells: uniform(4), wrap: uniform(5), ready: uniform(0),
   };
 
+  /** Where the window's fine rows are worked out when not here (the sim worker; GroundWindow.remote). Set before the first update. */
+  fineRemote: FineRemote | null = null;
+  setFineRemote(r: FineRemote | null) { this.fineRemote = r; this.win.remote = r; }
+
   constructor(readonly field: DuneField, readonly streamer: TerrainStreamer, readonly dents: DentLayer, public v: DentValues, readonly heat: GroundHeatTex | null = null) {
     this.group.name = "detail patch";
     this.win = this.makeWindow();
@@ -58,6 +62,7 @@ export class DetailPatch {
   private makeWindow() {
     const w = new GroundWindow(this.field, this.coverage(), this.v.patchSpacing, this.step(), this.lead());
     w.coarseSource = (i, j, out) => this.streamer.vertexAt(i, j, out);
+    w.remote = this.fineRemote;
     return w;
   }
 

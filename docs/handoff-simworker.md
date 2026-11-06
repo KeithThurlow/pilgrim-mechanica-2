@@ -15,8 +15,8 @@ Plan and rules: `docs/proposal-simworker.md`. Worker path on by default; `?nowor
   closer to the ground).
 
 ## Next, in order
-1. Step 2b: the ground window under the detail patch (`src/world/groundWindow.ts`: its fine and coarse fills) through the
-   worker, then measure on Keith's PC.
+1. Step 2b done (merged): the window's fine rows in the worker (`GroundWindow.remote`/`takeFine`). Next: step 3, escorts,
+   unless Keith's PC profile (`labs/convoy/?siege&manual` with and without `&noworker`) points elsewhere.
 2. Old step 2 notes: terrain building (chunks.ts TerrainStreamer build + patch strips, groundWindow.ts) through the worker.
 
 ## Facts to start from

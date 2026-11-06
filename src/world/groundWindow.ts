@@ -17,6 +17,10 @@ import { groundColour } from "./groundColour";
 
 interface Run { fine: boolean; j: number; i0: number; i1: number }
 
+/** Fine rows asked of the sim worker (src/sim/host.ts): each run's heights, field.height(i * f, j * f) for i0..i1. */
+export interface FineRemote { fine(req: { f: number; runs: { id: number; j: number; i0: number; i1: number }[] }): void }
+let runIds = 0;
+
 export class GroundWindow {
   /** Coarse step (the chunks' vertex spacing, m), fine steps per coarse step, and the fine step. */
   readonly step: number;
@@ -41,7 +45,7 @@ export class GroundWindow {
   version = 0;
   /** False while a whole-window fill is still in progress (after a jump or a full rebuild): don't draw yet. */
   ready = false;
-  readonly stats = { ms: 0, fineSamples: 0, coarseSamples: 0, viewSamples: 0 };
+  readonly stats = { ms: 0, fineSamples: 0, coarseSamples: 0, viewSamples: 0, asked: 0, askedTotal: 0, inflight: 0 };
   private valid = false;
   private full = false;
   private queue: Run[] = [];
@@ -67,6 +71,12 @@ export class GroundWindow {
    * (h, normal, colour into out), false when there is none. A coarse sample costs about eight fine ones.
    */
   coarseSource: ((i: number, j: number, out: Float32Array) => boolean) | null = null;
+  /**
+   * Fine rows worked out elsewhere (the sim worker), or null: all here. Asked as they're queued, written in when the
+   * answer comes (takeFine); one that reaches into the drawn window before then is filled here at once instead.
+   */
+  remote: FineRemote | null = null;
+  private inflight = new Map<number, Run>();
 
   /** Fine steps per coarse step and coarse cells across, for a coverage, spacing and coarse step. */
   static shape(coverage: number, spacing: number, step: number) {
@@ -136,6 +146,10 @@ export class GroundWindow {
       else this.queue[k++] = r;
     }
     this.queue.length = k;
+    for (const [id, r] of this.inflight) {
+      const m = r.fine ? S : 1;
+      if (r.j >= gz * m && r.j <= (gz + nc) * m && r.i1 >= gx * m && r.i0 <= (gx + nc) * m) { this.inflight.delete(id); n += this.fillFine(r); }
+    }
     if (n) this.version++;
     this.stats.viewSamples = n;
   }
@@ -172,6 +186,7 @@ export class GroundWindow {
     this.full = true;
     this.ready = false;
     this.queue.length = 0;
+    this.inflight.clear();
     this.dirtyFine.clear(); this.dirtyCoarse.clear();
     const P = this.pad, S = this.sub, x0 = this.gx - P, x1 = this.gx + this.nc + P, z0 = this.gz - P, z1 = this.gz + this.nc + P;
     for (let j = z0; j <= z1; j++) this.addCoarse(j, x0, x1);
@@ -183,6 +198,23 @@ export class GroundWindow {
   private work(budgetMs: number) {
     const t0 = performance.now();
     let any = false, fs = 0, cs = 0;
+    // With the worker: every fine run waiting goes there now (a whole fill at once too); coarse runs stay here (mostly
+    // copied off the chunks). Not for a fill wanted at once (the first one, fillNow).
+    const ask = this.remote && budgetMs < 1e8 ? [] as { id: number; j: number; i0: number; i1: number }[] : null;
+    if (ask) {
+      let k = 0;
+      for (const r of this.queue) {
+        if (r.fine) { const id = ++runIds; this.inflight.set(id, r); ask.push({ id, j: r.j, i0: r.i0, i1: r.i1 }); }
+        else this.queue[k++] = r;
+      }
+      this.queue.length = k;
+      for (const [j, sp] of this.dirtyFine) { const id = ++runIds, r = { fine: true, j, i0: sp[0], i1: sp[1] }; this.inflight.set(id, r); ask.push({ id, j, i0: sp[0], i1: sp[1] }); }
+      this.dirtyFine.clear();
+      if (ask.length) this.remote!.fine({ f: this.fine, runs: ask });
+      this.stats.asked = ask.length;
+      this.stats.askedTotal += ask.length;
+      this.stats.inflight = this.inflight.size;
+    }
     while (this.queue.length) {
       if (any && performance.now() - t0 > budgetMs) break;
       const r = this.queue.shift()!;
@@ -200,11 +232,32 @@ export class GroundWindow {
       }
     }
     if (any) this.version++;
-    if (!this.queue.length && this.full) { this.full = false; }
+    if (!this.queue.length && !this.inflight.size && this.full) { this.full = false; }
     this.ready = this.valid && !this.full;
     this.stats.ms = performance.now() - t0;
     this.stats.fineSamples = fs;
     this.stats.coarseSamples = cs;
+  }
+
+  /** The worker's answer to fine runs (the runs as asked, their heights one after another): written in where still wanted. */
+  takeFine(runs: { id: number; j: number; i0: number; i1: number }[], heights: Float32Array) {
+    let o = 0, n = 0;
+    const S = this.sub, P = this.pad, lo = (this.gz - P) * S, hi = (this.gz + this.nc + P) * S, m = this.mf;
+    const a = (this.gx - P) * S, b = (this.gx + this.nc + P) * S;
+    for (const q of runs) {
+      const r = this.inflight.get(q.id);
+      // Dropped runs (filled here meanwhile, or a refill since) are skipped.
+      if (r) {
+        this.inflight.delete(q.id);
+        if (q.j >= lo && q.j <= hi) {
+          const row = mod(q.j, m) * m;
+          for (let i = Math.max(q.i0, a); i <= Math.min(q.i1, b); i++) { this.fineH[row + mod(i, m)] = heights[o + i - q.i0]; n++; }
+        }
+      }
+      o += q.i1 - q.i0 + 1;
+    }
+    if (n) this.version++;
+    this.stats.inflight = this.inflight.size;
   }
 
   private fillFine(r: Run) {
