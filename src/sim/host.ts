@@ -2,12 +2,14 @@
 // frame's inputs (step 1: the ground's events from src/sim/groundEvents.ts) and takes the answers a frame or so later.
 // ?noworker: no worker at all, everything on the main thread as before (for comparing).
 //
-// Step 1 moves no system yet. The worker keeps its copy of the ground in step, and every frame a few points are
-// sampled on both threads (round the mech, across the road at the plough's blade, round the latest blasts): any
-// difference shows on the HUD line and in the console, since every system moved later reads the ground there.
+// The worker keeps its copy of the ground in step, and every frame a few points are sampled on both threads (round the
+// mech, across the road at the plough's blade, round the latest blasts): any difference shows on the HUD line and in
+// the console, since every system moved reads the ground there. Step 2: the terrain chunks' vertices are worked out
+// there (terrain(streamer)); the chunks near the mech are still built here when missing.
 import type { Param } from "../core/tweaks";
 import type { ConvoyRoute } from "../convoy/route";
 import type { GroundRecorder } from "./groundEvents";
+import type { TerrainStreamer } from "../world/chunks";
 import type { FromWorker, ToWorker } from "./messages";
 
 export const SIM_DEFAULTS = {
@@ -28,7 +30,7 @@ export class SimHost {
   private seed = 0x9e3779b9;
   private warned = false;
   readonly stats = {
-    ready: false, frames: 0, answered: 0, lag: 0, workerMs: 0, mainMs: 0, events: 0, eventsTotal: 0,
+    ready: false, applyMs: 0, frames: 0, answered: 0, lag: 0, workerMs: 0, mainMs: 0, events: 0, eventsTotal: 0,
     checked: 0, differ: 0, worst: 0, worstAt: "", error: "",
   };
 
@@ -43,7 +45,7 @@ export class SimHost {
   /** End of a frame: send the ground's changes and a few points to check (round fx, fz: the mech). */
   frame(fx: number, fz: number) {
     const t0 = performance.now();
-    const ground = this.rec.take();
+    this.flush();
     const id = ++this.id;
     // Don't pile checks up if the worker falls behind (the events always go: the copy needs every one).
     const n = this.expected.size < 3 ? Math.max(0, Math.round(this.v.simMirrorSamples)) : 0;
@@ -62,9 +64,11 @@ export class SimHost {
       this.expected.set(id, { want, xz: sample.slice() });
     }
     this.stats.frames++;
-    this.stats.events = ground.length;
-    this.stats.eventsTotal += ground.length;
-    this.send({ type: "frame", id, ground, sample }, [sample.buffer]);
+    this.stats.events = this.frameEvents;
+    this.frameEvents = 0;
+    this.stats.applyMs = this.applyMs;
+    this.applyMs = 0;
+    this.send({ type: "frame", id, sample }, [sample.buffer]);
     this.stats.mainMs = performance.now() - t0;
   }
 
@@ -74,10 +78,35 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
+
+  /**
+   * The terrain's chunk vertices from now on worked out in the worker: builds and patches go there (each after the
+   * ground's changes so far) and come back to the streamer.
+   */
+  terrain(streamer: TerrainStreamer) {
+    this.streamer = streamer;
+    streamer.remote = {
+      build: (req) => { this.flush(); this.send({ type: "chunk", req }); },
+      patch: (req) => { this.flush(); this.send({ type: "patch", req }); },
+    };
+  }
+
+  private streamer: TerrainStreamer | null = null;
+  private frameEvents = 0;
+  private applyMs = 0;
+
+  /** The ground's changes so far to the worker (before anything that reads them). */
+  private flush() {
+    const ground = this.rec.take();
+    if (!ground.length) return;
+    this.frameEvents += ground.length;
+    this.stats.eventsTotal += ground.length;
+    this.send({ type: "ground", ground });
+  }
 
   private send(m: ToWorker, transfer: Transferable[] = []) { this.worker.postMessage(m, transfer); }
 
@@ -85,6 +114,13 @@ export class SimHost {
     const s = this.stats;
     if (m.type === "ready") { s.ready = true; return; }
     if (m.type === "error") { s.error = m.message; console.error("sim worker:", m.message); return; }
+    if (m.type === "chunk" || m.type === "patch") {
+      // Copied into the chunks' geometry here, between frames: counted as the main thread's share.
+      const t0 = performance.now();
+      if (m.type === "chunk") this.streamer?.takeBuild(m.res); else this.streamer?.takePatch(m.res);
+      this.applyMs += performance.now() - t0;
+      return;
+    }
     s.answered++;
     s.lag = this.id - m.id;
     s.workerMs = m.ms;

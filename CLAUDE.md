@@ -208,7 +208,7 @@ reports/                Keith's in-lab reports and your replies (in git, so any 
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
 src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
-src/world/              noise, terrain (the dune height function), chunks (streaming, the shadow-only terrain copy), chunkGround
+src/world/              noise, terrain (the dune height function), chunks (streaming, the shadow-only terrain copy) + chunkFill (their vertex maths, also run in the sim worker), chunkGround
                         (a cheap ground for looks off the chunks' triangles), look (light, haze), wrecks (steel stand-ins),
                         craters (blast dents in the ground: hardness, slump), walkable (the ground plus registered surfaces
                         with moving frames, for anyone on foot)

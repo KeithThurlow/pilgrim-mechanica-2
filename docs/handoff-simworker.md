@@ -9,8 +9,15 @@ Plan and rules: `docs/proposal-simworker.md`. Worker path on by default; `?nowor
   Rules for the mirror: the worker's `route.onChange` must do to the ground what the lab's does (today: craters.invalidate);
   `pois.extra` (hand-placed pads) isn't mirrored (the convoy lab never uses it); objects in the values aren't mirrored.
 
+- Step 2 (chunk builds and patches): `src/world/chunkFill.ts`, `TerrainStreamer.remote` / `takeBuild` / `takePatch`,
+  `chunk` and `patch` messages; `tools/terrainworker-check.ts`. The main thread's crater patches read a cache of the
+  ground under the dents that can hold road it has since cut; the worker reads fresh (a few vertices differ, the worker's
+  closer to the ground).
+
 ## Next, in order
-1. Step 2: terrain building (chunks.ts TerrainStreamer build + patch strips, groundWindow.ts) through the worker.
+1. Step 2b: the ground window under the detail patch (`src/world/groundWindow.ts`: its fine and coarse fills) through the
+   worker, then measure on Keith's PC.
+2. Old step 2 notes: terrain building (chunks.ts TerrainStreamer build + patch strips, groundWindow.ts) through the worker.
 
 ## Facts to start from
 - The worker is `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })` in `src/sim/host.ts`; add
