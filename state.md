@@ -317,6 +317,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 ## Changes
 ### 2026-11-06 · Pods and tow: say "return to the convoy" (Keith asked; Claude)
 - Quest panel, pickup notes and markers now tell you to bring carried pods/hulks back: last pod gives a "bring them back to the convoy" note, panel shows distance to the convoy, and the green beacon/radar/edge mark move to the convoy (RETURN TO CONVOY). Files: `src/quests/questHud.ts`, `questLoop.ts`. Other contracts (salvage, cull, bounty) pay at risk on the spot and already say so. Checked: typecheck, `npm test`.
+### 2026-11-06 · Walker checked at 20 fps against 144: frame-rate independent (Keith: "legs end up dragging behind... might be frame rate"; Claude on `claude/project-thread-a6vlpg`)
+- New `tools/framerate-check.ts`: the same 14 s over the dunes (walk, Shift run, a turn, a 14 m/s shove, a jump) stepped as the game steps it (ceil(frame × 120) steps a frame) at 144, 60, 30 and 20 fps. Result: ends within 0.31 m (a frame's sampling), planted feet 0.43-0.45 m behind the hips on average at every rate, same landings. So the drag isn't the walker's frame rate; under 20 fps the whole game slows down instead (the frame cap in `src/core/app.ts`).
+- The one per-call ease found (the squashed thigh's splay, `pose()` in `src/mech/walker.ts`) now eases by time.
+- Checked: `framerate-check`, full `npm test`.
 
 ### 2026-11-06 · Instance pools upload only what's in use; the convoy lab stops copying every slider each frame (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
 - A CPU profile on Keith's PC (`/mnt/project-files/pc-profile-siege.md`, convoy lab `?siege&manual`): `writeBuffer` 9% of the frame, `cargoSizing` 3%.
