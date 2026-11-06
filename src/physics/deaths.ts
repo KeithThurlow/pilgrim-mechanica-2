@@ -118,25 +118,49 @@ export class DeathPhysics {
   }
 
   /** Keep the physics floor under the action: rebuilt when the focus moves a quarter of its size. */
-  /** The ground changed under the floor (a crater): rebuild it on a later follow(), at most every half second. */
-  groundChanged() { if (this.staleAt < 0) this.staleAt = performance.now(); }
+  /** The ground changed under the floor (a crater; a box, or everywhere): rebuilt on a later follow(), at most every
+   *  half second, sampling the ground again only inside the boxes. */
+  groundChanged(x0?: number, z0?: number, x1?: number, z1?: number) {
+    const g = this.grid;
+    if (x0 === undefined || z0 === undefined || x1 === undefined || z1 === undefined) this.allStale = true;
+    else {
+      // Off the floor: nothing to do (a later floor samples ground it didn't hold afresh).
+      if (g && (x1 < g.i0 * g.step - 2 || x0 > (g.i0 + g.n) * g.step + 2 || z1 < g.j0 * g.step - 2 || z0 > (g.j0 + g.n) * g.step + 2)) return;
+      this.stale.push(x0, z0, x1, z1);
+    }
+    if (this.staleAt < 0) this.staleAt = performance.now();
+  }
   private staleAt = -1;
+  private stale: number[] = [];
+  private allStale = false;
+  /** The last floor's heights and where its first node sits on the step lattice (nodes at whole multiples of step). */
+  private grid: { heights: Float32Array; i0: number; j0: number; n: number; step: number } | null = null;
 
   follow(x: number, z: number) {
     const size = this.v.floorSize;
     const stale = this.staleAt >= 0 && performance.now() - this.staleAt > 500;
-    if (stale) this.staleAt = -1;
     if (!stale && this.floor && Math.hypot(x - this.floorAt.x, z - this.floorAt.z) < size / 4) return;
     if (this.floor) this.world.removeCollider(this.floor, false);
-    // Heights on a grid every 1.5 m, centred on the collider: r along X, c along Z, stored r-major (checked against
-    // the height function by tools/deaths-check.ts).
-    const n = Math.max(8, Math.round(size / 1.5));
+    // Heights on a grid every ~1.5 m: r along X, c along Z, stored r-major (checked against the height function by
+    // tools/deaths-check.ts). The nodes sit on a fixed lattice (i * step), so a floor moved along reuses the heights it
+    // shares with the last one, and a crater only resamples its own box (perf, 2026-11-06: rebuilding the whole floor
+    // for every blast was ~8% of the convoy siege's ground samples).
+    const n = Math.max(8, Math.round(size / 1.5)), step = size / n;
+    const i0 = Math.round((x - size / 2) / step), j0 = Math.round((z - size / 2) / step);
     const heights = new Float32Array((n + 1) * (n + 1));
-    const cx = Math.round(x), cz = Math.round(z);
+    const old = this.grid && this.grid.n === n && this.grid.step === step && !(stale && this.allStale) ? this.grid : null;
+    const boxes = stale ? this.stale : [];
     for (let c = 0; c <= n; c++) for (let r = 0; r <= n; r++) {
-      const px = cx - size / 2 + (r / n) * size, pz = cz - size / 2 + (c / n) * size;
+      const I = i0 + r, J = j0 + c, px = I * step, pz = J * step;
+      if (old) {
+        const or = I - old.i0, oc = J - old.j0;
+        if (or >= 0 && oc >= 0 && or <= n && oc <= n && !inBoxes(boxes, px, pz)) { heights[r * (n + 1) + c] = old.heights[or * (n + 1) + oc]; continue; }
+      }
       heights[r * (n + 1) + c] = this.ground.height(px, pz);
     }
+    if (stale) { this.staleAt = -1; this.stale.length = 0; this.allStale = false; }
+    this.grid = { heights, i0, j0, n, step };
+    const cx = i0 * step + size / 2, cz = j0 * step + size / 2;
     const desc = RAPIER.ColliderDesc.heightfield(n, n, heights, { x: size, y: 1, z: size }).setTranslation(cx, 0, cz).setFriction(0.9).setCollisionGroups(FLOOR);
     this.floor = this.world.createCollider(desc);
     this.floorAt.set(cx, 0, cz);
@@ -479,3 +503,9 @@ const MECH = (0x0008 << 16) | 0x0010;
 const MECH_FLOOR = (0x0010 << 16) | 0x0008;
 // Vehicle wrecks also meet each other.
 const WRECK = (0x0004 << 16) | 0x0005;
+
+/** Whether (x, z) is inside any of the boxes (x0, z0, x1, z1 in a flat list), padded by a node step. */
+function inBoxes(b: number[], x: number, z: number) {
+  for (let k = 0; k < b.length; k += 4) if (x >= b[k] - 2 && x <= b[k + 2] + 2 && z >= b[k + 1] - 2 && z <= b[k + 3] + 2) return true;
+  return false;
+}
