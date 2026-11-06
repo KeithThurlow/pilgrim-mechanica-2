@@ -40,7 +40,8 @@ export const STREAM_PARAMS: Param[] = [
 export const SHADOW_ONLY_LAYER = 3;
 /** Patching: how far round a changed box the vertices are redone (m: normals read the ground 2 m round), and the grid
  *  queued patches merge on (m). Not feel: the ground looks the same either way. */
-const PATCH_PAD = 2.5, PATCH_CELL = 4;
+export const PATCH_PAD = 2.5;
+const PATCH_CELL = 4;
 
 interface Chunk {
   mesh: THREE.Mesh; water: THREE.Mesh | null; shadow: THREE.Mesh | null; cx: number; cz: number;
@@ -61,6 +62,10 @@ interface Building {
 /** Chunks this close to the focus (chunk units) are always finished in the frame they're asked for, as are builds
  *  that have run this many frames (so a patched-over build can't starve). */
 const BUILD_NOW_RADIUS = 1.5, BUILD_MAX_FRAMES = 30;
+/** More chunks missing than this (a jump: the lab's start, a drop far out) and the first one a frame is built whole, as
+ *  before (the ground catches up in a few seconds of slow frames rather than showing holes for longer); walking on
+ *  brings in about a dozen at a time, built a few rows a frame. */
+const CATCH_UP = 16;
 /** Patch cache layout per vertex: h, h at ±e on x and z (normal), at ±2 m (the colour's wide normal), crest, flat, wr, ws, rock. */
 const BASE_N = 14, WIDE_E = 2;
 /** out = (x, y, z) normalised, as DuneField.normal does it. */
@@ -237,8 +242,9 @@ export class TerrainStreamer {
     let built = 0, worked = false;
     // Nearest first, rows under the budget (a chunk can take a few frames); one near the focus is always finished now,
     // so the ground under it is never missing, and the first one asked for always gets at least a row.
+    const catchUp = missing.length > CATCH_UP;
     for (const [d, cx, cz] of missing) {
-      const now = d <= BUILD_NOW_RADIUS;
+      const now = d <= BUILD_NOW_RADIUS || (catchUp && !worked);
       if (worked && !now && performance.now() > end) break;
       const k = cx + "," + cz;
       const c = this.advance(k, cx, cz, now ? Infinity : end);
