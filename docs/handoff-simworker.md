@@ -21,24 +21,37 @@ Plan and rules: `docs/proposal-simworker.md`. Worker path on by default; `?nowor
   the mirror doesn't make by itself (route.onChange's memo invalidation is nested inside convoy.update).
 
 ## Next, in order
-0. Step 4: the robot swarm (see below), unless Keith's PC profile points elsewhere.
-1. Step 2b done (merged): the window's fine rows in the worker (`GroundWindow.remote`/`takeFine`). Next: step 3, escorts,
-   unless Keith's PC profile (`labs/convoy/?siege&manual` with and without `&noworker`) points elsewhere.
-2. Step 3 spec (escorts, `src/convoy/escort.ts` on `src/vehicles/car.ts`), worked out 2026-11-06, not started:
-   - Inputs the escorts read: the Convoy (platform poses, the plough: `Obstacle`s), the mech on the sand (`update(dt, mech)`),
-     `escorts.mechs` (guardian spots, `guardians.spots`), the field (mirrored already) and `escorts.memo` (a HeightMemo,
-     invalidated on ground changes: in the worker, wire it to the mirror's own changes), the values.
-   - The worker runs its own Convoy: record `convoy.reset/jump/update` as the outermost ground events (route.update is
-     nested in convoy.update, so the recorder's depth rule already makes route.update replay through it). Check: the
-     worker's platform poses equal the main thread's (a parity line like the ground's).
-   - Worker runs `EscortGroup.update` per substep from a per-substep command list (dt, mech x/z or null, guardian spots),
-     sent with the frame. Out: per escort a snapshot (pos, velocity, heading/quat, wheel spin/steer/suspension, `moved`,
-     mode) in one Float32Array; main keeps proxy `Escort`s whose `sim` fields are written from it, so escortBody, trail,
-     guard (turret fire from the escorts), safeZone and solids read them unchanged, a frame late.
-   - Keep `?noworker` running EscortGroup on the main thread as now. Check: `tools/escortworker-check.ts`, the worker's
-     escorts against the main thread's over a few minutes of driving with the mech weaving through them (positions equal,
-     or within float rounding if the commands' order differs).
-2. Old step 2 notes: terrain building (chunks.ts TerrainStreamer build + patch strips, groundWindow.ts) through the worker.
+Step 4: the robot swarm (`src/combat/robots.ts` RobotSwarm, 2172 lines), specced 2026-11-06 (Claude). Keith's PC: far from
+the convoy fighting robots the sim alone is ~20 ms (2026-11-06), so this is next. Headless (`?siege=120&manual&norender`,
+20 awake): swarm camps 2.4 ms, turrets 2.0, mech 1.1; the PC fight's own stage list (a Report from it) would say more.
+
+What it touches (2026-11-06 inventory): ~30 files read the swarm's arrays (drawing, targets, register, loot, ragdolls,
+fights, fortresses, humans, droids, allies, bodyContact, robotBeam, chill, arsenal, energyGuns...). Writes from outside:
+array pokes (`frozen`, `shake`, `hasT`, `hp`, `state`... in swarmCamps 6, fortresses 18, fronts/robots 8, humans 5,
+allies 2, droidCamps, infantryTarget, robotTarget) and methods (`damage`, `hitAt`, `hurtLeg`, `hurtOwn`, `trample`,
+`stomp`, `spawn`, `remove`, `setTarget`, `clearTarget`). Callbacks fired from inside `update` that act on main-thread
+things: `onShot`/`onBite`/`onCut` (args of update), `onLob`, `onBeam`, `onPulse`, `onDeathBlast`, `onLegLost`,
+`onDeath`, `onFootfall`. Hooks read inside update: `keepOut` (the safe zone round the convoy), `reactors` (the death
+physics' falling cores: a synchronous read of Rapier, main thread), `lookGround`.
+
+Plan, one PR each:
+- **4a, worker-ready, nothing moved** (pure refactor): every outside write goes through a method (`setFrozen`,
+  `shakeOff`, ...: no more array pokes), every callback becomes a plain-data event queued during update and handed to
+  the same handlers after it (`drain(handlers)`), `spawn` can take the slots to use. Behaviour changes only in that a
+  handler's own effect on the swarm (a beam hurting robots) lands after the step instead of inside it. Checks:
+  robots-check, robot-danger, robotweak, testswarm, the swarm and convoy labs' checks unchanged.
+- **4b, the swarm in the worker** (convoy lab only, `?noworker` as now): main keeps a RobotSwarm as a view; its
+  mutating methods apply to the view (so same-frame readers, e.g. damage's "killed", still work) and are recorded as
+  commands in the ground's stream (`GroundRecorder.command`, as the escorts'); `update` is a command (dt, the prey);
+  spawn picks slots on main and sends them. The worker answers each frame with the arrays drawing and targeting read
+  (0..hi, transferables) and the queued events, which main hands to the handlers. `keepOut` is rebuilt in the worker
+  on its own convoy (src/convoy/safeZone.ts); `reactors` positions go over as a command each frame (a frame late).
+  The view's RNG state comes back in the snapshot.
+- **4c, the parity check** (`tools/robotworker-check.ts`): a camp fight headless both ways, bit for bit (as the
+  escorts'), with damage, trample, stomps, spawns and a pack calming down.
+- Then striders, crushers and droids (their own fields) the same way, if the PC profile says so.
+
+Done before this: step 2b (the window's fine rows), step 3 (escorts, see Done).
 
 ## Facts to start from
 - The worker is `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })` in `src/sim/host.ts`; add
