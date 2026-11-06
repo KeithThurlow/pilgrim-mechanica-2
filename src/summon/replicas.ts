@@ -21,8 +21,10 @@ export const REPLICA_DEFAULTS = {
   repCount: 2,
   repHull: 2200,
   repArmour: 4,
-  repDamage: 0.6,
-  repEngage: 40,
+  repDamage: 0.8,
+  repPierce: 0.5,
+  repRange: 60,
+  repEngage: 60,
   repHold: 18,
   repLeash: 45,
   repSide: 9,
@@ -58,6 +60,8 @@ export const REPLICA_PARAMS: Param[] = [
   { key: "repHull", label: "Hit points", min: 100, max: 20000, step: 100, group: G },
   { key: "repArmour", label: "Armour", min: 0, max: 40, step: 0.5, group: G },
   { key: "repDamage", label: "Damage ×", min: 0, max: 5, step: 0.05, group: G, tip: "On their miniguns' rounds (the shared minigun sliders)" },
+  { key: "repPierce", label: "Armour pierce (minigun)", min: 0, max: 1, step: 0.05, group: G, tip: "Share of a foe's armour their rounds ignore (Claude 2026-11-06: at the shared 0.1 a crusher or an excavator took about 1 a round, so they looked like they did nothing to anything but the small robots)" },
+  { key: "repRange", label: "Guns reach (m)", min: 10, max: 150, step: 1, group: G, tip: "How far their miniguns fire and their rockets lob (was the shared minigun reach, 45 m)" },
   { key: "repEngage", label: "Picks foes within (m of you)", min: 5, max: 150, step: 1, group: G },
   { key: "repHold", label: "Holds off a foe at (m)", min: 3, max: 60, step: 1, group: G },
   { key: "repLeash", label: "Never further than (m from you)", min: 10, max: 150, step: 1, group: G },
@@ -187,6 +191,7 @@ export class Replicas {
     // Walk and guns follow the shared sliders; size is its own.
     Object.assign(u.v, this.v);
     u.v.hitRadius = this.v.repHitSize; u.v.bodyRadius = this.v.repBodySize; u.v.trample = 1;
+    u.v.range = this.v.repRange; u.v.roundAp = this.v.repPierce;
   }
 
   /** A rocket replica's volleys: after the pause, `repRocketVolley` rockets, alternating sides, lobbed at the foe. */

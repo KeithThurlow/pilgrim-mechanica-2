@@ -587,7 +587,7 @@ export class MechUnit implements Hittable, Solid {
         this.bf.fire(first ? this.flashSlot + (s === 1 ? 0 : 1) : -1, this.team, this.muzzle, d, own?.range ?? v.range, (own?.damage ?? v.roundDamage) * this.damageScale, this.player
           ? { eject: first ? this.eject : undefined, outboard: first ? left.clone().multiplyScalar(s) : undefined, voice: "player", silent: round, flashScale: first ? undefined : 0, ally: this.ally,
             sheet: { half: v.roundSheetHalf, height: v.roundSheetHeight, line: v.roundLine, pen: this.roundPen(own?.pierce), aim: at }, splash, splashShare, splashBlast: flak, burst, proto, hot: !!special, pierce: ap }
-          : { voice: round ? "none" : "other", hitScale: 0.7, flashScale: first ? undefined : 0, proto: special ? proto : undefined, hot: !!special, pierce: ap });
+          : { voice: round ? "none" : "other", hitScale: 0.7, flashScale: first ? undefined : 0, proto: special ? proto : undefined, hot: !!special, pierce: ap, ally: this.ally });
       }
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).

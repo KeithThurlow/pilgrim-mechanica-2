@@ -48,7 +48,7 @@ export const MINIGUN_FX_PARAMS: Param[] = [
 /** What a round struck: the sand, or something steel (a wreck, a hull). */
 export type HitSurface = "sand" | "metal" | "flesh";
 
-const TRACERS = 160, FLASHES = 24, SPARKS = 600, GRIT = 600, CASINGS = 240;
+const TRACERS = 160, FLASHES = 48, SPARKS = 600, GRIT = 600, CASINGS = 240;
 /** Rounds in flight at once (each times its impact): the GPU tracers draw them all; the CPU path has a Mesh for the
  *  first TRACERS only. */
 export const ROUNDS_IN_FLIGHT = 1024;
