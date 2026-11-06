@@ -50,6 +50,7 @@ import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "../../src/game/mechUnit";
+import { loadoutLevel } from "../../src/combat/rivalKit";
 import { ConvoyRoute, ROUTE_DEFAULTS, ROUTE_PARAMS } from "../../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS, PLATFORM_PARAMS } from "../../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS, CRANE_PARAMS } from "../../src/convoy/crane";
@@ -251,14 +252,6 @@ const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(); }, deaths });
-// The fortresses' warlord: a red Rampart loaded now so a keep can field it at once (src/expedition/warlord.ts).
-{
-  const wb = await RampartBody.load(toon);
-  const wl = new MechUnit(bf, V, wb, toon, 2, 20, false);
-  wl.paint = 0x8e2a1e;
-  wb.paint(toon, 0x8e2a1e);
-  loop.attachWarlord(wl, scene);
-}
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
@@ -310,6 +303,9 @@ const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, en
 loop.threatSource = { arsenal, wv: V };
 // High value targets get their own Rampart (loaded on the first summon) and see the player's weapons for dodging.
 loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource, summons: { values: V, deaths } });
+// Fortress mechs (src/expedition/fortMechs.ts): a Rampart each, loaded when a fortress streams in; items rolled
+// relative to the bay's loadout level, as the duel lab's rival.
+loop.setupFortMechs({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource, summons: { values: V, deaths }, playerLevel: () => loadoutLevel(bayState.loadout) });
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
@@ -765,6 +761,7 @@ selector = new Selector(app, {
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
     { topic: "fortress", label: "Fortress spawner shacks", objects: () => loop.forts.spawnersDraw.meshes() },
+    { topic: "fortress", label: "Fortress bandit mechs", objects: () => loop.forts.mechs.objects() },
     { topic: "fortress", label: "Fortress lookout towers", objects: () => loop.forts.towersDraw.meshes() },
     { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
