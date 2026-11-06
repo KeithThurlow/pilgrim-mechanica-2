@@ -11,8 +11,7 @@ import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMAL
 import { RobotsDraw } from "../../combat/robotsDraw";
 import { RobotTarget } from "../../combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../combat/robotTearFx";
-import { robotRagdoll } from "../../physics/bodies";
-import { ROBOT_RAG } from "../../combat/robotShapes";
+import { robotRagdolls } from "../../expedition/ragdolls";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../combat/striderLab";
 import { robotDeathSound, wireRobotBlasts } from "../robotBeam";
 
@@ -129,14 +128,7 @@ export function robotsFront(params0: URLSearchParams): Front {
       hook(player, "onStomp", (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k)));
       // Deaths go to the physics: the body and its leg parts fall apart loosely (small ones fly, walkers fold where they
       // stand, excavators topple from height).
-      sw.hideDead = true;
-      const RAG = ROBOT_RAG;
-      sw.onDeath = (i, nx, nz, speed) => {
-        const kind = sw.kind[i], [body, leg] = RAG[kind];
-        const { parts, joints } = robotRagdoll(sw, i, body, leg);
-        lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-          { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
-      };
+      robotRagdolls(sw, lab.deaths);
       // Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at
       // the plating, medium ones' saws bite.
       sw.onFootfall = robotFootfall(bf, sw);
@@ -176,6 +168,15 @@ export function robotsFront(params0: URLSearchParams): Front {
         const [b] = sw.spawn(1, p.x + 4, p.z + 11, 0, { mid: 0, big: 1 });
         sw.frozen[b] = 1;
         for (const i of sw.spawn(14, p.x + 4, p.z + 11, 6, { mid: 0.2, big: 0 })) sw.frozen[i] = 1;
+        let t = 0;
+        lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
+      }
+      // ?quaddeath[=s]: the same with a weapon quad 9 m off (Keith 2026-11-06: its reactor, smaller and sooner).
+      if (params0.has("quaddeath")) {
+        V.robotSwarmSize = 0;
+        const p = player.sim.pos, at = Number(params0.get("quaddeath")) || 1;
+        const [b] = sw.spawn(1, p.x + 3, p.z + 9, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
+        sw.frozen[b] = 1;
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
