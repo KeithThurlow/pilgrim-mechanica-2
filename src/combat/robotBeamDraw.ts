@@ -200,11 +200,15 @@ export class RobotBeamDraw {
   private pulse(s: Slot, i: number) {
     s.fine.hide();
     const sw = this.swarm, v = sw.v, g = sw.ground, C = Math.max(0.05, v.robotPulseCharge), t = sw.pulseT[i];
-    const e = sw.beamFrom(i, this.ep), gy = g.height(e.x, e.z), len = Math.max(0.5, e.y - gy), R = v.robotPulseRadius;
+    // Round 2 (Keith 2026-11-06): the beam runs from the emitter out to its locked spot (straight down when it's under it).
+    const e = sw.beamFrom(i, this.ep), ax = sw.pax[i], az = sw.paz[i], gy = g.height(ax, az), R = v.robotPulseRadius;
+    this.d.set(ax - e.x, gy - e.y, az - e.z);
+    const len = Math.max(0.5, this.d.length());
+    if (this.d.lengthSq() < 1e-6) this.d.set(0, -1, 0);
     const u = Math.min(1, t / C), grow = Math.pow(u, v.robotBeamGrowth);
-    this.live.push({ i, u: t < C ? u : 1 + (t - C) / C, line: { ex: e.x, ey: e.y, ez: e.z, sx: e.x, sy: gy, sz: e.z, x1: e.x, y1: gy, z1: e.z } });
+    this.live.push({ i, u: t < C ? u : 1 + (t - C) / C, line: { ex: e.x, ey: e.y, ez: e.z, sx: ax, sy: gy, sz: az, x1: ax, y1: gy, z1: az } });
     const f = t < C ? 0 : Math.max(0, 1 - (t - C) / Math.max(0.05, v.robotPulseHold));
-    this.q.setFromUnitVectors(Z, this.d.set(0, -1, 0));
+    this.q.setFromUnitVectors(Z, this.d.normalize());
     // The thin beam down; at the blast a wide flare.
     const w = t < C ? (0.05 + 0.12 * grow) * (0.8 + 0.2 * Math.sin(this.time * 50)) : 0.6 + 5 * f * f;
     s.core.position.set(e.x, e.y, e.z); s.core.quaternion.copy(this.q); s.core.scale.set(w, w, len);
@@ -213,8 +217,8 @@ export class RobotBeamDraw {
     // The pulse running down (the end of the charge), then the flare's sheath.
     const D = Math.min(C, Math.max(0.05, v.robotPulseDrop)), k = (t - (C - D)) / D;
     if (t < C && k >= 0) {
-      const seg = Math.min(len, 2.5), y = e.y - (len - seg) * Math.min(1, k);
-      s.beam.position.set(e.x, y, e.z); s.beam.quaternion.copy(this.q); s.beam.scale.set(0.5, 0.5, seg);
+      const seg = Math.min(len, 2.5), run = (len - seg) * Math.min(1, k);
+      s.beam.position.set(e.x + this.d.x * run, e.y + this.d.y * run, e.z + this.d.z * run); s.beam.quaternion.copy(this.q); s.beam.scale.set(0.5, 0.5, seg);
       (s.beam.material as THREE.MeshBasicMaterial).opacity = 0.9;
       s.beam.visible = true;
     } else if (t >= C && f > 0.01) {
@@ -235,11 +239,11 @@ export class RobotBeamDraw {
     s.edge.mesh.visible = s.ring.mesh.visible = s.line.mesh.visible = false;
     const A = v.robotPulseRing * (t < C ? 0.5 + 0.5 * grow : f);
     s.reach.mesh.visible = A > 0.005;
-    if (s.reach.mesh.visible) { s.reach.set(e.x, e.z, R - 3, R + 0.4, g, 0.85); s.reach.mat.opacity = A; }
+    if (s.reach.mesh.visible) { s.reach.set(ax, az, R - 3, R + 0.4, g, 0.85); s.reach.mat.opacity = A; }
     s.wave.mesh.visible = t < C && v.robotPulseRing > 0;
     if (s.wave.mesh.visible) {
       const rr = Math.max(0.6, R * u);
-      s.wave.set(e.x, e.z, rr - Math.min(rr, 2.5 + 2 * u), rr, g, 0.88);
+      s.wave.set(ax, az, rr - Math.min(rr, 2.5 + 2 * u), rr, g, 0.88);
       s.wave.mat.opacity = v.robotPulseRing * (0.8 + 0.8 * u);
     }
   }
