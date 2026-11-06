@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Pods and tow: say "return to the convoy" (Keith asked; Claude)
+- Quest panel, pickup notes and markers now tell you to bring carried pods/hulks back: last pod gives a "bring them back to the convoy" note, panel shows distance to the convoy, and the green beacon/radar/edge mark move to the convoy (RETURN TO CONVOY). Files: `src/quests/questHud.ts`, `questLoop.ts`. Other contracts (salvage, cull, bounty) pay at risk on the spot and already say so. Checked: typecheck, `npm test`.
+
 ### 2026-11-06 · Instance pools upload only what's in use; the convoy lab stops copying every slider each frame (Keith's frame drops near the convoy; Claude on `claude/project-thread-pxoczn`)
 - A CPU profile on Keith's PC (`/mnt/project-files/pc-profile-siege.md`, convoy lab `?siege&manual`): `writeBuffer` 9% of the frame, `cargoSizing` 3%.
 - `src/core/instanceUploads.ts` (called by `createApp` before each render): an instanced mesh's per-instance attribute that changed, with no update range of its own, gets one range over the instances in use (count), growing until three uploads it, so pools stop sending their whole capacity (e.g. 488 of 12288). Code that sets its own ranges (robots, flames, tracers) is left alone. The HUD details show "instance uploads trimmed" (cloud box, convoy `?siege&manual`: 32 buffers, ~870 KB a frame not sent).
