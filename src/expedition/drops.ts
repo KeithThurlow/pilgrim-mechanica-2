@@ -7,7 +7,8 @@
 // from the world seed and the thing's stable id (the spot's id, the robot's slot and generation), so every peer gets
 // the same drop. Rarity leans better with depth (the danger 0..1+ from src/expedition/depth.ts) and salvage heat
 // (0..1): each tier's weight is multiplied by e^(tier × (rarityDepth × danger + rarityHeat × heat + rarityThreat × x)).
-// A drop lies on the sand until a collector (the mech, or the pilot on foot) walks within reach of it, then it is
+// A drop lies on the sand until a collector (the mech, or the pilot on foot) in reach of it grabs it (Keith 2026-11-06:
+// picking up is a choice, a key press for the nearest drop in reach; autoPickup 1 is the old walk-over), then it is
 // "picked" (the glue puts it on the at-risk list); left further than dropForget behind it is "forgotten".
 // What happens is plain-data events (rule 12), drained by the glue each frame.
 import type { Param } from "../core/tweaks";
@@ -26,6 +27,7 @@ export const DROP_DEFAULTS = {
   rarityThreat: 0.4,
   rarityDepth: 0.5,
   rarityHeat: 0.4,
+  autoPickup: 0,
   pickupMech: 4.5,
   pickupPilot: 1.8,
   dropForget: 400,
@@ -46,7 +48,8 @@ export const DROP_PARAMS: Param[] = [
   { key: "rarityThreat", label: "Rarity lean per threat", min: 0, max: 2, step: 0.05, group: G, tip: "Each tier's weight × e^(tier × this × (threat / ref)^curve): the excavator's drops lean rarer" },
   { key: "rarityDepth", label: "Rarity lean per depth", min: 0, max: 2, step: 0.05, group: G, tip: "Each rarity tier's weight × e^(tier × this × danger): deeper out, rarer drops" },
   { key: "rarityHeat", label: "Rarity lean per heat", min: 0, max: 2, step: 0.05, group: G, tip: "The same for salvage heat (0..1)" },
-  { key: "pickupMech", label: "Mech grabs within (m)", min: 1, max: 12, step: 0.1, group: G, tip: "Walk the mech's hips this close to a drop to pick it up" },
+  { key: "autoPickup", label: "Pick up by walking over", min: 0, max: 1, step: 1, group: G, tip: "Keith 2026-11-06: 0 (default) a drop is only taken with E (the nearest in reach); 1 the old way: anything in reach is grabbed" },
+  { key: "pickupMech", label: "Mech grabs within (m)", min: 1, max: 12, step: 0.1, group: G, tip: "The mech's hips this close to a drop can take it (E)" },
   { key: "pickupPilot", label: "Pilot grabs within (m)", min: 0.5, max: 5, step: 0.1, group: G },
   { key: "levelMetres", label: "Item level per (m of depth)", min: 10, max: 1000, step: 5, group: G, tip: "A drop's level is 1 + its depth from the convoy over this (150: level 7.7 at 1 km; was 100). Enemies' area level uses the same" },
   { key: "levelJitter", label: "Item level spread (±)", min: 0, max: 10, step: 0.5, group: G },
@@ -72,7 +75,8 @@ export interface DropContext { danger: number; heat: number; depth: number }
 export function threatScale(v: DropValues, threat: number): number {
   return Math.pow(Math.max(0, threat) / Math.max(1, v.threatRef), Math.max(0.01, v.threatCurve));
 }
-export interface Collector { x: number; z: number; by: "mech" | "pilot" }
+/** Someone who can pick drops up. grab: they asked to take the nearest drop in reach this step (a command, rule 12). */
+export interface Collector { x: number; z: number; by: "mech" | "pilot"; grab?: boolean }
 
 /** FNV-1a of a string, mixed with a seed. */
 export function hashKey(seed: number, key: string): number {
@@ -165,19 +169,43 @@ export class DropField {
     return out;
   }
 
+  /** The nearest drop within reach of (x, z), else null (what a grab would take). */
+  nearest(x: number, z: number, reach: number): Drop | null {
+    let best: Drop | null = null, bd = reach;
+    for (const d of this.drops) { const dist = Math.hypot(d.x - x, d.z - z); if (dist <= bd) { bd = dist; best = d; } }
+    return best;
+  }
+
+  /** How far a collector of this kind reaches. */
+  reach(by: "mech" | "pilot"): number { return by === "mech" ? this.v.pickupMech : this.v.pickupPilot; }
+
   /**
-   * One step: collectors within reach pick drops up (take: may they; the glue says no while not out), drops further
-   * than dropForget from every collector are forgotten. Returns the drops picked this step.
+   * One step: a collector that grabs takes the nearest drop in its reach (with autoPickup, every drop in reach is
+   * taken; take: may they at all, the glue says no while not out); drops further than dropForget from every collector
+   * are forgotten. Returns the drops picked this step.
    */
   update(collectors: Collector[], take: boolean, canTake: (d: Drop) => boolean = () => true): Drop[] {
     const picked: Drop[] = [];
+    const auto = this.v.autoPickup >= 0.5;
+    // Grabs first: one drop each, the nearest in reach.
+    if (take && !auto) {
+      for (const c of collectors) {
+        if (!c.grab) continue;
+        const d = this.nearest(c.x, c.z, this.reach(c.by));
+        if (!d) continue;
+        if (!canTake(d)) { this.events.push({ type: "refused", drop: d, by: c.by }); continue; }
+        this.drops.splice(this.drops.indexOf(d), 1);
+        picked.push(d);
+        this.events.push({ type: "picked", drop: d, by: c.by });
+      }
+    }
     for (let k = this.drops.length - 1; k >= 0; k--) {
       const d = this.drops[k];
       let near = Infinity, by: Collector | null = null, inReach = false;
       for (const c of collectors) {
-        const dist = Math.hypot(c.x - d.x, c.z - d.z), reach = c.by === "mech" ? this.v.pickupMech : this.v.pickupPilot;
+        const dist = Math.hypot(c.x - d.x, c.z - d.z), reach = this.reach(c.by);
         if (dist <= reach) inReach = true;
-        if (take && dist <= reach && !by) by = c;
+        if (auto && take && dist <= reach && !by) by = c;
         near = Math.min(near, dist);
       }
       if (d.laid) { if (!inReach) d.laid = false; by = null; }

@@ -1,7 +1,8 @@
 // Loot out in the field (glue; the rules are drops.ts and expedition.ts, the rest is drawing and sound): stripped
 // spots burst into scrap clumps that fly to the mech with a coin jingle each, and may drop an item; killed robots may
-// drop one by size. Drops lie on the sand with a beam (dropsDraw.ts) until the mech or the pilot walks over them, then
-// join the at-risk list. The loot panel (lootHud.ts) shows the list, the banking count-in and the loss.
+// drop one by size. Drops lie on the sand with a beam (dropsDraw.ts) and a label (dropLabels.ts: name, level, power,
+// DPS) until the mech or the pilot takes one with E (Keith 2026-11-06: a choice, not a walk-over), then join the
+// at-risk list. The loot panel (lootHud.ts) shows the list, the banking count-in and the loss.
 // Ownership: drops, pick-ups and the at-risk list are host state (seeded, events); clumps, beams, sounds and the panel
 // are cosmetic.
 import type * as THREE from "three/webgpu";
@@ -16,20 +17,22 @@ import { VALUE_DEFAULTS, VALUE_PARAMS } from "../items/value";
 import type { LootValues } from "../items/generate";
 import { DropField, DROP_DEFAULTS, DROP_PARAMS, hashKey, itemName, type Collector, type DropContext } from "./drops";
 import { DropsDraw, DROP_FX_DEFAULTS, DROP_FX_PARAMS } from "./dropsDraw";
+import { DropLabels, DROP_LABEL_DEFAULTS, DROP_LABEL_PARAMS } from "./dropLabels";
+import type { Drop } from "./drops";
 import { ScrapClumps, CLUMP_DEFAULTS, CLUMP_PARAMS } from "./scrapClumps";
 import { LootHud, LOOT_HUD_DEFAULTS, LOOT_HUD_PARAMS } from "./lootHud";
 import { LootSound, LOOT_SOUND_DEFAULTS, LOOT_SOUND_PARAMS } from "../audio/lootSound";
 import { robotThreat } from "./threat";
 
 export const FIELD_LOOT_DEFAULTS = {
-  ...VALUE_DEFAULTS, ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
+  ...VALUE_DEFAULTS, ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...DROP_LABEL_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
   bigHaul: 40, streakGap: 0.4,
   dropHearFull: 50, dropHearMax: 160,
   cargoLimit: 1, cargoWarn: 0.85, cargoFullNote: 3,
 };
 export type FieldLootValues = typeof FIELD_LOOT_DEFAULTS;
 export const FIELD_LOOT_PARAMS: Param[] = [
-  ...VALUE_PARAMS, ...DROP_PARAMS, ...DROP_FX_PARAMS, ...CLUMP_PARAMS, ...LOOT_HUD_PARAMS, ...LOOT_SOUND_PARAMS,
+  ...VALUE_PARAMS, ...DROP_PARAMS, ...DROP_FX_PARAMS, ...DROP_LABEL_PARAMS, ...CLUMP_PARAMS, ...LOOT_HUD_PARAMS, ...LOOT_SOUND_PARAMS,
   { key: "bigHaul", label: "A big haul is (scrap)", min: 5, max: 500, step: 5, group: "Loot", tip: "A stripped spot worth this much ends its clumps on a bigger chime" },
   { key: "dropHearFull", label: "Drop sound: full volume within (m)", min: 0, max: 300, step: 5, group: "Loot", tip: "Keith 2026-10-31: drops far off were heard from the convoy. Closer to you than this, a drop's riff plays in full" },
   { key: "dropHearMax", label: "Drop sound: silent past (m)", min: 10, max: 1000, step: 5, group: "Loot", tip: "Fades out between the two; a drop further off than this makes no sound" },
@@ -46,6 +49,10 @@ export interface LootFrame {
   mech: { x: number; y: number; z: number; grabs: boolean };
   /** The pilot on foot (alive), else null: clumps fly to him and he grabs drops. */
   pilot: { x: number; y: number; z: number } | null;
+  /** E pressed this frame for a drop (the glue decided E goes to the drop, not a salvage spot): take the nearest in reach. */
+  grab?: boolean;
+  /** For the labels over the drops (none drawn without them). */
+  camera?: THREE.Camera; canvas?: HTMLCanvasElement;
 }
 
 /** How loud a drop this far (m) from you plays: 1 within dropHearFull, easing to 0 at dropHearMax. */
@@ -60,6 +67,7 @@ export function dropHearing(v: { dropHearFull: number; dropHearMax: number }, di
 export class FieldLoot {
   readonly drops: DropField;
   readonly draw: DropsDraw;
+  readonly labels: DropLabels;
   readonly clumps: ScrapClumps;
   readonly sound: LootSound;
   readonly hud: LootHud;
@@ -78,6 +86,7 @@ export class FieldLoot {
   ) {
     this.drops = new DropField(v, seed);
     this.draw = new DropsDraw(v, field);
+    this.labels = new DropLabels(v, (x, z) => field.height(x, z));
     this.clumps = new ScrapClumps(v);
     scene.add(this.draw.group, this.clumps.group);
     this.sound = new LootSound(ctx, v);
@@ -115,12 +124,19 @@ export class FieldLoot {
     return this.drops.roll(`forced:${k}`, 1, px, pz, this.at(px, pz), { rarity, level: level ?? this.drops.levelAt(Math.random, this.at(px, pz).depth) });
   }
 
+  /** The drop E would take now: the nearest in reach of the pilot on foot, else of the mech (null: none, or not out). */
+  target(f: Pick<LootFrame, "mech" | "pilot">): Drop | null {
+    if (this.exp.state !== "out") return null;
+    if (f.pilot) return this.drops.nearest(f.pilot.x, f.pilot.z, this.drops.reach("pilot"));
+    return f.mech.grabs ? this.drops.nearest(f.mech.x, f.mech.z, this.drops.reach("mech")) : null;
+  }
+
   update(dt: number, f: LootFrame) {
     this.t += dt;
-    const c = this.collectors;
+    const c = this.collectors, grab = !!f.grab;
     c.length = 0;
-    if (f.pilot) c.push({ x: f.pilot.x, z: f.pilot.z, by: "pilot" });
-    else if (f.mech.grabs) c.push({ x: f.mech.x, z: f.mech.z, by: "mech" });
+    if (f.pilot) c.push({ x: f.pilot.x, z: f.pilot.z, by: "pilot", grab });
+    else if (f.mech.grabs) c.push({ x: f.mech.x, z: f.mech.z, by: "mech", grab });
     const exp = this.exp;
     if (!this.v.cargoLimit) exp.capacity = Infinity;
     this.drops.update(c, exp.state === "out", (d) => exp.fits({ kind: "item", item: d.item, label: "" }));
@@ -151,6 +167,11 @@ export class FieldLoot {
     this.drops.events.length = 0;
     this.clumps.update(dt, ear.x, ear.y, ear.z);
     this.draw.update(dt);
+    if (f.camera && f.canvas) {
+      const t = this.v.autoPickup >= 0.5 ? null : this.target(f);
+      const full = !!t && !exp.fits({ kind: "item", item: t.item, label: "" });
+      this.labels.update(f.camera, f.canvas, this.drops.drops, ear, t, full, this.hud.fitted(), exp.state === "out");
+    }
     if (this.exp.events.some((e) => e.type === "lost")) this.clumps.clear();
     this.hud.events(this.exp.events, this.exp);
     this.exp.events.length = 0;

@@ -44,9 +44,28 @@ must(e.dumpScrap(1000) === 60 && e.scrapAtRisk === 0, "dump all wrong");
 const aboard = new Expedition(EXPEDITION_DEFAULTS);
 must(!aboard.dropItem("x") && aboard.dumpScrap(5) === 0 && !aboard.stow(small, "s"), "aboard, the cargo changed");
 
-// ---- Pick-ups refused by a full cargo; a laid drop isn't grabbed straight back ----
+// ---- Pick-ups are a choice (Keith 2026-11-06): nothing is taken by walking over; a grab takes the nearest in reach ----
 {
   const df = new DropField({ ...DROP_DEFAULTS, ...LOOT_DEFAULTS }, 7);
+  const a = rollItem(5, LOOT_DEFAULTS, { base: "hull-siege" }), b = rollItem(6, LOOT_DEFAULTS, { base: "hull-siege" });
+  df.place(a, 1, 0); df.place(b, 3, 0);
+  for (const d of df.drops) d.laid = false;
+  const at = (grab: boolean) => [{ x: 0, z: 0, by: "mech" as const, grab }];
+  for (let i = 0; i < 60; i++) must(df.update(at(false), true).length === 0, "a drop was picked up without a grab");
+  must(df.update(at(true), false).length === 0, "a grab took a drop while not out");
+  must(df.update(at(true), true, () => false).length === 0 && df.events.some((ev) => ev.type === "refused"), "a full cargo didn't refuse the grab");
+  must(df.drops.length === 2, "a refused drop left the sand");
+  const got = df.update(at(true), true);
+  must(got.length === 1 && got[0].item === a, "a grab didn't take exactly the nearest drop");
+  must(df.update([{ x: 20, z: 0, by: "mech", grab: true }], true).length === 0, "a grab took a drop out of reach");
+  must(df.update([{ x: 0, z: 0, by: "pilot", grab: true }], true).length === 0, "the pilot grabbed past his reach");
+  const laid = df.place(rollItem(7, LOOT_DEFAULTS, { base: "hull-siege" }), 0, 0);
+  must(df.update(at(true), true)[0] === laid, "a grab didn't take a drop just laid down (a deliberate grab may)");
+}
+
+// ---- The old walk-over (autoPickup 1): refused by a full cargo; a laid drop isn't grabbed straight back ----
+{
+  const df = new DropField({ ...DROP_DEFAULTS, ...LOOT_DEFAULTS, autoPickup: 1 }, 7);
   const it = rollItem(5, LOOT_DEFAULTS, { base: "hull-siege" });
   df.place(it, 0, 0);
   const c = [{ x: 0, z: 0, by: "mech" as const }];
