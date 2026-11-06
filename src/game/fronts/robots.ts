@@ -85,7 +85,7 @@ export function robotsFront(params0: URLSearchParams): Front {
         const r2 = V.dashShoveRadius * V.dashShoveRadius;
         for (let i = 0; i < sw.hi; i++) {
           const st = sw.state[i];
-          if (st === LATCHED) { sw.shake[i] = 1e3; continue; }
+          if (st === LATCHED) { sw.shakeOff(i); continue; }
           if (st >= DOWN || sw.kind[i] !== SMALL) continue;
           const ox = sw.px[i] - x, oz = sw.pz[i] - z;
           if (ox * ox + oz * oz < r2) sw.damage(i, V.dashShoveDamage, dx, dz);
@@ -112,7 +112,7 @@ export function robotsFront(params0: URLSearchParams): Front {
         // ?robotline=m: the line starts m to the side (the gun's muzzle is off the mech's centre) and meets the centre
         // line at ?lmb's distance, so a shot aimed there runs down it.
         const off = Number(params0.get("robotline")) || 0, meet = Number((params0.get("lmb") ?? "").split(",")[1]) || 52;
-        const put = (dz: number, dx: number, mid: number, big: number) => { for (const i of sw.spawn(1, p.x + dx + off * (1 - dz / meet), p.z + dz, 0, { mid, big })) sw.frozen[i] = 1; };
+        const put = (dz: number, dx: number, mid: number, big: number) => { for (const i of sw.spawn(1, p.x + dx + off * (1 - dz / meet), p.z + dz, 0, { mid, big })) sw.setFrozen(i, 1); };
         put(12, 0.4, 0, 0); put(16, -0.3, 0, 0); put(21, 0, 1, 0); put(26, 0.5, 0, 0); put(34, 0, 0, 1); put(44, -0.4, 1, 0); put(50, 0.3, 0, 0);
         // Some off the line, to show what the sheet leaves alone.
         put(18, 5, 0, 0); put(30, -7, 1, 0);
@@ -150,15 +150,15 @@ export function robotsFront(params0: URLSearchParams): Front {
       if (params0.has("beam")) {
         V.robotSwarmSize = 0;
         const p = player.sim.pos;
-        sw.spawn(1, p.x - 16, p.z + 18, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 0.3; });
-        sw.spawn(1, p.x + 18, p.z + 14, 0, { mid: 0, big: 1 }).forEach((i) => { sw.beamClock[i] = 2.5; });
+        sw.spawn(1, p.x - 16, p.z + 18, 0, { mid: 0, big: 1 }).forEach((i) => { sw.primeAttacks(i, 0.3); });
+        sw.spawn(1, p.x + 18, p.z + 14, 0, { mid: 0, big: 1 }).forEach((i) => { sw.primeAttacks(i, 2.5); });
       }
       // ?pulse: no packs, one big walker 10 m off, about to beam the ground under it (the terraform pulse; again every
       // cooldown).
       if (params0.has("pulse")) {
         V.robotSwarmSize = 0;
         const p = player.sim.pos;
-        sw.spawn(1, p.x + 6, p.z + 8, 0, { mid: 0, big: 1 }).forEach((i) => { sw.pulseClock[i] = 1.5; sw.beamClock[i] = 99; });
+        sw.spawn(1, p.x + 6, p.z + 8, 0, { mid: 0, big: 1 }).forEach((i) => { sw.primeAttacks(i, 99, 1.5); });
       }
       // ?bigdeath[=s]: no packs, a big walker 12 m off with small ones round its feet, destroyed after s (1 by
       // default): watch its core go unstable and blow, and get clear (Keith 2026-11-02).
@@ -166,17 +166,19 @@ export function robotsFront(params0: URLSearchParams): Front {
         V.robotSwarmSize = 0;
         const p = player.sim.pos, at = Number(params0.get("bigdeath")) || 1;
         const [b] = sw.spawn(1, p.x + 4, p.z + 11, 0, { mid: 0, big: 1 });
-        sw.frozen[b] = 1;
-        for (const i of sw.spawn(14, p.x + 4, p.z + 11, 6, { mid: 0.2, big: 0 })) sw.frozen[i] = 1;
+        sw.setFrozen(b, 1);
+        for (const i of sw.spawn(14, p.x + 4, p.z + 11, 6, { mid: 0.2, big: 0 })) sw.setFrozen(i, 1);
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
       // ?quaddeath[=s]: the same with a weapon quad 9 m off (Keith 2026-11-06: its reactor, smaller and sooner).
       if (params0.has("quaddeath")) {
         V.robotSwarmSize = 0;
+        // Off by default (Keith 2026-11-06, round 2: only the tall walkers go up); the flag turns it on to look at.
+        V.robotQuadDeathOn = 1;
         const p = player.sim.pos, at = Number(params0.get("quaddeath")) || 1;
         const [b] = sw.spawn(1, p.x + 3, p.z + 9, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
-        sw.frozen[b] = 1;
+        sw.setFrozen(b, 1);
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
@@ -185,13 +187,13 @@ export function robotsFront(params0: URLSearchParams): Front {
       if (params0.has("weak")) {
         V.robotSwarmSize = 0;
         const p = player.sim.pos, still = params0.get("weak") === "still";
-        for (const i of sw.spawn(1, p.x + 2, p.z + 28, 0, { mid: 0, big: 1 })) { if (still) sw.frozen[i] = 1; sw.pulseClock[i] = 8; sw.beamClock[i] = 8; }
+        for (const i of sw.spawn(1, p.x + 2, p.z + 28, 0, { mid: 0, big: 1 })) { if (still) sw.setFrozen(i, 1); sw.primeAttacks(i, 8, 8); }
       }
       // ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
       if (params0.has("lineup")) {
         V.robotSwarmSize = 0;
         const p = player.sim.pos;
-        const put = (dx: number, dz: number, mid: number, big: number, quad = 0, weapon = 0) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big, quad, weapon })) sw.frozen[i] = 1; };
+        const put = (dx: number, dz: number, mid: number, big: number, quad = 0, weapon = 0) => { for (const i of sw.spawn(1, p.x + dx, p.z + dz, 0, { mid, big, quad, weapon })) sw.setFrozen(i, 1); };
         put(-4, 9, 0, 0); put(-2.5, 10, 0, 0); put(1, 10, 1, 0); put(10, 16, 0, 1);
         for (let w = 0; w < 4; w++) put([9, 15, -9, -15][w], 1, 1, 0, 1, w);
       }
@@ -230,7 +232,7 @@ export function robotsFront(params0: URLSearchParams): Front {
           let cx = 0, cz = 0, n = 0;
           for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DOWN) { cx += sw.px[i]; cz += sw.pz[i]; n++; }
           const prey = n ? lab.prey(cx / n, cz / n) : lab.prey(player.sim.pos.x, player.sim.pos.z);
-          if (prey.kind !== lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shake[i] = 1e3;
+          if (prey.kind !== lastPrey) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === LATCHED) sw.shakeOff(i);
           lastPrey = prey.kind;
           const p = prey.at;
           // Robots near your summoned units (nearer them than you) turn on them, a share of them (src/summon/allies.ts).

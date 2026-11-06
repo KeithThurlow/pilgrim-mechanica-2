@@ -220,15 +220,15 @@ export class Allies {
   private steer(i: number, foe: Foe | null, sx: number, sz: number) {
     const sw = this.sw;
     if (foe) {
-      this.engaged[i] = 1; sw.frozen[i] = 0;
-      if (sw.kind[i] === MID) sw.shooter[i] = 1;
+      this.engaged[i] = 1; sw.setFrozen(i, 0);
+      if (sw.kind[i] === MID) sw.setShooter(i, 1);
       sw.setTarget(i, foe.x, foe.y, foe.z, Math.max(0.5, foe.r));
       return;
     }
     this.engaged[i] = 0;
-    if (sw.kind[i] === MID) sw.shooter[i] = 0;
+    if (sw.kind[i] === MID) sw.setShooter(i, 0);
     const d = Math.hypot(sw.px[i] - sx, sw.pz[i] - sz);
-    if (sw.frozen[i] ? d > 4 : d < 1.8) sw.frozen[i] = sw.frozen[i] ? 0 : 1;
+    if (sw.frozen[i] ? d > 4 : d < 1.8) sw.setFrozen(i, !sw.frozen[i]);
     sw.setTarget(i, sx, sw.hubY[i], sz, 0.3);
   }
 

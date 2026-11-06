@@ -16,8 +16,9 @@ import { ROBOT_TEAR_DEFAULTS } from "../combat/robotTearFx";
 import { StriderField, type StriderFieldValues } from "../combat/striderField";
 import type { SwarmCamps, SwarmCampValues } from "./swarmCamps";
 import { hash4 } from "../world/pois";
+import { robotMult } from "./depth";
 
-export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 18, striderPackEvery: 25, striderCampMax: 2 };
+export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 30, striderPackEvery: 45, striderCampMax: 1 };
 export type StriderCampValues = typeof STRIDER_CAMP_DEFAULTS;
 const G = "Striders: in the field";
 export const STRIDER_CAMP_GROUP = G;
@@ -60,7 +61,9 @@ export class StriderCamps {
     for (const s of this.sf.pack.list) {
       if (!s.alive || s.frozen || out.length >= max) continue;
       const p = s.pos();
-      if (Math.hypot(p.x - x, p.z - z) <= r) out.push(new THREE.Vector3(p.x, s.up(5).y, p.z));
+      // At the disc, its centre mass (the turrets fire thin rays): up(5) was 5 sim m over the pelvis, ×1.7, so the guns
+      // aimed ~7 m over the disc and never hit (Keith 2026-11-06).
+      if (Math.hypot(p.x - x, p.z - z) <= r) out.push(s.head(new THREE.Vector3()));
     }
     return out;
   }
@@ -75,7 +78,7 @@ export class StriderCamps {
       let g = this.live.get(id);
       if (!g) {
         const every = Math.max(1, roam ? v.striderPackEvery : v.striderCampEvery);
-        const want = this.left.get(id) ?? Math.min(v.striderCampMax, Math.floor(n / every));
+        const want = this.left.get(id) ?? Math.min(v.striderCampMax, Math.floor(n / robotMult(v) / every));
         g = { members: [], awake, hp: 0, spawned: want > 0 };
         const seed = (hash4(id.length, id.charCodeAt(0) | 0, id.charCodeAt(id.length - 1) | 0, n + 17) >>> 0) / 4294967296;
         for (let k = 0; k < want; k++) {

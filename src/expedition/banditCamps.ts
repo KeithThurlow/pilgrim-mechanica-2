@@ -5,7 +5,7 @@
 // leash. Nothing here is drawn or stepped; it only answers "which camps are near here".
 import type { Param } from "../core/tweaks";
 import { hash4, rng, type PoiKind, type PoiPlacement } from "../world/pois";
-import { DEPTH_GROUP, scaled, type DangerFn } from "./depth";
+import { DEPTH_GROUP, banditMult, scaled, type DangerFn } from "./depth";
 
 export const BANDIT_DEFAULTS = {
   banditSeed: 5,
@@ -118,7 +118,7 @@ export class BanditField {
     if (roll >= Math.min(0.95, this.chanceOf(p.kind) * scaled(v.banditChanceFar, d))) return null;
     if (Math.hypot(p.x - this.start.x, p.z - this.start.z) < v.banditClear) return null;
     const lo = Math.min(v.banditMin, v.banditMax), hi = Math.max(v.banditMin, v.banditMax);
-    const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * (1 + v.banditTier * (p.tier - 1)) * scaled(v.banditSizeFar, d)));
+    const size = Math.max(1, Math.round((lo + (hi - lo) * r() * r()) * (1 + v.banditTier * (p.tier - 1)) * scaled(v.banditSizeFar, d) * banditMult(v)));
     const a = r() * Math.PI * 2, off = 14 + r() * 10;
     return {
       id: `bandit:${p.id}`, poi: p.id, kind: p.kind,

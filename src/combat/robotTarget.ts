@@ -72,7 +72,7 @@ export class RobotTarget implements Hittable, Owner {
   /** The robot a key names (burning and heat are per part, the glow per robot). */
   unitOf(key: number) { return key >> 5; }
   /** Chill (src/game/chill.ts): the robot moves at k of its speed, 0 frozen solid. */
-  slow(key: number, k: number) { this.swarm.pace[key >> 2] = k; }
+  slow(key: number, k: number) { this.swarm.setPace(this.unitOf(key), k); }
 
   private hp: V3 = { x: 0, y: 0, z: 0 }; private kn: V3 = { x: 0, y: 0, z: 0 };
   private tp: V3 = { x: 0, y: 0, z: 0 }; private ft: V3 = { x: 0, y: 0, z: 0 }; private lw: V3 = { x: 0, y: 0, z: 0 };

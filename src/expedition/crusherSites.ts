@@ -6,10 +6,11 @@
 // A share of the salvage POIs (crusherSiteChance, seeded by the POI's id; never fortresses, hubs or bare rock) have a
 // crusher grazing on them: it walks from spot to spot and eats them (a spot it eats is gone, the player's loss). It
 // goes for the mech only inside crusherHunt (shorter out here) and hurts at crusherSiteDamage of the lab's numbers.
-// Killing it: a red flare goes up from the wreck, every camp within crusherCallWake hears it, and with chance
+// Killing it: its core goes up a moment later in a massive blast (Keith 2026-11-06, src/combat/crusherField.ts; it was a
+// red flare column), every camp within crusherCallWake hears it, and with chance
 // crusherCall a swarm of crusherCallSize comes in from crusherCallFrom off, heading for the wreck.
 // Stood up within crusherSiteNear of the mech, taken off past crusherSiteFar (its health remembered); a dead one
-// stays dead. Ownership: host (crushers, salvage eaten, the call); the flare cosmetic.
+// stays dead. Ownership: host (crushers, salvage eaten, the call).
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Battlefield } from "../game/battlefield";
@@ -40,13 +41,13 @@ export const CRUSHER_SITE_PARAMS: Param[] = [
   { key: "crusherSiteDamage", label: "Damage (× the lab's)", min: 0, max: 2, step: 0.05, group: G, tip: "Out here it's a nuisance while you salvage, not a killer" },
   { key: "crusherSiteNear", label: "Stands up within (m)", min: 100, max: 1500, step: 10, group: G },
   { key: "crusherSiteFar", label: "Taken off past (m)", min: 150, max: 2000, step: 10, group: G },
-  { key: "crusherCall", label: "A kill calls a swarm (chance)", min: 0, max: 1, step: 0.01, group: G, tip: "Its death flare: kill it and the zone escalates" },
+  { key: "crusherCall", label: "A kill calls a swarm (chance)", min: 0, max: 1, step: 0.01, group: G, tip: "Its death blast: kill it and the zone escalates" },
   { key: "crusherCallSize", label: "The swarm it calls (robots)", min: 1, max: 150, step: 1, group: G },
   { key: "crusherCallFrom", label: "The swarm comes from (m off)", min: 40, max: 600, step: 5, group: G },
-  { key: "crusherCallWake", label: "Its flare wakes camps within (m)", min: 0, max: 1000, step: 10, group: G },
+  { key: "crusherCallWake", label: "Its blast wakes camps within (m)", min: 0, max: 1000, step: 10, group: G },
   ...CRUSHER_PARAMS,
 ];
-export const CRUSHER_SITE_TOPIC = { id: "crushers", label: "Crushers", groups: [G, "Crushers", "Crushers: maw", "Crushers: pincers", "Crushers: eating"] };
+export const CRUSHER_SITE_TOPIC = { id: "crushers", label: "Crushers", groups: [G, "Crushers", "Crushers: maw", "Crushers: pincers", "Crushers: eating", "Crushers: death"] };
 
 /** A crusher's site: a POI it grazes on. Not a fortress or hub, not bare rock. */
 export const crusherSiteKind = (p: PoiPlacement) => p.kind !== "fortress" && p.kind !== "hub" && p.kind !== "outcrop";
@@ -60,7 +61,6 @@ export function idShare(id: string, salt = 0): number {
 }
 
 interface Live { c: Crusher; poi: PoiPlacement }
-interface Flare { mesh: THREE.Mesh; t: number }
 
 export class CrusherSites {
   readonly cf: CrusherField;
@@ -72,9 +72,8 @@ export class CrusherSites {
   private food: (CrusherFood & { spot: SpotState })[] = [];
   private spotIds = new Map<string, number>();
   private scanT = 0;
-  private flares: Flare[] = [];
 
-  constructor(private v: CrusherSiteValues, bf: Battlefield, private scene: THREE.Scene, private field: DuneField, mech: MechUnit,
+  constructor(private v: CrusherSiteValues, bf: Battlefield, scene: THREE.Scene, private field: DuneField, mech: MechUnit,
     private sites: FieldSites, private swarms: SwarmCamps, shake?: (k: number) => void) {
     this.cf = new CrusherField(v, bf, scene, field, mech, shake, 11, false);
     this.cf.onAte = (food) => {
@@ -90,8 +89,6 @@ export class CrusherSites {
   reset() {
     for (const l of this.live.values()) this.cf.remove(l.c);
     this.live.clear(); this.health.clear(); this.dead.clear();
-    for (const f of this.flares) this.scene.remove(f.mesh);
-    this.flares = [];
   }
 
   /** Mech radar contacts (big robots). */
@@ -123,12 +120,6 @@ export class CrusherSites {
       this.food.push({ id, x: s.x, y: this.field.height(s.x, s.z) + s.h, z: s.z, spot: s });
     }
     this.cf.update(dt, hunting ? prey : null, this.food);
-    for (const f of [...this.flares]) {
-      f.t -= dt;
-      (f.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, Math.min(1, f.t / 2)) * (0.7 + Math.random() * 0.3);
-      f.mesh.scale.x = f.mesh.scale.z = 1 + Math.sin(f.t * 9) * 0.15;
-      if (f.t <= 0) { this.scene.remove(f.mesh); this.flares.splice(this.flares.indexOf(f), 1); }
-    }
   }
 
   /** The nearest site with a crusher on it (alive or not yet stood up) within r of (x, z), or null (the lab's ?crusher). */
@@ -162,7 +153,7 @@ export class CrusherSites {
     }
   }
 
-  /** A kill: the flare, camps woken, and (likely) a swarm called to the wreck. */
+  /** A kill (when its core went up): camps woken, and (likely) a swarm called to the wreck. */
   private died(c: Crusher) {
     const v = this.v;
     let site: string | null = null;
@@ -170,7 +161,7 @@ export class CrusherSites {
     if (!site) return;
     this.live.delete(site);
     this.dead.add(site);
-    this.flare(c.x, c.bodyY, c.z);
+    // Keith 2026-11-06: the death blast is the signal now (src/combat/crusherField.ts); the red flare column is gone.
     if (v.crusherCallWake > 0) this.swarms.noise(c.x, c.z, v.crusherCallWake);
     if (idShare(site, 31) < v.crusherCall) {
       const a = idShare(site, 53) * Math.PI * 2, d = v.crusherCallFrom;
@@ -179,14 +170,5 @@ export class CrusherSites {
     }
   }
 
-  private flare(x: number, y: number, z: number) {
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-    const mesh = new THREE.Mesh(FLARE, mat);
-    mesh.position.set(x, y, z);
-    this.scene.add(mesh);
-    this.flares.push({ mesh, t: 8 });
-  }
 }
 
-/** The death flare: a tall thin red column (90 m). */
-const FLARE = new THREE.CylinderGeometry(0.35, 0.8, 90, 8, 1, true).translate(0, 45, 0);
