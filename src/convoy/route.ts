@@ -18,9 +18,9 @@ import type { GroundModifier, ModifierSample } from "../world/terrain";
 import { Wake, WAKE_DEFAULTS, WAKE_PARAMS, sweepTan, roadHalf, type WakeGround, type Berm } from "./wake";
 
 export const ROUTE_DEFAULTS = {
-  convoySpeed: 3.3,
+  convoySpeed: 2.2,
   convoyHeading: 0,
-  convoyTurn: 2,
+  convoyTurn: 1.33,
   convoyWander: 12,
   convoyWanderLength: 600,
   routeHalfWidth: 11,

@@ -239,7 +239,8 @@ function world(v = V) {
   addModifier(both, pads);
   const padsOnly = new DuneField(V);
   padsOnly.modifier = new PoiPads(pois);
-  for (let k = 0; k < 600; k++) { r1.update(0.5); r2.update(0.5); }
+  // Drive until the road is cut well past the samples below (s up to 1000), whatever the convoy speed.
+  for (let k = 0, n = Math.ceil(1100 / Math.max(0.5, V.convoySpeed) / 0.5); k < n; k++) { r1.update(0.5); r2.update(0.5); }
   let diffRoad = 0, diffPad = 0, nRoad = 0, nPad = 0, bad = 0;
   const tmp: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
   for (let z = -300; z <= 1300; z += 2.3) for (let x = -200; x <= 200; x += 2.3) {

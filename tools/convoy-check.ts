@@ -686,7 +686,9 @@ for (const mode of ["walk", "run", "dash", "sprint"] as const) for (const side o
   if (v0.out < w.V.deckStepOff - 0.01) fail(`${tag}: pushed off at only ${v0.out.toFixed(1)} m/s`);
   if (minFeet < -0.05) fail(`${tag}: feet ${(-minFeet).toFixed(2)} m into the sand while falling`);
   if (worstFoot > 0.05) fail(`${tag}: planted feet ${worstFoot.toFixed(2)} m off the sand after landing`);
-  if (Math.abs(hips - w.V.hipHeight) > 0.4) fail(`${tag}: hips ${hips.toFixed(2)} m over the sand 2 s (sprint: 4 s) after landing`);
+  // Standing on a steep berm face (a sprint lands 25 m out, past the road's edge) the legs straddle it and the hips sit lower.
+  const landSlope = slope(w.field, w.sim.pos.x, w.sim.pos.z), hipTol = landSlope > 30 ? 0.7 : 0.4;
+  if (Math.abs(hips - w.V.hipHeight) > hipTol) fail(`${tag}: hips ${hips.toFixed(2)} m over the sand 2 s (sprint: 4 s) after landing (slope ${landSlope.toFixed(0)}°)`);
   if (over > 60) fail(`${tag}: legs overreached ${over} frames`);
   for (const q of w.convoy.platforms) if (q.pushOut(w.sim.pos.x, w.sim.pos.z, 1.5)) fail(`${tag}: landed in the ${q.spec.name}'s footprint`);
   if (launches !== 1 || exp.state !== "out") fail(`${tag}: expedition launched ${launches} times (state ${exp.state})`);
@@ -843,7 +845,7 @@ for (const lanes of [1, 2]) {
   for (let i = 0; i < frames; i++) {
     const t = i * DT;
     if (Math.abs(t - 30) < DT / 2) w.V.convoyHeading = 60;
-    if (Math.abs(t - 90) < DT / 2) { w.V.convoyHeading = -30; w.V.convoySpeed = 5.5; }
+    if (Math.abs(t - 90) < DT / 2) { w.V.convoyHeading = -30; w.V.convoySpeed = ROUTE_DEFAULTS.convoySpeed * 5 / 3; } // a speed-up of two thirds (was 3.3 to 5.5)
     w.convoy.update(DT);
     // The mech: beside the bay on the left for the first minute, then standing on the first escort's line ahead of
     // it, then on the second one's (the other side).
