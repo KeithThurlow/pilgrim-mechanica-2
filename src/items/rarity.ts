@@ -1,8 +1,9 @@
-// Rarity (Keith 2026-10-25): five tiers, Common to Legendary, with 0-4 Protocol sockets. Rarer items roll wilder:
+// Rarity (Keith 2026-10-25): five tiers, Common to Legendary; Keith 2026-11-06 asked for a red tier above Legendary (Mythic, a
+// placeholder name), six in all, with 0-4 Protocol sockets. Rarer items roll wilder:
 // each tier widens a stat's range both ways (stronger, but not always better) and lifts its middle a little toward
 // better. How much is tuning (LOOT_PARAMS in generate.ts).
 
-export const RARITIES = ["common", "uncommon", "rare", "epic", "legendary"] as const;
+export const RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "mythic"] as const;
 export type Rarity = (typeof RARITIES)[number];
 
 export interface RarityInfo {
@@ -18,9 +19,10 @@ export const RARITY: Record<Rarity, RarityInfo> = {
   rare: { name: "Rare", color: "#5aa8f0", sockets: 2 },
   epic: { name: "Epic", color: "#b979f0", sockets: 3 },
   legendary: { name: "Legendary", color: "#f0a43a", sockets: 4 },
+  mythic: { name: "Mythic", color: "#ff3b3b", sockets: 5 },
 };
 
-/** 0 for Common up to 4 for Legendary. */
+/** 0 for Common up to 5 for Mythic. */
 export const tierOf = (r: Rarity) => RARITIES.indexOf(r);
 
 export interface WidenTuning {

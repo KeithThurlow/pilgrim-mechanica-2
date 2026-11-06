@@ -317,6 +317,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Loot rarer, and a red Mythic tier above Legendary (Keith asked; Claude on `claude/project-thread-brfzo0`)
+Rarity weights now steep (common 60, uncommon 24, rare 8, epic 2, legendary 0.4, mythic 0.06; was 50/28/14/6/2); drop counts down (`dropSpot` 0.3→0.2, `dropPerThreat` 1→0.65). New tier `mythic` (red #ff3b3b, 5 sockets, scrap value ×98); name is a placeholder for Keith. Files: `src/items/rarity.ts`, `generate.ts`, `src/expedition/drops.ts`, `src/audio/lootSound.ts` (Mythic volume slider; plays the Legendary riff), `tools/loadout-check.ts`. Checked: `npm test` (loadout-check updated for 6 tiers). Try `convoy?out&drop=all`.
+
 ### 2026-11-06 · Sim worker step 3: the escorts drive in the worker (Keith approved the plan; Claude on `claude/project-thread-2assf4`)
 - New `src/sim/escortsRemote.ts` (worker side `EscortsWorker`: the group, moved summed, `snapshot()`; main side `escortsRemote(rec)`, `applyEscorts`, `convoyPoses`). `src/sim/groundEvents.ts`: `convoy(c)` (taps reset/jump/update; route.update now replays inside them), `command(t, m, a)`. `src/sim/groundMirror.ts`: the worker's `convoy` and `escorts`. `src/convoy/escort.ts`: `remote`, `invalidate`, `makeEscort`. Frame answers carry the snapshot and the convoy poses; the HUD line shows escorts and the convoy parity. `labs/convoy/main.ts`: wired (with `?noworker` all as before).
 - Checked: `tools/escortworker-check.ts`: 90 s of driving with the mech weaving through the escorts, a guardian, blasts, count changes, a jump: every escort's pose and wheels equal the main thread's bit for bit, convoy poses equal; a missed step is caught. Escorts cost ~1 ms a frame headless, now off the main thread. `npm test` passes.
