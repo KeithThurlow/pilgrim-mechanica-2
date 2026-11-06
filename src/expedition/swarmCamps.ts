@@ -9,6 +9,7 @@ import { robotFootfall } from "../combat/robotPrints";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
+import { shareK } from "./depth";
 import { type RobotShares, RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
 import { RobotsDraw } from "../combat/robotsDraw";
 import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotLegLost, fireRobotPulse, robotDeathSound } from "../game/robotBeam";
@@ -130,7 +131,7 @@ export class SwarmCamps {
       if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
       const n = this.left.get(c.id) ?? c.size;
       if (n <= 0) continue;
-      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: v.robotMidShare + c.mid, big: v.robotBigShare + c.big, bigMin: c.bigs } : undefined, this.power?.(c.x, c.z) ?? 1);
+      const slots = sw.spawn(n, c.x, c.z, c.radius, c.danger > 0 ? { mid: (v.robotMidShare + c.mid) * shareK(v), big: (v.robotBigShare + c.big) * shareK(v), bigMin: c.bigs } : undefined, this.power?.(c.x, c.z) ?? 1);
       for (const i of slots) sw.frozen[i] = 1;
       const hurt = this.hurt.get(c.id) ?? 0;
       if (hurt > 0) for (const i of slots) sw.hp[i] *= 1 - hurt;
@@ -301,7 +302,7 @@ export class SwarmCamps {
         this.abstracts.set(id, g);
       }
       g.count = n;
-      g.power = robotPower(f, n, this.v.robotMidShare + c.mid, this.v.robotBigShare + c.big) * (1 - (this.hurt.get(c.id) ?? 0));
+      g.power = robotPower(f, n, (this.v.robotMidShare + c.mid) * shareK(this.v), (this.v.robotBigShare + c.big) * shareK(this.v)) * (1 - (this.hurt.get(c.id) ?? 0));
       out.push(g);
     }
   }

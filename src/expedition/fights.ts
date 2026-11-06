@@ -12,6 +12,7 @@ import { hash4, type PoiPlacement } from "../world/pois";
 import { SiteBuilder, type PoiSite } from "../pois/site";
 import type { CarKind } from "../vehicles/car";
 import type { ThreatField } from "./threats";
+import { shareK } from "./depth";
 import { FACTION, robotPower, newClash, sideOf, stepClash, survivors, type AbstractGroup, type Clash, type FactionValues, type Relations, type Side } from "../game/factions";
 
 export interface ClashEvent {
@@ -162,7 +163,7 @@ export function packSource(threats: ThreatField, f: FactionValues, shares: { rob
         cache.set(p.id, g);
       }
       g.x = p.x; g.z = p.z; g.count = p.n;
-      g.power = robotPower(f, p.n, shares.robotMidShare + p.mid, shares.robotBigShare + p.big) * (1 - (p.hurt ?? 0));
+      g.power = robotPower(f, p.n, (shares.robotMidShare + p.mid) * shareK(shares), (shares.robotBigShare + p.big) * shareK(shares)) * (1 - (p.hurt ?? 0));
       out.push(g);
     }
   };
