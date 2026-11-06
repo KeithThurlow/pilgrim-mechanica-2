@@ -19,13 +19,15 @@ import { POI_DEFAULTS, PoiField, type PoiPlacement } from "../src/world/pois";
 import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
-import { SiegeWalls, isSiege, wallHeight, fenced, routeVia } from "../src/pois/fortressGround";
+import { SiegeWalls, isSiege, wallHeight, wallMetal, fenced, routeVia, regionOf } from "../src/pois/fortressGround";
 import { ringR, type Layout } from "../src/pois/fortress";
 import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import * as THREE from "three/webgpu";
 import { Gates, GATE_DEFAULTS, type GateEvent } from "../src/pois/gates";
+import { armourHit } from "../src/game/armour";
+import { BASE_BY_ID } from "../src/items/bases";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DEAD } from "../src/combat/infantry";
 import { Fortresses, FORT_LIFE_DEFAULTS } from "../src/expedition/fortresses";
 import { Hubs, HUB_LIFE_DEFAULTS, type HubEvent } from "../src/expedition/hubs";
@@ -110,6 +112,10 @@ for (const p of sieges.slice(0, 6)) {
       if (smoothAt(ring, a)) continue;
       const sx = Math.sin(a), sz = Math.cos(a), R = ringR(ring, a);
       const top = w.field.height(p.x + sx * R, p.z + sz * R) - floor(p.x + sx * R, p.z + sz * R);
+      // Rounds ring on the containers and puff on the sand banked against them.
+      if (!wallMetal(L, p.x + sx * R, p.z + sz * R, w.walls.down) || !w.field.metalAt(p.x + sx * R, p.z + sz * R)) fail(`${p.id}: a container at ${R.toFixed(0)} m is not metal to rounds`);
+      const dr = R + ring.top + ring.face + ring.driftW * 0.5;
+      if (ring.drift > 0 && wallMetal(L, p.x + sx * dr, p.z + sz * dr, w.walls.down)) fail(`${p.id}: the drift at ${dr.toFixed(0)} m is metal to rounds`);
       if (top < ring.h * 0.95) { fail(`${p.id}: ring at ${R.toFixed(0)} m only ${top.toFixed(1)} m high at ${(a * 57.3).toFixed(0)} deg`); break; }
       // The container face: the rise from the drift at its foot to the top, over the face's width, either side (the
       // least of the two sides counts).
@@ -142,7 +148,7 @@ for (const p of sieges.slice(0, 6)) {
   for (let k = 0; k <= L.rings.length; k++) {
     const can = flood(w.field, L);
     // Everything inside ring k (k < count) must be out of reach while ring k's gates stand.
-    if (k < L.rings.length && L.rings[k].gates.some((g) => g.barred)) {
+    if (k < L.rings.length && L.rings[k].gates.every((g) => g.barred)) {
       for (let t = 0; t < 40; t++) {
         const a = t * 2.4, d = (ringR(L.rings[k], a) - L.rings[k].top - L.rings[k].face - 2) * Math.sqrt((t + 0.5) / 40);
         const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
@@ -203,7 +209,8 @@ console.log(`walls: ${rings} rings, ${gatesTried} gates, ${shapes.size} shapes (
 const fort = sieges.find((p) => p.kind === "fortress")!;
 {
   const L = w.walls.layout(fort), ring = L.rings[0], g = ring.gates[0];
-  const floor = w.field.height(fort.x, fort.z) - wallHeight(L, fort.x, fort.z, w.walls.down);
+  // The ground rolls: the floor at the gate (as the glue takes it).
+  const floor = w.field.height(g.x, g.z) - wallHeight(L, g.x, g.z, w.walls.down);
   const gates = new Gates({ ...GATE_DEFAULTS }, 2);
   const s = gates.add(fort.id, g, ring, floor);
   const events: GateEvent[] = [];
@@ -230,13 +237,20 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   if (downs !== 1 || events.filter((e) => e.type === "gateDown").length !== 1) fail(`gateDown fired ${downs} times`);
   if (gates.hitRay(o, d, 100) >= 0) fail("a downed gate still stops rounds");
   if (!w.walls.down.has(g.id)) fail("gateDown didn't open the gap");
-  const gap = w.field.height(g.x, g.z) - floor;
+  const gap = w.field.height(g.x, g.z) - s.floor;
   if (Math.abs(gap) > 0.3) fail(`a downed gate's gap is ${gap.toFixed(2)} m off the floor`);
   // A fresh gate: a blast next to it wears it.
   const s2 = gates.add(fort.id, ring.gates[ring.gates.length - 1], ring, floor);
   const n = gates.splash(new THREE.Vector3(s2.gate.x + ux * 3, floor + 2, s2.gate.z + uz * 3), 6, 200, d, { blast: true });
   if (n !== 1 || s2.hp >= s2.max) fail(`a blast beside a gate hit ${n} gates, health ${s2.hp}/${s2.max}`);
   console.log(`gates: a round meets the slab at ${hit.toFixed(1)} m (sand at ${sand < 0 ? "-" : sand.toFixed(1)} m) · down after ${rounds} rounds of 9 (${s.max} hp, armour ${GATE_DEFAULTS.gateArmour}) · one gateDown · the gap at the floor (${gap.toFixed(2)} m)`);
+  // Breach time (Keith 2026-11-05: walls took too long): two base miniguns on one gate, per ring inward.
+  const mg = BASE_BY_ID["mg-medium"].stats, perRound = armourHit(mg.damage.base, GATE_DEFAULTS.gateArmour, mg.ap.base);
+  const dps = 2 * mg.fireRate.base * perRound;
+  const times = [0, 1, 2].map((r) => GATE_DEFAULTS.gateHp * (1 + GATE_DEFAULTS.gateRingHp * r) / dps);
+  if (times[0] < 3 || times[0] > 10) fail(`two miniguns take ${times[0].toFixed(1)} s on an outer gate (want 3 to 10)`);
+  if (times[2] > 15) fail(`two miniguns take ${times[2].toFixed(1)} s on a keep gate (want under 15)`);
+  console.log(`gates: two miniguns (${dps.toFixed(0)} dps through armour) break the rings' gates in ${times.map((t) => t.toFixed(1)).join(" / ")} s; blasts ×${GATE_DEFAULTS.gateBlast}`);
   w.walls.down.clear();
 }
 
@@ -280,9 +294,10 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   const T2 = { x: fort.x + Math.sin(g.a) * (ringR(ring, g.a) + 40), y: 0, z: fort.z + Math.cos(g.a) * (ringR(ring, g.a) + 40), radius: 2.5 };
   T2.y = w.field.height(T2.x, T2.z) + 3;
   let through = 0;
-  // The glue's routing (routeVia): round the yard to the open gate, through it, then at the mech.
+  // The glue's routing (routeVia): round the yard to the open gate (round the shacks), through it, then at the mech;
+  // the town's yards are wide (the outer wall about 120 m out), so they get 100 s.
   let worstWait = 0;
-  for (let t = 0; t < 60 * 60; t++) {
+  for (let t = 0; t < 100 * 60; t++) {
     for (const i of yard) {
       if (sw.state[i] >= DEAD) continue;
       const via = routeVia(L, sw.px[i], sw.pz[i], T2.x, T2.z, w.walls.down);
@@ -293,7 +308,7 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
   }
   for (const i of yard) if (sw.state[i] < DEAD && outside(i)) through++;
   w.walls.down.clear();
-  if (through < 36) fail(`with a gate down only ${through} of 40 came round and out through it in 60 s`);
+  if (through < 36) fail(`with a gate down only ${through} of 40 came round and out through it in 100 s`);
   console.log(`fence: 40 bandits held in the yard for 30 s (${out} out, ${climbed} on the wall), sentries kept to the wall's top (moved up to ${sentryMoved.toFixed(2)} m) · a gate down: ${through} of 40 came round and out through it${worstWait ? ` (all out by ${worstWait.toFixed(0)} s)` : ""}`);
 }
 
@@ -361,6 +376,84 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
     const want = live.yards.filter((y) => y.state === "alert").reduce((n, y) => n + F.aliveIn(fp.id, y.k), 0);
     if (!pts.length || pts.length !== want) fail(`alert garrison: ${pts.length} turret threats, ${want} bandits alive in alert yards`);
     console.log(`fortress threats: asleep 0, alert ${pts.length}`);
+    // ---- 7. spawner shacks: alert, waves pour out of their doors; shot down, nobody comes out of them again ----
+    const L = live.L, poured: { x: number; z: number; id: string }[] = [];
+    if (!L.spawners.length) fail("a fortress with no spawner shacks");
+    for (let k = 0; k < L.rings.length - 1; k++) if (!L.spawners.some((q) => q.yard === k)) fail(`no spawner in yard ${k}`);
+    for (const q of L.spawners) {
+      const b = L.blocks[q.block];
+      const out = (m: number) => wallHeight(L, q.x + Math.sin(q.a) * m, q.z + Math.cos(q.a) * m, wd.walls.down);
+      if (out(-1) < b.h * 0.8) fail(`${q.id}: its door isn't on its shack's face`);
+      if (out(3) > 0.7) fail(`${q.id}: its door opens onto something solid (${out(3).toFixed(2)} m)`);
+    }
+    const pourOrig = F.spawners.onPour!;
+    F.spawners.onPour = (sp, x, z, a) => { poured.push({ x, z, id: sp.sp.id }); pourOrig(sp, x, z, a); };
+    for (let k = 0; k < 30 * 8; k++) F.update(1 / 30, true);
+    const first = poured.length;
+    if (first < Math.floor(FORT_LIFE_DEFAULTS.fortWave * (1 - FORT_LIFE_DEFAULTS.fortGateShare))) fail(`alert, only ${first} bandits poured out of the spawners in 8 s`);
+    for (const q of poured) {
+      const sp = L.spawners.find((s) => s.id === q.id)!;
+      if (Math.hypot(q.x - sp.x, q.z - sp.z) > 2.5) fail(`a bandit came out ${Math.hypot(q.x - sp.x, q.z - sp.z).toFixed(1)} m from its door`);
+      if (wallHeight(L, q.x, q.z, wd.walls.down) > 0.7) { fail("a bandit came out on top of something"); break; }
+    }
+    // ---- 8. lookout towers: crews on top; alert, the grenadiers and rocketeers lob at the mech; shot down, the stack
+    // leaves the ground and the crew dies ----
+    {
+      if (!L.towers.length) fail("a fortress with no lookout towers");
+      const lobs: number[] = [];
+      const bfl = bf as unknown as { lob: (...a: unknown[]) => unknown };
+      bfl.lob = (...a: unknown[]) => { lobs.push(Math.hypot((a[2] as number) - pel.x, (a[3] as number) - pel.z)); return any; };
+      // Stand the mech 30 m off the first tower with a bomb-thrower or rocketeer (outside, if the tower's in the outer yard).
+      const t0 = F.towers.list.find((t) => t.crew.some((c) => c.kind !== "gun")) ?? F.towers.list[0];
+      const top = t0 ? wd.field.height(t0.b.x, t0.b.z) - t0.floor : 0;
+      if (t0 && top < t0.t.h * 0.9) fail(`a tower stands only ${top.toFixed(1)} m (${t0.t.h.toFixed(1)})`);
+      const crewUp = t0 ? t0.crew.every((c) => F.sw.py[c.i] - t0.floor > t0.t.h * 0.9) : false;
+      if (t0 && !crewUp) fail("a tower's crew isn't up on top");
+      const keepP = pel.clone();
+      if (t0) { pel.set(t0.b.x + 30, wd.field.height(t0.b.x + 30, t0.b.z), t0.b.z); for (const y of live.yards) (F as unknown as { alarm(f: unknown, y: unknown): void }).alarm(live, y); }
+      for (let k = 0; k < 30 * 12; k++) F.update(1 / 30, true);
+      const special = t0?.crew.filter((c) => c.kind !== "gun").length ?? 0;
+      if (special && !lobs.length) fail("a tower's grenadier or rocketeer never fired in 12 s");
+      if (lobs.some((d) => d > 0.5)) fail("a tower shot landed off the mech");
+      // Down: off the ground, crew dead.
+      let tdowns = 0;
+      F.onTower = (e) => { if (e.type === "towerDown") tdowns++; };
+      if (t0) { for (let n = 0; n < 500 && !t0.down; n++) F.towers.hurt(t0, 100); F.towers.hurt(t0, 100); }
+      const after = t0 ? wd.field.height(t0.b.x, t0.b.z) - t0.floor : 0;
+      const crewDead = t0 ? t0.crew.every((c) => F.sw.gen[c.i] !== c.gen || F.sw.state[c.i] >= DEAD - 1) : true;
+      if (t0 && (tdowns !== 1 || after > 1)) fail(`tower down: ${tdowns} towerDown, ${after.toFixed(1)} m of it still in the ground`);
+      if (!crewDead) fail("a toppled tower's crew lived");
+      pel.copy(keepP);
+      console.log(`towers: ${L.towers.length}, top ${top.toFixed(1)} m, crew ${t0?.crew.map((c) => c.kind).join("+")} up there · alert: ${lobs.length} shots at the mech 30 m off in 12 s · shot down: one towerDown, gone from the ground (${after.toFixed(2)} m), crew down`);
+    }
+    // Shoot every spawner down: one spawnerDown each, and no more pour.
+    let downs = 0;
+    F.onSpawner = (e) => { if (e.type === "spawnerDown") downs++; };
+    for (const st of F.spawners.list) for (let n = 0; n < 200 && !st.down; n++) F.spawners.hurt(st, 100);
+    F.spawners.hurt(F.spawners.list[0], 100);
+    const before = poured.length;
+    for (let k = 0; k < 30 * 40; k++) F.update(1 / 30, true);
+    if (downs !== F.spawners.list.length) fail(`spawnerDown fired ${downs} times for ${F.spawners.list.length} spawners`);
+    if (poured.length !== before) fail(`${poured.length - before} poured out of shot-down spawners`);
+    console.log(`spawners: ${L.spawners.length} (every yard), doors on their faces onto open ground · alert: ${first} out of the doors in 8 s · all shot down: ${downs} downs, none out after`);
+    // ---- 9. gate surges: a wave streams out through the open gate nearest the mech (Keith 2026-11-06); with the
+    // spawners all down, the whole wave ----
+    {
+      const g = L.rings[0].gates[0];
+      wd.walls.down.add(g.id);
+      const ox = g.x - live.L.x, oz = g.z - live.L.z, ol = Math.hypot(ox, oz);
+      pel.set(g.x + (ox / ol) * 40, 0, g.z + (oz / ol) * 40); pel.y = wd.field.height(pel.x, pel.z) + 3;
+      const lf = live as unknown as { wave: number; waved: number };
+      lf.wave = 0; lf.waved = 0;
+      const y0 = live.yards[0], had = y0.slots.length;
+      for (let k = 0; k < 30 * 4; k++) F.update(1 / 30, true);
+      const fresh = y0.slots.slice(had), gens = y0.gens.slice(had);
+      if (fresh.length < FORT_LIFE_DEFAULTS.fortWave) fail(`a gate surge brought ${fresh.length} in 4 s (want ${FORT_LIFE_DEFAULTS.fortWave})`);
+      for (let k = 0; k < 30 * 16; k++) F.update(1 / 30, true);
+      const out = fresh.filter((i, n) => F.sw.gen[i] === gens[n] && regionOf(live.L, F.sw.px[i], F.sw.pz[i]) === 0).length;
+      if (out < fresh.length / 3) fail(`only ${out} of ${fresh.length} from a gate surge came out of the gate in 16 s`);
+      console.log(`gate surge: ${fresh.length} through the blown gate in 4 s, ${out} out on the sand after 20 s`);
+    }
   }
 }
 

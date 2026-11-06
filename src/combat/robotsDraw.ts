@@ -104,13 +104,26 @@ export class RobotsDraw {
   /** Chill (src/game/chill.ts): each robot's chill 0..1 by index, 2 when frozen solid. */
   chillMap: (() => ReadonlyMap<number, number> | null) | null = null;
   private cm: ReadonlyMap<number, number> | null = null;
-  private static ICY = new THREE.Color(0.55, 0.85, 1.25);
-  private static FROZEN = new THREE.Color(1.05, 1.25, 1.45);
+  /** Chill and freezing › Frozen look: how strongly chilled and frozen bodies frost over (0 off). */
+  frostLook = 1;
+  // Keith's render pass (2026-11-05): white plate going to ice white read as no change. Chilled now goes a clear pale
+  // blue, frozen solid a deep glacier blue (darker and bluer than any plate), with a pale glint running over it.
+  private static ICY = new THREE.Color(0.42, 0.68, 1.15);
+  private static FROZEN = new THREE.Color(0.16, 0.48, 1.0);
+  private static GLINT = new THREE.Color(0.75, 0.95, 1.3);
   /** Tint a body's colour toward red, then orange-white, by its heat. */
   private heatTint(i: number, c: THREE.Color) {
     const ch = this.cm?.get(i) ?? 0;
     // Chilled bodies frost over toward pale blue; frozen solid, near white ice.
-    if (ch > 0.02) c.lerp(ch >= 2 ? RobotsDraw.FROZEN : RobotsDraw.ICY, ch >= 2 ? 0.8 : Math.min(1, ch) * 0.6);
+    // Frozen ones go bright ice white-blue (over 1: they catch the light) with a slow glint running over them.
+    if (ch > 0.02 && this.frostLook > 0) {
+      const f = Math.min(1, this.frostLook);
+      if (ch >= 2) {
+        c.lerp(RobotsDraw.FROZEN, f * 0.9);
+        const g = Math.sin(this.time * 2.2 + i * 1.7);
+        if (g > 0.6) c.lerp(RobotsDraw.GLINT, f * (g - 0.6) * 1.2);
+      } else c.lerp(RobotsDraw.ICY, f * Math.min(1, ch) * 0.7);
+    }
     const h = this.hm?.get(i) ?? 0;
     if (h <= 0.01 || this.heatGlow <= 0) return;
     const k = Math.min(1, h * this.heatGlow);

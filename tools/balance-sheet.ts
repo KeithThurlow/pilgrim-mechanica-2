@@ -7,7 +7,7 @@
 //   npx tsx tools/balance-sheet.ts --check   exit 1 if a weapon is over 130% of its budget against its best set, or a
 //                                            behaviour Protocol's niche multiplier is outside ×1.1-1.5 (npm test)
 // Cadence (damage, rounds per shot, sustained shots/s over the magazine and reload) comes from src/items/dps.ts, the
-// The model itself lives in src/items/balanceModel.ts (shared with the weapon review lab, labs/weaponreview/).
+// The model itself lives in src/items/balanceModel.ts (shared with the weapons lab's review panel, labs/weapons/review.ts).
 import { BASE_BY_ID } from "../src/items/bases";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 import { INFANTRY_DEFAULTS } from "../src/combat/infantry";

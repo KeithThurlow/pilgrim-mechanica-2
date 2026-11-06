@@ -91,6 +91,8 @@ export interface MechWeapons {
   powerCut?(): boolean;
   /** A dash started along (x, z) (unit): a sword cut starting soon after, toward the aim, is a power cut. */
   dashed?(x: number, z: number): void;
+  /** A line weapon is aiming with the left button (armed by a tap, or dragging): the left gun doesn't fire on it. */
+  claimsClick?(): boolean;
   /** Weapons cold (death, hopping out, a round starting over): every trigger and key let go without firing, charges,
    *  paints, lasers and feed effects dropped. Rounds already in the air keep flying. */
   stop?(): void;
@@ -112,6 +114,7 @@ import type { HealTarget } from "../abilities/zones";
 import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, mechWreckSpec, mechWreckThrow, mechWreckThuds, seedOf, legPart, BODY, type MechPose } from "../physics/mechWreck";
 import { MechWreckRig } from "../physics/mechWreckDraw";
 import type { Dead } from "../physics/deaths";
+import { shotLine } from "../weapons/shotLine";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
@@ -233,6 +236,10 @@ export class MechUnit implements Hittable, Solid {
   dashHold = false;
   /** The shoulder weapon keys 1-4 held (hold to paint, release to fire). Set by the lab before step. */
   keys: [boolean, boolean, boolean, boolean] = [false, false, false, false];
+  /** The left mouse button down, raw (src/weapons/lineAim.ts): a line weapon armed by a tap takes it as its aim. */
+  click = false;
+  /** This mech's line weapons take click-and-drag aim (the player's; AIs only hold and release). Set by the lab. */
+  clickAim = false;
   /** The ground point under the cursor (null: none), and the soft lock, for weapons that paint or lead. */
   cursor: THREE.Vector3 | null = null;
   lock: TargetCandidate | null = null;
@@ -260,6 +267,7 @@ export class MechUnit implements Hittable, Solid {
   private shoulder = new THREE.Vector3();
   private muzzle = new THREE.Vector3();
   private dir = new THREE.Vector3();
+  private barrelDir = new THREE.Vector3();
   private eject = new THREE.Vector3();
   private a = new THREE.Vector3();
   private b = new THREE.Vector3();
@@ -421,6 +429,9 @@ export class MechUnit implements Hittable, Solid {
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
+    // A line weapon armed for click-and-drag (src/weapons/lineAim.ts) owns the left button: the left gun holds fire.
+    this.click = this.clickAim && triggerOf(trigger, 0);
+    if (this.click && this.weapons?.claimsClick?.()) trigger = [false, triggerOf(trigger, 1)];
     // A pilot in: the legs may flex now and then while it stands (the walker's idle).
     if (this.piloted && !cmd.idle) cmd = { ...cmd, idle: true };
     this.hurt = Math.max(0, this.hurt - dt * 400);
@@ -537,10 +548,10 @@ export class MechUnit implements Hittable, Solid {
       // ~2 m low at 20 m (Keith: "very hard to hit"). The barrel's heading stays the fallback with no aim.
       // A free arm while sprinting fires at the real aim, not the run's line.
       const at = this.armsFree[s === 1 ? 0 : 1] ? shotAt ?? want.aim : shotAt ?? aim;
-      if (at) {
-        const flat = Math.hypot(at.x - this.muzzle.x, at.z - this.muzzle.z);
-        if (flat > 1) this.dir.set(at.x - this.muzzle.x, at.y - this.muzzle.y, at.z - this.muzzle.z).normalize();
-      }
+      // Point blank (an enemy closer than a held gun's muzzle): the round starts further back along the barrel so it
+      // still flies outward, not back at the mech (Keith 2026-11-06: "negative knockback"; src/weapons/shotLine.ts).
+      this.barrelDir.copy(this.dir);
+      shotLine(this.muzzle, this.barrelDir, at ?? null, v.shotPullBack, this.muzzle, this.dir);
       if (this.player && !isFlameGun(own?.cls)) body.eject(s, this.eject);
       // Ignited rounds (Keith 2026-10-30): this side's feed has them loaded; what they hit burns.
       const special = this.weapons?.rounds?.(s) ?? null;

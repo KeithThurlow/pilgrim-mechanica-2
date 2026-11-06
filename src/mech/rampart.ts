@@ -9,6 +9,7 @@ import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { WalkerSim, LegPose } from "./walker";
 import type { UpperSim, UpperValues } from "./upper";
+import { armRoll } from "./upper";
 
 const UP = new THREE.Vector3(0, 1, 0);
 import type { WalkerValues } from "./walkerTuning";
@@ -744,16 +745,22 @@ export class RampartBody {
     // reach shortens so the fist sits by the chest, the gun still on the aim.
     const inward = -p.side * Math.sin(yaw) * cp;
     if (inward * reach > v.armCrossIn) reach = Math.max(v.armFore * 0.6, v.armCrossIn / inward);
-    const drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
+    let drop = v.armDropFront + (v.armDropSide - v.armDropFront) * s;
+    // Past side-on the arm rolls over (Keith 2026-11-06: "the elbow rolls up and then the wrist kind of almost inverts
+    // upside down"): bent, the elbow bending up instead of down, the forearm freer of the aim, the gun turned over on its
+    // barrel, so it tracks on round to nearly straight behind.
+    const roll = armRoll(p.side, yaw, v);
+    reach += (full * v.armReachBack - reach) * roll;
+    drop += (v.armDropBack - drop) * roll;
     // The arm's root out from the gun's shoulder point, as the sword's arm (a stub joins them).
     const o = this.tmp.o2.set(p.home.x + p.side * v.armShoulderOut, p.home.y, p.home.z);
     const hand = { x: o.x + Math.sin(yaw) * cp * reach, y: o.y - Math.sin(pitch) * reach - drop, z: o.z + Math.cos(yaw) * cp * reach };
-    const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * v.armPoleOut, y: -1, z: -v.armPoleBack });
+    const r = armIk(o, hand, v.armUpper, v.armFore, { x: p.side * (v.armPoleOut + (1 - v.armPoleOut) * roll), y: -1 + (v.armPoleUp + 1) * roll, z: -v.armPoleBack * (1 - roll) });
     // The forearm turned toward the aim, in line with the gun (Keith 2026-11-04: "the forearm just point a little more
     // towards the target... the elbows could come back"): the elbow is moved toward the point a forearm's length
     // behind the fist along the aim (armAlign of the way), kept an upper arm's length from the shoulder, and the fist
     // is put a forearm's length on from it, between the IK's forearm and the aim.
-    const fx = Math.sin(yaw) * cp, fy = -Math.sin(pitch), fz = Math.cos(yaw) * cp, k = v.armAlign;
+    const fx = Math.sin(yaw) * cp, fy = -Math.sin(pitch), fz = Math.cos(yaw) * cp, k = v.armAlign + (v.armAlignBack - v.armAlign) * roll;
     let ex = r.elbow.x + ((r.hand.x - fx * v.armFore) - r.elbow.x) * k, ey = r.elbow.y + ((r.hand.y - fy * v.armFore) - r.elbow.y) * k, ez = r.elbow.z + ((r.hand.z - fz * v.armFore) - r.elbow.z) * k;
     const eu = v.armUpper / Math.max(1e-6, Math.hypot(ex - o.x, ey - o.y, ez - o.z));
     ex = o.x + (ex - o.x) * eu; ey = o.y + (ey - o.y) * eu; ez = o.z + (ez - o.z) * eu;
@@ -771,7 +778,7 @@ export class RampartBody {
     const over = p.side * (o.x - r2.hand.x) - v.armCrossIn; // the align step can carry the fist a little further in
     if (over > 0) { r2.hand.x += p.side * over; r2.elbow.x += p.side * over; }
     p.yawPitch.position.set(r2.hand.x, r2.hand.y, r2.hand.z);
-    p.yawPitch.rotation.set(pitch, yaw, 0, "YXZ");
+    p.yawPitch.rotation.set(pitch, yaw, p.side * roll * v.armRollWrist * D, "YXZ");
     this.drawArm(p, o, r2, v.armShoulderOut > 0.02);
     // Where the gun sits in the fist and how big it draws, by kind: the minigun further back (its handle up by the
     // barrels), the SMG bigger.
@@ -845,7 +852,12 @@ export class RampartBody {
 
     // Hull: on the waist, turned to the torso's aim, pitched with the body, rolled only as much as it isn't kept level.
     // Leaning back (upper.lean) when the guns need more raise than they have.
-    t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + this.twist + upper.shake * Math.sin(performance.now() * 0.09), sim.hullRoll, "YXZ");
+    // A rolled-over arm (reaching back) leans the hull away from it, that shoulder up (Keith 2026-11-06: "if the torso
+    // leans over, most shoulders can accommodate that kind of rotation"). The arms aim in the hull's frame, so they
+    // stay on target.
+    let armLean = 0;
+    for (const p of this.pods) if (p.armShown && !p.held) armLean += p.side * armRoll(p.side, upper.guns[p.side === 1 ? 0 : 1].yaw, upper.v);
+    t.e.set(sim.bodyPitch - upper.lean, upper.torsoYaw + this.twist + upper.shake * Math.sin(performance.now() * 0.09), sim.hullRoll + armLean * upper.v.armRollLean * (Math.PI / 180), "YXZ");
     this.hull.quaternion.setFromEuler(t.e);
     // The hull stands as high above the hips as on its own model.
     t.v.copy(this.hullRest.Waist).sub(new THREE.Vector3(0, this.hullRest.Thigh_L.y, 0)).applyQuaternion(sim.pelvisQ);

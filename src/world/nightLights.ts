@@ -62,7 +62,7 @@ export const NIGHT_LIGHT_DEFAULTS = {
   lightFar: 160,
   // Rockets and clustering (Keith 2026-10-31)
   clusterRadius: 8,
-  clusterCurve: 0.5,
+  clusterCurve: 0.65, // merged lights keep more of their sum (was 0.5)
   clusterCap: 12000,
   clusterGrow: 0.6,
   flashPool: 1.2,
@@ -89,7 +89,7 @@ export const NIGHT_LIGHT_DEFAULTS = {
   telePrio: 1.5,
   // Tracers (Keith 2026-10-31: tracers light up to show a round's power; later the same day: "more but weaker lights")
   tracerShare: 1,
-  tracerLight: 240,
+  tracerLight: 320, // Keith 2026-11-05: more light from tracers (was 240)
   tracerSplit: 3,
   tracerPower: 0.6,
   tracerRef: 12,

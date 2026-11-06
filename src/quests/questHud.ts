@@ -14,6 +14,8 @@ export interface QuestHudFrame {
   lair: Lair | null;
   hvt: { name: string; health: number; level: number } | null;
   towing: boolean;
+  /** The convoy (its lead car): where carried pods and hulks go. */
+  home: { x: number; z: number };
   /** "Hold E: hook the hulk" and the like. */
   prompt: string;
 }
@@ -29,25 +31,28 @@ export class QuestHud {
 
   constructor(private el: HTMLElement) {}
 
+  /** Heading home with the goods (tow hooked, every pod aboard). */
+  private homing(c: Contract) { return c.carrying && (c.kind === "tow" || (c.kind === "pods" && c.have >= c.need)); }
+
   private goal(c: Contract): string {
     switch (c.kind) {
       case "salvage": return `strip ${c.label} ${c.have}/${c.need}`;
       case "cull": return `kill ${KILL_NAME[c.cull!]} at the ${c.label.toLowerCase()} ${c.have}/${c.need}`;
       case "bounty": return `kill ${c.label}`;
-      case "tow": return c.carrying ? "tow it to the crane" : "hook the downed Rampart (hold E)";
-      case "pods": return `pods ${c.have}/${c.need}${c.carrying ? " (at risk)" : ""}`;
+      case "tow": return c.carrying ? "tow it back to the convoy's crane" : "hook the downed Rampart (hold E)";
+      case "pods": return c.have >= c.need ? `all ${c.need} pods aboard: RETURN TO THE CONVOY (at risk until the crane has you)` : c.carrying ? `pods ${c.have}/${c.need} (at risk) · find the rest, then return to the convoy` : `pods ${c.have}/${c.need} · pick them up, then return to the convoy`;
     }
   }
 
   update(f: QuestHudFrame) {
     const b = f.board, lines: string[] = [];
-    const dist = (c: Contract) => {
+    const dist = (c: { x: number; z: number }) => {
       const dx = c.x - f.from.x, dz = c.z - f.from.z, d = Math.hypot(dx, dz);
       return d < 60 ? "here" : `${Math.round(d / 10) * 10} m ${compass(dx, dz)}`;
     };
     for (const c of b.list) {
       if (c.state === "offered") lines.push(`<div style="color:${GOLD}">▸ ${KIND_NAME[c.kind]} · ${dist(c)} · +${c.reward} <span style="color:${DIM}">J to accept (${Math.ceil(b.left(c))} s)</span></div>`);
-      else if (c.state === "active") lines.push(`<div>◆ <b style="color:${GREEN}">${KIND_NAME[c.kind]}</b> · ${this.goal(c)} · ${c.kind === "tow" && c.carrying ? "" : dist(c) + " · "}+${c.reward}</div>`);
+      else if (c.state === "active") lines.push(`<div>◆ <b style="color:${GREEN}">${KIND_NAME[c.kind]}</b> · ${this.goal(c)} · ${this.homing(c) ? `convoy ${dist(f.home)} · ` : dist(c) + " · "}+${c.reward}</div>`);
       else if (c.state === "done") lines.push(`<div style="color:${GOLD}">✓ ${KIND_NAME[c.kind]} done · +${c.reward} ${c.kind === "tow" || c.kind === "pods" ? "banked" : "at risk"}</div>`);
       else if (c.state === "failed") lines.push(`<div style="color:${RED}">✗ ${KIND_NAME[c.kind]} failed</div>`);
       else if (c.state === "dropped") lines.push(`<div style="color:${DIM}">✗ ${KIND_NAME[c.kind]} dropped</div>`);

@@ -93,7 +93,7 @@ export function loadoutFor(p: Pick): Loadout {
 
 /**
  * One weapon by its base id on the left side (a shoulder launcher on key 1), with these Protocols socketed (repeats
- * allowed, whatever its sockets): the weapon review lab's mech (labs/weaponreview/). Hull weapons on the left hull
+ * allowed, whatever its sockets): the weapons lab's reviewed weapon (labs/weapons/). Hull weapons on the left hull
  * mount, held ones in the left arm (a two-hander in both), launchers on the left shoulder. The right side keeps a
  * minigun (or an arm, for a two-hander), not fired by the review.
  */

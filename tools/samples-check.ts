@@ -9,6 +9,8 @@ import { SAMPLES, SAMPLE_DEFAULTS, SAMPLE_PARAMS, ALIEN_FIELDS, alienKey, sample
 import { cutVariants } from "../src/audio/sampleBank";
 import { addWeaponSounds } from "../src/weapons/weaponSound";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
+import { addFireSounds } from "../src/weapons/fire/fireGuns";
+import { ConvoySound, CONVOY_SOUND_DEFAULTS } from "../src/convoy/convoySound";
 import type { Sfx } from "../src/audio/sfx";
 
 let failed = 0;
@@ -35,6 +37,14 @@ const loud = matchLoudness(Float32Array.from(cut), 44100, 5, 12);
 ok(Math.max(...loud.map(Math.abs)) <= 0.981, "never past the ceiling");
 ok(mixUnder(cut, new Float32Array(50000), 0.5).length === 50000, "mix under lengthens to the longer");
 
+// A loop: as long as asked, and the wrap from its last sample to its first is no bigger than a step inside it.
+const tone = new Float32Array(sr * 3);
+for (let i = 0; i < tone.length; i++) tone[i] = 0.5 * Math.sin(2 * Math.PI * 97.3 * i / sr);
+const lp = cutSample(tone, sr, 44100, { start: 0.2, len: 1, fade: 0.3, rate: 1, lowpass: 20000, highpass: 20, loop: 0.3 });
+let step = 0; for (let i = 1; i < lp.length; i++) step = Math.max(step, Math.abs(lp[i] - lp[i - 1]));
+ok(lp.length === 44100, `loop length ${lp.length}`);
+ok(Math.abs(lp[0] - lp[lp.length - 1]) <= step * 1.5, "loop joins without a click");
+
 // The robot remix: every stage on at once stays finite and bounded, and does change the sound.
 const al = alienize(Float32Array.from(cut), 44100, { ring: 90, ringMix: 0.5, comb: 5, combFb: 0.9, sweepFrom: 3000, sweepTo: 100, sweepQ: 12, sweepMix: 0.8 });
 ok(al.every(Number.isFinite) && Math.max(...al.map(Math.abs)) < 50, "remix finite and bounded");
@@ -44,12 +54,12 @@ const same = alienize(Float32Array.from(cut), 44100, { ring: 0, ringMix: 0, comb
 ok(same.every((x, i) => x === cut[i]), "remix with every stage off leaves it alone");
 
 // The table: files present, sliders complete, sounds that exist.
-const procedural = readFileSync("src/weapons/weaponSound.ts", "utf8");
+const procedural = ["src/weapons/weaponSound.ts", "src/weapons/fire/fireGuns.ts", "src/convoy/convoySound.ts"].map((f) => readFileSync(f, "utf8")).join(" ");
 const keys = new Set(SAMPLE_PARAMS.map((p) => p.key));
 const D = SAMPLE_DEFAULTS as unknown as Record<string, number>;
 for (const d of SAMPLES) {
   ok(existsSync(`public/sounds/pixabay/${d.file}.mp3`), `${d.file}.mp3 in public/sounds/pixabay`);
-  for (const f of ["On", "Start", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const) ok(keys.has(sampleKey(d, f)) && Number.isFinite(D[sampleKey(d, f)]), `${d.id} ${f} slider`);
+  for (const f of ["On", "Start", "Step", "Len", "Fade", "Pitch", "Spread", "Lp", "Hp", "Gain", "Under"] as const) ok(keys.has(sampleKey(d, f)) && Number.isFinite(D[sampleKey(d, f)]), `${d.id} ${f} slider`);
   if (d.alien) for (const [f] of ALIEN_FIELDS) ok(keys.has(alienKey(d, f)) && Number.isFinite(D[alienKey(d, f)]), `${d.id} remix ${f} slider`);
   ok(procedural.includes(`addSound("${d.ref ?? d.sound}"`), `${d.id} matches a procedural sound (${d.ref ?? d.sound})`);
 }
@@ -59,8 +69,17 @@ let ff = true;
 try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); } catch { ff = false; }
 // The procedural sounds, generated as the game does, to match against.
 const proc = new Map<string, Float32Array[]>();
-const fake = { rate: 44100, onUpdate: [], addSound: (n: string, d: Float32Array[]) => proc.set(n, d) } as unknown as Sfx;
+const fake = { rate: 44100, onUpdate: [], addSound: (n: string, d: Float32Array[]) => proc.set(n, d), hasSound: (n: string) => proc.has(n) } as unknown as Sfx;
 addWeaponSounds(fake, WEAPON_DEFAULTS);
+addFireSounds({ sfx: fake }, WEAPON_DEFAULTS);
+new ConvoySound(fake, CONVOY_SOUND_DEFAULTS);
+// The sword's hit sounds: the smashes differ from each other, the ring sings on and dies away.
+const rms = (x: Float32Array, a: number, b: number) => { let s = 0; const i0 = Math.round(a * 44100), i1 = Math.min(x.length, Math.round(b * 44100)); for (let i = i0; i < i1; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, i1 - i0)); };
+const smashes = proc.get("swordSmash")!, rings = proc.get("swordRing")!;
+ok(smashes.length >= 10, `${smashes.length} smashes`);
+ok(new Set(smashes.map((x) => x.length)).size >= 5, "smashes differ in length");
+for (const x of smashes) ok(x.every(Number.isFinite) && Math.max(...x.map(Math.abs)) <= 1, "smash finite, under full scale");
+for (const x of rings) ok(rms(x, 0.5, 0.7) > rms(x, 0.02, 0.2) * 0.05 && rms(x, 0.5, 0.7) < rms(x, 0.02, 0.2) && Math.abs(x[x.length - 1]) < 0.01, "ring sings on and dies away");
 if (ff) {
   for (const d of SAMPLES) {
     const raw = execFileSync("ffmpeg", ["-v", "quiet", "-i", `public/sounds/pixabay/${d.file}.mp3`, "-ac", "1", "-ar", "44100", "-f", "f32le", "-"], { maxBuffer: 1 << 26 });
@@ -70,9 +89,17 @@ if (ff) {
     const vs = cutVariants(d, D, x, 44100, 44100, ref);
     const peak = Math.max(...vs.map((v) => v.reduce((a, s) => Math.max(a, Math.abs(s)), 0)));
     const lens = vs.map((v) => (v.length / 44100).toFixed(2)).join("/");
-    const punch = 20 * Math.log10(punchRms(vs[1], 44100) / refRms);
+    const punch = 20 * Math.log10(punchRms(vs[vs.length >> 1], 44100) / refRms);
     const refPeak = Math.max(...ref.map((v) => v.reduce((a, s) => Math.max(a, Math.abs(s)), 0)));
     ok(vs.every((v) => v.every(Number.isFinite)) && peak > 0.01 && peak <= 0.981, `${d.id} cut finite, audible, under full scale`);
+    // A loop's a real stretch of the recording: nowhere does it drop out, and it comes back round without a jump in level.
+    if (d.loop) {
+      const v = vs[0], w = 4410, e: number[] = [];
+      for (let i = 0; i + w <= v.length; i += w) { let s = 0; for (let j = i; j < i + w; j++) s += v[j] * v[j]; e.push(10 * Math.log10(s / w + 1e-12)); }
+      const hi = Math.max(...e), lo = Math.min(...e);
+      ok(hi - lo < 16, `${d.id} loop holds its level (${(hi - lo).toFixed(1)} dB swing)`);
+      ok(Math.abs(e[0] - e[e.length - 1]) < 8, `${d.id} loop level meets itself at the join`);
+    }
     console.log(`  ${d.id.padEnd(11)} ${(x.length / 44100).toFixed(2)} s recording → ${lens} s cuts · peak ${peak.toFixed(2)} (procedural ${refPeak.toFixed(2)}) · punch ${punch >= 0 ? "+" : ""}${punch.toFixed(1)} dB vs procedural`);
   }
 } else console.log("  (no ffmpeg: recordings not decoded)");

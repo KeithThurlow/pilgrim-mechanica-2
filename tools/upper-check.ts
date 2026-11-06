@@ -105,14 +105,18 @@ const run = (deg: number) => {
   }
   return { n, onAt, torso, yawL: (s.guns[0].yaw * 180) / Math.PI, yawR: (s.guns[1].yaw * 180) / Math.PI };
 };
-const side50 = run(70), behind = run(170);
+const side50 = run(70), behind = run(180), back = run(160), past = run(-175);
 if (side50.n[1] === 0) problems.push("sprinting: the left arm never fired at a target 70° out");
 if (side50.n[-1] > 0) problems.push("sprinting: the right arm fired 70° across its chest");
-if (behind.n[1] + behind.n[-1] > 0) problems.push("sprinting: an arm fired at a target behind");
+if (behind.n[1] + behind.n[-1] > 0) problems.push("sprinting: an arm fired at a target dead behind");
+// Keith 2026-11-06: past side-on the arm rolls over and tracks on round to runArmOut (170): a target 160° left is the
+// left arm's; one 5° past dead behind (on the right) leaves the left arm at its back limit, not swung round the front.
+if (back.n[1] === 0) problems.push("sprinting: the left arm never fired at a target 160° out");
+if (past.yawL < v.runArmOut - 15) problems.push(`sprinting: a target just past dead behind swung the left arm to ${past.yawL.toFixed(0)}° (want near its back limit)`);
 if (side50.torso > 1e-6) problems.push("sprinting: the torso turned off the run");
 if (side50.yawL > v.runArmOut + 1e-3 || side50.yawR > v.runArmIn + 1e-3) problems.push("sprinting: an arm swung past its arc");
 if (Math.abs(behind.yawL) > v.runArmOut + 1e-3 || Math.abs(behind.yawR) > v.runArmOut + 1e-3) problems.push("sprinting: an arm swung past its arc");
-console.log(`sprinting, target 70° left: left arm on target in ${side50.onAt.toFixed(2)} s, rounds L ${side50.n[1]} R ${side50.n[-1]} (arms at ${side50.yawL.toFixed(0)}° / ${side50.yawR.toFixed(0)}°) · behind: ${behind.n[1] + behind.n[-1]} rounds`);
+console.log(`sprinting, target 70° left: left arm on target in ${side50.onAt.toFixed(2)} s, rounds L ${side50.n[1]} R ${side50.n[-1]} (arms at ${side50.yawL.toFixed(0)}° / ${side50.yawR.toFixed(0)}°) · 160° left: rounds L ${back.n[1]} (arm at ${back.yawL.toFixed(0)}°) · dead behind: ${behind.n[1] + behind.n[-1]} rounds (arms at ${behind.yawL.toFixed(0)}° / ${behind.yawR.toFixed(0)}°) · 175° right: left arm at ${past.yawL.toFixed(0)}°`);
 const gap = Math.abs((restart[1] ?? 99) - (restart[-1] ?? 99));
 if (restart[1] === undefined || restart[-1] === undefined) problems.push("a gun never came back on target after the aim jumped");
 else if (gap < 0.02) problems.push(`both guns came back on target together (${(gap * 1000).toFixed(0)} ms apart)`);

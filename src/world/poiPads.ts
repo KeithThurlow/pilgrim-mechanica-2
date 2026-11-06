@@ -64,6 +64,11 @@ export function padAt(d: Pad, x: number, z: number, out: ModifierSample): boolea
   out.w = 1 - smooth(d.r, d.r + d.blend, dist);
   // floor = swell + lift: lift cancels the swell's plane under the pad so the floor stays at d.h.
   out.lift = d.h - (d.s0 + d.sx * dx + d.sz * dz + d.sxx * dx * dx + d.szz * dz * dz + d.sxz * dx * dz);
+  if (d.relief > 0) {
+    // A gentle rise toward the middle and two crossing rolls (pure: from the pad's own seeded waves).
+    const k = d.rk, ca = Math.cos(d.yaw), sa = Math.sin(d.yaw), u = dx * ca - dz * sa, v = dx * sa + dz * ca;
+    out.lift += d.relief * (0.7 * (1 - smooth(0, d.r + d.blend * 0.5, dist)) + 0.3 * Math.sin(u * k[0] + k[1]) * Math.cos(v * k[2] + k[3]));
+  }
   out.rough = d.rough;
   out.berm = 0;
   return true;

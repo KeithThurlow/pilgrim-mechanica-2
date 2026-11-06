@@ -7,7 +7,7 @@ import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 import { sampleBank, sampleBankOf } from "../audio/sampleBank";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
+export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "swordRing" | "bulletMetal" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -105,6 +105,48 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
       S.band(r, 0.12, 150, 2000, 0.4, 0.006, -80),
       S.delay(S.ring(r, 0.7, hz(BLOCK_BODY.slice(0, 5), f), 0.18, { attack: 0.01 }), 0.5 + r() * 0.04));
   }), () => v.swordLevel);
+  // The smash (Keith 2026-11-05: the smash in his reference video at 1:48, "swords hitting metal, hitting things"),
+  // synthetic, shaped on that clip (docs/decisions.md 2026-11-05): no ring and no tone to speak of, a flat wall of noise
+  // from 125 Hz up that holds near its peak for about 0.12 s (metal folding, not a tap), falls about 40 dB/s and leaves
+  // a bright scatter of debris. The crack and low thump are the blade's own, on top. Played over every unblocked cut.
+  // Ten of them, each its own blow (Keith 2026-11-05: "a few more variations"): how dull, sharp and hollow it is, how
+  // long it holds and how much torn steel shrieks through it are all drawn per variant, around the clip's shape.
+  sfx.addSound("swordSmash", variants(10, 54, (r) => {
+    const f = 0.85 + r() * 0.3, sharp = r(), hollow = r(), hold = 0.8 + r() * 0.4, tear = r() < 0.4 ? 0.04 + r() * 0.05 : 0;
+    const box = 150 + hollow * 260;
+    return S.mix(
+      S.band(r, 0.08, 1500, 9000, 0.15 + sharp * 0.3, 0.0005, -160),
+      crunch(S, r, 0.8 * hold, 0.8 + r() * 0.4, sharp * 0.3),
+      S.band(r, 0.8 * hold, 90 + r() * 50, 400 + r() * 250, 0.75, 0.001, -40 / hold),
+      S.band(r, 0.8 * hold, 500, 2000, 0.2 + r() * 0.16, 0.001, -44 / hold),
+      S.band(r, 0.8, 4000, 9500, 0.03 + r() * 0.04, 0.002, -30),
+      S.thump(0.14, 130 * f, 70 * f, 0.3),
+      S.ring(r, 0.35, [[box, -20, -45], [box * 1.62, -24, -60]], hollow * 0.22, { attack: 0.002, detune: 0.02 }),
+      tear ? S.delay(S.whine(0.22, 2100 * f, 1300 * f, tear), 0.02 + r() * 0.05) : new Float32Array(1),
+      S.delay(S.ring(r, 0.3, hz([[612, -22, -60], [987, -24, -70], [1534, -25, -80], [2210, -27, -90], [3405, -29, -110]], f), 0.1, { attack: 0.002, detune: 0.02, chokeAt: 0.1, choke: 60 }), 0.003),
+      S.delay(S.scale(S.crackle(r, 0.7, 0.3), 1), 0.1 + r() * 0.04));
+  }), () => v.swordLevel * v.swordSmashLevel);
+  // The blade singing on after a blow (Keith 2026-11-05: "swords ring a little after they've hit enemies"): the block's
+  // struck-steel partials without the strike, thin and long, and quiet under the smash. Once per cut (Arsenal.hitSound).
+  sfx.addSound("swordRing", variants(6, 57, (r) => {
+    const f = 0.96 + r() * 0.08; // tight, so each sword keeps its note (Sword sound: ring pitch)
+    return S.mix(
+      S.ring(r, 1.3, hz(BLOCK_BODY.slice(3), f), 0.4, { attack: 0.01, detune: 0.006 }),
+      S.ring(r, 1.3, hz(BLOCK_BODY.slice(0, 3), f), 0.22, { attack: 0.02, detune: 0.006 }),
+      S.ring(r, 0.6, hz(BLOCK_HI, f), 0.1, { attack: 0.006, detune: 0.004 }));
+  }), () => v.swordLevel * v.swordRingLevel);
+  // The scrape (Keith 2026-11-05, "blade on metal"; the recording swaps in over this): steel dragging on steel, a
+  // wavering pair of high squeals over bright grit, swelling in and fading. Played on metal bodies after the smash.
+  sfx.addSound("swordScrape", variants(4, 55, (r) => {
+    const hi = 2400 + r() * 900;
+    return S.mix(
+      S.band(r, 0.7, 2500, 9000, 0.32, 0.06, -9),
+      S.whine(0.7, hi, hi * (0.86 + r() * 0.08), 0.06),
+      S.whine(0.7, hi * 1.47, hi * 1.4, 0.035),
+      S.grind(r, 0.6, 0.3));
+  }), () => v.swordLevel * v.swordScrapeLevel);
+  // A round on metal (src/audio/minigunAudio.ts): the Sfx's metal tick as a sound the ricochet recording can swap over.
+  sfx.addSound("bulletMetal", variants(4, 56, (r) => S.mix(S.noise(r, 0.05, 5000, 0.35, 0.001), S.clang(r, 0.08, 0.12 + r() * 0.06))), () => sfx.v.metalLevel);
   // Round guns (Keith 2026-11-02, src/weapons/guns.ts), one voice each, levels on the Round guns: feel sliders.
   // SMG: a light, bright snap with a small thump; played many times a second, so short.
   sfx.addSound("smg", variants(4, 61, (r) => S.mix(S.tick(r, 0.02, 0.7), S.noise(r, 0.07, 5200, 0.55, 0.0003), S.thump(0.08, 280, 130, 0.45))), () => v.smgLevel);
@@ -171,4 +213,20 @@ export function playBlast(sfx: Sfx, at: THREE.Vector3, radius: number, v: Weapon
   sfx.playSound("blast", at, b.volume, b.rate);
   sfx.playSound("blastTail", at, b.tail, b.tailRate);
   if (b.boom > 0.02) sfx.playSound("blastBoom", at, b.boom, 0.9 + Math.random() * 0.2);
+}
+
+/** Grit crushed in a blow: dense clicks (hundreds a second, holding for the first 0.12 s, then thinning out) each a
+ *  short burst of bright noise, `len` s long; `bright` 0..1 from dull crumbling to sharp crackle. */
+function crunch(S: Synth, r: () => number, len: number, gain: number, bright: number) {
+  const s = new Float32Array(S.n(len)), sr = S.rate;
+  const a = 1 - Math.exp((-2 * Math.PI * (2500 + 6000 * bright)) / sr);
+  let lp = 0, env = 0;
+  for (let i = 0; i < s.length; i++) {
+    const t = i / sr, late = Math.max(0, t - 0.12), rate = 900 * Math.exp(-late * 6);
+    if (r() < rate / sr) env = 0.4 + r() * 0.6;
+    env *= 0.993;
+    lp += a * (r() * 2 - 1 - lp);
+    s[i] = lp * env * gain * Math.exp(-late * 4.5) * Math.min(1, (len - t) / 0.05);
+  }
+  return s;
 }

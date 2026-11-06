@@ -94,6 +94,7 @@ function world(v = V) {
 {
   const w = world();
   const A = 4000;
+  let worstRelief = 0;
   let worstIn = 0, worstSlopeIn = 0, worstEdge = 0, worstLevel = 0, n = 0;
   const pad = w.pois.poisIn(-A, -A, A, A).filter((p) => p.pad);
   // Hand-placed ones on purpose in rough places too (across a dune crest).
@@ -105,18 +106,21 @@ function world(v = V) {
     const d = p.pad!;
     n++;
     const ax = Math.sin(d.yaw), az = Math.cos(d.yaw);
-    let lo = Infinity, hi = -Infinity;
+    let lo = Infinity, hi = -Infinity, slopeHere = 0;
     for (let t = -1; t <= 1; t += 0.25) for (let a = 0; a < 12; a++) for (const f of [0, 0.45, 0.9]) {
       const x = d.x + ax * d.half * t + Math.cos(a * 0.52) * d.r * f, z = d.z + az * d.half * t + Math.sin(a * 0.52) * d.r * f;
       const h = w.field.height(x, z);
       lo = Math.min(lo, h); hi = Math.max(hi, h);
       w.field.normal(x, z, nrm);
-      worstSlopeIn = Math.max(worstSlopeIn, Math.acos(nrm[1]) * R2D);
+      if (d.relief > 0) slopeHere = Math.max(slopeHere, Math.acos(nrm[1]) * R2D);
+      else worstSlopeIn = Math.max(worstSlopeIn, Math.acos(nrm[1]) * R2D);
     }
     worstIn = Math.max(worstIn, hi - lo);
     // Big pads (fortresses, hubs: 100 m across and more) keep a little more of the swell's curve: 1.5 cm per metre past 30 (under 1.5 degrees all the same).
     const allow = 0.2 + 2 * V.bumps * V.padRough + Math.max(0, d.r + d.half - 30) * 0.015;
-    if (hi - lo > allow) fail(`${p.kind} ${p.id}: pad floor varies by ${(hi - lo).toFixed(2)} m (allowed ${allow.toFixed(2)})`);
+    // Fortresses keep their own uneven ground (relief): a rise and rolls of up to the relief, gently.
+    if (d.relief > 0) { worstRelief = Math.max(worstRelief, slopeHere); if (hi - lo > allow + 1.2 * d.relief) fail(`${p.kind} ${p.id}: uneven pad varies by ${(hi - lo).toFixed(2)} m (relief ${d.relief})`); }
+    else if (hi - lo > allow) fail(`${p.kind} ${p.id}: pad floor varies by ${(hi - lo).toFixed(2)} m (allowed ${allow.toFixed(2)})`);
     // Level with the ground it covers: the pad at the mean of the raw ground over the pad and half its blend.
     let s = 0, m = 0;
     for (let t = -1; t <= 1; t += 0.25) for (let a = 0; a < 16; a++) for (const f of [0, 0.5, 1]) {
@@ -133,9 +137,10 @@ function world(v = V) {
   }
   // The swell is cancelled by a quadratic fit, so a long pad keeps a few cm of its curve.
   if (worstSlopeIn > 3) fail(`a pad's floor slopes ${worstSlopeIn.toFixed(1)} deg`);
+  if (worstRelief > 12) fail(`an uneven (fortress) pad slopes ${worstRelief.toFixed(1)} deg`);
   if (worstLevel > 1.5) fail(`a pad sits ${worstLevel.toFixed(2)} m off the mean of its ground`);
   if (worstEdge > 75) fail(`a pad's edge reaches ${worstEdge.toFixed(0)} deg (cliff)`);
-  console.log(`pads: ${n} checked · floor within ${worstIn.toFixed(3)} m, slope under ${worstSlopeIn.toFixed(2)} deg · off the ground's mean by up to ${worstLevel.toFixed(2)} m · steepest edge ${worstEdge.toFixed(0)} deg`);
+  console.log(`pads: ${n} checked · floor within ${worstIn.toFixed(3)} m, slope under ${worstSlopeIn.toFixed(2)} deg (fortresses' uneven ground under ${worstRelief.toFixed(1)}) · off the ground's mean by up to ${worstLevel.toFixed(2)} m · steepest edge ${worstEdge.toFixed(0)} deg`);
 }
 
 // ---- 4. salvage adds up ----
@@ -234,7 +239,8 @@ function world(v = V) {
   addModifier(both, pads);
   const padsOnly = new DuneField(V);
   padsOnly.modifier = new PoiPads(pois);
-  for (let k = 0; k < 600; k++) { r1.update(0.5); r2.update(0.5); }
+  // Drive until the road is cut well past the samples below (s up to 1000), whatever the convoy speed.
+  for (let k = 0, n = Math.ceil(1100 / Math.max(0.5, V.convoySpeed) / 0.5); k < n; k++) { r1.update(0.5); r2.update(0.5); }
   let diffRoad = 0, diffPad = 0, nRoad = 0, nPad = 0, bad = 0;
   const tmp: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
   for (let z = -300; z <= 1300; z += 2.3) for (let x = -200; x <= 200; x += 2.3) {

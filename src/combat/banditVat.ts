@@ -9,6 +9,17 @@ import {
 } from "three/tsl";
 import type { VatHeader } from "./banditVatFormat";
 
+/** Frost over a bandit (Keith's render pass 2026-11-05: frozen bandits had no look): 0..1 in eighths, into animB.w. */
+export const packFrost = (f: number) => Math.round(Math.min(1, Math.max(0, f)) * 8) * 16;
+/** Chilled and frozen bandits tint toward this glacier blue (the robots' frozen colour). */
+export const FROST_RGB = [0.16, 0.48, 1.0] as const;
+/** The shader side: animB.w into frost (0..1), look (0..3) and shade. */
+export function unpackLook(w: THREE.Node<"float">) {
+  const fz = floor(w.div(16)), rest = w.sub(fz.mul(16));
+  const look = floor(rest.div(4));
+  return { frost: fz.div(8), look, shade: rest.sub(look.mul(4)) };
+}
+
 export interface BanditVatData { header: VatHeader; bin: ArrayBuffer }
 
 export async function loadBanditVat(base = "/models/"): Promise<BanditVatData> {
@@ -29,8 +40,9 @@ export class BanditVatMesh {
   /** Per instance: current clip (row, next row, between, weight of the previous clip). */
   readonly animA: THREE.InstancedBufferAttribute;
   /**
-   * Per instance: previous clip (row, next row, between), and look × 4 + shade: which cloth tint (0..3) and an
-   * overall brightness (0..2). Packed so the mesh stays within WebGPU's eight vertex buffers.
+   * Per instance: previous clip (row, next row, between), and frost × 16 + look × 4 + shade: how frosted over (0..8,
+   * eighths; packFrost), which cloth tint (0..3) and an overall brightness (0..2). Packed so the mesh stays within
+   * WebGPU's eight vertex buffers.
    */
   readonly animB: THREE.InstancedBufferAttribute;
   /** The four cloth tints, each ÷ the baked cloth colour so the plates come out in that colour. */
@@ -79,9 +91,9 @@ export class BanditVatMesh {
     })();
     const c = attribute<"vec4">("vatColour", "vec4");
     const tints = uniformArray(this.tints, "color");
-    const look = floor(b.w.div(4)), shade = b.w.sub(look.mul(4));
+    const { look, shade, frost } = unpackLook(b.w);
     const tint = vec3(tints.element(int(look)) as unknown as THREE.Node<"vec3">);
-    mat.colorNode = c.rgb.mul(mix(vec3(1, 1, 1), tint, c.a)).mul(shade);
+    mat.colorNode = mix(c.rgb.mul(mix(vec3(1, 1, 1), tint, c.a)).mul(shade), vec3(...FROST_RGB), frost.mul(0.85));
 
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;

@@ -34,6 +34,8 @@ export class ModifierStack implements GroundModifier {
     out.rough = W > 1e-9 ? R / W : 0;
     return true;
   }
+
+  metalAt(x: number, z: number) { return this.list.some((m) => m.metalAt?.(x, z)); }
 }
 
 /**

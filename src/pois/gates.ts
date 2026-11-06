@@ -12,13 +12,14 @@ import type { BarEntry } from "../ui/healthBars";
 import { armourHit } from "../game/armour";
 import type { Gate, Ring } from "./fortress";
 
-export const GATE_DEFAULTS = { gateHp: 3000, gateArmour: 3, gateRingHp: 0.35 };
+export const GATE_DEFAULTS = { gateHp: 1500, gateArmour: 2, gateRingHp: 0.3, gateBlast: 1.75 };
 export type GateValues = typeof GATE_DEFAULTS;
 const G = "Fortress: gates";
 export const GATE_PARAMS: Param[] = [
-  { key: "gateHp", label: "Gate health", min: 100, max: 30000, step: 50, group: G, tip: "The outer ring's barricades; 3000 is about 15 s of a level-1 mech's focused fire" },
+  { key: "gateHp", label: "Gate health", min: 100, max: 30000, step: 50, group: G, tip: "The outer ring's barricades; 1500 is about 6 s of two level-1 miniguns (Keith 2026-11-05: walls took too long)" },
   { key: "gateRingHp", label: "Tougher per ring inward (share)", min: 0, max: 2, step: 0.01, group: G },
   { key: "gateArmour", label: "Gate armour (flat per hit)", min: 0, max: 30, step: 0.5, group: G, tip: "Taken off every hit: small rounds do less, rockets and rails shrug it off" },
+  { key: "gateBlast", label: "Blasts × on gates", min: 0, max: 5, step: 0.05, group: G, tip: "Rockets, shells and mortars are the breaching tools: their blasts do this much more to a gate" },
 ];
 
 export interface GateState {
@@ -95,7 +96,7 @@ export class Gates implements Hittable {
       const d = this.distTo(s, at);
       if (d > radius) continue;
       // A blast's full weight close in, half at its edge; a round's splash a token share.
-      const k = (1 - 0.5 * (d / Math.max(0.01, radius))) * (o?.blast ? 1 : 0.25);
+      const k = (1 - 0.5 * (d / Math.max(0.01, radius))) * (o?.blast ? this.v.gateBlast : 0.25);
       this.hurt(s, armourHit(damage * k, this.v.gateArmour, o?.pierce));
       n++;
     }
@@ -134,7 +135,7 @@ export class Gates implements Hittable {
 }
 
 /** Ray against a box with two horizontal axes (u, w) and y: distance or -1. */
-function slab(o: THREE.Vector3, d: THREE.Vector3, b: { cx: number; cy: number; cz: number; ux: number; uz: number; wx: number; wz: number; hu: number; hw: number; hy: number }, maxDist: number) {
+export function slab(o: THREE.Vector3, d: THREE.Vector3, b: { cx: number; cy: number; cz: number; ux: number; uz: number; wx: number; wz: number; hu: number; hw: number; hy: number }, maxDist: number) {
   const ox = o.x - b.cx, oy = o.y - b.cy, oz = o.z - b.cz;
   const axes: [number, number, number][] = [
     [ox * b.ux + oz * b.uz, d.x * b.ux + d.z * b.uz, b.hu],

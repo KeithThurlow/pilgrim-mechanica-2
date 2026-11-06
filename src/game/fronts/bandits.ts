@@ -72,6 +72,7 @@ export function banditsFront(): Front {
       lab.app.scene.add(d.group);
       const target = new InfantryTarget(s, 2);
       bf.targets.push(target);
+      d.chillMap = () => { d.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(target) ?? null; };
       // The mech's body tramples them, and they may dive out of a charge or a telegraphed shot (Keith 2026-10-31).
       hook(player, "onStomp", (x, z, k) => s.stomp(x, z, V.stompReach * Math.min(1.5, k)));
       // Deaths go to the physics as ragdolls (Keith 2026-10-24), in the bandit's cloth colour.
@@ -114,7 +115,8 @@ export function banditsFront(): Front {
               rocketClock[i] = V.rocketEvery * (0.8 + Math.random() * 0.4);
               const dist = Math.hypot(p.x - fx, p.z - fz), flight = dist / Math.max(1, V.rocketSpeed);
               const v = prey.sim.vel;
-              bf.lob(2, from, p.x + v.x * flight * V.rocketLead, p.z + v.z * flight * V.rocketLead, flight, V.rocketArc, V.rocketRadius, V.rocketDamage);
+              // A rocket's wave, not a turret shell's (no second orb or lingering heat over the mech: Claude 2026-11-05).
+              bf.lob(2, from, p.x + v.x * flight * V.rocketLead, p.z + v.z * flight * V.rocketLead, flight, V.rocketArc, V.rocketRadius, V.rocketDamage).wave = "rocket";
               return;
             }
             dir.set(tx - fx, ty - fy, tz - fz).normalize();

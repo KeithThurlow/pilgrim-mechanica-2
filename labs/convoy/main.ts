@@ -31,7 +31,7 @@ import { tweakPanel, type Param } from "../../src/core/tweaks";
 import { Keys, typing } from "../../src/core/input";
 import { IsoCamera, ISO_DEFAULTS, ISO_PARAMS } from "../../src/core/isoCamera";
 import { DuneField, TERRAIN_DEFAULTS, TERRAIN_PARAMS } from "../../src/world/terrain";
-import { TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
+import { PATCH_PAD, TerrainStreamer, STREAM_DEFAULTS, STREAM_PARAMS } from "../../src/world/chunks";
 import { CraterLayer, CRATER_DEFAULTS, CRATER_PARAMS } from "../../src/world/craters";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../../src/physics/deaths";
 import { DeadDraw } from "../../src/physics/deadDraw";
@@ -50,6 +50,7 @@ import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "../../src/game/mechUnit";
+import { loadoutLevel } from "../../src/combat/rivalKit";
 import { ConvoyRoute, ROUTE_DEFAULTS, ROUTE_PARAMS } from "../../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS, PLATFORM_PARAMS } from "../../src/convoy/platform";
 import { Crane, CRANE_DEFAULTS, CRANE_PARAMS } from "../../src/convoy/crane";
@@ -62,6 +63,7 @@ import { PlatformBody } from "../../src/convoy/platformBody";
 import { CraneBody } from "../../src/convoy/craneBody";
 import { TRAIN_DEFAULTS, TRAIN_PARAMS, bridgeSpans, type Span } from "../../src/convoy/train";
 import { TRACK_DEFAULTS, TRACK_PARAMS } from "../../src/convoy/tracks";
+import { ConvoySound, CONVOY_SOUND_DEFAULTS, CONVOY_SOUND_PARAMS, CONVOY_SOUND_GROUP } from "../../src/convoy/convoySound";
 import { PIPE_DEFAULTS, PIPE_PARAMS } from "../../src/convoy/pipes";
 import { ConvoyTrail, TRAIL_DEFAULTS, TRAIL_PARAMS } from "../../src/convoy/trail";
 import { EscortGroup, ESCORT_DEFAULTS, ESCORT_PARAMS } from "../../src/convoy/escort";
@@ -116,7 +118,8 @@ import { AbilityControl } from "../../src/abilities/abilityUse";
 import { ABILITY_TOPIC } from "../../src/abilities/abilities";
 import { resolve, LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, type SlotId } from "../../src/items/loadout";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
-import { newBag, addTo, bagWeight } from "../../src/items/cargo";
+import { newBag, addTo, bagCells } from "../../src/items/cargo";
+import { cargoCapacity, cargoSizing } from "../../src/items/cargoSpace";
 import { rollLoot, makeItem } from "../../src/items/generate";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
 import { itemName } from "../../src/expedition/drops";
@@ -131,7 +134,7 @@ const V = {
   ...WALKER_DEFAULTS, ...UPPER_DEFAULTS, ...MINIGUN_FX_DEFAULTS, ...SFX_DEFAULTS, ...TOON_DEFAULTS, ...ISO_DEFAULTS,
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
-  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
+  ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...CONVOY_SOUND_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
   ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
@@ -143,7 +146,7 @@ const DEFAULTS = { ...V };
 const PARAMS: Param[] = [
   ...SUMMON_PARAMS,
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
-  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
+  ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...CONVOY_SOUND_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
   ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS,
 ];
@@ -160,14 +163,22 @@ scene.add(streamer.group);
 // under a time budget (the craters' way), nearest first is not needed as they come in order behind the blade.
 const patchQueue: [number, number, number, number][] = [];
 // Craters re-read their hardness as the road is cut (none on the road), so the patch covers both.
-route.onChange = (x0, z0, x1, z1) => { craters.invalidate(x0, z0, x1, z1); patchQueue.push([x0, z0, x1, z1]); };
+// Each box is padded as patchArea pads it, then cut into strips PATCH_STRIP m across (perf, Keith 2026-11-06: one box
+// could take 5 ms on his PC, well over the budget), patched with no more padding: the same vertices, done once each.
+const PATCH_STRIP = 4;
+route.onChange = (x0, z0, x1, z1) => {
+  craters.invalidate(x0, z0, x1, z1);
+  const a = x0 - PATCH_PAD, b = x1 + PATCH_PAD, c = z0 - PATCH_PAD, d = z1 + PATCH_PAD, eps = 1e-4;
+  if (b - a >= d - c) for (let s = a; s <= b; s += PATCH_STRIP) patchQueue.push([s, c, Math.min(b, s + PATCH_STRIP - eps), d]);
+  else for (let s = c; s <= d; s += PATCH_STRIP) patchQueue.push([a, s, b, Math.min(d, s + PATCH_STRIP - eps)]);
+};
 let patchMs = 0, patchVerts = 0;
 function patchSome(budgetMs: number) {
   const t0 = performance.now();
   patchVerts = 0;
   while (patchQueue.length && (patchVerts === 0 || performance.now() - t0 < budgetMs)) {
     const b = patchQueue.shift()!;
-    patchVerts += streamer.patchArea(b[0], b[1], b[2], b[3]);
+    patchVerts += streamer.patchArea(b[0], b[1], b[2], b[3], 0);
   }
   patchMs = performance.now() - t0;
 }
@@ -175,6 +186,7 @@ const look = new DesertLook(scene, app.renderer, V);
 const bf = new Battlefield(field, V, camera);
 // Ruts and prints as dents on a fine patch (Keith 2026-10-25).
 if (!app.params.has("norender")) bf.useDents(app.renderer, streamer);
+else bf.useLookGround(streamer);
 scene.add(bf.group);
 // Blast craters as real ground, as in the combat labs (Keith 2026-11-01: the labs' work in the convoy): the big walkers'
 // pulse and beam trenches, shells and rockets dent the sand (never the road: it is hard). Changed ground is queued and
@@ -248,14 +260,6 @@ const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(); }, deaths });
-// The fortresses' warlord: a red Rampart loaded now so a keep can field it at once (src/expedition/warlord.ts).
-{
-  const wb = await RampartBody.load(toon);
-  const wl = new MechUnit(bf, V, wb, toon, 2, 20, false);
-  wl.paint = 0x8e2a1e;
-  wb.paint(toon, 0x8e2a1e);
-  loop.attachWarlord(wl, scene);
-}
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
@@ -307,6 +311,9 @@ const { arsenal, draw: arsenalDraw } = fitArsenal(bf, player, V, toon, scene, en
 loop.threatSource = { arsenal, wv: V };
 // High value targets get their own Rampart (loaded on the first summon) and see the player's weapons for dodging.
 loop.quests.setup({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource, summons: { values: V, deaths } });
+// Fortress mechs (src/expedition/fortMechs.ts): a Rampart each, loaded when a fortress streams in; items rolled
+// relative to the bay's loadout level, as the duel lab's rival.
+loop.setupFortMechs({ look: toon, loadBody: () => RampartBody.load(toon), threat: () => loop.threatSource, summons: { values: V, deaths }, playerLevel: () => loadoutLevel(bayState.loadout) });
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
@@ -350,6 +357,7 @@ const kitCtl = new KitControl(player, foot, bf.sfx);
 player.uid = "player";
 const abilityCtl = new AbilityControl(player, foot, scene, (x, z) => walkable.floorBelow(x, z, sim.pelvis.y + 2).y, bf.sfx);
 addRepairSounds(bf.sfx, () => V.kitSound);
+const convoySound = new ConvoySound(bf.sfx, V);
 foot.showHealth = false;
 /** Was the crane armed when the pilot got out on the sand (it mustn't come for the empty mech; restored on getting in). */
 let armedWhenOut = true;
@@ -399,8 +407,8 @@ function refit() {
   fitted = r;
   // Summoner gear (Keith 2026-11-02): the pack's replicas, the shoulders' drones and swarm.
   applyGear(V, r);
-  bayState.cargo.capacity = r.cargoCapacity;
-  loop.exp.capacity = V.cargoLimit ? r.cargoCapacity : Infinity;
+  bayState.cargo.capacity = cargoCapacity(V, r.cargoRackRows);
+  loop.exp.capacity = V.cargoLimit ? bayState.cargo.capacity : Infinity;
   applyLoadout(player, r);
   // The sensor's seekers (its radar range already went into V.mechRadar through the loadout's values).
   loop.seeker.setModes(r.seekers);
@@ -711,7 +719,7 @@ const panel = tweakPanel({
     ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
-    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", "Convoy trail", "Ground dents"] },
+    { id: "tracks", label: "Tracks and trail", groups: ["Tracks", CONVOY_SOUND_GROUP, "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
     { id: "escorts", label: "Escorts", groups: ["Escorts", "Escort driving", "Convoy trail"] },
     { id: "defence", label: "Convoy defence", groups: ["Defences", ...GUARD_GROUPS, ...GUARDIAN_GROUPS, ...SAFE_GROUPS] },
@@ -760,6 +768,9 @@ selector = new Selector(app, {
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },
     { topic: "raiders", label: "War band", objects: () => loop.bands.group.children },
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
+    { topic: "fortress", label: "Fortress spawner shacks", objects: () => loop.forts.spawnersDraw.meshes() },
+    { topic: "fortress", label: "Fortress bandit mechs", objects: () => loop.forts.mechs.objects() },
+    { topic: "fortress", label: "Fortress lookout towers", objects: () => loop.forts.towersDraw.meshes() },
     { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
     { topic: "defence", label: "Turrets", objects: () => defenceBody.objects() },
@@ -938,6 +949,7 @@ app.onTick((rawDt) => {
   if (loop.quests.noSprint) { const k = loop.quests.moveScale; cmd = { x: cmd.x * k, z: cmd.z * k, sprint: false }; dashPressed = false; }
   if (sel.active || (carry.state !== "walking" && carry.state !== "inRange")) { trigger = false; held = [false, false, false, false]; }
   player.keys = held;
+  player.clickAim = !auto;
   player.cursor = cursor ? (player.cursor ?? new THREE.Vector3()).set(cursor.x, field.height(cursor.x, cursor.z), cursor.z) : null;
   player.lock = lock?.target ?? null;
   if (deployAsked) {
@@ -990,6 +1002,8 @@ app.onTick((rawDt) => {
   }
   trail.update(convoy.platforms);
   costs.mark("trail");
+  // The crawler tracks heard from the nearest car (Keith 2026-11-05).
+  convoySound.update(convoy.platforms, convoy.bay.speed, foot.mount.onFoot ? foot.sim.pos : sim.pelvis);
   // ?threat: a marker circling the train 60 m out, for the turrets to track (and shoot at).
   if (threatOn) {
     const mid = convoy.platforms[Math.floor(convoy.platforms.length / 2)], a = clock * 0.15;
@@ -1148,12 +1162,13 @@ app.onTick((rawDt) => {
   // The mech doll (one hull pool for now: every part shows the hull's share) and the cargo under it.
   syncCarry();
   loop.exp.capacity = V.cargoLimit ? bayState.cargo.capacity : Infinity;
+  loop.exp.sizing = cargoSizing(V, loop.unlocks.level("compactor"));
   inventory.update(dt);
   const lo = bayState.loadout, isOut = loop.exp.state === "out";
   doll.update(dt, {
     parts: partsFromHull(player.health / Math.max(1, player.maxHealth), { sensor: !!lo.sensor, pack: !!lo.pack, armL: !!lo.mountL, armR: !!lo.mountR }),
     cargo: isOut ? { load: loop.exp.load, capacity: loop.exp.capacity, scrap: loop.exp.scrapAtRisk, items: loop.exp.itemsAtRisk, warn: V.cargoWarn }
-      : { load: bagWeight(bayState.cargo), capacity: V.cargoLimit ? bayState.cargo.capacity : Infinity, scrap: 0, items: bayState.cargo.items.length, warn: V.cargoWarn },
+      : { load: bagCells(bayState.cargo, loop.exp.sizing), capacity: V.cargoLimit ? bayState.cargo.capacity : Infinity, scrap: 0, items: bayState.cargo.items.length, warn: V.cargoWarn },
     onFoot: !foot.driving,
   });
   const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))

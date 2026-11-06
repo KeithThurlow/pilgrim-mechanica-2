@@ -13,7 +13,7 @@ const BRAP_INTERVAL = 0.05, BRAP_STACK = 4, BRAP_STACK_GAIN = 0.04;
 const SPIN_UP_CLIP = 1.1; // seconds: the spin-up sound is built for this spin-up time
 
 /** What the voices need of the sound player (the real Sfx, or a stand-in in the headless check). */
-export type GunSfx = Pick<Sfx, "running" | "play" | "startLoop" | "setLoop" | "stopLoop"> & { v: { growlDetune: number }; ctx: { currentTime: number } };
+export type GunSfx = Pick<Sfx, "running" | "play" | "startLoop" | "setLoop" | "stopLoop"> & Partial<Pick<Sfx, "hasSound" | "playSound">> & { v: { growlDetune: number; metalEvery: number; metalScatter: number }; ctx: { currentTime: number } };
 
 /** One mech's guns: a growl loop each, and the trigger edges for the spin sounds. */
 interface Voice { loops: (Loop | null)[]; wasTrigger: boolean[]; level: number[]; quiet: number }
@@ -27,6 +27,7 @@ export class MinigunAudio {
   private voices = new Map<object, Voice>();
   private pending = 0;
   private lastBrap = -1;
+  private lastMetal = -1;
 
   constructor(private sfx: GunSfx) {}
 
@@ -73,7 +74,7 @@ export class MinigunAudio {
 
   hit(at: THREE.Vector3, surface: "sand" | "metal" | "flesh" = "sand") {
     const sfx = this.sfx;
-    if (surface === "metal") sfx.play("metalHit", at, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.25);
+    if (surface === "metal") this.metal(at);
     else sfx.play("dirtHit", at, 0.9 + Math.random() * 0.2);
     this.pending++;
     const now = sfx.ctx.currentTime;
@@ -82,6 +83,16 @@ export class MinigunAudio {
     sfx.play("brap", at, 1 + BRAP_STACK_GAIN * (n - 1));
     this.pending = 0;
     this.lastBrap = now;
+  }
+
+  /** A round on metal (Keith 2026-11-05): the ricochet recording, or the procedural tick if no weapons are about, each
+   *  one at its own pitch, level and moment, so a burst on a container rattles. */
+  private metal(at: THREE.Vector3) {
+    const sfx = this.sfx, now = sfx.ctx.currentTime;
+    if (!sfx.hasSound?.("bulletMetal")) { sfx.play("metalHit", at, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.25); return; }
+    if (now - this.lastMetal < sfx.v.metalEvery) return;
+    this.lastMetal = now;
+    sfx.playSound?.("bulletMetal", at, 0.75 + Math.random() * 0.4, 0.86 + Math.random() * 0.3, Math.random() * sfx.v.metalScatter, 6);
   }
 
   casing(at: THREE.Vector3) { this.sfx.play("casing", at); }

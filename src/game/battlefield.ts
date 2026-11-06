@@ -217,6 +217,7 @@ export class Battlefield {
   readonly pools: FirePools;
   /** Chilled and frozen targets (Keith 2026-11-05: the freeze ray; src/game/chill.ts). */
   readonly chills: Chills;
+  private tmpFreeze = new THREE.Vector3();
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
 
@@ -236,6 +237,13 @@ export class Battlefield {
     this.burns = new Burns(v as never);
     this.chills = new Chills(v as never);
     this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
+    // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
+    // burst of frost over the body, so the moment reads.
+    this.chills.onFreeze = (c) => {
+      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(c.x, c.y, c.z), 1, 0.9 + Math.random() * 0.25);
+      for (let k = 0; k < 14; k++) this.flames.mist(c.x + (Math.random() - 0.5) * 2, c.y + (Math.random() - 0.3) * 1.5, c.z + (Math.random() - 0.5) * 2, 0.9);
+      this.flames.frost(c.x, c.y, c.z, 4, 1);
+    };
     this.chills.quench = (t, k) => this.burns.quench(t, k);
     this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
     this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
@@ -243,7 +251,7 @@ export class Battlefield {
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
       maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold) => cold ? this.chills.hit(t, k, time, dps, x, y, z) : this.burns.ignite(t, k, time, dps, x, y, z) });
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold, dx, dz) => cold ? this.chills.hit(t, k, time, dps, x, y, z, dx, dz) : this.burns.ignite(t, k, time, dps, x, y, z, dx, dz) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -370,6 +378,15 @@ export class Battlefield {
         if (Math.random() < 0.5) this.flames.ember(x, y + 0.4, z);
       }
       this.heat?.spot(p.x, p.z, p.r * 0.8, (p.napalm ? 750 : 450) * fade, dt);
+      // The fire lights the ground round it (Keith 2026-11-05: "the fire doesn't emit any light"), flickering.
+      const V = this.v as { poolLight?: number; poolLightRange?: number };
+      if (this.look && (V.poolLight ?? 0) > 0) {
+        // A flamer lays a small splash pool every 0.15 s on the same spot, so they stack (eight or more a gun): each lights
+        // at a fraction and without its own glow, or together they blew the night out to white (PC render 2026-11-05).
+        const size = p.r / 3.6, flick = 0.8 + 0.35 * Math.random();
+        this.look.lights.hold(p.x, this.field.height(p.x, p.z) + 1 + 0.4 * size, p.z, (V.poolLight ?? 0) * fade * flick * size * (p.napalm ? 1 : 0.06),
+          (V.poolLightRange ?? 12) * (0.5 + 0.5 * size) * (p.napalm ? 1 : 0.6), 0xff7a2a, 1.2, p.napalm ? p.r * 2.2 : 0);
+      }
     }
   }
 
@@ -444,6 +461,15 @@ export class Battlefield {
    * Draw ground marks as dents (Keith 2026-10-25): a GPU dent layer around the camera focus and the fine patch of
    * ground that shows them (the chunks leave it a hole). Needs the renderer, so headless stages skip it (no marks).
    */
+  /** Perf pass 1: what only draws reads the chunks' triangles instead of the full height function (useDents calls it). */
+  useLookGround(streamer: TerrainStreamer) {
+    this.lookGround = new ChunkGround(streamer, this.field);
+    this.dust.ground = this.lookGround;
+    this.dustDraw.ground = this.lookGround;
+    // The flamers' fire is cosmetic too (every gob, lick and puff asked the full height function every frame).
+    this.flames.ground = this.lookGround;
+  }
+
   useDents(renderer: THREE.WebGPURenderer, streamer: TerrainStreamer) {
     const v = this.v as BattlefieldValues & DentValues;
     this.dents = new DentLayer(renderer, this.field, v);
@@ -451,10 +477,7 @@ export class Battlefield {
     this.patch = new DetailPatch(this.field, streamer, this.dents, v, this.heatTex);
     this.marks.dents = this.dents;
     this.group.add(this.patch.group);
-    // Perf pass 1: what only draws reads the chunks' triangles instead of the full height function.
-    this.lookGround = new ChunkGround(streamer, this.field);
-    this.dust.ground = this.lookGround;
-    this.dustDraw.ground = this.lookGround;
+    this.useLookGround(streamer);
     // Scale step 5: sparks, grit, casings and tracers on the GPU (fxGpuBits, fxGpuTracers pick them over the CPU's).
     this.renderer = renderer;
     const bits = new GpuBits(this.patch.gpuGround), tracers = new GpuTracers(ROUNDS_IN_FLIGHT);
@@ -593,15 +616,17 @@ export class Battlefield {
       splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
       return;
     }
-    for (let i = 0; i < 18 * k; i++) {
+    // Round your mech only a share of the dust goes up, so a rain of rockets doesn't bury it (src/fx/budget.ts underFire).
+    const keep = this.fx.underFire(p.x, p.z, false, true);
+    for (let i = 0; i < 18 * k * keep; i++) {
       const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6 * k;
       this.dust.emit(1, p.x, p.y + Math.random() * 0.5, p.z, Math.cos(a) * sp, 2 + Math.random() * 5 * k, Math.sin(a) * sp, 0.5 + Math.random() * 0.7, 2.5 + Math.random() * 3, 0.9);
     }
-    for (let i = 0; i < 20 * k; i++) {
+    for (let i = 0; i < 20 * k * keep; i++) {
       const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 9;
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
-    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k); this.marks.blast(p.x, p.z, s.radius); }
+    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k * Math.sqrt(keep)); this.marks.blast(p.x, p.z, s.radius); }
     // Explosions are barely warm (Keith 2026-11-01): at most a brief dull ember in the middle.
     if (low) this.heat?.spot(p.x, p.z, Math.max(0.5, s.radius * 0.3), (this.v as { heatBlast?: number }).heatBlast ?? 0);
     this.sfx.play("brap", p, 1.8, 0.4, false);
@@ -648,6 +673,8 @@ export class Battlefield {
 
   /** The look last seen in update(): blasts light the ground through its night lights. */
   private look: DesertLook | null = null;
+  /** The night lights, once a look has been seen (cosmetic). */
+  get lights() { return this.look?.lights ?? null; }
   /** The night lights (rockets, launches and blasts ask them for light; cosmetic), once a look has been seen. */
   get nightLights() { return this.look?.lights ?? null; }
 
@@ -715,8 +742,11 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
-    { const fv = this.v as { flameRise?: number; flameDrag?: number; flameGravity?: number }; this.flames.rise = fv.flameRise ?? 3; this.flames.drag = fv.flameDrag ?? 1.6; this.flames.gravity = fv.flameGravity ?? 4; }
+    this.flames.tune(this.v as object);
     this.flames.update(dt, camera);
+    // A light in among the fireballs every so many (Keith 2026-11-05; Flame look › A light every).
+    { const L = this.look?.lights, fl = this.flames, P = (this.v as { flameBallLight?: number }).flameBallLight ?? 0;
+      if (L && P > 0) for (let j = 0; j < fl.nLight; j++) { const o = j * 4, sz = fl.lightPts[o + 3]; L.hold(fl.lightPts[o], fl.lightPts[o + 1], fl.lightPts[o + 2], P * (0.85 + 0.3 * Math.random()) * Math.min(1.3, 0.5 + sz * 0.4), 3.5 + sz * 1.2, 0xff9a40, 1, 0); } }
     c?.mark("fire");
     this.dustDraw.tint.copy(look.tint);
     this.dustDraw.update(camera, this.sunDir, this.v, look.sun);
@@ -728,7 +758,7 @@ export class Battlefield {
     c?.mark("dust");
     // Blast waves and heat shimmer (the frame copy only runs while one is live).
     if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-      this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600);
+      this.wavesDraw.update(dt, camera as THREE.PerspectiveCamera, look.lights, (this.v as { blastLight?: number }).blastLight ?? 2600, this.fx.own);
     } else this.waves.update(dt);
     c?.mark("blast waves");
   }

@@ -6,8 +6,9 @@
 import type { Param } from "../core/tweaks";
 import { PEN_DEFAULTS, PEN_PARAMS } from "../game/sheet";
 import { ARMOUR_DEFAULTS, ARMOUR_PARAMS } from "../game/armour";
-import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP } from "./sword";
+import { SWORD_DEFAULTS, SWORD_PARAMS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP } from "./sword";
 import { ENERGY_DEFAULTS, ENERGY_PARAMS, ENERGY_GROUPS } from "./energy/energyTuning";
+import { LINE_AIM_DEFAULTS, LINE_AIM_PARAMS, LINE_AIM_GROUP } from "./lineAim";
 import { GUN_DEFAULTS, GUN_PARAMS, GUN_GROUPS } from "./guns";
 import { CANNON_DEFAULTS, CANNON_PARAMS, CANNON_GROUP } from "./cannon";
 import { SAMPLE_DEFAULTS, SAMPLE_PARAMS } from "../audio/samples";
@@ -195,6 +196,7 @@ export const WEAPON_DEFAULTS = {
   ...PEN_DEFAULTS,
   ...SWORD_DEFAULTS,
   ...ENERGY_DEFAULTS,
+  ...LINE_AIM_DEFAULTS,
   ...GUN_DEFAULTS,
   ...CANNON_DEFAULTS,
   ...FIRE_DEFAULTS,
@@ -373,6 +375,7 @@ export const WEAPON_PARAMS: Param[] = [
   ...PEN_PARAMS,
   ...SWORD_PARAMS,
   ...ENERGY_PARAMS,
+  ...LINE_AIM_PARAMS,
   ...GUN_PARAMS,
   ...CANNON_PARAMS,
   ...FIRE_PARAMS,
@@ -381,4 +384,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, LINE_AIM_GROUP, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

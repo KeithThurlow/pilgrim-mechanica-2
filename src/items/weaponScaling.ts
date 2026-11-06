@@ -1,6 +1,6 @@
 // Weapon scaling (Keith 2026-11-03: "formulas for area damage versus projectile speed versus DPS; some things scale
 // better in damage, some in area"). Pure. Reads the balance model (src/items/balanceModel.ts, the sheet's numbers) and
-// gives every weapon five axes and how Protocols move them. The weapon review lab (labs/weaponreview/) draws these;
+// gives every weapon five axes and how Protocols move them. The weapons lab's review panel (labs/weapons/review.ts) draws these;
 // tools/weaponscaling-check.ts prints them.
 //
 //   Focus  F = eDPS against the best single target (cutter, excavator, raider or rival mech: whichever it kills best)

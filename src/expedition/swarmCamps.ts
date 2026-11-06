@@ -68,7 +68,7 @@ export class SwarmCamps {
     bf.targets.push(this.target);
     // Hot metal glows (Keith 2026-11-05, src/game/burn.ts).
     this.draw.heatMap = () => { this.draw.heatGlow = (bf.v as { heatGlow?: number }).heatGlow ?? 1; return bf.burns.heatsOf(this.target); };
-    this.draw.chillMap = () => bf.chills.chillsOf(this.target);
+    this.draw.chillMap = () => { this.draw.frostLook = (bf.v as { frostLook?: number }).frostLook ?? 1; return bf.chills.chillsOf(this.target); };
     this.tear = new RobotTearFx(bf.gunFx, bf.sfx, field, v);
     scene.add(this.tear.group);
     // Walkers' feet kick up sand; big ones lob charges through the battlefield's shells.

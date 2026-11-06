@@ -3,7 +3,9 @@
 //   ring): one instanced sphere per wave, growing to the wave's reach (the blast's damage radius by default, so what
 //   is inside the orb is inside the blast). Its shader samples a copy of the frame (viewportSharedTexture) bent along
 //   the sphere's normal on screen, most at its silhouette and barely through its middle, like a bubble of hot air,
-//   with a faint wobble and a faint hot rim. Depth tested, so the half under the sand is hidden: a dome on the ground.
+//   with a faint wobble and a faint hot rim. Not depth tested (drawn over everything).
+// - The clear spot (Claude 2026-11-05: a crowd's rockets left a pale dome over the mech): orbs and shimmer fade out
+//   within waveClear metres of the local player's mech on screen, so blasts on it bend the air round it, not over it.
 // - The shimmer: heat puffs (exhaust behind rockets, heat over big blasts, the beam) are instanced quads placed
 //   straight in clip space that sample the same copy with a noisy offset, drawn last, no depth test.
 //   The frame is copied once a frame however many draw, and not at all when nothing is live (both meshes hidden).
@@ -12,7 +14,7 @@
 // - Heat sources: bodies that want shimmer over them (the excavator's beam) set `object.userData.heat = (waves) => ...`;
 //   found by a scan of the scene once a second.
 import * as THREE from "three/webgpu";
-import { Fn, float, vec2, vec3, vec4, sin, cos, clamp, max, abs, dot, pow, normalize, screenUV, viewportSharedTexture, instancedBufferAttribute, uniform, positionGeometry, positionView, normalView, time } from "three/tsl";
+import { Fn, float, vec2, vec3, vec4, sin, cos, clamp, max, abs, dot, pow, normalize, smoothstep, screenUV, viewportSharedTexture, instancedBufferAttribute, uniform, positionGeometry, positionView, normalView, time } from "three/tsl";
 import { BlastWaves } from "./blastWaves";
 import type { Ground } from "../mech/walker";
 import type { ShortLights } from "../world/lamps";
@@ -34,6 +36,8 @@ export class BlastWavesDraw {
   private B: THREE.InstancedBufferAttribute;
   private geo: THREE.InstancedBufferGeometry;
   private uAspect = uniform(1);
+  /** The clear spot over your mech: screen centre (u, v from the top left), radius (screen heights; 0 off), soft share. */
+  private uClear = uniform(new THREE.Vector4(0, 0, 0, 0.5));
   private p = new THREE.Vector3();
   private q = new THREE.Quaternion();
   private m = new THREE.Matrix4();
@@ -57,7 +61,13 @@ export class BlastWavesDraw {
     this.geo.setAttribute("waveB", this.B);
     this.geo.instanceCount = 0;
     const A = instancedBufferAttribute<"vec4">(this.A), B = instancedBufferAttribute<"vec4">(this.B);
-    const aspect = this.uAspect;
+    const aspect = this.uAspect, C = this.uClear;
+    // 0 over your mech, 1 outside the clear spot (Claude 2026-11-05: a rain of blasts on the mech hid it under orbs).
+    const clearMask = Fn(() => {
+      const d = screenUV.sub(C.xy).mul(vec2(aspect, 1)).length();
+      const r = max(C.z, 1e-5);
+      return C.z.greaterThan(0).select(smoothstep(r.mul(float(1).sub(C.w)), r, d), float(1));
+    });
 
     const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false, fog: false });
     mat.vertexNode = Fn(() => {
@@ -77,7 +87,7 @@ export class BlastWavesDraw {
       const ny = cos(qn.x.mul(8).add(t.mul(10)).add(sd.mul(0.7))).add(sin(qn.y.mul(12).add(t.mul(8))).mul(0.5));
       const off = vec2(nx, ny).mul(f2).mul(B.x).mul(0.6).div(vec2(aspect, 1));
       const col = viewportSharedTexture(screenUV.add(off)).rgb;
-      return vec4(col, clamp(fall.mul(3), 0, 1));
+      return vec4(col, clamp(fall.mul(3), 0, 1).mul(clearMask()));
     })();
     mat.colorNode = shade.rgb;
     mat.opacityNode = shade.a;
@@ -105,7 +115,7 @@ export class BlastWavesDraw {
       const off = sdir.add(wob).mul(shell).mul(O.x).div(vec2(aspect, 1));
       const col = viewportSharedTexture(screenUV.sub(off)).rgb;
       const rim = pow(edge, O.w.mul(2.5)).mul(O.z);
-      return vec4(col.add(vec3(1, 0.72, 0.45).mul(rim)), clamp(shell.mul(3).mul(O.y), 0, 1));
+      return vec4(col.add(vec3(1, 0.72, 0.45).mul(rim)), clamp(shell.mul(3).mul(O.y), 0, 1).mul(clearMask()));
     })();
     orbMat.colorNode = orbShade.rgb;
     orbMat.opacityNode = orbShade.a;
@@ -127,7 +137,7 @@ export class BlastWavesDraw {
    * Once a frame, after everything posted its blasts: heat sources, the waves' sim, then the orbs and quads.
    * lights: the night lights (null by day or without a look); light k scales a blast's flash (blastLight).
    */
-  update(dt: number, camera: THREE.PerspectiveCamera, lights: ShortLights | null, blastLight = 2600) {
+  update(dt: number, camera: THREE.PerspectiveCamera, lights: ShortLights | null, blastLight = 2600, own: { x: number; z: number } | null = null) {
     const w = this.waves, v = w.v;
     this.scanT += dt;
     if (this.scanT > 1) {
@@ -152,6 +162,15 @@ export class BlastWavesDraw {
         A[nq * 4] = (p.x + 1) / 2; A[nq * 4 + 1] = (1 - p.y) / 2;
         return 2 * dist * tanH;
       };
+      // The clear spot over your mech (waveClear m round a point waveClearHeight up on it).
+      const C = this.uClear.value;
+      C.z = 0;
+      if (own && v.waveClear > 0) {
+        const p = this.p.set(own.x, this.ground.height(own.x, own.z) + v.waveClearHeight, own.z);
+        const dist = camera.position.distanceTo(p);
+        p.project(camera);
+        if (p.z <= 1 && p.z >= -1) C.set((p.x + 1) / 2, (1 - p.y) / 2, v.waveClear / Math.max(1e-3, 2 * dist * tanH), v.waveClearSoft);
+      }
       const O = this.O.array as Float32Array;
       for (const wv of w.waves) {
         if (no >= MAX_ORBS) break;

@@ -10,6 +10,7 @@
 import * as THREE from "three/webgpu";
 import type { Hittable } from "./battlefield";
 import { matterOf, typeMul, type DamageTypeValues } from "./damageType";
+import { pushDir } from "./burn";
 
 export const CHILL_DEFAULTS = {
   chillDecay: 0.22,
@@ -34,9 +35,9 @@ export interface Chilled {
   grace: number;
   acc: number;
   x: number; y: number; z: number;
+  /** The way the cold came (the last hit, in plan): a body the cold kills is thrown this way (src/game/burn.ts pushDir). */
+  dx: number; dz: number;
 }
-
-const UP = new THREE.Vector3(0, 1, 0);
 
 export class Chills {
   readonly list: Chilled[] = [];
@@ -44,23 +45,26 @@ export class Chills {
   freezes = 0;
   shocks = 0;
   private at = new THREE.Vector3();
+  private dir = new THREE.Vector3();
   private chills = new Map<Hittable, Map<number, number>>();
   /** Hot metal's heat at this target and part, and a call to cool it (src/game/burn.ts; the battlefield wires them). */
   heatAt: ((t: Hittable, key: number) => number) | null = null;
   quench: ((t: Hittable, key: number) => void) | null = null;
+  /** Called the moment something freezes solid (the battlefield: the crack, the burst of frost). */
+  onFreeze: ((c: Chilled) => void) | null = null;
 
   constructor(private v: Partial<ChillValues & DamageTypeValues> = CHILL_DEFAULTS) {}
   private n<K extends keyof ChillValues>(k: K): number { return this.v[k] ?? CHILL_DEFAULTS[k]; }
 
   /** A cold hit: `amount` chill and the weapon's cold dps at full chill. */
-  hit(target: Hittable, key: number, amount: number, dps: number, x: number, y: number, z: number) {
+  hit(target: Hittable, key: number, amount: number, dps: number, x: number, y: number, z: number, dx = 0, dz = 0) {
     if (!(amount > 0) || !target.alive) return;
     // Thermal shock: cold on hot metal cracks it.
     const heat = this.heatAt?.(target, key) ?? 0;
     if (heat > 0.25) {
       if (key >= 0) target.pick?.(key);
       const d = this.n("shockDamage") * heat;
-      target.damage(d, this.at.set(x, y, z), UP);
+      target.damage(d, this.at.set(x, y, z), pushDir(this.dir, dx, dz));
       this.total += d; this.shocks++;
       this.quench?.(target, key);
     }
@@ -73,13 +77,14 @@ export class Chills {
         this.release(this.list[k]);
         this.list.splice(k, 1);
       }
-      c = { target, key, chill: 0, dps, frozen: 0, grace: 0, acc: 0, x, y, z };
+      c = { target, key, chill: 0, dps, frozen: 0, grace: 0, acc: 0, x, y, z, dx, dz };
       this.list.push(c);
     }
     c.dps = Math.max(c.dps, dps); c.x = x; c.y = y; c.z = z;
+    if (dx || dz) { c.dx = dx; c.dz = dz; }
     if (c.frozen > 0) return;
     c.chill = Math.min(1, c.chill + amount);
-    if (c.chill >= 1 && c.grace <= 0) { c.frozen = this.n("freezeTime"); this.freezes++; }
+    if (c.chill >= 1 && c.grace <= 0) { c.frozen = this.n("freezeTime"); this.freezes++; this.onFreeze?.(c); }
   }
 
   /** Fire on it: it thaws (no longer frozen, half its chill gone). */
@@ -106,7 +111,7 @@ export class Chills {
         const d = c.dps * (c.frozen > 0 ? 1 : c.chill) * tick * mul;
         if (d <= 0) continue;
         if (c.key >= 0) c.target.pick?.(c.key);
-        c.target.damage(d, this.at.set(c.x, c.y, c.z), UP);
+        c.target.damage(d, this.at.set(c.x, c.y, c.z), pushDir(this.dir, c.dx, c.dz));
         this.total += d;
       }
       const pace = c.frozen > 0 ? 0 : 1 - slow * c.chill;

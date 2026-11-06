@@ -40,6 +40,9 @@ export interface WeaponModel {
   /** The sword: the group that swings (yaw: the swing's angle, pitch: its lift), the blade inside it (stretched along
    *  +Z to the reach) and the hot edge. */
   sword?: { swing: THREE.Group; blade: THREE.Group; edge: THREE.MeshBasicMaterial };
+  /** A hull gun's bridge to the hull (the cryo projector): a group reaching inboard (x) from `from` m off the gun's
+   *  axis, built `reach` m long; the arsenal stretches it to the hull wherever the gun sits out. */
+  bridge?: { g: THREE.Group; from: number; reach: number };
 }
 
 const KHAKI = 0xb7a77c, OLIVE = 0x6c7546, DARK = 0x3e3c35, STEEL = 0x77736b, GLOW = 0x7fe0ff, HOT = 0xff6a2a;
@@ -47,6 +50,9 @@ const HOT_FIRE = HOT, KHAKI_PAINT = KHAKI, OLIVE_PAINT = OLIVE;
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const ring = new THREE.TorusGeometry(0.5, 0.12, 6, 16);
+const sphere = new THREE.SphereGeometry(0.5, 14, 10);
+/** A flared cone: narrow at -Y, wide at +Y (+Z after ALONG). */
+const bell = new THREE.CylinderGeometry(0.5, 0.28, 1, 14);
 const ALONG: [number, number, number] = [Math.PI / 2, 0, 0]; // cylinders along +Z
 type V3 = [number, number, number];
 
@@ -385,14 +391,12 @@ function breachModel(look: ToonLook): WeaponModel {
  * pilot flame always lit (glow; muzzle 1: where the flame catches the fuel), a fuel tank and a hose. The held flamer
  * carries one tank under the body; the hull Inferno two big tanks behind the breech, a thicker finned fuel barrel.
  */
-function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLook): WeaponModel {
+function flamerModel(kind: "flamer" | "inferno", look: ToonLook): WeaponModel {
   const { m, recoil, add, glow, muzzle } = kit(kind, look);
-  const big = kind === "inferno" || kind === "cryo";
-  const k = big ? 1.45 : 1, long = big ? 1.25 : 1;
-  // The freeze rays (Keith 2026-11-05) are the same rig in frost paint: pale coolant tanks, cyan bands and nozzle lamp
-  // (the lower nozzle is the coolant vent: a cold mist rather than a pilot flame).
-  const cold = kind === "frost" || kind === "cryo";
-  const HOT = cold ? GLOW : HOT_FIRE, KHAKI = cold ? 0xd6dde0 : KHAKI_PAINT, OLIVE = cold ? 0x5d6a72 : OLIVE_PAINT;
+  const big = kind === "inferno";
+  // Keith 2026-11-05: the hull ones stuck out too far forward; a shorter fuel barrel (was 1.25 × the held one's).
+  const k = big ? 1.45 : 1, long = big ? 0.9 : 1;
+  const HOT = HOT_FIRE, KHAKI = KHAKI_PAINT, OLIVE = OLIVE_PAINT;
   // Body and grip block.
   add(recoil, box, OLIVE, [0.42 * k, 0.4 * k, 0.9 * k], [0, 0, 0.3 * k]);
   add(recoil, box, DARK, [0.3 * k, 0.12 * k, 0.6 * k], [0, 0.25 * k, 0.3 * k]);
@@ -406,6 +410,13 @@ function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLo
   } else {
     add(recoil, cyl, KHAKI, [0.32, 0.8, 0.32], [0, -0.33, 0.25], ALONG);
     add(recoil, cyl, HOT, [0.34, 0.06, 0.34], [0, -0.33, 0.45], ALONG);
+    // Two fuel tanks standing out behind the grip as a counterweight (Keith 2026-11-05), banded, capped, piped forward.
+    for (const x of [-0.17, 0.17]) {
+      add(recoil, cyl, KHAKI, [0.3, 0.75, 0.3], [x, 0.02, -0.5], ALONG);
+      add(recoil, cyl, HOT, [0.32, 0.05, 0.32], [x, 0.02, -0.3], ALONG);
+      add(recoil, cyl, DARK, [0.14, 0.1, 0.14], [x, 0.02, -0.92], ALONG);
+    }
+    add(recoil, box, DARK, [0.5, 0.08, 0.12], [0, 0.02, -0.1]);
   }
   // The hose from the tank up into the fuel nozzle's breech.
   add(recoil, ring, DARK, [0.28 * k, 0.28 * k, 0.5 * k], [0.2 * k, -0.12 * k, 0.75 * k], [0, Math.PI / 2, 0]);
@@ -421,6 +432,110 @@ function flamerModel(kind: "flamer" | "inferno" | "frost" | "cryo", look: ToonLo
   add(recoil, box, STEEL, [0.12 * k, 0.16 * k, 0.1 * k], [0, -0.03 * k, fz + fl * 0.6]);
   glow(recoil, box, HOT, [0.07 * k, 0.07 * k, 0.14 * k], [0, -0.1 * k, iz + 0.06 * k]);
   muzzle(recoil, [0, -0.1 * k, iz + 0.12 * k]);
+  return m;
+}
+
+// ---- Freeze rays (Keith 2026-11-05; models 2026-11-05 overnight, agent): their own rigs, not the flamer in new paint ----
+// Same sockets as the flamers (muzzle 0: the stream leaves here; muzzle 1: the coolant vent's cold mist), but read as
+// cold kit from the game camera: pale insulated pressure vessels for weight behind the mount, a barrel wound with a
+// glowing condenser coil (lit while the trigger is held), a flared emitter with an ice-blue lens. Slate and frost white
+// where the flamers are olive and khaki.
+const PALE = 0xd6dde0, SLATE = 0x5d6a72, ICE = 0x8fd3e8;
+
+/** Frost thrower (Light, held): a squat compressor with a finned heat exchanger on top, one fat dewar flask behind the
+ *  grip (domed, banded, a lit gauge) and a pilot bottle beside it, a short coiled barrel ending in a bell. */
+function frostModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("frost", look);
+  // Compressor body and the heat exchanger's fins along its top.
+  add(recoil, box, SLATE, [0.44, 0.44, 0.85], [0, 0, 0.3]);
+  add(recoil, box, DARK, [0.12, 0.08, 0.72], [0, 0.25, 0.3]);
+  for (let i = 0; i < 5; i++) add(recoil, box, STEEL, [0.38, 0.13, 0.04], [0, 0.3, 0.02 + i * 0.14]);
+  // The dewar: a fat insulated flask behind the grip, domed at the back, two ice bands, a neck into the compressor.
+  add(recoil, cyl, PALE, [0.48, 0.78, 0.48], [0, 0.04, -0.47], ALONG);
+  add(recoil, sphere, PALE, [0.48, 0.48, 0.34], [0, 0.04, -0.86]);
+  for (const z of [-0.25, -0.68]) add(recoil, cyl, ICE, [0.5, 0.06, 0.5], [0, 0.04, z], ALONG);
+  add(recoil, cyl, DARK, [0.3, 0.12, 0.3], [0, 0.04, -0.06], ALONG);
+  // Its gauge on top, lit.
+  add(recoil, cyl, DARK, [0.15, 0.08, 0.15], [0, 0.31, -0.45]);
+  glow(recoil, cyl, GLOW, [0.11, 0.02, 0.11], [0, 0.355, -0.45]);
+  // The pilot bottle strapped along the left flank, piped forward.
+  add(recoil, cyl, PALE, [0.18, 0.62, 0.18], [0.3, -0.12, -0.32], ALONG);
+  add(recoil, cyl, DARK, [0.1, 0.08, 0.1], [0.3, -0.12, -0.67], ALONG);
+  add(recoil, cyl, DARK, [0.05, 0.5, 0.05], [0.26, -0.12, 0.15], ALONG);
+  // The barrel with its condenser coil, then the bell and the lens.
+  add(recoil, cyl, STEEL, [0.15, 1.0, 0.15], [0, 0.04, 1.22], ALONG);
+  for (let i = 0; i < 5; i++) glow(recoil, ring, GLOW, [0.28, 0.28, 0.55], [0, 0.04, 0.86 + i * 0.15]);
+  add(recoil, cyl, DARK, [0.24, 0.08, 0.24], [0, 0.04, 1.6], ALONG);
+  add(recoil, bell, DARK, [0.36, 0.26, 0.36], [0, 0.04, 1.82], ALONG);
+  glow(recoil, cyl, GLOW, [0.24, 0.02, 0.24], [0, 0.04, 1.94], ALONG);
+  muzzle(recoil, [0, 0.04, 2.02]);
+  // The coolant vent under the barrel.
+  add(recoil, box, STEEL, [0.12, 0.14, 0.1], [0, -0.1, 0.95]);
+  add(recoil, cyl, DARK, [0.08, 0.55, 0.08], [0, -0.17, 1.12], ALONG);
+  glow(recoil, cyl, GLOW, [0.07, 0.03, 0.07], [0, -0.17, 1.4], ALONG);
+  muzzle(recoil, [0, -0.17, 1.44]);
+  return m;
+}
+
+/**
+ * Cryo projector (Medium, hull). Keith 2026-11-06: the weight sat too far forward, nothing joined it to the hull, the
+ * black cradle under the vessels wasn't needed, and two round vessels behind a barrel read wrong. Now super-soaker
+ * style: two long insulated tanks lie side by side along the top, on a saddle over a compact receiver that sits back
+ * over the shoulder; a manifold with a gauge at their front feeds down into a short coiled barrel, a three-pronged
+ * emitter round the lens. A trunnion with a flange reaches inboard into the hull (the side says which way is in).
+ */
+function cryoModel(look: ToonLook, side: "left" | "right" = "right"): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("cryo", look);
+  const inb = side === "right" ? 1 : -1; // +X is the mech's left: a right gun's hull is toward +X
+  // Receiver: sits back over the shoulder, an end plate behind, radiator fins down the outboard flank only.
+  add(recoil, box, SLATE, [0.6, 0.5, 1.2], [0, -0.05, 0.1]);
+  add(recoil, box, DARK, [0.48, 0.38, 0.06], [0, -0.05, -0.52]);
+  for (let i = 0; i < 4; i++) add(recoil, box, STEEL, [0.08, 0.38, 0.05], [-inb * 0.33, -0.06, -0.25 + i * 0.22]);
+  // The bridge to the hull: a yoke plate on the inboard face, then (its own group, stretched by the arsenal to reach
+  // the hull wherever the gun sits out) the trunnion, a bearing collar, a brace under it and the flange on the hull.
+  add(recoil, box, DARK, [0.06, 0.42, 0.72], [inb * 0.31, -0.05, 0.05]);
+  const bridge = group(recoil, [inb * 0.31, -0.04, 0.02]);
+  add(bridge, cyl, STEEL, [0.3, 0.72, 0.3], [inb * 0.36, 0, 0], [0, 0, Math.PI / 2]);
+  add(bridge, cyl, DARK, [0.44, 0.1, 0.44], [inb * 0.08, 0, 0], [0, 0, Math.PI / 2]);
+  add(bridge, box, STEEL, [0.4, 0.08, 0.12], [inb * 0.3, -0.2, 0.18], [0, 0, inb * 0.45]);
+  add(bridge, box, DARK, [0.08, 0.52, 0.52], [inb * 0.68, 0, 0]);
+  m.bridge = { g: bridge, from: 0.31, reach: 0.72 };
+  // Two long tanks side by side along the top, on a saddle, banded in ice, domed both ends, strapped down.
+  add(recoil, box, DARK, [0.56, 0.06, 1.1], [0, 0.23, -0.15]);
+  const ty = 0.46, tz0 = -1.0, tz1 = 0.5, tr = 0.4;
+  for (const x of [-0.16, 0.16]) {
+    add(recoil, cyl, PALE, [tr, tz1 - tz0, tr], [x, ty, (tz0 + tz1) / 2], ALONG);
+    add(recoil, sphere, PALE, [tr, tr, 0.24], [x, ty, tz1]);
+    add(recoil, sphere, PALE, [tr, tr, 0.24], [x, ty, tz0]);
+    for (const z of [-0.72, -0.25]) add(recoil, cyl, ICE, [tr + 0.03, 0.06, tr + 0.03], [x, ty, z], ALONG);
+    add(recoil, cyl, DARK, [0.12, 0.1, 0.12], [x, ty, tz0 - 0.15], ALONG);
+  }
+  for (const z of [-0.5, 0.15]) add(recoil, box, DARK, [0.62, 0.05, 0.09], [0, ty + 0.2, z]);
+  // The manifold across the tanks' fronts, its gauge, the feed pipe down into the barrel's collar.
+  add(recoil, box, DARK, [0.48, 0.16, 0.14], [0, ty, tz1 + 0.12]);
+  add(recoil, cyl, DARK, [0.15, 0.08, 0.15], [0, ty + 0.12, tz1 + 0.12]);
+  glow(recoil, cyl, GLOW, [0.11, 0.02, 0.11], [0, ty + 0.165, tz1 + 0.12]);
+  add(recoil, cyl, STEEL, [0.1, 0.36, 0.1], [0, 0.26, tz1 + 0.22], [0.35, 0, 0]);
+  // The barrel: a collar, then the coil wound along it, short so the weight stays back.
+  add(recoil, cyl, DARK, [0.46, 0.16, 0.46], [0, -0.02, 0.76], ALONG);
+  add(recoil, cyl, STEEL, [0.28, 0.95, 0.28], [0, -0.02, 1.31], ALONG);
+  for (let i = 0; i < 5; i++) glow(recoil, ring, GLOW, [0.44, 0.44, 0.7], [0, -0.02, 0.95 + i * 0.15]);
+  add(recoil, cyl, DARK, [0.42, 0.14, 0.42], [0, -0.02, 1.7], ALONG);
+  // The emitter: three prongs leaning in round a bell, the lens inside.
+  for (let i = 0; i < 3; i++) {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / 3, r = 0.22;
+    const x = Math.cos(a) * r, y = -0.02 + Math.sin(a) * r;
+    const prong = add(recoil, box, STEEL, [0.07, 0.07, 0.42], [x, y, 1.93]);
+    prong.rotation.set(Math.sin(a) * 0.18, -Math.cos(a) * 0.18, 0);
+  }
+  add(recoil, bell, DARK, [0.32, 0.2, 0.32], [0, -0.02, 1.86], ALONG);
+  glow(recoil, cyl, GLOW, [0.22, 0.02, 0.22], [0, -0.02, 1.96], ALONG);
+  muzzle(recoil, [0, -0.02, 2.04]);
+  // The coolant vent under the receiver's nose.
+  add(recoil, box, STEEL, [0.16, 0.16, 0.14], [0, -0.36, 0.6]);
+  add(recoil, cyl, DARK, [0.11, 0.5, 0.11], [0, -0.36, 0.9], ALONG);
+  glow(recoil, cyl, GLOW, [0.09, 0.03, 0.09], [0, -0.36, 1.15], ALONG);
+  muzzle(recoil, [0, -0.36, 1.19]);
   return m;
 }
 
@@ -445,7 +560,8 @@ function napalmModel(look: ToonLook): WeaponModel {
 }
 
 /** The box stand-ins, by kind (the fallback). */
-export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
+/** The box stand-ins take the side where it matters (the cryo projector's bridge reaches inboard). */
+export const BOX_MODELS: Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel> = {
   rail: (l) => railModel("rail", l),
   railLight: (l) => railModel("railLight", l),
   autocannon: autocannonModel,
@@ -471,8 +587,8 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
   breach: breachModel,
   flamer: (l) => flamerModel("flamer", l),
   inferno: (l) => flamerModel("inferno", l),
-  frost: (l) => flamerModel("frost", l),
-  cryo: (l) => flamerModel("cryo", l),
+  frost: frostModel,
+  cryo: cryoModel,
   minigunFeed: (l) => { const m = kit("minigunFeed", l).m; return m; },
   plasma: energyBox("plasma"),
   orb: energyBox("orb"),
@@ -483,5 +599,5 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook) => WeaponModel> = {
 /** Every weapon's model, by kind: the library's (sided: the right one or its left mirror), boxes as the fallback. */
 export const WEAPON_MODELS: Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel> = Object.fromEntries(
   (Object.keys(BOX_MODELS) as ModelKind[]).map((k) => [k, (look: ToonLook, side: "left" | "right" = "right") =>
-    KIND_MODELS[k] ? libraryModel(k, look, side, () => BOX_MODELS[k](look)) : BOX_MODELS[k](look)]),
+    KIND_MODELS[k] ? libraryModel(k, look, side, () => BOX_MODELS[k](look)) : BOX_MODELS[k](look, side)]),
 ) as Record<ModelKind, (look: ToonLook, side?: "left" | "right") => WeaponModel>;

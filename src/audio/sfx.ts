@@ -17,6 +17,8 @@ export const SFX_DEFAULTS = {
   brapLevel: 0.19,
   dirtLevel: 0.32,
   metalLevel: 0.3,
+  metalEvery: 0.05,
+  metalScatter: 0.03,
   casingLevel: 0.18,
   grindLevel: 0.3,
   growlDetune: 1.7,
@@ -31,6 +33,8 @@ export const SFX_PARAMS: Param[] = [
   { key: "brapLevel", label: "Impact brap", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "dirtLevel", label: "Dirt hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "metalLevel", label: "Metal hit", min: 0, max: 1.5, step: 0.01, group: "Sound" },
+  { key: "metalEvery", label: "Bullet on metal: at most every (s)", min: 0, max: 0.3, step: 0.005, group: "Sound", tip: "A hail of rounds plays a hit this often, not one each" },
+  { key: "metalScatter", label: "Bullet on metal: timing scatter (s)", min: 0, max: 0.15, step: 0.005, group: "Sound", tip: "Each hit lands up to this late, so a burst rattles instead of ticking like a clock" },
   { key: "casingLevel", label: "Casings", min: 0, max: 1, step: 0.01, group: "Sound" },
   { key: "grindLevel", label: "Robots tearing at plating", min: 0, max: 1.5, step: 0.01, group: "Sound" },
   { key: "growlDetune", label: "Gun detune (%)", min: 0, max: 10, step: 0.1, group: "Sound", tip: "The two guns' growls run this far apart in pitch, so they beat against each other" },
@@ -212,10 +216,15 @@ export class Sfx {
       this.extra.set(name, e);
     }
     if (level) e.level = level;
+    this.versions.set(name, (this.versions.get(name) ?? 0) + 1);
     const use = data ?? e.proc;
     e.buffers = use.length ? this.toBuffers(use) : [];
     e.swapped = !!data;
   }
+
+  private versions = new Map<string, number>();
+  /** Bumped whenever a sound's variants are swapped: a long-running loop restarts on a change to pick up the recording. */
+  soundVersion(name: string) { return this.versions.get(name) ?? 0; }
 
   /** Play a sound added with addSound (a few voices at most, `voices` for a crowd of them; the oldest is cut), `delay` s from now. */
   playSound(name: string, at: THREE.Vector3, volume = 1, rate = 1, delay = 0, voices = PER_KIND) {

@@ -133,6 +133,9 @@ const EVENTS_MAX = 2048;
 export interface InfantryTarget { x: number; y: number; z: number; radius: number }
 export type ShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, shooter: number) => void;
 
+/** Turns tried round an obstacle (radians, signed by the bandit's own side). */
+const TURNS = [0.8, 1.6, 2.4, -0.8, -1.6, -2.4, Math.PI];
+
 export class InfantrySwarm {
   readonly px = new Float32Array(INFANTRY_MAX); readonly py = new Float32Array(INFANTRY_MAX); readonly pz = new Float32Array(INFANTRY_MAX);
   readonly vx = new Float32Array(INFANTRY_MAX); readonly vz = new Float32Array(INFANTRY_MAX);
@@ -441,8 +444,8 @@ export class InfantrySwarm {
           const ko = this.ko, w = this.keepOut.weight(px[i], pz[i], ko);
           if (w > 0) { steerOut(w, ko.x, ko.z, this.keepOut.push, wx, wz, ko); wx = ko.x; wz = ko.z; }
         }
-        // Don't press into the mech.
-        if (dist < keep + 1.5) {
+        // Don't press into the mech (a calm target is a spot to walk to, often a near waypoint: walk right up to it).
+        if (!calm && dist < keep + 1.5) {
           const into = wx * ux + wz * uz;
           if (into > 0) { wx -= ux * into; wz -= uz * into; }
         }
@@ -483,7 +486,22 @@ export class InfantrySwarm {
       if (d < m) {
         if (d > 1e-5) { x = target.x + (dx / d) * m; z = target.z + (dz / d) * m; } else { x = target.x + m; }
       }
-      if (this.fence && this.fence(ox, oz, x, z)) { x = ox; z = oz; vx[i] = 0; vz[i] = 0; }
+      if (this.fence && this.fence(ox, oz, x, z)) {
+        // Blocked (a wall, a shack): slide along it on one axis, or turn off to one side, before stopping.
+        const mx = x - ox, mz = z - oz;
+        if (Math.abs(mx) > 1e-5 && !this.fence(ox, oz, x, oz)) { z = oz; vz[i] = 0; }
+        else if (Math.abs(mz) > 1e-5 && !this.fence(ox, oz, ox, z)) { x = ox; vx[i] = 0; }
+        else {
+          // Round it: turned further and further off, this one's own side first (so a crowd splits both ways).
+          const sd = (i & 1) ? 1 : -1;
+          let moved = false;
+          for (const t of TURNS) {
+            const c = Math.cos(t * sd), sn = Math.sin(t * sd), tx = ox + mx * c - mz * sn, tz = oz + mx * sn + mz * c;
+            if (!this.fence(ox, oz, tx, tz)) { x = tx; z = tz; vx[i] = (tx - ox) / Math.max(1e-4, dt); vz[i] = (tz - oz) / Math.max(1e-4, dt); moved = true; break; }
+          }
+          if (!moved) { x = ox; z = oz; vx[i] = 0; vz[i] = 0; }
+        }
+      }
       px[i] = x; pz[i] = z;
       const y = this.ground.height(x, z);
       py[i] = y;
@@ -557,14 +575,17 @@ export class InfantrySwarm {
 
   private kill(i: number, dirX: number, dirZ: number, throwSpeed: number) {
     const l = Math.hypot(dirX, dirZ);
-    const nx = l > 1e-6 ? dirX / l : Math.sin(this.heading[i]), nz = l > 1e-6 ? dirZ / l : Math.cos(this.heading[i]);
-    const s = throwSpeed * (0.6 + 0.8 * this.rand());
+    // No way in plan (fire and cold ticking them down: straight up): they drop where they stand, falling along their
+    // heading, not thrown along it (Keith 2026-11-06: burning bodies flew at the mech).
+    const push = l > 1e-6;
+    const nx = push ? dirX / l : Math.sin(this.heading[i]), nz = push ? dirZ / l : Math.cos(this.heading[i]);
+    const r = this.rand(), s = push ? throwSpeed * (0.6 + 0.8 * r) : 0;
     this.state[i] = DEAD; this.stateTime[i] = 0; this.hp[i] = 0;
     this.vx[i] = nx * s; this.vz[i] = nz * s;
     this.fallYaw[i] = Math.atan2(nx, nz);
     this.count--;
     if (this.evN < EVENTS_MAX) { this.evX[this.evN] = this.px[i]; this.evZ[this.evN] = this.pz[i]; this.evN++; }
-    this.onDeath?.(i, nx, nz, s);
+    this.onDeath?.(i, push ? nx : 0, push ? nz : 0, s);
   }
 
   /** Into the register (src/game/register.ts): every standing bandit at its centre of mass, light (rounds carry on). */

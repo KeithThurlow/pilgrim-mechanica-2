@@ -7,7 +7,8 @@ import { LOOT_DEFAULTS, makeItem, rollItem } from "../src/items/generate";
 import { SALVAGE_DEFAULTS, SalvageSim } from "../src/pois/salvage";
 import { defaultLoadout, emptyLoadout, fit, resolve, fitProblem, LOADOUT_DEFAULTS } from "../src/items/loadout";
 import { fitWithHeld } from "../src/items/fitting";
-import { itemWeight } from "../src/items/item";
+import { cargoCapacity, cargoSizing, scrapCells } from "../src/items/cargoSpace";
+import { itemCells } from "../src/items/gridSize";
 import { partsFromHull } from "../src/ui/mechDoll";
 import { sortItems, sortValue, SORT_KEYS } from "../src/items/sort";
 import { itemValue } from "../src/items/value";
@@ -15,11 +16,11 @@ import { itemCadence, dpsOf } from "../src/items/dps";
 
 const fails: string[] = [];
 const must = (ok: boolean, what: string) => { if (!ok) fails.push(what); };
-const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
-// ---- Weight, room, fits ----
+// ---- Cells, room, fits (cargo space, not weight: Keith 2026-11-06) ----
 const e = new Expedition(EXPEDITION_DEFAULTS);
-e.capacity = 10; e.scrapWeight = 0.02;
+e.sizing = cargoSizing(); const cellsOf = (b: string) => { const k = itemCells({ kind: makeItem(b, "common", "q").kind, base: b }); return k.w * k.h; };
+e.capacity = cellsOf("legs-rampart") + 4 * e.sizing.blockCells + cellsOf("sensor-visor");
 const carried = makeItem("legs-rampart", "common", "carried");
 e.carryOut = [{ kind: "item", item: carried, label: "legs" }];
 e.launch();
@@ -27,9 +28,9 @@ must(e.atRisk.length === 1 && e.atRisk[0].kind === "item" && e.atRisk[0].item ==
 must(e.carryOut.length === 0, "carryOut not emptied by the launch");
 must(e.events.length === 0, "carrying out made pick-up events");
 e.add({ kind: "scrap", amount: 100, label: "x" });
-must(near(e.load, 6 + 2), `load wrong: ${e.load}`);
-must(near(e.room, 2), `room wrong: ${e.room}`);
-must(e.scrapRoom === 100, `scrap room wrong: ${e.scrapRoom}`);
+must(e.load === cellsOf("legs-rampart") + 4 * e.sizing.blockCells, `load wrong: ${e.load}`);
+must(e.room === cellsOf("sensor-visor"), `room wrong: ${e.room}`);
+must(e.scrapRoom === 0 && !e.fits({ kind: "scrap", amount: 1, label: "" }), `scrap room wrong: ${e.scrapRoom}`);
 const big = makeItem("hull-rampart", "common", "big"), small = makeItem("sensor-visor", "common", "small");
 must(!e.fits({ kind: "item", item: big, label: "" }) && e.fits({ kind: "item", item: small, label: "" }), "fits() wrong");
 must(!e.stow(big, "big") && e.stow(small, "small"), "stow() let an item over capacity or refused one that fits");
@@ -80,13 +81,13 @@ must(!aboard.dropItem("x") && aboard.dumpScrap(5) === 0 && !aboard.stow(small, "
   const sim = new SalvageSim({ ...SALVAGE_DEFAULTS, stripSizeSlow: 0 });
   sim.add({ place: { id: "p" }, sections: [{ name: "a", value: 50, spots: [{ id: "s", section: 0, x: 0, z: 0, h: 1, time: 1, value: 50, label: "x" }] }] } as never);
   const ex = new Expedition(EXPEDITION_DEFAULTS);
-  ex.capacity = 0.5; ex.scrapWeight = 0.02; ex.launch();
+  ex.capacity = 1; ex.launch();
   sim.canStrip = (s) => ex.fits({ kind: "scrap", amount: sim.pay(s), label: "" });
   let paid = 0;
   sim.onDone = (s) => { paid += sim.pay(s); };
   for (let i = 0; i < 300; i++) sim.update(1 / 60, 0, 0, true);
   must(paid === 0 && sim.blocked !== null && sim.spots[0].progress === 0, "stripped a spot whose scrap doesn't fit");
-  ex.capacity = 5;
+  ex.capacity = 100;
   for (let i = 0; i < 300; i++) sim.update(1 / 60, 0, 0, true);
   must(paid > 0 && sim.blocked === null, "a spot that fits didn't strip");
 }
@@ -106,10 +107,10 @@ must(!aboard.dropItem("x") && aboard.dumpScrap(5) === 0 && !aboard.stow(small, "
   fit(lo2, "hull", makeItem("hull-rampart", "common", "h"));
   const r2 = fitWithHeld(lo2, "mountL", makeItem("arm-rampart", "common", "a2"), []);
   must(r2.emptyHeld === "heldL", "an arm with nothing to hold didn't point at its hand");
-  // Capacity: the Rampart carries legs' carry plus racks (what the cargo limit uses).
-  const cap = resolve(defaultLoadout(), LOADOUT_DEFAULTS).cargoCapacity;
-  must(cap > 8 && cap < 40, `default cargo capacity odd: ${cap}`);
-  console.log(`default cargo ${cap.toFixed(1)} t · Rampart legs ${itemWeight(makeItem("legs-rampart", "common", "q")).toFixed(1)} t · 100 scrap ${(100 * 0.02).toFixed(1)} t`);
+  // Capacity: the cargo grid's cells plus the racks' rows (what the cargo limit uses).
+  const cap = cargoCapacity({}, resolve(defaultLoadout(), LOADOUT_DEFAULTS).cargoRackRows);
+  must(cap >= 40 && cap <= 200, `default cargo capacity odd: ${cap}`);
+  console.log(`default cargo ${cap} cells · Rampart legs ${itemCells({ kind: "legs", base: "legs-rampart" }).w}×${itemCells({ kind: "legs", base: "legs-rampart" }).h} · 100 scrap ${scrapCells(cargoSizing(), 100)} cells`);
 }
 
 // ---- The doll ----

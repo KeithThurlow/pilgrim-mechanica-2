@@ -63,6 +63,24 @@ export const SWORD_DEFAULTS = {
   swordSwishAirSize: 1.6,
   swordSwishAirStep: 0.9,
   swordLevel: 0.7,
+  // The sword's sounds by sword (Keith 2026-11-05): the turbine swipe a little above its own pitch on the buster and
+  // higher for each smaller sword; the smash over every hit, the old slam under it, the scrape on metal; then the blade
+  // ringing on, deepest on the buster, highest on the breaker, the short sword between.
+  swordSwingBreaker: 1.5,
+  swordSwingBuster: 1.2,
+  swordSwingShort: 1.9,
+  swordHitPitch: 0.5,
+  swordSmashLevel: 1,
+  swordHitUnder: 0.55,
+  swordScrapeLevel: 0.7,
+  swordScrapeSoft: 0.25,
+  swordScrapeDelay: 0.04,
+  swordRingLevel: 0.6,
+  swordRingSoft: 0.5,
+  swordRingDelay: 0.03,
+  swordRingBreaker: 1.25,
+  swordRingBuster: 0.6,
+  swordRingShort: 1,
   // The arm and the pose (Keith 2026-11-01: "the arms to actually animate"). Hull-frame metres.
   swordUpperArm: 1.45,
   swordForearm: 1.45,
@@ -154,6 +172,7 @@ export const SWORD_DEFAULTS = {
 };
 export type SwordValues = typeof SWORD_DEFAULTS;
 
+export const SWORD_SOUND_GROUP = "Sword sound";
 export const SWORD_GROUP = "Sword", SWORD_ARM_GROUP = "Sword arm", SWORD_BLOCK_GROUP = "Sword block", SWORD_POWER_GROUP = "Sword power", SWORD_VERT_GROUP = "Sword vertical cut";
 const G = SWORD_GROUP, GA = SWORD_ARM_GROUP, GB = SWORD_BLOCK_GROUP, GP = SWORD_POWER_GROUP, GV = SWORD_VERT_GROUP;
 export const SWORD_PARAMS: Param[] = [
@@ -194,6 +213,21 @@ export const SWORD_PARAMS: Param[] = [
   { key: "swordSwishAirSize", label: "Swish air puff size (m)", min: 0.2, max: 5, step: 0.05, group: G },
   { key: "swordSwishAirStep", label: "Swish air puff every (m)", min: 0.2, max: 4, step: 0.05, group: G, tip: "Spacing along the arc the blade's outer half travels (more puffs cost more)" },
   { key: "swordLevel", label: "Sound level", min: 0, max: 1.5, step: 0.01, group: G },
+  { key: "swordSwingBreaker", label: "Breaker: swipe pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "Playback speed of the turbine swipe: 1 is the recording, above 1 faster and higher" },
+  { key: "swordSwingBuster", label: "Buster: swipe pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "Keith: a little above the recording's own pitch for the big sword" },
+  { key: "swordSwingShort", label: "Short sword: swipe pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The highest of the three: a quick whip" },
+  { key: "swordHitPitch", label: "Hits follow the swipe pitch", min: 0, max: 1, step: 0.01, group: SWORD_SOUND_GROUP, tip: "Share of the sword's swipe pitch, against the Breaker's, the smash and scrape take (0: every sword hits alike, 1: as far apart as the swipes)" },
+  { key: "swordSmashLevel", label: "Smash level", min: 0, max: 2, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The synthetic smash on every unblocked hit (× Sword › Sound level); 0 off" },
+  { key: "swordHitUnder", label: "Old slam under the smash", min: 0, max: 1.5, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The earlier hit sound, mixed in beneath the smash this loud (1: as before)" },
+  { key: "swordScrapeLevel", label: "Scrape on metal", min: 0, max: 2, step: 0.01, group: SWORD_SOUND_GROUP, tip: "Blade on metal after the smash, on robots, mechs, vehicles and steel; 0 off" },
+  { key: "swordScrapeSoft", label: "Scrape on soft bodies ×", min: 0, max: 1, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The scrape on bandits on foot, this × the metal one" },
+  { key: "swordScrapeDelay", label: "Scrape after the smash (s)", min: 0, max: 0.3, step: 0.005, group: SWORD_SOUND_GROUP },
+  { key: "swordRingLevel", label: "Blade ring after a hit", min: 0, max: 2, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The blade singing on for about a second after a cut's first hit; 0 off" },
+  { key: "swordRingSoft", label: "Blade ring on soft bodies ×", min: 0, max: 1, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The ring on bandits on foot, this × the metal one" },
+  { key: "swordRingDelay", label: "Blade ring after the smash (s)", min: 0, max: 0.3, step: 0.005, group: SWORD_SOUND_GROUP },
+  { key: "swordRingBreaker", label: "Breaker: ring pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The highest note of the three" },
+  { key: "swordRingBuster", label: "Buster: ring pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "A deep thrum: lower also rings longer" },
+  { key: "swordRingShort", label: "Short sword: ring pitch ×", min: 0.3, max: 3, step: 0.01, group: SWORD_SOUND_GROUP, tip: "The middle note" },
   { key: "swordUpperArm", label: "Upper arm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordForearm", label: "Forearm (m)", min: 0.5, max: 3, step: 0.05, group: GA },
   { key: "swordDroop", label: "Blade tipped down in the cut (°)", min: -30, max: 60, step: 1, group: GA, tip: "So the tip sweeps low through small enemies" },

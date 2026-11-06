@@ -10,7 +10,7 @@ import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Param } from "../core/tweaks";
 import { InfantrySwarm, INFANTRY_MAX, DOWN, DEAD, EMPTY, FIRING, FLEEING } from "./infantry";
-import { BanditVatMesh, type BanditVatData } from "./banditVat";
+import { BanditVatMesh, packFrost, FROST_RGB, type BanditVatData } from "./banditVat";
 import { BanditAnim, type AnimClip } from "./banditAnim";
 import { VAT_CLIPS, type VatClipName } from "./banditVatFormat";
 
@@ -88,6 +88,18 @@ export class InfantryDraw {
   private ay = new THREE.Vector3(0, 1, 0);
   private az = new THREE.Vector3(0, 0, 1);
 
+  /** Chill (src/game/chill.ts): each bandit's chill 0..1 by index, 2 when frozen solid; set by whoever adds the target. */
+  chillMap: (() => ReadonlyMap<number, number> | null) | null = null;
+  /** Chill and freezing › Frozen look (0 off), as the robots'. */
+  frostLook = 1;
+  private frostC = new THREE.Color(...FROST_RGB);
+  /** How frosted over bandit i is this frame: chilled up to 0.6, frozen solid 1. */
+  private frost(cm: ReadonlyMap<number, number> | null, i: number): number {
+    const ch = cm?.get(i) ?? 0;
+    if (ch <= 0.02 || this.frostLook <= 0) return 0;
+    return Math.min(1, this.frostLook) * (ch >= 2 ? 1 : Math.min(1, ch) * 0.6);
+  }
+
   constructor(private swarm: InfantrySwarm, public look: BanditLookValues = { ...BANDIT_LOOK_DEFAULTS }, vat: BanditVatData | null = null) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
     this.boxes = new THREE.InstancedMesh(figure(), mat, INFANTRY_MAX);
@@ -122,6 +134,7 @@ export class InfantryDraw {
 
   update(dt: number): void {
     const sw = this.swarm, v = sw.v, vat = this.useVat ? this.vat : null, anim = this.anim, L = this.look;
+    const cm = this.chillMap?.() ?? null;
     this.boxes.visible = !vat;
     if (this.vat) this.vat.mesh.visible = !!vat;
     const bakedH = this.vat?.data.header.height ?? 1.8;
@@ -191,7 +204,7 @@ export class InfantryDraw {
         vat.turn.setXYZW(n, this.q.x, this.q.y, this.q.z, this.q.w);
         vat.animA.setXYZW(n, this.rows[0], this.rows[1], this.rows[2], this.rows[3]);
         const shade = (0.85 + sw.seed[i] * 0.3) * (st === DEAD ? 0.7 : 1);
-        vat.animB.setXYZW(n, this.rows[4], this.rows[5], this.rows[6], (sw.look[i] & 3) * 4 + shade);
+        vat.animB.setXYZW(n, this.rows[4], this.rows[5], this.rows[6], packFrost(this.frost(cm, i)) + (sw.look[i] & 3) * 4 + shade);
       } else {
         this.p.set(sw.px[i], y, sw.pz[i]);
         this.s.setScalar(scale * size);
@@ -199,6 +212,8 @@ export class InfantryDraw {
         this.boxes.setMatrixAt(n, this.m);
         this.c.setHex(CLOTH[sw.look[i] & 3]).multiplyScalar(0.85 + sw.seed[i] * 0.3);
         if (st === DEAD) this.c.multiplyScalar(0.7);
+        const f = this.frost(cm, i);
+        if (f > 0) this.c.lerp(this.frostC, f * 0.85);
         this.boxes.setColorAt(n, this.c);
       }
       n++;

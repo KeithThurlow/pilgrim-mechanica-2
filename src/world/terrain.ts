@@ -73,6 +73,8 @@ export interface GroundSample {
 export interface GroundModifier {
   /** Fill out for (x, z); return false (fast) where it has no effect. */
   at(x: number, z: number, out: ModifierSample): boolean;
+  /** Whether the ground here is steel rather than sand (fortress containers), for what a round hitting it does. */
+  metalAt?(x: number, z: number): boolean;
 }
 export interface ModifierSample {
   /** 0: the dunes untouched .. 1: the flat floor. */
@@ -96,6 +98,8 @@ export const NORMAL_E = 0.35;
 export class DuneField {
   /** Optional reshaping (the convoy road). Null: plain dunes. */
   modifier: GroundModifier | null = null;
+  /** Whether the ground at (x, z) is steel, not sand (GroundModifier.metalAt). */
+  metalAt(x: number, z: number) { return this.modifier?.metalAt?.(x, z) ?? false; }
   /** Optional dents added after the modifier (blast craters). Null: none. */
   dents: GroundLayer | null = null;
   private mod: ModifierSample = { w: 0, berm: 0, lift: 0, rough: 0 };
@@ -135,6 +139,7 @@ export class DuneField {
 
   /** Call after changing values. */
   update() {
+    generation++;
     if (this.v.seed !== this.seed) { this.n = new Noise2(this.v.seed * 7919); this.seed = this.v.seed; }
     const v = this.v;
     if (v.biomeSize !== undefined) {
@@ -154,13 +159,46 @@ export class DuneField {
   /** Unit vector the wind blows toward (slip faces face this way). */
   wind(): [number, number] { return [this.c, this.s]; }
 
-  height(x: number, z: number): number { return this.sample(x, z).h; }
+  private hs: GroundSample = { h: 0, crest: 0, flat: 0 };
+  height(x: number, z: number): number { return this.sample(x, z, this.hs).h; }
 
   /**
    * The ground at (x, z). raw: the ground before the modifier and the dents (the dunes as they were before the
    * convoy's plough cut them; what the plough's wake measures).
    */
   sample(x: number, z: number, out: GroundSample = { h: 0, crest: 0, flat: 0 }, raw = false): GroundSample {
+    // The ground before the modifier and the dents depends only on (x, z) and the values, and the same points are
+    // asked for over and over within a tick (feet, normals, AI): a small exact-match cache answers those.
+    const C = this.cache, i = slot(x, z);
+    if (C.kx[i] === x && C.kz[i] === z && C.gen[i] === generation) {
+      const o = i * 8, cv = C.val;
+      out.h = cv[o]; out.crest = cv[o + 1]; out.flat = cv[o + 2]; out.wr = cv[o + 3];
+      out.ws = cv[o + 4]; out.rock = cv[o + 5]; out.swell = cv[o + 6]; out.bumps = cv[o + 7];
+    } else {
+      this.base(x, z, out);
+      const o = i * 8, cv = C.val;
+      C.kx[i] = x; C.kz[i] = z; C.gen[i] = generation;
+      cv[o] = out.h; cv[o + 1] = out.crest; cv[o + 2] = out.flat; cv[o + 3] = out.wr!;
+      cv[o + 4] = out.ws!; cv[o + 5] = out.rock!; cv[o + 6] = out.swell!; cv[o + 7] = out.bumps!;
+    }
+    if (raw) return out;
+    const swell = out.swell!, bumps = out.bumps!;
+    const m = this.mod;
+    if (this.modifier && this.modifier.at(x, z, m)) {
+      // Blend toward a smooth floor that rides the swell, plus berms at the edges.
+      const floor = swell + m.lift + bumps * m.rough;
+      out.h = lerp(out.h, floor, m.w) + m.berm;
+      out.crest *= 1 - m.w;
+      out.flat = Math.max(out.flat, m.w);
+    }
+    if (this.dents) out.h += this.dents.at(x, z);
+    return out;
+  }
+
+  private cache = { kx: new Float64Array(CACHE_N).fill(NaN), kz: new Float64Array(CACHE_N), gen: new Int32Array(CACHE_N).fill(-1), val: new Float64Array(CACHE_N * 8) };
+
+  /** The ground before the modifier and the dents (sample's raw); every field of out is written. */
+  private base(x: number, z: number, out: GroundSample) {
     const v = this.v, n = this.n;
     // Biome weights: inside a region exactly one biome, so only its own ground is worked out.
     const bw = this.biomes ? this.biomes.weights(x, z, this.bw) : null;
@@ -212,17 +250,6 @@ export class DuneField {
       out.flat = lerp(flat, 1, Math.max(wrL, ws));
       out.rock = rockShow;
     }
-    if (raw) return out;
-    const m = this.mod;
-    if (this.modifier && this.modifier.at(x, z, m)) {
-      // Blend toward a smooth floor that rides the swell, plus berms at the edges.
-      const floor = swell + m.lift + bumps * m.rough;
-      out.h = lerp(out.h, floor, m.w) + m.berm;
-      out.crest *= 1 - m.w;
-      out.flat = Math.max(out.flat, m.w);
-    }
-    if (this.dents) out.h += this.dents.at(x, z);
-    return out;
   }
 
   /** The dunes alone (both sets), without swell or bumps. */
@@ -296,4 +323,16 @@ function smoothMax(a: number, b: number, k: number) {
   if (k <= 0) return Math.max(a, b);
   const h = Math.max(0, Math.min(1, 0.5 + (a - b) / (2 * k)));
   return lerp(b, a, h) + k * h * (1 - h);
+}
+
+// The sample cache (DuneField.sample). Any DuneField's update() empties every cache: fields can share one values object
+// (src/world/poiPads.ts), and update() is what every lab calls after a shape slider moves.
+const CACHE_N = 1024;
+let generation = 0;
+const bits = new Float64Array(2), words = new Int32Array(bits.buffer);
+function slot(x: number, z: number) {
+  bits[0] = x; bits[1] = z;
+  let h = Math.imul(words[0] ^ words[1], 0x9e3779b1) ^ Math.imul(words[2] ^ words[3], 0x85ebca77);
+  h ^= h >>> 15;
+  return h & (CACHE_N - 1);
 }

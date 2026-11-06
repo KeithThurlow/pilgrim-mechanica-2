@@ -2,7 +2,7 @@
 // I to view your inventory... and that should also bring up your doll"). I (or a click on the HUD doll) opens it
 // anywhere; I or Esc closes it; the game keeps running under it. Left: the mech doll, seen from behind, each slot a
 // tile round the silhouette (hover: the item's card; click: pick the slot, and the lists light up what fits it).
-// Right: the cargo with its weight against the mech's capacity, and the stash.
+// Right: the cargo with its cells against the cargo grid's size, and the stash.
 //
 // Where things come from and go depends on where the mech is:
 // - Out in the field the cargo is the expedition's at-risk list (src/expedition/expedition.ts). Items can be fitted
@@ -14,9 +14,9 @@
 // (src/items/gridSize.ts) with a placeholder image (src/ui/itemIcon.ts). Drag an item to move it (R or right click
 // while held turns it), onto a doll slot to fit it, from a doll slot onto a grid to take it off, between the cargo and
 // the stash, onto the bin to scrap it (twice) or, in the field, onto the sand to drop it. A click still fits it; a
-// right click sends it across (stash and cargo). The weight limit still rules the cargo; the grid adds the room. In
-// the field, a pick-up with no room in the grid still goes in (the grid doesn't refuse pick-ups yet) and shows under
-// the grid as "no room".
+// right click sends it across (stash and cargo). The cargo grid's size is the only limit on what the mech carries (cells,
+// src/items/cargoSpace.ts; Keith 2026-11-06: no weight). In the field a pick-up is refused when its cells don't fit;
+// anything already over (a refund, a lab start) shows under the grid as "no room".
 // The bay screen (B) still does sockets, loot rolls and the side-by-side stat changes.
 import "./inventory.css";
 import { STATS } from "../items/bases";
@@ -24,13 +24,14 @@ import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY } from "../items/rarity";
 import { levelOf } from "../items/level";
 import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
-import { itemWeight, type Item } from "../items/item";
+import type { Item } from "../items/item";
+import { cargoCapacity, cargoSizing, scrapCells } from "../items/cargoSpace";
 import {
   SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
   type LoadoutValues, type SlotId,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
-import { bagWeight, moveItem, takeFrom } from "../items/cargo";
+import { bagCells, moveItem, takeFrom } from "../items/cargo";
 import { itemName, type BayState } from "../items/bayState";
 import { itemValue, VALUE_DEFAULTS, type ValueValues } from "../items/value";
 import { sortItems as sortBy, SORT_KEYS, SORT_NAMES, type SortKey } from "../items/sort";
@@ -97,7 +98,6 @@ function btn(label: string, onClick: () => void, cls = "") {
 }
 const fmt = (x: number, d: number) => x.toFixed(d);
 const SORT_STORE = "pm2:inventory:sort";
-const sum = (xs: readonly Item[]) => xs.reduce((w, i) => w + itemWeight(i), 0);
 
 export function inventoryScreen(o: InventoryOptions) {
   const st = o.state;
@@ -129,11 +129,17 @@ export function inventoryScreen(o: InventoryOptions) {
   const field = () => !!o.exp && o.exp.state === "out";
   /** Items on offer to fit: the at-risk items in the field, the stash and the bay's cargo aboard. */
   const pool = (): Item[] => (field() ? o.exp!.atRisk.flatMap((l) => (l.kind === "item" ? [l.item] : [])) : [...st.cargo.items, ...st.stash.items]);
-  const capacity = () => resolve(st.loadout, o.tuning).cargoCapacity;
+  /** How the cargo counts cells (item classes from the Grid sliders, scrap blocks by the compactor). */
+  const sizing = () => cargoSizing(gv(), o.compactLevel ? o.compactLevel() : gv().salvageLevel);
+  /** The cargo grid's size in cells for a loadout (its racks add rows). */
+  const capacityOf = (lo: typeof st.loadout) => cargoCapacity(gv(), resolve(lo, o.tuning).cargoRackRows);
+  const capacity = () => capacityOf(st.loadout);
+  const sum = (xs: readonly Item[]) => xs.reduce((w, i) => w + sizing().itemCells(i), 0);
   const say = (t: string) => { message = t; messageT = 4; render(); };
 
   function changed() {
     st.cargo.capacity = capacity();
+    if (o.exp) o.exp.sizing = sizing();
     o.onChange();
     render();
   }
@@ -147,9 +153,9 @@ export function inventoryScreen(o: InventoryOptions) {
       // A dry run first: what comes off has to fit the cargo, under the capacity of the mech as it will be.
       const lo = copyLoadout(st.loadout);
       const r = fitWithHeld(lo, s, it, pool());
-      const cap = e.capacity === Infinity ? Infinity : resolve(lo, o.tuning).cargoCapacity;
+      const cap = e.capacity === Infinity ? Infinity : capacityOf(lo);
       const after = e.load - sum(r.used) + sum(r.off);
-      if (after > cap + 1e-9) { say(`No room in the cargo for what comes off (${fmt(after, 1)} / ${fmt(cap, 1)} t). Drop something first.`); return; }
+      if (after > cap + 1e-9) { say(`No room in the cargo for what comes off (${after} / ${cap} cells). Drop something first.`); return; }
       const real = fitWithHeld(st.loadout, s, it, pool());
       for (const u of real.used) e.takeItem(u.id);
       e.capacity = cap;
@@ -170,8 +176,8 @@ export function inventoryScreen(o: InventoryOptions) {
     if (isBuiltinArm(st.loadout[s])) { say("Arms come with the hull: fit a hull weapon here to replace this one."); return; }
     if (field()) {
       const e = o.exp!, lo = copyLoadout(st.loadout), off = unfit(lo, s);
-      const cap = e.capacity === Infinity ? Infinity : resolve(lo, o.tuning).cargoCapacity;
-      if (e.load + sum(off) > cap + 1e-9) { say(`No room in the cargo for it (${fmt(e.load + sum(off), 1)} / ${fmt(cap, 1)} t).`); return; }
+      const cap = e.capacity === Infinity ? Infinity : capacityOf(lo);
+      if (e.load + sum(off) > cap + 1e-9) { say(`No room in the cargo for it (${e.load + sum(off)} / ${cap} cells).`); return; }
       e.capacity = cap;
       for (const x of unfit(st.loadout, s)) e.stow(x, itemName(x));
     } else for (const x of unfit(st.loadout, s)) st.stash.items.push(x);
@@ -197,7 +203,7 @@ export function inventoryScreen(o: InventoryOptions) {
     const dps = dpsText(it);
     let h = `<div class="inv-tipname" style="color:${col}">${itemName(it)}</div>`
       + `<div class="inv-tipsub" style="color:${col}">${RARITY[it.rarity].name.toUpperCase()} · LEVEL ${levelOf(it)}</div>`
-      + `<div class="dim">${size} · ${it.maker} · ${fmt(itemWeight(it), 1)} t</div>`
+      + `<div class="dim">${size} · ${it.maker}</div>`
       + `<div>Power ${itemPower(it)}${dps ? ` · ${dps}` : ""} · ◆ ${itemValue(it, vv())} scrap</div>`;
     // DPS is sustained: the magazine and its reload counted (src/items/dps.ts). The burst is while the magazine lasts.
     const cad = itemCadence(it);
@@ -261,7 +267,7 @@ export function inventoryScreen(o: InventoryOptions) {
     const v = gv();
     // Layout version 2 (2026-11-03): layouts saved before were auto-placed turned; lay them out upright once.
     if (!st.grids || st.grids.v !== GRID_LAYOUT_V) st.grids = { cargo: [], stash: [], v: GRID_LAYOUT_V };
-    const grid: Grid = g === "cargo" ? { cols: v.cargoCols, rows: v.cargoRows, placed: st.grids.cargo } : { cols: v.stashCols, rows: v.stashRows, placed: st.grids.stash };
+    const grid: Grid = g === "cargo" ? { cols: v.cargoCols, rows: v.cargoRows + resolve(st.loadout, o.tuning).cargoRackRows, placed: st.grids.cargo } : { cols: v.stashCols, rows: v.stashRows, placed: st.grids.stash };
     if (g === "stash") grid.rows = Math.max(grid.rows, ...grid.placed.map((p) => p.y + footprint(p, p.rot).h));
     const items = gridItems(g);
     const left = new Set(syncGrid(grid, items.map((it) => ({ id: it.id, cells: itemCells(it, v) })), turnable(), g === "stash"));
@@ -374,7 +380,7 @@ export function inventoryScreen(o: InventoryOptions) {
     if (d.from === "cargo" || d.from === "stash") {
       // Across: stash and the bay's cargo (aboard only; the field's stash is out of reach).
       const from = d.from === "stash" ? st.stash : st.cargo, to = t.grid === "stash" ? st.stash : st.cargo;
-      if (!moveItem(from, to, it.id)) { say(`No room in the cargo for ${itemName(it)} (weight).`); return; }
+      if (!moveItem(from, to, it.id, sizing())) { say(`No room in the cargo for ${itemName(it)}.`); return; }
       setAt(t.grid, it, t.x, t.y, d.rot);
       changed();
       return;
@@ -384,7 +390,7 @@ export function inventoryScreen(o: InventoryOptions) {
     takeOff(slotFrom);
     if (st.loadout[slotFrom]?.id === it.id) return;
     const home: GridId = field() ? "cargo" : "stash";
-    if (t.grid !== home && !field() && !moveItem(st.stash, st.cargo, it.id)) { say(`No room in the cargo for ${itemName(it)} (weight); it went to the stash.`); return; }
+    if (t.grid !== home && !field() && !moveItem(st.stash, st.cargo, it.id, sizing())) { say(`No room in the cargo for ${itemName(it)}; it went to the stash.`); return; }
     setAt(t.grid, it, t.x, t.y, d.rot);
     changed();
   }
@@ -415,7 +421,7 @@ export function inventoryScreen(o: InventoryOptions) {
   /** Right click on a grid item: across to the other list (aboard). */
   function sendAcross(it: Item, from: GridId) {
     if (field()) return;
-    if (from === "stash") { if (moveItem(st.stash, st.cargo, it.id)) changed(); else say(`No room in the cargo for ${itemName(it)}.`); }
+    if (from === "stash") { if (moveItem(st.stash, st.cargo, it.id, sizing())) changed(); else say(`No room in the cargo for ${itemName(it)}.`); }
     else { moveItem(st.cargo, st.stash, it.id); changed(); }
   }
 
@@ -558,10 +564,10 @@ export function inventoryScreen(o: InventoryOptions) {
     row.style.borderLeftColor = RARITY[x.rarity].color;
     const name = el("span", "inv-name", itemName(x));
     name.style.color = RARITY[x.rarity].color;
-    const d = itemDps(x), val = itemValue(x, vv()), w = itemWeight(x);
+    const d = itemDps(x), val = itemValue(x, vv());
     // Each figure, tagged with the sort it answers; the one the list is sorted by stands out.
     const meta: [SortKey | null, string][] = [["level", `Lv ${levelOf(x)}`], ["power", `P ${itemPower(x)}`], ["dps", d !== null ? `${Math.round(d)} dps` : ""],
-      ["value", `◆ ${val}`], ["valuePerTonne", sortKey === "valuePerTonne" ? `${Math.round(val / Math.max(0.05, w))} ◆/t` : ""], ["weight", `${fmt(w, 1)} t`]];
+      ["value", `◆ ${val}`]];
     const metaEl = el("span", "dim");
     meta.filter(([, t]) => t).forEach(([k, t], i) => metaEl.append(i ? " · " : "", k === sortKey ? el("b", "inv-hot", t) : t));
     row.append(name, metaEl);
@@ -580,20 +586,20 @@ export function inventoryScreen(o: InventoryOptions) {
         changed();
       }, "small" + (armed ? " danger" : "")));
     }
-    if (mode === "stash") row.append(btn("→ cargo", () => { if (moveItem(st.stash, st.cargo, x.id)) changed(); else say(`No room in the cargo for ${itemName(x)}.`); }, "small"));
+    if (mode === "stash") row.append(btn("→ cargo", () => { if (moveItem(st.stash, st.cargo, x.id, sizing())) changed(); else say(`No room in the cargo for ${itemName(x)}.`); }, "small"));
     if (mode === "bayCargo") row.append(btn("→ stash", () => { moveItem(st.cargo, st.stash, x.id); changed(); }, "small"));
     hoverable(row, x, true);
     return row;
   }
 
-  function weightBar(load: number, cap: number) {
+  function spaceBar(load: number, cap: number) {
     const lim = Number.isFinite(cap) && cap > 0, share = lim ? load / cap : 0;
     const warn = o.tuning.cargoWarn ?? 0.85;
-    const box = el("div", "inv-weight");
-    const fill = el("div", "inv-weightfill " + (share > 1 + 1e-6 ? "over" : share >= warn ? "warn" : ""));
+    const box = el("div", "inv-space");
+    const fill = el("div", "inv-spacefill " + (share > 1 + 1e-6 ? "over" : share >= warn ? "warn" : ""));
     fill.style.width = `${Math.min(100, share * 100)}%`;
     box.append(fill);
-    const t = el("div", "inv-weighttext " + (share > 1 + 1e-6 ? "bad" : ""), lim ? `${fmt(load, 1)} / ${fmt(cap, 1)} t${share > 1 + 1e-6 ? " · over capacity" : ""}` : `${fmt(load, 1)} t · no limit`);
+    const t = el("div", "inv-spacetext " + (share > 1 + 1e-6 ? "bad" : ""), lim ? `${load} / ${cap} cells${share > 1 + 1e-6 ? " · over capacity" : ""}` : `${load} cells · no limit`);
     return [box, t];
   }
 
@@ -602,12 +608,12 @@ export function inventoryScreen(o: InventoryOptions) {
     if (field()) {
       const e = o.exp!;
       col.append(el("h3", "", "Cargo · at risk"));
-      col.append(...weightBar(e.load, e.capacity));
+      col.append(...spaceBar(e.load, e.capacity));
       col.append(el("p", "inv-note", "Lost if the mech is destroyed; banked when the crane or a pickup has you."));
       const scrap = e.scrapAtRisk;
       if (scrap > 0) {
         const row = el("div", "inv-item inv-scrap");
-        row.append(el("span", "inv-name", `◆ ${Math.floor(scrap)} scrap`), el("span", "dim", `${fmt(scrap * e.scrapWeight, 1)} t`));
+        row.append(el("span", "inv-name", `◆ ${Math.floor(scrap)} scrap`), el("span", "dim", `${scrapCells(e.sizing, scrap)} cells`));
         const n = Math.max(1, Math.round(scrap / 4));
         row.append(btn(`Dump ${n}`, () => { e.dumpScrap(n); render(); }, "small"), btn("Dump all", () => { e.dumpScrap(scrap); render(); }, "small"));
         col.append(row);
@@ -617,7 +623,7 @@ export function inventoryScreen(o: InventoryOptions) {
     } else {
       const cap = capacity();
       col.append(el("h3", "", "Cargo · goes out with the mech"));
-      col.append(...weightBar(bagWeight(st.cargo), cap));
+      col.append(...spaceBar(bagCells(st.cargo, sizing()), cap));
       col.append(gridBox("cargo"));
       if (!st.cargo.items.length) col.append(el("p", "inv-note", "Spare parts dragged here ride out at the next launch (at risk). Right click an item to send it across."));
       const sh = el("div", "inv-row");
@@ -630,11 +636,12 @@ export function inventoryScreen(o: InventoryOptions) {
 
   function render() {
     if (root.hidden) return;
+    if (o.exp) o.exp.sizing = sizing();
     sig = signature();
     const head = el("div", "inv-head");
     head.append(el("strong", "", "Inventory"));
     const r = resolve(st.loadout, o.tuning);
-    head.append(el("span", "dim", `${field() ? "In the field" : "On the convoy"} · fitted ${fmt(r.weight, 1)} t · cargo up to ${fmt(r.cargoCapacity, 1)} t · radar ${Math.round(r.values.mechRadar)} m`));
+    head.append(el("span", "dim", `${field() ? "In the field" : "On the convoy"} · cargo ${capacity()} cells · radar ${Math.round(r.values.mechRadar)} m`));
     const btns = el("div", "inv-row");
     if (o.openBay) btns.append(btn("Bay (B): sockets, loot", () => { close(); o.openBay!(); }, "small"));
     btns.append(btn("Close (I)", () => close(), "small"));
