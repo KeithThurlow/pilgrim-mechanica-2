@@ -5,6 +5,8 @@
 // 2. follow: the owner walks 6 m/s: the replicas keep up (inside the leash), never fire with nothing near.
 // 3. fight: a frozen pack 22 m ahead: minigun replicas fire rounds, rocket replicas lob volleys.
 // 4. size: their hit and body sizes are the replica sliders; marked soft (src/game/solids.ts lets you walk through).
+// 5. reach: a pack 52 m off (past the shared 45 m minigun reach) still draws fire (Keith 2026-11-06: "really short range").
+// 6. armour: a minigun round keeps a real share on a crusher's and an excavator's armour (they did ~1 a round).
 // Fails on NaN, the wrong roll, falling behind, firing at nothing, no fire on foes. Run: npm test.
 import * as THREE from "three/webgpu";
 import { Replicas, REPLICA_DEFAULTS } from "../src/summon/replicas";
@@ -19,6 +21,8 @@ import { RobotTarget } from "../src/combat/robotTarget";
 import { Register } from "../src/game/register";
 import { Solids } from "../src/game/solids";
 import { enemiesOf } from "../src/game/targeting";
+import { armourHit } from "../src/game/armour";
+import { CRUSHER_DEFAULTS } from "../src/combat/crusher";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import type { Battlefield, Hittable } from "../src/game/battlefield";
 
@@ -99,6 +103,29 @@ function stage(over: Partial<typeof REPLICA_DEFAULTS> = {}, seed = 1) {
   const u = s.reps.units()[0];
   console.log(`size: hit ${u.v.hitRadius} m, body ${u.v.bodyRadius} m, soft ${u.softSolid}`);
   if (u.v.hitRadius !== s.V.repHitSize || u.v.bodyRadius !== s.V.repBodySize || !u.softSolid) fail("size: replica sizes not applied");
+}
+
+// 5. Reach.
+{
+  const s = stage({ repCount: 2 }, 3);
+  s.tick(); s.tick();
+  s.reps.list[0].body.setWeapon("minigun"); s.reps.list[1].body.setWeapon("rockets");
+  for (let t = 0; t < 2; t += dt) s.tick();
+  const made = s.enemy.spawn(8, 0, 52, 3, { mid: 0, big: 0, quad: 0 });
+  for (const i of made) s.enemy.hp[i] = 1e6;
+  for (let t = 0; t < 8; t += dt) { s.tick(); s.enemy.update(dt, { x: 0, y: 3, z: 0, radius: 2 }, () => {}, () => {}); }
+  console.log(`reach: a pack 52 m off: rounds ${s.counts.fire}, rockets ${s.counts.lob}`);
+  if (s.counts.fire < 20) fail("reach: the minigun replica ignored a pack 52 m off");
+  if (s.counts.lob < 4) fail("reach: the rocket replica ignored a pack 52 m off");
+}
+
+// 6. Armour.
+{
+  const V = { ...MECH_DEFAULTS, ...REPLICA_DEFAULTS };
+  const d = V.roundDamage * V.repDamage;
+  const onCrusher = armourHit(d, CRUSHER_DEFAULTS.crusherArmour, V.repPierce), onBig = armourHit(d, ROBOT_DEFAULTS.robotBigArmour, V.repPierce);
+  console.log(`armour: a round ${d.toFixed(1)}, on a crusher ${onCrusher.toFixed(1)}, on an excavator ${onBig.toFixed(1)}`);
+  if (onCrusher < d * 0.3 || onBig < d * 0.5) fail("armour: replica rounds barely scratch armour");
 }
 
 if (failed) { console.log("replicas check FAILED"); process.exit(1); }

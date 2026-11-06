@@ -317,6 +317,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Mech replicas fight properly (Keith reported: "the one with miniguns isn't attacking at all"; Claude)
+- Cause: the minigun replicas did fire, but their rounds (12 × 0.6, the shared 0.1 pierce) kept about 1 a hit on a crusher or an excavator, all their guns shared the last muzzle-flash slot (23 of 24, clamped), so one flash between them and no tracer fill, and they only picked foes 40 m round you and fired out to 45 m.
+- `src/summon/replicas.ts`: own pierce (`repPierce` 0.5) and reach (`repRange` 60, guns and rockets), damage × 0.6 → 0.8, picks foes within 60 m (was 40). `src/fx/minigun.ts`: 48 flash slots (was 24). `src/game/mechUnit.ts`: an ally mech's rounds (replicas) carry the ally flag (their tracers thin less). `labs/convoy/main.ts`: `window.__summons` for probes.
+- Checked: `replicas-check` (new: a pack 52 m off draws fire; a round keeps 4.6 on crusher armour, 6.4 on an excavator), a headless probe in the swarm and convoy labs (minigun replicas firing at a crusher), full `npm test`.
 ### 2026-11-06 · Sim worker: step 4 (robot swarm) specced in the handoff note (Claude)
 - `docs/handoff-simworker.md`: what the swarm touches (readers, outside writes, callbacks, hooks) and the plan: 4a worker-ready refactor, 4b the swarm in the worker, 4c the parity check. Docs only.
 ### 2026-11-06 · Convoy guns hit striders (Keith reported; Claude on `claude/project-thread-7lrsuj`)

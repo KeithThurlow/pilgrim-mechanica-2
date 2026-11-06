@@ -292,6 +292,7 @@ escorts.mechs = guardians.spots;
 // back.
 const summons = new Summons(bf, scene, V, field, player, enemiesOf(player.team), deaths, { look: toon });
 const summonKeys = new SummonKeys(summons);
+(window as unknown as { __summons: unknown }).__summons = { summons, bf, player };
 // Enemies out there turn on your summons when they're nearer (src/summon/aggro.ts); replicas walk round the cars.
 loop.summonPrey = new SummonPrey(summons, V);
 if (summons.replicas) summons.replicas.blockers = (x, z, r) => {
