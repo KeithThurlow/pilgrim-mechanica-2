@@ -17,7 +17,7 @@ import { applyLoadout } from "../src/game/loadoutApply";
 import { BASES, BASE_BY_ID, STATS } from "../src/items/bases";
 import { PROTOCOLS } from "../src/items/protocols";
 import { RARITIES, RARITY } from "../src/items/rarity";
-import { LOOKS, lookFor, itemWeight, type Item } from "../src/items/item";
+import { LOOKS, lookFor, type Item } from "../src/items/item";
 import { LOOT_DEFAULTS, rollItem, rollLoot, rollProtocol, makeItem, statRange } from "../src/items/generate";
 import {
   defaultLoadout, emptyLoadout, fit, fitProblem, unfit, problems, resolve, socket, socketProblem, unsocket, bestHeld, SLOTS, LOADOUT_DEFAULTS,
@@ -26,7 +26,9 @@ import {
 } from "../src/items/loadout";
 import { readBay, bayToJson } from "../src/items/bayState";
 import { choose, cleanPick, loadoutFor, type Pick } from "../src/items/weaponPick";
-import { newBag, addTo, bagWeight, moveItem, loseCargo, hasRoom } from "../src/items/cargo";
+import { cargoCapacity } from "../src/items/cargoSpace";
+import { GRID_DEFAULTS } from "../src/items/grid";
+import { newBag, addTo, bagCells, moveItem, loseCargo, hasRoom } from "../src/items/cargo";
 import { RADAR_DEFAULTS, radarPicture, RadarZoom, type RadarWorld } from "../src/expedition/radar";
 import { Seeker, SEEKER_DEFAULTS, seekNearest } from "../src/expedition/seekers";
 import { SALVAGE_DEFAULTS, SalvageSim } from "../src/pois/salvage";
@@ -258,11 +260,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   fit(lo, "waistL", rollItem(23, L, { base: "waist-autoloader" }));
   r = resolve(lo);
   must(r.guns.left!.reload! < makeItem("mg-medium").stats.reload, "an autoloader didn't cut its side's reload");
-  // A cargo rack on the waist adds to the cargo.
+  // A cargo rack on the waist adds rows to the cargo grid.
   const rack = rollItem(22, L, { base: "waist-rack" });
-  const cap0 = r.cargoCapacity;
+  const cap0 = r.cargoRackRows;
   fit(lo, "waistL", rack);
-  must(close(resolve(lo).cargoCapacity, cap0 + rack.stats.carryBonus), "a cargo rack didn't add to the cargo");
+  must(resolve(lo).cargoRackRows === cap0 + Math.round(rack.stats.carryBonus) && Math.round(rack.stats.carryBonus) > 0, "a cargo rack didn't add rows to the cargo");
   // A back weapon in place of the pack: key 3, and the dash falls back to the bare values.
   const off = fit(lo, "pack", mk("sh-mortar"));
   r = resolve(lo);
@@ -408,12 +410,8 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(close(r.values.dashRecharge, pack.stats.dashRecharge * 0.7), "Coolant loop's recharge doesn't add up");
   // Extended feed (ammo) fits a waist drum.
   must(!socketProblem(rollItem(14, L, { base: "waist-drums", rarity: "rare" }), rollProtocol(5, "extendedFeed")), "Extended feed refused by a waist drum");
-  // Cargo capacity: legs' carry plus the hull's racks; weight: everything fitted, Protocols included.
-  const salv = rollItem(14, L, { base: "hull-salvager" });
-  fit(lo, "hull", salv);
-  const r3 = resolve(lo);
-  must(close(r3.cargoCapacity, lo.legs!.stats.carry + salv.stats.carryBonus), "cargo capacity isn't carry plus racks");
-  must(close(r3.weight, SLOTS.reduce((w, s) => w + (lo[s] ? itemWeight(lo[s]!) : 0), 0)) && r3.weight > 0, "loadout weight doesn't add up");
+  // Cargo space is the grid (src/items/cargoSpace.ts): the grid's cells plus the racks' rows, no weight.
+  must(cargoCapacity({}, 0) === GRID_DEFAULTS.cargoCols * GRID_DEFAULTS.cargoRows && cargoCapacity({}, 2) === GRID_DEFAULTS.cargoCols * (GRID_DEFAULTS.cargoRows + 2), "cargo capacity isn't the grid plus rack rows");
 }
 
 // ---- Rolls: deterministic, inside their ranges, rarity widens both ways ----
@@ -452,11 +450,11 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
 // ---- Cargo ----
 {
   const lo = defaultLoadout();
-  const cargo = newBag(resolve(lo).cargoCapacity), stash = newBag();
+  const cargo = newBag(cargoCapacity({}, resolve(lo).cargoRackRows)), stash = newBag();
   let refused = 0;
   for (let s = 1; s < 60; s++) { const it = rollItem(s, L, { kind: "legs" }); if (!addTo(cargo, it)) { refused++; addTo(stash, it); } }
   must(refused > 0, "cargo never filled");
-  must(bagWeight(cargo) <= cargo.capacity + 1e-9, `cargo over capacity (${bagWeight(cargo)} / ${cargo.capacity})`);
+  must(bagCells(cargo) <= cargo.capacity, `cargo over capacity (${bagCells(cargo)} / ${cargo.capacity})`);
   const big = stash.items[0];
   must(!hasRoom(cargo, big) && !moveItem(stash, cargo, big.id) && stash.items.includes(big), "moved an item into a full cargo");
   must(moveItem(cargo, stash, cargo.items[0].id), "couldn't move from cargo to stash");
@@ -493,6 +491,6 @@ for (const b of BASES) if (b.kind === "legs" && lookFor(makeItem(b.id)) !== "ram
 }
 
 const lo = defaultLoadout(), r = resolve(lo);
-console.log(`bases ${BASES.length} · protocols ${PROTOCOLS.length} · default: walk ${r.values.walkSpeed}, hull ${r.values.hull}, guns L ${r.guns.left?.fireRate}/s R ${r.guns.right?.fireRate}/s, radar ${r.values.mechRadar} m, cargo ${r.cargoCapacity} t, fitted ${r.weight.toFixed(1)} t`);
+console.log(`bases ${BASES.length} · protocols ${PROTOCOLS.length} · default: walk ${r.values.walkSpeed}, hull ${r.values.hull}, guns L ${r.guns.left?.fireRate}/s R ${r.guns.right?.fireRate}/s, radar ${r.values.mechRadar} m, cargo ${cargoCapacity({}, r.cargoRackRows)} cells`);
 if (fails.length) { console.log("FAIL\n  " + fails.join("\n  ")); throw new Error("loadout check failed"); }
 console.log("loadout check passed");

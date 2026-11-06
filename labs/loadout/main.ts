@@ -15,7 +15,8 @@ import { DummiesDraw } from "../../src/game/dummiesDraw";
 import { LOOT_DEFAULTS, LOOT_PARAMS, rollItem, rollLoot, rollProtocol } from "../../src/items/generate";
 import { LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, defaultLoadout, fit, fitProblem, resolve, type SlotId } from "../../src/items/loadout";
 import { RARITIES, type Rarity } from "../../src/items/rarity";
-import { newBag, bagWeight } from "../../src/items/cargo";
+import { newBag, bagCells } from "../../src/items/cargo";
+import { cargoCapacity } from "../../src/items/cargoSpace";
 import { inventoryScreen } from "../../src/ui/inventory";
 import { VALUE_DEFAULTS, VALUE_PARAMS } from "../../src/items/value";
 import { GRID_DEFAULTS, GRID_PARAMS } from "../../src/items/grid";
@@ -67,7 +68,7 @@ for (const part of (params.get("fit") ?? "").split(",").filter(Boolean)) {
 
 function refit() {
   const r = resolve(st.loadout, V);
-  st.cargo.capacity = r.cargoCapacity;
+  st.cargo.capacity = cargoCapacity(V, r.cargoRackRows);
   applyLoadout(player, r);
   lab.refresh();
   saveBay(KEY, st);
@@ -136,8 +137,8 @@ lab.onFrame((dt) => {
   const lo = st.loadout;
   doll.update(dt, {
     parts: partsFromHull(player.health / Math.max(1, player.maxHealth), { sensor: !!lo.sensor, pack: !!lo.pack, armL: !!lo.mountL, armR: !!lo.mountR }),
-    cargo: { load: bagWeight(st.cargo), capacity: r.cargoCapacity, scrap: 0, items: st.cargo.items.length, warn: 0.85 },
+    cargo: { load: bagCells(st.cargo), capacity: cargoCapacity(V, r.cargoRackRows), scrap: 0, items: st.cargo.items.length, warn: 0.85 },
   });
   const g = player.upper.guns;
-  lab.hud("loadout", `damage/s ${Math.round(rng.dps())} · dummies down ${rng.kills} · guns ${g[0].enabled ? "L" : "-"}${g[1].enabled ? "R" : "-"} · fitted ${r.weight.toFixed(1)} t · cargo ${st.cargo.items.length} · B: bay`);
+  lab.hud("loadout", `damage/s ${Math.round(rng.dps())} · dummies down ${rng.kills} · guns ${g[0].enabled ? "L" : "-"}${g[1].enabled ? "R" : "-"} · cargo ${st.cargo.items.length} · B: bay`);
 });

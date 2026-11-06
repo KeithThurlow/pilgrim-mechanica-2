@@ -622,7 +622,7 @@ export class ExpeditionLoop {
     let prompt = this.padPrompt() || (exp.state === "out" && onSand ? this.quests.prompt : "");
     if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
-      else if (s.blocked) prompt = `Cargo full: ${s.blocked.label} pays ${s.pay(s.blocked)} scrap (${(s.pay(s.blocked) * exp.scrapWeight).toFixed(1)} t), ${Math.max(0, exp.room).toFixed(1)} t free · I: drop something`;
+      else if (s.blocked) prompt = `Cargo full: ${s.blocked.label} pays ${s.pay(s.blocked)} scrap, ${Math.max(0, exp.room)} cells free · I: drop something`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
     this.hud.update(dt, {

@@ -13,6 +13,7 @@ import { LOOT_DEFAULTS, LOOT_PARAMS, rollItem, rollProtocol } from "../../src/it
 import { LOADOUT_DEFAULTS, LOADOUT_PARAMS, SLOTS, defaultLoadout, resolve, type SlotId } from "../../src/items/loadout";
 import { VALUE_DEFAULTS, VALUE_PARAMS } from "../../src/items/value";
 import { GRID_DEFAULTS, GRID_PARAMS } from "../../src/items/grid";
+import { cargoCapacity, cargoSizing } from "../../src/items/cargoSpace";
 import { GRID_SIZE_DEFAULTS, GRID_SIZE_PARAMS } from "../../src/items/gridSize";
 import { newBag } from "../../src/items/cargo";
 import { inventoryScreen } from "../../src/ui/inventory";
@@ -39,12 +40,11 @@ function roll(n: number, into: "stash" | "cargo" = "stash") {
 }
 // A stand-in expedition: out, the cargo is the at-risk list and the scrap salvage blocks.
 const exp = new Expedition(EXPEDITION_DEFAULTS);
-exp.scrapWeight = 0.02;
 function goOut(scrap: number) {
   if (exp.state !== "aboard") return;
   exp.carryOut = st.cargo.items.splice(0).map((item) => ({ kind: "item" as const, item, label: "cargo" }));
   exp.launch();
-  exp.capacity = resolve(st.loadout, V).cargoCapacity;
+  exp.capacity = cargoCapacity(V, resolve(st.loadout, V).cargoRackRows);
   if (scrap > 0) exp.add({ kind: "scrap", amount: scrap, label: "Wreck" });
   changed();
 }
@@ -56,7 +56,8 @@ function comeHome() {
   changed();
 }
 function changed() {
-  st.cargo.capacity = resolve(st.loadout, V).cargoCapacity;
+  st.cargo.capacity = cargoCapacity(V, resolve(st.loadout, V).cargoRackRows);
+  exp.sizing = cargoSizing(V, V.salvageLevel);
   if (exp.state === "out") exp.capacity = st.cargo.capacity;
   // The Compactor level slider stands in for the convoy's Salvage compactor unlock.
   exp.scrapValueMul = Unlocks.mulAt(V, "compactor", V.salvageLevel);
