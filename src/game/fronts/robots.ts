@@ -11,8 +11,7 @@ import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_PARAMS, DOWN, LATCHED, BIG, MID, SMAL
 import { RobotsDraw } from "../../combat/robotsDraw";
 import { RobotTarget } from "../../combat/robotTarget";
 import { RobotTearFx, ROBOT_TEAR_DEFAULTS, ROBOT_TEAR_PARAMS } from "../../combat/robotTearFx";
-import { robotRagdoll } from "../../physics/bodies";
-import { ROBOT_RAG } from "../../combat/robotShapes";
+import { robotRagdolls } from "../../expedition/ragdolls";
 import { StriderLab, STRIDER_LAB_DEFAULTS, STRIDER_LAB_PARAMS, STRIDER_TOPIC } from "../../combat/striderLab";
 import { robotDeathSound, wireRobotBlasts } from "../robotBeam";
 
@@ -129,14 +128,7 @@ export function robotsFront(params0: URLSearchParams): Front {
       hook(player, "onStomp", (x, z, k) => sw.stomp(x, z, V.robotStompReach * Math.min(1.5, k)));
       // Deaths go to the physics: the body and its leg parts fall apart loosely (small ones fly, walkers fold where they
       // stand, excavators topple from height).
-      sw.hideDead = true;
-      const RAG = ROBOT_RAG;
-      sw.onDeath = (i, nx, nz, speed) => {
-        const kind = sw.kind[i], [body, leg] = RAG[kind];
-        const { parts, joints } = robotRagdoll(sw, i, body, leg);
-        lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-          { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
-      };
+      robotRagdolls(sw, lab.deaths);
       // Walkers' feet coming down kick up the sand (a bucket a lot, a medium foot a little); latched small ones tear at
       // the plating, medium ones' saws bite.
       sw.onFootfall = robotFootfall(bf, sw);

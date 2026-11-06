@@ -13,7 +13,8 @@ import { SoftRing, glowMaterial } from "../weapons/ribbon";
 interface Ground { height(x: number, z: number): number }
 
 /** A core counting down: where (the ground under it), the blast's radius, seconds left of its delay. */
-export interface CoreView { id: number; x: number; y: number; z: number; t: number; delay: number; radius: number }
+/** hy: the hull's height when the wreck is falling (the glow rides it; Keith 2026-11-06), else the glow sits on the wreck. */
+export interface CoreView { id: number; x: number; y: number; z: number; t: number; delay: number; radius: number; hy?: number }
 
 const SEG = 64, AMBER = 0xffa020, HOT = 0xff7a18;
 
@@ -44,7 +45,8 @@ export class CoreWarnDraw {
       // Blinks: 1.5 a second at first, 10 at the end; each new cycle beeps.
       const was = s.phase;
       s.phase += dt * (1.5 + 8.5 * u * u);
-      if (Math.floor(s.phase) !== Math.floor(was)) this.onBeep?.(c.x, c.y + 1.5, c.z, u);
+      const gy = c.hy ?? c.y + 1.4;
+      if (Math.floor(s.phase) !== Math.floor(was)) this.onBeep?.(c.x, gy + 0.1, c.z, u);
       const on = s.phase % 1 < 0.45;
       const R = c.radius;
       s.ring.set(c.x, c.z, R - 1.6, R + 0.3, this.ground, 0.8, 0.09);
@@ -57,7 +59,7 @@ export class CoreWarnDraw {
       s.fill.mesh.visible = true;
       // The core: an orange glow on the wreck, swelling and flickering, jittering harder toward the end.
       const j = 0.15 + 0.6 * u * u, fl = 0.6 + 0.4 * Math.random();
-      s.glow.position.set(c.x + (Math.random() - 0.5) * j, c.y + 1.4 + (Math.random() - 0.5) * j, c.z + (Math.random() - 0.5) * j);
+      s.glow.position.set(c.x + (Math.random() - 0.5) * j, gy + (Math.random() - 0.5) * j, c.z + (Math.random() - 0.5) * j);
       s.glow.scale.setScalar((0.5 + 1.4 * u) * (on ? 1.15 : 0.9));
       (s.glow.material as THREE.MeshBasicMaterial).opacity = (0.55 + 0.45 * u) * fl;
       s.halo.position.copy(s.glow.position);

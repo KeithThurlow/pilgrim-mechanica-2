@@ -167,10 +167,12 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
 }
 
 /**
- * Resolve a big walker's core going up after its death (Keith 2026-11-02: "a really big, significant boom"): a big
- * blast on the ground under it (everything of another team in reach; the swarm hurt its own robots already), its
- * blast wave in the death kind, a second wave and flash up at the chassis, a column and a ring of dust, a deep extra
- * layer of the shared explosion sound (boom) and the shove outward.
+ * Resolve a reactor going up in a falling wreck (Keith 2026-11-02: "a really big, significant boom"; 2026-11-06: from
+ * the hull as it tips over, the tall walkers' an airburst like a nova): a big blast on the ground under the hull
+ * (everything of another team in reach; the swarm hurt its own robots already), its crater, the nova at the hull
+ * (src/fx/nova.ts: flash, fireball shell, shockwave ring), a blast wave and a flash of light up there, a burst of debris
+ * and smoke from the hull, a ring of dust along the ground, a deep extra layer of the explosion sound (boom) and the
+ * shove outward.
  */
 export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, shove?: (x: number, z: number, radius: number, speed: number) => void) {
   from.set(e.at.x, e.at.y, e.at.z);
@@ -178,13 +180,20 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
   // A huge crater on top of the blast's own dent (on dry ground; in water the blast splashes instead).
   if (e.craterR > 0.5 && e.craterDepth > 0 && !bf.inWater(e.at.x, e.at.z)) bf.crater(e.at.x, e.at.z, e.craterR, e.craterDepth);
   cookGround(bf, e.at.x, e.at.z, e.radius, (bf.v as HeatV).heatDeath ?? 1500, 0.45);
-  const hy = Math.max(e.at.y + 2, e.hubY);
-  bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * 0.6, { ground: false, fam: 2 });
-  bf.nightLights?.flash(e.at.x, hy, e.at.z, e.radius * 1.5, famOfTeam(ROBOTS));
-  // A column of dust and smoke up through where the chassis was, and a wide ring thrown out along the ground.
-  for (let k = 0; k < 40; k++) {
+  const hy = Math.max(e.at.y + 1, e.hubY), air = hy - e.at.y, nova = e.nova ?? 0;
+  bf.novas.post(e.at.x, hy, e.at.z, e.at.y, e.radius, nova);
+  bf.waves?.post("death", e.at.x, hy, e.at.z, e.radius * (0.6 + 0.4 * Math.min(1, nova)), { ground: false, fam: 2 });
+  bf.nightLights?.flash(e.at.x, hy, e.at.z, e.radius * (1.5 + ((bf.v as { novaLight?: number }).novaLight ?? 0) * Math.min(1.5, nova) * 0.5), famOfTeam(ROBOTS));
+  // Debris and smoke thrown out every way from the hull (an airburst: some of it straight down onto the sand), and a
+  // wide ring thrown out along the ground.
+  const n = Math.round(30 + 30 * Math.min(1.5, nova));
+  for (let k = 0; k < n; k++) {
+    const a = Math.random() * Math.PI * 2, up = Math.random() * 2 - 1, sp = 6 + Math.random() * 14, c = Math.sqrt(1 - up * up);
+    bf.dust.emit(1, e.at.x, hy, e.at.z, Math.cos(a) * c * sp, up * sp + 3, Math.sin(a) * c * sp, 1.6, 2.5 + Math.random() * 3, 0.9);
+  }
+  if (air < 3) for (let k = 0; k < 24; k++) {
     const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 4;
-    bf.dust.emit(1, e.at.x, e.at.y + Math.random() * hy * 0.5, e.at.z, Math.cos(a) * sp, 8 + Math.random() * 14, Math.sin(a) * sp, 1.6, 3 + Math.random() * 3, 0.9);
+    bf.dust.emit(1, e.at.x, e.at.y + Math.random() * 2, e.at.z, Math.cos(a) * sp, 8 + Math.random() * 14, Math.sin(a) * sp, 1.6, 3 + Math.random() * 3, 0.9);
   }
   for (let k = 0; k < 36; k++) {
     const a = (k / 36) * Math.PI * 2, r = e.radius * 0.5;
@@ -192,6 +201,7 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
     bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 14, 2 + Math.random() * 4, Math.cos(a) * 14, 1.4, 2.5 + Math.random() * 2.5, 0.9);
   }
   if (e.boom > 0) {
+    from.set(e.at.x, hy, e.at.z);
     bf.sfx.playSound("blastBoom", from, e.boom, 0.7 + Math.random() * 0.1);
     if (live(bf, "robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), 0.95 + Math.random() * 0.1);
     else bf.sfx.playSound("blast", from, e.boom * 0.5, 0.55 + Math.random() * 0.1);
