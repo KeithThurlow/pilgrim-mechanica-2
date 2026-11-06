@@ -43,6 +43,9 @@ export interface Owner {
   readonly name: string;
   publish(reg: Register): void;
   attach?(reg: Register, owner: number): void;
+  /** A part of thing `serial` under a ray (unit direction): its aim point into out, true when the ray is on a part worth
+   *  aiming at rather than the thing's centre (a big walker's leg or reactor, Keith 2026-11-06). */
+  aimPart?(serial: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, out: { x: number; y: number; z: number }): boolean;
 }
 
 /** Results of a line query: entries crossed, in order along the line, with where each footprint is entered and left. */

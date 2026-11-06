@@ -11,7 +11,7 @@ import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
 import { type RobotShares, RobotSwarm, DEAD, DOWN, LATCHED, BIG, MID, SMALL, isAirborne, robotCentre, type RobotValues } from "../combat/robots";
 import { RobotsDraw } from "../combat/robotsDraw";
-import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotPulse, robotDeathSound } from "../game/robotBeam";
+import { coreWarnFx, fireRobotBeam, fireRobotDeathBlast, fireRobotLegLost, fireRobotPulse, robotDeathSound } from "../game/robotBeam";
 import { RobotTarget } from "../combat/robotTarget";
 import { RobotTearFx, type RobotTearValues } from "../combat/robotTearFx";
 import type { Battlefield } from "../game/battlefield";
@@ -85,6 +85,7 @@ export class SwarmCamps {
     // A big one's core going up after it dies (Keith 2026-11-02): hurts everything round it, robots too.
     robotDeathSound(bf, this.sw);
     this.sw.onDeathBlast = (e) => fireRobotDeathBlast(bf, e, (x, z, r, sp) => { if (player.alive) player.shoveFrom(x, z, r, sp); });
+    this.sw.onLegLost = (e) => fireRobotLegLost(bf, e);
     // The mech's stomps crush small ones; a dash throws clingers off.
     player.onStomp = (x, z, k) => this.sw.stomp(x, z, 2.6 * Math.min(1.5, k));
   }

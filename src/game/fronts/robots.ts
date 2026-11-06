@@ -65,7 +65,7 @@ export function robotsFront(params0: URLSearchParams): Front {
     spec: {
       defaults: { ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...WAVE_DEFAULTS, ...DROID_ALL_DEFAULTS, ...STRIDER_LAB_DEFAULTS, ...LAB_GUN_DEFAULTS },
       params: [...WAVE_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS, ...DROID_PARAMS, ...STRIDER_LAB_PARAMS, ...LAB_GUN_PARAMS],
-      topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: terraform pulse", "Robots: weapon quads", "Robots: hit parts", "Lab: your guns"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
+      topics: [{ id: "robots", label: "Robots", groups: ["Robot waves", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: terraform pulse", "Robots: weapon quads", "Robots: hit parts", "Robots: big weak points", "Robots: big death", "Lab: your guns"] }, { id: "droids", label: "Humanoid robots", groups: DROID_GROUPS }, STRIDER_TOPIC],
       selectables: [{ topic: "robots", label: "Robots", objects: () => (draw ? draw.group.children : []) }, { topic: "droids", label: "Humanoid robots", objects: () => droidMeshes }, striders.selectable],
       actions: [{ label: "Pack now", onClick: () => pack?.() }, ...striders.actions],
       report: () => ({ robots: swarm?.count ?? 0, clinging: swarm?.latchedCount ?? 0, ...striders.report() }),
@@ -180,6 +180,13 @@ export function robotsFront(params0: URLSearchParams): Front {
         let t = 0;
         lab.onFrame((dt) => { if (t < at && (t += dt) >= at) sw.damage(b, 1e6, 0, 1); });
       }
+      // ?weak[=still]: no packs, one big walker 28 m ahead coming in (still: frozen there), to shoot its legs off or hit
+      // its reactor (Keith 2026-11-06, src/combat/robotWeakPoints.ts): Tab-lock it and point at a leg or the orb on top.
+      if (params0.has("weak")) {
+        V.robotSwarmSize = 0;
+        const p = player.sim.pos, still = params0.get("weak") === "still";
+        for (const i of sw.spawn(1, p.x + 2, p.z + 28, 0, { mid: 0, big: 1 })) { if (still) sw.frozen[i] = 1; sw.pulseClock[i] = 8; sw.beamClock[i] = 8; }
+      }
       // ?lineup: no packs, a frozen row of one of each kind ahead of the mech, for looking at them.
       if (params0.has("lineup")) {
         V.robotSwarmSize = 0;
@@ -273,7 +280,7 @@ export function robotsFront(params0: URLSearchParams): Front {
         },
         touch() {
           contact.robots(sw, target);
-          lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]}`);
+          lab.hud("robots", `robots ${sw.count} up · clinging ${sw.latchedCount} · saw strikes ${sw.cuts} · charges ${sw.lobs} · beams ${sw.beams} · destroyed ${target.kills} · hits body ${target.partHits[0]} leg ${target.partHits[1]} foot ${target.partHits[2]} reactor ${target.partHits[3]} · legs shot through ${sw.legsBroken}`);
           const rl = lab.arsenal.last;
           if (rl.railHits !== undefined) lab.hud("rail", `last rail slug: ${rl.railHits} bodies, ${Math.round(rl.rail ?? 0)} damage${rl.railGround ? " · stopped in a dune" : ""}`);
         },

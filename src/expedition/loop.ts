@@ -105,7 +105,7 @@ export const LOOP_TOPICS = [
   { id: "loot", label: "Loot and cargo", groups: ["Loot", "Loot labels", "Cargo", "Item value", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
-  { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
+  { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts", "Robots: big weak points"] },
   { id: "droids", label: "Humanoid robots", groups: [DROID_CAMP_GROUP, ...DROID_GROUPS] },
   STRIDER_CAMP_TOPIC,
   CRUSHER_SITE_TOPIC,

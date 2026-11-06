@@ -7,6 +7,7 @@
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { HUB_R, HUB_H, MID_SPEC, BIG_SPEC, MID_SAW_Z, MID_SAW_X, MID_SAW_Y, MID_BODY_H, BIG_BODY_H, QUAD_TURRET_Y, QUAD_GUN_X } from "./robotLegs";
+import { BIG_CORE_Y, BIG_CORE_R } from "./robotWeakPoints";
 
 /**
  * The robots' shared palette (also for the humanoid and strider robots in their own files): plate white, a dimmer
@@ -289,6 +290,13 @@ export function bigBodyGeometry(): THREE.BufferGeometry {
   k.cyl(R * 0.36, H * 0.14, WHITE_DIM, 0, H * 0.38, -0.04, 0, 0, 0, 12);
   k.cyl(R * 0.38, H * 0.03, JOINT, 0, H * 0.33, -0.04, 0, 0, 0, 12);
   k.cyl(0.012, 0.28, DARK, -0.1, H * 0.5 + 0.12, -0.1, 0, 0, 0, 5);
+  // The reactor's mast and cradle (Keith 2026-11-06: a target on top; the glowing orb is drawn apart, robotWeakPoints.ts).
+  k.cyl(0.035, BIG_CORE_Y - H * 0.4, DARK, 0, (BIG_CORE_Y + H * 0.4) / 2, 0, 0, 0, 0, 8);
+  k.cyl(BIG_CORE_R * 1.15, 0.03, JOINT, 0, BIG_CORE_Y - BIG_CORE_R * 0.75, 0, 0, 0, 0, 12);
+  for (let j = 0; j < 3; j++) {
+    const a = (j / 3) * Math.PI * 2;
+    k.box(0.025, BIG_CORE_R * 1.3, 0.025, DARK, Math.sin(a) * BIG_CORE_R * 1.05, BIG_CORE_Y - BIG_CORE_R * 0.15, Math.cos(a) * BIG_CORE_R * 1.05, 0, a, 0);
+  }
   // Sensor head: a squarish block out the front of the disc, dark visor band.
   k.box(0.24, 0.13, 0.2, WHITE, 0, H * 0.02, R + 0.04).box(0.245, 0.045, 0.12, GLASS, 0, H * 0.04, R + 0.09);
   k.box(0.16, 0.06, 0.14, JOINT, 0, -H * 0.18, R - 0.02);
