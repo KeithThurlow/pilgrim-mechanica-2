@@ -5,12 +5,17 @@
 // flies its own ballistic arc (gravity, a little drag), so a stream that's swung bends like water from a hose. The
 // points joined in order (with the nozzle at the near end) make the line. A point that reaches the sand lands (the
 // caller splashes a ground fire there); one that runs out of fuel in the air burns out (the caller lets a fireball
-// rise). Where a point goes from the middle, the line breaks there.
+// rise). A point that runs into something (a robot, a mech: the caller says what's there) splashes on it (Keith
+// 2026-11-06: "whatever it's throwing onto to have a hit slash splash type effect").
 
-/** A point's end: it came down on the sand, or burnt out in the air. */
-export type StreamEnd = "land" | "burnout";
+/** A point's end: it came down on the sand, burnt out in the air, or ran into something. */
+export type StreamEnd = "land" | "burnout" | "hit";
 
-export interface StreamGround { height(x: number, z: number): number }
+export interface StreamGround {
+  height(x: number, z: number): number;
+  /** Something not of `team` is at (x, y, z): the fuel splashes on it. */
+  hit?(x: number, y: number, z: number, team: number): boolean;
+}
 
 /** One nozzle's line. Points are kept oldest first. */
 export class FuelLine {
@@ -25,6 +30,8 @@ export class FuelLine {
   nx = 0; ny = 0; nz = 0; nvx = 0; nvy = 0; nvz = 0; nBurn = 1;
   /** Width scale (the inferno's is bigger), a freeze ray's (pale, no fire). */
   width = 1; cold = false;
+  /** Whose fuel (it splashes on anything not of this team; -1: nothing). */
+  team = -1;
   /** Pouring this frame, and last frame (a new pour starts a new line). */
   live = false; wasLive = false;
   /** Seconds since the nozzle last said it pours: a gun that pours only on its shots (a few a second) still pours in
@@ -71,7 +78,10 @@ export class FuelLine {
     }
     for (let i = this.n - 1; i >= 0; i--) {
       const g = ground.height(this.px[i], this.pz[i]);
-      if (this.py[i] <= g && this.vy[i] < 0) {
+      if (this.team >= 0 && ground.hit && this.age[i] > 0.04 && ground.hit(this.px[i], this.py[i], this.pz[i], this.team)) {
+        end("hit", this.px[i], this.py[i], this.pz[i], this.vx[i], this.vy[i], this.vz[i]);
+        this.drop(i);
+      } else if (this.py[i] <= g && this.vy[i] < 0) {
         end("land", this.px[i], g, this.pz[i], this.vx[i], this.vy[i], this.vz[i]);
         this.drop(i);
       } else if (this.age[i] >= this.burn[i]) {
@@ -93,10 +103,10 @@ export class FlameStreams {
   readonly lines = new Map<object, FuelLine>();
 
   /** A nozzle pours this frame: at (x, y, z), throwing fuel at (vx, vy, vz) that burns `burn` s. */
-  pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold: boolean) {
+  pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold: boolean, team = -1) {
     let l = this.lines.get(key);
     if (!l) { l = new FuelLine(); this.lines.set(key, l); }
-    l.live = true; l.since = 0; l.nx = x; l.ny = y; l.nz = z; l.nvx = vx; l.nvy = vy; l.nvz = vz; l.nBurn = burn; l.width = width; l.cold = cold;
+    l.live = true; l.since = 0; l.nx = x; l.ny = y; l.nz = z; l.nvx = vx; l.nvy = vy; l.nvz = vz; l.nBurn = burn; l.width = width; l.cold = cold; l.team = team;
   }
 
   step(dt: number, G: number, drag: number, every: number, ground: StreamGround,

@@ -60,7 +60,7 @@ must(armourHit(1.4, 8, undefined, F) === 1.4, "a hit with no pierce (a bite) pai
   t.splash(at, 4, 300, dir, { blast: true, pierce: 0.6 });
   must(close(h0 - sw.hp[e], armourHit(300 * v.robotBigBlast, v.robotBigArmour, 0.6, F), 1e-3), `a rocket's blast on the excavator took ${h0 - sw.hp[e]}`);
   // The level curve: a robot at power 2 spawns with twice the health.
-  const [p2] = sw.spawn(1, -40, 20, 0.1, { mid: 1, big: 0 }, 2);
+  const [p2] = sw.spawn(1, -40, 20, 0.1, { mid: 1, big: 0, quad: 0 }, 2);
   must(close(sw.hp[p2], 2 * v.robotMidHp) && sw.power[p2] === 2, "a robot spawned at power 2 doesn't have twice the health");
   must(close(levelPower(11, 0.075), 1.75), "levelPower(11) isn't 1.75");
 }
