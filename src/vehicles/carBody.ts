@@ -637,6 +637,11 @@ export class CarBody {
     return [this.chassis, ...this.gunMeshes, ...this.wheels.map((w) => w.spin), ...(this.glow ? [this.glow] : [])];
   }
 
+  /** For a death's debris (src/combat/raiderDeath.ts): the wheels' meshes (none on tracks), the turrets' yaw parts and the wheel radius. */
+  pieces(): { wheels: THREE.Object3D[]; turrets: THREE.Object3D[]; wheelR: number } {
+    return { wheels: this.tracked ? [] : this.wheels.map((w) => w.spin), turrets: this.turrets.map((t) => t.yawG), wheelR: this.v.wheelRadius };
+  }
+
   /** Burnt-out look: dark, wheels splayed (road wheels stay on their tracks), the guns slumped and still. */
   setWrecked(on: boolean) {
     this.wrecked = on;
