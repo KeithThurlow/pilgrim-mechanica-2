@@ -22,6 +22,7 @@ import {
   type V3, type WalkSpec,
   QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
+import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
 
 export const ROBOT_DEFAULTS = {
   // Small ones: the pack.
@@ -252,7 +253,12 @@ export const ROBOT_DEFAULTS = {
   // much energy they have"): a moment after it falls its core goes up, hurting everything round it, robots too
   // (a chain of them can go up together).
   robotBigDeathOn: 1,
-  robotBigDeathDelay: 2.8,
+  // Keith 2026-11-06: the reactor in the hull goes up as the wreck tips over, high up: an airburst with a nova ring.
+  robotBigDeathDelay: 2.4,
+  robotBigDeathMin: 1.4,
+  robotBigDeathAt: 0.6,
+  robotBigDeathTip: 0.35,
+  robotBigDeathNova: 1,
   robotBigDeathRadius: 22,
   robotBigDeathDamage: 90,
   robotBigDeathOwnDamage: 450,
@@ -261,6 +267,20 @@ export const ROBOT_DEFAULTS = {
   robotBigDeathBoom: 1.6,
   robotBigDeathCrater: 0.75,
   robotBigDeathCraterDepth: 3.5,
+  // A weapon quad's reactor (Keith 2026-11-06): smaller, sooner, the same way (it tips and goes up).
+  robotQuadDeathOn: 1,
+  robotQuadDeathDelay: 1.3,
+  robotQuadDeathMin: 0.4,
+  robotQuadDeathAt: 0.6,
+  robotQuadDeathTip: 0.8,
+  robotQuadDeathRadius: 9,
+  robotQuadDeathDamage: 35,
+  robotQuadDeathOwnDamage: 180,
+  robotQuadDeathShove: 10,
+  robotQuadDeathCrater: 0.5,
+  robotQuadDeathCraterDepth: 1.2,
+  robotQuadDeathBoom: 0.7,
+  robotQuadDeathNova: 0.45,
   // Stomps, hits, wrecks.
   robotStompKill: 0.6,
   robotStompThrow: 6,
@@ -277,7 +297,7 @@ export const ROBOT_DEFAULTS = {
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
-const GB = "Robots: beam", GP = "Robots: terraform pulse", GD = "Robots: big death", GQ = "Robots: weapon quads";
+const GB = "Robots: beam", GP = "Robots: terraform pulse", GD = "Robots: big death", GQ = "Robots: weapon quads", GQD = "Robots: weapon quad death";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
@@ -478,7 +498,11 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotPulseDodgePush", label: "Clear the ring at (m/s)", min: 0, max: 15, step: 0.5, group: GP, tip: "How fast one deep in the ring is pushed outward" },
   { key: "robotPulseDrop", label: "Pulse runs down for (s)", min: 0.05, max: 1.5, step: 0.05, group: GP, tip: "The end of the charge: a bright pulse runs down the thin beam into the sand, then the blast" },
   { key: "robotBigDeathOn", label: "Death blast on", min: 0, max: 1, step: 1, group: GD, tip: "A big one's core goes up a moment after it falls" },
-  { key: "robotBigDeathDelay", label: "Goes up after (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Keith 2026-11-02: time to get clear after a melee kill. The wreck goes unstable (an amber ring blinking faster, a band sweeping out to it, the core glowing and sparking), then the boom" },
+  { key: "robotBigDeathDelay", label: "Goes up at the latest (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Keith 2026-11-06: the wreck tips over and its reactor goes up as it falls (when the hull is down to the height share below), or at the latest after this. The ring on the sand blinks the warning (amber ring, sweep, glowing hull)" },
+  { key: "robotBigDeathMin", label: "Not before (s)", min: 0, max: 4, step: 0.05, group: GD, tip: "The warning you always get, however fast it falls" },
+  { key: "robotBigDeathAt", label: "Goes up at hull height (share)", min: 0, max: 1, step: 0.01, group: GD, tip: "Of its standing height: high is an airburst early in the fall, 0 waits for it to land (then the latest delay)" },
+  { key: "robotBigDeathTip", label: "Tip-over push (rad/s)", min: 0, max: 2, step: 0.01, group: GD, tip: "How hard the wreck starts to topple along the killing shot; more falls sooner" },
+  { key: "robotBigDeathNova", label: "Nova look (×)", min: 0, max: 3, step: 0.05, group: GD, tip: "The airburst's flash, glowing shell and shockwave ring (src/fx/nova.ts); 0 off" },
   { key: "robotBigDeathRadius", label: "Blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
   { key: "robotBigDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot (the pilot, bandits). Full at the centre, half at the edge" },
   { key: "robotBigDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Robots in reach, full at the centre, half at the edge; medium and big ones take their blast share. Enough kills another big one: a chain" },
@@ -487,6 +511,19 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotBigDeathCrater", label: "Crater radius (share of blast)", min: 0, max: 1.5, step: 0.05, group: GD, tip: "Keith 2026-11-02: a huge crater. 0: only the usual blast dent" },
   { key: "robotBigDeathCraterDepth", label: "Crater depth (m)", min: 0, max: 8, step: 0.1, group: GD, tip: "Past the usual crater depth limit (Craters); the wall steepness limit (Craters) still holds a wide one shallower" },
   { key: "robotBigDeathBoom", label: "Extra boom (volume)", min: 0, max: 4, step: 0.05, group: GD, tip: "A deep layer of the explosion sound on top of the blast's own (which already grows with the radius)" },
+  { key: "robotQuadDeathOn", label: "Reactor blast on", min: 0, max: 1, step: 1, group: GQD, tip: "Keith 2026-11-06: a weapon quad tips over and its reactor goes up, smaller and sooner than a big one's" },
+  { key: "robotQuadDeathDelay", label: "Goes up at the latest (s)", min: 0, max: 6, step: 0.05, group: GQD },
+  { key: "robotQuadDeathMin", label: "Not before (s)", min: 0, max: 3, step: 0.05, group: GQD },
+  { key: "robotQuadDeathAt", label: "Goes up at hull height (share)", min: 0, max: 1, step: 0.01, group: GQD },
+  { key: "robotQuadDeathTip", label: "Tip-over push (rad/s)", min: 0, max: 3, step: 0.01, group: GQD },
+  { key: "robotQuadDeathRadius", label: "Blast radius (m)", min: 1, max: 30, step: 0.5, group: GQD },
+  { key: "robotQuadDeathDamage", label: "Damage to the mech", min: 0, max: 300, step: 5, group: GQD, tip: "And anything else not a robot. Full at the centre, half at the edge" },
+  { key: "robotQuadDeathOwnDamage", label: "Damage to robots", min: 0, max: 2000, step: 10, group: GQD },
+  { key: "robotQuadDeathShove", label: "Shove (m/s)", min: 0, max: 40, step: 0.5, group: GQD },
+  { key: "robotQuadDeathCrater", label: "Crater radius (share of blast)", min: 0, max: 1.5, step: 0.05, group: GQD },
+  { key: "robotQuadDeathCraterDepth", label: "Crater depth (m)", min: 0, max: 5, step: 0.1, group: GQD },
+  { key: "robotQuadDeathBoom", label: "Extra boom (volume)", min: 0, max: 3, step: 0.05, group: GQD },
+  { key: "robotQuadDeathNova", label: "Nova look (×)", min: 0, max: 3, step: 0.05, group: GQD },
   { key: "robotStompKill", label: "Stomp kills within (× radius)", min: 0, max: 1, step: 0.01, group: G1 },
   { key: "robotStompThrow", label: "Stomp throw (m/s)", min: 0, max: 15, step: 0.1, group: G1 },
   { key: "robotStompReach", label: "Stomp knocks off below (m)", min: 0, max: 6, step: 0.1, group: G3, tip: "Latched ones lower than this near the foot are knocked off" },
@@ -575,6 +612,8 @@ export interface RobotDeathBlastEvent {
   radius: number; damage: number; pierce: number; shove: number; boom: number;
   /** Its crater: radius (m) and depth (m), past the usual crater depth limit. */
   craterR: number; craterDepth: number;
+  /** The nova look's size (×; 0 none, src/fx/nova.ts). The hull's height above the ground is hubY − at.y. */
+  nova?: number;
 }
 /** A beam's line: emitter, the low part's start, the end (world). */
 export interface BeamLine { ex: number; ey: number; ez: number; sx: number; sy: number; sz: number; x1: number; y1: number; z1: number }
@@ -659,9 +698,12 @@ export class RobotSwarm {
   onDeathBlast: ((e: RobotDeathBlastEvent) => void) | null = null;
   /** Death blasts gone off; robots killed by their own (pulses and death blasts) since construction. */
   deathBlasts = 0; ownKills = 0;
-  /** Big ones' cores waiting to go up (host state; drawn as unstable, src/fx/coreWarnDraw.ts): x, z, ground y, hub y,
-   *  id, power, seconds left of the delay, the delay and the blast radius. */
-  cores: { x: number; z: number; y: number; hubY: number; id: number; power: number; t: number; delay: number; radius: number }[] = [];
+  /** Reactors waiting to go up in falling wrecks (big ones, weapon quads; host state; drawn as unstable,
+   *  src/fx/coreWarnDraw.ts): src/combat/reactorFall.ts, with the robot's power and kind. */
+  cores: (Reactor & { power: number; big: boolean })[] = [];
+  /** The host's wrecks (the death physics): where robot id's hull is now (false: not tracked, the fall is modelled),
+   *  and its reactor going up there (blow it apart). Cosmetic glue; null: modelled. */
+  reactors: { at(id: number, out: V3): boolean; blow(id: number, x: number, y: number, z: number, radius: number): void } | null = null;
   private aim: RobotTarget = { x: 0, y: 0, z: 0, radius: 2 };
   /** Latch spot taken while leaping or latched (-1 none). */
   readonly slot = new Int16Array(ROBOT_MAX).fill(-1);
@@ -1877,29 +1919,38 @@ export class RobotSwarm {
       this.spin[i] = (this.rand() < 0.5 ? -1 : 1) * (6 + this.rand() * 8);
     }
     this.count--;
-    if (this.kind[i] === BIG && v.robotBigDeathOn > 0.5) {
-      this.cores.push({ x: this.px[i], z: this.pz[i], y: this.ground.height(this.px[i], this.pz[i]), hubY: this.hubY[i], id: this.uid[i], power: this.power[i], t: v.robotBigDeathDelay, delay: v.robotBigDeathDelay, radius: v.robotBigDeathRadius });
+    const big = this.kind[i] === BIG, quad = this.kind[i] === MID && this.variant[i] === QUAD_WEAPON;
+    if (big ? v.robotBigDeathOn > 0.5 : quad && v.robotQuadDeathOn > 0.5) {
+      const spec = big
+        ? { delay: v.robotBigDeathDelay, min: v.robotBigDeathMin, share: v.robotBigDeathAt, spin: v.robotBigDeathTip, radius: v.robotBigDeathRadius }
+        : { delay: v.robotQuadDeathDelay, min: v.robotQuadDeathMin, share: v.robotQuadDeathAt, spin: v.robotQuadDeathTip, radius: v.robotQuadDeathRadius };
+      const r = makeReactor(this.uid[i], this.px[i], this.pz[i], this.hubY[i], this.fallYaw[i], this.ground, spec);
+      this.cores.push(Object.assign(r, { power: this.power[i], big }));
     }
     this.onDeath?.(i, push ? nx : 0, push ? nz : 0, Math.hypot(this.vx[i], this.vz[i]));
   }
 
-  /** Big ones' cores counting down; those due go up: their robots hurt here, the rest (the battlefield) by the event. */
+  /** Reactors in falling wrecks; those due go up: their robots hurt here, the rest (the battlefield) by the event. */
   private tickCores(dt: number) {
     if (!this.cores.length) return;
-    const v = this.v, due = [];
+    const v = this.v, due = [], R = this.reactors;
     for (let k = this.cores.length - 1; k >= 0; k--) {
       const c = this.cores[k];
-      if ((c.t -= dt) <= 0) { due.push(c); this.cores.splice(k, 1); }
+      const track = R ? (out: V3) => R.at(c.id, out) : null;
+      if (stepReactor(c, dt, this.ground, track)) { due.push(c); this.cores.splice(k, 1); }
     }
     for (const c of due) {
       this.deathBlasts++;
-      // Hurting robots can kill more big ones: their cores queue up and go off after their own delay (a chain).
-      this.hurtOwn(c.x, c.z, c.radius, v.robotBigDeathOwnDamage * c.power, v.robotBigDeathPierce, c.id);
+      const b = c.big;
+      // Hurting robots can kill more of them: their reactors queue up and go off as they fall in turn (a chain).
+      this.hurtOwn(c.x, c.z, c.radius, (b ? v.robotBigDeathOwnDamage : v.robotQuadDeathOwnDamage) * c.power, v.robotBigDeathPierce, c.id);
+      R?.blow(c.id, c.x, c.hy, c.z, c.radius);
       this.onDeathBlast?.({
-        id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: c.hubY,
-        radius: c.radius, damage: v.robotBigDeathDamage * c.power, pierce: v.robotBigDeathPierce,
-        shove: v.robotBigDeathShove, boom: v.robotBigDeathBoom,
-        craterR: c.radius * v.robotBigDeathCrater, craterDepth: v.robotBigDeathCraterDepth,
+        id: c.id, at: { x: c.x, y: c.y, z: c.z }, hubY: c.hy,
+        radius: c.radius, damage: (b ? v.robotBigDeathDamage : v.robotQuadDeathDamage) * c.power, pierce: v.robotBigDeathPierce,
+        shove: b ? v.robotBigDeathShove : v.robotQuadDeathShove, boom: b ? v.robotBigDeathBoom : v.robotQuadDeathBoom,
+        craterR: c.radius * (b ? v.robotBigDeathCrater : v.robotQuadDeathCrater), craterDepth: b ? v.robotBigDeathCraterDepth : v.robotQuadDeathCraterDepth,
+        nova: b ? v.robotBigDeathNova : v.robotQuadDeathNova,
       });
     }
   }

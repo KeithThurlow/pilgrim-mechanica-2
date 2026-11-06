@@ -22,6 +22,7 @@ export const DEATH_DEFAULTS = {
   bodyStays: 14,
   floorSize: 120,
   ragdollsPerFrame: 6,
+  reactorFling: 14,
 };
 export type DeathValues = typeof DEATH_DEFAULTS;
 
@@ -33,6 +34,7 @@ export const DEATH_PARAMS: Param[] = [
   { key: "liveFor", label: "Bodies move for (s)", min: 1, max: 30, step: 0.5, group: "Death physics", tip: "Then they freeze where they lie" },
   { key: "maxRagdolls", label: "Moving bodies at once", min: 1, max: 200, step: 1, group: "Death physics", tip: "Past this the oldest freeze (the cost of the physics)" },
   { key: "bodyStays", label: "Bodies stay (s)", min: 2, max: 120, step: 1, group: "Death physics", tip: "Then they sink into the sand and are cleared" },
+  { key: "reactorFling", label: "Reactor blast throws the wreck (m/s)", min: 0, max: 60, step: 0.5, group: "Death physics", tip: "Keith 2026-11-06: a big walker's, weapon quad's or strider's reactor going up blows its own wreck apart, this fast near the hull" },
   { key: "floorSize", label: "Physics floor (m)", min: 40, max: 300, step: 10, group: "Death physics", tip: "Size of the patch of dunes the physics knows, centred on the camera" },
   { key: "ragdollsPerFrame", label: "New ragdolls per frame", min: 1, max: 60, step: 1, group: "Performance", tip: "Deaths past this in one frame wait their turn, flying on as they were thrown, and get their physics a frame or two later (perf pass 1: a barrage killing dozens at once made the physics spike to hundreds of ms). The cap on moving bodies is under Death physics" },
 ];
@@ -145,7 +147,7 @@ export class DeathPhysics {
    * velocity it had, and thrown by a push (dirX, dirZ: the kill's flat direction; strength in m/s).
    */
   ragdoll(parts: PartSpec[], joints: JointSpec[], x: number, y: number, z: number, yaw: number,
-    vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number): Dead {
+    vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number, tip = 0): Dead {
     const v = this.v;
     const base = this.q.setFromAxisAngle(UP, yaw);
     const push = strength * v.deathPush;
@@ -161,8 +163,11 @@ export class DeathPhysics {
       d.pos[k].set(x + at.x, y + at.y, z + at.z);
       d.quat[k].copy(base);
       if (p.rot) d.quat[k].multiply(new Quaternion(p.rot[0], p.rot[1], p.rot[2], p.rot[3]));
-      pend.lin.push({ x: vel.x + dirX * push * tall, y: vel.y + push * v.deathLift * tall, z: vel.z + dirZ * push * tall });
-      pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 });
+      // tip (rad/s): the whole body starts to topple about its feet along (dirX, dirZ), a tall wreck tipping over
+      // (Keith 2026-11-06): each part moves as ω × its offset from the feet, ω = tip · (up × dir).
+      const l = Math.hypot(dirX, dirZ) || 1, tx = tip * dirX / l, tz = tip * dirZ / l;
+      pend.lin.push({ x: vel.x + dirX * push * tall + tx * at.y, y: vel.y + push * v.deathLift * tall - (tx * at.x + tz * at.z), z: vel.z + dirZ * push * tall + tz * at.y });
+      pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4 + tz, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 - tx });
     });
     d.pending = pend;
     this.dead.push(d);
@@ -170,6 +175,27 @@ export class DeathPhysics {
     if (this.madeThisFrame < Math.max(1, v.ragdollsPerFrame ?? 6) && this.waiting.length === 0) this.make(d);
     else this.waiting.push(d);
     return d;
+  }
+
+  /**
+   * Blow a wreck apart from (x, y, z) (Keith 2026-11-06: the reactor in its hull going up): every part thrown outward,
+   * `speed` m/s at the centre, less out to `radius`, and set spinning. Wakes it if it had frozen still moving.
+   */
+  burst(d: Dead, x: number, y: number, z: number, radius: number, speed: number) {
+    const pend = d.pending;
+    for (let k = 0; k < d.pos.length; k++) {
+      const P = d.pos[k], dx = P.x - x, dy = P.y - y + 0.5, dz = P.z - z, l = Math.hypot(dx, dy, dz) || 1;
+      const s = speed * Math.max(0.3, 1 - l / Math.max(1, radius)) * (0.7 + Math.random() * 0.6);
+      const vx = (dx / l) * s, vy = (dy / l) * s + s * 0.4, vz = (dz / l) * s;
+      if (pend) { pend.lin[k].x += vx; pend.lin[k].y += vy; pend.lin[k].z += vz; continue; }
+      const b = d.bodies[k];
+      if (!b || !d.live) continue;
+      const lv = b.linvel();
+      b.setLinvel({ x: lv.x + vx, y: lv.y + vy, z: lv.z + vz }, true);
+      b.setAngvel({ x: (Math.random() - 0.5) * s, y: (Math.random() - 0.5) * s * 0.5, z: (Math.random() - 0.5) * s }, true);
+    }
+    // A second life to fly in.
+    if (d.live) d.age = Math.min(d.age, Math.max(0, (d.moveFor ?? this.v.liveFor) - 4));
   }
 
   /** Give a waiting ragdoll its bodies and joints, where it has flown to, moving as it moves now. */

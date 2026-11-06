@@ -70,8 +70,14 @@ export const STRIDER_DEFAULTS = {
   striderMeleeEvery: 3.5,
   // Its death (Keith 2026-11-02: "a big explosion when they die ... damage the enemies nearby", so killing one can
   // clear the swarm round it): a blast that hurts robots too.
-  striderDeathDelay: 2.8,
-  striderDeathRadius: 18,
+  // Keith 2026-11-06: it tips over and the reactor in its chest goes up as it falls, sooner and a bit smaller than a
+  // big walker's.
+  striderDeathDelay: 1.5,
+  striderDeathMin: 0.35,
+  striderDeathAt: 0.6,
+  striderDeathTip: 0.5,
+  striderDeathNova: 0.6,
+  striderDeathRadius: 15,
   striderDeathDamage: 60,
   striderDeathOwnDamage: 450,
   striderDeathPierce: 0.4,
@@ -133,7 +139,11 @@ export const STRIDER_PARAMS: Param[] = [
   { key: "striderSlamPierce", label: "Armour pierce", min: 0, max: 1, step: 0.05, group: GS },
   { key: "striderSlamEvery", label: "A slam at most every (s)", min: 1, max: 60, step: 0.5, group: GS },
   { key: "striderSlamRecover", label: "Stands after it (s)", min: 0, max: 5, step: 0.1, group: GS },
-  { key: "striderDeathDelay", label: "Goes up after (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Time to get clear after a melee kill: the wreck goes unstable (amber ring, sweep, glowing core), then the boom" },
+  { key: "striderDeathDelay", label: "Goes up at the latest (s)", min: 0, max: 8, step: 0.05, group: GD, tip: "Keith 2026-11-06: it tips over and its chest reactor goes up as it falls (when the chest is down to the height share below), or at the latest after this. Less warning than a big walker's" },
+  { key: "striderDeathMin", label: "Not before (s)", min: 0, max: 4, step: 0.05, group: GD },
+  { key: "striderDeathAt", label: "Goes up at chest height (share)", min: 0, max: 1, step: 0.01, group: GD },
+  { key: "striderDeathTip", label: "Tip-over push (rad/s)", min: 0, max: 3, step: 0.01, group: GD },
+  { key: "striderDeathNova", label: "Nova look (×)", min: 0, max: 3, step: 0.05, group: GD, tip: "The flash, shell and shockwave ring (src/fx/nova.ts); 0 off" },
   { key: "striderDeathRadius", label: "Death blast radius (m)", min: 2, max: 50, step: 0.5, group: GD },
   { key: "striderDeathDamage", label: "Damage to the mech", min: 0, max: 600, step: 5, group: GD, tip: "And anything else not a robot. Full at the centre, half at the edge" },
   { key: "striderDeathOwnDamage", label: "Damage to robots", min: 0, max: 3000, step: 10, group: GD, tip: "Every robot in reach (swarm, striders, crushers, droids) by its blast share, behind cover none" },

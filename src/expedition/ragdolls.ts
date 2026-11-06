@@ -8,16 +8,25 @@ import type { InfantrySwarm } from "../combat/infantry";
 import { robotRagdoll, BANDIT_PARTS, BANDIT_JOINTS } from "../physics/bodies";
 import { ROBOT_RAG } from "../combat/robotShapes";
 import { CLOTH } from "../combat/infantryDraw";
+import { ReactorWrecks } from "../game/reactorWrecks";
 
-/** Robots killed become ragdolls (small ones fly, walkers fold where they stand, big ones topple from height). */
+/**
+ * Robots killed become ragdolls (small ones fly, walkers fold where they stand, big ones topple from height). A wreck
+ * with a reactor (big ones, weapon quads: RobotSwarm.cores) is pushed to tip over along its fall, and its hull is
+ * where the reactor goes up, blowing it apart (Keith 2026-11-06, src/game/reactorWrecks.ts).
+ */
 export function robotRagdolls(sw: RobotSwarm, deaths: DeathPhysics) {
-  const prev = sw.onDeath;
+  const prev = sw.onDeath, wrecks = new ReactorWrecks(deaths);
   sw.hideDead = true;
+  sw.reactors = wrecks;
   sw.onDeath = (i, nx, nz, speed) => {
     const kind = sw.kind[i], [body, leg] = ROBOT_RAG[kind];
     const { parts, joints } = robotRagdoll(sw, i, body, leg);
-    deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
+    const core = sw.cores[sw.cores.length - 1], reactor = core && core.id === sw.uid[i] ? core : null;
+    const fx = reactor ? reactor.fx : nx, fz = reactor ? reactor.fz : nz;
+    const d = deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
+      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, fx, fz, kind === SMALL ? Math.max(3, speed) : 1, reactor ? reactor.angV : 0);
+    if (reactor) wrecks.add(reactor.id, d);
     prev?.(i, nx, nz, speed);
   };
 }

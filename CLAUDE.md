@@ -100,7 +100,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 ## Lab URL flags
 
 - Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
-  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either).
+  (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
 - Walker lab: `?cam=game|close|side|back|feet|head` (head: face to face with the hull), `?sensor=<sensor base id>|none` (the sensor on the hull; default the visor head), `?model=standin` (box walker), `?flat` (no dunes),
@@ -129,7 +129,7 @@ desert look direction. What came from where: `docs/decisions.md`.
   `?biome=mix|rocky|shallows` (desert by default), `?craters=N` (N blasts dent the ground round the start, one under
   the mech), `?proto=split:3,rate:2,multi:2,area:1.5,ricochet:1,chain:2` (raw round behaviour on every round of yours, unpriced; multi: side by side) or `?proto=splitter,overclock,doubleShot,quickLoader` (Protocol ids, priced, socketed into every picked weapon they fit; `src/items/protocols.ts`). R fills both magazines at once. Walker lab
   takes `?biome=` too. Swarm lab, robots (`?enemy=robots`): `?beam` (no packs; two excavators stopped either side of the mech, about to charge
-  their beams, which sweep after the mech for `robotBeamSweep` s), `?pulse` (one big walker 10 m off, about to throw its terraform pulse at the mech's spot), `?bigdeath[=s]` (a big walker 12 m off with robots round its feet, destroyed after s: watch its core go unstable and blow), `?lineup` (a frozen row of each kind, the four weapon quads beside the mech), `?quads` (one weapon quad of each weapon coming in), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
+  their beams, which sweep after the mech for `robotBeamSweep` s), `?pulse` (one big walker 10 m off, about to throw its terraform pulse at the mech's spot), `?bigdeath[=s]` (a big walker 12 m off with robots round its feet, destroyed after s: it tips over and its hull reactor goes up as it falls, an airburst nova; `?quaddeath[=s]` the same with a weapon quad), `?lineup` (a frozen row of each kind, the four weapon quads beside the mech), `?quads` (one weapon quad of each weapon coming in), `?swarm=N` (a big swarm: N on the field in packs of 60, e.g. `?swarm=300&barrage&time=22`), `?left= ?right= ?k1-3=` (fit weapons as the weapons lab),
   `?robotline[=m]` (a frozen line of mixed robots ahead, no packs; m: start that far to the side, meeting the
   centre at `?lmb`'s distance, so a shot from an arm runs down it), `?lmb=x,z` and `?fireat=N` (hold the left button aimed
   there, let go after N frames).
