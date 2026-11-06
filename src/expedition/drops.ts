@@ -19,10 +19,10 @@ import { BASE_BY_ID } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 
 export const DROP_DEFAULTS = {
-  dropSpot: 0.3,
+  dropSpot: 0.2,
   threatRef: 30000,
   threatCurve: 0.55,
-  dropPerThreat: 1,
+  dropPerThreat: 0.65,
   dropMaxItems: 2,
   rarityThreat: 0.4,
   rarityDepth: 0.5,
@@ -87,7 +87,7 @@ export function hashKey(seed: number, key: string): number {
 
 /** The rarity weights leaned by depth and heat (the loot rolls' weights as the base). */
 export function rarityWeights(v: DropValues & LootValues, danger: number, heat: number, extra = 0): number[] {
-  const base = [v.weightCommon, v.weightUncommon, v.weightRare, v.weightEpic, v.weightLegendary];
+  const base = [v.weightCommon, v.weightUncommon, v.weightRare, v.weightEpic, v.weightLegendary, v.weightMythic];
   const lean = v.rarityDepth * Math.max(0, danger) + v.rarityHeat * Math.max(0, Math.min(1, heat)) + Math.max(0, extra);
   return base.map((w, k) => Math.max(0, w) * Math.exp(k * lean));
 }
