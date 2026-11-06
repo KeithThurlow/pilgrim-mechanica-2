@@ -75,6 +75,10 @@ export class FrameHud {
     this.frameStages = frame;
   }
 
+  /** A note for this frame's spike entry (e.g. new shaders built), "" for none; set before frame(). */
+  note(text: string) { this.frameNote = text; }
+  private frameNote = "";
+
   /** sim: ms the lab's tick took (CPU). draw: ms to submit the frame to the GPU (CPU side of rendering). */
   frame(ms: number, drawCalls: number, triangles: number, sim = 0, draw = 0) {
     this.samples.push(ms);
@@ -84,7 +88,8 @@ export class FrameHud {
     const now = performance.now();
     // Spikes: skip the first seconds (shader compiles, chunk builds) and keep what the CPU spent the frame on.
     if (ms > BUDGET_MS * 2 && now > 5000) {
-      const st = this.frameStages ? [...this.frameStages].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(", ") : "";
+      const top = this.frameStages ? [...this.frameStages].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(1)}`) : [];
+      const st = (this.frameNote ? [this.frameNote, ...top] : top).join(", ");
       this.spikes.push({ at: +(now / 1000).toFixed(1), ms: +ms.toFixed(1), sim: +sim.toFixed(1), submit: +draw.toFixed(1), stages: st });
       if (this.spikes.length > 20) this.spikes.shift();
     }

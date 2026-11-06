@@ -11,6 +11,7 @@ import {
   Fn, uniform, texture, textureLoad, screenCoordinate, vec2, vec4, ivec2, int, float, abs, max, min, round, exp, smoothstep,
   length, select, If, Loop, mx_noise_float, vec3, clamp,
 } from "three/tsl";
+import { buildSync } from "../core/asyncShaders";
 import type { Param } from "../core/tweaks";
 import type { DuneField, GroundSample } from "../world/terrain";
 import {
@@ -222,10 +223,12 @@ export class DentLayer {
     mat.fragmentNode = this.passNode();
     mat.depthTest = false; mat.depthWrite = false;
     this.quad = new THREE.QuadMesh(mat);
+    buildSync(mat); // the ping-pong carries state: both passes draw from their first frame (src/core/asyncShaders.ts)
     const cm = new THREE.NodeMaterial();
     cm.fragmentNode = textureLoad(texture(this.targets[1].texture), ivec2(screenCoordinate.xy.floor()));
     cm.depthTest = false; cm.depthWrite = false;
     this.copy = new THREE.QuadMesh(cm);
+    buildSync(cm);
   }
 
   /** Size the two targets for the sliders' resolution and coverage; everything starts clear. */
