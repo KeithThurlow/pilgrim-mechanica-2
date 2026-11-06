@@ -13,7 +13,7 @@ import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
 // Lobbed charges are off by default (Keith 2026-11-02); this run turns them on to keep checking them.
-const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigLobOn: 1 }, field, 7);
+const swarm = new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotMidShare: 0.15, robotBigShare: 0.035, robotBigLobOn: 1 }, field, 7);
 const target = { x: 0, y: field.height(0, 0) + 3, z: 0, radius: 2 };
 const dt = 1 / 120;
 let failed = false;

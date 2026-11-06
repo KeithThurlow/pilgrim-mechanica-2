@@ -12,7 +12,7 @@
 import * as THREE from "three/webgpu";
 import { instancedBufferAttribute, uv, smoothstep, float, sin, positionWorld, time } from "three/tsl";
 import { FlameBlobs } from "./flameBlobs";
-import { FlameStreams } from "./flameStream";
+import { FlameStreams, type StreamGround } from "./flameStream";
 import { FlameTube } from "./flameTube";
 
 export const FLAME_MAX = 4096;
@@ -25,10 +25,11 @@ const GOB = 0, LICK = 1, EMBER = 2, SMOKE = 3, DROP = 4;
 export const FLY = 0, GROUND = 1, RISE = 2;
 
 /** The upward speed that brings fuel thrown at horizontal speed `vh` down `dy` m higher (negative: lower), `dist` m
- *  off, under gravity `G`: at most a 35° lob (Keith 2026-11-05: the fuel arcs out and lands on the aim). */
-export function lobVy(dy: number, dist: number, vh: number, G: number) {
+ *  off, under gravity `G`: at most `maxUp` degrees up (Keith 2026-11-05: the fuel arcs out and lands on the aim; Keith
+ *  2026-11-06: aimed up at a tall strider it launched far too strongly, so a high aim is not chased; was 35°). */
+export function lobVy(dy: number, dist: number, vh: number, G: number, maxUp = 35) {
   const T = dist / Math.max(1, vh);
-  return Math.min(vh * 0.7, dy / T + 0.5 * G * T);
+  return Math.min(vh * Math.tan((Math.min(80, maxUp) * Math.PI) / 180), dy / T + 0.5 * G * T);
 }
 
 /** The look values (Flame look sliders; the battlefield hands them in with tune()). */
@@ -37,7 +38,7 @@ export interface FlameLook {
   flameGroundLife: number; flameSlide: number; flameGroundDrag: number; flameRiseLife: number; flameBuoy: number;
   flameStretch: number; flameGrowFly: number; flameGrowGround: number; flameGrowRise: number; flameLicks: number;
   flameLightEvery: number; flameBallLights: number; flameBlob: number; flameLump: number; flameHalo: number;
-  flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number;
+  flameSmoke: number; flameSmokeRise: number; flameSmokeSize: number; flameHitSplash: number; flameHitDrip: number;
   flameTube: number; flameTubeNear: number; flameTubeFar: number; flameTubeLump: number; flameTubeEvery: number;
   flameShed: number; flameEndFire: number; flameEndSize: number;
 }
@@ -46,7 +47,7 @@ const LOOK: FlameLook = {
   flameGroundLife: 5.5, flameSlide: 0.3, flameGroundDrag: 4, flameRiseLife: 0.9, flameBuoy: 6,
   flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 0.4,
   flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
-  flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
+  flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2, flameHitSplash: 2, flameHitDrip: 0.3,
   flameTube: 1, flameTubeNear: 0.1, flameTubeFar: 1, flameTubeLump: 0.6, flameTubeEvery: 0.025,
   flameShed: 2.5, flameEndFire: 0.85, flameEndSize: 0.75,
 };
@@ -166,8 +167,31 @@ export class FlameFx {
 
   /** A nozzle pours this frame (`key`: the gun's side, kept across frames): the line's near end is at (x, y, z) and it
    *  throws fuel at (vx, vy, vz) that burns `burn` s; `width` scales the line (the hull guns' is bigger). */
-  pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold = false) {
-    this.streams.pour(key, x, y, z, vx, vy, vz, burn, width, cold);
+  pour(key: object, x: number, y: number, z: number, vx: number, vy: number, vz: number, burn: number, width: number, cold = false, team = -1) {
+    this.streams.pour(key, x, y, z, vx, vy, vz, burn, width, cold, team);
+  }
+
+  /** What's at a point that isn't of `team` (the battlefield hands in a register test): the line splashes on it. */
+  hitter: ((x: number, y: number, z: number, team: number) => boolean) | null = null;
+  private readonly lineGround: StreamGround = {
+    height: (x, z) => this.ground.height(x, z),
+    hit: (x, y, z, team) => this.hitter ? this.hitter(x, y, z, team) : false,
+  };
+
+  /** The line splashes on something it ran into: flames flung out round the hit, one fireball rising off it, now and
+   *  then burning fuel running down to the sand (Flame look › Splash on a hit). */
+  private splashOn(x: number, y: number, z: number, vx: number, vy: number, vz: number, w: number, cold: boolean) {
+    const L = this.look, n = L.flameHitSplash;
+    const sp = Math.hypot(vx, vz) || 1, bx = -vx / sp, bz = -vz / sp;
+    for (let k = 0; k < Math.floor(n + Math.random()); k++) {
+      // Flung back and sideways off the face it hit, a little up.
+      const a = (Math.random() - 0.5) * 2.6, ca = Math.cos(a), sa = Math.sin(a), s = 2 + Math.random() * 3;
+      const ux = bx * ca - bz * sa, uz = bx * sa + bz * ca;
+      if (cold) this.mist(x, y, z, 0.7 * w);
+      else this.add(LICK, x, y, z, ux * s, 0.5 + Math.random() * 1.5 + Math.max(0, vy) * 0.1, uz * s, 0.25 + Math.random() * 0.25, (0.45 + Math.random() * 0.3) * w, 2.2, -1, 1);
+    }
+    if (Math.random() < 0.35) this.gob(x, y, z, bx * 1.5, 0.5, bz * 1.5, 1e-4, L.flameEndSize * w * 0.8, 0, cold);
+    if (!cold && Math.random() < L.flameHitDrip) this.gob(x, y, z, bx * 0.8, -1, bz * 0.8, 9, L.flameEndSize * w * 0.6, 0, false);
   }
 
   /** A wisp of freezing mist (chilled things, the freeze ray's nozzle). */
@@ -311,9 +335,10 @@ export class FlameFx {
    *  fireball rises; flames and, near the far end, smoke come off the line as it goes. */
   private stepLines(dt: number) {
     const L = this.look;
-    this.streams.step(dt, L.flameGravity, L.flameDrag, L.flameTubeEvery, this.ground, (line, what, x, y, z, vx, vy, vz) => {
+    this.streams.step(dt, L.flameGravity, L.flameDrag, L.flameTubeEvery, this.lineGround, (line, what, x, y, z, vx, vy, vz) => {
       const sz = L.flameEndSize * line.width * (0.8 + Math.random() * 0.4);
-      if (what === "land") { if (Math.random() < L.flameEndFire) this.gob(x, y + 0.04, z, vx, Math.min(vy, -1), vz, 9, sz, 0, line.cold); }
+      if (what === "hit") this.splashOn(x, y, z, vx, vy, vz, line.width, line.cold);
+      else if (what === "land") { if (Math.random() < L.flameEndFire) this.gob(x, y + 0.04, z, vx, Math.min(vy, -1), vz, 9, sz, 0, line.cold); }
       else this.gob(x, y, z, vx, vy, vz, 1e-4, sz, 0, line.cold);
     });
     for (const l of this.streams.lines.values()) for (let i = 0; i < l.n; i++) {
