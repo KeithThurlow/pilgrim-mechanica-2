@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · More crushers (crabs) out in the field (Keith asked; Claude on `claude/more-crushers`)
+- `crusherSiteChance` 0.45→0.75 (share of salvage sites with a crusher grazing; still the "Salvage sites with one" slider). Only crushers near you stand up, so cost is bounded by `crusherSiteNear`.
+- Files: `src/expedition/crusherSites.ts`. Checked: full `npm test`.
+
 ### 2026-11-06 · Loot pickup is a choice: E takes a drop, labels on the sand (Keith asked; Claude on `claude/project-thread-rrt6xm`)
 - Drops are no longer grabbed by walking over them: E takes the nearest in reach (when nearer than the salvage spot in reach); `autoPickup` slider (Loot) brings the walk-over back. Labels over drops: name, level, power, DPS, ▲/▼ vs fitted, [E] TAKE on the target. The prompt line says `E: take <item>`. The demo still takes what it walks by.
 - Files: `src/expedition/drops.ts` (`Collector.grab`, `nearest`, `reach`, `autoPickup`), `dropLabels.ts` (new), `loot.ts` (`target`, labels), `loop.ts` (E press routing, `eSpent`).
