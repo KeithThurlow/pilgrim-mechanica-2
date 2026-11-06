@@ -174,6 +174,8 @@ export function robotsFront(params0: URLSearchParams): Front {
       // ?quaddeath[=s]: the same with a weapon quad 9 m off (Keith 2026-11-06: its reactor, smaller and sooner).
       if (params0.has("quaddeath")) {
         V.robotSwarmSize = 0;
+        // Off by default (Keith 2026-11-06, round 2: only the tall walkers go up); the flag turns it on to look at.
+        V.robotQuadDeathOn = 1;
         const p = player.sim.pos, at = Number(params0.get("quaddeath")) || 1;
         const [b] = sw.spawn(1, p.x + 3, p.z + 9, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
         sw.frozen[b] = 1;
