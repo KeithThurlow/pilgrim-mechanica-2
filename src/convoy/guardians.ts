@@ -2,7 +2,7 @@
 // Glue: Ramparts in the convoy's paint on the player's side, each holding a station beside a car (alternating sides,
 // spread along the train) at the convoy's pace, turning on the nearest threat within guardRange: its guns on it, and
 // stepping out toward it (to guardHold off) but never more than guardLeash from its station. Hit points, armour and
-// a damage multiplier on their miniguns make them lethal; one that's destroyed walks back out of the convoy after
+// a damage multiplier on their miniguns make them lethal; they walk round the cars (detour.ts), never through; one that's destroyed walks back out of the convoy after
 // guardRespawn. Their bodies load in the background (one at a time) the first time they are wanted.
 // Ownership: host (their health and brains; enemies' rounds can hit them). Not networked yet.
 import * as THREE from "three/webgpu";
@@ -14,6 +14,7 @@ import type { RampartBody } from "../mech/rampart";
 import type { ToonLook } from "../look/toon";
 import type { Convoy } from "./platform";
 import { FRIENDLY } from "./platformBody";
+import { detour } from "./detour";
 
 export const GUARDIAN_DEFAULTS = {
   guardMechs: 2,
@@ -53,6 +54,7 @@ export class Guardians {
   readonly spots: { x: number; z: number }[] = [];
   private loading = false;
   private aim = { x: 0, y: 0, z: 0 };
+  private via = { x: 0, z: 0 };
 
   constructor(private bf: Battlefield, readonly v: MechUnitValues & GuardianValues, private scene: THREE.Scene, private look: ToonLook,
     readonly convoy: Convoy, private load: () => Promise<RampartBody>) {}
@@ -146,9 +148,12 @@ export class Guardians {
         const lx = gx - st.x, lz = gz - st.z, l = Math.hypot(lx, lz);
         if (l > v.guardLeash) { gx = st.x + (lx / l) * v.guardLeash; gz = st.z + (lz / l) * v.guardLeash; }
       }
-      // A stick toward it, plus the convoy's pace so it keeps up on station.
+      // Round the cars, not through them: make for the corner of the one in the way (then through the gap).
+      const round = detour(this.convoy.platforms, p.x, p.z, gx, gz, PUSH_R, this.via);
+      // A stick toward it (full stride round a corner), plus the convoy's pace so it keeps up on station.
       const walk = Math.max(1, v.walkSpeed);
-      let mx = (gx - p.x) / 6 + g.svx / walk, mz = (gz - p.z) / 6 + g.svz / walk;
+      const dx = this.via.x - p.x, dz = this.via.z - p.z, kk = round ? 1 / Math.max(1e-6, Math.hypot(dx, dz)) : 1 / 6;
+      let mx = dx * kk + g.svx / walk, mz = dz * kk + g.svz / walk;
       const ml = Math.hypot(mx, mz);
       if (ml > 1) { mx /= ml; mz /= ml; }
       if (ml < 0.04) { mx = 0; mz = 0; }

@@ -11,7 +11,8 @@
 // roll at different speeds.
 // It keeps clear of the platforms and the plough at the front (a margin round each footprint), of the other escorts, and of the mech (it aims for
 // a line grazing a clearance round it, and from inside turns out to the side its nose points, as the war band does),
-// and drives round dune faces too steep to climb.
+// and drives round dune faces too steep to climb. The cars and plough are solid to it (Keith 2026-11-06: escorts got stuck
+// on the convoy): shoved out of them, backing out when nosed in, waiting for a mech that blocks it beside them.
 // Their guns (Keith 2026-11-01) are src/convoy/guard.ts: they shoot from station; `mode` is still the hook for breaking
 // station toward threats (not built).
 // In the sim worker (docs/proposal-simworker.md step 3; not with ?noworker): the convoy lab's group is a view; `remote`
@@ -262,12 +263,14 @@ export class EscortGroup {
     }
   }
 
-  /** The nearest mech to keep clear of: the player's or a guardian. */
+  /** The mech to keep clear of: the player's or a guardian, the nearest one ahead of it first (one it has passed
+   *  counts as farther, so a guardian beside it doesn't hide the mech it is about to drive into). */
   private nearestMech(e: Escort, mech: { x: number; z: number } | null) {
     if (!this.mechs.length) return mech;
-    const x = e.sim.pos.x, z = e.sim.pos.z;
-    let best = mech, bd = mech ? Math.hypot(mech.x - x, mech.z - z) : Infinity;
-    for (const m of this.mechs) { const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; best = m; } }
+    const x = e.sim.pos.x, z = e.sim.pos.z, hx = Math.sin(e.sim.heading), hz = Math.cos(e.sim.heading);
+    const score = (m: { x: number; z: number }) => { const dx = m.x - x, dz = m.z - z; return Math.hypot(dx, dz) + (dx * hx + dz * hz < 0 ? BEHIND_EXTRA : 0); };
+    let best = mech, bd = mech ? score(mech) : Infinity;
+    for (const m of this.mechs) { const d = score(m); if (d < bd) { bd = d; best = m; } }
     return best;
   }
 
@@ -421,7 +424,7 @@ export class EscortGroup {
       e.stuckT += dt;
       if (e.stuckT > STUCK_AFTER) {
         // Again and again: back further each time, the wheel the other way on every other try.
-        e.tries = Math.min(e.tries + 1, 4);
+        e.tries = Math.min(e.tries + 1, MAX_TRIES);
         e.stuckT = 0; e.backT = BACK_FOR * e.tries; e.backSteer = -Math.sign(err || e.side) * (e.tries % 2 === 0 ? -1 : 1); e.planT = 0;
         // Then go round on the other side from the one that got it stuck.
         e.commitSide = -Math.sign(e.planOff || err || 1); e.commitT = COMMIT_FOR + e.tries;
@@ -585,6 +588,10 @@ const LANE_EVERY = 0.5, LANE_STEP = 2.5, LANE_SPAN = 12;
 const STUCK_AFTER = 1.5, BACK_FOR = 1.6;
 /** It counts as stuck when it wants more than this (m/s): rough ground and a big turn can take a wanted crawl under 1. */
 const STUCK_WANT = 0.5;
+/** Back-outs in a row each back further, up to this many times BACK_FOR. */
+const MAX_TRIES = 2;
+/** A mech behind an escort counts this much (m) farther when it picks the one to keep clear of. */
+const BEHIND_EXTRA = 12;
 /** Seconds it waits for a mech that blocks it by the cars before backing off. */
 const WAIT_FOR = 3;
 /** Within a car's clearance, pointed in at it and this far (rad) off the heading it wants: it backs out. */
