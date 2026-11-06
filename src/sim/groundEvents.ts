@@ -88,7 +88,7 @@ export class GroundRecorder {
     this.tap(g, "sites", ["keepClear", "roadGrew", "rebuild"]);
     this.tap(g.walls.down, "gates", ["add", "delete", "clear"]);
     // Taken as the main thread worked it out, whenever (it is a lazy memo of the road's corridor).
-    g.onSkip = (id, b) => { this.diff(); this.events.push({ t: "sites", m: "setSkip", a: [id, b] }); this.total++; };
+    g.onSkip = (id, b) => { this.diff(false); this.events.push({ t: "sites", m: "setSkip", a: [id, b] }); this.total++; };
   }
 
   /**
@@ -109,7 +109,8 @@ export class GroundRecorder {
 
   /** The events since the last take (values diffed first). */
   take(): GroundEvent[] {
-    this.diff();
+    this.diff(true);
+    this.diffed = false;
     const e = this.events;
     this.events = [];
     return e;
@@ -121,22 +122,39 @@ export class GroundRecorder {
   }
 
   private push(e: GroundEvent) {
-    this.diff();
+    this.diff(false);
     this.events.push(e);
     this.total++;
   }
 
-  /** Values changed since the last look: one event per values object. */
-  private diff() {
+  /** Diffed since the last take; takes since the values' key list was read. */
+  private diffed = false;
+  private takes = 0;
+  private keysV: string[] = [];
+  private keysField: string[] = [];
+
+  /**
+   * Values changed since the last look: one event per values object. Perf (2026-11-06): the lab's values hold ~3000
+   * keys, and a diff on every recorded call cost ~0.3 ms each (several a substep once the escorts' commands came), so
+   * a diff runs at the first event after each take (catching the panel's changes, made between frames, in order) and
+   * at the take itself; a value code changes mid-frame goes at the frame's end. The key lists are read again every
+   * 30 takes (new keys only come in at setup).
+   */
+  private diff(atTake: boolean) {
+    if (!atTake && this.diffed) return;
+    this.diffed = true;
     const { V, field } = this.parts;
-    const d = diffInto(V, this.lastV);
+    if (atTake && ++this.takes % 30 === 1 || !this.keysV.length) this.keysV = Object.keys(V);
+    const d = diffInto(V, this.lastV, this.keysV);
     if (d) this.events.push({ t: "mirror", m: "values", a: [d] });
     if (field.v !== this.fieldV) {
       this.fieldV = field.v;
       this.lastField = field.v === V ? null : snapshot(field.v);
+      this.keysField = Object.keys(field.v);
       this.events.push({ t: "mirror", m: "fieldValues", a: [this.lastField ? { ...this.lastField } : null] });
     } else if (this.lastField) {
-      const f = diffInto(field.v, this.lastField);
+      if (!this.keysField.length || this.takes % 30 === 1) this.keysField = Object.keys(field.v);
+      const f = diffInto(field.v, this.lastField, this.keysField);
       if (f) this.events.push({ t: "mirror", m: "fieldSet", a: [f] });
     }
   }
@@ -172,10 +190,11 @@ export class GroundRecorder {
 }
 
 /** Keys of v that differ from last (last updated to match), or null. */
-function diffInto(v: object, last: Values): Values | null {
+function diffInto(v: object, last: Values, keys: string[]): Values | null {
   let d: Values | null = null;
-  for (const k in v) {
-    const x = (v as Record<string, unknown>)[k];
+  const o = v as Record<string, unknown>;
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i], x = o[k];
     if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") continue;
     if (last[k] !== x && !(Number.isNaN(x) && Number.isNaN(last[k]))) { (d ??= {})[k] = x; last[k] = x; }
   }

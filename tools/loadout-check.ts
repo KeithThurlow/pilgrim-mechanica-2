@@ -279,7 +279,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   must(r.values.mechRadar === LOADOUT_DEFAULTS.bareRadar && r.seekers.length === 0 && !r.parts.sensor, "no sensor doesn't fall back to the bare radar");
   // Rarer sensors: one more seeker mode per tier, longer range.
   const counts = RARITIES.map((q) => rollItem(30, L, { base: "sensor-dish", rarity: q }).seekers!.length);
-  must(counts.join() === "1,2,3,4,4", `seeker modes by rarity are ${counts.join()}, want 1,2,3,4,4`);
+  must(counts.join() === "1,2,3,4,4,4", `seeker modes by rarity are ${counts.join()}, want 1,2,3,4,4,4`);
   const mean = (q: (typeof RARITIES)[number]) => Array.from({ length: 200 }, (_, s) => rollItem(500 + s, L, { base: "sensor-dish", rarity: q }).stats.radarRange).reduce((a, b) => a + b) / 200;
   must(mean("legendary") > mean("common") * 1.25, "legendary sensors don't reach further on average");
 }
@@ -378,7 +378,7 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
 // ---- Sockets and Protocols ----
 {
   for (const r of RARITIES) must(rollItem(7, L, { base: "mg-medium", rarity: r }).sockets === RARITY[r].sockets, `${r} item has the wrong number of sockets`);
-  must(RARITIES.map((r) => RARITY[r].sockets).join() === "0,1,2,3,4", "sockets aren't 0-4 by rarity");
+  must(RARITIES.map((r) => RARITY[r].sockets).join() === "0,1,2,3,4,5", "sockets aren't 0-5 by rarity");
   const over = rollProtocol(1, "overpressure"), coolant = rollProtocol(2, "coolant"), shred = rollProtocol(3, "shredder"), choke = rollProtocol(4, "choke");
   const common = makeItem("mg-medium");
   must(!!socketProblem(common, over), "a Protocol socketed into a Common item (no sockets)");
