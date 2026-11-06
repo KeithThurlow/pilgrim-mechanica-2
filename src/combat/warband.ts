@@ -22,6 +22,7 @@ import { armourHit } from "../game/armour";
 import { VEHICLE_MASS } from "./trample";
 import type { Solid, SolidShape } from "../game/solids";
 import type { BarEntry } from "../ui/healthBars";
+import { RaiderDeaths, RAIDER_DEATH_DEFAULTS, RAIDER_DEATH_PARAMS, type DeathState } from "./raiderDeath";
 
 /**
  * What the band goes for: the player's mech, or the pilot on foot (src/pilot/quarry.ts Prey has this shape): alive,
@@ -96,6 +97,7 @@ export const WARBAND_DEFAULTS = {
   blastLift: 6,
   blastSpin: 4,
   blastPush: 4,
+  ...RAIDER_DEATH_DEFAULTS,
   ...BUS_DEFAULTS,
 };
 export type WarbandValues = typeof WARBAND_DEFAULTS;
@@ -151,6 +153,7 @@ export const WARBAND_PARAMS: Param[] = [
   { key: "blastLift", label: "Wreck thrown up (m/s)", min: 0, max: 20, step: 0.1, group: "Raider wrecks", tip: "A killed vehicle blows up and is thrown: it can roll over and land on its roof" },
   { key: "blastSpin", label: "Wreck spin (rad/s)", min: 0, max: 15, step: 0.1, group: "Raider wrecks" },
   { key: "blastPush", label: "Wreck pushed along the hit (m/s)", min: 0, max: 20, step: 0.1, group: "Raider wrecks" },
+  ...RAIDER_DEATH_PARAMS,
   { key: "techTopSpeed", label: "Technical: top speed (m/s)", min: 4, max: 40, step: 0.5, group: "Raider driving" },
   { key: "techAccel", label: "Technical: acceleration", min: 1, max: 20, step: 0.1, group: "Raider driving" },
   { key: "techGrip", label: "Technical: grip", min: 0.5, max: 15, step: 0.1, group: "Raider driving", tip: "How hard the tyres bleed off sideways sliding" },
@@ -226,6 +229,8 @@ export class Raider implements Hittable, Solid {
   tumbling = false;
   /** The wreck in the death physics (when there is one): it moves the body until it's cleared. */
   wreck: Dead | null = null;
+  /** How it's dying (src/combat/raiderDeath.ts): null while alive. */
+  death: DeathState | null = null;
   wheelAcc: number[];
   rutAcc = 0;
   private a = new THREE.Vector3();
@@ -320,7 +325,7 @@ export class Raider implements Hittable, Solid {
     if (!this.alive) return;
     if (dir) this.hitDir.set(dir.x, 0, dir.z).normalize();
     this.hp -= armourHit(amount, this.armour, pierce);
-    if (this.hp <= 0) { this.alive = false; this.hp = 0; this.deadFor = 0; this.body.setWrecked(true); }
+    if (this.hp <= 0) { this.alive = false; this.hp = 0; this.deadFor = 0; }
   }
 }
 
@@ -359,7 +364,11 @@ export class Warband {
     private makeMech: (() => MechUnit | null) | null,
     /** Death physics for wrecks (Rapier); without it wrecks use a simple throw. */
     private deaths: DeathPhysics | null = null,
-  ) {}
+  ) {
+    this.dying = new RaiderDeaths(bf, v, deaths, this.group);
+  }
+  /** How the vehicles die: the cook-off, the blast's debris, the burning wreck (src/combat/raiderDeath.ts). */
+  readonly dying: RaiderDeaths;
 
   /** Bring in a band from a random direction, spawnDistance out from the target. */
   spawn(target: THREE.Vector3) {
@@ -483,6 +492,7 @@ export class Warband {
       }
     }
     for (const r of this.raiders) this.drive(r, dt, this.targetFor?.(r) ?? player);
+    this.dying.update(dt);
     this.buses(dt, player);
     for (const m of this.mechs) this.walkMech(m, dt, this.targetFor?.(m) ?? player);
     // Clear wrecks that have burnt out and runaways that are far off.
@@ -527,6 +537,7 @@ export class Warband {
   /** Take the whole band off the field (a column handed back to the map, or the lab starting over). */
   clear() {
     this.music?.clear();
+    this.dying.clear();
     for (let i = this.raiders.length - 1; i >= 0; i--) this.remove(this.raiders[i], i);
     for (let i = this.mechs.length - 1; i >= 0; i--) {
       const m = this.mechs[i];
@@ -554,18 +565,17 @@ export class Warband {
     } else s.v.topSpeed = r.kind === "sixWheeler" ? v.sixTopSpeed : r.kind === "warRig" ? v.rigTopSpeed : r.kind === "partyBus" ? v.busTopSpeed : v.turretTopSpeed;
     let throttle = 0, steer = 0;
     if (!r.alive) {
-      if (r.deadFor === 0) this.blowUp(r);
+      // Hit, coast on burning, cook off, burn out (src/combat/raiderDeath.ts).
+      if (!r.death) this.dying.start(r);
+      if (!r.death!.blown && this.dying.cook(r, dt)) this.blowUp(r);
       r.deadFor += dt;
+      if (r.death!.blown) this.dying.burn(r, dt);
       if (r.wreck) {
         s.pos.copy(r.wreck.pos[0]); s.pos.y -= r.wreck.sink;
         s.quat.copy(r.wreck.quat[0]);
         this.pose(r);
       } else if (r.tumbling) this.tumble(r, dt);
       else { throttle = s.speed > 0.5 ? -0.6 : 0; this.stepCar(r, dt, throttle, 0); }
-      if (r.deadFor < 6 && Math.random() < dt * 8) {
-        // Burning out: dark smoke from the wreck.
-        this.bf.dust.smoke(s.pos.x, s.pos.y + 1.2, s.pos.z, (Math.random() - 0.5), 1.5 + Math.random(), (Math.random() - 0.5), 0.5, 3, 0.75, 0.9);
-      }
       return;
     }
     if (r.hp < r.maxHp * v.fleeAt) r.mode = "flee";
@@ -656,7 +666,8 @@ export class Warband {
     }
     bf.dust.stomp(p.x, p.y - 0.8, p.z, 2.5 * big);
     bf.marks.crater(p.x, p.z, 6 * big);
-    bf.sfx.play("brap", p, 2, 0.55, false);
+    r.body.setWrecked(true);
+    this.dying.blast(r);
     // Its blast wave (src/fx/blastWaves.ts: the vehicle kind, with a second ring and heat over the wreck).
     bf.waves?.post("death", p.x, p.y, p.z, 3.5 * big, { fam: 1 });
     // Thrown by the blast. With the death physics, a real rigid body that can roll over and slide down a dune.

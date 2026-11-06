@@ -1,7 +1,7 @@
 // Headless war band check: a band rolls in over the tall dunes and works a stationary mech. Fails on: NaN; a live
 // vehicle tipped more than 60° off the ground under it (it should never flip while driving); nobody firing; nobody making a gun run
 // (coming inside 14 m); most of the band not circling in its band; a killed vehicle not settling above the sand;
-// no next band after the first is beaten; a vehicle driving into the mech (centres inside 3.5 m). Then (Keith 2026-10-29)
+// no next band after the first is beaten; a killed vehicle not cooking off in time, not leaving one fuel fire, no parts torn off, or torn-off parts under the sand; a vehicle driving into the mech (centres inside 3.5 m). Then (Keith 2026-10-29)
 // no tanks in a war band (a turret truck instead), and the party bus: it drops bandits into the infantry swarm in
 // waves, never has more of its own alive than its cap, gives each a stable id, and drops nobody once it's destroyed.
 // Run: npm test (or npx tsx tools/warband-check.ts).
@@ -20,7 +20,7 @@ import { FACTION_DEFAULTS } from "../src/game/factions";
 let seed = 12345;
 Math.random = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
-let shots = 0, lobs = 0;
+let shots = 0, lobs = 0, pools = 0;
 const targets: Hittable[] = [];
 // A stand-in battlefield: real ground and dust, rounds counted, marks and sound ignored.
 const bf = {
@@ -34,6 +34,7 @@ const bf = {
   gunFx: { shot() {} },
   canSee() { return true; },
   dent() { return false; },
+  pools: { add() { pools++; return null; } },
 } as unknown as Battlefield;
 const pelvis = new THREE.Vector3(0, field.height(0, 0) + 3, 0);
 const player = { sim: { pelvis, pos: pelvis.clone().setY(field.height(0, 0)), vel: new THREE.Vector3() }, alive: true } as unknown as MechUnit;
@@ -94,9 +95,20 @@ for (let k = 0; k < 200; k++) {
 }
 // Kill the band: wrecks blow up, tumble and settle on the sand; then the next band comes.
 const firstWave = wb.waves;
-for (const r of wb.raiders) r.damage(1e6, undefined, new THREE.Vector3(1, 0, 0));
-let settled = 0, below = 0;
-for (let i = 0; i < 60 * 15; i++) wb.update(dt, player);
+const killed = wb.raiders.filter((x) => x.alive), poolsBefore = pools;
+for (const r of killed) r.damage(1e6, undefined, new THREE.Vector3(1, 0, 0));
+let settled = 0, below = 0, lateBlast = 0, piecesOut = 0, piecesUnder = 0;
+// Raider deaths (src/combat/raiderDeath.ts): each one cooks off within its delay (at most 1.25 × 1.24 of deathDelay),
+// leaves one fuel fire, and its torn-off wheels and turrets come to rest on the sand.
+for (let i = 0; i < 60 * 15; i++) {
+  wb.update(dt, player);
+  const t = (i + 1) * dt;
+  for (const r of killed) if (!r.death?.blown && t > v.deathDelay * 1.25 * 1.24 + 0.05) lateBlast++;
+  if (i === 60 * 6) {
+    piecesOut = wb.dying.pieceCount;
+    for (const o of wb.group.children) if (!killed.some((r) => r.body.root === o) && o.position.y < field.height(o.position.x, o.position.z) - 0.2) piecesUnder++;
+  }
+}
 for (const r of wb.raiders.filter((x) => !x.alive)) {
   if (!r.tumbling) settled++;
   if (r.sim.pos.y < field.height(r.sim.pos.x, r.sim.pos.z) - 0.05) below++;
@@ -140,8 +152,13 @@ if (closest > 14) problems.push(`no gun run came inside 14 m (closest ${closest.
 if (closest < 3.5) problems.push(`a vehicle drove into the mech (${closest.toFixed(1)} m between centres)`);
 if (bandShare < 0.35) problems.push(`only ${(bandShare * 100).toFixed(0)}% of circling samples were in their band`);
 if (below) problems.push(`${below} wrecks ended under the sand`);
+if (lateBlast) problems.push(`a killed vehicle hadn't cooked off by its latest time (${lateBlast} frames)`);
+if (pools - poolsBefore !== killed.length) problems.push(`${pools - poolsBefore} fuel fires for ${killed.length} vehicles killed`);
+if (piecesOut === 0) problems.push("no wheels or turrets torn off in a whole band's deaths");
+if (piecesUnder) problems.push(`${piecesUnder} torn-off parts under the sand`);
 if (wb.waves <= firstWave) problems.push("no next band after the first was beaten");
 console.log(`band of ${v.bandTechnicals + v.bandTrucks + v.bandSixWheelers + v.bandWarRigs + v.bandTurretTrucks + v.bandBuses} (technicals, gun trucks, six-wheelers, War Rig, turret truck, party bus): ${shots} rounds fired in 60 s · closest pass ${closest.toFixed(1)} m · circling in band ${(bandShare * 100).toFixed(0)}% · wrecks settled ${settled} · bands ${wb.waves} · turret shells ${lobs}`);
+console.log(`deaths: ${killed.length} killed, ${pools - poolsBefore} fuel fires, ${piecesOut} parts torn off flying or lying at 6 s`);
 console.log(`party bus ${busId}: ${bus?.crew?.waves ?? 0} drops, ${droppedBefore} bandits (most of its own alive at once ${maxOwn}, cap ${v.busCap}), after it was destroyed ${droppedAfter - droppedBefore} more (on foot ${spawnedBefore} then ${footAfter} 30 s later); map columns: ${colTurret} turret trucks, ${colBus} buses, ${colTanks} tanks`);
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("warband check failed"); }
 console.log("warband check passed");
