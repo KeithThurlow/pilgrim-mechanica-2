@@ -315,6 +315,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Flamer's fuel leaves the nozzle faster and follows the turn sooner (Keith: "the velocity out of the nozzle could maybe be a tiny bit more, but not by much ... when you kind of like rotate the mech around ... it lags behind"; Claude on `claude/project-thread-q7b0ap`)
+- The fuel flies at 1.25× the fuel speed (Flame look › Fuel flies, was 1), so it reaches the aim sooner on a flatter arc and slows under drag and gravity after; the line's throw follows the barrel in 0.05 s (Flame stream › Line swings over, was 0.12), so the bend when the mech turns is about half as deep, mostly right at the nozzle. Burn time scales with it, so reach is unchanged. Checked: `flamefx-check` (aimed 12 m lands at 12.0 m, widest gap 0.83 m; far line burns out at 23.7 m), full `npm test`.
 ### 2026-11-06 · Flamer's burning ground lasts 4-5× longer (Keith: "leave burning ground ... maybe 4 or 5 times longer where the napalm has hit"; Claude on `claude/project-thread-q7b0ap`)
 - Ground fires where the line lands burn 5.5 s (Flame look › Ground fire burns, was 1.2; slider to 15); fewer flames and less smoke off each per second (licks 0.4/s, was 1.2; ground smoke a third) so the field doesn't fill up. The splash damage pools burn 5.5 s too (was 1.2), laid every 0.6 s (was 0.15), so about as many burn at once. Node probe, two Infernos swinging for 10 s: 0.33 ms, 830 particles. Checked: typecheck, `flamefx-check`, `fire-check`, full `npm test`.
 
