@@ -12,9 +12,9 @@ import type { TargetCandidate } from "./targeting";
 
 export const RANGE_MECH_DEFAULTS = {
   moverOn: 1,
-  moverX: -30,
-  moverZ: 12,
-  moverSpan: 18,
+  moverX: -24,
+  moverZ: 4,
+  moverSpan: 12,
   moverPace: 0.6,
   moverSprint: 0,
   moverHull: 3000,

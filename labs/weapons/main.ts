@@ -149,6 +149,8 @@ style.textContent = `
 .wpick { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 3px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: calc(100vw - 20px); }
 .wpick.off { opacity: 0.6; }
+.wpick.min .wpick-row { display: none; }
+.wpick-top { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
 .wpick-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .wpick-row span { color: var(--muted); font-size: 12px; width: 42px; }
 .wpick button { background: #1f2226; color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; font: 12px var(--sans); cursor: pointer; }
@@ -158,6 +160,17 @@ document.head.appendChild(style);
 const bar = document.createElement("div");
 bar.className = "wpick";
 bar.title = "The picker's loadout (clicking one fits it all)";
+// Hide folds it to one line, so the runners behind the mech show (remembered).
+const top = document.createElement("div");
+top.className = "wpick-top";
+top.innerHTML = `<span>Loadout picker</span>`;
+const fold = document.createElement("button");
+fold.type = "button";
+const folded = (on: boolean) => { bar.classList.toggle("min", on); fold.textContent = on ? "show" : "hide"; try { localStorage.setItem(KEY + ":min", on ? "1" : ""); } catch { /* private window */ } };
+fold.addEventListener("click", () => folded(!bar.classList.contains("min")));
+top.appendChild(fold);
+bar.appendChild(top);
+try { folded(!!localStorage.getItem(KEY + ":min")); } catch { folded(false); }
 const buttons: { row: string; id: string; el: HTMLButtonElement }[] = [];
 for (const [row, label, opts] of ROWS) {
   const r = document.createElement("div");
