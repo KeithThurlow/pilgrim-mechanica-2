@@ -315,6 +315,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Less floaty: heavier air, blasts don't drift the mech (Keith: "floaty... on explosions and getting knocked back, you can end up drifting too much"; Claude on `claude/project-thread-a6vlpg`)
+- Knockback: blast shoves (pulses, big deaths, strider strikes; `MechUnit.shoveFrom`) go through `WalkerSim.knock`: the mech takes `knockTake` 0.8 of the shove and its feet dig in at `knockGrip` 25 m/s² until the skid is gone (it used to get the sprint's let-go grip at that speed). A 22 m/s shove: 5.4 m in 0.54 s (was 20.9 m in 1.37 s); 16 m/s: 2.5 m (was 5.8). Sliders in Your mech › Legs › Move.
+- Air: flights off crests, blasts and drops fall at `airGravity` 1.4 g (Air); landings graded as if at g, so the same jump squats and hurts the same; sprint strides keep g. Dunes at 16 m/s for 40 s: 24 take-offs, 4.6 s airborne (was 17, 6.4 s): jumps kept, shorter hang.
+- New `tools/knock-check.ts` (push limits, settle times, crest jumps still happen). Checked: knock, framerate, full `npm test`.
+- Open for Keith: `airGravity` and `knockGrip`/`knockTake` are first guesses; `?set=airGravity:1` is the old air.
+
 ### 2026-11-06 · Walker checked at 20 fps against 144: frame-rate independent (Keith: "legs end up dragging behind... might be frame rate"; Claude on `claude/project-thread-a6vlpg`)
 - New `tools/framerate-check.ts`: the same 14 s over the dunes (walk, Shift run, a turn, a 14 m/s shove, a jump) stepped as the game steps it (ceil(frame × 120) steps a frame) at 144, 60, 30 and 20 fps. Result: ends within 0.31 m (a frame's sampling), planted feet 0.43-0.45 m behind the hips on average at every rate, same landings. So the drag isn't the walker's frame rate; under 20 fps the whole game slows down instead (the frame cap in `src/core/app.ts`).
 - The one per-call ease found (the squashed thigh's splay, `pose()` in `src/mech/walker.ts`) now eases by time.

@@ -393,7 +393,7 @@ export class MechUnit implements Hittable, Solid {
     if (d > radius) return;
     if (d < 0.3) { dx = -Math.sin(sim.heading); dz = -Math.cos(sim.heading); } else { dx /= d; dz /= d; }
     const k = 1 - 0.5 * (d / radius);
-    sim.skid.x += dx * speed * k; sim.skid.z += dz * speed * k;
+    sim.knock(dx * speed * k, dz * speed * k);
     sim.stagger = Math.max(sim.stagger, 0.35 * k);
   }
 
