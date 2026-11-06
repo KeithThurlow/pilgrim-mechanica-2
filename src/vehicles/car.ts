@@ -214,7 +214,21 @@ const MIN_CENTRE_CLEAR = 0.25;
 /** Fastest the body may be thrown upward by the ground (m/s): a safety net, not a feel value. */
 const MAX_RISE = 10;
 
-const newWheel = (): Wheel => ({ pos: new Vector3(), slip: 0, compress: 0, steer: 0, spin: 0, grounded: true });
+/**
+ * A grounded wheel's contact point whose height is read off the ground only when someone asks for it (perf,
+ * 2026-11-06: twelve escorts at 120 Hz read the ground under every wheel every step for drawing and dust, which
+ * look once a frame). Same answer as reading it at placement, from the same (x, z).
+ */
+class GroundPoint extends Vector3 {
+  private ground: Ground | null = null;
+  private h = 0;
+  /** On the ground at (x, z): y is the ground's height there, looked up when first read. */
+  onGround(x: number, z: number, g: Ground) { this.x = x; this.z = z; this.ground = g; }
+  // @ts-expect-error: an accessor over Vector3's y field
+  get y() { if (this.ground) { this.h = this.ground.height(this.x, this.z); this.ground = null; } return this.h; }
+  set y(v: number) { this.h = v; this.ground = null; }
+}
+const newWheel = (): Wheel => ({ pos: new GroundPoint(), slip: 0, compress: 0, steer: 0, spin: 0, grounded: true });
 /** Wheels nearer the body centre than this (along it) bottom out by lifting the body, not tipping it. */
 const CENTRE_BAND = 0.5;
 /** Corner a wheel bottoms out in: front/back/middle x left/right. */
@@ -590,7 +604,7 @@ export class CarSim {
       const front = !this.driven[i];
       w.steer = this.steerAngle * this.share[i];
       if (w.grounded) {
-        w.pos.set(x, this.ground.height(x, z), z);
+        (w.pos as GroundPoint).onGround(x, z, this.ground);
       } else {
         const hang = this.pos.y + m.y - v.rideHeight - v.droop;
         w.pos.set(x, hang, z);
