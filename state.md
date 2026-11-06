@@ -209,6 +209,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Sim in a worker (Keith 2026-11-06, Claude on `claude/project-thread-lzdcwr`): plan in `docs/proposal-simworker.md`, handoff `docs/handoff-simworker.md`. One system per PR, the worker path the default on main, `?noworker` to compare. Step 1 (plumbing and the ground mirror) next.
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, compaction as an upgrade, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
 - Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batches 1 and 2 merged (robots, bandits, warband, droids, crusher, summoner's units in `labs/swarm/`). **Edit the robot, bandit, war band, droid, crusher and summoner lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Open questions in `docs/decisions.md` (2026-11-02 swarm lab rows).
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
@@ -315,6 +316,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Plan: the sim in a worker alongside drawing (Keith approved; Claude)
+- `docs/proposal-simworker.md`: steps, rules (worker path default on main, `?noworker` to compare, a parity check per step), what moves first (terrain building, escorts, the robot swarm). Docs only.
 ### 2026-11-06 · Far escorts step at half rate (Keith: 144 fps near the convoy; Claude on `claude/project-thread-lzdcwr`)
 - `src/convoy/escort.ts`: escorts farther than `escortLodDist` (90 m, slider "Half rate past", Convoy › Escort driving; 0 = off) from the mech step at 60 Hz (every other fixed step, alternate escorts each step, with both steps' time). Aboard the convoy (no mech on the sand) all run at full rate. The car sim at 60 Hz drives within a metre of 120 Hz over 250 m (node probe).
 - Checked: `tools/convoy-check.ts` escorts section now runs twice, at the default and with every escort at half rate (1 m): same rules pass (on station 97%, no flips, platform/plough/mech clearances). Escort update cost per step 0.22 → 0.13-0.17 ms with all of them far. npm test.
