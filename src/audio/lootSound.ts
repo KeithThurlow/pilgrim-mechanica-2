@@ -18,7 +18,7 @@ import type { Param } from "../core/tweaks";
 export const LOOT_SOUND_DEFAULTS = {
   lootVolume: 0.5,
   guitarDrive: 14, guitarTone: 3000, guitarRoom: 0.25,
-  volCommon: 0.8, volUncommon: 0.9, volRare: 1, volEpic: 1.1, volLegendary: 1.2,
+  volCommon: 0.8, volUncommon: 0.9, volRare: 1, volEpic: 1.1, volLegendary: 1.2, volMythic: 1.3,
   clankWeight: 0.6, clankBright: 0.4, streakBuild: 8, scrapVolume: 1,
 };
 export type LootSoundValues = typeof LOOT_SOUND_DEFAULTS;
@@ -31,6 +31,7 @@ export const LOOT_SOUND_PARAMS: Param[] = [
   { key: "volUncommon", label: "Drop volume: Uncommon (two chugs)", min: 0, max: 2, step: 0.05, group: "Loot" },
   { key: "volRare", label: "Drop volume: Rare (power chord)", min: 0, max: 2, step: 0.05, group: "Loot", tip: "Also the BANKED sting" },
   { key: "volEpic", label: "Drop volume: Epic (bend + sub)", min: 0, max: 2, step: 0.05, group: "Loot" },
+  { key: "volMythic", label: "Drop volume: Mythic", min: 0, max: 2, step: 0.05, group: "Loot" },
   { key: "volLegendary", label: "Drop volume: Legendary", min: 0, max: 2, step: 0.05, group: "Loot" },
   { key: "clankWeight", label: "Scrap clank weight", min: 0, max: 1, step: 0.05, group: "Loot", tip: "Lower pitch, a bigger thud, longer ring" },
   { key: "clankBright", label: "Scrap clank brightness", min: 0, max: 1, step: 0.05, group: "Loot", tip: "Upper metal partials and the grit on impact" },
@@ -81,7 +82,7 @@ export class LootSound {
   private get ok() { return this.ctx.state === "running" && this.v.lootVolume > 0; }
   private tierVol(tier: number) {
     const v = this.v;
-    return [v.volCommon, v.volUncommon, v.volRare, v.volEpic, v.volLegendary][Math.max(0, Math.min(4, tier))];
+    return [v.volCommon, v.volUncommon, v.volRare, v.volEpic, v.volLegendary, v.volMythic][Math.max(0, Math.min(5, tier))];
   }
 
   // ---- shared plumbing ----
