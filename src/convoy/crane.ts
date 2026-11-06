@@ -50,14 +50,16 @@ const wrap = (a: number) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (
 
 export interface V3 { x: number; y: number; z: number }
 
-/** One axis: position chases a target with a capped speed and acceleration, braking to arrive without overshoot. */
+/** One axis: position chases a target with a capped speed and acceleration, braking to arrive without overshoot.
+ *  ff: the target's own rate (a moving target, e.g. a mech the convoy is driving past), added so it keeps up. */
 class Axis {
   vel = 0;
   constructor(public x: number, private angular: boolean) {}
-  step(target: number, vmax: number, acc: number, dt: number) {
+  step(target: number, vmax: number, acc: number, dt: number, ff = 0) {
     const err = this.angular ? wrap(target - this.x) : target - this.x;
-    // Speed that still stops in time, toward the target.
-    const want = Math.sign(err) * Math.min(vmax, Math.sqrt(2 * acc * Math.abs(err)));
+    // Speed that still stops in time, toward the target (riding along with it when it moves).
+    const chase = Math.sign(err) * Math.min(vmax, Math.sqrt(2 * acc * Math.abs(err)));
+    const want = Math.max(-vmax, Math.min(vmax, ff + chase));
     this.vel += Math.max(-acc * dt, Math.min(acc * dt, want - this.vel));
     let dx = this.vel * dt;
     // Arrive: don't step past the target.
@@ -92,6 +94,10 @@ export class Crane {
   private slewT = Math.PI;
   private luffT = 0.6;
   private cradleYT: number | null = null;
+  /** Tracking a moving target (track()): the targets' rates, fed forward so the axes keep up with it. */
+  private tracking = false;
+  private prevT: { slew: number; luff: number } | null = null;
+  private ff = { slew: 0, luff: 0 };
   private tipVel = { x: 0, z: 0, ok: false };
   private fresh = true;
 
@@ -110,9 +116,17 @@ export class Crane {
 
   /** Aim: slew (relative to the platform), radius, and the cradle's height (null: rope fully up). */
   aim(slew: number, radius: number, cradleY: number | null) {
+    this.tracking = false;
     this.slewT = wrap(slew);
     this.luffT = this.luffFor(radius);
     this.cradleYT = cradleY;
+  }
+
+  /** Aim at a target that moves relative to the platform (a mech standing still while the convoy rolls past,
+   *  Keith 2026-11-06): as aim, plus the target's rates fed forward so the crane rides along instead of lagging. */
+  track(slew: number, radius: number, cradleY: number | null) {
+    this.aim(slew, radius, cradleY);
+    this.tracking = true;
   }
 
   /** Slew and radius that put the jib tip over world (x, z). */
@@ -137,16 +151,24 @@ export class Crane {
   /** True when slew and luff are on target (within tolerances in radians) and the cradle within tolH of its height. */
   settled(tolA = 2 * D2R, tolH = 0.15) {
     const h = this.cradleYT === null ? true : Math.abs(this.ropeWant() - this.hoist) < tolH || this.hoist <= MIN_ROPE + 0.01;
+    // Still relative to the target: a tracked target's own rate doesn't count as moving.
     return Math.abs(wrap(this.slew - this.slewT)) < tolA && Math.abs(this.luff - this.luffT) < tolA && h
-      && Math.abs(this.aSlew.vel) < 3 * D2R && Math.abs(this.aLuff.vel) < 3 * D2R;
+      && Math.abs(this.aSlew.vel - this.ff.slew) < 3 * D2R && Math.abs(this.aLuff.vel - this.ff.luff) < 3 * D2R;
   }
 
   step(dt: number) {
     if (dt <= 0) return;
     const v = this.v, px = this.cradle.x, py = this.cradle.y, pz = this.cradle.z;
     const tx = this.tip.x, tz = this.tip.z;
-    this.aSlew.step(this.slewT, v.craneSlew * D2R, v.craneSlewAccel * D2R, dt);
-    this.aLuff.step(this.luffT, v.craneLuff * D2R, v.craneLuffAccel * D2R, dt);
+    const vs = v.craneSlew * D2R, vl = v.craneLuff * D2R;
+    // A tracked target's rates from its last step (capped at the axes' top speeds, so a jump never fires them off).
+    if (this.tracking && this.prevT) {
+      this.ff.slew = Math.max(-vs, Math.min(vs, wrap(this.slewT - this.prevT.slew) / dt));
+      this.ff.luff = Math.max(-vl, Math.min(vl, (this.luffT - this.prevT.luff) / dt));
+    } else this.ff.slew = this.ff.luff = 0;
+    this.prevT = this.tracking ? { slew: this.slewT, luff: this.luffT } : null;
+    this.aSlew.step(this.slewT, vs, v.craneSlewAccel * D2R, dt, this.ff.slew);
+    this.aLuff.step(this.luffT, vl, v.craneLuffAccel * D2R, dt, this.ff.luff);
     this.place(false);
     const ropeBefore = this.hoist;
     this.aHoist.step(this.ropeWant(), v.craneHoist, v.craneHoistAccel, dt);

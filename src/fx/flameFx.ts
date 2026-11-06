@@ -43,8 +43,8 @@ export interface FlameLook {
 }
 const LOOK: FlameLook = {
   flameRise: 3, flameGravity: 9.8, flameDrag: 0.15, flameBreak: 1.2, flameSplashDrops: 2,
-  flameGroundLife: 1.2, flameSlide: 0.3, flameGroundDrag: 4, flameRiseLife: 0.9, flameBuoy: 6,
-  flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 1.2,
+  flameGroundLife: 5.5, flameSlide: 0.3, flameGroundDrag: 4, flameRiseLife: 0.9, flameBuoy: 6,
+  flameStretch: 0.08, flameGrowFly: 1.6, flameGrowGround: 2.2, flameGrowRise: 3, flameLicks: 0.4,
   flameLightEvery: 12, flameBallLights: 6, flameBlob: 1, flameLump: 0.5, flameHalo: 0.25,
   flameSmoke: 1, flameSmokeRise: 1.6, flameSmokeSize: 3.2,
   flameTube: 1, flameTubeNear: 0.1, flameTubeFar: 1, flameTubeLump: 0.6, flameTubeEvery: 0.025,
@@ -272,7 +272,7 @@ export class FlameFx {
         const u = (this.age[i] - this.tS[i]) / Math.max(0.05, this.life[i] - this.tS[i]);
         // A ground fire licks flames up off it; fire burning down (past halfway) throws dirty smoke.
         if (st === GROUND && L.flameLicks > 0 && Math.random() < dt * L.flameLicks) this.pendL.push(this.px[i], this.py[i] + 0.1, this.pz[i], this.s0[i] * 1.2);
-        if (L.flameSmoke > 0 && u > 0.5 && Math.random() < dt * L.flameSmoke * (st === RISE ? 2.5 : 0.8)) this.pend.push(this.px[i], this.py[i] + this.s0[i] * 0.6, this.pz[i], st === RISE ? 1.2 : 0.9);
+        if (L.flameSmoke > 0 && u > 0.5 && Math.random() < dt * L.flameSmoke * (st === RISE ? 2.5 : 0.25)) this.pend.push(this.px[i], this.py[i] + this.s0[i] * 0.6, this.pz[i], st === RISE ? 1.2 : 0.9);
       }
       if (k === LICK && !cold && L.flameSmoke > 0 && this.age[i] > this.life[i] * 0.35 && Math.random() < dt * L.flameSmoke * 0.5) this.pend.push(this.px[i], this.py[i] + this.size[i], this.pz[i], 0.8);
       if (keep !== i) this.copy(keep, i);

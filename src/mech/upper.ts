@@ -31,7 +31,7 @@ export const UPPER_DEFAULTS = {
   gunSpacing: 1.02,
   heldTrack: 1.8,
   heldOutward: 0.9,
-  runArmOut: 95,
+  runArmOut: 170,
   runArmIn: 50,
   armUpper: 1.45,
   armFore: 1.45,
@@ -45,6 +45,14 @@ export const UPPER_DEFAULTS = {
   armShoulderOut: 0.35,
   armCrossIn: 0.6,
   armAlign: 0.75,
+  armRollFrom: 90,
+  armRollOver: 45,
+  armRollWrist: 180,
+  armReachBack: 0.7,
+  armDropBack: 0,
+  armPoleUp: 4,
+  armAlignBack: 0.2,
+  armRollLean: 8,
   armKickMinigun: 3,
   shotPullBack: 4,
   armKickRifle: 4,
@@ -56,6 +64,13 @@ export const UPPER_DEFAULTS = {
   reloadTime: 2.6,
 };
 export type UpperValues = typeof UPPER_DEFAULTS;
+
+/** How far an arm has rolled over (0..1) for a gun yaw off the hull (+ to the mech's left) on that side: 0 up to
+ *  armRollFrom out from ahead, 1 once armRollOver past it (Keith 2026-11-06). Looks only. */
+export function armRoll(side: 1 | -1, yaw: number, v: UpperValues): number {
+  const u = Math.min(1, Math.max(0, ((side * yaw * 180) / Math.PI - v.armRollFrom) / Math.max(1e-3, v.armRollOver)));
+  return u * u * (3 - 2 * u);
+}
 
 export const UPPER_PARAMS: Param[] = [
   { key: "torsoTurnRate", label: "Torso turn rate (°/s)", min: 30, max: 600, step: 5, group: "Torso & guns" },
@@ -71,7 +86,7 @@ export const UPPER_PARAMS: Param[] = [
   { key: "gunSpacing", label: "Gun spacing (m)", min: 0, max: 3, step: 0.01, group: "Torso & guns", tip: "Each gun aims from its own shoulder, this far from the middle" },
   { key: "heldTrack", label: "Held weapons: tracking ×", min: 0.5, max: 4, step: 0.05, group: "Held weapons", tip: "Keith 2026-11-03: arms track from the shoulder much faster than hull weapons. Every held weapon's tracking (its arm's × the weapon's handling) times this" },
   { key: "heldOutward", label: "Held weapons: outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Held weapons", tip: "As Outward swing speed, for arms: share of the tracking an arm swings outward (inward is full speed)" },
-  { key: "runArmOut", label: "Sprinting: arm swings out to (°)", min: 0, max: 135, step: 1, group: "Held weapons", tip: "Keith 2026-11-03: sprinting, the hull faces the run and only the arms track. Each arm swings this far out from straight ahead (left arm to the left), off the hull's facing; 95: 5° behind side-on (Keith 2026-11-03)" },
+  { key: "runArmOut", label: "Sprinting: arm swings out to (°)", min: 0, max: 178, step: 1, group: "Held weapons", tip: "Keith 2026-11-03: sprinting, the hull faces the run and only the arms track. Each arm swings this far out from straight ahead (left arm to the left), off the hull's facing. Keith 2026-11-06: past side-on the elbow rolls up and the wrist turns over (Arm roll), so 170: nearly straight back (was 95)" },
   { key: "armUpper", label: "Arm pose: upper arm (m)", min: 0.4, max: 3, step: 0.01, group: "Held weapons", tip: "Keith 2026-11-03: the arm reaches from the shoulder to the gun's aim (two bones, the elbow finds itself)" },
   { key: "armFore", label: "Arm pose: forearm (m)", min: 0.4, max: 3, step: 0.01, group: "Held weapons" },
   { key: "armReachFront", label: "Arm pose: reach ahead (share)", min: 0.3, max: 1, step: 0.01, group: "Held weapons", tip: "How far out the fist is, as a share of the arm's full length, when the gun aims straight ahead (or across the chest): bent" },
@@ -91,6 +106,14 @@ export const UPPER_PARAMS: Param[] = [
   { key: "minigunGripBack", label: "Held minigun: sits back on the forearm (m)", min: -1, max: 2, step: 0.01, group: "Held weapons", tip: "Keith 2026-11-04: its handle up by the barrels, so the gun sits further back over the forearm" },
   { key: "smgScale", label: "Held SMG: size ×", min: 0.5, max: 2.5, step: 0.01, group: "Held weapons", tip: "Keith 2026-11-04: it looked too small" },
   { key: "armPoleBack", label: "Arm pose: elbow back", min: -1, max: 2, step: 0.05, group: "Held weapons", tip: "And this much back" },
+  { key: "armRollFrom", label: "Arm roll: starts at (°)", min: 45, max: 150, step: 1, group: "Held weapons", tip: "Keith 2026-11-06: aiming further back than this off straight ahead, the arm rolls over: the elbow comes up and the wrist turns the gun over, so it can track nearly straight behind" },
+  { key: "armRollOver", label: "Arm roll: done over (°)", min: 5, max: 90, step: 1, group: "Held weapons", tip: "The roll eases in over this many degrees past its start" },
+  { key: "armRollWrist", label: "Arm roll: wrist turn (°)", min: -180, max: 180, step: 1, group: "Held weapons", tip: "How far the gun turns over on its barrel, fully rolled (180: upside down; the sign picks which way it turns)" },
+  { key: "armReachBack", label: "Arm roll: reach behind (share)", min: 0.3, max: 1, step: 0.01, group: "Held weapons", tip: "The fist's reach as a share of the arm's length, fully rolled: bent, so the elbow stands up" },
+  { key: "armDropBack", label: "Arm roll: fist below the aim line (m)", min: -1, max: 1, step: 0.01, group: "Held weapons", tip: "Fully rolled; negative raises the fist above the line" },
+  { key: "armPoleUp", label: "Arm roll: elbow up", min: 0, max: 8, step: 0.1, group: "Held weapons", tip: "Which way the elbow bends, fully rolled: this much up for every 1 out (Keith 2026-11-06: almost straight up)" },
+  { key: "armAlignBack", label: "Arm roll: forearm along the aim (share)", min: 0, max: 1, step: 0.01, group: "Held weapons", tip: "Forearm along the aim, fully rolled (less, so the elbow can stand up)" },
+  { key: "armRollLean", label: "Arm roll: hull leans over (°)", min: 0, max: 25, step: 0.5, group: "Held weapons", tip: "Keith 2026-11-06: the hull rolls this far away from a fully rolled arm, raising that shoulder, as a person leans to reach behind. Looks only" },
   { key: "runArmIn", label: "Sprinting: arm swings across to (°)", min: 0, max: 120, step: 1, group: "Held weapons", tip: "And this far across the chest (left arm to the right). Outside the two, that arm doesn't fire" },
   { key: "spinUp", label: "Spin-up (s)", min: 0.05, max: 2, step: 0.05, group: "Minigun" },
   { key: "spinDown", label: "Spin-down (s)", min: 0.1, max: 4, step: 0.05, group: "Minigun" },
@@ -311,7 +334,9 @@ export class UpperSim {
       const pitchWant = aim ? -Math.atan2(aim.y - shoulder.y, Math.max(1, dist)) + this.lean : 0;
       // Each arm swings inward (toward the torso) at full speed and outward slower. Yaw grows toward the mech's
       // left, so for the left arm (+1) a rising yaw is outward, and for the right arm (-1) a falling one is.
-      const yawTo = clamp(yawWant, lo, hi);
+      // Outside the window, the nearer end round the circle (Keith 2026-11-06: with the arm reaching nearly straight back,
+      // a target just past dead behind is near the arm's back limit, not across the chest; it mustn't swing round the front).
+      const yawTo = yawWant >= lo && yawWant <= hi ? yawWant : Math.abs(wrap(yawWant - lo)) < Math.abs(wrap(yawWant - hi)) ? lo : hi;
       const outward = Math.sign(yawTo - g.yaw) === g.side;
       const kYaw = 1 - Math.exp(-track * (outward ? (own?.held ? v.heldOutward : v.outwardTrack) : 1) * dt);
       const kPitch = 1 - Math.exp(-track * dt);
