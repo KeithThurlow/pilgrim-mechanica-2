@@ -315,6 +315,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Robot swarms: fewer big walkers, more small units and gun quads (Keith asked; Claude on `claude/robots-mix`)
+- Defaults only (all still sliders): `robotBigShare` 0.035→0.015, `robotMidShare` 0.15→0.22, `robotQuadShare` 0.3→0.55 (so ~12% of a pack are weapon quads), camps `campMin/Max` 6–24→8–32, `campBigFar` 0.12→0.05, `campBigMin` 2→1.
+- Files: `src/combat/robots.ts`, `src/expedition/camps.ts`; checks `balance-check` (pins quad 0), `scaling-check` (excavator floors relaxed), `robots-check` (walk test pins the old mix).
+- Checked: full `npm test` 91/91. Frame cost: smalls are the cheapest kind, bigs the dearest, so per-pack cost should be about flat; camps are bigger (+33%), watch the convoy lab `?nearcamp`. Open question for Keith: is 1 sure excavator at full depth right?
+
 ### 2026-11-06 · Loot pickup is a choice: E takes a drop, labels on the sand (Keith asked; Claude on `claude/project-thread-rrt6xm`)
 - Drops are no longer grabbed by walking over them: E takes the nearest in reach (when nearer than the salvage spot in reach); `autoPickup` slider (Loot) brings the walk-over back. Labels over drops: name, level, power, DPS, ▲/▼ vs fitted, [E] TAKE on the target. The prompt line says `E: take <item>`. The demo still takes what it walks by.
 - Files: `src/expedition/drops.ts` (`Collector.grab`, `nearest`, `reach`, `autoPickup`), `dropLabels.ts` (new), `loot.ts` (`target`, labels), `loop.ts` (E press routing, `eSpent`).
