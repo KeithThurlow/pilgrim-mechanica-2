@@ -2775,7 +2775,8 @@ export class WalkerSim {
       // thigh angles out to the side instead of standing straight up and down (Keith 2026-10-24, side slopes).
       const rest = Math.max(0.5, v.hipHeight - v.ankleHeight);
       const squash = f.swinging || this.lofted ? 0 : clamp((rest - P.hip.distanceTo(P.ankle)) / rest, 0, 0.6);
-      f.splay += ((v.thighSplay * squash) - f.splay) * 0.15;
+      // Eased by time (was 0.15 a call: twice as quick at 240 fps as at 120).
+      f.splay += ((v.thighSplay * squash) - f.splay) * Math.min(1, 18 * this.poseDt);
       forwardOf(this.heading + this.hipOpen + f.side * (v.kneeOut + f.splay) * D2R + f.kneeYaw, P.legFwd);
       const reach = v.femur + v.shin - 0.002;
 
