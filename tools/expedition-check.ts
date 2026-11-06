@@ -631,16 +631,17 @@ function outAndBack(label: string, stops: number, pickAhead: number, sprintOut =
     const H = FIELD_LOOT_DEFAULTS;
     if (dropHearing(H, 10) !== 1 || dropHearing(H, H.dropHearMax + 1) !== 0 || !(dropHearing(H, (H.dropHearFull + H.dropHearMax) / 2) < 1)) fail("loot: drop sounds don't fade with distance");
   }
-  // A walked-over item joins the at-risk list; banking moves everything; a loss empties the list.
+  // A taken item (E: a grab in reach; walking over takes nothing, Keith 2026-11-06) joins the at-risk list; banking moves everything; a loss empties the list.
   const e = new Expedition({ ...EXPEDITION_DEFAULTS });
   const f = new DropField(LV, 9);
   e.launch();
   e.add({ kind: "scrap", amount: 40, label: "Wreck" });
   const d = f.roll("spot:x", 1, 10, 0, here)!;
-  if (f.update([{ x: 0, z: 0, by: "mech" }], true).length) fail("loot: a drop 10 m off was picked up");
-  const got = f.update([{ x: 9, z: 0, by: "mech" }], true);
+  if (f.update([{ x: 0, z: 0, by: "mech", grab: true }], true).length) fail("loot: a drop 10 m off was picked up");
+  if (f.update([{ x: 9, z: 0, by: "mech" }], true).length) fail("loot: walking over a drop picked it up without E");
+  const got = f.update([{ x: 9, z: 0, by: "mech", grab: true }], true);
   for (const g of got) e.add({ kind: "item", item: g.item, label: "x" });
-  if (got.length !== 1 || got[0] !== d || e.itemsAtRisk !== 1 || f.drops.length) fail("loot: walking over a drop didn't put it on the at-risk list");
+  if (got.length !== 1 || got[0] !== d || e.itemsAtRisk !== 1 || f.drops.length) fail("loot: taking a drop didn't put it on the at-risk list");
   if (!f.events.some((ev) => ev.type === "picked")) fail("loot: no picked event");
   const far = f.roll("spot:far", 1, 0, 0, here)!;
   f.update([{ x: LV.dropForget + 50, z: 0, by: "pilot" }], true);

@@ -54,6 +54,7 @@ import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type Threat
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
+import { itemName, type Drop } from "./drops";
 import { banditThreat } from "./threat";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
@@ -101,7 +102,7 @@ export const LOOP_TOPICS = [
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: garrison", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
-  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Cargo", "Item value", "Loot rolls"] },
+  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Loot labels", "Cargo", "Item value", "Loot rolls"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts"] },
@@ -216,6 +217,11 @@ export class ExpeditionLoop {
   kitsFound = 0;
   private demoFrom = 0;
   demoHold = false;
+  /** E and the drops (Keith 2026-11-06): the drop E would take now, E last frame, this frame's grab, a press spent on a drop. */
+  private eDrop: Drop | null = null;
+  private ePrev = false;
+  private grab = false;
+  private eSpent = false;
   demoAim: Aim | null = null;
   demoTrigger = false;
   /** Extraction pads: where they are, the call in progress, what the convoy has bought, their drawing. */
@@ -480,6 +486,19 @@ export class ExpeditionLoop {
     if (foot && !pl!.alive && exp.state === "out") exp.pilotKilled();
     // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
     const onSand = carry.state === "walking" || carry.state === "inRange";
+    // Item drops are taken with E (Keith 2026-11-06: a choice, not a walk-over). E goes to the nearest drop in reach
+    // when it's nearer than the salvage spot in reach; a press spent on a drop doesn't strip, hook or call anything
+    // until E is let go. The demo takes whatever it walks by.
+    const who = foot ? pl! : null;
+    const lootAt = { mech: { x: p.x, y: p.y, z: p.z, grabs: !foot && player.alive && onSand }, pilot: who && who.alive ? { x: who.x, y: 0, z: who.z } : null };
+    const drop = onSand ? this.loot.target(lootAt) : null, spot = this.sites.salvage.inReach, from = lootAt.pilot ?? lootAt.mech;
+    this.eDrop = drop && (!spot || Math.hypot(drop.x - from.x, drop.z - from.z) <= Math.hypot(spot.x - from.x, spot.z - from.z)) ? drop : null;
+    const eDown = inp.eHeld && !inp.demo;
+    this.grab = inp.demo ? !!drop : eDown && !this.ePrev && !!this.eDrop;
+    if (this.grab && !inp.demo) this.eSpent = true;
+    if (!eDown) this.eSpent = false;
+    this.ePrev = eDown;
+    if (this.eSpent) inp = { ...inp, eHeld: false };
     const holding = (inp.demo ? this.demoHold : inp.eHeld && !this.quests.usesE) && exp.state === "out" && player.alive && onSand && (!foot || pl!.alive);
     if (foot) this.sites.update(dt, pl!.x, pl!.z, holding, this.camera, pl!);
     else this.sites.update(dt, p.x, p.z, holding, this.camera);
@@ -623,6 +642,7 @@ export class ExpeditionLoop {
     if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
       else if (s.blocked) prompt = `Cargo full: ${s.blocked.label} pays ${s.pay(s.blocked)} scrap (${(s.pay(s.blocked) * exp.scrapWeight).toFixed(1)} t), ${Math.max(0, exp.room).toFixed(1)} t free · I: drop something`;
+      else if (this.eDrop) prompt = `E: take ${itemName(this.eDrop.item)}${s.inReach ? ` · step closer to ${s.inReach.label} to strip it` : ""}`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }
     this.hud.update(dt, {
@@ -645,6 +665,7 @@ export class ExpeditionLoop {
     this.loot.update(dt, {
       mech: { x: p.x, y: p.y + 1.5, z: p.z, grabs: !foot && player.alive && onSand },
       pilot: pa ? { x: pa.x, y: this.field.height(pa.x, pa.z) + 1.2, z: pa.z } : null,
+      grab: this.grab, camera: this.camera, canvas: inp.canvas,
     });
     inp.mark?.("loot");
   }
