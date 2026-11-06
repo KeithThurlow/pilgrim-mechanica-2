@@ -85,6 +85,8 @@ import { PloughFx, PLOUGH_FX_DEFAULTS, PLOUGH_FX_PARAMS } from "../../src/convoy
 import { PLOUGH_BASE_LENGTH, BLADE_AHEAD } from "../../src/convoy/plough";
 import { WAKE_PARAMS } from "../../src/convoy/wake";
 import { ExpeditionLoop, LOOP_DEFAULTS, LOOP_PARAMS, LOOP_TOPICS } from "../../src/expedition/loop";
+import { GroundRecorder } from "../../src/sim/groundEvents";
+import { SimHost, SIM_DEFAULTS, SIM_PARAMS, workerWanted } from "../../src/sim/host";
 import { POI_PARAMS } from "../../src/world/pois";
 import { SITE_PARAMS } from "../../src/pois/kinds";
 import { CAMP_PARAMS } from "../../src/expedition/camps";
@@ -136,7 +138,7 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...CONVOY_SOUND_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS, ...SIM_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
@@ -149,7 +151,7 @@ const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...CONVOY_SOUND_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
-  ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS,
+  ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS, ...SIM_PARAMS,
 ];
 
 // World: dunes with the convoy's road in them.
@@ -198,6 +200,9 @@ scene.add(bf.group);
 const craters = new CraterLayer(V, field);
 field.dents = craters;
 bf.craters = craters;
+// The sim worker (docs/proposal-simworker.md; ?noworker: none): from here every change to the ground is recorded and
+// replayed into the worker's own copy of it (src/sim/groundEvents.ts), checked against this one every frame.
+const groundRec = workerWanted() ? new GroundRecorder({ V, field, route, craters, routeAt: [0, 0] }) : null;
 // The dead go to the death physics (ragdolls, wrecks; src/physics/deaths.ts), as in the combat labs.
 await initPhysics();
 const deaths = new DeathPhysics(V, field);
@@ -266,6 +271,8 @@ const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.memo.invalidate(x0, z0, x1, z1); }, deaths });
+const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.height(x, z)) : null;
+if (simHost) app.hud.set("sim", () => simHost.line());
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
@@ -1129,6 +1136,9 @@ app.onTick((rawDt) => {
   deaths.step(dt);
   deadDraw.update();
   costs.mark("deaths");
+  // This frame's ground changes to the sim worker (and a few points to check its copy at).
+  simHost?.frame(sim.pelvis.x, sim.pelvis.z);
+  costs.mark("simworker");
   app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving) · craters ${craters.count}`);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);

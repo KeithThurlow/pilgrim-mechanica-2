@@ -44,7 +44,7 @@ import { DroidCamps, DROID_CAMP_DEFAULTS, DROID_CAMP_PARAMS, DROID_CAMP_GROUP } 
 import { StriderCamps, STRIDER_CAMP_DEFAULTS, STRIDER_CAMP_PARAMS, STRIDER_CAMP_TOPIC } from "./striderCamps";
 import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_TOPIC } from "./crusherSites";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
-import { FieldSites, SITES_DEFAULTS, SITES_PARAMS } from "./sites";
+import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
 import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, convoyDepth } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
@@ -243,7 +243,7 @@ export class ExpeditionLoop {
     opts: LoopOptions = {},
   ) {
     // The road's corridor, cut or still to be cut by the plough (nothing is placed where the road will run).
-    const blocked = (x: number, z: number) => route.corridor(x, z) > 0.02;
+    const blocked = roadBlocks(route);
     this.exp = new Expedition(v);
     this.fuel = new Fuel(v);
     this.pads = new PadField(v);

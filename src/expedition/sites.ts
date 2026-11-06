@@ -6,11 +6,11 @@
 import type * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { DuneField } from "../world/terrain";
-import { POI_DEFAULTS, POI_KINDS, PoiField, type PoiPlacement } from "../world/pois";
-import { PoiPads, rawGround } from "../world/poiPads";
-import { addModifier } from "../world/modifiers";
+import { POI_DEFAULTS, POI_KINDS, type PoiField, type PoiPlacement } from "../world/pois";
+import type { PoiPads } from "../world/poiPads";
+import { SitesGround } from "./sitesGround";
 import { SITE_DEFAULTS, buildSite } from "../pois/kinds";
-import { SiegeWalls, isSiege } from "../pois/fortressGround";
+import { isSiege, type SiegeWalls } from "../pois/fortressGround";
 import type { PoiSite } from "../pois/site";
 import { PoiDraw } from "../pois/poiDraw";
 import { SalvageSim, SALVAGE_DEFAULTS, type SpotState } from "../pois/salvage";
@@ -26,14 +26,14 @@ export const SITES_PARAMS: Param[] = [
 ];
 
 export class FieldSites {
+  /** The sites' part of the ground (placement, pads, walls): pure, mirrored in the sim worker. */
+  readonly ground: SitesGround;
   readonly pois: PoiField;
   readonly pads: PoiPads;
   /** Fortress and hub walls in the ground (gates down kept in walls.down). */
   readonly walls: SiegeWalls;
   readonly salvage: SalvageSim;
   readonly fx: SalvageDraw;
-  private raw: ReturnType<typeof rawGround>;
-  private skipMemo = new Map<string, boolean>();
   private drawn = new Map<string, PoiDraw>();
   private memory = new Map<string, { progress: number; done: boolean }>();
   /** Sites made on the sand by what happens there (the wrecks a clash leaves): kept, built and drawn like any POI. */
@@ -49,19 +49,10 @@ export class FieldSites {
     /** True where a POI shouldn't be (the road). */
     private blocked: (x: number, z: number) => boolean,
   ) {
-    this.raw = rawGround(field);
-    this.pois = new PoiField(v, this.raw);
-    this.pads = new PoiPads(this.pois);
-    addModifier(field, this.pads);
-    this.walls = new SiegeWalls(this.pois, v);
-    addModifier(field, this.walls);
-    // Asked for every ground sample near a fortress or hub (perf pass 2026-10-31: 13 road lookups per sample made a chunk
-    // there cost 30+ ms), so remembered per placement until the road grows (roadGrew) or the sites rebuild.
-    this.walls.skip = (p) => {
-      let b = this.skipMemo.get(p.id);
-      if (b === undefined) { b = this.blocked(p.x, p.z) || this.edgeBlocked(p); this.skipMemo.set(p.id, b); }
-      return b;
-    };
+    this.ground = new SitesGround(v, field, blocked);
+    this.pois = this.ground.pois;
+    this.pads = this.ground.pads;
+    this.walls = this.ground.walls;
     this.salvage = new SalvageSim(v);
     this.fx = new SalvageDraw(this.salvage, bf, v);
     scene.add(this.fx.group);
@@ -74,18 +65,15 @@ export class FieldSites {
   }
 
   /** Keep clear of the start (the convoy rolls out from there). */
-  keepClear(x: number, z: number, r: number) { this.pois.keepClear = [{ x, z, r }]; this.rebuild(); }
+  keepClear(x: number, z: number, r: number) { this.ground.keepClear(x, z, r); this.rebuild(); }
+
+  /** The road has new points: forget which fortresses and hubs it runs into. */
+  roadGrew() { this.ground.roadGrew(); }
 
   /** Placement or dune values changed: start over (stripped spots forgotten). */
-  /** The road has new points: forget which fortresses and hubs it runs into. */
-  roadGrew() { this.skipMemo.clear(); }
-
   rebuild() {
-    this.skipMemo.clear();
     this.extra.clear();
-    this.raw.refresh();
-    this.pois.reset();
-    this.walls.reset();
+    this.ground.rebuild();
     for (const id of [...this.drawn.keys()]) this.drop(id);
     this.memory.clear();
     this.syncT = 0;
@@ -93,16 +81,9 @@ export class FieldSites {
 
   /** Generated POIs in a box, without the ones the road has taken. */
   poisIn(x0: number, z0: number, x1: number, z1: number): PoiPlacement[] {
-    const out = this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z) && !(isSiege(p) && this.edgeBlocked(p)));
+    const out = this.pois.poisIn(x0, z0, x1, z1).filter((p) => !this.blocked(p.x, p.z) && !(isSiege(p) && this.ground.edgeBlocked(p)));
     for (const s of this.extra.values()) { const p = s.place; if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1) out.push(p); }
     return out;
-  }
-
-  /** A fortress or hub the road runs into anywhere round its pad's edge (not only at its centre). */
-  private edgeBlocked(p: PoiPlacement) {
-    const r = p.pad ? p.pad.r + p.pad.blend : p.reach;
-    for (let k = 0; k < 12; k++) if (this.blocked(p.x + Math.sin(k * 0.5236) * r, p.z + Math.cos(k * 0.5236) * r)) return true;
-    return false;
   }
 
   /** A site made on the sand (a clash's wreckage): from now on it is a POI with spots to strip. */
@@ -161,3 +142,5 @@ export class FieldSites {
     this.drawn.delete(id);
   }
 }
+
+export { SitesGround, roadBlocks } from "./sitesGround";

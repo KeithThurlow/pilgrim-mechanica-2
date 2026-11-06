@@ -15,6 +15,8 @@ export default defineConfig({
   // The Report box in every lab posts here in dev (tools/report-plugin.ts).
   plugins: [reportPlugin(root)],
   server: { host: true, open: "/" },
+  // The sim worker (src/sim/worker.ts) is an ES module worker in the build too.
+  worker: { format: "es" },
   build: {
     target: "es2022",
     rollupOptions: { input: { main: resolve(root, "index.html"), ...labs } },
