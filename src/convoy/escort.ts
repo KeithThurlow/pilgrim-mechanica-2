@@ -32,6 +32,8 @@ export interface Obstacle {
   readonly left: { x: number; z: number };
   /** Its own clear distance when it isn't a box (the plough's base and blade). */
   gapAt?(x: number, z: number): number;
+  /** Out of its footprint for a body of radius r (null when clear). */
+  pushOut(x: number, z: number, r: number): { x: number; z: number } | null;
 }
 
 export const ESCORT_DEFAULTS = {
@@ -111,6 +113,11 @@ export class Escort {
   stuckT = 0;
   backT = 0;
   backSteer = 0;
+  /** Back-outs in a row without getting going again (each backs further: out of a hollow the way it came in). */
+  tries = 0;
+  freeT = 0;
+  /** Seconds waiting for a mech in its way by the cars. */
+  waitT = 0;
   /** The lane it rides now (distance out from the route line, m), re-picked every LANE_EVERY s. */
   lane = 26;
   laneT = 0;
@@ -288,6 +295,11 @@ export class EscortGroup {
     const top = Math.min(v.escortTopSpeed, carValues(e.kind).topSpeed);
     s.v.topSpeed = top;
     this.project(e);
+    // Shoved or squeezed across the train (between two cars, Keith 2026-11-06: "they won't path around things"): ride
+    // the side it is on now rather than driving back through the cars to reach its old one.
+    if (Math.sign(e.out) !== e.side && Math.abs(e.out) > this.trainHalf + 2 && e.s < r.s + this.convoy.platforms[0].spec.length / 2 && e.s > r.s - this.convoy.length) {
+      e.side = e.side === 1 ? -1 : 1; e.lane = Math.abs(e.out);
+    }
     const weave = v.escortWeave * Math.sin((2 * Math.PI * this.t * e.weaveRate) / Math.max(1, v.escortWeavePeriod) + e.phase);
     const station = r.s + e.along;
     const behind = station - e.s;
@@ -340,6 +352,8 @@ export class EscortGroup {
     const rough = Math.max(e.planCost, now);
     want = Math.min(want * (1 - 0.3 * rough), top - (top - Math.min(top, cv + 1.5)) * rough);
 
+    const waited = e.waitT;
+    e.waitT = 0;
     // Never into the mech: graze round its clearance from out there; from inside, out along the side the nose points.
     if (mech) {
       const dx = s.pos.x - mech.x, dz = s.pos.z - mech.z, dist = Math.hypot(dx, dz) || 1, clear = v.escortMechClear;
@@ -358,12 +372,23 @@ export class EscortGroup {
       if (dist < clear) {
         const sd = wrap(s.heading - toMech) >= 0 ? 1 : -1;
         const t = Math.max(0, (dist - 2) / (clear - 2));
-        desired = toMech + sd * (Math.PI / 2 + (1 - t) * 0.7);
-        want = Math.max(cv * 0.5, Math.min(want, top * (0.45 + 0.35 * t)));
+        const out = toMech + sd * (Math.PI / 2 + (1 - t) * 0.7);
+        // That way runs in at the cars (a mech out in its lane, the truck squeezed inside it; Keith 2026-11-06: they
+        // got stuck on the convoy): hold the route's heading instead, waiting while the mech is ahead, and back off
+        // if it stays there.
+        const lp = r.pointAt(e.s, this.pt), lx = Math.cos(lp.heading), lz = -Math.sin(lp.heading);
+        if (e.side * (Math.sin(out) * lx + Math.cos(out) * lz) < -0.3 && Math.abs(e.out) < this.trainHalf + v.escortPlatformClear + 14) {
+          desired = lp.heading;
+          if (Math.cos(s.heading - toMech) > 0) { want = 0; e.waitT = waited + dt; } else want = Math.max(want, cv);
+        } else {
+          desired = out;
+          want = Math.max(cv * 0.5, Math.min(want, top * (0.45 + 0.35 * t)));
+        }
       }
     }
 
     // Hard rule last (over the mech's): never into a platform or the plough; inside the clearance, turn away.
+    let nosed = false;
     for (const p of this.obstacles()) {
       const d = rectGap(p, s.pos.x, s.pos.z, e.half * 0.6);
       if (d >= v.escortPlatformClear || (p === this.convoy.plough && this.convoy.plough.ahead(s.pos.x, s.pos.z))) continue;
@@ -373,6 +398,8 @@ export class EscortGroup {
       const outHd = fwd + wrap(away - fwd) * 0.6;
       const k = 1 - Math.max(0, d) / v.escortPlatformClear;
       desired = desired + wrap(outHd - desired) * Math.min(1, 0.4 + k);
+      // Nose pointed in at it: a slow truck can't turn out in the room it has (the cars sweep in on a turn), so it backs off.
+      if (Math.sin(s.heading) * p.left.x * sx + Math.cos(s.heading) * p.left.z * sx < -0.2) nosed = true;
     }
     const err = wrap(desired - s.heading);
     let steer = clamp(err * 1.8, -1, 1);
@@ -382,16 +409,39 @@ export class EscortGroup {
     if (e.backT > 0) {
       e.backT -= dt;
       throttle = -0.8; steer = e.backSteer;
-    } else if (want > 1 && Math.abs(s.speed) < 0.6) {
+    } else if (e.waitT > WAIT_FOR) {
+      // Waited for a mech that stays put: back off, away from the cars, and go round it.
+      e.waitT = 0; e.backT = BACK_FOR; e.backSteer = 0; e.planT = 0;
+      throttle = -0.8; steer = e.backSteer;
+    } else if (nosed && Math.abs(err) > NOSED_ERR) {
+      // Nosed in at a car with its way out behind it: back out, the wheel turning the nose toward the way out.
+      e.stuckT = 0; e.backT = BACK_FOR; e.backSteer = -Math.sign(err); e.planT = 0;
+      throttle = -0.8; steer = e.backSteer;
+    } else if (want > STUCK_WANT && Math.abs(s.speed) < 0.6) {
       e.stuckT += dt;
       if (e.stuckT > STUCK_AFTER) {
-        e.stuckT = 0; e.backT = BACK_FOR; e.backSteer = -Math.sign(err || e.side); e.planT = 0;
+        // Again and again: back further each time, the wheel the other way on every other try.
+        e.tries = Math.min(e.tries + 1, 4);
+        e.stuckT = 0; e.backT = BACK_FOR * e.tries; e.backSteer = -Math.sign(err || e.side) * (e.tries % 2 === 0 ? -1 : 1); e.planT = 0;
         // Then go round on the other side from the one that got it stuck.
-        e.commitSide = -Math.sign(e.planOff || err || 1); e.commitT = COMMIT_FOR;
+        e.commitSide = -Math.sign(e.planOff || err || 1); e.commitT = COMMIT_FOR + e.tries;
       }
-    } else e.stuckT = Math.max(0, e.stuckT - dt);
+      e.freeT = 0;
+    } else {
+      e.stuckT = Math.max(0, e.stuckT - dt);
+      if (s.speed > 1.5 && (e.freeT += dt) > 4) e.tries = 0;
+    }
     const bx = s.pos.x, bz = s.pos.z;
     s.update(dt, throttle, steer);
+    // The cars and the plough are solid: one that still ends up against them (a car swinging wide on a turn) is
+    // shoved out, losing the speed it had into them.
+    const pr = e.half * 0.6;
+    for (const p of this.obstacles()) {
+      const o = p.pushOut(s.pos.x, s.pos.z, pr);
+      if (!o) continue;
+      s.pos.x = o.x; s.pos.z = o.z;
+      if (Math.abs(err) > 1) s.speed *= 0.5;
+    }
     e.moved = Math.hypot(s.pos.x - bx, s.pos.z - bz);
   }
 
@@ -533,6 +583,12 @@ const STEEP_EVERY = 4;
 const LANE_EVERY = 0.5, LANE_STEP = 2.5, LANE_SPAN = 12;
 /** Stuck after this long not moving while it wants to; then backs out for BACK_FOR. */
 const STUCK_AFTER = 1.5, BACK_FOR = 1.6;
+/** It counts as stuck when it wants more than this (m/s): rough ground and a big turn can take a wanted crawl under 1. */
+const STUCK_WANT = 0.5;
+/** Seconds it waits for a mech that blocks it by the cars before backing off. */
+const WAIT_FOR = 3;
+/** Within a car's clearance, pointed in at it and this far (rad) off the heading it wants: it backs out. */
+const NOSED_ERR = 1.2;
 /** Most a picked line turns off the route's heading (rad). */
 const MAX_OFF_ROUTE = 1.6;
 
