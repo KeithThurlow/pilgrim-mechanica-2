@@ -1,4 +1,5 @@
-// The convoy's guardian mechs (Keith 2026-11-01: "some mechs that are particularly lethal defending the Convoy").
+// The convoy's guardian mechs (Keith 2026-11-01: "some mechs that are particularly lethal defending the Convoy";
+// Keith 2026-11-06: more mechs than vehicles beside the convoy, vehicles read as bandits: 6 by default, was 2).
 // Glue: Ramparts in the convoy's paint on the player's side, each holding a station beside a car (alternating sides,
 // spread along the train) at the convoy's pace, turning on the nearest threat within guardRange: its guns on it, and
 // stepping out toward it (to guardHold off) but never more than guardLeash from its station. Hit points, armour and
@@ -16,7 +17,7 @@ import type { Convoy } from "./platform";
 import { FRIENDLY } from "./platformBody";
 
 export const GUARDIAN_DEFAULTS = {
-  guardMechs: 2,
+  guardMechs: 6,
   guardHull: 6000,
   guardArmour: 16,
   guardDamage: 2.5,
@@ -30,7 +31,7 @@ export type GuardianValues = typeof GUARDIAN_DEFAULTS;
 
 const G = "Guardian mechs";
 export const GUARDIAN_PARAMS: Param[] = [
-  { key: "guardMechs", label: "Guardian mechs", min: 0, max: 4, step: 1, group: G, tip: "Ramparts in the convoy's paint walking beside the cars" },
+  { key: "guardMechs", label: "Guardian mechs", min: 0, max: 8, step: 1, group: G, tip: "Ramparts in the convoy's paint walking beside the cars" },
   { key: "guardHull", label: "Hit points", min: 100, max: 30000, step: 100, group: G },
   { key: "guardArmour", label: "Armour", min: 0, max: 60, step: 0.5, group: G },
   { key: "guardDamage", label: "Damage ×", min: 0, max: 10, step: 0.1, group: G, tip: "On their miniguns' rounds (the shared minigun sliders)" },
@@ -115,7 +116,7 @@ export class Guardians {
   reset() { this.list.forEach((g, k) => { if (k < Math.round(this.v.guardMechs)) this.place(g, k); }); }
 
   update(dt: number, threats: readonly THREE.Vector3[]) {
-    const v = this.v, want = Math.max(0, Math.min(4, Math.round(v.guardMechs)));
+    const v = this.v, want = Math.max(0, Math.min(8, Math.round(v.guardMechs)));
     if (this.list.length < want && !this.loading) void this.add();
     const st = { x: 0, z: 0 };
     this.spots.length = 0;
