@@ -2,7 +2,7 @@
 // paler; rocky sand greyer, bare rock by steepness with strata; wet sand and the floor under the shallows. The chunks
 // (src/world/chunks.ts) bake it into their vertex colours and the detail patch (src/world/detailPatch.ts) into its
 // colour window, from this one function, so the two can't drift apart.
-import * as THREE from "three/webgpu";
+import * as THREE from "three";
 import type { DuneField, GroundSample } from "./terrain";
 
 // Sand palette (sRGB): warm windward faces, darker slip faces, paler hardpan flats.

@@ -6,6 +6,7 @@ import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, vec4, float,
 import type { Param } from "../core/tweaks";
 import { NORMAL_E, type DuneField, type GroundSample } from "./terrain";
 import { groundColour, WATER_COLOURS, smooth } from "./groundColour";
+import { chunkArrays, fillChunkRows, groundVertex, type ChunkArrays, type PatchBlock } from "./chunkFill";
 
 export const STREAM_DEFAULTS = {
   chunkSize: 64,
@@ -19,6 +20,7 @@ export const STREAM_DEFAULTS = {
   shadowTerrain: 1,
   shadowSpacing: 4,
   shadowSink: 0.3,
+  workerBuilds: 8,
 };
 export type StreamValues = typeof STREAM_DEFAULTS;
 
@@ -34,6 +36,7 @@ export const STREAM_PARAMS: Param[] = [
   { key: "shadowTerrain", label: "Dune shadows from a coarse copy (0/1)", min: 0, max: 1, step: 1, group: "Performance", tip: "1: a coarse copy of the ground, never drawn, casts the dune shadows, and the drawn ground (chunks and the fine dent patch) only catches them (perf pass 1: the patch alone put 295k triangles in the shadow pass). 0: the drawn ground casts, as before" },
   { key: "shadowSpacing", label: "Shadow ground spacing (m)", min: 1, max: 16, step: 1, group: "Performance", onRelease: true, tip: "Vertex spacing of the coarse shadow copy (rounded to divide the chunk grid). Dune shadows are metres across; craters want 2-4 m" },
   { key: "shadowSink", label: "Shadow ground sunk (m)", min: 0, max: 2, step: 0.05, group: "Performance", tip: "The coarse copy sits this much lower, so where it would poke through the drawn ground (in hollows) it can't shade it with acne" },
+  { key: "workerBuilds", label: "Chunks out at the sim worker", min: 1, max: 32, step: 1, group: "Performance", tip: "With the sim worker on (not ?noworker), how many chunk builds can be out at once (nearest first). Chunks near the focus are still built at once on the main thread when missing" },
 ];
 
 /** Objects on this layer are drawn only into the sun's shadow map (the camera doesn't see it; src/world/look.ts lets the shadow camera). */
@@ -55,10 +58,20 @@ interface Chunk {
  * or rebuild over rows already filled winds j back to the first row it touched, so the finished chunk is the same as
  * one built in a single go.
  */
-interface Building {
-  cx: number; cz: number; j: number; frames: number;
-  pos: Float32Array; nor: Float32Array; col: Float32Array; hs: Float32Array; wsA: Float32Array | null;
+interface Building extends ChunkArrays { cx: number; cz: number; j: number; frames: number }
+
+/**
+ * Where chunk vertices are worked out off the main thread (the sim worker, src/sim/host.ts). Requests go in order with
+ * the ground's changes, so each answer is the ground as it was when asked; answers come back through takeBuild and
+ * takePatch in the same order.
+ */
+export interface TerrainRemote {
+  build(req: { epoch: number; seq: number; cx: number; cz: number; n: number; size: number; water: boolean }): void;
+  patch(req: { epoch: number; box: [number, number, number, number]; dentsOnly: boolean; n: number; size: number }): void;
 }
+/** A chunk built remotely. */
+export interface BuildResult extends ChunkArrays { epoch: number; seq: number; cx: number; cz: number; n: number; size: number }
+export interface PatchResult { epoch: number; box: [number, number, number, number]; dentsOnly: boolean; n: number; size: number; blocks: PatchBlock[] }
 /** Chunks this close to the focus (chunk units) are always finished in the frame they're asked for, as are builds
  *  that have run this many frames (so a patched-over build can't starve). */
 const BUILD_NOW_RADIUS = 1.5, BUILD_MAX_FRAMES = 30;
@@ -117,6 +130,17 @@ export class TerrainStreamer {
   readonly shadowStats = { proxyTris: 0, chunkTris: 0 };
   /** Bumped whenever a chunk is built, rebuilt or dropped (src/world/chunkGround.ts re-reads its cached chunk then). */
   version = 0;
+  /**
+   * Chunk vertices worked out elsewhere (the sim worker), or null: all here, as before. Chunks near the focus are still
+   * built here at once when missing (the ground under the mech is never a hole).
+   */
+  remote: TerrainRemote | null = null;
+  /** Remote builds asked for and not back yet, by key: the request's number, and whether its ground changed since. */
+  private inflight = new Map<string, { seq: number; stale: boolean }>();
+  private seq = 0;
+  /** Bumped by rebuildAll: answers to older requests are dropped. */
+  private epoch = 0;
+  readonly remoteStats = { builds: 0, patches: 0, inflight: 0, applied: 0 };
 
   /** A loaded chunk's vertex positions and normals (local to its corner), or null when it isn't loaded. */
   chunkData(cx: number, cz: number): { pos: Float32Array; nor: Float32Array } | null {
@@ -134,7 +158,7 @@ export class TerrainStreamer {
   vertexAt(i: number, j: number, out: Float32Array): boolean {
     const n = Math.round(this.v.segments), cx = Math.floor(i / n), cz = Math.floor(j / n);
     const key = cx + "," + cz, c = this.chunks.get(key);
-    if (!c || this.dirty.has(key)) return false;
+    if (!c || this.dirty.has(key) || this.inflight.has(key)) return false;
     const v = (j - cz * n) * (n + 1) + (i - cx * n), g = c.mesh.geometry;
     const pos = g.getAttribute("position").array, nor = g.getAttribute("normal").array, col = g.getAttribute("color").array;
     out[0] = pos[v * 3 + 1]; out[1] = nor[v * 3]; out[2] = nor[v * 3 + 1]; out[3] = nor[v * 3 + 2];
@@ -180,6 +204,8 @@ export class TerrainStreamer {
     this.chunks.clear();
     this.dirty.clear();
     this.building.clear();
+    this.inflight.clear();
+    this.epoch++;
     for (const f of this.onRebuild) f(null);
   }
 
@@ -196,6 +222,8 @@ export class TerrainStreamer {
       if (this.chunks.has(k)) this.dirty.add(k);
       const b = this.building.get(k);
       if (b) b.j = 0;
+      const r = this.inflight.get(k);
+      if (r) r.stale = true;
     }
     for (const f of this.onRebuild) f([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
   }
@@ -228,6 +256,7 @@ export class TerrainStreamer {
       if (Math.hypot(c.cx - ccx, c.cz - ccz) > r + 1.5) { this.dispose(c); this.chunks.delete(k); this.dirty.delete(k); }
     }
     for (const [k, b] of this.building) if (Math.hypot(b.cx - ccx, b.cz - ccz) > r + 1.5) this.building.delete(k);
+    for (const k of this.inflight.keys()) { const [x, z] = k.split(",").map(Number); if (Math.hypot(x - ccx, z - ccz) > r + 1.5) this.inflight.delete(k); }
 
     const missing: [number, number, number][] = [];
     for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
@@ -243,7 +272,15 @@ export class TerrainStreamer {
     // Nearest first, rows under the budget (a chunk can take a few frames); one near the focus is always finished now,
     // so the ground under it is never missing, and the first one asked for always gets at least a row.
     const catchUp = missing.length > CATCH_UP;
+    const remote = this.remote;
     for (const [d, cx, cz] of missing) {
+      if (remote && d > BUILD_NOW_RADIUS) {
+        // Asked of the worker (a few at a time, nearest first); the answer arrives through takeBuild.
+        const k = cx + "," + cz;
+        if (!this.inflight.has(k) && this.inflight.size < Math.max(1, Math.round(this.v.workerBuilds ?? 8))) this.ask(k, cx, cz);
+        continue;
+      }
+      if (remote) this.inflight.delete(cx + "," + cz); // built here now: a late answer is dropped
       const now = d <= BUILD_NOW_RADIUS || (catchUp && !worked);
       if (worked && !now && performance.now() > end) break;
       const k = cx + "," + cz;
@@ -259,6 +296,14 @@ export class TerrainStreamer {
       const order = [...this.dirty].map((k) => { const c = this.chunks.get(k); return { k, c, d: c ? Math.hypot(c.cx - ccx, c.cz - ccz) : 0 }; });
       order.sort((p, q) => p.d - q.d);
       for (const { k, c, d } of order) {
+        if (remote) {
+          // The old chunk draws until the worker's answer replaces it.
+          if (!c) { this.dirty.delete(k); continue; }
+          if (this.inflight.has(k) || this.inflight.size >= Math.max(1, Math.round(this.v.workerBuilds ?? 8))) continue;
+          this.dirty.delete(k);
+          this.ask(k, c.cx, c.cz);
+          continue;
+        }
         const now = d <= BUILD_NOW_RADIUS;
         if (worked && !now && performance.now() > end) break;
         if (!c) { this.dirty.delete(k); continue; }
@@ -275,6 +320,58 @@ export class TerrainStreamer {
     this.stats.buildMs = performance.now() - t0;
     this.stats.loaded = this.chunks.size;
     this.stats.pending = missing.length - built + this.dirty.size;
+    this.remoteStats.inflight = this.inflight.size;
+  }
+
+  private ask(k: string, cx: number, cz: number) {
+    const seq = ++this.seq;
+    this.inflight.set(k, { seq, stale: false });
+    this.remote!.build({ epoch: this.epoch, seq, cx, cz, n: Math.round(this.v.segments), size: this.v.chunkSize, water: this.field.waterLevel !== null });
+    this.remoteStats.builds++;
+  }
+
+  /** A remotely built chunk is back: put it in (replacing the one it rebuilds), unless it was asked for long ago. */
+  takeBuild(r: BuildResult) {
+    const k = r.cx + "," + r.cz, ask = this.inflight.get(k);
+    if (r.epoch !== this.epoch || !ask || ask.seq !== r.seq) return;
+    this.inflight.delete(k);
+    if (r.n !== Math.round(this.v.segments) || r.size !== this.v.chunkSize) return;
+    const old = this.chunks.get(k);
+    if (old) this.dispose(old);
+    this.chunks.set(k, this.finishBuild({ ...r, j: r.n + 1, frames: 0 }));
+    // Its ground changed while it was out (rebuildArea): again.
+    if (ask.stale) this.dirty.add(k);
+    this.remoteStats.applied++;
+  }
+
+  /** A remote patch is back: copy its vertices into the chunks loaded now, then tell the listeners (as patchBox does here). */
+  takePatch(r: PatchResult) {
+    if (r.epoch !== this.epoch || r.n !== Math.round(this.v.segments) || r.size !== this.v.chunkSize) return;
+    const n = r.n, row = n + 1, water = this.field.waterLevel;
+    for (const B of r.blocks) {
+      const key = B.cx + "," + B.cz, ch = this.chunks.get(key);
+      if (!ch) continue;
+      ch.base = undefined;
+      const g = ch.mesh.geometry;
+      const pos = g.getAttribute("position").array as Float32Array, nor = g.getAttribute("normal").array as Float32Array, col = g.getAttribute("color").array as Float32Array;
+      const wg = ch.water?.geometry;
+      for (let j = B.j0, q = 0; j <= B.j1; j++) for (let k = B.k0; k <= B.k1; k++, q++) {
+        const i = j * row + k, h = B.h[q];
+        pos[i * 3 + 1] = h;
+        nor[i * 3] = B.nor[q * 3]; nor[i * 3 + 1] = B.nor[q * 3 + 1]; nor[i * 3 + 2] = B.nor[q * 3 + 2];
+        col[i * 3] = B.col[q * 3]; col[i * 3 + 1] = B.col[q * 3 + 1]; col[i * 3 + 2] = B.col[q * 3 + 2];
+        const ws = B.ws[q];
+        if (water !== null && ws > 0) {
+          if (wg) this.waterVertex(wg, i, water, ws, h);
+          else if (h - water < 0.3) this.patchWater.add(key);
+        }
+      }
+      this.patched.set(key, ch);
+      this.stats.patched += (B.k1 - B.k0 + 1) * (B.j1 - B.j0 + 1);
+    }
+    for (const f of this.onRebuild) f(r.box, r.dentsOnly);
+    this.finishPatch();
+    this.remoteStats.applied++;
   }
 
   /** Build every chunk within the radius now (for tests and first frames). */
@@ -311,11 +408,7 @@ export class TerrainStreamer {
   }
 
   /** One ground vertex at (x, z): the sample into s, the normal into nn, the colour into tmp. */
-  private vertex(x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
-    this.field.sample(x, z, s);
-    this.field.normal(x, z, nn);
-    groundColour(this.field, x, z, s, tmp);
-  }
+  private vertex(x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) { groundVertex(this.field, x, z, s, nn, tmp); }
 
   /**
    * Update the loaded chunks' vertices inside a box in place (after the ground changed there, e.g. a crater): heights,
@@ -385,6 +478,12 @@ export class TerrainStreamer {
    */
   private patchBox(x0: number, z0: number, x1: number, z1: number, cached = false): number {
     const size = this.v.chunkSize, n = Math.round(this.v.segments), step = size / n, row = n + 1;
+    if (this.remote) {
+      // To the worker; its answer (takePatch) copies the vertices in and tells the listeners then.
+      this.remote.patch({ epoch: this.epoch, box: [x0, z0, x1, z1], dentsOnly: cached, n, size });
+      this.remoteStats.patches++;
+      return 0;
+    }
     for (const f of this.onRebuild) f([x0, z0, x1, z1], cached);
     const a = Math.floor(x0 / size), b = Math.floor(x1 / size), c = Math.floor(z0 / size), d = Math.floor(z1 / size);
     const s: GroundSample = { h: 0, crest: 0, flat: 0 }, nn = [0, 1, 0], tmp = this.c4;
@@ -470,39 +569,19 @@ export class TerrainStreamer {
   }
 
   private startBuild(cx: number, cz: number): Building {
-    const n = Math.round(this.v.segments), row = n + 1, count = row * row;
-    return {
-      cx, cz, j: 0, frames: 0,
-      pos: new Float32Array(count * 3), nor: new Float32Array(count * 3), col: new Float32Array(count * 3),
-      hs: new Float32Array(count), wsA: this.field.waterLevel !== null ? new Float32Array(count) : null,
-    };
+    return { cx, cz, j: 0, frames: 0, ...chunkArrays(Math.round(this.v.segments), this.field.waterLevel !== null) };
   }
 
   /** Fill rows from b.j on, at least one, until the deadline; true when every row is filled. */
   private fillRows(b: Building, deadline: number): boolean {
-    const n = Math.round(this.v.segments), size = this.v.chunkSize, step = size / n, row = n + 1;
-    const ox = b.cx * size, oz = b.cz * size;
-    const s = this.bs, nn = this.bn, tmp = this.bc;
-    const { pos, nor, col, hs, wsA } = b;
+    const n = Math.round(this.v.segments), size = this.v.chunkSize, row = n + 1;
     while (b.j < row) {
-      const j = b.j;
-      for (let k = 0, i = j * row; k < row; k++, i++) {
-        const x = ox + k * step, z = oz + j * step;
-        this.vertex(x, z, s, nn, tmp);
-        pos[i * 3] = k * step; pos[i * 3 + 1] = s.h; pos[i * 3 + 2] = j * step;
-        nor[i * 3] = nn[0]; nor[i * 3 + 1] = nn[1]; nor[i * 3 + 2] = nn[2];
-        col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
-        if (wsA) wsA[i] = s.ws ?? 0;
-        hs[i] = s.h;
-      }
+      fillChunkRows(this.field, b.cx, b.cz, n, size, b, b.j, b.j + 1);
       b.j++;
       if (b.j < row && performance.now() > deadline) return false;
     }
     return true;
   }
-  private bs: GroundSample = { h: 0, crest: 0, flat: 0 };
-  private bn = [0, 1, 0];
-  private bc = new THREE.Color();
 
   private finishBuild(b: Building): Chunk {
     const n = Math.round(this.v.segments), size = this.v.chunkSize, step = size / n;
