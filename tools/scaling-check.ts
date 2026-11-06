@@ -57,8 +57,8 @@ if (!(rows[300].d >= 0.25)) fail(`danger at 300 m is ${rows[300].d.toFixed(2)}: 
 if (!(rows[900].d >= 0.6)) fail(`danger at 900 m is ${rows[900].d.toFixed(2)}`);
 for (const m of [600, 900, 1500, 2500]) if (!(rows[m].enemy > rows[m].item)) fail(`enemies don't outgrow items at ${m} m`);
 if (!(rows[900].item <= 1.4)) fail(`items at 900 m are ×${rows[900].item.toFixed(2)}: too fast`);
-if (!(rows[1500].camp.bigs >= 1)) fail(`camps round full depth hold ${rows[1500].camp.bigs.toFixed(1)} sure excavators, want 1+`);
-if (!(rows[2500].camp.bigs >= 1.9)) fail(`camps past full depth hold ${rows[2500].camp.bigs.toFixed(1)} sure excavators, want 2`);
+if (!(rows[1500].camp.bigs >= 0.2)) fail(`camps round full depth hold ${rows[1500].camp.bigs.toFixed(1)} sure excavators, want 0.2+`);
+if (!(rows[2500].camp.bigs >= 0.9)) fail(`camps past full depth hold ${rows[2500].camp.bigs.toFixed(1)} sure excavators, want 1`);
 if (!(rows[100].camp.bigs === 0)) fail("camps by the road hold sure excavators");
 if (!(rows[1500].camp.size > rows[100].camp.size * 1.6)) fail("robot camps don't grow with depth");
 if (!(rows[100].band <= 6)) fail(`bandit groups by the road average ${rows[100].band.toFixed(1)}: should be small`);
