@@ -315,6 +315,13 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Less floaty: heavier air, blasts don't drift the mech (Keith: "floaty... on explosions and getting knocked back, you can end up drifting too much"; Claude on `claude/project-thread-a6vlpg`)
+- Knockback: blast shoves (pulses, big deaths, strider strikes; `MechUnit.shoveFrom`) go through `WalkerSim.knock`: the mech takes `knockTake` 0.8 of the shove and its feet dig in at `knockGrip` 25 m/s² until the skid is gone (it used to get the sprint's let-go grip at that speed). A 22 m/s shove: 5.4 m in 0.54 s (was 20.9 m in 1.37 s); 16 m/s: 2.5 m (was 5.8). Sliders in Your mech › Legs › Move.
+- Air: flights off crests, blasts and drops fall at `airGravity` 1.4 g (Air); landings graded as if at g, so the same jump squats and hurts the same; sprint strides keep g. Dunes at 16 m/s for 40 s: 24 take-offs, 4.6 s airborne (was 17, 6.4 s): jumps kept, shorter hang.
+- Off a steep face with one foot on the lip and the other over the drop, a foot down no longer lands it (it flies on until the hips come down; heavier air hit this in `slope-check`).
+- New `tools/knock-check.ts` (push limits, settle times, crest jumps still happen). Checked: knock, framerate, full `npm test`.
+- Open for Keith: `airGravity` and `knockGrip`/`knockTake` are first guesses; `?set=airGravity:1` is the old air.
+
 ### 2026-11-06 · Big walkers throw their pulse at you; their tracking beam fires longer (Keith asked; Claude on `claude/project-thread-x8yhm2`)
 - Terraform pulse round 2: the charge beam runs from the emitter out to the mech's spot, locked as the charge begins (`robotPulseAim` 1), and the same blast goes off there: within 30 m, 2.6 s charge, 11 m, 120 damage (were 16 m, 1.8 s, 14 m, 70). The swarm clears a charging ring from half way through (`robotPulseDodge`, `…DodgeFrom`, `…DodgePush`); ones latched on ride it out (`robotPulseLatched` 0), so walkers no longer wipe out the biters on you. Tracking beam: same 4.5 m/s chase, fires 3 s (was 1.8), every 5 s (was 6). `src/combat/robots.ts`, `robotBeamDraw.ts`, `src/game/robotBeam.ts`.
 - Checked: robot-danger-check (now counts pulse damage: walking away caught 0 of 12, standing 12 of 12; pack of 30 kills a standing mech in about 30 s, as before; excavator alone 25 dps, was 14.7), robots-check (own pulse; with nobody latched 20 die standing in the ring, 0 with the dodge); full `npm test`.
