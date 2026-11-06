@@ -12,6 +12,7 @@ import type { DuneField } from "../world/terrain";
 import type { ConvoyRoute } from "../convoy/route";
 import type { CraterLayer } from "../world/craters";
 import { SitesGround } from "../expedition/sitesGround";
+import type { Convoy } from "../convoy/platform";
 
 /** A plain value a values object holds (objects in the values are not mirrored). */
 export type Prim = number | string | boolean;
@@ -22,7 +23,7 @@ export type Values = Record<string, Prim>;
  * else a property set (p = v).
  */
 export interface GroundEvent { t: GroundTarget; m?: string; a?: unknown[]; p?: string; v?: Prim }
-export type GroundTarget = "mirror" | "field" | "route" | "wake" | "craters" | "sites" | "gates";
+export type GroundTarget = "mirror" | "field" | "route" | "wake" | "craters" | "sites" | "gates" | "convoy" | "escorts";
 
 /** What the copy is built from: the values as they are now and where the road started. */
 export interface GroundInit {
@@ -89,6 +90,22 @@ export class GroundRecorder {
     // Taken as the main thread worked it out, whenever (it is a lazy memo of the road's corridor).
     g.onSkip = (id, b) => { this.diff(); this.events.push({ t: "sites", m: "setSkip", a: [id, b] }); this.total++; };
   }
+
+  /**
+   * The convoy is mirrored too (step 3: the worker's escorts drive beside its own copy of it), from just after it was
+   * made, before its first reset: its reset, jump and update are recorded as the outermost calls, so the road's own
+   * update inside them replays through them.
+   */
+  convoy(c: Convoy) {
+    this.push({ t: "mirror", m: "convoy", a: [] });
+    this.tap(c, "convoy", ["reset", "jump", "update"]);
+  }
+
+  /**
+   * A command to a system that runs in the worker (step 3: the escorts' steps, resets and planning-memo invalidations),
+   * in order with the ground's changes. Recorded at any depth: the worker's copy doesn't make these calls by itself.
+   */
+  command(t: GroundTarget, m: string, a: unknown[]) { this.push({ t, m, a }); }
 
   /** The events since the last take (values diffed first). */
   take(): GroundEvent[] {

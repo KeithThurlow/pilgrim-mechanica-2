@@ -14,7 +14,14 @@ Plan and rules: `docs/proposal-simworker.md`. Worker path on by default; `?nowor
   ground under the dents that can hold road it has since cut; the worker reads fresh (a few vertices differ, the worker's
   closer to the ground).
 
+- Step 3 (escorts): `src/sim/escortsRemote.ts`; the convoy recorded (`GroundRecorder.convoy`) and the escorts' calls as
+  commands in the same stream (`GroundRecorder.command`), so the worker steps them at the same points as the main thread
+  would; snapshot back with each frame answer; `tools/escortworker-check.ts` (bit for bit). Ruts and dust are laid once a
+  frame from the snapshot's moved total (was per substep). Commands bypass the recorder's depth rule: use them for calls
+  the mirror doesn't make by itself (route.onChange's memo invalidation is nested inside convoy.update).
+
 ## Next, in order
+0. Step 4: the robot swarm (see below), unless Keith's PC profile points elsewhere.
 1. Step 2b done (merged): the window's fine rows in the worker (`GroundWindow.remote`/`takeFine`). Next: step 3, escorts,
    unless Keith's PC profile (`labs/convoy/?siege&manual` with and without `&noworker`) points elsewhere.
 2. Step 3 spec (escorts, `src/convoy/escort.ts` on `src/vehicles/car.ts`), worked out 2026-11-06, not started:

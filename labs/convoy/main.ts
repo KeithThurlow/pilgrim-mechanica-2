@@ -69,6 +69,7 @@ import { PIPE_DEFAULTS, PIPE_PARAMS } from "../../src/convoy/pipes";
 import { ConvoyTrail, TRAIL_DEFAULTS, TRAIL_PARAMS } from "../../src/convoy/trail";
 import { EscortGroup, ESCORT_DEFAULTS, ESCORT_PARAMS } from "../../src/convoy/escort";
 import { EscortBodies } from "../../src/convoy/escortBody";
+import { escortsRemote } from "../../src/sim/escortsRemote";
 import { BridgeBody } from "../../src/convoy/bridgeBody";
 import { Defence, DEFENCE_DEFAULTS, DEFENCE_PARAMS } from "../../src/convoy/defence";
 import { DefenceBody } from "../../src/convoy/defenceBody";
@@ -173,7 +174,7 @@ let deathsRef: DeathPhysics | null = null, escortsRef: EscortGroup | null = null
 route.onChange = (x0, z0, x1, z1) => {
   craters.invalidate(x0, z0, x1, z1);
   deathsRef?.groundChanged(x0, z0, x1, z1); // the plough's cut under the death physics' floor
-  escortsRef?.memo.invalidate(x0, z0, x1, z1); // and under the escorts' planning copy
+  escortsRef?.invalidate(x0, z0, x1, z1); // and under the escorts' planning copy
   const a = x0 - PATCH_PAD, b = x1 + PATCH_PAD, c = z0 - PATCH_PAD, d = z1 + PATCH_PAD, eps = 1e-4;
   if (b - a >= d - c) for (let s = a; s <= b; s += PATCH_STRIP) patchQueue.push([s, c, Math.min(b, s + PATCH_STRIP - eps), d]);
   else for (let s = c; s <= d; s += PATCH_STRIP) patchQueue.push([a, s, b, Math.min(d, s + PATCH_STRIP - eps)]);
@@ -210,12 +211,14 @@ deathsRef = deaths;
 const deadDraw = new DeadDraw(deaths);
 scene.add(deadDraw.group);
 let craterPatches = 0;
-const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(x0, z0, x1, z1); escortsRef?.memo.invalidate(x0, z0, x1, z1); };
+const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(x0, z0, x1, z1); escortsRef?.invalidate(x0, z0, x1, z1); };
 const flushGround = () => { if (craterPatches) { streamer.flushPatches(); craterPatches = 0; } };
 bf.onGround = groundChanged;
 
 // The convoy, its cranes (one per mech bay: the lead's and the rear one's), and their stand-in bodies.
 const convoy = new Convoy(route, V, field);
+// The sim worker keeps its own copy of the convoy (its calls recorded from before the first reset), for the escorts.
+groundRec?.convoy(convoy);
 convoy.reset(0, 0);
 const cranes = convoy.bays.map((b) => new Crane(V, b));
 const carry = new CraneCarry(V, cranes, field);
@@ -236,6 +239,8 @@ scene.add(bridges.group);
 let spans: Span[] = [];
 const escorts = new EscortGroup(V, convoy, field);
 escortsRef = escorts;
+// With the sim worker the escorts drive there (step 3): this group only shows the worker's snapshots, a frame late.
+if (groundRec) escorts.remote = escortsRemote(groundRec);
 const escortBodies = new EscortBodies(escorts);
 scene.add(escortBodies.group);
 const trail = new ConvoyTrail(V, bf, field);
@@ -270,10 +275,10 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.memo.invalidate(x0, z0, x1, z1); }, deaths });
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.invalidate(x0, z0, x1, z1); }, deaths });
 const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.height(x, z)) : null;
 if (simHost) app.hud.set("sim", () => simHost.line());
-if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); }
+if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); }
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
@@ -1011,9 +1016,11 @@ app.onTick((rawDt) => {
     costs.mark("pilot");
     escorts.update(dt / sub, mechOnSand);
     costs.mark("escorts");
-    for (const e of escorts.list) trail.car(e, e.sim, e.moved, e.kind === "technical" ? 0.45 : 0.6);
+    if (!escorts.remote) for (const e of escorts.list) trail.car(e, e.sim, e.moved, e.kind === "technical" ? 0.45 : 0.6);
     costs.mark("trail");
   }
+  // From the worker: the ground moved under each escort since the last snapshot, once a frame.
+  if (escorts.remote) for (const e of escorts.list) { trail.car(e, e.sim, e.moved, e.kind === "technical" ? 0.45 : 0.6); e.moved = 0; }
   trail.update(convoy.platforms);
   costs.mark("trail");
   // The crawler tracks heard from the nearest car (Keith 2026-11-05).

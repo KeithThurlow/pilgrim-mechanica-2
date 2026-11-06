@@ -1,9 +1,11 @@
 // The sim worker (plan docs/proposal-simworker.md): runs alongside the main thread's drawing. It holds the ground's copy
 // (src/sim/groundMirror.ts), kept in step by the main thread's events and sampled for the parity check, and works out
-// the terrain chunks' vertices from it (step 2: builds and patches, src/world/chunkFill.ts; 2b: the fine rows of the ground window under the detail patch). Later steps move whole
-// systems (escorts, the robot swarm) in here.
+// the terrain chunks' vertices from it (step 2: builds and patches, src/world/chunkFill.ts; 2b: the fine rows of the ground window under the detail patch). Step 3: the
+// convoy's copy and the escorts beside it (src/sim/escortsRemote.ts), stepped inside the ground's events. Later steps
+// move the robot swarm in here.
 import { GroundMirror } from "./groundMirror";
 import { chunkArrays, fillChunkRows, patchBlocks } from "../world/chunkFill";
+import { convoyPoses } from "./escortsRemote";
 import type { FromWorker, ToWorker } from "./messages";
 
 let ground: GroundMirror | null = null;
@@ -36,8 +38,12 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       post({ type: "fine", req: q, heights }, [heights.buffer]);
     } else if (m.type === "frame") {
       const heights = ground.heights(m.sample);
+      const escorts = ground.escorts?.snapshot() ?? null, convoy = ground.convoy ? convoyPoses(ground.convoy) : null;
       busy += performance.now() - t0;
-      post({ type: "frame", id: m.id, heights, ms: busy }, [heights.buffer]);
+      const t: Transferable[] = [heights.buffer];
+      if (escorts) t.push(escorts.buffer);
+      if (convoy) t.push(convoy.buffer);
+      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy }, t);
       busy = 0;
       return;
     }

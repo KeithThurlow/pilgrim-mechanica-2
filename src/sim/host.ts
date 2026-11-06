@@ -5,13 +5,18 @@
 // The worker keeps its copy of the ground in step, and every frame a few points are sampled on both threads (round the
 // mech, across the road at the plough's blade, round the latest blasts): any difference shows on the HUD line and in
 // the console, since every system moved reads the ground there. Step 2: the terrain chunks' vertices are worked out
-// there (terrain(streamer)); the chunks near the mech are still built here when missing.
+// there (terrain(streamer)); the chunks near the mech are still built here when missing. Step 3: the escorts drive in
+// the worker beside its own copy of the convoy (escorts(group, convoy)); their snapshot comes back with each frame's
+// answer, and the worker's convoy poses are checked against this one's.
 import type { Param } from "../core/tweaks";
 import type { ConvoyRoute } from "../convoy/route";
 import type { GroundRecorder } from "./groundEvents";
 import type { TerrainStreamer } from "../world/chunks";
 import type { DetailPatch } from "../world/detailPatch";
 import type { FromWorker, ToWorker } from "./messages";
+import type { EscortGroup } from "../convoy/escort";
+import type { Convoy } from "../convoy/platform";
+import { applyEscorts, convoyPoses } from "./escortsRemote";
 
 export const SIM_DEFAULTS = {
   simMirrorSamples: 16,
@@ -30,9 +35,12 @@ export class SimHost {
   private expected = new Map<number, { want: Float64Array; xz: Float64Array }>();
   private seed = 0x9e3779b9;
   private warned = false;
+  private convoyWarned = false;
   readonly stats = {
     ready: false, applyMs: 0, frames: 0, answered: 0, lag: 0, workerMs: 0, mainMs: 0, events: 0, eventsTotal: 0,
     checked: 0, differ: 0, worst: 0, worstAt: "", error: "",
+    /** Step 3: escorts in the last snapshot; convoy poses checked, how many differed, the worst (m or rad). */
+    escorts: 0, convoyChecked: 0, convoyDiffer: 0, convoyWorst: 0,
   };
 
   constructor(private v: SimValues, private rec: GroundRecorder, private route: ConvoyRoute, private height: (x: number, z: number) => number) {
@@ -64,6 +72,7 @@ export class SimHost {
       }
       this.expected.set(id, { want, xz: sample.slice() });
     }
+    if (this.convoy && this.convoyWant.size < 3) this.convoyWant.set(id, convoyPoses(this.convoy));
     this.stats.frames++;
     this.stats.events = this.frameEvents;
     this.frameEvents = 0;
@@ -79,7 +88,7 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
@@ -105,6 +114,19 @@ export class SimHost {
     patch.setFineRemote({ fine: (req) => { this.flush(); this.send({ type: "fine", req }); } });
   }
 
+  /**
+   * The escorts from now on drive in the worker (step 3): the group's calls go there as commands (it must not have been
+   * stepped yet, and the recorder must have the convoy from before its first reset), its list is written from the
+   * worker's snapshots.
+   */
+  escorts(group: EscortGroup, convoy: Convoy) {
+    this.escortGroup = group;
+    this.convoy = convoy;
+  }
+
+  private escortGroup: EscortGroup | null = null;
+  private convoy: Convoy | null = null;
+  private convoyWant = new Map<number, Float64Array>();
   private patch: DetailPatch | null = null;
   private streamer: TerrainStreamer | null = null;
   private frameEvents = 0;
@@ -137,6 +159,18 @@ export class SimHost {
     s.answered++;
     s.lag = this.id - m.id;
     s.workerMs = m.ms;
+    if (m.escorts && this.escortGroup) { applyEscorts(this.escortGroup, m.escorts); s.escorts = m.escorts[0]; }
+    const cw = this.convoyWant.get(m.id);
+    if (cw && m.convoy) {
+      this.convoyWant.delete(m.id);
+      for (let i = 0; i < cw.length; i++) {
+        s.convoyChecked++;
+        if (cw[i] === m.convoy[i]) continue;
+        s.convoyDiffer++;
+        s.convoyWorst = Math.max(s.convoyWorst, Math.abs(cw[i] - m.convoy[i]));
+        if (!this.convoyWarned) { this.convoyWarned = true; console.warn(`sim worker: the worker's convoy differs from the main thread's (value ${i}: ${cw[i]} here, ${m.convoy[i]} there), frame ${m.id}; a convoy call isn't reaching it (src/sim/groundEvents.ts convoy)`); }
+      }
+    }
     const e = this.expected.get(m.id);
     if (!e) return;
     const want = e.want;

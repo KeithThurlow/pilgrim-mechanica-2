@@ -24,8 +24,12 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: "ready" }
-  /** A frame done: the heights at its sample points, how long the worker was busy since the last frame (ms). */
-  | { type: "frame"; id: number; heights: Float64Array; ms: number }
+  /**
+   * A frame done: the heights at its sample points, how long the worker was busy since the last frame (ms); step 3:
+   * the escorts' snapshot (src/sim/escortsRemote.ts) and the worker's convoy poses (x, y, z, heading per platform,
+   * then the plough's x, z), for the parity check; null before they exist.
+   */
+  | { type: "frame"; id: number; heights: Float64Array; ms: number; escorts: Float64Array | null; convoy: Float64Array | null }
   | { type: "chunk"; res: BuildResult }
   | { type: "patch"; res: PatchResult }
   | { type: "fine"; req: FineRequest; heights: Float32Array }
