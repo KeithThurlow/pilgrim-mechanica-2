@@ -18,11 +18,15 @@ export interface CargoSizing {
 
 /** The sizing from the grid and size values (the defaults where missing) and the compactor level. */
 export function cargoSizing(v: Partial<GridValues & GridSizeValues> = {}, compactLevel = 0): CargoSizing {
-  const sv = { ...GRID_SIZE_DEFAULTS, ...v } as GridSizeValues;
+  // v is often a lab's whole values object (thousands of keys) and this runs every frame in the convoy lab (perf,
+  // 2026-11-06: copying it was 3% of a frame on Keith's PC): read v through the prototype, defaults only where missing.
+  const sv = Object.create(v) as Record<string, unknown>;
+  for (const k in GRID_SIZE_DEFAULTS) if ((v as Record<string, unknown>)[k] === undefined) sv[k] = (GRID_SIZE_DEFAULTS as Record<string, unknown>)[k];
+  const szv = sv as unknown as GridSizeValues;
   const level = Math.max(0, Math.min(SALVAGE_LEVELS, Math.round(compactLevel)));
-  const c = classCells(`salvage${level}` as Parameters<typeof classCells>[0], sv);
+  const c = classCells(`salvage${level}` as Parameters<typeof classCells>[0], szv);
   return {
-    itemCells: (it) => { const k = itemCells(it, sv); return k.w * k.h; },
+    itemCells: (it) => { const k = itemCells(it, szv); return k.w * k.h; },
     scrapPerBlock: Math.max(1, v.salvagePerBlock ?? GRID_DEFAULTS.salvagePerBlock),
     blockCells: c.w * c.h,
   };

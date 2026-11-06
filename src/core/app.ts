@@ -1,6 +1,7 @@
 // One renderer, scene, camera and loop for every lab and, later, the game.
 // WebGPU first; Three.js falls back to WebGL 2 by itself. ?webgl in the URL forces WebGL (used by headless shots).
 import * as THREE from "three/webgpu";
+import { trimInstanceUploads } from "./instanceUploads";
 import { FrameHud } from "./hud";
 
 export type Tick = (dt: number, time: number) => void;
@@ -51,6 +52,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
   const noRender = params.has("norender");
+  let up = { trimmed: 0, savedKB: 0 };
+  hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const raw = (now - prev) / 1000;
@@ -61,7 +64,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
     for (const t of ticks) t(dt, time);
     const t1 = performance.now();
     // ?norender: run the ticks without drawing (headless CPU measurements, e.g. the stress lab on a software GPU).
-    if (!noRender) renderer.render(scene, camera);
+    if (!noRender) { up = trimInstanceUploads(scene); renderer.render(scene, camera); }
     const t2 = performance.now();
     if (captures.length) {
       let url = "";
