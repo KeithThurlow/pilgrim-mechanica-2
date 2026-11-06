@@ -23,7 +23,7 @@ function run(v: V, spawn: (sw: RobotSwarm, t: { x: number; z: number }) => void,
   t.y = field.height(t.x, t.z) + 3;
   spawn(sw, t);
   let dmg = 0, first = -1, time = 0, dead = -1;
-  const by = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0 };
+  const by = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0, pulse: 0 };
   const pending: { at: number; x: number; z: number }[] = [];
   sw.onLob = (_i, _fx, _fy, _fz, x, z, flight) => { pending.push({ at: time + flight, x, z }); };
   const hit = (d: number, k: keyof typeof by) => { dmg += d; by[k] += d; if (first < 0) first = time; };
@@ -31,6 +31,11 @@ function run(v: V, spawn: (sw: RobotSwarm, t: { x: number; z: number }) => void,
   sw.onBeam = (e) => {
     const b = { ex: e.from.x, ey: e.from.y, ez: e.from.z, sx: e.start.x, sy: e.start.y, sz: e.start.z, x1: e.end.x, y1: e.end.y, z1: e.end.z };
     if (RobotSwarm.beamReaches(b, e.width, t.x, t.z, t.radius)) hit(e.damage, "beam");
+  };
+  // A big walker's pulse (2026-11-06: thrown out to the mech's spot): full at the centre, half at the edge.
+  sw.onPulse = (e) => {
+    const d = Math.max(0, Math.hypot(e.at.x - t.x, e.at.z - t.z) - t.radius);
+    if (d <= e.radius) hit(e.damage * (1 - 0.5 * d / e.radius), "pulse");
   };
   for (let s = 0; s < seconds * 120; s++) {
     time = s * dt;
@@ -75,7 +80,7 @@ function solo(v0: V, kind: number, shooter: boolean) {
 /** A pack of 30 at the default mix from 45 m: seconds until it has done a standing mech's hull in. */
 function pack(v: V) {
   const times: number[] = [];
-  const share = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0 };
+  const share = { bite: 0, shot: 0, slug: 0, cut: 0, lob: 0, beam: 0, pulse: 0 };
   for (const seed of [2, 4, 6, 8, 10, 12]) {
     const r = run(v, (sw, t) => sw.spawn(30, t.x + 45, t.z, 6), 120, seed, 120);
     times.push(r.dead < 0 ? 120 : r.dead);
