@@ -46,7 +46,7 @@ import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
-import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, convoyDepth } from "./depth";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
 import { PadDraw } from "./padDraw";
 import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS, UNLOCK_GROUP } from "./unlocks";
@@ -96,7 +96,7 @@ export const LOOP_PARAMS: Param[] = [
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
-  { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, SMALL_GROUP, "Fuel", "Way home", "Radar"] },
   { id: "quests", label: "Contracts and HVTs", groups: QUEST_GROUPS },
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
@@ -804,8 +804,8 @@ export class ExpeditionLoop {
       if (e.type === "engage") {
         const q = e.pack;
         const raid = q.kind === "raid";
-        swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: v.raidMidShare + q.mid, big: v.raidBigShare + q.big, bigMin: q.bigMin }
-          : q.mid > 0 || q.big > 0 || q.bigMin ? { mid: v.robotMidShare + q.mid, big: v.robotBigShare + q.big, bigMin: q.bigMin } : undefined, q.hurt ?? 0, q.goal);
+        swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: (v.raidMidShare + q.mid) * shareK(v), big: (v.raidBigShare + q.big) * shareK(v), bigMin: q.bigMin }
+          : q.mid > 0 || q.big > 0 || q.bigMin ? { mid: (v.robotMidShare + q.mid) * shareK(v), big: (v.robotBigShare + q.big) * shareK(v), bigMin: q.bigMin } : undefined, q.hurt ?? 0, q.goal);
       } else if (e.type === "raid") {
         this.hud.note(`Raid coming · ${e.pack.n} robots · ${Math.round(Math.hypot(e.pack.x - p.x, e.pack.z - p.z))} m`, "#ff9a7a", 4);
         this.sound.alarm();

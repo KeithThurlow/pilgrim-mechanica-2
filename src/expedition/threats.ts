@@ -13,7 +13,7 @@
 // brings them in as robots, reports back their centre and count, and hands survivors back here when the mech gets far.
 // Host state (seeded random only; events are plain data); the plumes, marks and sounds the glue makes are cosmetic.
 import type { Param } from "../core/tweaks";
-import { DEPTH_GROUP, scaled } from "./depth";
+import { DEPTH_GROUP, robotMult, scaled } from "./depth";
 
 export const THREAT_DEFAULTS = {
   roamPacks: 3,
@@ -264,7 +264,7 @@ export class ThreatField {
     const v = this.v, dg = m.danger ?? this.danger;
     const at = this.ring(m.x, m.z, v.heatRaidFrom, v.heatRaidFrom * 1.15, this.from?.(m.x, m.z));
     if (!at) return null;
-    const p = this.add("raid", at.x, at.z, Math.max(1, Math.round(v.heatRaidSize * scaled(v.raidSizeFar, dg))), "hunt", at.a + Math.PI, v.raidSpeed);
+    const p = this.add("raid", at.x, at.z, Math.max(1, Math.round(v.heatRaidSize * scaled(v.raidSizeFar, dg) * robotMult(v))), "hunt", at.a + Math.PI, v.raidSpeed);
     p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg; p.bigMin = Math.floor(v.raidBigMin * dg);
     return { type: "raid", pack: p, bearing: at.a };
   }
@@ -291,7 +291,7 @@ export class ThreatField {
       const at = this.ring(m.x, m.z, v.roamFrom, Math.max(v.roamFrom, v.roamTo), this.from?.(m.x, m.z));
       if (!at) break;
       const lo = Math.min(v.roamMin, v.roamMax), hi = Math.max(v.roamMin, v.roamMax);
-      const pk = this.add("pack", at.x, at.z, Math.round((lo + (hi - lo) * this.rand() * this.rand()) * scaled(v.roamSizeFar, dg)), "roam", this.rand() * Math.PI * 2, v.roamSpeed);
+      const pk = this.add("pack", at.x, at.z, Math.round((lo + (hi - lo) * this.rand() * this.rand()) * scaled(v.roamSizeFar, dg) * robotMult(v)), "roam", this.rand() * Math.PI * 2, v.roamSpeed);
       pk.mid = v.packMidFar * dg; pk.big = v.packBigFar * dg; pk.bigMin = Math.floor(v.packBigMin * dg);
     }
     if (m.out) {
@@ -312,7 +312,7 @@ export class ThreatField {
           this.raidT = v.raidEvery * (1 + (this.rand() * 2 - 1) * v.raidJitter);
           const at = this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15, this.from?.(m.x, m.z));
           if (at) {
-            const p = this.add("raid", at.x, at.z, Math.round(v.raidSize * scaled(v.raidSizeFar, dg)), "hunt", at.a + Math.PI, v.raidSpeed);
+            const p = this.add("raid", at.x, at.z, Math.round(v.raidSize * scaled(v.raidSizeFar, dg) * robotMult(v)), "hunt", at.a + Math.PI, v.raidSpeed);
             p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg; p.bigMin = Math.floor(v.raidBigMin * dg);
             out.push({ type: "raid", pack: p, bearing: at.a });
           }
