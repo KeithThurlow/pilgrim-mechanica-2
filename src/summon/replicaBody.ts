@@ -14,6 +14,7 @@ import type { UpperSim } from "../mech/upper";
 import type { MechBody, DeadRig } from "../game/mechUnit";
 import type { ToonLook } from "../look/toon";
 import { RampartBody } from "../mech/rampart";
+import type { FootShape } from "../fx/footprint";
 import { WireReplica, type ReplicaWeapon } from "./replicaWire";
 
 export type { ReplicaWeapon } from "./replicaWire";
@@ -107,6 +108,10 @@ export class ReplicaBody implements MechBody {
     return this.weapon === "rockets" ? this.racks.find((r) => r.side === side)!.muzzle.getWorldPosition(out) : this.rb.muzzle(side, out);
   }
   eject(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).eject(side, out); }
+  /** Keith 2026-11-06: their prints were the big plain oval; now the Rampart's own sole at the slimmed feet's size
+   *  (the wire stand-in, before the model loads: the plain oval at that size). */
+  footprint(side: 1 | -1): FootShape | null { return this.rb?.footprint(side) ?? null; }
+  printScale() { return this.rb?.printScale() ?? this.looks?.repFootSize ?? 1; }
   barrel(side: 1 | -1, out = new THREE.Vector3()) { return (this.rb ?? this.wire).barrel(side, out); }
 
   /** The Rampart's own paint (bleached paler by `repShade` in setLook); the wreck's colour as given. */
