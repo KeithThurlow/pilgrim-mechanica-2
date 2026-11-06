@@ -6,6 +6,7 @@
 import { GroundMirror } from "./groundMirror";
 import { chunkArrays, fillChunkRows, patchBlocks } from "../world/chunkFill";
 import { convoyPoses } from "./escortsRemote";
+import { snapshotTransfer } from "./robotsRemote";
 import type { FromWorker, ToWorker } from "./messages";
 
 let ground: GroundMirror | null = null;
@@ -37,13 +38,15 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       for (const r of q.runs) { const z = r.j * f; for (let i = r.i0; i <= r.i1; i++) heights[o++] = field.height(i * f, z); }
       post({ type: "fine", req: q, heights }, [heights.buffer]);
     } else if (m.type === "frame") {
+      const rf = ground.robots?.frame() ?? null, robots = rf ? { ...rf, ms: ground.robots!.ms } : null;
       const heights = ground.heights(m.sample);
       const escorts = ground.escorts?.snapshot() ?? null, convoy = ground.convoy ? convoyPoses(ground.convoy) : null;
       busy += performance.now() - t0;
       const t: Transferable[] = [heights.buffer];
       if (escorts) t.push(escorts.buffer);
       if (convoy) t.push(convoy.buffer);
-      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy }, t);
+      if (robots) t.push(...snapshotTransfer(robots.snap));
+      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy, robots }, t);
       busy = 0;
       return;
     }

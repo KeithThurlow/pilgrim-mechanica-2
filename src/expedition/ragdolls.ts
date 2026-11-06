@@ -22,7 +22,7 @@ export function robotRagdolls(sw: RobotSwarm, deaths: DeathPhysics) {
   sw.onDeath = (i, nx, nz, speed) => {
     const kind = sw.kind[i], [body, leg] = ROBOT_RAG[kind];
     const { parts, joints } = robotRagdoll(sw, i, body, leg);
-    const core = sw.cores[sw.cores.length - 1], reactor = core && core.id === sw.uid[i] ? core : null;
+    const reactor = sw.cores.find((c) => c.id === sw.uid[i]) ?? null;
     const fx = reactor ? reactor.fx : nx, fz = reactor ? reactor.fz : nz;
     const d = deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
       { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, fx, fz, kind === SMALL ? Math.max(3, speed) : 1, reactor ? reactor.angV : 0);

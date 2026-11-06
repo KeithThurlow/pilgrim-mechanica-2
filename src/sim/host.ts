@@ -17,6 +17,8 @@ import type { FromWorker, ToWorker } from "./messages";
 import type { EscortGroup } from "../convoy/escort";
 import type { Convoy } from "../convoy/platform";
 import { applyEscorts, convoyPoses } from "./escortsRemote";
+import { RobotsView } from "./robotsRemote";
+import type { RobotSwarm } from "../combat/robots";
 
 export const SIM_DEFAULTS = {
   simMirrorSamples: 16,
@@ -79,6 +81,7 @@ export class SimHost {
     this.stats.applyMs = this.applyMs;
     this.applyMs = 0;
     this.send({ type: "frame", id, sample }, [sample.buffer]);
+    if (this.robotsView) this.robotsView.frameId = id + 1;
     this.stats.mainMs = performance.now() - t0;
   }
 
@@ -88,7 +91,7 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.robotsView ? ` · robots ${this.robotsView.sw.count} (${this.robotsView.stats.ms.toFixed(2)} ms there)` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
@@ -123,6 +126,18 @@ export class SimHost {
     this.escortGroup = group;
     this.convoy = convoy;
   }
+
+  /**
+   * The robot swarm from now on steps in the worker (step 4, src/sim/robotsRemote.ts): sw becomes a view (it must have
+   * no robots yet). reactors: the death physics' wrecks (read each frame, sent along).
+   */
+  robots(sw: RobotSwarm, seed: number) {
+    const R = sw.reactors;
+    this.robotsView = new RobotsView(sw, this.rec, () => sw.reactors ?? R, seed);
+    this.robotsView.frameId = this.id + 1;
+    (this.stats as Record<string, unknown>).robots = this.robotsView.stats;
+  }
+  private robotsView: RobotsView | null = null;
 
   private escortGroup: EscortGroup | null = null;
   private convoy: Convoy | null = null;
@@ -159,6 +174,7 @@ export class SimHost {
     s.answered++;
     s.lag = this.id - m.id;
     s.workerMs = m.ms;
+    if (m.robots && this.robotsView) this.robotsView.take(m.id, m.robots.events, m.robots.snap, m.robots.ms);
     if (m.escorts && this.escortGroup) { applyEscorts(this.escortGroup, m.escorts); s.escorts = m.escorts[0]; }
     const cw = this.convoyWant.get(m.id);
     if (cw && m.convoy) {

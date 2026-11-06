@@ -13,6 +13,9 @@ import type { TrainValues } from "../convoy/train";
 import type { PlatformValues } from "../convoy/platform";
 import type { EscortValues } from "../convoy/escort";
 import { EscortsWorker } from "./escortsRemote";
+import { RobotsWorker } from "./robotsRemote";
+import type { RobotValues } from "../combat/robots";
+import type { SafeValues } from "../convoy/safeZone";
 import type { GroundEvent, GroundInit, Values } from "./groundEvents";
 
 export class GroundMirror {
@@ -23,6 +26,8 @@ export class GroundMirror {
   sites: SitesGround | null = null;
   convoy: Convoy | null = null;
   escorts: EscortsWorker | null = null;
+  /** Step 4: the robot swarm (src/sim/robotsRemote.ts), made by the view's first command. */
+  robots: RobotsWorker | null = null;
   /** Events applied in all. */
   applied = 0;
 
@@ -71,6 +76,7 @@ export class GroundMirror {
       case "escorts":
         if (!this.convoy) throw new Error(`ground mirror: escorts.${e.m} before the convoy was made`);
         return (this.escorts ??= new EscortsWorker(this.V as unknown as EscortValues, this.convoy, this.field));
+      case "robots": return (this.robots ??= new RobotsWorker(this.V as unknown as RobotValues & SafeValues, this.field, () => this.convoy));
       case "field": return this.field;
       case "route": return this.route;
       case "wake": return this.route.wake;
