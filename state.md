@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Pods and tow: say "return to the convoy" (Keith asked; Claude)
+- Quest panel, pickup notes and markers now tell you to bring carried pods/hulks back: last pod gives a "bring them back to the convoy" note, panel shows distance to the convoy, and the green beacon/radar/edge mark move to the convoy (RETURN TO CONVOY). Files: `src/quests/questHud.ts`, `questLoop.ts`. Other contracts (salvage, cull, bounty) pay at risk on the spot and already say so. Checked: typecheck, `npm test`.
+
 ### 2026-11-05 · Freeze rays: Frost thrower, Cryo projector, chill and freezing (Keith asked; Claude on `claude/project-thread-u0bsc9`)
 - New chill status (`src/game/chill.ts`) on the shots' burn path (`ShotProtocols.burn.cold`): slows, freezes solid, thaws; fire thaws, cold on hot metal is thermal shock. Robots and bandits take a `pace` (`src/combat/robots.ts`, `infantry.ts`, the targets' `slow`). Frost thrower (held) and Cryo projector (hull) as stream guns (`guns.ts`, `fireTuning.ts`, `fireGuns.ts`, `bases.ts`, `models.ts`, picks, traits `cold`), frost tint, mist, hiss.
 - Checked: `tools/chill-check.ts` (half chill pace 0.68, freeze after 24 hits of 0.05 at 30/s, thaw pace 0.72, shock 120 at heat 1); in the swarm lab `?left=frost` with `frostChill:1` froze 2 robots; full `npm test`.

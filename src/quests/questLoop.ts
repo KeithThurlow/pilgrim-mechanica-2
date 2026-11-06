@@ -273,7 +273,7 @@ export class QuestLoop {
       this.usesE = inp.eHeld || tow.hold > 0;
       this.prompt = tow.hold > 0 ? `${tow.on ? "Dropping" : "Hooking"}… ${Math.round(tow.hold * 100)}%` : tow.on ? "" : "Hold E: hook the downed Rampart";
       const r = tow.holdE(dt, inp.eHeld, this.hulkJob);
-      if (r === "hooked") { board.towing(this.hulkJob, true); this.note("Hulk on the cable · get it to the crane", "#ffd27a", 3); }
+      if (r === "hooked") { board.towing(this.hulkJob, true); this.note("Hulk on the cable · tow it back to the convoy", "#ffd27a", 3); }
       if (r === "dropped") board.towing(this.hulkJob, false);
     } else tow.holdE(dt, false, this.hulkJob);
     // While aboard (banked with it, hanging from the crane) the hulk rides along; the contract ends right after.
@@ -287,7 +287,10 @@ export class QuestLoop {
     if (!who) return;
     for (const c of this.board.active) {
       if (c.kind !== "pods" || !c.pods) continue;
-      for (const k of podsInReach(c.pods, who.x, who.z, this.v.podReach)) if (this.board.pod(c.id, k)) this.note(`Escape pod aboard · ${c.have}/${c.need} (at risk)`, "#ffd27a", 2.5);
+      for (const k of podsInReach(c.pods, who.x, who.z, this.v.podReach)) if (this.board.pod(c.id, k)) {
+        if (c.have >= c.need) this.note("All pods aboard · bring them back to the convoy", "#7dff9a", 5);
+        else this.note(`Escape pod aboard · ${c.have}/${c.need} (at risk) · find the rest, then return to the convoy`, "#ffd27a", 3.5);
+      }
     }
   }
 
@@ -298,10 +301,11 @@ export class QuestLoop {
     const field = this.field;
     for (const c of board.active) {
       if (c.kind === "tow" && c.carrying) continue;
-      const at = c.kind === "tow" && c.id === this.hulkJob ? { x: tow.x, z: tow.z } : c.kind === "bounty" && hvt.lair?.id === c.site && hvt.pos ? hvt.pos : c;
+      const homing = c.carrying && c.kind === "pods" && c.have >= c.need;
+      const at = homing ? this.w.lead() : c.kind === "tow" && c.id === this.hulkJob ? { x: tow.x, z: tow.z } : c.kind === "bounty" && hvt.lair?.id === c.site && hvt.pos ? hvt.pos : c;
       beacons.push({ x: at.x, z: at.z, color: GREEN });
       this.radar.push({ x: at.x, z: at.z, color: MISSION_GREEN, kind: "contract" });
-      this.marks.push({ id: "contract:" + c.id, x: at.x, y: field.height(at.x, at.z) + 3, z: at.z, text: `CONTRACT · ${KIND_NAME[c.kind].toUpperCase()}`, color: MISSION_GREEN, strength: 1 });
+      this.marks.push({ id: "contract:" + c.id, x: at.x, y: field.height(at.x, at.z) + 3, z: at.z, text: homing ? "RETURN TO CONVOY" : `CONTRACT · ${KIND_NAME[c.kind].toUpperCase()}`, color: MISSION_GREEN, strength: 1 });
       if (c.pods) for (const p of c.pods) if (p) pods.push(p);
     }
     // The lair stirring or its HVT out: a green pillar and diamond.
@@ -322,7 +326,7 @@ export class QuestLoop {
       board, from: inp.pilot ?? inp.mech,
       lair: hvt.lair ?? this.near,
       hvt: hvt.lair && u && u.alive ? { name: hvt.lair.name, health: u.health / u.maxHealth, level: hvt.level } : null,
-      towing: tow.on, prompt: this.prompt,
+      towing: tow.on, home: this.w.lead(), prompt: this.prompt,
     });
   }
 
