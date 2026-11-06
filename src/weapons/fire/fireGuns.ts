@@ -141,7 +141,8 @@ export class FireGuns {
     if (v.flameSplash > 0 && aim && s.splashT <= 0) {
       const g = bf.field.height(aim.x, aim.z), dist = Math.hypot(aim.x - fuel.x, aim.z - fuel.z);
       if (aim.y - g < 1.6 && dist <= Math.min(range, s.reach + 1)) {
-        s.splashT = 0.15;
+        // A pool every 0.6 s (was 0.15) now they burn 5.5 s (was 1.2): about as many burn at once, each for longer.
+        s.splashT = 0.6;
         bf.pools.add(this.unit.team, aim.x, aim.z, v.splashPool * v.flameSplash * big, v.splashPoolTime, v.splashPoolDps, burn.time, burn.dps, false);
       }
     }
