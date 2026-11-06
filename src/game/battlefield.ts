@@ -251,7 +251,7 @@ export class Battlefield {
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
       maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold) => cold ? this.chills.hit(t, k, time, dps, x, y, z) : this.burns.ignite(t, k, time, dps, x, y, z) });
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold, dx, dz) => cold ? this.chills.hit(t, k, time, dps, x, y, z, dx, dz) : this.burns.ignite(t, k, time, dps, x, y, z, dx, dz) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;

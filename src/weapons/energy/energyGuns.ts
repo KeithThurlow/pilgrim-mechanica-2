@@ -119,6 +119,8 @@ export class EnergyGuns {
     if (aim && Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z) > 2) {
       const y = u.lock ? aim.y : aim.y + 1;
       want.set(aim.x - muzzle.x, y - muzzle.y, aim.z - muzzle.z).normalize();
+      // Never back against the barrel (a target closer than a held muzzle, src/weapons/shotLine.ts): along it instead.
+      if (want.x * flat.x + want.z * flat.z < 0.25 * Math.hypot(want.x, want.z) * Math.hypot(flat.x, flat.z)) want.copy(flat).normalize();
     } else want.copy(flat).normalize();
     const gi = i === 0 ? 0 : 1;
 

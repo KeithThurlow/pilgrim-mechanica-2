@@ -6,7 +6,7 @@
 // Ownership: host (damage, the pools' list); ids are stable (rule 12). Randomness: none (the flames are cosmetic).
 import * as THREE from "three/webgpu";
 import type { Hittable } from "./battlefield";
-import type { Burns } from "./burn";
+import { pushDir, type Burns } from "./burn";
 import { matterOf, typeMul, type DamageTypeValues } from "./damageType";
 import { sheetHits } from "./sheetFire";
 import type { Sheet, SheetHit } from "./sheet";
@@ -35,7 +35,6 @@ const FALLBACK: PoolValues = { poolTick: 0.25, poolMax: 64, poolMerge: 0.6 };
 
 interface Ground { height(x: number, z: number): number }
 
-const UP = new THREE.Vector3(0, 1, 0);
 
 export class FirePools {
   readonly list: Pool[] = [];
@@ -45,6 +44,7 @@ export class FirePools {
   private serial = 1;
   private buf: SheetHit<Hittable>[] = [];
   private at = new THREE.Vector3();
+  private dir = new THREE.Vector3();
   private ro = new THREE.Vector3();
   private rd = new THREE.Vector3();
   private seen = new Set<string>();
@@ -108,7 +108,8 @@ export class FirePools {
       if (h.ray) { this.ro.set(h.ray.ox, h.ray.oy, h.ray.oz); this.rd.set(h.ray.dx, h.ray.dy, h.ray.dz); t.hitRay(this.ro, this.rd, h.ray.dist + 1e-3); }
       else t.pick?.(h.key);
       const dmg = p.dps * tick * typeMul("fire", matterOf(t), this.v);
-      if (dmg > 0) { t.damage(dmg, this.at.set(h.x, h.y, h.z), UP); this.total += dmg; }
+      // No push: a body the pool kills drops where it stands (src/game/burn.ts pushDir).
+      if (dmg > 0) { t.damage(dmg, this.at.set(h.x, h.y, h.z), pushDir(this.dir, 0, 0)); this.total += dmg; }
       this.burns.ignite(t, h.key, p.burnTime, p.burnDps, h.x, h.y, h.z);
       p.inside++;
     }
