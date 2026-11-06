@@ -109,6 +109,9 @@ export class Escort {
   /** Going round something on this side (+1 left) for commitT more seconds. */
   commitSide = 0;
   commitT = 0;
+  /** The ground's steepness under it (rad), re-read every STEEP_EVERY fixed steps (steepK counts down), for easing off. */
+  steep = 0;
+  steepK = 0;
   /** Half its length (m), for keeping clear. */
   readonly half: number;
   /** Its own surge rhythm (phase, and a rate share). */
@@ -129,6 +132,7 @@ export class Escort {
     this.weaveRate = 0.7 + ((index * 0.43 + 0.2) % 1) * 0.6;
     this.planT = (index % 12) / 60;
     this.laneT = (index % 12) / 24;
+    this.steepK = index % STEEP_EVERY; // staggered, so the group's reads spread over the steps
   }
 }
 
@@ -193,6 +197,7 @@ export class EscortGroup {
       if (sc < best) { best = sc; bx = p.x; bz = p.z; bh = p.heading; }
     }
     e.sim.reset(bx, bz, bh);
+    e.steep = this.steepAt(bx, bz, e.half * 0.7);
     e.lane = e.stationOut;
     e.sim.speed = this.convoy.route.v.convoySpeed;
     e.s = r.s + e.along;
@@ -289,7 +294,8 @@ export class EscortGroup {
     desired += e.planOff;
     // Ease off over rough ground (the picked line, or the ground under it now, near its climbing limit): crawl
     // across a steep face rather than flying over it.
-    const soft = v.escortSteep * D2R, now = clamp((this.steepAt(s.pos.x, s.pos.z, e.half * 0.7) - soft * 0.7) / (soft * 0.6), 0, 1);
+    if (--e.steepK < 0) { e.steepK = STEEP_EVERY - 1; e.steep = this.steepAt(s.pos.x, s.pos.z, e.half * 0.7); }
+    const soft = v.escortSteep * D2R, now = clamp((e.steep - soft * 0.7) / (soft * 0.6), 0, 1);
     const rough = Math.max(e.planCost, now);
     want = Math.min(want * (1 - 0.3 * rough), top - (top - Math.min(top, cv + 1.5)) * rough);
 
@@ -479,6 +485,9 @@ const PLAN_STEPS = 6;
 const COMMIT_FOR = 4;
 /** Seconds between picks (staggered across the escorts). */
 const PLAN_EVERY = 0.2;
+/** Fixed steps between reads of the ground's steepness under an escort (perf, 2026-11-06: 15 ground samples a step
+ *  each, a fifth of the escorts' cost; at 120 Hz every 4th step is 30 Hz, and the speed it caps changes slowly). */
+const STEEP_EVERY = 4;
 /** Lanes: re-picked every LANE_EVERY s, LANE_STEP apart, up to LANE_SPAN either side of the station line. */
 const LANE_EVERY = 0.5, LANE_STEP = 2.5, LANE_SPAN = 12;
 /** Stuck after this long not moving while it wants to; then backs out for BACK_FOR. */
