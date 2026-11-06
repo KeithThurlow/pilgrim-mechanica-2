@@ -89,6 +89,8 @@ export class SimHost {
    */
   terrain(streamer: TerrainStreamer) {
     this.streamer = streamer;
+    (this.stats as Record<string, unknown>).terrain = streamer.remoteStats;
+    (this.stats as Record<string, unknown>).chunks = streamer.stats;
     streamer.remote = {
       build: (req) => { this.flush(); this.send({ type: "chunk", req }); },
       patch: (req) => { this.flush(); this.send({ type: "patch", req }); },
