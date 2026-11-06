@@ -1,7 +1,7 @@
 // The balance model (docs/proposal-balance.md), pure: from the live item, weapon, Protocol and enemy tables, a weapon's
 // effective DPS against five reference target sets, its time to kill, and what Protocols do to it. A model, not the sim:
 // hit chance and area are expected values from simple geometry (seeded Monte Carlo). Moved out of
-// tools/balance-sheet.ts (2026-11-03) so the weapon review lab (labs/weaponreview/) and src/items/weaponScaling.ts read
+// tools/balance-sheet.ts (2026-11-03) so the weapons lab's review panel (labs/weapons/review.ts) and src/items/weaponScaling.ts read
 // the same numbers the sheet prints.
 // Cadence (damage, rounds per shot, sustained shots/s over the magazine and reload) comes from src/items/dps.ts, the
 // same function the item cards show; armour from src/game/armour.ts. Every other assumption is in REF and targets().
