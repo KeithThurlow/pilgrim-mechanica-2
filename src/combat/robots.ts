@@ -862,7 +862,6 @@ export class RobotSwarm {
 
   constructor(public v: RobotValues, readonly ground: Ground, seed = 1) {
     this.rs = (seed >>> 0) || 1;
-    this.os = (Math.imul(seed >>> 0, 0x9e3779b1) ^ 0x5bd1e995) >>> 0 || 1;
   }
 
   /**
@@ -873,21 +872,13 @@ export class RobotSwarm {
   remote: { step(dt: number, base: RobotTarget): void; events(): RobotEvent[] } | null = null;
   /** True while a view replays commands it already handed the events of: nothing is raised. */
   silent = false;
-  /** The stream the outside methods draw from (spawn, a kill by a hit), apart from the step's, so a view and the worker
-   *  that apply the same commands draw the same numbers. */
-  private os: number;
+
 
   /** Robots latched on the mech right now. */
   get latchedCount(): number { return this.latchN; }
 
   /** Seeded random 0..1 (mulberry32). */
   rand(): number {
-    if (!this.stepping) {
-      let u = (this.os = (this.os + 0x6d2b79f5) | 0);
-      u = Math.imul(u ^ (u >>> 15), u | 1);
-      u ^= u + Math.imul(u ^ (u >>> 7), u | 61);
-      return ((u ^ (u >>> 14)) >>> 0) / 4294967296;
-    }
     let t = (this.rs = (this.rs + 0x6d2b79f5) | 0);
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);

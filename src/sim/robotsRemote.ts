@@ -24,6 +24,21 @@ export const ROBOT_OPS = [
   "setFrozen", "shakeOff", "scaleHp", "setHealth", "setPace", "setShooter", "primeAttacks",
 ] as const;
 
+/**
+ * Setters that would change nothing are not sent (a camp sets every robot's freeze every frame). Safe: only the outside
+ * methods write these fields, so the view's values are the worker's at the same point in the stream.
+ */
+const UNCHANGED: Record<string, (sw: RobotSwarm, a: unknown[]) => boolean> = {
+  setFrozen: (sw, a) => sw.frozen[a[0] as number] === (a[1] ? 1 : 0),
+  setShooter: (sw, a) => sw.shooter[a[0] as number] === (a[1] ? 1 : 0),
+  setPace: (sw, a) => sw.pace[a[0] as number] === Math.fround(a[1] as number),
+  clearTarget: (sw, a) => sw.hasT[a[0] as number] === 0,
+  setTarget: (sw, a) => {
+    const i = a[0] as number, f = Math.fround;
+    return sw.hasT[i] === 1 && sw.tgx[i] === f(a[1] as number) && sw.tgy[i] === f(a[2] as number) && sw.tgz[i] === f(a[3] as number) && sw.tgr[i] === f(a[4] as number);
+  },
+};
+
 /** Fields never copied: the step's own flags and scratch, the view's settings. */
 const SKIP = new Set(["stepping", "silent", "hideDead", "remote", "events", "v", "ground", "lookGround", "keepOut", "reactors"]);
 
@@ -143,8 +158,9 @@ export class RobotsView {
     const o = sw as unknown as Record<string, (...a: unknown[]) => unknown>;
     for (const m of ROBOT_OPS) {
       const orig = o[m];
+      const same = UNCHANGED[m];
       o[m] = (...args: unknown[]) => {
-        if (this.depth === 0 && !sw.silent) {
+        if (this.depth === 0 && !sw.silent && !(same && same(sw, args))) {
           const a = m === "trample" ? [{ ...(args[0] as MechBody) }, pickTrample(args[1] as TrampleValues)] : args.map((x) => (typeof x === "function" ? null : x));
           this.log.push({ frame: this.frameId, m, a });
           rec.command("robots", "op", [m, a]);
