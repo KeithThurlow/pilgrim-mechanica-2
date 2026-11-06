@@ -14,6 +14,7 @@ export const CONVOY_SOUND_DEFAULTS = {
   tracksFar: 260,
   tracksSpeedRef: 4,
   tracksPitchBend: 0.35,
+  tracksPitch: 0.96,
 };
 export type ConvoySoundValues = typeof CONVOY_SOUND_DEFAULTS;
 const G = CONVOY_SOUND_GROUP;
@@ -22,6 +23,7 @@ export const CONVOY_SOUND_PARAMS: Param[] = [
   { key: "tracksNear", label: "Full level within (m)", min: 2, max: 100, step: 1, group: G },
   { key: "tracksFar", label: "Silent past (m)", min: 30, max: 800, step: 5, group: G, tip: "Fades out between the two (a low rumble far out on the sand tells you where home is)" },
   { key: "tracksSpeedRef", label: "Plays at its own pitch at (m/s)", min: 0.5, max: 12, step: 0.1, group: G },
+  { key: "tracksPitch", label: "Pitch", min: 0.5, max: 1.5, step: 0.01, group: G, tip: "The whole sound up or down (1: as recorded at the reference speed); Keith 2026-11-06: a little deeper" },
   { key: "tracksPitchBend", label: "Pitch follows speed", min: 0, max: 1, step: 0.01, group: G, tip: "0: one pitch whatever the speed; 1: twice as fast is an octave up" },
 ];
 
@@ -70,7 +72,7 @@ export class ConvoySound {
     if (this.loop && this.ver !== sfx.soundVersion("tankTracks")) { sfx.stopLoop(this.loop, 0.3); this.loop = null; }
     if (volume <= 0.001) { if (this.loop) { sfx.stopLoop(this.loop, 0.4); this.loop = null; } return; }
     if (!this.loop) { this.loop = sfx.startSoundLoop("tankTracks", Math.random()); this.ver = sfx.soundVersion("tankTracks"); if (!this.loop) return; }
-    const pitch = Math.pow(Math.max(0.05, speed) / Math.max(0.1, v.tracksSpeedRef), v.tracksPitchBend);
+    const pitch = v.tracksPitch * Math.pow(Math.max(0.05, speed) / Math.max(0.1, v.tracksSpeedRef), v.tracksPitchBend);
     sfx.setSoundLoop(this.loop, "tankTracks", this.at.set(best.x, best.y + 1, best.z), volume, Math.max(0.5, Math.min(2, pitch)));
   }
 

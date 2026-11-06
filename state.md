@@ -315,6 +315,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Convoy tracks sound a little deeper (Keith: "I love the ambient noise of the convoy... tune it a tiny bit deeper"; Claude on `claude/convoy-sound-deeper`)
+- New `tracksPitch` slider (Convoy sound › Pitch, 0.96) multiplies the loop's pitch. With the slower convoy (2.2 m/s, pitch follows speed) the loop already plays at 0.81 of its own pitch against 0.94 at 3.3 m/s, about 2.5 semitones down; this takes it to 0.78, about 3 semitones under what Keith heard. `src/convoy/convoySound.ts`. Checked: typecheck, full `npm test`.
+
 ### 2026-11-06 · Convoy two thirds slower (Keith: "make the convoy move just a teeny tiny bit slower... Let's try 2/3"; Claude on `claude/convoy-slower`)
 - `convoySpeed` 3.3 → 2.2 m/s; `convoyTurn` 2 → 1.33°/s with it, so the road bends the same per metre (the slider is per second; left at 2 the turns came 1.5× tighter and closed the gaps between cars to 6.7 m). `src/convoy/route.ts`. Checks: `poi-check` 6 drives until the road is cut past its samples whatever the speed; `convoy-check` 7c allows the hips 0.7 m low when a sprint off the bay lands on a berm face over 30° (it now lands on a 37 to 47° one); 11's speed-up is two thirds over the default (was 3.3 to 5.5; from 2.2 to 5.5 escorts got stuck). Standing pick-ups take 14 to 24 s now. Full `npm test` 85/85. Rough edge: escorts can get stuck for a while if the Convoy speed slider is pushed up 2.5× at once.
 
