@@ -37,6 +37,8 @@ export interface MechBody {
   legValues?(): Partial<WalkerValues>;
   /** The fitted legs' print in the sand, per foot (side 1 left), baked from the foot model (src/fx/footprint.ts). */
   footprint?(side: 1 | -1): FootShape | null;
+  /** That print's size × its model's (a slimmed body's smaller feet, e.g. the summoner's replicas); 1 if unset. */
+  printScale?(): number;
   /** Where other weapons' stand-ins hang (a gun side's pivot, a shoulder, the back mount, or one of the asset list's
    *  sockets: HullMount_L/R, Shoulder_L/R, Grip_L/R, Sensor, Pack, Waist_L/R), and hiding a side's own pod. */
   mount?(slot: MountSocket): THREE.Object3D;
@@ -306,7 +308,7 @@ export class MechUnit implements Hittable, Solid {
         this.onStomp?.(f.planted.x, f.planted.z, k);
         return;
       }
-      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
+      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null, this.body.printScale?.() ?? 1);
       // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
       dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
       // Sprinting, each footfall lands with weight: a thump and (in labs that shake) a small shake.
@@ -331,7 +333,7 @@ export class MechUnit implements Hittable, Solid {
       if (l.impact > 1.5) {
         for (const f of sim.feet) {
           if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
-          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null);
+          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null, this.body.printScale?.() ?? 1);
           dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
         }
         if (l.impact > v.landSoft) {
@@ -522,7 +524,7 @@ export class MechUnit implements Hittable, Solid {
       this.slideAcc[i] = bf.dust.slide(f.pos.x, f.pos.y, f.pos.z, f.slide.x, f.slide.z, dt, this.slideAcc[i]);
       // A furrow from where the foot was last frame (a skid that just started begins here).
       if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
-      bf.marks.skid(from.x, from.y, f.pos.x, f.pos.z, f.yaw, this.body.footprint?.(f.side) ?? null, dt);
+      bf.marks.skid(from.x, from.y, f.pos.x, f.pos.z, f.yaw, this.body.footprint?.(f.side) ?? null, dt, this.body.printScale?.() ?? 1);
       from.set(f.pos.x, f.pos.z, 1);
     });
     // Whatever is in the dash's way gets shoved (the lab decides what that is).

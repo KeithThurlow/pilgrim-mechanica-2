@@ -72,10 +72,10 @@ export class GroundMarks {
    * the foot's sole pressed along the way, a stamp every few centimetres, so the trench is the foot's width with its
    * toes' grooves; without a shape, the plain furrow.
    */
-  skid(x0: number, z0: number, x1: number, z1: number, yaw: number, shape: FootShape | null, dt: number) {
+  skid(x0: number, z0: number, x1: number, z1: number, yaw: number, shape: FootShape | null, dt: number, scale = 1) {
     if (!this.denting) return;
-    if (!shape || this.v.printShaped < 0.5) { this.furrow(x0, z0, x1, z1, 0.9, dt); return; }
-    const len = Math.hypot(x1 - x0, z1 - z0), s = this.v.printSize;
+    if (!shape || this.v.printShaped < 0.5) { this.furrow(x0, z0, x1, z1, 0.9 * scale, dt); return; }
+    const len = Math.hypot(x1 - x0, z1 - z0), s = this.v.printSize * scale;
     const n = Math.min(12, Math.max(1, Math.ceil(len / 0.1)));
     for (let k = 1; k <= n; k++) {
       const t = k / n;

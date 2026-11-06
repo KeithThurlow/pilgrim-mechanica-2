@@ -317,6 +317,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-06 · Replica footprints at their feet's size (Keith reported: "large round footprints"; Claude)
+- The replica body gave no foot shape, so every step stamped the plain full-size Rampart oval. `src/summon/replicaBody.ts` now hands on the Rampart's baked sole and a print scale; `RampartBody.printScale()` is the slimmed feet's size (`repFootSize`, 0.8); `src/game/mechUnit.ts` passes it to `marks.print` and `marks.skid` (`src/fx/groundMarks.ts`, a scale argument).
+- Checked: `replicas-check` (prints × 0.8 = feet × 0.8), full `npm test`.
 ### 2026-11-06 · Escorts and guardian mechs don't get stuck on the convoy (Keith: "they won't path around things"; Claude on `claude/project-thread-97z96l`)
 - Headless repro: a mech in an escort's lane squeezed the truck in against the cars, where it crawled nose-in at 1 m/s (too slow to turn) and the cars swept over it (2.6 m inside a car); guardians walked straight at a goal across the train and stood pressed against a car (0 of 24 walks across got there).
 - `src/convoy/escort.ts`: the cars and plough are solid (pushed out after each step, speed halved if nosed in); within a car's clearance and pointed at it, it backs out; a mech blocking it by the cars: it holds the route's heading and waits, backing off after 3 s; squeezed across the train it rides the side it's on; back-outs in a row back further (×2), the wheel the other way; stuck counts from a wanted 0.5 m/s (was 1); the mech it keeps clear of is the nearest one ahead (one it has passed counts 12 m farther). New `src/convoy/detour.ts` (pure): the corner of the car in the way, then through the gap; `guardians.ts` walks by it.
