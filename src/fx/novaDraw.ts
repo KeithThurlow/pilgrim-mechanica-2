@@ -6,6 +6,7 @@ import * as THREE from "three/webgpu";
 import { abs, dot, float, length, normalize, normalView, positionGeometry, positionView, pow, smoothstep, uniform } from "three/tsl";
 import { Novas, type Nova } from "./nova";
 import { SoftRing } from "../weapons/ribbon";
+import { NovaDebrisDraw } from "./novaDebrisDraw";
 
 interface Ground { height(x: number, z: number): number }
 
@@ -24,7 +25,13 @@ export class NovaDraw {
   private ball = new THREE.SphereGeometry(1, 24, 16);
   private disc = new THREE.CircleGeometry(1, 96).rotateX(-Math.PI / 2);
 
-  constructor(private novas: Novas, private ground: Ground) {}
+  /** The hull shattering: shards and sparks (src/fx/novaDebris.ts). */
+  private debris: NovaDebrisDraw;
+
+  constructor(private novas: Novas, private ground: Ground) {
+    this.debris = new NovaDebrisDraw(novas.debris);
+    this.group.add(this.debris.group);
+  }
 
   private make(): Slot {
     const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
@@ -54,6 +61,8 @@ export class NovaDraw {
   update(dt: number) {
     const N = this.novas, v = N.v;
     N.update(dt);
+    N.debris.update(dt, this.ground);
+    this.debris.update();
     while (this.slots.length < N.list.length) this.slots.push(this.make());
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i], n: Nova | undefined = N.list[i];

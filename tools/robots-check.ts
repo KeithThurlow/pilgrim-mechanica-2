@@ -356,14 +356,26 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   o.damage(0, 1e6, 1, 0);
   for (let s = 0; s < (ROBOT_DEFAULTS.robotBigDeathDelay + 1) * 120; s++) o.update(dt, far, () => {});
   if (n) fail("death blast went off with robotBigDeathOn 0");
-  // A weapon quad's reactor: smaller and sooner (Keith 2026-11-06); a small quad (the cutter) has none.
-  const q = big(24);
+  // Keith 2026-11-06 (round 2): by default only the tall walkers go up; a weapon quad just falls.
+  {
+    const d = big(25);
+    const [wd] = d.spawn(1, 300, 300, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
+    d.update(dt, far, () => {});
+    let nd = 0; d.onDeathBlast = () => nd++;
+    d.damage(wd, 1e6, 1, 0);
+    for (let s = 0; s < (ROBOT_DEFAULTS.robotQuadDeathDelay + 1) * 120; s++) d.update(dt, far, () => {});
+    if (nd) fail(`a weapon quad went up with the defaults (${nd} blasts; only the tall walkers should)`);
+  }
+  // A big one's blast is slowed and shatters its hull; with the quad's on, a quad's is neither.
+  if (!(ROBOT_DEFAULTS.robotBigDeathSlow > 1) || !(ROBOT_DEFAULTS.robotBigDeathShatter > 0)) fail("the tall walkers' blast should be slowed and shatter by default");
+  // A weapon quad's reactor when turned on: smaller and sooner (Keith 2026-11-06); a small quad (the cutter) has none.
+  const q = big(24, { robotQuadDeathOn: 1 });
   const [wq] = q.spawn(1, 300, 300, 0, { mid: 1, big: 0, quad: 1, weapon: 0 });
   const [cq] = q.spawn(1, 330, 300, 0, { mid: 1, big: 0, quad: 0 });
   q.update(dt, far, () => {});
   const qb: { t: number; r: number; id: number }[] = [];
   let qt = 0;
-  q.onDeathBlast = (e) => qb.push({ t: qt, r: e.radius, id: e.id });
+  q.onDeathBlast = (e) => { qb.push({ t: qt, r: e.radius, id: e.id }); if ((e.shatter ?? 0) > 0 || (e.slow ?? 1) !== 1) fail("a weapon quad's blast shattered or was slowed"); };
   q.damage(wq, 1e6, 1, 0); q.damage(cq, 1e6, 1, 0);
   for (let s = 0; s < (ROBOT_DEFAULTS.robotQuadDeathDelay + 1) * 120; s++) { q.update(dt, far, () => {}); qt += dt; }
   console.log(`weapon quad reactor: ${qb.map((b) => `${b.t.toFixed(2)} s, ${b.r} m`).join("; ")}`);

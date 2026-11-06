@@ -73,7 +73,7 @@ function run(opts: { frames: number; dropStep?: number }): Run {
       ref.update(dt / 2, aboard ? null : mech);
       r.refMs += performance.now() - t0;
       if (opts.dropStep === ++steps) {
-        const keep = view.remote; view.remote = { ...keep!, update: () => {} }; view.update(dt / 2, mech); view.remote = keep;
+        const keep: typeof view.remote = view.remote; view.remote = { ...keep!, update: () => {} }; view.update(dt / 2, mech); view.remote = keep;
       } else view.update(dt / 2, aboard ? null : mech);
     }
     // Blasts round the escorts now and then (their planning copy forgets the ground there).
