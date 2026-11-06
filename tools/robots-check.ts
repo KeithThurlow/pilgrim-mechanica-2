@@ -300,8 +300,11 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
 // Own blasts (Keith 2026-11-02): a big one's pulse hurts robots under it but not itself; its death blast goes off after
 // the delay, hurts robots round it and can set off another big one (a chain).
 {
-  const big = (seed: number) => new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1, robotPulseFirst: 0 }, field, seed);
-  const sw = big(21);
+  const big = (seed: number, o: Partial<typeof ROBOT_DEFAULTS> = {}) => new RobotSwarm({ ...ROBOT_DEFAULTS, robotQuadShare: 0, robotBigShare: 1, robotPulseFirst: 0, ...o }, field, seed);
+  // Small ones packed round it and the mech: the pulse hurts them (latched ones too when robotPulseLatched is 1). With
+  // the dodge on (2026-11-06: the pulse is thrown at the mech's spot) the ones not latched step out of the ring first.
+  const ownPulse = (o: Partial<typeof ROBOT_DEFAULTS>) => {
+  const sw = big(21, o);
   sw.spawn(1, 160, 160, 0);
   const b = 0, hp0 = sw.hp[b];
   const mech = { x: 160 + 6, y: field.height(166, 160) + 3, z: 160, radius: 2 };
@@ -315,10 +318,15 @@ else if (shaken < held / 2) fail("a fast mech shook fewer than half off");
   const smallLeft = sw.count - (sw.state[b] < DEAD ? 1 : 0);
   console.log(`own pulse: ${pulses} pulse, ${small0 - smallLeft} of ${small0} small ones under it killed, its own hp ${Math.round(sw.hp[b])}/${Math.round(hp0)}, ownKills ${sw.ownKills}`);
   if (!pulses) fail("the big one never pulsed with the mech beside it");
-  else {
-    if (sw.ownKills === 0) fail("its pulse hurt none of the robots under it");
-    if (sw.hp[b] < hp0) fail("its pulse hurt itself");
-  }
+  else if (sw.hp[b] < hp0) fail("its pulse hurt itself");
+  return pulses ? sw.ownKills : -1;
+  };
+  const hurt = ownPulse({ robotPulseDodge: 0, robotPulseLatched: 1 });
+  if (hurt === 0) fail("its pulse hurt none of the robots under it");
+  const stay = ownPulse({ robotPulseDodge: 0, robotMaxLatched: 0 }), clear = ownPulse({ robotPulseDodge: 1, robotMaxLatched: 0 });
+  console.log(`  none latched: ${stay} killed standing in the ring, ${clear} with the dodge`);
+  if (stay === 0) fail("none latched, dodge off: the pulse killed none round the mech");
+  if (stay > 0 && clear > stay * 0.5) fail(`with the dodge on, ${clear} robots still died in the ring (${stay} with it off): they don't clear it`);
   // Death: two big ones 8 m apart; kill one, its core goes up after the delay and takes the other with it.
   const d = big(22);
   d.spawn(1, 220, 220, 0); d.spawn(1, 228, 220, 0);

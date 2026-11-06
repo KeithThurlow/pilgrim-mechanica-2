@@ -3,7 +3,7 @@
 // body uses up (src/game/sheetFire.ts): the mech, the pilot, bandits and their vehicles in a robots-on-bandits fight
 // (other robots are its own team). Cosmetic: a scorched furrow along the sand, dust and a crack. Terraforming (Keith
 // 2026-11-01): the beam digs a trench of craters down its line (robotBeamDig), and the big walkers' pulse
-// (fireRobotPulse) blasts a crater under them and shoves the mech away. A big walker's beam sweeps (Keith 2026-11-01): the
+// (fireRobotPulse) blasts a crater where their beam lands (round 2, 2026-11-06: out to the mech's spot) and shoves the mech away. A big walker's beam sweeps (Keith 2026-11-01): the
 // release (tick 0) burns, scorches and digs the whole line with the crack and sound; each later tick burns the line for
 // its share and scorches, digs and dusts only where it strikes, so the sweep leaves a trench along its path. Round 2
 // (Keith 2026-11-01): big beams are live from the start of the charge (src/combat/beamCore.ts); the release is the tick
@@ -162,7 +162,8 @@ export function fireRobotPulse(bf: Battlefield, e: RobotPulseEvent, shove?: (x: 
     const x = e.at.x + Math.sin(a) * r, z = e.at.z + Math.cos(a) * r;
     bf.dust.emit(1, x, bf.field.height(x, z) + 0.3, z, Math.sin(a) * 9, 3 + Math.random() * 3, Math.cos(a) * 9, 1.2, 2.5 + Math.random() * 2, 0.9);
   }
-  bf.waves?.post("beam", e.from.x, e.from.y, e.from.z, 3, { ground: false, fam: 2 });
+  // At the blast (Keith 2026-11-06: the beam now throws it out to a spot; it was under the emitter).
+  bf.waves?.post("beam", e.at.x, e.at.y + 2, e.at.z, 3, { ground: false, fam: 2 });
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
 }
 
