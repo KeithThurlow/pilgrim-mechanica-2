@@ -21,8 +21,7 @@ import { SalvageDraw, SALVAGE_FX_DEFAULTS, SALVAGE_FX_PARAMS } from "../../src/p
 import { SalvageHud } from "../../src/pois/salvageHud";
 import { Fortresses, FORT_LIFE_DEFAULTS, FORT_LIFE_PARAMS } from "../../src/expedition/fortresses";
 import type { GateState } from "../../src/pois/gates";
-import { Warlord } from "../../src/expedition/warlord";
-import { MechUnit } from "../../src/game/mechUnit";
+import { mechOwner } from "../../src/game/registerOwners";
 import { INFANTRY_DEFAULTS, INFANTRY_PARAMS } from "../../src/combat/infantry";
 import { BANDIT_LOOK_DEFAULTS, BANDIT_LOOK_PARAMS } from "../../src/combat/infantryDraw";
 import { loadBanditVat } from "../../src/combat/banditVat";
@@ -61,7 +60,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
   defaults: LAB_DEFAULTS,
   params: [...KIND_PARAMS.fortress, ...KIND_PARAMS.hub, ...FORT_LIFE_PARAMS, ...HUB_LIFE_PARAMS, ...POI_PARAMS.filter((p) => p.group === "Pads"), ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS],
   topics: [
-    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: warlord", "Pads"] },
+    { id: "fortress", label: "Fortress", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: waves", "Fortress: mechs", "Fortress: warlord", "Pads"] },
     { id: "hub", label: "Manufacturing hub", groups: ["Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss", "Pads"] },
     { id: "bandits", label: "Bandits", groups: ["Fortress: garrison", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look"] },
     { id: "salvage", label: "Salvage", groups: ["Salvage", "Salvage: look"] },
@@ -72,6 +71,7 @@ const lab: CombatLab<typeof LAB_DEFAULTS> = await combatLab<typeof LAB_DEFAULTS>
     { topic: "fortress", label: "Gates", objects: () => forts?.gatesDraw.meshes() ?? [] },
     { topic: "fortress", label: "Spawner shacks", objects: () => forts?.spawnersDraw.meshes() ?? [] },
     { topic: "fortress", label: "Lookout towers", objects: () => forts?.towersDraw.meshes() ?? [] },
+    { topic: "fortress", label: "Bandit mechs", objects: () => forts?.mechs.objects() ?? [] },
     { topic: "bandits", label: "Garrison", objects: () => forts ? [forts.draw.group] : [] },
     { topic: "salvage", label: "Salvage spots", objects: () => salvageDraw?.objects() ?? [] },
   ],
@@ -124,17 +124,11 @@ forts = new Fortresses(V, field, bf, lab.app.scene, walls, player, vat, () => [p
   (x0, z0, x1, z1) => lab.streamer.rebuildArea(x0, z0, x1, z1));
 const F = forts;
 bf.register.add(F.target);
-// The keep's warlord: a dark red Rampart (src/expedition/warlord.ts); killed, a burst of drops (the lab just notes it).
-{
-  const wb = await lab.loadRampart();
-  const wl = new MechUnit(bf, V, wb, lab.toon, 2, 20, false);
-  wl.paint = 0x8e2a1e;
-  wb.paint(lab.toon, 0x8e2a1e);
-  const w = new Warlord(V, bf, lab.app.scene, wl);
-  F.warlord = w;
-  bf.register.add(w);
-  w.onEvent = (e) => { if (e.type === "warlordDown") { warlordKills++; lab.shake(0.8); } };
-}
+// The bandit mechs (src/expedition/fortMechs.ts): one in the outer yard, one in the middle, the warlord and its
+// flankers in the keep, each the duel lab's rival brain on a rolled loadout (level 1 here: the lab has no bay).
+F.mechs.setup = { look: lab.toon, loadBody: () => lab.loadRampart(), threat: () => ({ arsenal, wv: V }) };
+bf.register.add(mechOwner("fortress mechs", () => F.mechs.list()));
+F.mechs.onEvent = (e) => { if (e.role === "boss") { warlordKills++; lab.shake(0.8); } else { mechKills++; lab.shake(0.5); } };
 // A hub's fabricators, building robots into a swarm of their own (no camps here).
 swarms = new SwarmCamps(V, field, bf, lab.app.scene, new CampField(V), player, () => false);
 const S = swarms;
@@ -145,7 +139,7 @@ let fabsDown = 0, batches = 0, boss = "-";
 H.onEvent = (e) => { if (e.type === "fabDown") { fabsDown++; lab.shake(0.6); } if (e.type === "hubBatch") batches++; if (e.type === "hubBossUp") { boss = "out"; lab.shake(0.5); } if (e.type === "hubBossDown") boss = "down"; };
 const contact = new BodyContact(player, bf);
 player.onDash = (x, z, dx, dz) => { F.dashed(x, z, dx, dz, V.dashShoveRadius, V.dashShove, V.dashShoveDamage); };
-let downs = 0, warlordKills = 0;
+let downs = 0, warlordKills = 0, mechKills = 0;
 F.onGate = (e) => { if (e.type === "gateDown") { downs++; lab.shake(0.6); } };
 
 function rebuild() {
@@ -259,5 +253,5 @@ lab.onFrame((dt) => {
     lab.hud("fortress", `hub seed ${SEED} · ${h ? (h.awake ? "awake" : "asleep") : "not streamed"} · fabricators ${H.fabs.list.map((s) => (s.down ? "down" : Math.round(s.hp))).join(" / ")} (${fabsDown} down${H.isDead(place.id) ? ", hub dead" : ""}) · robots from it ${H.robotsFrom(place.id)} (${batches} batches) · boss ${boss} · swarm ${S.sw.count} · scrap ${salvage.scrap} · shift+< or shift+>: put it back up`);
     return;
   }
-  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · towers ${F.towers.list.filter((s) => !s.down).length}/${F.towers.list.length} up · warlord ${F.warlord?.unit ? (F.warlord.unit.alive ? `${Math.round(F.warlord.unit.health)} hp${F.warlord.awake ? " awake" : ""}` : "down") : "-"}${warlordKills ? ` (${warlordKills} killed)` : ""} · scrap ${salvage.scrap} · shift+< or shift+>: put it back up`);
+  lab.hud("fortress", `${KIND} seed ${SEED} · ${yards} · gates ${gates} (${downs} blown) · spawners ${F.spawners.list.filter((s) => !s.down).length}/${F.spawners.list.length} up${F.spawners.list.some((s) => s.want > 0) ? " (pouring)" : ""} · towers ${F.towers.list.filter((s) => !s.down).length}/${F.towers.list.length} up · mechs ${F.mechs.live().map((m) => `${m.post.role === "boss" ? "W" : m.post.role === "flank" ? "f" : "y" + m.post.yard} ${Math.round(m.unit.health)}`).join(", ") || "-"}${mechKills || warlordKills ? ` (${mechKills} down, warlord ${warlordKills})` : ""} · scrap ${salvage.scrap} · shift+< or shift+>: put it back up`);
 });

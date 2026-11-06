@@ -11,7 +11,8 @@ import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY, RARITIES, tierOf, type Rarity } from "../items/rarity";
 import { levelOf } from "../items/level";
 import { itemPower, dpsText } from "../items/power";
-import { itemWeight, type Item } from "../items/item";
+import type { Item } from "../items/item";
+import { cargoCapacity, cargoSizing } from "../items/cargoSpace";
 import { rollItem, rollLoot, rollProtocol, type LootValues } from "../items/generate";
 import {
   SLOTS, SLOT_NAMES, MOUNTS, SIDES, fit, fitProblem, unfit, resolve, summary, copyLoadout, effectiveStats, socket, socketProblem,
@@ -19,7 +20,7 @@ import {
   type SlotId, type LoadoutValues, type SummaryLine,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
-import { bagWeight, loseCargo, moveItem, takeFrom } from "../items/cargo";
+import { bagCells, loseCargo, moveItem, takeFrom } from "../items/cargo";
 import { bayToJson, itemName, readBay, type BayState } from "../items/bayState";
 export { itemName, type BayState };
 
@@ -70,7 +71,9 @@ export function bayScreen(o: BayOptions) {
   let choice: MountChoice | null = null;
   let hover: Item | null = null;
 
-  const changed = () => { st.cargo.capacity = resolve(st.loadout, o.tuning).cargoCapacity; o.onChange(); render(); };
+  const gridV = () => o.tuning as Record<string, number>;
+  const sizing = () => cargoSizing(gridV());
+  const changed = () => { st.cargo.capacity = cargoCapacity(gridV(), resolve(st.loadout, o.tuning).cargoRackRows); o.onChange(); render(); };
   const bagOf = (it: Item) => (st.cargo.items.includes(it) ? st.cargo : st.stash);
   const toStash = (items: Item[]) => { for (const i of items) st.stash.items.push(i); };
   const pool = () => [...st.cargo.items, ...st.stash.items];
@@ -157,7 +160,7 @@ export function bayScreen(o: BayOptions) {
     for (const s of SIDES) col.append(mountBlock(s));
     col.append(el("h3", "", "Back and waist"), slotRow("pack"), slotRow("waistL"), slotRow("waistR"));
     const r = resolve(st.loadout, o.tuning);
-    col.append(el("p", "bay-note", `Fitted ${fmt(r.weight, 1)} t · cargo up to ${fmt(r.cargoCapacity, 1)} t · radar ${Math.round(r.values.mechRadar)} m · salvage ×${fmt(r.values.gearSalvage, 2)}`));
+    col.append(el("p", "bay-note", `Cargo ${cargoCapacity(gridV(), r.cargoRackRows)} cells · radar ${Math.round(r.values.mechRadar)} m · salvage ×${fmt(r.values.gearSalvage, 2)}`));
     return col;
   }
 
@@ -190,7 +193,7 @@ export function bayScreen(o: BayOptions) {
     const c = el("div", "bay-card");
     c.style.borderColor = RARITY[it.rarity].color;
     const head = el("div", "bay-cardhead");
-    head.append(nameEl(it), el("span", "dim", `${RARITY[it.rarity].name}${sizeLabel(it)} · ${it.maker} · ${fmt(itemWeight(it), 1)} t`));
+    head.append(nameEl(it), el("span", "dim", `${RARITY[it.rarity].name}${sizeLabel(it)} · ${it.maker}`));
     c.append(head);
     // Level, power and (weapons) DPS (Keith 2026-10-28).
     // DPS: its own, and with its Protocols (Keith 2026-10-31; src/items/dps.ts, the balance sheet's formula).
@@ -337,7 +340,7 @@ export function bayScreen(o: BayOptions) {
     const def = x.kind === "protocol" ? PROTOCOL_BY_ID[x.base] : null;
     const what = def ? "Protocol · " + def.text : x.kind === "weapon" ? sizeLabel(x).slice(3) : x.kind;
     const dps = dpsText(x);
-    row.append(el("span", "dim", `Lv ${levelOf(x)} · P ${itemPower(x)}${dps ? ` · ${dps}` : ""} · ${what}${x.socketed.length ? ` · ${x.socketed.length}◆` : ""} · ${fmt(itemWeight(x), 1)} t · ${where}`));
+    row.append(el("span", "dim", `Lv ${levelOf(x)} · P ${itemPower(x)}${dps ? ` · ${dps}` : ""} · ${what}${x.socketed.length ? ` · ${x.socketed.length}◆` : ""} · ${where}`));
     return row;
   }
 
@@ -345,15 +348,15 @@ export function bayScreen(o: BayOptions) {
     const col = el("div", "bay-col bay-bags");
     col.append(el("div", "bay-deltawrap"));
     for (const [name, bag, other] of [["Cargo", st.cargo, st.stash], ["Stash", st.stash, st.cargo]] as const) {
-      const w = bagWeight(bag);
-      const h = el("h3", "", `${name} · ${bag.items.length} · ${fmt(w, 1)}${Number.isFinite(bag.capacity) ? ` / ${fmt(bag.capacity, 1)}` : ""} t`);
-      if (w > bag.capacity + 1e-9) h.classList.add("bad");
+      const w = bagCells(bag, sizing());
+      const h = el("h3", "", `${name} · ${bag.items.length} · ${w}${Number.isFinite(bag.capacity) ? ` / ${bag.capacity}` : ""} cells`);
+      if (w > bag.capacity) h.classList.add("bad");
       col.append(h);
       const list = el("div", "bay-list bay-bag");
       if (!bag.items.length) list.append(el("p", "bay-note", name === "Cargo" ? "Empty. Cargo rides on the mech and is lost if it's destroyed." : "Empty."));
       for (const x of [...bag.items].sort(sortItems)) {
         const row = itemRow(x);
-        row.append(btn(name === "Cargo" ? "→ stash" : "→ cargo", () => { if (moveItem(bag, other, x.id)) changed(); else flash(row); }, "small"));
+        row.append(btn(name === "Cargo" ? "→ stash" : "→ cargo", () => { if (moveItem(bag, other, x.id, sizing())) changed(); else flash(row); }, "small"));
         list.append(row);
       }
       col.append(list);

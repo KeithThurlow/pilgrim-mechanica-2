@@ -44,11 +44,11 @@
 .inv-name { font-weight: 600; }
 .inv-scrap { cursor: default; border-left-color: #e6c86a; }
 .inv-scrap .inv-name { color: #e6c86a; }
-.inv-weight { height: 8px; background: #0008; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-.inv-weightfill { height: 100%; background: #9fc7b4; }
-.inv-weightfill.warn { background: #e8a33a; }
-.inv-weightfill.over { background: #e0482c; }
-.inv-weighttext { font: 12px var(--mono); margin: 2px 0 4px; }
+.inv-space { height: 8px; background: #0008; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.inv-spacefill { height: 100%; background: #9fc7b4; }
+.inv-spacefill.warn { background: #e8a33a; }
+.inv-spacefill.over { background: #e0482c; }
+.inv-spacetext { font: 12px var(--mono); margin: 2px 0 4px; }
 .inv-tip {
   position: fixed; z-index: 30; pointer-events: none; min-width: 200px; max-width: 280px; padding: 7px 10px;
   background: rgba(10, 12, 14, 0.96); border: 1px solid #fff4; border-radius: 5px; font: 12px/1.4 system-ui, sans-serif; color: #e8e2d6;

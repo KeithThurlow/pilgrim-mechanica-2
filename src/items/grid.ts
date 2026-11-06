@@ -137,7 +137,7 @@ export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCol
 
 const G = "Grid";
 export const GRID_PARAMS: Param[] = [
-  { key: "cargoCols", label: "Cargo columns", min: 4, max: 20, step: 1, group: G, tip: "The mech's cargo grid (later from the legs and hull, like the weight)" },
+  { key: "cargoCols", label: "Cargo columns", min: 4, max: 20, step: 1, group: G, tip: "The mech's cargo grid (cargo racks add rows)" },
   { key: "cargoRows", label: "Cargo rows", min: 4, max: 20, step: 1, group: G },
   { key: "stashCols", label: "Stash columns", min: 6, max: 30, step: 1, group: G, tip: "The convoy's stash grid: as wide as this, at least this tall, and it grows to take everything (no limit yet)" },
   { key: "stashRows", label: "Stash rows", min: 6, max: 30, step: 1, group: G },

@@ -12,7 +12,6 @@ import type { Expedition } from "./expedition";
 import type { SpotState } from "../pois/salvage";
 import type { Rarity } from "../items/rarity";
 import { tierOf } from "../items/rarity";
-import { itemWeight } from "../items/item";
 import { VALUE_DEFAULTS, VALUE_PARAMS } from "../items/value";
 import type { LootValues } from "../items/generate";
 import { DropField, DROP_DEFAULTS, DROP_PARAMS, hashKey, itemName, type Collector, type DropContext } from "./drops";
@@ -26,7 +25,7 @@ export const FIELD_LOOT_DEFAULTS = {
   ...VALUE_DEFAULTS, ...DROP_DEFAULTS, ...DROP_FX_DEFAULTS, ...CLUMP_DEFAULTS, ...LOOT_HUD_DEFAULTS, ...LOOT_SOUND_DEFAULTS,
   bigHaul: 40, streakGap: 0.4,
   dropHearFull: 50, dropHearMax: 160,
-  cargoLimit: 1, scrapWeight: 0.02, cargoWarn: 0.85, cargoFullNote: 3,
+  cargoLimit: 1, cargoWarn: 0.85, cargoFullNote: 3,
 };
 export type FieldLootValues = typeof FIELD_LOOT_DEFAULTS;
 export const FIELD_LOOT_PARAMS: Param[] = [
@@ -35,8 +34,7 @@ export const FIELD_LOOT_PARAMS: Param[] = [
   { key: "dropHearFull", label: "Drop sound: full volume within (m)", min: 0, max: 300, step: 5, group: "Loot", tip: "Keith 2026-10-31: drops far off were heard from the convoy. Closer to you than this, a drop's riff plays in full" },
   { key: "dropHearMax", label: "Drop sound: silent past (m)", min: 10, max: 1000, step: 5, group: "Loot", tip: "Fades out between the two; a drop further off than this makes no sound" },
   // Cargo (Keith 2026-11-01: manage the cargo, drop things, rather than let it rack up).
-  { key: "cargoLimit", label: "Cargo limit on", min: 0, max: 1, step: 1, group: "Cargo", tip: "1: the at-risk cargo can't go over the mech's cargo capacity (legs' carry + hull and waist racks). 0: carry anything, as before" },
-  { key: "scrapWeight", label: "Scrap weight (t each)", min: 0, max: 0.2, step: 0.005, group: "Cargo", tip: "What one scrap weighs in the cargo. 0.02: 100 scrap is 2 t; the default Rampart carries 12 t" },
+  { key: "cargoLimit", label: "Cargo limit on", min: 0, max: 1, step: 1, group: "Cargo", tip: "1: the at-risk cargo can't take more room than the cargo grid has (Grid › Cargo columns and rows, plus cargo racks). 0: carry anything" },
   { key: "cargoWarn", label: "Cargo nearly full at (share)", min: 0.3, max: 1, step: 0.01, group: "Cargo", tip: "The cargo bar turns amber past this share of capacity" },
   { key: "cargoFullNote", label: "\"Cargo full\" note every (s)", min: 0.5, max: 15, step: 0.5, group: "Cargo", tip: "Standing by a drop with a full cargo says so at most this often" },
   { key: "streakGap", label: "Clink streak breaks after (s)", min: 0.05, max: 2, step: 0.05, group: "Loot", tip: "Clumps landing closer together than this climb the scale" },
@@ -124,7 +122,6 @@ export class FieldLoot {
     if (f.pilot) c.push({ x: f.pilot.x, z: f.pilot.z, by: "pilot" });
     else if (f.mech.grabs) c.push({ x: f.mech.x, z: f.mech.z, by: "mech" });
     const exp = this.exp;
-    exp.scrapWeight = this.v.cargoLimit ? this.v.scrapWeight : 0;
     if (!this.v.cargoLimit) exp.capacity = Infinity;
     this.drops.update(c, exp.state === "out", (d) => exp.fits({ kind: "item", item: d.item, label: "" }));
     const ear = f.pilot ?? f.mech;
@@ -137,7 +134,7 @@ export class FieldLoot {
     }
     for (const ev of this.drops.events) {
       if (ev.type === "refused") {
-        if (this.fullT <= 0) { this.fullT = this.v.cargoFullNote; this.onFull?.(`Cargo full · ${itemName(ev.drop.item)} needs ${itemWeight(ev.drop.item).toFixed(1)} t, ${Math.max(0, exp.room).toFixed(1)} t free · I: drop something`); }
+        if (this.fullT <= 0) { this.fullT = this.v.cargoFullNote; this.onFull?.(`Cargo full · ${itemName(ev.drop.item)} needs ${exp.sizing.itemCells(ev.drop.item)} cells, ${Math.max(0, exp.room)} free · I: drop something`); }
         continue;
       }
       if (ev.type === "dropped") {

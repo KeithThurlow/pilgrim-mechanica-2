@@ -154,7 +154,7 @@ export function mechDollHud(v: DollValues, onClick: () => void, parent: HTMLElem
         fill.style.width = `${Math.min(100, share * 100)}%`;
         fill.style.background = col;
         label.style.color = col;
-        label.textContent = lim ? `CARGO ${c.load.toFixed(1)} / ${c.capacity.toFixed(1)} t` : `CARGO ${c.load.toFixed(1)} t`;
+        label.textContent = lim ? `CARGO ${c.load} / ${c.capacity} cells` : `CARGO ${c.load} cells`;
       }
     },
   };
