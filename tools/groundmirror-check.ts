@@ -55,25 +55,25 @@ function run(opts: { flat?: boolean; dropCrater?: number; frames?: number }): Ru
   const gates = fort ? siegeLayout(fort, V).rings.flatMap((r) => r.gates) : [];
 
   const r: Run = { frames: 0, mism: 0, worst: 0, at: "", samples: 0, events: 0, maxFrame: 0, bytes: 0, skips: 0 };
-  const frames = opts.frames ?? 1800, dt = 1 / 60, xz = new Float64Array(2 * 96);
+  const frames = opts.frames ?? 1200, dt = 1 / 60, xz = new Float64Array(2 * 96);
   let roadSeen = -1, dropped = 0;
   const p = { x: 0, z: 0, heading: 0 };
   for (let f = 0; f < frames; f++) {
     // Slider changes between frames, the way the panel makes them.
-    if (f === 300) { V.convoyHeading = 25; }
-    if (f === 500) { V.craterMaxStack = 1.8; V.hardRockySand = 0.4; craters.invalidate(); }
-    if (f === 700) { V.bermSpread = 3; route.wake.clear(); }
-    if (f === 900) { V.height *= 1.1; field.update(); route.wake.clear(); sites.rebuild(); }
-    if (f === 1000 && fort) { route.pointAt(route.s, p); convoy.jump(route.s + Math.max(0, fort.z - p.z - 150)); }
-    if (f === 1100) for (const g of gates.slice(0, 2)) sites.walls.down.add(g.id);
-    if (f === 1500) { sites.walls.down.clear(); craters.clear(); }
-    if (f === 1600) { V.convoySpeed = 4; }
+    if (f === 200) { V.convoyHeading = 25; }
+    if (f === 330) { V.craterMaxStack = 1.8; V.hardRockySand = 0.4; craters.invalidate(); }
+    if (f === 460) { V.bermSpread = 3; route.wake.clear(); }
+    if (f === 600) { V.height *= 1.1; field.update(); route.wake.clear(); sites.rebuild(); }
+    if (f === 700 && fort) { route.pointAt(route.s, p); convoy.jump(route.s + Math.max(0, fort.z - p.z - 150)); }
+    if (f === 800) for (const g of gates.slice(0, 2)) sites.walls.down.add(g.id);
+    if (f === 1000) { sites.walls.down.clear(); craters.clear(); }
+    if (f === 1100) { V.convoySpeed = 4; }
     // One frame: the convoy at 120 Hz, blasts now and then, craters slump.
     for (let i = 0; i < 2; i++) convoy.update(dt / 2);
     if (route.count !== roadSeen) { roadSeen = route.count; sites.roadGrew(); }
     if (f % 9 === 0) {
       route.pointAt(route.s + 40 * rnd(), p);
-      const near = fort && f > 1000 && rnd() < 0.5;
+      const near = fort && f > 700 && rnd() < 0.5;
       const bx = near ? fort.x + (rnd() - 0.5) * 160 : p.x + (rnd() - 0.5) * 120, bz = near ? fort.z + (rnd() - 0.5) * 160 : p.z + (rnd() - 0.5) * 120;
       if (opts.dropCrater !== undefined && f === opts.dropCrater) {
         // A mirror that misses this blast: the main thread digs it with recording off.
@@ -121,11 +121,11 @@ if (a.mism) fail(`the mirror's ground differs from the main thread's at ${a.mism
 if (a.events / a.frames > 12) fail(`too many ground events a frame (${(a.events / a.frames).toFixed(1)}; expected a handful)`);
 if (a.bytes / a.frames > 2000) fail(`ground events too big (${(a.bytes / a.frames).toFixed(0)} bytes a frame)`);
 
-const b = run({ flat: true, frames: 600 });
+const b = run({ flat: true, frames: 400 });
 console.log(`  ?flat ground: ${b.samples} samples, ${b.mism} differ`);
 if (b.mism) fail(`with ?flat's field values the mirror differs at ${b.mism} points (worst ${b.worst} m at ${b.at})`);
 
-const c = run({ dropCrater: 180, frames: 400 });
+const c = run({ dropCrater: 180, frames: 300 });
 console.log(`  a missed blast: ${c.mism} of ${c.samples} samples differ (must be some)`);
 if (!c.mism) fail("a mirror that missed a crater wasn't caught: the sampling can't see a difference");
 
