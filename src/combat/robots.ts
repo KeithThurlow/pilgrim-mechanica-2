@@ -649,7 +649,7 @@ export type RobotEvent =
   | { t: "pulse"; e: RobotPulseEvent }
   | { t: "deathBlast"; e: RobotDeathBlastEvent }
   | { t: "legLost"; e: RobotLegLostEvent }
-  | { t: "death"; robot: number; nx: number; nz: number; speed: number }
+  | { t: "death"; robot: number; id: number; nx: number; nz: number; speed: number }
   | { t: "footfall"; robot: number; x: number; y: number; z: number; leg: number }
   /** A wreck's reactor going up where the host's death physics has it (reactors.blow). */
   | { t: "blow"; id: number; x: number; y: number; z: number; radius: number };
@@ -863,6 +863,16 @@ export class RobotSwarm {
   constructor(public v: RobotValues, readonly ground: Ground, seed = 1) {
     this.rs = (seed >>> 0) || 1;
   }
+
+  /**
+   * Sim worker (src/sim/robotsRemote.ts): when set, this swarm is a view of one stepped in the worker. update() hands
+   * out the events the worker sent back and sends the step; the outside methods still act here at once (and go there as
+   * commands, so both agree).
+   */
+  remote: { step(dt: number, base: RobotTarget): void; events(): RobotEvent[] } | null = null;
+  /** True while a view replays commands it already handed the events of: nothing is raised. */
+  silent = false;
+
 
   /** Robots latched on the mech right now. */
   get latchedCount(): number { return this.latchN; }
@@ -1120,6 +1130,7 @@ export class RobotSwarm {
   private events: RobotEvent[] = [];
   private stepping = false;
   private emit(e: RobotEvent) {
+    if (this.silent) return;
     if (this.stepping) this.events.push(e);
     else this.handle(e, null, null, null);
   }
@@ -1137,10 +1148,20 @@ export class RobotSwarm {
       case "pulse": this.onPulse?.(e.e); break;
       case "deathBlast": this.onDeathBlast?.(e.e); break;
       case "legLost": this.onLegLost?.(e.e); break;
-      case "death": this.onDeath?.(e.robot, e.nx, e.nz, e.speed); break;
+      case "death": if (this.firstDeath(e.id)) this.onDeath?.(e.robot, e.nx, e.nz, e.speed); break;
       case "footfall": this.onFootfall?.(e.robot, e.x, e.y, e.z, e.leg); break;
       case "blow": this.reactors?.blow(e.id, e.x, e.y, e.z, e.radius); break;
     }
+  }
+
+  /** Uids whose death was handed out lately: a view can see one die twice (a hit here, the worker's step there). */
+  private deadSeen = new Set<number>();
+  private deadRing: number[] = [];
+  private firstDeath(id: number): boolean {
+    if (this.deadSeen.has(id)) return false;
+    this.deadSeen.add(id); this.deadRing.push(id);
+    if (this.deadRing.length > 512) this.deadSeen.delete(this.deadRing.shift()!);
+    return true;
   }
 
   /**
@@ -1148,6 +1169,11 @@ export class RobotSwarm {
    * the step go to their handlers once it's done (RobotEvent).
    */
   update(dt: number, base: RobotTarget, onShot: RobotShotFn, onBite?: RobotBiteFn, onCut?: RobotCutFn): void {
+    if (this.remote) {
+      this.dispatch(this.remote.events(), onShot, onBite, onCut);
+      this.remote.step(dt, base);
+      return;
+    }
     const evs = this.step(dt, base);
     this.dispatch(evs, onShot, onBite, onCut);
     evs.length = 0;
@@ -2095,7 +2121,7 @@ export class RobotSwarm {
       const r = makeReactor(this.uid[i], this.px[i], this.pz[i], this.hubY[i], this.fallYaw[i], this.ground, spec);
       this.cores.push(Object.assign(r, { power: this.power[i], big }));
     }
-    this.emit({ t: "death", robot: i, nx: push ? nx : 0, nz: push ? nz : 0, speed: Math.hypot(this.vx[i], this.vz[i]) });
+    this.emit({ t: "death", robot: i, id: this.uid[i], nx: push ? nx : 0, nz: push ? nz : 0, speed: Math.hypot(this.vx[i], this.vz[i]) });
   }
 
   /** Reactors in falling wrecks; those due go up: their robots hurt here, the rest (the battlefield) by the event. */
