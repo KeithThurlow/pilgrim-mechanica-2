@@ -5,7 +5,7 @@
 import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
-import { Register } from "./register";
+import { Register, FLAG } from "./register";
 import { WaterFx, WATER_FX_DEFAULTS, type WaterFxValues } from "../fx/water";
 import { WaterDraw } from "../fx/waterDraw";
 import { ShellsDraw, SHELL_FX_DEFAULTS, type ShellFxValues } from "../fx/shellsDraw";
@@ -253,6 +253,20 @@ export class Battlefield {
     this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
     this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
     this.flames = new FlameFx(field);
+    // The flamer's line splashes on what it runs into (Keith 2026-11-06): anything hittable of another team, as a
+    // standing column round its centre, from the sand to as far above the centre as the centre is up (register body).
+    {
+      const near: number[] = [], f = { all: FLAG.Hittable, notTeam: 0 }, reg = this.register;
+      this.flames.hitter = (x, y, z, team) => {
+        f.notTeam = team;
+        reg.near(x, z, 0.2, f, near);
+        for (const e of near) {
+          const g = field.height(reg.x[e], reg.z[e]), top = reg.y[e] + Math.max(0.6, reg.y[e] - g);
+          if (y <= top && y >= g - 0.2) return true;
+        }
+        return false;
+      };
+    }
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
       maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
