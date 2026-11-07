@@ -100,8 +100,10 @@ export interface Hittable {
    *  swinging its own sword at it parries (src/weapons/sword.ts). The share of the cut's damage it takes (1: neither),
    *  and whether the blades met (the cutter's blade recoils too). */
   parry?(fromX: number, fromZ: number, power?: boolean): Parry;
-  /** ECS stage 4.1 (src/game/combatRules.ts syncWorld): write its things' shared components into the host world. */
+  /** ECS stage 5 (src/game/combatRules.ts syncWorld, src/ecs/heavy.ts): each tick, write its shared components into
+   *  the host world; leaveWorld when it is no longer a target (its entity goes). */
   syncWorld?(world: import("../ecs/world").World): void;
+  leaveWorld?(): void;
 }
 
 /** A sword cut met: the share of its damage that lands, and whether it was a parry (both blades recoil). */

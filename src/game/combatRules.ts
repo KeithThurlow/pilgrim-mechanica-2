@@ -101,12 +101,20 @@ export class CombatRules {
     this.syncWorld();
   }
 
-  /** Counts the tick, and lets targets write shared components they keep elsewhere (none today: the robots are the
-   *  world's own columns since stage 4.3). */
+  /** Counts the tick, and lets targets write the shared components they keep elsewhere: the heavies (mechs, vehicles:
+   *  src/ecs/heavy.ts, stage 5; the swarms are the world's own columns since stages 4.3-4.4). A target that left the
+   *  list since last tick leaves the world. */
   syncWorld() {
     this.world.tick++;
-    for (const t of this.targets) t.syncWorld?.(this.world);
+    const now = this.synced === this.syncA ? this.syncB : this.syncA;
+    now.clear();
+    for (const t of this.targets) if (t.syncWorld) { t.syncWorld(this.world); now.add(t); }
+    for (const t of this.synced) if (!now.has(t)) t.leaveWorld?.();
+    this.synced = now;
   }
+  private syncA = new Set<Hittable>();
+  private syncB = new Set<Hittable>();
+  private synced = this.syncA;
 
   /** Is (x, z) under the shallows' water (deep enough to splash)? */
   inWater(x: number, z: number, depth = 0.04): boolean {
