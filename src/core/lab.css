@@ -87,15 +87,14 @@ body.selecting #view canvas { cursor: crosshair; }
 /* Combat labs: a red edge when the player's mech takes hits */
 .hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px 30px rgba(200, 40, 20, 0.85); transition: opacity 0.08s; }
 
-/* Phones and tablets (html.touch, set by src/core/touch.ts; Keith 2026-11-07): the touch pad owns the bottom of the
-   screen, so the panel sits at the top right beside a smaller HUD, and opens no taller than half the screen. */
-html.touch .hud { font-size: 10px; padding: 4px 6px; max-width: 46vw; }
-html.touch .panel { left: auto; right: 6px; top: 6px; bottom: auto; width: min(320px, calc(100% - 52vw)); max-height: 50%; font-size: 12px; }
-html.touch .panel.open { width: min(340px, calc(100% - 12px)); }
-html.touch .report-btn, html.touch .help { display: none; }
-html.touch .exp-hud { bottom: 220px !important; font-size: 11px !important; }
-@media (orientation: landscape) and (max-height: 560px) {
-  html.touch .exp-hud { left: 50% !important; bottom: 6px !important; transform: translateX(-50%); }
-  html.touch .panel { width: 240px; max-height: calc(100% - 150px); }
-  html.touch .panel.open { width: 300px; }
+/* Phones and tablets (html.touch, set by src/core/touch.ts; Keith 2026-11-07): the page is drawn at 0.6 scale there
+   and the two sticks own the bottom corners, so the panel sits at the top right beside the HUD, and the expedition HUD
+   (radar) sits above the left stick in portrait, between the sticks in landscape. */
+html.touch .panel { left: auto; right: 8px; top: 8px; bottom: auto; width: min(320px, calc(100% - 300px)); max-height: 55%; }
+html.touch .panel.open { width: min(340px, calc(100% - 16px)); }
+html.touch .report-btn, html.touch .help, html.touch .mech-doll { display: none !important; }
+html.touch .exp-hud { bottom: 330px !important; }
+@media (orientation: landscape) {
+  html.touch .exp-hud { left: 50px !important; top: 120px; bottom: auto !important; }
+  html.touch .panel { max-height: 36%; min-height: 0; }
 }
