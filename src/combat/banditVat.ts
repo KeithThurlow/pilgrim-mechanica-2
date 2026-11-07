@@ -8,6 +8,7 @@ import {
   Fn, attribute, instancedBufferAttribute, vertexIndex, uniformArray, floor, textureLoad, ivec2, int, vec3, mix, sign, abs, max, normalLocal, float,
 } from "three/tsl";
 import type { VatHeader } from "./banditVatFormat";
+import { asset } from "../core/assetBase";
 
 /** Frost over a bandit (Keith's render pass 2026-11-05: frozen bandits had no look): 0..1 in eighths, into animB.w. */
 export const packFrost = (f: number) => Math.round(Math.min(1, Math.max(0, f)) * 8) * 16;
@@ -22,7 +23,7 @@ export function unpackLook(w: THREE.Node<"float">) {
 
 export interface BanditVatData { header: VatHeader; bin: ArrayBuffer }
 
-export async function loadBanditVat(base = "/models/"): Promise<BanditVatData> {
+export async function loadBanditVat(base = asset("models/")): Promise<BanditVatData> {
   const [header, bin] = await Promise.all([
     fetch(`${base}bandit-vat.json`).then((r) => { if (!r.ok) throw new Error(`bandit-vat.json ${r.status}`); return r.json() as Promise<VatHeader>; }),
     fetch(`${base}bandit-vat.bin`).then((r) => { if (!r.ok) throw new Error(`bandit-vat.bin ${r.status}`); return r.arrayBuffer(); }),
