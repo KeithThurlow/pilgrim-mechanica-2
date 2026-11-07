@@ -6,6 +6,7 @@ import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 import { Clock, clockFromUrl } from "./clock";
+import { InterpSet } from "../look/treeInterp";
 
 export type Tick = (dt: number, time: number) => void;
 
@@ -25,6 +26,8 @@ export interface App {
   onAfterRender(fn: () => void): void;
   /** The game clock: fixed or frame-locked, ticks run, alpha between ticks. */
   clock: Clock;
+  /** The models drawn between ticks (null when frame-locked; src/look/treeInterp.ts). */
+  interp: InterpSet | null;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N, ?norender */
   params: URLSearchParams;
   /** A PNG data URL of the next rendered frame (taken right after it renders, before the canvas clears). */
@@ -69,7 +72,9 @@ export async function createApp(container: HTMLElement): Promise<App> {
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
   const clock = clockFromUrl(params);
-  hud.set("clock", () => clock.hud());
+  // Stage 6c: under ?tick=N every model on drawBetweenTicks' list is drawn between its last two ticks.
+  const interp = clock.fixed ? new InterpSet() : null;
+  hud.set("clock", () => clock.hud() + (interp ? `; ${interp.models} models (${interp.parts} parts) drawn between ticks` : ""));
   const noRender = params.has("norender");
   let up = { trimmed: 0, savedKB: 0, empty: 0 };
   hud.set("shaders", () => `shaders: ${shaders.total} pipelines built (${shaders.async ? "in the background" : "sync, ?syncshaders"}), ${shaders.totalMs.toFixed(0)} ms in frames (code ${shaders.totalGenMs.toFixed(0)}), worst frame ${shaders.worstMs.toFixed(0)} ms`);
@@ -83,8 +88,9 @@ export async function createApp(container: HTMLElement): Promise<App> {
     prev = now;
     const t0 = performance.now();
     if (!app.hold) {
-      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); });
+      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); interp?.capture(); });
       const fdt = Math.min(raw, 1 / 20);
+      interp?.apply(clock.alpha);
       for (const f of frames) f(fdt, clock.alpha);
     }
     const t1 = performance.now();
@@ -95,6 +101,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
       else renderer.render(scene, camera);
       restoreEmptyPools();
     }
+    interp?.restore();
     for (const f of afters) f();
     const t2 = performance.now();
     hud.note(shaders.frameNew || shaders.frameGenMs > 1 ? `new shaders ${shaders.frameNew} (code ${shaders.frameGenMs.toFixed(0)} ms, GPU ${shaders.frameMs.toFixed(0)} ms)` : "");
@@ -110,7 +117,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   });
 
   const app: App = {
-    renderer, scene, camera, hud, backend, params, last, hold: false, clock,
+    renderer, scene, camera, hud, backend, params, last, hold: false, clock, interp,
     onTick: (fn) => ticks.push(fn),
     onFrame: (fn) => frames.push(fn),
     onAfterRender: (fn) => afters.push(fn),

@@ -4,9 +4,10 @@ import * as THREE from "three/webgpu";
 import { CarBody } from "../vehicles/carBody";
 import type { EscortGroup } from "./escort";
 import { FRIENDLY } from "./platformBody";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 export class EscortBodies {
-  readonly group = new THREE.Group();
+  readonly group = drawBetweenTicks(new THREE.Group());
   readonly bodies: CarBody[] = [];
   /** Turret angles for escort i's turret k (relative to its body), from the escort guns; null: forward. */
   turretAim: ((i: number, k: number) => { yaw: number; pitch: number } | null) | null = null;

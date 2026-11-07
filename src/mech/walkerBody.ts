@@ -3,6 +3,7 @@
 // replacing these meshes, not the walk.
 import * as THREE from "three/webgpu";
 import type { WalkerSim, LegPose } from "./walker";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 const mat = (color: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.15, flatShading: true, ...o });
@@ -57,7 +58,7 @@ interface LegMeshes {
 }
 
 export class WalkerBody {
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   private hull = new THREE.Group();
   private pelvisMesh: THREE.Mesh;
   private legs: LegMeshes[];

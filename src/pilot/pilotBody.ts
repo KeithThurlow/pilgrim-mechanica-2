@@ -8,6 +8,7 @@ import type { Param } from "../core/tweaks";
 import { BanditVatMesh, type BanditVatData } from "../combat/banditVat";
 import { BanditAnim, type AnimClip } from "../combat/banditAnim";
 import { VAT_CLIPS, type VatClipName } from "../combat/banditVatFormat";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 export const PILOT_LOOK_DEFAULTS = {
   pilotSuitR: 0.16,
@@ -34,7 +35,7 @@ export const PILOT_LOOK_PARAMS: Param[] = [
 const STAND = 0.25, WALK_TOP = 2.6, RATE_MIN = 0.4, RATE_MAX = 2.2;
 
 export class PilotBody {
-  readonly group = new THREE.Group();
+  readonly group = drawBetweenTicks(new THREE.Group());
   readonly vat: BanditVatMesh | null;
   private anim: BanditAnim | null = null;
   private ids = {} as Record<VatClipName, number>;
