@@ -26,9 +26,13 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   `combatLab.ts` run camera, streaming, light and `bf.frame` per drawn frame. Still per tick in those labs: the unit
   bodies' posing (mech `body.update`, robotsDraw, infantryDraw...) inside their sims' updates.
 
+- Stage 6b: `src/look/treeInterp.ts` (capture after each tick, apply(alpha) per frame, restore after render via
+  `App.onAfterRender`); used for the player's Rampart and the camera focus in the convoy lab and `combatLab.ts`, only
+  with `?tick=N`.
+
 ## Next, in order
-- Stage 6b, interpolated drawing: the player's mech first (the camera follows it): keep the walker's drawn state of the
-  last two ticks and pose the model between them by alpha in onFrame; then robotsDraw (an interpolated view of the
+- Stage 6c: TreeInterp on the other heavies (rival and bandit mechs, guardians, war band vehicles, escorts, the convoy
+  cars: each has a root Object3D); then robotsDraw (an interpolated view of the
   swarm's position arrays: prev copies at tick start, a blended copy per frame that the drawer reads), infantry, the
   war band. Then flip the default to `?tick=60`.
 - Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
