@@ -69,6 +69,7 @@ export function warbandFront(): Front {
       wb.riders = riders;
       const vat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
       const rd = new InfantryDraw(riders, V, vat);
+      rd.cull = lab.bf.view;
       riderDraw = rd;
       lab.app.scene.add(rd.group);
       const riderTarget = new InfantryTarget(riders, 2);

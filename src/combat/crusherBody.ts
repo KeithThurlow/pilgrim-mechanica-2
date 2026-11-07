@@ -12,6 +12,7 @@ import * as THREE from "three/webgpu";
 import { ROBOT_PALETTE } from "./robotShapes";
 import { CRUSHER_FRAME, CLAW, SUCK, type Crusher } from "./crusher";
 import type { V3 } from "./robotLegs";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 const P = ROBOT_PALETTE;
 const lit = (color: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
@@ -70,7 +71,7 @@ interface Pincer { pivot: THREE.Group; fore: THREE.Group; jawA: THREE.Group; jaw
 const TEETH = 16, INNER = 10, BLADES = 9;
 
 export class CrusherBody {
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   /** The shell: at the body centre, turned and leaned, scaled by the body width. */
   private shell = new THREE.Group();
   private maw = new THREE.Group();

@@ -50,6 +50,7 @@ export const WEAPON_DEFAULTS = {
   railSheetHalf: 0.6,
   railSheetHeight: 17,
   railSlugHeight: 1.6,
+  railLift: 3,
   railLineOn: 1,
   railLineWidth: 0.05,
   railLineOpacity: 0.4,
@@ -163,7 +164,7 @@ export const WEAPON_DEFAULTS = {
   laserGlisten: 1,
   laserRange: 60,
   // Blasts (every blast on the battlefield)
-  dentBudget: 6,
+  dentPerTick: 4,
   dentMerge: 0.6,
   blastGroundReach: 0.5,
   blastCover: 1,
@@ -241,6 +242,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "railSheetHalf", label: "Sheet half-width (m)", min: 0, max: 3, step: 0.05, group: R, tip: "It hits anything whose hit circle comes within this of its line on the ground" },
   { key: "railSheetHeight", label: "Sheet height (m)", min: 1, max: 25, step: 0.5, group: R, tip: "From under the ground up to this over the floor (the mech's feet to the ground under the aim): a big walker's body is about 14-16 m up" },
   { key: "railSlugHeight", label: "Slug height (m over the floor)", min: 0, max: 5, step: 0.05, group: R, tip: "The slug flies this high over the line from the mech's feet to the ground at the aim: sand above it costs penetration (Sand, Penetration group), and the streak is drawn toward this height at the aim" },
+  { key: "railLift", label: "Climbs to an aim higher than (m)", min: 0, max: 20, step: 0.1, group: R, tip: "Keith 2026-11-07: the slug flies flat, unless the aim (a lock's part, e.g. a big walker's reactor) stands more than this over the slug height there: then it climbs straight to the aim and on past it" },
   { key: "railLineOn", label: "Aim line on", min: 0, max: 1, step: 1, group: R, tip: "A faint line from the muzzle to where the slug stops, while charging" },
   { key: "railLineWidth", label: "Aim line width (m)", min: 0.01, max: 0.3, step: 0.005, group: R },
   { key: "railLineOpacity", label: "Aim line strength", min: 0, max: 1, step: 0.01, group: R },
@@ -345,7 +347,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "laserGlisten", label: "Glisten", min: 0, max: 3, step: 0.05, group: L, tip: "Small glints running along the line" },
   { key: "laserRange", label: "Range (m)", min: 5, max: 150, step: 1, group: L },
 
-  { key: "dentBudget", label: "Dent time per frame (ms)", min: 0.5, max: 30, step: 0.5, group: B, tip: "Blasts queue their craters; each frame digs queued ones until this much time is spent (at least one). A 12-missile swarm spreads over a few frames instead of stalling one" },
+  { key: "dentPerTick", label: "Craters dug per tick", min: 1, max: 24, step: 1, group: B, tip: "Blasts queue their craters; each sim tick digs at most this many (a count, not a time budget, so every machine digs the same: docs/architecture-review.md stage 3). Higher digs a barrage at once but costs that tick more." },
   { key: "dentMerge", label: "Merge dents closer than (× radius)", min: 0, max: 2, step: 0.05, group: B, tip: "A queued dent this close to another (as a share of the bigger radius) joins it: one dig instead of two" },
   { key: "blastCover", label: "Cover blocks blasts", min: 0, max: 1, step: 1, group: B, tip: "On: a dune, wall or steel wreck between a blast and a unit shields it (a line from the blast to the unit's middle); off: everything in the radius takes it" },
   { key: "blastGroundReach", label: "Digs when within (× radius) of the ground", min: 0, max: 2, step: 0.05, group: B, tip: "A blast higher than this over the sand (a rocket or missile on a tall robot's chassis) bursts in the air: no crater, no ground mark" },

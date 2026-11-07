@@ -13,6 +13,8 @@ export class HitStop {
     this.left = Math.max(this.left, seconds);
     this.k = Math.min(this.left > 0 && this.k < 1 ? this.k : 1, Math.max(0, scale));
   }
+  /** The time scale now, without spending any of the stop (for a second reader in the same frame). */
+  now(): number { return this.left > 0 ? this.k : 1; }
   /** This frame's time scale; spends the stop's real time. */
   dtScale(rawDt: number): number {
     if (this.left <= 0) { this.k = 1; return 1; }

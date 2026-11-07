@@ -99,7 +99,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ## Lab URL flags
 
-- Every lab: `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
+- Every lab: `?tick=60` (or 30, 120) runs the sims on the fixed game tick (`src/core/clock.ts`; the camera and effects move every drawn frame, mechs and vehicles are drawn between ticks, the swarms still step at the tick until their interpolation lands; the HUD's `clock` line). `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
   (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
@@ -207,7 +207,8 @@ state.md                live state of every system, work in progress, change his
 reports/                Keith's in-lab reports and your replies (in git, so any agent can pick them up; delete one when fixed)
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
-src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
+src/core/               app (renderer, loop), clock (the game tick), hud (frame time), tweaks (slider panel), input
+src/ecs/                the ECS core: world (ids, columns, queries, systems, events), components (shared ones), snapshot
 src/world/              noise, terrain (the dune height function), chunks (streaming, the shadow-only terrain copy) + chunkFill (their vertex maths, also run in the sim worker), chunkGround
                         (a cheap ground for looks off the chunks' triangles), look (light, haze), wrecks (steel stand-ins),
                         craters (blast dents in the ground: hardness, slump), walkable (the ground plus registered surfaces
@@ -287,7 +288,10 @@ docs/                   design.md (the game), decisions.md (log)
   read proportions from the model's joint markers rather than hardcoding them.
 - Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the
   first click or key press.
-- Sims step at a fixed 120 Hz inside the frame (see the walker lab) so feel doesn't change with frame rate.
+- Time: today most sims step at the frame's dt (some split it into substeps of at most 1/120 s, e.g. the walker), so results still
+  vary a little with frame rate. The target (Keith 2026-11-07, `docs/architecture-review.md`): one fixed 60 Hz game tick for the
+  rules (`src/core/clock.ts`, `?tick=60|30|120` to try it), the walker substepping at 120 inside it, and everything seen drawn at
+  the display's rate (144+, ideally 200+) interpolated between ticks. Each part declares its rate (review §4.6).
 
 ## State
 

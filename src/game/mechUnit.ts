@@ -1,6 +1,7 @@
 // A mech on the battlefield: the walker sim (legs), the upper-body sim (torso and two miniguns), the Rampart model,
 // health, and its rounds fired into the shared battlefield. Used for the player's mech and for bandit mechs (red
 // Ramparts for now, Keith 2026-10-24), so both walk, shoot, kick up dust and take hits the same way.
+import { Rng, seedFrom } from "../core/rng";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { WalkerSim, leftOf, type MoveCommand, type Landing } from "../mech/walker";
@@ -210,6 +211,8 @@ export class MechUnit implements Hittable, Solid {
   readonly abilities: Abilities;
   /** Stable id for heal zones and peers ("player" for the local one; allies and enemies their own). */
   uid = "mech";
+  /** The guns' spread (seeded from uid on the first shot; host state). */
+  private spreadRng: Rng | null = null;
   /** Paint colour (null: the model's own). */
   paint: number | null = null;
   /** Hull for this mech instead of the shared slider (bandit mechs). */
@@ -429,6 +432,9 @@ export class MechUnit implements Hittable, Solid {
 
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
+  /** Steps a second for the legs, torso and guns (120; an AI mech off the screen can take fewer: guardians' LOD). */
+  subHz = 120;
+
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
     // A line weapon armed for click-and-drag (src/weapons/lineAim.ts) owns the left button: the left gun holds fire.
@@ -449,7 +455,7 @@ export class MechUnit implements Hittable, Solid {
     const { sim, upper, body, v } = this;
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
-    const sub = Math.max(1, Math.ceil(dt * 120));
+    const sub = Math.max(1, Math.ceil(dt * this.subHz));
     const dash = this.dash;
     // Sprinting a while (sprintGunsAfter), the weapons are off (src/mech/bound.ts): no trigger, and the torso, guns and
     // head face the line of travel (turned that share into a drift) with the hull leaning forward by speed.
@@ -576,8 +582,10 @@ export class MechUnit implements Hittable, Solid {
       const burst = flak ? splash * (this.weapons?.pelletBurst?.(s) ?? 1) : 0;
       for (let p = 0; p < pellets; p++) {
         // Pellets spread evenly over the cone (a random point in the disc: sqrt), single rounds as before.
-        const r = pellets > 1 ? Math.sqrt(Math.random()) : Math.random();
-        const tilt = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * r);
+        // Seeded per mech (rule 12): the same shots spread the same way on every machine.
+        const rng = (this.spreadRng ??= new Rng(seedFrom(`${this.uid}:spread`)));
+        const r = pellets > 1 ? Math.sqrt(rng.next()) : rng.next();
+        const tilt = new THREE.Vector3(rng.next() - 0.5, rng.next() - 0.5, rng.next() - 0.5).normalize().multiplyScalar(Math.tan(spread) * r);
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
         const first = p === 0;
         if (flame) {

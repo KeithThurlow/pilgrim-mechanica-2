@@ -75,6 +75,8 @@ export interface Dead {
   /** Its own ground: a plane fitted to the dunes under it, moved along as it slides (heavy bodies only). */
   plane?: RAPIER.Collider | null;
   planeAt?: Vector3;
+  /** Its id while the physics runs in the sim worker (src/sim/deathsRemote.ts). */
+  id?: number;
   /** Parts that report hitting the sand (the hull and pelvis slamming down): impacts since the owner last drained them. */
   thud?: Thud | null;
 }
@@ -91,7 +93,7 @@ export interface HoldValues {
   mechFadeTime: number;
 }
 interface Hold { hinges: RAPIER.RevoluteImpulseJoint[]; v: HoldValues; weight: number; still: number; gain: number }
-interface Thud { parts: number[]; offs: Vector3[]; prevVy: number[]; cool: number[]; impacts: { x: number; y: number; z: number; speed: number }[] }
+export interface Thud { parts: number[]; offs: Vector3[]; prevVy: number[]; cool: number[]; impacts: { x: number; y: number; z: number; speed: number }[] }
 
 /** A ragdoll's bodies not yet made: its parts' starting velocities and spins, in the order of parts. */
 interface Pending { joints: JointSpec[]; lin: { x: number; y: number; z: number }[]; ang: { x: number; y: number; z: number }[]; floor: number }
@@ -112,6 +114,15 @@ export class DeathPhysics {
   private q = new Quaternion();
   private v3 = new Vector3();
 
+  /**
+   * Sim worker (src/sim/deathsRemote.ts): when set, the world runs there and this one only keeps the list the drawers
+   * and owners read: a new body is placed here (its pose at death) and sent; the worker's poses come back each frame.
+   */
+  remote: {
+    made(d: Dead, m: "ragdoll" | "heavy" | "wreck", a: unknown[]): void;
+    cmd(m: string, a: unknown[]): void;
+  } | null = null;
+
   /** Call initPhysics() first. */
   constructor(public v: DeathValues, private ground: Ground) {
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -121,6 +132,7 @@ export class DeathPhysics {
   /** The ground changed under the floor (a crater; a box, or everywhere): rebuilt on a later follow(), at most every
    *  half second, sampling the ground again only inside the boxes. */
   groundChanged(x0?: number, z0?: number, x1?: number, z1?: number) {
+    if (this.remote) { this.remote.cmd("groundChanged", [x0, z0, x1, z1]); return; }
     const g = this.grid;
     if (x0 === undefined || z0 === undefined || x1 === undefined || z1 === undefined) this.allStale = true;
     else {
@@ -137,6 +149,7 @@ export class DeathPhysics {
   private grid: { heights: Float32Array; i0: number; j0: number; n: number; step: number } | null = null;
 
   follow(x: number, z: number) {
+    if (this.remote) { this.remote.cmd("follow", [x, z]); return; }
     const size = this.v.floorSize;
     const stale = this.staleAt >= 0 && performance.now() - this.staleAt > 500;
     if (!stale && this.floor && Math.hypot(x - this.floorAt.x, z - this.floorAt.z) < size / 4) return;
@@ -195,6 +208,7 @@ export class DeathPhysics {
     });
     d.pending = pend;
     this.dead.push(d);
+    if (this.remote) { this.remote.made(d, "ragdoll", [parts, joints, x, y, z, yaw, { x: vel.x, y: vel.y, z: vel.z }, dirX, dirZ, strength, tip]); return d; }
     // Made now while this frame's allowance lasts, else queued (perf pass 1).
     if (this.madeThisFrame < Math.max(1, v.ragdollsPerFrame ?? 6) && this.waiting.length === 0) this.make(d);
     else this.waiting.push(d);
@@ -206,6 +220,7 @@ export class DeathPhysics {
    * `speed` m/s at the centre, less out to `radius`, and set spinning. Wakes it if it had frozen still moving.
    */
   burst(d: Dead, x: number, y: number, z: number, radius: number, speed: number) {
+    if (this.remote) { if (d.id !== undefined) this.remote.cmd("burst", [d.id, x, y, z, radius, speed]); return; }
     const pend = d.pending;
     for (let k = 0; k < d.pos.length; k++) {
       const P = d.pos[k], dx = P.x - x, dy = P.y - y + 0.5, dz = P.z - z, l = Math.hypot(dx, dy, dz) || 1;
@@ -275,6 +290,15 @@ export class DeathPhysics {
   /** A vehicle wreck: one rigid body (a chassis box and a cab box), thrown by a blast. */
   wreck(half: [number, number, number], cab: { half: [number, number, number]; at: [number, number, number] }, pos: Vector3, quat: Quaternion,
     vel: Vector3, dirX: number, dirZ: number, lift: number, spin: number): Dead {
+    if (this.remote) {
+      const d: Dead = {
+        parts: [{ half, at: [0, 0, 0], color: 0 }], bodies: [], joints: [], pos: [pos.clone()], quat: [quat.clone()],
+        age: 0, live: true, kind: "vehicle", sink: 0, done: false,
+      };
+      this.dead.push(d);
+      this.remote.made(d, "wreck", [half, cab, [pos.x, pos.y, pos.z], [quat.x, quat.y, quat.z, quat.w], [vel.x, vel.y, vel.z], dirX, dirZ, lift, spin]);
+      return d;
+    }
     const v = this.v, w = this.world;
     const desc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(pos.x, pos.y, pos.z)
@@ -317,6 +341,7 @@ export class DeathPhysics {
   }
 
   step(dt: number) {
+    if (this.remote) { for (const d of this.dead) d.age += dt; this.remote.cmd("step", [dt]); return; }
     const v = this.v;
     // This frame's new ragdolls: the waiting ones first, oldest first, up to the allowance; the rest fly on.
     // (Those made since the last step count against it; the count starts again after this step.)
@@ -357,6 +382,17 @@ export class DeathPhysics {
    */
   heavy(parts: PartSpec[], joints: JointSpec[], lin: { x: number; y: number; z: number }[], ang: { x: number; y: number; z: number },
     o: { damping: number; moveFor: number; hold: HoldValues; thud: { part: number; at: [number, number, number] }[] }): Dead {
+    if (this.remote) {
+      // Each part starts at its place, unturned (as below); the worker's world holds the joints, the hold and the plane.
+      const d: Dead = {
+        parts, bodies: [], joints: [], pos: parts.map((p) => new Vector3(p.at[0], p.at[1], p.at[2])), quat: parts.map(() => new Quaternion()),
+        age: 0, live: true, kind: "mech", sink: 0, done: false, keep: true, moveFor: o.moveFor,
+        thud: { parts: [], offs: [], prevVy: [], cool: [], impacts: [] },
+      };
+      this.dead.push(d);
+      this.remote.made(d, "heavy", [parts, joints, lin, ang, { damping: o.damping, moveFor: o.moveFor, thud: o.thud }]);
+      return d;
+    }
     const w = this.world;
     const d: Dead = {
       parts, bodies: [], joints: [], pos: parts.map(() => new Vector3()), quat: parts.map(() => new Quaternion()),
@@ -431,6 +467,13 @@ export class DeathPhysics {
 
   /** Take a kept body out for good (its owner is done with it: a mech rebuilt). */
   remove(d: Dead) {
+    if (this.remote) {
+      if (d.id !== undefined && !d.done) this.remote.cmd("remove", [d.id]);
+      d.live = false; d.done = true;
+      const i = this.dead.indexOf(d);
+      if (i >= 0) this.dead.splice(i, 1);
+      return;
+    }
     this.freeze(d);
     d.done = true;
     const i = this.dead.indexOf(d);

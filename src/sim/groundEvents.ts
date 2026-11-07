@@ -23,7 +23,7 @@ export type Values = Record<string, Prim>;
  * else a property set (p = v).
  */
 export interface GroundEvent { t: GroundTarget; m?: string; a?: unknown[]; p?: string; v?: Prim }
-export type GroundTarget = "mirror" | "field" | "route" | "wake" | "craters" | "sites" | "gates" | "convoy" | "escorts" | "robots";
+export type GroundTarget = "mirror" | "field" | "route" | "wake" | "craters" | "sites" | "gates" | "convoy" | "escorts" | "robots" | "deaths";
 
 /** What the copy is built from: the values as they are now and where the road started. */
 export interface GroundInit {

@@ -281,7 +281,7 @@ const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.invalidate(x0, z0, x1, z1); }, deaths });
 const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.height(x, z)) : null;
 if (simHost) app.hud.set("sim", () => simHost.line());
-if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); simHost.robots(loop.swarms.sw, SwarmCamps.SEED); }
+if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); simHost.robots(loop.swarms.sw, SwarmCamps.SEED); simHost.deaths(deaths); }
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
@@ -928,6 +928,8 @@ function holdOnBucket() {
   }
 }
 
+/** ?nocull: the convoy's cosmetic parts posed every frame even off the screen (perf comparison). */
+const noCull = params.has("nocull");
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
@@ -1040,12 +1042,15 @@ app.onTick((rawDt) => {
   }
   // The convoy's turrets, escort guns and guardians all pick from the same list of threats near the train.
   const threats = threatOn ? [threatMark.position] : loop.turretThreats(96);
+  costs.mark("turret threats");
   defence.target(threats);
   defence.update(dt);
+  costs.mark("turrets");
   convoyGuns.target(threats);
   convoyGuns.update(dt);
+  costs.mark("escort guns");
   guardians.update(dt, threats);
-  costs.mark("turrets");
+  costs.mark("guardians");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);
   if (out) {
@@ -1103,8 +1108,10 @@ app.onTick((rawDt) => {
   // Killed where no expedition ends it (aboard): back in the cockpit after a moment.
   if (!foot.sim.alive && foot.deadFor > 3 && loop.exp.state !== "lost") homeAboard();
   costs.mark("pilot");
-  for (const b of bodies) b.update();
-  deckMechs.update();
+  // (Cars well off the screen skip their tracks and their knelt mechs; ?nocull: everything every frame.)
+  const view = noCull ? undefined : bf.view;
+  for (const b of bodies) b.update(view);
+  deckMechs.update(view);
   for (const c of craneBodies) c.update();
   spans = bridgeSpans(convoy.platforms, V, spans);
   bridges.update(spans, dt);
@@ -1121,18 +1128,8 @@ app.onTick((rawDt) => {
   reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
   healthBars.update(rawDt);
 
-  follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
-  // Out on the sand the camera leads the mech at speed (the sprint).
-  iso.update(follow, rawDt, driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
-  shaker.apply(camera, rawDt, V.shakeDecay);
-  toon.update(camera, canvas.clientHeight);
-  costs.mark("camera");
-  streamer.update(follow.x, follow.z);
-  costs.mark("ground");
-  const camDist = camera.position.distanceTo(follow);
-  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
-  costs.mark("light");
-  bf.update(dt, camera, look);
+  // The battlefield's sim tick here; its effects and drawing once per drawn frame (onFrame below; architecture stage 6a).
+  bf.tick(dt, look);
   arsenalDraw.update();
   app.hud.set("weapons", () => arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
@@ -1179,7 +1176,6 @@ app.onTick((rawDt) => {
   airliftHud.update(airlift, Math.hypot(sim.pos.x - convoy.bays[0].x, sim.pos.z - convoy.bays[0].z), loop.exp.bank.scrap);
   airliftDraw.update(dt, airlift, convoy.bays[0]);
   app.hud.set("airlift", () => `airlift: ${airlift.state}${airlift.onPad ? " (on the helipad)" : ""} · ${(airlift.km * 1000).toFixed(0)} m flown, ${airlift.paid} scrap this trip · quadcopter at ${airliftDraw.copterAt.x.toFixed(0)}, ${airliftDraw.copterAt.y.toFixed(0)}, ${airliftDraw.copterAt.z.toFixed(0)}`);
-  costs.end(app.hud);
 
   const p = convoy.bay;
   app.hud.set("convoy", () => `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
@@ -1209,4 +1205,36 @@ app.onTick((rawDt) => {
   app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : lock.how === "held" ? "target (Tab)" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
   app.hud.set("crane", () => `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
+});
+
+// Once per drawn frame, after the frame's ticks (src/core/clock.ts; architecture stage 6a): the camera, the ground
+// streaming, the light and the battlefield's effects and drawing. Frame-locked (the default) this runs right after the
+// one tick, as before; with ?tick=N the camera and effects still move every drawn frame.
+// With a fixed tick (?tick=N) every mech and vehicle is drawn between its last two ticks (architecture stage 6b-c;
+// drawBetweenTicks in src/look/treeInterp.ts, run by the app).
+const betweenTicks = app.clock.fixed;
+// The camera's target between ticks too, so it glides with the drawn mech.
+const focusPrev = new THREE.Vector3(), focusCur = new THREE.Vector3(), focusDrawn = new THREE.Vector3();
+let focusTicks = 0;
+if (betweenTicks) {
+  app.onTick(() => { focusPrev.copy(focusCur); focusCur.copy(focus(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
+}
+
+app.onFrame((rawDt, alpha) => {
+  if (app.clock.ran === 0) costs.begin();
+  const fdt = (fixedDt || rawDt) * hitStop.now();
+  follow.lerp(betweenTicks && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
+  // Out on the sand the camera leads the mech at speed (the sprint).
+  iso.update(follow, rawDt, foot.driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
+  shaker.apply(camera, rawDt, V.shakeDecay);
+  toon.update(camera, canvas.clientHeight);
+  costs.mark("camera");
+  streamer.update(follow.x, follow.z);
+  costs.mark("ground");
+  const camDist = camera.position.distanceTo(follow);
+  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), fdt);
+  costs.mark("light");
+  bf.frame(fdt, camera, look);
+  costs.mark("effects");
+  costs.end(app.hud);
 });

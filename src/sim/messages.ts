@@ -33,7 +33,8 @@ export type FromWorker =
    */
   | { type: "frame"; id: number; heights: Float64Array; ms: number; escorts: Float64Array | null; convoy: Float64Array | null;
       /** Step 4: the robot swarm's frame (its steps' events, a snapshot after them, the steps' ms), or null. */
-      robots: { events: RobotEvent[]; snap: RobotSnapshot; ms: number } | null }
+      robots: { events: RobotEvent[]; snap: RobotSnapshot; ms: number } | null;
+      deaths: { poses: Float64Array; thuds: Float64Array; ms: number } | null }
   | { type: "chunk"; res: BuildResult }
   | { type: "patch"; res: PatchResult }
   | { type: "fine"; req: FineRequest; heights: Float32Array }

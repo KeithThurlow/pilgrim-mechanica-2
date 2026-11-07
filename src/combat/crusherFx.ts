@@ -4,6 +4,7 @@
 import * as THREE from "three/webgpu";
 import type { Ground } from "../mech/walker";
 import { SUCK, EAT, type Crusher } from "./crusher";
+import type { ViewCull } from "../core/viewCull";
 
 const MAX = 260;
 interface Bit { x: number; y: number; z: number; owner: Crusher | null; life: number }
@@ -18,6 +19,7 @@ export class CrusherFx {
   private s = new THREE.Vector3();
   private p = new THREE.Vector3();
   private maw = { x: 0, y: 0, z: 0 };
+  private vis = new Map<Crusher, boolean>();
 
   constructor(private ground: Ground) {
     const mat = new THREE.MeshBasicMaterial({ color: 0xe0c89a, transparent: true, opacity: 0.75, depthWrite: false });
@@ -27,10 +29,18 @@ export class CrusherFx {
     this.group.add(this.mesh);
   }
 
-  update(dt: number, list: readonly Crusher[]) {
+  /** view: streaks only for crushers whose cone is on the screen (perf 2026-11-07). */
+  update(dt: number, list: readonly Crusher[], view?: ViewCull) {
+    const vis = this.vis; vis.clear();
+    const seen = (c: Crusher) => {
+      let s = vis.get(c);
+      if (s === undefined) vis.set(c, (s = !view || view.sees(c.x, c.bodyY, c.z, 8 + Math.max(c.v.crusherSuckRange, c.v.crusherEatReach))));
+      return s;
+    };
     // Spawn: a stream in the cone ahead, thicker as the fan comes up.
     for (const c of list) {
       if (!c.alive || c.spin < 0.15) continue;
+      if (!seen(c)) { this.acc.set(c, 0); continue; }
       const rate = (c.mode === SUCK || c.mode === EAT ? 110 : 35) * c.spin;
       let a = (this.acc.get(c) ?? 0) + rate * dt;
       const range = c.mode === EAT ? c.v.crusherEatReach : c.v.crusherSuckRange, cone = (c.v.crusherSuckCone * Math.PI) / 180;
@@ -53,7 +63,7 @@ export class CrusherFx {
       c.maw(this.maw);
       const dx = this.maw.x - b.x, dy = this.maw.y - b.y, dz = this.maw.z - b.z, d = Math.hypot(dx, dy, dz);
       b.life += dt;
-      if (d < 0.8 || b.life > 4 || !c.alive || c.spin < 0.1) { b.owner = null; continue; }
+      if (d < 0.8 || b.life > 4 || !c.alive || c.spin < 0.1 || !seen(c)) { b.owner = null; continue; }
       // Faster near the maw; it hugs the sand until the last few metres, then lifts into the intake.
       const speed = 3 + 60 * c.spin / Math.max(1.5, d);
       const k = Math.min(1, (speed * dt) / d);

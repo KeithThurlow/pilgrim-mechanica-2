@@ -9,6 +9,7 @@
 // faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar (a key paints, release
 // fires), and (Keith 2026-10-30) feeds and power (src/weapons/gear.ts): a press on the key overdrives or loads special
 // rounds into the gun on that side, or refills energy bars; their passives are applied to the guns and the dash.
+import { Rng, seedFrom } from "../core/rng";
 import type { WaveKind } from "../fx/blastWaves";
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable, Parry } from "../game/battlefield";
@@ -26,7 +27,7 @@ import { LineAim } from "./lineAim";
 /** The shoulder weapons that paint a strip (line mortar, napalm launcher): click-and-drag aim. */
 const isLine = (w: string) => w === "linemortar" || w === "napalm";
 import { SalvoSim, planStrip, type SalvoStats } from "./salvo";
-import { RailSim, railSheet, coilGlow, type RailStats } from "./rail";
+import { RailSim, railSheet, railAimY, coilGlow, type RailStats } from "./rail";
 import type { Sheet } from "../game/sheet";
 import { MortarSim, mortarAim, mortarHeight, lobArc, lobPoint, type MortarStats } from "./mortar";
 import { CannonShells, leadPoint, type CannonStats, type Shell } from "./autocannon";
@@ -168,6 +169,8 @@ export class Arsenal implements MechWeapons {
   shoulders: Shoulder[] = [];
   /** Rail beams fired recently (the draw fades them). */
   readonly railShots: RailShot[] = [];
+  /** Shell spread (seeded from the unit's uid on the first shot; host state). */
+  private spreadRng: Rng | null = null;
   /** Energy weapons on either side (Keith 2026-11-02, src/weapons/energy/): pulse laser, beam laser, nova lance. */
   readonly energy: EnergyGuns;
   /** Flamers on either side (Keith 2026-11-05, src/weapons/fire/): the stream's reach, roar, gobs and splashes. */
@@ -479,7 +482,7 @@ export class Arsenal implements MechWeapons {
         this.lineOnSand(sheet, end, s.aimLine);
         const e = s.aimLine[s.aimLine.length - 1];
         s.aimBeam.length = 0;
-        if (e) s.aimBeam.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z }, { x: e.x, y: Math.max(e.y + 0.3, bf.field.height(e.x, e.z) + v.railSlugHeight), z: e.z });
+        if (e) s.aimBeam.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z }, { x: e.x, y: Math.max(e.y + 0.3, this.railEndY(muzzle, aim, e)), z: e.z });
         s.meterAt = aim ? { x: aim.x, y: aim.y, z: aim.z } : null;
       } else { s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; }
       if (fired !== null) this.fireRail(s, side, muzzle, d, aim, st, fired);
@@ -1099,7 +1102,9 @@ export class Arsenal implements MechWeapons {
       d.set((d.x / hl) * flat, y - m.y, (d.z / hl) * flat).normalize();
     }
     const spread = (st.spread * Math.PI) / 180;
-    const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
+    // Seeded per mech (rule 12): the same shells spread the same way on every machine.
+    const rng = (this.spreadRng ??= new Rng(seedFrom(`${this.unit.uid}:arsenal`)));
+    const j = new THREE.Vector3(rng.next() - 0.5, rng.next() - 0.5, rng.next() - 0.5).normalize().multiplyScalar(Math.tan(spread) * rng.next());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
     // A Double shot puts its copies side by side, protoPairGap metres apart across the barrel (one muzzle's effects).
     const pairs = Math.max(1, Math.round(s.proto?.multi ?? 1)), gap = (this.bf.v as { protoPairGap?: number }).protoPairGap ?? 0.5;
@@ -1234,6 +1239,16 @@ export class Arsenal implements MechWeapons {
    * lingering ionised trail (the draw), a big muzzle blast and kick, sparks and debris flung along the path at every
    * body, a strike where it ends (a puff and dent in sand, sparks on steel), the crack and thump.
    */
+  /** The preview line's end height at e: the slug height over the sand there, or on the climb to a high aim. */
+  private railEndY(muzzle: THREE.Vector3, aim: Vec3 | null, e: Vec3): number {
+    const v = this.v, field = this.bf.field, flat = field.height(e.x, e.z) + v.railSlugHeight;
+    if (!aim) return flat;
+    const ay = railAimY(v, field, aim);
+    if (ay <= field.height(aim.x, aim.z) + v.railSlugHeight + 1e-6) return flat;
+    const af = Math.max(2, Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z)), ef = Math.hypot(e.x - muzzle.x, e.z - muzzle.z);
+    return muzzle.y + (ay - muzzle.y) * (ef / af);
+  }
+
   private fireRail(s: Side, side: 1 | -1, muzzle: THREE.Vector3, d: THREE.Vector3, aim: Vec3 | null, st: RailStats, power: number) {
     const bf = this.bf, u = this.unit, v = this.v, field = bf.field;
     const dir = d.clone();
@@ -1248,7 +1263,7 @@ export class Arsenal implements MechWeapons {
     // stopped (into the ground when a dune stopped it).
     const L = shot.result.end;
     const aimFlat = aim ? Math.max(2, Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z)) : 30;
-    const aimY = aim ? field.height(aim.x, aim.z) + v.railSlugHeight : field.height(muzzle.x + dir.x * 30, muzzle.z + dir.z * 30) + v.railSlugHeight;
+    const aimY = aim ? railAimY(v, field, aim) : field.height(muzzle.x + dir.x * 30, muzzle.z + dir.z * 30) + v.railSlugHeight;
     const rise = (aimY - muzzle.y) / aimFlat;
     const yAt = (t: number) => {
       const x = muzzle.x + dir.x * t, z = muzzle.z + dir.z * t;

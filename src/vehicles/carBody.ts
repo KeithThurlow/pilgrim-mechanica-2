@@ -13,6 +13,7 @@ import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { carAxles, carValues, type CarKind, type CarSim, type CarValues } from "./car";
 import { LAMP_HEAD, LAMP_TAIL, type LampSpot } from "../world/lamps";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 const PAL = {
   paint: 0xa8552c, // rust orange, the default body colour
@@ -185,7 +186,7 @@ const tmpV = new THREE.Vector3(), tmpU = new THREE.Vector3(), invQ = new THREE.Q
 const GLOW_BASE = new THREE.MeshBasicMaterial({ vertexColors: true });
 
 export class CarBody {
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   readonly v: CarValues;
   private chassis: THREE.Mesh;
   private turrets: Turret[] = [];

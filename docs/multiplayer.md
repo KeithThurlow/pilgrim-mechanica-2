@@ -56,9 +56,13 @@ networked when the time comes. Keith: managing performance will be the main thin
 1. **Seeded randomness in sims:** never `Math.random()` in anything that changes game state; use a seeded generator
    owned by the system.
    - Cosmetic code (FX, sound, drawing) may keep `Math.random()`.
-   - Known debt (2026-10-26), fix when touched: `src/combat/warband.ts`, `src/expedition/swarmCamps.ts`,
-     `src/game/battlefield.ts`, `src/game/mechUnit.ts`, `src/weapons/arsenal.ts`. The rest of the 130 uses are
-     cosmetic.
+   - Use `Rng` (`src/core/rng.ts`, seeded, snapshot-able). The 2026-10-26 debt list was cleared on 2026-11-07
+     (architecture stage 3b):
+     - the mechs' spread (`mechUnit.ts`, `arsenal.ts`) and the war band's spawns, runs, circling and gun spread
+       (`warband.ts`) are seeded;
+     - what was left in `battlefield.ts` and `swarmCamps.ts` turned out to be cosmetic (effects, which rounds show a
+       tracer).
+     - The war band's wreck tumble is still on Math.random (wrecks are cosmetic).
 2. **Inputs as commands:** a sim takes a command (move, aim, fire, dash, salvage, hop out) and never reads the
    keyboard or mouse itself. Labs turn input into commands; later the network does too. `MoveCommand` and `Aim` are
    the model.

@@ -78,6 +78,9 @@ Done before this: step 2b (the window's fine rows), step 3 (escorts, see Done).
 - Next candidates by main-thread ms in that fight: death physics (Rapier, `src/physics/deaths.ts`) ~1 ms, guardian mechs
   (`src/convoy/guardians.ts`) ~0.8, robotsDraw ~1.1 (drawing, stays on main: an LOD or cheaper small-leg pose), dust
   draw ~1. To do when Keith is back: his PC `labs/convoy/?siege&manual&bench`, to pick between them on real numbers.
+- Done since: robots off screen not drawn (#276), guardians off screen at 60 Hz (#277), death physics in the worker
+  (`src/sim/deathsRemote.ts`; in the fight deaths 1.39 -> 0.20 ms, sim 9.9 -> 7.9). Left on main: dust draw ~1,
+  convoy bodies ~0.9, turrets ~0.8 (the other thread), robotsDraw ~0.9.
 
 ## Facts to start from
 - The worker is `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })` in `src/sim/host.ts`; add

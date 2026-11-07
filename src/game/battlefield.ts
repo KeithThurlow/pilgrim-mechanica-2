@@ -35,7 +35,6 @@ import { Sfx, type SfxValues } from "../audio/sfx";
 import { MinigunAudio } from "../audio/minigunAudio";
 import { PEN_DEFAULTS, type PenValues, type PenMaterial, type Sheet, type SheetHit } from "./sheet";
 import { makeSheet, resolveSheet, type SheetFire, type SheetShot } from "./sheetFire";
-import { splashBlast, firstBody, blastCover } from "./splash";
 import { armourRule } from "./armour";
 import { Shots, SHOT_DEFAULTS, type ShotProtocols } from "./shots";
 import { Burns } from "./burn";
@@ -50,6 +49,7 @@ import { BlastWavesDraw } from "../fx/blastWavesDraw";
 import { Novas, NOVA_DEFAULTS, type NovaValues } from "../fx/nova";
 import { NovaDraw } from "../fx/novaDraw";
 import { Solids } from "./solids";
+import { CombatRules, type CombatEvent, type BlastEvent } from "./combatRules";
 export type { SheetFire, SheetShot } from "./sheetFire";
 
 export type BattlefieldValues = DustValues & MinigunFxValues & SfxValues & Partial<ShellFxValues> & Partial<DentValues> & Partial<PenValues>;
@@ -100,6 +100,8 @@ export interface Hittable {
    *  swinging its own sword at it parries (src/weapons/sword.ts). The share of the cut's damage it takes (1: neither),
    *  and whether the blades met (the cutter's blade recoils too). */
   parry?(fromX: number, fromZ: number, power?: boolean): Parry;
+  /** ECS stage 4.1 (src/game/combatRules.ts syncWorld): write its things' shared components into the host world. */
+  syncWorld?(world: import("../ecs/world").World): void;
 }
 
 /** A sword cut met: the share of its damage that lands, and whether it was a parry (both blades recoil). */
@@ -188,16 +190,19 @@ export class Battlefield {
   readonly fx: FxBudget;
   readonly sfx: Sfx;
   readonly gunAudio: MinigunAudio;
-  readonly targets: Hittable[] = [];
+  /** The rules apart from the looks (src/game/combatRules.ts): damage, shells, craters, solids, the register. This
+   *  class plays what they did (rules.events) as dust, marks, waves, lights and sound. */
+  readonly rules: CombatRules;
+  get targets(): Hittable[] { return this.rules.targets; }
   /** Every round in flight this frame, as data (src/game/shots.ts); resolved in update. */
-  readonly shots: Shots;
+  get shots(): Shots { return this.rules.shots; }
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts): owners add themselves;
    *  the lab rebuilds it once a tick, before the soft lock. */
-  readonly register = new Register();
+  get register(): Register { return this.rules.register; }
   /** Mechs and vehicles as solid bodies (src/game/solids.ts): each resolves itself after it steps. */
-  readonly solids = new Solids();
+  get solids(): Solids { return this.rules.solids; }
   /** Slow telegraphed shells (lob) and their landing marks. */
-  readonly shells = new Shells();
+  get shells(): Shells { return this.rules.shells; }
   readonly shellsDraw: ShellsDraw;
   /** Blast waves on every explosion and heat shimmer behind rockets (Keith 2026-10-31; cosmetic: src/fx/blastWaves.ts). */
   readonly waves: BlastWaves;
@@ -208,21 +213,22 @@ export class Battlefield {
   /** Ripples and splashes on the shallows' water (null where the ground has no water). */
   readonly water: WaterFx | null = null;
   private waterDraw: WaterDraw | null = null;
-  private wsamp = { h: 0, crest: 0, flat: 0 } as import("../world/terrain").GroundSample;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   /** Blast craters in the ground (null: blasts leave only fine dents). Set by the lab, with onGround. */
-  craters: CraterLayer | null = null;
+  get craters(): CraterLayer | null { return this.rules.craters; }
+  set craters(c: CraterLayer | null) { this.rules.craters = c; }
   /** Called with a box whose ground changed (rebuild the chunks and the physics floor there). */
-  onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
+  get onGround() { return this.rules.onGround; }
+  set onGround(f: ((x0: number, z0: number, x1: number, z1: number) => void) | null) { this.rules.onGround = f; }
   private hit = new THREE.Vector3();
   private back = new THREE.Vector3();
   /** Targets set burning by ignited rounds (the incendiary feed, Keith 2026-10-30): damage over time, flames drawn at them. */
-  readonly burns: Burns;
+  get burns(): Burns { return this.rules.burns; }
   private flameT = 0;
   /** Burning pools on the ground (Keith 2026-11-05: napalm, the flamers' splashes; src/game/firePools.ts). */
-  readonly pools: FirePools;
+  get pools(): FirePools { return this.rules.pools; }
   /** Chilled and frozen targets (Keith 2026-11-05: the freeze ray; src/game/chill.ts). */
-  readonly chills: Chills;
+  get chills(): Chills { return this.rules.chills; }
   private tmpFreeze = new THREE.Vector3();
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
@@ -239,23 +245,12 @@ export class Battlefield {
     for (const [k, val] of Object.entries(FIRE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(DAMAGE_TYPE_DEFAULTS)) if (!(k in dv)) dv[k] = val;
     for (const [k, val] of Object.entries(CHILL_DEFAULTS)) if (!(k in dv)) dv[k] = val;
+    this.rules = new CombatRules(field, v as never, wrecks);
+    this.rules.waterLevel = () => (this.water ? this.water.level : null);
     this.lookGround = field;
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
-    this.burns = new Burns(v as never);
-    this.chills = new Chills(v as never);
-    this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
-    // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
-    // burst of frost over the body, so the moment reads.
-    this.chills.onFreeze = (c) => {
-      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(c.x, c.y, c.z), 1, 0.9 + Math.random() * 0.25);
-      for (let k = 0; k < 14; k++) this.flames.mist(c.x + (Math.random() - 0.5) * 2, c.y + (Math.random() - 0.3) * 1.5, c.z + (Math.random() - 0.5) * 2, 0.9);
-      this.flames.frost(c.x, c.y, c.z, 4, 1);
-    };
-    this.chills.quench = (t, k) => this.burns.quench(t, k);
-    this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
-    this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
     this.flames = new FlameFx(field);
     // The flamer's line splashes on what it runs into (Keith 2026-11-06): anything hittable of another team, as a
     // standing column round its centre, from the sand to as far above the centre as the centre is up (register body).
@@ -274,7 +269,6 @@ export class Battlefield {
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
       maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold, dx, dz) => cold ? this.chills.hit(t, k, time, dps, x, y, z, dx, dz) : this.burns.ignite(t, k, time, dps, x, y, z, dx, dz) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -346,11 +340,10 @@ export class Battlefield {
         team, power: damage * (1 + Math.max(0, o.pierce ?? 0)) });
   }
 
-  /** Burning targets: damage over time, and a few embers and a thread of dark smoke at each (cosmetic, local). */
+  /** Burning targets' look (their damage is the rules'): flames, embers, glow and a thread of dark smoke at each. */
   private stepBurns(dt: number) {
     const bn = this.burns;
     if (!bn.list.length) return;
-    bn.step(dt);
     const k = (this.v as { burnFlames?: number }).burnFlames ?? 1;
     // Flames licking off what burns (Keith 2026-11-05), hot metal throwing the odd ember as it cools.
     const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
@@ -374,21 +367,19 @@ export class Battlefield {
     }
   }
 
-  /** Chilled targets: slow, cold damage, freezing (host); frost glints over them (cosmetic). */
+  /** Chilled targets' look (slowing, cold damage and freezing are the rules'): frost glints and mist over them. */
   private stepChills(dt: number) {
     const cs = this.chills;
     if (!cs.list.length) return;
-    cs.step(dt);
     const gk = (this.v as { heatGlow?: number }).heatGlow ?? 1;
     if (gk > 0) for (const c of cs.list) this.flames.frost(c.x, c.y, c.z, 2.2 * gk, c.frozen > 0 ? 1 : c.chill * 0.7);
     for (const c of cs.list) if (Math.random() < dt * 6 * (c.frozen > 0 ? 1 : c.chill)) this.flames.mist(c.x + (Math.random() - 0.5) * 1.2, c.y + Math.random() * 0.6, c.z + (Math.random() - 0.5) * 1.2, 0.5);
   }
 
-  /** Burning pools: damage and ignition (host), flames, embers, smoke and red-hot sand over them (cosmetic). */
+  /** Burning pools' look (damage and ignition are the rules'): flames, embers, smoke, light and red-hot sand. */
   private stepPools(dt: number) {
     const ps = this.pools;
     if (!ps.list.length) return;
-    ps.step(dt);
     const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
     for (const p of ps.list) {
       const fade = Math.min(1, p.left / Math.min(1.5, p.life * 0.4));
@@ -417,9 +408,8 @@ export class Battlefield {
     }
   }
 
-  /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
-  private resolveShots(dt: number) {
-    this.shots.step(dt);
+  /** Play the shots the rules resolved this tick: their draws to the gun effects, the lights and the sound. */
+  private resolveShots() {
     this.pops = 0;
     this.popsDue = 0;
     for (const dr of this.shots.draws) if (dr.look.burst) this.popsDue++;
@@ -530,11 +520,7 @@ export class Battlefield {
   }
 
   /** Is (x, z) under the shallows' water (deep enough to splash)? */
-  inWater(x: number, z: number, depth = 0.04): boolean {
-    if (!this.water) return false;
-    const s = this.field.sample(x, z, this.wsamp);
-    return (s.ws ?? 0) > 0.3 && s.h < this.water.level - depth;
-  }
+  inWater(x: number, z: number, depth = 0.04): boolean { return this.rules.inWater(x, z, depth); }
 
   /**
    * Lob a telegraphed shell from `from` to land on the ground at (x, z) after `flight` seconds, bursting with `radius`
@@ -543,72 +529,19 @@ export class Battlefield {
    */
   lob(team: number, from: THREE.Vector3, x: number, z: number, flight: number, arc: number, radius: number, damage: number, y?: number): Shell {
     const to = this.hit.set(x, y ?? this.field.height(x, z), z);
-    this.sfx.play("brap", from, 1.3, 0.45, false);
-    this.look?.lights.launch(from.x, from.y, from.z, Math.min(1.5, Math.max(0.5, radius / 3)), famOfTeam(team));
-    return this.shells.lob(team, from, to, flight, arc, radius, damage);
+    const shell = this.rules.lob(team, from, to, flight, arc, radius, damage);
+    this.playEvents();
+    return shell;
   }
 
-  /**
-   * Dent the ground with a blast of this radius at (x, z): a real crater in the height function (sized by the crater
-   * sliders, less on hard ground, none on protected ground), and the chunks follow. Returns whether it dented.
-   */
-  /** Craters waiting to be dug (blasts queue them; update digs them within a time budget per frame). */
-  readonly dentQueue: { x: number; z: number; r: number }[] = [];
-  /** What digging costs: last frame's ms and dents, the worst frame's ms, the queue, merges so far. */
-  readonly dentStats = { frameMs: 0, frameDents: 0, worstMs: 0, lastMs: 0, merged: 0, dug: 0 };
-
-  /** Queue a crater; one close to a queued one (dentMerge × the bigger radius) joins it instead. */
-  queueDent(x: number, z: number, r: number) {
-    if (!this.craters) return;
-    const merge = (this.v as { dentMerge?: number }).dentMerge ?? 0.6;
-    for (const d of this.dentQueue) {
-      if (Math.hypot(d.x - x, d.z - z) < merge * Math.max(d.r, r)) {
-        const w = r / (r + d.r);
-        d.x += (x - d.x) * w; d.z += (z - d.z) * w; d.r = Math.max(d.r, r);
-        this.dentStats.merged++;
-        return;
-      }
-    }
-    this.dentQueue.push({ x, z, r });
-  }
-
-  /** Dig queued craters until this frame's budget (ms) is spent; at least one per frame. */
-  private digQueued() {
-    const budget = (this.v as { dentBudget?: number }).dentBudget ?? 6;
-    const t0 = performance.now();
-    let n = 0;
-    while (this.dentQueue.length) {
-      const d = this.dentQueue.shift()!;
-      const t1 = performance.now();
-      this.dent(d.x, d.z, d.r);
-      this.dentStats.lastMs = performance.now() - t1;
-      n++; this.dentStats.dug++;
-      if (performance.now() - t0 >= budget) break;
-    }
-    const ms = performance.now() - t0;
-    this.dentStats.frameMs = ms; this.dentStats.frameDents = n;
-    this.dentStats.worstMs = Math.max(this.dentStats.worstMs * 0.995, ms);
-  }
-
+  /** Craters waiting to be dug, and what digging costs (src/game/combatRules.ts). */
+  get dentQueue() { return this.rules.dentQueue; }
+  get dentStats() { return this.rules.dentStats; }
+  queueDent(x: number, z: number, r: number) { this.rules.queueDent(x, z, r); }
   /** A crater of its own size, past the usual depth limit (a dying walker's core: Keith 2026-11-02 "a huge crater"). */
-  crater(x: number, z: number, radius: number, depth: number): boolean {
-    if (!this.craters) return false;
-    const box = this.craters.add(x, z, radius, depth, depth);
-    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
-    return !!box;
-  }
-
-  dent(x: number, z: number, blastRadius: number): boolean {
-    if (!this.craters) return false;
-    const box = this.craters.blast(x, z, blastRadius);
-    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
-    return !!box;
-  }
-
-  /** A shell bursts where it is: its landing point, or a body it came down on (shellHit). */
-  private burst(s: Shell) { this.blast(s.team, s.pos, s.radius, s.damage, s.pierce, s.wave ?? (s.team === 3 ? "volley" : s.team === 2 ? "turret" : "mortar")); }
-  /** Shells go off on the first body of another team in their path (a tall robot's chassis or legs). */
-  private shellHit = (s: Shell, a: THREE.Vector3, b: THREE.Vector3) => { const h = firstBody(this.targets, s.team, a, b); return h ? h.f : -1; };
+  crater(x: number, z: number, radius: number, depth: number): boolean { return this.rules.crater(x, z, radius, depth); }
+  /** Dent the ground with a blast of this radius at (x, z); whether it dented. */
+  dent(x: number, z: number, blastRadius: number): boolean { return this.rules.dent(x, z, blastRadius); }
 
   /** Called with every blast (where, how big), e.g. for camera shake in a lab. */
   onBlast: ((at: THREE.Vector3, radius: number) => void) | null = null;
@@ -618,29 +551,59 @@ export class Battlefield {
   onThud: ((at: THREE.Vector3, strength: number) => void) | null = null;
 
   /**
-   * A blast on the ground at p (its y is moved onto the new ground): the crater, dust and debris, the sound, and
-   * damage through splash() to everything of another team within radius (full at the centre, half at the edge).
+   * A blast on the ground at p: damage through splash() to everything of another team within radius (full at the
+   * centre, half at the edge) and the crater (the rules), then its look: dust and debris, marks, waves, light, sound.
    * Shells burst through here; the player's rockets and mortar shells too (src/weapons).
    */
   blast(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number, kind: WaveKind = "default") {
-    const s = { team, radius, damage, pierce };
-    const k = Math.max(0.5, s.radius / 3);
+    this.rules.blast(team, p, radius, damage, pierce, kind);
+    this.playEvents();
+  }
+
+  /** A blast that hurts the given team's own units (src/game/combatRules.ts blastOwn); no effects. */
+  blastOwn(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number): number { return this.rules.blastOwn(team, p, radius, damage, pierce); }
+
+  /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
+  canSee(from: THREE.Vector3, to: THREE.Vector3): boolean { return this.rules.canSee(from, to); }
+
+  /** Play what the rules did since the last call (cosmetic: each side plays the events it gets). */
+  playEvents() {
+    const evs = this.rules.events;
+    for (let i = 0; i < evs.length; i++) this.play(evs[i]);
+    evs.length = 0;
+  }
+
+  private play(e: CombatEvent) {
+    if (e.type === "freeze") {
+      // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
+      // burst of frost over the body, so the moment reads.
+      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(e.x, e.y, e.z), 1, 0.9 + Math.random() * 0.25);
+      for (let k = 0; k < 14; k++) this.flames.mist(e.x + (Math.random() - 0.5) * 2, e.y + (Math.random() - 0.3) * 1.5, e.z + (Math.random() - 0.5) * 2, 0.9);
+      this.flames.frost(e.x, e.y, e.z, 4, 1);
+      return;
+    }
+    if (e.type === "lob") {
+      this.sfx.play("brap", this.tmpEv.set(e.x, e.y, e.z), 1.3, 0.45, false);
+      this.look?.lights.launch(e.x, e.y, e.z, Math.min(1.5, Math.max(0.5, e.radius / 3)), famOfTeam(e.team));
+      return;
+    }
+    this.playBlast(e);
+  }
+  private tmpEv = new THREE.Vector3();
+
+  /** A blast's look and sound (its damage and crater are the rules'). */
+  private playBlast(e: BlastEvent) {
+    const p = this.tmpEv.set(e.x, e.y, e.z), radius = e.radius, low = e.low, wet = e.wet;
+    const k = Math.max(0.5, radius / 3);
     this.onBlast?.(p, radius);
     // At night a blast lights the ground for a moment (cosmetic: src/world/nightLights.ts).
-    this.look?.lights.flash(p.x, p.y + 1, p.z, radius, famOfTeam(team));
-    // The blast digs into the ground first (the floor under the water too), so marks and dust sit on the new ground.
-    // An air burst (on a tall robot's chassis or legs) doesn't dig or mark the ground (blastGroundReach × radius up).
-    const low = p.y - this.field.height(p.x, p.z) < s.radius * ((this.v as { blastGroundReach?: number }).blastGroundReach ?? 0.5);
-    const wet = low && this.inWater(p.x, p.z);
+    this.look?.lights.flash(p.x, p.y + 1, p.z, radius, famOfTeam(e.team));
     // Its blast wave (every explosion has one; its kind picks the profile), with a ground ring when on dry ground.
-    this.waves.post(kind, p.x, p.y + 0.5, p.z, radius, { ground: low && !wet, fam: famOfTeam(team) });
-    // The crater is queued (a 12-missile swarm would stall a frame digging them all at once); the effects play now.
-    if (low) this.queueDent(p.x, p.z, s.radius);
+    this.waves.post(e.kind, p.x, p.y + 0.5, p.z, radius, { ground: low && !wet, fam: famOfTeam(e.team) });
     if (wet) {
       this.water!.splash(p.x, p.z, 2.5 * k, 0, 0, 2);
       for (let r = 0; r < 3; r++) this.water!.ripple(p.x, p.z, 1, 1.5 + r * 0.6);
       this.sfx.play("brap", p, 1.6, 0.5, false);
-      splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
       return;
     }
     // Round your mech only a share of the dust goes up, so a rain of rockets doesn't bury it (src/fx/budget.ts underFire).
@@ -653,46 +616,10 @@ export class Battlefield {
       const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 9;
       this.dust.emit(2, p.x, p.y, p.z, Math.cos(a) * sp, 4 + Math.random() * 8, Math.sin(a) * sp, 0.15, 0.5 + Math.random() * 0.5, 0.95);
     }
-    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k * Math.sqrt(keep)); this.marks.blast(p.x, p.z, s.radius); }
+    if (low) { this.dust.stomp(p.x, p.y, p.z, 1.6 * k * Math.sqrt(keep)); this.marks.blast(p.x, p.z, radius); }
     // Explosions are barely warm (Keith 2026-11-01): at most a brief dull ember in the middle.
-    if (low) this.heat?.spot(p.x, p.z, Math.max(0.5, s.radius * 0.3), (this.v as { heatBlast?: number }).heatBlast ?? 0);
+    if (low) this.heat?.spot(p.x, p.z, Math.max(0.5, radius * 0.3), (this.v as { heatBlast?: number }).heatBlast ?? 0);
     this.sfx.play("brap", p, 1.8, 0.4, false);
-    splashBlast(this.targets, s.team, p, s.radius, s.damage, this.back.set(0, -1, 0), null, s.pierce, this.cover(p));
-  }
-
-  /**
-   * A blast that hurts the given team's own units (Keith 2026-11-02: a strider's death clears the robots round it):
-   * every target of `team` in reach takes its blast share as an explosive's, with cover; no effects (the caller's
-   * blast plays them). Returns the number hit.
-   */
-  blastOwn(team: number, p: THREE.Vector3, radius: number, damage: number, pierce?: number): number {
-    if (damage <= 0) return 0;
-    const cover = this.cover(p), dir = this.back.set(0, -1, 0);
-    let n = 0;
-    for (const t of this.targets) if (t.alive && t.team === team && t.splash) n += t.splash(p, radius, damage, dir, { blast: true, pierce, cover });
-    return n;
-  }
-
-  /** A blast's cover test at p (dunes, walls and steel wrecks between it and a unit shield the unit). */
-  private steelRay = (o: THREE.Vector3, d: THREE.Vector3, max: number) => (this.wrecks!.hit(o, d, max, this.steelAt, this.steelN) ? o.distanceTo(this.steelAt) : -1);
-  private steelAt = new THREE.Vector3();
-  private steelN = new THREE.Vector3();
-  private cover(p: THREE.Vector3) {
-    if (((this.v as { blastCover?: number }).blastCover ?? 1) < 0.5) return undefined;
-    return blastCover(this.field, this.wrecks ? this.steelRay : null, p);
-  }
-
-  /** Can a shooter at `from` see `to` (no dune in between)? For enemies deciding whether to fire. */
-  canSee(from: THREE.Vector3, to: THREE.Vector3): boolean {
-    const d = this.hit.subVectors(to, from);
-    const len = d.length();
-    if (len < 1e-3) return true;
-    d.divideScalar(len);
-    // March the line against the ground; stop a little short of the target (its feet are on the sand).
-    for (let t = 1.5; t < len - 1.5; t += 1.5) {
-      if (from.y + d.y * t < this.field.height(from.x + d.x * t, from.z + d.z * t)) return false;
-    }
-    return true;
   }
 
   /** A lab's per-stage timer (src/core/costs.ts): when set, update() splits its time into dents, gun fx, dust. */
@@ -722,14 +649,43 @@ export class Battlefield {
     }
   }
 
+  /** A tick and a drawn frame together (labs that don't split them; frame-locked, both once a frame). */
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
-    this.look = look;
-    this.solids.tick(dt);
+    this.tick(dt, look);
+    this.frame(dt, camera, look);
+  }
+
+  /**
+   * One sim tick (src/core/clock.ts; architecture stage 6a): the rules (solids, shells, craters, shots, burning,
+   * pools, chill) and what they hand to the effects this tick (blast and freeze events, the shots' draws, flames at
+   * what burns). Run it per tick; frame() once per drawn frame.
+   */
+  tick(dt: number, look: DesertLook | null = this.look) {
+    if (look) {
+      this.look = look;
+      // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
+      this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
+    }
     // One armour rule for every hit (src/game/armour.ts): its floor from the lab's slider.
     const fl = (this.v as { armourFloor?: number }).armourFloor;
     if (fl !== undefined) armourRule.floor = fl;
+    const c = this.costs;
+    // The rules' tick, then their look.
+    this.rules.step(dt);
+    this.playEvents();
+    c?.mark("combat rules");
+    for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
+    this.resolveShots();
+    this.stepBurns(dt);
+    this.stepPools(dt);
+    this.stepChills(dt);
+    c?.mark("shots");
+  }
+
+  /** One drawn frame: sound, ground dents, effects stepped and drawn (cosmetic; dt is the frame's time). */
+  frame(dt: number, camera: THREE.Camera, look: DesertLook) {
+    this.look = look;
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
-    // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
     this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
     const c = this.costs;
     this.sfx.update();
@@ -743,17 +699,8 @@ export class Battlefield {
       if (this.heatTex && look.lights) this.heatTex.light(look.lights, this.lookGround);
     }
     c?.mark("ground dents");
-    this.shells.update(dt, (s) => this.burst(s), this.shellHit);
-    this.digQueued();
-    c?.mark("dents");
-    for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     this.lightShells(look);
-    this.resolveShots(dt);
-    this.stepBurns(dt);
-    this.stepPools(dt);
-    this.stepChills(dt);
-    c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
     const gb = this.gunFx.gpuBits, gt = this.gunFx.gpuTracers;
