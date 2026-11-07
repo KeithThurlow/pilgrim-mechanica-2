@@ -9,7 +9,8 @@
 //   next generation, so a kept id goes stale. `relink` rebuilds that from the swarm's state after a snapshot overwrote it.
 // - No world given, or no room in it: the block makes a world of its own (`own`), so a swarm always has columns.
 // Pure.
-import { World, type Entity, type AnyComponent } from "./world";
+import { World, type Entity, type AnyComponent, type Component } from "./world";
+import { packBlock, applyBlock, type BlockSnapshot } from "./snapshot";
 import { Transform, PrevTransform, Velocity, Health, Status, Team, Collider, Armour } from "./components";
 
 /** The components every live swarm member has. */
@@ -31,6 +32,9 @@ export class SwarmBlock {
   readonly radius: Float32Array; readonly foot: Float32Array; readonly reach: Float32Array; readonly height: Float32Array;
   readonly armour: Float32Array;
   private prev: { x: Float32Array; y: Float32Array; z: Float32Array; heading: Float32Array };
+  /** The components a snapshot of the block carries (stage 7a): the simulated ones. Team, Collider, Armour and Bar
+   *  aren't: whoever publishes to the register writes them. A kind adds its own (Robot, Infantry). */
+  readonly shipped: Component[] = [Transform, Velocity, Health, Status];
   /** The uid each slot's entity was made for. */
   private linked: Uint32Array;
 
@@ -60,6 +64,22 @@ export class SwarmBlock {
     for (const a of [this.x, this.y, this.z, this.heading, this.vx, this.vy, this.vz, this.hp, this.max]) a.fill(0);
     this.pace.fill(1);
   }
+
+  /** Slots 0..n of the shipped components, one buffer each (src/ecs/snapshot.ts packBlock). */
+  pack(n: number): BlockSnapshot { return packBlock(this.world, this.base, n, this.shipped); }
+
+  /** A snapshot of another copy of this swarm's block into this one (its relink is the kind's to call). */
+  apply(s: BlockSnapshot) { applyBlock(this.world, this.base, s, this.shipped); }
+
+  /** True when `a` is a view of one of the shipped components' columns (a swarm's own field that pack() carries). */
+  isShipped(a: ArrayBufferView): boolean {
+    if (!this.bufs) {
+      this.bufs = new Set();
+      for (const c of this.shipped) for (const col of Object.values(this.world.columns(c))) this.bufs.add((col as ArrayBufferView).buffer);
+    }
+    return this.bufs.has(a.buffer);
+  }
+  private bufs: Set<ArrayBufferLike> | null = null;
 
   /** This block's slice of a column. */
   view<T extends { subarray(a: number, b: number): T }>(col: T): T { return col.subarray(this.base, this.base + this.slots); }

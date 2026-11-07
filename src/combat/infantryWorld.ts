@@ -21,6 +21,7 @@ export class InfantryBlock extends SwarmBlock {
 
   constructor(slots: number, world?: World) {
     super(slots, world, "infantry");
+    this.shipped.push(Infantry);
     const I = this.world.columns(Infantry);
     this.state = this.view(I.state); this.stateTime = this.view(I.stateTime); this.look = this.view(I.look);
     this.uid = this.view(I.uid); this.frozen = this.view(I.frozen);

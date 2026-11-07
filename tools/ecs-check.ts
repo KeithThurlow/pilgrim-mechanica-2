@@ -5,7 +5,7 @@
 // interpolation between ticks. Run: npm test (or npx tsx tools/ecs-check.ts).
 import { World, defineComponent, defineObjects, entityIndex, entityGen, type Component, type Entity, type Query } from "../src/ecs/world";
 import { Transform, PrevTransform, keepPrevious, drawnAt } from "../src/ecs/components";
-import { packWorld } from "../src/ecs/snapshot";
+import { packWorld, packBlock, applyBlock } from "../src/ecs/snapshot";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 20) console.log("  FAIL " + s); problems.push(s); };
@@ -147,6 +147,29 @@ const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
   const e2 = w.createAt(base + 3);
   if (e2 === e || entityGen(e2) !== entityGen(e) + 1) fail("held index's next generation");
   if (!w.exists(a)) fail("the first entity went");
+}
+
+// Block snapshots (stage 7a): a block's components, one buffer each, into another world at another base, every field
+// type (an odd count so the 8-byte alignment between fields shows), and nothing outside the block touched.
+{
+  const Mixed = defineComponent("Mixed", { a: "u8", b: "f64", c: "u16", d: "f32", e: "i32", f: "u32" });
+  const src = new World({ capacity: 64 }), dst = new World({ capacity: 64 });
+  const sb = src.reserve(13), db = (dst.reserve(5), dst.reserve(13));
+  const S = src.columns(Mixed), T = src.columns(Transform);
+  for (let i = 0; i < 13; i++) {
+    S.a[sb + i] = i * 7; S.b[sb + i] = i * 1.5e10; S.c[sb + i] = 60000 - i; S.d[sb + i] = -i / 3; S.e[sb + i] = -i * 1000; S.f[sb + i] = 4e9 - i;
+    T.x[sb + i] = i; T.heading[sb + i] = -i;
+  }
+  dst.columns(Transform).x.fill(99);
+  const s = packBlock(src, sb, 11, [Mixed, Transform]);
+  if (Object.keys(s.comps).length !== 2) fail("block: one buffer per component");
+  applyBlock(dst, db, s, [Mixed, Transform]);
+  const D = dst.columns(Mixed), X = dst.columns(Transform);
+  for (let i = 0; i < 11; i++) {
+    for (const k of ["a", "b", "c", "d", "e", "f"] as const) if (D[k][db + i] !== S[k][sb + i]) fail(`block ${k}[${i}] ${D[k][db + i]} vs ${S[k][sb + i]}`);
+    if (X.x[db + i] !== i || X.heading[db + i] !== Math.fround(-i)) fail(`block Transform[${i}]`);
+  }
+  if (X.x[db + 11] !== 99 || X.x[db - 1] !== 99) fail("block: an index outside the block was written");
 }
 
 if (problems.length) { console.log(`ecs: ${problems.length} problem(s)`); process.exit(1); }

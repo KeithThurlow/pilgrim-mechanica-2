@@ -96,6 +96,10 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   Armour (and Bar). Still pushing their own bars: props and POIs (dummies, the test swarm, gates, towers, fabricators,
   spawners). Not done from the review's stage 5: MechUnit split into a three-free sim and a render system.
 
+- Stage 7a, one snapshot format (Claude 2026-11-07): `packBlock`/`applyBlock` (`src/ecs/snapshot.ts`), `SwarmBlock.shipped`
+  / `pack` / `apply` / `isShipped`; the robots' worker snapshot carries its block that way (`RobotSnapshot.block`) and the
+  AI's arrays by name. robotworker-check unchanged and comparing the block bytes too.
+
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
   stress) move their camera in the tick; split them like the walker lab when it matters. Still per tick: droids'
@@ -103,7 +107,7 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 4.3b, more readers onto the components: the robots' register publish could become a world system over
   `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
   snapshot becomes `packWorld` columns of the swarm's block (stage 7).
-- Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (one snapshot format), 7b
+- Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (done), 7b
   (infantry in the worker), 7c (MechUnit split; wants Keith to play-test), 7d (the rules in the worker), 7e (retire the
   remotes). Then stage 8, co-op transport.
 
