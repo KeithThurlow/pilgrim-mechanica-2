@@ -6,7 +6,7 @@
 // every frame the pivots follow the sim's joints. Hull-mounted miniguns on both sides: the right pod is mirrored
 // onto the left shoulder in place of the rocket box. Ammo drums and a power pack ride on the back.
 import * as THREE from "three/webgpu";
-import { mergeTinted } from "../look/mergeGeometry";
+import { flatPaint, mergeTinted } from "../look/mergeGeometry";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { WalkerSim, LegPose } from "./walker";
 import type { UpperSim, UpperValues } from "./upper";
@@ -838,7 +838,7 @@ export class RampartBody {
         if (m.isMesh && !m.userData.ink && !m.userData.glow) this.paints!.push({ mesh: m, base: (m.material as THREE.MeshStandardMaterial).color.getHex() });
       });
     }
-    for (const { mesh, base } of this.paints) look.tint(mesh, color === null ? base : color);
+    for (const { mesh, base } of this.paints) { flatPaint(mesh, color !== null); look.tint(mesh, color === null ? base : color); }
   }
 
   /** A drawn-only twist of the waist (radians, + the mech's left; the sword's follow-through, Keith 2026-11-01): the

@@ -210,6 +210,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Render path: fewer objects for three (Keith 2026-11-07 via the coordinator, Claude on `claude/project-thread-90s30y`, backup `wip/draw-merge`): docs/engine-options.md A.1-A.4 one PR each (merged parts done; next static matrices, more instancing, shadows). Handoff `docs/handoff-drawcost.md`.
 - Sim in a worker (Keith 2026-11-06, Claude on `claude/project-thread-lla597`): plan in `docs/proposal-simworker.md`, handoff `docs/handoff-simworker.md`. One system per PR, the worker path the default on main, `?noworker` to compare. Steps 1 (plumbing and the ground mirror), 2 (chunk builds and patches), 2b (the detail patch's fine rows), 3 (escorts) 4a (the swarm worker-ready), 4b (the robot swarm in the worker) and 4c (its parity check, shipped with 4b) done; next: the PC profile far out fighting robots decides (striders, crushers, droids, or the rest of the sim).
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, compaction as an upgrade, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
 - Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batches 1 and 2 merged (robots, bandits, warband, droids, crusher, summoner's units in `labs/swarm/`). **Edit the robot, bandit, war band, droid, crusher and summoner lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Open questions in `docs/decisions.md` (2026-11-02 swarm lab rows).
@@ -317,6 +318,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-07 · Mech parts merged at load: fewer objects for three to draw (perf, docs/engine-options.md A.1; Claude)
+- Weapon models (`src/weapons/weaponModel.ts` planFor): parts that don't move on their own join the moving part they ride or one body mesh; while every door, missile, tube, lid and recoil sits at rest, one more mesh draws them all (the barrels' spin stays its own). The code stand-ins (visor and other sensor heads, the power pack, the arm stand-ins) become one vertex-coloured mesh per rigid node plus one for their lenses and lamps (`src/look/mergeGeometry.ts` mergeTinted); a mech paint (guardians, bandit mechs, wrecks) still turns them one flat colour (`flatPaint`). `?nomerge` draws every part on its own as before.
+- Checked: `tools/drawcount-probe.mjs` (new; objects three draws a frame, by owner), convoy `?siege&manual` camera pass 209 → 111 objects (the missile pod 64 → 4, the visor heads 26 → 8, packs 22 → 4); new `tools/mergeparts-check.ts` (65 weapons, code-built and GLB: the same triangles in the same places at rest and posed; 291 part meshes at rest drawn as 121, before outlines); frames merged vs `?nomerge` match (weapons lab, convoy siege); `npm test`.
 
 ### 2026-11-07 · Robots off the screen aren't drawn (perf; Claude)
 - New `src/core/viewCull.ts` (the camera's view, updated once a frame in `Battlefield.update` as `bf.view`); `RobotsDraw.cull`: robots more than `robotDrawCull` m (4; Performance) plus 1.5× their size outside the view are skipped (swarm camps, the summoner's allies, the swarm lab's fronts). -1 draws them all.

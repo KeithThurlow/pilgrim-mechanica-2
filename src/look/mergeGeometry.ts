@@ -55,7 +55,8 @@ const _c = new THREE.Color();
  * A node's own tinted parts (code stand-ins built from boxes and cylinders, each with its own toon material) as one
  * vertex-coloured mesh, and its lit-up lenses and lamps as one more. Only direct children that are plain meshes with
  * nothing hung on them but their ink: anything moved or hidden on its own must stay a child group of its own. The
- * merged mesh's material is white, so a paint (RampartBody.paint) multiplies the parts' colours instead of replacing them.
+ * merged mesh's material is white and the parts' colours are in its vertices; a paint that should replace them (as a
+ * tint replaced each part's colour) calls flatPaint first.
  */
 export function mergeTinted(node: THREE.Object3D, look: ToonLook) {
   if (!MERGE_PARTS) return;
@@ -95,7 +96,10 @@ export function mergeTinted(node: THREE.Object3D, look: ToonLook) {
     if (isGlow) {
       mesh.material = new THREE.MeshBasicMaterial({ vertexColors: true });
       mesh.userData.glow = true;
-    } else look.apply(mesh);
+    } else {
+      look.apply(mesh);
+      mesh.userData.mergedTint = true;
+    }
     for (const m of list) {
       m.removeFromParent();
       if (!isGlow) look.forget(m);
@@ -111,4 +115,19 @@ export function mergeTintedTree(root: THREE.Object3D, look: ToonLook) {
   const nodes: THREE.Object3D[] = [];
   root.traverse((o) => { if (!(o as THREE.Mesh).isMesh) nodes.push(o); });
   for (const n of nodes) mergeTinted(n, look);
+}
+
+/**
+ * A mergeTinted mesh one flat colour (on: its vertex colours white, so the material's colour is all there is, as when
+ * each part was tinted) or its parts' own colours back (off). Other meshes are left alone.
+ */
+export function flatPaint(mesh: THREE.Mesh, on: boolean) {
+  if (!mesh.userData.mergedTint) return;
+  const a = mesh.geometry.attributes.color as THREE.BufferAttribute;
+  const own: Float32Array = mesh.userData.ownColors ?? (mesh.userData.ownColors = (a.array as Float32Array).slice());
+  const want = on ? 1 : 0;
+  if (mesh.userData.flat === want) return;
+  mesh.userData.flat = want;
+  if (on) (a.array as Float32Array).fill(1); else (a.array as Float32Array).set(own);
+  a.needsUpdate = true;
 }

@@ -46,7 +46,14 @@ const out = await p.evaluate(async (DRILL) => {
   const per = (m) => [...m].map(([k, v]) => [k, v / frames]).sort((a, b) => b[1] - a[1]);
   // Scene-graph size: objects whose matrices update each frame.
   let objs = 0, auto = 0, meshes = 0, mats = new Set();
-  app.scene.traverse((o) => { objs++; if (o.matrixAutoUpdate) auto++; if (o.isMesh) { meshes++; if (o.material) mats.add(o.material); } });
+  const tree = new Map();
+  const walk = (o, hidden) => {
+    hidden = hidden || !o.visible;
+    objs++; if (o.matrixAutoUpdate) auto++; if (o.isMesh) { meshes++; if (o.material) mats.add(o.material); }
+    if (o !== app.scene) { const k = owner(o); const t = tree.get(k) || { n: 0, hidden: 0, auto: 0 }; t.n++; if (hidden) t.hidden++; if (o.matrixAutoUpdate) t.auto++; tree.set(k, t); }
+    for (const c of o.children) walk(c, hidden);
+  };
+  walk(app.scene, false);
   // Render alone on a held moment.
   app.hold = true;
   await new Promise((res) => setTimeout(res, 300));
@@ -55,12 +62,13 @@ const out = await p.evaluate(async (DRILL) => {
   app.hold = false;
   ts.sort((a, b) => a - b);
   return { cam: camN / frames, shadow: shN / frames, instanced: inst / frames, camBy: per(cam).slice(0, 200), shBy: per(sh).slice(0, 12),
-    objs, auto, meshes, materials: mats.size, renderMedian: ts[ts.length >> 1], calls: app.last.calls, backend: app.backend };
+    objs, auto, meshes, tree: [...tree].sort((a, b) => b[1].n - a[1].n).slice(0, 25), materials: mats.size, renderMedian: ts[ts.length >> 1], calls: app.last.calls, backend: app.backend };
 }, process.env.DRILL || "");
 console.log(`${url}  backend ${out.backend}`);
 console.log(`objects a frame: camera ${out.cam}, shadow ${out.shadow} (instanced/batched ${out.instanced}); draw calls ${out.calls}`);
 console.log(`scene: ${out.objs} objects, ${out.auto} with matrixAutoUpdate, ${out.meshes} meshes, ${out.materials} materials`);
 console.log(`render call median (held frame, software GPU): ${out.renderMedian.toFixed(2)} ms`);
+if (process.env.TREE) console.log("scene objects by owner (all, hidden, auto-updating):\n" + out.tree.map(([k, t]) => `  ${String(t.n).padStart(6)} ${String(t.hidden).padStart(6)} ${String(t.auto).padStart(6)}  ${k}`).join("\n"));
 console.log("camera pass by owner:\n" + out.camBy.map(([k, v]) => `  ${String(v).padStart(6)}  ${k}`).join("\n"));
 console.log("shadow pass by owner:\n" + out.shBy.map(([k, v]) => `  ${String(v).padStart(6)}  ${k}`).join("\n"));
 await b.close();

@@ -202,8 +202,8 @@ export class WeaponModel {
 /**
  * How a model's parts merge (once per model, shared by its instances). Anchors are the parts that move on their own
  * (its moving list, plus Recoil and a clip's Clip, which the game moves or hides); every other part joins the nearest
- * anchor it rides, or the body (base). rest: the body and every anchor that doesn't ride a spinning part, at rest, as
- * one geometry; null when there's no base to hold the per-frame hooks or nothing moves.
+ * anchor it rides, or the body (base, always drawn). rest: every anchor that doesn't ride a spinning part, at rest,
+ * as one geometry; null when there's no base to hold the per-frame hooks or nothing moves.
  */
 interface Plan { own: Map<string, THREE.BufferGeometry | null>; base: THREE.BufferGeometry | null; rest: THREE.BufferGeometry | null; restParts: string[] }
 const plans = new WeakMap<ModelDef, Plan>();
@@ -226,7 +226,7 @@ function planFor(def: ModelDef): Plan {
   const base = mergeParts(groups.get("") ?? []);
   const restParts = base ? def.parts.filter((p) => isAnchor(p.name) && own.get(p.name) && !spins(p.name)).map((p) => p.name) : [];
   const rest = restParts.length
-    ? mergeParts([base!, ...restParts.map((n) => { const v = byName.get(n)!.pivot; return own.get(n)!.clone().translate(v.x, v.y, v.z); })])
+    ? mergeParts([...restParts.map((n) => { const v = byName.get(n)!.pivot; return own.get(n)!.clone().translate(v.x, v.y, v.z); })])
     : null;
   plan = { own, base, rest, restParts: rest ? restParts : [] };
   plans.set(def, plan);
