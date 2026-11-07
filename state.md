@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · Phone preset: no sun shadows, no blast waves or hot sand, thinner dust, smaller dent layer (Keith: still drops at ?res=0.15, "maybe the dust particles"; Claude on `claude/project-thread-oakhm8-phonefx`)
+- `src/core/phoneQuality.ts` `PHONE_PRESET`, applied by `tweakPanel` (`src/core/tweaks.ts`) as the defaults on touch screens (sliders and `?set=` still win; `?lite=0` off): waveOn 0, heatOn 0, fxDustPerFrame 150, fxGpuDustPerFrame 400, fxGpuDustPool 8192, fxThinFrom/To 20/50 m, dentRes 1024. `src/core/app.ts`: sun shadows off on phones (`?shadows=1` back, `?shadows=0` off anywhere); the HUD's "draws" line says "no shadows, lite".
+- Checked: typecheck, full `npm test`. Not measured on a phone: Keith to try `?shadows=1` and `?lite=0` to see which costs most.
+
 ### 2026-11-07 · The frame HUD shows what the GPU draws (Keith: "how can I tell if this is actually working?"; Claude on `claude/project-thread-oakhm8-reshud`)
 - `src/core/hud.ts` `pixels`, set by `src/core/app.ts` on resize: a third top line "draws 1123×468 px (res 0.5)" (", AA" when MSAA is on), so `?res=` can be seen working. Checked: typecheck, full `npm test`.
 
