@@ -99,7 +99,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ## Lab URL flags
 
-- Every lab: `?tick=60` (or 30, 120) runs the sims on the fixed game tick (`src/core/clock.ts`; the camera and effects move every drawn frame, mechs and vehicles are drawn between ticks, the swarms still step at the tick until their interpolation lands; the HUD's `clock` line). `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
+- Every lab: `?tick=60` (or 30, 120) runs the sims on the fixed game tick (`src/core/clock.ts`; the camera and effects move every drawn frame, mechs, vehicles and the robot swarm are drawn between ticks, infantry and droids still step at the tick until their interpolation lands; the HUD's `clock` line). `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
   (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
