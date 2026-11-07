@@ -75,6 +75,19 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   robots and bandits in one world hashes the same as main (9d26da88); `tools/infantryworld-check.ts`; full `npm test`;
   the bandit, war band, convoy (bandit camp, fortress), weapons (runners) and stress labs load headless clean.
 
+- Stage 5 proposal (Claude 2026-11-07; Keith "continue re-architecting as you see fit", relayed: build without
+  waiting). Heavies keep their object sims (review §4.1); each becomes an entity in the host world through
+  `src/ecs/heavy.ts` (`HeavyLink`: Transform, PrevTransform, Health, Team, Collider, Armour, Bar, and the `Sim` object
+  component holding the thing), written each tick by `Hittable.syncWorld` (CombatRules.syncWorld, end of the rules'
+  step; a target that leaves the list gets `leaveWorld`). Readers move over as each kind lands: its health bars first
+  (`gatherBars`), so its own `bars()` goes. Order, one PR each: 5a mechs (MechUnit: player, rivals, guardians,
+  replicas, bandit mechs), 5b vehicles (war band cars, the party bus, escorts), 5c crushers and striders. Later, when a
+  co-op peer needs it: MechUnit split into a sim without three and a render system (the review's 5 "L" part), so the
+  host world can step in the worker (stage 7).
+- Stage 5a, mechs (Claude 2026-11-07): `MechUnit.link` (HeavyLink), `syncWorld`/`leaveWorld`; its health bar comes from
+  the world (MechUnit.bars gone). Bars now sit where the mech was at the end of the rules' step (at most a tick
+  behind the old live pelvis). `tools/heavy-check.ts`.
+
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
   stress) move their camera in the tick; split them like the walker lab when it matters. Still per tick: droids'

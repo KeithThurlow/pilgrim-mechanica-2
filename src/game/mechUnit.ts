@@ -1,6 +1,9 @@
 // A mech on the battlefield: the walker sim (legs), the upper-body sim (torso and two miniguns), the Rampart model,
 // health, and its rounds fired into the shared battlefield. Used for the player's mech and for bandit mechs (red
 // Ramparts for now, Keith 2026-10-24), so both walk, shoot, kick up dust and take hits the same way.
+import { HeavyLink, type HeavyState } from "../ecs/heavy";
+import type { World } from "../ecs/world";
+import { KIND } from "./register";
 import { Rng, seedFrom } from "../core/rng";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
@@ -648,12 +651,18 @@ export class MechUnit implements Hittable, Solid {
   /** Flat armour per hit (src/game/armour.ts): the hull's. */
   armourOf() { return this.armourOverride ?? this.v.armour; }
 
-  /** Health bar (an enemy mech's: the bars skip the player's team): always on, over the hull. */
-  bars(out: import("../ui/healthBars").BarEntry[]) {
-    if (!this.alive) return;
-    const p = this.sim.pelvis;
-    out.push({ key: this, x: p.x, y: p.y + 3.4, z: p.z, hp: this.health, max: this.maxHealth, armour: this.armourOf(), width: 3.6, always: true });
+  /** This mech as an entity in the host world (src/ecs/heavy.ts, stage 5): Transform at the pelvis, Health, Team,
+   *  Collider, Armour and its health bar (an enemy mech's: the bars skip the viewer's team; always on, over the hull). */
+  readonly link = new HeavyLink();
+  private state: HeavyState = { x: 0, y: 0, z: 0, heading: 0, hp: 0, max: 0, team: 0, kind: KIND.Mech, radius: 0, reach: 0, height: 0, armour: 0, bar: { width: 3.6, lift: 3.4, always: true } };
+  syncWorld(world: World) {
+    const s = this.state, p = this.sim.pelvis;
+    s.x = p.x; s.y = p.y; s.z = p.z; s.heading = this.sim.heading;
+    s.hp = this.health; s.max = this.maxHealth; s.team = this.team; s.armour = this.armourOf();
+    s.radius = this.v.hitRadius; s.reach = this.v.hitRadius; s.height = 4.4; // the Rampart to the hood (CLAUDE.md)
+    this.link.sync(world, this.alive, this, s);
   }
+  leaveWorld() { this.link.leave(); }
 
   /** The useKit command (Q): start a repair kit; why not, or null when it started. */
   useKit(): KitRefusal | null { return this.kits.use(this.health, this.maxHealth, this.alive); }
