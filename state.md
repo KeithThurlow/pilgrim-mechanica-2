@@ -318,6 +318,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Walker: the cramped leg's thigh search reads the ground only where it can matter (Keith asked to act on `docs/sim-scope.md`; Claude)
+- Headless convoy lab (`?crest&manual&norender`, cloud): ground lookups were ~40% of the tick and the walker's leg-room search (`legRoom` in the cramped-thigh and turn-limit searches, two height reads per candidate angle, ~90 candidates) was the biggest caller at 18.7% of the tick, mostly the six guardian mechs. Now each candidate is scored with the knee and hock taken as clear of the ground (a floor on its cost), and the ground is read only for the ones that could still win, cheapest first (`src/mech/walker.ts`: `underOf`, `cramp`). Same pick, same poses bit for bit (`tools/walker-parity-probe.ts`: joint hashes before and after equal on 8 runs; free walking 20-30% fewer ground reads). In the lab: 18.7% → 4.9% of the tick.
+- Convoy lab cost marks: the old "turrets" stage split into "turret threats", "turrets", "escort guns" and "guardians" (`labs/convoy/main.ts`). Turrets, escort guns and the threat list together cost ~0.1-0.2 ms; the guardians ~2.5-4 ms on the cloud box.
+- Checked: walker, convoy, duel checks, typecheck. Drawing time not measured (headless).
+
 ### 2026-11-07 · Sim scope write-up: `docs/sim-scope.md` (Keith asked how much of the world is simulated; Claude)
 - What is full sim, reduced rate, abstract, frozen or not spawned by distance, terrain streaming, the sim worker steps, where the frame cost is, and localized-spawning opportunities. Docs only; nothing run.
 ### 2026-11-06 · A/B frame-time bench: `labs/convoy/?siege&manual&bench` (Keith: judging the worker by eye isn't a test; Claude)

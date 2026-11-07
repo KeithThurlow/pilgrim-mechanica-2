@@ -412,6 +412,8 @@ export class WalkerSim {
   /** This frame's lean into a change of velocity as body pitch (nose down +) and roll (left side up +), radians. */
   accPitch = 0;
   accRoll = 0;
+  /** Scratch for the cramped leg's thigh search (71 angles). */
+  private cramp = { w: new Float64Array(72), base: new Float64Array(72), a: new Float64Array(72), b: new Float64Array(72), back: new Float64Array(72), floor: new Float64Array(72), order: new Uint32Array(72) };
   private t = { f: new Vector3(), l: new Vector3(), a: new Vector3(), b: new Vector3(), c: new Vector3(), d: new Vector3(), n3: new Vector3(), n: [0, 1, 0], e: new Euler(), m: new Matrix4() };
 
   constructor(public v: WalkerValues, public ground: Ground) {
@@ -2909,28 +2911,53 @@ export class WalkerSim {
         let aim = r.w;
         if (cramped) {
           this.stats.cramped++;
-          let bestCost = Infinity;
+          // Every thigh angle from -40° to 100° in 2° steps is scored; the ground under the knee and hock is read only for
+          // the angles that could still win (perf: these searches were most of the walker's ground reads). Pass 1 scores
+          // each as if the knee and hock were clear of the ground (never more than the real cost), pass 2 reads the
+          // ground for the cheapest first and stops once no other can beat the best. Same pick as scoring them all in
+          // order: least cost, and on a tie the first.
+          const C = this.cramp;
+          let n = 0;
           for (let w = -40 * D2R; w <= 100 * D2R; w += 2 * D2R) {
             if (!this.legAtThigh(P, planeUp, w)) continue;
-            const q = this.legRoom(P, planeUp), d = w - r.w;
-            const short = Math.max(0, kMin - q.knee) + Math.max(0, hMin - q.hock) + q.under + 10 * q.back;
-            const cost = Math.abs(d) - (d > 0 ? v.legRoomForward * D2R : 0) + 100 * short;
-            if (cost < bestCost) { bestCost = cost; aim = w; }
+            const q = this.legRoom(P, planeUp, false), d = w - r.w;
+            const fwd = d > 0 ? v.legRoomForward * D2R : 0, a = Math.max(0, kMin - q.knee), b = Math.max(0, hMin - q.hock);
+            C.w[n] = w; C.base[n] = Math.abs(d) - fwd; C.a[n] = a; C.b[n] = b; C.back[n] = q.back;
+            C.floor[n] = C.base[n] + 100 * (a + b + 0 + 10 * q.back);
+            if (Number.isNaN(C.floor[n])) C.floor[n] = Infinity; // (a NaN cost never wins; keeps the sort sound)
+            C.order[n] = n; n++;
           }
+          const ord = C.order.subarray(0, n).sort((i, j) => C.floor[i] - C.floor[j] || i - j);
+          let bestCost = Infinity, bestI = -1;
+          for (const i of ord) {
+            if (C.floor[i] > bestCost) break;
+            this.legAtThigh(P, planeUp, C.w[i]);
+            const cost = C.base[i] + 100 * (C.a[i] + C.b[i] + this.underOf(P) + 10 * C.back[i]);
+            if (cost < bestCost || (cost === bestCost && i < bestI)) { bestCost = cost; bestI = i; }
+          }
+          if (bestI >= 0) aim = C.w[bestI];
         }
         // At most legTurnMax from last frame's thigh: the pose the leg can make in that range nearest the aim (and least in
         // the ground or bent backward), or, if it can reach none there, the nearest it can.
         const from = Number.isFinite(prev) ? prev : aim, span = Number.isFinite(prev) ? step : 0;
         let w = NaN, ok = false, bestCost = Infinity;
         // Never with the knee or hock in the ground, if it can help it.
-        const cost = (c: number) => (this.legAtThigh(P, planeUp, c) ? Math.abs(c - aim) + this.misfit(P, planeUp, kMin, hMin) : Infinity);
+        // (The ground is read only when the pose could still beat the best: the cost with it taken as clear is a floor.)
+        const cost = (c: number, sub: boolean) => {
+          if (!this.legAtThigh(P, planeUp, c)) return Infinity;
+          const q = this.legRoom(P, planeUp, false), a = Math.abs(c - aim);
+          const floor = sub ? a + this.misfitOf(q, kMin, hMin) - a : a + this.misfitOf(q, kMin, hMin);
+          if (floor >= bestCost) return Infinity;
+          q.under = this.underOf(P);
+          return sub ? a + this.misfitOf(q, kMin, hMin) - a : a + this.misfitOf(q, kMin, hMin);
+        };
         for (let x = -span; x <= span + 1e-6; x += Math.max(0.25 * D2R, span / 8)) {
-          const k = cost(from + x);
+          const k = cost(from + x, false);
           if (k < bestCost) { bestCost = k; w = from + x; }
         }
         for (let x = span + D2R; !Number.isFinite(w) && x < 120 * D2R; x += D2R) {
           for (const c of [from + x, from - x]) {
-            const k = cost(c) - Math.abs(c - aim);
+            const k = cost(c, true);
             if (k < bestCost) { bestCost = k; w = c; }
           }
         }
@@ -2940,7 +2967,7 @@ export class WalkerSim {
           f.theta = Math.atan2(-this.t.a.dot(P.legFwd), this.t.a.dot(planeUp));
         } else { f.theta = theta; this.placeLeg(f, P, toHip, planeUp, theta, reach, false); }
       }
-      f.legW = this.legRoom(P, planeUp).w;
+      f.legW = this.legRoom(P, planeUp, false).w;
     }
   }
   /** Hock and knee for the cannon at theta (f.theta follows if the hip was out of reach and the cannon swung toward it). */
@@ -3008,14 +3035,18 @@ export class WalkerSim {
   }
 
   /** What a pose costs for having its knee or hock in the ground, the knee bent backward, or either shut past kMin/hMin. */
-  private misfit(P: LegPose, planeUp: Vector3, kMin: number, hMin: number) {
-    const q = this.legRoom(P, planeUp);
+  private misfitOf(q: { under: number; back: number; knee: number; hock: number }, kMin: number, hMin: number) {
     return 100 * q.under + 1000 * q.back + 3 * (Math.max(0, kMin - q.knee) + Math.max(0, hMin - q.hock));
+  }
+
+  /** How far the knee or hock sits under the ground (0 above it). */
+  private underOf(P: LegPose) {
+    return Math.max(0, this.ground.height(P.hock.x, P.hock.z) + 0.1 - P.hock.y, this.ground.height(P.knee.x, P.knee.z) + 0.1 - P.knee.y);
   }
 
   /** The leg as posed: thigh forward of straight down, the knee's and the hock's angles (radians), and whether the hip
    * came closer to the hock than the folded thigh and shin can (the solve pushed the hock off the cannon). */
-  private legRoom(P: LegPose, planeUp: Vector3) {
+  private legRoom(P: LegPose, planeUp: Vector3, ground = true) {
     const v = this.v, a = this.t.a, b = this.t.b;
     a.subVectors(P.knee, P.hip);
     const w = Math.atan2(a.dot(P.legFwd), -a.dot(planeUp));
@@ -3025,7 +3056,8 @@ export class WalkerSim {
     const hock = a.angleTo(b);
     const clamped = P.hock.distanceTo(P.hip) < Math.abs(v.femur - v.shin) + 0.051;
     // How far the knee or hock sits under the ground (0 above it).
-    const under = Math.max(0, this.ground.height(P.hock.x, P.hock.z) + 0.1 - P.hock.y, this.ground.height(P.knee.x, P.knee.z) + 0.1 - P.knee.y);
+    // (ground false: taken as 0, for a caller that reads it only if it needs it.)
+    const under = ground ? this.underOf(P) : 0;
     // How far the knee sits behind the hip-hock line (it should bend forward; 0 when it does by 3 cm or more).
     a.subVectors(P.knee, P.hip); b.subVectors(P.hock, P.hip);
     const bq = b.lengthSq() || 1;

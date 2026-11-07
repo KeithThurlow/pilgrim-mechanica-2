@@ -1040,12 +1040,15 @@ app.onTick((rawDt) => {
   }
   // The convoy's turrets, escort guns and guardians all pick from the same list of threats near the train.
   const threats = threatOn ? [threatMark.position] : loop.turretThreats(96);
+  costs.mark("turret threats");
   defence.target(threats);
   defence.update(dt);
+  costs.mark("turrets");
   convoyGuns.target(threats);
   convoyGuns.update(dt);
+  costs.mark("escort guns");
   guardians.update(dt, threats);
-  costs.mark("turrets");
+  costs.mark("guardians");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);
   if (out) {
