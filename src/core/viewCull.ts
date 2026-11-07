@@ -9,6 +9,8 @@ export class ViewCull {
   private readonly s = new THREE.Sphere();
   /** False until the first update (everything is seen). */
   ready = false;
+  /** ?nocull: everything is seen (perf comparisons). */
+  readonly off = typeof location !== "undefined" && new URLSearchParams(location.search).has("nocull");
 
   update(camera: THREE.Camera) {
     camera.updateMatrixWorld();
@@ -19,7 +21,7 @@ export class ViewCull {
 
   /** Is a sphere at (x, y, z) of radius r (m) in view? */
   sees(x: number, y: number, z: number, r: number): boolean {
-    if (!this.ready) return true;
+    if (!this.ready || this.off) return true;
     this.s.center.set(x, y, z); this.s.radius = r;
     return this.f.intersectsSphere(this.s);
   }
