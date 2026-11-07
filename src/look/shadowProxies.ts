@@ -18,6 +18,12 @@ export const SHADOW_PROXY_LAYER = 4;
 /** How often the scene is scanned for new meshes (frames). */
 const SCAN_EVERY = 30;
 const _shadowSide = { [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide } as Record<number, number>;
+/** Layer masks a part may sit on: the default layer, or shadow-only (the terrain's coarse shadow copies, src/world/chunks.ts
+ *  SHADOW_ONLY_LAYER 3: only the shadow cameras see them, so batched they draw the same; 2026-11-07, one object instead of ~23). */
+const plainLayers = (mask: number) => mask === 1 || mask === 1 << 3;
+/** The batch's own layer for a part's mask: the proxy layer, or the shadow-only layer kept as it was (the sun sees it; the
+ *  headlamp's shadow camera doesn't, as before). */
+const batchLayer = (mask: number) => (mask === 1 ? SHADOW_PROXY_LAYER : 3);
 const noop = THREE.Object3D.prototype.onBeforeShadow, noopAfter = THREE.Object3D.prototype.onAfterShadow;
 
 interface Geo { id: number; users: number; pv: number; iv: number }
@@ -29,6 +35,8 @@ interface Part {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   side: number;
+  /** The mesh's layer mask when placed (a shadow-only part goes in a shadow-only batch). */
+  mask: number;
 }
 
 /** Meshes that were plain once and then weren't: they cast for themselves from then on. */
@@ -45,7 +53,7 @@ function plain(o: THREE.Object3D): o is THREE.Mesh {
 
 /** The material and geometry part of plain(), checked again whenever a part's material or geometry changes. */
 function shadowSafe(m: THREE.Mesh): boolean {
-  if (m.onBeforeShadow !== noop || m.onAfterShadow !== noopAfter || m.layers.mask !== 1 || !m.frustumCulled) return false;
+  if (m.onBeforeShadow !== noop || m.onAfterShadow !== noopAfter || !plainLayers(m.layers.mask) || !m.frustumCulled) return false;
   const mat = m.material as THREE.Material & { positionNode?: unknown; alphaMap?: unknown; displacementMap?: unknown; castShadowNode?: unknown; castShadowPositionNode?: unknown; maskNode?: unknown; wireframe?: boolean };
   if (!mat || Array.isArray(mat) || mat.alphaTest > 0 || mat.alphaMap || mat.displacementMap || mat.positionNode || mat.castShadowNode || mat.castShadowPositionNode || mat.maskNode || mat.wireframe) return false;
   const g = m.geometry, p = g?.attributes.position as THREE.BufferAttribute | undefined;
@@ -81,13 +89,13 @@ class Batch {
   mesh: THREE.BatchedMesh;
   geos = new Map<THREE.BufferGeometry, Geo>();
 
-  constructor(readonly side: number, scene: THREE.Scene, readonly maxInst: number, readonly maxVert: number, readonly maxIdx: number) {
+  constructor(readonly side: number, readonly layer: number, scene: THREE.Scene, readonly maxInst: number, readonly maxVert: number, readonly maxIdx: number) {
     // The shadow pass draws `_shadowSide[material.side]`; give the batch the side that comes back to `side`.
     const back = side === THREE.FrontSide ? THREE.BackSide : side === THREE.BackSide ? THREE.FrontSide : THREE.DoubleSide;
     const mat = new THREE.MeshBasicMaterial({ colorWrite: false, side: back });
     this.mesh = new THREE.BatchedMesh(maxInst, maxVert, maxIdx, mat);
     this.mesh.name = "shadow batch";
-    this.mesh.layers.set(SHADOW_PROXY_LAYER);
+    this.mesh.layers.set(layer);
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false; // culled per part instead
     this.mesh.perObjectFrustumCulled = true;
@@ -160,7 +168,7 @@ export class ShadowProxies {
       while (vis && c) { if (!c.visible) vis = false; root = c; c = c.parent; }
       if (vis && root !== scene) { this.release(i, false); continue; }
       const mat = m.material as THREE.Material;
-      if (m.geometry !== p.geometry || mat !== p.material || m.layers.mask !== 1) {
+      if (m.geometry !== p.geometry || mat !== p.material || m.layers.mask !== p.mask) {
         if (!shadowSafe(m)) { this.release(i, true); continue; }
         this.rehome(p, mat, scene);
       } else if (shadowSideOf(mat) !== p.side) this.rehome(p, mat, scene);
@@ -190,15 +198,16 @@ export class ShadowProxies {
 
   /** Puts a part in its side's batch, replacing the batch with one twice the size when it's full. */
   private place(p: Part, scene: THREE.Scene) {
-    let b = this.batches.get(p.side);
-    if (!b) { b = new Batch(p.side, scene, 1024, 1 << 18, 3 << 18); this.batches.set(p.side, b); }
+    const key = p.side * 8 + batchLayer(p.mask);
+    let b = this.batches.get(key);
+    if (!b) { b = new Batch(p.side, batchLayer(p.mask), scene, 1024, 1 << 18, 3 << 18); this.batches.set(key, b); }
     p.batch = b;
     p.inst = b.place(p.geometry);
     if (p.inst >= 0) return;
     const nv = (p.geometry.attributes.position as THREE.BufferAttribute).count * 2;
-    const big = new Batch(p.side, scene, b.maxInst * 2, Math.max(b.maxVert * 2, b.maxVert + nv), Math.max(b.maxIdx * 2, b.maxIdx + nv * 3));
+    const big = new Batch(p.side, b.layer, scene, b.maxInst * 2, Math.max(b.maxVert * 2, b.maxVert + nv), Math.max(b.maxIdx * 2, b.maxIdx + nv * 3));
     b.dispose();
-    this.batches.set(p.side, big);
+    this.batches.set(key, big);
     for (const q of this.parts) if (q.batch === b) { q.batch = big; q.inst = big.place(q.geometry); }
     p.batch = big;
     p.inst = big.place(p.geometry);
@@ -206,7 +215,7 @@ export class ShadowProxies {
 
   private add(mesh: THREE.Mesh, scene: THREE.Scene) {
     const mat = mesh.material as THREE.Material, side = shadowSideOf(mat);
-    const p = { mesh, want: true, inst: -1, geometry: mesh.geometry, material: mat, side } as Part;
+    const p = { mesh, want: true, inst: -1, geometry: mesh.geometry, material: mat, side, mask: mesh.layers.mask } as Part;
     this.place(p, scene);
     owned.set(mesh, p);
     // castShadow reads false for the renderer; the code's own value is kept in `want`.
@@ -220,6 +229,7 @@ export class ShadowProxies {
     p.side = shadowSideOf(mat);
     p.geometry = p.mesh.geometry;
     p.material = mat;
+    p.mask = p.mesh.layers.mask;
     this.place(p, scene);
   }
 
