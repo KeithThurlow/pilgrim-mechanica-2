@@ -25,6 +25,7 @@ const BUTTONS: [label: string, code: string, key: string][] = [
 export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement) {
   if (!touchMode) return;
   canvas.style.touchAction = "none";
+  document.documentElement.classList.add("touch");
   document.body.style.touchAction = "manipulation";
   const css = document.createElement("style");
   css.textContent = `
@@ -35,7 +36,11 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
 .tp-btns{position:fixed;right:16px;bottom:16px;display:grid;grid-template-columns:repeat(3,56px);gap:8px;z-index:20}
 .tp-btns button{height:56px;border-radius:50%;border:2px solid rgba(255,220,160,.5);background:rgba(0,0,0,.3);
   color:#fdc;font:600 13px system-ui;touch-action:none;user-select:none;-webkit-user-select:none}
-.tp-btns button.on{background:rgba(255,180,90,.55)}`;
+.tp-btns button.on{background:rgba(255,180,90,.55)}
+.tp-full{position:fixed;left:24px;bottom:${STICK + 40}px;width:44px;height:44px;border-radius:8px;z-index:20;
+  border:2px solid rgba(255,220,160,.5);background:rgba(0,0,0,.3);color:#fdc;font:20px system-ui}
+@media (orientation:landscape) and (max-height:560px){.tp-btns{grid-template-columns:repeat(3,48px);gap:6px}
+  .tp-btns button{height:48px;font-size:11px}.tp-stick{left:16px;bottom:16px}.tp-full{left:16px;bottom:${STICK + 28}px}}`;
   document.head.append(css);
 
   // Stick: WASD past the dead zone (Keys turns them into a camera-relative direction, as on a keyboard).
@@ -79,6 +84,18 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
     b.addEventListener("contextmenu", (e) => e.preventDefault());
     btns.append(b);
   };
+  // Full: fullscreen, then landscape where the browser allows it (Android Chrome does; iOS Safari has no lock, the
+  // phone's own rotation works there once its rotation lock is off).
+  const full = document.createElement("button");
+  full.className = "tp-full"; full.textContent = "⛶";
+  full.addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) { await document.exitFullscreen(); return; }
+      await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.("landscape");
+    } catch { /* not allowed here */ }
+  });
+  container.append(full);
   hold("Gun R", () => { touchState.right = true; }, () => { touchState.right = false; });
   for (const [label, code, k] of BUTTONS) hold(label, () => key("keydown", code, k), () => key("keyup", code, k));
   container.append(stick, btns);
