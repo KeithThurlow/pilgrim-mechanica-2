@@ -12,6 +12,7 @@
 import type { ViewCull } from "../core/viewCull";
 import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import * as THREE from "three/webgpu";
+import { betweenTicks, swarmBetweenTicks } from "../look/treeInterp";
 import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
   HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_X, MID_SAW_Y, MID_SAW_Z,
@@ -233,7 +234,29 @@ export class RobotsDraw {
     e[o + 3] = this.swarm.heading[i]; e[o + 4] = this.swarm.seed[i]; e[o + 5] = (locked ? 1 : 0) + (big ? 2 : 0) + (glowOnly ? 4 : 0);
   }
 
+  /**
+   * Each tick. Frame-locked it draws; with a fixed tick (?tick=N; architecture stage 6d) it does nothing here: the app
+   * draws the swarm once per drawn frame between its last two ticks (SlotInterp over the arrays the drawer reads).
+   */
   update(dt: number): void {
+    if (betweenTicks()) { this.setUpBetween(); return; }
+    this.draw(dt);
+  }
+
+  private between = false;
+  private setUpBetween() {
+    if (this.between) return;
+    this.between = true;
+    const sw = this.swarm;
+    swarmBetweenTicks(this.group, () => sw.hi, [
+      { a: sw.px }, { a: sw.py }, { a: sw.pz }, { a: sw.hubY }, { a: sw.vx }, { a: sw.vz },
+      { a: sw.heading, angle: true }, { a: sw.turret, angle: true }, { a: sw.tumble, angle: true },
+      { a: sw.gait, jump: 10 }, { a: sw.stateTime, jump: 1 },
+      { a: sw.footX, stride: WALK_LEGS }, { a: sw.footY, stride: WALK_LEGS }, { a: sw.footZ, stride: WALK_LEGS },
+    ], [sw.gen, sw.state], (dt) => this.draw(dt));
+  }
+
+  private draw(dt: number): void {
     const sw = this.swarm;
     this.time += dt;
     this.eyeN = 0;

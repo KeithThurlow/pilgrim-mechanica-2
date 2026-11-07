@@ -7,7 +7,7 @@ import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 import { skipHiddenMatrices } from "./matrixSkip";
 import { Clock, clockFromUrl } from "./clock";
-import { InterpSet } from "../look/treeInterp";
+import { InterpSet, setBetweenTicks, runAfterTick, runFrameDrawers } from "../look/treeInterp";
 
 export type Tick = (dt: number, time: number) => void;
 
@@ -76,6 +76,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const clock = clockFromUrl(params);
   // Stage 6c: under ?tick=N every model on drawBetweenTicks' list is drawn between its last two ticks.
   const interp = clock.fixed ? new InterpSet() : null;
+  // Stage 6d: swarm drawers (RobotsDraw...) draw once per drawn frame, between ticks, instead of in the tick.
+  setBetweenTicks(clock.fixed);
   hud.set("clock", () => clock.hud() + (interp ? `; ${interp.models} models (${interp.parts} parts) drawn between ticks` : ""));
   const noRender = params.has("norender");
   let up = { trimmed: 0, savedKB: 0, empty: 0 };
@@ -90,9 +92,9 @@ export async function createApp(container: HTMLElement): Promise<App> {
     prev = now;
     const t0 = performance.now();
     if (!app.hold) {
-      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); interp?.capture(); });
+      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); if (interp) { interp.capture(); runAfterTick(); } });
       const fdt = Math.min(raw, 1 / 20);
-      interp?.apply(clock.alpha);
+      if (interp) { interp.apply(clock.alpha); runFrameDrawers(fdt, clock.alpha); }
       for (const f of frames) f(fdt, clock.alpha);
     }
     const t1 = performance.now();

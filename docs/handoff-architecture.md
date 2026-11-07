@@ -33,11 +33,14 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   Rampart, walker stand-in, car, escort, crusher, strider, pilot, platform and crane bodies register themselves. Parts
   posed outside the tick are skipped (compared against the captured pose). New model kinds: wrap the root in
   `drawBetweenTicks` where it's built.
+- Stage 6d: `SlotInterp` + `drawEachFrame` (same file); `RobotsDraw.update` under `betweenTicks()` only registers
+  (first call) and the app draws it per frame with the arrays blended in place (restored at once after the draw).
+- Stage 6e: `InfantryDraw` the same, through the shared `swarmBetweenTicks`.
 
 ## Next, in order
-- Stage 6d: robotsDraw (an interpolated view of the
-  swarm's position arrays: prev copies at tick start, a blended copy per frame that the drawer reads), infantry, the
-  war band. Then flip the default to `?tick=60`.
+- The 60 Hz default: flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab
+  comparison (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and
+  lasers, crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
 - Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
   unchanged at every step):
   - 4.2 Readers move to the components: the register's robot owner, targeting, health bars, then `robotsDraw`
