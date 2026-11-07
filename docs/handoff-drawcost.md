@@ -16,13 +16,16 @@ Goal: fewer objects through three's renderer (~14 µs each on Keith's PC, ~330 a
 - A.2 matrix work (PR 2): hidden subtrees skip the walk (`src/core/matrixSkip.ts`, `?allmatrices` off), ink shells and
   POI sites frozen, crushers off screen hidden. Siege matrix walk 2.16 → 1.28 ms (cloud box).
 
+- A.4 shadows (PR 3): the terrain's shadow copies batched in `src/look/shadowProxies.ts` (shadow-only layer kept).
+  Siege shadow pass 42 → 23.5 objects.
+
 ## Next, in order
 1. Still walking every frame: guardian mechs off screen (~100 objects each; the robot-swarm thread owns guardians),
    escorts (~150), the player's mech (~280).
 2. What's left in the camera pass after PR 1: unnamed "Group" owners (~21 objects: boxes, spheres, a ring), the Rampart's
    own bone meshes (16 a mech: they ride different bones, so they can't merge), drums.
-3. Shadows (A.4): casters are already batched (`src/look/shadowProxies.ts`); the shadow pass is ~44 objects, mostly
-   terrain chunks (23).
+3. Camera pass after all this: ~111 in the siege: 16 bone meshes a mech (separate bones, can't merge), the feeds,
+   ~20 small FX and reticle meshes, 7 terrain chunks.
 
 ## Known
 - A painted mech (guardian, bandit, wreck) caches its paint list on its first paint; a sensor fitted after that isn't
