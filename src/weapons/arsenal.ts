@@ -9,6 +9,7 @@
 // faint targeting laser. Shoulders: RPG rocket, missile pod (swarm), big mortar, line mortar (a key paints, release
 // fires), and (Keith 2026-10-30) feeds and power (src/weapons/gear.ts): a press on the key overdrives or loads special
 // rounds into the gun on that side, or refills energy bars; their passives are applied to the guns and the dash.
+import { Rng, seedFrom } from "../core/rng";
 import type { WaveKind } from "../fx/blastWaves";
 import * as THREE from "three/webgpu";
 import type { Battlefield, Hittable, Parry } from "../game/battlefield";
@@ -168,6 +169,8 @@ export class Arsenal implements MechWeapons {
   shoulders: Shoulder[] = [];
   /** Rail beams fired recently (the draw fades them). */
   readonly railShots: RailShot[] = [];
+  /** Shell spread (seeded from the unit's uid on the first shot; host state). */
+  private spreadRng: Rng | null = null;
   /** Energy weapons on either side (Keith 2026-11-02, src/weapons/energy/): pulse laser, beam laser, nova lance. */
   readonly energy: EnergyGuns;
   /** Flamers on either side (Keith 2026-11-05, src/weapons/fire/): the stream's reach, roar, gobs and splashes. */
@@ -1099,7 +1102,9 @@ export class Arsenal implements MechWeapons {
       d.set((d.x / hl) * flat, y - m.y, (d.z / hl) * flat).normalize();
     }
     const spread = (st.spread * Math.PI) / 180;
-    const j = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
+    // Seeded per mech (rule 12): the same shells spread the same way on every machine.
+    const rng = (this.spreadRng ??= new Rng(seedFrom(`${this.unit.uid}:arsenal`)));
+    const j = new THREE.Vector3(rng.next() - 0.5, rng.next() - 0.5, rng.next() - 0.5).normalize().multiplyScalar(Math.tan(spread) * rng.next());
     d.add(j.addScaledVector(d, -j.dot(d))).normalize();
     // A Double shot puts its copies side by side, protoPairGap metres apart across the barrel (one muzzle's effects).
     const pairs = Math.max(1, Math.round(s.proto?.multi ?? 1)), gap = (this.bf.v as { protoPairGap?: number }).protoPairGap ?? 0.5;
