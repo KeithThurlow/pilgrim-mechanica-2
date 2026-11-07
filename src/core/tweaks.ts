@@ -5,6 +5,7 @@
 // and which slider groups belong to each. The panel opens on the topic buttons only; picking one, or selecting the
 // thing in the scene (hold V, src/core/select.ts), shows just its groups. "All" shows everything.
 
+import { PHONE_PRESET, phoneLite } from "./phoneQuality";
 export interface Param {
   key: string;
   label: string;
@@ -48,6 +49,11 @@ export interface PanelOptions<V extends Values> {
 
 export function tweakPanel<V extends Values>(o: PanelOptions<V>) {
   const storeKey = `pm2:${o.id}`;
+  // Phones start from the phone preset (src/core/phoneQuality.ts) as their defaults.
+  if (phoneLite) for (const p of o.params) {
+    const v = PHONE_PRESET[p.key];
+    if (v !== undefined) { (o.defaults as Values)[p.key] = v; (o.values as Values)[p.key] = v; }
+  }
   // Saved values come back, except where the default has changed since they were saved: a new default in code
   // wins over a stale save (otherwise tuning changes pushed by an agent never show up in Keith's browser).
   try {

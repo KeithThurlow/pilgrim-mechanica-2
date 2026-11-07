@@ -5,6 +5,7 @@ import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { mountTouchPad, touchMode } from "./touch";
+import { phoneLite } from "./phoneQuality";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 import { skipHiddenMatrices } from "./matrixSkip";
 import { Clock, clockFromUrl } from "./clock";
@@ -53,7 +54,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
   renderer.setPixelRatio(touchMode ? window.devicePixelRatio * res : Math.min(window.devicePixelRatio, 2) * res);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
+  // Sun shadows draw the scene a second time: off on phones (`?shadows=1` puts them back, `?shadows=0` takes them off anywhere).
+  renderer.shadowMap.enabled = params.has("shadows") ? params.get("shadows") !== "0" : !phoneLite;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(renderer.domElement);
   // New shaders build in the background instead of stalling the frame (?syncshaders: three's own sync build).
@@ -69,7 +71,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
     const w = container.clientWidth, h = container.clientHeight;
     renderer.setSize(w, h, false);
     const c = renderer.domElement;
-    hud.pixels = `${c.width}×${c.height} px (res ${res}${aa ? ", AA" : ""})`;
+    hud.pixels = `${c.width}×${c.height} px (res ${res}${aa ? ", AA" : ""}${renderer.shadowMap.enabled ? "" : ", no shadows"}${phoneLite ? ", lite" : ""})`;
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };
