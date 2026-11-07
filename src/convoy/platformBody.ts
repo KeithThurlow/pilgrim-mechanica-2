@@ -13,6 +13,7 @@ import { Kit, kitMesh, KIT_MAT } from "./kit";
 import { PAL, KIND_PAINT, furniture, furnBox, type Box } from "./furniture";
 import { trackPods, type TrackValues } from "./tracks";
 import { TrackBody } from "./trackBody";
+import type { ViewCull } from "../core/viewCull";
 import { generatePipes, type PipeValues } from "./pipes";
 import { pipesGeometry, PIPE_MAT } from "./pipesDraw";
 import { landingEnds, landingLayout, stairBox, LANDING_HALF, CAB_ROOF, type TrainValues } from "./train";
@@ -36,6 +37,9 @@ const FLAT = { height: () => 0, normal: (_x: number, _z: number, out: number[] =
 interface Wheel { mesh: THREE.Mesh; r: number }
 type BodyValues = TrackValues & PipeValues & TrainValues & { runningGap: number };
 
+/** How far past the screen's edge a car's moving parts still run (m): enough for their shadows to fall in view. */
+export const CULL_MARGIN = 30;
+
 export class PlatformBody {
   /** Rides the platform (local frame: x left, y up, z forward). */
   readonly root = new THREE.Group();
@@ -48,7 +52,6 @@ export class PlatformBody {
   private wheels: Wheel[] = [];
   /** The bay terminal's lit screen and lamp. */
   private screens: THREE.Mesh[] = [];
-  private built = "";
   private m = new THREE.Matrix4();
   /** Pipe runs on this platform (for the HUD). */
   pipeRuns = 0;
@@ -72,19 +75,33 @@ export class PlatformBody {
   landingMeshes(): THREE.Object3D[] { return this.landings ? [this.landings] : []; }
   vehicleMeshes(): THREE.Object3D[] { return this.cars.map((c) => c.root); }
 
-  update() {
-    const p = this.platform, c = this.carry, v = this.v;
-    const ends = landingEnds(this.all)[this.index];
-    const key = [p.deck, v.trackPods, v.trackTop, v.trackHeight, v.trackWidth, v.trackPitch, v.trackPodGap, v.pipeDensity, v.pipeSeed, v.pipeScale,
+  private key: (number | boolean)[] = [];
+  /** The shape's sliders now; true if any moved since the last build (perf: was a joined string every frame). */
+  private changed(ends: { nose: boolean; tail: boolean }) {
+    const p = this.platform, c = this.carry, v = this.v, k = this.key;
+    const now = [p.deck, v.trackPods, v.trackTop, v.trackHeight, v.trackWidth, v.trackPitch, v.trackPodGap, v.pipeDensity, v.pipeSeed, v.pipeScale,
       v.bridgeCount, v.bridgeRise, ends.nose, ends.tail, v.runningGap,
-      ...(c ? [c.craneSetDown, c.craneMount, c.deckParkX, c.deckParkZ, c.deckLaunchX, c.deckPadRadius, c.deckOpenSides] : [])].join("|");
-    if (key !== this.built) { this.build(ends); this.built = key; }
+      ...(c ? [c.craneSetDown, c.craneMount, c.deckParkX, c.deckParkZ, c.deckLaunchX, c.deckPadRadius, c.deckOpenSides] : [])];
+    let diff = now.length !== k.length;
+    for (let i = 0; !diff && i < now.length; i++) diff = now[i] !== k[i];
+    if (diff) this.key = now;
+    return diff;
+  }
+
+  /**
+   * Place the car's body. With a view (perf 2026-11-07): a car well off the screen doesn't run its crawler tracks'
+   * plates (they're posed from the distance travelled, so they're right again the frame it comes back).
+   */
+  update(view?: ViewCull) {
+    const p = this.platform;
+    const ends = landingEnds(this.all)[this.index];
+    if (this.changed(ends)) this.build(ends);
     this.m.makeBasis(new THREE.Vector3(p.left.x, p.left.y, p.left.z), new THREE.Vector3(p.up.x, p.up.y, p.up.z), new THREE.Vector3(p.fwd.x, p.fwd.y, p.fwd.z));
     this.m.setPosition(p.x, p.y, p.z);
     this.root.matrix.copy(this.m);
     this.root.matrixWorldNeedsUpdate = true;
     for (const w of this.wheels) w.mesh.rotation.x = p.travelled / w.r;
-    this.tracks?.update(p.travelled);
+    if (this.tracks && (!view || view.sees(p.x, p.y, p.z, p.spec.length / 2 + CULL_MARGIN))) this.tracks.update(p.travelled);
   }
 
   private clear() {
