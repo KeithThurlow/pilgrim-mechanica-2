@@ -118,6 +118,7 @@ export function robotsFront(params0: URLSearchParams): Front {
         put(18, 5, 0, 0); put(30, -7, 1, 0);
       }
       const d = new RobotsDraw(sw);
+      d.cull = bf.view;
       draw = d;
       lab.app.scene.add(d.group);
       const target = new RobotTarget(sw, 3);
