@@ -235,7 +235,7 @@ export class RobotsDraw {
   }
 
   /**
-   * Each tick. Frame-locked it draws; with a fixed tick (?tick=N; architecture stage 6d) it does nothing here: the app
+   * Each tick. Headless (checks) it draws; in the app (architecture stage 6d) it does nothing here: the app
    * draws the swarm once per drawn frame between its last two ticks (SlotInterp over the arrays the drawer reads).
    */
   update(dt: number): void {

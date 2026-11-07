@@ -17,18 +17,18 @@ export interface App {
   camera: THREE.PerspectiveCamera;
   hud: FrameHud;
   backend: "WebGPU" | "WebGL2";
-  /** Called once per sim tick before rendering (src/core/clock.ts): frame-locked by default (once a frame, dt the frame's
-   *  time clamped so a stalled tab never explodes a sim); with ?tick=N, N times a second at dt = 1/N, 0 to 4 per frame. */
+  /** Called once per sim tick before rendering (src/core/clock.ts): 60 times a second at dt = 1/60 (or ?tick=N), 0 to 4
+   *  per drawn frame. */
   onTick(fn: Tick): void;
   /** Called once per drawn frame after the frame's ticks (0 or more), before rendering: cameras, effects, drawing.
    *  dt: the frame's real time (clamped to 1/20 s); alpha: how far between the last tick and the next (src/core/clock.ts). */
   onFrame(fn: (dt: number, alpha: number) => void): void;
   /** Called after each render (e.g. to put back a model posed between ticks: src/look/treeInterp.ts). */
   onAfterRender(fn: () => void): void;
-  /** The game clock: fixed or frame-locked, ticks run, alpha between ticks. */
+  /** The game clock: ticks run, alpha between ticks. */
   clock: Clock;
-  /** The models drawn between ticks (null when frame-locked; src/look/treeInterp.ts). */
-  interp: InterpSet | null;
+  /** The models drawn between ticks (src/look/treeInterp.ts). */
+  interp: InterpSet;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N, ?norender */
   params: URLSearchParams;
   /** A PNG data URL of the next rendered frame (taken right after it renders, before the canvas clears). */
@@ -74,11 +74,13 @@ export async function createApp(container: HTMLElement): Promise<App> {
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
   const clock = clockFromUrl(params);
-  // Stage 6c: under ?tick=N every model on drawBetweenTicks' list is drawn between its last two ticks.
-  const interp = clock.fixed ? new InterpSet() : null;
-  // Stage 6d: swarm drawers (RobotsDraw...) draw once per drawn frame, between ticks, instead of in the tick.
-  setBetweenTicks(clock.fixed);
-  hud.set("clock", () => clock.hud() + (interp ? `; ${interp.models} models (${interp.parts} parts) drawn between ticks` : ""));
+  // Every model on drawBetweenTicks' list is drawn between its last two ticks (stage 6c); swarm drawers (RobotsDraw...)
+  // draw once per drawn frame, between ticks, instead of in the tick (6d).
+  const interp = new InterpSet();
+  setBetweenTicks(true);
+  hud.set("clock", () => `${clock.hud()}; ${interp.models} models (${interp.parts} parts) drawn between ticks`);
+  // ?dt=seconds: every drawn frame advances that much time, however long it took (repeatable headless shots, ?bench).
+  const stepDt = params.has("dt") ? Number(params.get("dt")) || 0 : 0;
   const noRender = params.has("norender");
   let up = { trimmed: 0, savedKB: 0, empty: 0 };
   hud.set("shaders", () => `shaders: ${shaders.total} pipelines built (${shaders.async ? "in the background" : "sync, ?syncshaders"}), ${shaders.totalMs.toFixed(0)} ms in frames (code ${shaders.totalGenMs.toFixed(0)}), worst frame ${shaders.worstMs.toFixed(0)} ms`);
@@ -88,13 +90,13 @@ export async function createApp(container: HTMLElement): Promise<App> {
   hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent; ${up.empty} empty pools not drawn`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
-    const raw = (now - prev) / 1000;
+    const real = (now - prev) / 1000, raw = stepDt || real;
     prev = now;
     const t0 = performance.now();
     if (!app.hold) {
-      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); if (interp) { interp.capture(); runAfterTick(); } });
+      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); interp.capture(); runAfterTick(); });
       const fdt = Math.min(raw, 1 / 20);
-      if (interp) { interp.apply(clock.alpha); runFrameDrawers(fdt, clock.alpha); }
+      interp.apply(clock.alpha); runFrameDrawers(fdt, clock.alpha);
       for (const f of frames) f(fdt, clock.alpha);
     }
     const t1 = performance.now();
@@ -105,7 +107,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
       else renderer.render(scene, camera);
       restoreEmptyPools();
     }
-    interp?.restore();
+    interp.restore();
     for (const f of afters) f();
     const t2 = performance.now();
     hud.note(shaders.frameNew || shaders.frameGenMs > 1 ? `new shaders ${shaders.frameNew} (code ${shaders.frameGenMs.toFixed(0)} ms, GPU ${shaders.frameMs.toFixed(0)} ms)` : "");
@@ -115,9 +117,9 @@ export async function createApp(container: HTMLElement): Promise<App> {
       try { url = renderer.domElement.toDataURL("image/png"); } catch { /* tainted or lost: send without */ }
       for (const c of captures.splice(0)) c(url);
     }
-    last.frame = raw * 1000; last.tick = t1 - t0; last.render = t2 - t1;
+    last.frame = real * 1000; last.tick = t1 - t0; last.render = t2 - t1;
     last.calls = renderer.info.render.drawCalls; last.tris = renderer.info.render.triangles;
-    hud.frame(raw * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles, t1 - t0, t2 - t1);
+    hud.frame(real * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles, t1 - t0, t2 - t1);
   });
 
   const app: App = {

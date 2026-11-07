@@ -277,16 +277,20 @@ const stick = new THREE.Vector3(), aimPt = new THREE.Vector3();
 const aimAtArg = params.get("aimat")?.split(",").map(Number);
 const aimAt: Aim | null = aimAtArg && aimAtArg.length === 2 ? { x: aimAtArg[0], y: field.height(aimAtArg[0], aimAtArg[1]) + 0.8, z: aimAtArg[1] } : null;
 
-// ?dt=seconds: every frame advances this much time, however long it took to draw (repeatable headless shots).
-const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
-// ?warm=seconds: run that much sim time (in dt steps) before the first drawn frame, so slow headless shots start mid-run.
+// ?dt=seconds (every drawn frame advances that much time: repeatable headless shots) is the app's (src/core/app.ts).
+// ?warm=seconds: run that much sim time (in ticks) before the first drawn frame, so slow headless shots start mid-run.
 let warm = Number(params.get("warm") ?? 0);
-app.onTick((frameDt) => {
-  if (warm > 0) { const step = fixedDt || 1 / 30; for (; warm > 0; warm -= step) tick(step); }
-  tick(frameDt);
+// The camera's target, kept per tick and blended between ticks per drawn frame (the mech is drawn between ticks).
+const focusPrev = new THREE.Vector3(), focusCur = new THREE.Vector3();
+let focusTicks = 0;
+app.onTick((tickDt) => {
+  if (warm > 0) { for (; warm > 0; warm -= tickDt) tick(tickDt); }
+  tick(tickDt);
+  focusPrev.copy(focusCur); focusCur.set(sim.pelvis.x, sim.pelvis.y - 1.2, sim.pelvis.z);
+  if (focusTicks++ === 0) focusPrev.copy(focusCur);
 });
 function tick(rawDt: number) {
-  const dt = (fixedDt || rawDt) * (slow ? 0.25 : 1);
+  const dt = rawDt * (slow ? 0.25 : 1);
   clock += dt;
 
   keys.move(camera, stick);
@@ -326,7 +330,15 @@ function tick(rawDt: number) {
     (reticle.material as THREE.MeshBasicMaterial).color.setHex(upper.onTarget && !mech.gunsOff ? 0xffb347 : 0x9a958c);
   }
 
-  follow.lerp(new THREE.Vector3(sim.pelvis.x, sim.pelvis.y - 1.2, sim.pelvis.z), Math.min(1, rawDt * 6));
+  bf.tick(dt, look);
+  hudLines(cmd);
+}
+
+// Once per drawn frame, after its ticks: the camera, streaming, light and the battlefield's effects.
+const focusDrawn = new THREE.Vector3();
+app.onFrame((rawDt, alpha) => {
+  const dt = rawDt * (slow ? 0.25 : 1);
+  follow.lerp(focusDrawn.lerpVectors(focusPrev, focusCur, alpha), Math.min(1, rawDt * 6));
   // The game camera leads a fast mech and pulls out a little.
   if (camName === "game") iso.update(follow, rawDt, { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z });
   else {
@@ -348,7 +360,10 @@ function tick(rawDt: number) {
   // Haze and shadows scale with the zoom: fog counts from the camera, and far views need a bigger shadow box.
   const camDist = camera.position.distanceTo(follow);
   look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
-  bf.update(dt, camera, look);
+  bf.frame(dt, camera, look);
+});
+
+function hudLines(cmd: MoveCommand) {
 
   const [a, b] = sim.feet;
   const misses = sim.stats.overreach / Math.max(1, sim.stats.frames * 2);

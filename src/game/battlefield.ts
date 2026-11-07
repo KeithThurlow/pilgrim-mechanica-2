@@ -649,7 +649,7 @@ export class Battlefield {
     }
   }
 
-  /** A tick and a drawn frame together (labs that don't split them; frame-locked, both once a frame). */
+  /** A tick and a drawn frame together (headless checks that don't split them). */
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
     this.tick(dt, look);
     this.frame(dt, camera, look);
