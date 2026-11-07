@@ -17,6 +17,7 @@ import { NightLights, NIGHT_LIGHT_DEFAULTS, NIGHT_LIGHT_PARAMS, NIGHT_LIGHT_GROU
 import { BLAST_WAVE_DEFAULTS, BLAST_WAVE_PARAMS, BLAST_WAVE_GROUPS } from "../fx/blastWaves";
 import { NOVA_DEFAULTS, NOVA_PARAMS, NOVA_GROUPS } from "../fx/nova";
 import { HEAT_DEFAULTS, HEAT_PARAMS, HEAT_GROUPS } from "../fx/groundHeat";
+import { touchMode } from "../core/touch";
 
 export const LOOK_DEFAULTS = {
   sunAzimuth: 215,
@@ -158,7 +159,7 @@ export class DesertLook {
 
     this.sun = new THREE.DirectionalLight(SUN, 4);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.setScalar(touchMode ? 1024 : 2048); // phones: a quarter of the shadow map's pixels
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.sun.shadow.radius = 2;
