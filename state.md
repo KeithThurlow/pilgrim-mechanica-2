@@ -210,6 +210,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
+- Architecture migration (Keith 2026-11-07, Claude on `claude/project-thread-2luei6`): `docs/architecture-review.md` stages, one PR each; stage 1 (the clock) merged; next stage 2, the ECS core (`src/ecs/`). Handoff `docs/handoff-architecture.md`. **New per-system worker remotes wait for stage 7.**
 - Sim in a worker (Keith 2026-11-06, Claude on `claude/project-thread-lla597`): plan in `docs/proposal-simworker.md`, handoff `docs/handoff-simworker.md`. One system per PR, the worker path the default on main, `?noworker` to compare. Steps 1 (plumbing and the ground mirror), 2 (chunk builds and patches), 2b (the detail patch's fine rows), 3 (escorts) 4a (the swarm worker-ready), 4b (the robot swarm in the worker) and 4c (its parity check, shipped with 4b) done; next: the PC profile far out fighting robots decides (striders, crushers, droids, or the rest of the sim).
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, compaction as an upgrade, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
 - Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batches 1 and 2 merged (robots, bandits, warband, droids, crusher, summoner's units in `labs/swarm/`). **Edit the robot, bandit, war band, droid, crusher and summoner lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Open questions in `docs/decisions.md` (2026-11-02 swarm lab rows).
@@ -317,6 +318,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-07 · Architecture stage 1: one game clock (Claude)
+- `src/core/clock.ts` (new): every lab's ticks go through one clock. The default stays frame-locked (one tick a frame, dt clamped to 1/20 s, as before). `?tick=60` (or 30, 120) runs fixed ticks of 1/N s, at most 4 a frame (a longer stall drops time), `alpha` between ticks for interpolated drawing later, `every(n)` rate groups; HUD line `clock`. `src/core/app.ts` runs the ticks through it (`app.clock`).
+- `docs/architecture-review.md`: Keith's targets (sim 30-60 Hz, drawn 144+, ideally 200+) and §4.6, each part's rate and thread; CLAUDE.md's 120 Hz line corrected.
+- Checked: `tools/clock-check.ts` (ticks add up to real time, catch-up cap, rate groups; a robot camp fight at fixed 60 Hz is bit-for-bit the same drawn at 30, 60, 144, 240 fps and a jittery mix, and differs frame-locked); walker and swarm labs headless with `?tick=60` / `?tick=30`, no errors; `npm test`.
 
 ### 2026-11-07 · Convoy cars well off the screen skip their crawler tracks and knelt mechs (perf; Claude)
 - Cosmetic only: a car more than 30 m (`CULL_MARGIN`, for shadows) off the screen doesn't pose its track plates or the Ramparts knelt on its deck; both are posed from the car alone, so they're right the frame it comes back. The car's slider check is an array compare instead of a joined string every frame (`src/convoy/platformBody.ts`, `deckMechs.ts`, `labs/convoy/main.ts`; `?nocull` poses all every frame).

@@ -5,6 +5,13 @@ with and feel is maintainable, with a strong entity component system", built to 
 in 4-player co-op**. Smoothness is what counts, so a lower fixed sim and damage tick (30 or 60 Hz) with interpolated
 drawing is fine. He also asked what tick rates ARPGs use.
 
+**Targets after Keith's answers (2026-11-07):**
+- **Sim:** 30 or 60 Hz is fine.
+- **Drawn frames:** as high as the graphics allow, interpolated: **at least 144 fps, ideally 200+**. That is a 6.9 ms
+  main-thread frame, 5 ms at 200 fps.
+- **Rates:** each part of the game runs at its own rate and on its own thread where that makes sense, for example
+  animation at the drawn rate apart from the sim (section 4.6).
+
 Claude wrote this from main `6f5425c` (after #276). It reads the code, `state.md`, `docs/sim-scope.md`,
 `docs/proposal-simworker.md`, `docs/handoff-simworker.md`, `docs/multiplayer.md`, `docs/engine-options.md` and the PC
 profiles in the project files. It also takes in the parallel threads' recent work: the sim worker steps (#252-#274) and
@@ -291,6 +298,10 @@ Robots now queue events (4a). Elsewhere, systems call each other's handlers mid-
 ### 4.5 Budgets (estimates, to be measured)
 The frame budget is 6.9 ms at 144 fps and 10 ms at 100 fps.
 
+Keith's later target (200+ fps) means a 5 ms main thread. Reaching it needs the render systems at ~3.5 ms, which is
+beyond the table below. It probably needs the per-kind batching and animation LOD of section 4.6, and a GPU that isn't
+the limit.
+
 | | Solo, 144 fps | Co-op host, 100 fps | Basis |
 | --- | --- | --- | --- |
 | Main: input, prediction, interpolation | ~0.5 ms | ~0.7 | Local walker ~0.7 ms at 120 Hz today (profile: walkers 4-5% of 16 ms, several mechs) |
@@ -305,6 +316,36 @@ The frame budget is 6.9 ms at 144 fps and 10 ms at 100 fps.
 - That makes the main thread's render cost the gate for both goals, which matches `engine-options.md`.
 - If render submit can't get under ~6 ms, the Bevy spike is the next call, not more sim work.
 
+### 4.6 Each part at its own rate and thread (Keith 2026-11-07)
+Keith asked whether animation could be separated from the sim, and whether parts could be threaded differently, each
+with its own performance threshold. Yes. The rule: **the sim decides *what* happens at a fixed rate; everything you
+*see* is computed at the drawn rate from the sim's state.** A part that nothing else depends on (cosmetic) can run at
+any rate, on any thread, and skip work when it's far or off screen.
+
+| Part | Thread | Rate | Budget | Notes |
+| --- | --- | --- | --- | --- |
+| Host rules: damage, shots, projectiles, enemy movement, status effects | Worker (host) | **60 Hz** | ≤ 8 ms per tick (of 16.7) | Rays are swept, so fast rounds don't tunnel. DoT damage is applied at 10 Hz, its look every frame. |
+| AI decisions near the player (target picks, paths, attack choices) | Worker | 10-20 Hz, staggered across ticks | inside the above | Movement still steps every tick. Spreading decisions over ticks flattens spikes. |
+| AI far, or out of view | Worker | 30 / 15 Hz rate groups | inside the above | Generalises the escort and guardian LOD (#250, the off-screen guardians). |
+| Abstract groups (roaming packs, clashes, war columns) | Worker | 2 Hz | ~0.1 ms | Already about this (clashes every 0.5 s). |
+| Spatial index (register) | Worker | every tick | ~0.3 ms | One per world. The view has its own for the cursor. |
+| Your own mech's legs and IK (walker sim) | **Main**, predicted | 120 Hz (2 substeps per tick) | ~0.7 ms per frame | Zero input lag. In co-op the host keeps an authoritative copy and corrects when it drifts. |
+| Remote mechs' legs and poses | Main | drawn rate, from interpolated state | ~0.2 ms each | Foot plants come from the host's state. The pose is cosmetic. |
+| Enemy animation (robot legs, bandit baked clips, swaying hoses) | Main | **drawn rate near**, ½ or ¼ rate far (animation LOD), none off screen | ≤ 1 ms | Read from interpolated transforms. This is where `robotsDraw`'s ~1 ms goes today. |
+| Particles: dust, sparks, tracers, casings | GPU compute | drawn rate | GPU time | Spawned from sim events. Already on the GPU (scale step 5). |
+| Ground dents, heat | GPU / main | dents every frame, heat 4-30 Hz | ~0.3 ms | Cosmetic, made from ground events. |
+| Death physics (Rapier ragdolls, wrecks) | Main now, a second worker later | 60 Hz fixed, interpolated | ~1 ms | Cosmetic, so it can live in its own worker without touching the host. |
+| Terrain chunks and patches | Worker | on demand, budgeted | ≤ 4 ms per frame in the background | Already there (worker steps 2 and 2b). |
+| Audio | Web Audio's own thread | events at the tick, mixed natively | ~0.2 ms main | Sounds start from sim events. Pitch and spin follow the interpolated state. |
+| Camera, HUD, UI | Main | drawn rate (text HUD 10 Hz) | ~0.3 ms | |
+| Network | Worker (host) | inputs every tick; snapshots to peers at 20-30 Hz | ~0.5 ms per peer | The same snapshot the local view gets, quantised and filtered by distance. |
+
+Threads: **main** (input, prediction, interpolation, animation, drawing, at 5-6.9 ms a frame), **host worker** (the
+world at 60 Hz, at most 8 ms of each 16.7 ms tick) and an optional **cosmetic worker** (ragdolls, maybe animation
+baking). The GPU runs particles and dents, and Web Audio mixes on its own thread. The clock (stage 1) carries this. It
+runs the fixed ticks and gives every drawn-rate part an `alpha` between the last two ticks, and a part declares its rate
+when it registers.
+
 ---
 
 ## 5. Migration plan (staged, each stage a PR, nothing visible changes until stage 6)
@@ -314,12 +355,12 @@ stage and the game still plays. Each stage comes with a check.
 
 | Stage | What | Size | Check | Unblocks |
 | --- | --- | --- | --- | --- |
-| **1. One clock** | `src/core/scheduler.ts`: fixed-tick accumulator (starting at **120 Hz**, so nothing changes), phases, `alpha`. The convoy lab's loop and `combatLab.ts` call `scheduler.frame(raw)`; systems are registered in phase order once. `ceil(dt·120)` substeps go. Hit-stop to presentation. `?tick=N` flag. | S (1-2 sessions) | `tools/determinism-check.ts`: a scripted headless fight twice at different frame rates (30, 60, 144 fps of render) gives the same world hash | Everything below |
+| **1. One clock** | `src/core/clock.ts`: fixed-tick accumulator, catch-up cap, `alpha` for the drawn-rate parts, rate groups (every Nth tick). Every lab's ticks go through it. The default stays frame-locked (as today) until interpolation lands; `?tick=60` (or 30, 120) runs the fixed tick now, so it can be felt and measured. Expect judder on a 144 Hz screen until stage 6. | S (1-2 sessions) | `tools/determinism-check.ts`: a scripted headless fight twice at different frame rates (30, 60, 144 fps of render) gives the same world hash | Everything below |
 | **2. ECS core** | `src/ecs/`: world, ids, columns, queries, systems, events, resources; replication tags. No game code moved. | S | `ecs-check`: add/remove/query against brute force, id reuse, column growth | 3-5 |
 | **3. Damage as data** | Split `Battlefield`: `HitSystem` (pure: shots, sheets, splash, armour, matter, status) emits `Hit`/`Blast`/`Death` events; FX and sound consume them. `Hittable` adapters become thin bridges writing ECS components. Seeded RNG for spread. | M (2-3 sessions) | The existing weapon, sheet, splash and armour checks unchanged; a new event-stream parity check | 4-7, co-op damage |
 | **4. Crowds onto the ECS** | Robots, then infantry: their SoA arrays *become* component columns (mostly a rename); their AI becomes systems; their draw classes become render systems reading `Transform`. Register rebuilt from components. | M each | robots-check, infantry checks, robotworker parity | Rate groups, per-kind render |
 | **5. Heavies onto the ECS** | Mechs (player, rival, guardians, replicas), war band vehicles, escorts, crushers, striders: opaque sim components (walker, car); `MechUnit` split into sim (no three) and a render system. | L (several sessions, one kind per PR) | Duel and walker checks; `weaponscaling-check`; duel sim headless | Co-op mechs on the host |
-| **6. 60 Hz + interpolation** | Tick to 60; walker and car substep ×2 inside; `PrevTransform` and interpolated drawing; rate groups for far LOD. A slider and `?tick=120` keep the old feel to compare. | S-M | Determinism check at 60; walker feel numbers (cadence, swing, bob) equal to the 120 Hz run within tolerance | The performance goal |
+| **6. 60 Hz + interpolation** (Keith 2026-11-07: 30 or 60 fine, drawn 144-200+) | Tick to 60 by default; walker and car substep ×2 inside; `PrevTransform` and interpolated drawing; rate groups for far LOD. A slider and `?tick=120` keep the old feel to compare. | S-M | Determinism check at 60; walker feel numbers (cadence, swing, bob) equal to the 120 Hz run within tolerance | The performance goal |
 | **7. Host world in the worker** | The whole host world steps in the worker; one snapshot (dirty columns) + events back; main is the view, with the local mech predicted. `robotsRemote`/`escortsRemote` retired. `?noworker` runs the same world on main. | M-L | Parity: worker and main worlds equal bit for bit for a scripted run (the generalised robotworker check) | Co-op transport |
 | **8. Co-op transport** | WebRTC data channel carrying the same protocol, quantised, 20-30 Hz, interest-managed; signalling server; remote mechs interpolated. | L | A two-tab headless test: same world hash at the host, remote sees within quantisation | Co-op |
 | **9. Clean-ups** | Random lint, config resources (F8), ground height cache (F9), state.md dedupe (F12). Do these whenever convenient; they are independent. | S each | Their own checks | — |
@@ -377,7 +418,8 @@ What this tells us:
 
 ## 7. Open questions for Keith (defaults chosen; none blocks stages 1-3)
 
-1. **Tick:** 60 Hz with interpolation (default), or keep 120? Stage 6 has a `?tick=120` flag so you can feel both.
+1. **Tick:** answered (Keith 2026-11-07): 30 or 60 Hz is fine, drawn as fast as the graphics allow. We're going with
+   60, and `?tick=30` lets you compare.
 2. **ECS:** in-house (default) or bitECS? In-house keeps the storage under our control for the snapshot and network.
 3. **Order:** stages 1-3 first (default, small and invisible), then crowds, then heavies. Or heavies first if co-op
    mechs matter sooner?
