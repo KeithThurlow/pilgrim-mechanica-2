@@ -24,6 +24,9 @@ export interface SheetFire {
   line?: number;
   /** Fly flat to range (the rail) rather than come down on the sand past the aim (rounds). */
   flat?: boolean;
+  /** A flat shot aimed high (Keith 2026-11-07: the rail up at a big walker's reactor): when the aim stands more than
+   *  this over the line's height at it, the line climbs straight to the aim (and on past it). Unset: always flat. */
+  lift?: number;
   /** Throw light bodies along the line at this speed (m/s; the rail). */
   knock?: number;
   /** Armour pierce 0..1 of each hit (src/game/armour.ts; none: armour-ignoring). */
@@ -55,6 +58,9 @@ export function makeSheet(field: Ground, muzzle: THREE.Vector3, d: THREE.Vector3
   const aimFlat = aim ? Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z) : 0;
   const slope = aim && aimFlat > 1 ? (field.height(aim.x, aim.z) - g0) / aimFlat : f.flat ? 0 : rise;
   const flatRange = f.flat ? range : range * fl;
+  // A flat shot aimed high climbs to the aim (lift); else it keeps its height over the floor.
+  const over = aim && f.flat && f.line !== undefined && f.lift !== undefined && aimFlat > 1 ? aim.y - (field.height(aim.x, aim.z) + f.line) : 0;
+  const climb = over > (f.lift ?? Infinity) ? over / aimFlat : 0;
   let land = flatRange;
   if (!f.flat) {
     for (let t = Math.max(0, aimFlat * 0.98); t <= flatRange; t += v.sheetStep) {
@@ -64,7 +70,7 @@ export function makeSheet(field: Ground, muzzle: THREE.Vector3, d: THREE.Vector3
   return {
     ox: muzzle.x, oz: muzzle.z, dx, dz, from: 0, len: land, half: f.half, under: v.sheetUnder,
     top: (t) => g0 + slope * t + f.height,
-    line: f.line === undefined ? undefined : f.flat ? (t) => g0 + slope * t + f.line! : (t) => Math.max(g0 + slope * t + f.line!, muzzle.y + rise * t),
+    line: f.line === undefined ? undefined : f.flat ? (t) => g0 + slope * t + f.line! + climb * t : (t) => Math.max(g0 + slope * t + f.line!, muzzle.y + rise * t),
     ground: (x, z) => field.height(x, z),
     aim: f.flat && aim && aimFlat > 1 ? { y0: muzzle.y, t: aimFlat, y: aim.y } : undefined,
   };

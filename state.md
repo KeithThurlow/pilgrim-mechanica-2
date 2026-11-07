@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · The rail climbs to a big walker's reactor (Keith asked; Claude on `claude/project-thread-2vnrf3`)
+- The slug still flies flat at its slug height over the sand, but when the aim stands more than `railLift` (3 m, Rail cannon group) above that, as with a lock on a big walker's reactor or body, the slug's line climbs straight to the aim and on past it, and the streak and preview line follow. Keith: weak points are for the big walkers only (as built).
+- Files: `src/game/sheetFire.ts` (`SheetFire.lift`), `src/weapons/rail.ts` (`railAimY`), `tuning.ts`, `arsenal.ts` (streak, preview). Checked: `tools/robotweak-check.ts` (the rail at the reactor from 30 and 60 m strikes it, at the body the body, at the sand it flies 1.6 m up as before); full `npm test` passes.
+
 
 ### 2026-11-07 · Architecture stage 6c: every mech and vehicle drawn between ticks (Claude)
 - `drawBetweenTicks(root)` and `InterpSet` (src/look/treeInterp.ts): the models built by RampartBody, WalkerBody, CarBody, EscortBody, CrusherBody, StriderBody, PilotBody, PlatformBody and CraneBody put themselves on a list; under `?tick=N` the app (`App.interp`) captures every one in a scene after each tick, poses them between ticks before the drawn frame and puts them back after the render. The player-only wiring of 6b is gone from the labs (the camera focus blend stays). A part something poses outside the tick (in a drawn frame) is left alone. Frame-locked (the default) nothing changes. The HUD's clock line counts the models and parts.

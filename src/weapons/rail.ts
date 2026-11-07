@@ -55,5 +55,12 @@ export function coilGlow(c: number, i: number, n: number): number {
 /** The rail's sheet: flat out to range, its floor from the mech's feet to the ground under the aim; the slug flies at
  *  its slug height over that floor, so sand above that costs penetration (not just sand above the tall sheet's top). */
 export function railSheet(v: WeaponValues, st: RailStats, aim: { x: number; y: number; z: number } | null): SheetFire {
-  return { half: v.railSheetHalf, height: v.railSheetHeight, line: v.railSlugHeight, pen: st.pen, aim, flat: true, knock: v.railKnock, pierce: st.ap ?? v.railAp };
+  return { half: v.railSheetHalf, height: v.railSheetHeight, line: v.railSlugHeight, lift: v.railLift, pen: st.pen, aim, flat: true, knock: v.railKnock, pierce: st.ap ?? v.railAp };
+}
+
+/** The slug's height at the aim: its slug height over the ground there, or the aim itself when it stands more than
+ *  railLift over that (aimed up at a big walker's reactor: the slug climbs to it, Keith 2026-11-07). */
+export function railAimY(v: WeaponValues, ground: { height(x: number, z: number): number }, aim: { x: number; y: number; z: number }): number {
+  const g = ground.height(aim.x, aim.z) + v.railSlugHeight;
+  return aim.y - g > v.railLift ? aim.y : g;
 }
