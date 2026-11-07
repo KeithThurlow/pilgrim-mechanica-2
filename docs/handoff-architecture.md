@@ -38,19 +38,24 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 6e: `InfantryDraw` the same, through the shared `swarmBetweenTicks`.
 
 ## Next, in order
-- The 60 Hz default: flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab
-  comparison (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and
-  lasers, crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
-- Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
-  unchanged at every step):
-  - 4.2 Readers move to the components: the register's robot owner, targeting, health bars, then `robotsDraw`
-    (interpolating with `drawnAt` once stage 6 lands).
-  - 4.3 The swarm writes the components itself (its x/z/heading/hp arrays become views of the columns, or the swarm
-    keeps slot-indexed private state only); the sync goes. The worker's robot snapshot becomes `packWorld` columns.
+- The 60 Hz default: waiting on Keith (decision card 2026-11-07: flip now, or after he has played `?tick=60`). Then
+  flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab comparison
+  (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and lasers,
+  crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
+- Stage 4, re-planned (Claude 2026-11-07): skip 4.2 as its own step. Moving readers onto a mirror that is synced at the
+  end of `rules.step` adds a one-tick-stale copy and no gain; the readers move when the swarm owns its state in the
+  world (4.3). 4.3 is a big build (rule 9): propose it to Keith before starting. Outline:
+  - A world with a fixed capacity per kind (ROBOT_MAX is fixed), so columns never get replaced and the swarm's arrays
+    can be `subarray` views of its slice of the columns (Transform.x/z/heading, Health.hp/max...). Today the world
+    grows by replacing columns (`World.columns` after `create`), which breaks views: add `new World({ capacity })`.
+  - Slot index = entity index within the swarm's slice (a range of entity indices reserved per swarm), generations
+    from the swarm's `gen`; `RobotEntities` and the sync go; robots-check and robotworker parity unchanged.
+  - Then the register's robot owner, targeting and health bars read the components; the worker's robot snapshot
+    becomes `packWorld` columns (stage 7).
   - Then infantry the same way.
-- Stages 5 heavies, 6 60 Hz default + interpolation, 7 host world in the worker, 8 co-op transport (review §5).
+- Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
 
 ## Facts
-- Labs' tick bodies mix sim and drawing; with `?tick=N` the whole body runs per tick (0-4 times a frame). Splitting each
-  lab's body into a sim tick and a per-frame draw comes with stage 6.
+- Under `?tick=N` the labs' tick bodies run 0-4 times a frame; what's seen is drawn between ticks (6b-6e). Fx still step
+  in the tick in places (above).
 - Hit-stop (`src/game/hitStop.ts`) still scales the sim's dt; to move to presentation in stage 6.
