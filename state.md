@@ -319,6 +319,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · The frame HUD shows what the GPU draws (Keith: "how can I tell if this is actually working?"; Claude on `claude/project-thread-oakhm8-reshud`)
+- `src/core/hud.ts` `pixels`, set by `src/core/app.ts` on resize: a third top line "draws 1123×468 px (res 0.5)" (", AA" when MSAA is on), so `?res=` can be seen working. Checked: typecheck, full `npm test`.
+
 ### 2026-11-07 · Phones draw at half resolution, no MSAA, smaller sun shadow map (Keith: frame rate GPU-bound on his phone, sharper than the PC; Claude on `claude/project-thread-oakhm8-mobileperf`)
 - `src/core/app.ts`: on touch screens the renderer's pixel ratio is `devicePixelRatio × ?res=` (0.5: half the native width and height, a quarter of the pixels; before, the phone drew every native pixel with MSAA) and MSAA is off (`?aa=1` puts it back). `?res=` also scales the PC's ratio. `src/world/look.ts`: sun shadow map 1024 on touch (2048 on the PC).
 - Checked: typecheck, full `npm test`. Not measured on a phone here: Keith to compare `?res=0.5` (default), `?res=0.35`, `?res=0.75`.
