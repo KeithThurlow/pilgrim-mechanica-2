@@ -27,6 +27,8 @@ export const GUARDIAN_DEFAULTS = {
   guardHold: 22,
   guardLeash: 45,
   guardRespawn: 40,
+  /** Perf 2026-11-07: steps a second for a guardian off the screen (its legs, torso and guns; 120 on screen). */
+  guardLodHz: 60,
 };
 export type GuardianValues = typeof GUARDIAN_DEFAULTS;
 
@@ -41,13 +43,14 @@ export const GUARDIAN_PARAMS: Param[] = [
   { key: "guardHold", label: "Holds off a target (m)", min: 5, max: 60, step: 1, group: G },
   { key: "guardLeash", label: "Leash from station (m)", min: 0, max: 150, step: 5, group: G, tip: "Never further than this from its station, whatever it is chasing" },
   { key: "guardRespawn", label: "Back out after (s)", min: 3, max: 300, step: 1, group: G, tip: "A destroyed guardian walks back out of the convoy this long after" },
+  { key: "guardLodHz", label: "Steps a second off the screen", min: 15, max: 120, step: 15, group: G, tip: "Perf 2026-11-07: a guardian off the screen steps its legs, torso and guns this often (120 on screen, the same as yours)" },
 ];
 export const GUARDIAN_GROUPS = [G];
 
 /** Push-out radius round a guardian against the cars (as the lab does for the player's mech). */
 const PUSH_R = 2.2;
 
-interface Guardian { unit: MechUnit; body: RampartBody; on: boolean; sx: number; sz: number; svx: number; svz: number; target: THREE.Vector3 | null }
+interface Guardian { unit: MechUnit; body: RampartBody; on: boolean; sx: number; sz: number; svx: number; svz: number; target: THREE.Vector3 | null; acc?: number }
 
 export class Guardians {
   readonly list: Guardian[] = [];
@@ -126,16 +129,24 @@ export class Guardians {
       if (k >= want) { if (g.on) this.off(g); return; }
       if (!g.on) this.place(g, k);
       const u = g.unit;
+      // Off the screen it steps its legs and guns at a lower rate (nobody sees the gait): one step of 1/guardLodHz s
+      // once that much time has gone by.
+      const pp = u.sim.pos, hz = this.bf.view.sees(pp.x, pp.y + 2, pp.z, 7) ? 120 : Math.max(15, Math.min(120, v.guardLodHz));
+      u.subHz = hz;
+      g.acc = (g.acc ?? 0) + dt;
+      const due = hz >= 120 || g.acc >= 1 / hz - 1e-6, sdt = g.acc;
+      if (due) g.acc = 0;
       u.hullOverride = v.guardHull; u.armourOverride = v.guardArmour; u.damageScale = v.guardDamage;
       // Its station and how fast it moves (the convoy's pace).
       this.station(k, st);
       if (dt > 0) { g.svx += ((st.x - g.sx) / dt - g.svx) * Math.min(1, dt * 4); g.svz += ((st.z - g.sz) / dt - g.svz) * Math.min(1, dt * 4); }
       g.sx = st.x; g.sz = st.z;
       if (!u.alive) {
-        u.step(dt, { x: 0, z: 0, sprint: false }, null, false);
+        if (due) u.step(sdt, { x: 0, z: 0, sprint: false }, null, false);
         if (u.deadFor > v.guardRespawn) this.place(g, k);
         return;
       }
+      if (!due) { this.spots.push({ x: u.sim.pos.x, z: u.sim.pos.z }); return; }
       const p = u.sim.pelvis;
       // The nearest threat in reach.
       let best: THREE.Vector3 | null = null, bd = v.guardRange;
@@ -159,7 +170,7 @@ export class Guardians {
       if (ml > 1) { mx /= ml; mz /= ml; }
       if (ml < 0.04) { mx = 0; mz = 0; }
       const aim = best ? (this.aim.x = best.x, this.aim.y = best.y, this.aim.z = best.z, this.aim) : null;
-      u.step(dt, { x: mx, z: mz, sprint: false }, aim, !!best && bd < v.range + 4);
+      u.step(sdt, { x: mx, z: mz, sprint: false }, aim, !!best && bd < v.range + 4);
       // Never inside a car or the plough.
       for (const c of this.convoy.platforms) { const o = c.pushOut(u.sim.pos.x, u.sim.pos.z, PUSH_R); if (o) { u.sim.pos.x = o.x; u.sim.pos.z = o.z; } }
       const o = this.convoy.plough.pushOut(u.sim.pos.x, u.sim.pos.z, PUSH_R);

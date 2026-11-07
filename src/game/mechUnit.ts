@@ -429,6 +429,9 @@ export class MechUnit implements Hittable, Solid {
 
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
+  /** Steps a second for the legs, torso and guns (120; an AI mech off the screen can take fewer: guardians' LOD). */
+  subHz = 120;
+
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
     // A line weapon armed for click-and-drag (src/weapons/lineAim.ts) owns the left button: the left gun holds fire.
@@ -449,7 +452,7 @@ export class MechUnit implements Hittable, Solid {
     const { sim, upper, body, v } = this;
     body.shoulderLine(this.shoulder);
     const fired: (1 | -1)[] = [];
-    const sub = Math.max(1, Math.ceil(dt * 120));
+    const sub = Math.max(1, Math.ceil(dt * this.subHz));
     const dash = this.dash;
     // Sprinting a while (sprintGunsAfter), the weapons are off (src/mech/bound.ts): no trigger, and the torso, guns and
     // head face the line of travel (turned that share into a drift) with the hull leaning forward by speed.

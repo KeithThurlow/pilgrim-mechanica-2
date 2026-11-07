@@ -2,6 +2,7 @@
 // sound, steel wrecks, and everything that can be shot. A `fire` call is a shot command (src/game/shots.ts: shots as
 // data, with its Protocols as fields); the shots resolve once a frame in update (the nearest of: a unit of another
 // team, a steel wreck, the sand), apply their damage, and their draws go to the gun effects and the sound.
+import { ViewCull } from "../core/viewCull";
 import type { Costs } from "../core/costs";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
@@ -225,6 +226,9 @@ export class Battlefield {
   private tmpFreeze = new THREE.Vector3();
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
+
+  /** What the camera sees this frame (drawers skip what's off the screen; cosmetic). */
+  readonly view = new ViewCull();
 
   constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     // Labs that don't list the dent or penetration sliders still get their defaults.
@@ -765,6 +769,7 @@ export class Battlefield {
     if (gpuDust) gd!.update(this.renderer!, dt, this.v);
     this.dustDraw.gpuOn = gpuDust;
     camera.updateMatrixWorld();
+    this.view.update(camera);
     this.flames.tune(this.v as object);
     this.flames.update(dt, camera);
     // A light in among the fireballs every so many (Keith 2026-11-05; Flame look › A light every).

@@ -65,6 +65,7 @@ export class SwarmCamps {
     this.sw = new RobotSwarm(v, field, SwarmCamps.SEED);
     this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw);
+    this.draw.cull = bf.view;
     coreWarnFx(bf, this.draw.coreWarn);
     scene.add(this.draw.group);
     this.target = new RobotTarget(this.sw, 3);

@@ -25,7 +25,7 @@ export const SIM_DEFAULTS = {
 };
 export type SimValues = typeof SIM_DEFAULTS;
 export const SIM_PARAMS: Param[] = [
-  { key: "simMirrorSamples", label: "Ground parity points a frame", min: 0, max: 256, step: 8, group: "Performance", tip: "Points where the sim worker's copy of the ground is checked against the main thread's every frame (0: off). Costs the main thread a few µs each" },
+  { key: "simMirrorSamples", label: "Ground parity points (every 4th frame)", min: 0, max: 256, step: 8, group: "Performance", tip: "Points where the sim worker's copy of the ground is checked against the main thread's every frame (0: off). Costs the main thread a few µs each" },
 ];
 
 /** Whether this page runs the sim worker (not with ?noworker). */
@@ -56,10 +56,11 @@ export class SimHost {
   /** End of a frame: send the ground's changes and a few points to check (round fx, fz: the mech). */
   frame(fx: number, fz: number) {
     const t0 = performance.now();
-    this.flush();
+    this.flush(true);
     const id = ++this.id;
     // Don't pile checks up if the worker falls behind (the events always go: the copy needs every one).
-    const n = this.expected.size < 3 ? Math.max(0, Math.round(this.v.simMirrorSamples)) : 0;
+    // Every 4th frame (perf 2026-11-07: the heights cost the main thread ~0.1 ms a frame at 16 points).
+    const n = this.expected.size < 3 && id % 4 === 0 ? Math.max(0, Math.round(this.v.simMirrorSamples)) : 0;
     const sample = new Float64Array(2 * n);
     if (n) {
       const want = new Float64Array(n), p = { x: 0, z: 0, heading: 0 }, spots = this.rec.spots;
@@ -148,8 +149,8 @@ export class SimHost {
   private applyMs = 0;
 
   /** The ground's changes so far to the worker (before anything that reads them). */
-  private flush() {
-    const ground = this.rec.take();
+  private flush(frameEnd = false) {
+    const ground = this.rec.take(frameEnd);
     if (!ground.length) return;
     this.frameEvents += ground.length;
     this.stats.eventsTotal += ground.length;

@@ -28,6 +28,8 @@ import { WEAK_DEFAULTS, WEAK_PARAMS, BIG_CORE_Y, crippleK, legsLost, raySphere, 
 export const ROBOT_DEFAULTS = {
   // Small ones: the pack.
   robotRunSpeed: 8,
+  /** Drawing: robots further than this outside the camera's view aren't drawn (m; -1 draws them all). */
+  robotDrawCull: 4,
   robotSpeedJitter: 0.15,
   robotAccel: 5,
   robotTurn: 600,
@@ -308,6 +310,7 @@ export type RobotValues = typeof ROBOT_DEFAULTS;
 const GB = "Robots: beam", GP = "Robots: terraform pulse", GD = "Robots: big death", GQ = "Robots: weapon quads", GQD = "Robots: weapon quad death";
 const G1 = "Robots", G2 = "Robots: big ones", GM = "Robots: medium", G3 = "Robots: attack", GH = "Robots: hit parts";
 export const ROBOT_PARAMS: Param[] = [
+  { key: "robotDrawCull", label: "Robots drawn this far off the screen (m)", min: -1, max: 40, step: 1, group: "Performance", tip: "Perf 2026-11-07: robots further outside the view than this (plus their size) aren't drawn, so their shadows still come in at the edges. -1 draws them all" },
   { key: "robotRunSpeed", label: "Run speed (m/s)", min: 1, max: 16, step: 0.1, group: G1 },
   { key: "robotSpeedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: G1 },
   { key: "robotAccel", label: "Acceleration (1/s)", min: 0.5, max: 20, step: 0.1, group: G1 },

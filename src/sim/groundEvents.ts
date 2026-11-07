@@ -107,10 +107,14 @@ export class GroundRecorder {
    */
   command(t: GroundTarget, m: string, a: unknown[]) { this.push({ t, m, a }); }
 
-  /** The events since the last take (values diffed first). */
-  take(): GroundEvent[] {
-    this.diff(true);
-    this.diffed = false;
+  /**
+   * The events since the last take (values diffed first). frameEnd false: a take mid-frame (a chunk build going out):
+   * the values are diffed only if they haven't been since the frame began (perf 2026-11-07: a full diff on every one of
+   * a frame's several takes was ~0.3 ms a frame in a siege).
+   */
+  take(frameEnd = true): GroundEvent[] {
+    this.diff(frameEnd);
+    if (frameEnd) this.diffed = false;
     const e = this.events;
     this.events = [];
     return e;
