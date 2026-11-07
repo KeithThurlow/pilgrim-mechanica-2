@@ -318,6 +318,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Docs: adversarial architecture review (Claude)
+- `docs/architecture-review.md`: findings (no single fixed tick: systems step at frame dt or variable `ceil(dt·120)` substeps; five entity shapes; `Battlefield` mixes damage rules with FX; the worker's per-system views won't scale), ranked risks, a target (small in-house ECS, one 60 Hz host world in the worker with one snapshot/event protocol that is also the netcode, interpolated per-kind drawing), a 9-stage migration and ARPG tick rates. Nothing built; for Keith to review before any restructuring.
+- Checked: docs only, `npm test` not run.
+
 ### 2026-11-07 · Robots off the screen aren't drawn (perf; Claude)
 - New `src/core/viewCull.ts` (the camera's view, updated once a frame in `Battlefield.update` as `bf.view`); `RobotsDraw.cull`: robots more than `robotDrawCull` m (4; Performance) plus 1.5× their size outside the view are skipped (swarm camps, the summoner's allies, the swarm lab's fronts). -1 draws them all.
 - Checked: headless bench `labs/convoy/?siege=300&manual&norender&bench`: swarm camps 2.37 → 0.88 ms (worker) and 3.14 → 1.62 (noworker), sim 7.8 → 6.2 ms; `npm test`.
