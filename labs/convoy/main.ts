@@ -930,7 +930,6 @@ function holdOnBucket() {
 
 /** ?nocull: the convoy's cosmetic parts posed every frame even off the screen (perf comparison). */
 const noCull = params.has("nocull");
-const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
 // ?bench: the same scene played with the sim worker and with ?noworker, measured, side by side (src/core/bench.ts).
@@ -938,7 +937,7 @@ runBench(app.hud, [{ label: "worker", flag: "" }, { label: "noworker", flag: "no
 app.onTick((rawDt) => {
   if (bigClose) holdOnBucket();
   // A heavy melee hit slows the fight a moment (src/game/hitStop.ts).
-  const dt = (fixedDt || rawDt) * hitStop.dtScale(rawDt);
+  const dt = rawDt * hitStop.dtScale(rawDt);
   clock += dt;
   costs.begin();
   bf.register.rebuild();
@@ -1207,23 +1206,17 @@ app.onTick((rawDt) => {
   app.hud.set("crane", () => `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
 });
 
-// Once per drawn frame, after the frame's ticks (src/core/clock.ts; architecture stage 6a): the camera, the ground
-// streaming, the light and the battlefield's effects and drawing. Frame-locked (the default) this runs right after the
-// one tick, as before; with ?tick=N the camera and effects still move every drawn frame.
-// With a fixed tick (?tick=N) every mech and vehicle is drawn between its last two ticks (architecture stage 6b-c;
-// drawBetweenTicks in src/look/treeInterp.ts, run by the app).
-const betweenTicks = app.clock.fixed;
-// The camera's target between ticks too, so it glides with the drawn mech.
+// Once per drawn frame, after the frame's ticks (src/core/clock.ts, 60 Hz): the camera, the ground streaming, the light
+// and the battlefield's effects and drawing. Mechs, vehicles and swarms are drawn between their last two ticks by the
+// app (src/look/treeInterp.ts); the camera's target is blended the same way, so it glides with the drawn mech.
 const focusPrev = new THREE.Vector3(), focusCur = new THREE.Vector3(), focusDrawn = new THREE.Vector3();
 let focusTicks = 0;
-if (betweenTicks) {
-  app.onTick(() => { focusPrev.copy(focusCur); focusCur.copy(focus(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
-}
+app.onTick(() => { focusPrev.copy(focusCur); focusCur.copy(focus(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
 
 app.onFrame((rawDt, alpha) => {
   if (app.clock.ran === 0) costs.begin();
-  const fdt = (fixedDt || rawDt) * hitStop.now();
-  follow.lerp(betweenTicks && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
+  const fdt = rawDt * hitStop.now();
+  follow.lerp(focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   // Out on the sand the camera leads the mech at speed (the sprint).
   iso.update(follow, rawDt, foot.driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
   shaker.apply(camera, rawDt, V.shakeDecay);

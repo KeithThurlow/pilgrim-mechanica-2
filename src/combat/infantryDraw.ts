@@ -141,7 +141,7 @@ export class InfantryDraw {
   private get useVat(): boolean { return !!this.vat && this.look.banditLook >= 0.5; }
 
   /**
-   * Each tick. Frame-locked it draws; with a fixed tick (?tick=N; architecture stage 6e) the app draws the crowd once
+   * Each tick. In the app (architecture stage 6e) it only sets up: the app draws the crowd once
    * per drawn frame between its last two ticks instead (swarmBetweenTicks: the arrays read here blended in place).
    */
   update(dt: number): void {

@@ -2,7 +2,7 @@
 // 144-200+). For the few heavy things posed as a tree of parts (the mechs, vehicles): after each tick, capture() keeps
 // every part's local position, rotation and scale (this tick's and the last); each drawn frame apply(alpha) poses the
 // tree between them; restore() after the render puts this tick's pose back, so anything reading the model during a tick
-// (muzzles, sockets) sees the sim's pose, not a blended one. Frame-locked (alpha 1) apply changes nothing. A part something
+// (muzzles, sockets) sees the sim's pose, not a blended one. At alpha 1 apply changes nothing. A part something
 // else moved since the capture (posed in a drawn frame, not a tick) is left as it is by apply and by restore.
 // Stage 6c: drawBetweenTicks(root) puts a model on the app's list (InterpSet, run by createApp under ?tick=N).
 // Ownership: cosmetic, local.

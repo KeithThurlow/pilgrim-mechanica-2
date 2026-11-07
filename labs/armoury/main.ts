@@ -231,11 +231,10 @@ build();
 streamer.fill(0, 0);
 
 // ---- Loop
-const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 let clock = t0, spin = 0;
 const aim = { x: 0, y: 0, z: 30 }, tmp = new THREE.Vector3();
 app.onTick((rawDt) => {
-  const dt = fixedDt || rawDt;
+  const dt = rawDt;
   clock += dt;
   if (view === "rampart") {
     // Stand and track a slowly sweeping aim point ahead.

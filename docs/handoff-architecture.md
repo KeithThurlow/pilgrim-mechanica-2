@@ -58,10 +58,9 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
     one each) has the extra ones fall back to worlds of their own (still correct, just outside the host world).
 
 ## Next, in order
-- The 60 Hz default: waiting on Keith (decision card 2026-11-07: flip now, or after he has played `?tick=60`). Then
-  flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab comparison
-  (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and lasers,
-  crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
+- The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
+  stress) move their camera in the tick; split them like the walker lab when it matters. Still per tick: droids'
+  visors and lasers, crusher and strider fx.
 - Stage 4.3b, readers onto the components: the register's robot owner, targeting and health bars query the world
   (`Robot`, `Transform`, `Health`) instead of the swarm's arrays (today they read the same memory through the swarm). Then
   the worker's robot snapshot becomes `packWorld` columns of the swarm's block (stage 7).
@@ -69,6 +68,6 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
 
 ## Facts
-- Under `?tick=N` the labs' tick bodies run 0-4 times a frame; what's seen is drawn between ticks (6b-6e). Fx still step
+- The labs' tick bodies run 0-4 times a drawn frame (60 Hz); what's seen is drawn between ticks (6b-6e). Fx still step
   in the tick in places (above).
 - Hit-stop (`src/game/hitStop.ts`) still scales the sim's dt; to move to presentation in stage 6.
