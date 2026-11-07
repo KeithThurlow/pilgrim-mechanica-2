@@ -103,7 +103,9 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 4.3b, more readers onto the components: the robots' register publish could become a world system over
   `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
   snapshot becomes `packWorld` columns of the swarm's block (stage 7).
-- Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
+- Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (one snapshot format), 7b
+  (infantry in the worker), 7c (MechUnit split; wants Keith to play-test), 7d (the rules in the worker), 7e (retire the
+  remotes). Then stage 8, co-op transport.
 
 ## Facts
 - The labs' tick bodies run 0-4 times a drawn frame (60 Hz); what's seen is drawn between ticks (6b-6e). Fx still step
