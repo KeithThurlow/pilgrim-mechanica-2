@@ -23,6 +23,8 @@ import {
   QUAD_TURRET_Y, QUAD_GUN_X,
 } from "./robotLegs";
 import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
+import { RobotBlock } from "./robotWorld";
+import type { World } from "../ecs/world";
 import { WEAK_DEFAULTS, WEAK_PARAMS, BIG_CORE_Y, crippleK, legsLost, raySphere, stumpWay } from "./robotWeakPoints";
 
 export const ROBOT_DEFAULTS = {
@@ -672,21 +674,21 @@ export const QUAD_WEAPONS = ["minigun", "rockets", "laser", "rail"] as const;
 export const QUAD_DROP = ["mg-light", "rpg-light", "rail-light", "rail-light"] as const;
 
 export class RobotSwarm {
-  readonly px = new Float32Array(ROBOT_MAX); readonly py = new Float32Array(ROBOT_MAX); readonly pz = new Float32Array(ROBOT_MAX);
-  readonly vx = new Float32Array(ROBOT_MAX); readonly vy = new Float32Array(ROBOT_MAX); readonly vz = new Float32Array(ROBOT_MAX);
+  readonly px: Float32Array; readonly py = new Float32Array(ROBOT_MAX); readonly pz: Float32Array;
+  readonly vx: Float32Array; readonly vy: Float32Array; readonly vz: Float32Array;
   /** Facing (radians, 0 = +Z). Latched ones face the mech's centre. */
-  readonly heading = new Float32Array(ROBOT_MAX);
-  readonly hp = new Float32Array(ROBOT_MAX);
+  readonly heading: Float32Array;
+  readonly hp: Float32Array;
   /** Health it spawned with (hp bars read hp / maxHp). */
-  readonly maxHp = new Float32Array(ROBOT_MAX);
+  readonly maxHp: Float32Array;
   /** Its area level's power (src/items/level.ts levelPower; 1 at level 1): spawn health and every attack's damage ×. */
   readonly power = new Float32Array(ROBOT_MAX).fill(1);
   /** Body length (m). */
-  readonly size = new Float32Array(ROBOT_MAX);
-  readonly kind = new Uint8Array(ROBOT_MAX);
-  readonly state = new Uint8Array(ROBOT_MAX).fill(EMPTY);
+  readonly size: Float32Array;
+  readonly kind: Uint8Array;
+  readonly state: Uint8Array;
   /** Seconds in the current state (DEAD: since death; the drawer collapses and sinks from it). */
-  readonly stateTime = new Float32Array(ROBOT_MAX);
+  readonly stateTime: Float32Array;
   /** Trot cycle (radians, advances with ground covered). */
   readonly gait = new Float32Array(ROBOT_MAX);
   /** Wreck tumble (radians about the body's long axis) and its spin rate; the death fall direction. */
@@ -697,8 +699,8 @@ export class RobotSwarm {
   /** Small ones that shoot instead of leaping; medium ones that hold at range and shoot instead of closing to saw. */
   readonly shooter = new Uint8Array(ROBOT_MAX);
   /** Medium walkers: QUAD_SMALL or QUAD_WEAPON; weapon quads' weapon (Q_*). */
-  readonly variant = new Uint8Array(ROBOT_MAX);
-  readonly weapon = new Uint8Array(ROBOT_MAX);
+  readonly variant: Uint8Array;
+  readonly weapon: Uint8Array;
   /** A weapon quad's turret yaw (world, heading convention): swivels toward the target on its own; its guns fire along it. */
   readonly turret = new Float32Array(ROBOT_MAX);
   /** Medium ones: time until the saw can attack again. */
@@ -757,13 +759,13 @@ export class RobotSwarm {
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(ROBOT_MAX);
   /** Serial per robot, handed out at spawn and never reused (the register's ids, rule 12). */
-  readonly uid = new Uint32Array(ROBOT_MAX);
+  readonly uid: Uint32Array;
   private nextUid = 1;
   /**
    * World height of the body's centre (the hub for small ones, the chassis for medium and big); px, pz are under it.
    * py is the sand under the robot when it stands, the hub itself while leaping or latched.
    */
-  readonly hubY = new Float32Array(ROBOT_MAX);
+  readonly hubY: Float32Array;
   /** Walker feet (WALK_LEGS per robot, world x y z): where each foot is, and while stepping (stepT ≥ 0) where from and to. */
   readonly footX = new Float32Array(ROBOT_MAX * WALK_LEGS); readonly footY = new Float32Array(ROBOT_MAX * WALK_LEGS); readonly footZ = new Float32Array(ROBOT_MAX * WALK_LEGS);
   /** Step progress 0..1 per walker foot; -1 planted. */
@@ -791,9 +793,9 @@ export class RobotSwarm {
    * Frozen robots stand where they are and do nothing (not stepped, no attacks) until cleared: a camp asleep out in
    * the sand (the expedition lab). The dead still collapse.
    */
-  readonly frozen = new Uint8Array(ROBOT_MAX);
+  readonly frozen: Uint8Array;
   /** Chill (src/game/chill.ts, host): 1 at full speed, less while chilled, 0 frozen solid (no thinking, no moving, still hittable). */
-  readonly pace = new Float32Array(ROBOT_MAX).fill(1);
+  readonly pace: Float32Array;
   /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
   keepOut: KeepOut | null = null;
   private ko = { x: 0, z: 0 };
@@ -863,8 +865,18 @@ export class RobotSwarm {
    */
   lookGround: Ground | null = null;
 
-  constructor(public v: RobotValues, readonly ground: Ground, seed = 1) {
+  /** The swarm's block of the ECS world (src/combat/robotWorld.ts): the shared arrays above are views of its columns. */
+  readonly block: RobotBlock;
+
+  /** world: the host's (CombatRules.world, fixed capacity) so the robots are its entities; else the swarm makes its own. */
+  constructor(public v: RobotValues, readonly ground: Ground, seed = 1, world?: World) {
     this.rs = (seed >>> 0) || 1;
+    const b = (this.block = new RobotBlock(ROBOT_MAX, world));
+    this.px = b.px; this.hubY = b.hubY; this.pz = b.pz; this.heading = b.heading;
+    this.vx = b.vx; this.vy = b.vy; this.vz = b.vz;
+    this.hp = b.hp; this.maxHp = b.maxHp; this.pace = b.pace;
+    this.kind = b.kind; this.state = b.state; this.stateTime = b.stateTime; this.size = b.size;
+    this.variant = b.variant; this.weapon = b.weapon; this.uid = b.uid; this.frozen = b.frozen;
   }
 
   /**
@@ -973,6 +985,7 @@ export class RobotSwarm {
         }
         this.hubY[i] = (this.py[i] + fy / WALK_LEGS) * 0.5 + H;
       } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
+      this.block.link(i);
     }
     return made;
   }
@@ -991,8 +1004,9 @@ export class RobotSwarm {
       const k = this.kind[i];
       const r = this.bodyRadius(i), reach = this.hitReach(i);
       const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0) | (st === DOWN ? FLAG.Down : 0);
-      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r,
-        k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i], reach, ref);
+      const foot = k === SMALL ? 0 : robotFootprint(this, i);
+      reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r, foot, this.vx[i], this.vz[i], reach, ref);
+      this.block.publish(i, team, KIND.Unit, r, foot, reach, this.heightOf(i));
     }
   }
 
@@ -1128,6 +1142,7 @@ export class RobotSwarm {
     if (s === LATCHED) this.latchN++;
     if (s !== LEAP && s !== LATCHED) this.freeLatch(i);
     if (s >= DOWN) { this.beamT[i] = -1; this.pulseT[i] = -1; }
+    if (s >= DEAD && this.state[i] < DEAD) this.block.unlink(i);
     this.state[i] = s; this.stateTime[i] = 0;
   }
 
@@ -1176,6 +1191,7 @@ export class RobotSwarm {
    * the step go to their handlers once it's done (RobotEvent).
    */
   update(dt: number, base: RobotTarget, onShot: RobotShotFn, onBite?: RobotBiteFn, onCut?: RobotCutFn): void {
+    this.block.keepPrevious(this.hi);
     if (this.remote) {
       this.dispatch(this.remote.events(), onShot, onBite, onCut);
       this.remote.step(dt, base);

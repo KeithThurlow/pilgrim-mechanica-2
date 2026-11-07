@@ -10,7 +10,7 @@
 //   events and a snapshot.
 // The snapshot is every typed array the swarm owns (slot arrays cut to hi) and its plain number and boolean fields,
 // found by name, so a field added to RobotSwarm goes across without code here. Ownership: host (enemies).
-import { RobotSwarm, ROBOT_MAX, type RobotEvent, type RobotTarget, type RobotValues } from "../combat/robots";
+import { RobotSwarm, ROBOT_MAX, DEAD, type RobotEvent, type RobotTarget, type RobotValues } from "../combat/robots";
 import { WALK_LEGS } from "../combat/robotLegs";
 import { SafeZone, type SafeValues } from "../convoy/safeZone";
 import type { Convoy } from "../convoy/platform";
@@ -76,6 +76,7 @@ export function applyRobots(sw: RobotSwarm, s: RobotSnapshot) {
   for (const k in s.arrays) (o[k] as unknown as { set(a: ArrayLike<number>): void }).set(s.arrays[k] as unknown as ArrayLike<number>);
   for (const k in s.scalars) o[k] = s.scalars[k];
   sw.cores = s.cores;
+  sw.block.relink(sw.hi, DEAD);
 }
 
 const pickTrample = (tv: TrampleValues): TrampleValues => {

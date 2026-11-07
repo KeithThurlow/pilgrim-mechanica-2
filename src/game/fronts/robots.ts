@@ -78,7 +78,7 @@ export function robotsFront(params0: URLSearchParams): Front {
       // Humanoid robots (the middle tier on the human rig) walk in with each pack (robotDroids, off by default).
       const droids = await shared();
       droidMeshes = droids.meshes;
-      const sw = new RobotSwarm(V, field);
+      const sw = new RobotSwarm(V, field, 1, bf.rules.world);
       sw.lookGround = bf.lookGround;
       // A dash throws clingers off and bowls over small ones in the way.
       hook(player, "onDash", (x, z, dx, dz) => {

@@ -17,6 +17,10 @@
 // - Events: plain data, `world.emit(type, data)`; the tick's events are kept until the next step starts (FX, sound and
 //   the network read them after the tick).
 // - Resources: world singletons by key (the ground, the register, config, RNG streams).
+// - Fixed capacity and reserved blocks (stage 4.3): `new World({ capacity })` never grows, so its columns are never
+//   replaced and a pool (the robot swarm) can keep `subarray` views of its block of them (`reserve(n)`: n contiguous
+//   entity indices that `create` never hands out; `createAt(index)` makes the entity in one, `destroy` gives the index
+//   back to its block with the next generation). A world without a capacity grows by doubling and can't reserve.
 // Ownership: the world is host state when it is the host's; a view world on a peer holds copies.
 
 export type Entity = number;
@@ -125,19 +129,55 @@ export class World {
   private ids = new Map<AnyComponent, number>();
   private cols: (Record<string, Column> | null)[] = [];
   private objs: (unknown[] | null)[] = [];
-  private gens = new Uint16Array(1024);
-  private live = new Uint8Array(1024);
+  private gens: Uint16Array;
+  private live: Uint8Array;
   private free: number[] = [];
   private next = 0;
-  private cap = 1024;
+  private cap: number;
+  /** Fixed capacity: never grows (columns stay put for views). */
+  readonly fixed: boolean;
+  /** 1 for indices in a reserved block (never on the free list). */
+  private held: Uint8Array;
   /** Component membership: `words` u32 words per entity. */
   private words = 1;
-  private masks = new Uint32Array(1024);
+  private masks: Uint32Array;
   private queries: Query[] = [];
   private systems: System[] = [];
   private resources = new Map<string, unknown>();
   /** This tick's events (plain data), kept until the next step starts. */
   events: WorldEvent[] = [];
+
+  constructor(opts: { capacity?: number } = {}) {
+    this.fixed = opts.capacity !== undefined;
+    const cap = (this.cap = Math.min(MAX_ENTITIES, Math.max(1, opts.capacity ?? 1024)));
+    this.gens = new Uint16Array(cap); this.live = new Uint8Array(cap); this.held = new Uint8Array(cap);
+    this.masks = new Uint32Array(cap);
+  }
+
+  /** Reserve n contiguous entity indices for a pool (fixed worlds only); returns the first, or -1 if they don't fit. */
+  reserve(n: number): number {
+    if (!this.fixed) throw new Error("ecs: reserve needs a fixed-capacity world");
+    if (this.next + n > this.cap) return -1;
+    const base = this.next;
+    this.next += n;
+    this.held.fill(1, base, base + n);
+    return base;
+  }
+
+  /** Make the entity at a reserved index (its current generation). The index must be held and not live. */
+  createAt(index: number): Entity {
+    if (index >= this.next || !this.held[index]) throw new Error(`ecs: index ${index} isn't reserved`);
+    if (this.live[index]) throw new Error(`ecs: index ${index} is live`);
+    this.live[index] = 1;
+    this.alive++;
+    return makeId(index, this.gens[index]);
+  }
+
+  /** The live entity at an index, or -1. */
+  at(index: number): Entity | -1 { return index < this.next && this.live[index] ? makeId(index, this.gens[index]) : -1; }
+
+  /** Give e these components without touching their fields (a pool that wrote them already). */
+  attach(e: Entity, ...comps: AnyComponent[]): Entity { for (const c of comps) this.mark(e, c); return e; }
 
   /** Add a component type to this world (once, before entities use it). */
   register<C extends AnyComponent>(comp: C): number {
@@ -161,8 +201,8 @@ export class World {
     return id;
   }
 
-  /** A flat component's columns in this world (index them with entityIndex(e)). They are replaced when the world grows,
-   *  so fetch them each tick rather than keeping them. */
+  /** A flat component's columns in this world (index them with entityIndex(e)). In a growing world they are replaced
+   *  when it grows, so fetch them each tick rather than keeping them; a fixed world's stay put (views are safe). */
   columns<S extends Schema>(comp: Component<S>): Columns<S> {
     return this.cols[this.register(comp)] as unknown as Columns<S>;
   }
@@ -178,6 +218,7 @@ export class World {
     else {
       if (this.next >= MAX_ENTITIES) throw new Error("ecs: out of entity indices");
       i = this.next++;
+      if (i >= this.cap && this.fixed) { this.next--; throw new Error("ecs: world full"); }
       if (i >= this.cap) this.grow(Math.min(MAX_ENTITIES, this.cap * 2));
     }
     this.live[i] = 1;
@@ -199,7 +240,7 @@ export class World {
     for (const o of this.objs) if (o) o[i] = undefined;
     this.live[i] = 0;
     this.gens[i] = (this.gens[i] + 1) & GEN_MASK;
-    this.free.push(i);
+    if (!this.held[i]) this.free.push(i);
     this.alive--;
   }
 
@@ -291,6 +332,7 @@ export class World {
   private grow(cap: number) {
     const g = new Uint16Array(cap); g.set(this.gens); this.gens = g;
     const l = new Uint8Array(cap); l.set(this.live); this.live = l;
+    const hd = new Uint8Array(cap); hd.set(this.held); this.held = hd;
     const m = new Uint32Array(cap * this.words); m.set(this.masks); this.masks = m;
     this.components.forEach((comp, id) => {
       const c = this.cols[id];

@@ -36,23 +36,36 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 6d: `SlotInterp` + `drawEachFrame` (same file); `RobotsDraw.update` under `betweenTicks()` only registers
   (first call) and the app draws it per frame with the arrays blended in place (restored at once after the draw).
 - Stage 6e: `InfantryDraw` the same, through the shared `swarmBetweenTicks`.
+- Stage 4.3 (Claude 2026-11-07; Keith 2026-11-07 "continue re-architecting as you see fit", relayed by the coordinator,
+  counted as the go-ahead for this proposal):
+  - Proposal: the swarm's state lives in the world, one copy. `new World({ capacity })` is fixed (never grows, so
+    columns stay put); `world.reserve(n)` hands a pool n contiguous entity indices that `create` never uses;
+    `createAt(index)` / `destroy` make and end the entity there (the index stays the pool's, next generation).
+    `RobotSwarm(v, ground, seed, world?)` reserves ROBOT_MAX in the host's world (`rules.world`, room for 8 swarms +
+    4096; the front's and the summoner's allies' swarms use it) and its shared arrays are `subarray` views: Transform
+    (px, hubY, pz, heading), Velocity, Health (hp, maxHp), Status.pace, and a new `Robot` component (kind, state,
+    stateTime, size, variant, weapon, uid, frozen). The AI's own clocks and the leg arrays stay swarm arrays (opaque sim,
+    review §4.1). Entity lives from spawn to death (hooks in `spawn` and `setState`); PrevTransform copied at the start
+    of `update`; Team and Collider written in `publish` (they need the publisher's team and sliders). Snapshots into the
+    worker's view `relink`. Without a world, or with no room, a swarm makes its own world (a warning once).
+  - Built: `src/combat/robotWorld.ts` (`RobotBlock`, `Robot`), `src/ecs/world.ts` (capacity, reserve, createAt, at,
+    attach), `robots.ts` (views, hooks), `robotsRemote.ts` (relink). `RobotEntities`, `src/ecs/slots.ts` and the robots'
+    `syncWorld` are gone. `tools/robotworld-check.ts` replaces robotentities-check.
+  - Behaviour: identical. A scripted camp fight (2400 ticks, spawns, damage, removals) hashes every snapshot array the
+    same before and after (7d39aee7), in the swarm's own world and in a shared one; robots, robotworker, allies checks
+    unchanged.
+  - Known: blocks are never given back; a lab that makes more than 8 swarms over its life (field rivals with summoner gear,
+    one each) has the extra ones fall back to worlds of their own (still correct, just outside the host world).
 
 ## Next, in order
 - The 60 Hz default: waiting on Keith (decision card 2026-11-07: flip now, or after he has played `?tick=60`). Then
   flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab comparison
   (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and lasers,
   crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
-- Stage 4, re-planned (Claude 2026-11-07): skip 4.2 as its own step. Moving readers onto a mirror that is synced at the
-  end of `rules.step` adds a one-tick-stale copy and no gain; the readers move when the swarm owns its state in the
-  world (4.3). 4.3 is a big build (rule 9): propose it to Keith before starting. Outline:
-  - A world with a fixed capacity per kind (ROBOT_MAX is fixed), so columns never get replaced and the swarm's arrays
-    can be `subarray` views of its slice of the columns (Transform.x/z/heading, Health.hp/max...). Today the world
-    grows by replacing columns (`World.columns` after `create`), which breaks views: add `new World({ capacity })`.
-  - Slot index = entity index within the swarm's slice (a range of entity indices reserved per swarm), generations
-    from the swarm's `gen`; `RobotEntities` and the sync go; robots-check and robotworker parity unchanged.
-  - Then the register's robot owner, targeting and health bars read the components; the worker's robot snapshot
-    becomes `packWorld` columns (stage 7).
-  - Then infantry the same way.
+- Stage 4.3b, readers onto the components: the register's robot owner, targeting and health bars query the world
+  (`Robot`, `Transform`, `Health`) instead of the swarm's arrays (today they read the same memory through the swarm). Then
+  the worker's robot snapshot becomes `packWorld` columns of the swarm's block (stage 7).
+- Stage 4.4: infantry the same way (`InfantrySwarm` reserves a block; its arrays become views).
 - Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
 
 ## Facts

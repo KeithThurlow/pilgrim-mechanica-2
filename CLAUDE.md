@@ -236,7 +236,7 @@ src/convoy/             route (heading + flattened road), safeZone (enemies stee
 src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
 src/combat/             warband (raider vehicles and bandit mechs) + partyBus (the bus's drops), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
-                        robots (scrappers, cutters, excavators) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx,
+                        robots (scrappers, cutters, excavators; its arrays are ECS columns: robotWorld) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx,
                         crusher (the heavy crab quad: a sucking turbine maw, pincers, eats salvage) + crusherBody, crusherTarget, crusherFx, crusherField (glue),
                         rivalAi (a rival mech's brain: a view in, the player's commands out) + rivalKit (rolled rival loadouts,
                         the kit as the AI sees it), duelThreats (weapons in the air as threats), duelScore, duelSim (headless duel)
