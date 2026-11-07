@@ -318,6 +318,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Guardian mechs off the screen step at 60 Hz (perf; Claude)
+- `src/convoy/guardians.ts`: a guardian outside the camera's view (`bf.view`) steps its legs, torso and guns once per 1/`guardLodHz` s (60; Guardian mechs) instead of every frame at 120 Hz; on screen as before. `MechUnit.subHz` (120) sets its substep rate. Why not the worker yet: a guardian is a whole MechUnit (weapons through the battlefield's shots, damage, solids, sounds, the Rampart's pose), far more tangled than the swarm; this takes most of the off-screen cost for a few lines.
+- Checked: headless bench `?siege=300&manual&norender&bench`: turrets stage (guardians inside it) 0.96 → 0.80 ms (worker), 0.85 → 0.66 (noworker), most guardians being on screen in a siege; `npm test`. Cloud note: with 4 cores here, other main-thread stages read ~0.1-0.15 ms higher with the worker running beside them (convoy bodies, turrets), so the worker's net gain in the cloud is small; Keith's PC bench decides.
+
 ### 2026-11-07 · Robots off the screen aren't drawn (perf; Claude)
 - New `src/core/viewCull.ts` (the camera's view, updated once a frame in `Battlefield.update` as `bf.view`); `RobotsDraw.cull`: robots more than `robotDrawCull` m (4; Performance) plus 1.5× their size outside the view are skipped (swarm camps, the summoner's allies, the swarm lab's fronts). -1 draws them all.
 - Checked: headless bench `labs/convoy/?siege=300&manual&norender&bench`: swarm camps 2.37 → 0.88 ms (worker) and 3.14 → 1.62 (noworker), sim 7.8 → 6.2 ms; `npm test`.
