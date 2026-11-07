@@ -9,6 +9,7 @@
 // Standing small ones take their feet from the sim's leg pose; latched ones lie flat on the hull, legs gripping and
 // raking; leaping ones fly splayed; flung and dead ones tumble. Walkers take every leg from the sim (planted,
 // stepping) through RobotSwarm.legPose.
+import type { ViewCull } from "../core/viewCull";
 import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import * as THREE from "three/webgpu";
 import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
@@ -156,6 +157,11 @@ export class RobotsDraw {
    */
   /** Dying big ones' cores going unstable (its hooks: src/game/robotBeam.ts coreWarnFx). */
   readonly coreWarn: CoreWarnDraw;
+  /** What the camera sees (src/core/viewCull.ts): robots well off the screen aren't drawn. Null: all drawn. */
+  cull: ViewCull | null = null;
+  /** Robots left out last frame. */
+  culled = 0;
+
   constructor(private swarm: RobotSwarm, opts: { cap?: number; paint?: number; eye?: number; alarm?: number } = {}) {
     this.beamDraw = new RobotBeamDraw(swarm);
     this.group.add(this.beamDraw.group);
@@ -233,9 +239,12 @@ export class RobotsDraw {
     this.eyeN = 0;
     this.hm = this.heatMap?.() ?? null;
     this.cm = this.chillMap?.() ?? null;
+    const margin = sw.v.robotDrawCull ?? -1, cull = margin >= 0 ? this.cull : null;
+    this.culled = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
+      if (cull && !cull.sees(sw.px[i], sw.hubY[i], sw.pz[i], sw.size[i] * 1.5 + margin)) { this.culled++; continue; }
       if (this.gen[i] !== sw.gen[i]) { this.gen[i] = sw.gen[i]; this.roll[i] = 0; this.sawA[i] = 0; }
       const k = sw.kind[i];
       if (k === BIG) this.big(i); else if (k === MID) this.mid(i, dt); else this.small(i, dt);
