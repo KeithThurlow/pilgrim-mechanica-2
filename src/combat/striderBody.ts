@@ -16,6 +16,7 @@ import { glowMaterial } from "../weapons/ribbon";
 import { ROBOT_PALETTE } from "./robotShapes";
 import { footShapeOr } from "../fx/footprint";
 import { bakeFootFromObject } from "../fx/footprintMesh";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 /** The robots' shared white palette (ROBOT_PALETTE in robotShapes.ts). */
 export const STRIDER_PALETTE = ROBOT_PALETTE;
@@ -86,7 +87,7 @@ const CABLE_SEGS = 6;
 interface Arm { pivot: THREE.Group; elbow: THREE.Group; claws: THREE.Group[]; x: number; z: number; e: number; spread: number }
 
 export class StriderBody {
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   /** Everything above the hips, turned by the torso's yaw. */
   private torso = new THREE.Group();
   /** The hull disc (leaning toward the prey) and the seeker running round its rim. */

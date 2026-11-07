@@ -5,13 +5,14 @@ import type { Crane } from "./crane";
 import { Kit, kitMesh } from "./kit";
 import { PAL } from "./furniture";
 import type { PlatformBody } from "./platformBody";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 const ROPE = new THREE.MeshStandardMaterial({ color: 0x1d1b19, roughness: 0.6, metalness: 0.4 });
 const DOWN = new THREE.Vector3(0, -1, 0);
 
 /** The crane: turret on the platform, jib, rope and cradle placed in the world. */
 export class CraneBody {
-  readonly group = new THREE.Group();
+  readonly group = drawBetweenTicks(new THREE.Group());
   private turret = new THREE.Group();
   private jib: THREE.Mesh;
   private rope: THREE.Mesh;

@@ -3,7 +3,6 @@
 // pilot (hold F to hop out and back in; the enemies pick him through lab.foot.quarry when he's nearer), the
 // iso game camera, the slider panel with topics and hold-V selection, the Report box, a hull bar and a red edge when
 // hit, and a demo that walks loops and shoots the nearest enemy until you take over. A lab adds its enemies.
-import { TreeInterp } from "../look/treeInterp";
 import { hitStop } from "./hitStop";
 import { applyLoadout, fittedLoadout } from "./loadoutApply";
 import { Summons, SUMMON_DEFAULTS, SUMMON_PARAMS, SUMMON_TOPIC, type SummonValues } from "../summon/summons";
@@ -527,22 +526,21 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   });
   // Once per drawn frame, after its ticks (src/core/clock.ts): the camera, terrain streaming, light, the battlefield's
   // effects and drawing. Frame-locked (the default) this runs right after the one tick, as before.
-  // With a fixed tick (?tick=N) the player's mech is drawn between its last two ticks (architecture stage 6b).
-  const playerInterp = app.clock.fixed ? new TreeInterp(body.root) : null;
+  // With a fixed tick (?tick=N) every mech and vehicle is drawn between its last two ticks (architecture stage 6b-c;
+// drawBetweenTicks in src/look/treeInterp.ts, run by the app).
+  const betweenTicks = app.clock.fixed;
   // The camera's target between ticks too, so it glides with the drawn mech.
   const focusPrev = new THREE.Vector3(), focusCur = new THREE.Vector3(), focusDrawn = new THREE.Vector3();
   let focusTicks = 0;
   const focusNow = (out: THREE.Vector3) => foot.focus(out) ?? out.set(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
-  if (playerInterp) {
-    app.onTick(() => { playerInterp.capture(); focusPrev.copy(focusCur); focusCur.copy(focusNow(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
-    app.onAfterRender(() => playerInterp.restore());
+  if (betweenTicks) {
+    app.onTick(() => { focusPrev.copy(focusCur); focusCur.copy(focusNow(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
   }
   app.onFrame((rawDt, alpha) => {
     const cst = lab.costs;
-    playerInterp?.apply(alpha);
     if (app.clock.ran === 0) cst?.begin();
     const fdt = (fixedDt || rawDt) * hitStop.now();
-    const want = playerInterp && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focusNow(new THREE.Vector3());
+    const want = betweenTicks && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focusNow(new THREE.Vector3());
     follow.lerp(want, Math.min(1, rawDt * 6));
     // The camera leads the mech at speed (not the pilot on foot).
     const ps = player.sim;

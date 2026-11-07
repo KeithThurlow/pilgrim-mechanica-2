@@ -21,6 +21,7 @@ import { WHEEL_X_IN, WHEEL_Z } from "./trail";
 import { CarBody } from "../vehicles/carBody";
 import { CarSim, carValues } from "../vehicles/car";
 import { LAMP_HEAD, LAMP_FLOOD, LAMP_RUNNING, LAMP_CAB, type LampSpot } from "../world/lamps";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 const MAT = KIT_MAT;
 /** Deck markings get their own material so hold-V can light them apart from the platform. */
@@ -42,7 +43,7 @@ export const CULL_MARGIN = 30;
 
 export class PlatformBody {
   /** Rides the platform (local frame: x left, y up, z forward). */
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   private hull: THREE.Mesh | null = null;
   private marks: THREE.Mesh | null = null;
   private pipes: THREE.Mesh | null = null;

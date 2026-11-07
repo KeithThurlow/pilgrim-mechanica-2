@@ -19,7 +19,6 @@
 // (start out with little fuel left), ?depth=metres (start out that far off the road, for the depth rings), ?loot=N (that much scrap at risk), ?nearcamp[=metres] (just outside the nearest swarm camp, or that far from it), ?crusher[=metres] (that close to the nearest salvage site a crusher grazes on); factions: ?banditcamp[=metres] (just outside the nearest bandit camp), ?clash (a robot pack on its way into the nearest bandit camp, both out of your sight: watch the radar flicker, then the wreckage), ?warband (a war band column a few hundred metres ahead, hunting you); ?fortress[=metres] / ?hub[=metres] (that far from the nearest bandit fortress or manufacturing hub, 150 m by default).
 // The plough (Keith 2026-10-26): a giant bulldozer at the very front cuts the road and throws the sand into berms;
 // ?watch=plough follows its blade, ?crest[=metres] starts with the blade that far (18 m) short of a big dune crest.
-import { TreeInterp } from "../../src/look/treeInterp";
 import { canvasRect } from "../../src/core/canvasRect";
 import { hitStop } from "../../src/game/hitStop";
 import { energyHud, reactorHud } from "../../src/ui/energyBar";
@@ -1211,21 +1210,20 @@ app.onTick((rawDt) => {
 // Once per drawn frame, after the frame's ticks (src/core/clock.ts; architecture stage 6a): the camera, the ground
 // streaming, the light and the battlefield's effects and drawing. Frame-locked (the default) this runs right after the
 // one tick, as before; with ?tick=N the camera and effects still move every drawn frame.
-// With a fixed tick (?tick=N) the player's mech is drawn between its last two ticks (architecture stage 6b).
-const playerInterp = app.clock.fixed ? new TreeInterp(body.root) : null;
+// With a fixed tick (?tick=N) every mech and vehicle is drawn between its last two ticks (architecture stage 6b-c;
+// drawBetweenTicks in src/look/treeInterp.ts, run by the app).
+const betweenTicks = app.clock.fixed;
 // The camera's target between ticks too, so it glides with the drawn mech.
 const focusPrev = new THREE.Vector3(), focusCur = new THREE.Vector3(), focusDrawn = new THREE.Vector3();
 let focusTicks = 0;
-if (playerInterp) {
-  app.onTick(() => { playerInterp.capture(); focusPrev.copy(focusCur); focusCur.copy(focus(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
-  app.onAfterRender(() => playerInterp.restore());
+if (betweenTicks) {
+  app.onTick(() => { focusPrev.copy(focusCur); focusCur.copy(focus(focusDrawn)); if (focusTicks++ === 0) focusPrev.copy(focusCur); });
 }
 
 app.onFrame((rawDt, alpha) => {
   if (app.clock.ran === 0) costs.begin();
-  playerInterp?.apply(alpha);
   const fdt = (fixedDt || rawDt) * hitStop.now();
-  follow.lerp(playerInterp && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
+  follow.lerp(betweenTicks && focusTicks > 1 ? focusDrawn.lerpVectors(focusPrev, focusCur, alpha) : focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
   // Out on the sand the camera leads the mech at speed (the sprint).
   iso.update(follow, rawDt, foot.driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
   shaker.apply(camera, rawDt, V.shakeDecay);

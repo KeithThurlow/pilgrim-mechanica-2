@@ -29,10 +29,13 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 6b: `src/look/treeInterp.ts` (capture after each tick, apply(alpha) per frame, restore after render via
   `App.onAfterRender`); used for the player's Rampart and the camera focus in the convoy lab and `combatLab.ts`, only
   with `?tick=N`.
+- Stage 6c: `drawBetweenTicks(root)` + `InterpSet` (same file), run by `createApp` (`App.interp`) under `?tick=N`: the
+  Rampart, walker stand-in, car, escort, crusher, strider, pilot, platform and crane bodies register themselves. Parts
+  posed outside the tick are skipped (compared against the captured pose). New model kinds: wrap the root in
+  `drawBetweenTicks` where it's built.
 
 ## Next, in order
-- Stage 6c: TreeInterp on the other heavies (rival and bandit mechs, guardians, war band vehicles, escorts, the convoy
-  cars: each has a root Object3D); then robotsDraw (an interpolated view of the
+- Stage 6d: robotsDraw (an interpolated view of the
   swarm's position arrays: prev copies at tick start, a blended copy per frame that the drawer reads), infantry, the
   war band. Then flip the default to `?tick=60`.
 - Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity

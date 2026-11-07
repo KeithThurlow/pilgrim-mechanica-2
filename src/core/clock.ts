@@ -61,7 +61,7 @@ export class Clock {
 
   hud(): string {
     return this.hz
-      ? `clock: fixed ${this.hz} Hz, ${this.ran} tick${this.ran === 1 ? "" : "s"} this frame, alpha ${this.alpha.toFixed(2)}${this.dropped > 0 ? `, ${this.dropped.toFixed(1)} s dropped` : ""} (your mech is drawn between ticks; the rest steps)`
+      ? `clock: fixed ${this.hz} Hz, ${this.ran} tick${this.ran === 1 ? "" : "s"} this frame, alpha ${this.alpha.toFixed(2)}${this.dropped > 0 ? `, ${this.dropped.toFixed(1)} s dropped` : ""} (mechs and vehicles are drawn between ticks; swarms step)`
       : "clock: frame-locked (?tick=60 for the fixed tick)";
   }
 }

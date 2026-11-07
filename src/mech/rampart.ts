@@ -30,6 +30,7 @@ import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
 import { footShapeOr, type FootShape } from "../fx/footprint";
 import { bakeFootFromGeometry } from "../fx/footprintMesh";
+import { drawBetweenTicks } from "../look/treeInterp";
 
 /**
  * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
@@ -209,7 +210,7 @@ interface PodRig {
 }
 
 export class RampartBody {
-  readonly root = new THREE.Group();
+  readonly root = drawBetweenTicks(new THREE.Group());
   private pelvis = new THREE.Group();
   private hull = new THREE.Group();
   /** The torso mesh's holder (the fitted hull's mesh goes in it). */

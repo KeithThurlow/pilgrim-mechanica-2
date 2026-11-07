@@ -1,9 +1,11 @@
 // Drawing a model between ticks (src/look/treeInterp.ts; docs/architecture-review.md stage 6b). A small tree of parts
 // moved and turned each tick: apply(alpha) poses every part between its last two ticks (position, scale lerped,
 // rotation the short way and unit length), restore() puts the tick's pose back exactly, alpha 1 changes nothing, the
-// first tick holds still, snap() drops the last pose, and a changed tree starts over. Run: npm test.
+// first tick holds still, snap() drops the last pose, and a changed tree starts over. A part posed outside the tick
+// (in a drawn frame) is left alone by apply and restore. The app's list (stage 6c): models on drawBetweenTicks are
+// captured while in a scene, dropped when removed, back when added again. Run: npm test.
 import * as THREE from "three/webgpu";
-import { TreeInterp } from "../src/look/treeInterp";
+import { TreeInterp, InterpSet, drawBetweenTicks } from "../src/look/treeInterp";
 
 const problems: string[] = [];
 const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
@@ -46,5 +48,37 @@ if (root.position.x !== 4) fail("a changed tree should hold its first pose");
 ti.restore();
 pose(5); ti.capture(); ti.apply(0.5);
 if (!near(root.position.x, 4.5)) fail(`after the change it blends again: ${root.position.x}`);
+
+// A part posed outside the tick: apply leaves it, and so does restore when it's moved after apply.
+{
+  const r = new THREE.Group(), a = new THREE.Object3D(), b = new THREE.Object3D();
+  r.add(a, b);
+  const t = new TreeInterp(r);
+  a.position.x = 0; b.position.x = 0; t.capture();
+  a.position.x = 1; b.position.x = 1; t.capture();
+  b.position.x = 7; // a drawn frame moved b after the tick
+  t.apply(0.5);
+  if (!near(a.position.x, 0.5) || b.position.x !== 7) fail(`apply over a part posed outside the tick: a ${a.position.x}, b ${b.position.x}`);
+  a.position.y = 3; // and a after apply
+  t.restore();
+  if (a.position.y !== 3 || a.position.x !== 0.5 || b.position.x !== 7) fail(`restore over a part moved after apply: ${a.position.x},${a.position.y}`);
+}
+// The app's list.
+{
+  const scene = new THREE.Scene(), set = new InterpSet();
+  const m = drawBetweenTicks(new THREE.Group()), loose = drawBetweenTicks(new THREE.Group());
+  m.add(new THREE.Object3D());
+  scene.add(m);
+  m.position.x = 0; set.capture(); m.position.x = 2; set.capture();
+  if (set.models !== 1 || set.parts !== 2) fail(`list: ${set.models} models, ${set.parts} parts (loose one out of the scene)`);
+  set.apply(0.5);
+  if (!near(m.position.x, 1)) fail(`list apply ${m.position.x}`);
+  set.restore();
+  if (m.position.x !== 2) fail("list restore");
+  scene.remove(m); set.capture();
+  if (set.models !== 0) fail("a removed model should leave the list");
+  scene.add(m, loose); set.capture();
+  if (set.models !== 2) fail(`added back: ${set.models} models`);
+}
 if (problems.length) { console.log(`treeinterp: ${problems.length} problem(s)`); process.exit(1); }
 console.log("treeinterp: ok");
