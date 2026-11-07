@@ -3,10 +3,13 @@
 // the big ones (excavators, turret trucks, the party bus, enemy mechs). An armoured one carries a steel chip at the
 // bar's left end, wider the more armour it has. Scrappers and bandits die to a hit or two and get none.
 // Cheap: every bar is three quads in one instanced mesh (one draw call), facing the camera; each target adapter pushes
-// its own bars (Hittable.bars, src/game/battlefield.ts), so every lab with a battlefield gets them. Cosmetic, local.
+// its own bars (Hittable.bars, src/game/battlefield.ts), so every lab with a battlefield gets them; kinds in the ECS world
+// give theirs through their Bar component (src/game/entityBars.ts). Cosmetic, local.
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Hittable } from "../game/battlefield";
+import type { World } from "../ecs/world";
+import { gatherBars } from "../game/entityBars";
 
 /** One bar: where (its centre, m), health now and full, armour, width (m), and whether it always shows. */
 export interface BarEntry { key: unknown; x: number; y: number; z: number; hp: number; max: number; armour: number; width: number; always: boolean }
@@ -36,7 +39,7 @@ export class HealthBars {
   private frame = 0;
   private m = new THREE.Matrix4(); private p = new THREE.Vector3(); private s = new THREE.Vector3(); private right = new THREE.Vector3();
 
-  constructor(scene: THREE.Scene, private camera: THREE.Camera, private targets: () => readonly Hittable[], private team: number, public v: BarValues) {
+  constructor(scene: THREE.Scene, private camera: THREE.Camera, private targets: () => readonly Hittable[], private team: number, public v: BarValues, private world: World | null = null) {
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, toneMapped: false, transparent: true, opacity: 0.92 });
     this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, CAP * 3);
     this.mesh.frustumCulled = false;
@@ -52,7 +55,11 @@ export class HealthBars {
     const v = this.v;
     this.t += dt; this.frame++;
     this.list.length = 0;
-    if (v.hpBarShow > 0) for (const t of this.targets()) if (t.team !== this.team && t.bars) t.bars(this.list);
+    if (v.hpBarShow > 0) {
+      // Kinds in the ECS world (the robots) from their components; the rest from their target adapters.
+      if (this.world) gatherBars(this.world, this.team, this.list);
+      for (const t of this.targets()) if (t.team !== this.team && t.bars) t.bars(this.list);
+    }
     const q = this.camera.quaternion;
     this.right.set(1, 0, 0).applyQuaternion(q);
     let n = 0;

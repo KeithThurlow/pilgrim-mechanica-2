@@ -272,7 +272,7 @@ look.lights.addLamps(() => bodies.flatMap((b) => b.terminalMeshes().filter((m) =
 const player = new MechUnit(bf, V, body, toon, 1, 0, true);
 // Each gun's magazine round the cursor; enemies' health bars (Keith 2026-10-31).
 const reloadHud = new ReloadHud();
-const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V);
+const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V, bf.rules.world);
 bf.targets.push(player);
 bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at full
 const sim = player.sim;

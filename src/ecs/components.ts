@@ -14,6 +14,9 @@ export const Health = defineComponent("Health", { hp: "f32", max: "f32" });
 export const Armour = defineComponent("Armour", { flat: "f32", type: "u8", matter: "u8" });
 /** What hit tests and the register measure: body radius, footprint, hit reach, height. */
 export const Collider = defineComponent("Collider", { radius: "f32", foot: "f32", reach: "f32", height: "f32" });
+/** A health bar over it (src/game/entityBars.ts gathers them for src/ui/healthBars.ts): width (m), height above
+ *  Transform.y (m), always shown (1) or only after a hit (0). Only things worth a bar have one. */
+export const Bar = defineComponent("Bar", { width: "f32", lift: "f32", always: "u8" }, { replicate: "cosmetic" });
 /** Status effects: burning (heat 0..1, seconds left), chill (pace 0..1: 1 normal, 0 frozen solid). */
 export const Status = defineComponent("Status", { heat: "f32", burnLeft: "f32", pace: "f32" }, { defaults: { pace: 1 } });
 

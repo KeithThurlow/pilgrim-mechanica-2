@@ -233,7 +233,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
   // longer fires both: it's hold to hop out of the mech and back in (Keith 2026-10-26).
   const buttons = new MouseButtons(canvas, () => { auto = false; });
   const reloadHud = new ReloadHud();
-  const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V);
+  const healthBars = new HealthBars(scene, camera, () => bf.targets, player.team, V, bf.rules.world);
   // Space: dash the way WASD points (Keith 2026-10-24), on charges; keep holding to carry on into the sprint (Keith 2026-10-26).
   let dashPressed = false, spaceDown = false;
   addEventListener("keydown", (e) => {

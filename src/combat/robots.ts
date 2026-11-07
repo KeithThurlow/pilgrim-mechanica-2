@@ -1002,7 +1002,9 @@ export class RobotSwarm {
       const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0) | (st === DOWN ? FLAG.Down : 0);
       const foot = k === SMALL ? 0 : robotFootprint(this, i);
       reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r, foot, this.vx[i], this.vz[i], reach, ref);
-      this.block.publish(i, team, KIND.Unit, r, foot, reach, this.heightOf(i));
+      this.block.publish(i, team, KIND.Unit, r, foot, reach, this.heightOf(i), this.armourOf(i));
+      // Health bars (src/game/entityBars.ts): cutters and excavators, over the body; excavators always.
+      if (k !== SMALL) { const big = k === BIG; this.block.bar(i, big ? 5 : 2.4, this.size[i] * (big ? 0.9 : 0.75) + 0.6, big); }
     }
   }
 
