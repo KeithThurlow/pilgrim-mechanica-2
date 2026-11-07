@@ -292,6 +292,19 @@ export class InfantrySwarm {
     this.hasT[i] = 1; this.tgx[i] = x; this.tgy[i] = y; this.tgz[i] = z; this.tgr[i] = radius; this.calm[i] = calm ? 1 : 0;
   }
   clearTarget(i: number) { this.hasT[i] = 0; this.calm[i] = 0; }
+
+  // Setters for what outside code changes (the sim worker records these calls, src/sim/infantryRemote.ts: write
+  // through them, never into the arrays, on a swarm that may be a view).
+  /** Asleep (skipped by the step) or awake. */
+  setFrozen(i: number, on: boolean | number) { this.frozen[i] = on ? 1 : 0; }
+  /** Put to sleep where it stands: frozen, still, no target of its own (a camp that hasn't woken). */
+  sleep(i: number) { this.frozen[i] = 1; this.vx[i] = 0; this.vz[i] = 0; this.hasT[i] = 0; this.calm[i] = 0; }
+  /** Chill's pace (src/game/chill.ts): 1 normal, 0 frozen solid. */
+  setPace(i: number, k: number) { this.pace[i] = k; }
+  /** Health times k (a camp coming back hurt). */
+  scaleHp(i: number, k: number) { this.hp[i] *= k; }
+  /** Facing (a bus's drop running out of the door). */
+  setHeading(i: number, h: number) { this.heading[i] = h; }
   private targetOf(i: number, base: InfantryTarget): InfantryTarget {
     if (!this.hasT[i]) return base;
     const t = this.slotT;
@@ -333,6 +346,12 @@ export class InfantrySwarm {
 
   update(dt: number, base: InfantryTarget, onShot: ShotFn): void {
     this.block.keepPrevious(this.hi);
+    if (this.remote) {
+      const s = this.remote.shots();
+      for (let k = 0; k + 6 < s.length; k += 7) onShot(s[k], s[k + 1], s[k + 2], s[k + 3], s[k + 4], s[k + 5], s[k + 6]);
+      this.remote.step(dt, base);
+      return;
+    }
     const v = this.v, { px, py, pz, vx, vz, state, stateTime } = this;
     if (dt <= 0) return;
     this.buildHash();
@@ -602,8 +621,17 @@ export class InfantrySwarm {
     this.fallYaw[i] = Math.atan2(nx, nz);
     this.count--;
     if (this.evN < EVENTS_MAX) { this.evX[this.evN] = this.px[i]; this.evZ[this.evN] = this.pz[i]; this.evN++; }
-    this.onDeath?.(i, push ? nx : 0, push ? nz : 0, s);
+    if (!this.silent) this.onDeath?.(i, push ? nx : 0, push ? nz : 0, s);
   }
+
+  /**
+   * Sim worker (src/sim/infantryRemote.ts): when set, this swarm is a view of one stepped in the worker. update() hands
+   * the shots the worker sent back to onShot and sends the step; the outside methods still act here at once (and go
+   * there as commands, so both agree).
+   */
+  remote: { step(dt: number, base: InfantryTarget): void; shots(): ArrayLike<number> } | null = null;
+  /** True while a view replays commands it already handed the effects of: no deaths are raised. */
+  silent = false;
 
   /** Into the register (src/game/register.ts): every standing bandit at its centre of mass, light (rounds carry on). */
   publish(reg: Register, team: number, ref: unknown = null): void {

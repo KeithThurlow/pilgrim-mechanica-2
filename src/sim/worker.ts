@@ -7,6 +7,7 @@ import { GroundMirror } from "./groundMirror";
 import { chunkArrays, fillChunkRows, patchBlocks } from "../world/chunkFill";
 import { convoyPoses } from "./escortsRemote";
 import { snapshotTransfer } from "./robotsRemote";
+import { infantryFrameTransfer } from "./infantryRemote";
 import type { FromWorker, ToWorker } from "./messages";
 
 let ground: GroundMirror | null = null;
@@ -39,6 +40,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       post({ type: "fine", req: q, heights }, [heights.buffer]);
     } else if (m.type === "frame") {
       const rf = ground.robots?.frame() ?? null, robots = rf ? { ...rf, ms: ground.robots!.ms } : null;
+      const inf = ground.infantry, infantry = inf ? { swarms: inf.frame(), ms: inf.ms } : null;
       const deaths = ground.deaths?.frame() ?? null;
       const heights = ground.heights(m.sample);
       const escorts = ground.escorts?.snapshot() ?? null, convoy = ground.convoy ? convoyPoses(ground.convoy) : null;
@@ -47,8 +49,9 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       if (escorts) t.push(escorts.buffer);
       if (convoy) t.push(convoy.buffer);
       if (robots) t.push(...snapshotTransfer(robots.snap));
+      if (infantry) t.push(...infantryFrameTransfer(infantry.swarms));
       if (deaths) t.push(deaths.poses.buffer, deaths.thuds.buffer);
-      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy, robots, deaths }, t);
+      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy, robots, infantry, deaths }, t);
       busy = 0;
       return;
     }
