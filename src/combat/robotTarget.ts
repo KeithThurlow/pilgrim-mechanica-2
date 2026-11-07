@@ -7,6 +7,8 @@
 // robotBigBlast, so a blast on an excavator's bucket or chassis hurts it. Host-owned damage.
 // It is also the swarm's owner in the register (src/game/register.ts): once added (bf.register.add(target)) every hit
 // test here (rounds, sheets, splash) tests only the robots the register's grid hands back, not the whole swarm.
+import { RobotEntities } from "./robotEntities";
+import type { World } from "../ecs/world";
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
@@ -37,6 +39,13 @@ export class RobotTarget implements Hittable, Owner {
   constructor(private swarm: RobotSwarm, readonly team: number) {}
 
   publish(reg: Register) { this.swarm.publish(reg, this.team); }
+
+  /** The robots as entities in the host world (architecture stage 4.1). */
+  entities: RobotEntities | null = null;
+  syncWorld(world: World) {
+    if (!this.entities || this.entities.world !== world) this.entities = new RobotEntities(world, this.swarm, this.team);
+    this.entities.sync();
+  }
   attach(reg: Register, owner: number) { this.cull.attach(reg, owner); }
 
   hitRay(o: THREE.Vector3, d: THREE.Vector3, maxDist: number) {

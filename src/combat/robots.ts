@@ -984,18 +984,22 @@ export class RobotSwarm {
    * hittable, not locked).
    */
   publish(reg: Register, team: number, ref: unknown = null): void {
-    const base = FLAG.Hittable | FLAG.Detectable, hk = this.v.robotHitScale;
+    const base = FLAG.Hittable | FLAG.Detectable;
     for (let i = 0; i < this.hi; i++) {
       const st = this.state[i];
       if (st >= DEAD) continue; // dead, empty
-      const k = this.kind[i], s = this.size[i];
-      const r = Math.max(0.6, k === BIG ? s * 0.5 : k === MID ? s * 0.4 : s * 0.35);
-      const reach = k === SMALL ? s * Math.max(1, 0.5 * hk) : Math.max(s * 0.6 * hk, this.heightOf(i) * 1.3 + s);
+      const k = this.kind[i];
+      const r = this.bodyRadius(i), reach = this.hitReach(i);
       const flags = base | (k === SMALL ? FLAG.Light : 0) | (this.frozen[i] ? FLAG.Asleep : 0) | (st === DOWN ? FLAG.Down : 0);
       reg.put(i, this.uid[i], KIND.Unit, team, flags, this.px[i], this.hubY[i], this.pz[i], r,
         k === SMALL ? 0 : robotFootprint(this, i), this.vx[i], this.vz[i], reach, ref);
     }
   }
+
+  /** Robot i's body radius, as the register and hit tests measure it. */
+  bodyRadius(i: number): number { const k = this.kind[i], s = this.size[i]; return Math.max(0.6, k === BIG ? s * 0.5 : k === MID ? s * 0.4 : s * 0.35); }
+  /** How far anything of robot i reaches (a walker's legs and arms), as hit tests cull with. */
+  hitReach(i: number): number { const k = this.kind[i], s = this.size[i], hk = this.v.robotHitScale; return k === SMALL ? s * Math.max(1, 0.5 * hk) : Math.max(s * 0.6 * hk, this.heightOf(i) * 1.3 + s); }
 
   /** Take a robot off the field at once (live or dead; its slot freed). */
   remove(i: number): void {

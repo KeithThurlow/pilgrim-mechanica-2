@@ -10,6 +10,7 @@
 // Deterministic: no Math.random, and crater digging is capped by count per tick (`dentPerTick`), not by wall-clock time,
 // so the ground comes out the same on every machine.
 // Ownership: host (damage, shells, craters, the ground). Events are plain data (rule 12).
+import { World } from "../ecs/world";
 import * as THREE from "three/webgpu";
 import { Shells, type Shell } from "./shells";
 import { Register } from "./register";
@@ -36,6 +37,9 @@ export type CombatEvent = BlastEvent | LobEvent | FreezeEvent;
 export interface CombatRuleValues { blastGroundReach?: number; blastCover?: number; dentMerge?: number; dentPerTick?: number }
 
 export class CombatRules {
+  /** The host's ECS world (src/ecs/): shared components for what the targets hold, written by syncWorld each tick
+   *  (stage 4.1: robots; readers move over in 4.2). */
+  readonly world = new World();
   /** Everything that can be shot (adapters; the ECS replaces them in stages 4-5). */
   readonly targets: Hittable[] = [];
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts). */
@@ -93,6 +97,13 @@ export class CombatRules {
     if (this.burns.list.length) this.burns.step(dt);
     if (this.pools.list.length) this.pools.step(dt);
     if (this.chills.list.length) this.chills.step(dt);
+    this.syncWorld();
+  }
+
+  /** The targets' shared components into the world (those that have entities yet: the robots). */
+  syncWorld() {
+    this.world.tick++;
+    for (const t of this.targets) t.syncWorld?.(this.world);
   }
 
   /** Is (x, z) under the shallows' water (deep enough to splash)? */
