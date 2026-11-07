@@ -5,6 +5,7 @@ import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
+import { Clock, clockFromUrl } from "./clock";
 
 export type Tick = (dt: number, time: number) => void;
 
@@ -14,8 +15,11 @@ export interface App {
   camera: THREE.PerspectiveCamera;
   hud: FrameHud;
   backend: "WebGPU" | "WebGL2";
-  /** Called every frame before rendering. dt is clamped so a stalled tab never explodes a sim. */
+  /** Called once per sim tick before rendering (src/core/clock.ts): frame-locked by default (once a frame, dt the frame's
+   *  time clamped so a stalled tab never explodes a sim); with ?tick=N, N times a second at dt = 1/N, 0 to 4 per frame. */
   onTick(fn: Tick): void;
+  /** The game clock: fixed or frame-locked, ticks run, alpha between ticks. */
+  clock: Clock;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N, ?norender */
   params: URLSearchParams;
   /** A PNG data URL of the next rendered frame (taken right after it renders, before the canvas clears). */
@@ -57,6 +61,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const captures: ((url: string) => void)[] = [];
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
+  const clock = clockFromUrl(params);
+  hud.set("clock", () => clock.hud());
   const noRender = params.has("norender");
   let up = { trimmed: 0, savedKB: 0, empty: 0 };
   hud.set("shaders", () => `shaders: ${shaders.total} pipelines built (${shaders.async ? "in the background" : "sync, ?syncshaders"}), ${shaders.totalMs.toFixed(0)} ms in frames (code ${shaders.totalGenMs.toFixed(0)}), worst frame ${shaders.worstMs.toFixed(0)} ms`);
@@ -68,10 +74,10 @@ export async function createApp(container: HTMLElement): Promise<App> {
     const now = performance.now();
     const raw = (now - prev) / 1000;
     prev = now;
-    const dt = Math.min(raw, 1 / 20);
-    time += dt;
     const t0 = performance.now();
-    if (!app.hold) for (const t of ticks) t(dt, time);
+    if (!app.hold) {
+      clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); });
+    }
     const t1 = performance.now();
     // ?norender: run the ticks without drawing (headless CPU measurements, e.g. the stress lab on a software GPU).
     if (!noRender) { up = trimInstanceUploads(scene);
@@ -94,7 +100,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   });
 
   const app: App = {
-    renderer, scene, camera, hud, backend, params, last, hold: false,
+    renderer, scene, camera, hud, backend, params, last, hold: false, clock,
     onTick: (fn) => ticks.push(fn),
     capture: () => new Promise<string>((res) => captures.push(res)),
   };

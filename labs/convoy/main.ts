@@ -928,6 +928,8 @@ function holdOnBucket() {
   }
 }
 
+/** ?nocull: the convoy's cosmetic parts posed every frame even off the screen (perf comparison). */
+const noCull = params.has("nocull");
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
@@ -1040,12 +1042,15 @@ app.onTick((rawDt) => {
   }
   // The convoy's turrets, escort guns and guardians all pick from the same list of threats near the train.
   const threats = threatOn ? [threatMark.position] : loop.turretThreats(96);
+  costs.mark("turret threats");
   defence.target(threats);
   defence.update(dt);
+  costs.mark("turrets");
   convoyGuns.target(threats);
   convoyGuns.update(dt);
+  costs.mark("escort guns");
   guardians.update(dt, threats);
-  costs.mark("turrets");
+  costs.mark("guardians");
   // A mech walking on the deck rides it: the platform's motion this frame first, then its own step, kept on the deck.
   carry.ride(sim);
   if (out) {
@@ -1103,8 +1108,10 @@ app.onTick((rawDt) => {
   // Killed where no expedition ends it (aboard): back in the cockpit after a moment.
   if (!foot.sim.alive && foot.deadFor > 3 && loop.exp.state !== "lost") homeAboard();
   costs.mark("pilot");
-  for (const b of bodies) b.update();
-  deckMechs.update();
+  // (Cars well off the screen skip their tracks and their knelt mechs; ?nocull: everything every frame.)
+  const view = noCull ? undefined : bf.view;
+  for (const b of bodies) b.update(view);
+  deckMechs.update(view);
   for (const c of craneBodies) c.update();
   spans = bridgeSpans(convoy.platforms, V, spans);
   bridges.update(spans, dt);

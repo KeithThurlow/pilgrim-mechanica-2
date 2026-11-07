@@ -15,7 +15,8 @@ import type { Ground } from "../mech/walker";
 import { kneelPose, type Kneel } from "./hold";
 import type { Convoy } from "./platform";
 import { furniture } from "./furniture";
-import { FRIENDLY } from "./platformBody";
+import { FRIENDLY, CULL_MARGIN } from "./platformBody";
+import type { ViewCull } from "../core/viewCull";
 
 export const DECK_MECH_DEFAULTS = { deckMechsOn: 1, deckMechCrouch: 1.1, deckMechPitch: 8 };
 export type DeckMechValues = typeof DECK_MECH_DEFAULTS;
@@ -58,13 +59,16 @@ export class DeckMechs {
     this.loading = false;
   }
 
-  update() {
+  /** With a view (perf 2026-11-07): mechs on a car well off the screen aren't posed (it is all from the deck, nothing
+   *  carried over, so they're right again the frame they come back). */
+  update(view?: ViewCull) {
     const on = this.v.deckMechsOn > 0;
     for (const a of this.list) {
       if (!a.body) { if (on && !this.loading) void this.add(a); continue; }
       a.body.root.visible = on;
       if (!on) continue;
       const p = this.convoy.platforms[a.pi];
+      if (view && !view.sees(p.x, p.y, p.z, p.spec.length / 2 + CULL_MARGIN)) continue;
       a.kneel.crouch = this.v.deckMechCrouch; a.kneel.pitch = this.v.deckMechPitch;
       kneelPose(a.sim, p, a.kneel);
       a.upper.torsoYaw = p.heading + a.kneel.relHeading;
