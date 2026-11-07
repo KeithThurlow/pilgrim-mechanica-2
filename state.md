@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · Phones draw at half resolution, no MSAA, smaller sun shadow map (Keith: frame rate GPU-bound on his phone, sharper than the PC; Claude on `claude/project-thread-oakhm8-mobileperf`)
+- `src/core/app.ts`: on touch screens the renderer's pixel ratio is `devicePixelRatio × ?res=` (0.5: half the native width and height, a quarter of the pixels; before, the phone drew every native pixel with MSAA) and MSAA is off (`?aa=1` puts it back). `?res=` also scales the PC's ratio. `src/world/look.ts`: sun shadow map 1024 on touch (2048 on the PC).
+- Checked: typecheck, full `npm test`. Not measured on a phone here: Keith to compare `?res=0.5` (default), `?res=0.35`, `?res=0.75`.
+
 ### 2026-11-07 · Phones: twin sticks (aim and auto-fire on the right), everything at 0.6 scale (Keith: "it really needs to be a dual stick setup", "most things are still too big"; Claude on `claude/project-thread-oakhm8-sticks`)
 - `src/core/touch.ts`: left stick WASD (pushed to the rim holds Space: dash, then sprint); right stick aims round the screen centre (further out the further it's pushed) and fires both sides past the dead zone, holding its last aim when let go; small buttons Dash, F, E, R, Q, 1, 2, 3, Tab, Inv, ⛶ beside the right stick (a 3-wide block left of it in landscape). The viewport is set to `?uiscale=` (0.6) so panels and HUDs shrink; the pad is sized up to stay thumb-sized. `MouseButtons` (`src/game/playerAim.ts`) reads the right stick as cursor and both triggers (Gun R is gone). On touch the mech doll is hidden (Inv opens the inventory), the radar caps at 30% of the short side, the expedition HUD sits top left under the frame HUD in landscape.
 - Checked: Pixel 7 emulation landscape and portrait, convoy `?far&norender`: nothing overlaps the sticks; left stick sends KeyW, buttons their keys, no errors; full `npm test`. Open for Keith: aim reach and dead zone, sprint at the rim, the button set.

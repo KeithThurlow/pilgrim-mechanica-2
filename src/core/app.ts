@@ -4,7 +4,7 @@ import * as THREE from "three/webgpu";
 import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
-import { mountTouchPad } from "./touch";
+import { mountTouchPad, touchMode } from "./touch";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 import { skipHiddenMatrices } from "./matrixSkip";
 import { Clock, clockFromUrl } from "./clock";
@@ -43,9 +43,14 @@ export interface App {
 export async function createApp(container: HTMLElement): Promise<App> {
   const params = new URLSearchParams(location.search);
   skipHiddenMatrices(!params.has("allmatrices"));
-  const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: params.has("webgl") });
+  // Phones (Keith 2026-11-07: GPU-bound on his phone, and it looked sharper than the PC): no MSAA and a fraction of
+  // the screen's own pixels, `?res=` (0.5 on touch screens: half the width and height of the native screen; on the PC
+  // it scales the usual pixel ratio, capped at 2). `?aa=1` / `?aa=0` forces MSAA on or off.
+  const res = Number(params.get("res")) || (touchMode ? 0.5 : 1);
+  const aa = params.has("aa") ? params.get("aa") !== "0" : !touchMode;
+  const renderer = new THREE.WebGPURenderer({ antialias: aa, forceWebGL: params.has("webgl") });
   await renderer.init();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(touchMode ? window.devicePixelRatio * res : Math.min(window.devicePixelRatio, 2) * res);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
