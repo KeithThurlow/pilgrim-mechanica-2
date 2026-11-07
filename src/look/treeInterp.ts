@@ -138,3 +138,92 @@ function inScene(o: THREE.Object3D) {
   for (let p: THREE.Object3D | null = o; p; p = p.parent) if ((p as THREE.Scene).isScene) return true;
   return false;
 }
+
+// Swarms drawn between ticks (stage 6d). A swarm's sim keeps its units in slot arrays (x, z, heading, feet...) and
+// its drawer poses instances from them. SlotInterp keeps the last two ticks of the arrays the drawer reads; for the
+// drawn frame apply(alpha) writes the blend into the sim's own arrays, the drawer runs, and restore() puts the tick's
+// values back at once, so nothing but the drawer sees a blend. A slot whose key (generation, state) changed between
+// the ticks, or a value that jumped (a phase wrapped), shows this tick's value.
+type Num = Float32Array | Float64Array | Uint8Array | Uint16Array | Uint32Array | Int32Array;
+export interface Channel {
+  a: Float32Array;
+  /** Floats per slot (4 feet × 1: stride 4). */
+  stride?: number;
+  /** An angle: blended the short way round. */
+  angle?: boolean;
+  /** A step bigger than this isn't blended (a wrapped phase). */
+  jump?: number;
+}
+
+export class SlotInterp {
+  private prev: Float32Array[];
+  private cur: Float32Array[];
+  private kPrev: Num[];
+  private kCur: Num[];
+  private hiPrev = 0;
+  private hi = 0;
+  private captured = 0;
+  private applied = false;
+
+  constructor(private channels: Channel[], private keys: Num[]) {
+    this.prev = channels.map((c) => new Float32Array(c.a.length));
+    this.cur = channels.map((c) => new Float32Array(c.a.length));
+    this.kPrev = keys.map((k) => new (k.constructor as new (n: number) => Num)(k.length));
+    this.kCur = keys.map((k) => new (k.constructor as new (n: number) => Num)(k.length));
+  }
+
+  /** End of a tick: slots below hi are live (the sim's high-water mark). */
+  capture(hi: number) {
+    this.restore();
+    const swap = (a: Num[], b: Num[]) => { for (let j = 0; j < a.length; j++) { const t = a[j]; a[j] = b[j]; b[j] = t; } };
+    swap(this.prev, this.cur); swap(this.kPrev, this.kCur);
+    this.hiPrev = this.hi; this.hi = hi;
+    for (let j = 0; j < this.channels.length; j++) { const s = this.channels[j].stride ?? 1; this.cur[j].set(this.channels[j].a.subarray(0, hi * s)); }
+    for (let j = 0; j < this.keys.length; j++) this.kCur[j].set(this.keys[j].subarray(0, hi));
+    this.captured++;
+  }
+
+  /** Blend into the sim's arrays alpha of the way from the last tick to this one. Call restore() right after drawing. */
+  apply(alpha: number) {
+    if (this.captured < 2 || alpha >= 1 || this.applied) return;
+    const a = Math.max(0, alpha), n = Math.min(this.hi, this.hiPrev);
+    for (let j = 0; j < this.channels.length; j++) {
+      const ch = this.channels[j], s = ch.stride ?? 1, p = this.prev[j], c = this.cur[j], out = ch.a, jump = ch.jump ?? Infinity;
+      for (let i = 0; i < n; i++) {
+        if (!this.same(i)) continue;
+        for (let k = i * s, e = k + s; k < e; k++) {
+          let d = c[k] - p[k];
+          if (ch.angle) d = Math.atan2(Math.sin(d), Math.cos(d));
+          if (Math.abs(d) > jump) continue;
+          out[k] = c[k] - d * (1 - a);
+        }
+      }
+    }
+    this.applied = true;
+  }
+
+  /** Back to this tick's values. */
+  restore() {
+    if (!this.applied) return;
+    this.applied = false;
+    for (let j = 0; j < this.channels.length; j++) { const s = this.channels[j].stride ?? 1; this.channels[j].a.set(this.cur[j].subarray(0, this.hi * s)); }
+  }
+
+  private same(i: number) {
+    for (let j = 0; j < this.keys.length; j++) if (this.kPrev[j][i] !== this.kCur[j][i]) return false;
+    return true;
+  }
+}
+
+// What draws once per drawn frame instead of each tick, when the clock is fixed (createApp sets betweenTicks and runs
+// the list: afterTick after every tick, frame before the app's onFrame callbacks).
+export interface FrameDrawer { afterTick(): void; frame(dt: number, alpha: number): void; live(): boolean }
+const drawers = new Set<FrameDrawer>();
+let fixedClock = false;
+/** True when the app runs a fixed tick: drawers that interpolate draw in frames, not ticks. */
+export function betweenTicks() { return fixedClock; }
+export function setBetweenTicks(on: boolean) { fixedClock = on; }
+/** Put a drawer on the app's per-frame list (dropped once live() says false). */
+export function drawEachFrame(d: FrameDrawer) { drawers.add(d); }
+export function runAfterTick() { for (const d of drawers) { if (!d.live()) { drawers.delete(d); continue; } d.afterTick(); } }
+export function runFrameDrawers(dt: number, alpha: number) { for (const d of drawers) d.frame(dt, alpha); }

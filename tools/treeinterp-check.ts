@@ -3,9 +3,11 @@
 // rotation the short way and unit length), restore() puts the tick's pose back exactly, alpha 1 changes nothing, the
 // first tick holds still, snap() drops the last pose, and a changed tree starts over. A part posed outside the tick
 // (in a drawn frame) is left alone by apply and restore. The app's list (stage 6c): models on drawBetweenTicks are
-// captured while in a scene, dropped when removed, back when added again. Run: npm test.
+// captured while in a scene, dropped when removed, back when added again. Swarms (stage 6d, SlotInterp): slot arrays
+// blended in place and put back exactly, angles the short way, a slot whose key changed or a value that jumped not
+// blended, strided arrays (feet). Run: npm test.
 import * as THREE from "three/webgpu";
-import { TreeInterp, InterpSet, drawBetweenTicks } from "../src/look/treeInterp";
+import { TreeInterp, InterpSet, drawBetweenTicks, SlotInterp } from "../src/look/treeInterp";
 
 const problems: string[] = [];
 const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
@@ -79,6 +81,24 @@ if (!near(root.position.x, 4.5)) fail(`after the change it blends again: ${root.
   if (set.models !== 0) fail("a removed model should leave the list");
   scene.add(m, loose); set.capture();
   if (set.models !== 2) fail(`added back: ${set.models} models`);
+}
+
+// Swarm slot arrays.
+{
+  const x = new Float32Array(8), h = new Float32Array(8), g = new Float32Array(8), f = new Float32Array(16), gen = new Uint32Array(8);
+  const si = new SlotInterp([{ a: x }, { a: h, angle: true }, { a: g, jump: 10 }, { a: f, stride: 2 }], [gen]);
+  x.set([0, 0, 0]); h.set([3, 0, 0]); g.set([0, 999, 0]); f.set([0, 0, 0, 0]);
+  si.capture(3);
+  x.set([2, 4, 6]); h.set([-3, 1, 0]); g.set([1, 999 - 300 * Math.PI, 0]); f.set([2, 4, 6, 8]); gen[2] = 1;
+  si.capture(3);
+  si.apply(0.5);
+  if (!near(x[0], 1) || !near(x[1], 2)) fail(`slot blend ${x[0]}, ${x[1]}`);
+  if (x[2] !== 6) fail("a slot whose generation changed should show this tick");
+  if (!near(Math.abs(h[0]), Math.PI, 1e-3)) fail(`slot angle should blend the short way: ${h[0]}`);
+  if (!near(g[0], 0.5) || g[1] !== Math.fround(999 - 300 * Math.PI)) fail(`jump: ${g[0]}, ${g[1]}`);
+  if (!near(f[1], 2) || !near(f[3], 4)) fail(`strided: ${f[1]}, ${f[3]}`);
+  si.restore();
+  if (x[0] !== 2 || h[0] !== Math.fround(-3) || f[3] !== 8) fail("slot restore should be exact");
 }
 if (problems.length) { console.log(`treeinterp: ${problems.length} problem(s)`); process.exit(1); }
 console.log("treeinterp: ok");
