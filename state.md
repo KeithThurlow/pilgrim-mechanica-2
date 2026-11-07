@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · The labs on GitHub Pages, for playing on the phone (Keith asked; Claude on `claude/project-thread-oakhm8`)
+- `.github/workflows/pages.yml` builds every lab on each push to main and publishes it to https://keiththurlow.github.io/pilgrim-mechanica-2/ (one-time: repo Settings › Pages › Source: GitHub Actions). `vite.config.ts` takes `VITE_BASE` (the sub-path); public/ files now go through `src/core/assetBase.ts` (`asset("models/...")`) in `rampart.ts`, `banditVat.ts`, `library.ts`, `sensorModels.ts`, `labs/parts/main.ts`; the hub's links are relative. The Report button falls back to downloading the report there (no dev server).
+- Checked: `VITE_BASE=/pilgrim-mechanica-2/ vite build` served under the sub-path; hub and labs load with no missing files (only the weapon GLBs that fall back to stand-ins by design); full `npm test`.
+
 
 ### 2026-11-07 · Dead code pruned, batch 2: the old sprint gallop (Claude)
 - `src/mech/walker.ts`: `boundStart` and `boundLaunch` (the whole gallop gait, only reached with the hidden `boundGallop` 1,

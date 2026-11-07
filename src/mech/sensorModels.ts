@@ -8,6 +8,7 @@ import * as THREE from "three/webgpu";
 import { mergeTintedTree } from "../look/mergeGeometry";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ToonLook } from "../look/toon";
+import { asset } from "../core/assetBase";
 
 export interface SensorModel {
   root: THREE.Group;
@@ -18,7 +19,7 @@ export interface SensorModel {
 }
 
 const loader = new GLTFLoader();
-const base = "/models/sensors/";
+const base = asset("models/sensors/");
 const glbs = new Map<string, Promise<THREE.Object3D | null>>();
 
 /** The GLB's scene for this id, or null when there's none (a missing file, or the dev server's html). Cached. */
