@@ -4,7 +4,8 @@
 // world's queries, snapshots and (later) the network see the swarm without a sync.
 // - Shared components: Transform (x = px, y = hubY the body centre, z = pz, heading), Velocity (vx, vy, vz), Health
 //   (hp, maxHp), Status.pace (pace). PrevTransform is last tick's Transform (copied at the start of each update).
-//   Team and Collider are written where the register is published (they depend on the publisher's team and sliders).
+//   Team, Collider, Armour (flat) and Bar are written where the register is published (they depend on the publisher's
+//   team and the sliders). Only cutters and excavators get a Bar (scrappers die to a hit); excavators' always show.
 // - The kind's own component, Robot: kind, state, stateTime, size, variant, weapon, uid, frozen.
 // - The rest (the AI's clocks, leg arrays, latch slots...) stays in the swarm's own arrays, an opaque sim (review §4.1),
 //   until something outside needs it.
@@ -13,7 +14,7 @@
 //   array after a snapshot overwrote the swarm (the sim worker's view).
 // Ownership: host (enemies). Pure.
 import { World, defineComponent, type Entity } from "../ecs/world";
-import { Transform, PrevTransform, Velocity, Health, Status, Team, Collider } from "../ecs/components";
+import { Transform, PrevTransform, Velocity, Health, Status, Team, Collider, Armour, Bar } from "../ecs/components";
 
 /** A robot's kind and state (src/combat/robots.ts constants: SMALL/MID/BIG, RUN..DEAD, EMPTY). */
 export const Robot = defineComponent("Robot", {
@@ -21,7 +22,7 @@ export const Robot = defineComponent("Robot", {
 }, { defaults: { state: 255 } });
 
 /** The components every live robot has. */
-export const ROBOT_COMPONENTS = [Transform, PrevTransform, Velocity, Health, Status, Team, Collider, Robot] as const;
+export const ROBOT_COMPONENTS = [Transform, PrevTransform, Velocity, Health, Status, Team, Collider, Armour, Robot] as const;
 
 /** Entity indices a world needs per robot swarm, and a capacity that fits a few swarms plus other things. */
 export const swarmWorldCapacity = (slots: number, swarms = 8) => slots * swarms + 4096;
@@ -30,6 +31,9 @@ let warned = false;
 
 export class RobotBlock {
   readonly world: World;
+  /** True when the swarm made a world of its own (none given, or no room): nothing else sees it, so its target adapter
+   *  pushes its health bars itself (RobotTarget.bars). */
+  readonly own: boolean;
   /** The block's first entity index: slot i is index base + i. */
   readonly base: number;
   readonly px: Float32Array; readonly hubY: Float32Array; readonly pz: Float32Array; readonly heading: Float32Array;
@@ -41,6 +45,7 @@ export class RobotBlock {
   private team: Uint8Array; private unitKind: Uint8Array;
   /** The uid each slot's entity was made for. */
   private linked: Uint32Array;
+  private armour: Float32Array; private barW: Float32Array; private barLift: Float32Array; private barAlways: Uint8Array;
   readonly radius: Float32Array; readonly foot: Float32Array; readonly reach: Float32Array; readonly height: Float32Array;
 
   /** A block of `slots` in `world` (a fixed one with room), else in a world of its own. */
@@ -52,11 +57,13 @@ export class RobotBlock {
       base = w.reserve(slots);
     }
     this.world = w!; this.base = base;
+    this.own = this.world !== world;
     this.linked = new Uint32Array(slots);
     const v = <T extends { subarray(a: number, b: number): T }>(a: T) => a.subarray(base, base + slots);
     const T = this.world.columns(Transform), P = this.world.columns(PrevTransform), Vl = this.world.columns(Velocity);
     const H = this.world.columns(Health), S = this.world.columns(Status), R = this.world.columns(Robot);
-    const M = this.world.columns(Team), C = this.world.columns(Collider);
+    const M = this.world.columns(Team), C = this.world.columns(Collider), A = this.world.columns(Armour), B = this.world.columns(Bar);
+    this.armour = v(A.flat); this.barW = v(B.width); this.barLift = v(B.lift); this.barAlways = v(B.always);
     this.px = v(T.x); this.hubY = v(T.y); this.pz = v(T.z); this.heading = v(T.heading);
     this.prev = { x: v(P.x), y: v(P.y), z: v(P.z), heading: v(P.heading) };
     this.vx = v(Vl.x); this.vy = v(Vl.y); this.vz = v(Vl.z);
@@ -79,7 +86,8 @@ export class RobotBlock {
   link(i: number) {
     const j = this.base + i, w = this.world;
     if (w.at(j) !== -1) w.destroy(w.at(j) as Entity);
-    w.attach(w.createAt(j), ...ROBOT_COMPONENTS);
+    const e = w.attach(w.createAt(j), ...ROBOT_COMPONENTS);
+    if (this.kind[i] !== 0) w.attach(e, Bar); // not the scrappers (SMALL)
     this.linked[i] = this.uid[i];
     this.prev.x[i] = this.px[i]; this.prev.y[i] = this.hubY[i]; this.prev.z[i] = this.pz[i]; this.prev.heading[i] = this.heading[i];
   }
@@ -106,9 +114,13 @@ export class RobotBlock {
     p.x.set(this.px.subarray(0, hi)); p.y.set(this.hubY.subarray(0, hi)); p.z.set(this.pz.subarray(0, hi)); p.heading.set(this.heading.subarray(0, hi));
   }
 
-  /** Team and Collider of slot i, as the register is published. */
-  publish(i: number, team: number, unitKind: number, radius: number, foot: number, reach: number, height: number) {
+  /** Team, Collider and armour of slot i, as the register is published. */
+  publish(i: number, team: number, unitKind: number, radius: number, foot: number, reach: number, height: number, armour: number) {
     this.team[i] = team; this.unitKind[i] = unitKind;
     this.radius[i] = radius; this.foot[i] = foot; this.reach[i] = reach; this.height[i] = height;
+    this.armour[i] = armour;
   }
+
+  /** Slot i's health bar (only read where it has a Bar). */
+  bar(i: number, width: number, lift: number, always: boolean) { this.barW[i] = width; this.barLift[i] = lift; this.barAlways[i] = always ? 1 : 0; }
 }

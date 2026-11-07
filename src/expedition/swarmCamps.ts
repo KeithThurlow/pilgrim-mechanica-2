@@ -62,7 +62,7 @@ export class SwarmCamps {
     /** True where a camp shouldn't be (the road). */
     private blocked: (x: number, z: number) => boolean,
   ) {
-    this.sw = new RobotSwarm(v, field, SwarmCamps.SEED);
+    this.sw = new RobotSwarm(v, field, SwarmCamps.SEED, bf.rules.world);
     this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw);
     this.draw.cull = bf.view;

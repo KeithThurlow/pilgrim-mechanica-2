@@ -15,6 +15,9 @@ import { SHALLOWS_DEFAULTS } from "../src/world/shallows";
 import { RobotSwarm, ROBOT_DEFAULTS, ROBOT_MAX, DEAD, type RobotTarget } from "../src/combat/robots";
 import { TRAMPLE_DEFAULTS } from "../src/combat/trample";
 import { Register } from "../src/game/register";
+import { gatherBars } from "../src/game/entityBars";
+import type { BarEntry } from "../src/ui/healthBars";
+import { SMALL, BIG } from "../src/combat/robots";
 import { packRobots, applyRobots } from "../src/sim/robotsRemote";
 
 const problems: string[] = [];
@@ -38,6 +41,9 @@ if (sw.block.base < 1 || sw2.block.base < sw.block.base + ROBOT_MAX) fail(`block
 }
 const reg = new Register();
 reg.add({ name: "robots", publish: (r) => sw.publish(r, 3) });
+reg.add({ name: "robots2", publish: (r) => sw2.publish(r, 5) });
+const bars: BarEntry[] = [];
+let barsSeen = 0;
 let seed = 77;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
@@ -85,6 +91,20 @@ for (let f = 0; f < 1800; f++) {
   }
   if (world.alive !== live + sw2.count + 1) fail(`frame ${f}: ${world.alive} entities, ${live} + ${sw2.count} robots + 1`);
   if (world.query(Robot).count !== live + sw2.count) fail(`frame ${f}: the Robot query holds ${world.query(Robot).count}`);
+  // Health bars from the world (stage 4.3b): as RobotTarget.bars pushed them, cutters and excavators only, seen from
+  // team 5 (so only sw's).
+  bars.length = 0;
+  gatherBars(world, 5, bars);
+  let want = 0;
+  for (let i = 0; i < sw.hi; i++) if (sw.state[i] < DEAD && sw.kind[i] !== SMALL) want++;
+  if (bars.length !== want) fail(`frame ${f}: ${bars.length} bars, ${want} cutters and excavators`);
+  for (const b of bars) {
+    const i = entityIndex(b.key as number) - sw.block.base, big = sw.kind[i] === BIG, f32 = Math.fround;
+    const y = sw.hubY[i] + f32(sw.size[i] * (big ? 0.9 : 0.75) + 0.6); // lift kept as f32: within 1e-7 m of the old bar
+    if (i < 0 || i >= sw.hi || b.key !== sw.block.entity(i) || b.x !== sw.px[i] || b.z !== sw.pz[i] || b.y !== y || b.hp !== sw.hp[i] || b.max !== sw.maxHp[i]
+      || b.armour !== f32(sw.armourOf(i)) || b.width !== (big ? 5 : f32(2.4)) || b.always !== big) { fail(`frame ${f}: bar of robot ${i}`); break; }
+  }
+  barsSeen += bars.length;
   most = Math.max(most, live);
   prev = now;
 }
@@ -105,6 +125,6 @@ if (!world.exists(other)) fail("the other entity went");
   if (bad) fail(`a snapshot left ${bad} slots' entities wrong`);
   if (e0 < 0 || view.block.entity(e0) === before || world.exists(before as Entity)) fail("a reused slot kept its old entity");
 }
-console.log(`  1800 ticks, up to ${most} robots, ${stale.length} died or removed (ids stale), two swarms and a view in one world`);
+console.log(`  1800 ticks, up to ${most} robots, ${barsSeen} bars checked, ${stale.length} died or removed (ids stale), two swarms and a view in one world`);
 if (problems.length) { console.log(`robotworld: ${problems.length} problem(s)`); process.exit(1); }
 console.log("robotworld: ok");

@@ -57,13 +57,21 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   - Known: blocks are never given back; a lab that makes more than 8 swarms over its life (field rivals with summoner gear,
     one each) has the extra ones fall back to worlds of their own (still correct, just outside the host world).
 
+- Stage 4.3b, health bars from the world (Claude 2026-11-07; Keith "please continue", relayed): new `Bar` component
+  (width, lift, always; cosmetic) and robots' `Armour.flat`, written in `RobotSwarm.publish`; `src/game/entityBars.ts`
+  `gatherBars(world, team, out)` pushes a bar for every entity with Transform, Health, Team, Armour and Bar off the
+  viewer's team; `HealthBars` takes the host world (combat labs, convoy lab). `RobotTarget.bars` only covers a swarm in a
+  world of its own (`RobotBlock.own`). Keys are entity ids. Also fixed from 4.3: the convoy lab's camp swarm
+  (`swarmCamps.ts`) and the stress lab's now use the host world too. Checked: robotworld-check compares every bar with
+  the old adapter's, every tick. Targeting (the soft lock) reads the register, which robots fill from their columns.
+
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
   stress) move their camera in the tick; split them like the walker lab when it matters. Still per tick: droids'
   visors and lasers, crusher and strider fx.
-- Stage 4.3b, readers onto the components: the register's robot owner, targeting and health bars query the world
-  (`Robot`, `Transform`, `Health`) instead of the swarm's arrays (today they read the same memory through the swarm). Then
-  the worker's robot snapshot becomes `packWorld` columns of the swarm's block (stage 7).
+- Stage 4.3b, more readers onto the components: the robots' register publish could become a world system over
+  `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
+  snapshot becomes `packWorld` columns of the swarm's block (stage 7).
 - Stage 4.4: infantry the same way (`InfantrySwarm` reserves a block; its arrays become views).
 - Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
 

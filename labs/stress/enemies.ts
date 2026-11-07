@@ -44,7 +44,7 @@ export class StressRobots {
 
   constructor(private lab: CombatLab<V>) {
     const { V, bf, field, player } = lab;
-    const sw = this.sw = new RobotSwarm(V, field);
+    const sw = this.sw = new RobotSwarm(V, field, 1, bf.rules.world);
     sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(sw);
     coreWarnFx(lab.bf, this.draw.coreWarn);
