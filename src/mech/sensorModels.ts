@@ -18,9 +18,7 @@ export interface SensorModel {
 }
 
 const loader = new GLTFLoader();
-let base = "/models/sensors/";
-/** Where the sensor GLBs are served from (default /models/sensors/). */
-export function setSensorModelBase(url: string) { base = url; }
+const base = "/models/sensors/";
 const glbs = new Map<string, Promise<THREE.Object3D | null>>();
 
 /** The GLB's scene for this id, or null when there's none (a missing file, or the dev server's html). Cached. */

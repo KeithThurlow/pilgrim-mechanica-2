@@ -259,9 +259,3 @@ function button(label: string, onClick: () => void) {
   b.addEventListener("click", onClick);
   return b;
 }
-
-/** Start from these defaults; the panel overwrites them with any saved values. */
-export function defaultsOf<V extends Values>(params: Param[], given: V): V {
-  for (const p of params) if (!(p.key in given)) throw new Error(`No default for ${p.key}`);
-  return { ...given };
-}

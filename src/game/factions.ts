@@ -17,7 +17,6 @@ import { KIND, FLAG, kindBit, type Filter, type Register } from "./register";
 
 export const FACTION = { robots: 0, raiders: 1, player: 2, convoy: 3 } as const;
 export type Faction = 0 | 1 | 2 | 3;
-export const FACTION_NAMES = ["robots", "raiders", "player", "convoy"] as const;
 /** The battlefield team each faction's rounds carry (the player's mech is 1, the war band 2, the robots 3). */
 export const TEAM = { player: 1, raiders: 2, robots: 3, convoy: 5 } as const;
 export const factionOfTeam = (team: number): Faction | -1 =>

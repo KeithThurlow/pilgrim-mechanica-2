@@ -27,9 +27,7 @@ export type ModelSource = "glb" | "glb-mirrored" | "stand-in";
 const defs = new Map<string, { def: ModelDef; source: ModelSource }>();
 const loading = new Map<string, Promise<ModelDef>>();
 const loader = new GLTFLoader();
-let base = "/models/weapons/";
-/** Where the GLBs are served from (default /models/weapons/). */
-export function setWeaponModelBase(url: string) { base = url; }
+const base = "/models/weapons/";
 
 /** A GLB's extras when it lacks them: a targeting laser under the minigun's barrels or on a pod's side. */
 function addon(e: CatalogEntry, def: ModelDef) {

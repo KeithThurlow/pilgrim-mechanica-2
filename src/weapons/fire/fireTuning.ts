@@ -152,7 +152,6 @@ export const FIRE_DEFAULTS = {
   heatGlow: 1,
   fireFlames: 1,
 };
-export type FireValues = typeof FIRE_DEFAULTS;
 
 export const FLAMER_GROUP = "Flamer (held)", INFERNO_GROUP = "Inferno (hull flamer)", STREAM_GROUP = "Flame stream", NAPALM_GROUP = "Napalm launcher", HEAT_GROUP = "Burning and heat";
 export const FROST_GROUP = "Frost thrower (held freeze ray)", CRYO_GROUP = "Cryo projector (hull freeze ray)", CHILL_GROUP = "Chill and freezing";

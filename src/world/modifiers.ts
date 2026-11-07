@@ -49,10 +49,3 @@ export function addModifier(field: DuneField, m: GroundModifier): ModifierStack 
   field.modifier = stack;
   return stack;
 }
-
-/** Take a modifier back out of a field's stack (or the field). */
-export function removeModifier(field: DuneField, m: GroundModifier) {
-  const cur = field.modifier;
-  if (cur === m) field.modifier = null;
-  else if (cur instanceof ModifierStack) { const i = cur.list.indexOf(m); if (i >= 0) cur.list.splice(i, 1); }
-}

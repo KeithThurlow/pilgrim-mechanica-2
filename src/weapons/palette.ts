@@ -8,8 +8,6 @@ export type Section = (typeof SECTIONS)[number];
 export const SECTION = Object.fromEntries(SECTIONS.map((s, i) => [s, i])) as Record<Section, number>;
 /** Sections that glow: lamps at full strength, visors and lenses faintly (the kit's emission shares). */
 export const GLOW_SHARE: Partial<Record<Section, number>> = { lighting: 1, visor: 0.35 };
-/** Sections with bare metal (glints: lower roughness, some metalness). */
-export const METAL_SHARE: Partial<Record<Section, number>> = { mechanical: 1, detail: 0.7 };
 
 export interface Scheme { name: string; colors: Record<Section, number> }
 
@@ -22,6 +20,3 @@ export const SCHEMES: Scheme[] = [
   { name: "Bandit red", colors: { plating: 0x9a3b24, secondary: 0x4a3a2c, dark: 0x2a2420, mechanical: 0x5e5a54, trim: 0xd8c9a0, lighting: 0xff6a2a, detail: 0xa8a090, visor: 0xffa040 } },
   { name: "Dune camo", colors: { plating: 0xcdb58a, secondary: 0x8f7650, dark: 0x3a3128, mechanical: 0x6c665c, trim: 0x2e2a24, lighting: 0xffc060, detail: 0xb8ad94, visor: 0x9fd8c8 } },
 ];
-
-/** The scheme a brand's models were painted in (a weapon keeps its brand look unless repainted). */
-export function brandScheme(brand: string) { return Math.max(0, SCHEMES.findIndex((s) => s.name === brand)); }

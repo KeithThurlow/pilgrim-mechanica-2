@@ -1,7 +1,7 @@
 // Draws the excavators' charging beam (Keith 2026-10-31; sim in robots.ts). Cosmetic. While it charges: a glow at the
 // emitter under the chassis that grows bigger and hotter, and a thin warning line on the sand along the beam's path
 // that brightens (and widens to the beam's width once the aim locks), so it reads by day. Then the beam: a white-hot
-// core in a blue sheath from the emitter to where it strikes, and a scorch along the sand that glows and fades.
+// core in a blue sheath from the emitter to where it strikes.
 // Keith 2026-11-01: narrower, a thin thread of the beam already showing from the lock as it charges, and a big walker's
 // beam keeps firing for robotBeamSweep, flickering, while its strike drags toward the mech, then fades.
 // Blue since 2026-11-01 (Keith: red for the robots' seeking, blue for their terraforming weapons). The big walkers'
@@ -10,9 +10,9 @@
 // Keith 2026-11-02: fine beams, not wide tubes: a thin white-hot core in a soft glow (src/fx/beamStrand.ts), wavering
 // and flickering, with wisps spiralling along it, and a bright melt flash where it strikes the sand, throwing molten
 // spatter (src/fx/meltSparks.ts). The light it casts on the ground is a quarter of what it was; the old blue scorch
-// ribbon is off by default (the hot sand, src/fx/groundHeat.ts, shows the melt and cools point by point).
+// ribbon is gone (the hot sand, src/fx/groundHeat.ts, shows the melt and cools point by point).
 // At night it lights the ground through the night lights' one request path (src/world/lamps.ts ShortLights): the
-// charging emitter holds a real light at high priority, the line and the scorch glow on the sand.
+// charging emitter holds a real light at high priority, and the warning line on the sand.
 import * as THREE from "three/webgpu";
 import { RobotSwarm, BIG, type BeamLine } from "./robots";
 import { beamPower, beamWidthShare } from "./beamCore";
@@ -22,28 +22,22 @@ import { FAM_ROBOT, type ShortLights } from "../world/lamps";
 import { FineBeam, MELT } from "../fx/fineBeam";
 import { MeltSparks } from "../fx/meltSparks";
 
-const SLOTS = 16, SCORCHES = 8, PTS = 48;
-const HOT = 0x2a8cff, CORE = 0xe0f6ff, LINE = 0x3aa8ff, EMBER = 0x5ab8ff, EMBER_COLD = 0x0a2a60;
+const SLOTS = 16, PTS = 48;
+const HOT = 0x2a8cff, CORE = 0xe0f6ff, LINE = 0x3aa8ff;
 
 interface Slot {
   glow: THREE.Mesh; halo: THREE.Mesh; line: Ribbon; edge: Ribbon; beam: THREE.Mesh; core: THREE.Mesh; ring: Ribbon; reach: SoftRing; wave: SoftRing;
   /** The fine beam and its melt flash (src/fx/fineBeam.ts). */
   fine: FineBeam;
 }
-interface Scorch { ribbon: Ribbon; t: number; sx: number; sz: number; x1: number; z1: number; w: number }
 
 export class RobotBeamDraw {
   readonly group = new THREE.Group();
   private slots: Slot[] = [];
-  private scorches: Scorch[] = [];
-  private nextScorch = 0;
-  /** Last seen charge time per robot (to catch the moment it fires). */
-  private seen = new Float32Array(4096).fill(-1);
   private line: BeamLine = { ex: 0, ey: 0, ez: 0, sx: 0, sy: 0, sz: 0, x1: 0, y1: 0, z1: 0 };
   private pts: P3[] = [];
   private q = new THREE.Quaternion();
   private d = new THREE.Vector3();
-  private c = new THREE.Color();
   private time = 0;
   private sparks: MeltSparks;
   /** The charging and burning beams this frame, for the lights: robot, charge share (0..1, >1 burning). */
@@ -67,12 +61,6 @@ export class RobotBeamDraw {
       const fine = new FineBeam(this.sparks, swarm.ground, HOT, CORE);
       this.group.add(fine.group);
       this.slots.push({ glow, halo, line, edge, beam, core, ring, reach, wave, fine });
-    }
-    for (let k = 0; k < SCORCHES; k++) {
-      const ribbon = new Ribbon(PTS, EMBER, true);
-      ribbon.mesh.visible = false;
-      this.group.add(ribbon.mesh);
-      this.scorches.push({ ribbon, t: 1e9, sx: 0, sz: 0, x1: 0, z1: 0, w: 1 });
     }
     // The night lights find this and ask it for its lights each frame.
     this.group.userData.shortLights = (L: ShortLights) => this.lights(L);
@@ -104,10 +92,10 @@ export class RobotBeamDraw {
     this.time += dt;
     this.live.length = 0;
     let k = 0;
-    for (let i = 0; i < sw.hi && i < this.seen.length; i++) {
+    for (let i = 0; i < sw.hi; i++) {
       const t = sw.beamT[i];
-      if (sw.kind[i] === BIG && sw.pulseT[i] >= 0 && k < SLOTS) { this.pulse(this.slots[k++], i); this.seen[i] = -1; continue; }
-      if (t < 0) { this.seen[i] = -1; continue; }
+      if (sw.kind[i] === BIG && sw.pulseT[i] >= 0 && k < SLOTS) { this.pulse(this.slots[k++], i); continue; }
+      if (t < 0) continue;
       if (k >= SLOTS) continue;
       // Per robot: a big one's beam, or a weapon quad's laser or rail (thinner, a smaller glow).
       const spec = sw.beamSpec(i), C = spec.charge, W = spec.width, G = v.robotBeamGlow * (sw.kind[i] === BIG ? 1 : 0.3);
@@ -115,13 +103,6 @@ export class RobotBeamDraw {
       s.ring.mesh.visible = s.reach.mesh.visible = s.wave.mesh.visible = false;
       const D = sw.beamSweep(i), u = t / C, locked = t >= C * v.robotBeamLock;
       this.live.push({ i, u, line: b });
-      // Caught the moment it fired: leave a scorch.
-      if (this.seen[i] < C && t >= C) {
-        const sc = this.scorches[this.nextScorch++ % SCORCHES];
-        sc.t = 0; sc.sx = b.sx; sc.sz = b.sz; sc.x1 = b.x1; sc.z1 = b.z1; sc.w = W;
-        if ((v.robotBeamScorchGlow ?? 0) > 0) sc.ribbon.set(this.path(b), W * 1.3, "ground", g, 0.1);
-      }
-      this.seen[i] = t;
       if (t < C) {
         // Charging: the emitter glow grows and heats, flickering faster toward the end.
         const grow = Math.pow(Math.min(1, u), v.robotBeamGrowth), flick = 0.9 + 0.1 * Math.sin(this.time * (20 + 40 * u));
@@ -176,19 +157,7 @@ export class RobotBeamDraw {
       s.fine.hide();
     }
     this.sparks.update(dt);
-    // Scorches: hot at first, cooling to a dull ember glow, then gone.
-    const T = Math.max(0.05, v.robotBeamScorch);
-    for (const sc of this.scorches) {
-      sc.t += dt;
-      const f = 1 - sc.t / T;
-      sc.ribbon.mesh.visible = f > 0 && (v.robotBeamScorchGlow ?? 0) > 0;
-      if (!sc.ribbon.mesh.visible) continue;
-      sc.ribbon.mat.opacity = 0.9 * f * f * v.robotBeamScorchGlow;
-      this.c.setHex(EMBER).lerp(this.c2.setHex(EMBER_COLD), 1 - f);
-      sc.ribbon.mat.color.copy(this.c);
-    }
   }
-  private c2 = new THREE.Color();
   private ep = { x: 0, y: 0, z: 0 };
 
   /**
@@ -266,9 +235,6 @@ export class RobotBeamDraw {
         L.hold((b.sx + b.x1) / 2, (b.sy + b.y1) / 2 + 1, (b.sz + b.z1) / 2, v.robotBeamFlash * 0.07 * f, 14, 0x4090ff, v.robotBeamPrio * 0.3);
       }
     }
-    const T = Math.max(0.05, v.robotBeamScorch);
-    const sg = v.robotBeamScorchGlow ?? 0;
-    if (sg > 0) for (const sc of this.scorches) if (sc.t < T) L.telegraphLine(sc.sx, sc.sz, sc.x1, sc.z1, sc.w * 1.4, 0.6 * sg * (1 - sc.t / T), FAM_ROBOT);
   }
 }
 
