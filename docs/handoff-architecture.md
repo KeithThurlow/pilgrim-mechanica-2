@@ -11,7 +11,16 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 2, the ECS core: `src/ecs/world.ts`, `components.ts`, `snapshot.ts`; `tools/ecs-check.ts`. Component definitions
   hold no data (`world.columns(C)`, `world.objects(C)`), so two worlds can live in one thread (parity checks, ?noworker).
 
+- Stage 3a: `src/game/combatRules.ts` (blasts, shells, craters, cover, canSee, solids, register; `blast`/`lob` events);
+  Battlefield delegates and plays events (`playEvents`, `playBlast`). Craters by count per tick (`dentPerTick`).
+  `tools/combatrules-check.ts` also guards the rules' run-time imports (no fx/audio/look/ui, no *Draw/*Body).
+
 ## Next, in order
+- Stage 3b: move into the rules the rest of the damage path: `resolveShots` (Shots already writes events and draws:
+  the rules keep events and damage, Battlefield plays the draws), `stepBurns`/`stepPools`/`stepChills` (damage and
+  pace in the rules, flames, mist and freeze cracks as events), `sheetHits`/`resolveSheet`. Then the mechs' spread
+  (`mechUnit.ts`, Math.random before a ShotCmd) from a seeded stream. Check: rules-check extended; shots-check,
+  fire-check, chill-check unchanged.
 - Stage 3, damage as data (split `Battlefield`), then 4 crowds, 5 heavies, 6 60 Hz default + interpolation, 7 host world
   in the worker, 8 co-op transport.
 

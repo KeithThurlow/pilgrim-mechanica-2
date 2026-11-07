@@ -101,7 +101,9 @@ for (const k of WAVE_KIND_LIST) {
   const all = files.map((f) => readFileSync(f, "utf8")).join("\n");
   for (const k of WAVE_KIND_LIST) ok(all.includes(`"${k}"`), `kind ${k} is posted somewhere in src`);
   const bf = readFileSync("src/game/battlefield.ts", "utf8");
-  ok(/blast\([^)]*kind: WaveKind[\s\S]{0,1200}this\.waves\.post\(kind/.test(bf), "Battlefield.blast posts its wave (every explosion goes through it)");
+  // Every explosion goes through Battlefield.blast: the rules write a blast event (src/game/combatRules.ts) and
+  // playEvents plays it, posting its wave (architecture stage 3a).
+  ok(/blast\([^)]*kind: WaveKind[\s\S]{0,400}this\.rules\.blast\([\s\S]{0,200}this\.playEvents\(\)/.test(bf) && /playBlast\(e: BlastEvent\)[\s\S]{0,1200}this\.waves\.post\(e\.kind/.test(bf), "Battlefield.blast posts its wave (every explosion goes through it)");
 }
 
 if (fails) { console.log(`\n${fails} failed`); process.exit(1); }

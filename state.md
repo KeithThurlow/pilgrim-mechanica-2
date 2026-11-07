@@ -211,7 +211,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## In progress
 
-- Architecture migration (Keith 2026-11-07, Claude on `claude/project-thread-2luei6`): `docs/architecture-review.md` stages, one PR each; stages 1 (the clock) and 2 (the ECS core, `src/ecs/`) merged; next stage 3, damage as data (split `Battlefield`). Handoff `docs/handoff-architecture.md`. **New per-system worker remotes wait for stage 7.**
+- Architecture migration (Keith 2026-11-07, Claude on `claude/project-thread-2luei6`): `docs/architecture-review.md` stages, one PR each; stages 1 (the clock) and 2 (the ECS core, `src/ecs/`) merged; stage 3a (blasts, shells, craters: `src/game/combatRules.ts`) merged; next 3b (shots' resolve, burning, pools, chill). Handoff `docs/handoff-architecture.md`. **New per-system worker remotes wait for stage 7.**
 - Sim in a worker (Keith 2026-11-06, Claude on `claude/project-thread-lla597`): plan in `docs/proposal-simworker.md`, handoff `docs/handoff-simworker.md`. One system per PR, the worker path the default on main, `?noworker` to compare. Steps 1 (plumbing and the ground mirror), 2 (chunk builds and patches), 2b (the detail patch's fine rows), 3 (escorts) 4a (the swarm worker-ready), 4b (the robot swarm in the worker) and 4c (its parity check, shipped with 4b) done; next: the PC profile far out fighting robots decides (striders, crushers, droids, or the rest of the sim).
 - Grid inventory (Keith 2026-11-02, Claude on `claude/project-thread-s93ecs`): batch 1 merged (sizes, grids in the inventory, placeholder pictures, salvage blocks, `labs/inventory/`). Next, if Keith wants: the grid refusing field pick-ups (and the strip prompt), the cargo grid's size from the legs and hull, compaction as an upgrade, real item pictures. Open questions in `docs/decisions.md` (2026-11-02 grid rows).
 - Swarm lab (Keith 2026-11-02, Claude on `claude/project-thread-t5feol`): batches 1 and 2 merged (robots, bandits, warband, droids, crusher, summoner's units in `labs/swarm/`). **Edit the robot, bandit, war band, droid, crusher and summoner lab code in `src/game/fronts/` now, not in `labs/<name>/main.ts`** (those are redirects). Open questions in `docs/decisions.md` (2026-11-02 swarm lab rows).
@@ -319,6 +319,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-07 · Architecture stage 3a: the battlefield's rules apart from its looks (Claude)
+- `src/game/combatRules.ts` (new, no drawing or sound): blasts (splash damage, cover, the crater queued), lobbed shells and their bursts, craters dug, line of sight, the solids and the register, writing plain-data `blast` and `lob` events. `Battlefield` keeps its API (`blast`, `lob`, `canSee`, `targets`, `shells`, `register`...) by delegating, and plays the events as dust, marks, water, blast waves, lights and sound (`playEvents`).
+- Craters are dug **by count per tick** (`dentPerTick` 4, Weapons › blasts; was `dentBudget`, 6 ms of wall-clock time a frame), so every machine digs the same ground.
+- Checked: `tools/combatrules-check.ts` (the rules load no drawing or sound; blast damage by team and reach; one plain event per blast; air bursts don't dig; a shell bursts after its flight; craters per tick; same ground twice); weapons lab `?barrage` and swarm lab `?pulse` headless, no errors; `npm test`.
 
 ### 2026-11-07 · Architecture stage 2: the ECS core (Claude)
 - `src/ecs/` (new, pure): `world.ts` (entity ids of 20-bit index + 12-bit generation, flat components as SoA typed-array columns kept per world, object components for heavy sims, sparse-set queries, systems with a phase and a rate group, per-tick plain-data events, resources), `components.ts` (Transform, PrevTransform, Velocity, Team, Health, Armour, Collider, Status; `keepPrevious`, `drawnAt` for drawing between ticks), `snapshot.ts` (host-shared columns as typed arrays). No game code uses it yet (stage 3 next: damage as data).

@@ -163,7 +163,7 @@ export const WEAPON_DEFAULTS = {
   laserGlisten: 1,
   laserRange: 60,
   // Blasts (every blast on the battlefield)
-  dentBudget: 6,
+  dentPerTick: 4,
   dentMerge: 0.6,
   blastGroundReach: 0.5,
   blastCover: 1,
@@ -345,7 +345,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "laserGlisten", label: "Glisten", min: 0, max: 3, step: 0.05, group: L, tip: "Small glints running along the line" },
   { key: "laserRange", label: "Range (m)", min: 5, max: 150, step: 1, group: L },
 
-  { key: "dentBudget", label: "Dent time per frame (ms)", min: 0.5, max: 30, step: 0.5, group: B, tip: "Blasts queue their craters; each frame digs queued ones until this much time is spent (at least one). A 12-missile swarm spreads over a few frames instead of stalling one" },
+  { key: "dentPerTick", label: "Craters dug per tick", min: 1, max: 24, step: 1, group: B, tip: "Blasts queue their craters; each sim tick digs at most this many (a count, not a time budget, so every machine digs the same: docs/architecture-review.md stage 3). Higher digs a barrage at once but costs that tick more." },
   { key: "dentMerge", label: "Merge dents closer than (× radius)", min: 0, max: 2, step: 0.05, group: B, tip: "A queued dent this close to another (as a share of the bigger radius) joins it: one dig instead of two" },
   { key: "blastCover", label: "Cover blocks blasts", min: 0, max: 1, step: 1, group: B, tip: "On: a dune, wall or steel wreck between a blast and a unit shields it (a line from the blast to the unit's middle); off: everything in the radius takes it" },
   { key: "blastGroundReach", label: "Digs when within (× radius) of the ground", min: 0, max: 2, step: 0.05, group: B, tip: "A blast higher than this over the sand (a rocket or missile on a tall robot's chassis) bursts in the air: no crater, no ground mark" },
