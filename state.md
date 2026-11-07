@@ -319,6 +319,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Crushers off the screen aren't posed and make no suction streaks (perf; Claude)
+- Headless convoy lab `?siege&manual&norender`: the five crushers grazing salvage 500 m off cost 7% of the tick, almost all looks (the suction streaks: two ground reads per grain, 4.2%; the body's pose, 1.1%). Now a crusher outside the screen (30 m sphere) isn't posed (its clocks catch up when seen) and its grains aren't made or flown (`src/combat/crusherField.ts`, `crusherFx.ts`). Crushers' share of the tick 7.1% → 2.6%. The sim is unchanged.
+- `?nocull` (any lab, `src/core/viewCull.ts`): every view cull off, robots' drawer and the convoy cars' too, for comparing.
+- Checked: crusher and crusher sites checks, typecheck, full `npm test`. Drawing time not measured.
+
 ### 2026-11-07 · Architecture stage 1: one game clock (Claude)
 - `src/core/clock.ts` (new): every lab's ticks go through one clock. The default stays frame-locked (one tick a frame, dt clamped to 1/20 s, as before). `?tick=60` (or 30, 120) runs fixed ticks of 1/N s, at most 4 a frame (a longer stall drops time), `alpha` between ticks for interpolated drawing later, `every(n)` rate groups; HUD line `clock`. `src/core/app.ts` runs the ticks through it (`app.clock`).
 - `docs/architecture-review.md`: Keith's targets (sim 30-60 Hz, drawn 144+, ideally 200+) and §4.6, each part's rate and thread; CLAUDE.md's 120 Hz line corrected.
