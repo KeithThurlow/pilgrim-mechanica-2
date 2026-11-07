@@ -74,7 +74,7 @@ export class BanditCamps {
     /** True where a camp shouldn't be (the road). */
     private blocked: (x: number, z: number) => boolean,
   ) {
-    this.sw = new InfantrySwarm(v, field, 23);
+    this.sw = new InfantrySwarm(v, field, 23, bf.rules?.world);
     this.draw = new InfantryDraw(this.sw, v, vat);
     this.draw.cull = bf.view;
     scene.add(this.draw.group);

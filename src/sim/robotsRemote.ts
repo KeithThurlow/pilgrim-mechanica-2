@@ -76,7 +76,7 @@ export function applyRobots(sw: RobotSwarm, s: RobotSnapshot) {
   for (const k in s.arrays) (o[k] as unknown as { set(a: ArrayLike<number>): void }).set(s.arrays[k] as unknown as ArrayLike<number>);
   for (const k in s.scalars) o[k] = s.scalars[k];
   sw.cores = s.cores;
-  sw.block.relink(sw.hi, DEAD);
+  sw.block.relinkRobots(sw.hi, DEAD);
 }
 
 const pickTrample = (tv: TrampleValues): TrampleValues => {

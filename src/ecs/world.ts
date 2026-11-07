@@ -58,7 +58,7 @@ export interface ObjectComponent<T> {
   readonly _t?: T;
 }
 
-type AnyComponent = Component | ObjectComponent<unknown>;
+export type AnyComponent = Component | ObjectComponent<unknown>;
 const isFlat = (c: AnyComponent): c is Component => "schema" in c;
 
 export function defineComponent<S extends Schema>(name: string, schema: S, opts: { replicate?: Replicate; defaults?: Partial<Record<keyof S, number>> } = {}): Component<S> {

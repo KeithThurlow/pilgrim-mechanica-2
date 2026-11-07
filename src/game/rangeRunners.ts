@@ -3,6 +3,7 @@
 // it on screen), never shooting, for tracking and spread on small fast targets. The bandit swarm's own sim
 // (src/combat/infantry.ts) in calm, hurrying mode: each runner has a lane and runs to its end, turns and runs back. The
 // dead come back from the band's ends after a while. Host-owned state (targets), seeded; the drawing is cosmetic.
+import type { World } from "../ecs/world";
 import type * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import { InfantrySwarm, INFANTRY_DEFAULTS, INFANTRY_PARAMS, INFANTRY_MAX, DEAD, DOWN, type InfantryValues } from "../combat/infantry";
@@ -49,8 +50,8 @@ export class RangeRunners {
   /** The runner the demo follows (a slot), kept while it stands. */
   private followed = -1;
 
-  constructor(private v: RunnerValues, ground: Ground, deaths: DeathPhysics | null, seed = 11) {
-    this.sw = new InfantrySwarm(v, ground, seed);
+  constructor(private v: RunnerValues, ground: Ground, deaths: DeathPhysics | null, seed = 11, world?: World) {
+    this.sw = new InfantrySwarm(v, ground, seed, world);
     this.target = new InfantryTarget(this.sw, 2);
     const s = this.sw;
     if (deaths) {

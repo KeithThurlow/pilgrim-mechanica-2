@@ -65,7 +65,7 @@ export function warbandFront(): Front {
 
       // The party bus's bandits: one infantry swarm (seeded), drawn as the baked Vanguard, stomped and dashed through,
       // dying as ragdolls, in the register for the soft lock.
-      const riders = new InfantrySwarm(V, lab.field, 41);
+      const riders = new InfantrySwarm(V, lab.field, 41, bf.rules.world);
       wb.riders = riders;
       const vat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
       const rd = new InfantryDraw(riders, V, vat);

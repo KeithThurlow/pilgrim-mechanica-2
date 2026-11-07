@@ -111,7 +111,7 @@ export class StressBandits {
 
   constructor(private lab: CombatLab<V>) {
     const { V, bf, field } = lab;
-    const sw = this.sw = new InfantrySwarm(V, field);
+    const sw = this.sw = new InfantrySwarm(V, field, 1, bf.rules.world);
     this.target = new InfantryTarget(sw, 2);
     bf.targets.push(this.target);
     bf.register.add(this.target);

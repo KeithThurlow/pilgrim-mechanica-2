@@ -199,7 +199,7 @@ app.scene.add(cs.group);
 const ts = new TestSwarm(V as unknown as TestSwarmValues, START);
 tsDraw = new TestSwarmDraw(ts);
 app.scene.add(tsDraw.group);
-const rr = new RangeRunners(V as unknown as RunnerValues, lab.field, lab.deaths);
+const rr = new RangeRunners(V as unknown as RunnerValues, lab.field, lab.deaths, 11, lab.bf.rules.world);
 runners = rr;
 await rr.show(app.scene);
 if (rr.draw) { const d = rr.draw; d.chillMap = () => { d.frostLook = (bf.v as { frostLook?: number } | undefined)?.frostLook ?? 1; return bf.chills?.chillsOf(rr.target) ?? null; }; }

@@ -37,10 +37,10 @@ export type CombatEvent = BlastEvent | LobEvent | FreezeEvent;
 export interface CombatRuleValues { blastGroundReach?: number; blastCover?: number; dentMerge?: number; dentPerTick?: number }
 
 export class CombatRules {
-  /** The host's ECS world (src/ecs/). Fixed capacity, so pools can keep views of its columns: a robot swarm made with
-   *  it reserves a block and its arrays are the block's columns (src/combat/robotWorld.ts, stage 4.3). Room for 8
-   *  swarms of 1024 (ROBOT_MAX) plus 4096 more. */
-  readonly world = new World({ capacity: 1024 * 8 + 4096 });
+  /** The host's ECS world (src/ecs/). Fixed capacity, so pools can keep views of its columns: a robot or infantry
+   *  swarm made with it reserves a block and its arrays are the block's columns (src/ecs/swarmBlock.ts, stages 4.3-4.4).
+   *  Room for 16 swarms of 1024 (ROBOT_MAX, INFANTRY_MAX) plus 4096 more. */
+  readonly world = new World({ capacity: 1024 * 16 + 4096 });
   /** Everything that can be shot (adapters; the ECS replaces them in stages 4-5). */
   readonly targets: Hittable[] = [];
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts). */
