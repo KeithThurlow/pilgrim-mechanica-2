@@ -4,6 +4,7 @@ import * as THREE from "three/webgpu";
 import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
+import { mountTouchPad } from "./touch";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
 import { skipHiddenMatrices } from "./matrixSkip";
 import { Clock, clockFromUrl } from "./clock";
@@ -57,6 +58,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
   const backend = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? "WebGPU" : "WebGL2";
   const hud = new FrameHud(container, backend);
+  mountTouchPad(container, renderer.domElement);
 
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;

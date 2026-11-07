@@ -26,6 +26,7 @@ import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
 import { playBlast } from "../weapons/weaponSound";
 import type { WeaponValues } from "../weapons/tuning";
+import { touchState } from "../core/touch";
 
 /**
  * The mouse over the canvas: where it is, and both buttons. Read both from the `buttons` bitmask on every pointer
@@ -37,8 +38,12 @@ import type { WeaponValues } from "../weapons/tuning";
 export class MouseButtons {
   mouse: { x: number; y: number } | null = null;
   left = false;
-  right = false;
+  private rightButton = false;
+  /** The right trigger: the right mouse button, or the touch pad's Gun R (src/core/touch.ts). */
+  get right() { return this.rightButton || touchState.right; }
+  set right(v: boolean) { this.rightButton = v; }
   private lastButtons = 0;
+  private finger = -1;
 
   /** onUse: the player touched the mouse (the lab stops its demo). */
   constructor(canvas: HTMLCanvasElement, onUse: () => void) {
@@ -58,6 +63,15 @@ export class MouseButtons {
     addEventListener("pointermove", read);
     addEventListener("pointerup", read);
     addEventListener("blur", () => { this.left = false; this.right = false; this.lastButtons = 0; });
+    // A finger on the canvas (phones): where it is is the cursor, and it holds the left trigger while it's down.
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || this.finger >= 0) return;
+      this.finger = e.pointerId; this.mouse = { x: e.clientX, y: e.clientY }; this.left = true; onUse();
+    });
+    canvas.addEventListener("pointermove", (e) => { if (e.pointerId === this.finger) this.mouse = { x: e.clientX, y: e.clientY }; });
+    const lift = (e: PointerEvent) => { if (e.pointerId === this.finger) { this.finger = -1; this.left = false; } };
+    canvas.addEventListener("pointerup", lift);
+    canvas.addEventListener("pointercancel", lift);
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 }

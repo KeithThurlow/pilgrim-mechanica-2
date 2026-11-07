@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · Touch controls for phones (Keith asked to play on his phone; Claude on `claude/project-thread-oakhm8-touch`)
+- `src/core/touch.ts`, mounted by `createApp` on touch screens (`?touch` forces it, `?touch=0` hides it): a stick bottom left sends WASD, buttons bottom right send Space (Dash), F, E, R, Q, 1, 2, Tab as key events, so every lab takes them unchanged; Gun R holds the right trigger. In `MouseButtons` (`src/game/playerAim.ts`) a finger on the canvas is the cursor and holds the left trigger.
+- Checked: Pixel 7 emulation on the walker lab: pad mounts (stick + 9 buttons), stick up sends KeyW, Dash sends Space, no errors; full `npm test`. Open for Keith: button set and sizes, a sprint toggle, aiming without firing.
+
 ### 2026-11-07 · The labs on GitHub Pages, for playing on the phone (Keith asked; Claude on `claude/project-thread-oakhm8`)
 - `.github/workflows/pages.yml` builds every lab on each push to main and publishes it to https://keiththurlow.github.io/pilgrim-mechanica-2/ (one-time: repo Settings › Pages › Source: GitHub Actions). `vite.config.ts` takes `VITE_BASE` (the sub-path); public/ files now go through `src/core/assetBase.ts` (`asset("models/...")`) in `rampart.ts`, `banditVat.ts`, `library.ts`, `sensorModels.ts`, `labs/parts/main.ts`; the hub's links are relative. The Report button falls back to downloading the report there (no dev server).
 - Checked: `VITE_BASE=/pilgrim-mechanica-2/ vite build` served under the sub-path; hub and labs load with no missing files (only the weapon GLBs that fall back to stand-ins by design); full `npm test`.
