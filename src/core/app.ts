@@ -68,6 +68,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;
     renderer.setSize(w, h, false);
+    const c = renderer.domElement;
+    hud.pixels = `${c.width}×${c.height} px (res ${res}${aa ? ", AA" : ""})`;
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };

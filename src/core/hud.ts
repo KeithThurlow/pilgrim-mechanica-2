@@ -19,6 +19,8 @@ export class FrameHud {
   private toggle: HTMLDivElement;
   private extra: HTMLDivElement;
   private lines = new Map<string, Line>();
+  /** What the GPU draws: the canvas's pixels and MSAA (set by createApp on resize; shown on the top line). */
+  pixels = "";
   private samples: number[] = [];
   private windowStart = performance.now();
   private worst = 0;
@@ -123,6 +125,7 @@ export class FrameHud {
       `${Math.round(1000 / Math.max(0.1, avg))} fps<br><span class="dim">` +
       // What's left of the frame after the tick and the submit is mostly the GPU (or waiting on it).
       `sim ${sim.toFixed(1)} · submit ${draw.toFixed(1)} · gpu/wait ${Math.max(0, avg - sim - draw).toFixed(1)} ms` +
+      (this.pixels ? `<br>draws ${this.pixels}` : "") +
       `${top ? `<br>top: ${top}` : ""}</span>`;
     const n = this.lines.size;
     this.toggle.textContent = `${this.open ? "▾" : "▸"} details${n ? ` (${n})` : ""} · \``;
