@@ -6,6 +6,7 @@
 //  0 boxes: the merged low-poly stand-in, running as a bob, a lean and a sway.
 // Downed bandits topple flat along the way they were thrown (the pose frozen) and get back up; the dead lie flat,
 // then sink into the sand (unless the death physics draws them: hideDead).
+import type { ViewCull } from "../core/viewCull";
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Param } from "../core/tweaks";
@@ -76,6 +77,12 @@ export class InfantryDraw {
   private tilt = new Float32Array(INFANTRY_MAX);
   private phase = new Float32Array(INFANTRY_MAX);
   private gen = new Uint32Array(INFANTRY_MAX);
+  /** Time each bandit's pose has missed while off the screen (caught up when it's drawn again). */
+  private lag = new Float32Array(INFANTRY_MAX);
+  /** What the camera sees (src/core/viewCull.ts): bandits well off the screen aren't posed or drawn. Null: all drawn. */
+  cull: ViewCull | null = null;
+  /** Bandits left out last frame. */
+  culled = 0;
   private lastHp = new Float32Array(INFANTRY_MAX);
   private rows = new Float32Array(8);
   private m = new THREE.Matrix4();
@@ -138,13 +145,15 @@ export class InfantryDraw {
     this.boxes.visible = !vat;
     if (this.vat) this.vat.mesh.visible = !!vat;
     const bakedH = this.vat?.data.header.height ?? 1.8;
+    const margin = v.banditDrawCull ?? -1, cull = margin >= 0 ? this.cull : null;
+    this.culled = 0;
     let n = 0;
     for (let i = 0; i < sw.hi; i++) {
       const st = sw.state[i];
       if (st === EMPTY || (st === DEAD && sw.hideDead)) continue;
       const fresh = this.gen[i] !== sw.gen[i];
       if (fresh) {
-        this.gen[i] = sw.gen[i]; this.tilt[i] = 0; this.phase[i] = sw.seed[i] * 6.283; this.lastHp[i] = sw.hp[i];
+        this.gen[i] = sw.gen[i]; this.tilt[i] = 0; this.lag[i] = 0; this.phase[i] = sw.seed[i] * 6.283; this.lastHp[i] = sw.hp[i];
         if (anim) anim.reset(i, this.clipId.run, sw.seed[i] * 2);
       }
 
@@ -167,6 +176,10 @@ export class InfantryDraw {
       const size = 0.94 + sw.seed[i] * 0.12;
       const hit = sw.hp[i] < this.lastHp[i] - 1e-4;
       this.lastHp[i] = sw.hp[i];
+      // Off the screen: not posed (the toppling above still runs), the time it missed kept for when it's seen.
+      if (cull && !cull.sees(sw.px[i], sw.py[i] + 0.9, sw.pz[i], 1.2 + margin)) { this.lag[i] += dt; this.culled++; continue; }
+      const pdt = dt + this.lag[i];
+      this.lag[i] = 0;
 
       if (tilt > 0.001) {
         // Lie along the fall: the figure's up turns toward fallYaw.
@@ -185,7 +198,7 @@ export class InfantryDraw {
         y += 0.5 - Math.cos(k * Math.PI * 2) * 0.5 - Math.sin(k * Math.PI) * 0.4;
       } else {
         // Run cycle: bob, lean into the run, sway side to side.
-        this.phase[i] += (speed / STRIDE) * Math.PI * dt;
+        this.phase[i] += (speed / STRIDE) * Math.PI * pdt;
         const run = Math.min(1, speed / 4);
         y += Math.abs(Math.sin(this.phase[i])) * BOB * run;
         this.q.setFromAxisAngle(this.ay, sw.heading[i]);
@@ -198,7 +211,7 @@ export class InfantryDraw {
       if (vat && anim) {
         const s = (L.banditScale / bakedH) * size * scale;
         this.choose(i, st, speed, hit, s);
-        anim.step(i, dt, L.banditFade);
+        anim.step(i, pdt, L.banditFade);
         anim.rows(i, this.rows, 0);
         vat.place.setXYZW(n, sw.px[i], y, sw.pz[i], s);
         vat.turn.setXYZW(n, this.q.x, this.q.y, this.q.z, this.q.w);

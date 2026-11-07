@@ -320,6 +320,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Bandits off the screen aren't posed or drawn (perf; Claude)
+- As the robots' drawer (#276): a bandit more than `banditDrawCull` (4 m, Performance group; -1 all) outside the view isn't posed or put in the instance buffers; toppling still runs, the run cycle's missed time is caught up when it's seen (`src/combat/infantryDraw.ts`; wired for bandit camps, fortresses, the swarm lab's bandits and war band riders). Headless convoy siege: the infantry drawer 2.4% → 0.6% of the tick. `?nocull` compares.
+- Checked: infantry, fortress, warband checks, typecheck, full `npm test`. Drawing time not measured.
+
 ### 2026-11-07 · Crushers off the screen aren't posed and make no suction streaks (perf; Claude)
 - Headless convoy lab `?siege&manual&norender`: the five crushers grazing salvage 500 m off cost 7% of the tick, almost all looks (the suction streaks: two ground reads per grain, 4.2%; the body's pose, 1.1%). Now a crusher outside the screen (30 m sphere) isn't posed (its clocks catch up when seen) and its grains aren't made or flown (`src/combat/crusherField.ts`, `crusherFx.ts`). Crushers' share of the tick 7.1% → 2.6%. The sim is unchanged.
 - `?nocull` (any lab, `src/core/viewCull.ts`): every view cull off, robots' drawer and the convoy cars' too, for comparing.

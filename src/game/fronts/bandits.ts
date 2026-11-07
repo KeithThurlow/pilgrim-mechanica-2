@@ -68,6 +68,7 @@ export function banditsFront(): Front {
       // Vanguard baked to an animation texture (Keith 2026-10-24); boxes if it fails to load.
       const vat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
       const d = new InfantryDraw(s, V, vat);
+      d.cull = bf.view;
       draw = d;
       lab.app.scene.add(d.group);
       const target = new InfantryTarget(s, 2);
