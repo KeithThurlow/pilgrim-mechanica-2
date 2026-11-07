@@ -80,6 +80,12 @@ export class ToonLook {
     (mesh.material as THREE.MeshStandardMaterial).color.setHex(color);
   }
 
+  /** Stop managing a mesh (merged away or dropped). */
+  forget(mesh: THREE.Mesh) {
+    const i = this.meshes.findIndex((m) => m.mesh === mesh);
+    if (i >= 0) this.meshes.splice(i, 1);
+  }
+
   private swapMaterials() {
     for (const { mesh, tint } of this.meshes) {
       (mesh.material as THREE.Material).dispose();
