@@ -281,7 +281,7 @@ const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake
 const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.invalidate(x0, z0, x1, z1); }, deaths });
 const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.height(x, z)) : null;
 if (simHost) app.hud.set("sim", () => simHost.line());
-if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); simHost.robots(loop.swarms.sw, SwarmCamps.SEED); }
+if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); simHost.robots(loop.swarms.sw, SwarmCamps.SEED); simHost.deaths(deaths); }
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
 // (src/convoy/safeZone.ts, in the loop).
