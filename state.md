@@ -322,6 +322,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - New `src/core/viewCull.ts` (the camera's view, updated once a frame in `Battlefield.update` as `bf.view`); `RobotsDraw.cull`: robots more than `robotDrawCull` m (4; Performance) plus 1.5× their size outside the view are skipped (swarm camps, the summoner's allies, the swarm lab's fronts). -1 draws them all.
 - Checked: headless bench `labs/convoy/?siege=300&manual&norender&bench`: swarm camps 2.37 → 0.88 ms (worker) and 3.14 → 1.62 (noworker), sim 7.8 → 6.2 ms; `npm test`.
 
+### 2026-11-07 · Engine options write-up: `docs/engine-options.md` (Keith asked about Bevy or another engine for performance; Claude)
+- Compares staying on three.js (fix the render path: merge parts per bone, static matrices, instancing, shadows, height grid) with Bevy native, Bevy WASM, Godot, Unity/Unreal and other JS engines, on the siege's measured costs. Recommendation: stay, do the render fixes now, and run a draw-cost spike (the same scene in three and in Bevy) on Keith's PC as the gate. Docs only; nothing run.
 ### 2026-11-07 · Sim scope write-up: `docs/sim-scope.md` (Keith asked how much of the world is simulated; Claude)
 - What is full sim, reduced rate, abstract, frozen or not spawned by distance, terrain streaming, the sim worker steps, where the frame cost is, and localized-spawning opportunities. Docs only; nothing run.
 ### 2026-11-06 · A/B frame-time bench: `labs/convoy/?siege&manual&bench` (Keith: judging the worker by eye isn't a test; Claude)
