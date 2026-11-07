@@ -70,7 +70,7 @@ function show(el: HTMLElement, results: Run[], step: number) {
   const S = results.map((r) => ({ label: r.label, ...summary(r) }));
   const pad = (s: string, w: number) => s.padEnd(w);
   const col = (f: (s: (typeof S)[number]) => number) => S.map((s) => pad(f(s).toFixed(2), 12)).join("");
-  const keys = [...new Set(S.flatMap((s) => s.stages.slice(0, 10).map(([k]) => k)))];
+  const keys = [...new Set(S.flatMap((s) => s.stages.slice(0, 16).map(([k]) => k)))];
   const lines = [
     `bench: ${location.pathname} ${location.search} · fixed step ${(step * 1000).toFixed(2)} ms · ${results[0]?.frames.length ?? 0} frames each`,
     pad("", 24) + S.map((s) => pad(s.label, 12)).join(""),
