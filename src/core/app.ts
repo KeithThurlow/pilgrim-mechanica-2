@@ -21,6 +21,8 @@ export interface App {
   /** Called once per drawn frame after the frame's ticks (0 or more), before rendering: cameras, effects, drawing.
    *  dt: the frame's real time (clamped to 1/20 s); alpha: how far between the last tick and the next (src/core/clock.ts). */
   onFrame(fn: (dt: number, alpha: number) => void): void;
+  /** Called after each render (e.g. to put back a model posed between ticks: src/look/treeInterp.ts). */
+  onAfterRender(fn: () => void): void;
   /** The game clock: fixed or frame-locked, ticks run, alpha between ticks. */
   clock: Clock;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N, ?norender */
@@ -62,6 +64,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
 
   const ticks: Tick[] = [];
   const frames: ((dt: number, alpha: number) => void)[] = [];
+  const afters: (() => void)[] = [];
   const captures: ((url: string) => void)[] = [];
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
@@ -92,6 +95,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
       else renderer.render(scene, camera);
       restoreEmptyPools();
     }
+    for (const f of afters) f();
     const t2 = performance.now();
     hud.note(shaders.frameNew || shaders.frameGenMs > 1 ? `new shaders ${shaders.frameNew} (code ${shaders.frameGenMs.toFixed(0)} ms, GPU ${shaders.frameMs.toFixed(0)} ms)` : "");
     shaderFrameDone(shaders, now > 5000);
@@ -109,6 +113,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
     renderer, scene, camera, hud, backend, params, last, hold: false, clock,
     onTick: (fn) => ticks.push(fn),
     onFrame: (fn) => frames.push(fn),
+    onAfterRender: (fn) => afters.push(fn),
     capture: () => new Promise<string>((res) => captures.push(res)),
   };
   // For agents' probes in a headless browser (scene contents, triangle counts): window.__app.
