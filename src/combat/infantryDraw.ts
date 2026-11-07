@@ -14,6 +14,7 @@ import { InfantrySwarm, INFANTRY_MAX, DOWN, DEAD, EMPTY, FIRING, FLEEING } from 
 import { BanditVatMesh, packFrost, FROST_RGB, type BanditVatData } from "./banditVat";
 import { BanditAnim, type AnimClip } from "./banditAnim";
 import { VAT_CLIPS, type VatClipName } from "./banditVatFormat";
+import { betweenTicks, swarmBetweenTicks } from "../look/treeInterp";
 
 /** Raider cloth: rust, dusty khaki, faded indigo, olive. */
 export const CLOTH = [0x9a4a2c, 0xb59c72, 0x4e5a78, 0x6b6a3e];
@@ -139,7 +140,27 @@ export class InfantryDraw {
 
   private get useVat(): boolean { return !!this.vat && this.look.banditLook >= 0.5; }
 
+  /**
+   * Each tick. Frame-locked it draws; with a fixed tick (?tick=N; architecture stage 6e) the app draws the crowd once
+   * per drawn frame between its last two ticks instead (swarmBetweenTicks: the arrays read here blended in place).
+   */
   update(dt: number): void {
+    if (betweenTicks()) { this.setUpBetween(); return; }
+    this.draw(dt);
+  }
+
+  private between = false;
+  private setUpBetween() {
+    if (this.between) return;
+    this.between = true;
+    const sw = this.swarm;
+    swarmBetweenTicks(this.group, () => sw.hi, [
+      { a: sw.px }, { a: sw.py }, { a: sw.pz }, { a: sw.vx }, { a: sw.vz },
+      { a: sw.heading, angle: true }, { a: sw.fallYaw, angle: true }, { a: sw.stateTime, jump: 1 }, { a: sw.diveT, jump: 1 },
+    ], [sw.gen, sw.state], (dt) => this.draw(dt));
+  }
+
+  private draw(dt: number): void {
     const sw = this.swarm, v = sw.v, vat = this.useVat ? this.vat : null, anim = this.anim, L = this.look;
     const cm = this.chillMap?.() ?? null;
     this.boxes.visible = !vat;

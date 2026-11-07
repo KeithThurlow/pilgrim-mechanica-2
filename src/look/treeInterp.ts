@@ -227,3 +227,19 @@ export function setBetweenTicks(on: boolean) { fixedClock = on; }
 export function drawEachFrame(d: FrameDrawer) { drawers.add(d); }
 export function runAfterTick() { for (const d of drawers) { if (!d.live()) { drawers.delete(d); continue; } d.afterTick(); } }
 export function runFrameDrawers(dt: number, alpha: number) { for (const d of drawers) d.frame(dt, alpha); }
+
+/**
+ * Set a swarm drawer up to draw between ticks: a SlotInterp over the given arrays, captured after every tick, and the
+ * draw run once per drawn frame with them blended (put back straight after). Dropped once its group, having been in
+ * the scene, is taken out. Call once, from the drawer's update when betweenTicks() is true.
+ */
+export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, channels: Channel[], keys: Num[], draw: (dt: number) => void) {
+  const interp = new SlotInterp(channels, keys);
+  interp.capture(hi());
+  let seen = false;
+  drawEachFrame({
+    afterTick: () => interp.capture(hi()),
+    frame: (dt, alpha) => { if (!group.parent) return; interp.apply(alpha); try { draw(dt); } finally { interp.restore(); } },
+    live: () => { if (group.parent) seen = true; return !(seen && !group.parent); },
+  });
+}

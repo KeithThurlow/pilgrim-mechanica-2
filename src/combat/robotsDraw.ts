@@ -12,7 +12,7 @@
 import type { ViewCull } from "../core/viewCull";
 import { CoreWarnDraw } from "../fx/coreWarnDraw";
 import * as THREE from "three/webgpu";
-import { betweenTicks, drawEachFrame, SlotInterp } from "../look/treeInterp";
+import { betweenTicks, swarmBetweenTicks } from "../look/treeInterp";
 import { RobotSwarm, ROBOT_MAX, BIG, MID, QUAD_WEAPON, Q_LASER, Q_RAIL, LEAP, LATCHED, FIRE, CUT, DOWN, DEAD, EMPTY, RUN } from "./robots";
 import {
   HUB_R, HUB_H, HIP_R, FOOT_R, S_THIGH, S_SHIN, SMALL_LEGS, WALK_LEGS, MID_SPEC, BIG_SPEC, MID_SAW_X, MID_SAW_Y, MID_SAW_Z,
@@ -239,29 +239,21 @@ export class RobotsDraw {
    * draws the swarm once per drawn frame between its last two ticks (SlotInterp over the arrays the drawer reads).
    */
   update(dt: number): void {
-    if (betweenTicks()) { this.between(); return; }
+    if (betweenTicks()) { this.setUpBetween(); return; }
     this.draw(dt);
   }
 
-  private interp: SlotInterp | null = null;
-  private seen = false;
-  private between() {
-    if (this.interp) return;
+  private between = false;
+  private setUpBetween() {
+    if (this.between) return;
+    this.between = true;
     const sw = this.swarm;
-    this.interp = new SlotInterp([
+    swarmBetweenTicks(this.group, () => sw.hi, [
       { a: sw.px }, { a: sw.py }, { a: sw.pz }, { a: sw.hubY }, { a: sw.vx }, { a: sw.vz },
       { a: sw.heading, angle: true }, { a: sw.turret, angle: true }, { a: sw.tumble, angle: true },
       { a: sw.gait, jump: 10 }, { a: sw.stateTime, jump: 1 },
       { a: sw.footX, stride: WALK_LEGS }, { a: sw.footY, stride: WALK_LEGS }, { a: sw.footZ, stride: WALK_LEGS },
-    ], [sw.gen, sw.state]);
-    const interp = this.interp;
-    interp.capture(sw.hi);
-    drawEachFrame({
-      afterTick: () => interp.capture(sw.hi),
-      frame: (dt, alpha) => { if (!this.group.parent) return; interp.apply(alpha); try { this.draw(dt); } finally { interp.restore(); } },
-      // Dropped once it was in the scene and has been taken out.
-      live: () => { if (this.group.parent) this.seen = true; return !(this.seen && !this.group.parent); },
-    });
+    ], [sw.gen, sw.state], (dt) => this.draw(dt));
   }
 
   private draw(dt: number): void {

@@ -35,12 +35,12 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   `drawBetweenTicks` where it's built.
 - Stage 6d: `SlotInterp` + `drawEachFrame` (same file); `RobotsDraw.update` under `betweenTicks()` only registers
   (first call) and the app draws it per frame with the arrays blended in place (restored at once after the draw).
+- Stage 6e: `InfantryDraw` the same, through the shared `swarmBetweenTicks`.
 
 ## Next, in order
-- Stage 6e: infantryDraw and the droids the same way as 6d (a SlotInterp over the arrays the drawer reads, the
-  drawer on `drawEachFrame`, its `update` only setting up under `betweenTicks()`); the bandit VAT animation time too.
-  Then flip the default to `?tick=60` (clock.ts `clockFromUrl`), with `?tick=0` for frame-locked, after a stress-lab
-  comparison.
+- The 60 Hz default: flip `clockFromUrl` (src/core/clock.ts) to 60 with `?tick=0` for frame-locked, after a stress-lab
+  comparison (`labs/stress/?run` with and without `?tick=60`). Left per tick under the fixed clock: droids' visors and
+  lasers, crusher and strider fx, dust and other fx that step in the tick (they're drawn per frame by bf.frame).
 - Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
   unchanged at every step):
   - 4.2 Readers move to the components: the register's robot owner, targeting, health bars, then `robotsDraw`
