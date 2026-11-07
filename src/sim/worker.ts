@@ -39,6 +39,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       post({ type: "fine", req: q, heights }, [heights.buffer]);
     } else if (m.type === "frame") {
       const rf = ground.robots?.frame() ?? null, robots = rf ? { ...rf, ms: ground.robots!.ms } : null;
+      const deaths = ground.deaths?.frame() ?? null;
       const heights = ground.heights(m.sample);
       const escorts = ground.escorts?.snapshot() ?? null, convoy = ground.convoy ? convoyPoses(ground.convoy) : null;
       busy += performance.now() - t0;
@@ -46,7 +47,8 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       if (escorts) t.push(escorts.buffer);
       if (convoy) t.push(convoy.buffer);
       if (robots) t.push(...snapshotTransfer(robots.snap));
-      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy, robots }, t);
+      if (deaths) t.push(deaths.poses.buffer, deaths.thuds.buffer);
+      post({ type: "frame", id: m.id, heights, ms: busy, escorts, convoy, robots, deaths }, t);
       busy = 0;
       return;
     }
