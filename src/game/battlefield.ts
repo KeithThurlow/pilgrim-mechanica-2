@@ -649,13 +649,43 @@ export class Battlefield {
     }
   }
 
+  /** A tick and a drawn frame together (labs that don't split them; frame-locked, both once a frame). */
   update(dt: number, camera: THREE.Camera, look: DesertLook) {
-    this.look = look;
+    this.tick(dt, look);
+    this.frame(dt, camera, look);
+  }
+
+  /**
+   * One sim tick (src/core/clock.ts; architecture stage 6a): the rules (solids, shells, craters, shots, burning,
+   * pools, chill) and what they hand to the effects this tick (blast and freeze events, the shots' draws, flames at
+   * what burns). Run it per tick; frame() once per drawn frame.
+   */
+  tick(dt: number, look: DesertLook | null = this.look) {
+    if (look) {
+      this.look = look;
+      // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
+      this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
+    }
     // One armour rule for every hit (src/game/armour.ts): its floor from the lab's slider.
     const fl = (this.v as { armourFloor?: number }).armourFloor;
     if (fl !== undefined) armourRule.floor = fl;
+    const c = this.costs;
+    // The rules' tick, then their look.
+    this.rules.step(dt);
+    this.playEvents();
+    c?.mark("combat rules");
+    for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
+    this.resolveShots();
+    this.stepBurns(dt);
+    this.stepPools(dt);
+    this.stepChills(dt);
+    c?.mark("shots");
+  }
+
+  /** One drawn frame: sound, ground dents, effects stepped and drawn (cosmetic; dt is the frame's time). */
+  frame(dt: number, camera: THREE.Camera, look: DesertLook) {
+    this.look = look;
     this.sunDir.subVectors(look.sun.position, look.sun.target.position).normalize();
-    // The effects budget thins from the camera's focus (the sun's shadow box is centred on it).
     this.fx.fx = look.sun.target.position.x; this.fx.fz = look.sun.target.position.z;
     const c = this.costs;
     this.sfx.update();
@@ -669,18 +699,8 @@ export class Battlefield {
       if (this.heatTex && look.lights) this.heatTex.light(look.lights, this.lookGround);
     }
     c?.mark("ground dents");
-    // The rules' tick (solids, shells bursting, craters dug), then their look.
-    this.rules.step(dt);
-    this.playEvents();
-    c?.mark("combat rules");
-    for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     this.lightShells(look);
-    this.resolveShots();
-    this.stepBurns(dt);
-    this.stepPools(dt);
-    this.stepChills(dt);
-    c?.mark("shots");
     if (this.water) { this.water.level = this.field.waterLevel ?? this.water.level; this.water.update(dt); this.waterDraw!.update(); }
     this.gunFx.update(dt);
     const gb = this.gunFx.gpuBits, gt = this.gunFx.gpuTracers;
