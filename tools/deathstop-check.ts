@@ -168,7 +168,9 @@ for (const how of ["dies", "stop() called", "owner stepped dead, held"] as const
   must(/private destroy\(\) \{[\s\S]{0,200}this\.goCold\(\)/.test(src), "MechUnit.destroy doesn't go cold");
   must(/reset\(x: number[\s\S]{0,300}this\.goCold\(\)/.test(src), "MechUnit.reset (a round starting over) doesn't go cold");
   must(/wasPiloted && !this\.piloted\) this\.goCold\(\)/.test(src), "MechUnit doesn't go cold when the pilot gets out");
-  must(/goCold\(\) \{[\s\S]{0,200}gunAudio\.release\(this\)/.test(src), "goCold doesn't release the gun loops");
+  // The loops are the mech's looks (src/game/mechFx.ts, stage 7c): goCold tells them, and they release.
+  const fx = fs.readFileSync(new URL("../src/game/mechFx.ts", import.meta.url), "utf8");
+  must(/goCold\(\) \{[\s\S]{0,200}this\.fx\?\.cold\(\)/.test(src) && /cold\(\) \{ this\.bf\.gunAudio\.release\(this\.u\); \}/.test(fx), "goCold doesn't release the gun loops");
   must(/if \(!this\.alive\) \{[^}]*weapons\?\.step\(dt, null, false\)/.test(src), "a dead MechUnit doesn't keep stepping its weapons cold");
 }
 

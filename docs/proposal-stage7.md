@@ -23,6 +23,10 @@ Plan: `docs/architecture-review.md` §4.3 (host and view) and §5 stage 7. Where
   rules: no three, events out) and `MechView` (body, FX, sound from events). Guardians and rival AIs first (host
   mechs), the player's mech stays predicted on main. Check: duel-check and walker-check unchanged; a duel sim headless
   through MechSim.
+  - Done in two parts (Claude 2026-11-07). Part 1, merged: the looks and sounds out (`src/game/mechFx.ts`), parity
+    by `tools/mechfx-probe.ts` (same hash before and after) and `tools/mechfx-check.ts`. Part 2: rounds from muzzles
+    worked out from the sim and the rig's joint markers instead of the posed model; numbers shift, so it waits for a
+    mech play-test.
 - **7d. The rules in the worker.** `CombatRules` (shots, blasts, burns, pools, chills, the register) steps in the worker
   with the swarms and host mechs; main keeps the view world from snapshots and plays the rules' events (already plain
   data since stage 3). The per-system remotes merge into one message per tick. Check: a generalised parity check (the
