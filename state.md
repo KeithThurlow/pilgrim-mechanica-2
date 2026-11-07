@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · Phone layout: radar, panel and HUD fit a phone, fullscreen + landscape button (Keith: "the mini map is taking up the entire screen", couldn't turn the phone; Claude on `claude/project-thread-oakhm8-mobile`)
+- The radar scope is capped at 40% of the screen's short side (`src/expedition/radarDraw.ts`; `radarSize` 520 still rules on the PC). On touch screens (`html.touch`, set by `src/core/touch.ts`) `src/core/lab.css` puts the slider panel at the top right beside a smaller HUD, the expedition HUD above the stick (portrait) or bottom centre (landscape), and hides the Report button (no dev server on Pages). A ⛶ button above the stick goes fullscreen and locks landscape where the browser allows (Android Chrome; iOS needs the phone's rotation lock off).
+- Checked: Pixel 7 emulation portrait and landscape on the convoy lab `?far`: radar 165 px / 144 px, no errors; touch pad still sends keys; full `npm test`. Open for Keith: whether the panel should start hidden on phones.
+
 ### 2026-11-07 · Touch controls for phones (Keith asked to play on his phone; Claude on `claude/project-thread-oakhm8-touch`)
 - `src/core/touch.ts`, mounted by `createApp` on touch screens (`?touch` forces it, `?touch=0` hides it): a stick bottom left sends WASD, buttons bottom right send Space (Dash), F, E, R, Q, 1, 2, Tab as key events, so every lab takes them unchanged; Gun R holds the right trigger. In `MouseButtons` (`src/game/playerAim.ts`) a finger on the canvas is the cursor and holds the left trigger.
 - Checked: Pixel 7 emulation on the walker lab: pad mounts (stick + 9 buttons), stick up sends KeyW, Dash sends Space, no errors; full `npm test`. Open for Keith: button set and sizes, a sprint toggle, aiming without firing.

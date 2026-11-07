@@ -54,6 +54,7 @@ export class ExpeditionHud {
   private time = 0;
 
   constructor(radar: HTMLCanvasElement) {
+    this.root.className = "exp-hud"; // lab.css moves it clear of the touch pad on phones
     Object.assign(this.root.style, {
       position: "fixed", left: "10px", bottom: "34px", display: "flex", alignItems: "flex-end", gap: "10px",
       pointerEvents: "none", zIndex: "4", font: "600 13px/1.35 system-ui, 'Segoe UI', sans-serif", color: COL.ok,
