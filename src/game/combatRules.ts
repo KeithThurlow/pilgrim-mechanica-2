@@ -37,9 +37,10 @@ export type CombatEvent = BlastEvent | LobEvent | FreezeEvent;
 export interface CombatRuleValues { blastGroundReach?: number; blastCover?: number; dentMerge?: number; dentPerTick?: number }
 
 export class CombatRules {
-  /** The host's ECS world (src/ecs/): shared components for what the targets hold, written by syncWorld each tick
-   *  (stage 4.1: robots; readers move over in 4.2). */
-  readonly world = new World();
+  /** The host's ECS world (src/ecs/). Fixed capacity, so pools can keep views of its columns: a robot swarm made with
+   *  it reserves a block and its arrays are the block's columns (src/combat/robotWorld.ts, stage 4.3). Room for 8
+   *  swarms of 1024 (ROBOT_MAX) plus 4096 more. */
+  readonly world = new World({ capacity: 1024 * 8 + 4096 });
   /** Everything that can be shot (adapters; the ECS replaces them in stages 4-5). */
   readonly targets: Hittable[] = [];
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts). */
@@ -100,7 +101,8 @@ export class CombatRules {
     this.syncWorld();
   }
 
-  /** The targets' shared components into the world (those that have entities yet: the robots). */
+  /** Counts the tick, and lets targets write shared components they keep elsewhere (none today: the robots are the
+   *  world's own columns since stage 4.3). */
   syncWorld() {
     this.world.tick++;
     for (const t of this.targets) t.syncWorld?.(this.world);

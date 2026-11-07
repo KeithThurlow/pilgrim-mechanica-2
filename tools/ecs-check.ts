@@ -3,7 +3,7 @@
 // destroy and index reuse, more than 32 components (two mask words), systems in phase order and at their rates,
 // events cleared each tick, two worlds sharing component definitions without sharing data, snapshot columns, and
 // interpolation between ticks. Run: npm test (or npx tsx tools/ecs-check.ts).
-import { World, defineComponent, defineObjects, entityIndex, type Component, type Entity, type Query } from "../src/ecs/world";
+import { World, defineComponent, defineObjects, entityIndex, entityGen, type Component, type Entity, type Query } from "../src/ecs/world";
 import { Transform, PrevTransform, keepPrevious, drawnAt } from "../src/ecs/components";
 import { packWorld } from "../src/ecs/snapshot";
 
@@ -118,6 +118,35 @@ const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
   const s = packWorld(a);
   if (!s.columns.Transform || s.columns.PrevTransform) fail("snapshot should hold host components only");
   if ((s.columns.Transform.x as Float32Array)[0] !== 3) fail("snapshot value");
+}
+
+// Fixed capacity and reserved blocks (stage 4.3): columns never move, create never hands out a held index, a held index
+// comes back with the next generation, and a full world says so.
+{
+  const w = new World({ capacity: 40 });
+  const T0 = w.columns(Transform).x;
+  const a = w.create(), base = w.reserve(16);
+  if (base !== 1 || w.reserve(100) !== -1) fail(`reserve: base ${base}`);
+  const view = w.columns(Transform).x.subarray(base, base + 16);
+  const made: number[] = [];
+  for (let k = 0; k < 23; k++) made.push(w.create());
+  if (made.some((e) => entityIndex(e) >= base && entityIndex(e) < base + 16)) fail("create handed out a reserved index");
+  let full = false;
+  try { w.create(); } catch { full = true; }
+  if (!full) fail("a full fixed world didn't refuse");
+  if (w.columns(Transform).x !== T0) fail("a fixed world's columns moved");
+  const e = w.createAt(base + 3);
+  w.attach(e, Transform);
+  view[3] = 7;
+  if (w.columns(Transform).x[entityIndex(e)] !== 7 || !w.has(e, Transform) || w.at(base + 3) !== e) fail("createAt / attach / view");
+  w.destroy(e);
+  if (w.exists(e) || w.at(base + 3) !== -1) fail("destroyed held entity still there");
+  for (const m of made) w.destroy(m);
+  const again = w.create();
+  if (entityIndex(again) >= base && entityIndex(again) < base + 16) fail("a destroyed held index went to the free list");
+  const e2 = w.createAt(base + 3);
+  if (e2 === e || entityGen(e2) !== entityGen(e) + 1) fail("held index's next generation");
+  if (!w.exists(a)) fail("the first entity went");
 }
 
 if (problems.length) { console.log(`ecs: ${problems.length} problem(s)`); process.exit(1); }

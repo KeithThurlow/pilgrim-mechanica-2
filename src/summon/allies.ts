@@ -134,7 +134,7 @@ export class Allies {
     for (const [k, x] of Object.entries(ROBOT_DEFAULTS)) if (!(k in V)) av[k] = x;
     this.av = av as unknown as RobotValues;
     this.refreshValues();
-    this.sw = new RobotSwarm(this.av, ground, 21);
+    this.sw = new RobotSwarm(this.av, ground, 21, bf.rules.world);
     this.sw.lookGround = bf.lookGround;
     this.draw = new RobotsDraw(this.sw, { cap: MAX_ALLIES, paint: SUMMON_PAINT.plate, eye: SUMMON_PAINT.eye, alarm: 0xbff6ff });
     this.draw.cull = bf.view;
