@@ -207,7 +207,8 @@ state.md                live state of every system, work in progress, change his
 reports/                Keith's in-lab reports and your replies (in git, so any agent can pick them up; delete one when fixed)
 index.html              lab hub
 labs/<name>/            one page per system (index.html + main.ts)
-src/core/               app (renderer, loop), hud (frame time), tweaks (slider panel), input
+src/core/               app (renderer, loop), clock (the game tick), hud (frame time), tweaks (slider panel), input
+src/ecs/                the ECS core: world (ids, columns, queries, systems, events), components (shared ones), snapshot
 src/world/              noise, terrain (the dune height function), chunks (streaming, the shadow-only terrain copy) + chunkFill (their vertex maths, also run in the sim worker), chunkGround
                         (a cheap ground for looks off the chunks' triangles), look (light, haze), wrecks (steel stand-ins),
                         craters (blast dents in the ground: hardness, slump), walkable (the ground plus registered surfaces
