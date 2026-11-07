@@ -6,6 +6,7 @@
 // every frame the pivots follow the sim's joints. Hull-mounted miniguns on both sides: the right pod is mirrored
 // onto the left shoulder in place of the rocket box. Ammo drums and a power pack ride on the back.
 import * as THREE from "three/webgpu";
+import { flatPaint, mergeTinted } from "../look/mergeGeometry";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { WalkerSim, LegPose } from "./walker";
 import type { UpperSim, UpperValues } from "./upper";
@@ -838,7 +839,7 @@ export class RampartBody {
         if (m.isMesh && !m.userData.ink && !m.userData.glow) this.paints!.push({ mesh: m, base: (m.material as THREE.MeshStandardMaterial).color.getHex() });
       });
     }
-    for (const { mesh, base } of this.paints) look.tint(mesh, color === null ? base : color);
+    for (const { mesh, base } of this.paints) { flatPaint(mesh, color !== null); look.tint(mesh, color === null ? base : color); }
   }
 
   /** A drawn-only twist of the waist (radians, + the mech's left; the sword's follow-through, Keith 2026-11-01): the
@@ -965,6 +966,7 @@ function armUpper(look: ToonLook, side: 1 | -1) {
   const joint = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8));
   look.apply(joint); look.tint(joint, 0x3e3c35);
   g.add(m, joint);
+  mergeTinted(g, look);
   return g;
 }
 /** Stand-in forearm (box) from the elbow (the gun pivot) along the aim to a fist (handAt), which holds the weapon's
@@ -979,6 +981,7 @@ function armFore(look: ToonLook) {
   hand.position.set(H[0], H[1], H[2]);
   look.apply(hand); look.tint(hand, 0x3e3c35);
   g.add(m, hand);
+  mergeTinted(g, look);
   return g;
 }
 /** Stand-in power pack from boxes, in the Rampart's khaki and olive (or a variant's paint), until a modelled one exists. */
@@ -1001,5 +1004,6 @@ function powerPack(look: ToonLook, khaki = 0xb7a77c, olive = 0x6c7546) {
   for (const x of [-0.42, 0.42]) add(cell, olive, [0.34, 0.85, 0.34], [x, 0.48, 0.02], [0, 0, Math.PI / 2]);
   add(box, khaki, [0.5, 0.18, 0.5], [0, 0.42, 0.05]);
   add(box, 0xd18a2a, [0.12, 0.1, 0.03], [0.55, 0.15, -0.39]);
+  mergeTinted(g, look);
   return g;
 }

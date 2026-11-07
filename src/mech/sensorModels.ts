@@ -5,6 +5,7 @@
 // about its own Y). The origin sits on the socket (`Sensor_Front` for a head, `Sensor_Top` for a cluster), +Z forward.
 // Drawing only: src/mech/rampart.ts hangs these on the hull and turns the nodes from src/mech/head.ts.
 import * as THREE from "three/webgpu";
+import { mergeTintedTree } from "../look/mergeGeometry";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ToonLook } from "../look/toon";
 
@@ -176,5 +177,6 @@ export function standInSensor(id: string, look: ToonLook, style: "head" | "clust
   root.name = id;
   const build = STAND_INS[id] ?? (style === "head" ? visorHead : mastCluster);
   const n = build(new Kit(look), root);
+  mergeTintedTree(root, look);
   return { root, head: n.head ?? null, pitch: n.pitch ?? null, sweep: n.sweep ?? null, source: "stand-in" };
 }
