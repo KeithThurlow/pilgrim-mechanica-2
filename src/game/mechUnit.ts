@@ -1,7 +1,7 @@
 // A mech on the battlefield: the walker sim (legs), the upper-body sim (torso and two miniguns), the Rampart model,
 // health, and its rounds fired into the shared battlefield. Used for the player's mech and for bandit mechs (red
 // Ramparts for now, Keith 2026-10-24), so both walk, shoot, kick up dust and take hits the same way.
-import { HeavyLink, type HeavyState } from "../ecs/heavy";
+import { HeavyLink, heavyState, type HeavyState } from "../ecs/heavy";
 import type { World } from "../ecs/world";
 import { KIND } from "./register";
 import { Rng, seedFrom } from "../core/rng";
@@ -654,7 +654,7 @@ export class MechUnit implements Hittable, Solid {
   /** This mech as an entity in the host world (src/ecs/heavy.ts, stage 5): Transform at the pelvis, Health, Team,
    *  Collider, Armour and its health bar (an enemy mech's: the bars skip the viewer's team; always on, over the hull). */
   readonly link = new HeavyLink();
-  private state: HeavyState = { x: 0, y: 0, z: 0, heading: 0, hp: 0, max: 0, team: 0, kind: KIND.Mech, radius: 0, reach: 0, height: 0, armour: 0, bar: { width: 3.6, lift: 3.4, always: true } };
+  private state: HeavyState = heavyState(KIND.Mech, { width: 3.6, lift: 3.4, always: true });
   syncWorld(world: World) {
     const s = this.state, p = this.sim.pelvis;
     s.x = p.x; s.y = p.y; s.z = p.z; s.heading = this.sim.heading;

@@ -18,6 +18,8 @@ import { LEG_TYPES } from "../src/mech/legTypes";
 import { UPPER_DEFAULTS } from "../src/mech/upper";
 import { DUST_DEFAULTS } from "../src/fx/dust";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
+import { DustSim } from "../src/fx/dust";
+import { Warband, WARBAND_DEFAULTS, type Raider } from "../src/combat/warband";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 15) console.log("  FAIL " + s); problems.push(s); };
@@ -84,6 +86,43 @@ for (let f = 0; f < 900; f++) {
 }
 for (const e of seen) if (e !== mech.link.entity && world.exists(e)) fail(`old entity ${e} still exists`);
 if (seen.size !== 3) fail(`${seen.size} entities over its lives (want 3: first, rebuilt, back on the field)`);
-console.log(`  ${ticks} ticks, ${checked} checked, ${seen.size} entities over its lives`);
+console.log(`  mech: ${ticks} ticks, ${checked} checked, ${seen.size} entities over its lives`);
+
+// Stage 5b: a war band's raiders (vehicles). One entity per live raider on the field; the bar as Raider.bars pushed it.
+{
+  const rules2 = new CombatRules(field, {});
+  const w2 = rules2.world;
+  const bf2 = {
+    field, targets: rules2.targets, dust: new DustSim({ ...DUST_DEFAULTS }, field),
+    marks: { rut() {}, crater() {}, print() {} }, sfx: { play() {} }, fire() { return null; }, lob() { return null; },
+    gunFx: { shot() {} }, canSee() { return true; }, dent() { return false; }, pools: { add() { return null; } },
+  } as unknown as Battlefield;
+  const pelvis = new THREE.Vector3(0, field.height(0, 0) + 3, 0);
+  const player = { sim: { pelvis, pos: pelvis.clone().setY(field.height(0, 0)), vel: new THREE.Vector3() }, alive: true } as unknown as MechUnit;
+  const wb = new Warband(bf2, { ...WARBAND_DEFAULTS, bandMechs: 0 }, null);
+  let most = 0, kills = 0, barsN = 0;
+  const out: BarEntry[] = [];
+  for (let f = 0; f < 60 * 40; f++) {
+    wb.update(1 / 60, player);
+    if (f % 300 === 299) { const r = wb.raiders.find((x) => x.alive); if (r) { r.damage(r.maxHp * 0.3, hit, dir); if (f % 600 === 599) { r.damage(1e6, hit, dir); kills++; } } }
+    rules2.syncWorld();
+    const live = rules2.targets.filter((t): t is Raider => (t as Raider).sim !== undefined && t.alive && wb.raiders.includes(t as Raider));
+    const q = w2.query(Transform, Sim);
+    if (q.count !== live.length) fail(`war band tick ${f}: ${q.count} heavies, ${live.length} live raiders`);
+    most = Math.max(most, live.length);
+    out.length = 0;
+    gatherBars(w2, 1, out);
+    if (out.length !== live.length) fail(`war band tick ${f}: ${out.length} bars`);
+    for (const r of live) {
+      const e = r.link.entity, b = out.find((x) => x.key === e), s = r.sim, sh = (r as unknown as { shape: { capY: number; radius: number; half: number } }).shape;
+      const k = r.kind, always = k === "turretTruck" || k === "tank" || k === "partyBus" || k === "warRig";
+      if (!b || Math.abs(b.x - s.pos.x) > 1e-3 || Math.abs(b.y - (s.pos.y + sh.capY + sh.radius + 2.2)) > 1e-3 || b.hp !== Math.fround(r.hp)
+        || b.max !== Math.fround(r.maxHp) || b.width !== Math.fround(Math.max(2.4, sh.half * 1.1)) || b.always !== always) { fail(`war band tick ${f}: bar of a ${k}`); break; }
+      barsN++;
+    }
+  }
+  if (most < 3 || kills < 2) fail(`war band: only ${most} raiders at once, ${kills} kills`);
+  console.log(`  war band: up to ${most} raiders as entities, ${kills} destroyed, ${barsN} bars checked`);
+}
 if (problems.length) { console.log(`heavy: ${problems.length} problem(s)`); process.exit(1); }
 console.log("heavy: ok");

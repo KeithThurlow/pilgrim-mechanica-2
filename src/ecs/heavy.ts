@@ -21,6 +21,11 @@ export interface HeavyState {
   bar: { width: number; lift: number; always: boolean } | null;
 }
 
+/** A fresh state to fill each tick (kept by the heavy, so syncing allocates nothing). */
+export function heavyState(kind: number, bar: HeavyState["bar"] = null): HeavyState {
+  return { x: 0, y: 0, z: 0, heading: 0, hp: 0, max: 0, team: 0, kind, radius: 0, reach: 0, height: 0, armour: 0, bar };
+}
+
 export class HeavyLink {
   private world: World | null = null;
   private e: Entity | -1 = -1;

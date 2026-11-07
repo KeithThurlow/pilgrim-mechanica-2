@@ -22,7 +22,8 @@ import { BusMusic } from "../audio/busMusic";
 import { armourHit } from "../game/armour";
 import { VEHICLE_MASS } from "./trample";
 import type { Solid, SolidShape } from "../game/solids";
-import type { BarEntry } from "../ui/healthBars";
+import { HeavyLink, heavyState } from "../ecs/heavy";
+import type { World } from "../ecs/world";
 import { RaiderDeaths, RAIDER_DEATH_DEFAULTS, RAIDER_DEATH_PARAMS, type DeathState } from "./raiderDeath";
 
 /**
@@ -316,13 +317,23 @@ export class Raider implements Hittable, Solid {
 
   armourOf() { return this.armour; }
 
-  /** Health bar: when hurt; the heavies (turret truck, tank, party bus, War Rig) always. */
-  bars(out: BarEntry[]) {
-    if (!this.alive) return;
-    const s = this.sim, k = this.kind;
-    out.push({ key: this, x: s.pos.x, y: s.pos.y + this.shape.capY + this.shape.radius + 2.2, z: s.pos.z, hp: this.hp, max: this.maxHp, armour: this.armour,
-      width: Math.max(2.4, this.shape.half * 1.1), always: k === "turretTruck" || k === "tank" || k === "partyBus" || k === "warRig" });
+  /** This raider as an entity in the host world (src/ecs/heavy.ts, stage 5b): Transform at the chassis, Health, Team,
+   *  Collider (its capsule), Armour, and its health bar (when hurt; the heavies, turret truck, tank, party bus and War
+   *  Rig, always). */
+  readonly link = new HeavyLink();
+  private state = heavyState(KIND.Vehicle);
+  private barState = { width: 0, lift: 0, always: false };
+  syncWorld(world: World) {
+    const s = this.sim, sh = this.shape, st = this.state, b = this.barState, k = this.kind;
+    st.x = s.pos.x; st.y = s.pos.y; st.z = s.pos.z; st.heading = s.heading;
+    st.hp = this.hp; st.max = this.maxHp; st.team = this.team; st.armour = this.armour;
+    st.radius = sh.radius; st.reach = sh.half + sh.radius; st.height = sh.capY + sh.radius;
+    b.width = Math.max(2.4, sh.half * 1.1); b.lift = sh.capY + sh.radius + 2.2;
+    b.always = k === "turretTruck" || k === "tank" || k === "partyBus" || k === "warRig";
+    st.bar = b;
+    this.link.sync(world, this.alive, this, st);
   }
+  leaveWorld() { this.link.leave(); }
 
   damage(amount: number, _at?: THREE.Vector3, dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;
