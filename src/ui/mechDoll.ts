@@ -91,6 +91,7 @@ export interface DollView {
 /** The HUD doll at the bottom right. Click it (or press I) for the inventory. */
 export function mechDollHud(v: DollValues, onClick: () => void, parent: HTMLElement = document.body) {
   const root = document.createElement("div");
+  root.className = "mech-doll"; // hidden on phones (lab.css): the touch pad's Inv button opens it there
   Object.assign(root.style, {
     position: "fixed", right: "14px", bottom: "14px", zIndex: "20", cursor: "pointer", userSelect: "none",
     font: "600 11px system-ui, sans-serif", color: "#f3e6d0", textShadow: "0 1px 2px #000", textAlign: "center",

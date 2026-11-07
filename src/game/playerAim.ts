@@ -26,7 +26,7 @@ import { Arsenal } from "../weapons/arsenal";
 import { ArsenalDraw } from "../weapons/arsenalDraw";
 import { playBlast } from "../weapons/weaponSound";
 import type { WeaponValues } from "../weapons/tuning";
-import { touchState } from "../core/touch";
+import { TOUCH_USE, touchState } from "../core/touch";
 
 /**
  * The mouse over the canvas: where it is, and both buttons. Read both from the `buttons` bitmask on every pointer
@@ -36,11 +36,16 @@ import { touchState } from "../core/touch";
  * onto the field doesn't fire); a release counts anywhere.
  */
 export class MouseButtons {
-  mouse: { x: number; y: number } | null = null;
-  left = false;
+  private pointer: { x: number; y: number } | null = null;
+  private leftButton = false;
   private rightButton = false;
-  /** The right trigger: the right mouse button, or the touch pad's Gun R (src/core/touch.ts). */
-  get right() { return this.rightButton || touchState.right; }
+  /** The cursor: the mouse, or the touch pad's right stick while it's held (src/core/touch.ts). */
+  get mouse() { return touchState.aim ?? this.pointer; }
+  set mouse(v: { x: number; y: number } | null) { this.pointer = v; }
+  /** The triggers: the mouse buttons, or the right stick pushed (it fires both sides). */
+  get left() { return this.leftButton || touchState.fire; }
+  set left(v: boolean) { this.leftButton = v; }
+  get right() { return this.rightButton || touchState.fire; }
   set right(v: boolean) { this.rightButton = v; }
   private lastButtons = 0;
   private finger = -1;
@@ -72,6 +77,9 @@ export class MouseButtons {
     const lift = (e: PointerEvent) => { if (e.pointerId === this.finger) { this.finger = -1; this.left = false; } };
     canvas.addEventListener("pointerup", lift);
     canvas.addEventListener("pointercancel", lift);
+    // The right stick: keep its last aim when it's let go, so the guns hold where they pointed.
+    addEventListener(TOUCH_USE, () => onUse());
+    canvas.ownerDocument.addEventListener("pointerup", () => { if (touchState.aim) this.pointer = { ...touchState.aim }; }, true);
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 }

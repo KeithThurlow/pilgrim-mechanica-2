@@ -47,7 +47,7 @@ export class RadarDraw {
   draw(dt: number, pic: RadarPicture, range: number, upYaw: number, heading: number, warn: 0 | 1 | 2) {
     const v = this.v, dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     // Never more than ~40% of the screen's short side (Keith 2026-11-07: on his phone the 520 px scope filled it).
-    const S = Math.round(Math.min(v.radarSize, 0.4 * Math.min(innerWidth, innerHeight)));
+    const S = Math.round(Math.min(v.radarSize, (document.documentElement.classList.contains("touch") ? 0.3 : 0.4) * Math.min(innerWidth, innerHeight)));
     if (this.px !== S * dpr) {
       this.px = S * dpr;
       this.canvas.width = this.canvas.height = this.px;
