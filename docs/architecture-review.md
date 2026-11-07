@@ -111,6 +111,13 @@ the renderer along. This is the main reason the worker has moved little of the f
 **hit-resolution system** (pure, host) that emits hit, blast and death events, and **FX/audio consumers** of those
 events on the main thread (stage 3).
 
+  *Correction while building stage 3 (2026-11-07).* This finding was overstated in two places:
+  - Its 31 `Math.random` calls are all cosmetic.
+  - Shots were already data with events (`src/game/shots.ts`).
+
+  The real coupling was elsewhere. Blasts did damage and effects in one call, and crater digging (host ground) was capped
+  by wall-clock milliseconds, which is nondeterministic. Stage 3a fixed both (`src/game/combatRules.ts`).
+
 ### F4 (M-H). The worker design doesn't scale past a few systems
 - Each moved system needs:
   - a remote file;
