@@ -71,6 +71,14 @@ Plan, one PR each:
 
 Done before this: step 2b (the window's fine rows), step 3 (escorts, see Done).
 
+## After step 4 (cloud bench 2026-11-07, Keith away a week)
+- Headless `?siege=300&manual&norender&bench`: sim 7.8 ms (worker) vs 8.1-8.35 (noworker); swarm camps 2.4 vs 3.1. At
+  `?siege` (40 robots) no difference. The swarm step was under 1 ms of the main thread here; the remaining swarm-camps
+  time is drawing (`robotsDraw.update` ~1.1 ms, CPU per-instance work).
+- Next candidates by main-thread ms in that fight: death physics (Rapier, `src/physics/deaths.ts`) ~1 ms, guardian mechs
+  (`src/convoy/guardians.ts`) ~0.8, robotsDraw ~1.1 (drawing, stays on main: an LOD or cheaper small-leg pose), dust
+  draw ~1. To do when Keith is back: his PC `labs/convoy/?siege&manual&bench`, to pick between them on real numbers.
+
 ## Facts to start from
 - The worker is `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })` in `src/sim/host.ts`; add
   message types in `src/sim/messages.ts`, and the frame's answer comes back in `SimHost.receive` a frame later.
