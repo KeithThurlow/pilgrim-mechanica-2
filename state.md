@@ -315,6 +315,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-07 · The labs on GitHub Pages, for playing on the phone (Keith asked; Claude on `claude/project-thread-oakhm8`)
+- `.github/workflows/pages.yml` builds every lab on each push to main and publishes it to https://keiththurlow.github.io/pilgrim-mechanica-2/ (one-time: repo Settings › Pages › Source: GitHub Actions). `vite.config.ts` takes `VITE_BASE` (the sub-path); public/ files now go through `src/core/assetBase.ts` (`asset("models/...")`) in `rampart.ts`, `banditVat.ts`, `library.ts`, `sensorModels.ts`, `labs/parts/main.ts`; the hub's links are relative. The Report button falls back to downloading the report there (no dev server).
+- Checked: `VITE_BASE=/pilgrim-mechanica-2/ vite build` served under the sub-path; hub, walker, swarm, convoy, parts, sounds and the robots forward load with no missing files (only the weapon GLBs that fall back to stand-ins by design); full `npm test`.
+
 ### 2026-11-05 · Freeze rays: Frost thrower, Cryo projector, chill and freezing (Keith asked; Claude on `claude/project-thread-u0bsc9`)
 - New chill status (`src/game/chill.ts`) on the shots' burn path (`ShotProtocols.burn.cold`): slows, freezes solid, thaws; fire thaws, cold on hot metal is thermal shock. Robots and bandits take a `pace` (`src/combat/robots.ts`, `infantry.ts`, the targets' `slow`). Frost thrower (held) and Cryo projector (hull) as stream guns (`guns.ts`, `fireTuning.ts`, `fireGuns.ts`, `bases.ts`, `models.ts`, picks, traits `cold`), frost tint, mist, hiss.
 - Checked: `tools/chill-check.ts` (half chill pace 0.68, freeze after 24 hits of 0.05 at 30/s, thaw pace 0.72, shock 120 at heat 1); in the swarm lab `?left=frost` with `frostChill:1` froze 2 robots; full `npm test`.

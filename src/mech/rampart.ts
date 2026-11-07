@@ -29,6 +29,7 @@ import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
 import { footShapeOr, type FootShape } from "../fx/footprint";
 import { bakeFootFromGeometry } from "../fx/footprintMesh";
+import { asset } from "../core/assetBase";
 
 /**
  * Stand-in fit for the mounts (Keith 2026-10-26) until arms, sensors and waist kit are modelled: an arm drops its
@@ -244,7 +245,7 @@ export class RampartBody {
   private feet: (FootShape | null)[] = [null, null];
   private hullLook = "rampart";
   /** Where the part models load from; fixed: a ?mech= variant (whole, its parts don't swap). */
-  private base = "/models/";
+  private base = asset("models/");
   private fixed = false;
   /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
   private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
@@ -253,7 +254,7 @@ export class RampartBody {
 
   private constructor() { this.root.name = "rampart"; }
 
-  static async load(look: ToonLook, base = "/models/"): Promise<RampartBody> {
+  static async load(look: ToonLook, base = asset("models/")): Promise<RampartBody> {
     const body = new RampartBody();
     const id = mechVariant();
     // The whole variant with ?mech=, else the Rampart; the part looks (src/items/item.ts AVAILABLE_LOOKS) load too so a

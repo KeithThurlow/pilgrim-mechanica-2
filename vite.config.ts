@@ -12,6 +12,8 @@ const labs = Object.fromEntries(
 );
 
 export default defineConfig({
+  // GitHub Pages serves the build under /<repo>/ (.github/workflows/pages.yml sets VITE_BASE); dev stays at /.
+  base: process.env.VITE_BASE ?? "/",
   // The Report box in every lab posts here in dev (tools/report-plugin.ts).
   plugins: [reportPlugin(root)],
   server: { host: true, open: "/" },

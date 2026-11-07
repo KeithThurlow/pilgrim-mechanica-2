@@ -18,6 +18,7 @@ import { WeaponModel } from "./weaponModel";
 import type { WeaponLook } from "./weaponLook";
 import { Build, v } from "./kit";
 import { laserEmitter } from "./build/common";
+import { asset } from "../core/assetBase";
 
 export { CATALOG, find, entry, register } from "./catalog";
 export type { CatalogEntry } from "./catalog";
@@ -27,7 +28,7 @@ export type ModelSource = "glb" | "glb-mirrored" | "stand-in";
 const defs = new Map<string, { def: ModelDef; source: ModelSource }>();
 const loading = new Map<string, Promise<ModelDef>>();
 const loader = new GLTFLoader();
-let base = "/models/weapons/";
+let base = asset("models/weapons/");
 /** Where the GLBs are served from (default /models/weapons/). */
 export function setWeaponModelBase(url: string) { base = url; }
 

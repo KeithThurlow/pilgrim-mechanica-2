@@ -7,6 +7,7 @@
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ToonLook } from "../look/toon";
+import { asset } from "../core/assetBase";
 
 export interface SensorModel {
   root: THREE.Group;
@@ -17,7 +18,7 @@ export interface SensorModel {
 }
 
 const loader = new GLTFLoader();
-let base = "/models/sensors/";
+let base = asset("models/sensors/");
 /** Where the sensor GLBs are served from (default /models/sensors/). */
 export function setSensorModelBase(url: string) { base = url; }
 const glbs = new Map<string, Promise<THREE.Object3D | null>>();

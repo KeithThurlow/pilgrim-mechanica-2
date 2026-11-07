@@ -22,6 +22,7 @@ import { UpperSim, UPPER_DEFAULTS } from "../../src/mech/upper";
 import { LEG_TYPES } from "../../src/mech/legTypes";
 import { RampartBody, mechLegType } from "../../src/mech/rampart";
 import { ToonLook, TOON_DEFAULTS, TOON_PARAMS } from "../../src/look/toon";
+import { asset } from "../../src/core/assetBase";
 
 const app = await createApp(document.getElementById("view")!);
 const { scene, camera, params } = app;
@@ -59,7 +60,7 @@ const torso = rampart.root.getObjectByName("torso") as THREE.Mesh | undefined;
 
 // ---- The generated parts
 interface Entry { id: string; kind: string; lane: string; label?: string }
-const list: Entry[] = await fetch("/models/gen/index.json").then((r) => (r.ok ? r.json() : [])).catch(() => []);
+const list: Entry[] = await fetch(asset("models/gen/index.json")).then((r) => (r.ok ? r.json() : [])).catch(() => []);
 const pick = document.getElementById("part") as HTMLSelectElement;
 const info = document.getElementById("info")!;
 for (const e of list) pick.add(new Option(`${e.id} · ${e.kind} · lane ${e.lane.toUpperCase()}`, e.id));
@@ -77,7 +78,7 @@ let meshes: THREE.Mesh[] = [], markers: THREE.Object3D[] = [], shownKind = "";
 
 /** A part as the game would show it: its meshes on the toon look, its empties as markers. */
 async function load(id: string) {
-  const gltf = await loader.loadAsync(`/models/gen/${id}.glb?v=${Date.now()}`);
+  const gltf = await loader.loadAsync(`${asset("models/gen/")}${id}.glb?v=${Date.now()}`);
   const root = gltf.scene, found: THREE.Mesh[] = [], empties: THREE.Object3D[] = [];
   root.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); else if (o !== root && !o.children.length) empties.push(o); });
   for (const m of found) toon.apply(m);
@@ -110,7 +111,7 @@ async function build() {
     meshes.push(...h.found);
   }
   applyTint();
-  const side = await fetch(`/models/gen/${current}.json`).then((r) => r.json()).catch(() => ({}));
+  const side = await fetch(`${asset("models/gen/")}${current}.json`).then((r) => r.json()).catch(() => ({}));
   info.textContent = `${current} · ${e.kind} · lane ${e.lane.toUpperCase()} · ${side.trisIn ?? "?"} → ${side.tris ?? "?"} tris · ${(side.size ?? []).map((v: number) => v.toFixed(2)).join("×")} m · ${side.prompt ?? side.from ?? ""}`;
 }
 function applyTint() {
