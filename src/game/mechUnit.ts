@@ -117,9 +117,8 @@ import { SOLID_DEFAULTS, SOLID_PARAMS, type Solid, type SolidShape } from "./sol
 import { RepairKits, REPAIR_DEFAULTS, REPAIR_PARAMS, type KitRefusal } from "./repair";
 import { Abilities, ABILITY_DEFAULTS, ABILITY_PARAMS } from "../abilities/abilities";
 import type { HealTarget } from "../abilities/zones";
-import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, mechWreckSpec, mechWreckThrow, mechWreckThuds, seedOf, legPart, BODY, type MechPose } from "../physics/mechWreck";
-import { MechWreckRig } from "../physics/mechWreckDraw";
-import type { Dead } from "../physics/deaths";
+import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, type MechPose } from "../physics/mechWreck";
+import { MechFxView, type MechFx } from "./mechFx";
 import { shotLine } from "../weapons/shotLine";
 
 export const MECH_DEFAULTS = {
@@ -180,7 +179,7 @@ export const MECH_PARAMS: Param[] = [
 
 export type MechUnitValues = WalkerValues & UpperValues & DustValues & MechValues;
 
-export const WRECK = 0x3b3531;
+export { WRECK } from "./mechFx";
 const D2R = Math.PI / 180;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 
@@ -198,11 +197,13 @@ export class MechUnit implements Hittable, Solid {
   health: number;
   /** Seconds since destroyed (for the lab's rebuild). */
   deadFor = 0;
+  /** Its looks and sounds (src/game/mechFx.ts, stage 7c): told what happens as it happens. null: none (headless, or a
+   *  copy whose looks are played elsewhere); the game plays the same either way. */
+  fx: MechFx | null;
   /** The wreck falling in the death physics (cosmetic; Keith 2026-11-01), while destroyed. */
-  wreck: { dead: Dead; rig: MechWreckRig } | null = null;
-  /** Where the last hit came from (flat, unit; the kill's push) and how many times this mech has died (seeds its fall). */
-  private lastHit = { x: 0, z: 0 };
-  private deaths = 0;
+  get wreck() { return this.fx?.wreck ?? null; }
+  /** Where the last hit came from (flat, unit; the kill's push). */
+  readonly lastHit = { x: 0, z: 0 };
   /** Recent damage taken per second (for a HUD flash). */
   hurt = 0;
   /** Recent hits for the HUD's hit arcs: where each came from (unit x, z on the ground) and how much it took. Newest
@@ -237,9 +238,6 @@ export class MechUnit implements Hittable, Solid {
   readonly reactor: Reactor;
   /** The sprint (Keith 2026-10-26): Space held past the dash. */
   readonly bound: Bound;
-  private wakeAcc = 0;
-  /** The hover drive's downwash puffs carried over (fractional). */
-  private washAcc = 0;
   /** Space still held: the dash carries on into the sprint. Set by the lab before step (only while driving). */
   dashHold = false;
   /** The shoulder weapon keys 1-4 held (hold to paint, release to fire). Set by the lab before step. */
@@ -284,7 +282,7 @@ export class MechUnit implements Hittable, Solid {
     private bf: Battlefield,
     readonly v: MechUnitValues,
     readonly body: MechBody,
-    private look: ToonLook,
+    look: ToonLook,
     readonly team: number,
     /** First of the two muzzle-flash slots this mech's guns use (0 for the player: those carry the flash lights). */
     private flashSlot: number,
@@ -306,46 +304,25 @@ export class MechUnit implements Hittable, Solid {
     this.health = v.hull;
     this.kits = new RepairKits(v);
     this.abilities = new Abilities(v);
-    const sim = this.sim, dust = bf.dust;
+    this.fx = new MechFxView(bf, this, look);
+    const sim = this.sim;
+    // The rules of a footfall, a landing and a push-off; their looks go to fx as they happen.
     sim.onFootfall = (f, k) => {
-      // In the shallows: a splash and rings instead of a print and dust.
-      if (bf.inWater(f.planted.x, f.planted.z)) {
-        bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.5, sim.vel.x * 0.1, sim.vel.z * 0.1);
-        this.onStomp?.(f.planted.x, f.planted.z, k);
-        return;
-      }
-      bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null, this.body.printScale?.() ?? 1);
-      // Sprint strides come quickly: each throws less than a walking stomp (boundDust).
-      dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1), sim.vel.x, sim.vel.z);
-      // Sprinting, each footfall lands with weight: a thump and (in labs that shake) a small shake.
-      if (sim.running && sim.runK > 0.5) {
-        if (v.sprintThump > 0) bf.sfx.play("brap", f.planted, v.sprintThump * Math.min(1.5, k), 0.32 + 0.04 * Math.random(), true);
-        this.onSprintStep?.(k);
-      }
+      const wet = bf.inWater(f.planted.x, f.planted.z);
+      this.fx?.footfall(sim.feet.indexOf(f), k, wet);
+      // Sprinting, each footfall lands with weight: in labs that shake, a small shake.
+      if (!wet && sim.running && sim.runK > 0.5) this.onSprintStep?.(k);
       this.onStomp?.(f.planted.x, f.planted.z, k);
     };
     // A landing (a drop, a crest, a jump): both feet stomp at once, scaled by how hard it hit; hard ones hurt.
     sim.onLand = (l) => {
       const k = Math.min(2.2, 0.4 + l.impact / 6);
+      this.fx?.land(l);
       // A sprint stride's landing already stomped foot by foot: here only the extra burst, the sound and the shake.
       if (l.bound) {
-        for (const f of sim.feet) if (!bf.inWater(f.pos.x, f.pos.z)) dust.stomp(f.pos.x, f.pos.y, f.pos.z, k * 0.8, sim.vel.x, sim.vel.z);
-        this.a.set(l.x, l.y, l.z);
-        bf.sfx.play("brap", this.a, Math.min(1.8, 0.5 + l.hard * 1.1), 0.4, false);
         this.onStomp?.(l.x, l.z, k * 1.5);
         this.onLanding?.(l);
         return;
-      }
-      if (l.impact > 1.5) {
-        for (const f of sim.feet) {
-          if (bf.inWater(f.planted.x, f.planted.z)) { bf.water!.splash(f.planted.x, f.planted.z, 0.6 + k * 0.6, sim.vel.x * 0.1, sim.vel.z * 0.1); continue; }
-          bf.marks.print(f.planted.x, f.planted.z, f.plantedYaw, k, this.body.footprint?.(f.side) ?? null, this.body.printScale?.() ?? 1);
-          dust.stomp(f.planted.x, f.planted.y, f.planted.z, k * 1.2, sim.vel.x + sim.skid.x, sim.vel.z + sim.skid.z);
-        }
-        if (l.impact > v.landSoft) {
-          this.a.set(l.x, l.y, l.z);
-          bf.sfx.play("brap", this.a, Math.min(1.8, 0.5 + l.hard * 1.1), 0.4, false);
-        }
       }
       this.onStomp?.(l.x, l.z, k * 1.5);
       if (l.damage > 0) this.damage(l.damage, this.a.set(l.x, l.y, l.z), this.b.set(0, 1, 0));
@@ -353,15 +330,9 @@ export class MechUnit implements Hittable, Solid {
     };
     sim.onLiftOff = (f, k) => {
       if (k < 0.15) return;
-      if (bf.inWater(f.pos.x, f.pos.z)) { bf.water!.splash(f.pos.x, f.pos.z, 0.25 * k, -Math.sin(sim.heading) * 0.5, -Math.cos(sim.heading) * 0.5, 0.6); return; }
-      const hd = sim.heading;
-      dust.kick(f.pos.x, f.pos.y, f.pos.z, -Math.sin(hd), -Math.cos(hd), Math.min(1.6, k) * (sim.bounding ? v.boundDust * v.sprintKick : sim.speed > v.walkSpeed + 0.5 ? v.sprintKick : 1));
-      // Sprinting, the push-off throws the mech on: sand burst back off the toes, and the toes dig in (Keith 21:54).
-      if (sim.running && sim.runK > 0.5) {
-        const t = f.pose.toe;
-        if (v.sprintPushDust > 0) dust.kick(t.x, t.y, t.z, -Math.sin(sim.course), -Math.cos(sim.course), Math.min(2, k) * v.sprintPushDust);
-        bf.marks.dig(t.x, t.z, sim.course, k * v.sprintToeDig);
-      }
+      const wet = bf.inWater(f.pos.x, f.pos.z);
+      this.fx?.liftOff(sim.feet.indexOf(f), k, wet);
+      if (wet) return;
       this.stepTimes.push(this.clock);
       while (this.stepTimes.length && this.clock - this.stepTimes[0] > 3) this.stepTimes.shift();
     };
@@ -371,11 +342,6 @@ export class MechUnit implements Hittable, Solid {
    * Dash along (x, z) (world; any length): a front-loaded shove that skids the planted feet. Returns true if it went
    * (a charge was free). While it runs, onDash is called each frame with where the mech is and which way it goes.
    */
-  /** Each foot's skid point for the dash furrow (x, z, then 1 while skidding). */
-  private skidFrom = [new THREE.Vector3(), new THREE.Vector3()];
-  /** Each foot's slide dust carry-over (fractional puffs). */
-  private slideAcc = [0, 0];
-
   tryDash(x: number, z: number, cut = true): boolean {
     // Space mid-cut is a sword's power cut instead (Keith 2026-11-02), when there's the energy for it. An AI asks for its
     // power cuts apart (cut false: a dodge mid-cut stays a dodge).
@@ -383,9 +349,7 @@ export class MechUnit implements Hittable, Solid {
     if (!this.alive || !this.sim.canDash || !this.dash.start(x, z)) return false;
     this.sim.dash(this.dash.dirX, this.dash.dirZ);
     this.weapons?.dashed?.(this.dash.dirX, this.dash.dirZ);
-    // The hydraulics bang: a burst of sand off both feet.
-    for (const f of this.sim.feet) this.bf.dust.stomp(f.pos.x, f.pos.y, f.pos.z, 1.3, -this.dash.dirX * 4, -this.dash.dirZ * 4);
-    this.bf.sfx.play("brap", this.sim.pelvis, 0.9, 0.35, false);
+    this.fx?.dashed();
     return true;
   }
 
@@ -427,10 +391,9 @@ export class MechUnit implements Hittable, Solid {
     this.health = this.maxHealth;
     this.alive = true;
     this.deadFor = 0;
-    this.clearWreck();
+    this.fx?.clearWreck();
     this.goCold();
-    this.bf.nightLights?.streams.clear();
-    this.body.paint(this.look, this.paint);
+    this.fx?.reset();
   }
 
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
@@ -450,7 +413,7 @@ export class MechUnit implements Hittable, Solid {
     if (this.wasPiloted && !this.piloted) this.goCold();
     this.wasPiloted = this.piloted;
     // Dead: the weapons still fly what is already in the air, with every trigger let go.
-    if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); this.stepWreck(); return; }
+    if (!this.alive) { this.deadFor += dt; this.weapons?.step(dt, null, false); this.fx?.dead(); return; }
     this.heal(this.kits.step(dt));
     this.abilities.step(dt);
     // Braced by the Field weld: rooted where it stands.
@@ -504,38 +467,8 @@ export class MechUnit implements Hittable, Solid {
     this.bf.solids?.resolve(this, dt, v);
     body.update(sim, upper);
     body.aimSensor?.(dt, aim, v);
-    // Wading: the body pushes a wake (rings dropped as it moves, overlapping into a V).
-    const bf = this.bf;
-    if (bf.water) {
-      const moved = Math.hypot(sim.vel.x, sim.vel.z) * dt + Math.hypot(dash.vx, dash.vz) * dt;
-      if (moved > 0 && bf.inWater(sim.pos.x, sim.pos.z, 0.15)) {
-        this.wakeAcc = bf.water.wake(sim.pos.x, sim.pos.z, moved, this.wakeAcc, 0.7, 1.4);
-        if (dash.active && Math.random() < dt * 25) for (const f of sim.feet) bf.water.splash(f.pos.x, f.pos.z, 0.8, dash.dirX, dash.dirZ, 0.8);
-      }
-    }
-    // Hovering (src/mech/hover.ts): the drive's downwash blows sand out from under it, fading with height.
-    if (sim.hovering && v.hoverDust > 0) {
-      const gy = bf.field.height(sim.pos.x, sim.pos.z), up = sim.pelvis.y - gy - v.hipHeight - v.hoverLift;
-      const k = v.hoverDust * Math.max(0, 1 - up / Math.max(0.1, v.hoverDustReach));
-      this.washAcc += dt * v.hoverDustRate;
-      for (; this.washAcc >= 1; this.washAcc--) {
-        if (k <= 0 || bf.inWater(sim.pos.x, sim.pos.z)) continue;
-        const a = Math.random() * Math.PI * 2, r = 0.8 + Math.random() * 1.2, x = sim.pos.x + Math.cos(a) * r, z = sim.pos.z + Math.sin(a) * r;
-        bf.dust.kick(x, bf.field.height(x, z), z, Math.cos(a), Math.sin(a), k);
-      }
-    }
-    // Any skidding foot (the dash's slide, a drift in the sprint, a landing skid, sliding down a face) carves the ground:
-    // sand thrown along it by the slide's speed and the surface, and a furrow in the dents (Keith 2026-10-26 18:28).
-    sim.feet.forEach((f, i) => {
-      const from = this.skidFrom[i], sp = Math.hypot(f.slide.x, f.slide.z);
-      if (f.swinging || sp < v.slideMin) { from.z = 0; this.slideAcc[i] = 0; return; }
-      if (bf.inWater(f.pos.x, f.pos.z)) { if (Math.random() < dt * 20) bf.water!.splash(f.pos.x, f.pos.z, 0.6, f.slide.x / sp, f.slide.z / sp, 0.6); from.z = 0; return; }
-      this.slideAcc[i] = bf.dust.slide(f.pos.x, f.pos.y, f.pos.z, f.slide.x, f.slide.z, dt, this.slideAcc[i]);
-      // A furrow from where the foot was last frame (a skid that just started begins here).
-      if (from.z === 0) from.set(f.pos.x, f.pos.z, 1);
-      bf.marks.skid(from.x, from.y, f.pos.x, f.pos.z, f.yaw, this.body.footprint?.(f.side) ?? null, dt, this.body.printScale?.() ?? 1);
-      from.set(f.pos.x, f.pos.z, 1);
-    });
+    // Its looks: wading wake, hover downwash, skidding feet.
+    this.fx?.step(dt);
     // Whatever is in the dash's way gets shoved (the lab decides what that is).
     if (dash.active) this.onDash?.(sim.pos.x, sim.pos.z, dash.dirX, dash.dirZ);
     // Sprinting through a crowd shoves it aside like a dash.
@@ -605,10 +538,7 @@ export class MechUnit implements Hittable, Solid {
     }
     // The other weapons see what the guns saw: with the weapons off, no trigger (they drop paints and charges, gunsOff).
     this.weapons?.step(dt, aim, trigger);
-    if (this.player && body.armed) {
-      const guns = upper.guns.filter((g) => g.enabled && (!g.stats?.cls || g.stats.cls === "minigun"));
-      this.bf.gunAudio.update(this, dt, guns.some((g) => triggerOf(trigger, g.side === 1 ? 0 : 1)), guns, guns.map((g) => body.muzzle(g.side, new THREE.Vector3())));
-    }
+    this.fx?.guns(dt, trigger);
   }
 
   /** Where the torso looks with the weapons off: far along the line of travel (turned sprintFaceDrift into a drift), level with the shoulders. */
@@ -715,7 +645,7 @@ export class MechUnit implements Hittable, Solid {
   goCold() {
     this.weapons?.stop?.();
     for (const g of this.upper.guns) g.firing = false;
-    this.bf.gunAudio.release(this);
+    this.fx?.cold();
   }
 
   private destroy() {
@@ -724,71 +654,7 @@ export class MechUnit implements Hittable, Solid {
     this.deadFor = 0;
     this.kits.cut();
     this.goCold();
-    this.body.paint(this.look, WRECK);
-    // A burst of dark smoke and sand where it went down.
-    const p = this.sim.pelvis, dust = this.bf.dust;
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 3;
-      dust.smoke(p.x + Math.cos(a), p.y - 1 + Math.random() * 2, p.z + Math.sin(a), Math.cos(a) * s, 1 + Math.random() * 2, Math.sin(a) * s,
-        0.8 + Math.random() * 0.8, 3 + Math.random() * 3, 0.85, 0.75);
-    }
-    this.bf.dust.stomp(p.x, p.y - 3, p.z, 2.5);
-    this.fall();
-  }
-
-  /**
-   * Hand the body to the death physics as a heavy wreck (src/physics/mechWreck.ts): it buckles and topples the way the
-   * killing hit pushed it (or the way it was going) and the model follows the parts. Only with a death world and a
-   * model that can be posed (not the stand-in walker).
-   */
-  private fall() {
-    const deaths = this.bf.deaths, v = this.v, body = this.body;
-    if (!deaths || !v.mechWreckOn || !body.deadRig) return;
-    this.clearWreck();
-    const rig = body.deadRig(), sim = this.sim;
-    rig.hull.updateWorldMatrix(true, false);
-    const hp = rig.hull.getWorldPosition(new THREE.Vector3()), hq = rig.hull.getWorldQuaternion(new THREE.Quaternion());
-    const pose: MechPose = {
-      pelvis: sim.pelvis.clone(), pelvisQ: sim.pelvisQ.clone(), hull: hp, hullQ: hq, hullBox: rig.hullBox,
-      legs: sim.feet.map((f) => ({ hip: f.pose.hip, knee: f.pose.knee, hock: f.pose.hock, ankle: f.pose.ankle, foot: f.pose.foot, footQ: f.pose.footQ })),
-      vel: sim.vel,
-    };
-    const { parts, joints } = mechWreckSpec(pose, v.mechBendLimit);
-    // Pushed away from the last hit; with none, the way it faces.
-    let dx = this.lastHit.x, dz = this.lastHit.z;
-    if (dx === 0 && dz === 0) { dx = Math.sin(sim.heading); dz = Math.cos(sim.heading); }
-    const g = this.sim.ground.height(sim.pos.x, sim.pos.z);
-    const { lin, ang } = mechWreckThrow(parts, pose, v, dx, dz, seedOf(`${this.uid}:${this.deaths++}`), g);
-    const dead = deaths.heavy(parts, joints, lin, ang, { damping: v.mechWreckDamping, moveFor: v.mechMoveFor, hold: v, thud: mechWreckThuds(parts) });
-    const objs: { obj: THREE.Object3D; part: number }[] = [{ obj: rig.pelvis, part: BODY }, { obj: rig.hull, part: BODY }];
-    rig.legs.forEach((L, i) => objs.push({ obj: L.thigh, part: legPart(i, 0) }, { obj: L.shin, part: legPart(i, 1) }, { obj: L.cannon, part: legPart(i, 2) }, { obj: L.foot, part: legPart(i, 2) }));
-    this.wreck = { dead, rig: new MechWreckRig(objs, dead) };
-    // For checking from the console (and the headless smoke run): the newest wreck's state.
-    (globalThis as { __wreck?: () => unknown }).__wreck = () => ({ live: dead.live, age: +dead.age.toFixed(2), pelvis: rig.pelvis.position.toArray().map((x) => +x.toFixed(2)), body: dead.pos[0].toArray().map((x) => +x.toFixed(2)) });
-  }
-
-  /** Pose the model on the wreck; each slam into the sand kicks up dust, thuds and calls onThud (camera shake). */
-  private stepWreck() {
-    const w = this.wreck;
-    if (!w) return;
-    w.rig.apply();
-    const hits = w.dead.thud?.impacts;
-    if (!hits?.length) return;
-    for (const h of hits.splice(0)) {
-      const k = Math.min(2, h.speed / 5) * this.v.mechThud;
-      if (k <= 0.05) continue;
-      this.a.set(h.x, this.sim.ground.height(h.x, h.z), h.z);
-      this.bf.dust.stomp(this.a.x, this.a.y, this.a.z, 1.5 * k);
-      this.bf.sfx.play("brap", this.a, Math.min(1.8, 0.6 + k * 0.7), 0.3, false);
-      this.bf.onThud?.(this.a, k);
-    }
-  }
-
-  /** The wreck out of the death physics (rebuilt, respawned). */
-  private clearWreck() {
-    if (!this.wreck) return;
-    this.bf.deaths?.remove(this.wreck.dead);
-    this.wreck = null;
+    this.fx?.destroyed();
   }
 }
 

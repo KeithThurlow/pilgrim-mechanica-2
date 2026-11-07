@@ -104,6 +104,13 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   `setPace`, `scaleHp`, `setHeading`) for every outside write in the convoy lab's camps swarm; `tools/infantryworker-check.ts`.
   Not moved: fortress garrisons (`Fortresses.sw` has a `fence`: the walls' geometry would have to go across as data,
   and fortresses.ts still writes its arrays directly: px/pz/hp/hold/frozen/hurry), the weapons lab's runners.
+- Stage 7c part 1 (Claude 2026-11-07): `src/game/mechFx.ts` (`MechFx` interface, `MechFxView`); `MechUnit.fx`. Every
+  cosmetic call MechUnit made is now a MechFx call at the same moment, so the order of everything is unchanged
+  (`tools/mechfx-probe.ts` hashes the same on main and after). `tools/mechfx-check.ts`: fx on vs off, same game.
+  Left for part 2 (wants Keith's mech play-test): the rounds leave from `body.muzzle/barrel/shoulderLine` of the posed
+  model, so a host mech still needs its model posed; part 2 works them out from the sim plus the rig's joint markers
+  (numbers will shift a little), then MechUnit can run without three's scene and step in the worker (7d). MechUnit
+  still builds its MechFxView itself (imports it); 7d hands a recorder instead.
 
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
@@ -113,7 +120,7 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
   snapshot becomes `packWorld` columns of the swarm's block (stage 7).
 - Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (done), 7b (done, bar fortresses)
-  (infantry in the worker), 7c (MechUnit split; wants Keith to play-test), 7d (the rules in the worker), 7e (retire the
+  (infantry in the worker), 7c (part 1 done: looks out; part 2, muzzles without the model, wants Keith to play-test), 7d (the rules in the worker), 7e (retire the
   remotes). Then stage 8, co-op transport.
 
 ## Facts
