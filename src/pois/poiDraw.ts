@@ -86,6 +86,8 @@ export class PoiDraw {
       this.meshes.push(...body.meshes());
     }
     this.group.updateMatrixWorld(true);
+    // Nothing on a site moves once placed: its matrices are worked out once, not every frame.
+    this.group.traverse((o) => { o.matrixAutoUpdate = false; });
   }
 
   /** A flat decal following the ground (a grid of 9 x 9 points over its ellipse). */

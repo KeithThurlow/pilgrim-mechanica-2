@@ -54,6 +54,10 @@ const out = await p.evaluate(async (DRILL) => {
     for (const c of o.children) walk(c, hidden);
   };
   walk(app.scene, false);
+  // The scene graph's matrix walk alone (what every render starts with).
+  let mw = performance.now();
+  for (let i = 0; i < 30; i++) app.scene.updateMatrixWorld();
+  mw = (performance.now() - mw) / 30;
   // Render alone on a held moment.
   app.hold = true;
   await new Promise((res) => setTimeout(res, 300));
@@ -62,11 +66,12 @@ const out = await p.evaluate(async (DRILL) => {
   app.hold = false;
   ts.sort((a, b) => a - b);
   return { cam: camN / frames, shadow: shN / frames, instanced: inst / frames, camBy: per(cam).slice(0, 200), shBy: per(sh).slice(0, 12),
-    objs, auto, meshes, tree: [...tree].sort((a, b) => b[1].n - a[1].n).slice(0, 25), materials: mats.size, renderMedian: ts[ts.length >> 1], calls: app.last.calls, backend: app.backend };
+    objs, auto, meshes, tree: [...tree].sort((a, b) => b[1].n - a[1].n).slice(0, 25), materials: mats.size, renderMedian: ts[ts.length >> 1], mw, calls: app.last.calls, backend: app.backend };
 }, process.env.DRILL || "");
 console.log(`${url}  backend ${out.backend}`);
 console.log(`objects a frame: camera ${out.cam}, shadow ${out.shadow} (instanced/batched ${out.instanced}); draw calls ${out.calls}`);
 console.log(`scene: ${out.objs} objects, ${out.auto} with matrixAutoUpdate, ${out.meshes} meshes, ${out.materials} materials`);
+console.log(`scene matrix walk: ${out.mw.toFixed(3)} ms`);
 console.log(`render call median (held frame, software GPU): ${out.renderMedian.toFixed(2)} ms`);
 if (process.env.TREE) console.log("scene objects by owner (all, hidden, auto-updating):\n" + out.tree.map(([k, t]) => `  ${String(t.n).padStart(6)} ${String(t.hidden).padStart(6)} ${String(t.auto).padStart(6)}  ${k}`).join("\n"));
 console.log("camera pass by owner:\n" + out.camBy.map(([k, v]) => `  ${String(v).padStart(6)}  ${k}`).join("\n"));

@@ -112,6 +112,7 @@ export class ToonLook {
     line.castShadow = false;
     line.receiveShadow = false;
     line.userData.ink = true;
+    line.matrixAutoUpdate = false; // rides its mesh, never moves on it
     mesh.add(line);
   }
 }

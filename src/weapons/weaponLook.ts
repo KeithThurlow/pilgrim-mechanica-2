@@ -130,6 +130,7 @@ export class WeaponLook {
       line.name = mesh.name + "_ink";
       line.userData.ink = true;
       line.raycast = () => {};
+      line.matrixAutoUpdate = false; // rides its mesh, never moves on it
       mesh.add(line);
     }
     this.materials.push({ mat, paint, meshes });
