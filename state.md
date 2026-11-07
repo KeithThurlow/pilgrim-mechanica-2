@@ -318,6 +318,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · Convoy cars well off the screen skip their crawler tracks and knelt mechs (perf; Claude)
+- Cosmetic only: a car more than 30 m (`CULL_MARGIN`, for shadows) off the screen doesn't pose its track plates or the Ramparts knelt on its deck; both are posed from the car alone, so they're right the frame it comes back. The car's slider check is an array compare instead of a joined string every frame (`src/convoy/platformBody.ts`, `deckMechs.ts`, `labs/convoy/main.ts`; `?nocull` poses all every frame).
+- Headless convoy lab `?siege&manual&norender`: "convoy bodies" 1.28 → 0.38 ms a frame. Checked: convoy check, typecheck, full `npm test`. Drawing time not measured.
+
 ### 2026-11-07 · Walker: the cramped leg's thigh search reads the ground only where it can matter (Keith asked to act on `docs/sim-scope.md`; Claude)
 - Headless convoy lab (`?crest&manual&norender`, cloud): ground lookups were ~40% of the tick and the walker's leg-room search (`legRoom` in the cramped-thigh and turn-limit searches, two height reads per candidate angle, ~90 candidates) was the biggest caller at 18.7% of the tick, mostly the six guardian mechs. Now each candidate is scored with the knee and hock taken as clear of the ground (a floor on its cost), and the ground is read only for the ones that could still win, cheapest first (`src/mech/walker.ts`: `underOf`, `cramp`). Same pick, same poses bit for bit (`tools/walker-parity-probe.ts`: joint hashes before and after equal on 8 runs; free walking 20-30% fewer ground reads). In the lab: 18.7% → 4.9% of the tick.
 - Convoy lab cost marks: the old "turrets" stage split into "turret threats", "turrets", "escort guns" and "guardians" (`labs/convoy/main.ts`). Turrets, escort guns and the threat list together cost ~0.1-0.2 ms; the guardians ~2.5-4 ms on the cloud box.

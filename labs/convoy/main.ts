@@ -928,6 +928,8 @@ function holdOnBucket() {
   }
 }
 
+/** ?nocull: the convoy's cosmetic parts posed every frame even off the screen (perf comparison). */
+const noCull = params.has("nocull");
 const fixedDt = params.has("dt") ? Number(params.get("dt")) : 0;
 /** ?holdf=seconds: F held from the start (headless shots of getting out). */
 const holdF = Number(params.get("holdf") ?? 0);
@@ -1106,8 +1108,10 @@ app.onTick((rawDt) => {
   // Killed where no expedition ends it (aboard): back in the cockpit after a moment.
   if (!foot.sim.alive && foot.deadFor > 3 && loop.exp.state !== "lost") homeAboard();
   costs.mark("pilot");
-  for (const b of bodies) b.update();
-  deckMechs.update();
+  // (Cars well off the screen skip their tracks and their knelt mechs; ?nocull: everything every frame.)
+  const view = noCull ? undefined : bf.view;
+  for (const b of bodies) b.update(view);
+  deckMechs.update(view);
   for (const c of craneBodies) c.update();
   spans = bridgeSpans(convoy.platforms, V, spans);
   bridges.update(spans, dt);
