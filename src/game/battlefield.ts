@@ -193,7 +193,7 @@ export class Battlefield {
   readonly rules: CombatRules;
   get targets(): Hittable[] { return this.rules.targets; }
   /** Every round in flight this frame, as data (src/game/shots.ts); resolved in update. */
-  readonly shots: Shots;
+  get shots(): Shots { return this.rules.shots; }
   /** Every live thing that can be hit, seen or salvaged, on one grid (src/game/register.ts): owners add themselves;
    *  the lab rebuilds it once a tick, before the soft lock. */
   get register(): Register { return this.rules.register; }
@@ -221,12 +221,12 @@ export class Battlefield {
   private hit = new THREE.Vector3();
   private back = new THREE.Vector3();
   /** Targets set burning by ignited rounds (the incendiary feed, Keith 2026-10-30): damage over time, flames drawn at them. */
-  readonly burns: Burns;
+  get burns(): Burns { return this.rules.burns; }
   private flameT = 0;
   /** Burning pools on the ground (Keith 2026-11-05: napalm, the flamers' splashes; src/game/firePools.ts). */
-  readonly pools: FirePools;
+  get pools(): FirePools { return this.rules.pools; }
   /** Chilled and frozen targets (Keith 2026-11-05: the freeze ray; src/game/chill.ts). */
-  readonly chills: Chills;
+  get chills(): Chills { return this.rules.chills; }
   private tmpFreeze = new THREE.Vector3();
   /** Fire's look: the flamers' stream, flames on burning things and pools, embers (cosmetic, src/fx/flameFx.ts). */
   readonly flames: FlameFx;
@@ -249,19 +249,6 @@ export class Battlefield {
     this.marks = new GroundMarks(field, v as BattlefieldValues & DentValues);
     this.gunFx = new MinigunFx(field, v);
     this.dust = new DustSim(v, field);
-    this.burns = new Burns(v as never);
-    this.chills = new Chills(v as never);
-    this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
-    // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
-    // burst of frost over the body, so the moment reads.
-    this.chills.onFreeze = (c) => {
-      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(c.x, c.y, c.z), 1, 0.9 + Math.random() * 0.25);
-      for (let k = 0; k < 14; k++) this.flames.mist(c.x + (Math.random() - 0.5) * 2, c.y + (Math.random() - 0.3) * 1.5, c.z + (Math.random() - 0.5) * 2, 0.9);
-      this.flames.frost(c.x, c.y, c.z, 4, 1);
-    };
-    this.chills.quench = (t, k) => this.burns.quench(t, k);
-    this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
-    this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
     this.flames = new FlameFx(field);
     // The flamer's line splashes on what it runs into (Keith 2026-11-06): anything hittable of another team, as a
     // standing column round its centre, from the sand to as far above the centre as the centre is up (register body).
@@ -280,7 +267,6 @@ export class Battlefield {
     // window.__fire() in the console: what burns now and the fire damage so far.
     (globalThis as { __fire?: () => object }).__fire = () => ({ burning: this.burns.list.filter((b) => b.left > 0).length, hot: this.burns.list.filter((b) => b.heat > 0.05).length,
       maxHeat: Math.max(0, ...this.burns.list.map((b) => b.heat)), chilled: this.chills.list.length, frozen: this.chills.list.filter((c) => c.frozen > 0).length, freezes: this.chills.freezes, shocks: this.chills.shocks, coldDamage: Math.round(this.chills.total), pools: this.pools.list.length, flames: this.flames.n, burnDamage: Math.round(this.burns.total), cookDamage: Math.round(this.burns.heatTotal), poolDamage: Math.round(this.pools.total) });
-    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never, ignite: (t, k, time, dps, x, y, z, cold, dx, dz) => cold ? this.chills.hit(t, k, time, dps, x, y, z, dx, dz) : this.burns.ignite(t, k, time, dps, x, y, z, dx, dz) });
     this.fx = this.gunFx.budget;
     this.fx.pool = DUST_MAX;
     this.dust.budget = this.fx;
@@ -352,11 +338,10 @@ export class Battlefield {
         team, power: damage * (1 + Math.max(0, o.pierce ?? 0)) });
   }
 
-  /** Burning targets: damage over time, and a few embers and a thread of dark smoke at each (cosmetic, local). */
+  /** Burning targets' look (their damage is the rules'): flames, embers, glow and a thread of dark smoke at each. */
   private stepBurns(dt: number) {
     const bn = this.burns;
     if (!bn.list.length) return;
-    bn.step(dt);
     const k = (this.v as { burnFlames?: number }).burnFlames ?? 1;
     // Flames licking off what burns (Keith 2026-11-05), hot metal throwing the odd ember as it cools.
     const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
@@ -380,21 +365,19 @@ export class Battlefield {
     }
   }
 
-  /** Chilled targets: slow, cold damage, freezing (host); frost glints over them (cosmetic). */
+  /** Chilled targets' look (slowing, cold damage and freezing are the rules'): frost glints and mist over them. */
   private stepChills(dt: number) {
     const cs = this.chills;
     if (!cs.list.length) return;
-    cs.step(dt);
     const gk = (this.v as { heatGlow?: number }).heatGlow ?? 1;
     if (gk > 0) for (const c of cs.list) this.flames.frost(c.x, c.y, c.z, 2.2 * gk, c.frozen > 0 ? 1 : c.chill * 0.7);
     for (const c of cs.list) if (Math.random() < dt * 6 * (c.frozen > 0 ? 1 : c.chill)) this.flames.mist(c.x + (Math.random() - 0.5) * 1.2, c.y + Math.random() * 0.6, c.z + (Math.random() - 0.5) * 1.2, 0.5);
   }
 
-  /** Burning pools: damage and ignition (host), flames, embers, smoke and red-hot sand over them (cosmetic). */
+  /** Burning pools' look (damage and ignition are the rules'): flames, embers, smoke, light and red-hot sand. */
   private stepPools(dt: number) {
     const ps = this.pools;
     if (!ps.list.length) return;
-    ps.step(dt);
     const fk = (this.v as { fireFlames?: number }).fireFlames ?? 1;
     for (const p of ps.list) {
       const fade = Math.min(1, p.left / Math.min(1.5, p.life * 0.4));
@@ -423,9 +406,8 @@ export class Battlefield {
     }
   }
 
-  /** Resolve this frame's shots (damage as they resolve) and hand their draws to the gun effects and the sound. */
-  private resolveShots(dt: number) {
-    this.shots.step(dt);
+  /** Play the shots the rules resolved this tick: their draws to the gun effects, the lights and the sound. */
+  private resolveShots() {
     this.pops = 0;
     this.popsDue = 0;
     for (const dr of this.shots.draws) if (dr.look.burst) this.popsDue++;
@@ -590,6 +572,14 @@ export class Battlefield {
   }
 
   private play(e: CombatEvent) {
+    if (e.type === "freeze") {
+      // Freezing solid (Keith 2026-11-05: "I can't really tell if it's actually freezing things"): a glassy crack and a
+      // burst of frost over the body, so the moment reads.
+      this.sfx.playSound("freezeCrack", this.tmpFreeze.set(e.x, e.y, e.z), 1, 0.9 + Math.random() * 0.25);
+      for (let k = 0; k < 14; k++) this.flames.mist(e.x + (Math.random() - 0.5) * 2, e.y + (Math.random() - 0.3) * 1.5, e.z + (Math.random() - 0.5) * 2, 0.9);
+      this.flames.frost(e.x, e.y, e.z, 4, 1);
+      return;
+    }
     if (e.type === "lob") {
       this.sfx.play("brap", this.tmpEv.set(e.x, e.y, e.z), 1.3, 0.45, false);
       this.look?.lights.launch(e.x, e.y, e.z, Math.min(1.5, Math.max(0.5, e.radius / 3)), famOfTeam(e.team));
@@ -680,11 +670,11 @@ export class Battlefield {
     // The rules' tick (solids, shells bursting, craters dug), then their look.
     this.rules.step(dt);
     this.playEvents();
-    c?.mark("dents");
+    c?.mark("combat rules");
     for (const s of this.shells.list) if (s.live && Math.random() < dt * 30) this.dust.smoke(s.pos.x, s.pos.y, s.pos.z, 0, 0.3, 0, 0.25, 1.2, 0.5, 0.8);
     this.shellsDraw.update();
     this.lightShells(look);
-    this.resolveShots(dt);
+    this.resolveShots();
     this.stepBurns(dt);
     this.stepPools(dt);
     this.stepChills(dt);

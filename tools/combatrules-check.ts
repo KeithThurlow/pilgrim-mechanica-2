@@ -3,7 +3,8 @@
 //    src/look and src/ui, and is no *Draw or *Body file, so a host worker or a server can run it alone.
 // 2. Blasts: damage reaches targets of other teams in reach and spares its own team and those out of reach; each blast
 //    writes one plain-data event (low or an air burst; JSON round trip equal); air bursts queue no crater.
-// 3. Shells: a lobbed shell writes a lob event, then bursts where it lands (a blast event, damage) after its flight.
+// 3. Shells: a lobbed shell writes a lob event, then bursts where it lands (a blast event, damage) after its flight;
+//    shots resolve in the rules' tick, leaving their draws for the view; a freeze is a plain event.
 // 4. Craters dig by count per tick (dentPerTick), never by time, and the same blasts give the same ground twice.
 // Run: npm test (or npx tsx tools/combatrules-check.ts).
 import { readFileSync, existsSync } from "node:fs";
@@ -105,6 +106,19 @@ function rules(): CombatRules {
   if (burst < 1.3 || burst > 1.8) fail(`shell burst after ${burst.toFixed(2)} s (flight 1.5)`);
   if (foe.taken <= 0) fail("the shell's burst did no damage");
   console.log(`  shell: burst after ${burst.toFixed(2)} s, foe took ${foe.taken.toFixed(1)}`);
+}
+
+// 3b. Shots resolve in the rules' tick (their draws left for the view); a freeze is a plain event.
+{
+  const r = rules();
+  const y = field.height(0, 0) + 3;
+  r.shots.fire({ team: 0, origin: new THREE.Vector3(0, y, 0), dir: new THREE.Vector3(0, -0.3, 1).normalize(), range: 60, damage: 10 }, { slot: 0 });
+  r.step(1 / 60);
+  if (r.shots.draws.length !== 1 || r.shots.draws[0].surface !== "sand") fail(`a round into the sand: ${r.shots.draws.length} draws (${r.shots.draws[0]?.surface})`);
+  r.chills.onFreeze?.({ x: 1, y: 2, z: 3 } as never);
+  const fz = r.events.find((e) => e.type === "freeze");
+  if (!fz || JSON.stringify(fz) !== '{"type":"freeze","x":1,"y":2,"z":3}') fail(`freeze event ${JSON.stringify(fz)}`);
+  console.log(`  shots: ${r.shots.draws.length} draw after the rules' tick; freeze event ${fz ? "written" : "missing"}`);
 }
 
 // 4. Craters by count, the same twice.

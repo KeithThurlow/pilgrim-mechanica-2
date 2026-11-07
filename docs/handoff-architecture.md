@@ -15,14 +15,21 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   Battlefield delegates and plays events (`playEvents`, `playBlast`). Craters by count per tick (`dentPerTick`).
   `tools/combatrules-check.ts` also guards the rules' run-time imports (no fx/audio/look/ui, no *Draw/*Body).
 
+- Stage 3b: the rules own and step shots, burns, pools, chills (order kept); `freeze` event; Battlefield plays draws and
+  lists. `src/core/rng.ts`; mechUnit and arsenal spread, war band spawns/runs/rings/turret clocks/spread seeded.
+
 ## Next, in order
-- Stage 3b: move into the rules the rest of the damage path: `resolveShots` (Shots already writes events and draws:
-  the rules keep events and damage, Battlefield plays the draws), `stepBurns`/`stepPools`/`stepChills` (damage and
-  pace in the rules, flames, mist and freeze cracks as events), `sheetHits`/`resolveSheet`. Then the mechs' spread
-  (`mechUnit.ts`, Math.random before a ShotCmd) from a seeded stream. Check: rules-check extended; shots-check,
-  fire-check, chill-check unchanged.
-- Stage 3, damage as data (split `Battlefield`), then 4 crowds, 5 heavies, 6 60 Hz default + interpolation, 7 host world
-  in the worker, 8 co-op transport.
+- Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
+  unchanged at every step):
+  - 4.1 A host `World` as a rules resource (`rules.world`) and a sync system: each live robot slot gets an entity (by
+    uid, kept while it lives), Transform, PrevTransform, Health, Team, Collider written from the swarm's arrays each
+    tick. Nothing reads them yet. Check: the components equal the swarm's arrays every tick of a camp fight.
+  - 4.2 Readers move to the components: the register's robot owner, targeting, health bars, then `robotsDraw`
+    (interpolating with `drawnAt` once stage 6 lands).
+  - 4.3 The swarm writes the components itself (its x/z/heading/hp arrays become views of the columns, or the swarm
+    keeps slot-indexed private state only); the sync goes. The worker's robot snapshot becomes `packWorld` columns.
+  - Then infantry the same way.
+- Stages 5 heavies, 6 60 Hz default + interpolation, 7 host world in the worker, 8 co-op transport (review §5).
 
 ## Facts
 - Labs' tick bodies mix sim and drawing; with `?tick=N` the whole body runs per tick (0-4 times a frame). Splitting each

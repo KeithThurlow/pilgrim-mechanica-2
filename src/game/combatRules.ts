@@ -15,6 +15,10 @@ import { Shells, type Shell } from "./shells";
 import { Register } from "./register";
 import { Solids } from "./solids";
 import { splashBlast, firstBody, blastCover } from "./splash";
+import { Shots } from "./shots";
+import { Burns } from "./burn";
+import { Chills } from "./chill";
+import { FirePools } from "./firePools";
 import type { Hittable } from "./battlefield";
 import type { DuneField } from "../world/terrain";
 import type { WreckStandIns } from "../world/wrecks";
@@ -25,7 +29,9 @@ import type { WaveKind } from "../fx/blastWaves";
 export interface BlastEvent { type: "blast"; team: number; x: number; y: number; z: number; radius: number; damage: number; kind: WaveKind; low: boolean; wet: boolean }
 /** A shell was lobbed from (x, y, z), to burst with this radius. */
 export interface LobEvent { type: "lob"; team: number; x: number; y: number; z: number; radius: number }
-export type CombatEvent = BlastEvent | LobEvent;
+/** Something froze solid at (x, y, z) (the freeze ray). */
+export interface FreezeEvent { type: "freeze"; x: number; y: number; z: number }
+export type CombatEvent = BlastEvent | LobEvent | FreezeEvent;
 
 export interface CombatRuleValues { blastGroundReach?: number; blastCover?: number; dentMerge?: number; dentPerTick?: number }
 
@@ -44,6 +50,14 @@ export class CombatRules {
   onGround: ((x0: number, z0: number, x1: number, z1: number) => void) | null = null;
   /** The shallows' water level here, or null where there is no water (set by whoever knows it). */
   waterLevel: (() => number | null) | null = null;
+  /** Every round in flight this tick, as data (src/game/shots.ts): resolved in step, damage as each hit is made;
+   *  its draws (tracer, flash, impact) are left in shots.draws for the view to play. */
+  readonly shots: Shots;
+  /** Targets set burning (damage over time, heat), chilled and frozen ones, burning pools on the ground. The view
+   *  reads their lists to draw flames, glow, frost and mist. */
+  readonly burns: Burns;
+  readonly chills: Chills;
+  readonly pools: FirePools;
   /** What happened since the last drain: blasts, lobs (plain data). The view plays them; a host would send them. */
   readonly events: CombatEvent[] = [];
   /** Craters waiting to be dug (blasts queue them; step digs up to dentPerTick a tick). */
@@ -55,13 +69,30 @@ export class CombatRules {
   private seg = new THREE.Vector3();
   private wsamp = { h: 0, crest: 0, flat: 0 } as import("../world/terrain").GroundSample;
 
-  constructor(readonly field: DuneField, readonly v: CombatRuleValues, readonly wrecks: WreckStandIns | null = null) {}
+  constructor(readonly field: DuneField, readonly v: CombatRuleValues, readonly wrecks: WreckStandIns | null = null) {
+    this.burns = new Burns(v as never);
+    this.chills = new Chills(v as never);
+    this.chills.heatAt = (t, k) => this.burns.heatAtKey(t, k);
+    this.chills.quench = (t, k) => this.burns.quench(t, k);
+    this.chills.onFreeze = (c) => this.events.push({ type: "freeze", x: c.x, y: c.y, z: c.z });
+    this.burns.onIgnite = (t, k) => this.chills.thaw(t, k);
+    this.pools = new FirePools(field, this.targets, this.burns, v as never, this.register);
+    this.shots = new Shots({ field, targets: this.targets, wrecks, register: this.register, v: v as never,
+      ignite: (t, k, time, dps, x, y, z, cold, dx, dz) => cold ? this.chills.hit(t, k, time, dps, x, y, z, dx, dz) : this.burns.ignite(t, k, time, dps, x, y, z, dx, dz) });
+  }
 
-  /** One tick of the rules: solids, shells in flight (bursting where they land or hit a body), craters dug. */
+  /**
+   * One tick of the rules, in this order: solids; shells in flight (bursting where they land or hit a body); craters
+   * dug; shots resolved; burning, burning pools and chill stepped (damage over time, ignition, slowing, freezing).
+   */
   step(dt: number) {
     this.solids.tick(dt);
     this.shells.update(dt, (s) => this.burst(s), this.shellHit);
     this.digQueued();
+    this.shots.step(dt);
+    if (this.burns.list.length) this.burns.step(dt);
+    if (this.pools.list.length) this.pools.step(dt);
+    if (this.chills.list.length) this.chills.step(dt);
   }
 
   /** Is (x, z) under the shallows' water (deep enough to splash)? */

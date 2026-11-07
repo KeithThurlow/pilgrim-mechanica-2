@@ -4,6 +4,7 @@
 // bandits on foot (partyBus.ts), that swarm the player's mech, circling it at range and breaking in for gun runs a few
 // at a time, and bandit mechs (red Ramparts) that hold off and trade fire. Hurt vehicles flee; wrecks burn out and are
 // cleared. When a band is gone, the next one rolls in from the dunes.
+import { Rng, seedFrom } from "../core/rng";
 import { steerOut, type KeepOut } from "../game/keepOut";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
@@ -214,7 +215,7 @@ export class Raider implements Hittable, Solid {
   armour: number;
   mode: Mode = "circle";
   /** +1 circles one way, -1 the other. */
-  dirSign = Math.random() < 0.5 ? 1 : -1;
+  dirSign: number;
   radius: number;
   readonly shape: KindShape;
   readonly turrets: Turret[] = [];
@@ -241,7 +242,9 @@ export class Raider implements Hittable, Solid {
   /** The party bus's crew (partyBus.ts); null on every other kind. */
   crew: BusCrew | null = null;
 
-  constructor(readonly kind: CarKind, ground: CarGround, slot: () => number, w: WarbandValues) {
+  /** rnd: the band's seeded stream (rule 12), for its circling side, ring and turret clocks. */
+  constructor(readonly kind: CarKind, ground: CarGround, slot: () => number, w: WarbandValues, rnd: () => number = new Rng(seedFrom(kind)).fn) {
+    this.dirSign = rnd() < 0.5 ? 1 : -1;
     const cv: CarValues = { ...CAR_DEFAULTS, ...CAR_KINDS[kind] };
     this.sim = new CarSim(cv, ground);
     this.body = new CarBody(kind);
@@ -252,8 +255,8 @@ export class Raider implements Hittable, Solid {
     const arm: Record<CarKind, number> = { technical: w.techArmour, gunTruck: w.truckArmour, sixWheeler: w.sixArmour, warRig: w.rigArmour,
       tank: w.turretArmour + 4, turretTruck: w.turretArmour, partyBus: w.busArmour };
     this.armour = arm[kind];
-    this.radius = kind === "partyBus" ? w.busRing + (Math.random() - 0.5) * w.circleSpread : w.circleRadius + (Math.random() - 0.5) * w.circleSpread + (this.shape.clear - 9);
-    for (let i = 0; i < this.body.turretCount; i++) this.turrets.push({ yaw: 0, pitch: 0, fireClock: Math.random(), hasLos: true, losClock: Math.random() * 0.25, slot: slot() });
+    this.radius = kind === "partyBus" ? w.busRing + (rnd() - 0.5) * w.circleSpread : w.circleRadius + (rnd() - 0.5) * w.circleSpread + (this.shape.clear - 9);
+    for (let i = 0; i < this.body.turretCount; i++) this.turrets.push({ yaw: 0, pitch: 0, fireClock: rnd(), hasLos: true, losClock: rnd() * 0.25, slot: slot() });
     this.wheelAcc = new Array(this.sim.wheels.length).fill(0);
   }
 
@@ -369,11 +372,14 @@ export class Warband {
   }
   /** How the vehicles die: the cook-off, the blast's debris, the burning wreck (src/combat/raiderDeath.ts). */
   readonly dying: RaiderDeaths;
+  /** The band's seeded stream (rule 12): where bands come in, who makes a run, the guns' spread. Host state. Its
+   *  wrecks' tumble and the effects stay on Math.random (cosmetic). */
+  readonly rng = new Rng(seedFrom("warband"));
 
   /** Bring in a band from a random direction, spawnDistance out from the target. */
   spawn(target: THREE.Vector3) {
     const v = this.v;
-    const a0 = Math.random() * Math.PI * 2;
+    const a0 = this.rng.next() * Math.PI * 2;
     const n = (k: number, kind: CarKind): CarKind[] => Array(Math.max(0, Math.round(k))).fill(kind);
     // The War Rig leads from the middle; the party bus and the turret truck trail.
     const kinds: CarKind[] = [...n(v.bandTechnicals / 2, "technical"), ...n(v.bandTrucks, "gunTruck"), ...n(v.bandWarRigs, "warRig"),
@@ -381,7 +387,7 @@ export class Warband {
       ...n(v.bandTurretTrucks, "turretTruck")];
     kinds.forEach((kind, i) => {
       const a = a0 + (i - kinds.length / 2) * 0.12;
-      const d = v.spawnDistance + Math.random() * 15 + (kind === "turretTruck" || kind === "partyBus" ? 20 : 0);
+      const d = v.spawnDistance + this.rng.next() * 15 + (kind === "turretTruck" || kind === "partyBus" ? 20 : 0);
       const r = this.make(kind, `${this.name}:w${this.waves + 1}:${i}`);
       const x = target.x + Math.sin(a) * d, z = target.z + Math.cos(a) * d;
       r.sim.reset(x, z, a + Math.PI);
@@ -440,7 +446,7 @@ export class Warband {
 
   /** A raider with its stable id (and a crew when it's a party bus). */
   private make(kind: CarKind, id: string): Raider {
-    const r = new Raider(kind, this.bf.field, () => this.slot(), this.v);
+    const r = new Raider(kind, this.bf.field, () => this.slot(), this.v, this.rng.fn);
     r.id = id;
     if (kind === "partyBus") r.crew = new BusCrew(id, this.v);
     return r;
@@ -486,7 +492,7 @@ export class Warband {
     if (this.runClock >= v.runEvery && running < v.attackers) {
       const pick = this.raiders.filter((r) => r.alive && r.mode === "circle" && r.kind !== "partyBus");
       if (pick.length) {
-        const r = pick[Math.floor(Math.random() * pick.length)];
+        const r = pick[Math.floor(this.rng.next() * pick.length)];
         r.mode = "run"; r.runTime = 0; r.runFrom.copy(r.sim.pos);
         this.runClock = 0;
       }
@@ -793,7 +799,7 @@ export class Warband {
         r.body.muzzle(this.muzzle, i);
         r.body.barrel(this.dir, i);
         const spread = g.spread * D2R;
-        const tilt = this.tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(Math.tan(spread) * Math.random());
+        const tilt = this.tmp.set(this.rng.next() - 0.5, this.rng.next() - 0.5, this.rng.next() - 0.5).normalize().multiplyScalar(Math.tan(spread) * this.rng.next());
         const d = this.dir.clone().add(tilt.addScaledVector(this.dir, -tilt.dot(this.dir))).normalize();
         if (shellGun(r.kind)) {
           // A slow lobbed shell at where the mech will be (its walk, not a dash), marked on the sand.
