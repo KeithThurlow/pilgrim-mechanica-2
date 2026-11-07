@@ -18,6 +18,9 @@ export interface App {
   /** Called once per sim tick before rendering (src/core/clock.ts): frame-locked by default (once a frame, dt the frame's
    *  time clamped so a stalled tab never explodes a sim); with ?tick=N, N times a second at dt = 1/N, 0 to 4 per frame. */
   onTick(fn: Tick): void;
+  /** Called once per drawn frame after the frame's ticks (0 or more), before rendering: cameras, effects, drawing.
+   *  dt: the frame's real time (clamped to 1/20 s); alpha: how far between the last tick and the next (src/core/clock.ts). */
+  onFrame(fn: (dt: number, alpha: number) => void): void;
   /** The game clock: fixed or frame-locked, ticks run, alpha between ticks. */
   clock: Clock;
   /** URL flags shared by every lab: ?webgl, ?auto, ?shot, ?seed=N, ?norender */
@@ -58,6 +61,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   resize();
 
   const ticks: Tick[] = [];
+  const frames: ((dt: number, alpha: number) => void)[] = [];
   const captures: ((url: string) => void)[] = [];
   let prev = performance.now(), time = 0;
   const last = { frame: 0, tick: 0, render: 0, calls: 0, tris: 0 };
@@ -77,6 +81,8 @@ export async function createApp(container: HTMLElement): Promise<App> {
     const t0 = performance.now();
     if (!app.hold) {
       clock.run(raw, (dt) => { time += dt; for (const t of ticks) t(dt, time); });
+      const fdt = Math.min(raw, 1 / 20);
+      for (const f of frames) f(fdt, clock.alpha);
     }
     const t1 = performance.now();
     // ?norender: run the ticks without drawing (headless CPU measurements, e.g. the stress lab on a software GPU).
@@ -102,6 +108,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const app: App = {
     renderer, scene, camera, hud, backend, params, last, hold: false, clock,
     onTick: (fn) => ticks.push(fn),
+    onFrame: (fn) => frames.push(fn),
     capture: () => new Promise<string>((res) => captures.push(res)),
   };
   // For agents' probes in a headless browser (scene contents, triangle counts): window.__app.

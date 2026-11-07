@@ -1128,18 +1128,8 @@ app.onTick((rawDt) => {
   reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
   healthBars.update(rawDt);
 
-  follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
-  // Out on the sand the camera leads the mech at speed (the sprint).
-  iso.update(follow, rawDt, driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
-  shaker.apply(camera, rawDt, V.shakeDecay);
-  toon.update(camera, canvas.clientHeight);
-  costs.mark("camera");
-  streamer.update(follow.x, follow.z);
-  costs.mark("ground");
-  const camDist = camera.position.distanceTo(follow);
-  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
-  costs.mark("light");
-  bf.update(dt, camera, look);
+  // The battlefield's sim tick here; its effects and drawing once per drawn frame (onFrame below; architecture stage 6a).
+  bf.tick(dt, look);
   arsenalDraw.update();
   app.hud.set("weapons", () => arsenal.controls().join(" · "));
   // The expedition: POIs and salvage, swarm camps (the robot sim), fuel, the way home, the radar and its HUD.
@@ -1186,7 +1176,6 @@ app.onTick((rawDt) => {
   airliftHud.update(airlift, Math.hypot(sim.pos.x - convoy.bays[0].x, sim.pos.z - convoy.bays[0].z), loop.exp.bank.scrap);
   airliftDraw.update(dt, airlift, convoy.bays[0]);
   app.hud.set("airlift", () => `airlift: ${airlift.state}${airlift.onPad ? " (on the helipad)" : ""} · ${(airlift.km * 1000).toFixed(0)} m flown, ${airlift.paid} scrap this trip · quadcopter at ${airliftDraw.copterAt.x.toFixed(0)}, ${airliftDraw.copterAt.y.toFixed(0)}, ${airliftDraw.copterAt.z.toFixed(0)}`);
-  costs.end(app.hud);
 
   const p = convoy.bay;
   app.hud.set("convoy", () => `convoy ${p.speed.toFixed(1)} m/s heading ${((p.heading * 180) / Math.PI).toFixed(0)}° · ${convoy.platforms.length} cars over ${convoy.length.toFixed(0)} m · ${spans.length} footbridges · ${escorts.list.length} escorts · pipe runs ${bodies.reduce((a, b) => a + b.pipeRuns, 0)} · ruts ${trail.ruts} · road ${route.count} points · ground chunks pending ${streamer.stats.pending}`);
@@ -1216,4 +1205,26 @@ app.onTick((rawDt) => {
   app.hud.set("dash", () => `dash ${dashDots} (Space)${player.bound.on ? ` · sprint ${sim.speed.toFixed(1)} m/s` : " · hold Space to sprint"} · hull ${Math.max(0, Math.round(player.health))}/${player.maxHealth} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo}${lock ? ` · lock on ${lock.how === "cursor" ? "cursor" : lock.how === "held" ? "target (Tab)" : "line of fire"}` : ""} · hits body ${loop.swarms.target.partHits[0]}, legs ${loop.swarms.target.partHits[1]}, feet ${loop.swarms.target.partHits[2]}`);
   const crane = carry.crane;
   app.hud.set("crane", () => `crane: ${crane.platform.spec.name} · ${carry.phase && carry.state !== "parked" ? carry.phase : "stowed"} · slew ${((crane.slew * 180) / Math.PI).toFixed(0)}° · reach ${crane.radius.toFixed(1)} m · rope ${crane.hoist.toFixed(1)} m · swing ${crane.swingOffset.toFixed(2)} m · picked up ${carry.pickups}, launched ${carry.deploys}, parked ${carry.parks}${bf.sfx.running ? "" : " · click for sound"}`);
+});
+
+// Once per drawn frame, after the frame's ticks (src/core/clock.ts; architecture stage 6a): the camera, the ground
+// streaming, the light and the battlefield's effects and drawing. Frame-locked (the default) this runs right after the
+// one tick, as before; with ?tick=N the camera and effects still move every drawn frame.
+app.onFrame((rawDt) => {
+  if (app.clock.ran === 0) costs.begin();
+  const fdt = (fixedDt || rawDt) * hitStop.now();
+  follow.lerp(focus(new THREE.Vector3()), Math.min(1, rawDt * 6));
+  // Out on the sand the camera leads the mech at speed (the sprint).
+  iso.update(follow, rawDt, foot.driving && (carry.state === "walking" || carry.state === "inRange") ? { x: sim.vel.x + sim.skid.x, z: sim.vel.z + sim.skid.z } : undefined);
+  shaker.apply(camera, rawDt, V.shakeDecay);
+  toon.update(camera, canvas.clientHeight);
+  costs.mark("camera");
+  streamer.update(follow.x, follow.z);
+  costs.mark("ground");
+  const camDist = camera.position.distanceTo(follow);
+  look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), fdt);
+  costs.mark("light");
+  bf.frame(fdt, camera, look);
+  costs.mark("effects");
+  costs.end(app.hud);
 });

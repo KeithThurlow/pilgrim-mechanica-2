@@ -501,20 +501,8 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     reloadHud.update(buttons.mouse, player.upper, driving && player.alive);
     healthBars.update(dt);
 
-    const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
-    follow.lerp(want, Math.min(1, rawDt * 6));
-    // The camera leads the mech at speed (not the pilot on foot).
-    const ps = player.sim;
-    iso.update(follow, rawDt, foot.driving ? { x: ps.vel.x + ps.skid.x, z: ps.vel.z + ps.skid.z } : undefined);
-    shaker.apply(camera, rawDt, V.shakeDecay);
-    toon.update(camera, canvas.clientHeight);
-    cst?.mark("camera");
-    streamer.update(follow.x, follow.z);
-    cst?.mark("terrain streaming");
-    const camDist = camera.position.distanceTo(follow);
-    look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), dt);
-    cst?.mark("light");
-    bf.update(dt, camera, look);
+    // The battlefield's sim tick; the camera, light and its effects once per drawn frame (onFrame; architecture 6a).
+    bf.tick(dt, look);
     flushGround();
     arsenalDraw.update();
     cst?.mark("weapons draw");
@@ -531,11 +519,33 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
-    cst?.end(app.hud);
     const fl = bf.fx.last;
     app.hud.set("fx", () => bf.fx.on ? `effects budget: ${fl.asked} asked · ${fl.full} yours at full · ${fl.thinned} thinned · ${fl.merged} hits merged · ${fl.spawned} dust puffs · pressure ${fl.pressure.toFixed(2)}` : "effects budget off");
     const sprint = player.bound.on ? ` · sprint ${player.sim.speed.toFixed(1)} m/s` : " · hold Space to sprint";
     app.hud.set("guns", () => `dash ${dashDots} (Space)${sprint} · ammo L ${player.upper.guns[0].ammo} R ${player.upper.guns[1].ammo} · dust ${bf.dust.alive}${bf.sfx.running ? "" : " · click for sound"}`);
+  });
+  // Once per drawn frame, after its ticks (src/core/clock.ts): the camera, terrain streaming, light, the battlefield's
+  // effects and drawing. Frame-locked (the default) this runs right after the one tick, as before.
+  app.onFrame((rawDt) => {
+    const cst = lab.costs;
+    if (app.clock.ran === 0) cst?.begin();
+    const fdt = (fixedDt || rawDt) * hitStop.now();
+    const want = foot.focus(new THREE.Vector3()) ?? new THREE.Vector3(player.sim.pelvis.x, player.sim.pelvis.y - 1.2, player.sim.pelvis.z);
+    follow.lerp(want, Math.min(1, rawDt * 6));
+    // The camera leads the mech at speed (not the pilot on foot).
+    const ps = player.sim;
+    iso.update(follow, rawDt, foot.driving ? { x: ps.vel.x + ps.skid.x, z: ps.vel.z + ps.skid.z } : undefined);
+    shaker.apply(camera, rawDt, V.shakeDecay);
+    toon.update(camera, canvas.clientHeight);
+    cst?.mark("camera");
+    streamer.update(follow.x, follow.z);
+    cst?.mark("terrain streaming");
+    const camDist = camera.position.distanceTo(follow);
+    look.update(follow, camDist + V.radius * V.chunkSize, Math.max(1, camDist / 40), fdt);
+    cst?.mark("light");
+    bf.frame(fdt, camera, look);
+    cst?.mark("effects");
+    cst?.end(app.hud);
   });
   return lab;
 }
