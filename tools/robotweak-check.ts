@@ -13,6 +13,8 @@ import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { makeSheet } from "../src/game/sheetFire";
 import { PEN_DEFAULTS, type SheetHit } from "../src/game/sheet";
 import { MECH_DEFAULTS } from "../src/game/mechUnit";
+import { railSheet } from "../src/weapons/rail";
+import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
 
 const field = new DuneField({ ...TERRAIN_DEFAULTS });
 const dt = 1 / 120;
@@ -145,6 +147,27 @@ const mid = (a: V3, b: V3, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (
   console.log(`sheets: a round at the reactor strikes part ${pc}, at the body part ${pb} (reactor ${PART_CORE}, body ${PART_BODY})`);
   if (pc !== PART_CORE) fail("a round (sheet) at the reactor didn't strike it");
   if (pb !== PART_BODY) fail("a round (sheet) at the body's centre didn't strike the body");
+}
+
+// The rail (Keith 2026-11-07): flat as ever at the sand or the body, but aimed up at the reactor it climbs to it.
+{
+  const sw = big(9), t = new RobotTarget(sw, 3), W = WEAPON_DEFAULTS;
+  const cy = sw.hubY[0] + sw.size[0] * BIG_CORE_Y, c = v3(); robotCentre(sw, 0, c);
+  const st = { damage: 100, charge: 1, cooldown: 1, range: W.railRange, pen: 1e4 };
+  const railAt = (x: number, y: number, z: number, dist = 30) => {
+    const ox = x + dist, oz = z + 3, muzzle = new THREE.Vector3(ox, field.height(ox, oz) + 4, oz);
+    const aim = { x, y, z }, d = new THREE.Vector3(x - ox, 0, z - oz).normalize();
+    const sh = makeSheet(field, muzzle, d, W.railRange, railSheet(W, st, aim), PEN_DEFAULTS);
+    const out: SheetHit<unknown>[] = [];
+    t.sheet(sh, out as never);
+    return { part: out.length ? out[0].key & 3 : -1, lineAtAim: sh.line!(Math.hypot(x - ox, z - oz)) - field.height(x, z) };
+  };
+  const core = railAt(sw.px[0], cy, sw.pz[0]), body = railAt(c.x, c.y, c.z), sand = railAt(c.x, field.height(c.x, c.z) + 1, c.z);
+  const coreFar = railAt(sw.px[0], cy, sw.pz[0], 60);
+  console.log(`rail: at the reactor strikes part ${core.part} (slug ${core.lineAtAim.toFixed(1)} m up there; from 60 m part ${coreFar.part}), at the body part ${body.part}, at the sand the slug flies ${sand.lineAtAim.toFixed(1)} m up`);
+  if (core.part !== PART_CORE || coreFar.part !== PART_CORE) fail("the rail aimed at the reactor didn't strike it");
+  if (body.part !== PART_BODY) fail("the rail aimed at the body didn't strike the body");
+  if (Math.abs(sand.lineAtAim - W.railSlugHeight) > 0.01) fail("the rail aimed at the sand no longer flies flat at its slug height");
 }
 
 // Blasts at its feet wear the legs down.

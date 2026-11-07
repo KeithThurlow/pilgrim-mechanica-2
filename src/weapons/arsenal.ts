@@ -27,7 +27,7 @@ import { LineAim } from "./lineAim";
 /** The shoulder weapons that paint a strip (line mortar, napalm launcher): click-and-drag aim. */
 const isLine = (w: string) => w === "linemortar" || w === "napalm";
 import { SalvoSim, planStrip, type SalvoStats } from "./salvo";
-import { RailSim, railSheet, coilGlow, type RailStats } from "./rail";
+import { RailSim, railSheet, railAimY, coilGlow, type RailStats } from "./rail";
 import type { Sheet } from "../game/sheet";
 import { MortarSim, mortarAim, mortarHeight, lobArc, lobPoint, type MortarStats } from "./mortar";
 import { CannonShells, leadPoint, type CannonStats, type Shell } from "./autocannon";
@@ -482,7 +482,7 @@ export class Arsenal implements MechWeapons {
         this.lineOnSand(sheet, end, s.aimLine);
         const e = s.aimLine[s.aimLine.length - 1];
         s.aimBeam.length = 0;
-        if (e) s.aimBeam.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z }, { x: e.x, y: Math.max(e.y + 0.3, bf.field.height(e.x, e.z) + v.railSlugHeight), z: e.z });
+        if (e) s.aimBeam.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z }, { x: e.x, y: Math.max(e.y + 0.3, this.railEndY(muzzle, aim, e)), z: e.z });
         s.meterAt = aim ? { x: aim.x, y: aim.y, z: aim.z } : null;
       } else { s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; }
       if (fired !== null) this.fireRail(s, side, muzzle, d, aim, st, fired);
@@ -1239,6 +1239,16 @@ export class Arsenal implements MechWeapons {
    * lingering ionised trail (the draw), a big muzzle blast and kick, sparks and debris flung along the path at every
    * body, a strike where it ends (a puff and dent in sand, sparks on steel), the crack and thump.
    */
+  /** The preview line's end height at e: the slug height over the sand there, or on the climb to a high aim. */
+  private railEndY(muzzle: THREE.Vector3, aim: Vec3 | null, e: Vec3): number {
+    const v = this.v, field = this.bf.field, flat = field.height(e.x, e.z) + v.railSlugHeight;
+    if (!aim) return flat;
+    const ay = railAimY(v, field, aim);
+    if (ay <= field.height(aim.x, aim.z) + v.railSlugHeight + 1e-6) return flat;
+    const af = Math.max(2, Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z)), ef = Math.hypot(e.x - muzzle.x, e.z - muzzle.z);
+    return muzzle.y + (ay - muzzle.y) * (ef / af);
+  }
+
   private fireRail(s: Side, side: 1 | -1, muzzle: THREE.Vector3, d: THREE.Vector3, aim: Vec3 | null, st: RailStats, power: number) {
     const bf = this.bf, u = this.unit, v = this.v, field = bf.field;
     const dir = d.clone();
@@ -1253,7 +1263,7 @@ export class Arsenal implements MechWeapons {
     // stopped (into the ground when a dune stopped it).
     const L = shot.result.end;
     const aimFlat = aim ? Math.max(2, Math.hypot(aim.x - muzzle.x, aim.z - muzzle.z)) : 30;
-    const aimY = aim ? field.height(aim.x, aim.z) + v.railSlugHeight : field.height(muzzle.x + dir.x * 30, muzzle.z + dir.z * 30) + v.railSlugHeight;
+    const aimY = aim ? railAimY(v, field, aim) : field.height(muzzle.x + dir.x * 30, muzzle.z + dir.z * 30) + v.railSlugHeight;
     const rise = (aimY - muzzle.y) / aimFlat;
     const yAt = (t: number) => {
       const x = muzzle.x + dir.x * t, z = muzzle.z + dir.z * t;
