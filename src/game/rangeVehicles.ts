@@ -2,6 +2,9 @@
 // autocannon, the mortar's lead and the salvo's snap have something moving to take. No AI: each drives round an
 // ellipse at a set speed, chasing a point a little ahead of it. A Hittable with health; knocked out, it burns and
 // comes back after a while. Sim and drawing in one small file (the body is src/vehicles/carBody.ts).
+import { HeavyLink, heavyState } from "../ecs/heavy";
+import { KIND } from "./register";
+import type { World } from "../ecs/world";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Hittable, SplashOpts } from "./battlefield";
@@ -123,12 +126,17 @@ export class RangeCar implements Hittable {
 
   armourOf() { return this.v.carArmour ?? 0; }
 
-  /** Health bar when hurt. */
-  bars(out: import("../ui/healthBars").BarEntry[]) {
-    if (!this.alive) return;
-    const p = this.sim.pos;
-    out.push({ key: this, x: p.x, y: p.y + 3.5, z: p.z, hp: this.health, max: this.v.carHealth, armour: this.armourOf(), width: 3, always: false });
+  /** This truck as an entity in the host world (src/ecs/heavy.ts, stage 5b), with its health bar when hurt. */
+  readonly link = new HeavyLink();
+  private state = heavyState(KIND.Vehicle, { width: 3, lift: 3.5, always: false });
+  syncWorld(world: World) {
+    const p = this.sim.pos, st = this.state;
+    st.x = p.x; st.y = p.y; st.z = p.z; st.heading = this.sim.heading;
+    st.hp = this.health; st.max = this.v.carHealth; st.team = this.team; st.armour = this.armourOf();
+    st.radius = 1.4; st.reach = this.half + 1.4; st.height = 1.7; // its hit capsule
+    this.link.sync(world, this.alive, this, st);
   }
+  leaveWorld() { this.link.leave(); }
 
   damage(amount: number, _at?: THREE.Vector3, _dir?: THREE.Vector3, pierce?: number) {
     if (!this.alive) return;

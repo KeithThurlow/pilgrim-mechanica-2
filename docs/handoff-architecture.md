@@ -87,6 +87,9 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 5a, mechs (Claude 2026-11-07): `MechUnit.link` (HeavyLink), `syncWorld`/`leaveWorld`; its health bar comes from
   the world (MechUnit.bars gone). Bars now sit where the mech was at the end of the rules' step (at most a tick
   behind the old live pelvis). `tools/heavy-check.ts`.
+- Stage 5b, vehicles (Claude 2026-11-07): war band raiders (`Raider`: cars, trucks, the party bus, War Rig) and the
+  weapons lab's range trucks (`RangeCar`) sync through HeavyLink; their bars come from the world. Escorts aren't
+  targets (nothing shoots them), so they get no entity yet. heavy-check runs a war band.
 
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
