@@ -325,6 +325,14 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Craters are dug **by count per tick** (`dentPerTick` 4, Weapons › blasts; was `dentBudget`, 6 ms of wall-clock time a frame), so every machine digs the same ground.
 - Checked: `tools/combatrules-check.ts` (the rules load no drawing or sound; blast damage by team and reach; one plain event per blast; air bursts don't dig; a shell bursts after its flight; craters per tick; same ground twice); weapons lab `?barrage` and swarm lab `?pulse` headless, no errors; `npm test`.
 
+### 2026-11-07 · Bandits off the screen aren't posed or drawn (perf; Claude)
+- As the robots' drawer (#276): a bandit more than `banditDrawCull` (4 m, Performance group; -1 all) outside the view isn't posed or put in the instance buffers; toppling still runs, the run cycle's missed time is caught up when it's seen (`src/combat/infantryDraw.ts`; wired for bandit camps, fortresses, the swarm lab's bandits and war band riders). Headless convoy siege: the infantry drawer 2.4% → 0.6% of the tick. `?nocull` compares.
+- Checked: infantry, fortress, warband checks, typecheck, full `npm test`. Drawing time not measured.
+
+### 2026-11-07 · Crushers off the screen aren't posed and make no suction streaks (perf; Claude)
+- Headless convoy lab `?siege&manual&norender`: the five crushers grazing salvage 500 m off cost 7% of the tick, almost all looks (the suction streaks: two ground reads per grain, 4.2%; the body's pose, 1.1%). Now a crusher outside the screen (30 m sphere) isn't posed (its clocks catch up when seen) and its grains aren't made or flown (`src/combat/crusherField.ts`, `crusherFx.ts`). Crushers' share of the tick 7.1% → 2.6%. The sim is unchanged.
+- `?nocull` (any lab, `src/core/viewCull.ts`): every view cull off, robots' drawer and the convoy cars' too, for comparing.
+- Checked: crusher and crusher sites checks, typecheck, full `npm test`. Drawing time not measured.
 ### 2026-11-07 · Architecture stage 2: the ECS core (Claude)
 - `src/ecs/` (new, pure): `world.ts` (entity ids of 20-bit index + 12-bit generation, flat components as SoA typed-array columns kept per world, object components for heavy sims, sparse-set queries, systems with a phase and a rate group, per-tick plain-data events, resources), `components.ts` (Transform, PrevTransform, Velocity, Team, Health, Armour, Collider, Status; `keepPrevious`, `drawnAt` for drawing between ticks), `snapshot.ts` (host-shared columns as typed arrays). No game code uses it yet (stage 3 next: damage as data).
 - Checked: `tools/ecs-check.ts` (40k random operations against a reference: membership, 12 queries, values through growth, stale ids, 40 components over two mask words; phases and rate groups; events; two worlds; snapshot; heading interpolation the short way); `npm test`.

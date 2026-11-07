@@ -76,6 +76,7 @@ export class BanditCamps {
   ) {
     this.sw = new InfantrySwarm(v, field, 23);
     this.draw = new InfantryDraw(this.sw, v, vat);
+    this.draw.cull = bf.view;
     scene.add(this.draw.group);
     this.target = new InfantryTarget(this.sw, TEAM.raiders);
     bf.targets.push(this.target);

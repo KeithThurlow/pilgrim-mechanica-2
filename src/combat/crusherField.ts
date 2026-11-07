@@ -22,6 +22,9 @@ export type CrusherFieldValues = CrusherValues & RobotTearValues;
 /** How long a dead crusher's wreck lies before it goes (s). */
 const WRECK_TIME = 12;
 
+/** A crusher is drawn if this sphere round it is on the screen (m): its body, legs and shadow, with room to spare. */
+const CRUSHER_CULL_R = 30;
+
 export class CrusherField {
   readonly pack: Crushers;
   readonly target: CrusherTarget;
@@ -74,6 +77,9 @@ export class CrusherField {
   }
 
   /** One frame: they hunt `prey` (null: nobody) and eat from `food`. */
+  /** Time since each crusher's body was last posed, while it is off the screen. */
+  private unposed = new Map<number, number>();
+
   update(dt: number, prey: Prey | null, food: readonly CrusherFood[] = []) {
     this.hunted = prey;
     const cp = this.cp;
@@ -92,8 +98,16 @@ export class CrusherField {
     }
     this.tickCores(dt);
     for (const w of [...this.wrecks]) if ((w.t -= dt) <= 0) this.remove(w.c);
-    for (const c of this.pack.list) this.bodies.get(c.id)?.update(c, dt);
-    this.fx.update(dt, this.pack.list);
+    // Off the screen (perf 2026-11-07: crushers grazing 500 m off cost more in looks than in sim): the body isn't posed
+    // (its clocks catch up the frame it's seen again) and the suction streaks aren't made.
+    const view = this.bf.view;
+    for (const c of this.pack.list) {
+      const b = this.bodies.get(c.id);
+      if (!b) continue;
+      const late = (this.unposed.get(c.id) ?? 0) + dt;
+      if (view.sees(c.x, c.bodyY, c.z, CRUSHER_CULL_R)) { b.update(c, late); this.unposed.delete(c.id); } else this.unposed.set(c.id, late);
+    }
+    this.fx.update(dt, this.pack.list, view);
     this.tear.update(dt);
   }
 

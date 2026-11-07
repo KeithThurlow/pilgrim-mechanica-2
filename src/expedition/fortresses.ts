@@ -155,6 +155,7 @@ export class Fortresses {
   ) {
     this.sw = new InfantrySwarm(v, field, 41);
     this.draw = new InfantryDraw(this.sw, v, vat);
+    this.draw.cull = bf.view;
     scene.add(this.draw.group);
     this.target = new InfantryTarget(this.sw, TEAM.raiders);
     this.mechs = new FortMechs(v as never, bf, scene, player);
