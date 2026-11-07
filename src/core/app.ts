@@ -5,6 +5,7 @@ import { restoreEmptyPools, trimInstanceUploads } from "./instanceUploads";
 import { ShadowProxies } from "../look/shadowProxies";
 import { FrameHud } from "./hud";
 import { asyncShaders, shaderFrameDone } from "./asyncShaders";
+import { skipHiddenMatrices } from "./matrixSkip";
 import { Clock, clockFromUrl } from "./clock";
 import { InterpSet } from "../look/treeInterp";
 
@@ -40,6 +41,7 @@ export interface App {
 
 export async function createApp(container: HTMLElement): Promise<App> {
   const params = new URLSearchParams(location.search);
+  skipHiddenMatrices(!params.has("allmatrices"));
   const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: params.has("webgl") });
   await renderer.init();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));

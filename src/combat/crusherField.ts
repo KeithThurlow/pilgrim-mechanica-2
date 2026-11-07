@@ -105,7 +105,10 @@ export class CrusherField {
       const b = this.bodies.get(c.id);
       if (!b) continue;
       const late = (this.unposed.get(c.id) ?? 0) + dt;
-      if (view.sees(c.x, c.bodyY, c.z, CRUSHER_CULL_R)) { b.update(c, late); this.unposed.delete(c.id); } else this.unposed.set(c.id, late);
+      // Hidden too, so three neither walks its ~160 parts' matrices nor tests them against the view (2026-11-07).
+      const seen = view.sees(c.x, c.bodyY, c.z, CRUSHER_CULL_R);
+      b.root.visible = seen;
+      if (seen) { b.update(c, late); this.unposed.delete(c.id); } else this.unposed.set(c.id, late);
     }
     this.fx.update(dt, this.pack.list, view);
     this.tear.update(dt);
