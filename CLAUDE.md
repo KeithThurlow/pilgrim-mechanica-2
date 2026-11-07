@@ -99,7 +99,7 @@ desert look direction. What came from where: `docs/decisions.md`.
 
 ## Lab URL flags
 
-- Every lab: `?tick=60` (or 30, 120) runs the sims on the fixed game tick (`src/core/clock.ts`; the camera and effects move every drawn frame, mechs, vehicles, robots and infantry are drawn between ticks; the HUD's `clock` line). `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
+- Every lab: the sims run on a fixed 60 Hz game tick (`src/core/clock.ts`, Keith 2026-11-07; `?tick=30` or 120 to try another rate): the camera and effects move every drawn frame, mechs, vehicles, robots and infantry are drawn between ticks (the HUD's `clock` line). `?dt=seconds` makes every drawn frame advance that much time (headless shots). `?webgl` forces WebGL 2. `?set=key:value,key:value` overrides any tuning value for that page load
   (not saved), e.g. `?set=sunAzimuth:120,height:12`. `?norender` runs the ticks without drawing (headless CPU timing; no GPU dent layer or GPU effects either). `?syncshaders`: new shaders build in the frame (three's old way, freezes while the driver compiles) instead of in the background (`src/core/asyncShaders.ts`).
   The HUD shows only the frame and the top CPU stages; `` ` `` (or a click) opens its details. `window.__hud()` dumps it all
   with recent frame spikes (also in every report).
@@ -288,10 +288,10 @@ docs/                   design.md (the game), decisions.md (log)
   read proportions from the model's joint markers rather than hardcoding them.
 - Sound is procedural (`src/audio/synth.ts`, recipes from the old game's SfxSynth): no audio files. It starts on the
   first click or key press.
-- Time: today most sims step at the frame's dt (some split it into substeps of at most 1/120 s, e.g. the walker), so results still
-  vary a little with frame rate. The target (Keith 2026-11-07, `docs/architecture-review.md`): one fixed 60 Hz game tick for the
-  rules (`src/core/clock.ts`, `?tick=60|30|120` to try it), the walker substepping at 120 inside it, and everything seen drawn at
-  the display's rate (144+, ideally 200+) interpolated between ticks. Each part declares its rate (review §4.6).
+- Time (Keith 2026-11-07, `docs/architecture-review.md`): one fixed 60 Hz game tick for the rules (`src/core/clock.ts`), the
+  walker substepping at 120 inside it, and everything seen drawn at the display's rate (144+, ideally 200+) between ticks
+  (`src/look/treeInterp.ts`: `drawBetweenTicks` for models, `swarmBetweenTicks` for swarm drawers). Per-tick work goes in
+  `app.onTick`, the camera and effects in `app.onFrame`. Each part declares its rate (review §4.6).
 
 ## State
 

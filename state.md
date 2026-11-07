@@ -321,6 +321,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-07 · The 60 Hz tick everywhere; frame-locked gone (Keith's call, Claude)
+- `src/core/clock.ts`: always a fixed tick, 60 Hz (`?tick=30` or 120 to try another); the frame-locked mode and its flag are gone. `src/core/app.ts`: always draws mechs, vehicles and swarms between ticks; `?dt=seconds` now sets each drawn frame's time in the app (the labs' own `?dt` handling went: their ticks are always 1/60 s). The walker lab split into a per-tick sim and a per-frame camera, streaming, light and effects (`bf.tick`/`bf.frame`), the camera target blended between ticks as in the combat and convoy labs.
+- Rough edge: the tool labs (terrain, parts, armoury, inventory, pose, stress) still move their camera in the tick, so it steps at 60 Hz on a faster screen.
+- Checked: `tools/clock-check.ts` (the frame-locked comparison dropped), `tools/treeinterp-check.ts`; walker (also `?dt=0.033&walk=straight`), swarm, convoy `?siege&manual`, terrain and stress labs headless, no errors; `npm test`.
+
 ### 2026-11-07 · Architecture stage 4.3: the robot swarm's state in the ECS (Claude)
 - The host's world (`rules.world`) has a fixed capacity; a `RobotSwarm` reserves a block of 1024 entity indices in it and its arrays for position, heading, velocity, health, pace, kind, state, size, variant, weapon, uid and frozen are views of the block's columns (Transform, Velocity, Health, Status, new `Robot`), so there's one copy and no sync. An entity lives from a robot's spawn to its death; PrevTransform is copied at each update; Team and Collider are written as the register is published; the sim worker's view relinks after each snapshot. Proposal and notes in `docs/handoff-architecture.md`. `src/ecs/world.ts` (capacity, reserve, createAt, at, attach), `src/combat/robotWorld.ts` (new), `robots.ts`, `robotsRemote.ts`, `combatRules.ts`, `fronts/robots.ts`, `summon/allies.ts`; `robotEntities.ts`, `src/ecs/slots.ts` removed.
 - Checked: a scripted 2400-tick camp fight hashes the swarm's snapshot identically before and after (own world and shared world); new `tools/robotworld-check.ts` (views alias columns, entity per live robot, stale ids, two swarms' blocks apart, a view relinks); full `npm test`. Nothing visible should change.

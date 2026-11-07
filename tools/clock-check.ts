@@ -2,9 +2,8 @@
 // 1. Fixed mode: over any run of frame times the ticks run add up to the real time (to under one tick), at most
 //    maxTicks a frame, alpha in 0..1, a long stall drops time instead of spiralling, rate groups fire one tick in n.
 // 2. Frame-rate independence: a robot camp fight (spawns, hits, a moving target) driven through a fixed 60 Hz clock
-//    gives the same swarm, bit for bit, whether the page draws at 30, 60, 144 or 240 fps or a jittery mix. The same
-//    fight frame-locked (as the labs run by default today) is shown to differ by frame rate: that is what the fixed
-//    tick fixes (review finding F1).
+//    gives the same swarm, bit for bit, whether the page draws at 30, 60, 144 or 240 fps or a jittery mix (review
+//    finding F1; the old frame-locked clock is gone, Keith 2026-11-07).
 // Run: npm test (or npx tsx tools/clock-check.ts).
 import { Clock } from "../src/core/clock";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
@@ -51,12 +50,11 @@ function frames(kind: string, total: number): number[] {
   let hits = 0;
   for (let i = 0; i < 120; i++) c.run(1 / 60, () => { if (c.every(4, 1)) hits++; });
   if (hits !== 30) fail(`every(4) fired ${hits} times in 120 ticks`);
-  const locked = new Clock(null);
-  if (locked.run(0.5, () => {}) !== 1 || locked.dt !== 1 / 20) fail(`frame-locked: dt ${locked.dt}`);
+  if (new Clock().hz !== 60) fail("the default clock should be 60 Hz");
 }
 
 // 2. A fight driven through the clock.
-function fight(hz: number | null, kind: string, seconds: number, stopAt = Infinity): { hash: string; ticks: number } {
+function fight(hz: number, kind: string, seconds: number, stopAt = Infinity): { hash: string; ticks: number } {
   const V = { ...TERRAIN_DEFAULTS, ...BIOME_DEFAULTS, ...ROCK_DEFAULTS, ...SHALLOWS_DEFAULTS, ...ROBOT_DEFAULTS, ...TRAMPLE_DEFAULTS };
   const field = new DuneField(V);
   const sw = new RobotSwarm(V, field, 7);
@@ -93,8 +91,6 @@ function fight(hz: number | null, kind: string, seconds: number, stopAt = Infini
     if (r.hash !== ref.hash) fail(`fixed 60 Hz at ${kind} fps: swarm ${r.hash} vs ${ref.hash} at 60 fps`);
     else console.log(`  fixed 60 Hz, drawn at ${kind.padStart(6)} fps: same swarm (${r.hash}) after ${r.ticks} ticks`);
   }
-  const a = fight(null, "60", 12), b = fight(null, "144", 12);
-  console.log(`  frame-locked (today's default): 60 fps ${a.hash}, 144 fps ${b.hash}: ${a.hash === b.hash ? "same" : "differ, as expected"}`);
 }
 
 if (problems.length) { console.log(`clock: ${problems.length} problem(s)`); process.exit(1); }

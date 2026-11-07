@@ -173,7 +173,7 @@ function startRun() {
 }
 (globalThis as unknown as { __stress: unknown }).__stress = run;
 app.onTick((rawDt) => {
-  const dt = Number(params.get("dt")) || rawDt;
+  const dt = rawDt; // ?dt is the app's (every drawn frame that long)
   const last = app.last;
   const ms = new Map(costs.frame);
   ms.set("frame", last.frame);
