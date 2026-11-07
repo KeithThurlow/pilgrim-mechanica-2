@@ -27,6 +27,11 @@ const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
 
 function same(a: RobotSnapshot, b: RobotSnapshot): string {
   if (a.hi !== b.hi) return `hi ${a.hi} vs ${b.hi}`;
+  for (const k in a.block.comps) {
+    const x = new Uint8Array(a.block.comps[k]), y = b.block.comps[k] ? new Uint8Array(b.block.comps[k]) : null;
+    if (!y || x.length !== y.length) return `block ${k}: length`;
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return `block ${k} byte ${i}`;
+  }
   for (const k in a.arrays) {
     const x = a.arrays[k] as unknown as ArrayLike<number>, y = b.arrays[k] as unknown as ArrayLike<number>;
     if (!y || x.length !== y.length) return `${k}: length`;

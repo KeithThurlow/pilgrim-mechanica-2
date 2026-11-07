@@ -8,14 +8,17 @@
 //   the wrecks' reactor positions the main thread sends each frame (a frame late). It applies the commands as they come
 //   and runs the frame's steps when the frame ends (after its other commands, as the view saw them), then packs the
 //   events and a snapshot.
-// The snapshot is every typed array the swarm owns (slot arrays cut to hi) and its plain number and boolean fields,
-// found by name, so a field added to RobotSwarm goes across without code here. Ownership: host (enemies).
+// The snapshot (stage 7a, docs/proposal-stage7.md): the swarm's block of the ECS world (Transform, Velocity, Health,
+// Status, Robot: src/ecs/swarmBlock.ts pack) as one buffer per component, cut to hi; then every other typed array the
+// swarm owns (the AI's own arrays, slot arrays cut to hi) and its plain number and boolean fields, found by name, so a
+// field added to RobotSwarm goes across without code here. Ownership: host (enemies).
 import { RobotSwarm, ROBOT_MAX, DEAD, type RobotEvent, type RobotTarget, type RobotValues } from "../combat/robots";
 import { WALK_LEGS } from "../combat/robotLegs";
 import { SafeZone, type SafeValues } from "../convoy/safeZone";
 import type { Convoy } from "../convoy/platform";
 import type { DuneField } from "../world/terrain";
 import type { GroundRecorder } from "./groundEvents";
+import { blockBuffers, type BlockSnapshot } from "../ecs/snapshot";
 import { TRAMPLE_DEFAULTS, type MechBody, type TrampleValues } from "../combat/trample";
 
 /** The swarm's outside methods that change it: recorded on the view, applied in the worker. */
@@ -44,35 +47,39 @@ const SKIP = new Set(["stepping", "silent", "hideDead", "remote", "events", "v",
 
 export interface RobotSnapshot {
   hi: number;
+  /** The swarm's block of the world: its simulated components, slots 0..hi. */
+  block: BlockSnapshot;
+  /** The swarm's other arrays, by field name. */
   arrays: Record<string, ArrayBufferView>;
   scalars: Record<string, number | boolean>;
   cores: RobotSwarm["cores"];
 }
 
-/** The swarm as it is now: slot arrays cut to hi, the rest whole. */
+/** The swarm as it is now: its block's components and slot arrays cut to hi, the rest whole. */
 export function packRobots(sw: RobotSwarm): RobotSnapshot {
-  const o = sw as unknown as Record<string, unknown>, hi = sw.hi;
+  const o = sw as unknown as Record<string, unknown>, hi = sw.hi, block = sw.block;
   const arrays: Record<string, ArrayBufferView> = {}, scalars: Record<string, number | boolean> = {};
   for (const k of Object.keys(o)) {
     if (SKIP.has(k)) continue;
     const x = o[k];
     if (typeof x === "number" || typeof x === "boolean") scalars[k] = x;
-    else if (ArrayBuffer.isView(x) && !(x instanceof DataView)) {
+    else if (ArrayBuffer.isView(x) && !(x instanceof DataView) && !block.isShipped(x)) {
       const a = x as unknown as { length: number; slice(a: number, b: number): ArrayBufferView };
       const per = a.length === ROBOT_MAX ? 1 : a.length === ROBOT_MAX * WALK_LEGS ? WALK_LEGS : 0;
       arrays[k] = per ? a.slice(0, hi * per) : a.slice(0, a.length);
     }
   }
-  return { hi, arrays, scalars, cores: sw.cores.map((c) => ({ ...c })) };
+  return { hi, block: block.pack(hi), arrays, scalars, cores: sw.cores.map((c) => ({ ...c })) };
 }
 
 export function snapshotTransfer(s: RobotSnapshot): Transferable[] {
-  return Object.values(s.arrays).map((a) => a.buffer as ArrayBuffer);
+  return [...blockBuffers(s.block), ...Object.values(s.arrays).map((a) => a.buffer as ArrayBuffer)];
 }
 
 /** A snapshot into a swarm (the view). */
 export function applyRobots(sw: RobotSwarm, s: RobotSnapshot) {
   const o = sw as unknown as Record<string, unknown>;
+  sw.block.apply(s.block);
   for (const k in s.arrays) (o[k] as unknown as { set(a: ArrayLike<number>): void }).set(s.arrays[k] as unknown as ArrayLike<number>);
   for (const k in s.scalars) o[k] = s.scalars[k];
   sw.cores = s.cores;

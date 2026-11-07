@@ -33,6 +33,7 @@ export class RobotBlock extends SwarmBlock {
   /** A block of `slots` in `world` (a fixed one with room), else in a world of its own. */
   constructor(slots: number, world?: World) {
     super(slots, world, "robots");
+    this.shipped.push(Robot);
     const R = this.world.columns(Robot), B = this.world.columns(Bar);
     this.kind = this.view(R.kind); this.state = this.view(R.state); this.stateTime = this.view(R.stateTime); this.size = this.view(R.size);
     this.variant = this.view(R.variant); this.weapon = this.view(R.weapon); this.uid = this.view(R.uid); this.frozen = this.view(R.frozen);
