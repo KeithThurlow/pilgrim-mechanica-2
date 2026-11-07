@@ -9,6 +9,7 @@ import type { ModelDef, Moving } from "./parts";
 import { WeaponPaint, type WeaponLook } from "./weaponLook";
 import type { CatalogEntry } from "./catalog";
 import { LaserSight } from "./laserSight";
+import { MERGE_PARTS, mergeParts } from "../look/mergeGeometry";
 
 const D2R = Math.PI / 180;
 const AX = new THREE.Vector3();
@@ -37,6 +38,11 @@ export class WeaponModel {
   private body = new THREE.Group();
   private spinAngle = 0;
   private moving = new Map<string, Moving>();
+  /** Merged: one mesh of every moving part at rest, shown while they all are; the parts' own meshes otherwise. */
+  private restMesh: THREE.Mesh | null = null;
+  private restParts: string[] = [];
+  private restLive: THREE.Mesh[] = [];
+  private atRest = false;
 
   constructor(readonly entry: CatalogEntry, def: ModelDef, private look: WeaponLook, scheme?: number) {
     this.root.name = `weapon-${entry.id}`;
@@ -45,6 +51,15 @@ export class WeaponModel {
     this.rootAt = def.rootAt ?? "joint";
     this.paint = new WeaponPaint(scheme ?? look.v.weaponScheme, def.palette);
     const pivots: Record<string, THREE.Vector3> = {};
+    // Merged (MERGE_PARTS): parts that don't move on their own join the moving part they ride (or the body's one
+    // mesh), and while every moving part is at rest one more mesh draws them all (see planFor).
+    const plan = MERGE_PARTS ? planFor(def) : null;
+    if (plan?.base) {
+      const base = new THREE.Mesh(plan.base);
+      base.name = `${entry.id}:base`;
+      this.body.add(base);
+      this.meshes.push(base);
+    }
     for (const p of def.parts) {
       const pivot = new THREE.Group(), motion = new THREE.Group();
       pivot.name = p.name;
@@ -52,13 +67,27 @@ export class WeaponModel {
       const host = p.parent ? this.parts[p.parent] : undefined;
       pivot.position.copy(p.pivot).sub(host && p.parent ? pivots[p.parent] : new THREE.Vector3());
       pivots[p.name] = p.pivot;
-      const mesh = new THREE.Mesh(p.geometry);
-      mesh.name = `${entry.id}:${p.name}`;
-      motion.add(mesh);
       pivot.add(motion);
       (host ?? this.body).add(pivot);
       this.parts[p.name] = motion;
+      const geo = plan ? plan.own.get(p.name) : p.geometry;
+      if (!geo) continue;
+      const mesh = new THREE.Mesh(geo);
+      mesh.name = `${entry.id}:${p.name}`;
+      motion.add(mesh);
       this.meshes.push(mesh);
+      if (plan?.restParts.includes(p.name)) this.restLive.push(mesh);
+    }
+    if (plan?.rest) {
+      this.restMesh = new THREE.Mesh(plan.rest);
+      this.restMesh.name = `${entry.id}:rest`;
+      this.body.add(this.restMesh);
+      this.meshes.push(this.restMesh);
+      this.restParts = plan.restParts;
+      this.showRest(true);
+      // Before every draw (the scene's matrix update reaches here first), whatever moved the parts this frame.
+      const own = this.body.updateMatrixWorld.bind(this.body);
+      this.body.updateMatrixWorld = (force?: boolean) => { this.syncRest(); own(force); };
     }
     this.recoil = this.parts.Recoil ?? this.body;
     look.apply(this.meshes, this.paint);
@@ -148,9 +177,58 @@ export class WeaponModel {
     this.recoil.position.multiplyScalar(1 - k);
   }
 
+  /** Rest mesh or the moving parts' own meshes: rest only while every one sits at rest and shows. */
+  private syncRest() {
+    let at = true;
+    for (const n of this.restParts) {
+      const p = this.parts[n];
+      if (!p.visible || p.position.lengthSq() > 1e-8 || Math.abs(p.quaternion.w) < 1 - 1e-7) { at = false; break; }
+    }
+    if (at !== this.atRest) this.showRest(at);
+  }
+  private showRest(at: boolean) {
+    this.atRest = at;
+    this.restMesh!.visible = at;
+    for (const m of this.restLive) m.visible = !at;
+  }
+
   dispose() {
     this.root.removeFromParent();
     this.look.release(this.paint);
     this.laser?.dispose();
   }
+}
+
+/**
+ * How a model's parts merge (once per model, shared by its instances). Anchors are the parts that move on their own
+ * (its moving list, plus Recoil and a clip's Clip, which the game moves or hides); every other part joins the nearest
+ * anchor it rides, or the body (base). rest: the body and every anchor that doesn't ride a spinning part, at rest, as
+ * one geometry; null when there's no base to hold the per-frame hooks or nothing moves.
+ */
+interface Plan { own: Map<string, THREE.BufferGeometry | null>; base: THREE.BufferGeometry | null; rest: THREE.BufferGeometry | null; restParts: string[] }
+const plans = new WeakMap<ModelDef, Plan>();
+function planFor(def: ModelDef): Plan {
+  let plan = plans.get(def);
+  if (plan) return plan;
+  const byName = new Map(def.parts.map((p) => [p.name, p]));
+  const kinds = new Map(def.moving.map((m) => [m.node, m.kind]));
+  const isAnchor = (n: string) => kinds.has(n) || n === "Recoil" || n === "Clip";
+  const anchorOf = (n: string) => { for (let p = byName.get(n); p; p = p.parent ? byName.get(p.parent) : undefined) if (isAnchor(p.name)) return p.name; return ""; };
+  const spins = (a: string) => { for (let p = byName.get(a); p; p = p.parent ? byName.get(p.parent) : undefined) if (kinds.get(p.name) === "spin") return true; return false; };
+  const groups = new Map<string, THREE.BufferGeometry[]>();
+  for (const p of def.parts) {
+    const a = anchorOf(p.name), at = a ? byName.get(a)!.pivot : new THREE.Vector3();
+    const g = p.geometry.clone().translate(p.pivot.x - at.x, p.pivot.y - at.y, p.pivot.z - at.z);
+    (groups.get(a) ?? groups.set(a, []).get(a)!).push(g);
+  }
+  const own = new Map<string, THREE.BufferGeometry | null>();
+  for (const p of def.parts) own.set(p.name, isAnchor(p.name) ? mergeParts(groups.get(p.name) ?? []) : null);
+  const base = mergeParts(groups.get("") ?? []);
+  const restParts = base ? def.parts.filter((p) => isAnchor(p.name) && own.get(p.name) && !spins(p.name)).map((p) => p.name) : [];
+  const rest = restParts.length
+    ? mergeParts([base!, ...restParts.map((n) => { const v = byName.get(n)!.pivot; return own.get(n)!.clone().translate(v.x, v.y, v.z); })])
+    : null;
+  plan = { own, base, rest, restParts: rest ? restParts : [] };
+  plans.set(def, plan);
+  return plan;
 }
