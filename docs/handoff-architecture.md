@@ -8,9 +8,10 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 1, one clock: `src/core/clock.ts` (fixed or frame-locked; `run(raw, fn)`, `alpha`, `every(n)`), `App.clock`,
   `?tick=N`; `tools/clock-check.ts`. Default still frame-locked: a fixed tick judders until drawing interpolates (stage 6).
 
+- Stage 2, the ECS core: `src/ecs/world.ts`, `components.ts`, `snapshot.ts`; `tools/ecs-check.ts`. Component definitions
+  hold no data (`world.columns(C)`, `world.objects(C)`), so two worlds can live in one thread (parity checks, ?noworker).
+
 ## Next, in order
-- Stage 2, the ECS core: `src/ecs/` (world, ids index+generation, SoA columns, sparse-set queries, systems with phase and
-  rate, per-tick event buffer, resources, replication tags) and `tools/ecs-check.ts`. No game code moved.
 - Stage 3, damage as data (split `Battlefield`), then 4 crowds, 5 heavies, 6 60 Hz default + interpolation, 7 host world
   in the worker, 8 co-op transport.
 
