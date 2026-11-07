@@ -24,12 +24,6 @@ export function loftZ(P: Piece, stations: Station[], sec: Section, o: PrimOpts &
   prim(P, rings, sec, o);
 }
 
-/** A hollow frame along +Z (armoured lips, bezels): outer and inner rings (same count) from z0 to z1. */
-export function collarZ(P: Piece, outer: Ring2, inner: Ring2, z0: number, z1: number, sec: Section, x0 = 0, y0 = 0) {
-  const R = (z: number, r: Ring2) => r.map(([x, y]) => v(x + x0, y + y0, z));
-  prim(P, [R(z0, outer), R(z1, outer), R(z1, inner), R(z0, inner)], sec, { closed: true, caps: false });
-}
-
 /** A plate: ring (in u, v) extruded t along n from c; bevel insets the outer face (a chamfered top). */
 export function extrude(P: Piece, ring: Ring2, c: V3, u: V3, w: V3, n: V3, t: number, sec: Section, bevel = 0, secs?: Section[]) {
   const at = (a: number, b: number, d: number) => c.clone().addScaledVector(u, a).addScaledVector(w, b).addScaledVector(n, d);

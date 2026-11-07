@@ -21,7 +21,6 @@ import { robotMult } from "./depth";
 export const STRIDER_CAMP_DEFAULTS = { ...STRIDER_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, striderBeamReach: 5, stridersOn: 1, striderCampEvery: 30, striderPackEvery: 45, striderCampMax: 1 };
 export type StriderCampValues = typeof STRIDER_CAMP_DEFAULTS;
 const G = "Striders: in the field";
-export const STRIDER_CAMP_GROUP = G;
 export const STRIDER_CAMP_PARAMS: Param[] = [
   { key: "stridersOn", label: "Striders in the field (0 off, 1 on)", min: 0, max: 1, step: 1, group: G },
   { key: "striderCampEvery", label: "A camp brings one per (robots)", min: 1, max: 100, step: 1, group: G, tip: "A camp of 18-35 robots brings one strider at 18, 36+ two (up to the most)" },

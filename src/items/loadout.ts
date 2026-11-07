@@ -199,9 +199,6 @@ export function liftProblem(legs: Item | null, hull: Item | null): string | null
 /** A sensor item's style (an unknown base counts as a cluster, the old default). */
 export const sensorStyleOf = (item: Item): SensorStyle => BASE_BY_ID[item.base]?.sensor?.style ?? "cluster";
 
-/** Slots this item could go in as the loadout stands. */
-export const slotsFor = (lo: Loadout, item: Item) => SLOTS.filter((s) => !fitProblem(lo, s, item));
-
 /**
  * Fit an item (throws if it doesn't fit). Returns everything that came off: what was in the slot, and anything that
  * no longer fits after the change (a hull weapon in place of an arm bounces that side's held weapon and a two-hander,

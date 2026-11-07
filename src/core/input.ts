@@ -36,17 +36,3 @@ export class Keys {
   }
   get sprint() { return this.has("ShiftLeft") || this.has("ShiftRight"); }
 }
-
-/** Calls back with the ground point under a click or tap that wasn't a drag (orbit drags still work). */
-export function onGroundTap(canvas: HTMLCanvasElement, camera: THREE.Camera, ground: THREE.Object3D, cb: (p: THREE.Vector3) => void) {
-  let sx = 0, sy = 0, t = 0;
-  const ray = new THREE.Raycaster();
-  canvas.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; t = performance.now(); });
-  canvas.addEventListener("pointerup", (e) => {
-    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 6 || performance.now() - t > 400) return;
-    const r = canvas.getBoundingClientRect();
-    ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    const hit = ray.intersectObject(ground, true)[0];
-    if (hit) cb(hit.point);
-  });
-}

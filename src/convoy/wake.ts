@@ -239,5 +239,3 @@ export class Wake {
 
 /** The tan of the blade sweep (how far the tips trail the middle per metre out). */
 export const sweepTan = (v: WakeValues) => Math.tan((Math.min(60, Math.max(0, v.bladeSweep)) * Math.PI) / 180);
-
-export { wrap as wakeWrap };

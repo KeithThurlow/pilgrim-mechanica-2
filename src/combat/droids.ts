@@ -47,7 +47,6 @@ export const DROID_VARIANT_DEFAULTS = {
   droidBruteHeight: 4.3, droidBruteHp: 200, droidBruteDamage: 3, droidBruteBurst: 8, droidBruteSpread: 6, droidBruteNear: 7, droidBruteFar: 14,
   droidBruteSpeed: 2.6,
 };
-export type DroidVariantValues = typeof DROID_VARIANT_DEFAULTS;
 /** Every humanoid robot value: the base (the trooper) and the variants. */
 export const DROID_ALL_DEFAULTS = { ...DROID_DEFAULTS, ...DROID_VARIANT_DEFAULTS };
 export type DroidAllValues = typeof DROID_ALL_DEFAULTS;

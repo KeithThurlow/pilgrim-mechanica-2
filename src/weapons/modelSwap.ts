@@ -43,7 +43,7 @@ export const KIND_MODELS: Partial<Record<ModelKind, { id: string; scale?: number
 
 const ids = [...new Set(Object.values(KIND_MODELS).flatMap(({ id }) => [id, entry(id).mirror].filter((x): x is string => !!x)))];
 // Warm the cache as soon as the arsenal is imported, so most fits find their model ready.
-const warm = preloadWeapons(ids).catch((e) => console.warn("weapon models:", e));
+void preloadWeapons(ids).catch((e) => console.warn("weapon models:", e));
 
 const looks = new WeakMap<ToonLook, WeaponLook>();
 /** The shared weapon look for a unit look (weapon sliders at their defaults; the armoury lab tunes them). */
@@ -135,5 +135,3 @@ export function libraryModel(kind: ModelKind, toon: ToonLook, side: "left" | "ri
   }
   return out;
 }
-
-export { warm as weaponModelsReady };

@@ -11,12 +11,6 @@ export function octRing(hw: number, hh: number, ch: number, batter = 0, belly = 
   return [[-bw + cb, -hh], [bw - cb, -hh], [hw, -hh + cb], [hw, hh - ch], [tw - ch, hh], [-tw + ch, hh], [-hw, hh - ch], [-hw, -hh + cb]];
 }
 
-/** A faceted section: sides break at `shoulder` of the height, top and bottom faces narrowed. */
-export function hexRing(hw: number, hh: number, shoulder = 0.35, top = 0.55, bottom = 0.7): Ring2 {
-  const zs = hh * (2 * shoulder - 1);
-  return [[-hw * bottom, -hh], [hw * bottom, -hh], [hw, zs], [hw * 0.96, hh * 0.45], [hw * top, hh], [-hw * top, hh], [-hw * 0.96, hh * 0.45], [-hw, zs]];
-}
-
 /** A superellipse: p 2 = ellipse, higher = squarer with rounded corners. */
 export function sellRing(hw: number, hh: number, n = 16, p = 3, phase = 0): Ring2 {
   const out: Ring2 = [];

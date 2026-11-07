@@ -4,7 +4,6 @@
 // and speed, missing: shapes and counts that shouldn't grow, such as stride, arc and spread). Items saved before levels
 // have none: they are level 1.
 import { STATS } from "./bases";
-import type { Item } from "./item";
 
 /**
  * How much each stat grows with level (missing: not at all). Balance pass (2026-10-31, docs/proposal-balance.md
@@ -36,6 +35,3 @@ export function levelMul(stat: string, level: number, growth: number): number {
   const g = 1 + growth * w * (level - 1);
   return (STATS[stat]?.better ?? 1) > 0 ? g : 1 / g;
 }
-
-/** The fixed default parts and old saves: level 1. */
-export function withLevel(item: Item): Item { if (item.level === undefined) item.level = 1; return item; }

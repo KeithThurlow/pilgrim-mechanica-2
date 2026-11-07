@@ -31,7 +31,6 @@ export const BIOME_PARAMS: Param[] = [
 ];
 
 export const DESERT = 0, ROCKY = 1, SHALLOWS = 2;
-export const BIOME_NAMES = ["desert", "rocky", "shallows"] as const;
 
 /** Weights of each biome at a point; they always add up to 1. */
 export interface BiomeWeights { desert: number; rocky: number; shallows: number }

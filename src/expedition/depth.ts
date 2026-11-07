@@ -45,7 +45,6 @@ export const banditMult = (v: object) => Math.max(1, (v as { smallBanditMult?: n
 export const shareK = (v: object) => 1 / robotMult(v);
 
 export type Ring = "Near" | "Out" | "Deep" | "Far";
-export const RING_NAMES: Ring[] = ["Near", "Out", "Deep", "Far"];
 export type DangerFn = (x: number, z: number) => number;
 
 const DEPTH_BEHIND = 2500, DEPTH_AHEAD = 5000, DEPTH_STEP = 50;

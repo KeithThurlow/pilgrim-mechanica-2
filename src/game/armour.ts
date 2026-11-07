@@ -17,7 +17,6 @@ export const ARMOUR_DEFAULTS = {
   /** A hit keeps at least this share of its damage through any armour. */
   armourFloor: 0.15,
 };
-export type ArmourValues = typeof ARMOUR_DEFAULTS;
 
 export const ARMOUR_PARAMS: Param[] = [
   { key: "armourFloor", label: "Armour: share a hit always keeps", min: 0, max: 1, step: 0.01, group: "Armour", tip: "damage taken = max(this × hit, hit − armour × (1 − pierce)): small rounds on heavy armour keep this much" },
