@@ -65,6 +65,16 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
   (`swarmCamps.ts`) and the stress lab's now use the host world too. Checked: robotworld-check compares every bar with
   the old adapter's, every tick. Targeting (the soft lock) reads the register, which robots fill from their columns.
 
+- Stage 4.4, infantry in the world (Claude 2026-11-07): the swarm-block code shared by both kinds is
+  `src/ecs/swarmBlock.ts` (`SwarmBlock`: reserve, views of Transform, PrevTransform, Velocity, Health, Status, Team,
+  Collider, Armour; link, unlink, relink, keepPrevious, publish); `RobotBlock` extends it. `InfantrySwarm(v, ground, seed,
+  world?)` keeps its px, py (Transform.y: the feet), pz, heading, vx, vz, hp, pace, state, stateTime, look, uid, frozen as
+  views (`src/combat/infantryWorld.ts`, new `Infantry` component); Health.max is the spawn health. Entities from spawn to
+  death (downed bandits are alive). Bandits, war band riders, humans' camps, fortress garrisons, the range's runners and
+  the stress lab's bandits use the host world. `rules.world` grew to 16 swarms (20480). Checked: a scripted fight of
+  robots and bandits in one world hashes the same as main (9d26da88); `tools/infantryworld-check.ts`; full `npm test`;
+  the bandit, war band, convoy (bandit camp, fortress), weapons (runners) and stress labs load headless clean.
+
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
   stress) move their camera in the tick; split them like the walker lab when it matters. Still per tick: droids'
@@ -72,7 +82,6 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 4.3b, more readers onto the components: the robots' register publish could become a world system over
   `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
   snapshot becomes `packWorld` columns of the swarm's block (stage 7).
-- Stage 4.4: infantry the same way (`InfantrySwarm` reserves a block; its arrays become views).
 - Stages 5 heavies, 7 host world in the worker, 8 co-op transport (review §5).
 
 ## Facts

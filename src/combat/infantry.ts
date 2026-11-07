@@ -4,6 +4,8 @@
 // Keith 2026-10-24: "a traditional swarm of bandits on foot ... you get to mow down swathes of bandits that are
 // trying to take you out, shooting you with guns."
 // Structure of arrays, INFANTRY_MAX slots; dead slots are reused once their body has sunk (or oldest body first).
+import { InfantryBlock } from "./infantryWorld";
+import type { World } from "../ecs/world";
 import { steerOut, type KeepOut } from "../game/keepOut";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
@@ -140,14 +142,14 @@ export type ShotFn = (fx: number, fy: number, fz: number, tx: number, ty: number
 const TURNS = [0.8, 1.6, 2.4, -0.8, -1.6, -2.4, Math.PI];
 
 export class InfantrySwarm {
-  readonly px = new Float32Array(INFANTRY_MAX); readonly py = new Float32Array(INFANTRY_MAX); readonly pz = new Float32Array(INFANTRY_MAX);
-  readonly vx = new Float32Array(INFANTRY_MAX); readonly vz = new Float32Array(INFANTRY_MAX);
+  readonly px: Float32Array; readonly py: Float32Array; readonly pz: Float32Array;
+  readonly vx: Float32Array; readonly vz: Float32Array;
   /** Facing (radians, 0 = +Z). */
-  readonly heading = new Float32Array(INFANTRY_MAX);
-  readonly hp = new Float32Array(INFANTRY_MAX);
-  readonly state = new Uint8Array(INFANTRY_MAX).fill(EMPTY);
+  readonly heading: Float32Array;
+  readonly hp: Float32Array;
+  readonly state: Uint8Array;
   /** Seconds in the current state (DEAD: since death; the drawer sinks and fades from it). */
-  readonly stateTime = new Float32Array(INFANTRY_MAX);
+  readonly stateTime: Float32Array;
   readonly fireClock = new Float32Array(INFANTRY_MAX);
   readonly burstLeft = new Uint8Array(INFANTRY_MAX);
   readonly fear = new Float32Array(INFANTRY_MAX);
@@ -157,16 +159,16 @@ export class InfantrySwarm {
   /** Smoothed climb along the run (rise over run), and the way a downed or dead body fell (radians). */
   readonly slope = new Float32Array(INFANTRY_MAX); readonly fallYaw = new Float32Array(INFANTRY_MAX);
   /** Cloth variant 0..3 and a 0..1 seed, for the drawer. */
-  readonly look = new Uint8Array(INFANTRY_MAX); readonly seed = new Float32Array(INFANTRY_MAX);
+  readonly look: Uint8Array; readonly seed = new Float32Array(INFANTRY_MAX);
   /** Bumped every time a slot is (re)spawned, so the drawer can reset per-slot state. */
   readonly gen = new Uint32Array(INFANTRY_MAX);
   /** Serial per bandit, handed out at spawn and never reused (the register's ids, rule 12). */
-  readonly uid = new Uint32Array(INFANTRY_MAX);
+  readonly uid: Uint32Array;
   private nextUid = 1;
   /** Asleep: skipped by the step (a camp that has not woken, or one the player left; bodies and the downed still settle). */
-  readonly frozen = new Uint8Array(INFANTRY_MAX);
+  readonly frozen: Uint8Array;
   /** Chill (src/game/chill.ts, host): 1 at full speed, less while chilled, 0 frozen solid (no thinking, no moving, still hittable). */
-  readonly pace = new Float32Array(INFANTRY_MAX).fill(1);
+  readonly pace: Float32Array;
   /** Calm: walks to its target spot and stands there, never shooting or afraid (a patrol, or the way home to the camp). */
   readonly calm = new Uint8Array(INFANTRY_MAX);
   /** Calm but hurrying (a fortress's garrison on its way round to a gate): walks to its target spot at a run. */
@@ -215,9 +217,17 @@ export class InfantrySwarm {
   /** Seconds before the mech's body can hurt this one again (trample). */
   readonly trampleCd = new Float32Array(INFANTRY_MAX);
 
-  constructor(public v: InfantryValues, private ground: Ground, seed = 1) {
+  /** The swarm's block of the ECS world (src/combat/infantryWorld.ts): the shared arrays above are views of its columns. */
+  readonly block: InfantryBlock;
+
+  /** world: the host's (CombatRules.world, fixed capacity) so the bandits are its entities; else the swarm makes its own. */
+  constructor(public v: InfantryValues, private ground: Ground, seed = 1, world?: World) {
     this.rs = (seed >>> 0) || 1;
     this.seedN = this.rs;
+    const b = (this.block = new InfantryBlock(INFANTRY_MAX, world));
+    this.px = b.x; this.py = b.y; this.pz = b.z; this.heading = b.heading;
+    this.vx = b.vx; this.vz = b.vz; this.hp = b.hp; this.pace = b.pace;
+    this.state = b.state; this.stateTime = b.stateTime; this.look = b.look; this.uid = b.uid; this.frozen = b.frozen;
   }
 
   /** Seeded random 0..1 (mulberry32). */
@@ -264,6 +274,8 @@ export class InfantrySwarm {
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
       this.count++;
+      this.block.max[i] = v.hp;
+      this.block.linkBandit(i);
     }
     return made;
   }
@@ -271,7 +283,7 @@ export class InfantrySwarm {
   /** Take bandit i off the field (its camp streamed out). */
   remove(i: number) {
     if (this.state[i] === EMPTY) return;
-    if (this.state[i] < DEAD) this.count--;
+    if (this.state[i] < DEAD) { this.count--; this.block.unlink(i); }
     this.state[i] = EMPTY; this.frozen[i] = 0; this.hasT[i] = 0; this.calm[i] = 0; this.hold[i] = 0; this.hurry[i] = 0;
   }
 
@@ -320,6 +332,7 @@ export class InfantrySwarm {
   }
 
   update(dt: number, base: InfantryTarget, onShot: ShotFn): void {
+    this.block.keepPrevious(this.hi);
     const v = this.v, { px, py, pz, vx, vz, state, stateTime } = this;
     if (dt <= 0) return;
     this.buildHash();
@@ -584,6 +597,7 @@ export class InfantrySwarm {
     const nx = push ? dirX / l : Math.sin(this.heading[i]), nz = push ? dirZ / l : Math.cos(this.heading[i]);
     const r = this.rand(), s = push ? throwSpeed * (0.6 + 0.8 * r) : 0;
     this.state[i] = DEAD; this.stateTime[i] = 0; this.hp[i] = 0;
+    this.block.unlink(i);
     this.vx[i] = nx * s; this.vz[i] = nz * s;
     this.fallYaw[i] = Math.atan2(nx, nz);
     this.count--;
@@ -598,6 +612,7 @@ export class InfantrySwarm {
     for (let i = 0; i < this.hi; i++) {
       if (this.state[i] >= DOWN) continue; // down, dead, empty (rounds pass over the downed too)
       reg.put(i, this.uid[i], KIND.Unit, team, this.frozen[i] ? flags | FLAG.Asleep : flags, this.px[i], this.py[i] + y, this.pz[i], r, 0, this.vx[i], this.vz[i], 0, ref);
+      this.block.publish(i, team, KIND.Unit, r, 0, 0, this.v.banditHeight, 0);
     }
   }
 

@@ -61,7 +61,7 @@ export function banditsFront(): Front {
     },
     async start({ lab, contact }) {
       const { V, bf, player, field, arsenal } = lab;
-      const s = new InfantrySwarm(V, field);
+      const s = new InfantrySwarm(V, field, 1, bf.rules.world);
       sw = s;
       // A dash ploughs through them.
       hook(player, "onDash", (x, z, dx, dz) => { if (s.shove(x, z, V.dashShoveRadius, dx, dz, V.dashShove, V.dashShoveDamage)) bf.sfx.play("brap", player.sim.pelvis, 0.6, 0.6, false); });

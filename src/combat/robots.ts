@@ -868,9 +868,9 @@ export class RobotSwarm {
   constructor(public v: RobotValues, readonly ground: Ground, seed = 1, world?: World) {
     this.rs = (seed >>> 0) || 1;
     const b = (this.block = new RobotBlock(ROBOT_MAX, world));
-    this.px = b.px; this.hubY = b.hubY; this.pz = b.pz; this.heading = b.heading;
+    this.px = b.x; this.hubY = b.y; this.pz = b.z; this.heading = b.heading;
     this.vx = b.vx; this.vy = b.vy; this.vz = b.vz;
-    this.hp = b.hp; this.maxHp = b.maxHp; this.pace = b.pace;
+    this.hp = b.hp; this.maxHp = b.max; this.pace = b.pace;
     this.kind = b.kind; this.state = b.state; this.stateTime = b.stateTime; this.size = b.size;
     this.variant = b.variant; this.weapon = b.weapon; this.uid = b.uid; this.frozen = b.frozen;
   }
@@ -981,7 +981,7 @@ export class RobotSwarm {
         }
         this.hubY[i] = (this.py[i] + fy / WALK_LEGS) * 0.5 + H;
       } else this.hubY[i] = this.py[i] + HUB_Y * this.size[i];
-      this.block.link(i);
+      this.block.linkRobot(i);
     }
     return made;
   }

@@ -121,7 +121,7 @@ if (!world.exists(other)) fail("the other entity went");
   const e0 = (() => { for (let i = 0; i < view.hi; i++) if (view.state[i] < DEAD) return i; return -1; })();
   const before = view.block.entity(e0);
   view.uid[e0] += 100000;
-  view.block.relink(view.hi, DEAD);
+  view.block.relinkRobots(view.hi, DEAD);
   if (bad) fail(`a snapshot left ${bad} slots' entities wrong`);
   if (e0 < 0 || view.block.entity(e0) === before || world.exists(before as Entity)) fail("a reused slot kept its old entity");
 }

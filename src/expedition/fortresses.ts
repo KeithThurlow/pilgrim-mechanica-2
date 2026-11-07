@@ -153,7 +153,7 @@ export class Fortresses {
     /** Rebuild the ground's meshes over a box (a gate went down). */
     private rebuildGround: (x0: number, z0: number, x1: number, z1: number) => void,
   ) {
-    this.sw = new InfantrySwarm(v, field, 41);
+    this.sw = new InfantrySwarm(v, field, 41, bf.rules?.world);
     this.draw = new InfantryDraw(this.sw, v, vat);
     this.draw.cull = bf.view;
     scene.add(this.draw.group);
