@@ -317,6 +317,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-07 · Sim scope write-up: `docs/sim-scope.md` (Keith asked how much of the world is simulated; Claude)
+- What is full sim, reduced rate, abstract, frozen or not spawned by distance, terrain streaming, the sim worker steps, where the frame cost is, and localized-spawning opportunities. Docs only; nothing run.
 ### 2026-11-06 · A/B frame-time bench: `labs/convoy/?siege&manual&bench` (Keith: judging the worker by eye isn't a test; Claude)
 - `src/core/bench.ts` (new): `?bench` plays the page once per variant (here with the sim worker, then `?noworker`) at a fixed 1/120 s step so both simulate the same frames, warms 8 s and measures 30 s of sim time each (`?benchtime=warm,measure`), reloading between runs (sessionStorage), then shows average, p95 and worst frame, tick, submit, GPU/wait and the CPU stages side by side, copied to the clipboard (click the box if the copy needs a click) and in `window.__bench`. `FrameHud.onFrame` listeners. Convoy lab calls `runBench`. Checked: headless run of both variants end to end.
 ### 2026-11-06 · Replica footprints at their feet's size (Keith reported: "large round footprints"; Claude)
