@@ -11,6 +11,8 @@ import { KIND, FLAG, type Register } from "../game/register";
 import { closingSpeed, pairChance, threatOut, trampleFling, trampleHurt, type GroundThreat, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 
 export const INFANTRY_DEFAULTS = {
+  /** Perf 2026-11-07: bandits further outside the view than this aren't posed or drawn (m; -1 draws them all). */
+  banditDrawCull: 4,
   runSpeed: 4.5,
   banditPatrol: 0.4,
   speedJitter: 0.15,
@@ -66,6 +68,7 @@ export const INFANTRY_DEFAULTS = {
 export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
 export const INFANTRY_PARAMS: Param[] = [
+  { key: "banditDrawCull", label: "Bandits drawn this far off the screen (m)", min: -1, max: 40, step: 1, group: "Performance", tip: "Perf 2026-11-07: bandits further outside the view than this aren't posed or drawn (their run cycle catches up when seen), so their shadows still come in at the edges. -1 draws them all" },
   { key: "runSpeed", label: "Run speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Bandits" },
   { key: "banditPatrol", label: "Patrol walk (× run speed)", min: 0.1, max: 1, step: 0.01, group: "Bandits", tip: "How fast calm bandits (camp patrols, walking home) go" },
   { key: "speedJitter", label: "Speed spread ±", min: 0, max: 0.5, step: 0.01, group: "Bandits", tip: "Each bandit's own speed, so the swarm strings out" },
