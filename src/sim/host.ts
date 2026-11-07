@@ -18,6 +18,8 @@ import type { EscortGroup } from "../convoy/escort";
 import type { Convoy } from "../convoy/platform";
 import { applyEscorts, convoyPoses } from "./escortsRemote";
 import { RobotsView } from "./robotsRemote";
+import { InfantryView } from "./infantryRemote";
+import type { InfantrySwarm } from "../combat/infantry";
 import { DeathsView } from "./deathsRemote";
 import type { DeathPhysics } from "../physics/deaths";
 import type { RobotSwarm } from "../combat/robots";
@@ -85,6 +87,7 @@ export class SimHost {
     this.applyMs = 0;
     this.send({ type: "frame", id, sample }, [sample.buffer]);
     if (this.robotsView) this.robotsView.frameId = id + 1;
+    for (const v of this.infantryViews.values()) v.frameId = id + 1;
     this.stats.mainMs = performance.now() - t0;
   }
 
@@ -94,7 +97,7 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.robotsView ? ` · robots ${this.robotsView.sw.count} (${this.robotsView.stats.ms.toFixed(2)} ms there)` : ""}${this.deathsView ? ` · dead ${this.deathsView.stats.bodies} (${this.deathsView.stats.ms.toFixed(2)} ms there)` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.robotsView ? ` · robots ${this.robotsView.sw.count} (${this.robotsView.stats.ms.toFixed(2)} ms there)` : ""}${[...this.infantryViews.values()].map((v) => ` · bandits ${v.sw.count} (${v.stats.ms.toFixed(2)} ms there)`).join("")}${this.deathsView ? ` · dead ${this.deathsView.stats.bodies} (${this.deathsView.stats.ms.toFixed(2)} ms there)` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
@@ -142,6 +145,18 @@ export class SimHost {
   }
   private robotsView: RobotsView | null = null;
 
+  /**
+   * An infantry swarm from now on steps in the worker (stage 7b, src/sim/infantryRemote.ts): sw becomes a view (it must
+   * have no bandits yet, and no fence). id: its name in the stream (one per swarm).
+   */
+  infantry(sw: InfantrySwarm, id: number, seed: number) {
+    const v = new InfantryView(sw, id, this.rec, seed);
+    v.frameId = this.id + 1;
+    this.infantryViews.set(id, v);
+    (this.stats as Record<string, unknown>)[`infantry${id}`] = v.stats;
+  }
+  private infantryViews = new Map<number, InfantryView>();
+
   /** Death physics from now on runs in the worker (src/sim/deathsRemote.ts): phys becomes a view of it. */
   deaths(phys: DeathPhysics) {
     this.deathsView = new DeathsView(phys, this.rec);
@@ -185,6 +200,7 @@ export class SimHost {
     s.lag = this.id - m.id;
     s.workerMs = m.ms;
     if (m.robots && this.robotsView) this.robotsView.take(m.id, m.robots.events, m.robots.snap, m.robots.ms);
+    if (m.infantry) for (const f of m.infantry.swarms) this.infantryViews.get(f.id)?.take(m.id, f.shots, f.snap, m.infantry.ms);
     if (m.deaths && this.deathsView) this.deathsView.take(m.deaths.poses, m.deaths.thuds, m.deaths.ms);
     if (m.escorts && this.escortGroup) { applyEscorts(this.escortGroup, m.escorts); s.escorts = m.escorts[0]; }
     const cw = this.convoyWant.get(m.id);

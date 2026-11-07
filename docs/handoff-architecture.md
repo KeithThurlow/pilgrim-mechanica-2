@@ -99,6 +99,11 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 7a, one snapshot format (Claude 2026-11-07): `packBlock`/`applyBlock` (`src/ecs/snapshot.ts`), `SwarmBlock.shipped`
   / `pack` / `apply` / `isShipped`; the robots' worker snapshot carries its block that way (`RobotSnapshot.block`) and the
   AI's arrays by name. robotworker-check unchanged and comparing the block bytes too.
+- Stage 7b, infantry in the worker (Claude 2026-11-07): `src/sim/infantryRemote.ts` (InfantryView, InfantryWorker by swarm
+  id, calls and steps in stream order, shots back as flat 7-number records); `InfantrySwarm` setters (`setFrozen`, `sleep`,
+  `setPace`, `scaleHp`, `setHeading`) for every outside write in the convoy lab's camps swarm; `tools/infantryworker-check.ts`.
+  Not moved: fortress garrisons (`Fortresses.sw` has a `fence`: the walls' geometry would have to go across as data,
+  and fortresses.ts still writes its arrays directly: px/pz/hp/hold/frozen/hurry), the weapons lab's runners.
 
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,
@@ -107,7 +112,7 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 4.3b, more readers onto the components: the robots' register publish could become a world system over
   `Robot` + `Transform` + `Collider` once Collider is written by the sim (today publish computes it); the worker's robot
   snapshot becomes `packWorld` columns of the swarm's block (stage 7).
-- Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (done), 7b
+- Stage 7 (the host world in the worker): proposal `docs/proposal-stage7.md`, steps 7a (done), 7b (done, bar fortresses)
   (infantry in the worker), 7c (MechUnit split; wants Keith to play-test), 7d (the rules in the worker), 7e (retire the
   remotes). Then stage 8, co-op transport.
 

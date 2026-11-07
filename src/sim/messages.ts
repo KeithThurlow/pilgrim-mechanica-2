@@ -6,6 +6,7 @@ import type { BuildResult, PatchResult, TerrainRemote } from "../world/chunks";
 import type { FineRemote } from "../world/groundWindow";
 import type { RobotEvent } from "../combat/robots";
 import type { RobotSnapshot } from "./robotsRemote";
+import type { InfantryFrame } from "./infantryRemote";
 
 export type FineRequest = Parameters<FineRemote["fine"]>[0];
 
@@ -34,6 +35,8 @@ export type FromWorker =
   | { type: "frame"; id: number; heights: Float64Array; ms: number; escorts: Float64Array | null; convoy: Float64Array | null;
       /** Step 4: the robot swarm's frame (its steps' events, a snapshot after them, the steps' ms), or null. */
       robots: { events: RobotEvent[]; snap: RobotSnapshot; ms: number } | null;
+      /** Stage 7b: each infantry swarm's frame (its steps' shots, a snapshot), and the steps' ms; null without any. */
+      infantry: { swarms: InfantryFrame[]; ms: number } | null;
       deaths: { poses: Float64Array; thuds: Float64Array; ms: number } | null }
   | { type: "chunk"; res: BuildResult }
   | { type: "patch"; res: PatchResult }

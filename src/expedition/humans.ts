@@ -49,6 +49,8 @@ interface Live {
 const CAMP_SLOT_MAX = 200;
 
 export class BanditCamps {
+  /** The swarm's seed (the sim worker makes its copy from it). */
+  static readonly SEED = 23;
   readonly sw: InfantrySwarm;
   readonly draw: InfantryDraw;
   readonly target: InfantryTarget;
@@ -74,7 +76,7 @@ export class BanditCamps {
     /** True where a camp shouldn't be (the road). */
     private blocked: (x: number, z: number) => boolean,
   ) {
-    this.sw = new InfantrySwarm(v, field, 23, bf.rules?.world);
+    this.sw = new InfantrySwarm(v, field, BanditCamps.SEED, bf.rules?.world);
     this.draw = new InfantryDraw(this.sw, v, vat);
     this.draw.cull = bf.view;
     scene.add(this.draw.group);
@@ -129,8 +131,8 @@ export class BanditCamps {
       const hurt = this.hurt.get(c.id) ?? 0;
       const r = rng(hash4(c.seed, 3, 5, 7)), patrol = Math.round(slots.length * v.banditPatrolShare);
       slots.forEach((i, k) => {
-        sw.frozen[i] = 1;
-        if (hurt > 0) sw.hp[i] *= 1 - hurt;
+        sw.setFrozen(i, 1);
+        if (hurt > 0) sw.scaleHp(i, 1 - hurt);
         this.postX[i] = sw.px[i]; this.postZ[i] = sw.pz[i];
         this.wp[i] = k < patrol ? Math.floor(r() * 6) : -1;
         this.wait[i] = r() * v.banditPatrolPause;
@@ -166,8 +168,8 @@ export class BanditCamps {
       const chase = l.state === "alert" && hunting && Math.hypot(home.x - tx, home.z - tz) <= v.banditLeash;
       for (const k of this.own(l)) {
         const i = k;
-        if (l.state === "asleep") { sw.frozen[i] = 1; sw.vx[i] = 0; sw.vz[i] = 0; sw.clearTarget(i); continue; }
-        sw.frozen[i] = 0;
+        if (l.state === "asleep") { sw.sleep(i); continue; }
+        sw.setFrozen(i, 0);
         if (sw.state[i] >= DOWN) continue;
         // In a fight with another faction: the director set its target.
         if (sw.hasT[i] && !sw.calm[i]) continue;

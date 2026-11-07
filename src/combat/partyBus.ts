@@ -96,7 +96,7 @@ export class BusCrew {
     const made = sw.spawn(n, bus.x - fx * back, bus.z - fz * back, 1 + Math.sqrt(n) * 0.5);
     for (const i of made) {
       // Out of the door, running away from the bus at first.
-      sw.heading[i] = bus.heading + Math.PI;
+      sw.setHeading(i, bus.heading + Math.PI);
       this.slots.push(i); this.gens.push(sw.gen[i]); this.ids.push(`${this.id}/b${++this.dropped}`);
     }
     this.waves++;
