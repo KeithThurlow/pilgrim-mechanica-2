@@ -19,7 +19,7 @@
 // hull kept clear of the ground ahead. Speed builds toward the legs' top speed; the line of run turns only as fast as
 // the feet grip (the turning circle grows with speed squared) and the body can turn ahead of it into a drift that skids
 // the feet. Running off a crest flies on the gallop's air pose and lands on its staggered stance (the gallop: trailing
-// foot down first, the body dipping, then the run again; boundGallop brings back the whole gallop). Walls: ground
+// foot down first, the body dipping, then the run again). Walls: ground
 // steeper than wallGrade takes the speed going into it away (sprint, dash, skid), and nothing takes off upward faster
 // than launchUpMax, so a wall can't fling the mech into the sky.
 // Dash (Keith 18:28): a push-off. The planted foot pushes, the hips open toward the dash, the other foot steps out and
@@ -615,13 +615,12 @@ export class WalkerSim {
     this.accelLean(dt);
     this.plantPitch = 0;
     // The sprint, once any stagger and landing squat are over. Its ground gait is the run (left, right, left, right);
-    // the gallop's stance is the way down out of the air (a crest jump's landing), and the whole gait with boundGallop.
-    const gallop = v.boundGallop >= 0.5;
+    // the gallop's stance is the way down out of the air (a crest jump's landing).
     const sprinting = (this.bound || this.burst || (this.dashMove !== null && this.dashMove.oUp)) && this.stagger <= 0 && !this.squatState;
-    this.runK = clamp(this.runK + (sprinting && !gallop ? dt : -dt) / Math.max(0.02, v.runBlend), 0, 1);
+    this.runK = clamp(this.runK + (sprinting ? dt : -dt) / Math.max(0.02, v.runBlend), 0, 1);
     if (this.airborne) { this.stats.airFrames++; this.fly(dt, cmd); this.pose(); this.pushPrev.copy(this.push); this.trackSlides(dt); return; }
     if (this.squatState) { this.squatState.t += dt; if (this.squatState.t >= this.squatState.down + this.squatState.up) this.squatState = null; }
-    if (this.bound && this.stagger <= 0 && !this.squatState && (gallop || this.bStance)) { this.boundStep(dt, cmd); this.pushPrev.copy(this.push); this.trackSlides(dt); return; }
+    if (this.bound && this.stagger <= 0 && !this.squatState && this.bStance) { this.boundStep(dt, cmd); this.pushPrev.copy(this.push); this.trackSlides(dt); return; }
     if (this.bStance) this.endBound();
     this.prevPos.copy(this.pos);
     // The run: the sprint while Space holds it, or a dash's short sprint after letting go (burst). The dash's steps
@@ -1393,57 +1392,6 @@ export class WalkerSim {
     if (this.airborne) f.pos.set(this.pos.x + f.airRel.x, this.airY + f.airRel.y, this.pos.z + f.airRel.z);
   }
 
-  /**
-   * Start sprinting from the walk (or a stand, or the end of a dash): with the speed it has, at least the run's, into a
-   * short stance on the feet as they are (a swinging foot comes down first), whose push-off is the first leap.
-   */
-  private boundStart(dt: number, cmd: MoveCommand) {
-    const v = this.v;
-    const mx = this.vel.x + this.skid.x + this.pushPrev.x, mz = this.vel.z + this.skid.z + this.pushPrev.z;
-    const s = Math.hypot(mx, mz);
-    this.boundSpeed = Math.max(s, v.sprintSpeed);
-    this.course = s > 0.5 ? Math.atan2(mx, mz) : this.heading;
-    this.skid.set(0, 0, 0);
-    this.squatState = null;
-    const Tc = clamp(v.boundStanceLen / Math.max(4, this.boundSpeed), 0.06, 0.45) * 0.6, lag = v.boundStagger * Tc;
-    const under = this.ground.height(this.pos.x, this.pos.z);
-    const fw = forwardOf(this.course, this.t.f), [a, b] = this.feet;
-    // The planted foot behind goes first; a swinging foot lands late where it was heading.
-    let first: Foot = a.swinging ? b : b.swinging ? a : (a.planted.x - b.planted.x) * fw.x + (a.planted.z - b.planted.z) * fw.z < 0 ? a : b;
-    if (first.swinging) first = a;
-    for (const f of this.feet) {
-      f.u = 0; f.stanceT = 0;
-      if (!f.swinging) { f.bState = 0; continue; }
-      f.bState = 1;
-      f.lift.copy(f.pos); f.liftUp.copy(f.up); f.liftTheta = f.theta;
-      f.target.set(f.pos.x + Math.sin(this.course) * this.boundSpeed * lag, 0, f.pos.z + Math.cos(this.course) * this.boundSpeed * lag);
-      this.groundAt(f.target, f.targetUp);
-      f.targetYaw = this.heading + f.side * v.toeOut * D2R;
-    }
-    this.airLead = first.side;
-    this.bStance = { t: 0, T: Tc + lag, Tc, lag, r0: this.pelvis.y - (under + this.boundStand()), A: (v.boundHop / 2) * (Tc + lag) / Math.PI, first };
-    this.boundStep(dt, cmd);
-  }
-
-  /** Push off: both feet leave (whichever are still down), the lead foot swaps, the body flies on the air state. */
-  private boundLaunch() {
-    const v = this.v;
-    const cx = Math.sin(this.course), cz = Math.cos(this.course);
-    // Off the ground it's running on: the push-off is relative to the slope there, capped going up (no wall fling).
-    const vy = Math.min(v.launchUpMax, v.boundHop + this.boundSpeed * clamp(this.gradeAlong(cx, cz), -1.5, 3));
-    const k = clamp(0.4 + this.boundSpeed / 14, 0.5, 2);
-    for (const f of this.feet) if (!f.swinging) this.onLiftOff?.(f, k);
-    this.bStance = null;
-    this.airLead = this.airLead >= 0 ? -1 : 1;
-    this.stats.leaps++;
-    const wasAir = this.airborne;
-    this.launch(cx * this.boundSpeed, vy, cz * this.boundSpeed);
-    if (!wasAir) this.stats.takeoffs--; // a stride, not a take-off
-    this.strideLeap = true;
-    this.bLeap = true;
-    for (const f of this.feet) { f.bState = 0; f.swinging = false; }
-  }
-
   /** A sprint leap (or any flight while sprinting) comes down softly enough: the stance of the next stride. */
   private boundLand(impact: number, gx: number, gz: number, wasLeap: boolean) {
     const v = this.v;
@@ -1516,8 +1464,7 @@ export class WalkerSim {
   /** One step of a sprint stance: the body runs over planted feet, dips and rises; the feet go down and up staggered. */
   private boundStep(dt: number, cmd: MoveCommand) {
     const v = this.v;
-    if (!this.bStance) { this.boundStart(dt, cmd); return; }
-    const st = this.bStance;
+    const st = this.bStance!;
     st.t += dt;
     const cx = Math.sin(this.course), cz = Math.cos(this.course);
     const grade = this.gradeAlong(cx, cz);
@@ -1617,7 +1564,7 @@ export class WalkerSim {
       f.groundY = g;
     }
     this.pose();
-    if (st.t >= st.T) { if (this.v.boundGallop >= 0.5) this.boundLaunch(); else this.runFromStance(); }
+    if (st.t >= st.T) this.runFromStance();
   }
 
   // ---- The dash as footwork (Keith 2026-10-27; beats and curves in src/mech/dashSteps.ts) ----

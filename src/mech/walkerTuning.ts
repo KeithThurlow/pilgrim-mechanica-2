@@ -172,7 +172,6 @@ export const WALKER_DEFAULTS = {
   // The sprint's ground gait (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the
   // same time", left, right, left, right, not paired stomps with a hop). The gallop above stays as the way into and out
   // of the air: a crest jump's or a fall's landing stance, then the run.
-  boundGallop: 0,
   runSteps: 1.8,
   runStepsTop: 3,
   runPlant: 0.5,
@@ -269,7 +268,7 @@ export const WALKER_DEFAULTS = {
 };
 export type WalkerValues = typeof WALKER_DEFAULTS;
 
-// Not on the panel (Keith 2026-10-27: too many sprint sliders, most did nothing): the old gallop's (boundGallop,
+// Not on the panel (Keith 2026-10-27: too many sprint sliders, most did nothing): the gallop landing stance's (
 // boundStagger, boundReach, boundSplit, boundSwing, boundLeadLift, boundTuck, boundSquat, boundHop; with the run gait
 // they only shape a moment of landing stance) and the run's internal fixes (runHurry, runReachGive, runLookAhead,
 // runDescentSteps). Their values stay above and still take ?set=.
