@@ -66,3 +66,31 @@ export class HeavyLink {
     this.e = -1;
   }
 }
+
+/** A pack of heavies behind one target adapter (crushers, striders): a HeavyLink per unit, kept while the unit is in
+ *  the list; a unit that leaves the list or the pack leaving the world ends its entity. */
+export class HeavyPack<T extends object> {
+  private links = new Map<T, HeavyLink>();
+  private seen = new Set<T>();
+  private state: HeavyState;
+  constructor(kind: number, bar: HeavyState["bar"] = null) { this.state = heavyState(kind, bar); }
+
+  /** Each tick: every unit's state through fill (alive: whether it has an entity). */
+  sync(world: World, units: readonly T[], alive: (u: T) => boolean, fill: (u: T, s: HeavyState) => void) {
+    this.seen.clear();
+    for (const u of units) {
+      let l = this.links.get(u);
+      if (!l) { l = new HeavyLink(); this.links.set(u, l); }
+      const on = alive(u);
+      if (on) fill(u, this.state);
+      l.sync(world, on, u, this.state);
+      this.seen.add(u);
+    }
+    for (const [u, l] of this.links) if (!this.seen.has(u)) { l.leave(); this.links.delete(u); }
+  }
+
+  /** The entity of a unit (-1: none). */
+  entity(u: T): Entity | -1 { return this.links.get(u)?.entity ?? -1; }
+
+  leave() { for (const l of this.links.values()) l.leave(); this.links.clear(); }
+}

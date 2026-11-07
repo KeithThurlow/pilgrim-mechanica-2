@@ -90,6 +90,11 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 5b, vehicles (Claude 2026-11-07): war band raiders (`Raider`: cars, trucks, the party bus, War Rig) and the
   weapons lab's range trucks (`RangeCar`) sync through HeavyLink; their bars come from the world. Escorts aren't
   targets (nothing shoots them), so they get no entity yet. heavy-check runs a war band.
+- Stage 5c, crushers and striders (Claude 2026-11-07): `HeavyPack` (src/ecs/heavy.ts) keeps a HeavyLink per unit
+  behind a pack adapter (`CrusherTarget.heavies`, `StriderTarget.heavies`); their bars come from the world. Stage 5's
+  entity part is done: every enemy and mech on a battlefield is an entity with Transform, Health, Team, Collider,
+  Armour (and Bar). Still pushing their own bars: props and POIs (dummies, the test swarm, gates, towers, fabricators,
+  spawners). Not done from the review's stage 5: MechUnit split into a three-free sim and a render system.
 
 ## Next, in order
 - The 60 Hz tick is the only clock (Keith 2026-11-07). Left: the tool labs (terrain, parts, armoury, inventory, pose,

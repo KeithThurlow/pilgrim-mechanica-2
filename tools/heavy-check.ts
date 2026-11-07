@@ -20,6 +20,10 @@ import { DUST_DEFAULTS } from "../src/fx/dust";
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
 import { DustSim } from "../src/fx/dust";
 import { Warband, WARBAND_DEFAULTS, type Raider } from "../src/combat/warband";
+import { Crushers, CRUSHER_DEFAULTS } from "../src/combat/crusher";
+import { CrusherTarget } from "../src/combat/crusherTarget";
+import { Striders, STRIDER_DEFAULTS } from "../src/combat/strider";
+import { StriderTarget } from "../src/combat/striderTarget";
 
 const problems: string[] = [];
 const fail = (s: string) => { if (problems.length < 15) console.log("  FAIL " + s); problems.push(s); };
@@ -124,5 +128,48 @@ console.log(`  mech: ${ticks} ticks, ${checked} checked, ${seen.size} entities o
   if (most < 3 || kills < 2) fail(`war band: only ${most} raiders at once, ${kills} kills`);
   console.log(`  war band: up to ${most} raiders as entities, ${kills} destroyed, ${barsN} bars checked`);
 }
+// Stage 5c: crushers and striders (packs behind one adapter). One entity per live unit; killed or removed, gone; the
+// bar as their bars() pushed it.
+{
+  const rules3 = new CombatRules(field, {});
+  const w3 = rules3.world;
+  const crushers = new Crushers({ ...CRUSHER_DEFAULTS }, field, 5), striders = new Striders({ ...STRIDER_DEFAULTS }, field, 9);
+  const ct = new CrusherTarget(crushers, 3), st = new StriderTarget(striders, 3);
+  rules3.targets.push(ct, st);
+  const c1 = crushers.spawn(40, 0, 0), c2 = crushers.spawn(-40, 10, 1);
+  const s1 = striders.spawn(0, 60, 0), s2 = striders.spawn(20, -60, 2);
+  const out: BarEntry[] = [];
+  let checkedN = 0;
+  const A = new THREE.Vector3();
+  for (let f = 0; f < 600; f++) {
+    crushers.update(1 / 60, null, []);
+    striders.update(1 / 60, null, () => false);
+    if (f === 100) { crushers.hit(c1, c1.maxHealth * 0.3); striders.hit(s1, s1.maxHealth * 0.2); }
+    if (f === 200) crushers.hit(c2, 1e9);
+    if (f === 300) striders.remove(s2);
+    if (f === 450) rules3.targets.splice(rules3.targets.indexOf(st), 1);
+    rules3.syncWorld();
+    const liveC = crushers.list.filter((c) => c.alive), liveS = f >= 450 ? [] : striders.list.filter((s) => s.alive);
+    const q = w3.query(Transform, Sim);
+    if (q.count !== liveC.length + liveS.length) fail(`packs tick ${f}: ${q.count} heavies, ${liveC.length} crushers + ${liveS.length} striders`);
+    out.length = 0;
+    gatherBars(w3, 1, out);
+    if (out.length !== q.count) fail(`packs tick ${f}: ${out.length} bars`);
+    for (const c of liveC) {
+      const b = out.find((x) => x.key === ct.heavies.entity(c));
+      if (!b || Math.abs(b.x - c.x) > 1e-3 || Math.abs(b.y - (c.bodyY + c.W * 0.5 + 1.5)) > 1e-3 || b.hp !== Math.fround(c.health) || b.width !== 5 || !b.always) { fail(`packs tick ${f}: a crusher's bar`); break; }
+      checkedN++;
+    }
+    for (const s of liveS) {
+      const h = s.head(A), b = out.find((x) => x.key === st.heavies.entity(s));
+      if (!b || Math.abs(b.x - h.x) > 1e-3 || Math.abs(b.y - (h.y + 2.5)) > 1e-3 || b.hp !== Math.fround(s.health) || b.width !== 6 || !b.always) { fail(`packs tick ${f}: a strider's bar`); break; }
+      checkedN++;
+    }
+  }
+  if (w3.alive !== 1) fail(`packs: ${w3.alive} entities at the end (want the one crusher left)`);
+  void s2;
+  console.log(`  crushers and striders: ${checkedN} bars checked; killed, removed and off-the-field ones gone`);
+}
+
 if (problems.length) { console.log(`heavy: ${problems.length} problem(s)`); process.exit(1); }
 console.log("heavy: ok");

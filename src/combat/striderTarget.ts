@@ -7,7 +7,8 @@ import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import { inBand, sheetCircle, sheetSegment, type Sheet, type SheetHit } from "../game/sheet";
 import type { HitSurface } from "../fx/minigun";
-import type { BarEntry } from "../ui/healthBars";
+import { HeavyPack } from "../ecs/heavy";
+import type { World } from "../ecs/world";
 import { armourHit } from "../game/armour";
 import { rayCapsule, capsuleNormal } from "../game/mechUnit";
 import { KIND, FLAG, ObjectSerials, type Owner, type Register } from "../game/register";
@@ -157,13 +158,18 @@ export class StriderTarget implements Hittable, Owner {
     return n;
   }
 
-  bars(out: BarEntry[]) {
-    for (const s of this.pack.list) {
-      if (!s.alive) continue;
-      const h = s.head(A);
-      out.push({ key: s, x: h.x, y: h.y + 2.5, z: h.z, hp: s.health, max: s.maxHealth, armour: this.armourOf(), width: 6, always: true });
-    }
+  /** The striders as entities in the host world (src/ecs/heavy.ts, stage 5c): Transform at the disc (its head),
+   *  Health, Team, Collider (as the register measures them), Armour and an always-on health bar over the disc. */
+  readonly heavies = new HeavyPack<Strider>(KIND.Unit, { width: 6, lift: 2.5, always: true });
+  syncWorld(world: World) {
+    this.heavies.sync(world, this.pack.list, (s) => s.alive, (s, st) => {
+      const h = s.head(A), S = s.S;
+      st.x = h.x; st.y = h.y; st.z = h.z; st.heading = s.sim.heading;
+      st.hp = s.health; st.max = s.maxHealth; st.team = this.team; st.armour = this.armourOf();
+      st.radius = STRIDER_FRAME.headR * S * 0.8; st.reach = S * 1.6; st.height = (s.sim.v.hipHeight + STRIDER_FRAME.head) * S * 0.75;
+    });
   }
+  leaveWorld() { this.heavies.leave(); }
 
   /** Into the register (the soft lock and the weapons): each standing strider at its disc (the guns' centre mass), the disc's footprint as its body, its legs' spread as reach. */
   publish(reg: Register) {

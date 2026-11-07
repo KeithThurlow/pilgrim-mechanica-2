@@ -5,7 +5,8 @@
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import type { BarEntry } from "../ui/healthBars";
+import { HeavyPack } from "../ecs/heavy";
+import type { World } from "../ecs/world";
 import { armourHit } from "../game/armour";
 import { rayCapsule, capsuleNormal } from "../game/mechUnit";
 import { KIND, FLAG, ObjectSerials, type Owner, type Register } from "../game/register";
@@ -103,12 +104,18 @@ export class CrusherTarget implements Hittable, Owner {
     return n;
   }
 
-  bars(out: BarEntry[]) {
-    for (const c of this.pack.list) {
-      if (!c.alive) continue;
-      out.push({ key: c, x: c.x, y: c.bodyY + c.W * 0.5 + 1.5, z: c.z, hp: c.health, max: c.maxHealth, armour: this.armourOf(), width: 5, always: true });
-    }
+  /** The crushers as entities in the host world (src/ecs/heavy.ts, stage 5c): Transform at the shell, Health, Team,
+   *  Collider (as the register measures them), Armour and an always-on health bar over the shell. */
+  readonly heavies = new HeavyPack<Crusher>(KIND.Unit, { width: 5, lift: 0, always: true });
+  syncWorld(world: World) {
+    this.heavies.sync(world, this.pack.list, (c) => c.alive, (c, st) => {
+      st.x = c.x; st.y = c.bodyY; st.z = c.z; st.heading = c.heading;
+      st.hp = c.health; st.max = c.maxHealth; st.team = this.team; st.armour = this.armourOf();
+      st.radius = c.W * 0.45; st.reach = c.W * 0.6; st.height = c.H + c.W * 0.25;
+      st.bar!.lift = c.W * 0.5 + 1.5;
+    });
   }
+  leaveWorld() { this.heavies.leave(); }
 
   /** Into the register (the soft lock and the weapons): each standing crusher at its shell, its stance as reach. */
   publish(reg: Register) {
