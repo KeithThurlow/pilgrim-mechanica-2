@@ -18,12 +18,13 @@ drawn as fast as the graphics allow (144+, ideally 200+), interpolated; don't wa
 - Stage 3b: the rules own and step shots, burns, pools, chills (order kept); `freeze` event; Battlefield plays draws and
   lists. `src/core/rng.ts`; mechUnit and arsenal spread, war band spawns/runs/rings/turret clocks/spread seeded.
 
+- Stage 4.1: `rules.world`, `rules.syncWorld()` (end of `rules.step`) calls `Hittable.syncWorld?`; `RobotTarget` →
+  `src/combat/robotEntities.ts` over `src/ecs/slots.ts`; `tools/robotentities-check.ts`. Known: a RobotTarget taken out
+  of `targets` leaves its entities in the world (no target is removed today).
+
 ## Next, in order
 - Stage 4, the robot swarm onto the ECS, strangler-style (each step its own PR, robots-check and robotworker parity
   unchanged at every step):
-  - 4.1 A host `World` as a rules resource (`rules.world`) and a sync system: each live robot slot gets an entity (by
-    uid, kept while it lives), Transform, PrevTransform, Health, Team, Collider written from the swarm's arrays each
-    tick. Nothing reads them yet. Check: the components equal the swarm's arrays every tick of a camp fight.
   - 4.2 Readers move to the components: the register's robot owner, targeting, health bars, then `robotsDraw`
     (interpolating with `drawnAt` once stage 6 lands).
   - 4.3 The swarm writes the components itself (its x/z/heading/hp arrays become views of the columns, or the swarm
