@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Phones: the camera pulls back on narrow screens, pinch to zoom (Keith: "way too zoomed in on the phone"; Claude on `claude/project-thread-gx0ixa-zoom`)
+- `src/core/isoCamera.ts`: on a screen narrower than 16:9 the camera distance is × (16:9 / aspect)^`camNarrowFit` (0.5; Camera group): an upright phone (aspect 0.49) sits about 1.9× further out, 81 m in place of 40 m. PC unchanged (factor 1 at 16:9 or wider). Two fingers on the view pinch the zoom (between the near and far distances, as the wheel).
+- Checked: typecheck, full `npm test`; Pixel 7 emulation camera height 70 m (PC game view 31 m). Pinch not tried on a real phone.
+
 ### 2026-11-08 · Phones: dynamic resolution (Keith: 12-17 fps on his phone, GPU-bound; Claude on `claude/project-thread-gx0ixa-dynres`)
 - `src/core/app.ts`: on touch screens (`?dynres=1` anywhere, `?dynres=0` off) every quarter second the pixel ratio drops 15% while frames are under 30 fps with over 40% of the time outside the sim and submit, down to `?dynmin=` (0.5) of `?res=`, and climbs 8% back when over 50 fps. Skips the first 3 s and frames over 250 ms. The HUD's pixels line shows `×scale dyn`.
 - Checked: typecheck, full `npm test`; Pixel 7 emulation on the walker lab moves the scale and back; PC emulation unchanged. Not timed on a real phone.
