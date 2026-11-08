@@ -56,9 +56,13 @@ export class DetailPatch {
   }
 
   /** Coarser with the zoom (Keith 2026-11-08: "it only really needs to be high if the camera is zoomed in"): 0 at
-   *  patchSpacing, each level twice the spacing (never coarser than the chunks' own grid) and no denser middle. */
+   *  patchSpacing, each level twice the spacing (never coarser than the chunks' own grid) and no denser middle. Only the
+   *  vertex grid changes (a cached geometry per level on the same window, textures and material), so switching costs
+   *  nothing and shows nothing: rebuilding the window made the ground flash white or vanish (Keith 2026-11-08). */
   zoomLevel = 0;
-  private spacing() { return Math.min(this.step(), this.v.patchSpacing * 2 ** this.zoomLevel); }
+  private geoms = new Map<number, THREE.BufferGeometry>();
+  private uLod = uniform(1);
+  private spacing() { return this.v.patchSpacing; }
   /** The level for a camera distance (m), with 10% hysteresis so it doesn't flicker at a threshold. */
   private levelFor(d: number) {
     const v = this.v as DentValues & { patchZoomFrom?: number; patchZoomFar?: number };
@@ -86,7 +90,7 @@ export class DetailPatch {
   private build() {
     const w = this.win;
     this.key = `${w.step}|${w.sub}|${w.nc}|${w.pad}|${this.fineKey()}`;
-    if (this.mesh) { this.group.remove(this.mesh); this.mesh.geometry.dispose(); }
+    if (this.mesh) this.group.remove(this.mesh);
     for (const t of [this.fineTex, this.coarseTex, this.colourTex]) t?.dispose();
     const tex = (data: Float32Array, n: number, fmt: THREE.PixelFormat) => {
       const t = new THREE.DataTexture(data, n, n, fmt, THREE.FloatType);
@@ -105,13 +109,33 @@ export class DetailPatch {
     this.gpuGround.cells.value = w.nc;
     this.gpuGround.wrap.value = w.mc;
 
+    for (const g of this.geoms.values()) g.dispose();
+    this.geoms.clear();
+    const g = this.geometry(0);
+    const mesh = new THREE.Mesh(g, this.material());
+    mesh.frustumCulled = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.visible = false;
+    mesh.name = "detail patch";
+    this.mesh = mesh;
+    this.group.add(mesh);
+  }
+
+  /** The vertex grid for a zoom level (cached): level 0 the window's own (with its dense middle), each level up every
+   *  other line of the one below. Positions are fine-grid indices, so the same material places every level. */
+  private geometry(lod: number) {
+    const cached = this.geoms.get(lod);
+    if (cached) return cached;
+    const w = this.win;
     // A grid of vertices whose positions are just their grid indices; the shader places them. Round the focus (the
     // window's middle) the lines come closer, patchFineSub to a ground sample, so foot-sized dents reach the mesh
     // (Keith 2026-11-02: footprints read as painted on at 25 cm); the ground there is interpolated between samples.
     // A plain tensor grid: the dense band runs out to the edges in each direction, no T-junctions.
-    const [c0, c1, sub] = this.fineBand();
-    const line: number[] = [];
-    for (let k = 0; k <= w.nf; k++) {
+    const [c0, c1, sub] = lod > 0 ? [0, 0, 1] : this.fineBand();
+    const line: number[] = [], every = 2 ** lod;
+    for (let k = 0; k <= w.nf; k += every) {
       line.push(k);
       if (k >= c0 && k < c1) for (let q = 1; q < sub; q++) line.push(k + q / sub);
     }
@@ -131,22 +155,13 @@ export class DetailPatch {
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
     g.setIndex(new THREE.BufferAttribute(idx, 1));
-    this.stats.vertices = row * row;
-    this.stats.triangles = n * n * 2;
-    const mesh = new THREE.Mesh(g, this.material());
-    mesh.frustumCulled = false;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.matrixAutoUpdate = false;
-    mesh.visible = false;
-    mesh.name = "detail patch";
-    this.mesh = mesh;
-    this.group.add(mesh);
+    this.geoms.set(lod, g);
+    return g;
   }
 
   /** The window cells (fine) of the dense middle band, and vertices per fine cell there. */
   private fineBand(): [number, number, number] {
-    const w = this.win, sub = this.zoomLevel > 0 ? 1 : Math.max(1, Math.round(this.v.patchFineSub ?? 1));
+    const w = this.win, sub = Math.max(1, Math.round(this.v.patchFineSub ?? 1));
     const m = Math.min(w.nf, 2 * Math.round(Math.max(0, this.v.patchFineArea ?? 0) / w.fine / 2));
     if (sub <= 1 || m <= 0) return [0, 0, 1];
     return [w.nf / 2 - m / 2, w.nf / 2 + m / 2, sub];
@@ -212,7 +227,7 @@ export class DetailPatch {
       // The dents, low-passed to what the lattice can carry (a 3 x 3 binomial one vertex apart: closer in the dense
       // middle, where the vertices are).
       const dense = li.greaterThanEqual(B0).and(li.lessThanEqual(B1)).and(lj.greaterThanEqual(B0)).and(lj.lessThanEqual(B1));
-      const KD = select(dense, float(F / SUB), float(F));
+      const KD = select(dense.and(this.uLod.lessThan(1.5)), float(F / SUB), this.uLod.mul(F));
       let acc: THREE.Node<"float"> = float(0);
       for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
         const wt = ((2 - Math.abs(a)) * (2 - Math.abs(b))) / 16;
@@ -250,6 +265,14 @@ export class DetailPatch {
   update(fx: number, fz: number, on: boolean, camDist = 0) {
     const v = this.v, mesh = this.mesh!;
     if (camDist > 0) this.zoomLevel = this.levelFor(camDist);
+    // Never coarser than the chunks' grid (a fine cell is 1 / sub of it), and only levels that land on the window's edge.
+    let lod = 0;
+    while (lod < this.zoomLevel && 2 ** (lod + 1) <= this.win.sub && this.win.nf % 2 ** (lod + 1) === 0) lod++;
+    const g = this.geometry(lod);
+    if (mesh.geometry !== g) mesh.geometry = g;
+    this.uLod.value = 2 ** lod;
+    this.stats.vertices = g.attributes.position.count;
+    this.stats.triangles = (g.index?.count ?? 0) / 3;
     // With the coarse shadow copy of the ground on (src/world/chunks.ts), the patch only catches shadows: its dents are
     // centimetres deep, below what the shadow map can show, and it was 295k triangles in the shadow pass.
     mesh.castShadow = !((this.streamer.v.shadowTerrain ?? 0) > 0.5);
