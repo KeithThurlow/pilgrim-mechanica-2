@@ -324,6 +324,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - `src/core/lab.css`: on phones the frame HUD (`.hud`) and the expedition card (`.exp-card`, `src/expedition/expeditionHud.ts`) are hidden until the menu's FPS or Info; in portrait the action bar (`.action-bar`, `src/ui/actionBar.ts`) sits above the pad (`--tp-clear`).
 - Open for Keith: the Home timer is on the hidden card (Info shows it); the weapons lab's loadout picker still opens over the middle (HIDE closes it).
 - Checked: typecheck, full `npm test`; Pixel 7 emulation both ways on the convoy lab `?out`; menu toggles and a drag on 1 in the weapons lab. Not seen on a real phone.
+### 2026-11-08 · Phones: lighter death physics (Keith's swarm lab on his phone: sim 36 ms; Claude on `claude/project-thread-gx0ixa-swarm`)
+- Profile (swarm lab `?swarm=150&norender&proto=split:3`, Pixel 7 emulation, 8 s): Rapier (death physics, looks only) 1124 ms, the top cost, more than the robots' sim. `PHONE_PRESET` adds `maxRagdolls` 10 (30), `liveFor` 4 s (7), `ragdollsPerFrame` 3 (6); `DEATH_DEFAULTS` through `phoneDefaults`. Rapier 1124 → 323 ms. PC unchanged.
+- Checked: typecheck, full `npm test`.
+
 ### 2026-11-08 · The game tick is 30 Hz everywhere (Keith: "we can probably just make 30 hertz the sim rate"; Claude on `claude/project-thread-gx0ixa-tick30`)
 - `src/core/clock.ts`: `Clock` and `clockFromUrl` default to 30 Hz on every screen (phones already were); `?tick=60` the old rate. Rates of fire hold: `src/mech/upper.ts` fires every round due in a tick (several in one at over 30 rounds/s); no weapon caps its rate at one per tick. `tools/clock-check.ts` expects 30; CLAUDE.md and docs/decisions.md updated.
 - Checked: typecheck, full `npm test`.
