@@ -20,6 +20,8 @@ export const PHONE_PRESET: Record<string, number> = {
   // 74k. Footprints and berms still show through the dent texture's per-pixel normals.
   patchSpacing: 0.5,       // 0.25
   patchFineSub: 1,         // 2
+  patchZoomFrom: 30,       // 60: 1 m spacing from 30 m out (an upright phone's game view is about 80 m) ...
+  patchZoomFar: 60,        // 120 (already at the chunks' 1 m grid)
 };
 
 /** The phone preset over a system's defaults, where they're declared, so values read before any panel is built (the

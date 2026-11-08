@@ -55,12 +55,28 @@ export class DetailPatch {
     streamer.onRebuild.push((box, dentsOnly = false) => this.pending.push({ box, dentsOnly }));
   }
 
+  /** Coarser with the zoom (Keith 2026-11-08: "it only really needs to be high if the camera is zoomed in"): 0 at
+   *  patchSpacing, each level twice the spacing (never coarser than the chunks' own grid) and no denser middle. */
+  zoomLevel = 0;
+  private spacing() { return Math.min(this.step(), this.v.patchSpacing * 2 ** this.zoomLevel); }
+  /** The level for a camera distance (m), with 10% hysteresis so it doesn't flicker at a threshold. */
+  private levelFor(d: number) {
+    const v = this.v as DentValues & { patchZoomFrom?: number; patchZoomFar?: number };
+    const at = [v.patchZoomFrom ?? 0, v.patchZoomFar ?? 0];
+    let n = 0;
+    for (let i = 0; i < at.length; i++) {
+      if (!(at[i] > 0)) continue;
+      const edge = at[i] * (this.zoomLevel > i ? 0.9 : 1.1);
+      if (d > edge) n = i + 1;
+    }
+    return n;
+  }
   private step() { return this.streamer.v.chunkSize / Math.max(1, Math.round(this.streamer.v.segments)); }
   private coverage() { return Math.max(8, this.v.dentCoverage - 4 * this.step()); }
   /** Coarse cells sampled ahead of the drawn patch on every side, so ground is ready before it comes into view. */
   private lead() { return Math.max(0, Math.round((this.v.patchLead ?? 6) / this.step())); }
   private makeWindow() {
-    const w = new GroundWindow(this.field, this.coverage(), this.v.patchSpacing, this.step(), this.lead());
+    const w = new GroundWindow(this.field, this.coverage(), this.spacing(), this.step(), this.lead());
     w.coarseSource = (i, j, out) => this.streamer.vertexAt(i, j, out);
     w.remote = this.fineRemote;
     return w;
@@ -130,7 +146,7 @@ export class DetailPatch {
 
   /** The window cells (fine) of the dense middle band, and vertices per fine cell there. */
   private fineBand(): [number, number, number] {
-    const w = this.win, sub = Math.max(1, Math.round(this.v.patchFineSub ?? 1));
+    const w = this.win, sub = this.zoomLevel > 0 ? 1 : Math.max(1, Math.round(this.v.patchFineSub ?? 1));
     const m = Math.min(w.nf, 2 * Math.round(Math.max(0, this.v.patchFineArea ?? 0) / w.fine / 2));
     if (sub <= 1 || m <= 0) return [0, 0, 1];
     return [w.nf / 2 - m / 2, w.nf / 2 + m / 2, sub];
@@ -231,8 +247,9 @@ export class DetailPatch {
   }
 
   /** Follow the focus: refill what came into view, upload, place the chunks' hole. */
-  update(fx: number, fz: number, on: boolean) {
+  update(fx: number, fz: number, on: boolean, camDist = 0) {
     const v = this.v, mesh = this.mesh!;
+    if (camDist > 0) this.zoomLevel = this.levelFor(camDist);
     // With the coarse shadow copy of the ground on (src/world/chunks.ts), the patch only catches shadows: its dents are
     // centimetres deep, below what the shadow map can show, and it was 295k triangles in the shadow pass.
     mesh.castShadow = !((this.streamer.v.shadowTerrain ?? 0) > 0.5);
@@ -266,7 +283,7 @@ export class DetailPatch {
   }
 
   private makeWindowIfChanged(): GroundWindow | null {
-    const st = this.step(), sh = GroundWindow.shape(this.coverage(), this.v.patchSpacing, st);
+    const st = this.step(), sh = GroundWindow.shape(this.coverage(), this.spacing(), st);
     return `${st}|${sh.sub}|${sh.nc}|${this.lead()}|${this.fineKey()}` === this.key ? null : this.makeWindow();
   }
 }
