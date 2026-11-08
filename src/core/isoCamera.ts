@@ -23,6 +23,9 @@ export const ISO_DEFAULTS = {
   camLeadFrom: 7,
   camSpeedZoom: 1.2,
   camSpeedEase: 1.5,
+  // Screens narrower than 16:9 (a phone held upright; Keith 2026-11-08: "way too zoomed in on the phone"): the camera
+  // pulls back by (16:9 / aspect) to this power, so they keep some of the PC's width. 0: the same distance as the PC.
+  camNarrowFit: 0.5,
 };
 export type IsoValues = typeof ISO_DEFAULTS;
 
@@ -41,6 +44,7 @@ export const ISO_PARAMS: Param[] = [
   { key: "camLeadMax", label: "Look ahead at most (m)", min: 0, max: 40, step: 0.5, group: "Camera" },
   { key: "camLeadFrom", label: "Look ahead from (m/s)", min: 0, max: 20, step: 0.5, group: "Camera", tip: "Walking and running stay centred; above this the look-ahead builds in" },
   { key: "camSpeedZoom", label: "Pull out per m/s over that (m)", min: 0, max: 5, step: 0.05, group: "Camera", tip: "At 14 m/s about 8 m further out, at 22 m/s about 18 m" },
+  { key: "camNarrowFit", label: "Narrow screens: pull back (power)", min: 0, max: 1, step: 0.05, group: "Camera", tip: "On a screen narrower than 16:9 the camera sits (16:9 / aspect)^this further out, so an upright phone sees more of the PC's width. 0: as on the PC; 1: the PC's full width. Pinch zooms on a touch screen" },
   { key: "camSpeedEase", label: "Look-ahead easing (1/s)", min: 0.2, max: 10, step: 0.1, group: "Camera", tip: "How quickly the look-ahead and pull-out follow changes of speed and direction" },
 ];
 
@@ -63,6 +67,24 @@ export class IsoCamera {
       // Even steps in log space, so each notch feels the same near and far.
       this.distTarget = THREE.MathUtils.clamp(this.distTarget * Math.exp(Math.sign(e.deltaY) * 0.14), this.v.camNearDist, this.v.camFarDist);
     }, { passive: false });
+    // Pinch zoom on touch screens: two fingers on the view (not the sticks), the distance scaled by how far they spread.
+    const fingers = new Map<number, { x: number; y: number }>();
+    let pinch0 = 0, dist0 = 0;
+    const span = () => { const [a, b] = [...fingers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || !this.enabled) return;
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (fingers.size === 2) { e.preventDefault(); pinch0 = span(); dist0 = this.distTarget; }
+    });
+    el.addEventListener("pointermove", (e) => {
+      const f = fingers.get(e.pointerId);
+      if (!f) return;
+      f.x = e.clientX; f.y = e.clientY;
+      if (fingers.size === 2 && pinch0 > 10) this.distTarget = THREE.MathUtils.clamp(dist0 * pinch0 / Math.max(10, span()), this.v.camNearDist, this.v.camFarDist);
+    });
+    const lift = (e: PointerEvent) => { fingers.delete(e.pointerId); pinch0 = 0; };
+    el.addEventListener("pointerup", lift);
+    el.addEventListener("pointercancel", lift);
   }
 
   /** Jump the zoom to a distance (m), e.g. for review shots. */
@@ -102,7 +124,8 @@ export class IsoCamera {
     this.lead.x += (mx * k - this.lead.x) * ease;
     this.lead.y += (mz * k - this.lead.y) * ease;
     this.speedDist += (over * v.camSpeedZoom - this.speedDist) * ease;
-    const dist = this.dist + this.speedDist;
+    const narrow = Math.pow(Math.max(1, (16 / 9) / Math.max(0.1, this.camera.aspect)), v.camNarrowFit ?? 0);
+    const dist = this.dist * narrow + this.speedDist;
     const yaw = THREE.MathUtils.degToRad(this.v.camYaw);
     // Look at a point toward the screen's bottom edge, so the followed thing sits higher on screen.
     const drop = v.camSouth * dist;
