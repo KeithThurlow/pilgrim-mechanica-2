@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Phones: dynamic resolution (Keith: 12-17 fps on his phone, GPU-bound; Claude on `claude/project-thread-gx0ixa-dynres`)
+- `src/core/app.ts`: on touch screens (`?dynres=1` anywhere, `?dynres=0` off) every quarter second the pixel ratio drops 15% while frames are under 30 fps with over 40% of the time outside the sim and submit, down to `?dynmin=` (0.5) of `?res=`, and climbs 8% back when over 50 fps. Skips the first 3 s and frames over 250 ms. The HUD's pixels line shows `×scale dyn`.
+- Checked: typecheck, full `npm test`; Pixel 7 emulation on the walker lab moves the scale and back; PC emulation unchanged. Not timed on a real phone.
+
 ### 2026-11-08 · Phones: a coarser ground mesh, and the phone preset reaches values read at start (Keith: 12-17 fps, 40-80 ms GPU wait on his phone; Claude on `claude/project-thread-gx0ixa`)
 - Measured (Pixel 7 emulation, convoy lab): 864k triangles a frame, 524k of them the detail patch (25 cm spacing, 12.5 cm middle), whatever the `?res=`; that's why `?res=0.15` didn't help. `PHONE_PRESET` (`src/core/phoneQuality.ts`) adds `patchSpacing` 0.5 and `patchFineSub` 1: the patch 74k. New `phoneDefaults()` puts the preset into `FX_BUDGET_DEFAULTS`, `DENT_DEFAULTS`, `BLAST_WAVE_DEFAULTS`, `HEAT_DEFAULTS` where they're declared: the convoy lab builds its battlefield before its panel, so the GPU dust pool (sized once) had stayed at 32768 on phones; now 8192. Frame total 864k → 266k triangles. PC unchanged.
 - Checked: typecheck, full `npm test`, triangle counts in the emulated phone. Not timed on a real phone.
