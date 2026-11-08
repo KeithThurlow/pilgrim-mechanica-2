@@ -319,6 +319,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Phones: landscape laid out like a MOBA, ability buttons are drag-to-aim sticks (Keith: "the buttons in the center take up all of the view"; Claude on `claude/project-thread-vhroly`)
+- `src/core/touch.ts`: the button block is gone. Round the left stick a fan of Q (repair kit), R, E, F, Tab; round the right stick 1, 2, 3, 4 and Dash (landscape: inward round over the top; portrait: 40-140° so the fans don't meet). 1-4 turn into their own stick while held: drag to aim on the ground (the rim reaches the screen's edge), release fires; a tap with no drag fires at the current aim; the key is held the whole time, so hold-to-paint launchers paint. Inv and ⛶ small at the top (top right in portrait). In landscape the left stick sits clear of the energy and hull bars.
+- `src/core/lab.css`: the minimap (expedition HUD) top left in both orientations, the frame HUD bottom centre between the fans in landscape.
+- Open for Keith: no cancel gesture yet (a drag always fires); line mortar and napalm still take their line from a finger on the view after the key; the buttons say 1-4, not the item's name.
+- Checked: typecheck, full `npm test`; Pixel 7 emulation portrait and landscape on the convoy lab `?out`; a touch drag on 1 in the weapons lab `?k1=rpg` paints at the dragged spot, a tap sends the key at the old aim.
 ### 2026-11-08 · Phones tick at 30 Hz (Keith's HUD in a convoy fight: sim 103 ms a frame, gpu/wait 1.6, 8 fps; Claude on `claude/project-thread-gx0ixa-tick`)
 - `src/core/clock.ts` `clockFromUrl`: 30 Hz under the phone preset (`phoneLite`), 60 elsewhere; `?tick=60` puts phones back. The sim was running the clock's 4 catch-up ticks every frame (about 25 ms each), so it never caught up; at 30 Hz half the ticks for the same game time. Drawing between ticks is unchanged.
 - Checked: typecheck, full `npm test`. Not timed on a phone.
