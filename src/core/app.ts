@@ -51,7 +51,15 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const aa = params.has("aa") ? params.get("aa") !== "0" : !touchMode;
   const renderer = new THREE.WebGPURenderer({ antialias: aa, forceWebGL: params.has("webgl") });
   await renderer.init();
-  renderer.setPixelRatio(touchMode ? window.devicePixelRatio * res : Math.min(window.devicePixelRatio, 2) * res);
+  const basePR = touchMode ? window.devicePixelRatio * res : Math.min(window.devicePixelRatio, 2) * res;
+  renderer.setPixelRatio(basePR);
+  // Dynamic resolution (Keith 2026-11-08: 12-17 fps on his phone, GPU-bound): on touch screens (`?dynres=1` anywhere,
+  // `?dynres=0` off) the pixel ratio drops while frames run slow with most of the time outside the sim and the submit,
+  // down to `?dynmin=` (0.5) of the base `?res=`, and climbs back when there's room. A quarter-second window, ignoring
+  // the first 3 s and frame spikes (shader builds).
+  const dynOn = params.has("dynres") ? params.get("dynres") !== "0" : touchMode;
+  const dynMin = Math.min(1, Math.max(0.2, Number(params.get("dynmin")) || 0.5));
+  const dyn = { scale: 1, sum: 0, gpu: 0, n: 0, since: 0 };
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   // Sun shadows draw the scene a second time: off on phones (`?shadows=1` puts them back, `?shadows=0` takes them off anywhere).
@@ -71,7 +79,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
     const w = container.clientWidth, h = container.clientHeight;
     renderer.setSize(w, h, false);
     const c = renderer.domElement;
-    hud.pixels = `${c.width}×${c.height} px (res ${res}${aa ? ", AA" : ""}${renderer.shadowMap.enabled ? "" : ", no shadows"}${phoneLite ? ", lite" : ""})`;
+    hud.pixels = `${c.width}×${c.height} px (res ${res}${dynOn ? ` ×${dyn.scale.toFixed(2)} dyn` : ""}${aa ? ", AA" : ""}${renderer.shadowMap.enabled ? "" : ", no shadows"}${phoneLite ? ", lite" : ""})`;
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };
@@ -129,6 +137,18 @@ export async function createApp(container: HTMLElement): Promise<App> {
       for (const c of captures.splice(0)) c(url);
     }
     last.frame = real * 1000; last.tick = t1 - t0; last.render = t2 - t1;
+    if (dynOn && now > 3000 && real < 0.25) {
+      dyn.sum += real * 1000; dyn.gpu += Math.max(0, real * 1000 - (t2 - t0)); dyn.n++;
+      if (now - dyn.since > 250) {
+        const avg = dyn.sum / dyn.n, gpuShare = dyn.gpu / dyn.sum;
+        // Under 30 fps and mostly the GPU's: 15% fewer pixels across; over 50 fps: 8% more.
+        let next = dyn.scale;
+        if (avg > 33 && gpuShare > 0.4) next = Math.max(dynMin, dyn.scale * 0.85);
+        else if (avg < 20) next = Math.min(1, dyn.scale * 1.08);
+        if (Math.abs(next - dyn.scale) > 0.01) { dyn.scale = next; renderer.setPixelRatio(basePR * next); resize(); }
+        dyn.sum = dyn.gpu = dyn.n = 0; dyn.since = now;
+      }
+    }
     last.calls = renderer.info.render.drawCalls; last.tris = renderer.info.render.triangles;
     hud.frame(real * 1000, renderer.info.render.drawCalls, renderer.info.render.triangles, t1 - t0, t2 - t1);
   });
