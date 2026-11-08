@@ -319,6 +319,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Phones: touch pad sized from the screen, rarer keys in a menu, debug HUD and card hidden (Keith's phone screenshots: landscape "unplayable", everything overlapping; Claude on `claude/project-thread-vhroly`)
+- `src/core/touch.ts`: sticks and buttons are shares of the screen's short side (stick 0.30, button 0.12 landscape / 0.105 portrait), laid out again on every resize and turn; the viewport meta is set again on a turn. Left fan: Q, E, ⋯. The ⋯ menu holds Tab, F, R, Inv, Info, FPS and ⛶. Right fan unchanged (1-4 drag-to-aim, Dash), wider in portrait.
+- `src/core/lab.css`: on phones the frame HUD (`.hud`) and the expedition card (`.exp-card`, `src/expedition/expeditionHud.ts`) are hidden until the menu's FPS or Info; in portrait the action bar (`.action-bar`, `src/ui/actionBar.ts`) sits above the pad (`--tp-clear`).
+- Open for Keith: the Home timer is on the hidden card (Info shows it); the weapons lab's loadout picker still opens over the middle (HIDE closes it).
+- Checked: typecheck, full `npm test`; Pixel 7 emulation both ways on the convoy lab `?out`; menu toggles and a drag on 1 in the weapons lab. Not seen on a real phone.
 ### 2026-11-08 · The game tick is 30 Hz everywhere (Keith: "we can probably just make 30 hertz the sim rate"; Claude on `claude/project-thread-gx0ixa-tick30`)
 - `src/core/clock.ts`: `Clock` and `clockFromUrl` default to 30 Hz on every screen (phones already were); `?tick=60` the old rate. Rates of fire hold: `src/mech/upper.ts` fires every round due in a tick (several in one at over 30 rounds/s); no weapon caps its rate at one per tick. `tools/clock-check.ts` expects 30; CLAUDE.md and docs/decisions.md updated.
 - Checked: typecheck, full `npm test`.

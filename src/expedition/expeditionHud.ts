@@ -64,6 +64,7 @@ export class ExpeditionHud {
       background: "rgba(10, 14, 14, 0.62)", padding: "8px 10px", borderRadius: "6px", minWidth: "190px", fontVariantNumeric: "tabular-nums",
     } as CSSStyleDeclaration);
     // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
+    this.col.className = "exp-card"; // phones: hidden unless the touch menu's Info is on (lab.css)
     this.col.append(this.questSlot, this.info, this.lootSlot);
     this.root.append(radar, this.col);
     document.body.appendChild(this.root);
