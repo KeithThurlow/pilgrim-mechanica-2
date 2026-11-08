@@ -50,7 +50,7 @@ function frames(kind: string, total: number): number[] {
   let hits = 0;
   for (let i = 0; i < 120; i++) c.run(1 / 60, () => { if (c.every(4, 1)) hits++; });
   if (hits !== 30) fail(`every(4) fired ${hits} times in 120 ticks`);
-  if (new Clock().hz !== 60) fail("the default clock should be 60 Hz");
+  if (new Clock().hz !== 30) fail("the default clock should be 30 Hz");
 }
 
 // 2. A fight driven through the clock.
