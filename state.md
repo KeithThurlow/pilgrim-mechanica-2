@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Phones tick at 30 Hz (Keith's HUD in a convoy fight: sim 103 ms a frame, gpu/wait 1.6, 8 fps; Claude on `claude/project-thread-gx0ixa-tick`)
+- `src/core/clock.ts` `clockFromUrl`: 30 Hz under the phone preset (`phoneLite`), 60 elsewhere; `?tick=60` puts phones back. The sim was running the clock's 4 catch-up ticks every frame (about 25 ms each), so it never caught up; at 30 Hz half the ticks for the same game time. Drawing between ticks is unchanged.
+- Checked: typecheck, full `npm test`. Not timed on a phone.
+
 ### 2026-11-08 · The patch's zoom levels switch without a flash; phones at 1 m (Keith: "the whole ground will flash white or become invisible" on zoom; "lower the close and far tessellation again"; Claude on `claude/project-thread-gx0ixa-patchflash`)
 - `src/world/detailPatch.ts`: a zoom level now swaps only the vertex grid (`geometry(lod)`, cached; every 2^lod-th line of the window's, no dense middle) on the same window, textures and material, so nothing reloads or recompiles; before, each switch rebuilt the window (refilled from the worker), the textures and the shader, and the patch hid meanwhile. The dents' low-pass widens with the level (`uLod`). Phone preset `patchSpacing` 1 m at every zoom (the coarsest without cracks at the chunks' seam), 18k triangles.
 - Checked: typecheck, full `npm test`; Pixel 7 emulation: 18k patch triangles; `?set=patchSpacing:0.5` 18k at the game view, 74k at `?zoom=12`.

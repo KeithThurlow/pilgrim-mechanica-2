@@ -10,6 +10,8 @@
 // Rate groups: `every(n, phase)` is true on one tick in n, so a part can run at hz/n (far AI, heat, abstract groups;
 // review §4.6). Ownership: host (the clock is the world's time; in co-op the host's tick count is the shared clock).
 
+import { phoneLite } from "./phoneQuality";
+
 export class Clock {
   /** Ticks a second. */
   readonly hz: number;
@@ -56,8 +58,9 @@ export class Clock {
   }
 }
 
-/** The clock a page asks for: 60 Hz, or `?tick=N`. */
+/** The clock a page asks for: 60 Hz (30 on phones: Keith 2026-11-08, the sim took 103 ms a frame in a fight on his
+ *  phone, 4 ticks of about 25 ms; at 30 Hz half the ticks, the drawing still at the screen's rate), or `?tick=N`. */
 export function clockFromUrl(params: URLSearchParams): Clock {
   const hz = Number(params.get("tick"));
-  return new Clock(Number.isFinite(hz) && hz > 0 ? hz : 60);
+  return new Clock(Number.isFinite(hz) && hz > 0 ? hz : phoneLite ? 30 : 60);
 }
