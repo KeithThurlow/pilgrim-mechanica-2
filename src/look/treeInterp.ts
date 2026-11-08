@@ -27,14 +27,17 @@ export class TreeInterp {
   get size() { return this.parts.length; }
 
   /** End of a tick: this tick's pose becomes the last, the tree's pose now becomes this tick's. */
+  private list: THREE.Object3D[] = [];
   capture() {
     this.restore();
-    const list: THREE.Object3D[] = [];
+    // One list reused tick to tick (a fresh one each tick was garbage at 60 Hz for every model).
+    const list = this.list;
+    list.length = 0;
     this.root.traverse((o) => { list.push(o); });
     const same = list.length === this.parts.length && list.every((o, i) => o === this.parts[i]);
     if (!same) {
       const n = list.length * F;
-      this.parts = list; this.prev = new Float64Array(n); this.cur = new Float64Array(n); this.shown = new Float64Array(n);
+      this.parts = list.slice(); this.prev = new Float64Array(n); this.cur = new Float64Array(n); this.shown = new Float64Array(n);
       this.on = new Uint8Array(list.length); this.captured = 0;
     } else this.prev.set(this.cur);
     const c = this.cur;
@@ -52,8 +55,9 @@ export class TreeInterp {
     const p = this.prev, c = this.cur, w = this.shown, a = Math.max(0, alpha);
     for (let i = 0; i < this.parts.length; i++) {
       const o = this.parts[i], k = i * F;
-      // Moved since the capture by something outside the tick: not ours to pose.
-      if (!same(o, c, k)) { this.on[i] = 0; continue; }
+      // Moved since the capture by something outside the tick: not ours to pose. Still between the two ticks (most
+      // parts of a model: fixed on their joint): nothing to blend, so nothing to write or put back.
+      if (still(p, c, k) || !same(o, c, k)) { this.on[i] = 0; continue; }
       this.on[i] = 1;
       for (let j = 0; j < 3; j++) w[k + j] = p[k + j] + (c[k + j] - p[k + j]) * a;
       for (let j = 7; j < 10; j++) w[k + j] = p[k + j] + (c[k + j] - p[k + j]) * a;
@@ -85,10 +89,18 @@ function read(o: THREE.Object3D, a: Float64Array, k: number) {
   a[k + 3] = o.quaternion.x; a[k + 4] = o.quaternion.y; a[k + 5] = o.quaternion.z; a[k + 6] = o.quaternion.w;
   a[k + 7] = o.scale.x; a[k + 8] = o.scale.y; a[k + 9] = o.scale.z;
 }
+/** Writes the quaternion's fields without its change callback: through set() every write re-derived the part's Euler
+ *  rotation (a matrix and its decomposition), the biggest share of this file's cost (phone profile, Keith 2026-11-08).
+ *  The Euler keeps the tick's value, which is right again once restore() puts the tick's pose back. */
 function write(o: THREE.Object3D, a: Float64Array, k: number) {
   o.position.set(a[k], a[k + 1], a[k + 2]);
-  o.quaternion.set(a[k + 3], a[k + 4], a[k + 5], a[k + 6]);
+  const q = o.quaternion as unknown as { _x: number; _y: number; _z: number; _w: number };
+  q._x = a[k + 3]; q._y = a[k + 4]; q._z = a[k + 5]; q._w = a[k + 6];
   o.scale.set(a[k + 7], a[k + 8], a[k + 9]);
+}
+function still(p: Float64Array, c: Float64Array, k: number) {
+  for (let j = 0; j < F; j++) if (p[k + j] !== c[k + j]) return false;
+  return true;
 }
 function same(o: THREE.Object3D, a: Float64Array, k: number) {
   const p = o.position, q = o.quaternion, s = o.scale;
