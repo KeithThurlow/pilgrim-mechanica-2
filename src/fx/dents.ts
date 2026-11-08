@@ -13,6 +13,7 @@ import {
 } from "three/tsl";
 import { buildSync } from "../core/asyncShaders";
 import type { Param } from "../core/tweaks";
+import { phoneDefaults } from "../core/phoneQuality";
 import type { DuneField, GroundSample } from "../world/terrain";
 import {
   SURFACE_IDS, SURFACE_COUNT, SET_RATES, relaxRates, bermRatio, packBrush, BRUSH_ROWS, MAX_DIF, BERM_DECAY, COMP_DECAY,
@@ -21,7 +22,7 @@ import {
 import { DentMemory } from "./dentMemory";
 import { footAtlas, footAtlasVersion, setFootContact, shapeBermRatio, TILE, MAX_SHAPES, type FootShape } from "./footprint";
 
-export const DENT_DEFAULTS = {
+export const DENT_DEFAULTS = phoneDefaults({
   dentCoverage: 100,
   dentRes: 2048,
   patchSpacing: 0.25,
@@ -67,7 +68,7 @@ export const DENT_DEFAULTS = {
   dentDirtDepth: 0.45, dentDirtBerm: 0.5, dentDirtSoften: 1.5, dentDirtSlump: 0.1, dentDirtLife: 400,
   dentGravelDepth: 0.3, dentGravelBerm: 0.6, dentGravelSoften: 2, dentGravelSlump: 0.1, dentGravelLife: 300,
   dentSnowDepth: 2.5, dentSnowBerm: 0.35, dentSnowSoften: 1, dentSnowSlump: 0.02, dentSnowLife: 900,
-};
+});
 export type DentValues = typeof DENT_DEFAULTS;
 
 const G = "Ground dents", GS = "Ground dents: surfaces";

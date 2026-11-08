@@ -11,6 +11,7 @@
 // things (`heat`: the excavator's beam while it charges and burns).
 // Drawing: blastWavesDraw.ts (a refracting sphere per wave, shimmer quads for the puffs, a flash of light at night).
 import type { Param } from "../core/tweaks";
+import { phoneDefaults } from "../core/phoneQuality";
 
 /** What went off. Each kind has its own profile (WAVE_KINDS) and slider. */
 export type WaveKind = "default" | "rocket" | "missile" | "lineMortar" | "mortar" | "cannon" | "turret" | "volley" | "beam" | "death";
@@ -41,7 +42,7 @@ export const WAVE_KINDS: Record<WaveKind, Profile> = {
 };
 export const WAVE_KIND_LIST = Object.keys(WAVE_KINDS) as WaveKind[];
 
-export const BLAST_WAVE_DEFAULTS = {
+export const BLAST_WAVE_DEFAULTS = phoneDefaults({
   waveOn: 1,
   waveSize: 1,
   waveMinSize: 1,
@@ -75,7 +76,7 @@ export const BLAST_WAVE_DEFAULTS = {
   waveBeamHeat: 0.1,
   waveDefaultK: 1, waveRocketK: 1, waveMissileK: 1, waveLineK: 1, waveMortarK: 1, waveCannonK: 1,
   waveTurretK: 1, waveVolleyK: 1, waveBeamK: 1, waveDeathK: 1,
-};
+});
 export type BlastWaveValues = typeof BLAST_WAVE_DEFAULTS;
 
 const G = "Blast waves", GK = "Blast waves by kind", GH = "Heat shimmer";
