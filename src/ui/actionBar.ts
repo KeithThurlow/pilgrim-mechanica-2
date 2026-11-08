@@ -51,6 +51,7 @@ export class ActionBar {
 
   constructor(parent: HTMLElement = document.body) {
     this.root = el("div", { position: "fixed", left: "50%", bottom: "34px", transform: "translateX(-50%)", pointerEvents: "none", zIndex: "20", font: "600 11px system-ui, sans-serif", color: "#f3e6d0", textShadow: "0 1px 2px #000", textAlign: "center" }, parent);
+    this.root.className = "action-bar"; // phones in portrait: lifted above the touch pad (lab.css)
     this.noteEl = el("div", { marginBottom: "4px", color: "rgba(243, 230, 208, 0.85)", minHeight: "14px" }, this.root);
     this.row = el("div", { display: "flex", gap: "6px", alignItems: "flex-end", justifyContent: "center" }, this.root);
   }

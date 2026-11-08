@@ -88,16 +88,20 @@ body.selecting #view canvas { cursor: crosshair; }
 .hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px 30px rgba(200, 40, 20, 0.85); transition: opacity 0.08s; }
 
 /* Phones and tablets (html.touch, set by src/core/touch.ts; Keith 2026-11-07, laid out like a MOBA 2026-11-08): the page
-   is drawn at 0.6 scale there and the two sticks with their button fans own the bottom corners, so the expedition HUD
-   (the minimap) sits top left past the energy bars, the frame HUD bottom centre between the fans, Inv and ⛶ top centre, the panel top right. */
+   is drawn at 0.6 scale there and the two sticks with their button fans own the bottom corners. The minimap sits top
+   left past the energy bars, the panel top right. The frame HUD and the expedition card are hidden until the touch
+   menu's FPS or Info turns them on (Keith 2026-11-08: everything overlapped). In portrait the action bar sits above
+   the pad (--tp-clear, from touch.ts). */
 html.touch .panel { left: auto; right: 8px; top: 8px; bottom: auto; width: min(320px, calc(100% - 300px)); max-height: 55%; }
 html.touch .panel.open { width: min(340px, calc(100% - 16px)); }
 html.touch .report-btn, html.touch .help, html.touch .mech-doll { display: none !important; }
 html.touch .exp-hud { left: 56px !important; top: 8px; bottom: auto !important; align-items: flex-start !important; }
-html.touch .hud { left: 50%; transform: translateX(-50%); top: auto; bottom: 95px; max-width: 40vw; opacity: 0.85; }
+html.touch:not(.tp-info) .exp-card { display: none; }
+html.touch:not(.tp-fps) .hud { display: none; }
+html.touch .hud { left: 50%; transform: translateX(-50%); top: 8px; max-width: 40vw; opacity: 0.85; }
 @media (orientation: portrait) {
-  html.touch .exp-hud { top: 150px; }
-  html.touch .hud { left: 8px; transform: none; top: 8px; bottom: auto; max-width: calc(100% - 340px); }
+  html.touch .hud { max-width: 60vw; top: 60px; }
+  html.touch .action-bar { bottom: var(--tp-clear, 34px) !important; }
 }
 @media (orientation: landscape) {
   html.touch .panel { max-height: 36%; min-height: 0; }
