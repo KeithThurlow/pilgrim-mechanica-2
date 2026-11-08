@@ -238,7 +238,7 @@ export class Battlefield {
   /** What the camera sees this frame (drawers skip what's off the screen; cosmetic). */
   readonly view = new ViewCull();
 
-  constructor(readonly field: DuneField, readonly v: BattlefieldValues, camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
+  constructor(readonly field: DuneField, readonly v: BattlefieldValues, readonly camera: THREE.Camera, readonly wrecks: WreckStandIns | null = null) {
     // Labs that don't list the dent or penetration sliders still get their defaults.
     const dv = v as BattlefieldValues & Record<string, unknown>;
     for (const [k, val] of Object.entries(DENT_DEFAULTS)) if (!(k in dv)) dv[k] = val;
@@ -696,7 +696,7 @@ export class Battlefield {
       // The dents and the patch follow the camera focus (the sun's shadow box is centred on it).
       const f = look.sun.target.position;
       this.dents.update(dt, f.x, f.z);
-      this.patch.update(f.x, f.z, true);
+      this.patch.update(f.x, f.z, true, this.camera.position.distanceTo(f));
       this.heatTex?.update(dt, f.x, f.z);
       if (this.heatTex && look.lights) this.heatTex.light(look.lights, this.lookGround);
     }

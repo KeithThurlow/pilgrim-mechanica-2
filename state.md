@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · The detail patch coarsens with the zoom (Keith: "it only really needs to be high if the camera is zoomed in"; Claude on `claude/project-thread-gx0ixa-patchzoom`)
+- `src/world/detailPatch.ts` (`zoomLevel`, `levelFor`): past `patchZoomFrom` metres of camera distance the patch is at twice `patchSpacing` with no fine middle, past `patchZoomFar` twice again (never coarser than the chunks' 1 m grid), 10% hysteresis; the camera distance comes from `Battlefield` (`src/game/battlefield.ts`). Sliders in the dents' group (`src/fx/dents.ts`): PC 60 / 120 m (the game view and a sprint stay fine; only the far zoom coarsens), phone preset 30 / 60 m: an upright phone's game view draws the patch at 1 m (18k triangles, was 74k), zoomed in 0.5 m.
+- Checked: typecheck, full `npm test`; Pixel 7 emulation convoy lab: 18k patch triangles at the game view, 74k at `?zoom=12`.
+
 ### 2026-11-08 · Phones: the camera pulls back on narrow screens, pinch to zoom (Keith: "way too zoomed in on the phone"; Claude on `claude/project-thread-gx0ixa-zoom`)
 - `src/core/isoCamera.ts`: on a screen narrower than 16:9 the camera distance is × (16:9 / aspect)^`camNarrowFit` (0.5; Camera group): an upright phone (aspect 0.49) sits about 1.9× further out, 81 m in place of 40 m. PC unchanged (factor 1 at 16:9 or wider). Two fingers on the view pinch the zoom (between the near and far distances, as the wheel).
 - Checked: typecheck, full `npm test`; Pixel 7 emulation camera height 70 m (PC game view 31 m). Pinch not tried on a real phone.

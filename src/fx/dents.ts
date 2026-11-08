@@ -29,6 +29,10 @@ export const DENT_DEFAULTS = phoneDefaults({
   patchEdge: 4,
   patchBudget: 3,
   patchLead: 6,
+  // The patch coarsens with the zoom (Keith 2026-11-08): past this camera distance (m; the PC game view is about 42, sprinting up to 58) twice the spacing and no fine
+  // middle, past the second twice again (never coarser than the chunks' 1 m grid). 0: off.
+  patchZoomFrom: 60,
+  patchZoomFar: 120,
   patchFineArea: 32,
   patchFineSub: 2,
   dentScale: 1,
@@ -85,6 +89,8 @@ export const DENT_PARAMS: Param[] = [
   { key: "patchSpacing", label: "Patch spacing (m)", min: 0.125, max: 1, step: 0.125, group: G, onRelease: true, tip: "Vertex spacing of the fine ground patch (rounded to divide the chunk grid)" },
   { key: "patchEdge", label: "Patch edge blend (m)", min: 0.5, max: 12, step: 0.5, group: G, tip: "Over this width at its edge the patch eases back to the chunks' shape, so no seam shows" },
   { key: "patchBudget", label: "Patch fill budget (ms/frame)", min: 0.5, max: 16, step: 0.5, group: G, tip: "CPU time per frame for sampling the true ground into the patch: the lead ahead of it, then ground that changed (the plough, craters), and after a jump" },
+  { key: "patchZoomFrom", label: "Patch: coarser from camera (m)", min: 0, max: 200, step: 1, group: G, tip: "Camera further than this from what it follows: the patch at twice its spacing, no fine middle (so zoomed out costs less). 0: off" },
+  { key: "patchZoomFar", label: "Patch: coarser again from (m)", min: 0, max: 300, step: 1, group: G, tip: "And past this, twice again (at most the chunks' 1 m grid). 0: off" },
   { key: "patchLead", label: "Patch lead (m)", min: 0, max: 16, step: 1, group: G, onRelease: true, tip: "Ground sampled this far beyond the patch's edge ahead of time, so it's ready before it comes into view (whatever the lead hasn't reached when it does is filled that frame)" },
   { key: "patchFineArea", label: "Patch: fine middle (m)", min: 0, max: 100, step: 4, group: G, onRelease: true, tip: "A square this wide round the camera focus gets denser vertices (Fine middle ×), so footprints and small dents press the mesh, not only its shading (Keith 2026-11-02). 0: off" },
   { key: "patchFineSub", label: "Patch: fine middle ×", min: 1, max: 4, step: 1, group: G, onRelease: true, tip: "Vertices per patch spacing in the fine middle: 2 is 12.5 cm at the default spacing (the dense rows and columns run out to the patch's edges, so the cost grows with both sliders)" },
