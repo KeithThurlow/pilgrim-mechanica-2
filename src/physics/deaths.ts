@@ -7,12 +7,13 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import { Quaternion, Vector3 } from "three";
 import type { Param } from "../core/tweaks";
+import { phoneDefaults } from "../core/phoneQuality";
 import type { Ground } from "../mech/walker";
 
 /** The thinnest a ragdoll part's collider is (half extent, m). */
 const MIN_HALF = 0.1;
 
-export const DEATH_DEFAULTS = {
+export const DEATH_DEFAULTS = phoneDefaults({
   deathPush: 1,
   deathLift: 0.5,
   deathSpin: 1,
@@ -23,7 +24,7 @@ export const DEATH_DEFAULTS = {
   floorSize: 120,
   ragdollsPerFrame: 6,
   reactorFling: 14,
-};
+});
 export type DeathValues = typeof DEATH_DEFAULTS;
 
 export const DEATH_PARAMS: Param[] = [

@@ -21,6 +21,11 @@ export const PHONE_PRESET: Record<string, number> = {
   patchSpacing: 1,         // 0.25 (Keith 2026-11-08: 0.5 close in was still more than needed)
   patchFineSub: 1,         // 2
   patchZoomFrom: 30,       // 60: 1 m spacing from 30 m out (an upright phone's game view is about 80 m) ...
+  // Death physics (src/physics/deaths.ts), all looks: the top cost of a big swarm fight on the main thread (Rapier, 14%
+  // of the swarm lab's CPU with 150 robots and split shot, more than the robots' own sim; Keith 2026-11-08).
+  maxRagdolls: 10,         // 30 moving at once
+  liveFor: 4,              // 7 s before they freeze
+  ragdollsPerFrame: 3,     // 6
   patchZoomFar: 60,        // 120 (already at the chunks' 1 m grid)
 };
 
