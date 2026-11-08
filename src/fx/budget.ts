@@ -18,8 +18,9 @@
 //
 // Cosmetic only (rule 12): nothing here touches game state; peers each run their own.
 import type { Param } from "../core/tweaks";
+import { phoneDefaults } from "../core/phoneQuality";
 
-export const FX_BUDGET_DEFAULTS = {
+export const FX_BUDGET_DEFAULTS = phoneDefaults({
   fxBudget: 1,
   fxNear: 15,
   fxThinFrom: 30,
@@ -40,7 +41,7 @@ export const FX_BUDGET_DEFAULTS = {
   fxGpuTracers: 1,
   fxGpuDust: 1,
   fxGpuDustPool: 32768,
-};
+});
 export type FxBudgetValues = typeof FX_BUDGET_DEFAULTS;
 
 const G = "Performance", GE = "Effects";

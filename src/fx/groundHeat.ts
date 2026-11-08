@@ -10,8 +10,9 @@
 // Cooling is Newton's law, T × exp(-dt / heatCool), so 2000° glows about three times as long as 900°. Sand hotter than
 // heatCharFrom fuses dark (glassy) and that char fades much more slowly (heatCharLife).
 import type { Param } from "../core/tweaks";
+import { phoneDefaults } from "../core/phoneQuality";
 
-export const HEAT_DEFAULTS = {
+export const HEAT_DEFAULTS = phoneDefaults({
   heatOn: 1,
   heatArea: 104,
   heatRes: 256,
@@ -38,7 +39,7 @@ export const HEAT_DEFAULTS = {
   heatLights: 6,
   heatLightBin: 6,
   heatLightPrio: 0.7,
-};
+});
 export type HeatValues = typeof HEAT_DEFAULTS;
 
 const G = "Hot sand", GW = "Hot sand: by weapon", GL = "Hot sand: night light";
