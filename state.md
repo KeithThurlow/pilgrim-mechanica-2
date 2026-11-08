@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · The game tick is 30 Hz everywhere (Keith: "we can probably just make 30 hertz the sim rate"; Claude on `claude/project-thread-gx0ixa-tick30`)
+- `src/core/clock.ts`: `Clock` and `clockFromUrl` default to 30 Hz on every screen (phones already were); `?tick=60` the old rate. Rates of fire hold: `src/mech/upper.ts` fires every round due in a tick (several in one at over 30 rounds/s); no weapon caps its rate at one per tick. `tools/clock-check.ts` expects 30; CLAUDE.md and docs/decisions.md updated.
+- Checked: typecheck, full `npm test`.
+
 ### 2026-11-08 · Phones: landscape laid out like a MOBA, ability buttons are drag-to-aim sticks (Keith: "the buttons in the center take up all of the view"; Claude on `claude/project-thread-vhroly`)
 - `src/core/touch.ts`: the button block is gone. Round the left stick a fan of Q (repair kit), R, E, F, Tab; round the right stick 1, 2, 3, 4 and Dash (landscape: inward round over the top; portrait: 40-140° so the fans don't meet). 1-4 turn into their own stick while held: drag to aim on the ground (the rim reaches the screen's edge), release fires; a tap with no drag fires at the current aim; the key is held the whole time, so hold-to-paint launchers paint. Inv and ⛶ small at the top (top right in portrait). In landscape the left stick sits clear of the energy and hull bars.
 - `src/core/lab.css`: the minimap (expedition HUD) top left in both orientations, the frame HUD bottom centre between the fans in landscape.

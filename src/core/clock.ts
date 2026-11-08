@@ -1,7 +1,8 @@
 // The game clock (docs/architecture-review.md stage 1, Keith 2026-11-07: "30 or 60 Hz" for the sim, drawn as fast as
 // the graphics go). One place decides how many sim ticks a drawn frame runs and how long each is.
 //
-// A fixed tick, 60 Hz (Keith 2026-11-07: "just run the 60 hertz tick rate"; `?tick=30` or 120 to try another rate).
+// A fixed tick, 30 Hz (Keith 2026-11-08, after playing 30 Hz on his phone: "we can probably just make 30 hertz the sim
+// rate"; was 60 from 2026-11-07; `?tick=60` or 120 to try another rate).
 // Real time goes into an accumulator; each frame runs as many whole ticks of 1/hz s as are due (at most `maxTicks`; a
 // longer stall drops the rest rather than spiralling), and `alpha` (0..1) says how far the drawn frame is between the
 // last tick and the next, for drawing between ticks (src/look/treeInterp.ts). The same inputs give the same results at
@@ -10,7 +11,6 @@
 // Rate groups: `every(n, phase)` is true on one tick in n, so a part can run at hz/n (far AI, heat, abstract groups;
 // review §4.6). Ownership: host (the clock is the world's time; in co-op the host's tick count is the shared clock).
 
-import { phoneLite } from "./phoneQuality";
 
 export class Clock {
   /** Ticks a second. */
@@ -27,7 +27,7 @@ export class Clock {
   dropped = 0;
   private acc = 0;
 
-  constructor(hz = 60, readonly maxTicks = 4) {
+  constructor(hz = 30, readonly maxTicks = 4) {
     this.hz = hz > 0 ? hz : 60;
     this.dt = 1 / this.hz;
   }
@@ -58,9 +58,9 @@ export class Clock {
   }
 }
 
-/** The clock a page asks for: 60 Hz (30 on phones: Keith 2026-11-08, the sim took 103 ms a frame in a fight on his
- *  phone, 4 ticks of about 25 ms; at 30 Hz half the ticks, the drawing still at the screen's rate), or `?tick=N`. */
+/** The clock a page asks for: 30 Hz (Keith 2026-11-08), or `?tick=N`. Guns that fire faster than the tick fire
+ *  several rounds in one tick (src/mech/upper.ts), so rates of fire hold. */
 export function clockFromUrl(params: URLSearchParams): Clock {
   const hz = Number(params.get("tick"));
-  return new Clock(Number.isFinite(hz) && hz > 0 ? hz : phoneLite ? 30 : 60);
+  return new Clock(Number.isFinite(hz) && hz > 0 ? hz : 30);
 }
