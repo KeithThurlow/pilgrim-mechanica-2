@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · The patch's zoom levels switch without a flash; phones at 1 m (Keith: "the whole ground will flash white or become invisible" on zoom; "lower the close and far tessellation again"; Claude on `claude/project-thread-gx0ixa-patchflash`)
+- `src/world/detailPatch.ts`: a zoom level now swaps only the vertex grid (`geometry(lod)`, cached; every 2^lod-th line of the window's, no dense middle) on the same window, textures and material, so nothing reloads or recompiles; before, each switch rebuilt the window (refilled from the worker), the textures and the shader, and the patch hid meanwhile. The dents' low-pass widens with the level (`uLod`). Phone preset `patchSpacing` 1 m at every zoom (the coarsest without cracks at the chunks' seam), 18k triangles.
+- Checked: typecheck, full `npm test`; Pixel 7 emulation: 18k patch triangles; `?set=patchSpacing:0.5` 18k at the game view, 74k at `?zoom=12`.
+
 ### 2026-11-08 · The detail patch coarsens with the zoom (Keith: "it only really needs to be high if the camera is zoomed in"; Claude on `claude/project-thread-gx0ixa-patchzoom`)
 - `src/world/detailPatch.ts` (`zoomLevel`, `levelFor`): past `patchZoomFrom` metres of camera distance the patch is at twice `patchSpacing` with no fine middle, past `patchZoomFar` twice again (never coarser than the chunks' 1 m grid), 10% hysteresis; the camera distance comes from `Battlefield` (`src/game/battlefield.ts`). Sliders in the dents' group (`src/fx/dents.ts`): PC 60 / 120 m (the game view and a sprint stay fine; only the far zoom coarsens), phone preset 30 / 60 m: an upright phone's game view draws the patch at 1 m (18k triangles, was 74k), zoomed in 0.5 m.
 - Checked: typecheck, full `npm test`; Pixel 7 emulation convoy lab: 18k patch triangles at the game view, 74k at `?zoom=12`.

@@ -18,7 +18,7 @@ export const PHONE_PRESET: Record<string, number> = {
   // The detail patch (src/world/detailPatch.ts) was 524k of the 864k triangles a frame in the convoy lab, the same at
   // any ?res= (Keith 2026-11-08: 12-17 fps, 40-80 ms of GPU wait): 50 cm between vertices and no denser middle make it
   // 74k. Footprints and berms still show through the dent texture's per-pixel normals.
-  patchSpacing: 0.5,       // 0.25
+  patchSpacing: 1,         // 0.25 (Keith 2026-11-08: 0.5 close in was still more than needed)
   patchFineSub: 1,         // 2
   patchZoomFrom: 30,       // 60: 1 m spacing from 30 m out (an upright phone's game view is about 80 m) ...
   patchZoomFar: 60,        // 120 (already at the chunks' 1 m grid)
