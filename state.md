@@ -319,6 +319,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+### 2026-11-08 · Drawing between ticks costs less: still parts skipped, no Euler sync (phone profile; Claude on `claude/project-thread-gx0ixa-interp`)
+- `src/look/treeInterp.ts`: `apply` skips parts whose pose is the same at both ticks (most parts, fixed on their joints), so `restore` skips them too; `write` sets the quaternion's fields without its change callback (each write re-derived the Euler rotation); `capture` reuses its list. Same pose drawn. Headless convoy siege profile (`?siege=80&norender&tick=30`): treeInterp 639 → 376 ms and three's own 479 → 307 ms over 8 s.
+- Checked: typecheck, `treeinterp-check`, full `npm test`.
+
 ### 2026-11-08 · Phones tick at 30 Hz (Keith's HUD in a convoy fight: sim 103 ms a frame, gpu/wait 1.6, 8 fps; Claude on `claude/project-thread-gx0ixa-tick`)
 - `src/core/clock.ts` `clockFromUrl`: 30 Hz under the phone preset (`phoneLite`), 60 elsewhere; `?tick=60` puts phones back. The sim was running the clock's 4 catch-up ticks every frame (about 25 ms each), so it never caught up; at 30 Hz half the ticks for the same game time. Drawing between ticks is unchanged.
 - Checked: typecheck, full `npm test`. Not timed on a phone.
