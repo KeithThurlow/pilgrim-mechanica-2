@@ -23,6 +23,7 @@ export function convoyShop(o: ShopOptions) {
     border: "1px solid #4a5a56", borderRadius: "8px", padding: "10px 12px", color: "#dfeae4", display: "none",
     font: "500 13px/1.4 system-ui, 'Segoe UI', sans-serif",
   } as CSSStyleDeclaration);
+  root.className = "convoy-shop"; // phones: under the menu button (lab.css)
   document.body.appendChild(root);
   let forced = false, shown = false;
 

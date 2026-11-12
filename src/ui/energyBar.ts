@@ -22,6 +22,7 @@ export function leftStack() {
   Object.assign(stack.style, {
     position: "fixed", left: "14px", top: "120px", display: "flex", alignItems: "stretch", gap: "8px", pointerEvents: "none", zIndex: "20",
   } as Partial<CSSStyleDeclaration>);
+  stack.className = "left-stack"; // phones: inside the safe area, hidden under the inventory (lab.css)
   document.body.appendChild(stack);
   return stack;
 }
