@@ -3,6 +3,9 @@
 // and pack's abilities (3, 4) and the repair kit (Q). Each shows its key, a short name, a dark sweep that unwinds as
 // it cools with the seconds left, an amber bar draining while its effect lasts, and a white flash the moment it's
 // ready again. Plain DOM, styles written only when they change. Reads ActionSlots; owns nothing in the game.
+// On phones the touch pad's buttons are the bar (Keith 2026-11-12: `touchSlots`); only the note line is drawn here.
+
+import { touchMode, touchSlots } from "../core/touch";
 
 export interface ActionSlot {
   key: string;
@@ -70,6 +73,8 @@ export class ActionBar {
   update(dt: number, slots: ActionSlot[], size: number, note: string, show = true) {
     st(this.root, "display", show && slots.length ? "" : "none");
     txt(this.noteEl, note);
+    // Phones: the touch pad's own buttons show the slots (src/core/touch.ts); only the note stays here.
+    if (touchMode) { touchSlots(show && slots.length ? slots : null); return; }
     if (!show) return;
     while (this.buttons.length < slots.length) this.buttons.push(this.make());
     this.buttons.forEach((b, i) => {

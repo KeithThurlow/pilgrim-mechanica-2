@@ -1,16 +1,24 @@
 // Touch controls for phones (Keith 2026-11-07: playing the Pages build on his phone while away from the PC; "it really
 // needs to be a dual stick setup", aim and fire while moving). Only on a touch screen (or `?touch`; `?touch=0` off).
-// Layout (Keith 2026-11-08, landscape like a MOBA: minimap top left, sticks in the bottom corners, buttons round them):
+// Layout (Keith 2026-11-08, landscape like a MOBA: minimap top left, sticks in the bottom corners, buttons round them;
+// reviewed in both orientations 2026-11-12):
 // - Left stick: WASD as key events (Keys makes it camera-relative, as on a keyboard). Pushed to the rim it holds Space
-//   too: a dash, then the sprint while it stays there. Round it: Q (repair kit), E (use), and ⋯, a menu with the rarer
-//   keys (Tab lock, F hop out, R reload, Inv), Info (the expedition card), FPS (the frame HUD) and ⛶ (fullscreen).
+//   too: a dash, then the sprint while it stays there. Round it: Repair (Q), Use (E), Reload (R).
 // - Right stick: aims (a point on the screen round its centre, further out the further it's pushed) and fires both
 //   sides while pushed past the dead zone. MouseButtons (src/game/playerAim.ts) reads `touchState`.
-// - Round the right stick, the abilities: Dash, then 1-4. Each of 1-4 is its own stick while held (drag to aim on the
+// - Both sticks follow the thumb: each owns its bottom corner of the screen (an unseen zone under the buttons), and a
+//   touch anywhere in it off the resting knob puts the stick's centre there until it's let go.
+// - Round the right stick: Dash nearest the middle, then the abilities 1-4. Each of 1-4 is its own stick while held (drag to aim on the
 //   ground: the knob's push is the point on the screen, the whole screen at the rim), released it fires; a tap with no
 //   drag fires at the current aim. Its key is held for as long as the finger is down, so hold-to-paint launchers paint.
+// - The buttons are the action bar on phones (`touchSlots`, fed by src/ui/actionBar.ts): each of 1-4 and Repair shows
+//   what it is, its cooldown sweep and seconds, its rounds or kits; 1-4 with nothing fitted are hidden.
+// - ☰ in the top right corner opens the menu: the rarer keys by name (Lock, Hop out, Inventory, and on the convoy lab
+//   Launch, Recover, Bay, Shop, Contract, Heli), then Info (the expedition card), FPS (the frame HUD), Tune (the slider
+//   panel, hidden until asked for) and Fullscreen. A touch on the view closes it.
 // - Sizes are shares of the screen's short side (Keith 2026-11-08: on his phone in landscape the fixed sizes filled the
-//   screen), laid out again on every resize and turn. The frame HUD and the expedition card start hidden (the menu).
+//   screen), laid out again on every resize and turn, inside the phone's safe area (notch, rounded corners, home bar).
+//   While the inventory, bay or shop is open the pad and the left bars are hidden (lab.css).
 // - The whole page is drawn at `?uiscale=` (0.6 by default) of its size, so the labs' panels and HUDs fit a phone.
 // Pure input glue: no sim or lab changes. Ownership: the player's own input.
 
@@ -30,23 +38,68 @@ const key = (type: "keydown" | "keyup", code: string, k: string) =>
 
 // Shares of the screen's short side (S). Landscape is the short screen height, so it gets a smaller share.
 const SIZE = {
-  land: { stick: 0.30, btn: 0.12, gap: 0.025, edgeX: 0.05, edgeY: 0.04 },
-  port: { stick: 0.30, btn: 0.105, gap: 0.03, edgeX: 0.04, edgeY: 0.035 },
+  land: { stick: 0.30, btn: 0.125, gap: 0.025, edgeX: 0.05, edgeY: 0.05 },
+  port: { stick: 0.30, btn: 0.11, gap: 0.03, edgeX: 0.04, edgeY: 0.06 },
 };
 const KNOB = 0.42, DEAD = 0.25, RIM = 0.92;
 const BARS = 56; // CSS px: the energy and hull bars on the left edge (src/ui/energyBar.ts); the landscape left stick clears them
 const AIM_DEAD = 0.18; // an ability stick's drag below this (of its radius) is a tap: fire at the current aim
+const BTN_PAD = 6; // CSS px kept between neighbours in a fan
 
 type Btn = [label: string, code: string, key: string];
 // Inward first (toward the middle of the screen), then round over the top to the outer edge.
-const LEFT_BTNS: Btn[] = [["Q", "KeyQ", "q"], ["E", "KeyE", "e"], ["⋯", "", ""]];
-const RIGHT_BTNS: Btn[] = [["1", "Digit1", "1"], ["2", "Digit2", "2"], ["3", "Digit3", "3"], ["4", "Digit4", "4"], ["Dash", "Space", " "]];
+const LEFT_BTNS: Btn[] = [["Repair", "KeyQ", "q"], ["Use", "KeyE", "e"], ["Reload", "KeyR", "r"]];
+const RIGHT_BTNS: Btn[] = [["Dash", "Space", " "], ["1", "Digit1", "1"], ["2", "Digit2", "2"], ["3", "Digit3", "3"], ["4", "Digit4", "4"]];
 const AIMED = new Set(["Digit1", "Digit2", "Digit3", "Digit4"]); // the ones that turn into a stick
-const MENU_KEYS: Btn[] = [["Tab", "Tab", "Tab"], ["F", "KeyF", "f"], ["R", "KeyR", "r"], ["Inv", "KeyI", "i"]];
+const MENU_KEYS: Btn[] = [["Lock", "Tab", "Tab"], ["Hop out", "KeyF", "f"], ["Inventory", "KeyI", "i"]];
+// The convoy lab's own keys (labs/convoy/main.ts); hold ones (Recover, Contract, Heli) are held while the finger is down.
+const CONVOY_KEYS: Btn[] = [["Launch", "KeyG", "g"], ["Recover", "KeyX", "x"], ["Bay", "KeyB", "b"], ["Shop", "KeyU", "u"], ["Contract", "KeyJ", "j"], ["Heli", "KeyH", "h"]];
+const CLOSES_MENU = new Set(["KeyI", "KeyB", "KeyU"]); // these open a screen of their own
+const SLOT_KEY: Record<string, string> = { Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4", KeyQ: "Q" };
+
+/** What a button shows (the action bar's slot, src/ui/actionBar.ts). */
+export interface TouchSlot {
+  key: string; name: string; cool: number; coolMax?: number; active?: number | null; ready: boolean; sub?: string; dim?: boolean;
+  tone?: "weapon" | "ability" | "kit";
+}
+const TONE = { weapon: "#ffb347", ability: "#7fd6c8", kit: "#8fd18a" } as const;
+interface SlotBtn { el: HTMLButtonElement; lbl: HTMLElement; sub: HTMLElement; cd: HTMLElement; def: string; max: number; sig: string }
+const slotBtns = new Map<string, SlotBtn>();
+let relabel = () => {};
+
+/**
+ * The action bar's slots onto the pad's buttons (1-4 and Repair): name, cooldown sweep and seconds, rounds or kits,
+ * lit while its effect lasts; a key of 1-4 with no slot is hidden. null: back to the plain labels, all shown.
+ */
+export function touchSlots(slots: TouchSlot[] | null) {
+  for (const [k, b] of slotBtns) {
+    const s = slots?.find((x) => x.key === k);
+    if (s && s.cool > b.max) b.max = s.cool;
+    if (!s || s.cool <= 0) b.max = 0;
+    const max = s?.coolMax && s.coolMax > 0 ? s.coolMax : b.max;
+    const share = s && s.cool > 0 && max > 0 ? Math.min(1, s.cool / max) : 0;
+    const secs = s && s.cool > 0 ? (s.cool < 10 ? s.cool.toFixed(1) : String(Math.ceil(s.cool))) : "";
+    const lit = !!s && s.active != null && s.active > 0;
+    const sig = !slots ? "" : !s ? "-" : `${s.name}|${s.sub ?? ""}|${Math.round(share * 90)}|${secs}|${s.ready}|${!!s.dim}|${lit}|${s.tone}`;
+    if (sig === b.sig) continue;
+    b.sig = sig;
+    b.el.style.display = slots && !s && k !== "Q" ? "none" : "";
+    const name = s?.name ?? b.def, renamed = b.lbl.textContent !== name;
+    b.lbl.textContent = name;
+    b.sub.textContent = s ? s.sub ?? (k === "Q" ? "" : k) : "";
+    const col = TONE[s?.tone ?? "weapon"];
+    b.cd.textContent = secs;
+    b.cd.style.background = share > 0 ? `conic-gradient(rgba(0,0,0,.68) ${(share * 360).toFixed(0)}deg, transparent 0)` : "";
+    b.el.style.borderColor = s ? (s.ready && s.cool <= 0) || lit ? col : "rgba(255,220,160,.25)" : "";
+    b.el.style.boxShadow = lit ? `0 0 14px 2px ${col}` : "";
+    b.el.style.opacity = s?.dim ? "0.45" : "";
+    if (renamed) relabel();
+  }
+}
 
 /** Drag tracking on an element: calls back with x, y in -1..1 of the radius from the centre `centre` gives (y down). */
 function dragger(el: HTMLElement, centre: () => { x: number; y: number; r: number }, cb: {
-  down?: () => void; move: (v: { x: number; y: number }) => void; up: () => void;
+  down?: (e: PointerEvent) => void; move: (v: { x: number; y: number }) => void; up: () => void;
 }) {
   let id = -1;
   const move = (e: PointerEvent) => {
@@ -62,7 +115,7 @@ function dragger(el: HTMLElement, centre: () => { x: number; y: number; r: numbe
     id = e.pointerId; e.preventDefault();
     try { el.setPointerCapture(id); } catch { /* synthetic pointer */ }
     dispatchEvent(new Event(TOUCH_USE));
-    cb.down?.();
+    cb.down?.(e);
     move(e);
   });
   el.addEventListener("pointermove", (e) => { if (e.pointerId === id) move(e); });
@@ -71,16 +124,31 @@ function dragger(el: HTMLElement, centre: () => { x: number; y: number; r: numbe
   el.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
-/** One stick: calls back with x, y in -1..1 (y down) while held, and null when let go. */
+/**
+ * One stick: calls back with x, y in -1..1 (y down) while held, and null when let go. It rests at its home; a touch in
+ * its zone off the resting knob moves its centre under the thumb until it's let go.
+ */
 function stick(side: "left" | "right", cb: (v: { x: number; y: number } | null) => void) {
-  const el = document.createElement("div"), knob = document.createElement("div");
-  el.className = `tp-stick tp-${side}`; knob.className = "tp-knob"; el.append(knob);
-  const centre = () => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }; };
-  dragger(el, centre, {
-    move: (v) => { const r = centre().r; knob.style.transform = `translate(${v.x * r}px,${v.y * r}px)`; cb(v); },
-    up: () => { knob.style.transform = ""; cb(null); },
+  const zone = document.createElement("div"), ring = document.createElement("div"), knob = document.createElement("div");
+  zone.className = "tp-zone"; ring.className = `tp-stick tp-${side}`; knob.className = "tp-knob"; ring.append(knob);
+  let hx = 0, hy = 0, r = 1, cx = 0, cy = 0, held = false;
+  const place = (x: number, y: number) => { cx = x; cy = y; box(ring, x, y, r * 2); };
+  const clamp = (v: number, max: number) => Math.min(Math.max(v, r * 0.7), max - r * 0.7);
+  dragger(zone, () => ({ x: cx, y: cy, r }), {
+    down: (e) => {
+      held = true; ring.classList.add("held");
+      if (Math.hypot(e.clientX - hx, e.clientY - hy) > r * KNOB) place(clamp(e.clientX, innerWidth), clamp(e.clientY, innerHeight));
+    },
+    move: (v) => { knob.style.transform = `translate(${v.x * r}px,${v.y * r}px)`; cb(v); },
+    up: () => { held = false; ring.classList.remove("held"); knob.style.transform = ""; place(hx, hy); cb(null); },
   });
-  return el;
+  /** Where it rests and how big it is; its zone's box (left, top, width, height). */
+  const home = (x: number, y: number, rad: number, z: [number, number, number, number]) => {
+    hx = x; hy = y; r = rad;
+    Object.assign(zone.style, { left: `${z[0]}px`, top: `${z[1]}px`, width: `${z[2]}px`, height: `${z[3]}px` });
+    if (!held) place(x, y);
+  };
+  return { zone, ring, home };
 }
 
 /** Where the right stick or an ability stick points: a spot on the canvas round its centre (the camera follows the mech). */
@@ -106,24 +174,38 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
   document.body.style.touchAction = "none";
   const style = document.createElement("style");
   style.textContent = `
+.tp-zone{position:fixed;z-index:19;touch-action:none}
 .tp-stick{position:fixed;border-radius:50%;z-index:20;background:rgba(0,0,0,.18);border:2px solid rgba(255,220,160,.4);
-  touch-action:none;box-sizing:border-box}
+  pointer-events:none;box-sizing:border-box;opacity:.6;transition:opacity .12s}
+.tp-stick.held{opacity:1}
 .tp-right{border-color:rgba(255,150,90,.55)}
 .tp-knob{position:absolute;left:50%;top:50%;width:${KNOB * 100}%;height:${KNOB * 100}%;transform-origin:center;
   translate:-50% -50%;border-radius:50%;background:rgba(255,220,160,.5);pointer-events:none}
 .tp-right .tp-knob{background:rgba(255,150,90,.55)}
-.tp-btn{position:fixed;border-radius:50%;border:1.5px solid rgba(255,220,160,.45);background:rgba(0,0,0,.3);color:#fdc;
+.tp-btn{position:fixed;border-radius:50%;border:2px solid rgba(255,220,160,.45);background:rgba(14,12,9,.45);color:#fdc;
   font-weight:600;font-family:system-ui;touch-action:none;user-select:none;-webkit-user-select:none;padding:0;z-index:21;
-  box-sizing:border-box}
+  box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;
+  line-height:1.05;text-shadow:0 1px 2px #000;text-transform:none;letter-spacing:0;-webkit-tap-highlight-color:transparent}
+.tp-btn>*{pointer-events:none}
+.tp-lbl{max-width:92%;overflow:hidden;text-align:center}
+.tp-sub{font-size:.72em;opacity:.8;margin-top:.15em}
+.tp-sub:empty{display:none}
+.tp-cd{position:absolute;inset:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;
+  font-weight:700}
+.tp-cd:not(:empty)+.tp-lbl,.tp-cd:not(:empty)~.tp-sub{opacity:.35}
 .tp-btn.aimed{border-color:rgba(255,150,90,.7)}
 .tp-btn.on{background:rgba(255,180,90,.55)}
-.tp-menu{position:fixed;display:none;flex-direction:column;gap:6px;z-index:22}
-.tp-menu.open{display:flex}
-.tp-menu .tp-btn{position:static;border-radius:8px}
+.tp-menu{position:fixed;display:none;gap:8px;z-index:23;padding:10px;border-radius:12px;background:rgba(14,12,9,.82);
+  border:1px solid rgba(255,220,160,.25);box-sizing:border-box}
+.tp-menu.open{display:grid}
+.tp-menu .tp-btn{position:static;border-radius:10px;border-width:1.5px}
 .tp-astick{position:fixed;border-radius:50%;border:2px solid rgba(255,150,90,.7);background:rgba(0,0,0,.22);z-index:22;
   pointer-events:none;box-sizing:border-box;display:none}
 .tp-astick .tp-knob{background:rgba(255,150,90,.75)}`;
   document.head.append(style);
+  // The phone's safe area (notch, rounded corners, home bar), read off a hidden box's padding.
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
 
   // Left stick: WASD past the dead zone, Space at the rim.
   const held = new Set<string>();
@@ -154,6 +236,7 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
   astick.className = "tp-astick"; aknob.className = "tp-knob"; astick.append(aknob);
   let stickR = 60; // px, set by layout()
 
+  const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed */ } };
   const hold = (b: HTMLElement, press: (on: boolean) => void) => {
     b.addEventListener("pointerdown", (e) => {
       e.preventDefault();
@@ -164,15 +247,34 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
     b.addEventListener("pointercancel", () => press(false));
     b.addEventListener("contextmenu", (e) => e.preventDefault());
   };
+  const plain = (label: string) => {
+    const b = document.createElement("button"), lbl = document.createElement("span");
+    b.className = "tp-btn"; lbl.className = "tp-lbl"; lbl.textContent = label; b.append(lbl);
+    return b;
+  };
+
+  // The ☰ menu, top right: the rarer keys by name, then the toggles. Open until ☰ again or a touch on the view.
+  const menu = document.createElement("div");
+  menu.className = "tp-menu";
+  const menuBtn = plain("☰");
+  const openMenu = (on: boolean) => { menu.classList.toggle("open", on); menuBtn.classList.toggle("on", on); };
+  menuBtn.addEventListener("click", () => { buzz(); openMenu(!menu.classList.contains("open")); });
+  canvas.addEventListener("pointerdown", () => openMenu(false));
 
   // Buttons: the key is held while the finger is on them.
   const keyButton = ([label, code, k]: Btn) => {
-    const b = document.createElement("button");
-    b.className = "tp-btn"; b.textContent = label;
+    const b = plain(label);
     const press = (on: boolean) => {
       if (on === b.classList.contains("on")) return;
       b.classList.toggle("on", on); key(on ? "keydown" : "keyup", code, k);
+      if (on) buzz(); else if (CLOSES_MENU.has(code)) openMenu(false);
     };
+    const slot = SLOT_KEY[code];
+    if (slot) {
+      const cd = document.createElement("span"), sub = document.createElement("span");
+      cd.className = "tp-cd"; sub.className = "tp-sub"; b.prepend(cd); b.append(sub);
+      slotBtns.set(slot, { el: b, lbl: b.querySelector(".tp-lbl")!, sub, cd, def: label, max: 0, sig: "" });
+    }
     if (!AIMED.has(code)) { hold(b, press); return b; }
     b.classList.add("aimed");
     let moved = false;
@@ -201,22 +303,20 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
     return b;
   };
 
-  // The ⋯ menu: the rarer keys, then the toggles. It stays open until ⋯ is pressed again.
-  const menu = document.createElement("div");
-  menu.className = "tp-menu";
-  const menuBtns: HTMLButtonElement[] = MENU_KEYS.map(keyButton);
-  const toggle = (label: string, cls: string, on = false) => {
-    const b = document.createElement("button");
-    b.className = "tp-btn"; b.textContent = label;
-    const show = (v: boolean) => { root.classList.toggle(cls, v); b.classList.toggle("on", v); };
-    show(on);
-    b.addEventListener("click", () => show(!root.classList.contains(cls)));
+  const convoy = typeof location !== "undefined" && location.pathname.includes("/convoy");
+  const menuBtns: HTMLButtonElement[] = [...MENU_KEYS, ...(convoy ? CONVOY_KEYS : [])].map(keyButton);
+  const toggle = (label: string, cls: string, closes = false) => {
+    const b = plain(label);
+    b.addEventListener("click", () => {
+      const v = !root.classList.contains(cls);
+      root.classList.toggle(cls, v); b.classList.toggle("on", v); buzz();
+      if (closes && v) openMenu(false);
+    });
     return b;
   };
-  menuBtns.push(toggle("Info", "tp-info"), toggle("FPS", "tp-fps"));
+  menuBtns.push(toggle("Info", "tp-info"), toggle("FPS", "tp-fps"), toggle("Tune", "tp-tune", true));
   // Fullscreen, then landscape where the browser allows it (Android Chrome; iOS needs the phone's rotation lock off).
-  const full = document.createElement("button");
-  full.className = "tp-btn"; full.textContent = "⛶";
+  const full = plain("Fullscreen");
   full.addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) { await document.exitFullscreen(); return; }
@@ -229,38 +329,64 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
 
   const placed: { el: HTMLButtonElement; side: "left" | "right"; i: number; n: number }[] = [];
   for (const [side, list] of [["left", LEFT_BTNS], ["right", RIGHT_BTNS]] as const)
-    list.forEach((def, i) => {
-      let el: HTMLButtonElement;
-      if (def[0] === "⋯") {
-        el = document.createElement("button"); el.className = "tp-btn"; el.textContent = "⋯";
-        el.addEventListener("click", () => { menu.classList.toggle("open"); el.classList.toggle("on", menu.classList.contains("open")); });
-      } else el = keyButton(def);
-      placed.push({ el, side, i, n: list.length });
-    });
+    list.forEach((def, i) => placed.push({ el: keyButton(def), side, i, n: list.length }));
 
-  // Lay everything out from the screen's short side: the sticks in the bottom corners, the buttons fanned round them
-  // (landscape from inward (0°) round over the top; portrait starting higher up so the two fans don't meet), the menu
-  // above the left fan. `--tp-clear` is the height the pad takes, for the action bar in portrait (lab.css).
+  // A label's size from its length: one or two characters big, a name fitted to the button's width.
+  const fit = (b: HTMLElement, bt: number) => {
+    const n = (b.querySelector(".tp-lbl")?.textContent ?? "").length;
+    b.style.fontSize = `${Math.round(bt * (n <= 2 ? 0.38 : Math.min(0.24, 1.5 / n)))}px`;
+  };
+
+  // Lay everything out from the screen's short side, inside the safe area: the sticks in the bottom corners with their
+  // zones, the buttons fanned round them (landscape from inward (0°) round over the top; portrait starting higher up
+  // so the two fans don't meet; the ring wide enough that neighbours never touch), ☰ and its menu top right.
+  // `--tp-clear` is the height the pad takes (the action bar's note in portrait), `--tp-top` where the top right
+  // corner is free again (the Tune panel), both for lab.css.
+  let btnSize = 60;
   const layout = () => {
+    const cs = getComputedStyle(probe), px = (v: string) => parseFloat(v) || 0;
+    const ins = { t: px(cs.paddingTop), r: px(cs.paddingRight), b: px(cs.paddingBottom), l: px(cs.paddingLeft) };
     const w = innerWidth, h = innerHeight, land = w > h, S = Math.min(w, h), z = land ? SIZE.land : SIZE.port;
-    const st = z.stick * S, bt = z.btn * S, ring = st / 2 + z.gap * S + bt / 2;
+    const st = z.stick * S, bt = btnSize = z.btn * S;
     stickR = st / 2;
-    const cy = h - z.edgeY * S - st / 2;
-    const lx = (land ? Math.max(z.edgeX * S, BARS) : z.edgeX * S) + st / 2, rx = w - z.edgeX * S - st / 2;
-    box(left, lx, cy, st); box(right, rx, cy, st);
+    const cy = h - ins.b - z.edgeY * S - st / 2;
+    const lx = ins.l + (land ? Math.max(z.edgeX * S, BARS) : z.edgeX * S) + st / 2, rx = w - ins.r - z.edgeX * S - st / 2;
+    const zt = land ? h * 0.36 : cy - st * 1.5, zw = land ? w * 0.36 : w / 2;
+    left.home(lx, cy, stickR, [0, zt, zw, h - zt]); right.home(rx, cy, stickR, [w - zw, zt, zw, h - zt]);
+    // Each fan's angles and ring: the ring wide enough that neighbours never touch, the far end of the fan pulled in
+    // until its last button is on the screen (clear of the bars on the left in landscape).
+    const fan = { left: land ? [0, 100] : [40, 120], right: land ? [0, 125] : [15, 125] };
+    const rings = { left: 0, right: 0 };
+    for (const side of ["left", "right"] as const) {
+      const n = side === "left" ? LEFT_BTNS.length : RIGHT_BTNS.length, f = fan[side];
+      const room = side === "left" ? lx - ins.l - (land ? BARS - 8 : 4) - bt / 2 : w - ins.r - 4 - bt / 2 - rx;
+      for (let i = 0; i < 4; i++) {
+        const step = (f[1] - f[0]) / Math.max(1, n - 1) * Math.PI / 180;
+        rings[side] = Math.max(st / 2 + z.gap * S + bt / 2, (bt + BTN_PAD) / (2 * Math.sin(step / 2)));
+        f[1] = Math.min(f[1], Math.acos(Math.max(-1, -Math.max(0, room) / rings[side])) * 180 / Math.PI);
+      }
+    }
     let top = cy;
     for (const p of placed) {
-      const [a0, a1] = p.side === "left" ? (land ? [0, 100] : [40, 120]) : (land ? [0, 120] : [15, 125]);
-      const a = (a0 + (a1 - a0) * (p.n > 1 ? p.i / (p.n - 1) : 0)) * Math.PI / 180;
+      const [a0, a1] = fan[p.side];
+      const step = (a1 - a0) / Math.max(1, p.n - 1) * Math.PI / 180, ring = rings[p.side];
+      const a = a0 * Math.PI / 180 + step * p.i;
       const x = (p.side === "left" ? lx : rx) + (p.side === "left" ? 1 : -1) * Math.cos(a) * ring, y = cy - Math.sin(a) * ring;
       box(p.el, x, y, bt);
-      p.el.style.fontSize = `${Math.round(bt * (p.el.textContent!.length > 2 ? 0.28 : 0.38))}px`;
+      fit(p.el, bt);
       top = Math.min(top, y - bt / 2);
     }
-    for (const b of menuBtns) Object.assign(b.style, { width: `${bt * 1.25}px`, height: `${bt * 0.75}px`, fontSize: `${Math.round(bt * 0.3)}px` });
-    Object.assign(menu.style, { left: `${lx - st / 2}px`, bottom: `${h - top + 8}px`, maxHeight: `${top - 8}px`, flexWrap: "wrap-reverse" });
+    const mb = bt * 0.9, m = 8;
+    box(menuBtn, w - ins.r - m - mb / 2, ins.t + m + mb / 2, mb);
+    menuBtn.style.fontSize = `${Math.round(mb * 0.42)}px`;
+    const cols = land ? 4 : 3, mw = Math.min(bt * 1.75, (w - ins.l - ins.r - 2 * m - 20 - (cols - 1) * 8) / cols);
+    for (const b of menuBtns) Object.assign(b.style, { width: `${mw}px`, height: `${bt * 0.72}px`, fontSize: `${Math.round(bt * 0.25)}px` });
+    Object.assign(menu.style, { right: `${ins.r + m}px`, top: `${ins.t + m + mb + m}px`, gridTemplateColumns: `repeat(${cols}, ${mw}px)` });
     root.style.setProperty("--tp-clear", `${Math.round(h - top + 6)}px`);
+    root.style.setProperty("--tp-top", `${Math.round(ins.t + m + mb + m)}px`);
   };
+  relabel = () => { for (const p of placed) fit(p.el, btnSize); };
+  container.append(probe, left.zone, right.zone, left.ring, right.ring, ...placed.map((p) => p.el), menuBtn, menu, astick);
   layout();
   addEventListener("resize", layout);
   visualViewport?.addEventListener("resize", layout);
@@ -270,6 +396,4 @@ export function mountTouchPad(container: HTMLElement, canvas: HTMLCanvasElement)
     meta.setAttribute("content", viewport);
     requestAnimationFrame(layout);
   });
-
-  container.append(left, right, ...placed.map((p) => p.el), menu, astick);
 }

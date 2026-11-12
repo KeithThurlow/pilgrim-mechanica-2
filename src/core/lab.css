@@ -87,22 +87,37 @@ body.selecting #view canvas { cursor: crosshair; }
 /* Combat labs: a red edge when the player's mech takes hits */
 .hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px 30px rgba(200, 40, 20, 0.85); transition: opacity 0.08s; }
 
-/* Phones and tablets (html.touch, set by src/core/touch.ts; Keith 2026-11-07, laid out like a MOBA 2026-11-08): the page
-   is drawn at 0.6 scale there and the two sticks with their button fans own the bottom corners. The minimap sits top
-   left past the energy bars, the panel top right. The frame HUD and the expedition card are hidden until the touch
-   menu's FPS or Info turns them on (Keith 2026-11-08: everything overlapped). In portrait the action bar sits above
-   the pad (--tp-clear, from touch.ts). */
-html.touch .panel { left: auto; right: 8px; top: 8px; bottom: auto; width: min(320px, calc(100% - 300px)); max-height: 55%; }
-html.touch .panel.open { width: min(340px, calc(100% - 16px)); }
-html.touch .report-btn, html.touch .help, html.touch .mech-doll { display: none !important; }
-html.touch .exp-hud { left: 56px !important; top: 8px; bottom: auto !important; align-items: flex-start !important; }
+/* Phones and tablets (html.touch, set by src/core/touch.ts; Keith 2026-11-07, laid out like a MOBA 2026-11-08, both
+   orientations reviewed 2026-11-12): the page is drawn at 0.6 scale there and the two sticks with their button fans
+   own the bottom corners, the menu button the top right. The minimap sits top left past the energy bars. The frame
+   HUD, the expedition card and the tuning panel are hidden until the touch menu's FPS, Info or Tune turns them on
+   (Keith 2026-11-08: everything overlapped). The action bar is only its note there (the pad's buttons show the
+   slots), above the pad in portrait (--tp-clear). Everything keeps inside the phone's safe area. While the inventory,
+   the bay or the shop is open the pad and the left bars are hidden, and those screens fill the phone. */
+html.touch:not(.tp-tune) .panel { display: none; }
+html.touch .panel {
+  left: auto; right: calc(8px + env(safe-area-inset-right, 0px)); top: var(--tp-top, 80px); bottom: auto;
+  width: min(360px, calc(100% - 16px)); max-height: 50%; min-height: 0; z-index: 22;
+}
+html.touch .panel-body { display: block; }
+html.touch .panel-head button { display: none; }
+html.touch .report-btn, html.touch .help, html.touch .mech-doll, html.touch .bay-open-btn { display: none !important; }
+html.touch .exp-hud { left: calc(56px + env(safe-area-inset-left, 0px)) !important; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto !important; align-items: flex-start !important; }
+html.touch .left-stack { left: calc(14px + env(safe-area-inset-left, 0px)) !important; }
 html.touch:not(.tp-info) .exp-card { display: none; }
 html.touch:not(.tp-fps) .hud { display: none; }
-html.touch .hud { left: 50%; transform: translateX(-50%); top: 8px; max-width: 40vw; opacity: 0.85; }
+html.touch .hud { left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); max-width: 40vw; opacity: 0.85; }
+html.touch:has(.inv:not([hidden]), .bay:not([hidden])) :is(.tp-zone, .tp-stick, .tp-btn, .tp-menu, .left-stack, .action-bar, .exp-hud) { display: none !important; }
+html.touch :is(.inv, .bay) {
+  left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: auto;
+  top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 24;
+}
+html.touch :is(.inv, .bay) button { min-height: 34px; }
+html.touch .convoy-shop { top: var(--tp-top, 80px) !important; right: calc(8px + env(safe-area-inset-right, 0px)) !important; }
 @media (orientation: portrait) {
-  html.touch .hud { max-width: 60vw; top: 60px; }
+  html.touch .hud { max-width: 60vw; top: calc(60px + env(safe-area-inset-top, 0px)); }
   html.touch .action-bar { bottom: var(--tp-clear, 34px) !important; }
 }
 @media (orientation: landscape) {
-  html.touch .panel { max-height: 36%; min-height: 0; }
+  html.touch .panel { max-height: 62%; }
 }
