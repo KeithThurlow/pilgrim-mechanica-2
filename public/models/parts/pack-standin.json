@@ -1,0 +1,38 @@
+{
+ "id": "pack-standin",
+ "kind": "pack",
+ "name": "Rampart power pack",
+ "maker": "Stratford-Aegis",
+ "says": "generator: cells, radiator, exhaust",
+ "tris": 1784,
+ "meshes": 2,
+ "size": [
+  1.634,
+  1.021,
+  0.978
+ ],
+ "min": [
+  -0.817,
+  -0.3768,
+  -0.4815
+ ],
+ "max": [
+  0.817,
+  0.6442,
+  0.4962
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   0.38
+  ],
+  "Top": [
+   0.0,
+   0.7,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/packs.py"
+}

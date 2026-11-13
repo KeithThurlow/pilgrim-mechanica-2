@@ -27,6 +27,7 @@ import { armIk, type SwordPose } from "../weapons/sword";
 export interface HeldPose extends SwordPose { upper: number; fore: number; out: number }
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
+import { partFromGlb, partGlb } from "./partModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
 import { footShapeOr, type FootShape } from "../fx/footprint";
@@ -52,6 +53,8 @@ export const MOUNT_STANDIN = {
   sensorFront: [0, 0.78, 1.0] as [number, number, number],
 };
 /** The sensor a body shows before any loadout is applied (the default loadout's). */
+/** The pack a body shows when no loadout says which (the labs' plain Rampart): the Rampart's standard pack. */
+const DEFAULT_PACK = "pack-standin";
 const DEFAULT_SENSOR = { id: "sensor-visor", style: "head" as SensorStyle };
 
 const loader = new GLTFLoader();
@@ -220,6 +223,9 @@ export class RampartBody {
   private back: THREE.Object3D | null = null;
   private drums: THREE.Object3D[] = [];
   private pack: THREE.Object3D | null = null;
+  /** The fitted pack's base id and the code stand-in it shows until (or without) its model. */
+  private packId: string | null = null;
+  private packStandIn: THREE.Object3D | null = null;
   /** Where shoulder weapons stand: on each shoulder (+1 left, -1 right) and on top of the back mount. */
   private shoulderMounts: { side: 1 | -1; g: THREE.Group }[] = [];
   private backTop = new THREE.Group();
@@ -393,8 +399,14 @@ export class RampartBody {
         this.drums.push(part);
       });
     }
-    this.pack = powerPack(look, variant?.packBody, variant?.packCells);
+    // The pack: a slot where the stand-in box pack sits until the fitted item's model loads (setPack).
+    this.pack = new THREE.Group();
+    this.pack.position.set(0, 1.05, -0.25);
+    this.packStandIn = powerPack(look, variant?.packBody, variant?.packCells);
+    this.pack.add(this.packStandIn);
     back.add(this.pack);
+    this.packId = null;
+    this.setPack(DEFAULT_PACK);
     // A shoulder weapon on the back mount stands on top of the pack (key 3).
     this.backTop.position.set(0, 1.75, -0.1);
     back.add(this.backTop);
@@ -471,6 +483,20 @@ export class RampartBody {
     this.paints = null;
     if (this.lastPaint) this.paint(this.lastPaint.look, this.lastPaint.color);
   }
+  /** Fit a pack's model by item base id: the stand-in box pack stays until its GLB loads (and if there is none). */
+  setPack(id: string | null) {
+    id = id ?? DEFAULT_PACK;
+    if (id === this.packId || !this.pack || !this.look) return;
+    this.packId = id;
+    const slot = this.pack, look = this.look;
+    void partGlb(id).then((scene) => {
+      if (this.packId !== id || this.pack !== slot) return;
+      slot.clear();
+      slot.add(scene ? partFromGlb(scene, look) : this.packStandIn!);
+      this.repaint();
+    });
+  }
+
   /** Fit a sensor's model by base id (null: none): the code stand-in at once, its GLB in its place if one loads. */
   setSensor(id: string | null, style?: SensorStyle) {
     if (id === this.sensorId) return;
@@ -549,6 +575,7 @@ export class RampartBody {
     }
     for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
     if (this.pack) this.pack.visible = parts.pack;
+    if (parts.packId !== undefined && parts.pack) this.setPack(parts.packId);
     // A back weapon stands on the pack, or lower where the pack would be.
     this.backTop.position.y = parts.pack ? 1.75 : 0.95;
     // The fitted sensor (a body told only on/off keeps its model and hides it).
@@ -988,7 +1015,6 @@ function armFore(look: ToonLook) {
 /** Stand-in power pack from boxes, in the Rampart's khaki and olive (or a variant's paint), until a modelled one exists. */
 function powerPack(look: ToonLook, khaki = 0xb7a77c, olive = 0x6c7546) {
   const g = new THREE.Group();
-  g.position.set(0, 1.05, -0.25);
   const box = new THREE.BoxGeometry(1, 1, 1);
   const add = (geo: THREE.BufferGeometry, tint: number, size: [number, number, number], at: [number, number, number], rot: [number, number, number] = [0, 0, 0]) => {
     const m = new THREE.Mesh(geo);

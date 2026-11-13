@@ -1,0 +1,43 @@
+{
+ "id": "pack-replica",
+ "kind": "pack",
+ "name": "Replica bay",
+ "maker": "Novus-Lux",
+ "says": "fabricator: slatted bay door, hoppers, gantry",
+ "tris": 1000,
+ "meshes": 2,
+ "size": [
+  1.622,
+  1.052,
+  1.053
+ ],
+ "min": [
+  -0.8111,
+  -0.3768,
+  -0.557
+ ],
+ "max": [
+  0.8111,
+  0.675,
+  0.4962
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   0.38
+  ],
+  "Top": [
+   0.0,
+   0.7,
+   -0.0
+  ],
+  "Bay": [
+   0.0,
+   -0.02,
+   -0.56
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/packs.py"
+}
