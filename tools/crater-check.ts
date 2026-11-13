@@ -281,13 +281,76 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   const { field, craters } = world({ height: 0, swell: 0, bumps: 0 });
   const x = 400, z = 400, g0 = field.height(x, z);
   craters.add(x, z, 16.5, 3.5, 3.5);
+  craters.settle();
   const deep = g0 - field.height(x, z);
   const { field: f2, craters: c2 } = world({ height: 0, swell: 0, bumps: 0 });
   c2.add(x, z, 16.5, 3.5);
+  c2.settle();
   const capped = f2.height(x, z) - f2.height(x, z) + (g0 - f2.height(x, z));
   console.log(`huge crater: 16.5 m radius, ${deep.toFixed(2)} m deep (the wall limit holds it there; usual depth limit ${capped.toFixed(2)} m)`);
   if (deep < capped + 0.5) problems.push(`a huge crater dug only ${deep.toFixed(2)} m`);
   if (capped > CRATER_DEFAULTS.craterMaxDepth + 0.05) problems.push(`a crater without a depth override went ${capped.toFixed(2)} m deep`);
+}
+// Big craters are fitted over ticks (Keith 2026-11-13: a dying walker's crater stalled the sim for 80 ms and more): the
+// ground holds still until one lands, it lands the crater an at-once fit makes, a blast on top of it lands after it, a
+// change under it (the plough's road) starts it over, and no tick does much more than the budget's work.
+{
+  const big: [number, number, number, number][] = [[400, 400, 23.8, 1.5], [460, 380, 16.5, 3.5], [300, 300, 18.7, 4.5]];
+  const once = world({ craterStepNodes: 0 }), spread = world();
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 4000; i++) pts.push([250 + rnd() * 260, 250 + rnd() * 200]);
+  const before = pts.map(([x, z]) => spread.field.height(x, z));
+  let ticks = 0, worstTicks = 0, held = true, landed = 0, reads = 0, worstReads = 0;
+  const f = spread.field, height = f.height.bind(f);
+  f.height = (x: number, z: number) => { reads++; return height(x, z); };
+  for (const [x, z, r, d] of big) {
+    once.craters.add(x, z, r, d, d);
+    once.craters.blast(x + 3, z - 2, 6);
+    const box = spread.craters.add(x, z, r, d, d);
+    if (!box || !spread.craters.stats.deferred) fail(`a ${r} m crater was not spread over ticks`);
+    // A small blast on it: waits behind it.
+    spread.craters.blast(x + 3, z - 2, 6);
+    if (spread.craters.pending !== 2) fail(`a blast on a crater on its way did not wait behind it (${spread.craters.pending} waiting)`);
+    let n = 0;
+    while (spread.craters.pending) {
+      if (n === 1 && pts.some(([px, pz], i) => Math.abs(px - x) < 60 && height(px, pz) !== before[i])) held = false;
+      reads = 0;
+      spread.craters.update(0, () => landed++);
+      worstReads = Math.max(worstReads, reads);
+      n++; ticks++;
+      if (n > 200) { fail("a spread crater never landed"); break; }
+    }
+    worstTicks = Math.max(worstTicks, n);
+    for (let i = 0; i < pts.length; i++) before[i] = height(pts[i][0], pts[i][1]);
+  }
+  f.height = height;
+  let worst = 0;
+  for (const [x, z] of pts) worst = Math.max(worst, Math.abs(once.field.height(x, z) - spread.field.height(x, z)));
+  // Started over by a change under it, then by more than it can ride out: finished at once.
+  const again = world();
+  again.craters.add(0, 0, 20, 1.5, 1.5);
+  for (let k = 0; k < 3; k++) again.craters.update(0);
+  again.craters.invalidate(-5, -5, 5, 5);
+  let n2 = 0;
+  while (again.craters.pending && n2 < 200) { again.craters.update(0); n2++; }
+  for (let k = 0; k < 3; k++) again.craters.invalidate(-5, -5, 5, 5);
+  const flat = world({ craterStepNodes: 0 });
+  flat.craters.add(0, 0, 20, 1.5, 1.5);
+  let offAgain = 0;
+  for (let i = 0; i < 500; i++) { const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80; offAgain = Math.max(offAgain, Math.abs(flat.field.height(x, z) - again.field.height(x, z))); }
+  const rush = world();
+  rush.craters.add(0, 0, 20, 1.5, 1.5);
+  rush.craters.update(0);
+  for (let k = 0; k < 3; k++) rush.craters.invalidate(-5, -5, 5, 5);
+  rush.craters.update(0);
+  console.log(`spread craters: ${big.length} big ones and a blast on each over ${ticks} ticks (${worstTicks} at most), ${landed} ground changes told, ${worst.toExponential(1)} m off fitting at once; at most ${worstReads} ground reads a tick; started over once: ${offAgain.toExponential(1)} m off, ${n2} more ticks; three times: ${rush.craters.pending ? "still waiting" : "finished on the next tick"}`);
+  if (!held) fail("the ground moved before a spread crater landed");
+  if (worst > 1e-6) fail(`spread craters differ from fitting at once by ${worst} m`);
+  if (landed < big.length * 2) fail(`${landed} ground changes told for ${big.length * 2} craters landing`);
+  if (worstTicks > 30) fail(`a spread crater took ${worstTicks} ticks to land`);
+  if (worstReads > CRATER_DEFAULTS.craterStepNodes * 1.5) fail(`${worstReads} ground reads in one tick (budget ${CRATER_DEFAULTS.craterStepNodes})`);
+  if (offAgain > 1e-6) fail(`a crater started over differs from fitting at once by ${offAgain} m`);
+  if (rush.craters.pending) fail("a crater started over three times was not finished on the next tick");
 }
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("crater check failed"); }
 console.log("crater check passed");
