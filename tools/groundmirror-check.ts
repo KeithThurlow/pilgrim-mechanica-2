@@ -80,7 +80,8 @@ function run(opts: { flat?: boolean; dropCrater?: number; frames?: number }): Ru
         const add = Object.getPrototypeOf(craters).add as CraterLayer["add"];
         add.call(craters, bx, bz, 4, 1.2);
         dropped++;
-      } else craters.blast(bx, bz, 3 + 5 * rnd());
+      } else if (f % 90 === 0) craters.add(bx, bz, 16 + 6 * rnd(), 3.5, 3.5); // a dying walker's: fitted over ticks, in step on both sides
+      else craters.blast(bx, bz, 3 + 5 * rnd());
     }
     craters.update(dt);
 

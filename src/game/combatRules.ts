@@ -177,7 +177,7 @@ export class CombatRules {
   dent(x: number, z: number, blastRadius: number): boolean {
     if (!this.craters) return false;
     const box = this.craters.blast(x, z, blastRadius);
-    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
+    if (box && !this.craters.stats.deferred) this.onGround?.(box[0], box[1], box[2], box[3]);
     return !!box;
   }
 
@@ -185,7 +185,8 @@ export class CombatRules {
   crater(x: number, z: number, radius: number, depth: number): boolean {
     if (!this.craters) return false;
     const box = this.craters.add(x, z, radius, depth, depth);
-    if (box) this.onGround?.(box[0], box[1], box[2], box[3]);
+    // A big one lands a few ticks on (craterStepNodes): the ground changes then, through craters.update's changed().
+    if (box && !this.craters.stats.deferred) this.onGround?.(box[0], box[1], box[2], box[3]);
     return !!box;
   }
 

@@ -1153,7 +1153,7 @@ app.onTick((rawDt) => {
   // This frame's ground changes to the sim worker (and a few points to check its copy at).
   simHost?.frame(sim.pelvis.x, sim.pelvis.z);
   costs.mark("simworker");
-  app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving) · craters ${craters.count}`);
+  app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving) · craters ${craters.count}${craters.pending ? ` (${craters.pending} big on their way)` : ""}`);
   // The shop shows with the bay screen; the bank moving (banked, a fee) redraws it and is saved.
   shop.sync(bay.isOpen);
   if (loop.exp.bank.scrap !== savedScrap) { persist(); shop.refresh(); }

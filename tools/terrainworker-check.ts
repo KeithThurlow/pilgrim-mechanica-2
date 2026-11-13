@@ -2,8 +2,9 @@
 // one building and patching its chunks itself, the other asking a stand-in worker (a GroundMirror fed the recorded ground
 // events, answering a frame late, as src/sim/host.ts and worker.ts do). The convoy drives with the plough cutting the road,
 // blasts dent the ground near it, the focus follows the convoy; after the answers are in, every chunk both have must match
-// where they differ, the worker's chunk is never further from the ground than the main thread's (the main thread's crater
-// patches read a cache of the ground under the dents, which can hold road it has since cut; the worker's read it fresh).
+// where they differ, the worker's chunk is never further from the ground than the main thread's (crater patches read a
+// cache of the ground under the dents on both sides, src/world/chunkFill.ts PatchCache in the worker: dropped by the same
+// rule, a chunk built again or a patch that isn't dents-only).
 // Also: chunk vertices from the copy equal the main thread's exactly; most chunks were built remotely.
 // Run: npm test (or npx tsx tools/terrainworker-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";
@@ -17,7 +18,7 @@ import { CraterLayer, CRATER_DEFAULTS } from "../src/world/craters";
 import { SITES_DEFAULTS } from "../src/expedition/sites";
 import { SitesGround, roadBlocks } from "../src/expedition/sitesGround";
 import { TerrainStreamer, STREAM_DEFAULTS, PATCH_PAD, type BuildResult, type PatchResult } from "../src/world/chunks";
-import { chunkArrays, fillChunkRows, patchBlocks } from "../src/world/chunkFill";
+import { chunkArrays, fillChunkRows, patchBlocks, PatchCache } from "../src/world/chunkFill";
 import { GroundRecorder } from "../src/sim/groundEvents";
 import { GroundMirror } from "../src/sim/groundMirror";
 import { GroundWindow } from "../src/world/groundWindow";
@@ -58,12 +59,14 @@ const mirror = new GroundMirror(structuredClone(rec.init));
 // The stand-in worker: requests in order (the ground's events before each), answered at the next frame.
 type Job = () => (() => void);
 let queue: Job[] = [], answers: (() => void)[] = [];
+const patchCache = new PatchCache();
 const flush = () => { const ev = rec.take(); if (ev.length) { const e = structuredClone(ev); queue.push(() => { mirror.apply(e); return () => {}; }); } };
 remote.remote = {
   build: (q) => {
     flush();
     queue.push(() => {
       const a = chunkArrays(q.n, q.water);
+      patchCache.seen(q.epoch); patchCache.drop(q.cx, q.cz);
       fillChunkRows(mirror.field, q.cx, q.cz, q.n, q.size, a, 0, q.n + 1);
       const res: BuildResult = structuredClone({ ...a, epoch: q.epoch, seq: q.seq, cx: q.cx, cz: q.cz, n: q.n, size: q.size });
       return () => remote.takeBuild(res);
@@ -72,7 +75,8 @@ remote.remote = {
   patch: (q) => {
     flush();
     queue.push(() => {
-      const b = q.box, res: PatchResult = structuredClone({ ...q, blocks: patchBlocks(mirror.field, b[0], b[1], b[2], b[3], q.n, q.size) });
+      patchCache.seen(q.epoch);
+      const b = q.box, res: PatchResult = structuredClone({ ...q, blocks: patchBlocks(mirror.field, b[0], b[1], b[2], b[3], q.n, q.size, patchCache, q.dentsOnly) });
       return () => remote.takePatch(res);
     });
   },
