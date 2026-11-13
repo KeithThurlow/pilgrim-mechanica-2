@@ -4,7 +4,7 @@
 // convoy's copy and the escorts beside it (src/sim/escortsRemote.ts), stepped inside the ground's events. Later steps
 // move the robot swarm in here.
 import { GroundMirror } from "./groundMirror";
-import { chunkArrays, fillChunkRows, patchBlocks } from "../world/chunkFill";
+import { chunkArrays, fillChunkRows, patchBlocks, PatchCache } from "../world/chunkFill";
 import { convoyPoses } from "./escortsRemote";
 import { snapshotTransfer } from "./robotsRemote";
 import { infantryFrameTransfer } from "./infantryRemote";
@@ -12,6 +12,8 @@ import type { FromWorker, ToWorker } from "./messages";
 
 let ground: GroundMirror | null = null;
 let busy = 0;
+// The patch caches (the ground under the dents per chunk vertex): a crater's redraw reads the crater lattice only.
+const patchCache = new PatchCache();
 const post = (m: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(m, transfer);
 
 self.onmessage = (e: MessageEvent<ToWorker>) => {
@@ -23,12 +25,17 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     if (m.type === "ground") ground.apply(m.ground);
     else if (m.type === "chunk") {
       const q = m.req, a = chunkArrays(q.n, q.water);
+      // Built again: its ground may have changed under the dents (as the main thread's chunk loses its cache).
+      patchCache.seen(q.epoch);
+      patchCache.drop(q.cx, q.cz);
       fillChunkRows(ground.field, q.cx, q.cz, q.n, q.size, a, 0, q.n + 1);
       const t: Transferable[] = [a.pos.buffer, a.nor.buffer, a.col.buffer, a.hs.buffer];
       if (a.wsA) t.push(a.wsA.buffer);
       post({ type: "chunk", res: { ...a, epoch: q.epoch, seq: q.seq, cx: q.cx, cz: q.cz, n: q.n, size: q.size } }, t);
     } else if (m.type === "patch") {
-      const q = m.req, b = q.box, blocks = patchBlocks(ground.field, b[0], b[1], b[2], b[3], q.n, q.size);
+      const q = m.req, b = q.box;
+      patchCache.seen(q.epoch);
+      const blocks = patchBlocks(ground.field, b[0], b[1], b[2], b[3], q.n, q.size, patchCache, q.dentsOnly);
       post({ type: "patch", res: { ...q, blocks } }, blocks.flatMap((B) => [B.h.buffer, B.nor.buffer, B.col.buffer, B.ws.buffer]));
     } else if (m.type === "fine") {
       const q = m.req, f = q.f;

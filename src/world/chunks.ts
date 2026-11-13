@@ -4,9 +4,9 @@
 import * as THREE from "three/webgpu";
 import { vertexColor, positionWorld, uniform, mx_noise_float, vec3, vec4, float, sin, smoothstep, clamp, cameraPosition, attribute, time, abs, max } from "three/tsl";
 import type { Param } from "../core/tweaks";
-import { NORMAL_E, type DuneField, type GroundSample } from "./terrain";
-import { groundColour, WATER_COLOURS, smooth } from "./groundColour";
-import { chunkArrays, fillChunkRows, groundVertex, type ChunkArrays, type PatchBlock } from "./chunkFill";
+import type { DuneField, GroundSample } from "./terrain";
+import { WATER_COLOURS, smooth } from "./groundColour";
+import { chunkArrays, fillChunkRows, groundVertex, groundVertexCached, newPatchBase, type ChunkArrays, type PatchBlock } from "./chunkFill";
 
 export const STREAM_DEFAULTS = {
   chunkSize: 64,
@@ -80,9 +80,7 @@ const BUILD_NOW_RADIUS = 1.5, BUILD_MAX_FRAMES = 30;
  *  brings in about a dozen at a time, built a few rows a frame. */
 const CATCH_UP = 16;
 /** Patch cache layout per vertex: h, h at ±e on x and z (normal), at ±2 m (the colour's wide normal), crest, flat, wr, ws, rock. */
-const BASE_N = 14, WIDE_E = 2;
 /** out = (x, y, z) normalised, as DuneField.normal does it. */
-function unit(out: number[], x: number, y: number, z: number) { const l = Math.hypot(x, y, z); out[0] = x / l; out[1] = y / l; out[2] = z / l; }
 
 export class TerrainStreamer {
   readonly group = new THREE.Group();
@@ -118,8 +116,6 @@ export class TerrainStreamer {
   private patched = new Map<string, Chunk>();
   private patchWater = new Set<string>();
   private patchRows = new Map<number, Set<number>>();
-  private sb: GroundSample = { h: 0, crest: 0, flat: 0 };
-  private wideN = [0, 1, 0];
   private index: THREE.BufferAttribute | null = null;
   private indexSegments = -1;
   private shadowIndex: THREE.BufferAttribute | null = null;
@@ -382,29 +378,10 @@ export class TerrainStreamer {
     this.v.budgetMs = b;
   }
 
-  /**
-   * One ground vertex as vertex() works it out, from the chunk's patch cache plus the dents read now: the same sums in
-   * the same order, so the same ground (to float32 rounding of the cached heights). The cache fills on first use.
-   */
+  /** One ground vertex from the chunk's patch cache plus the dents read now (src/world/chunkFill.ts groundVertexCached). */
   private vertexCached(ch: Chunk, i: number, x: number, z: number, s: GroundSample, nn: number[], tmp: THREE.Color) {
-    const f = this.field, n = Math.round(this.v.segments), E = NORMAL_E;
-    const B = (ch.base ??= new Float32Array((n + 1) * (n + 1) * BASE_N).fill(NaN));
-    const o = i * BASE_N;
-    if (B[o] !== B[o]) {
-      const dents = f.dents;
-      f.dents = null;
-      const q = f.sample(x, z, this.sb);
-      B[o] = q.h; B[o + 9] = q.crest; B[o + 10] = q.flat; B[o + 11] = q.wr ?? 0; B[o + 12] = q.ws ?? 0; B[o + 13] = q.rock ?? 0;
-      B[o + 1] = f.height(x + E, z); B[o + 2] = f.height(x - E, z); B[o + 3] = f.height(x, z + E); B[o + 4] = f.height(x, z - E);
-      B[o + 5] = f.height(x + WIDE_E, z); B[o + 6] = f.height(x - WIDE_E, z); B[o + 7] = f.height(x, z + WIDE_E); B[o + 8] = f.height(x, z - WIDE_E);
-      f.dents = dents;
-    }
-    const D = f.dents, at = (px: number, pz: number) => (D ? D.at(px, pz) : 0);
-    s.h = B[o] + at(x, z); s.crest = B[o + 9]; s.flat = B[o + 10]; s.wr = B[o + 11]; s.ws = B[o + 12]; s.rock = B[o + 13];
-    unit(nn, -((B[o + 1] + at(x + E, z)) - (B[o + 2] + at(x - E, z))), 2 * E, -((B[o + 3] + at(x, z + E)) - (B[o + 4] + at(x, z - E))));
-    const w = this.wideN;
-    unit(w, -((B[o + 5] + at(x + WIDE_E, z)) - (B[o + 6] + at(x - WIDE_E, z))), 2 * WIDE_E, -((B[o + 7] + at(x, z + WIDE_E)) - (B[o + 8] + at(x, z - WIDE_E))));
-    groundColour(f, x, z, s, tmp, w);
+    const n = Math.round(this.v.segments);
+    groundVertexCached(this.field, (ch.base ??= newPatchBase(n)), i, x, z, s, nn, tmp);
   }
 
   /** One ground vertex at (x, z): the sample into s, the normal into nn, the colour into tmp. */
