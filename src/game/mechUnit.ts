@@ -20,7 +20,7 @@ export type MountSocket = "left" | "right" | "back" | "shoulderL" | "shoulderR"
  *  the mounts (Keith 2026-10-26); a body without them reads only the first four. */
 export interface BodyParts {
   gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean;
-  drumsL?: boolean; drumsR?: boolean; sensor?: boolean; sensorId?: string | null; sensorStyle?: "head" | "cluster" | null; mountL?: "gun" | "arm" | null; mountR?: "gun" | "arm" | null;
+  drumsL?: boolean; drumsR?: boolean; packId?: string | null; sensor?: boolean; sensorId?: string | null; sensorStyle?: "head" | "cluster" | null; mountL?: "gun" | "arm" | null; mountR?: "gun" | "arm" | null;
 }
 
 /** What a mech unit needs from its model: the Rampart, or the stand-in walker (no guns). */

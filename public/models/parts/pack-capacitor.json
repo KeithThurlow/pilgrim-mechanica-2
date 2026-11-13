@@ -1,0 +1,38 @@
+{
+ "id": "pack-capacitor",
+ "kind": "pack",
+ "name": "Capacitor pack",
+ "maker": "Novus-Lux",
+ "says": "stored charge: six lit capacitors, bus bars",
+ "tris": 1892,
+ "meshes": 2,
+ "size": [
+  1.7,
+  1.039,
+  0.956
+ ],
+ "min": [
+  -0.85,
+  -0.3768,
+  -0.46
+ ],
+ "max": [
+  0.85,
+  0.662,
+  0.4962
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   0.38
+  ],
+  "Top": [
+   0.0,
+   0.7,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/packs.py"
+}

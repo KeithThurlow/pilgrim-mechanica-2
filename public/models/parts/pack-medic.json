@@ -1,0 +1,38 @@
+{
+ "id": "pack-medic",
+ "kind": "pack",
+ "name": "Medic pack",
+ "maker": "Stratford-Aegis",
+ "says": "repair: white door, green cross, racked beacons",
+ "tris": 1284,
+ "meshes": 2,
+ "size": [
+  1.744,
+  1.057,
+  0.969
+ ],
+ "min": [
+  -0.817,
+  -0.3768,
+  -0.473
+ ],
+ "max": [
+  0.927,
+  0.6806,
+  0.4962
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   0.38
+  ],
+  "Top": [
+   0.0,
+   0.7,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/packs.py"
+}
