@@ -2,8 +2,9 @@
 // one building and patching its chunks itself, the other asking a stand-in worker (a GroundMirror fed the recorded ground
 // events, answering a frame late, as src/sim/host.ts and worker.ts do). The convoy drives with the plough cutting the road,
 // blasts dent the ground near it, the focus follows the convoy; after the answers are in, every chunk both have must match
-// where they differ, the worker's chunk is never further from the ground than the main thread's (the main thread's crater
-// patches read a cache of the ground under the dents, which can hold road it has since cut; the worker's read it fresh).
+// where they differ, the worker's chunk is never further from the ground than the main thread's (crater patches read a
+// cache of the ground under the dents on both sides, src/world/chunkFill.ts PatchCache in the worker: dropped by the same
+// rule, a chunk built again or a patch that isn't dents-only).
 // Also: chunk vertices from the copy equal the main thread's exactly; most chunks were built remotely.
 // Run: npm test (or npx tsx tools/terrainworker-check.ts).
 import { DuneField, TERRAIN_DEFAULTS } from "../src/world/terrain";

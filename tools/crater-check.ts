@@ -340,8 +340,8 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   for (let i = 0; i < 500; i++) { const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80; offAgain = Math.max(offAgain, Math.abs(flat.field.height(x, z) - again.field.height(x, z))); }
   const rush = world();
   rush.craters.add(0, 0, 20, 1.5, 1.5);
-  rush.craters.update(0);
-  for (let k = 0; k < 3; k++) rush.craters.invalidate(-5, -5, 5, 5);
+  // (Changes between two ticks count once: the plough's cut comes as several boxes.)
+  for (let k = 0; k < 3; k++) { rush.craters.update(0); for (let q = 0; q < 4; q++) rush.craters.invalidate(-5, -5, 5, 5); if (!rush.craters.pending) fail("a crater landed while the ground kept changing under it"); }
   rush.craters.update(0);
   console.log(`spread craters: ${big.length} big ones and a blast on each over ${ticks} ticks (${worstTicks} at most), ${landed} ground changes told, ${worst.toExponential(1)} m off fitting at once; at most ${worstReads} ground reads a tick; started over once: ${offAgain.toExponential(1)} m off, ${n2} more ticks; three times: ${rush.craters.pending ? "still waiting" : "finished on the next tick"}`);
   if (!held) fail("the ground moved before a spread crater landed");

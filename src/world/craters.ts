@@ -99,8 +99,8 @@ interface Job {
   i0: number; j0: number; nx: number; nz: number;
   /** The fit, part done (fitSteps: yields the work each part took, returns the crater's depth). */
   fit: Generator<number, number>;
-  /** Times it started over (the road or a protected zone changed under it). */
-  again: number;
+  /** Times it started over (the road or a protected zone changed under it), and whether any of it is done since. */
+  again: number; begun: boolean;
 }
 /**
  * What the fit's parts cost, in footprint nodes read (one field.height each): baking a tile's softness (289 hardness
@@ -275,7 +275,8 @@ export class CraterLayer {
     let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
     // A crater being fitted there read the old ground: it starts over.
     for (const j of this.jobs) {
-      if (j.x + j.R < x0 || j.x - j.R > x1 || j.z + j.R < z0 || j.z - j.R > z1) continue;
+      if (!j.begun || j.x + j.R < x0 || j.x - j.R > x1 || j.z + j.R < z0 || j.z - j.R > z1) continue;
+      j.begun = false;
       j.fit = this.fitSteps(j.x, j.z, j.r, j.d, j.a, j.tanWall, j.i0, j.j0, j.nx, j.nz);
       j.again++;
     }
@@ -318,7 +319,7 @@ export class CraterLayer {
     // A big one, or one on top of a big one still on its way (it lands after it, as it was made after it): fitted
     // over the next updates (stepJobs), landing through update()'s changed().
     if (step > 0 && (nx * nz > step / 4 || this.jobs.some((j) => Math.abs(j.x - x) < j.R + R && Math.abs(j.z - z) < j.R + R))) {
-      this.jobs.push({ x, z, r, d, a, tanWall: tanWall / 1.08, R, i0, j0, nx, nz, fit, again: 0 });
+      this.jobs.push({ x, z, r, d, a, tanWall: tanWall / 1.08, R, i0, j0, nx, nz, fit, again: 0, begun: false });
       this.stats.deferred = true;
       this.stats.pending = this.jobs.length;
       this.stats.addMs = performance.now() - t0;
@@ -353,6 +354,7 @@ export class CraterLayer {
   private stepJobs(budget: number, changed?: (x0: number, z0: number, x1: number, z1: number) => void) {
     while (this.jobs.length && budget > 0) {
       const j = this.jobs[0];
+      j.begun = true;
       let part = j.fit.next();
       // Started over more than twice (the plough keeps cutting under it): all of it now, and nothing else this call.
       if (j.again > 2 && budget !== Infinity) { while (!part.done) part = j.fit.next(); budget = 0; }
