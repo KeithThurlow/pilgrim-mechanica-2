@@ -243,7 +243,7 @@ export class RampartBody {
   private aimBearing: number | null = null;
   private aimRate = 0;
   private lastPaint: { look: ToonLook; color: number | null } | null = null;
-  private waists: { side: 1 | -1; g: THREE.Group }[] = [];
+  private waists: { side: 1 | -1; g: THREE.Group; kit: THREE.Group; kitId: string | null }[] = [];
   private legs: { thigh: Bone; shin: Bone; cannon: Bone; foot: THREE.Group; toe: THREE.Group }[] = [];
   private pods: PodRig[] = [];
   /** Rest-pose joints of the fitted legs' model and the fitted hull's model (world space, metres). */
@@ -385,7 +385,11 @@ export class RampartBody {
       const waist = new THREE.Group();
       waist.position.set(x, 0, 0);
       back.add(waist);
-      this.waists.push({ side: x > 0 ? 1 : -1, g: waist });
+      // Waist kit other than the drums (autoloader, rack, cutting kit) loads into its own group here (setWaist).
+      const kit = new THREE.Group();
+      kit.name = "WaistKit";
+      waist.add(kit);
+      this.waists.push({ side: x > 0 ? 1 : -1, g: waist, kit, kitId: null });
       drum.updateMatrixWorld(true);
       drum.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -498,6 +502,23 @@ export class RampartBody {
     });
   }
 
+  /** Fit a side's waist kit by item base id (null, or a drum: nothing, the drums are their own meshes): its model
+   *  from public/models/parts/ once it loads; a base with no model shows nothing, as before. */
+  setWaist(side: 1 | -1, id: string | null) {
+    const w = this.waists.find((q) => q.side === side);
+    if (!w || !this.look || id === w.kitId) return;
+    w.kitId = id;
+    w.kit.clear();
+    if (!id || BASE_BY_ID[id]?.tags.includes("ammo")) return;
+    const look = this.look;
+    void partGlb(id).then((scene) => {
+      if (w.kitId !== id || !scene) return;
+      w.kit.clear();
+      w.kit.add(partFromGlb(scene, look));
+      this.repaint();
+    });
+  }
+
   /** Fit a sensor's model by base id (null: none): the code stand-in at once, its GLB in its place if one loads. */
   setSensor(id: string | null, style?: SensorStyle) {
     if (id === this.sensorId) return;
@@ -575,6 +596,8 @@ export class RampartBody {
       else if (p.ik && !p.held) p.ik.g.visible = false;
     }
     for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
+    if (parts.waistL !== undefined) this.setWaist(1, parts.waistL);
+    if (parts.waistR !== undefined) this.setWaist(-1, parts.waistR ?? null);
     if (this.pack) this.pack.visible = parts.pack;
     if (parts.packId !== undefined && parts.pack) this.setPack(parts.packId);
     // A back weapon stands on the pack, or lower where the pack would be.

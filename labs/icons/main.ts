@@ -79,7 +79,7 @@ async function build(b: Base): Promise<THREE.Object3D | null> {
     case "legs": return b.id === "legs-hover" ? null : mechParts(b.look, /^Part_(Pelvis|Thigh|Shin|Cannon|Foot)/);
     case "waist": {
       const file = b.id === "waist-drums" ? "ammo-drum-back-half" : b.id === "waist-fulldrums" ? "ammo-drum-back-full" : null;
-      if (!file) return null;
+      if (!file) { const s = await partGlb(b.id); return s ? partFromGlb(s, toon) : null; }
       const s = await glb(`models/weapons/${file}.glb`);
       if (!s) return null;
       const g = s.clone(true);
