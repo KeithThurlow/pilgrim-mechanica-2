@@ -1,0 +1,38 @@
+{
+ "id": "waist-kit",
+ "kind": "waist",
+ "name": "Cutting kit",
+ "maker": "Suzaku Dynamics",
+ "says": "cuts wrecks: gas bottles, hose reel, torch",
+ "tris": 884,
+ "meshes": 2,
+ "size": [
+  0.808,
+  0.895,
+  0.73
+ ],
+ "min": [
+  -0.4,
+  -0.375,
+  -0.725
+ ],
+ "max": [
+  0.4084,
+  0.52,
+  0.005
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "Torch": [
+   -0.34,
+   0.24,
+   -0.56
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/waist.py"
+}

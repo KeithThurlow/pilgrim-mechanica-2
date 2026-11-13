@@ -1,0 +1,38 @@
+{
+ "id": "waist-autoloader",
+ "kind": "waist",
+ "name": "Autoloader",
+ "maker": "Novus-Lux",
+ "says": "fast feed: shell carousel, rammer, chute",
+ "tris": 908,
+ "meshes": 2,
+ "size": [
+  1.031,
+  0.992,
+  0.81
+ ],
+ "min": [
+  -0.5157,
+  -0.4,
+  -0.69
+ ],
+ "max": [
+  0.5157,
+  0.5924,
+  0.12
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "FeedOut": [
+   0.26,
+   0.5,
+   0.12
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/waist.py"
+}
