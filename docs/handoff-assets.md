@@ -12,10 +12,11 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
 - Batch 2: `labs/icons/`, `tools/icons.mjs` (`npm run build && CHROME=... npm run icons`, then build again),
   `src/ui/itemIcon.ts` shows `public/icons/<base>.png`; `tools/assets-check.ts`. After any model change rerun icons.
 
+- Batch 3: the inventory's layout (`src/ui/inventory.ts` `TILES`, `dollBox`, `statStrip`, `cargoColumn`; `inventory.css`).
+
 ## Next, in order
-1. Inventory layout (own PR): doll tiles overlap (Back over Shoulder 2, mounts over hands), the stash grid runs off
-   the bottom of the panel, doll tiles show a tiny footprint where the picture could go.
-2. Arms, sensors, waist kit. 3. Robots. Then as the plan's table.
+1. Arms ×3, sensors ×5, waist kit ×3 (part kit; budgets are already in `tools/assets-check.ts`).
+2. Robots. Then as the plan's table.
 
 ## How to test
 - Shots here: `npm run build`, then `CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome node tools/shots.mjs "<lab url>"`.

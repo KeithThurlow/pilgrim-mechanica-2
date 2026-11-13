@@ -1,6 +1,6 @@
 /* The inventory (src/ui/inventory.ts), in the lab chrome's colours (src/core/lab.css). Left of the tuning panel. */
 .inv {
-  position: fixed; left: max(10px, calc(100% - 1310px)); top: 10px; bottom: 84px; width: min(940px, calc(100% - 370px)); z-index: 6;
+  position: fixed; left: max(10px, calc(100% - 1560px)); top: 10px; bottom: 84px; width: min(1190px, calc(100% - 370px)); z-index: 6;
   display: flex; flex-direction: column; background: rgba(20, 22, 25, 0.96); border: 1px solid var(--line); border-radius: 6px; font-size: 13px;
 }
 .inv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
@@ -12,25 +12,40 @@
 .inv button.small { padding: 2px 7px; font-size: 11px; }
 .inv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .inv-msg { padding: 6px 10px; background: rgba(230, 160, 60, 0.14); color: #f0b860; border-bottom: 1px solid var(--line); font-size: 12px; }
-.inv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 356px 1fr; }
+.inv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 372px 1fr; }
 .inv-left { overflow: auto; padding: 8px; border-right: 1px solid var(--line); }
-.inv-col { overflow: auto; padding: 6px 10px 10px; }
+.inv-col { overflow: auto; padding: 6px 12px 10px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0 16px; }
+.inv-sec { min-width: 0; max-width: 100%; }
+.inv-sec h3 { margin-right: auto; }
+.inv-sec .inv-row { min-height: 26px; }
 .inv h3 { margin: 8px 0 4px; color: #7fc0d0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
 .inv-note { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
-.inv-doll { position: relative; width: 340px; height: 410px; margin: 0 auto; }
-.inv-sil { position: absolute; left: 95px; top: 40px; width: 150px; height: 300px; opacity: 0.55; pointer-events: none; }
+/* The doll: a 3 x 4 grid of slot tiles over the silhouette, each showing its item's picture (2026-11-13). */
+.inv-doll { position: relative; width: 352px; margin: 0 auto; }
+.inv-sil { position: absolute; left: 76px; top: 8px; width: 200px; height: 400px; opacity: 0.22; pointer-events: none; }
+.inv-tiles { position: relative; display: grid; grid-template-columns: repeat(3, 112px); grid-auto-rows: 98px; gap: 8px; }
 .inv-tile {
-  position: absolute; width: 80px; min-height: 50px; padding: 3px 5px; box-sizing: border-box; cursor: pointer;
-  display: flex; flex-direction: column; gap: 1px; background: rgba(0, 0, 0, 0.45); border: 1px solid #ffffff38; border-radius: 4px;
+  position: relative; padding: 3px 5px 4px; box-sizing: border-box; cursor: pointer; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; background: rgba(8, 10, 12, 0.72); border: 1px solid #ffffff38; border-radius: 4px;
 }
-.inv-tile:hover { background: rgba(255, 255, 255, 0.06); }
+.inv-tile:hover { background: rgba(40, 44, 48, 0.85); }
 .inv-tile.on { box-shadow: 0 0 0 2px var(--accent); }
-.inv-tile.empty { border-style: dashed; }
+.inv-tile.empty { border-style: dashed; background: rgba(8, 10, 12, 0.45); }
 .inv-tile.off { opacity: 0.4; }
-.inv-tilelabel { color: var(--muted); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
-.inv-tilename { font-size: 11px; font-weight: 600; line-height: 1.15; }
+.inv-tiletop { display: flex; justify-content: space-between; gap: 4px; white-space: nowrap; }
+.inv-tilelabel { color: var(--muted); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
+.inv-tilemeta { color: var(--muted); font: 9px var(--mono); }
+.inv-tilepic { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.inv-tilepic svg { display: block; }
+.inv-tilepic.ghosted { opacity: 0.35; }
+.inv-tilenone { color: #ffffff30; font-size: 11px; }
+.inv-tilename { font-size: 11px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 13px; }
 .inv-tile.empty .inv-tilename { color: var(--muted); font-weight: 400; }
-.inv-tilemeta { color: var(--muted); font-size: 10px; }
+.inv-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; }
+.inv-statcell { display: flex; flex-direction: column; padding: 3px 6px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); border-radius: 3px; }
+.inv-statcell span { color: var(--muted); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
+.inv-statcell b { font: 600 12px var(--mono); }
+.inv-gap { width: 14px; }
 .inv-slotpanel { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
 .inv-list { display: flex; flex-direction: column; gap: 2px; }
 .inv-item {
@@ -97,11 +112,5 @@
 }
 .inv.dragging .inv-zone { border-color: var(--accent); color: var(--fg); }
 .inv-gitem.salvage { background: rgba(60, 50, 25, 0.85); border-color: #e6c86a !important; }
-/* Filtered out (the Show chips) and an equipped item's grid footprint on its doll tile (Keith 2026-11-03). */
+/* Filtered out (the Show chips; Keith 2026-11-03). */
 .inv-gitem.dim { opacity: 0.18; }
-.inv-tile { padding-right: 26px; }
-.inv-tilefoot {
-  position: absolute; right: 3px; top: 4px; box-sizing: content-box; border: 1px solid; border-radius: 1px; pointer-events: none;
-  background-color: rgba(255, 255, 255, 0.06);
-  background-image: linear-gradient(#ffffff30 1px, transparent 1px), linear-gradient(90deg, #ffffff30 1px, transparent 1px);
-}
