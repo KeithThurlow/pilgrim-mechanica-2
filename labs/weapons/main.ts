@@ -146,7 +146,7 @@ function useReview() {
 // ---- The picker bar ----
 const style = document.createElement("style");
 style.textContent = `
-.wpick { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 3px;
+.wpick { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 3px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: calc(100vw - 20px); }
 .wpick.off { opacity: 0.6; }
 .wpick.min .wpick-row { display: none; }

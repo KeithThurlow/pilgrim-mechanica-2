@@ -4,16 +4,19 @@
 //   node tools/blender/run.mjs <script.py> [-- script args]
 //
 // Slots are directories under tools/blender/.slots/ (mkdir is atomic); a slot older than 30 minutes is treated as
-// abandoned and taken over. BLENDER points at the executable (default: Blender 4.4 in Program Files).
+// abandoned and taken over. BLENDER points at the executable (default: the cloud's bpy module if set up with
+// tools/blender/cloud-setup.sh, else Blender 4.4 in Program Files).
 import { spawn } from "node:child_process";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const slotsDir = join(here, ".slots");
 const slots = Number(process.env.BLENDER_SLOTS ?? 2);
-const blender = process.env.BLENDER ?? "C:/Program Files/Blender Foundation/Blender 4.4/blender.exe";
+// No Blender installed (cloud sessions): the bpy module behind tools/blender/blender-bpy, once cloud-setup.sh has run.
+const cloud = existsSync(join(here, "../../.blender-cloud")) ? join(here, "blender-bpy") : null;
+const blender = process.env.BLENDER ?? cloud ?? "C:/Program Files/Blender Foundation/Blender 4.4/blender.exe";
 const staleMs = 30 * 60 * 1000;
 const [script, ...rest] = process.argv.slice(2);
 if (!script) { console.error("usage: node tools/blender/run.mjs <script.py> [-- args]"); process.exit(2); }

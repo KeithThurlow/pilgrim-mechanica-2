@@ -16,7 +16,6 @@ interface Spike { at: number; ms: number; sim: number; submit: number; stages: s
 export class FrameHud {
   private el: HTMLDivElement;
   private perf: HTMLDivElement;
-  private toggle: HTMLDivElement;
   private extra: HTMLDivElement;
   private lines = new Map<string, Line>();
   /** What the GPU draws: the canvas's pixels and MSAA (set by createApp on resize; shown on the top line). */
@@ -39,13 +38,13 @@ export class FrameHud {
     this.el = document.createElement("div");
     this.el.className = "hud";
     this.perf = document.createElement("div");
-    this.toggle = document.createElement("div");
-    this.toggle.className = "hud-toggle dim";
+    this.perf.className = "hud-toggle";
     this.extra = document.createElement("div");
-    this.el.append(this.perf, this.toggle, this.extra);
+    // Bottom middle (Keith 2026-11-13): the details open upward above the one timing line, which is the click target.
+    this.el.append(this.extra, this.perf);
     parent.appendChild(this.el);
     try { this.open = localStorage.getItem(OPEN_KEY) === "1"; } catch { /* private mode */ }
-    this.toggle.addEventListener("click", () => this.setOpen(!this.open));
+    this.perf.addEventListener("click", () => this.setOpen(!this.open));
     addEventListener("keydown", (e) => {
       if (e.code !== "Backquote" || e.repeat) return;
       const t = e.target as HTMLElement | null;
@@ -120,18 +119,16 @@ export class FrameHud {
     const { avg, worst, calls, tris, sim, draw } = this.shown;
     const cls = (v: number) => (v <= BUDGET_MS * 1.05 ? "ok" : v <= BUDGET_MS * 2 ? "warn" : "bad");
     const top = this.stageList.slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(" · ");
+    // Core timings only, on one line (Keith 2026-11-13): fps, frame ms, and the split into sim / submit / gpu.
     this.perf.innerHTML =
-      `<b class="${cls(avg)}">${avg.toFixed(1)} ms</b> avg · <span class="${cls(worst)}">${worst.toFixed(1)}</span> worst · ` +
-      `${Math.round(1000 / Math.max(0.1, avg))} fps<br><span class="dim">` +
-      // What's left of the frame after the tick and the submit is mostly the GPU (or waiting on it).
-      `sim ${sim.toFixed(1)} · submit ${draw.toFixed(1)} · gpu/wait ${Math.max(0, avg - sim - draw).toFixed(1)} ms` +
-      (this.pixels ? `<br>draws ${this.pixels}` : "") +
-      `${top ? `<br>top: ${top}` : ""}</span>`;
-    const n = this.lines.size;
-    this.toggle.textContent = `${this.open ? "▾" : "▸"} details${n ? ` (${n})` : ""} · \``;
+      `<b class="${cls(avg)}">${Math.round(1000 / Math.max(0.1, avg))} fps</b> · <span class="${cls(avg)}">${avg.toFixed(1)} ms</span>` +
+      ` <span class="${cls(worst)}">(worst ${worst.toFixed(0)})</span><span class="dim"> · sim ${sim.toFixed(1)} · submit ${draw.toFixed(1)}` +
+      ` · gpu ${Math.max(0, avg - sim - draw).toFixed(1)}</span>`;
     if (!this.open) { this.extra.innerHTML = ""; return; }
     const all = this.stageList.map(([k, v]) => `${k} ${v.toFixed(1)}`).join(" · ");
     this.extra.innerHTML =
+      (this.pixels ? `<div class="dim">draws ${this.pixels}</div>` : "") +
+      (top ? `<div class="dim">top: ${top}</div>` : "") +
       `<div class="dim">${this.backend} · ${calls} draws · ${(tris / 1000).toFixed(0)}k tris</div>` +
       (all ? `<div class="dim">cpu ms: ${all}</div>` : "") +
       [...this.lines.values()].map((l) => this.text(l)).filter(Boolean).map((l) => `<div>${l}</div>`).join("");
