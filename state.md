@@ -209,6 +209,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   (8-16 s a frame here), not played.
 
 ## In progress
+- Model and asset rebuild (Keith 2026-11-13; Claude on `claude/project-thread-vum2tc`, backup `wip/assets`): the review of every model, the pipeline and the build order are in `docs/asset-pipeline.md`; handoff `docs/handoff-assets.md`. Batch 0 merged (plan, Blender in the cloud). Next: power packs and the part loader, then the contract check and inventory pictures from the models, the inventory layout, arms, sensors, waist kit, robots.
 
 - Architecture migration (Keith 2026-11-07; Claude): `docs/architecture-review.md` stages, one PR each. Merged: 1 (the clock; 60 Hz is the only clock), 2 (the ECS core, `src/ecs/`), 3 (`src/game/combatRules.ts`), 4.1-4.4 (robot and infantry swarms own their state as ECS columns; health bars from the world), 5a-5c (mechs, vehicles, crushers, striders as entities, `src/ecs/heavy.ts`), 6a-6e (drawn between ticks), 7a (one block snapshot format), 7b (bandit camps' infantry in the worker), 7c part 1 (a mech's looks and sounds out of MechUnit: `src/game/mechFx.ts`). Next: 7d, the rules in the worker; 7c part 2 (muzzles without the posed model) waits for a mech play-test (proposal `docs/proposal-stage7.md`). Handoff `docs/handoff-architecture.md`. **New per-system worker remotes wait for stage 7.**
 - Render path: fewer objects for three (Keith 2026-11-07 via the coordinator, Claude on `claude/project-thread-90s30y`, backup `wip/draw-merge`): docs/engine-options.md A.1-A.4 one PR each (merged parts, matrix work, terrain shadow batch done; what's left is small, see the handoff). Handoff `docs/handoff-drawcost.md`.
@@ -319,6 +320,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-13 · Asset rebuild, batch 0: the plan, and Blender in the cloud (Keith: "plan out its review and build pipeline and start building assets for all mecha parts, weapons and enemies"; Claude on `claude/project-thread-vum2tc`)
+- `docs/asset-pipeline.md`: every model graded (mech parts, weapons, enemies, items with none, inventory pictures), the pipeline (script, numbers, one sheet, GLB + LODs + sidecar, contract check, icon from the model), the draw-cost rules, the build order, what to check against the reference art when Keith's PC is back, open questions.
+- `tools/blender/cloud-setup.sh` + `tools/blender/blender-bpy`: Blender's Python module (5.3) in `.blender-cloud/`; `run.mjs` uses it when there's no `BLENDER`. Checked: the Rampart export here gives 34,638 tris and a GLB within 1 KB of the committed one; Cycles renders on the CPU.
+- `tools/shots.mjs`: `CHROME=<path>` picks the browser (the cloud box's Chromium isn't the pinned one), pages get 3 minutes to load.
+- No game code changed. `npm test` passes.
 
 ### 2026-11-13 · Frame counter moved to the bottom middle, core timings only (Keith: "put the counter at the bottom middle... just core timings"; Claude)
 - One line: `fps · frame ms (worst) · sim · submit · gpu`. Click it or press ` for the details, which now open upward above it (draws, top CPU stages, lab lines as before). `window.__hud()` and Report unchanged. Files: `src/core/hud.ts`, `src/core/lab.css`; weapon/duel pickers raised 22 px so they clear it. Touch keeps its top-centre spot (only with the fps toggle on) so it never meets the pad or action bar. Checked: typecheck of hud.ts, `npm test`. Open question for Keith: keep "worst" in the line?

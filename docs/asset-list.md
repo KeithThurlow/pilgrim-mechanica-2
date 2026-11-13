@@ -1,8 +1,10 @@
 # Asset list (for the Blender agent on Keith's PC)
 
 Keith 2026-10-25: "spec an asset list here... prioritize it as you see fit... an agent on the computer can consume
-this." The cloud sessions have no Blender, so models are built on Keith's PC and come back through git. This file is
-the queue between them.
+this." The cloud sessions had no Blender, so models were built on Keith's PC and came back through git. **Since
+2026-11-13 cloud sessions build models too** (`sh tools/blender/cloud-setup.sh`, then `node tools/blender/run.mjs`
+as on the PC); the review of every model, the pipeline and the build order are in `docs/asset-pipeline.md`. This file
+stays the contract and the queue: a cloud agent takes an item the same way (`[~] (cloud, date)`).
 
 ## How to use this list (the desktop agent)
 
