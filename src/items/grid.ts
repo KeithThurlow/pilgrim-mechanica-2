@@ -133,7 +133,7 @@ export interface GridValues {
   [k: string]: number;
 }
 
-export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 30, salvagePerBlock: 25, salvageLevel: 0 };
+export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 34, salvagePerBlock: 25, salvageLevel: 0 };
 
 const G = "Grid";
 export const GRID_PARAMS: Param[] = [

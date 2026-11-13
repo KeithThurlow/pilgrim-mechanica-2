@@ -39,9 +39,10 @@ import { itemCadence } from "../items/dps";
 import type { LootValues } from "../items/generate";
 import type { Expedition } from "../expedition/expedition";
 import { dollSvg, paintPart, DOLL_PARTS, type DollPart } from "./mechDoll";
-import { GRID_SIZE_DEFAULTS, isSalvage, itemCells, salvageBlocks, type GridSizeValues } from "../items/gridSize";
+import { GRID_SIZE_DEFAULTS, gridClassOf, isSalvage, itemCells, salvageBlocks, type GridSizeValues } from "../items/gridSize";
 import { GRID_DEFAULTS, autoPlace, fitsAt, footprint, placeAt, syncGrid, type Grid, type GridValues } from "../items/grid";
 import { itemIcon } from "./itemIcon";
+import { TALL } from "./iconShape";
 
 export interface InventoryOptions {
   state: BayState;
@@ -63,21 +64,24 @@ export interface InventoryOptions {
   onOpen?: () => void;
 }
 
-/** Where each slot's tile sits on the doll (px in a 340 × 410 box) and its short label. */
-const TILES: Record<SlotId, { x: number; y: number; label: string }> = {
-  sensor: { x: 130, y: 0, label: "Sensor" },
-  pack: { x: 252, y: 8, label: "Back · 3" },
-  shoulderL: { x: 8, y: 8, label: "Shoulder · 1" },
-  shoulderR: { x: 252, y: 70, label: "Shoulder · 2" },
-  mountL: { x: 8, y: 128, label: "L mount · LMB" },
-  mountR: { x: 252, y: 128, label: "R mount · RMB" },
-  heldL: { x: 8, y: 204, label: "Left hand" },
-  heldR: { x: 252, y: 204, label: "Right hand" },
-  hull: { x: 130, y: 150, label: "Hull" },
-  waistL: { x: 8, y: 280, label: "Waist L" },
-  waistR: { x: 252, y: 280, label: "Waist R" },
-  legs: { x: 130, y: 352, label: "Legs" },
+/** Where each slot's tile sits on the doll (a 3 × 4 grid, the mech seen from behind: its left side on the left, the
+ *  spine down the middle; 2026-11-13, was loose positions that overlapped) and its short label. */
+const TILES: Record<SlotId, { col: number; row: number; label: string }> = {
+  shoulderL: { col: 1, row: 1, label: "Shoulder 1" },
+  mountL: { col: 1, row: 2, label: "Mount L" },
+  heldL: { col: 1, row: 3, label: "Left hand" },
+  waistL: { col: 1, row: 4, label: "Waist L" },
+  sensor: { col: 2, row: 1, label: "Sensor" },
+  pack: { col: 2, row: 2, label: "Back 3" },
+  hull: { col: 2, row: 3, label: "Hull" },
+  legs: { col: 2, row: 4, label: "Legs" },
+  shoulderR: { col: 3, row: 1, label: "Shoulder 2" },
+  mountR: { col: 3, row: 2, label: "Mount R" },
+  heldR: { col: 3, row: 3, label: "Right hand" },
+  waistR: { col: 3, row: 4, label: "Waist R" },
 };
+/** The picture's box on a doll tile (px). */
+const TILE_PIC = { w: 98, h: 50 };
 /** Which doll shape lights for a slot. */
 const PART_OF: Record<SlotId, DollPart> = {
   sensor: "sensor", pack: "pack", shoulderL: "armL", shoulderR: "armR", mountL: "armL", mountR: "armR", heldL: "armL", heldR: "armR",
@@ -248,7 +252,7 @@ export function inventoryScreen(o: InventoryOptions) {
   const GRID_LAYOUT_V = 2;
   // Filter chips (Keith 2026-11-03): items outside the filter are dimmed in the grids.
   type Filter = "all" | "hullWeapon" | "held" | "parts" | "gear" | "protocol";
-  const FILTERS: [Filter, string][] = [["all", "All"], ["hullWeapon", "Hull weapons"], ["held", "Held weapons"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
+  const FILTERS: [Filter, string][] = [["all", "All"], ["hullWeapon", "Hull weapons"], ["held", "Held"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
   let filter: Filter = "all";
   const passes = (x: Item) => filter === "all" || isSalvage(x) || (filter === "hullWeapon" ? isHullWeapon(x) : filter === "held" ? x.kind === "weapon" && !isHullWeapon(x)
     : filter === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : filter === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol");
@@ -488,6 +492,7 @@ export function inventoryScreen(o: InventoryOptions) {
 
   function dollBox() {
     const box = el("div", "inv-doll");
+    const tiles = el("div", "inv-tiles");
     const { svg, parts } = dollSvg();
     svg.classList.add("inv-sil");
     const lo = st.loadout;
@@ -507,27 +512,29 @@ export function inventoryScreen(o: InventoryOptions) {
       // A hand only exists with an arm on that mount (or the two-hander's other hand).
       const noHand = (s === "heldL" && !armable(lo, "L")) || (s === "heldR" && !armable(lo, "R"));
       const tile = el("div", "inv-tile" + (s === slot ? " on" : "") + (it ? "" : " empty") + (noHand && !it ? " off" : ""));
-      tile.style.left = `${t.x}px`; tile.style.top = `${t.y}px`;
+      tile.style.gridColumn = `${t.col}`; tile.style.gridRow = `${t.row}`;
       if (it) tile.style.borderColor = RARITY[it.rarity].color;
-      const kind = s === "mountL" || s === "mountR" ? (isArm(it) ? "Arm" : isHullWeapon(it) ? "Hull weapon" : "") : "";
-      tile.append(el("span", "inv-tilelabel", t.label));
-      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? itemName(it) : noHand ? "no arm on this hull" : "empty");
+      const top = el("div", "inv-tiletop");
+      top.append(el("span", "inv-tilelabel", t.label));
+      tile.append(top);
+      const pic = el("div", "inv-tilepic");
+      tile.append(pic);
+      const shown = heldBy2 ? lo.heldR : it;
+      if (shown) {
+        // The item's own picture, as big as the tile takes (guns and swords laid flat), and its grid size beside the
+        // label (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid spaces that
+        // item needs").
+        const c = itemCells(shown, gv()), flat = c.h >= 2 * c.w && TALL.includes(gridClassOf(shown));
+        const fw = flat ? c.h : c.w, fh = flat ? c.w : c.h, px = Math.min(TILE_PIC.w / fw, TILE_PIC.h / fh, 30);
+        const svg = itemIcon(shown, RARITY[shown.rarity].color, flat, gv());
+        svg.style.width = `${fw * px}px`; svg.style.height = `${fh * px}px`;
+        if (heldBy2) pic.classList.add("ghosted");
+        pic.append(svg);
+        if (!isBuiltinArm(shown) && !heldBy2) top.append(el("span", "inv-tilemeta", `${c.w}×${c.h} L${levelOf(shown)}`));
+      } else pic.append(el("span", "inv-tilenone", noHand ? "no arm" : "empty"));
+      const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? (isBuiltinArm(it) ? "Arm (with the hull)" : itemName(it)) : noHand ? "no arm on this hull" : "");
       if (it) name.style.color = RARITY[it.rarity].color;
       tile.append(name);
-      if (it && !heldBy2) {
-        // Its grid footprint (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid
-        // spaces that item needs"): a small block of its cells with its picture, and w × h.
-        const c = itemCells(it, gv()), px = 5;
-        const foot = el("div", "inv-tilefoot");
-        foot.style.width = `${c.w * px}px`; foot.style.height = `${c.h * px}px`; foot.style.backgroundSize = `${px}px ${px}px`;
-        foot.style.borderColor = RARITY[it.rarity].color;
-        foot.title = `${c.w} × ${c.h} cells`;
-        const pic = itemIcon(it, RARITY[it.rarity].color, false, gv());
-        pic.style.width = "100%"; pic.style.height = "100%"; pic.style.display = "block";
-        foot.append(pic);
-        if (!isBuiltinArm(it)) tile.append(foot);
-        tile.append(el("span", "inv-tilemeta", `${kind ? kind + " · " : ""}${isBuiltinArm(it) ? "comes with the hull" : `${c.w}×${c.h} · Lv ${levelOf(it)}`}`));
-      }
       tile.dataset.slot = s;
       // Press: a click picks the slot; dragging it off onto a grid takes it off (legs and hull only swap).
       tile.addEventListener("pointerdown", (e) => {
@@ -538,8 +545,20 @@ export function inventoryScreen(o: InventoryOptions) {
         if (!off) press.x = press.y = Number.NaN; // no drag: only the click
       });
       if (it) hoverable(tile, it, false);
-      box.append(tile);
+      tiles.append(tile);
     }
+    box.append(tiles, statStrip());
+    return box;
+  }
+
+  /** The mech as fitted, in a line of figures under the doll. */
+  function statStrip() {
+    const r = resolve(st.loadout, o.tuning).values, fitted = Object.values(st.loadout).filter((x): x is Item => !!x);
+    const power = fitted.reduce((n, x) => n + itemPower(x), 0), dps = fitted.reduce((n, x) => n + (itemDps(x) ?? 0), 0);
+    const box = el("div", "inv-stats");
+    const cell = (k: string, v: string) => { const c = el("div", "inv-statcell"); c.append(el("span", "", k), el("b", "", v)); box.append(c); };
+    cell("Power", `${Math.round(power)}`); cell("DPS", `${Math.round(dps)}`); cell("Hull", `${Math.round(r.hull)}`); cell("Armour", `${Math.round(r.armour)}`);
+    cell("Walk", `${fmt(r.walkSpeed, 1)} m/s`); cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
     return box;
   }
 
@@ -605,32 +624,40 @@ export function inventoryScreen(o: InventoryOptions) {
 
   function cargoColumn() {
     const col = el("div", "inv-col");
+    const cargo = el("section", "inv-sec"), stash = el("section", "inv-sec");
+    col.append(cargo, stash);
     if (field()) {
       const e = o.exp!;
-      col.append(el("h3", "", "Cargo · at risk"));
-      col.append(...spaceBar(e.load, e.capacity));
-      col.append(el("p", "inv-note", "Lost if the mech is destroyed; banked when the crane or a pickup has you."));
+      cargo.append(el("h3", "", "Cargo · at risk"));
+      cargo.append(...spaceBar(e.load, e.capacity));
       const scrap = e.scrapAtRisk;
       if (scrap > 0) {
         const row = el("div", "inv-item inv-scrap");
         row.append(el("span", "inv-name", `◆ ${Math.floor(scrap)} scrap`), el("span", "dim", `${scrapCells(e.sizing, scrap)} cells`));
         const n = Math.max(1, Math.round(scrap / 4));
         row.append(btn(`Dump ${n}`, () => { e.dumpScrap(n); render(); }, "small"), btn("Dump all", () => { e.dumpScrap(scrap); render(); }, "small"));
-        col.append(row);
+        cargo.append(row);
       }
-      col.append(gridBox("cargo"), zone("sand", "Drop here to leave it on the sand"));
-      col.append(el("h3", "", "Stash"), el("p", "inv-note", `On the convoy: ${st.stash.items.length} items. Bank the cargo to reach it.`));
+      cargo.append(gridBox("cargo"), zone("sand", "Drop here to leave it on the sand"));
+      cargo.append(el("p", "inv-note", "Lost if the mech is destroyed; banked when the crane or a pickup has you."));
+      stash.append(el("h3", "", "Stash"), el("p", "inv-note", `On the convoy: ${st.stash.items.length} items. Bank the cargo to reach it.`));
     } else {
       const cap = capacity();
-      col.append(el("h3", "", "Cargo · goes out with the mech"));
-      col.append(...spaceBar(bagCells(st.cargo, sizing()), cap));
-      col.append(gridBox("cargo"));
-      if (!st.cargo.items.length) col.append(el("p", "inv-note", "Spare parts dragged here ride out at the next launch (at risk). Right click an item to send it across."));
+      const ch = el("div", "inv-row");
+      ch.append(el("h3", "", "Cargo · goes out with the mech"), btn("Tidy", () => tidy("cargo"), "small"));
+      cargo.append(ch);
+      cargo.append(...spaceBar(bagCells(st.cargo, sizing()), cap));
+      cargo.append(gridBox("cargo"));
+      cargo.append(el("p", "inv-note", "Spare parts here ride out at the next launch, at risk. Right click an item to send it across."));
       const sh = el("div", "inv-row");
-      sh.append(el("h3", "", `Stash · ${st.stash.items.length}`), btn("Tidy", () => tidy("stash"), "small"));
-      col.append(sh, gridBox("stash"));
-      if (o.bankScrap) col.append(zone("bin", "Scrap bin: drop a stash item here twice to scrap it"));
+      sh.append(el("h3", "", `Stash · ${st.stash.items.length} items`), btn("Tidy", () => tidy("stash"), "small"));
+      stash.append(sh, gridBox("stash"));
+      if (o.bankScrap) stash.append(zone("bin", "Scrap bin: drop a stash item here twice to scrap it"));
     }
+    // Wide enough for the two grids side by side: the cells' width tells the sheet (else the stash goes under the cargo).
+    const v = gv();
+    cargo.style.width = `${v.cargoCols * v.gridCellPx + 2}px`;
+    stash.style.width = `${(field() ? Math.min(v.stashCols, 8) : v.stashCols) * v.gridCellPx + 2}px`;
     return col;
   }
 
@@ -647,13 +674,14 @@ export function inventoryScreen(o: InventoryOptions) {
     btns.append(btn("Close (I)", () => close(), "small"));
     head.append(btns);
     const bar = el("div", "inv-sort");
-    bar.append(el("span", "dim", "Sort (Tidy lays the grids out in this order; it also orders the list of what fits a slot):"));
+    const sortLabel = el("span", "dim", "Sort");
+    sortLabel.title = "Tidy lays the grids out in this order; it also orders the list of what fits a slot";
+    bar.append(sortLabel);
     for (const k of SORT_KEYS) bar.append(btn(SORT_NAMES[k] + (k === sortKey ? (sortUp ? " ▲" : " ▼") : ""), () => setSort(k), "small chip" + (k === sortKey ? " on" : "")));
     bar.append(btn("Tidy both", () => { tidy("cargo"); if (!field()) tidy("stash"); }, "small"));
-    const fbar = el("div", "inv-sort");
-    fbar.append(el("span", "dim", "Show:"));
-    for (const [f, label] of FILTERS) fbar.append(btn(label, () => { filter = f; render(); }, "small chip" + (f === filter ? " on" : "")));
-    const kids: HTMLElement[] = [head, bar, fbar];
+    bar.append(el("span", "inv-gap"), el("span", "dim", "Show"));
+    for (const [f, label] of FILTERS) bar.append(btn(label, () => { filter = f; render(); }, "small chip" + (f === filter ? " on" : "")));
+    const kids: HTMLElement[] = [head, bar];
     if (message && messageT > 0) kids.push(el("div", "inv-msg", message));
     const body = el("div", "inv-body");
     const left = el("div", "inv-left");
