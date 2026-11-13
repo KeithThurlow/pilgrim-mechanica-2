@@ -15,7 +15,7 @@ import { WEAPON_MODELS, type ModelKind } from "../../src/weapons/models";
 import { createWeapon, preloadWeapons } from "../../src/weapons/library";
 import { weaponLookFor } from "../../src/weapons/modelSwap";
 import { partFromGlb, partGlb } from "../../src/mech/partModels";
-import { standInSensor } from "../../src/mech/sensorModels";
+import { fromGlb, sensorGlb, standInSensor } from "../../src/mech/sensorModels";
 import { asset } from "../../src/core/assetBase";
 import { ICON_VIEWS, iconShape, type IconView } from "../../src/ui/iconShape";
 
@@ -74,7 +74,7 @@ async function build(b: Base): Promise<THREE.Object3D | null> {
       return null;
     }
     case "pack": { const s = await partGlb(b.id); return s ? partFromGlb(s, toon) : null; }
-    case "sensor": return standInSensor(b.id, toon, b.sensor?.style ?? "cluster").root;
+    case "sensor": { const s = await sensorGlb(b.id); return s ? fromGlb(s, toon).root : standInSensor(b.id, toon, b.sensor?.style ?? "cluster").root; }
     case "hull": return mechParts(b.look, /^Part_Torso/);
     case "legs": return b.id === "legs-hover" ? null : mechParts(b.look, /^Part_(Pelvis|Thigh|Shin|Cannon|Foot)/);
     case "waist": {

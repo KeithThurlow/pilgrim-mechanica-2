@@ -1,0 +1,36 @@
+{
+ "id": "sensor-dish",
+ "kind": "sensor",
+ "name": "Survey dish",
+ "maker": "Novus-Lux",
+ "says": "scanner: big turning dish, lit feed horn",
+ "tris": 476,
+ "meshes": 3,
+ "size": [
+  1.4,
+  1.183,
+  0.927
+ ],
+ "min": [
+  -0.7,
+  -0.012,
+  -0.3816
+ ],
+ "max": [
+  0.7,
+  1.1714,
+  0.5453
+ ],
+ "sockets": {},
+ "moving": {
+  "Sweep": {
+   "axis": "y",
+   "pivot": [
+    0.0,
+    0.16,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/sensors.py"
+}

@@ -1,0 +1,44 @@
+{
+ "id": "sensor-optic",
+ "kind": "sensor",
+ "name": "Twin-optic head",
+ "maker": "Novus-Lux",
+ "says": "binoculars: two lens barrels on a drum",
+ "tris": 704,
+ "meshes": 4,
+ "size": [
+  1.0,
+  0.782,
+  0.812
+ ],
+ "min": [
+  -0.5,
+  -0.278,
+  -0.3563
+ ],
+ "max": [
+  0.5,
+  0.5037,
+  0.456
+ ],
+ "sockets": {},
+ "moving": {
+  "Head": {
+   "axis": "y",
+   "pivot": [
+    0.0,
+    0.12,
+    -0.0
+   ]
+  },
+  "HeadPitch": {
+   "axis": "x",
+   "pivot": [
+    0.0,
+    0.4,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/sensors.py"
+}

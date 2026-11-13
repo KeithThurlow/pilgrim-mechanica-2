@@ -22,9 +22,14 @@ WHITE, SLATE, NAVY, NBARE = (0.79, 0.81, 0.86), (0.35, 0.41, 0.57), (0.20, 0.22,
 BRASS, TEAL = (0.72, 0.56, 0.24), (0.35, 1.0, 0.92)
 
 
+def B(P, c, size, mat="primary", col=(0.5, 0.5, 0.5), **k):
+    """A chamfered box by its centre (V.blk takes the bottom)."""
+    return V.blk(P, c, size, mat, col, mid=True, **k)
+
+
 def bracket(b, col=FRAME):
     """The plate every waist item bolts to the hull by."""
-    V.blk(b.body, (0, 0.03, -0.04), (0.70, 0.07, 0.56), "dark", col, ch=0.02)
+    B(b.body, (0, 0.03, -0.04), (0.70, 0.07, 0.56), "dark", col, ch=0.02)
     for s in (-1, 1):
         V.bolt_row(b.body, (s * 0.30, 0.066, -0.26), (s * 0.30, 0.066, 0.18), 3, Y_, 0.02, col=BARE)
 
@@ -49,7 +54,7 @@ def waist_autoloader():
         V.cyl(b.body, c, 0.058, 0.12, "y", 8, None, "trim", BRASS)
         V.cyl(b.body, c + Vector((0, 0.062, 0)), 0.026, 0.01, "y", 6, None, "dark", (0.30, 0.24, 0.12))
     # the rammer on the roof and the chute to the gun
-    V.blk(b.body, (0, 0.42, 0.33), (0.26, 0.34, 0.10), "secondary", SLATE, ch=0.025)
+    B(b.body, (0, 0.42, 0.33), (0.26, 0.34, 0.10), "secondary", SLATE, ch=0.025)
     V.cyl(b.body, (0, 0.63, 0.33), 0.035, 0.12, "y", 6, None, "trim", NBARE)
     V.pipe_run(b.body, [(0.26, 0.30, 0.26), (0.26, 0.30, 0.44), (0.26, 0.02, 0.50), (0.26, -0.12, 0.50)], 0.07, "secondary", SLATE,
                bend=0.12, n=6, clamps=2, clamp_col=NBARE)
@@ -64,9 +69,9 @@ def waist_autoloader():
 def crate(P, c, size, col, strap=FRAME):
     """A cargo crate: a chamfered box, a lid line, corner cleats and a strap over it."""
     c = Vector(c)
-    V.blk(P, c, size, "primary", col, ch=0.02)
-    V.blk(P, c + Vector((0, 0, size[2] * 0.28)), (size[0] + 0.012, size[1] + 0.012, 0.022), "trim", V.shade(col, 0.72), ch=0.004)
-    V.blk(P, c, (0.07, size[1] + 0.02, size[2] + 0.02), "dark", strap, ch=0.006)
+    B(P, c, size, "primary", col, ch=0.02)
+    B(P, c + Vector((0, 0, size[2] * 0.28)), (size[0] + 0.012, size[1] + 0.012, 0.022), "trim", V.shade(col, 0.72), ch=0.004)
+    B(P, c, (0.07, size[1] + 0.02, size[2] + 0.02), "dark", strap, ch=0.006)
 
 
 def waist_rack():
@@ -75,7 +80,7 @@ def waist_rack():
     b = K.Build("waist-rack", "waist", "Cargo rack", 42, "Stratford-Aegis", "carries more: tube cage, crates, jerrycan, roll")
     bracket(b)
     # the floor and the tube cage
-    V.blk(b.body, (0, 0.38, -0.385), (0.86, 0.66, 0.03), "dark", FRAME, ch=0.008)
+    B(b.body, (0, 0.38, -0.385), (0.86, 0.66, 0.03), "dark", FRAME, ch=0.008)
     for s in (-1, 1):
         V.pipe_run(b.body, [(s * 0.43, 0.07, -0.38), (s * 0.43, 0.07, 0.20), (s * 0.43, 0.70, 0.20), (s * 0.43, 0.70, -0.38)], 0.022, "trim",
                    OLIVE_D, bend=0.07, n=5)
@@ -84,8 +89,8 @@ def waist_rack():
     # the load
     crate(b.body, (-0.19, 0.39, -0.20), (0.42, 0.52, 0.32), KHAKI)
     crate(b.body, (-0.17, 0.36, 0.07), (0.38, 0.44, 0.20), OLIVE)
-    V.blk(b.body, (0.24, 0.40, -0.14), (0.26, 0.46, 0.44), "secondary", (0.50, 0.25, 0.14), ch=0.045)          # the jerrycan
-    V.blk(b.body, (0.24, 0.40, -0.14), (0.268, 0.30, 0.30), "secondary", (0.43, 0.21, 0.12), ch=0.02)
+    B(b.body, (0.24, 0.40, -0.14), (0.26, 0.46, 0.44), "secondary", (0.50, 0.25, 0.14), ch=0.045)          # the jerrycan
+    B(b.body, (0.24, 0.40, -0.14), (0.268, 0.30, 0.30), "secondary", (0.43, 0.21, 0.12), ch=0.02)
     V.cyl(b.body, (0.24, 0.26, 0.11), 0.04, 0.06, "z", 6, None, "dark", FRAME)
     V.bar(b.body, (0.16, 0.44, 0.115), (0.32, 0.44, 0.115), 0.016, "dark", FRAME, 5)
     V.cyl(b.body, (0.0, 0.40, 0.25), 0.085, 0.74, "x", 8, [(0, 0.8), (0.08, 1.0), (0.92, 1.0), (1, 0.8)], "secondary", (0.38, 0.36, 0.27))
@@ -101,7 +106,7 @@ def waist_kit():
     steel) with valves and gauges, a hose reel on the rear, a cutting torch clipped across."""
     b = K.Build("waist-kit", "waist", "Cutting kit", 43, "Suzaku Dynamics", "cuts wrecks: gas bottles, hose reel, torch")
     bracket(b)
-    V.blk(b.body, (0, 0.30, -0.375), (0.80, 0.48, 0.05), "dark", FRAME, ch=0.012)                              # the tray
+    B(b.body, (0, 0.30, -0.375), (0.80, 0.48, 0.05), "dark", FRAME, ch=0.012)                              # the tray
     for s, col in ((-1, HAZARD), (1, (0.52, 0.55, 0.56))):
         x = s * 0.20
         K.lathe(b.body, (x, 0.26, -0.35), (x, 0.26, 0.24), [(0, 0.15), (0.05, 0.165), (0.80, 0.165), (0.93, 0.10), (1.0, 0.05)], 10,
@@ -109,7 +114,7 @@ def waist_kit():
         V.cyl(b.body, (x, 0.26, 0.255), 0.035, 0.07, "z", 6, None, "trim", BRASS)                              # the valve
         V.cyl(b.body, (x + s * 0.06, 0.26, 0.262), 0.04, 0.02, "x", 8, None, "trim", BARE)                     # its gauge
         V.cyl(b.body, (x, 0.26, -0.10), 0.172, 0.05, "z", 10, None, "dark", FRAME)                             # the strap
-    V.blk(b.body, (0, 0.10, 0.02), (0.72, 0.06, 0.07), "dark", FRAME, ch=0.01)
+    B(b.body, (0, 0.10, 0.02), (0.72, 0.06, 0.07), "dark", FRAME, ch=0.01)
     # the hose reel on the rear and the hose up to the torch
     V.cyl(b.body, (0, 0.56, -0.16), 0.19, 0.035, "y", 10, None, "trim", OLIVE)
     V.cyl(b.body, (0, 0.62, -0.16), 0.15, 0.10, "y", 10, None, "dark", RUBBER)
@@ -120,7 +125,7 @@ def waist_kit():
     V.bar(b.body, (0.32, 0.50, 0.30), (-0.22, 0.50, 0.30), 0.028, "trim", BARE, 6)
     V.cyl(b.body, (0.24, 0.50, 0.30), 0.042, 0.16, "x", 6, None, "dark", FRAME)                                # the grip
     V.bar(b.body, (-0.22, 0.50, 0.30), (-0.34, 0.56, 0.24), 0.02, "trim", BRASS, 5)                            # the nozzle
-    V.blk(b.body, (0.0, 0.47, 0.25), (0.06, 0.06, 0.10), "dark", FRAME, ch=0.008)
+    B(b.body, (0.0, 0.47, 0.25), (0.06, 0.06, 0.10), "dark", FRAME, ch=0.008)
     b.lamp((-0.345, 0.565, 0.235), (0.035, 0.035), Vector((-0.8, 0.5, -0.4)).normalized(), AMBER)
     b.socket("Mount", (0, 0, 0))
     b.socket("Torch", (-0.34, 0.56, 0.24), (-0.8, 0.5, -0.4))
@@ -137,5 +142,5 @@ if __name__ == "__main__":
             continue
         K.write(b, a.out)
         if a.sheet:
-            K.sheet(os.path.join(a.sheet, b.id))
+            K.sheet(os.path.join(a.sheet, b.id), views=[("rear34", 35, 25, 5.0)], res=(420, 420))
     H.report()
