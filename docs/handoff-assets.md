@@ -9,6 +9,9 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
   [--only <id>] [--sheet <dir>]`. Gotchas: collect a GLB's meshes before `look.apply` (it adds an outline child, a live
   traverse recurses for ever); Blender's colours are 16-bit normalised, `plain()` in partModels makes them floats.
 
+- Batch 2: `labs/icons/`, `tools/icons.mjs` (`npm run build && CHROME=... npm run icons`, then build again),
+  `src/ui/itemIcon.ts` shows `public/icons/<base>.png`; `tools/assets-check.ts`. After any model change rerun icons.
+
 ## Next, in order
 1. `tools/assets-check.ts` and `labs/icons/` + `npm run icons`; `src/ui/itemIcon.ts` shows `public/icons/<base>.webp`.
 3. Inventory layout (own PR). 4. Arms, sensors, waist kit. 5. Robots. Then as the plan's table.

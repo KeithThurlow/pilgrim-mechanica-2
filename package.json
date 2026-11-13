@@ -11,6 +11,7 @@
     "check": "tsc --noEmit",
     "test": "node tools/run-checks.mjs",
     "shots": "node tools/shots.mjs",
+    "icons": "node tools/icons.mjs",
     "test:serial": "node tools/run-checks.mjs -j 1"
   },
   "dependencies": {

@@ -96,6 +96,8 @@ desert look direction. What came from where: `docs/decisions.md`.
   output only for failures, `npm test -- --verbose` for all, `npm test -- duel fortress` for some, `npm run test:serial` one at a time).
 - `npm run build`: typecheck + production build to `dist/`. `npm run shots`: screenshots of the labs into `shots/`
   (needs a build; `npx playwright install chromium` once, or `CHROME=<path>` for an installed one).
+- `npm run icons`: inventory pictures rendered from the item models into `public/icons/` and `src/ui/iconList.ts`
+  (needs a build; rerun after a model changes, then build again). Icons lab: `?base=<item base id>`, `?px=N` (pixels a cell).
 - Models: `sh tools/blender/cloud-setup.sh` once on a machine without Blender (cloud sessions), then
   `node tools/blender/run.mjs <script.py> -- args`. The review, pipeline and build order: `docs/asset-pipeline.md`.
 
