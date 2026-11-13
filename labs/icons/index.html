@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Icons lab</title>
+  <style>
+    body { margin: 0; background: #23262b; color: #e8e4dc; font: 13px system-ui, sans-serif; }
+    #bar { padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #bar select, #bar button { background: #1f2226; color: #e8e4dc; border: 1px solid #30343b; border-radius: 4px; padding: 5px 8px; font: inherit; }
+    #stage { padding: 20px; display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+    #view canvas { display: block; background: transparent; image-rendering: auto; }
+    #view { background: repeating-conic-gradient(#2c3036 0% 25%, #262a2f 0% 50%) 50% / 16px 16px; border: 1px solid #3a3f47; }
+    #info { font: 12px ui-monospace, Consolas, monospace; color: #c9c3b6; white-space: pre; }
+  </style>
+</head>
+<body>
+  <div id="bar"><select id="base"></select><button id="prev">[</button><button id="next">]</button><span>inventory pictures, drawn from each item's model · <code>npm run icons</code> saves them to <code>public/icons/</code></span></div>
+  <div id="stage"><div id="view"></div><div id="info"></div></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

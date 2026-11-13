@@ -1,8 +1,11 @@
-// Placeholder grid images (Keith 2026-11-02: "every item to have a grid size, a placeholder grid image"): a line
-// drawing per size class, stretched to the item's cells and drawn in its rarity colour. Swap for real icons later
-// (an image per base would go here, by base id, falling back to these).
+// Grid images. An item with a model shows a picture rendered from it (Keith 2026-11-13; labs/icons/, `npm run icons`,
+// the list in iconList.ts). The rest keep the placeholder (Keith 2026-11-02: "every item to have a grid size, a
+// placeholder grid image"): a line drawing per size class, stretched to the item's cells, in its rarity colour.
 import { gridClassOf, itemCells, type GridClass, type GridSizeValues } from "../items/gridSize";
 import type { Item } from "../items/item";
+import { asset } from "../core/assetBase";
+import { ICON_IDS } from "./iconList";
+import { TALL } from "./iconShape";
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -63,13 +66,14 @@ function shapes(c: GridClass, W: number, H: number): string {
   }
 }
 
-/** The item's grid image as an SVG element sized to its cells (turned 90° when `rot`). */
-/** Classes drawn long side down: when their cells lie flat (hull weapons, Keith 2026-11-03), the drawing is turned. */
-const TALL: GridClass[] = ["hullGun", "held", "heldLong", "sword", "swordBig", "swordShort", "legs", "arm"];
-
+/**
+ * The item's grid image as an SVG element sized to its cells (turned 90° when `rot`): its picture rendered from its
+ * model (public/icons/<base id>.png, written by `npm run icons`; Keith 2026-11-13) on a wash of its rarity colour,
+ * or the line drawing for its size class when its base has no model of its own yet.
+ */
 export function itemIcon(item: Item, color: string, turned = false, v?: Partial<GridSizeValues>): SVGSVGElement {
-  const cells = itemCells(item, v);
-  const flat = TALL.includes(gridClassOf(item)) && cells.w > cells.h;
+  const cells = itemCells(item, v), cls = gridClassOf(item);
+  const flat = TALL.includes(cls) && cells.w > cells.h;
   // Draw it tall, then turn it to lie flat (and once more if the player turned it).
   const w = flat ? cells.h : cells.w, h = flat ? cells.w : cells.h;
   const rot = flat !== turned;
@@ -79,6 +83,12 @@ export function itemIcon(item: Item, color: string, turned = false, v?: Partial<
   svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
   svg.setAttribute("preserveAspectRatio", "none");
   const turn = rot ? ` transform="translate(${H} 0) rotate(90)"` : "";
-  svg.innerHTML = `<g${turn} fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">${shapes(gridClassOf(item), W, H)}</g>`;
+  if (ICON_IDS.has(item.base)) {
+    svg.classList.add("pic");
+    svg.innerHTML = `<g${turn}><rect x="0.6" y="0.6" width="${W - 1.2}" height="${H - 1.2}" rx="1.2" fill="${color}" fill-opacity="0.13" stroke="${color}" stroke-opacity="0.55" stroke-width="0.5"/>`
+      + `<image href="${asset(`icons/${item.base}.png`)}" x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" preserveAspectRatio="xMidYMid meet"/></g>`;
+    return svg;
+  }
+  svg.innerHTML = `<g${turn} fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">${shapes(cls, W, H)}</g>`;
   return svg;
 }
