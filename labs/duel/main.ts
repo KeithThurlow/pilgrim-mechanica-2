@@ -176,7 +176,7 @@ function refit() {
 
 const style = document.createElement("style");
 style.textContent = `
-.wpick { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 3px;
+.wpick { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; gap: 3px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: calc(100vw - 20px); }
 .wpick-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .wpick-row span { color: var(--muted); font-size: 12px; width: 42px; }
