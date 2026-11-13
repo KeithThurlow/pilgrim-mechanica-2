@@ -204,6 +204,29 @@ export class ConvoyRoute implements GroundModifier {
     return 1 - smooth((n.d - roadHalf(this.v)) / Math.max(0.01, this.v.routeBlend));
   }
 
+  /**
+   * No road (or berm) within r of (x, z): no segment of any grid cell the square round it touches comes within the
+   * road's reach plus r. (at() only finds a segment through its own cell's list, and every cell within reach of a
+   * segment lists it.)
+   */
+  noFloor(x: number, z: number, r: number): boolean {
+    const R = this.reach + r, R2 = R * R;
+    const a = Math.floor((x - r) / CELL), b = Math.floor((x + r) / CELL), c = Math.floor((z - r) / CELL), d = Math.floor((z + r) / CELL);
+    for (let cz = c; cz <= d; cz++) for (let cx = a; cx <= b; cx++) {
+      const list = this.grid.get(cellKey(cx, cz));
+      if (!list) continue;
+      for (let k = 0; k < list.length; k++) {
+        const i = list[k];
+        const ax = this.xs[i], az = this.zs[i], ex = this.xs[i + 1] - ax, ez = this.zs[i + 1] - az, px = x - ax, pz = z - az;
+        let t = (px * ex + pz * ez) / (ex * ex + ez * ez);
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dx = px - ex * t, dz = pz - ez * t;
+        if (dx * dx + dz * dz <= R2) return false;
+      }
+    }
+    return true;
+  }
+
   private near = { d: 0, s: 0, side: 1 };
   /** Nearest point of the route within R of (x, z): distance, distance along the route, side (+1 left). */
   private nearest(x: number, z: number, R: number) {

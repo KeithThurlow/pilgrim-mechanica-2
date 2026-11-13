@@ -75,6 +75,12 @@ export interface GroundModifier {
   at(x: number, z: number, out: ModifierSample): boolean;
   /** Whether the ground here is steel rather than sand (fortress containers), for what a round hitting it does. */
   metalAt?(x: number, z: number): boolean;
+  /**
+   * True when at() gives no weight toward a floor (w = 0, or false) anywhere within r of (x, z); false when it may, or
+   * when that is not cheap to tell. Lets the craters' hardness skip its 16 reads round a point out on open sand (perf
+   * 2026-11-13). Must never say true where a floor is in reach.
+   */
+  noFloor?(x: number, z: number, r: number): boolean;
 }
 export interface ModifierSample {
   /** 0: the dunes untouched .. 1: the flat floor. */

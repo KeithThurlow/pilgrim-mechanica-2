@@ -125,6 +125,27 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
     return { field, craters, pad: pois.extra[0].pad! };
   };
   const a = build(), pad = a.pad;
+  // Open sand is told cheaply (GroundModifier.noFloor, perf 2026-11-13): never where a floor is within the margin, and
+  // the hardness is the same with the shortcut as without, round the road, the pads and far out among the generated POIs.
+  {
+    const plain = build();
+    (plain.field.modifier as unknown as { noFloor?: unknown }).noFloor = undefined;
+    const m = a.field.modifier!, M = v.protectMargin;
+    let n = 0, open = 0, wrong = 0, differ = 0;
+    const one = (x: number, z: number) => {
+      const p0 = plain.craters.protectedAt(x, z), p1 = a.craters.protectedAt(x, z);
+      n++;
+      if (p0 !== p1) differ++;
+      if (m.noFloor!(x, z, M + 1e-3)) { open++; if (p0 !== 0) wrong++; }
+    };
+    for (let i = 0; i < 6000; i++) one((rnd() - 0.5) * 2 * (v.routeHalfWidth + v.routeBlend + 40), (rnd() - 0.5) * 500);
+    for (let i = 0; i < 3000; i++) { const a2 = rnd() * 6.283, r = rnd() * (pad.r + 60); one(pad.x + Math.cos(a2) * r, pad.z + Math.sin(a2) * r); }
+    for (let i = 0; i < 20000; i++) one((rnd() - 0.5) * 4000, (rnd() - 0.5) * 4000);
+    console.log(`open sand: ${n} points, ${open} told open (${wrong} of them protected), hardness differs at ${differ}`);
+    if (wrong) fail(`${wrong} points told open sand are protected`);
+    if (differ) fail(`the protection differs at ${differ} of ${n} points with the open-sand shortcut`);
+    if (open < n * 0.3 || open > n * 0.98) fail(`${open} of ${n} points told open: the test points don't cover both`);
+  }
   // Points inside: the road floor (|x| < half-width), the pad's floor, the protected circle.
   const inside: [number, number][] = [];
   for (let i = 0; i < 600; i++) inside.push([(rnd() - 0.5) * 2 * (v.routeHalfWidth - 0.5), (rnd() - 0.5) * 160]);

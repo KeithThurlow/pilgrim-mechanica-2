@@ -279,4 +279,7 @@ export class SiegeWalls implements GroundModifier {
   }
 
   metalAt(x: number, z: number) { return this.near(x, z, this.list).some((p) => wallMetal(this.layout(p), x, z, this.down)); }
+
+  /** Walls only add height (w is always 0): never a floor. */
+  noFloor() { return true; }
 }

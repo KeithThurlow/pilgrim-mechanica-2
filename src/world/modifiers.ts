@@ -36,6 +36,12 @@ export class ModifierStack implements GroundModifier {
   }
 
   metalAt(x: number, z: number) { return this.list.some((m) => m.metalAt?.(x, z)); }
+
+  /** No floor within r of (x, z) from any of them (one that can't tell says there may be). */
+  noFloor(x: number, z: number, r: number) {
+    for (const m of this.list) if (!m.noFloor || !m.noFloor(x, z, r)) return false;
+    return true;
+  }
 }
 
 /**
