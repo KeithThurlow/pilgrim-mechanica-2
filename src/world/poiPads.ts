@@ -3,7 +3,7 @@
 // Pure: a height lookup asks the POI field for the POI of each grid level whose cell holds the point (pads never
 // cross their cell's edge), plus hand-placed ones in grid buckets. Stack it with the convoy road via addModifier.
 import { DuneField, type GroundModifier, type ModifierSample } from "./terrain";
-import type { Pad, PoiField, PoiPlacement, RawGround } from "./pois";
+import { POI_LEVELS, type Pad, type PoiField, type PoiPlacement, type RawGround } from "./pois";
 
 const smooth = (a: number, b: number, x: number) => { const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return t * t * (3 - 2 * t); };
 const BUCKET = 64;
@@ -48,6 +48,24 @@ export class PoiPads implements GroundModifier {
     if (list) for (const d of list) apply(d);
     if (!any) return false;
     out.w = W; out.berm = 0; out.lift = W > 1e-9 ? L / W : 0; out.rough = W > 1e-9 ? R / W : 0;
+    return true;
+  }
+
+  /** No pad within r of (x, z): the POIs of every cell and bucket the square round it touches, by padAt's own reach. */
+  noFloor(x: number, z: number, r: number): boolean {
+    const far = (d: Pad) => { const reach = d.r + d.half + d.blend + r; return Math.abs(x - d.x) > reach || Math.abs(z - d.z) > reach; };
+    const pois = this.pois;
+    for (let l = 0; l < POI_LEVELS.length; l++) {
+      const C = pois.cellSize(l);
+      for (let j = Math.floor((z - r) / C); j <= Math.floor((z + r) / C); j++) for (let i = Math.floor((x - r) / C); i <= Math.floor((x + r) / C); i++) {
+        const p = pois.cell(l, i, j);
+        if (p?.pad && !far(p.pad)) return false;
+      }
+    }
+    for (let j = Math.floor((z - r) / BUCKET); j <= Math.floor((z + r) / BUCKET); j++) for (let i = Math.floor((x - r) / BUCKET); i <= Math.floor((x + r) / BUCKET); i++) {
+      const list = this.buckets.get(key(i, j));
+      if (list) for (const d of list) if (!far(d)) return false;
+    }
     return true;
   }
 }
