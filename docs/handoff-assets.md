@@ -13,8 +13,9 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
   `src/ui/itemIcon.ts` shows `public/icons/<base>.png`; `tools/assets-check.ts`. After any model change rerun icons.
 
 ## Next, in order
-1. `tools/assets-check.ts` and `labs/icons/` + `npm run icons`; `src/ui/itemIcon.ts` shows `public/icons/<base>.webp`.
-3. Inventory layout (own PR). 4. Arms, sensors, waist kit. 5. Robots. Then as the plan's table.
+1. Inventory layout (own PR): doll tiles overlap (Back over Shoulder 2, mounts over hands), the stash grid runs off
+   the bottom of the panel, doll tiles show a tiny footprint where the picture could go.
+2. Arms, sensors, waist kit. 3. Robots. Then as the plan's table.
 
 ## How to test
 - Shots here: `npm run build`, then `CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome node tools/shots.mjs "<lab url>"`.
