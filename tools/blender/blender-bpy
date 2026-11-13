@@ -1,0 +1,15 @@
+#!/bin/sh
+# Stands in for `blender -b --factory-startup --python-exit-code 1 -P <script> -- <args>` on the bpy module
+# (tools/blender/cloud-setup.sh). run.mjs picks it by itself when .blender-cloud/ exists and BLENDER isn't set.
+here="$(cd "$(dirname "$0")/../.." && pwd)"
+BLENDER_CLOUD=1 exec "$here/.blender-cloud/bin/python" - "$@" <<'PY'
+import os, runpy, sys
+a = sys.argv[1:]
+i = a.index("-P")
+script, rest = a[i + 1], a[i + 2:]
+sys.argv = ["blender"] + rest            # scripts read their own args after "--", as under Blender
+sys.path.insert(0, os.path.dirname(os.path.abspath(script)))
+import bpy
+bpy.ops.wm.read_factory_settings(use_empty=False)
+runpy.run_path(script, run_name="__main__")
+PY

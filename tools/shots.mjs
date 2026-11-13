@@ -47,9 +47,10 @@ const DEFAULT = [
 ];
 const pages = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT;
 
-const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 for (const [i, url] of pages.entries()) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  page.setDefaultTimeout(180000);
   const logs = [];
   page.on("console", (m) => { if (m.type() === "error") logs.push(m.text()); });
   page.on("pageerror", (e) => logs.push(e.message));
