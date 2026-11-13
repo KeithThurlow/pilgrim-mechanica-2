@@ -224,7 +224,11 @@ Status: `[ ]` open · `[~]` taken · `[x]` done.
 - **Note:** the Rampart's own built-in minigun pod is the look Keith already likes ("they felt powerful, they felt
   good"). Match its weight.
 
-### [ ] M1 · Power pack for the Rampart
+### [x] M1 · Power packs (cloud, 2026-11-13, `tools/blender/parts/packs.py`, 1,000-1,892 tris each)
+> cloud: built as five models by item base id, `public/models/parts/pack-<id>.glb` (standin, capacitor, medic, replica,
+> booster), loaded by `src/mech/partModels.ts`. Sockets `Mount`, `Top` (a back weapon stands there), the replica bay's
+> `Bay`, the booster's `Thrust_L/R`. No `ShoulderMount_L/R` (shoulders sit on the hull top since 2026-10-30). No LOD files
+> yet: nothing in the game loads them.
 - **File:** `public/models/rampart-pack.glb`.
 - **What:** the back power pack, today boxes in `src/mech/rampart.ts`.
   - Built in the Rampart's construction (the mech-modeling skill, v4 study).

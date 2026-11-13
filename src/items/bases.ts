@@ -425,7 +425,7 @@ export const BASES: Base[] = [
   // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later). Charges are
   // energy bars (Keith 2026-10-27: 4 by default, recharge 30% faster; every pack scaled the same).
   {
-    id: "pack-standin", name: "Stand-in power pack", kind: "pack", tags: ["power"], weight: 1.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
+    id: "pack-standin", name: "Rampart power pack", kind: "pack", tags: ["power"], weight: 1.6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
     stats: { dashCharges: s(DASH_DEFAULTS.dashCharges, 0.2), dashRecharge: s(DASH_DEFAULTS.dashRecharge, 0.1) },
   },
   {

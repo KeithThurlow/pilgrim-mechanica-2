@@ -401,6 +401,7 @@ export class RampartBody {
     }
     // The pack: a slot where the stand-in box pack sits until the fitted item's model loads (setPack).
     this.pack = new THREE.Group();
+    this.pack.name = "Pack";
     this.pack.position.set(0, 1.05, -0.25);
     this.packStandIn = powerPack(look, variant?.packBody, variant?.packCells);
     this.pack.add(this.packStandIn);

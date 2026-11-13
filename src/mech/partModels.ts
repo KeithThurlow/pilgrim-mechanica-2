@@ -30,18 +30,36 @@ export function partGlb(id: string): Promise<THREE.Object3D | null> {
   return p;
 }
 
+/**
+ * The geometry as plain float attributes (position, normal, rgb colour) with its index: Blender's exporter packs
+ * normalised 16-bit colours and may interleave, which the unit look's outline shell and the part merges can't copy.
+ */
+function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const out = new THREE.BufferGeometry();
+  for (const [name, size] of [["position", 3], ["normal", 3], ["color", 3]] as const) {
+    const a = g.getAttribute(name);
+    if (!a) continue;
+    const arr = new Float32Array(a.count * size);
+    for (let i = 0; i < a.count; i++) for (let k = 0; k < size; k++) arr[i * size + k] = a.getComponent(i, k);
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  if (g.index) out.setIndex(Array.from(g.index.array as ArrayLike<number>));
+  return out;
+}
+
 /** A copy of a loaded part for one mech: the body in the unit look, the glow unlit (marked so paint leaves it alone). */
 export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group {
   const root = new THREE.Group();
   const copy = scene.clone(true);
   root.add(copy);
-  copy.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    m.geometry = m.geometry.clone();
+  // Collected first: the unit look hangs an outline shell on each mesh it takes, which a live traverse would walk into.
+  const meshes: THREE.Mesh[] = [];
+  copy.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+  for (const m of meshes) {
+    m.geometry = plain(m.geometry);
     const lit = (m.material as THREE.Material)?.name === "Paint_lighting";
     if (lit) { m.material = new THREE.MeshBasicMaterial({ vertexColors: true }); m.userData.glow = true; }
     else look.apply(m);
-  });
+  }
   return root;
 }
