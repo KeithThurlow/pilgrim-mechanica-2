@@ -56,8 +56,10 @@ export const STATS: Record<string, StatInfo> = {
   turnRate: { label: "Turn rate (°/s)", better: 1, decimals: 0 },
   /** Hover legs (src/mech/hover.ts): 1 flies on the hover drive instead of walking. */
   hover: { label: "Hovers", better: 1, decimals: 0, whole: true, hidden: true },
-  /** Legs that can only lift so much (hover legs): the heaviest hull they take (t; src/items/loadout.ts fitProblem). */
-  lifts: { label: "Lifts hulls up to (t)", better: 1, decimals: 1 },
+  /** Leg load (Keith 2026-11-14, soft limits): the weight above the legs they carry at full speed (t), and how hard
+   *  going over bites (×; src/items/loadout.ts legLoad). */
+  carry: { label: "Best load (t)", better: 1, decimals: 1 },
+  strain: { label: "Overload strain ×", better: -1, decimals: 2 },
   hull: { label: "Hull points", better: 1, decimals: 0 },
   torsoTurnRate: { label: "Torso turn (°/s)", better: 1, decimals: 0 },
   /** Cargo racks (waist): extra rows on the cargo grid (src/items/cargoSpace.ts). */
@@ -232,22 +234,22 @@ export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
   {
     id: "legs-rampart", name: "Rampart legs", kind: "legs", tags: ["legs"], weight: 6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { walkSpeed: s(W.walkSpeed, 0.03), sprintSpeed: s(W.sprintSpeed, 0.03), accel: s(W.accel, 0.1), strideBase: s(R.strideBase!, 0.04), stridePerSpeed: s(R.stridePerSpeed!, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1) },
+    stats: { walkSpeed: s(W.walkSpeed, 0.03), sprintSpeed: s(W.sprintSpeed, 0.03), accel: s(W.accel, 0.1), strideBase: s(R.strideBase!, 0.04), stridePerSpeed: s(R.stridePerSpeed!, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1), carry: s(20, 0.05), strain: s(1, 0) },
   },
   {
     id: "legs-stilt", name: "Stilt legs", kind: "legs", tags: ["legs"], weight: 4.5, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 1,
-    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(3.8, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1) },
+    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(3.8, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1), carry: s(16, 0.05), strain: s(1.1, 0) },
   },
   {
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    stats: { walkSpeed: s(4.8, 0.03), sprintSpeed: s(6.2, 0.03), accel: s(2.2, 0.1), strideBase: s(SG.strideBase!, 0.04), stridePerSpeed: s(SG.stridePerSpeed!, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1) },
+    stats: { walkSpeed: s(4.8, 0.03), sprintSpeed: s(6.2, 0.03), accel: s(2.2, 0.1), strideBase: s(SG.strideBase!, 0.04), stridePerSpeed: s(SG.stridePerSpeed!, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1), carry: s(27, 0.05), strain: s(0.8, 0) },
   },
   {
     // Hover legs (Keith 2026-11-02: "a floating leg that can't support heavy hulls... hovers instead of walking"): the
-    // Stilt's legs on a hover drive, feet hanging; quick and floaty, no stomp, light hulls only (the Cuirass, the
-    // Salvager). A model of their own comes later: the Stilt's legs stand in.
+    // Stilt's legs on a hover drive, feet hanging; quick and floaty, no stomp, best with light hulls (the Cuirass, the
+    // Salvager): heavier ones fit and crawl (Keith 2026-11-14, soft limits). A model of their own comes later: the Stilt's legs stand in.
     id: "legs-hover", name: "Hover legs", kind: "legs", tags: ["legs", "hover"], weight: 3, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.7,
-    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(4, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), lifts: s(6, 0) },
+    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(4, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), carry: s(15, 0.05), strain: s(1.5, 0) },
   },
   // Hulls: hull points, torso turn, mounts.
   {
