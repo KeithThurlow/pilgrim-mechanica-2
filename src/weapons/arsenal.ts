@@ -38,6 +38,7 @@ import { splashBlast, firstBody } from "../game/splash";
 import { SwarmSim, channelAim, type SwarmStats } from "./swarm";
 import { CLIP_SEAT, nextTube, reloadShare } from "./clip";
 import { WEAPON_MODELS, type WeaponModel, type ModelKind } from "./models";
+import { gearFromGlb, shoulderPart, swordFromGlb } from "./partSwap";
 import { addWeaponSounds } from "./weaponSound";
 import { rayGround } from "../world/raycast";
 import { newMag, magReady, magReload, magResize, magStep, magTake, shotRounds, type Mag } from "./magazine";
@@ -171,6 +172,8 @@ export class Arsenal implements MechWeapons {
   readonly rockets = new Rockets();
   readonly sides: [Side, Side];
   shoulders: Shoulder[] = [];
+  /** The drone racks' and swarm hives' models on their shoulder mounts (drawing only). */
+  private summonParts: THREE.Object3D[] = [];
   /** Rail beams fired recently (the draw fades them). */
   readonly railShots: RailShot[] = [];
   /** Shell spread (seeded from the unit's uid on the first shot; host state). */
@@ -231,7 +234,7 @@ export class Arsenal implements MechWeapons {
       const g = guns[i];
       const kind: SideKind = !g ? null : isEnergy(g.cls) ? "energy" : g.cls === "melee" ? "melee" : g.cls === "rail" ? "rail" : g.cls === "autocannon" ? "autocannon" : g.cls === "cannon" ? "cannon" : g.cls === "rpg" ? "rpg" : isRoundGun(g.cls) ? g.cls : "minigun";
       const mk: ModelKind | null = kind === "energy" ? g!.cls as EnergyKind : kind === "rail" ? (g!.light ? "railLight" : "rail") : kind === "cannon" ? "breach" : kind === "autocannon" ? "autocannon" : kind === "rpg" ? (g!.light ? "rpgLight" : "rpg") : kind === "melee" ? "sword" : isRoundGun(kind) ? kind : kind === "minigun" && !g!.light ? "minigunFeed" : null;
-      if (s.model && s.model.kind !== mk) { s.model.root.removeFromParent(); s.model = null; }
+      if (s.model && (s.model.kind !== mk || (mk === "sword" && s.model.base !== g?.base))) { s.model.root.removeFromParent(); s.model = null; }
       if (kind !== "melee" && s.swish) { s.swish.mesh.removeFromParent(); s.swish = null; }
       if (kind !== "melee") body.holdPose?.(i === 0 ? 1 : -1, null);
       body.setTwist?.(0);
@@ -241,7 +244,12 @@ export class Arsenal implements MechWeapons {
       s.whined = false; s.aimLine.length = 0; s.aimBeam.length = 0; s.meterAt = null; s.tube = 0;
       s.swingSeen = 0; s.cleave = 0; s.bit = false; s.swishT = 0; s.swishAir = 0;
       s.kind = kind; s.light = !!g?.light; s.own = g?.own ?? null; s.base = g?.base; s.proto = g?.proto; s.cost = g?.cost ?? 1;
-      if (mk && !s.model && body.mount) { s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right"); body.mount(i === 0 ? "left" : "right").add(s.model.root); }
+      if (mk && !s.model && body.mount) {
+        s.model = WEAPON_MODELS[mk](this.look, i === 0 ? "left" : "right");
+        body.mount(i === 0 ? "left" : "right").add(s.model.root);
+        // A sword's model is its base's (asset batch 6): the Breaker, the Buster or the short sword.
+        if (mk === "sword") swordFromGlb(s.model, g?.base ?? "sword-light", this.look);
+      }
       body.showPod?.(i === 0 ? 1 : -1, kind === "minigun" || kind === null, mk !== "minigunFeed");
       s.rail.charge = 0; s.rail.holding = false; s.cool = 0; s.idle = 0; s.seat = -1; s.channel = false;
       s.sword.stop(); s.swordHits.clear(); s.swish?.clear(); s.twist = s.twistV = 0;
@@ -266,6 +274,7 @@ export class Arsenal implements MechWeapons {
       const mk: ModelKind = x.weapon === "rpg" ? "shoulderRpg" : x.weapon;
       const model = body.mount ? WEAPON_MODELS[mk](this.look, x.mount === "shoulderL" ? "left" : "right") : null;
       if (model && body.mount) body.mount(x.mount).add(model.root);
+      if (model && (x.family === "feed" || x.family === "power")) gearFromGlb(model, `sh-${x.weapon}`, this.look);
       const gear = x.family === "feed" || x.family === "power" ? new GearSim(gearStats(x.weapon, x.own, this.v)) : null;
       const sk = x.weapon as StrikeKind;
       // A refit keeps a strike already running on that key (its cooldown too), so swapping gear can't reset it.
@@ -275,6 +284,11 @@ export class Arsenal implements MechWeapons {
       if (model) model.clip = x.weapon === "rpg" ? mag : null;
       return { ...x, gear, strike, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), aim: new LineAim(), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
+    // The summoner shoulders (a drone rack, a swarm hive) have no weapon: their models stand on their mounts all the same.
+    for (const p of this.summonParts) p.removeFromParent();
+    this.summonParts = [];
+    if (body.mount) for (const [keys, base] of [[r.summons.droneKeys, "sh-drones"], [r.summons.swarmKeys, "sh-hive"]] as const)
+      for (const k of keys) { const p = shoulderPart(base, this.look); body.mount(k === 1 ? "shoulderL" : "shoulderR").add(p); this.summonParts.push(p); }
     // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
     // sliders stay live), a capacitor's faster refill.
     for (const g of this.unit.upper.guns) { g.rateMul = 1; g.spinCut = 0; g.ammoMul = 1; }
@@ -301,7 +315,7 @@ export class Arsenal implements MechWeapons {
 
   /** The fitted stand-ins (for the hold-V selector). */
   meshes(): THREE.Object3D[] {
-    return [...this.sides.map((s) => s.model?.root), ...this.shoulders.map((s) => s.model?.root)].filter((x): x is THREE.Group => !!x);
+    return [...this.sides.map((s) => s.model?.root), ...this.shoulders.map((s) => s.model?.root), ...this.summonParts].filter((x): x is THREE.Group => !!x);
   }
 
   // ---- Stats: the item's own when rolled, else the sliders ----
@@ -688,7 +702,7 @@ export class Arsenal implements MechWeapons {
       const len = st.reach * v.swordLength;
       ms.blade.scale.z = Math.max(0.3, len / ws - 0.46);
       // A heavier sword is a thicker, broader blade (the buster), a lighter one slimmer.
-      ms.blade.scale.x = ms.blade.scale.y = st.heft ?? 1;
+      ms.blade.scale.x = ms.blade.scale.y = (st.heft ?? 1) / (ms.heft ?? 1);
       ms.edge.opacity = sw.cutting ? 1 : 0.35;
     }
   }
