@@ -71,7 +71,7 @@ def blade(b, L, spine, edge, t, steel, spine_col=FRAME, spine_r=0.04, tip_t=0.45
 def sword_light():
     """Breaker sword. Says: a katana, mech-sized. A slim single-edged blade with a gentle curve and a clipped point, bare
     steel with a dark spine; a long wrapped grip, a round guard, a brass collar with a ready lamp."""
-    b = K.Build("sword-light", "sword", "Breaker sword", 61, "Suzaku", "katana: slim, curved, single edge")
+    b = K.Build("sword-light", "weapon", "Breaker sword", 61, "Suzaku", "katana: slim, curved, single edge")
     L = 4.24
     rise = lambda s: 0.20 * (s / L) ** 2                                     # noqa: E731 the curve
     w = lambda s: 0.30 - 0.08 * (s / L)                                       # noqa: E731
@@ -98,7 +98,7 @@ def sword_light():
 def sword_heavy():
     """Buster sword. Says: a slab of armour plate with an edge. A broad straight cleaver with a chisel point, a raised
     spine rail with bolts, three sunken panels down each flat; a long two-hand grip, a wide block guard in hazard paint."""
-    b = K.Build("sword-heavy", "sword", "Buster sword", 62, "Stratford-Aegis", "cleaver: broad slab, chisel point, spine rail")
+    b = K.Build("sword-heavy", "weapon", "Buster sword", 62, "Stratford-Aegis", "cleaver: broad slab, chisel point, spine rail")
     L, h = 4.95, 0.31
     spine = [(0.0, h - 0.06), (-0.30, h), (-(L - 0.05), h)]
     edge = [(-L, h - 0.08), (-(L - 0.70), -h), (-1.6, -h), (-0.25, -h), (0.0, -h + 0.06)]
@@ -133,7 +133,7 @@ def sword_heavy():
 def sword_short():
     """Short sword. Says: a quick machete. A broad leaf blade that widens toward a dropped point, a hazard band at the
     root; a short grip with a knuckle bow round the hand, a squat guard."""
-    b = K.Build("sword-short", "sword", "Short sword", 63, "Suzaku", "machete: leaf blade, knuckle bow")
+    b = K.Build("sword-short", "weapon", "Short sword", 63, "Suzaku", "machete: leaf blade, knuckle bow")
     L = 2.94
     spine = [(0.0, 0.14), (-1.0, 0.14), (-2.0, 0.15), (-2.55, 0.12), (-L, -0.02)]
     edge = [(-(L - 0.14), -0.10), (-2.45, -0.22), (-1.8, -0.24), (-0.9, -0.17), (-0.25, -0.14), (0.0, -0.13)]
@@ -455,7 +455,7 @@ if __name__ == "__main__":
             continue
         K.write(b, a.out)
         if a.sheet:
-            sword = b.kind == "sword"
+            sword = b.id.startswith("sword")
             K.sheet(os.path.join(a.sheet, b.id), views=[("side", 90, 30, 9.0)] if sword else [("rear34", 35, 25, 5.0)],
                     res=(900, 300) if sword else (420, 420), target=(0, -2.4, 0) if sword else (0, 0.05, 0.12))
     H.report()
