@@ -153,9 +153,11 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     return false;
   };
   put("legs", pickBase(r, ofKind("legs")).id);
-  // A hull the legs can lift (hover legs take only light ones).
-  const lifts = lo.legs?.stats.lifts ?? Infinity;
-  put("hull", pickBase(r, ofKind("hull").filter((b) => b.weight <= lifts)).id);
+  // A hull that leaves room on the legs for about 9 t of weapons and gear (Keith 2026-11-14: any legs carry any hull,
+  // slower over their best load; so hover legs still take only the light hulls, Stilt legs no Siege hull).
+  const carry = lo.legs?.stats.carry ?? BASE_BY_ID[lo.legs?.base ?? ""]?.stats.carry?.base ?? Infinity;
+  const roomy = ofKind("hull").filter((b) => b.weight <= carry - 9);
+  put("hull", pickBase(r, roomy.length ? roomy : ofKind("hull")).id);
   // A sensor that fits the hull's sockets (a few tries).
   for (let i = 0; i < 4 && !lo.sensor; i++) put("sensor", pickBase(r, ofKind("sensor")).id);
   for (const s of SIDES) {

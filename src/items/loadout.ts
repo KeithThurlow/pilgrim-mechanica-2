@@ -50,12 +50,20 @@ export function sideOf(slot: SlotId): MountSide | null {
 /** What a side's waist does for its gun's magazine: the bonus share and the reload speed. */
 interface Feed { bonus: number; speed: number }
 
+/** The slider group of the leg load penalty (in the Loadout topic). */
+export const LEG_LOAD_GROUP = "Leg load";
+
 export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
   bareDashCharges: 3, // Keith 2026-11-03: the player's mech starts with at least three energy bars
   rivalBareDashCharges: 3, // rival mechs (duel, HVT) get the same three bars; the rival AI uses the extra one
   bareDashRecharge: 4.6,
   bareRadar: 250,
+  // Leg load (Keith 2026-11-14, soft limits; docs/proposal-soft-limits.md): over the legs' best load, by how far over.
+  loadSpeedSlope: 0.5,
+  loadAccelSlope: 0.8,
+  loadTurnSlope: 0.6,
+  loadFloor: 0.4,
 };
 export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
@@ -64,6 +72,10 @@ export const LOADOUT_PARAMS: Param[] = [
   { key: "rivalBareDashCharges", label: "Rival dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech", tip: "Rival mechs (duel, HVT) without a pack; the player's is above" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 1000, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
+  { key: "loadSpeedSlope", label: "Walk and sprint lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP, tip: "Over the legs' best load (everything fitted above them, t): walk and sprint × (1 − this × how far over × the legs' strain). 0.5: 10% over is 5% slower" },
+  { key: "loadAccelSlope", label: "Speed-up lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP },
+  { key: "loadTurnSlope", label: "Turn rate lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP },
+  { key: "loadFloor", label: "Least share left", min: 0.05, max: 1, step: 0.01, group: LEG_LOAD_GROUP, tip: "However heavy, the legs keep at least this share of their speed, speed-up and turn" },
 ];
 
 /** Today's mech: Rampart legs and hull, the Rampart visor head (Keith 2026-10-26: hulls have heads), a Medium minigun on each hull mount, the stand-in power
@@ -138,12 +150,11 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   const side = sideOf(slot);
   switch (slot) {
     case "legs": {
-      if (item.kind !== "legs") return "only legs go here";
-      return liftProblem(item, lo.hull);
+      // Any legs carry any hull (Keith 2026-11-14, soft limits): too heavy only slows them (legLoad).
+      return item.kind !== "legs" ? "only legs go here" : null;
     }
     case "hull": {
-      if (item.kind !== "hull") return "only a hull goes here";
-      return liftProblem(lo.legs, item);
+      return item.kind !== "hull" ? "only a hull goes here" : null;
     }
     case "sensor": {
       if (item.kind !== "sensor") return "only a sensor goes here";
@@ -184,16 +195,21 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   }
 }
 
-/**
- * Legs that can only lift so much (hover legs, Keith 2026-11-02: they "can't support heavy hulls"): why this hull is
- * too heavy for these legs, or null. The hull's own weight counts (with its Protocols), not what hangs on it.
- */
-export function liftProblem(legs: Item | null, hull: Item | null): string | null {
-  if (!legs || !hull) return null;
-  const lifts = effectiveStats(legs).lifts;
-  if (lifts === undefined) return null;
-  const w = itemWeight(hull);
-  return w > lifts + 1e-6 ? `too heavy: ${BASE_BY_ID[legs.base]?.name ?? "these legs"} lift hulls up to ${lifts.toFixed(1)} t, this hull is ${w.toFixed(1)} t` : null;
+/** What the legs carry (Keith 2026-11-14, soft limits instead of "can't fit"): the weight above them (t: every fitted
+ *  item but the legs, with its Protocols), their best load, how far over it they are (share × their strain, 0 at or
+ *  under) and what that leaves of their walk and sprint, speed-up and turn (1 at or under). */
+export interface LegLoad { tonnes: number; best: number; strain: number; over: number; speed: number; accel: number; turn: number }
+
+export function legLoad(lo: Loadout, v: LoadoutValues = LOADOUT_DEFAULTS): LegLoad {
+  let tonnes = 0;
+  for (const s of SLOTS) if (s !== "legs" && lo[s] && !(s === "heldL" && lo.heldL === lo.heldR)) tonnes += itemWeight(lo[s]!);
+  const legs = lo.legs ? effectiveStats(lo.legs) : BASE_STATS("legs-rampart");
+  const base = lo.legs ? BASE_BY_ID[lo.legs.base]?.stats : undefined;
+  // Legs saved before leg load have no carry or strain of their own: their base's.
+  const best = Math.max(0.1, legs.carry ?? base?.carry?.base ?? 20), strain = Math.max(0, legs.strain ?? base?.strain?.base ?? 1);
+  const over = Math.max(0, tonnes / best - 1) * strain;
+  const k = (slope: number) => Math.max(Math.min(1, v.loadFloor), 1 - slope * over);
+  return { tonnes, best, strain, over, speed: k(v.loadSpeedSlope), accel: k(v.loadAccelSlope), turn: k(v.loadTurnSlope) };
 }
 
 /** A sensor item's style (an unknown base counts as a cluster, the old default). */
@@ -377,6 +393,8 @@ export interface Resolved {
   summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[]; droneKeys: (1 | 2)[] };
   /** Rows the waist racks add to the cargo grid (cargoCapacity in src/items/cargoSpace.ts turns it into cells). */
   cargoRackRows: number;
+  /** The weight on the legs and what it costs them (legLoad); the values above already carry the cost. */
+  load: LegLoad;
 }
 
 export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Resolved {
@@ -474,6 +492,9 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     values[k] = values[k] * (m.mul ?? 1) + (m.add ?? 0);
   }
   values.dashCharges = Math.max(1, Math.round(values.dashCharges));
+  // Too heavy for the legs: slower, slower to speed up and turn (Keith 2026-11-14), after the Protocols' walk mods.
+  const load = legLoad(lo, bare);
+  values.walkSpeed *= load.speed; values.sprintSpeed *= load.speed; values.accel *= load.accel; values.turnRate *= load.turn;
   const drum = (s: SlotId) => lo[s]?.tags.includes("ammo") ?? false;
   const mountPart = (s: MountSide) => (isHullWeapon(lo[MOUNTS[s].mount]) ? "gun" : isArm(lo[MOUNTS[s].mount]) ? "arm" : null);
   let racks = 0;
@@ -493,6 +514,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     }),
     summons: summonsOf(lo),
     cargoRackRows: Math.round(racks),
+    load,
   };
 }
 
@@ -532,6 +554,7 @@ export function summary(r: Resolved): SummaryLine[] {
   const v = r.values;
   const line = (key: string, label: string, value: number | null, better: 1 | -1, decimals: number): SummaryLine => ({ key, label, value, better, decimals });
   const out = [
+    line("load", "Load (t)", r.load.tonnes, -1, 1), line("loadBest", "Legs' best load (t)", r.load.best, 1, 1), line("loadSpeed", "Load: speed ×", r.load.speed, 1, 2),
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
     line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),

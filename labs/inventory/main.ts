@@ -87,7 +87,7 @@ const panel = tweakPanel({
   ],
   topics: [
     { id: "grid", label: "Grid", groups: ["Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks", "Convoy unlocks"] },
-    { id: "loot", label: "Loot", groups: ["Loot rolls", "Item value", "Bare mech"] },
+    { id: "loot", label: "Loot", groups: ["Loot rolls", "Item value", "Bare mech", "Leg load"] },
   ],
   onChange: () => changed(),
 });
