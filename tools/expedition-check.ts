@@ -225,12 +225,27 @@ const STEP = 1 / 20;
     contacts: [{ id: 1, x: mx + 50, z: mz, kind: 0 }, { id: 2, x: mx + 400, z: mz, kind: 0 }],
   });
   if (!linked(V, world(0, V.convoyLink - 5), false) || linked(V, world(0, V.convoyLink + 5), false) || !linked(V, world(0, 5000), true)) fail("link edge wrong");
-  const c = radarPicture(V, world(100, 0), "convoy");
+  // The old picture (radarAllEnemies): camps as heat over the convoy's whole coverage, no single robots.
+  const OLD = { ...V, radarAllEnemies: 1 };
+  const c = radarPicture(OLD, world(100, 0), "convoy");
   const ids = c.blips.map((b) => b.id);
   if (!ids.includes("a") || ids.includes("b")) fail(`convoy radar POIs ${ids} (want a, not b in the unknown area)`);
   if (c.blobs.length !== 1 || c.blobs[0].id !== "s") fail(`convoy radar blobs ${c.blobs.map((b) => b.id)} (the one in fog must hide)`);
   if (c.blips.some((b) => b.kind === "robot")) fail("convoy radar shows single robots");
   if (c.fog.length !== 1) fail("unknown area not on the convoy radar");
+  // Keith 2026-11-14: by default enemies show only inside the mech's sensor range, POIs as before.
+  {
+    const S = { ...V, mechRadar: 150 };
+    const n = radarPicture(S, world(100, 0), "convoy");
+    const nids = n.blips.map((b) => b.id);
+    if (!nids.includes("a") || !nids.includes("c")) fail(`convoy radar lost POIs ${nids}`);
+    if (n.blobs.length) fail(`convoy radar shows camp heat out of sensor range: ${n.blobs.map((b) => b.id)}`);
+    if (!nids.includes("r1") || nids.includes("r2")) fail(`convoy radar enemies ${nids} (want r1 at 50 m, not r2 at 400 m)`);
+    const far = world(-500, 0); far.heat = [{ id: "pk", x: -500 + 300, z: 0, guess: 20, awake: true }, { id: "pn", x: -500 + 80, z: 0, guess: 20, awake: true }];
+    const h = radarPicture(S, far, "mech").blobs.map((b) => b.id);
+    if (h.join() !== "pn") fail(`mech radar heat ${h} (want only the pack inside the sensor range, no rim glow)`);
+    if (radarPicture(OLD, far, "mech").blobs.length !== 2) fail("the old picture lost the rim glow");
+  }
   const m = radarPicture({ ...V, mechRadar: 150 }, world(-500, 0), "mech"); // the fixture is laid out for 150 m
   const mids = m.blips.map((b) => b.id);
   if (!mids.includes("b") || !mids.includes("r1") || mids.includes("r2") || mids.includes("a")) fail(`mech radar ${mids} (want b and r1 only near: inside fog it still sees)`);
