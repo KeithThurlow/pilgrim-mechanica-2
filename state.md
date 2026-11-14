@@ -334,6 +334,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Files: `src/expedition/runThreat.ts` (`effective(depth, home)`), `loop.ts` (`nearHome`). Checked: typecheck, `tools/runthreat-check.ts` (a place by the convoy ignores a 1500 m threat), `npm test`.
 - Try: convoy lab `?out&runthreat=1500`: kills out at 280 m drop ~level 11; walk inside 250 m of the convoy: THREAT turns green ▼ and kills there drop ~level 1-2.
 
+### 2026-11-14 · Arms by hull, slimmer Salvager hull, no arms on the doll (Keith; Claude on `claude/project-thread-yjrqik`)
+- Four modelled arms replace the box arms, one per hull (`Base.arm`): `arm-rampart`, `arm-siege` (new item; the Siege had the Loader's), `arm-loader` (Salvager), `arm-wildcat` (Cuirass). Built by `tools/blender/parts/arms.py` into `public/models/parts/arm-*.glb` (1.3k-2.5k tris); `armFromGlb` (`src/mech/partModels.ts`) reads the pieces, `rampart.ts` `fitArm` swaps them in when the hull's `parts.armId` changes, and each bone now turns about the elbow's hinge so the arm's front stays on the inside of the bend.
+- Salvager hull squeezed across in its Blender script (`slim_k`: ×0.86 to the belt, ×0.74 at the roof), shoulders and gun empties in with it: torso ±1.12 → ±0.96 m, shoulders ±1.02 → ±0.86 m.
+- Inventory doll: a mount holding the hull's arm shows as an empty mount; the silhouette's arm lights with the held weapon.
+- Checked: `npm run check`, `npm test`, two loadout-lab shots (Salvager and Rampart arms holding a minigun).
 ### 2026-11-14 · Convoy radar only aboard (Keith; Claude on `claude/project-thread-f8uouj`)
 - Keith: the convoy radar should only be on while you're on the convoy; the changing range ring for the player felt weird. The big convoy scope now shows only while the mech is aboard (`convoyRadarAboard` 1; 0 brings back the 450 m range edge); out on the sand it's always the mech's own scope. The sensor-range ring and the range-edge ring are gone. `src/expedition/radar.ts`, `radarDraw.ts`; `expedition-check` (convoy scope off the convoy is refused, the old edge still works at 0); full `npm test`.
 
