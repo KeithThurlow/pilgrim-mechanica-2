@@ -38,6 +38,7 @@
 .bay-cardhead { display: flex; flex-direction: column; margin-bottom: 4px; }
 .bay-cardhead .dim { font-size: 12px; }
 .bay-stat { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 1px 0; }
+.bay-stat.minor { opacity: 0.7; }
 .bay-val { font: 12px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
 .bay-sockets { margin-top: 6px; }
 .bay-socket { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 3px 0; font-size: 12px; }

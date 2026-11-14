@@ -33,15 +33,16 @@ import { STATS } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY } from "../items/rarity";
 import { levelOf } from "../items/level";
-import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
+import { itemPower, dpsText, itemDps } from "../items/power";
 import type { Item } from "../items/item";
 import { cargoCapacity, cargoSizing, scrapCells } from "../items/cargoSpace";
 import { energyNeedOf,
-  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
+  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isHullWeapon, isTwoHander, resolve, unfit,
   socket, socketProblem, unsocket,
   type LoadoutValues, type SlotId,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
+import { compareFit, lineText, slotFor } from "../items/compare";
 import { bagCells, moveItem, takeFrom } from "../items/cargo";
 import { itemName, type BayState } from "../items/bayState";
 import { itemValue, VALUE_DEFAULTS, type ValueValues } from "../items/value";
@@ -210,11 +211,8 @@ export function inventoryScreen(o: InventoryOptions) {
       else say("No fitted item has a free socket this Protocol fits: drag it onto an item in the stash or cargo to socket it there.");
       return;
     }
-    if (slot && !fitProblem(st.loadout, slot, it)) { fitInto(slot, it); return; }
-    // An empty slot first, a hand that already has its arm before one that would take a hull weapon off.
-    const free = (q: SlotId) => !st.loadout[q] && !fitProblem(st.loadout, q, it);
-    const s = SLOTS.find((q) => free(q) && !((q === "heldL" && !isArm(st.loadout.mountL)) || (q === "heldR" && !isArm(st.loadout.mountR))))
-      ?? SLOTS.find(free) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
+    // The same pick the hover card compares against (src/items/compare.ts slotFor).
+    const s = slotFor(st.loadout, it, slot);
     if (s) fitInto(s, it); else say(`${itemName(it)} doesn't fit anywhere on this mech.`);
   }
 
@@ -278,12 +276,31 @@ export function inventoryScreen(o: InventoryOptions) {
       h += `<div class="inv-stat"><span>${info?.label ?? k}</span><span>${fmt(eff[k], info?.decimals ?? 2)}</span></div>`;
     }
     if (it.sockets) h += `<div class="dim">Sockets ${it.socketed.length}/${it.sockets}${it.socketed.length ? ": " + it.socketed.map((p) => PROTOCOL_BY_ID[p.base]?.name ?? p.base).join(", ") : ""}</div>`;
-    if (compare) {
-      const vs = versusFitted(it, Object.values(st.loadout)), p = itemPower(it), d = itemDps(it);
-      const diff = (a: number, b: number, u: string) => { const x = Math.round(a - b); return `<b class="${x > 0 ? "good" : x < 0 ? "bad" : "dim"}">${x > 0 ? "+" : ""}${x}${u}</b>`; };
-      h += `<div class="inv-cmp">${!vs ? "nothing of this kind fitted" : `${d !== null && vs.dps !== null ? diff(d, vs.dps, " dps") + " · " : ""}${diff(p, vs.power, " power")} vs fitted`}</div>`;
-    }
+    if (compare) h += compareHtml(it);
     return h;
+  }
+  /** What fitting it does to the whole mech (src/items/compare.ts): into the slot a click would pick, after leg load,
+   *  the reactor and cargo; what comes off. Keith 2026-11-14. */
+  function compareHtml(it: Item, into?: SlotId): string {
+    if (it.kind === "protocol" || isSalvage(it)) return "";
+    const s = into ?? slotFor(st.loadout, it, slot);
+    if (!s) return `<div class="inv-cmp dim">Doesn't fit this mech.</div>`;
+    const c = compareFit(st.loadout, s, it, pool().filter((x) => x !== it), o.tuning, (r) => cargoCapacity(gv(), r.cargoRackRows));
+    if (!c) return "";
+    let h = `<div class="inv-cmp"><div class="dim">Fitted into ${SLOT_NAMES[s]}${c.held ? `, holding ${itemName(c.held)}` : ""}:</div>`;
+    for (const w of c.warnings) h += `<div class="${w.good ? "good" : "bad"}">${w.text}</div>`;
+    const major = c.lines.filter((l) => l.major), minor = c.lines.filter((l) => !l.major);
+    const row = (l: (typeof c.lines)[number], dim: boolean) => {
+      const t = lineText(l, fmt);
+      return `<div class="inv-stat${dim ? " dim" : ""}"><span>${l.label}</span><b class="${t.good === null ? "" : t.good ? "good" : "bad"}">${t.text}</b></div>`;
+    };
+    for (const l of major) h += row(l, false);
+    const MAX_MINOR = 6;
+    for (const l of minor.slice(0, MAX_MINOR)) h += row(l, true);
+    if (minor.length > MAX_MINOR) h += `<div class="dim">+${minor.length - MAX_MINOR} more</div>`;
+    if (!c.lines.length) h += `<div class="dim">No change to the mech.</div>`;
+    if (c.off.length) h += `<div class="bad">Comes off: ${c.off.map(itemName).join(", ")}</div>`;
+    return h + `</div>`;
   }
   function showTip(it: Item, e: MouseEvent, compare: boolean) {
     tip.innerHTML = cardHtml(it, compare);
@@ -392,8 +409,18 @@ export function inventoryScreen(o: InventoryOptions) {
     const px = gv().gridCellPx;
     drag.ghost.style.left = `${e.clientX - (drag.gx + 0.5) * px}px`;
     drag.ghost.style.top = `${e.clientY - (drag.gy + 0.5) * px}px`;
-    drag.ghost.classList.toggle("bad", !canLand(target(e)));
+    const t = target(e), ok = canLand(t);
+    drag.ghost.classList.toggle("bad", !ok);
+    // Held over a doll slot it fits: the card compares fitting it there (Keith 2026-11-14).
+    const over = ok && t && "slot" in t ? t.slot : null;
+    if (over !== dragTipSlot) {
+      dragTipSlot = over;
+      if (over) { tip.innerHTML = `<div class="inv-tipname" style="color:${RARITY[drag.item.rarity].color}">${itemName(drag.item)}</div>` + compareHtml(drag.item, over); tip.style.borderColor = RARITY[drag.item.rarity].color; tip.hidden = false; }
+      else hideTip();
+    }
+    if (over) moveTip(e);
   }
+  let dragTipSlot: SlotId | null = null;
   function startDrag(e: PointerEvent) {
     if (!press) return;
     hideTip();
@@ -418,6 +445,7 @@ export function inventoryScreen(o: InventoryOptions) {
     if (e) moveGhost(e); else drag.ghost.style.left = "-999px";
   }
   function endDrag() {
+    if (dragTipSlot) { dragTipSlot = null; hideTip(); }
     drag?.ghost.remove();
     drag = null;
     root.classList.remove("dragging");
