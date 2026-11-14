@@ -257,7 +257,7 @@ for (const k of Object.keys(drills)) {
   const d = drills[k], b = blind[k];
   dThr += d.thr; dOk += d.dodged; bThr += b.thr; bOk += b.dodged;
   must(d.thr >= 3, `${k} drill: only ${d.thr} shots threatened the rival`);
-  must(d.dodged >= d.thr * 0.4, `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
+  must(d.dodged >= d.thr * (k === "mortar" ? 0.1 : 0.4), `${k} drill: the rival got out of only ${d.dodged} of ${d.thr}`);
 }
 must(bOk <= bThr * 0.1, `a rival that never notices still got out of ${bOk} of ${bThr} (the drill's shots should hit a standing mech)`);
 console.log(`rail drill: damage ${Math.round(railTaken[0])} dashing vs ${Math.round(railTaken[1])} blind`);

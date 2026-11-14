@@ -12,8 +12,9 @@ export const WALKER_DEFAULTS = {
   ...HOVER_DEFAULTS,
   // Move
   // Keith 2026-10-26: the walk up near the old sprint (was 4 / 6.5).
-  walkSpeed: 6,
-  sprintSpeed: 8.5,
+  // Keith 2026-11-14: speeds closer together and lower: a sprint of 6-8 m/s is typical, 10 very fast, 12 end game.
+  walkSpeed: 5,
+  sprintSpeed: 6.5,
   accel: 4,
   // Keith 2026-11-03: lower the hull turn (was 120, then 90); Keith 2026-11-04: still too fast, so the arms' faster tracking while sprinting shows.
   turnRate: 50,
@@ -146,7 +147,7 @@ export const WALKER_DEFAULTS = {
   launchUpMax: 6,
   // Sprint (Keith 2026-10-26: hold Space after the dash and the mech runs on, faster and faster, a real digitigrade
   // run with a flight phase, handling like a vehicle; docs/proposal-bound.md). Top speed and build come from the legs.
-  boundTop: 14,
+  boundTop: 8,
   boundBuild: 0.3,
   boundHop: 6,
   boundStanceLen: 4,
@@ -392,7 +393,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "wallScrub", label: "Wall scrub rate (1/s)", min: 1, max: 60, step: 1, group: "Air" },
   { key: "launchUpMax", label: "Fastest take-off upward (m/s)", min: 1, max: 30, step: 0.5, group: "Air", tip: "However steep the ground it leaves from, the mech never takes off upward faster than this (6 m/s rises about 1.8 m). Distance off a crest still comes from speed" },
 
-  { key: "boundTop", label: "Top speed (m/s)", min: 8, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 14, Stilt 18, Siege 12; late legs 22-26" },
+  { key: "boundTop", label: "Top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 8.2, Stilt 8.5, Siege 7.8 (within 10%); 10 is very fast, 12 end game" },
   { key: "boundBuild", label: "Speed build (share/s)", min: 0.05, max: 3, step: 0.01, group: "Sprint", tip: "Each second held closes this share of the gap from the run to top speed" },
   { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 6, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },
   { key: "boundCrouch", label: "Run low (m)", min: 0, max: 2, step: 0.01, group: "Sprint", tip: "The hips run this much lower at top speed" },
