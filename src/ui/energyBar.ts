@@ -38,6 +38,9 @@ export class ReactorBar {
   private root: HTMLDivElement;
   private fill: HTMLDivElement;
   private ticks: HTMLDivElement[] = [];
+  /** The biggest energy shot fitted (Keith 2026-11-14, capacitor gating): a gold line at its share of the bar; red at
+   *  the top, the bar's edge red, when the reactor can't hold it (underpowered). */
+  private needMark: HTMLDivElement;
 
   constructor(parent: HTMLElement = leftStack()) {
     this.root = document.createElement("div");
@@ -49,10 +52,14 @@ export class ReactorBar {
     this.fill = document.createElement("div");
     Object.assign(this.fill.style, { position: "absolute", left: "0", right: "0", bottom: "0", background: CYAN } as Partial<CSSStyleDeclaration>);
     this.root.appendChild(this.fill);
+    this.needMark = document.createElement("div");
+    Object.assign(this.needMark.style, { position: "absolute", left: "-1px", right: "-1px", height: "2px", display: "none", zIndex: "1" } as Partial<CSSStyleDeclaration>);
+    this.root.appendChild(this.needMark);
     parent.appendChild(this.root);
   }
 
-  update(r: Reactor, show = true) {
+  /** `need`: the biggest shot fitted (bars, 0: none gated); `under`: one is held and can't fire (it flashes). */
+  update(r: Reactor, show = true, need = 0, under = false) {
     this.root.style.display = show ? "block" : "none";
     if (!show) return;
     const cap = r.cap, k = Math.max(0, Math.min(1, r.charge / cap));
@@ -66,6 +73,12 @@ export class ReactorBar {
       this.root.appendChild(t); this.ticks.push(t);
     }
     this.ticks.forEach((t, i) => { t.style.display = i < n ? "block" : "none"; t.style.bottom = `${(((i + 1) / cap) * 100).toFixed(1)}%`; });
+    const over = need > cap + 1e-9, flash = under && Math.sin(performance.now() * 0.025) > 0;
+    this.needMark.style.display = need > 0 ? "block" : "none";
+    this.needMark.style.bottom = `calc(${(Math.min(1, need / cap) * 100).toFixed(1)}% - 1px)`;
+    this.needMark.style.background = over ? (flash ? "#ffffff" : "#ff4a3a") : "#ffd060";
+    this.root.style.borderColor = over ? (flash ? "#ff4a3a" : "rgba(255, 90, 70, 0.8)") : "rgba(160, 230, 255, 0.45)";
+    this.root.title = over ? `Reactor: ${cap.toFixed(1)} bars, too small for a ${need.toFixed(1)}-bar shot (fit a capacitor bank or a bigger hull)` : "Reactor: energy weapons";
   }
 }
 
@@ -79,7 +92,7 @@ export class EnergyBar {
 
   constructor(parent: HTMLElement = leftStack()) {
     this.root = document.createElement("div");
-    Object.assign(this.root.style, { display: "flex", flexDirection: "column-reverse", gap: "6px", order: "0" } as Partial<CSSStyleDeclaration>);
+    Object.assign(this.root.style, { display: "flex", flexDirection: "column-reverse", gap: "6px", order: "2" } as Partial<CSSStyleDeclaration>);
     parent.appendChild(this.root);
   }
 

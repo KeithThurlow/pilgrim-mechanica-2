@@ -13,24 +13,36 @@
 // The grids (Keith 2026-11-02): the cargo and the stash are grid inventories, each item a block of cells by its size
 // (src/items/gridSize.ts) with a placeholder image (src/ui/itemIcon.ts). Drag an item to move it (R or right click
 // while held turns it), onto a doll slot to fit it, from a doll slot onto a grid to take it off, between the cargo and
-// the stash, onto the bin to scrap it (twice) or, in the field, onto the sand to drop it. A click still fits it; a
-// right click sends it across (stash and cargo). The cargo grid's size is the only limit on what the mech carries (cells,
+// the stash or, in the field, onto the sand to drop it. A click still fits it; a right click sends it across (stash
+// and cargo).
+// Protocols (Keith 2026-11-14: "we've lost the ability to socket protocols"): drag one onto an item with a free socket
+// (in a grid or on the doll) to socket it, or click it to socket it into the picked slot's item (else the first fitted
+// item it fits). Each item with sockets shows them as pips (filled: a Protocol in). The panel under the doll lists the
+// focused item's sockets (the picked slot's item, or the one selected item) with Remove, and the Protocols that fit.
+// Selecting (Keith 2026-11-14: "requiring players to drag an item onto it twice is not a great mechanic... select what
+// they want to scrap, and then... scrap selected"): Select (or Shift / Ctrl + click) picks items; Scrap selected banks
+// them at the convoy, Drop selected leaves them on the sand in the field; Select shown picks every item the Show chip
+// lets through (a targeted bulk scrap: Show Held, Select shown, Scrap).
+// Size (Keith 2026-11-14: "everything's too small... like half the vertical space"): the doll takes Doll height of the
+// screen's height, the text grows with it, and the cells grow with the screen's height (Grid sliders). The cargo grid's size is the only limit on what the mech carries (cells,
 // src/items/cargoSpace.ts; Keith 2026-11-06: no weight). In the field a pick-up is refused when its cells don't fit;
 // anything already over (a refund, a lab start) shows under the grid as "no room".
-// The bay screen (B) still does sockets, loot rolls and the side-by-side stat changes.
+// The bay screen (B) still does loot rolls and the side-by-side stat changes (and sockets too).
 import "./inventory.css";
 import { STATS } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY } from "../items/rarity";
 import { levelOf } from "../items/level";
-import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
+import { itemPower, dpsText, itemDps } from "../items/power";
 import type { Item } from "../items/item";
 import { cargoCapacity, cargoSizing, scrapCells } from "../items/cargoSpace";
-import {
-  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
+import { energyNeedOf,
+  SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isHullWeapon, isTwoHander, resolve, unfit,
+  socket, socketProblem, unsocket,
   type LoadoutValues, type SlotId,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
+import { compareFit, lineText, slotFor } from "../items/compare";
 import { bagCells, moveItem, takeFrom } from "../items/cargo";
 import { itemName, type BayState } from "../items/bayState";
 import { itemValue, VALUE_DEFAULTS, type ValueValues } from "../items/value";
@@ -51,7 +63,7 @@ export interface InventoryOptions {
   exp?: Expedition | null;
   /** After anything changes (refit the mech, save). */
   onChange: () => void;
-  /** Open the bay screen (sockets, loot rolls), where there is one. */
+  /** Open the bay screen (loot rolls), where there is one. */
   openBay?: () => void;
   /** Scrap an item for its value into the convoy's bank (Keith 2026-11-01: only at the convoy, never in the field, or
    *  everything gets scrapped into junk). Without it (no bank, e.g. the loadout lab) there's no Scrap button. */
@@ -80,8 +92,6 @@ const TILES: Record<SlotId, { col: number; row: number; label: string }> = {
   heldR: { col: 3, row: 3, label: "Right hand" },
   waistR: { col: 3, row: 4, label: "Waist R" },
 };
-/** The picture's box on a doll tile (px). */
-const TILE_PIC = { w: 98, h: 50 };
 /** Which doll shape lights for a slot. */
 const PART_OF: Record<SlotId, DollPart> = {
   sensor: "sensor", pack: "pack", shoulderL: "armL", shoulderR: "armR", mountL: "armL", mountR: "armR", heldL: "armL", heldR: "armR",
@@ -114,8 +124,11 @@ export function inventoryScreen(o: InventoryOptions) {
   let slot: SlotId | null = null;
   let message = "", messageT = 0;
   let sig = "";
-  /** The stash item whose Scrap button was clicked once (the next click scraps it). */
-  let scrapArmed: string | null = null;
+  /** Selected items (ids), what Scrap selected and Drop selected act on; Select mode makes a click pick. */
+  const selected = new Set<string>();
+  let selectMode = false;
+  /** Scrap selected was clicked once over something rare or socketed (the next click scraps). */
+  let scrapSure = false;
   // Sorting (Keith 2026-11-01): one order for every list, kept between visits.
   let sortKey: SortKey = "rarity", sortUp = false;
   try {
@@ -191,12 +204,54 @@ export function inventoryScreen(o: InventoryOptions) {
 
   /** Click on an item in a list: into the picked slot if it fits there, else the first slot it fits. */
   function equip(it: Item) {
-    if (slot && !fitProblem(st.loadout, slot, it)) { fitInto(slot, it); return; }
-    // An empty slot first, a hand that already has its arm before one that would take a hull weapon off.
-    const free = (q: SlotId) => !st.loadout[q] && !fitProblem(st.loadout, q, it);
-    const s = SLOTS.find((q) => free(q) && !((q === "heldL" && !isArm(st.loadout.mountL)) || (q === "heldR" && !isArm(st.loadout.mountR))))
-      ?? SLOTS.find(free) ?? SLOTS.find((q) => !fitProblem(st.loadout, q, it));
-    if (s) fitInto(s, it); else say(it.kind === "protocol" ? "Protocols go in sockets: open the bay (B)." : `${itemName(it)} doesn't fit anywhere on this mech.`);
+    if (it.kind === "protocol") {
+      const hosts = [slot ? slotItem(slot) : null, ...SLOTS.map(slotItem)].filter((x): x is Item => !!x);
+      const h = hosts.find((x) => !socketProblem(x, it));
+      if (h) socketInto(h, it);
+      else say("No fitted item has a free socket this Protocol fits: drag it onto an item in the stash or cargo to socket it there.");
+      return;
+    }
+    // The same pick the hover card compares against (src/items/compare.ts slotFor).
+    const s = slotFor(st.loadout, it, slot);
+    if (s) fitInto(s, it); else say(`${itemName(it)} doesn't fit anywhere on this mech.`);
+  }
+
+  /** The item a doll slot shows (the left hand shows the two-hander held in the right). */
+  const slotItem = (s: SlotId): Item | null => (s === "heldL" && isTwoHander(st.loadout.heldR) ? st.loadout.heldR : st.loadout[s]);
+  const protoName = (p: Item) => PROTOCOL_BY_ID[p.base]?.name ?? p.base;
+
+  /** Socket a Protocol from the cargo or stash into an item (fitted, or in a grid). */
+  function socketInto(host: Item, proto: Item) {
+    const why = socketProblem(host, proto);
+    if (why) { say(`${protoName(proto)} into ${itemName(host)}: ${why}.`); return; }
+    if (field()) { if (!o.exp!.takeItem(proto.id)) return; }
+    else if (!takeFrom(st.stash, proto.id) && !takeFrom(st.cargo, proto.id)) return;
+    socket(host, proto);
+    selected.delete(proto.id);
+    hideTip();
+    say(`${protoName(proto)} socketed into ${itemName(host)}.`);
+    changed();
+  }
+  /** Take the Protocol in socket i out: into the stash aboard, the cargo in the field (if there's room). */
+  function unsocketFrom(host: Item, i: number) {
+    const q = unsocket(host, i);
+    if (!q) return;
+    if (field()) {
+      if (!o.exp!.stow(q, protoName(q))) { host.socketed.splice(i, 0, q); say(`No room in the cargo for ${protoName(q)}.`); return; }
+    } else st.stash.items.push(q);
+    say(`${protoName(q)} taken out of ${itemName(host)} (${field() ? "into the cargo" : "into the stash"}).`);
+    changed();
+  }
+  /** An item's sockets as pips: filled in the Protocol's rarity colour, hollow when free. */
+  function pips(it: Item): HTMLElement | null {
+    if (!it.sockets) return null;
+    const b = el("span", "inv-pips");
+    for (let i = 0; i < it.sockets; i++) {
+      const p = it.socketed[i], d = el("i", p ? "on" : "");
+      if (p) d.style.background = RARITY[p.rarity].color;
+      b.append(d);
+    }
+    return b;
   }
 
   // ---- the item card (hover) ----
@@ -221,12 +276,31 @@ export function inventoryScreen(o: InventoryOptions) {
       h += `<div class="inv-stat"><span>${info?.label ?? k}</span><span>${fmt(eff[k], info?.decimals ?? 2)}</span></div>`;
     }
     if (it.sockets) h += `<div class="dim">Sockets ${it.socketed.length}/${it.sockets}${it.socketed.length ? ": " + it.socketed.map((p) => PROTOCOL_BY_ID[p.base]?.name ?? p.base).join(", ") : ""}</div>`;
-    if (compare) {
-      const vs = versusFitted(it, Object.values(st.loadout)), p = itemPower(it), d = itemDps(it);
-      const diff = (a: number, b: number, u: string) => { const x = Math.round(a - b); return `<b class="${x > 0 ? "good" : x < 0 ? "bad" : "dim"}">${x > 0 ? "+" : ""}${x}${u}</b>`; };
-      h += `<div class="inv-cmp">${!vs ? "nothing of this kind fitted" : `${d !== null && vs.dps !== null ? diff(d, vs.dps, " dps") + " · " : ""}${diff(p, vs.power, " power")} vs fitted`}</div>`;
-    }
+    if (compare) h += compareHtml(it);
     return h;
+  }
+  /** What fitting it does to the whole mech (src/items/compare.ts): into the slot a click would pick, after leg load,
+   *  the reactor and cargo; what comes off. Keith 2026-11-14. */
+  function compareHtml(it: Item, into?: SlotId): string {
+    if (it.kind === "protocol" || isSalvage(it)) return "";
+    const s = into ?? slotFor(st.loadout, it, slot);
+    if (!s) return `<div class="inv-cmp dim">Doesn't fit this mech.</div>`;
+    const c = compareFit(st.loadout, s, it, pool().filter((x) => x !== it), o.tuning, (r) => cargoCapacity(gv(), r.cargoRackRows));
+    if (!c) return "";
+    let h = `<div class="inv-cmp"><div class="dim">Fitted into ${SLOT_NAMES[s]}${c.held ? `, holding ${itemName(c.held)}` : ""}:</div>`;
+    for (const w of c.warnings) h += `<div class="${w.good ? "good" : "bad"}">${w.text}</div>`;
+    const major = c.lines.filter((l) => l.major), minor = c.lines.filter((l) => !l.major);
+    const row = (l: (typeof c.lines)[number], dim: boolean) => {
+      const t = lineText(l, fmt);
+      return `<div class="inv-stat${dim ? " dim" : ""}"><span>${l.label}</span><b class="${t.good === null ? "" : t.good ? "good" : "bad"}">${t.text}</b></div>`;
+    };
+    for (const l of major) h += row(l, false);
+    const MAX_MINOR = 6;
+    for (const l of minor.slice(0, MAX_MINOR)) h += row(l, true);
+    if (minor.length > MAX_MINOR) h += `<div class="dim">+${minor.length - MAX_MINOR} more</div>`;
+    if (!c.lines.length) h += `<div class="dim">No change to the mech.</div>`;
+    if (c.off.length) h += `<div class="bad">Comes off: ${c.off.map(itemName).join(", ")}</div>`;
+    return h + `</div>`;
   }
   function showTip(it: Item, e: MouseEvent, compare: boolean) {
     tip.innerHTML = cardHtml(it, compare);
@@ -251,14 +325,18 @@ export function inventoryScreen(o: InventoryOptions) {
   type GridId = "cargo" | "stash";
   const GRID_LAYOUT_V = 2;
   // Filter chips (Keith 2026-11-03): items outside the filter are dimmed in the grids.
-  type Filter = "all" | "hullWeapon" | "held" | "parts" | "gear" | "protocol";
-  const FILTERS: [Filter, string][] = [["all", "All"], ["hullWeapon", "Hull weapons"], ["held", "Held"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
-  let filter: Filter = "all";
-  const passes = (x: Item) => filter === "all" || isSalvage(x) || (filter === "hullWeapon" ? isHullWeapon(x) : filter === "held" ? x.kind === "weapon" && !isHullWeapon(x)
-    : filter === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : filter === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol");
+  type Filter = "hullWeapon" | "held" | "parts" | "gear" | "protocol";
+  const FILTERS: [Filter, string][] = [["hullWeapon", "Hull weapons"], ["held", "Held"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
+  /** Toggle tags (Keith 2026-11-14): click adds, click again removes; none selected shows everything. */
+  const filters = new Set<Filter>();
+  const matches = (f: Filter, x: Item) => f === "hullWeapon" ? isHullWeapon(x) : f === "held" ? x.kind === "weapon" && !isHullWeapon(x)
+    : f === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : f === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol";
+  const passes = (x: Item) => filters.size === 0 || isSalvage(x) || [...filters].some((f) => matches(f, x));
   const gv = (): GridValues & GridSizeValues => {
     const t = o.tuning as Record<string, number | undefined>, out: Record<string, number> = { ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
     for (const k in out) if (typeof t[k] === "number") out[k] = t[k]!;
+    // The cells grow with the screen's height (the slider is the size on a screen 1080 px tall).
+    out.gridCellPx = Math.round(out.gridCellPx * Math.max(0.8, Math.min(1.6, innerHeight / 1080)));
     return out as GridValues & GridSizeValues;
   };
   const turnable = () => gv().gridTurn >= 0.5;
@@ -298,8 +376,14 @@ export function inventoryScreen(o: InventoryOptions) {
     return g;
   }
   /** Where the drag would land: a grid cell, a doll slot, the bin or the sand. */
-  function target(e: PointerEvent): { grid: GridId; x: number; y: number } | { slot: SlotId } | { zone: "bin" | "sand" } | null {
+  function target(e: PointerEvent): { grid: GridId; x: number; y: number } | { slot: SlotId } | { host: Item } | { zone: "sand" } | null {
     const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    // A Protocol over an item with a free socket it fits (in a grid or on the doll): socket it there.
+    if (drag && drag.item.kind === "protocol") {
+      const h = hit?.closest<HTMLElement>("[data-iid], [data-slot]");
+      const host = h ? (h.dataset.iid ? findItem(h.dataset.iid) : slotItem(h.dataset.slot as SlotId)) : null;
+      if (host && host.id !== drag.item.id && !socketProblem(host, drag.item)) return { host };
+    }
     const gEl = hit?.closest<HTMLElement>("[data-grid]");
     if (gEl && drag) {
       const r = gEl.getBoundingClientRect(), px = gv().gridCellPx;
@@ -308,15 +392,16 @@ export function inventoryScreen(o: InventoryOptions) {
     const sEl = hit?.closest<HTMLElement>("[data-slot]");
     if (sEl) return { slot: sEl.dataset.slot as SlotId };
     const zEl = hit?.closest<HTMLElement>("[data-zone]");
-    if (zEl) return { zone: zEl.dataset.zone as "bin" | "sand" };
+    if (zEl) return { zone: "sand" };
     return null;
   }
   /** Whether the dragged item can land there (for the ghost's colour). */
   function canLand(t: ReturnType<typeof target>): boolean {
     if (!drag || !t) return false;
     const it = drag.item;
+    if ("host" in t) return true;
     if ("slot" in t) return !isSalvage(it) && typeof drag.from === "string" && (drag.from === "cargo" || drag.from === "stash") && !fitProblem(st.loadout, t.slot, it);
-    if ("zone" in t) return t.zone === "bin" ? drag.from === "stash" && !!o.bankScrap : drag.from === "cargo" && field();
+    if ("zone" in t) return drag.from === "cargo" && field();
     if (field() && t.grid === "stash") return false;
     const { grid } = gridOf(t.grid);
     return fitsAt(grid, itemCells(it, gv()), t.x, t.y, drag.rot, it.id);
@@ -326,15 +411,29 @@ export function inventoryScreen(o: InventoryOptions) {
     const px = gv().gridCellPx;
     drag.ghost.style.left = `${e.clientX - (drag.gx + 0.5) * px}px`;
     drag.ghost.style.top = `${e.clientY - (drag.gy + 0.5) * px}px`;
-    drag.ghost.classList.toggle("bad", !canLand(target(e)));
+    const t = target(e), ok = canLand(t);
+    drag.ghost.classList.toggle("bad", !ok);
+    // Held over a doll slot it fits: the card compares fitting it there (Keith 2026-11-14).
+    const over = ok && t && "slot" in t ? t.slot : null;
+    if (over !== dragTipSlot) {
+      dragTipSlot = over;
+      if (over) { tip.innerHTML = `<div class="inv-tipname" style="color:${RARITY[drag.item.rarity].color}">${itemName(drag.item)}</div>` + compareHtml(drag.item, over); tip.style.borderColor = RARITY[drag.item.rarity].color; tip.hidden = false; }
+      else hideTip();
+    }
+    if (over) moveTip(e);
   }
+  let dragTipSlot: SlotId | null = null;
   function startDrag(e: PointerEvent) {
     if (!press) return;
     hideTip();
     drag = { item: press.item, from: press.from, rot: press.rot, gx: press.gx, gy: press.gy, ghost: ghostOf(press.item, press.rot) };
     press = null;
     root.classList.add("dragging");
-    for (const t of root.querySelectorAll<HTMLElement>("[data-slot]")) t.classList.toggle("fits", !fitProblem(st.loadout, t.dataset.slot as SlotId, drag.item));
+    const d = drag;
+    const takes = (host: Item | null) => !!host && host.id !== d.item.id && !socketProblem(host, d.item);
+    const proto = d.item.kind === "protocol";
+    for (const t of root.querySelectorAll<HTMLElement>("[data-slot]")) t.classList.toggle("fits", proto ? takes(slotItem(t.dataset.slot as SlotId)) : !fitProblem(st.loadout, t.dataset.slot as SlotId, d.item));
+    for (const t of root.querySelectorAll<HTMLElement>("[data-iid]")) t.classList.toggle("fits", proto && takes(findItem(t.dataset.iid!)));
     moveGhost(e);
   }
   function turnDrag(e?: PointerEvent) {
@@ -348,6 +447,7 @@ export function inventoryScreen(o: InventoryOptions) {
     if (e) moveGhost(e); else drag.ghost.style.left = "-999px";
   }
   function endDrag() {
+    if (dragTipSlot) { dragTipSlot = null; hideTip(); }
     drag?.ghost.remove();
     drag = null;
     root.classList.remove("dragging");
@@ -363,21 +463,11 @@ export function inventoryScreen(o: InventoryOptions) {
     const d = drag, t = target(e), it = d.item;
     endDrag();
     if (!t || !canLandFor(d, t)) { render(); return; }
+    if ("host" in t) { socketInto(t.host, it); return; }
     if ("slot" in t) { fitInto(t.slot, it); return; }
     if ("zone" in t) {
-      if (t.zone === "sand") {
-        if (isSalvage(it)) { o.exp!.dumpScrap(it.stats.scrap); say(`Dumped ${it.stats.scrap} scrap.`); return; }
-        if (o.exp!.dropItem(it.id)) render();
-        return;
-      }
-      // The bin: twice to scrap (the first drop arms it).
-      const val = itemValue(it, vv());
-      if (scrapArmed !== it.id) { scrapArmed = it.id; say(`Drop ${itemName(it)} on the bin again to scrap it for ◆ ${val}.`); return; }
-      scrapArmed = null;
-      if (!takeFrom(st.stash, it.id)) return;
-      o.bankScrap!(val);
-      say(`Scrapped ${itemName(it)} for ${val} scrap (banked).`);
-      changed();
+      if (isSalvage(it)) { o.exp!.dumpScrap(it.stats.scrap); say(`Dumped ${it.stats.scrap} scrap.`); return; }
+      if (o.exp!.dropItem(it.id)) render();
       return;
     }
     if (d.from === t.grid) { setAt(t.grid, it, t.x, t.y, d.rot); changed(); return; }
@@ -409,7 +499,9 @@ export function inventoryScreen(o: InventoryOptions) {
     if (press) {
       const p = press;
       press = null;
-      if (isSalvage(p.item)) say(`Salvage: ${p.item.stats.scrap} scrap, banks for ${Math.floor(p.item.stats.scrap * (o.scrapValueMul?.() ?? 1))} when the mech is picked up (the Salvage compactor packs it smaller and banks it for more). Drag it onto the sand to dump it.`);
+      const picking = (selectMode || e.shiftKey || e.ctrlKey || e.metaKey) && (p.from === "cargo" || p.from === "stash");
+      if (picking && !isSalvage(p.item)) toggleSel(p.item.id);
+      else if (isSalvage(p.item)) say(`Salvage: ${p.item.stats.scrap} scrap, banks for ${Math.floor(p.item.stats.scrap * (o.scrapValueMul?.() ?? 1))} when the mech is picked up (the Salvage compactor packs it smaller and banks it for more). Drag it onto the sand to dump it.`);
       else if (p.from === "cargo" || p.from === "stash") equip(p.item);
       else { slot = slot === p.from ? null : p.from; render(); }
     }
@@ -440,7 +532,8 @@ export function inventoryScreen(o: InventoryOptions) {
       const it = findItem(p.id);
       if (!it) continue;
       const f = footprint(p, p.rot), col = isSalvage(it) ? "#e6c86a" : RARITY[it.rarity].color;
-      const cell = el("div", "inv-gitem" + (slot && !fitProblem(st.loadout, slot, it) ? " fits" : "") + (scrapArmed === it.id ? " armed" : "") + (passes(it) ? "" : " dim"));
+      const cell = el("div", "inv-gitem" + (slot && !fitProblem(st.loadout, slot, it) ? " fits" : "") + (selected.has(it.id) ? " sel" : "") + (passes(it) ? "" : " dim"));
+      if (!isSalvage(it)) cell.dataset.iid = it.id;
       cell.style.left = `${p.x * px}px`; cell.style.top = `${p.y * px}px`;
       cell.style.width = `${f.w * px}px`; cell.style.height = `${f.h * px}px`;
       cell.style.borderColor = col;
@@ -449,6 +542,8 @@ export function inventoryScreen(o: InventoryOptions) {
       const label = isSalvage(it) ? `◆ ${it.stats.scrap}${mul > 1.001 ? ` → ${Math.floor(it.stats.scrap * mul)}` : ""}` : itemName(it);
       if (f.w * f.h >= 2 || isSalvage(it)) { const n = el("span", "inv-gname", label); n.style.color = isSalvage(it) ? "#e6c86a" : col; cell.append(n); }
       if (isSalvage(it)) cell.classList.add("salvage");
+      const pp = pips(it);
+      if (pp) cell.append(pp);
       cell.addEventListener("pointerdown", (e) => {
         const r = cell.getBoundingClientRect();
         e.preventDefault();
@@ -486,7 +581,7 @@ export function inventoryScreen(o: InventoryOptions) {
     st.grids![g] = left ? [] : fresh.placed;
     changed();
   }
-  const zone = (z: "bin" | "sand", text: string) => { const b = el("div", "inv-zone", text); b.dataset.zone = z; return b; };
+  const zone = (z: "sand", text: string) => { const b = el("div", "inv-zone", text); b.dataset.zone = z; return b; };
 
   // ---- pieces ----
 
@@ -498,7 +593,8 @@ export function inventoryScreen(o: InventoryOptions) {
     const lo = st.loadout;
     const partItem: Record<DollPart, Item | null> = {
       sensor: lo.sensor, pack: lo.pack, hull: lo.hull, legL: lo.legs, legR: lo.legs,
-      armL: lo.mountL, armR: lo.mountR,
+      // The arms come with the hull (Keith 2026-11-14: they needn't show on the doll): an arm side lights with what it holds.
+      armL: isBuiltinArm(lo.mountL) ? lo.heldL : lo.mountL, armR: isBuiltinArm(lo.mountR) ? lo.heldR : lo.mountR,
     };
     for (const p of DOLL_PARTS) {
       const it = partItem[p];
@@ -507,7 +603,8 @@ export function inventoryScreen(o: InventoryOptions) {
     }
     box.append(svg);
     for (const s of SLOTS) {
-      const t = TILES[s], it = lo[s];
+      // A mount holding the hull's own arm shows as an empty mount: the arm isn't an item (Keith 2026-11-14).
+      const t = TILES[s], it = isBuiltinArm(lo[s]) ? null : lo[s];
       const heldBy2 = s === "heldL" && isTwoHander(lo.heldR);
       // A hand only exists with an arm on that mount (or the two-hander's other hand).
       const noHand = (s === "heldL" && !armable(lo, "L")) || (s === "heldR" && !armable(lo, "R"));
@@ -524,13 +621,15 @@ export function inventoryScreen(o: InventoryOptions) {
         // The item's own picture, as big as the tile takes (guns and swords laid flat), and its grid size beside the
         // label (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid spaces that
         // item needs").
-        const c = itemCells(shown, gv()), flat = c.h >= 2 * c.w && TALL.includes(gridClassOf(shown));
-        const fw = flat ? c.h : c.w, fh = flat ? c.w : c.h, px = Math.min(TILE_PIC.w / fw, TILE_PIC.h / fh, 30);
+        const c = itemCells(shown, gv()), flat = !TALL.includes(gridClassOf(shown)) && c.h >= 2 * c.w; // weapons are drawn wide already (Keith 2026-11-14)
+        const pic0 = tilePic(), fw = flat ? c.h : c.w, fh = flat ? c.w : c.h, px = Math.min(pic0.w / fw, pic0.h / fh, pic0.h / 1.6);
         const svg = itemIcon(shown, RARITY[shown.rarity].color, flat, gv());
         svg.style.width = `${fw * px}px`; svg.style.height = `${fh * px}px`;
         if (heldBy2) pic.classList.add("ghosted");
         pic.append(svg);
         if (!isBuiltinArm(shown) && !heldBy2) top.append(el("span", "inv-tilemeta", `${c.w}×${c.h} L${levelOf(shown)}`));
+        const pp = pips(shown);
+        if (pp) tile.append(pp);
       } else pic.append(el("span", "inv-tilenone", noHand ? "no arm" : "empty"));
       const name = el("span", "inv-tilename", heldBy2 ? "(two-hander)" : it ? (isBuiltinArm(it) ? "Arm (with the hull)" : itemName(it)) : noHand ? "no arm on this hull" : "");
       if (it) name.style.color = RARITY[it.rarity].color;
@@ -553,23 +652,81 @@ export function inventoryScreen(o: InventoryOptions) {
 
   /** The mech as fitted, in a line of figures under the doll. */
   function statStrip() {
-    const r = resolve(st.loadout, o.tuning).values, fitted = Object.values(st.loadout).filter((x): x is Item => !!x);
+    const rr = resolve(st.loadout, o.tuning), r = rr.values, fitted = Object.values(st.loadout).filter((x): x is Item => !!x);
     const power = fitted.reduce((n, x) => n + itemPower(x), 0), dps = fitted.reduce((n, x) => n + (itemDps(x) ?? 0), 0);
     const box = el("div", "inv-stats");
     const cell = (k: string, v: string) => { const c = el("div", "inv-statcell"); c.append(el("span", "", k), el("b", "", v)); box.append(c); };
     cell("Power", `${Math.round(power)}`); cell("DPS", `${Math.round(dps)}`); cell("Hull", `${Math.round(r.hull)}`); cell("Armour", `${Math.round(r.armour)}`);
-    cell("Walk", `${fmt(r.walkSpeed, 1)} m/s`); cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
+    cell("Walk", `${fmt(r.walkSpeed, 1)} m/s`);
+    // Leg load (Keith 2026-11-14): the weight on the legs against their best load, and the speed it costs over it.
+    const ld = rr.load;
+    cell("Load", `${fmt(ld.tonnes, 1)}/${fmt(ld.best, 0)} t${ld.speed < 0.995 ? ` −${Math.round((1 - ld.speed) * 100)}%` : ""}`);
+    // Capacitor gating (Keith 2026-11-14): with a heavy energy weapon fitted, the reactor against its biggest shot.
+    const need = energyNeedOf(rr);
+    if (need !== null) cell("Reactor", `${fmt(r.reactorCap, 1)}/${fmt(need, 1)}${need > r.reactorCap + 1e-9 ? " underpowered" : ""}`);
+    cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
+    return box;
+  }
+
+  /** The one selected item, if exactly one is (its sockets show under the doll when no slot is picked). */
+  const onlySelected = (): Item | null => (selected.size === 1 ? findItem([...selected][0]) : null);
+
+  /** An item's Protocol sockets: each filled one with Remove, then the Protocols on hand that fit a free one. */
+  function socketBox(it: Item) {
+    const box = el("div", "inv-socks");
+    if (it.kind === "protocol") { box.append(el("p", "inv-note", "A Protocol: drag it onto an item with a free socket (pips), or click it to socket it into the picked slot's item.")); return box; }
+    if (!it.sockets) { box.append(el("p", "inv-note", isBuiltinArm(it) ? "No Protocol sockets." : "No Protocol sockets (Common).")); return box; }
+    box.append(el("h3", "", `Protocol sockets · ${it.socketed.length}/${it.sockets}`));
+    for (let i = 0; i < it.sockets; i++) {
+      const p = it.socketed[i];
+      const row = el("div", "inv-item inv-sock");
+      if (p) {
+        row.style.borderLeftColor = RARITY[p.rarity].color;
+        const n = el("span", "inv-name", "◆ " + protoName(p));
+        n.style.color = RARITY[p.rarity].color;
+        row.append(n, el("span", "dim", PROTOCOL_BY_ID[p.base]?.text ?? ""), btn("Remove", () => unsocketFrom(it, i), "small"));
+      } else row.append(el("span", "dim", "◇ Empty socket"));
+      box.append(row);
+    }
+    if (it.socketed.length < it.sockets) {
+      const fits = pool().filter((q) => q.kind === "protocol" && !socketProblem(it, q));
+      box.append(el("p", "inv-note", fits.length ? "Click a Protocol to socket it (or drag one onto the item):" : `No Protocol ${field() ? "in the cargo" : "on hand"} fits it.`));
+      const list = el("div", "inv-list");
+      for (const q of sorted(fits)) {
+        const row = el("div", "inv-item");
+        row.style.borderLeftColor = RARITY[q.rarity].color;
+        const n = el("span", "inv-name", protoName(q));
+        n.style.color = RARITY[q.rarity].color;
+        row.append(n, el("span", "dim", PROTOCOL_BY_ID[q.base]?.text ?? ""));
+        row.addEventListener("click", () => socketInto(it, q));
+        list.append(row);
+      }
+      box.append(list);
+    }
     return box;
   }
 
   function slotPanel() {
     const col = el("div", "inv-slotpanel");
-    if (!slot) { col.append(el("p", "inv-note", "Click a slot on the doll to see what fits it. Click an item in the lists to fit it; hover for its card.")); return col; }
-    const it = slot === "heldL" && isTwoHander(st.loadout.heldR) ? st.loadout.heldR : st.loadout[slot];
+    if (!slot) {
+      const one = onlySelected();
+      if (one) {
+        const head = el("div", "inv-row");
+        const n = el("b", "", itemName(one));
+        n.style.color = RARITY[one.rarity].color;
+        head.append(n, el("span", "dim", "selected"));
+        col.append(head, socketBox(one));
+        return col;
+      }
+      col.append(el("p", "inv-note", "Click a slot on the doll to see what fits it and its sockets. Click an item in the grids to fit it; hover for its card. Drag a Protocol onto an item to socket it. Shift + click (or Select) picks items to scrap."));
+      return col;
+    }
+    const it = slotItem(slot);
     const head = el("div", "inv-row");
     head.append(el("b", "", SLOT_NAMES[slot]), el("span", "dim", it ? itemName(it) : "empty"));
     if (it && slot !== "legs" && slot !== "hull") head.append(btn(field() ? "Take off (to cargo)" : "Take off (to stash)", () => takeOff(slot!), "small"));
     col.append(head);
+    if (it) col.append(socketBox(it));
     const fits = pool().filter((x) => x.kind !== "protocol" && !fitProblem(st.loadout, slot!, x)); 
     if (!fits.length) col.append(el("p", "inv-note", field() ? "Nothing in the cargo fits here." : "Nothing in the stash or cargo fits here."));
     const list = el("div", "inv-list");
@@ -590,21 +747,9 @@ export function inventoryScreen(o: InventoryOptions) {
     const metaEl = el("span", "dim");
     meta.filter(([, t]) => t).forEach(([k, t], i) => metaEl.append(i ? " · " : "", k === sortKey ? el("b", "inv-hot", t) : t));
     row.append(name, metaEl);
-    row.addEventListener("click", () => equip(x));
+    if (mode !== "fit" && selected.has(x.id)) row.classList.add("sel");
+    row.addEventListener("click", (e) => { if (mode !== "fit" && (selectMode || e.shiftKey || e.ctrlKey || e.metaKey)) toggleSel(x.id); else equip(x); });
     if (mode === "cargo") row.append(btn("Drop", () => { hideTip(); if (o.exp!.dropItem(x.id)) render(); }, "small"));
-    if (mode === "stash" && o.bankScrap) {
-      // Two clicks: the first arms it ("Sure?"), the second scraps it. Protocols socketed in it go with it (counted).
-      const val = itemValue(x, vv()), armed = scrapArmed === x.id;
-      row.append(btn(armed ? `Sure? +◆${val}` : `Scrap ◆${val}`, () => {
-        if (!armed) { scrapArmed = x.id; render(); return; }
-        scrapArmed = null;
-        if (!takeFrom(st.stash, x.id)) return;
-        o.bankScrap!(val);
-        hideTip();
-        say(`Scrapped ${itemName(x)} for ${val} scrap (banked).`);
-        changed();
-      }, "small" + (armed ? " danger" : "")));
-    }
     if (mode === "stash") row.append(btn("→ cargo", () => { if (moveItem(st.stash, st.cargo, x.id, sizing())) changed(); else say(`No room in the cargo for ${itemName(x)}.`); }, "small"));
     if (mode === "bayCargo") row.append(btn("→ stash", () => { moveItem(st.cargo, st.stash, x.id); changed(); }, "small"));
     hoverable(row, x, true);
@@ -652,7 +797,6 @@ export function inventoryScreen(o: InventoryOptions) {
       const sh = el("div", "inv-row");
       sh.append(el("h3", "", `Stash · ${st.stash.items.length} items`), btn("Tidy", () => tidy("stash"), "small"));
       stash.append(sh, gridBox("stash"));
-      if (o.bankScrap) stash.append(zone("bin", "Scrap bin: drop a stash item here twice to scrap it"));
     }
     // Wide enough for the two grids side by side: the cells' width tells the sheet (else the stash goes under the cargo).
     const v = gv();
@@ -661,8 +805,94 @@ export function inventoryScreen(o: InventoryOptions) {
     return col;
   }
 
+  // ---- selecting (Scrap selected, Drop selected) ----
+
+  function toggleSel(id: string) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    scrapSure = false;
+    hideTip();
+    render();
+  }
+  /** The selected items still there (ids of items gone since are let go). */
+  function selItems(): Item[] {
+    const out: Item[] = [];
+    for (const id of [...selected]) { const x = findItem(id); if (x && !isSalvage(x)) out.push(x); else selected.delete(id); }
+    return out;
+  }
+  /** Every item the Show chip lets through, in the grids on show (the stash and cargo aboard, the cargo out). */
+  function selectShown() {
+    const xs = field() ? pool() : [...st.cargo.items, ...st.stash.items];
+    for (const x of xs) if (passes(x)) selected.add(x.id);
+    scrapSure = false;
+    render();
+  }
+  /** Scrap every selected item into the bank, at the convoy. Something epic or legendary, or with Protocols in it,
+   *  asks for a second click (the Protocols go with it, counted in its value). */
+  function scrapSelected() {
+    if (field() || !o.bankScrap) return;
+    const xs = selItems();
+    if (!xs.length) return;
+    const risky = xs.filter((x) => x.rarity === "epic" || x.rarity === "legendary" || x.socketed.length).length;
+    if (risky && !scrapSure) {
+      scrapSure = true;
+      say(`${risky} of them ${risky > 1 ? "are" : "is"} epic, legendary or holds Protocols: click Scrap selected again to scrap all ${xs.length}.`);
+      return;
+    }
+    let total = 0, n = 0;
+    for (const x of xs) if (takeFrom(st.stash, x.id) || takeFrom(st.cargo, x.id)) { total += itemValue(x, vv()); n++; }
+    selected.clear();
+    scrapSure = false;
+    if (total > 0) o.bankScrap(total);
+    hideTip();
+    say(`Scrapped ${n} item${n === 1 ? "" : "s"} for ${total} scrap (banked).`);
+    changed();
+  }
+  /** Out in the field: lay every selected item on the sand. */
+  function dropSelected() {
+    if (!field()) return;
+    let n = 0;
+    for (const x of selItems()) if (o.exp!.dropItem(x.id)) n++;
+    selected.clear();
+    say(`Dropped ${n} item${n === 1 ? "" : "s"} on the sand.`);
+    changed();
+  }
+  function selBar() {
+    const bar = el("div", "inv-selbar");
+    bar.append(btn(selectMode ? "Selecting: click items" : "Select", () => { selectMode = !selectMode; render(); }, "small chip" + (selectMode ? " on" : "")));
+    bar.append(btn(filters.size === 0 ? "Select all" : "Select shown", selectShown, "small"));
+    const xs = selItems();
+    if (xs.length) {
+      const val = xs.reduce((n, x) => n + itemValue(x, vv()), 0);
+      bar.append(el("span", "", `${xs.length} selected`), el("span", "dim", `◆ ${val}`));
+      if (!field() && o.bankScrap) bar.append(btn(scrapSure ? `Sure? Scrap ${xs.length} +◆${val}` : `Scrap selected +◆${val}`, scrapSelected, "small danger"));
+      if (field()) bar.append(btn("Drop selected on the sand", dropSelected, "small"));
+      bar.append(btn("Clear", () => { selected.clear(); scrapSure = false; render(); }, "small"));
+    } else bar.append(el("span", "dim", selectMode ? "Click items to pick them; click again to let go." : "Shift + click picks items too."));
+    return bar;
+  }
+
+  /** The doll's tile size from the screen: Doll height of the screen's height in four rows, no wider than the
+   *  screen allows; `f` scales the text with it. */
+  function dollSize() {
+    const share = gv().invDollShare ?? 0.5, gap = 8;
+    const row = Math.max(84, Math.min(230, (innerHeight * share - 3 * gap) / 4));
+    const wide = innerWidth < 900 ? innerWidth - 40 : 9999;
+    const col = Math.max(96, Math.min(row * 1.15, (wide - 2 * gap) / 3));
+    return { row, col, f: Math.max(1, Math.min(1.4, 1 + (row / 98 - 1) * 0.5)) };
+  }
+  /** The picture's box on a doll tile (px). */
+  function tilePic() {
+    const d = dollSize();
+    return { w: d.col - 14, h: Math.max(30, d.row - 36 * d.f) };
+  }
+
   function render() {
     if (root.hidden) return;
+    const ds = dollSize();
+    for (const e of [root, tip]) {
+      e.style.setProperty("--row", `${ds.row}px`); e.style.setProperty("--col", `${ds.col}px`); e.style.setProperty("--f", `${ds.f}`);
+    }
+    selItems();
     if (o.exp) o.exp.sizing = sizing();
     sig = signature();
     const head = el("div", "inv-head");
@@ -670,7 +900,7 @@ export function inventoryScreen(o: InventoryOptions) {
     const r = resolve(st.loadout, o.tuning);
     head.append(el("span", "dim", `${field() ? "In the field" : "On the convoy"} · cargo ${capacity()} cells · radar ${Math.round(r.values.mechRadar)} m`));
     const btns = el("div", "inv-row");
-    if (o.openBay) btns.append(btn("Bay (B): sockets, loot", () => { close(); o.openBay!(); }, "small"));
+    if (o.openBay) btns.append(btn("Bay (B): loot", () => { close(); o.openBay!(); }, "small"));
     btns.append(btn("Close (I)", () => close(), "small"));
     head.append(btns);
     const bar = el("div", "inv-sort");
@@ -680,8 +910,8 @@ export function inventoryScreen(o: InventoryOptions) {
     for (const k of SORT_KEYS) bar.append(btn(SORT_NAMES[k] + (k === sortKey ? (sortUp ? " ▲" : " ▼") : ""), () => setSort(k), "small chip" + (k === sortKey ? " on" : "")));
     bar.append(btn("Tidy both", () => { tidy("cargo"); if (!field()) tidy("stash"); }, "small"));
     bar.append(el("span", "inv-gap"), el("span", "dim", "Show"));
-    for (const [f, label] of FILTERS) bar.append(btn(label, () => { filter = f; render(); }, "small chip" + (f === filter ? " on" : "")));
-    const kids: HTMLElement[] = [head, bar];
+    for (const [f, label] of FILTERS) bar.append(btn(label, () => { if (!filters.delete(f)) filters.add(f); render(); }, "small chip" + (filters.has(f) ? " on" : "")));
+    const kids: HTMLElement[] = [head, bar, selBar()];
     if (message && messageT > 0) kids.push(el("div", "inv-msg", message));
     const body = el("div", "inv-body");
     const left = el("div", "inv-left");
@@ -695,10 +925,10 @@ export function inventoryScreen(o: InventoryOptions) {
   function signature() {
     const e = o.exp;
     const g = gv();
-    return `${Object.values(g).join(",")}|${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
+    return `${Object.values(g).join(",")}|${innerWidth}x${innerHeight}|${field()}|${e ? e.load.toFixed(2) + ":" + e.atRisk.length + ":" + Math.floor(e.scrapAtRisk) + ":" + e.capacity : ""}|${st.stash.items.length}|${st.cargo.items.length}|${SLOTS.map((s) => st.loadout[s]?.id ?? "").join()}`;
   }
 
-  function open() { scrapArmed = null; o.onOpen?.(); root.hidden = false; render(); }
+  function open() { scrapSure = false; o.onOpen?.(); root.hidden = false; render(); }
   function close() { root.hidden = true; hideTip(); }
   function toggle() { if (root.hidden) open(); else close(); }
 

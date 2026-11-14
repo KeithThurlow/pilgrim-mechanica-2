@@ -343,6 +343,7 @@ loop.setupFortMechs({ look: toon, loadBody: () => RampartBody.load(toon), threat
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
+(window as unknown as { __loop: unknown }).__loop = loop;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -649,6 +650,13 @@ function restart() {
     loop.columns.place(x, z, Math.max(1, Number(params.get("warband")) || 6), m.x, m.z, 0.7);
     carry.armed = true;
   }
+  // ?lance[=N]: a bandit mech lance (N mechs, 2 by default) hunting the mech from 200 m ahead (Keith 2026-11-14).
+  if (params.has("lance")) {
+    const m = sim.pos, ang = p.heading;
+    const x = m.x + Math.sin(ang) * 200, z = m.z + Math.cos(ang) * 200;
+    loop.lances.place(x, z, Math.max(1, Number(params.get("lance")) || 2), m, 0.3);
+    carry.armed = true;
+  }
   // ?siege[=N]: out on the sand beside the workshop car, a robot pack of N (40) coming at the mech from 200 m off that
   // side, for the convoy's defence (Keith 2026-11-01); add ?warband for vehicles too.
   if (params.has("siege")) {
@@ -685,9 +693,11 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
+  // The run's threat level (runThreat.ts) set that high (m of depth) from the start, e.g. ?out&runthreat=1500.
+  if (params.has("runthreat")) loop.runThreat.set(Number(params.get("runthreat")) || 1500);
   // ?items=N: N random items at risk (for the banking count-in and the loss).
   for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
   // ?lowfuel turns fuel on (it is off by default, Keith 2026-11-01) and leaves little in the pack.
@@ -696,7 +706,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -743,7 +753,7 @@ const panel = tweakPanel({
     PILOT_TOPIC, SUMMON_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
     ABILITY_TOPIC,
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Loot slot mix", "Bare mech", "Leg load", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", CONVOY_SOUND_GROUP, "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
@@ -756,7 +766,7 @@ const panel = tweakPanel({
     { id: "road", label: "Road", groups: ["Road", "Dunes", "Shape", "Sand surface", "Ground dents", "Ground dents: surfaces", "Craters", "Streaming"] },
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
-    { id: "legs", label: "Legs", groups: ["Move", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
+    { id: "legs", label: "Legs", groups: ["Move", "Leg load", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
     { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
     { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
@@ -796,6 +806,7 @@ selector = new Selector(app, {
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
     { topic: "fortress", label: "Fortress spawner shacks", objects: () => loop.forts.spawnersDraw.meshes() },
     { topic: "fortress", label: "Fortress bandit mechs", objects: () => loop.forts.mechs.objects() },
+    { topic: "raiders", label: "Bandit mechs", objects: () => loop.fieldMechs.objects() },
     { topic: "fortress", label: "Fortress lookout towers", objects: () => loop.forts.towersDraw.meshes() },
     { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },
@@ -1184,7 +1195,7 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", () => `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
-  reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
+  reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)), arsenal.energy.need(), arsenal.energy.underpowered());
   vitals.hideActions = bay.isOpen || inventory.isOpen;
   vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: [...arsenal.keySlots(), ...summonKeys.slots(fitted, !!player.gunsOff)], healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();

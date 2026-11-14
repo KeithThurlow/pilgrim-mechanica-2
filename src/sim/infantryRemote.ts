@@ -45,7 +45,7 @@ const UNCHANGED: Record<string, (sw: InfantrySwarm, a: unknown[]) => boolean> = 
 };
 
 /** Fields never copied: the view's own flags and settings. */
-const SKIP = new Set(["silent", "hideDead", "remote", "v", "ground", "keepOut", "fence", "onDeath", "ko", "slotT"]);
+const SKIP = new Set(["snapStamp", "silent", "hideDead", "remote", "v", "ground", "keepOut", "fence", "onDeath", "ko", "slotT"]);
 
 export interface InfantrySnapshot {
   hi: number;
@@ -199,6 +199,7 @@ export class InfantryView {
       try { for (const c of this.log) { call(sw, c.m, c.a); this.stats.replayed++; } } finally { this.depth--; sw.silent = false; }
     }
     for (let j = 0; j < shots.length; j++) this.inbox.push(shots[j]);
+    sw.snapStamp++;
     this.stats.snapshots++;
     this.stats.ms = ms;
   }

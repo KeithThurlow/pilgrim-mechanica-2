@@ -157,7 +157,7 @@ export class InfantryDraw {
     swarmBetweenTicks(this.group, () => sw.hi, [
       { a: sw.px }, { a: sw.py }, { a: sw.pz }, { a: sw.vx }, { a: sw.vz },
       { a: sw.heading, angle: true }, { a: sw.fallYaw, angle: true }, { a: sw.stateTime, jump: 1 }, { a: sw.diveT, jump: 1 },
-    ], [sw.gen, sw.state], (dt) => this.draw(dt));
+    ], [sw.gen, sw.state], (dt) => this.draw(dt), () => (sw.remote ? sw.snapStamp : null));
   }
 
   private draw(dt: number): void {

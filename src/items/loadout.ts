@@ -13,7 +13,7 @@
 // The hull item says which mounts it offers and what each takes (`Base.mounts` in bases.ts). More mounts later: add
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
-import { isEnergy } from "../weapons/energy/energySim";
+import { energyNeed, isEnergy } from "../weapons/energy/energySim";
 import { REACTOR_DEFAULTS } from "../mech/reactor";
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, tagsOf, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
@@ -50,12 +50,20 @@ export function sideOf(slot: SlotId): MountSide | null {
 /** What a side's waist does for its gun's magazine: the bonus share and the reload speed. */
 interface Feed { bonus: number; speed: number }
 
+/** The slider group of the leg load penalty (in the Loadout topic). */
+export const LEG_LOAD_GROUP = "Leg load";
+
 export const LOADOUT_DEFAULTS = {
   bareMagBonus: 0,
   bareDashCharges: 3, // Keith 2026-11-03: the player's mech starts with at least three energy bars
   rivalBareDashCharges: 3, // rival mechs (duel, HVT) get the same three bars; the rival AI uses the extra one
   bareDashRecharge: 4.6,
   bareRadar: 250,
+  // Leg load (Keith 2026-11-14, soft limits; docs/proposal-soft-limits.md): over the legs' best load, by how far over.
+  loadSpeedSlope: 0.5,
+  loadAccelSlope: 0.8,
+  loadTurnSlope: 0.6,
+  loadFloor: 0.4,
 };
 export type LoadoutValues = typeof LOADOUT_DEFAULTS;
 export const LOADOUT_PARAMS: Param[] = [
@@ -64,6 +72,10 @@ export const LOADOUT_PARAMS: Param[] = [
   { key: "rivalBareDashCharges", label: "Rival dash charges without a pack", min: 1, max: 8, step: 1, group: "Bare mech", tip: "Rival mechs (duel, HVT) without a pack; the player's is above" },
   { key: "bareDashRecharge", label: "Dash recharge without a pack (s)", min: 0.2, max: 15, step: 0.1, group: "Bare mech" },
   { key: "bareRadar", label: "Mech radar without a sensor (m)", min: 20, max: 1000, step: 5, group: "Bare mech", tip: "The hull's own short scope when the sensor mount is empty; a sensor sets the mech radar range" },
+  { key: "loadSpeedSlope", label: "Walk and sprint lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP, tip: "Over the legs' best load (everything fitted above them, t): walk and sprint × (1 − this × how far over × the legs' strain). 0.5: 10% over is 5% slower" },
+  { key: "loadAccelSlope", label: "Speed-up lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP },
+  { key: "loadTurnSlope", label: "Turn rate lost per 100% over", min: 0, max: 2, step: 0.05, group: LEG_LOAD_GROUP },
+  { key: "loadFloor", label: "Least share left", min: 0.05, max: 1, step: 0.01, group: LEG_LOAD_GROUP, tip: "However heavy, the legs keep at least this share of their speed, speed-up and turn" },
 ];
 
 /** Today's mech: Rampart legs and hull, the Rampart visor head (Keith 2026-10-26: hulls have heads), a Medium minigun on each hull mount, the stand-in power
@@ -138,12 +150,11 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   const side = sideOf(slot);
   switch (slot) {
     case "legs": {
-      if (item.kind !== "legs") return "only legs go here";
-      return liftProblem(item, lo.hull);
+      // Any legs carry any hull (Keith 2026-11-14, soft limits): too heavy only slows them (legLoad).
+      return item.kind !== "legs" ? "only legs go here" : null;
     }
     case "hull": {
-      if (item.kind !== "hull") return "only a hull goes here";
-      return liftProblem(lo.legs, item);
+      return item.kind !== "hull" ? "only a hull goes here" : null;
     }
     case "sensor": {
       if (item.kind !== "sensor") return "only a sensor goes here";
@@ -184,16 +195,21 @@ export function fitProblem(lo: Loadout, slot: SlotId, item: Item): string | null
   }
 }
 
-/**
- * Legs that can only lift so much (hover legs, Keith 2026-11-02: they "can't support heavy hulls"): why this hull is
- * too heavy for these legs, or null. The hull's own weight counts (with its Protocols), not what hangs on it.
- */
-export function liftProblem(legs: Item | null, hull: Item | null): string | null {
-  if (!legs || !hull) return null;
-  const lifts = effectiveStats(legs).lifts;
-  if (lifts === undefined) return null;
-  const w = itemWeight(hull);
-  return w > lifts + 1e-6 ? `too heavy: ${BASE_BY_ID[legs.base]?.name ?? "these legs"} lift hulls up to ${lifts.toFixed(1)} t, this hull is ${w.toFixed(1)} t` : null;
+/** What the legs carry (Keith 2026-11-14, soft limits instead of "can't fit"): the weight above them (t: every fitted
+ *  item but the legs, with its Protocols), their best load, how far over it they are (share × their strain, 0 at or
+ *  under) and what that leaves of their walk and sprint, speed-up and turn (1 at or under). */
+export interface LegLoad { tonnes: number; best: number; strain: number; over: number; speed: number; accel: number; turn: number }
+
+export function legLoad(lo: Loadout, v: LoadoutValues = LOADOUT_DEFAULTS): LegLoad {
+  let tonnes = 0;
+  for (const s of SLOTS) if (s !== "legs" && lo[s] && !(s === "heldL" && lo.heldL === lo.heldR)) tonnes += itemWeight(lo[s]!);
+  const legs = lo.legs ? effectiveStats(lo.legs) : BASE_STATS("legs-rampart");
+  const base = lo.legs ? BASE_BY_ID[lo.legs.base]?.stats : undefined;
+  // Legs saved before leg load have no carry or strain of their own: their base's.
+  const best = Math.max(0.1, legs.carry ?? base?.carry?.base ?? 20), strain = Math.max(0, legs.strain ?? base?.strain?.base ?? 1);
+  const over = Math.max(0, tonnes / best - 1) * strain;
+  const k = (slope: number) => Math.max(Math.min(1, v.loadFloor), 1 - slope * over);
+  return { tonnes, best, strain, over, speed: k(v.loadSpeedSlope), accel: k(v.loadAccelSlope), turn: k(v.loadTurnSlope) };
 }
 
 /** A sensor item's style (an unknown base counts as a cluster, the old default). */
@@ -310,6 +326,17 @@ export function unsocket(item: Item, i: number): Item | null {
 }
 
 /** An item's stats with its Protocols' item-scope changes applied. */
+/**
+ * Leg items rolled before 2026-11-14 carry the old, short strides per m/s (Keith 2026-11-14: walking steps too short):
+ * rolls inside the old range are carried over to the same place in the new one.
+ */
+const OLD_STRIDE_PER_SPEED: Record<string, number> = { "legs-rampart": 0.45, "legs-stilt": 0.45, "legs-hover": 0.45, "legs-siege": 0.36 };
+function strideNow(base: string, st: Record<string, number>): Record<string, number> {
+  const old = OLD_STRIDE_PER_SPEED[base], now = BASE_BY_ID[base]?.stats.stridePerSpeed?.base;
+  if (!old || !now || !(st.stridePerSpeed < old * 1.1)) return st;
+  return { ...st, stridePerSpeed: st.stridePerSpeed * (now / old) };
+}
+
 export function effectiveStats(item: Item): Record<string, number> {
   const out = { ...item.stats };
   const ws = stackWeights(item.socketed);
@@ -363,7 +390,7 @@ export interface Resolved {
   /** Parts to show on the model: each side's mount ("gun": a hull weapon, "arm", or null), drums per waist side, the
    *  pack (a power pack, not a back weapon), the sensor (and which: its base id, for the model, and its style).
    *  `drums` is either side (older bodies). */
-  parts: { legsLook: string; hullLook: string; drums: boolean; drumsL: boolean; drumsR: boolean; waistL: string | null; waistR: string | null; armL: string | null; armR: string | null; pack: boolean; packId: string | null; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null };
+  parts: { legsLook: string; hullLook: string; drums: boolean; drumsL: boolean; drumsR: boolean; waistL: string | null; waistR: string | null; pack: boolean; packId: string | null; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null; armId: string };
   /** Shoulder weapons on their keys: the arms' shoulders 1 and 2, the back weapon on the pack mount 3 (mount "back"
    *  is the model's top of the back); their own rolled stats (null: an unrolled base item, on the weapon sliders). */
   shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null; proto?: import("../game/shots").ShotProtocols; cost?: number }[];
@@ -377,10 +404,12 @@ export interface Resolved {
   summons: { replicas: number; replicaBuild: number; replicaRebuild: number; drones: number; droneRebuild: number; scrappers: number; swarmRebuild: number; swarmKeys: (1 | 2)[]; droneKeys: (1 | 2)[] };
   /** Rows the waist racks add to the cargo grid (cargoCapacity in src/items/cargoSpace.ts turns it into cells). */
   cargoRackRows: number;
+  /** The weight on the legs and what it costs them (legLoad); the values above already carry the cost. */
+  load: LegLoad;
 }
 
 export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Resolved {
-  const legs = lo.legs ? effectiveStats(lo.legs) : BASE_STATS("legs-rampart");
+  const legs = lo.legs ? strideNow(lo.legs.base, effectiveStats(lo.legs)) : BASE_STATS("legs-rampart");
   const hull = lo.hull ? effectiveStats(lo.hull) : BASE_STATS("hull-rampart");
   const pack = lo.pack?.kind === "pack" ? effectiveStats(lo.pack) : null;
   const sensor = lo.sensor ? effectiveStats(lo.sensor) : null;
@@ -474,6 +503,15 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     values[k] = values[k] * (m.mul ?? 1) + (m.add ?? 0);
   }
   values.dashCharges = Math.max(1, Math.round(values.dashCharges));
+  // Capacitor banks on the shoulders let the reactor hold more (Keith 2026-11-14, soft limits: what heavy energy weapons
+  // need to charge; an item saved before this has its base's).
+  for (const s of ["shoulderL", "shoulderR"] as const) {
+    const it = lo[s];
+    if (it?.kind === "shoulder" && BASE_BY_ID[it.base]?.shoulder === "capacitor") values.reactorCap += effectiveStats(it).capBonus ?? BASE_BY_ID[it.base]?.stats.capBonus?.base ?? 0;
+  }
+  // Too heavy for the legs: slower, slower to speed up and turn (Keith 2026-11-14), after the Protocols' walk mods.
+  const load = legLoad(lo, bare);
+  values.walkSpeed *= load.speed; values.sprintSpeed *= load.speed; values.accel *= load.accel; values.turnRate *= load.turn;
   const drum = (s: SlotId) => lo[s]?.tags.includes("ammo") ?? false;
   const mountPart = (s: MountSide) => (isHullWeapon(lo[MOUNTS[s].mount]) ? "gun" : isArm(lo[MOUNTS[s].mount]) ? "arm" : null);
   let racks = 0;
@@ -481,7 +519,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   return {
     values,
     guns: { left, right },
-    parts: { legsLook: lo.legs ? lookFor(lo.legs) : "rampart", hullLook: lo.hull ? lookFor(lo.hull) : "rampart", drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), waistL: lo.waistL?.base ?? null, waistR: lo.waistR?.base ?? null, armL: isArm(lo.mountL) ? lo.mountL!.base : null, armR: isArm(lo.mountR) ? lo.mountR!.base : null, pack: !!pack, packId: lo.pack?.kind === "pack" ? lo.pack.base : null, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R") },
+    parts: { legsLook: lo.legs ? lookFor(lo.legs) : "rampart", hullLook: lo.hull ? lookFor(lo.hull) : "rampart", drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), waistL: lo.waistL?.base ?? null, waistR: lo.waistR?.base ?? null, pack: !!pack, packId: lo.pack?.kind === "pack" ? lo.pack.base : null, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R"), armId: hullArmBase(lo.hull) ?? "arm-rampart" },
     shoulders: ([["shoulderL", 1, "shoulderL"], ["shoulderR", 2, "shoulderR"], ["pack", 3, "back"]] as const).flatMap(([slot, key, mount]) => {
       const it = lo[slot], w = it?.kind === "shoulder" ? BASE_BY_ID[it.base]?.shoulder : undefined;
       return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null, proto: shotProtocolsOf(it.socketed), cost: shotCostOf(it.socketed) }] : [];
@@ -493,6 +531,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     }),
     summons: summonsOf(lo),
     cargoRackRows: Math.round(racks),
+    load,
   };
 }
 
@@ -526,18 +565,28 @@ function BASE_STATS(id: string): Record<string, number> {
 
 // ---- For the bay screen: a flat list of what a loadout gives, to compare two ----
 
+/** The biggest shot a fitted energy weapon commits at once (energyNeed: a sunder beam's press, a lance's full charge),
+ *  or null with none: over the reactor's capacity it's underpowered (Keith 2026-11-14, soft limits). Rolled stats; an
+ *  unrolled base item's are its base's (the sliders can differ). */
+export function energyNeedOf(r: Resolved): number | null {
+  let need = 0;
+  for (const g of [r.guns.left, r.guns.right]) if (g && isEnergy(g.cls)) need = Math.max(need, energyNeed(g.cls, g.energy ?? 0));
+  return need > 0 ? need : null;
+}
+
 export interface SummaryLine { key: string; label: string; value: number | null; better: 1 | -1; decimals: number }
 
 export function summary(r: Resolved): SummaryLine[] {
   const v = r.values;
   const line = (key: string, label: string, value: number | null, better: 1 | -1, decimals: number): SummaryLine => ({ key, label, value, better, decimals });
   const out = [
+    line("load", "Load (t)", r.load.tonnes, -1, 1), line("loadBest", "Legs' best load (t)", r.load.best, 1, 1), line("loadSpeed", "Load: speed ×", r.load.speed, 1, 2),
     line("walkSpeed", "Walk (m/s)", v.walkSpeed, 1, 2), line("sprintSpeed", "Sprint (m/s)", v.sprintSpeed, 1, 2),
     line("turnRate", "Turn (°/s)", v.turnRate, 1, 0), line("strideBase", "Stride (m)", v.strideBase, 1, 2), line("impact", "Stomp", v.impact, 1, 2),
     line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),
     line("cargo", "Cargo rack rows", r.cargoRackRows, 1, 0), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
-    line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
+    line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("energyNeed", "Biggest energy shot (bars)", energyNeedOf(r), -1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
   ];
   for (const [name, g] of [["L", r.guns.left], ["R", r.guns.right]] as const) {

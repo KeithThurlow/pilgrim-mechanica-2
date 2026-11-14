@@ -36,7 +36,7 @@ const lab = await combatLab({
   defaults: { ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...DUMMY_DEFAULTS, ...DOLL_DEFAULTS, ...VALUE_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS },
   params: [...LOOT_PARAMS, ...LOADOUT_PARAMS, ...DUMMY_PARAMS, ...DOLL_PARAMS, ...VALUE_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS],
   topics: [
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Item value", "Bare mech", "Mech doll", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Loot slot mix", "Item value", "Bare mech", "Leg load", "Mech doll", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "dummies", label: "Targets", groups: ["Target dummies"] },
   ],
   selectables: [{ topic: "dummies", label: "Target dummies", objects: () => draw?.meshes() ?? [] }],

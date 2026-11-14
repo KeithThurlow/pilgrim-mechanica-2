@@ -25,9 +25,12 @@ import { armIk, type SwordPose } from "../weapons/sword";
  *  weapon's axes, the arm's bone lengths, and the way the elbow bends. */
 /** A held pose and its arm: bone lengths, and how far the shoulder sits out from the hull's (a stub bridges it). */
 export interface HeldPose extends SwordPose { upper: number; fore: number; out: number }
+/** A two-bone arm as drawn: its pieces (the hull's arm model, or boxes until it loads), the elbow's last hinge, the model's id. */
+interface IkArm { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; stub: THREE.Mesh; joint: THREE.Mesh; hinge: THREE.Vector3; id: string }
+const AX = { a: new THREE.Vector3(), b: new THREE.Vector3(), x: new THREE.Vector3(), z: new THREE.Vector3(), m: new THREE.Matrix4() };
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
-import { armFromGlb, partFromGlb, partGlb } from "./partModels";
+import { ARM_PIECES, armFromGlb, partFromGlb, partGlb } from "./partModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
 import { footShapeOr, type FootShape } from "../fx/footprint";
@@ -211,9 +214,7 @@ interface PodRig {
   kickBase?: THREE.Vector3;
   /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
   held?: boolean;
-  ik?: { g: THREE.Group; upper: THREE.Object3D; fore: THREE.Object3D; elbow: THREE.Object3D; hand: THREE.Object3D; stub: THREE.Object3D; joint: THREE.Object3D; armId?: string | null };
-  /** The fitted arm's item base id (its model takes the box arm's place once loaded). */
-  armId?: string | null;
+  ik?: IkArm;
 }
 
 export class RampartBody {
@@ -261,6 +262,8 @@ export class RampartBody {
   /** The front sensor socket's place on the fitted hull (before the head sliders move it). */
   private frontAt = new THREE.Vector3(...MOUNT_STANDIN.sensorFront);
   private lastParts: BodyParts | null = null;
+  /** The hull's own arm (its base id): the model the two-bone arms draw with (Keith 2026-11-14). */
+  private armId = "arm-rampart";
   private tmp = { q: new THREE.Quaternion(), v: new THREE.Vector3(), e: new THREE.Euler(), left: new THREE.Vector3(), e2: new THREE.Vector3(), h2: new THREE.Vector3(), d2: new THREE.Vector3(), o2: new THREE.Vector3() };
 
   private constructor() { this.root.name = "rampart"; }
@@ -580,9 +583,12 @@ export class RampartBody {
   showParts(parts: BodyParts) {
     this.lastParts = parts;
     const S = MOUNT_STANDIN;
+    if (parts.armId && parts.armId !== this.armId) {
+      this.armId = parts.armId;
+      for (const p of this.pods) if (p.ik) this.fitArm(p.ik);
+    }
     for (const p of this.pods) {
       const L = p.side === 1, arm = (L ? parts.mountL : parts.mountR) === "arm";
-      if (parts.armL !== undefined) p.armId = L ? parts.armL : parts.armR ?? null;
       // An arm: the gun pivot moves down to its hand and the held weapon draws smaller; the arm shows even unarmed.
       p.yawPitch.visible = (L ? parts.gunLeft : parts.gunRight) || arm;
       p.yawPitch.position.copy(p.home);
@@ -773,19 +779,26 @@ export class RampartBody {
     ik.g.visible = true;
     const e = this.tmp.e2.set(r.elbow.x, r.elbow.y, r.elbow.z), h = this.tmp.h2.set(r.hand.x, r.hand.y, r.hand.z);
     const d = this.tmp.d2;
-    if (ik.armId !== p.armId) this.fitArm(p, ik);
-    const bone = (m: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3) => {
+    // The elbow's hinge (the arm's plane): each bone turns about it, so a modelled arm keeps its front to the inside of
+    // the bend (the last hinge held while the arm is straight).
+    const hx = AX.a.copy(e).sub(root).cross(AX.b.copy(h).sub(e));
+    if (hx.lengthSq() > 1e-6) ik.hinge.copy(hx.normalize());
+    const bone = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, hinged = true) => {
       d.copy(b).sub(a); const len = d.length();
       m.position.copy(a);
-      m.quaternion.setFromUnitVectors(UP, d.divideScalar(Math.max(1e-6, len)));
+      d.divideScalar(Math.max(1e-6, len));
+      const x = AX.x.copy(ik.hinge).addScaledVector(d, -ik.hinge.dot(d));
+      if (!hinged || x.lengthSq() < 1e-6) m.quaternion.setFromUnitVectors(UP, d);
+      else { x.normalize(); m.quaternion.setFromRotationMatrix(AX.m.makeBasis(x, d, AX.z.crossVectors(x, d))); }
       m.scale.set(1, len, 1);
     };
     ik.stub.visible = stub;
-    if (stub) bone(ik.stub, p.home, root);
+    if (stub) bone(ik.stub, p.home, root, false);
     ik.joint.position.copy(root);
     bone(ik.upper, root, e);
     bone(ik.fore, e, h);
     ik.elbow.position.copy(e);
+    ik.elbow.quaternion.copy(ik.fore.quaternion);
     ik.hand.position.copy(h);
     ik.hand.quaternion.copy(p.yawPitch.quaternion);
   }
@@ -847,25 +860,6 @@ export class RampartBody {
     p.kickBase!.set(S.gunAt[0] - S.handAt[0], S.gunAt[1] - S.handAt[1], S.gunAt[2] - S.handAt[2] - (cls === "minigun" ? v.minigunGripBack : 0));
   }
 
-  /** Swap an arm's box pieces for its item's model (public/models/parts/<arm base id>.glb) when there is one. */
-  private fitArm(p: PodRig, ik: NonNullable<PodRig["ik"]>) {
-    const id = p.armId ?? null, look = this.look;
-    ik.armId = id;
-    if (!id || !look) return;
-    void partGlb(id).then((scene) => {
-      const m = scene && ik.armId === id ? armFromGlb(scene, look) : null;
-      if (!m) return;
-      for (const k of ["joint", "upper", "fore", "elbow", "hand"] as const) {
-        const old = ik[k];
-        m[k].position.copy(old.position); m[k].quaternion.copy(old.quaternion); m[k].scale.copy(old.scale);
-        ik.g.remove(old);
-        ik.g.add(m[k]);
-        ik[k] = m[k];
-      }
-      this.repaint();
-    });
-  }
-
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */
   private ikArm() {
     const look = this.look!, g = new THREE.Group();
@@ -877,7 +871,30 @@ export class RampartBody {
     const stub = part(new THREE.BoxGeometry(0.42, 1, 0.42).translate(0, 0.5, 0), 0x3e3c35);
     const joint = part(new THREE.SphereGeometry(0.3, 10, 8), 0x6c7546);
     this.hull.add(g);
-    return { g, upper, fore, elbow, hand, stub, joint };
+    const ik: IkArm = { g, upper, fore, elbow, hand, stub, joint, hinge: new THREE.Vector3(-1, 0, 0), id: "" };
+    this.fitArm(ik);
+    return ik;
+  }
+
+  /** The hull's arm model in place of the boxes (or of another hull's arm) once its GLB loads; the boxes stay without one. */
+  private fitArm(ik: IkArm) {
+    const id = this.armId;
+    if (ik.id === id) return;
+    ik.id = id;
+    void partGlb(id).then((scene) => {
+      if (!scene || ik.id !== id || !this.look) return;
+      const m = armFromGlb(scene, this.look);
+      if (!m) return;
+      for (const k of ARM_PIECES) {
+        const old = ik[k], next = m[k];
+        next.position.copy(old.position); next.quaternion.copy(old.quaternion); next.scale.copy(old.scale); next.visible = old.visible;
+        ik.g.remove(old);
+        this.look.forget(old);
+        ik.g.add(next);
+        ik[k] = next;
+      }
+      this.repaint();
+    });
   }
 
   /** The hull's frame (hull to world), current now. */

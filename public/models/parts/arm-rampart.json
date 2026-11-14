@@ -3,62 +3,76 @@
  "kind": "arm",
  "name": "Rampart arm",
  "maker": "Stratford-Aegis",
- "says": "armoured arm: plate shells, pauldron, gauntlet",
- "tris": 1076,
- "meshes": 5,
+ "says": "armoured sleeves, back ram, gauntlet",
+ "tris": 2040,
+ "meshes": 6,
  "size": [
-  0.72,
-  3.37,
-  0.685
+  0.554,
+  1.693,
+  0.565
  ],
  "min": [
-  -0.36,
-  -3.07,
-  -0.3424
+  -0.277,
+  -0.2632,
+  -0.295
  ],
  "max": [
-  0.36,
-  0.3,
-  0.3424
+  0.277,
+  1.43,
+  0.27
  ],
  "sockets": {
-  "Shoulder": [
+  "Upper_End": [
    0.0,
-   0.0,
+   1.45,
    -0.0
   ],
-  "Grip": [
+  "Fore_End": [
    0.0,
-   -2.9,
+   1.45,
    -0.0
   ]
  },
  "moving": {
+  "Joint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Stub": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
   "Upper": {
    "pivot": [
     0.0,
-    -1.45,
+    0.0,
     -0.0
    ]
   },
   "Elbow": {
    "pivot": [
     0.0,
-    -1.45,
+    0.0,
     -0.0
    ]
   },
   "Fore": {
    "pivot": [
     0.0,
-    -2.9,
+    0.0,
     -0.0
    ]
   },
   "Hand": {
    "pivot": [
     0.0,
-    -2.9,
+    0.0,
     -0.0
    ]
   }

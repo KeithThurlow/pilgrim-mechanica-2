@@ -7,11 +7,11 @@ import { isRoundGun } from "../weapons/guns";
 import { BASES, BASE_BY_ID, type Base } from "../items/bases";
 import { rng, rollItem, type LootValues } from "../items/generate";
 import { RARITIES, type Rarity } from "../items/rarity";
-import { emptyLoadout, fit, fitProblem, hullMount, MOUNTS, SIDES, SLOTS, type Loadout, type Resolved, type SlotId } from "../items/loadout";
+import { effectiveStats, emptyLoadout, fit, fitProblem, resolve, hullMount, MOUNTS, SIDES, SLOTS, type Loadout, type Resolved, type SlotId } from "../items/loadout";
 import { itemName } from "../items/bayState";
 import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
-import { energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
+import { energyNeed, energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
 
 export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | EnergyClass;
 /** An energy weapon (Keith 2026-11-02, on the reactor): pulse laser, beam laser, nova lance, plasma, orb, arc, sunder. */
@@ -66,7 +66,7 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     if (isEnergy(g.cls)) {
       // Energy weapons (rivals rolled them since 2026-11-02 but never fired them): their own stats as the arsenal reads them.
       const st = energyStats(g.cls, o, v);
-      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, energy: st }));
+      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, spinUp: st.spool, energy: st }));
     } else if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
     else if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
     else if (g.cls === "rail") {
@@ -153,9 +153,11 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
     return false;
   };
   put("legs", pickBase(r, ofKind("legs")).id);
-  // A hull the legs can lift (hover legs take only light ones).
-  const lifts = lo.legs?.stats.lifts ?? Infinity;
-  put("hull", pickBase(r, ofKind("hull").filter((b) => b.weight <= lifts)).id);
+  // A hull that leaves room on the legs for about 9 t of weapons and gear (Keith 2026-11-14: any legs carry any hull,
+  // slower over their best load; so hover legs still take only the light hulls, Stilt legs no Siege hull).
+  const carry = lo.legs?.stats.carry ?? BASE_BY_ID[lo.legs?.base ?? ""]?.stats.carry?.base ?? Infinity;
+  const roomy = ofKind("hull").filter((b) => b.weight <= carry - 9);
+  put("hull", pickBase(r, roomy.length ? roomy : ofKind("hull")).id);
   // A sensor that fits the hull's sockets (a few tries).
   for (let i = 0; i < 4 && !lo.sensor; i++) put("sensor", pickBase(r, ofKind("sensor")).id);
   for (const s of SIDES) {
@@ -173,6 +175,15 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
   if (lo.mountL?.kind === "arm" && lo.mountR?.kind === "arm" && r() < 0.25) put("heldR", pickBase(r, ofKind("weapon", "H")).id);
   put("pack", pickBase(r, r() < 0.45 ? ofKind("shoulder") : ofKind("pack")).id);
   for (const s of SIDES) put(MOUNTS[s].waist, pickBase(r, ofKind("waist").filter((b) => b.tags.includes("ammo"))).id);
+  // A heavy energy weapon its reactor can't hold a shot of (Keith 2026-11-14, capacitor gating) would never fire: a
+  // nova lance in its place (no draw, so every seed still rolls the same rival otherwise).
+  const cap = resolve(lo).values.reactorCap;
+  for (const s of SIDES) {
+    const g = lo[MOUNTS[s].mount], b = g ? BASE_BY_ID[g.base] : undefined;
+    if (!g || !b?.cls || energyNeed(b.cls, effectiveStats(g).energyShot ?? 0) <= cap + 1e-9) continue;
+    const swap = roll("lance-medium");
+    if (!fitProblem(lo, MOUNTS[s].mount, swap)) fit(lo, MOUNTS[s].mount, swap);
+  }
   return lo;
 }
 

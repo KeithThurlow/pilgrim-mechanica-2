@@ -240,6 +240,8 @@ export class WalkerSim {
   private hurry = 1;
   /** How far the hips sit below where they want to be (m): the stretch is read as if they were there. */
   private hipShort = 0;
+  /** The walk's crouch now (m), eased toward `walkCrouch` (Keith 2026-11-14). */
+  private walkDip = 0;
   /** The height the running hips may rise to by the reach of the feet carrying them (eased; NaN until running). */
   private reachCap = NaN;
   /** The idle flex: steps left in it (0: not flexing), and how far its gait has blended in (0..1). */
@@ -2524,7 +2526,12 @@ export class WalkerSim {
     const down = smooth(0, 0.35, -this.grade);
     const sprintCrouch = v.boundCrouch * (0.4 + 0.6 * this.speedShare());
     if (!this.dashMove) { const e = Math.max(0, 1 - dt * 3); this.dashRoll *= e; this.dashPitch *= e; this.dashDipNow *= e; }
-    let yT = ref + v.hipHeight - v.downhillCrouch * down - (v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
+    // The walk's crouch (Keith 2026-11-14, longer walking steps): walking straight on, not climbing (a crouched leg
+    // folds shut up a steep face) nor scrambling sideways (the longer reach left the feet crossed for longer), and not
+    // in a dash's steps or the run, which have their own; eased.
+    const dipWant = this.dashMove || this.running ? 0 : v.walkCrouch * smooth(0.5, v.walkSpeed, this.speed) * (1 - this.offLegs()) * (1 - smooth(0.05, 0.3, this.grade));
+    this.walkDip += (dipWant - this.walkDip) * Math.min(1, dt * (this.dashMove || this.running ? 12 : 3));
+    let yT = ref + v.hipHeight - v.downhillCrouch * down - Math.max(this.walkDip, v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
     if (rk > 0) {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).
       const clear = this.groundAhead(Math.max(1.5, this.speed * v.runLookAhead)) + v.runClear;

@@ -46,15 +46,19 @@ import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
-import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth } from "./depth";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth, dangerOf, scaled } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
 import { PadDraw } from "./padDraw";
 import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS, UNLOCK_GROUP } from "./unlocks";
 import { ThreatField, THREAT_DEFAULTS, THREAT_PARAMS, THREAT_GROUPS, type ThreatEvent } from "./threats";
+import { LanceField, LANCE_DEFAULTS, LANCE_PARAMS, LANCE_GROUPS, type LanceEvent } from "./lances";
+import { FieldMechs } from "./fieldMechs";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
 import { itemName, type Drop } from "./drops";
+import { KitOrbs } from "./kitOrbs";
+import { KitOrbsDraw } from "./kitOrbsDraw";
 import { banditThreat } from "./threat";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
@@ -68,12 +72,13 @@ import type { Raider } from "../combat/warband";
 import { mechOwner } from "../game/registerOwners";
 import { QuestLoop, QUEST_DEFAULTS, QUEST_PARAMS, QUEST_GROUPS } from "../quests/questLoop";
 import { SafeZone, SAFE_DEFAULTS, SAFE_PARAMS } from "../convoy/safeZone";
+import { RunThreat, RUN_THREAT_DEFAULTS, RUN_THREAT_PARAMS, RUN_THREAT_GROUP } from "./runThreat";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS, ...PAD_DEFAULTS, ...UNLOCK_DEFAULTS,
-  ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS,
-  ...QUEST_DEFAULTS,
+  ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS, ...LANCE_DEFAULTS,
+  ...QUEST_DEFAULTS, ...RUN_THREAT_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
   ...HUB_LIFE_DEFAULTS,
   ...SAFE_DEFAULTS,
@@ -83,9 +88,9 @@ export const LOOP_DEFAULTS = {
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
-  ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
+  ...RUN_THREAT_PARAMS, ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
-  ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
+  ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...LANCE_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
   ...QUEST_PARAMS,
   ...FORT_LIFE_PARAMS,
   ...HUB_LIFE_PARAMS,
@@ -96,15 +101,15 @@ export const LOOP_PARAMS: Param[] = [
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
-  { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, SMALL_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "expedition", label: "Expedition", groups: ["Expedition", RUN_THREAT_GROUP, DEPTH_GROUP, SMALL_GROUP, "Fuel", "Way home", "Radar"] },
   { id: "quests", label: "Contracts and HVTs", groups: QUEST_GROUPS },
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: waves", "Fortress: mechs", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
-  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Loot labels", "Cargo", "Item value", "Loot rolls"] },
+  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Loot labels", "Cargo", "Item value", "Loot rolls", "Loot slot mix"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
-  { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
+  { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, ...LANCE_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts", "Robots: big weak points"] },
   { id: "droids", label: "Humanoid robots", groups: [DROID_CAMP_GROUP, ...DROID_GROUPS] },
   STRIDER_CAMP_TOPIC,
@@ -138,6 +143,8 @@ export class ExpeditionLoop {
   readonly camps: CampField;
   /** Distance from the road and the danger it makes (depth.ts). */
   readonly depth: DepthField;
+  /** The run's threat level (runThreat.ts): the deepest the player has been, falling only at home. */
+  readonly runThreat: RunThreat;
   readonly swarms: SwarmCamps;
   /** Humanoid squads that come with the robot camps, packs and raids. */
   readonly droids: DroidCamps;
@@ -153,6 +160,9 @@ export class ExpeditionLoop {
   readonly forts: Fortresses;
   readonly hubs: Hubs;
   readonly columns: WarColumns;
+  /** Bandit mech lances wandering the sand (lances.ts) and the bandit mechs on the field (fieldMechs.ts: lances and camp guards). */
+  readonly lances: LanceField;
+  readonly fieldMechs: FieldMechs;
   readonly bands: WarBands;
   /** The convoy's safe zone (Keith 2026-11-01): robots, bandits and war bands steer out of it. */
   readonly zone: SafeZone;
@@ -215,6 +225,9 @@ export class ExpeditionLoop {
   private stripped = 0;
   /** Repair kits found in salvage (all runs). */
   kitsFound = 0;
+  /** Repair kit pickups on the sand (walk over them; Keith 2026-11-14), host-owned, with their drawing. */
+  readonly kitOrbs: KitOrbs;
+  private kitOrbsDraw: KitOrbsDraw;
   private demoFrom = 0;
   demoHold = false;
   /** E and the drops (Keith 2026-11-06): the drop E would take now, E last frame, this frame's grab, a press spent on a drop. */
@@ -253,6 +266,7 @@ export class ExpeditionLoop {
     this.padDraw = new PadDraw(field, scene);
     this.sites = new FieldSites(v, field, bf, scene, blocked);
     this.depth = new DepthField(route, v);
+    this.runThreat = new RunThreat(v);
     this.camps = new CampField(v);
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
@@ -262,14 +276,27 @@ export class ExpeditionLoop {
     this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms, undefined, deaths);
     this.crushers = new CrusherSites(v, bf, scene, field, player, this.sites, this.swarms);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
-    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
+    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(x, z), this.nearHome(x, z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
     this.bandits = new BanditField(v, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1).filter((q) => !q.id.startsWith("clash:")));
     this.bandits.danger = this.depth.danger;
     this.banditCamps = new BanditCamps(v, field, bf, scene, this.bandits, player, opts.vat ?? null, blocked);
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
-    this.columns.danger = this.depth.danger;
+    // War band columns are sized when they turn up, by the deeper of the place and the run's threat (Keith 2026-11-14).
+    this.columns.danger = (x, z) => dangerOf(v, this.runThreat.effective(this.depth.depth(x, z), this.nearHome(x, z)));
     this.bands = new WarBands(v, bf, scene, this.columns, deaths);
+    this.lances = new LanceField(v, 53, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
+    this.fieldMechs = new FieldMechs(v as never, bf, scene, player, this.lances, this.banditCamps);
+    // Bandits follow the run's threat as the robots do: a camp streaming in is as big as the deeper of its place and the
+    // threat says (never smaller than its own), its bandits' health × the threat level's enemy power; its guard mechs
+    // grade by the same danger.
+    this.fieldMechs.dangerAt = (x, z) => this.threatDanger(x, z);
+    this.banditCamps.threat = (c) => {
+      const d = this.threatDanger(c.x, c.z);
+      const size = Math.max(1, scaled(v.banditSizeFar, d) / Math.max(1e-3, scaled(v.banditSizeFar, c.danger)));
+      const power = v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(c.x, c.z), this.nearHome(c.x, c.z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1;
+      return { size, power };
+    };
     this.contact = new BodyContact(player, bf);
     this.bands.riders = this.banditCamps.sw;
     this.relations = new Relations(v);
@@ -321,6 +348,12 @@ export class ExpeditionLoop {
     this.sound = new RadarSound(bf.sfx.ctx);
     this.dashes = player.dash.dashes;
     this.loot.watch(this.swarms.sw);
+    // Every kill goes through the item drops' fromKill (robots, bandits, fortress garrisons): a kit pickup rolls beside it.
+    this.kitOrbs = new KitOrbs(v as never, 0x4b17);
+    this.kitOrbsDraw = new KitOrbsDraw(field, this.player.v.kitOrbLife);
+    scene.add(this.kitOrbsDraw.group);
+    const itemKill = this.loot.drops.fromKill.bind(this.loot.drops);
+    this.loot.drops.fromKill = (key, threat, x, z, at) => { this.kitOrbs.fromKill(key, threat, x, z); return itemKill(key, threat, x, z, at); };
     this.quests = new QuestLoop(v as never, {
       exp: this.exp, hud: this.hud, sites: this.sites, camps: this.camps, bandits: this.bandits, drops: this.loot.drops,
       dropCtx: (x, z) => this.dropCtx(x, z), depth: (x, z) => this.depth.depth(x, z),
@@ -347,11 +380,17 @@ export class ExpeditionLoop {
   private bf: Battlefield;
 
   /**
-   * Hand the fortresses' bandit mechs what they need to come out (the toon look, a Rampart loader, the player's level);
+   * Hand the bandit mechs (the fortresses', the lances' and the camp guards') what they need to come out (the toon look, a Rampart loader, the player's level);
    * without it no mechs. Killed, the warlord drops warlordDrops items rolled as if from deep, hot ground; the others
    * fortMechDrops.
    */
   setupFortMechs(s: RivalSetup) {
+    this.fieldMechs.setup = s;
+    this.fieldMechs.onEvent = (e) => {
+      this.hud.note("Bandit mech down", "#ffb347", 3);
+      this.hotDrops(`banditmech:${e.id}`, this.v.lanceDrops, e.x, e.z);
+      this.quests?.killed("bandit", e.x, e.z);
+    };
     const m = this.forts.mechs;
     m.setup = s;
     m.onEvent = (e) => {
@@ -371,7 +410,18 @@ export class ExpeditionLoop {
 
   /** Where a drop rolls (loot rolls by depth and salvage heat). */
   private dropCtx(x: number, z: number) {
-    return { danger: this.depth.liveDanger(x, z), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth: this.depth.liveDepth(x, z) };
+    const depth = this.runThreat.effective(this.depth.liveDepth(x, z), this.nearHome(x, z));
+    return { danger: dangerOf(this.v, depth), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth };
+  }
+
+  /** Live danger at a place, with the run's threat (the deeper of the two). */
+  private threatDanger(x: number, z: number) {
+    return dangerOf(this.v, this.runThreat.effective(this.depth.liveDepth(x, z), this.nearHome(x, z)));
+  }
+
+  /** Near the convoy (within threatHome): the threat falls there and doesn't count (Keith 2026-11-14: no luring packs into its guns). */
+  private nearHome(x: number, z: number) {
+    return convoyDepth(this.route, x, z, this.v.depthTrain) < this.v.threatHome;
   }
 
   /** The summoner's units as prey (src/summon/aggro.ts; the lab sets it): each enemy kind's group near one may go for it. */
@@ -408,6 +458,7 @@ export class ExpeditionLoop {
     reg.add(mechOwner("fortress mechs", () => this.forts.mechs.list()));
     o.bands = [reg.add({ name: "war bands", publish: (r) => this.bands.publish(r) })];
     reg.add(mechOwner("hvt", () => this.quests.hvt.list()));
+    reg.add(mechOwner("bandit mechs", () => this.fieldMechs.list()));
   }
 
   /** Start over where the lab put the convoy (POIs kept clear of the start; camps too). */
@@ -428,6 +479,9 @@ export class ExpeditionLoop {
     this.columns.reset();
     this.skirmish.reset();
     this.threats.reset();
+    this.runThreat.set(0);
+    this.lances.reset();
+    this.fieldMechs.reset();
     this.blasts.length = 0;
     this.quests.reset();
     this.sites.keepClear(x, z, 190);
@@ -442,7 +496,7 @@ export class ExpeditionLoop {
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
-    const m = { x: this.at.x, z: this.at.z, out: true, loud: true, danger: this.depth.liveDanger(this.at.x, this.at.z) };
+    const m = { x: this.at.x, z: this.at.z, out: true, loud: true, danger: this.threatDanger(this.at.x, this.at.z) };
     if (what === "pack") {
       if (this.threats.pull(m)) this.hud.note("The noise is drawing a pack in", "#ffcf7a", 3);
     } else {
@@ -475,8 +529,8 @@ export class ExpeditionLoop {
     const { exp, fuel, carry, player, v, bf } = this, sim = player.sim, p = sim.pelvis;
     // Launched (on the sand), picked up (the crane has it: banked), or destroyed out there.
     const happened = exp.follow(carry.state, carry.attached, player.alive);
-    if (happened === "launched") { fuel.refill(); this.demoGoal = null; this.demoFrom = this.stripped; }
-    if (happened === "banked") this.sound.banked();
+    if (happened === "launched") { fuel.refill(); this.demoGoal = null; this.demoFrom = this.stripped; this.kitOrbs.reset(); for (const id of [...this.kitOrbsShown]) this.kitOrbsDraw.remove(id); this.kitOrbsShown.clear(); }
+    if (happened === "banked") { this.sound.banked(); this.restockKits(); }
     // A dead mech isn't picked up.
     if (!player.alive && (carry.state === "inRange" || carry.state === "pickup")) carry.state = "walking";
     if (!player.alive) carry.armed = false;
@@ -484,6 +538,12 @@ export class ExpeditionLoop {
     // The pilot killed on foot out there: the expedition is over, the at-risk list lost (Keith 2026-10-26).
     const pl = inp.pilot, foot = !!pl?.onFoot;
     if (foot && !pl!.alive && exp.state === "out") exp.pilotKilled();
+    // The run's threat: ratchets up to the deepest point out there, falls only aboard or by the convoy (Keith 2026-11-14).
+    {
+      const tx = foot ? pl!.x : p.x, tz = foot ? pl!.z : p.z;
+      const home = exp.state !== "out" || this.nearHome(tx, tz);
+      this.runThreat.update(dt, exp.state === "out" ? this.depth.liveDepth(tx, tz) : 0, exp.state === "out", home);
+    }
     // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
     const onSand = carry.state === "walking" || carry.state === "inRange";
     // Item drops are taken with E (Keith 2026-11-06: a choice, not a walk-over). E goes to the nearest drop in reach
@@ -566,7 +626,7 @@ export class ExpeditionLoop {
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
     const ev = exp.update(dt, inp.recallHeld && !inp.demo && player.alive, fuelOn && fuel.empty);
-    if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
+    if (ev === "home") { const r = exp.last?.reason; this.onHome?.(); fuel.refill(); this.demoGoal = null; if (r === "recalled" || r === "fuel") this.restockKits(); }
 
     // The way home: the return point and the warning.
     this.homeT -= dt;
@@ -605,18 +665,20 @@ export class ExpeditionLoop {
       w.band = []; w.rings = v.depthRings > 0 ? [v.depthNear, v.depthOut, v.depthDeep] : [];
       if (w.rings.length) for (let s = -v.convoyRadar * 1.6; s <= v.convoyRadar * 1.6; s += 100) { this.route.ahead(head + s, out); w.band.push({ x: out.x, z: out.z }); }
     }
-    this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.droids.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.striders.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.crushers.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    for (const c of this.banditCamps.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
-    for (const c of this.bands.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
+    const sr = v.mechRadar * Math.max(1.1, v.radarEnemySense * 1.05);
+    this.swarms.contacts(p.x, p.z, sr, w.contacts);
+    this.droids.contacts(p.x, p.z, sr, w.contacts);
+    this.striders.contacts(p.x, p.z, sr, w.contacts);
+    this.crushers.contacts(p.x, p.z, sr, w.contacts);
+    for (const c of this.banditCamps.contacts(p.x, p.z, sr, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
+    for (const c of this.bands.contacts(p.x, p.z, sr, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
     // Moving danger as heat: packs and raids (hotter hunting), and blasts for a few seconds.
     const heat = (w.heat ??= []);
     heat.length = 0;
     for (const q of this.threats.packs) heat.push({ id: q.id, x: q.x, z: q.z, guess: q.kind === "raid" ? q.n * 1.5 : q.n, awake: q.state !== "roam" });
     for (const b of this.blasts) heat.push({ id: b.id, x: b.x, z: b.z, guess: 20 * Math.max(0, 1 - b.t / 6), awake: true });
     // War band columns (their own heat colour) and the fights going on out of view (a flicker).
+    for (const l of this.lances.lances) if (l.state !== "live") heat.push({ id: l.id, x: l.x, z: l.z, guess: l.n * 8, awake: l.state !== "roam", faction: 1 });
     for (const c of this.columns.cols) if (c.state !== "live") heat.push({ id: c.id, x: c.x, z: c.z, guess: c.kinds.length * 2.5, awake: c.state !== "roam", faction: 1 });
     for (const f of this.skirmish.fighting()) heat.push({ id: "fight:" + f.id, x: f.x, z: f.z, guess: 10 + Math.sqrt(f.power) * 2, awake: true, faction: 1, fighting: true });
     inp.mark?.("radar lists");
@@ -651,6 +713,7 @@ export class ExpeditionLoop {
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive,
       pad: this.padHud(), depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
+      threat: v.threatOn > 0 && (exp.state === "out" || this.runThreat.m > 1) ? { level: this.runThreat.level(v.levelMetres), m: this.runThreat.m, falling: this.runThreat.falling, rising: this.runThreat.m < this.runThreat.peak - 1 } : null,
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
@@ -668,6 +731,32 @@ export class ExpeditionLoop {
       grab: this.grab, camera: this.camera, canvas: inp.canvas,
     });
     inp.mark?.("loot");
+    this.updateKitOrbs(dt, onSand, foot, pl);
+    inp.mark?.("kit pickups");
+  }
+
+  /** Back at the convoy: the kits topped up (Keith 2026-11-14). */
+  private restockKits() {
+    const n = this.player.kits.restock(this.player.v.kitHome);
+    if (n > 0) this.hud.note(`Repair kits restocked · ${this.player.kits.count}/${this.player.v.kitMax}`, "#9dffb0", 3);
+  }
+
+  private kitOrbsShown = new Set<string>();
+  /** Kit pickups: walked over by the mech (or the pilot on foot) on the sand, taken unless the kits are full. */
+  private updateKitOrbs(dt: number, onSand: boolean, foot: boolean, pl: LoopPilot | null | undefined) {
+    const { player, kitOrbs, kitOrbsDraw } = this, p = player.sim.pelvis, full = player.kits.count >= player.v.kitMax;
+    const who = [];
+    if (onSand && !foot && player.alive) who.push({ x: p.x, z: p.z, full });
+    if (onSand && foot && pl?.alive) who.push({ x: pl.x, z: pl.z, full });
+    const taken = kitOrbs.update(dt, who, { x: p.x, z: p.z });
+    for (const e of kitOrbs.events) {
+      if (e.type === "dropped") { kitOrbsDraw.add(e.orb); this.kitOrbsShown.add(e.orb.id); }
+      else if (e.type === "taken") { kitOrbsDraw.remove(e.orb.id); this.kitOrbsShown.delete(e.orb.id); }
+      else { kitOrbsDraw.remove(e.id); this.kitOrbsShown.delete(e.id); }
+    }
+    kitOrbs.events.length = 0;
+    for (let k = 0; k < taken; k++) if (player.kits.restock(1)) { this.kitsFound++; this.hud.note(`Repair kit · ${player.kits.count}/${player.v.kitMax}`, "#9dffb0", 2); this.sound.banked(); }
+    kitOrbsDraw.update(dt);
   }
 
   /**
@@ -703,7 +792,7 @@ export class ExpeditionLoop {
       } else if (e.type === "raid") {
         this.heatAnswer("raid");
       } else if (e.type === "extracted") {
-        this.sound.banked();
+        this.sound.banked(); this.restockKits();
       }
     }
     call.events.length = 0;
@@ -744,6 +833,7 @@ export class ExpeditionLoop {
    * columns wander, hear and come onto the field, the fight director points every live group at its enemies through
    * the register, and groups off the field that meet fight by the numbers and leave wreckage and loot.
    */
+  private lanceEvents: LanceEvent[] = [];
   private updateHumans(dt: number, hunting: boolean, prey: Prey | undefined, pilot: { x: number; z: number; notice: number } | null, bandPrey: Prey | undefined = prey) {
     const { v, player, bf } = this, sim = player.sim;
     const m = pilot ?? sim.pelvis;
@@ -757,13 +847,20 @@ export class ExpeditionLoop {
       if (left > 0 || !f || !hunting) { if (!f) this.fortCalls.set(poi, -1); continue; }
       // Out of the fortress on the mech's side, a little round from it, hunting the mech.
       const a = Math.atan2(m.x - f.L.x, m.z - f.L.z) + 0.9, R = f.L.reach + 30;
-      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.depth.liveDanger(f.L.x, f.L.z));
+      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.threatDanger(f.L.x, f.L.z));
       this.hud.note("War band out of the fortress", "#ff7ad0", 4);
       this.fortCalls.set(poi, -1);
     }
     const evs = this.columns.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud });
     for (const e of evs) { this.bands.bring(e.col); this.hud.note(`War band · ${e.col.kinds.length} vehicles`, "#ff7ad0", 4); this.sound.alarm(); }
     this.bands.update(dt, bandPrey ?? player, hunting, m);
+    // Bandit mech lances (lances.ts): the ones that close with the mech come onto the field; camp guards with their camps.
+    this.lanceEvents = this.lances.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud, danger: hunting ? this.threatDanger(m.x, m.z) : 0 }, this.lanceEvents);
+    for (const e of this.lanceEvents) {
+      this.fieldMechs.bring(e.lance);
+      if (e.lance.n > 0) { this.hud.note(`Bandit mech${e.lance.n > 1 ? `s · ${e.lance.n}` : ""} incoming`, "#ff7ad0", 4); this.sound.alarm(); }
+    }
+    this.fieldMechs.update(dt, hunting);
     // Who fights whom in view.
     const gl = this.groupList;
     gl.length = 0;
@@ -798,7 +895,7 @@ export class ExpeditionLoop {
     this.loud = loud;
     if (swarms.anyAwake || this.banditCamps.anyAlert || this.forts.anyAlert) threats.engaged = true;
     this.at.x = p.x; this.at.z = p.z;
-    this.events = threats.update(dt, { x: p.x, z: p.z, out: hunting, loud, danger: hunting ? this.depth.liveDanger(p.x, p.z) : 0 }, this.events);
+    this.events = threats.update(dt, { x: p.x, z: p.z, out: hunting, loud, danger: hunting ? this.threatDanger(p.x, p.z) : 0 }, this.events);
     if (this.pending.length) { if (hunting) this.events.push(...this.pending); this.pending.length = 0; }
     for (const e of this.events) {
       if (e.type === "engage") {
@@ -806,6 +903,11 @@ export class ExpeditionLoop {
         const raid = q.kind === "raid";
         swarms.addGroup(q.id, q.n, q.x, q.z, raid ? { mid: (v.raidMidShare + q.mid) * shareK(v), big: (v.raidBigShare + q.big) * shareK(v), bigMin: q.bigMin }
           : q.mid > 0 || q.big > 0 || q.bigMin ? { mid: (v.robotMidShare + q.mid) * shareK(v), big: (v.robotBigShare + q.big) * shareK(v), bigMin: q.bigMin } : undefined, q.hurt ?? 0, q.goal);
+      } else if (e.type === "mechRaid") {
+        // A raid (or the first fight) that is bandit mechs: a lance hunting the mech from the raid's distance (the first fight's: just outside its engage range).
+        const me = { x: p.x, z: p.z, out: true, loud, danger: this.threatDanger(p.x, p.z) };
+        const l = e.first ? this.lances.hunt("scout", me, v.lanceEngage + 20, v.lanceEngage + 50) : this.lances.hunt("raid", me, v.raidFrom, v.raidFrom * 1.15);
+        if (l && !e.first) { this.hud.note(`Bandit mech raid · ${l.n} mech${l.n > 1 ? "s" : ""} · ${Math.round(Math.hypot(l.x - p.x, l.z - p.z))} m`, "#ff7ad0", 4); this.sound.alarm(); }
       } else if (e.type === "raid") {
         this.hud.note(`Raid coming · ${e.pack.n} robots · ${Math.round(Math.hypot(e.pack.x - p.x, e.pack.z - p.z))} m`, "#ff9a7a", 4);
         this.sound.alarm();
@@ -859,6 +961,11 @@ export class ExpeditionLoop {
       const raid = q.kind === "raid", coming = q.state !== "roam";
       marks.push({ id: q.id, x: q.x, y: field.height(q.x, q.z) + 3, z: q.z, text: raid ? "RAID" : q.state === "live" ? "CONTACT" : coming ? "DUST · COMING" : "DUST",
         color: raid ? "#ff7a5a" : coming ? "#ffb347" : "#e8d6b0", strength: raid || coming ? 1 : 1 - d / (v.plumeRange * 1.2) });
+    }
+    for (const l of this.lances.lances) {
+      const d = Math.hypot(l.x - p.x, l.z - p.z);
+      if (d > v.plumeRange || l.state === "roam") continue;
+      marks.push({ id: l.id, x: l.x, y: field.height(l.x, l.z) + 5, z: l.z, text: l.state === "live" ? "MECH" : "MECH · COMING", color: "#ff7ad0", strength: 1 });
     }
     for (const b of this.blasts) marks.push({ id: b.id, x: b.x, y: field.height(b.x, b.z) + 3, z: b.z, text: "BLAST", color: "#ffd27a", strength: 1 - b.t / 6 });
     for (const m of this.quests.marks) marks.push(m);

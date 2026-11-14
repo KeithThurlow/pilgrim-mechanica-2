@@ -10,7 +10,7 @@ import { DEPTH_GROUP, robotMult, scaled, type DangerFn } from "./depth";
 export const CAMP_DEFAULTS = {
   campSeed: 7,
   campCell: 520,
-  campChance: 0.45,
+  campChance: 0.3,
   campMin: 6,
   campMax: 24,
   campGuess: 0.4,

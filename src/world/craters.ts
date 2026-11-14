@@ -247,7 +247,8 @@ export class CraterLayer {
       if (p >= 1) return 1;
     }
     const m = this.field.modifier;
-    if (m) {
+    // Open sand (no pad or road within the margin): none of the reads below would find a floor.
+    if (m && !m.noFloor?.(x, z, M + 1e-3)) {
       // A modifier's floor (pad, road) is protected and its own blend eases out; then dilated by the margin: the
       // strongest of the point and rings at the margin and half of it.
       const w = (px: number, pz: number) => (m.at(px, pz, this.ms) ? smooth(0, 0.25, this.ms.w) : 0);
