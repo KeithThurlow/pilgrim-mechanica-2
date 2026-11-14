@@ -358,7 +358,7 @@ export class ThreatField {
       if (p.state === "hunt") {
         const want = Math.atan2(p.tx - p.x, p.tz - p.z);
         p.heading = want;
-        p.speed = p.kind === "raid" ? v.raidSpeed : v.roamHuntSpeed;
+        p.speed = p.kind === "raid" || p.kind === "scout" ? v.raidSpeed : v.roamHuntSpeed;   // the first fight's scout catches a walking mech
       } else {
         // Wander: hold a heading, swing to a new one now and then, drifting away from the mech when very close.
         p.turn -= dt;

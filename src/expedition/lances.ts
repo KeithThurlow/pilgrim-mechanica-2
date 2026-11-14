@@ -24,7 +24,7 @@ export const LANCE_DEFAULTS = {
   lanceMin: 1,
   lanceMax: 2,
   lanceSpeed: 3,
-  lanceHuntSpeed: 5,
+  lanceHuntSpeed: 7,
   lanceHear: 280,
   lanceLoud: 1.6,
   lanceEngage: 140,
