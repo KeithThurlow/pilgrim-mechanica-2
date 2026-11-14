@@ -397,25 +397,25 @@ export const BASES: Base[] = [
   roundGun("flak-medium", "Flak cannon", "M", "flak", ["weapon", "ballistic", "flak"], 2.6, ["Suzaku", "Stratford-Aegis"], "rampart-turret", 0.9, { arc: s(30, 0.08), track: s(10, 0.08) }),
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
-    id: "sh-rpg", name: "Shoulder rocket", kind: "shoulder", shoulder: "rpg", tags: ["shoulder", "explosive", "rocket"], weight: 1.8, makers: ["Suzaku"], look: "rampart-rocket", drop: 1,
+    id: "sh-rpg", name: "Shoulder rocket", kind: "shoulder", shoulder: "rpg", tags: ["shoulder", "explosive", "rocket"], weight: 1.8, makers: ["Suzaku"], look: "rampart-rocket", drop: 1.5,
     stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgShoulderCooldown, 0.1), magazine: s(WD.rpgShoulderMag, 0.3), reload: s(WD.rpgShoulderReload, 0.1) },
   },
   {
-    id: "sh-missiles", name: "Missile pod", kind: "shoulder", shoulder: "missiles", tags: ["shoulder", "explosive", "missiles"], weight: 2.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart-rocket", drop: 1,
+    id: "sh-missiles", name: "Missile pod", kind: "shoulder", shoulder: "missiles", tags: ["shoulder", "explosive", "missiles"], weight: 2.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart-rocket", drop: 1.5,
     stats: { rockets: s(WD.swarmMissiles, 0.2), damage: s(WD.swarmDamage, 0.1), ap: s(WD.swarmAp, 0), blast: s(WD.swarmBlast, 0.08), cooldown: s(WD.swarmCooldown, 0.1) },
   },
   {
-    id: "sh-mortar", name: "Big mortar", kind: "shoulder", shoulder: "mortar", tags: ["shoulder", "explosive", "mortar"], weight: 3.4, makers: ["Suzaku"], look: "rampart-siege", drop: 0.8,
+    id: "sh-mortar", name: "Big mortar", kind: "shoulder", shoulder: "mortar", tags: ["shoulder", "explosive", "mortar"], weight: 3.4, makers: ["Suzaku"], look: "rampart-siege", drop: 1.2,
     stats: { damage: s(WD.mortarDamage, 0.1), ap: s(WD.mortarAp, 0), blast: s(WD.mortarBlast, 0.08), cooldown: s(WD.mortarCooldown, 0.1) },
   },
   {
-    id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 0.8,
+    id: "sh-linemortar", name: "Line mortar", kind: "shoulder", shoulder: "linemortar", tags: ["shoulder", "explosive", "mortar"], weight: 2.8, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart-siege", drop: 1.2,
     stats: { shells: s(WD.salvoRockets, 0.2), damage: s(WD.salvoDamage, 0.1), ap: s(WD.salvoAp, 0), cooldown: s(WD.salvoCooldown, 0.1), stripLength: s(WD.salvoLength, 0.1), blast: s(WD.salvoBlast, 0.08) },
   },
   // The napalm launcher (Keith 2026-11-05: "a lot like line mortar ... shoulder mounted"): canisters up a painted strip,
   // each a small burst and a pool of burning gel (src/game/firePools.ts). Base values from the Napalm launcher sliders.
   {
-    id: "sh-napalm", name: "Napalm launcher", kind: "shoulder", shoulder: "napalm", tags: ["shoulder", "fire", "mortar", "napalm"], weight: 2.6, makers: ["Suzaku"], look: "rampart-siege", drop: 0.8,
+    id: "sh-napalm", name: "Napalm launcher", kind: "shoulder", shoulder: "napalm", tags: ["shoulder", "fire", "mortar", "napalm"], weight: 2.6, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
     stats: { shells: s(WD.napalmShells, 0.2), damage: s(WD.napalmDamage, 0.1), ap: s(WD.napalmAp, 0), cooldown: s(WD.napalmCooldown, 0.1), stripLength: s(WD.napalmLength, 0.1), blast: s(WD.napalmBlast, 0.08),
       poolRadius: s(WD.napalmPool, 0.1), poolTime: s(WD.napalmPoolTime, 0.12), poolDps: s(WD.napalmPoolDps, 0.12), burnTime: s(WD.napalmBurnTime, 0.12), burnDps: s(WD.napalmBurnDps, 0.12) },
   },

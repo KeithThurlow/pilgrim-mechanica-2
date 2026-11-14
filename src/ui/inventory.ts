@@ -308,11 +308,13 @@ export function inventoryScreen(o: InventoryOptions) {
   type GridId = "cargo" | "stash";
   const GRID_LAYOUT_V = 2;
   // Filter chips (Keith 2026-11-03): items outside the filter are dimmed in the grids.
-  type Filter = "all" | "hullWeapon" | "held" | "parts" | "gear" | "protocol";
-  const FILTERS: [Filter, string][] = [["all", "All"], ["hullWeapon", "Hull weapons"], ["held", "Held"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
-  let filter: Filter = "all";
-  const passes = (x: Item) => filter === "all" || isSalvage(x) || (filter === "hullWeapon" ? isHullWeapon(x) : filter === "held" ? x.kind === "weapon" && !isHullWeapon(x)
-    : filter === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : filter === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol");
+  type Filter = "hullWeapon" | "held" | "parts" | "gear" | "protocol";
+  const FILTERS: [Filter, string][] = [["hullWeapon", "Hull weapons"], ["held", "Held"], ["parts", "Legs, hulls, sensors"], ["gear", "Shoulder, back, waist"], ["protocol", "Protocols"]];
+  /** Toggle tags (Keith 2026-11-14): click adds, click again removes; none selected shows everything. */
+  const filters = new Set<Filter>();
+  const matches = (f: Filter, x: Item) => f === "hullWeapon" ? isHullWeapon(x) : f === "held" ? x.kind === "weapon" && !isHullWeapon(x)
+    : f === "parts" ? x.kind === "legs" || x.kind === "hull" || x.kind === "sensor" : f === "gear" ? x.kind === "shoulder" || x.kind === "pack" || x.kind === "waist" : x.kind === "protocol";
+  const passes = (x: Item) => filters.size === 0 || isSalvage(x) || [...filters].some((f) => matches(f, x));
   const gv = (): GridValues & GridSizeValues => {
     const t = o.tuning as Record<string, number | undefined>, out: Record<string, number> = { ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS };
     for (const k in out) if (typeof t[k] === "number") out[k] = t[k]!;
@@ -591,7 +593,7 @@ export function inventoryScreen(o: InventoryOptions) {
         // The item's own picture, as big as the tile takes (guns and swords laid flat), and its grid size beside the
         // label (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid spaces that
         // item needs").
-        const c = itemCells(shown, gv()), flat = c.h >= 2 * c.w && TALL.includes(gridClassOf(shown));
+        const c = itemCells(shown, gv()), flat = !TALL.includes(gridClassOf(shown)) && c.h >= 2 * c.w; // weapons are drawn wide already (Keith 2026-11-14)
         const pic0 = tilePic(), fw = flat ? c.h : c.w, fh = flat ? c.w : c.h, px = Math.min(pic0.w / fw, pic0.h / fh, pic0.h / 1.6);
         const svg = itemIcon(shown, RARITY[shown.rarity].color, flat, gv());
         svg.style.width = `${fw * px}px`; svg.style.height = `${fh * px}px`;
@@ -792,7 +794,7 @@ export function inventoryScreen(o: InventoryOptions) {
   /** Every item the Show chip lets through, in the grids on show (the stash and cargo aboard, the cargo out). */
   function selectShown() {
     const xs = field() ? pool() : [...st.cargo.items, ...st.stash.items];
-    for (const x of xs) if (filter === "all" || passes(x)) selected.add(x.id);
+    for (const x of xs) if (passes(x)) selected.add(x.id);
     scrapSure = false;
     render();
   }
@@ -829,7 +831,7 @@ export function inventoryScreen(o: InventoryOptions) {
   function selBar() {
     const bar = el("div", "inv-selbar");
     bar.append(btn(selectMode ? "Selecting: click items" : "Select", () => { selectMode = !selectMode; render(); }, "small chip" + (selectMode ? " on" : "")));
-    bar.append(btn(filter === "all" ? "Select all" : "Select shown", selectShown, "small"));
+    bar.append(btn(filters.size === 0 ? "Select all" : "Select shown", selectShown, "small"));
     const xs = selItems();
     if (xs.length) {
       const val = xs.reduce((n, x) => n + itemValue(x, vv()), 0);
@@ -880,7 +882,7 @@ export function inventoryScreen(o: InventoryOptions) {
     for (const k of SORT_KEYS) bar.append(btn(SORT_NAMES[k] + (k === sortKey ? (sortUp ? " ▲" : " ▼") : ""), () => setSort(k), "small chip" + (k === sortKey ? " on" : "")));
     bar.append(btn("Tidy both", () => { tidy("cargo"); if (!field()) tidy("stash"); }, "small"));
     bar.append(el("span", "inv-gap"), el("span", "dim", "Show"));
-    for (const [f, label] of FILTERS) bar.append(btn(label, () => { filter = f; render(); }, "small chip" + (f === filter ? " on" : "")));
+    for (const [f, label] of FILTERS) bar.append(btn(label, () => { if (!filters.delete(f)) filters.add(f); render(); }, "small chip" + (filters.has(f) ? " on" : "")));
     const kids: HTMLElement[] = [head, bar, selBar()];
     if (message && messageT > 0) kids.push(el("div", "inv-msg", message));
     const body = el("div", "inv-body");

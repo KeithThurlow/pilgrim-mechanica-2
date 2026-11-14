@@ -21,6 +21,18 @@ export const REPAIR_DEFAULTS = {
   kitPrice: 40,
   /** Chance a stripped wreck gives a kit (scrap piles half that). */
   kitSalvage: 0.12,
+  /** Kits an enemy kill leaves as a pickup (the base chance; a kill's threat adds below). */
+  kitKill: 0.04,
+  /** Extra chance per unit of kill threat (drops.ts threatScale: 1 is an enemy worth one item). */
+  kitKillThreat: 0.3,
+  /** The most chance one kill gives. */
+  kitKillMax: 0.6,
+  /** Metres the mech (or the pilot) must be from a kit pickup to take it by walking over it. */
+  kitOrbReach: 3.5,
+  /** Seconds a kit pickup lies on the sand before it burns out. */
+  kitOrbLife: 90,
+  /** Kits restocked when the mech is back at the convoy (banked, recalled, out of fuel, extracted; not when lost). */
+  kitHome: 3,
   /** Loudness of the kit's ratchet and hiss, its clank and the low hull warning. */
   kitSound: 0.8,
 };
@@ -35,6 +47,12 @@ export const REPAIR_PARAMS: Param[] = [
   { key: "kitHandTime", label: "Patch by hand: hold (s)", min: 0.2, max: 10, step: 0.1, group: G, tip: "On foot, hold Q beside the mech this long to use a kit on it" },
   { key: "kitHandReach", label: "Patch by hand: reach (m)", min: 1, max: 8, step: 0.1, group: G },
   { key: "kitPrice", label: "Kit price (scrap)", min: 0, max: 500, step: 5, group: G, tip: "At a bay terminal (B on the deck)" },
+  { key: "kitKill", label: "Kit pickup from a kill (chance)", min: 0, max: 1, step: 0.01, group: G, tip: "Base chance each enemy kill leaves a repair kit pickup on the sand (walk over it)" },
+  { key: "kitKillThreat", label: "Kit pickup: more per threat", min: 0, max: 2, step: 0.01, group: G, tip: "Added chance × the kill's threat scale (an excavator is ~1.7, a scrapper ~0.02)" },
+  { key: "kitKillMax", label: "Kit pickup: most chance", min: 0, max: 1, step: 0.01, group: G },
+  { key: "kitOrbReach", label: "Kit pickup reach (m)", min: 1, max: 12, step: 0.1, group: G, tip: "Walk this close to take it (not taken at full kits)" },
+  { key: "kitOrbLife", label: "Kit pickup lasts (s)", min: 10, max: 600, step: 5, group: G },
+  { key: "kitHome", label: "Kits restocked at the convoy", min: 0, max: 10, step: 1, group: G, tip: "Back aboard (banked, recalled, no fuel, extracted): kits topped up by this many; a lost mech gets none" },
   { key: "kitSound", label: "Kit and warning sound", min: 0, max: 2, step: 0.05, group: G },
   { key: "kitSalvage", label: "Kit from a wreck (chance)", min: 0, max: 1, step: 0.01, group: G, tip: "Each stripped wreck; scrap piles half this" },
 ];
