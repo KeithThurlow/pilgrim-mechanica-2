@@ -283,7 +283,7 @@ export class ExpeditionLoop {
     this.banditCamps = new BanditCamps(v, field, bf, scene, this.bandits, player, opts.vat ?? null, blocked);
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     // War band columns are sized when they turn up, by the deeper of the place and the run's threat (Keith 2026-11-14).
-    this.columns.danger = (x, z) => dangerOf(v, this.runThreat.effective(this.depth.depth(x, z)));
+    this.columns.danger = (x, z) => dangerOf(v, this.runThreat.effective(this.depth.depth(x, z), this.nearHome(x, z)));
     this.bands = new WarBands(v, bf, scene, this.columns, deaths);
     this.lances = new LanceField(v, 53, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.fieldMechs = new FieldMechs(v as never, bf, scene, player, this.lances, this.banditCamps);
@@ -294,7 +294,7 @@ export class ExpeditionLoop {
     this.banditCamps.threat = (c) => {
       const d = this.threatDanger(c.x, c.z);
       const size = Math.max(1, scaled(v.banditSizeFar, d) / Math.max(1e-3, scaled(v.banditSizeFar, c.danger)));
-      const power = v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(c.x, c.z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1;
+      const power = v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(c.x, c.z), this.nearHome(c.x, c.z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1;
       return { size, power };
     };
     this.contact = new BodyContact(player, bf);
