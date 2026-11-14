@@ -18,7 +18,7 @@ const verbose = process.argv.includes("--verbose");
 
 const RULES: Record<string, { tris: number; sockets: string[]; half: [number, number, number] }> = {
   pack: { tris: 2000, sockets: ["Mount", "Top"], half: [0.95, 0.8, 0.85] },
-  arm: { tris: 1500, sockets: ["Shoulder", "Grip_R"], half: [1.2, 2.2, 1.6] },
+  arm: { tris: 1500, sockets: ["Shoulder", "Grip"], half: [1.2, 2.2, 1.6] },
   sensor: { tris: 1000, sockets: [], half: [1.2, 1.6, 1.2] },
   waist: { tris: 1000, sockets: ["Mount"], half: [0.9, 0.9, 0.9] },
 };

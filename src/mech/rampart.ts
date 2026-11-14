@@ -27,7 +27,7 @@ import { armIk, type SwordPose } from "../weapons/sword";
 export interface HeldPose extends SwordPose { upper: number; fore: number; out: number }
 import { HeadDriver, HEAD_DEFAULTS, type HeadValues } from "./head";
 import { fromGlb, sensorGlb, standInSensor, type SensorModel } from "./sensorModels";
-import { partFromGlb, partGlb } from "./partModels";
+import { armFromGlb, partFromGlb, partGlb } from "./partModels";
 import { BASE_BY_ID, type SensorStyle } from "../items/bases";
 import { AVAILABLE_LOOKS } from "../items/item";
 import { footShapeOr, type FootShape } from "../fx/footprint";
@@ -211,7 +211,9 @@ interface PodRig {
   kickBase?: THREE.Vector3;
   /** A weapon-driven pose (holdPose) and its two-bone arm, built on first use. */
   held?: boolean;
-  ik?: { g: THREE.Group; upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; stub: THREE.Mesh; joint: THREE.Mesh };
+  ik?: { g: THREE.Group; upper: THREE.Object3D; fore: THREE.Object3D; elbow: THREE.Object3D; hand: THREE.Object3D; stub: THREE.Object3D; joint: THREE.Object3D; armId?: string | null };
+  /** The fitted arm's item base id (its model takes the box arm's place once loaded). */
+  armId?: string | null;
 }
 
 export class RampartBody {
@@ -580,6 +582,7 @@ export class RampartBody {
     const S = MOUNT_STANDIN;
     for (const p of this.pods) {
       const L = p.side === 1, arm = (L ? parts.mountL : parts.mountR) === "arm";
+      if (parts.armL !== undefined) p.armId = L ? parts.armL : parts.armR ?? null;
       // An arm: the gun pivot moves down to its hand and the held weapon draws smaller; the arm shows even unarmed.
       p.yawPitch.visible = (L ? parts.gunLeft : parts.gunRight) || arm;
       p.yawPitch.position.copy(p.home);
@@ -770,7 +773,8 @@ export class RampartBody {
     ik.g.visible = true;
     const e = this.tmp.e2.set(r.elbow.x, r.elbow.y, r.elbow.z), h = this.tmp.h2.set(r.hand.x, r.hand.y, r.hand.z);
     const d = this.tmp.d2;
-    const bone = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
+    if (ik.armId !== p.armId) this.fitArm(p, ik);
+    const bone = (m: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3) => {
       d.copy(b).sub(a); const len = d.length();
       m.position.copy(a);
       m.quaternion.setFromUnitVectors(UP, d.divideScalar(Math.max(1e-6, len)));
@@ -841,6 +845,25 @@ export class RampartBody {
     const S = MOUNT_STANDIN;
     p.kick.scale.setScalar(S.heldScale * (cls === "smg" ? v.smgScale : 1));
     p.kickBase!.set(S.gunAt[0] - S.handAt[0], S.gunAt[1] - S.handAt[1], S.gunAt[2] - S.handAt[2] - (cls === "minigun" ? v.minigunGripBack : 0));
+  }
+
+  /** Swap an arm's box pieces for its item's model (public/models/parts/<arm base id>.glb) when there is one. */
+  private fitArm(p: PodRig, ik: NonNullable<PodRig["ik"]>) {
+    const id = p.armId ?? null, look = this.look;
+    ik.armId = id;
+    if (!id || !look) return;
+    void partGlb(id).then((scene) => {
+      const m = scene && ik.armId === id ? armFromGlb(scene, look) : null;
+      if (!m) return;
+      for (const k of ["joint", "upper", "fore", "elbow", "hand"] as const) {
+        const old = ik[k];
+        m[k].position.copy(old.position); m[k].quaternion.copy(old.quaternion); m[k].scale.copy(old.scale);
+        ik.g.remove(old);
+        ik.g.add(m[k]);
+        ik[k] = m[k];
+      }
+      this.repaint();
+    });
   }
 
   /** The two-bone arm a held pose draws: boxes along +Y (stretched to each bone), an elbow and a fist. */

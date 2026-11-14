@@ -34,7 +34,7 @@ export function partGlb(id: string): Promise<THREE.Object3D | null> {
  * The geometry as plain float attributes (position, normal, rgb colour) with its index: Blender's exporter packs
  * normalised 16-bit colours and may interleave, which the unit look's outline shell and the part merges can't copy.
  */
-function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
+export function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
   for (const [name, size] of [["position", 3], ["normal", 3], ["color", 3]] as const) {
     const a = g.getAttribute(name);
@@ -68,4 +68,31 @@ export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group 
   root.add(copy);
   dressPart(copy, look);
   return root;
+}
+
+/** The length an arm model's bones are authored at (tools/blender/parts/arms.py). */
+const ARM_BONE = 1.45;
+
+/**
+ * An arm model's posed pieces for one mech (src/mech/rampart.ts drawArm): the shoulder (Body), the two bones turned to
+ * run one unit up +Y from their near joint (the game stretches them to the bone), the elbow and the fist. Null when the
+ * GLB lacks a piece.
+ */
+export function armFromGlb(scene: THREE.Object3D, look: ToonLook): { joint: THREE.Object3D; upper: THREE.Object3D; fore: THREE.Object3D; elbow: THREE.Object3D; hand: THREE.Object3D } | null {
+  const copy = scene.clone(true);
+  const get = (n: string) => copy.getObjectByName(n) ?? null;
+  const upper = get("Upper"), fore = get("Fore"), elbow = get("Elbow"), hand = get("Hand"), body = get("Body");
+  if (!upper || !fore || !elbow || !hand || !body) return null;
+  // The bones are authored from the far joint up to the near one: turn them over and make them one unit long.
+  for (const bone of [upper, fore]) bone.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) m.geometry = plain(m.geometry).rotateX(Math.PI).translate(0, ARM_BONE, 0).scale(1, 1 / ARM_BONE, 1);
+  });
+  const joint = new THREE.Group();
+  const glow = get("Glow");
+  joint.add(body);
+  if (glow) joint.add(glow);
+  const out = { joint, upper, fore, elbow, hand };
+  for (const o of Object.values(out)) { o.removeFromParent(); o.position.set(0, 0, 0); dressPart(o, look); }
+  return out;
 }

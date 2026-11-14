@@ -111,14 +111,14 @@ class Build:
         return S
 
     def node(self, name, pivot, parent=None, **move):
-        P = V.Piece(name, pivot, len(self.nodes) + 11)
+        P = V.Piece(name, (0, 0, 0), len(self.nodes) + 11)     # authored about its own pivot
         self.nodes[name] = (P, Vector(pivot), parent, move)
         return P
 
     def node_glow(self, name):
         """A lit piece riding a moving node (a lens on a head): authored about the node's pivot, like the node's own."""
         if name not in self.glows:
-            self.glows[name] = V.Piece(name + "_Glow", self.nodes[name][1], len(self.glows) + 31)
+            self.glows[name] = V.Piece(name + "_Glow", (0, 0, 0), len(self.glows) + 31)
         return self.glows[name]
 
     def socket(self, name, at, forward=None):

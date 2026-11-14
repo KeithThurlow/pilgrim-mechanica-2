@@ -1,0 +1,67 @@
+{
+ "id": "arm-loader",
+ "kind": "arm",
+ "name": "Loader arm",
+ "maker": "Suzaku Dynamics",
+ "says": "heavy lifter: girder, exposed rams, pincer hand",
+ "tris": 1008,
+ "meshes": 5,
+ "size": [
+  0.7,
+  3.31,
+  0.75
+ ],
+ "min": [
+  -0.35,
+  -3.07,
+  -0.31
+ ],
+ "max": [
+  0.35,
+  0.24,
+  0.44
+ ],
+ "sockets": {
+  "Shoulder": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "Grip": [
+   0.0,
+   -2.9,
+   -0.0
+  ]
+ },
+ "moving": {
+  "Upper": {
+   "pivot": [
+    0.0,
+    -1.45,
+    -0.0
+   ]
+  },
+  "Elbow": {
+   "pivot": [
+    0.0,
+    -1.45,
+    -0.0
+   ]
+  },
+  "Fore": {
+   "pivot": [
+    0.0,
+    -2.9,
+    -0.0
+   ]
+  },
+  "Hand": {
+   "pivot": [
+    0.0,
+    -2.9,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/arms.py"
+}

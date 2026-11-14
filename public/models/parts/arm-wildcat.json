@@ -1,0 +1,67 @@
+{
+ "id": "arm-wildcat",
+ "kind": "arm",
+ "name": "Wildcat arm",
+ "maker": "Novus-Lux",
+ "says": "slim quick arm: fairings, ball joints, lit forearm",
+ "tris": 692,
+ "meshes": 6,
+ "size": [
+  0.54,
+  3.23,
+  0.597
+ ],
+ "min": [
+  -0.27,
+  -3.01,
+  -0.2568
+ ],
+ "max": [
+  0.27,
+  0.22,
+  0.34
+ ],
+ "sockets": {
+  "Shoulder": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "Grip": [
+   0.0,
+   -2.9,
+   -0.0
+  ]
+ },
+ "moving": {
+  "Upper": {
+   "pivot": [
+    0.0,
+    -1.45,
+    -0.0
+   ]
+  },
+  "Elbow": {
+   "pivot": [
+    0.0,
+    -1.45,
+    -0.0
+   ]
+  },
+  "Fore": {
+   "pivot": [
+    0.0,
+    -2.9,
+    -0.0
+   ]
+  },
+  "Hand": {
+   "pivot": [
+    0.0,
+    -2.9,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/arms.py"
+}
