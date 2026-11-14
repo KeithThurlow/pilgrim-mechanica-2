@@ -30,6 +30,7 @@ export const UPPER_DEFAULTS = {
   fireCone: 4,
   gunSpacing: 1.02,
   heldTrack: 1.8,
+  heldMinAim: 5,
   heldOutward: 0.9,
   runArmOut: 170,
   runArmIn: 50,
@@ -85,6 +86,7 @@ export const UPPER_PARAMS: Param[] = [
   { key: "fireCone", label: "Fire cone (°)", min: 0.5, max: 30, step: 0.5, group: "Torso & guns", tip: "A gun fires only once it points this close to the aim" },
   { key: "gunSpacing", label: "Gun spacing (m)", min: 0, max: 3, step: 0.01, group: "Torso & guns", tip: "Each gun aims from its own shoulder, this far from the middle" },
   { key: "heldTrack", label: "Held weapons: tracking ×", min: 0.5, max: 4, step: 0.05, group: "Held weapons", tip: "Keith 2026-11-03: arms track from the shoulder much faster than hull weapons. Every held weapon's tracking (its arm's × the weapon's handling) times this" },
+  { key: "heldMinAim", label: "Held weapons: closest aim (m)", min: 0, max: 10, step: 0.1, group: "Held weapons", tip: "Keith 2026-11-14: an aim point nearer the hull than this (from the middle of the shoulders) is pushed out along its line, so two held weapons (swords) converge but their hands never overlap" },
   { key: "heldOutward", label: "Held weapons: outward swing speed", min: 0.1, max: 1.5, step: 0.01, group: "Held weapons", tip: "As Outward swing speed, for arms: share of the tracking an arm swings outward (inward is full speed)" },
   { key: "runArmOut", label: "Sprinting: arm swings out to (°)", min: 0, max: 178, step: 1, group: "Held weapons", tip: "Keith 2026-11-03: sprinting, the hull faces the run and only the arms track. Each arm swings this far out from straight ahead (left arm to the left), off the hull's facing. Keith 2026-11-06: past side-on the elbow rolls up and the wrist turns over (Arm roll), so 170: nearly straight back (was 95)" },
   { key: "armUpper", label: "Arm pose: upper arm (m)", min: 0.4, max: 3, step: 0.01, group: "Held weapons", tip: "Keith 2026-11-03: the arm reaches from the shoulder to the gun's aim (two bones, the elbow finds itself)" },
@@ -321,6 +323,14 @@ export class UpperSim {
     for (const g of this.guns) {
       const own = g.stats, free = this.freeArms[g.side === 1 ? 0 : 1];
       aim = free ? this.armAim : torsoAim;
+      if (aim && own?.held && v.heldMinAim > 0) {
+        // Keep the hands apart: an aim closer than heldMinAim (from the shoulders' middle) is pushed out along its line.
+        const dx = aim.x - shoulder.x, dz = aim.z - shoulder.z, d = Math.hypot(dx, dz);
+        if (d < v.heldMinAim) {
+          const k = d < 1e-3 ? 0 : v.heldMinAim / d;
+          aim = { ...aim, x: d < 1e-3 ? shoulder.x + Math.sin(this.torsoYaw) * v.heldMinAim : shoulder.x + dx * k, z: d < 1e-3 ? shoulder.z + Math.cos(this.torsoYaw) * v.heldMinAim : shoulder.z + dz * k };
+        }
+      }
       const ymax = (own?.arc ?? v.podYawMax) * D2R, track = (own?.track ?? v.podTrack) * (own?.held ? v.heldTrack : 1);
       // The yaw window off the torso, as [low, high] (+ to the mech's left): the gun's arc both ways, or sprinting with a
       // free arm, the shoulder's own: further out than across the chest.
