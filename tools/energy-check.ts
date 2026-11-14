@@ -8,13 +8,13 @@
 // Run: npm test (or npx tsx tools/energy-check.ts).
 import * as THREE from "three";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
-import { EnergySim, energyStats, isEnergy, type EnergyPool } from "../src/weapons/energy/energySim";
+import { EnergySim, energyNeed, energyStats, isEnergy, type EnergyPool } from "../src/weapons/energy/energySim";
 import { EnergyGuns } from "../src/weapons/energy/energyGuns";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { Reactor, REACTOR_DEFAULTS } from "../src/mech/reactor";
 import { BASE_BY_ID } from "../src/items/bases";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
-import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
+import { defaultLoadout, energyNeedOf, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
 import { loadoutFor } from "../src/items/weaponPick";
 import { itemDps } from "../src/items/power";
@@ -132,6 +132,41 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   must(s3.on, "the sunder beam wasn't blasting half a second in");
   s3.drop();
   must(!s3.on && s3.phase === 0 && s3.step(dt, false, st, pool(100)).shots === 0, "a dash didn't cut the sunder beam off");
+}
+
+// ---- Capacitor gating (Keith 2026-11-14, soft limits): a shot bigger than the reactor holds ----
+{
+  const capped = (n: number, cap: number) => Object.assign(pool(n), { cap });
+  // A sunder beam on a reactor too small for its press: never starts, however long it's held, takes nothing.
+  const st = energyStats("sunder", null, V), small = capped(V.sunderEnergy * 0.9, V.sunderEnergy * 0.9), s1 = new EnergySim();
+  for (let t = 0; t < 3; t += dt) s1.step(dt, true, st, small);
+  must(s1.phase === 0 && s1.under && s1.dry && near(small.left, V.sunderEnergy * 0.9), "an underpowered sunder beam started or spent energy");
+  // Big enough: it fires (and isn't flagged). Energy free: never gated.
+  const big = capped(V.sunderEnergy, V.sunderEnergy), s2 = new EnergySim();
+  s2.step(dt, true, st, big);
+  must(s2.phase === 1 && !s2.under, "a sunder beam with a reactor just big enough didn't start");
+  const s3 = new EnergySim(); s3.step(dt, true, st, capped(0, 0.5), true);
+  must(s3.phase === 1 && !s3.under, "a free sunder beam (Energy 0) was gated");
+  // A lance on a reactor holding half its full charge: charges to half, however long, and fires at that power.
+  const ls = energyStats("lance", null, V), half = capped(100, V.lanceEnergy * 0.5), s4 = new EnergySim();
+  for (let t = 0; t < V.lanceCharge * 3; t += dt) s4.step(dt, true, ls, half);
+  must(Math.abs(s4.charge - 0.5) < 1e-6 && s4.under, `an underpowered lance charged to ${s4.charge.toFixed(3)} (want 0.5)`);
+  const power = s4.step(dt, false, ls, half).power;
+  must(Math.abs(power - 0.5) < 1e-6, `the underpowered lance fired at ${power.toFixed(3)}`);
+  // Per-shot weapons aren't gated.
+  must(energyNeed("laser", 0.05) === 0 && energyNeed("beam", 0.4) === 0 && energyNeed("arc", 0.06) === 0, "a per-shot weapon has a gated need");
+  // Items: the Rampart's reactor holds a sunder shot, a 3-bar Salvager's doesn't, a capacitor bank tops it up.
+  const lo = defaultLoadout();
+  fit(lo, "mountL", makeItem("sunder-medium"));
+  const ramp = resolve(lo), need = energyNeedOf(ramp)!;
+  must(need > 0 && need <= ramp.values.reactorCap, `a sunder beam on the Rampart is underpowered (${need} / ${ramp.values.reactorCap})`);
+  lo.hull = makeItem("hull-salvager");
+  const salv = resolve(lo);
+  must(need > salv.values.reactorCap, `a sunder beam on the Salvager isn't underpowered (${need} / ${salv.values.reactorCap})`);
+  fit(lo, "shoulderR", makeItem("sh-capacitor"));
+  const bank = resolve(lo);
+  must(bank.values.reactorCap > salv.values.reactorCap + 1 && need <= bank.values.reactorCap, `a capacitor bank didn't bring the Salvager up to a sunder shot (${bank.values.reactorCap})`);
+  console.log(`capacitor gating: sunder needs ${need.toFixed(1)} bars · Rampart ${ramp.values.reactorCap} · Salvager ${salv.values.reactorCap} · Salvager + bank ${bank.values.reactorCap.toFixed(1)}`);
 }
 
 // ---- Items ----

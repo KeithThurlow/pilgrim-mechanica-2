@@ -23,7 +23,7 @@ import type { MechUnit } from "../../game/mechUnit";
 import type { WeaponValues } from "../tuning";
 import type { Vec3 } from "../painter";
 import { rayGround } from "../../world/raycast";
-import { EnergySim, energyStats, withProtocols, type EnergyClass, type EnergyStats } from "./energySim";
+import { EnergySim, energyNeed, energyStats, withProtocols, type EnergyClass, type EnergyStats } from "./energySim";
 import type { ShotProtocols } from "../../game/shots";
 import { addEnergySounds } from "./energySound";
 import type { Loop } from "../../audio/sfx";
@@ -163,6 +163,11 @@ export class EnergyGuns {
   // (Bolts and orbs already in flight carry on: they're shots, not the gun.)
 
   /** A sunder beam is charging or burning (the walk slows). */
+  /** Capacitor gating (Keith 2026-11-14): the biggest shot a fitted energy weapon commits at once (bars, 0: none
+   *  gated), and whether one is held while the reactor is too small for it (the reactor bar shows both). */
+  need(): number { let n = 0; for (let i = 0; i < 2; i++) { const st = this.stats(i); if (st) n = Math.max(n, energyNeed(st.cls, st.energy)); } return this.v.energyCost < 0.5 ? 0 : n; }
+  underpowered(): boolean { return this.sides.some((s) => s.cls && s.sim.under); }
+
   slowed(): boolean { return this.sides.some((s) => s.cls === "sunder" && s.sim.phase > 0); }
 
   private quiet(s: ESide) {

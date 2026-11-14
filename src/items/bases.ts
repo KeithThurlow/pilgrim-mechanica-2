@@ -126,6 +126,8 @@ export const STATS: Record<string, StatInfo> = {
   poolTime: { label: "Pool burns (s)", better: 1, decimals: 1 },
   poolDps: { label: "Pool damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
+  /** A capacitor bank's extra reactor capacity (bars; Keith 2026-11-14, soft limits: what lets heavy energy weapons charge). */
+  capBonus: { label: "Reactor capacity + (bars)", better: 1, decimals: 1 },
   // Summoner gear (Keith 2026-11-02, src/summon/gear.ts): the pack builds mech replicas, the shoulders carry drones and
   // the scrap swarm.
   replicas: { label: "Mech replicas", better: 1, decimals: 0, whole: true },
@@ -422,7 +424,7 @@ export const BASES: Base[] = [
   // dash's kinetic bars: the passive speeds its regen, the key refills reactor bars at once.
   {
     id: "sh-capacitor", name: "Capacitor bank", kind: "shoulder", shoulder: "capacitor", tags: ["shoulder", "power", "energy"], weight: 1.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 0.9,
-    stats: { refill: s(WD.capRefill, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },
+    stats: { refill: s(WD.capRefill, 0.15), capBonus: s(WD.capCapacity, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },
   },
   // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later). Charges are
   // energy bars (Keith 2026-10-27: 4 by default, recharge 30% faster; every pack scaled the same).
