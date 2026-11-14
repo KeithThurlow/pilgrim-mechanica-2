@@ -16,12 +16,12 @@ import type { Param } from "../core/tweaks";
 import { DEPTH_GROUP, robotMult, scaled } from "./depth";
 
 export const THREAT_DEFAULTS = {
-  roamPacks: 3,
+  roamPacks: 2,
   roamFrom: 260,
   roamTo: 520,
   roamDrop: 1000,
   roamMin: 6,
-  roamMax: 16,
+  roamMax: 12,
   roamSpeed: 2,
   roamHuntSpeed: 4,
   roamHear: 200,
@@ -29,9 +29,9 @@ export const THREAT_DEFAULTS = {
   roamEngage: 130,
   roamView: 320,
   firstFight: 25,
-  raidEvery: 120,
+  raidEvery: 180,
   raidJitter: 0.35,
-  raidFirst: 75,
+  raidFirst: 120,
   raidSize: 20,
   raidFrom: 340,
   raidSpeed: 6,
@@ -149,6 +149,8 @@ export interface MechNow {
 export type ThreatEvent =
   | { type: "engage"; pack: Pack }
   | { type: "raid"; pack: Pack; bearing: number }
+  /** A raid or the first fight that is bandit mechs instead (lances.ts, lanceRaidShare / lanceFirstShare): the glue sends a lance. */
+  | { type: "mechRaid"; first: boolean }
   | { type: "blast"; x: number; z: number };
 
 export class ThreatField {
@@ -165,6 +167,7 @@ export class ThreatField {
   private rs: number;
   private wasOut = false;
   private deepRaided = false;
+  private firstSent = false;
   /** Danger at the mech now, as of the last update. */
   danger = 0;
 
@@ -186,7 +189,7 @@ export class ThreatField {
   /** A new trip: the clocks start (called on the drop). */
   launched() {
     const v = this.v;
-    this.outFor = 0; this.engaged = false; this.deepRaided = false;
+    this.outFor = 0; this.engaged = false; this.deepRaided = false; this.firstSent = false;
     this.raidT = v.raidFirst;
     this.blastT = v.blastEvery * (0.3 + 0.5 * this.rand());
   }
@@ -296,6 +299,12 @@ export class ThreatField {
     }
     if (m.out) {
       // The first fight: a scout pack just outside the engage range, if nothing has come yet.
+      // A share of the time it's a bandit lance instead (Keith 2026-11-14: too many robots), rolled once a trip.
+      const shares = v as { lanceFirstShare?: number; lanceRaidShare?: number };
+      if (v.firstFight > 0 && !this.engaged && !this.firstSent && this.outFor >= v.firstFight) {
+        this.firstSent = true;
+        if (this.rand() < (shares.lanceFirstShare ?? 0)) { this.engaged = true; out.push({ type: "mechRaid", first: true }); }
+      }
       if (v.firstFight > 0 && !this.engaged && this.outFor >= v.firstFight && !this.packs.some((p) => p.kind === "scout")) {
         const at = this.ring(m.x, m.z, v.roamEngage + 15, v.roamEngage + 40);
         if (at) {
@@ -310,7 +319,7 @@ export class ThreatField {
         this.raidT -= dt * scaled(v.raidFreqFar, dg);
         if (this.raidT <= 0) {
           this.raidT = v.raidEvery * (1 + (this.rand() * 2 - 1) * v.raidJitter);
-          const at = this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15, this.from?.(m.x, m.z));
+          const at = this.rand() < (shares.lanceRaidShare ?? 0) ? (out.push({ type: "mechRaid", first: false }), null) : this.ring(m.x, m.z, v.raidFrom, v.raidFrom * 1.15, this.from?.(m.x, m.z));
           if (at) {
             const p = this.add("raid", at.x, at.z, Math.round(v.raidSize * scaled(v.raidSizeFar, dg) * robotMult(v)), "hunt", at.a + Math.PI, v.raidSpeed);
             p.tx = m.x; p.tz = m.z; p.mid = v.raidMidFar * dg; p.big = v.raidBigFar * dg; p.bigMin = Math.floor(v.raidBigMin * dg);

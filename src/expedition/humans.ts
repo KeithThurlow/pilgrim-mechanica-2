@@ -112,6 +112,16 @@ export class BanditCamps {
     this.camps.reset();
   }
 
+  /** The camps on the field and how awake each is (their guard mechs follow it: src/expedition/fieldMechs.ts). */
+  liveCamps(out: { camp: BanditCamp; state: "asleep" | "idle" | "alert" }[] = []) {
+    out.length = 0;
+    for (const l of this.live.values()) out.push({ camp: l.camp, state: l.state });
+    return out;
+  }
+
+  /** Alert a camp on the field by id (its guard mech was shot). */
+  alarmCamp(id: string) { const l = this.live.get(id); if (l) this.alarm(l); }
+
   private alarm(l: Live) { if (l.state !== "alert") { l.state = "alert"; this.onAlert?.(l.camp); } l.quiet = 0; }
 
   /**
