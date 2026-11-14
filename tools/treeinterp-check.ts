@@ -103,6 +103,28 @@ if (!near(root.position.x, 4.5)) fail(`after the change it blends again: ${root.
   set.inView = null;
 }
 
+// A part that has held still a long while is only looked at now and then: when it moves it shows the tick's pose
+// (never an old one), and within a few ticks it blends again.
+{
+  const root = new THREE.Group(), part = new THREE.Object3D();
+  root.add(part);
+  const t = new TreeInterp(root);
+  for (let i = 0; i < 60; i++) { root.position.x = i; t.capture(); }
+  let unblended = 0, wrong = 0, blendedAt = -1;
+  for (let i = 0; i < 20; i++) {
+    part.position.y = i + 1; root.position.x = 60 + i; t.capture();
+    t.apply(0.5);
+    if (near(part.position.y, i + 0.5)) { if (blendedAt < 0) blendedAt = i; }
+    else if (part.position.y === i + 1) unblended++;
+    else wrong++;
+    if (!near(root.position.x, 59.5 + i)) fail(`the moving root should blend all along: ${root.position.x}`);
+    t.restore();
+    if (part.position.y !== i + 1) fail("restore after a quiet part moved");
+  }
+  if (wrong) fail(`a quiet part that moved showed neither the tick's pose nor a blend, ${wrong} times`);
+  if (blendedAt < 0 || blendedAt > 9) fail(`a quiet part that moved should blend again within 9 ticks: ${blendedAt} (${unblended} unblended)`);
+}
+
 // Swarm slot arrays.
 {
   const x = new Float32Array(8), h = new Float32Array(8), g = new Float32Array(8), f = new Float32Array(16), gen = new Uint32Array(8);

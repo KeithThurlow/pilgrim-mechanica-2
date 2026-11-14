@@ -27,6 +27,12 @@ export const PHONE_PRESET: Record<string, number> = {
   liveFor: 4,              // 7 s before they freeze
   ragdollsPerFrame: 3,     // 6
   patchZoomFar: 60,        // 120 (already at the chunks' 1 m grid)
+  // The main thread's tick (profile 2026-11-14, convoy lab: about twice a 33 ms frame on a phone). Mechs are drawn
+  // between ticks, so stepping their legs more often than the 30 Hz tick shows nowhere; the walker keeps its cadence
+  // and its line at 30.
+  guardHz: 30,             // guardian mechs on the screen: 120 on the PC
+  guardLodHz: 30,          // and off it: 60
+  radarHz: 10,             // the scope's canvas: 30
 };
 
 /** The phone preset over a system's defaults, where they're declared, so values read before any panel is built (the
