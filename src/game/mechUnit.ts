@@ -21,6 +21,8 @@ export type MountSocket = "left" | "right" | "back" | "shoulderL" | "shoulderR"
 export interface BodyParts {
   gunLeft: boolean; gunRight: boolean; drums: boolean; pack: boolean;
   drumsL?: boolean; drumsR?: boolean; packId?: string | null; sensor?: boolean; sensorId?: string | null; sensorStyle?: "head" | "cluster" | null; mountL?: "gun" | "arm" | null; mountR?: "gun" | "arm" | null;
+  /** The hull's own arm (its base id: the model the arms draw with). */
+  armId?: string;
 }
 
 /** What a mech unit needs from its model: the Rampart, or the stand-in walker (no guns). */

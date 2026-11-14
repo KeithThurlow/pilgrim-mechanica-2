@@ -1,0 +1,81 @@
+{
+ "id": "arm-loader",
+ "kind": "arm",
+ "name": "Loader arm",
+ "maker": "Goliath Earthworks",
+ "says": "channel beams, rams, grab",
+ "tris": 2484,
+ "meshes": 6,
+ "size": [
+  0.594,
+  1.742,
+  0.671
+ ],
+ "min": [
+  -0.297,
+  -0.2925,
+  -0.3
+ ],
+ "max": [
+  0.297,
+  1.45,
+  0.3713
+ ],
+ "sockets": {
+  "Upper_End": [
+   0.0,
+   1.45,
+   -0.0
+  ],
+  "Fore_End": [
+   0.0,
+   1.45,
+   -0.0
+  ]
+ },
+ "moving": {
+  "Joint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Stub": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Upper": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Elbow": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Fore": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Hand": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/arms.py"
+}
