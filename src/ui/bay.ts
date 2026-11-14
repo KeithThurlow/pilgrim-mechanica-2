@@ -6,6 +6,7 @@
 // and stash lists with their weights; loot rolls to fill the stash. Lists for now (Keith 2026-10-25: a grid inventory
 // is the long-term goal). B or the Bay button opens and closes it.
 import "./bay.css";
+import { compareFit, lineText } from "../items/compare";
 import { STATS, BASE_BY_ID, type MountSide } from "../items/bases";
 import { PROTOCOL_BY_ID } from "../items/protocols";
 import { RARITY, RARITIES, tierOf, type Rarity } from "../items/rarity";
@@ -15,9 +16,9 @@ import type { Item } from "../items/item";
 import { cargoCapacity, cargoSizing } from "../items/cargoSpace";
 import { rollItem, rollLoot, rollProtocol, type LootValues } from "../items/generate";
 import {
-  SLOTS, SLOT_NAMES, MOUNTS, SIDES, fit, fitProblem, unfit, resolve, summary, copyLoadout, effectiveStats, socket, socketProblem,
-  unsocket, defaultLoadout, bestHeld, hullMount, isTwoHander, isArm, isHullWeapon,
-  type SlotId, type LoadoutValues, type SummaryLine,
+  SLOTS, SLOT_NAMES, MOUNTS, SIDES, fitProblem, unfit, resolve, effectiveStats, socket, socketProblem,
+  unsocket, defaultLoadout, hullMount, isTwoHander, isArm, isHullWeapon,
+  type SlotId, type LoadoutValues,
 } from "../items/loadout";
 import { fitWithHeld } from "../items/fitting";
 import { bagCells, loseCargo, moveItem, takeFrom } from "../items/cargo";
@@ -242,39 +243,21 @@ export function bayScreen(o: BayOptions) {
   function deltas(): HTMLElement {
     const box = el("div", "bay-deltas");
     if (!hover) { box.append(el("p", "bay-note", "Hover an item to see what it changes; click to fit it.")); return box; }
-    const now = summary(resolve(st.loadout, o.tuning));
-    const lo = copyLoadout(st.loadout);
-    let off: Item[] = [];
-    try { off = fit(lo, slot, hover); } catch { return box; }
-    // An arm brings its auto-fitted held weapon (as fitItem does).
-    let held: Item | null = null;
-    if (isMountSlot(slot) && hover.kind === "arm") {
-      const side: MountSide = slot === "mountL" ? "L" : "R";
-      held = bestHeld(lo, side, pool().filter((x) => x !== hover));
-      if (held) off.push(...fit(lo, MOUNTS[side].held, held));
-    }
-    const then = summary(resolve(lo, o.tuning));
-    box.append(el("div", "bay-sub", `Fitting ${itemName(hover)}${held ? ` (holding ${itemName(held)})` : ""}`));
+    // The whole mech before and after, every soft limit counted (src/items/compare.ts, Keith 2026-11-14).
+    const c = compareFit(st.loadout, slot, hover, pool().filter((x) => x !== hover), o.tuning);
+    if (!c) return box;
+    box.append(el("div", "bay-sub", `Fitting ${itemName(hover)}${c.held ? ` (holding ${itemName(c.held)})` : ""}`));
+    for (const w of c.warnings) box.append(el("p", "bay-note " + (w.good ? "good" : "bad"), w.text));
     // What the fit bounces to the stash (the slot's item, and a side's held and shoulder weapons under a hull weapon).
-    if (off.length) box.append(el("p", "bay-note bad", `Comes off to the stash: ${off.map(itemName).join(", ")}`));
-    let any = false;
-    then.forEach((t: SummaryLine, i) => {
-      const n = now[i];
-      if (n.value === t.value || (n.value !== null && t.value !== null && Math.abs(n.value - t.value) < 10 ** -(t.decimals + 1))) return;
-      any = true;
-      const row = el("div", "bay-stat");
-      row.append(el("span", "", t.label));
-      let cls = "", text: string;
-      if (t.value === null) { text = "gone"; cls = "bad"; }
-      else if (n.value === null) { text = `new ${fmt(t.value, t.decimals)}`; cls = "good"; }
-      else {
-        const d = t.value - n.value;
-        cls = (d > 0) === (t.better > 0) ? "good" : "bad";
-        text = `${fmt(n.value, t.decimals)} → ${fmt(t.value, t.decimals)} (${d > 0 ? "+" : ""}${fmt(d, t.decimals)})`;
-      }
-      row.append(el("b", "bay-val " + cls, text));
+    if (c.off.length) box.append(el("p", "bay-note bad", `Comes off to the stash: ${c.off.map(itemName).join(", ")}`));
+    const any = c.lines.length > 0;
+    for (const l of c.lines) {
+      const row = el("div", "bay-stat" + (l.major ? "" : " minor"));
+      row.append(el("span", "", l.label));
+      const t = lineText(l, fmt);
+      row.append(el("b", "bay-val " + (t.good === null ? "" : t.good ? "good" : "bad"), t.text));
       box.append(row);
-    });
+    }
     if (!any) box.append(el("p", "bay-note", "No change."));
     return box;
   }

@@ -271,7 +271,7 @@ export class ExpeditionLoop {
     this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms, undefined, deaths);
     this.crushers = new CrusherSites(v, bf, scene, field, player, this.sites, this.swarms);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
-    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(x, z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
+    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(x, z), this.nearHome(x, z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
     this.bandits = new BanditField(v, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1).filter((q) => !q.id.startsWith("clash:")));
     this.bandits.danger = this.depth.danger;
@@ -386,13 +386,18 @@ export class ExpeditionLoop {
 
   /** Where a drop rolls (loot rolls by depth and salvage heat). */
   private dropCtx(x: number, z: number) {
-    const depth = this.runThreat.effective(this.depth.liveDepth(x, z));
+    const depth = this.runThreat.effective(this.depth.liveDepth(x, z), this.nearHome(x, z));
     return { danger: dangerOf(this.v, depth), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth };
   }
 
   /** Live danger at a place, with the run's threat (the deeper of the two). */
   private threatDanger(x: number, z: number) {
-    return dangerOf(this.v, this.runThreat.effective(this.depth.liveDepth(x, z)));
+    return dangerOf(this.v, this.runThreat.effective(this.depth.liveDepth(x, z), this.nearHome(x, z)));
+  }
+
+  /** Near the convoy (within threatHome): the threat falls there and doesn't count (Keith 2026-11-14: no luring packs into its guns). */
+  private nearHome(x: number, z: number) {
+    return convoyDepth(this.route, x, z, this.v.depthTrain) < this.v.threatHome;
   }
 
   /** The summoner's units as prey (src/summon/aggro.ts; the lab sets it): each enemy kind's group near one may go for it. */
@@ -509,7 +514,7 @@ export class ExpeditionLoop {
     // The run's threat: ratchets up to the deepest point out there, falls only aboard or by the convoy (Keith 2026-11-14).
     {
       const tx = foot ? pl!.x : p.x, tz = foot ? pl!.z : p.z;
-      const home = exp.state !== "out" || convoyDepth(this.route, tx, tz, v.depthTrain) < v.threatHome;
+      const home = exp.state !== "out" || this.nearHome(tx, tz);
       this.runThreat.update(dt, exp.state === "out" ? this.depth.liveDepth(tx, tz) : 0, exp.state === "out", home);
     }
     // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
