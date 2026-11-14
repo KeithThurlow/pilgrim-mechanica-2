@@ -323,6 +323,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Feet no longer reach out ahead walking and strafing, worst on the stilts (Keith; Claude on `claude/project-thread-r7ijxv`)
+- Keith: on the stilt legs, strafing left and right, the feet went out in front of the way of travel (the Siege a little too). Two causes. Shared: since the longer strides (#346) nearly every walking step ends hurried (the trailing leg near full stretch, cadence up to 2.5x), but the landing spot was aimed at the unhurried cadence, so the foot landed early, short of where the body would be, and sat ahead of the hips (`aim()` now uses the cadence the steps actually come at). Stilt only: its long-cannoned legs stand at 0.94 of their reach at the model's 3.05 m hips (Rampart 0.87, Siege 0.89), so it hurried even on short strides; it now walks lower (`walkCrouch` 0.3 for the stilt, was 0.15). New slider `plantReach` (0.6; Gait › Walk: farthest plant ahead) caps a walking foot's landing ahead of its hip at that share of the leg's level reach.
+- Numbers, flat strafe: stilt planted foot at most 1.62 m ahead of its hip (stretch 0.97) → 0.91-1.2 m (0.92); landing in a reversal 1.65 → 0.88 m. Rampart and Siege about as before going straight (0.97, 0.72 m), less in strafe reversals.
+- Checked: new walker-check section (every leg type, walk and Shift, straight and strafing with reversals: planted foot no more than 0.75 of the level reach ahead of its hip; stilt was 1.08); slope-check's uphill swing-thigh ask lowered to the flat's (uphill feet now land nearer the hips, so the swing squashes less: 30°, was 65°); full `npm test` 110/110.
+
 ### 2026-11-14 · Convoy radar only aboard (Keith; Claude on `claude/project-thread-f8uouj`)
 - Keith: the convoy radar should only be on while you're on the convoy; the changing range ring for the player felt weird. The big convoy scope now shows only while the mech is aboard (`convoyRadarAboard` 1; 0 brings back the 450 m range edge); out on the sand it's always the mech's own scope. The sensor-range ring and the range-edge ring are gone. `src/expedition/radar.ts`, `radarDraw.ts`; `expedition-check` (convoy scope off the convoy is refused, the old edge still works at 0); full `npm test`.
 

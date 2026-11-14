@@ -52,6 +52,9 @@ export const LEG_TYPES: Record<string, LegType> = {
       footSpread: 0.82, walkSpread: 0.56,
       toeHinge: 0.12, toeLength: 0.47, toeCurl: 35,
       strideBase: 2.5, stridePerSpeed: 1.0, strideMax: 7.5, liftHeight: 0.9, // Keith 2026-11-14: longer walking steps (was 0.5 per m/s)
+      // Keith 2026-11-14 (feet reaching out in front): the long-cannoned legs stand near full stretch at the model's 3.05 m hips
+      // (0.94 of reach, the Rampart 0.87), so every step hurried; walking they sit lower than the others.
+      walkCrouch: 0.3,
       // Fast and fragile: quicker to top speed, less grip, lands softer things only.
       boundTop: 8.5, boundBuild: 0.4, boundGrip: 0.6, boundHop: 2.6, landHard: 9, landHurt: 10,
     },
