@@ -7,8 +7,8 @@
 // it carries on into the sprint (src/mech/bound.ts). The booster pack's tank (boostFuel) stays here, refilling between
 // uses; the sprint spends it on thrust and glide.
 // Energy (Keith 2026-10-27): the charges are bars of energy, each its own bar (a HUD at the side, src/ui/energyBar.ts).
-// A dash needs a full bar and empties it; the sprint (only ever out of a held dash) drains the rest slowly, the emptiest
-// bar with any left first, so the full ones stay for dashes. Nothing refills while sprinting; otherwise, dashRegenDelay
+// A dash needs a full bar and empties it; the sprint (only ever out of a held dash) drains the rest slowly, the top
+// bar with any left first, so the bars empty cleanly from the top down. Nothing refills while sprinting; otherwise, dashRegenDelay
 // after the last use, the bar nearest full refills at one bar per dashRecharge seconds, then the next.
 // Ownership: the player's own state (their movement), like the walk.
 import type { Param } from "../core/tweaks";
@@ -112,12 +112,12 @@ export class Dash {
   get refillShare() { const k = this.refilling; return k < 0 ? 0 : this.bars[k]; }
 
   /**
-   * The sprint drains energy (sprintDrain bars per second): the emptiest bar with any left first. False when there's
+   * The sprint drains energy (sprintDrain bars per second): the top bar with any left first (Keith 2026-11-14: empties top to bottom). False when there's
    * none left (the sprint ends).
    */
   drain(dt: number): boolean {
     let k = -1;
-    for (let i = 0; i < this.bars.length; i++) if (this.bars[i] > 1e-6 && (k < 0 || this.bars[i] < this.bars[k])) k = i;
+    for (let i = this.bars.length - 1; i >= 0; i--) if (this.bars[i] > 1e-6) { k = i; break; } // the top bar with any left: reads down from the top
     if (k < 0) return false;
     this.bars[k] = Math.max(0, this.bars[k] - this.v.sprintDrain * dt);
     this.draining = true; this.idle = 0;

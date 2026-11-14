@@ -323,6 +323,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Stamina bar drains top to bottom (Keith; Claude on `claude/project-thread-8d0m8g`)
+- Keith: the stamina bar emptied in random segments, and should be the bar nearest the player. The sprint now drains the top bar with any left (`Dash.drain`, `src/mech/dash.ts`) so the bars empty cleanly from the top down, matching how dashes take the top full bar. The energy bars moved to the right of the hull bar in the left stack (`src/ui/energyBar.ts`, order 2), nearest the screen centre. Checked: `npm test` 108/108.
+
 ### 2026-11-14 · Arc caster spool-up (Keith; Claude on `claude/project-thread-a02z02`)
 - Keith: "a winding up noise ... like a capacitor charging. And then they fire." Held, the arc caster charges for `arcSpool` 0.5 s before its first zap (free, no energy), a capacitor whine climbing in pitch with the charge (a seamless loop, `arcWhine`) and a blue-white ball swelling at the muzzle with sparks crackling off it, the gun trembling. Full, the whine holds high and flutters while it zaps at its rate. Let go, the charge drains over `arcSpinDown` 0.6 s (the whine winds down with it), so a re-press within that is quicker; a dash or the sprint empties it. HUD: charge %, then "zapping". Rivals know the delay (`spinUp`). Sliders: Weapons › Arc caster (Spool-up, Spool drains in, Charge whine level, Charge glow size).
 - Files: `src/weapons/energy/energySim.ts` (spin), `energyGuns.ts` (spool glue), `energyDraw.ts`, `energySound.ts`, `energyTuning.ts`; `src/combat/rivalKit.ts`; `labs/weapons/review.ts`. Checked: `tools/energy-check.ts` (first zap at the spool, rate after, drain rate, quicker warm re-press, dash empties, 0 spool fires at once), typecheck, `npm test`.
