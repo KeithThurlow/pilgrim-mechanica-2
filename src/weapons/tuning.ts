@@ -71,7 +71,7 @@ export const WEAPON_DEFAULTS = {
   // Big mortar (one huge shell over the hills)
   mortarShells: 1,
   mortarRing: 1.5,
-  mortarBlast: 16,
+  mortarBlast: 14,
   mortarDamage: 1100,
   mortarFlight: 2.2,
   mortarArc: 22,
