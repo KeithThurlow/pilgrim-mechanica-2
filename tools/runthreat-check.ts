@@ -47,6 +47,10 @@ if (!t.falling) fail("not marked falling at home");
 // Aboard (not out) falls too.
 t.set(600); t.update(1, 0, false, false);
 if (Math.abs(t.m - (600 - t.v.threatDecay)) > 1e-6) fail("threat did not fall aboard");
+// By the convoy (home), a place plays at its own depth even with the threat high: no farming lured packs.
+t.set(1500);
+if (t.effective(30, true) !== 30) fail("a place by the convoy still counts the threat");
+if (t.effective(30, false) !== 1500) fail("a place out there ignores the threat");
 // Off: place depth only.
 const off = new RunThreat({ ...RUN_THREAT_DEFAULTS, threatOn: 0 });
 off.update(1, 1000, true, false);
