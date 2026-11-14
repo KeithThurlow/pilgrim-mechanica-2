@@ -30,4 +30,5 @@ export const ICON_VIEWS: Partial<Record<GridClass, IconView>> & { default: IconV
   swordShort: { from: [1, 0.5, 0.15], upright: "long" },
   legs: { from: [0.75, 0.3, 0.9], upright: "world" },
   pack: { from: [0.6, 0.7, -0.9], upright: "world" },
+  waist: { from: [0.6, 0.7, -0.9], upright: "world" },
 };

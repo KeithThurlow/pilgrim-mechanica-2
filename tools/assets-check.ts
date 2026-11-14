@@ -55,10 +55,13 @@ function meanColour(g: Gltf, bin: Buffer, acc: number): number {
   return s / (a.count * 3);
 }
 
-const partsDir = "public/models/parts";
-const files = existsSync(partsDir) ? readdirSync(partsDir).filter((f) => f.endsWith(".glb") && !/-lod\d\.glb$/.test(f)) : [];
-for (const file of files) {
-  const id = file.slice(0, -4), base = BASE_BY_ID[id], tag = `parts/${file}`;
+const found: [string, string][] = [];
+for (const dir of ["public/models/parts", "public/models/sensors"]) {
+  if (existsSync(dir)) for (const f of readdirSync(dir)) if (f.endsWith(".glb") && !/-lod\d\.glb$/.test(f)) found.push([dir, f]);
+}
+const files = found;
+for (const [partsDir, file] of found) {
+  const id = file.slice(0, -4), base = BASE_BY_ID[id], tag = `${partsDir.split("/").pop()}/${file}`;
   if (!base) { fail(`${tag}: no item base "${id}"`); continue; }
   const rule = RULES[base.kind];
   if (!rule) { fail(`${tag}: kind ${base.kind} has no part rules yet (add them here with its budget)`); continue; }
@@ -92,7 +95,7 @@ for (const file of files) {
   }
   const moving = side ? Object.keys(side.moving ?? {}).length : 0;
   if (!names.has("Body") && base.kind !== "arm") fail(`${tag}: no Body mesh`);
-  if (meshNodes > 2 + moving) fail(`${tag}: ${meshNodes} meshes (Body, Glow and one per moving node: ${2 + moving} at most)`);
+  if (meshNodes > 2 + 2 * moving) fail(`${tag}: ${meshNodes} meshes (Body, Glow and a body and a glow per moving node: ${2 + 2 * moving} at most)`);
   if (tris > rule.tris) fail(`${tag}: ${tris} tris, budget ${rule.tris}`);
   for (const s of rule.sockets) if (!names.has(s)) fail(`${tag}: no ${s} socket`);
   for (let k = 0; k < 3; k++) if (Math.max(Math.abs(lo[k]), Math.abs(hi[k])) > rule.half[k]) fail(`${tag}: reaches ${Math.max(Math.abs(lo[k]), Math.abs(hi[k])).toFixed(2)} m on ${"xyz"[k]} (envelope ${rule.half[k]})`);
