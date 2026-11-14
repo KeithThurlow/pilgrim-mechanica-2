@@ -343,6 +343,7 @@ loop.setupFortMechs({ look: toon, loadBody: () => RampartBody.load(toon), threat
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
+(window as unknown as { __loop: unknown }).__loop = loop;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;

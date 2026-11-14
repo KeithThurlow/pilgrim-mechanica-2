@@ -46,7 +46,7 @@ import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
-import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth, dangerOf } from "./depth";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth, dangerOf, scaled } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
 import { PadDraw } from "./padDraw";
 import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS, UNLOCK_GROUP } from "./unlocks";
@@ -282,10 +282,21 @@ export class ExpeditionLoop {
     this.bandits.danger = this.depth.danger;
     this.banditCamps = new BanditCamps(v, field, bf, scene, this.bandits, player, opts.vat ?? null, blocked);
     this.columns = new WarColumns(v, 31, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
-    this.columns.danger = this.depth.danger;
+    // War band columns are sized when they turn up, by the deeper of the place and the run's threat (Keith 2026-11-14).
+    this.columns.danger = (x, z) => dangerOf(v, this.runThreat.effective(this.depth.depth(x, z)));
     this.bands = new WarBands(v, bf, scene, this.columns, deaths);
     this.lances = new LanceField(v, 53, (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150));
     this.fieldMechs = new FieldMechs(v as never, bf, scene, player, this.lances, this.banditCamps);
+    // Bandits follow the run's threat as the robots do: a camp streaming in is as big as the deeper of its place and the
+    // threat says (never smaller than its own), its bandits' health × the threat level's enemy power; its guard mechs
+    // grade by the same danger.
+    this.fieldMechs.dangerAt = (x, z) => this.threatDanger(x, z);
+    this.banditCamps.threat = (c) => {
+      const d = this.threatDanger(c.x, c.z);
+      const size = Math.max(1, scaled(v.banditSizeFar, d) / Math.max(1e-3, scaled(v.banditSizeFar, c.danger)));
+      const power = v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(c.x, c.z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1;
+      return { size, power };
+    };
     this.contact = new BodyContact(player, bf);
     this.bands.riders = this.banditCamps.sw;
     this.relations = new Relations(v);
@@ -844,7 +855,7 @@ export class ExpeditionLoop {
     for (const e of evs) { this.bands.bring(e.col); this.hud.note(`War band · ${e.col.kinds.length} vehicles`, "#ff7ad0", 4); this.sound.alarm(); }
     this.bands.update(dt, bandPrey ?? player, hunting, m);
     // Bandit mech lances (lances.ts): the ones that close with the mech come onto the field; camp guards with their camps.
-    this.lanceEvents = this.lances.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud, danger: hunting ? this.depth.liveDanger(m.x, m.z) : 0 }, this.lanceEvents);
+    this.lanceEvents = this.lances.update(dt, { x: m.x, z: m.z, out: hunting, loud: this.loud, danger: hunting ? this.threatDanger(m.x, m.z) : 0 }, this.lanceEvents);
     for (const e of this.lanceEvents) {
       this.fieldMechs.bring(e.lance);
       if (e.lance.n > 0) { this.hud.note(`Bandit mech${e.lance.n > 1 ? `s · ${e.lance.n}` : ""} incoming`, "#ff7ad0", 4); this.sound.alarm(); }
@@ -894,7 +905,7 @@ export class ExpeditionLoop {
           : q.mid > 0 || q.big > 0 || q.bigMin ? { mid: (v.robotMidShare + q.mid) * shareK(v), big: (v.robotBigShare + q.big) * shareK(v), bigMin: q.bigMin } : undefined, q.hurt ?? 0, q.goal);
       } else if (e.type === "mechRaid") {
         // A raid (or the first fight) that is bandit mechs: a lance hunting the mech from the raid's distance (the first fight's: just outside its engage range).
-        const me = { x: p.x, z: p.z, out: true, loud, danger: this.depth.liveDanger(p.x, p.z) };
+        const me = { x: p.x, z: p.z, out: true, loud, danger: this.threatDanger(p.x, p.z) };
         const l = e.first ? this.lances.hunt("scout", me, v.lanceEngage + 20, v.lanceEngage + 50) : this.lances.hunt("raid", me, v.raidFrom, v.raidFrom * 1.15);
         if (l && !e.first) { this.hud.note(`Bandit mech raid · ${l.n} mech${l.n > 1 ? "s" : ""} · ${Math.round(Math.hypot(l.x - p.x, l.z - p.z))} m`, "#ff7ad0", 4); this.sound.alarm(); }
       } else if (e.type === "raid") {

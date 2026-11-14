@@ -31,6 +31,8 @@ interface Slot {
 export class FieldMechs {
   setup: RivalSetup | null = null;
   onEvent: ((e: FieldMechEvent) => void) | null = null;
+  /** Danger at a place with the run's threat in (the loop sets it); left out, a camp's own. Camp guards count and grade by it. */
+  dangerAt: ((x: number, z: number) => number) | null = null;
   private slots: Slot[] = [];
   /** Camp guards killed this trip (they don't come back). */
   private dead = new Set<string>();
@@ -95,12 +97,13 @@ export class FieldMechs {
     for (const s of this.slots) if (s.camp && !s.pending && !this.camps.some((c) => c.camp.id === s.camp!.id && c.state !== "asleep")) this.free(s);
     for (const { camp: c, state } of this.camps) {
       if (state === "asleep") continue;
-      const n = campMechs(v, c.seed, c.danger);
+      const dg = Math.max(c.danger, this.dangerAt?.(c.x, c.z) ?? 0);
+      const n = campMechs(v, c.seed, dg);
       for (let k = 0; k < n; k++) {
         const key = `${c.id}:m${k}`;
         if (this.dead.has(key) || this.has(key)) continue;
         const a = (c.seed % 628) / 100 + k * 2.4, r = c.radius + 6;
-        this.put(key, c.x + Math.sin(a) * r, c.z + Math.cos(a) * r, a, c.danger, c.seed + k * 104729, { x: c.x, z: c.z, r: v.campMechArena }, null, c);
+        this.put(key, c.x + Math.sin(a) * r, c.z + Math.cos(a) * r, a, dg, c.seed + k * 104729, { x: c.x, z: c.z, r: v.campMechArena }, null, c);
       }
     }
     // Step them.
