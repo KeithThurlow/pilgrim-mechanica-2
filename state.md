@@ -323,6 +323,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+- 2026-11-14: Sand prints (feet, convoy ruts) fade out in about 30 s: `dentSandLife` 90 → 9 s (time constant; ~4% left at 30 s). Slider still Dents › Sand › heals over. Off-screen memory forgets them sooner too (cheaper). `src/fx/dents.ts`, `tools/dents-check.ts` (30 s check). Checked: dents-check; npm test. Claude, for Keith.
 ### 2026-11-14 · Gear comparison shows what the whole mech gets, soft limits counted (Keith; Claude on `claude/project-thread-5rk08q`)
 - `src/items/compare.ts` (pure): `compareFit` fits the item into a copy of the loadout as a click would (`fitWithHeld`), resolves both and lists what changes: sustained DPS of all weapons, walk, sprint, speed-up and turn after leg load, load and the legs' best load, hull, armour, reactor and the biggest energy shot, cargo cells, radar, power, then the per-gun details; warnings when a fit goes over or back under the legs' best load, or makes the mech underpowered or clears it; what comes off. `slotFor` is the slot a click picks (the inventory's equip uses it too).
 - Inventory card (`src/ui/inventory.ts`): the old "+N dps · +N power vs fitted" line is now this comparison, into the slot a click would fit; dragging an item over a doll slot it fits shows the comparison for that slot. Bay hover (`src/ui/bay.ts`) uses the same module (gains DPS, speed-up and the warnings).
