@@ -1,0 +1,38 @@
+{
+ "id": "sh-beltfeed",
+ "kind": "shoulder",
+ "name": "Belt feed",
+ "maker": "Stratford-Aegis",
+ "says": "more rounds faster: ammo box, belt window, chute",
+ "tris": 1504,
+ "meshes": 2,
+ "size": [
+  0.909,
+  0.96,
+  1.3
+ ],
+ "min": [
+  -0.4529,
+  -0.29,
+  -0.47
+ ],
+ "max": [
+  0.456,
+  0.67,
+  0.83
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "FeedOut": [
+   0.0,
+   -0.28,
+   0.76
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/gear.py"
+}

@@ -1,0 +1,38 @@
+{
+ "id": "sh-incendiary",
+ "kind": "shoulder",
+ "name": "Incendiary feed",
+ "maker": "Suzaku Dynamics",
+ "says": "burning rounds: red belt box, fuel tank, injector",
+ "tris": 1344,
+ "meshes": 2,
+ "size": [
+  0.941,
+  1.215,
+  1.25
+ ],
+ "min": [
+  -0.435,
+  -0.29,
+  -0.42
+ ],
+ "max": [
+  0.5061,
+  0.925,
+  0.83
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "FeedOut": [
+   0.0,
+   -0.28,
+   0.76
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/gear.py"
+}

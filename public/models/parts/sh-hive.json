@@ -1,0 +1,38 @@
+{
+ "id": "sh-hive",
+ "kind": "shoulder",
+ "name": "Swarm hive",
+ "maker": "Suzaku Dynamics",
+ "says": "a nest of small machines: hex cells, scrappers crawling out",
+ "tris": 1276,
+ "meshes": 2,
+ "size": [
+  0.784,
+  1.014,
+  1.074
+ ],
+ "min": [
+  -0.3918,
+  0.0,
+  -0.606
+ ],
+ "max": [
+  0.3918,
+  1.014,
+  0.468
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "Launch": [
+   0.0,
+   0.97,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/gear.py"
+}

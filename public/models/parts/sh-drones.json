@@ -1,0 +1,38 @@
+{
+ "id": "sh-drones",
+ "kind": "shoulder",
+ "name": "Drone rack",
+ "maker": "Novus-Lux",
+ "says": "drones live here: launch tray, four docked drones, mast",
+ "tris": 1236,
+ "meshes": 2,
+ "size": [
+  0.84,
+  0.981,
+  0.859
+ ],
+ "min": [
+  -0.42,
+  0.0,
+  -0.42
+ ],
+ "max": [
+  0.42,
+  0.9805,
+  0.439
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ],
+  "Launch": [
+   0.0,
+   0.5491,
+   0.074
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/gear.py"
+}
