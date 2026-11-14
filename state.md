@@ -323,6 +323,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Robots and bandits in the sim worker move every tick again (Keith: swarms updating at ~1 Hz on his PC; Claude on `claude/fix-swarm-1hz`)
+- Found (convoy lab `?siege=80&manual`, Keith's PC): the worker stepped and answered every tick, but the view's positions only changed every ~40 ticks. The swarm drawers' `SlotInterp.restore()` (src/look/treeInterp.ts) put the last tick's capture back after each drawn frame, so a worker snapshot landing between a tick and the next drawn frame was wiped; only a snapshot with no drawn frame before the next tick survived. Main-thread readers (aim, hits, camps) saw the stale view too. In since stage 6d (#294) met the worker swarms; `?noworker` and the swarm lab were fine.
+- Fix: `restore()` puts back what the arrays held before `apply()`; `swarmBetweenTicks` takes a snapshot stamp (`snapStamp`, counted by `RobotsView.take`/`InfantryView.take`, skipped by the packers) and for a worker swarm captures when a snapshot lands, blending by the time since then over the time between snapshots.
+- Checked: probe of robot positions every 100 ms now matches `?noworker`; `tools/treeinterp-check.ts` has a write-after-capture case (fails on the old restore); `npm test` 108/108.
+
 ### 2026-11-13 · Hardness reads skip the road and pad lookups on open sand (follow-up to the raid sim spikes, Keith: "please continue"; Claude on `claude/project-thread-dau506`)
 - Found (convoy lab `?siege=80`): `CraterLayer.protectedAt` read the modifiers at 17 points for every hardness read; 54% of the main thread's reads (the mechs' feet sinking, `bf.sinkDepth`, 14% of the tick with five guardians) and 97-99% of the worker's (new crater tiles' softness) found nothing.
 - `src/world/terrain.ts`: optional `GroundModifier.noFloor(x, z, r)`: true only when no weight toward a floor is within r. `src/convoy/route.ts` (no segment of the grid cells the square touches within reach + r), `src/world/poiPads.ts` (the cells' and buckets' pads by `padAt`'s own reach), `src/pois/fortressGround.ts` (walls never floor), `src/world/modifiers.ts` (all of the stack; one that can't tell says no). `src/world/craters.ts`: `protectedAt` skips the modifier reads when it says so.
