@@ -174,6 +174,25 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     for (let t = 0; t < after; t += dt) guns.age(dt);
     return { range, unit, guns };
   };
+  // The arc caster's spool (Keith 2026-11-14): no zap until the capacitors are full; full, it zaps at its rate; let
+  // go, the spool drains, and a quick re-press fires sooner than a cold one; a dash empties it.
+  {
+    const st = energyStats("arc", null, V), sim = new EnergySim(), pool: EnergyPool = { energy: 99, use: () => true };
+    let shots = 0, first = -1;
+    for (let t = 0; t < V.arcSpool + 1 + dt / 2; t += dt) { const o = sim.step(dt, true, st, pool); if (o.shots && first < 0) first = t; shots += o.shots; }
+    must(first >= V.arcSpool - 2 * dt && first <= V.arcSpool + 2 * dt, `the arc's first zap came at ${first.toFixed(3)} s, not after its ${V.arcSpool} s spool`);
+    must(Math.abs(shots - (1 + V.arcRate * 1)) <= 1, `the arc zapped ${shots} times in its first second at full spool (want about ${1 + V.arcRate})`);
+    const off = 0.2;
+    for (let t = 0; t < off; t += dt) sim.step(dt, false, st, pool);
+    must(near(sim.spin, 1 - off / V.arcSpinDown, 0.02), `the arc's spool didn't drain at its rate (${sim.spin.toFixed(3)})`);
+    let again = 0;
+    for (let t = 0; t < V.arcSpool; t += dt) { if (sim.step(dt, true, st, pool).shots) break; again += dt; }
+    must(again < V.arcSpool * 0.6, `a quick re-press took ${again.toFixed(2)} s to zap (a warm spool should be quicker)`);
+    sim.drop();
+    must(sim.spin === 0, "a dash didn't empty the arc's spool");
+    const st0 = { ...st, spool: 0 }, cold = new EnergySim();
+    must(cold.step(dt, true, st0, pool).shots === 1, "an arc with no spool didn't zap at once");
+  }
   const flat = () => 0;
   const spots = [{ x: 0, z: 25 }, { x: 6, z: 25 }];
   {
@@ -231,13 +250,13 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   {
     // Arc: the cutout nearest the aim, then jumps along a line of cutouts 6 m apart, damage falling by the keep.
     const line = [0, 1, 2, 3, 4, 5, 6].map((k) => ({ x: k * 6, z: 20 }));
-    const { range, guns } = fire("arc", flat, 20, dt, line);
+    const { range, guns } = fire("arc", flat, 20, V.arcSpool + 2 * dt, line);
     const hits = guns.last.arcHits ?? 0;
     must(hits === Math.min(line.length, V.arcHops + 1), `the arc struck ${hits} cutouts (want ${Math.min(line.length, V.arcHops + 1)})`);
     must(taken(range.dummies[0]) > 0 && taken(range.dummies[V.arcHops]) > 0 && taken(range.dummies[V.arcHops + 1]) === 0, "the arc's jumps didn't run down the line in order and stop");
-    const lone = fire("arc", flat, 20, dt, [{ x: 0, z: 20 }, { x: 0, z: 20 + V.arcHopRange + 3 }]);
+    const lone = fire("arc", flat, 20, V.arcSpool + 2 * dt, [{ x: 0, z: 20 }, { x: 0, z: 20 + V.arcHopRange + 3 }]);
     must(lone.guns.last.arcHits === 1 && taken(lone.range.dummies[1]) === 0, "the arc jumped further than its reach");
-    const none = fire("arc", flat, 20, dt, [{ x: 0, z: 60 }]);
+    const none = fire("arc", flat, 20, V.arcSpool + 2 * dt, [{ x: 0, z: 60 }]);
     must(none.guns.arcs.length === 1 && none.guns.last.arcHits === 1 && taken(none.range.dummies[0]) === 0, "an arc with nothing in range didn't ground at the aim");
   }
   {

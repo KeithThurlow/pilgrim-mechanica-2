@@ -193,6 +193,31 @@ export class EnergyDraw {
         }
       }
     }
+    // The arc caster's charge: short sparks crackling off the muzzle, more and longer as the capacitors fill.
+    for (const sd of g.sides) {
+      if (sd.cls !== "arc" || !sd.charge.on) continue;
+      const k = sd.charge.k, gl = g.v.arcGlow, at = sd.charge.at;
+      const count = Math.floor(k * 4 + Math.random() * 1.5);
+      for (let j = 0; j < count && n < MAX_SEGS; j++) {
+        const L = (0.25 + 0.75 * k) * gl * (0.5 + Math.random() * 0.5);
+        const th = Math.random() * Math.PI * 2, ph = (Math.random() - 0.3) * Math.PI * 0.6;
+        a.set(at.x, at.y, at.z);
+        const dx = Math.cos(th) * Math.cos(ph), dy = Math.sin(ph), dz = Math.sin(th) * Math.cos(ph);
+        for (let q = 1; q <= 3 && n < MAX_SEGS; q++) {
+          const t = (q / 3) * L, j2 = q < 3 ? 0.12 * L : 0;
+          b.set(at.x + dx * t + (Math.random() - 0.5) * j2, at.y + dy * t + (Math.random() - 0.5) * j2, at.z + dz * t + (Math.random() - 0.5) * j2);
+          this.d.subVectors(b, a);
+          const len = this.d.length();
+          if (len > 1e-3) {
+            this.q.setFromUnitVectors(Z, this.d.divideScalar(len));
+            this.put(this.segs, n, a, this.q, this.s.set(0.03, 0.03, len), 0xffffff, 0.6 + 0.4 * k);
+            this.put(this.segGlow, n, a, this.q, this.s.set(0.14, 0.14, len), COL.arc, 0.5 * k);
+            n++;
+          }
+          a.copy(b);
+        }
+      }
+    }
     for (const im of [this.segs, this.segGlow]) { im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
   }
 
@@ -229,7 +254,7 @@ export class EnergyDraw {
       const sunder = s.cls === "sunder", col = sunder ? COL.sunder : COL.beam;
       (B.glow.material as THREE.MeshBasicMaterial).color.setHex(col);
       (B.end.material as THREE.MeshBasicMaterial).color.setHex(col);
-      (c.halo.material as THREE.MeshBasicMaterial).color.setHex(sunder ? COL.sunder : COL.lance);
+      (c.halo.material as THREE.MeshBasicMaterial).color.setHex(sunder ? COL.sunder : s.cls === "arc" ? COL.arc : COL.lance);
       if (s.beam.on && sunder) {
         // The sunder beam: swells in over a fifth of a second, throbs, thins in its last moments.
         const fl = 0.88 + 0.12 * Math.sin(this.t * 41 + i * 2) + 0.06 * Math.sin(this.t * 113);
@@ -248,7 +273,14 @@ export class EnergyDraw {
         this.ball(B.end, s.beam.to, (s.beam.hit ? 0.9 : 0.7) * (0.8 + 0.3 * Math.sin(this.t * 37)), 0.9);
         this.ball(B.muzzle, s.beam.from, w * 3, 0.9);
       } else B.glow.visible = B.core.visible = B.end.visible = B.muzzle.visible = false;
-      if (s.charge.on) {
+      if (s.charge.on && s.cls === "arc") {
+        // The arc's capacitors: a small blue-white ball swelling and flickering faster as it charges (the crackle round
+        // it is in drawArcs).
+        const k = s.charge.k, gl = v.arcGlow, fl = 0.75 + 0.25 * Math.sin(this.t * (30 + 70 * k)) * Math.random();
+        this.a.set(s.charge.at.x, s.charge.at.y, s.charge.at.z);
+        this.ball(c.ball, this.a, (0.06 + 0.22 * k) * gl * fl, 0.5 + 0.5 * k);
+        this.ball(c.halo, this.a, (0.2 + 0.6 * k) * gl * fl, 0.15 + 0.35 * k);
+      } else if (s.charge.on) {
         const k = s.charge.k, fl = 0.9 + 0.1 * Math.sin(this.t * (20 + 40 * k));
         this.a.set(s.charge.at.x, s.charge.at.y, s.charge.at.z);
         this.ball(c.ball, this.a, (0.12 + 0.45 * k) * fl, 0.6 + 0.4 * k);
