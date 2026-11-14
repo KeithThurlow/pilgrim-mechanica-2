@@ -1,0 +1,33 @@
+{
+ "id": "sh-artillery",
+ "kind": "shoulder",
+ "name": "Artillery beacon",
+ "maker": "Suzaku",
+ "says": "radio box, whip antenna, flare tube",
+ "tris": 420,
+ "meshes": 2,
+ "size": [
+  0.66,
+  1.66,
+  1.101
+ ],
+ "min": [
+  -0.33,
+  0.0,
+  -0.4757
+ ],
+ "max": [
+  0.33,
+  1.66,
+  0.6254
+ ],
+ "sockets": {
+  "Muzzle": [
+   0.12,
+   0.8928,
+   0.5643
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}

@@ -1,5 +1,5 @@
 // Item models from public/models/parts/ (tools/blender/parts/items.py, asset batch 6) swapped into the arsenal's code
-// models once they load: a sword's hilt and blade by its base id, a shoulder feed's or the capacitor bank's body, and
+// models once they load: a sword's hilt and blade by its base id, a shoulder feed's, the capacitor bank's or a strike's body, and
 // the summoner shoulders (drone rack, swarm hive), which have no weapon model of their own. The box stand-ins show until
 // the GLB loads and stay when there is none (headless checks, a missing file). Drawing only.
 import * as THREE from "three/webgpu";
@@ -53,7 +53,7 @@ export function swordFromGlb(m: WeaponModel, base: string, look: ToonLook) {
   });
 }
 
-/** A shoulder feed's or the capacitor bank's model by base id: the GLB in place of the boxes, its lamps the glow. */
+/** A shoulder feed's, the capacitor bank's or a strike's model by base id: the GLB in place of the boxes, its lamps the glow. */
 export function gearFromGlb(m: WeaponModel, base: string, look: ToonLook) {
   m.base = base;
   void partGlb(base).then((scene) => {
@@ -61,8 +61,19 @@ export function gearFromGlb(m: WeaponModel, base: string, look: ToonLook) {
     const part = partFromGlb(scene, look);
     const lamps: THREE.MeshBasicMaterial[] = [];
     part.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.userData.glow) { const mat = lamp(); (o as THREE.Mesh).material = mat; lamps.push(mat); } });
-    m.recoil.clear();
+    // The boxes out; the muzzles (and the groups holding them) stay, the first moved to the GLB's Muzzle socket.
+    const boxes: THREE.Object3D[] = [];
+    m.recoil.traverse((o) => { if ((o as THREE.Mesh).isMesh && !(o.parent as THREE.Mesh | null)?.isMesh) boxes.push(o); });
+    for (const o of boxes) o.removeFromParent();
     m.recoil.add(part);
+    const sock = part.getObjectByName("Muzzle"), mz = m.muzzles[0];
+    if (sock && mz) {
+      m.recoil.updateWorldMatrix(true, true);
+      const at = m.recoil.worldToLocal(sock.getWorldPosition(new THREE.Vector3()));
+      m.recoil.add(mz);
+      mz.position.copy(at);
+      mz.quaternion.identity();
+    }
     m.glow.length = 0;
     m.glow.push(...lamps);
     m.meshes.length = 0;

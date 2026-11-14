@@ -1,0 +1,33 @@
+{
+ "id": "sh-stasis",
+ "kind": "shoulder",
+ "name": "Cryo bomb",
+ "maker": "Novus-Lux",
+ "says": "pressure bottle, frost bands, valve",
+ "tris": 528,
+ "meshes": 2,
+ "size": [
+  0.67,
+  1.45,
+  0.74
+ ],
+ "min": [
+  -0.335,
+  0.0,
+  -0.37
+ ],
+ "max": [
+  0.335,
+  1.45,
+  0.37
+ ],
+ "sockets": {
+  "Muzzle": [
+   0.0,
+   1.45,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}

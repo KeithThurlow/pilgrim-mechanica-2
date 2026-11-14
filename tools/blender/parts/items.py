@@ -316,7 +316,136 @@ def sh_hive():
     return b
 
 
-ITEMS = [sword_light, sword_heavy, sword_short, sh_beltfeed, sh_incendiary, sh_capacitor, sh_drones, sh_hive]
+# ---------------------------------------------------------------- shoulder strikes (Keith 2026-11-14, src/weapons/strikes.ts)
+# Each has a `Muzzle` socket where its effect leaves (the stand-in's muzzle) and a lamp the game lights when it's ready.
+FROST, VIOLET = (0.62, 0.92, 1.0), (0.72, 0.46, 1.0)
+PALE = (0.76, 0.80, 0.82)
+
+
+def ball(P, c, r, mat, col, n=10):
+    """A sphere-ish lathe (a pole-capped profile)."""
+    c = Vector(c)
+    prof = [(t, max(0.12, math.sin(math.pi * t))) for t in (0, 0.12, 0.3, 0.5, 0.7, 0.88, 1.0)]
+    return K.lathe(P, c - Z_ * r, c + Z_ * r, [(t, r * k) for t, k in prof], n, mat, col)
+
+
+def sh_quake():
+    """Quake hammer. Says: it pounds the ground. A braced block with a fat piston standing on it, a heavy hammer head on
+    top in olive with hazard bands, two raking braces, an amber ready lamp."""
+    b = K.Build("sh-quake", "shoulder", "Quake hammer", 81, "Stratford-Aegis", "piston and hammer head on a braced block")
+    mount_plate(b)
+    S = K.mass({
+        "x": ([(-0.42, 0.06), (0.40, 0.06), (0.46, 0.14), (0.46, 0.34), (0.36, 0.44), (-0.36, 0.44), (-0.42, 0.36)], -0.45, 0.45),
+        "y": ([(-0.45, 0.06), (0.45, 0.06), (0.45, 0.32), (0.34, 0.44), (-0.34, 0.44), (-0.45, 0.32)], -0.5, 0.5),
+    }, "block", FRAME, fillet=0.03)
+    b.add(S)
+    V.cyl(b.body, (0, 0, 0.66), 0.20, 0.44, "z", 12, None, "secondary", OLIVE_D)                           # the cylinder
+    V.cyl(b.body, (0, 0, 1.02), 0.13, 0.36, "z", 12, None, "trim", STEEL)                                   # the ram
+    V.cyl(b.body, (0, 0, 0.88), 0.22, 0.05, "z", 12, None, "trim", BARE)
+    S = K.mass({
+        "x": ([(-0.34, 1.20), (0.34, 1.20), (0.40, 1.28), (0.40, 1.60), (0.32, 1.70), (-0.32, 1.70), (-0.40, 1.60), (-0.40, 1.28)], -0.42, 0.42),
+        "y": ([(-0.42, 1.20), (0.42, 1.20), (0.42, 1.62), (0.36, 1.70), (-0.36, 1.70), (-0.42, 1.62)], -0.5, 0.5),
+    }, "head", OLIVE, fillet=0.03)
+    b.add(S)
+    for z in (1.30, 1.58):
+        B(b.body, (0, 0, z), (0.86, 0.82, 0.05), "trim", HAZARD, ch=0.01)
+    for s in (-1, 1):
+        V.bar(b.body, (s * 0.38, 0.30, 0.40), (s * 0.20, 0.06, 1.18), 0.035, "trim", BARE, 6)
+        V.bar(b.body, (s * 0.38, -0.30, 0.40), (s * 0.20, -0.06, 1.18), 0.035, "trim", BARE, 6)
+    b.lamp((0.24, -0.403, 1.44), (0.10, 0.06), FWD, AMBER)
+    b.lamp((0, 0, 1.705), (0.16, 0.05), Z_, AMBER)
+    b.socket("Muzzle", (0, 0, 1.80))
+    return b
+
+
+def sh_orbital():
+    """Orbital lance. Says: it calls a beam down from orbit. A white uplink dish tilted at the sky on a short slate mast,
+    three struts to a bright emitter at its focus."""
+    b = K.Build("sh-orbital", "shoulder", "Orbital lance", 82, "Novus-Lux", "uplink dish at the sky, lit emitter")
+    mount_plate(b, NAVY)
+    B(b.body, (0, 0, 0.18), (0.56, 0.56, 0.24), "dark", NAVY, ch=0.04)
+    V.cyl(b.body, (0, 0, 0.55), 0.07, 0.56, "z", 8, None, "trim", SLATE)
+    V.cyl(b.body, (0, 0, 0.32), 0.14, 0.08, "z", 8, None, "trim", NBARE)
+    tilt = math.radians(32)
+    up = Vector((0, math.sin(tilt), math.cos(tilt)))            # leaning back, looking up
+    a = Vector((0, 0, 0.82))
+    K.lathe(b.body, a, a + up * 0.28, [(0, 0.08), (0.4, 0.30), (0.8, 0.52), (1.0, 0.56)], 14, "primary", WHITE)
+    K.lathe(b.body, a + up * 0.27, a + up * 0.30, [(0, 0.56), (1, 0.58)], 14, "trim", SLATE)
+    f = a + up * 0.66
+    u, v, _ = V.basis_from(up)
+    for k in range(3):
+        ang = k * math.tau / 3
+        V.bar(b.body, a + up * 0.26 + (u * math.cos(ang) + v * math.sin(ang)) * 0.48, f, 0.018, "dark", NAVY, 4)
+    V.cyl(b.body, f - up * 0.02, 0.06, 0.10, "z", 8, None, "dark", NAVY, rot=up.to_track_quat("Z", "Y").to_matrix())
+    lit(b.glow, ball(b.glow, f + up * 0.06, 0.07, "glow", CYAN, 8))
+    b.lamp((0.24, -0.283, 0.20), (0.10, 0.05), FWD, TEAL)
+    b.socket("Muzzle", f + up * 0.08)
+    return b
+
+
+def sh_stasis():
+    """Cryo bomb. Says: a canister of cold. An upright pale pressure bottle with a domed top and a valve, cradled in a
+    frame, ringed with three frost-blue lit bands."""
+    b = K.Build("sh-stasis", "shoulder", "Cryo bomb", 83, "Novus-Lux", "pressure bottle, frost bands, valve")
+    mount_plate(b, NAVY)
+    B(b.body, (0, 0, 0.14), (0.66, 0.66, 0.16), "dark", NAVY, ch=0.03)
+    K.lathe(b.body, (0, 0, 0.20), (0, 0, 1.36), [(0, 0.20), (0.04, 0.27), (0.78, 0.27), (0.92, 0.20), (1.0, 0.08)], 12, "primary", PALE)
+    V.cyl(b.body, (0, 0, 1.40), 0.05, 0.08, "z", 6, None, "trim", BRASS)
+    V.bar(b.body, (-0.08, 0, 1.43), (0.12, 0, 1.43), 0.02, "trim", FRAME, 4)
+    for z in (0.46, 0.76, 1.06):
+        lit(b.glow, V.cyl(b.glow, (0, 0, z), 0.285, 0.06, "z", 12, None, "glow", FROST))
+    for s in (-1, 1):
+        V.bar(b.body, (s * 0.31, -0.20, 0.22), (s * 0.31, -0.20, 1.10), 0.025, "trim", NBARE, 4)
+        V.bar(b.body, (s * 0.31, 0.20, 0.22), (s * 0.31, 0.20, 1.10), 0.025, "trim", NBARE, 4)
+        V.bar(b.body, (s * 0.31, -0.20, 1.10), (s * 0.31, 0.20, 1.10), 0.025, "trim", NBARE, 4)
+    b.socket("Muzzle", (0, 0, 1.45))
+    return b
+
+
+def sh_gravity():
+    """Singularity. Says: a caged black hole. A dark sphere held in three bowed prongs over a round base, a violet core
+    showing through a slot, violet lamps round the base."""
+    b = K.Build("sh-gravity", "shoulder", "Singularity", 84, "Novus-Lux", "dark sphere in three prongs, violet core")
+    mount_plate(b, NAVY)
+    V.cyl(b.body, (0, 0, 0.18), 0.40, 0.24, "z", 12, [(0, 1.0), (1, 0.85)], "dark", NAVY)
+    c = Vector((0, 0, 0.88))
+    ball(b.body, c, 0.25, "dark", (0.12, 0.11, 0.14), 12)
+    lit(b.glow, V.cyl(b.glow, c, 0.255, 0.05, "z", 12, None, "glow", VIOLET))
+    for k in range(3):
+        ang = k * math.tau / 3 + math.pi / 2
+        d = Vector((math.cos(ang), math.sin(ang), 0))
+        V.pipe_run(b.body, [Vector((0, 0, 0.30)) + d * 0.26, Vector((0, 0, 0.62)) + d * 0.38, c + d * 0.34 + Z_ * 0.16,
+                            c + d * 0.20 + Z_ * 0.26], 0.035, "trim", SLATE, bend=0.10, n=5)
+        b.lamp(Vector((0, 0, 0.18)) + d * 0.37 + Z_ * 0.02, (0.08, 0.05), d, VIOLET)
+    b.socket("Muzzle", c + Z_ * 0.05)
+    return b
+
+
+def sh_artillery():
+    """Artillery beacon. Says: it calls the guns in. An olive radio box with a whip antenna and a folded dish, a stubby
+    flare tube pointing up and ahead, a hot lamp."""
+    b = K.Build("sh-artillery", "shoulder", "Artillery beacon", 85, "Suzaku", "radio box, whip antenna, flare tube")
+    mount_plate(b)
+    S = K.mass({
+        "x": ([(-0.36, 0.06), (0.34, 0.06), (0.40, 0.14), (0.40, 0.42), (0.32, 0.48), (-0.30, 0.48), (-0.36, 0.42)], -0.32, 0.32),
+    }, "box", OLIVE, fillet=0.03)
+    b.add(S)
+    B(b.body, (0, 0.02, 0.50), (0.66, 0.78, 0.05), "secondary", KHAKI, ch=0.015)
+    V.louvres(b.body, (0, 0.40, 0.28), X_, Z_, Y_, 0.46, 0.22, 4, "dark", FRAME, tilt=0.5, t=0.018)
+    V.cyl(b.body, (-0.22, 0.24, 0.56), 0.05, 0.08, "z", 6, None, "trim", BARE)
+    V.bar(b.body, (-0.22, 0.24, 0.58), (-0.22, 0.24, 1.66), 0.012, "dark", FRAME, 4, r2=0.006)                 # the whip
+    tilt = math.radians(50)
+    d = Vector((0, -math.sin(tilt), math.cos(tilt)))
+    a = Vector((0.12, -0.12, 0.52))
+    K.lathe(b.body, a, a + d * 0.56, [(0, 0.11), (0.85, 0.10), (0.9, 0.125), (1, 0.125)], 10, "secondary", STEEL_D)
+    V.cyl(b.body, a + d * 0.06, 0.15, 0.10, "z", 8, None, "dark", FRAME, rot=d.to_track_quat("Z", "Y").to_matrix())
+    b.lamp((0.20, -0.323, 0.30), (0.10, 0.06), FWD, HOT)
+    b.lamp((0.20, 0.36, 0.40), (0.08, 0.05), Y_, HOT)
+    b.socket("Muzzle", a + d * 0.58)
+    return b
+
+
+ITEMS = [sword_light, sword_heavy, sword_short, sh_beltfeed, sh_incendiary, sh_capacitor, sh_drones, sh_hive, sh_quake, sh_orbital, sh_stasis, sh_gravity, sh_artillery]
 
 if __name__ == "__main__":
     a = K.parse_args()

@@ -274,7 +274,7 @@ export class Arsenal implements MechWeapons {
       const mk: ModelKind = x.weapon === "rpg" ? "shoulderRpg" : x.weapon;
       const model = body.mount ? WEAPON_MODELS[mk](this.look, x.mount === "shoulderL" ? "left" : "right") : null;
       if (model && body.mount) body.mount(x.mount).add(model.root);
-      if (model && (x.family === "feed" || x.family === "power")) gearFromGlb(model, `sh-${x.weapon}`, this.look);
+      if (model && x.family !== "launcher") gearFromGlb(model, `sh-${x.weapon}`, this.look);
       const gear = x.family === "feed" || x.family === "power" ? new GearSim(gearStats(x.weapon, x.own, this.v)) : null;
       const sk = x.weapon as StrikeKind;
       // A refit keeps a strike already running on that key (its cooldown too), so swapping gear can't reset it.
