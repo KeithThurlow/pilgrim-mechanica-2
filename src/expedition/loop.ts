@@ -55,6 +55,8 @@ import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
 import { itemName, type Drop } from "./drops";
+import { KitOrbs } from "./kitOrbs";
+import { KitOrbsDraw } from "./kitOrbsDraw";
 import { banditThreat } from "./threat";
 import type { LootValues } from "../items/generate";
 import { levelPower } from "../items/level";
@@ -218,6 +220,9 @@ export class ExpeditionLoop {
   private stripped = 0;
   /** Repair kits found in salvage (all runs). */
   kitsFound = 0;
+  /** Repair kit pickups on the sand (walk over them; Keith 2026-11-14), host-owned, with their drawing. */
+  readonly kitOrbs: KitOrbs;
+  private kitOrbsDraw: KitOrbsDraw;
   private demoFrom = 0;
   demoHold = false;
   /** E and the drops (Keith 2026-11-06): the drop E would take now, E last frame, this frame's grab, a press spent on a drop. */
@@ -325,6 +330,12 @@ export class ExpeditionLoop {
     this.sound = new RadarSound(bf.sfx.ctx);
     this.dashes = player.dash.dashes;
     this.loot.watch(this.swarms.sw);
+    // Every kill goes through the item drops' fromKill (robots, bandits, fortress garrisons): a kit pickup rolls beside it.
+    this.kitOrbs = new KitOrbs(v as never, 0x4b17);
+    this.kitOrbsDraw = new KitOrbsDraw(field, this.player.v.kitOrbLife);
+    scene.add(this.kitOrbsDraw.group);
+    const itemKill = this.loot.drops.fromKill.bind(this.loot.drops);
+    this.loot.drops.fromKill = (key, threat, x, z, at) => { this.kitOrbs.fromKill(key, threat, x, z); return itemKill(key, threat, x, z, at); };
     this.quests = new QuestLoop(v as never, {
       exp: this.exp, hud: this.hud, sites: this.sites, camps: this.camps, bandits: this.bandits, drops: this.loot.drops,
       dropCtx: (x, z) => this.dropCtx(x, z), depth: (x, z) => this.depth.depth(x, z),
@@ -486,8 +497,8 @@ export class ExpeditionLoop {
     const { exp, fuel, carry, player, v, bf } = this, sim = player.sim, p = sim.pelvis;
     // Launched (on the sand), picked up (the crane has it: banked), or destroyed out there.
     const happened = exp.follow(carry.state, carry.attached, player.alive);
-    if (happened === "launched") { fuel.refill(); this.demoGoal = null; this.demoFrom = this.stripped; }
-    if (happened === "banked") this.sound.banked();
+    if (happened === "launched") { fuel.refill(); this.demoGoal = null; this.demoFrom = this.stripped; this.kitOrbs.reset(); for (const id of [...this.kitOrbsShown]) this.kitOrbsDraw.remove(id); this.kitOrbsShown.clear(); }
+    if (happened === "banked") { this.sound.banked(); this.restockKits(); }
     // A dead mech isn't picked up.
     if (!player.alive && (carry.state === "inRange" || carry.state === "pickup")) carry.state = "walking";
     if (!player.alive) carry.armed = false;
@@ -583,7 +594,7 @@ export class ExpeditionLoop {
 
     // The state machine: recall held, out of fuel; at the bottom of a fade the lab puts the mech home.
     const ev = exp.update(dt, inp.recallHeld && !inp.demo && player.alive, fuelOn && fuel.empty);
-    if (ev === "home") { this.onHome?.(); fuel.refill(); this.demoGoal = null; }
+    if (ev === "home") { const r = exp.last?.reason; this.onHome?.(); fuel.refill(); this.demoGoal = null; if (r === "recalled" || r === "fuel") this.restockKits(); }
 
     // The way home: the return point and the warning.
     this.homeT -= dt;
@@ -687,6 +698,32 @@ export class ExpeditionLoop {
       grab: this.grab, camera: this.camera, canvas: inp.canvas,
     });
     inp.mark?.("loot");
+    this.updateKitOrbs(dt, onSand, foot, pl);
+    inp.mark?.("kit pickups");
+  }
+
+  /** Back at the convoy: the kits topped up (Keith 2026-11-14). */
+  private restockKits() {
+    const n = this.player.kits.restock(this.player.v.kitHome);
+    if (n > 0) this.hud.note(`Repair kits restocked · ${this.player.kits.count}/${this.player.v.kitMax}`, "#9dffb0", 3);
+  }
+
+  private kitOrbsShown = new Set<string>();
+  /** Kit pickups: walked over by the mech (or the pilot on foot) on the sand, taken unless the kits are full. */
+  private updateKitOrbs(dt: number, onSand: boolean, foot: boolean, pl: LoopPilot | null | undefined) {
+    const { player, kitOrbs, kitOrbsDraw } = this, p = player.sim.pelvis, full = player.kits.count >= player.v.kitMax;
+    const who = [];
+    if (onSand && !foot && player.alive) who.push({ x: p.x, z: p.z, full });
+    if (onSand && foot && pl?.alive) who.push({ x: pl.x, z: pl.z, full });
+    const taken = kitOrbs.update(dt, who, { x: p.x, z: p.z });
+    for (const e of kitOrbs.events) {
+      if (e.type === "dropped") { kitOrbsDraw.add(e.orb); this.kitOrbsShown.add(e.orb.id); }
+      else if (e.type === "taken") { kitOrbsDraw.remove(e.orb.id); this.kitOrbsShown.delete(e.orb.id); }
+      else { kitOrbsDraw.remove(e.id); this.kitOrbsShown.delete(e.id); }
+    }
+    kitOrbs.events.length = 0;
+    for (let k = 0; k < taken; k++) if (player.kits.restock(1)) { this.kitsFound++; this.hud.note(`Repair kit · ${player.kits.count}/${player.v.kitMax}`, "#9dffb0", 2); this.sound.banked(); }
+    kitOrbsDraw.update(dt);
   }
 
   /**
@@ -722,7 +759,7 @@ export class ExpeditionLoop {
       } else if (e.type === "raid") {
         this.heatAnswer("raid");
       } else if (e.type === "extracted") {
-        this.sound.banked();
+        this.sound.banked(); this.restockKits();
       }
     }
     call.events.length = 0;

@@ -10,6 +10,8 @@ import { HealZones, type HealTarget } from "../src/abilities/zones";
 import { Abilities, ABILITY_DEFAULTS } from "../src/abilities/abilities";
 import { defaultLoadout, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
+import { KitOrbs } from "../src/expedition/kitOrbs";
+import { DROP_DEFAULTS } from "../src/expedition/drops";
 
 const problems: string[] = [];
 const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
@@ -137,6 +139,30 @@ if (a.me !== b.me || a.friend !== b.friend) problems.push("the same commands gav
   if (r !== "3:beacon,4:nanite") problems.push(`Medic pack + Salvager gave ${r}`);
   lo.hull = makeItem("hull-siege");
   if (!resolve(lo).abilities.some((x) => x.key === 4 && x.id === "weld")) problems.push("Siege hull has no weld");
+}
+// Kit pickups: seeded (same kills, same orbs), the chance rises with threat and stops at the cap, a full collector
+// leaves it, a near one takes it once, it burns out by age and by distance, home restock stops at kitMax.
+{
+  const v = { ...REPAIR_DEFAULTS, ...DROP_DEFAULTS };
+  const run = () => { const o = new KitOrbs(v, 7); let n = 0; for (let i = 0; i < 2000; i++) if (o.fromKill(`k${i}`, 40, i, 0)) n++; return n; };
+  const a = run(), b = run();
+  if (a !== b) problems.push(`kit pickup rolls differ between runs: ${a} vs ${b}`);
+  if (!near(a / 2000, new KitOrbs(v, 7).chance(40), 0.03)) problems.push(`kit pickup rate ${a / 2000} off its chance`);
+  const o = new KitOrbs(v, 7);
+  if (!(o.chance(1e6) <= v.kitKillMax + 1e-9 && o.chance(1e6) > o.chance(40))) problems.push("kit pickup chance doesn't rise to its cap");
+  const orb = new KitOrbs({ ...v, kitKill: 1, kitKillMax: 1 }, 1);
+  const q = orb.fromKill("x", 0, 10, 10)!;
+  if (orb.update(0.1, [{ x: q.x, z: q.z, full: true }], { x: q.x, z: q.z }) !== 0 || orb.orbs.length !== 1) problems.push("a full collector took a kit pickup");
+  if (orb.update(0.1, [{ x: q.x + 50, z: q.z, full: false }], { x: q.x, z: q.z }) !== 0) problems.push("a far collector took a kit pickup");
+  if (orb.update(0.1, [{ x: q.x + 1, z: q.z, full: false }], { x: q.x, z: q.z }) !== 1 || orb.orbs.length !== 0) problems.push("a near collector didn't take the kit pickup once");
+  const old = new KitOrbs({ ...v, kitKill: 1, kitKillMax: 1 }, 1); old.fromKill("y", 0, 0, 0);
+  old.update(v.kitOrbLife + 1, [], { x: 0, z: 0 });
+  if (old.orbs.length) problems.push("a kit pickup outlived kitOrbLife");
+  const far = new KitOrbs({ ...v, kitKill: 1, kitKillMax: 1 }, 1); far.fromKill("z", 0, 0, 0);
+  far.update(0.1, [], { x: v.dropForget + 50, z: 0 });
+  if (far.orbs.length) problems.push("a kit pickup stayed past dropForget");
+  const k = new RepairKits(v, 1);
+  if (k.restock(v.kitHome) !== Math.min(v.kitHome, v.kitMax - 1) || k.count > v.kitMax) problems.push("home restock past kitMax");
 }
 
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("repair check failed"); }

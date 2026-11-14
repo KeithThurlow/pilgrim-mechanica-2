@@ -331,6 +331,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Checked: typecheck; new `tools/runthreat-check.ts` (round trip to 1.5 km and back: threat 1500 m, a drop by the convoy on the way back rolls level 11 instead of 1.5; never falls while out; back to 0 in 125 s at home; off = old behaviour); `npm test`.
 - Try: convoy lab `?far` (walk out, watch THREAT climb, walk back: it holds; board: it falls), `?out&runthreat=1500` (kills near the convoy drop level ~11 gear).
 
+### 2026-11-14 · Repair kits refill at the convoy and drop as pickups (Keith; Claude on `claude/project-thread-d10zn5`)
+- Back aboard (banked by the crane, recalled, out of fuel, or extracted) the mech's kits are topped up by `kitHome` (3, so to the max); a lost mech or a killed pilot gets none. Out in the field enemy kills can leave a green repair-kit orb (health-orb style: walk over it, no key; stays if kits are full; burns out after `kitOrbLife` 90 s or past `dropForget`). Chance per kill `kitKill` 0.04 + `kitKillThreat` 0.3 × threat scale, capped `kitKillMax` 0.6 (scrapper ~4.5%, cutter ~9%, excavator ~47%, fortress garrison 4%); rolled seeded by the kill's id. Existing salvage-spot kits and the bay shop stay.
+- Files: `src/expedition/kitOrbs.ts` (pure), `kitOrbsDraw.ts`, `loop.ts` (wraps `loot.drops.fromKill` so every kill site rolls, `restockKits`, `updateKitOrbs`), `src/game/repair.ts` (new sliders, Repair kits group), `tools/repair-check.ts`. Checked: repair-check (seeded, rate, cap, full collector, once, expiry, restock cap), `npm test`.
+- Open for Keith: drop rate, home restock amount (all 3?) and whether orbs should also spawn from salvage spots instead of the silent kit roll.
 ### 2026-11-14 · Inventory filter tags (Keith; Claude)
 - Inventory Show chips are multi-select toggle tags; no tags selected shows everything (the All chip is gone). `src/ui/inventory.ts`. Checked: typecheck, npm test. Claude (Keith's request).
 
