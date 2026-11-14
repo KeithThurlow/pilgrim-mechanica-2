@@ -28,22 +28,44 @@ export class TreeInterp {
 
   /** End of a tick: this tick's pose becomes the last, the tree's pose now becomes this tick's. */
   private list: THREE.Object3D[] = [];
+  // The tree is walked again only after a part was added or taken out (every node tells us: three's childadded and
+  // childremoved). Walking 2,800 parts every tick to find the same list was half of this file's cost (convoy profile,
+  // 2026-11-13).
+  private dirty = true;
+  private heard = new Set<THREE.Object3D>();
+  private onTree = () => { this.dirty = true; };
   capture() {
     this.restore();
-    // One list reused tick to tick (a fresh one each tick was garbage at 60 Hz for every model).
-    const list = this.list;
-    list.length = 0;
-    this.root.traverse((o) => { list.push(o); });
-    const same = list.length === this.parts.length && list.every((o, i) => o === this.parts[i]);
-    if (!same) {
-      const n = list.length * F;
-      this.parts = list.slice(); this.prev = new Float64Array(n); this.cur = new Float64Array(n); this.shown = new Float64Array(n);
-      this.on = new Uint8Array(list.length); this.captured = 0;
-    } else this.prev.set(this.cur);
-    const c = this.cur;
-    for (let i = 0; i < list.length; i++) read(list[i], c, i * F);
-    // A new tree (or the first tick) has no last pose: hold this one.
+    if (this.dirty) {
+      this.dirty = false;
+      // One list reused (a fresh one each time was garbage for every model).
+      const list = this.list;
+      list.length = 0;
+      this.root.traverse((o) => { list.push(o); });
+      for (const o of list) if (!this.heard.has(o)) { this.heard.add(o); o.addEventListener("childadded", this.onTree); o.addEventListener("childremoved", this.onTree); }
+      const same = list.length === this.parts.length && list.every((o, i) => o === this.parts[i]);
+      if (!same) {
+        const n = list.length * F;
+        this.parts = list.slice(); this.prev = new Float64Array(n); this.cur = new Float64Array(n); this.shown = new Float64Array(n);
+        this.on = new Uint8Array(list.length); this.captured = 0;
+      }
+    }
+    // The last tick's pose and this one's swap places (no copy), then this tick's is read.
+    const t = this.prev; this.prev = this.cur; this.cur = t;
+    const c = this.cur, parts = this.parts;
+    for (let i = 0; i < parts.length; i++) read(parts[i], c, i * F);
+    // A new tree (or the first tick, or the first after sleep()) has no last pose: hold this one.
     if (this.captured++ === 0) this.prev.set(c);
+  }
+
+  /** Not captured for a while (hidden, off the screen): the next capture starts over, holding its pose for a tick. */
+  sleep() { this.restore(); this.captured = 0; }
+
+  /** Stop listening to the tree (the model left the list). */
+  dispose() {
+    this.restore();
+    for (const o of this.heard) { o.removeEventListener("childadded", this.onTree); o.removeEventListener("childremoved", this.onTree); }
+    this.heard.clear();
   }
 
   /** Forget the last pose (a teleport, a respawn): the next frames show this tick's pose until the next capture. */
@@ -128,17 +150,26 @@ export class InterpSet {
   models = 0;
   parts = 0;
 
+  /** Says whether a model can be on the screen (the app's camera test); unset: every model is captured. */
+  inView: ((root: THREE.Object3D) => boolean) | null = null;
+  /** Models skipped at the last tick: hidden, or off the screen. */
+  asleep = 0;
+
   capture() {
-    for (const [r, ti] of this.map) if (!tracked.has(r)) { ti.restore(); this.map.delete(r); }
-    let m = 0, n = 0;
+    for (const [r, ti] of this.map) if (!tracked.has(r)) { ti.dispose(); this.map.delete(r); }
+    let m = 0, n = 0, z = 0;
     for (const r of tracked) {
-      if (!inScene(r)) continue;
+      const state = shownInScene(r);
+      if (state === 0) continue;
       let ti = this.map.get(r);
+      // Hidden (a parked body, a culled car) or off the screen: nothing to draw between ticks, so nothing to keep.
+      // Back in view it holds its pose for one tick, then blends again.
+      if (state === 1 || (this.inView && !this.inView(r))) { ti?.sleep(); z++; continue; }
       if (!ti) { ti = new TreeInterp(r); this.map.set(r, ti); }
       ti.capture();
       m++; n += ti.size;
     }
-    this.models = m; this.parts = n;
+    this.models = m; this.parts = n; this.asleep = z;
   }
   apply(alpha: number) { for (const [r, ti] of this.map) if (r.visible) ti.apply(alpha); }
   restore() { for (const ti of this.map.values()) ti.restore(); }
@@ -146,9 +177,14 @@ export class InterpSet {
   snap(root: THREE.Object3D) { this.map.get(root)?.snap(); }
 }
 
-function inScene(o: THREE.Object3D) {
-  for (let p: THREE.Object3D | null = o; p; p = p.parent) if ((p as THREE.Scene).isScene) return true;
-  return false;
+/** 0: not in a scene; 1: in one but hidden (itself or a parent); 2: in one and shown. */
+function shownInScene(o: THREE.Object3D): 0 | 1 | 2 {
+  let shown = true;
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+    if (!p.visible) shown = false;
+    if ((p as THREE.Scene).isScene) return shown ? 2 : 1;
+  }
+  return 0;
 }
 
 // Swarms drawn between ticks (stage 6d). A swarm's sim keeps its units in slot arrays (x, z, heading, feet...) and
