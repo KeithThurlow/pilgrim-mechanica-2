@@ -51,7 +51,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       femur: 1.247, shin: 0.82, cannon: 1.298, cannonRake: 14.3, ankleHeight: 0.153, ankleBack: 0,
       footSpread: 0.82, walkSpread: 0.56,
       toeHinge: 0.12, toeLength: 0.47, toeCurl: 35,
-      strideBase: 2.5, stridePerSpeed: 0.5, liftHeight: 0.9,
+      strideBase: 2.5, stridePerSpeed: 1.0, strideMax: 7.5, liftHeight: 0.9, // Keith 2026-11-14: longer walking steps (was 0.5 per m/s)
       // Fast and fragile: quicker to top speed, less grip, lands softer things only.
       boundTop: 8.5, boundBuild: 0.4, boundGrip: 0.6, boundHop: 2.6, landHard: 9, landHurt: 10,
     },
@@ -67,7 +67,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       femur: 1.441, shin: 0.679, cannon: 1.017, cannonRake: 18.4, ankleHeight: 0.136, ankleBack: 0,
       footSpread: 1.2, walkSpread: 0.95,
       toeHinge: 0.24, toeLength: 0.8, toeCurl: 35,
-      strideBase: 2.1, stridePerSpeed: 0.36,
+      strideBase: 2.1, stridePerSpeed: 0.8, strideMax: 6, // Keith 2026-11-14: longer walking steps (was 0.36 per m/s)
       // Slow to wind up, grips hard, lands almost anything.
       boundTop: 7.8, boundBuild: 0.25, boundGrip: 0.85, boundHop: 2.1, landHard: 13, landHurt: 15,
     },

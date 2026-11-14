@@ -123,6 +123,8 @@ for (const build of builds) {
     sim.launch(0, 0, fwd);
     let under = 0, nan = 0, low = Infinity, landedAt = -1, settledAt = -1, wasAir = true;
     const cmd = { x: 0, z: fwd / build.values.walkSpeed, sprint: false };
+    const wk = Math.min(1, Math.max(0, (fwd - 0.5) / Math.max(0.1, build.values.walkSpeed - 0.5)));
+    const walkDip = fwd ? (build.values.walkCrouch ?? 0) * wk * wk * (3 - 2 * wk) : 0;
     for (let i = 0; i < 6 / dt; i++) {
       sim.update(dt, cmd);
       for (const f of sim.feet) if (f.pos.y < -0.02 || f.planted.y < -0.02) under++;
@@ -131,8 +133,8 @@ for (const build of builds) {
       wasAir = sim.airborne;
       if (landedAt >= 0) {
         low = Math.min(low, sim.pelvis.y);
-        // Settled: the squat is over and the hips are back within 0.15 m of standing.
-        if (settledAt < 0 && !sim.landing && !sim.airborne && Math.abs(sim.pelvis.y - stand) < 0.15) settledAt = i * dt - landedAt;
+        // Settled: the squat is over and the hips are back within 0.15 m of standing (walking on: of the walk's crouch).
+        if (settledAt < 0 && !sim.landing && !sim.airborne && Math.abs(sim.pelvis.y - (stand - walkDip)) < 0.15) settledAt = i * dt - landedAt;
       }
     }
     const l = sim.lastLanding;
