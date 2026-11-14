@@ -743,7 +743,7 @@ const panel = tweakPanel({
     PILOT_TOPIC, SUMMON_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
     ABILITY_TOPIC,
-    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Bare mech", "Leg load", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
+    { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Loot slot mix", "Bare mech", "Leg load", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },
     { id: "tracks", label: "Tracks and trail", groups: ["Tracks", CONVOY_SOUND_GROUP, "Convoy trail", "Ground dents"] },
     { id: "pipes", label: "Pipes", groups: ["Pipes"] },
