@@ -591,6 +591,11 @@ export class WalkerSim {
   /** 0 at walk speed and below, 1 at sprint speed: how much the gait is a run (bounce, crouch). */
   runShare() { return smooth(this.v.walkSpeed, Math.max(this.v.walkSpeed + 0.1, this.v.sprintSpeed), this.speed); }
   /** Each foot's distance from the centre line: footSpread standing, coming in to walkSpread once moving. */
+  /** How far (m) a leg reaches level from its hip at the walk's hip height, at its longest (legReachMax). */
+  walkReach() {
+    const v = this.v, R = v.legReachMax * (v.femur + v.shin + v.cannon), dy = v.hipHeight - v.walkCrouch - v.ankleHeight;
+    return Math.sqrt(Math.max(0, R * R - dy * dy));
+  }
   spread() { return this.v.footSpread + (this.v.walkSpread - this.v.footSpread) * clamp(this.speed / 1.5, 0, 1); }
   duty() { return this.v.duty + (this.v.dutyFast - this.v.duty) * clamp(this.speed / Math.max(0.1, this.v.sprintSpeed), 0, 1); }
 
@@ -2285,7 +2290,9 @@ export class WalkerSim {
   /** Landing spot: where this foot belongs when the body gets there, on the ground. */
   private aim(f: Foot) {
     const v = this.v, d = this.dutyNow, S = this.stride();
-    const cps = Math.max(this.speed / S + (this.cpsNow - this.speed / S) * this.gaitK, MIN_CYCLE);
+    // The cadence the steps actually come at (hurried included: Keith 2026-11-14, aimed at the unhurried cadence a hurried
+    // walk landed its feet early, short of where the body would be, so they reached out ahead; worst on the stilts).
+    const cps = Math.max(this.cpsNow > 0 ? this.cpsNow : this.speed / S, MIN_CYCLE);
     const remain = ((1 - f.u) * (1 - d)) / cps;
     const h = this.heading + this.turnSpeed * remain * 0.5;
     const fw = forwardOf(h, this.t.f), lf = leftOf(h, this.t.l);
@@ -2301,6 +2308,14 @@ export class WalkerSim {
     // the peak's pace the feet landed metres ahead of the stopped body and the hips dropped after them).
     const go = this.burst && this.speed > 0.3 ? this.burstGo(remain) / this.speed : remain;
     f.target.copy(this.pos).addScaledVector(this.vel, go).addScaledVector(this.t.b, ahead).addScaledVector(lf, f.side * this.spread());
+    // Walking, never further ahead of its own hip than plantReach of what the leg reaches level at the walk's hip height
+    // (Keith 2026-11-14: the stilts' feet reached out in front strafing; the stride's share ahead outgrew the shorter legs).
+    if (this.gaitK < 1) {
+      const cap = v.plantReach * this.walkReach(), hx = this.pos.x + this.vel.x * go + lf.x * f.side * v.hipWidth;
+      const hz = this.pos.z + this.vel.z * go + lf.z * f.side * v.hipWidth;
+      const over = ((f.target.x - hx) * this.t.b.x + (f.target.z - hz) * this.t.b.z - cap) * (1 - this.gaitK);
+      if (over > 0) { f.target.x -= this.t.b.x * over; f.target.z -= this.t.b.z * over; }
+    }
     // Walking, never across the other leg: the landing spot stays on its own side of where the body will be.
     if (!this.running) {
       const cx = this.pos.x + this.vel.x * go, cz = this.pos.z + this.vel.z * go;
