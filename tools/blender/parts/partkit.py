@@ -254,7 +254,7 @@ def write(b, out_dir, wear=None):
     return side
 
 
-def sheet(path, views=None, res=(620, 520), samples=24, extra=None):
+def sheet(path, views=None, res=(620, 520), samples=24, extra=None, target=(0, 0.05, 0.12)):
     """Renders the scene as it stands (after write()) from the builder's check views, with Cycles on the CPU: a hard high sun
     like the game's, the paint from the vertex colours. views: [(name, yaw from behind (deg), pitch down (deg), distance)].
     `extra(scene)` can add stand-in context (a slab for the hull's back)."""
@@ -298,7 +298,7 @@ def sheet(path, views=None, res=(620, 520), samples=24, extra=None):
     cam.data.lens = 70
     sc.collection.objects.link(cam)
     sc.camera = cam
-    target = Vector((0, 0.05, 0.12))
+    target = Vector(target)
     views = views or [("game", 0, 50, 5.2), ("rear34", 38, 22, 4.6), ("side", 80, 12, 4.6)]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     for name, yaw, pitch, dist in views:
