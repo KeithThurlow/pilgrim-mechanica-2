@@ -324,6 +324,15 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Mobile frame rate, step 2: phones step mechs' legs less often, the scope at 10 Hz; still model parts and the instanced pool list cost less everywhere (Keith's phone in convoy fights; Claude on `claude/project-thread-w0fxn6`)
+- Walker probe (40 s on the dunes, Rampart legs): stepped at 120, 60 or 30 Hz it keeps the same cadence (1.15 steps/s), ends within 0.2 m of the same place, feet never under the ground; a step costs the same, so 30 Hz is a quarter of the work. Mechs are drawn between ticks, so the extra steps inside a tick show nowhere.
+- `src/convoy/guardians.ts`: new slider `guardHz` (Convoy guardians: steps a second on the screen, 120). `src/core/phoneQuality.ts`: phones `guardHz` 30, `guardLodHz` 30, `radarHz` 10. `src/game/mechUnit.ts`: every other mech (yours, rivals, bandit mechs) substeps at 60 on phones (120 elsewhere).
+- `src/look/treeInterp.ts`: a part that has held still for 30 ticks is looked at every 8th tick only (most parts never move on their joint); when it moves it shows the tick's pose unblended until seen, then blends again.
+- `src/core/instanceUploads.ts`: the scene's instanced meshes are listed every 20 frames instead of walking the whole scene every frame.
+- Numbers (cloud box, `labs/convoy/?siege=80&manual&lite=1&norender&dt=0.0333`, 40 s through the fight): sim 13.0 → 10.2-11.2 ms a tick mean, 95% 21.5 → 17.6-19; guardians 1.93 → 1.0-1.2, mech 0.80 → 0.55-0.66, radar 0.77 → 0.31-0.36; the per-tick capture 1.8 → 0.38 (profile).
+- Checked: typecheck; `treeinterp-check` (a quiet part that moves never shows an old pose and blends again within 9 ticks); full `npm test`. Not seen on a GPU or a phone.
+- Open for Keith: guardians' gait on the phone at 30 steps a second (`?set=guardHz:120` is the old way); whether the PC should take the lower rates too (it would save about 1 ms there).
+
 ### 2026-11-14 · Mobile frame rate, step 1: profile tools; models drawn between ticks cost less (Keith: "we need to profile the game again... nowhere near performance goals" on the phone in convoy fights; Claude on `claude/project-thread-w0fxn6`)
 - Found (convoy lab `?siege=80&manual&lite=1`, cloud box, about half a phone's speed): the main thread spends about 13 ms a tick with no fight on (20-30 in one) plus 6-10 ms submitting the draw; no single hot spot. Dearest: keeping 2,800 model parts for drawing between ticks (2-4 ms), guardian mechs' walkers (2 ms), ground reads through the modifier stack (2.4 ms, spread), the radar's canvas (0.8-1.4), posting to the sim worker (0.4-1).
 - `tools/perf-profile.mjs` (CPU profile of the page and the sim worker, ms a drawn frame, by self and total time; `THROTTLE`, `FIRE`, `SERIES`) and `tools/perf-stages.mjs` (the HUD's stages averaged with no profiler attached, sim percentiles; `window.__costs()` from `src/core/costs.ts`).
