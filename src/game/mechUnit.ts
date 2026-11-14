@@ -6,6 +6,7 @@ import type { World } from "../ecs/world";
 import { KIND } from "./register";
 import { Rng, seedFrom } from "../core/rng";
 import * as THREE from "three/webgpu";
+import { phoneLite } from "../core/phoneQuality";
 import type { Param } from "../core/tweaks";
 import { WalkerSim, leftOf, type MoveCommand, type Landing } from "../mech/walker";
 import type { WalkerValues } from "../mech/walkerTuning";
@@ -401,7 +402,7 @@ export class MechUnit implements Hittable, Solid {
   /** Advance one frame: legs and guns at 120 Hz, fire whatever the guns fired, pose the model. */
   /** shotAt: where the minigun rounds go, if not the aim (the lab aims the arms ahead of a moving lock, the rounds at it). */
   /** Steps a second for the legs, torso and guns (120; an AI mech off the screen can take fewer: guardians' LOD). */
-  subHz = 120;
+  subHz = phoneLite ? 60 : 120;
 
   step(dt: number, cmd: MoveCommand, aim: Aim | null, trigger: Trigger, shotAt: Aim | null = aim) {
     this.clock += dt;
