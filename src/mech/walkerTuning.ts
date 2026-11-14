@@ -61,6 +61,8 @@ export const WALKER_DEFAULTS = {
   bob: 0.06,
   runBounce: 1,
   runCrouch: 0.18,
+  // Keith 2026-11-14 (walk strides too short): the hips sit this much lower at walk speed, so the legs reach a longer step.
+  walkCrouch: 0.2,
   impact: 2.2,
   weightShift: 0.08,
   crunchRoll: 4,
@@ -318,6 +320,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "kneeOut", label: "Knees out (°)", min: -10, max: 30, step: 1, group: "Body" },
   { key: "bob", label: "Body bob (m)", min: 0, max: 0.3, step: 0.005, group: "Body" },
   { key: "runBounce", label: "Run bounce", min: 0, max: 1, step: 0.01, group: "Body", tip: "Walking the hips ride highest over the planted foot (vaulting); running they sink onto it and spring off (bouncing). 1 = full bounce at sprint speed, blending in from walk speed" },
+  { key: "walkCrouch", label: "Walk crouch (m)", min: 0, max: 0.6, step: 0.01, group: "Gait", tip: "Keith 2026-11-14: the hips drop this much at walk speed (from nothing standing), giving the legs reach for a longer walking step. The run's crouch takes over above it" },
   { key: "runCrouch", label: "Run crouch (m)", min: 0, max: 0.6, step: 0.01, group: "Body", tip: "The hips drop this much at sprint speed (from nothing at walk speed): a lower, driving run that keeps the long strides in reach" },
   { key: "impact", label: "Plant thud", min: 0, max: 8, step: 0.05, group: "Body", tip: "How hard the body drops onto each footfall" },
   { key: "weightShift", label: "Weight shift (m)", min: 0, max: 0.4, step: 0.005, group: "Body", tip: "The pelvis moves over the planted foot" },

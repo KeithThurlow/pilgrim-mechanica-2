@@ -193,6 +193,9 @@ export interface Base {
 export type SummonKind = "replicas" | "drones" | "swarm";
 
 const R = LEG_TYPES.rampart.values;
+// Leg items roll their stride around their leg type's (Keith 2026-11-14: the items' own, shorter strides overrode the
+// leg types' walk in every lab with a loadout).
+const ST = LEG_TYPES["rampart-stilt"].values, SG = LEG_TYPES["rampart-siege"].values;
 const W = { ...WALKER_DEFAULTS, ...R };
 const U = UPPER_DEFAULTS;
 const WD = WEAPON_DEFAULTS;
@@ -229,22 +232,22 @@ export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
   {
     id: "legs-rampart", name: "Rampart legs", kind: "legs", tags: ["legs"], weight: 6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { walkSpeed: s(W.walkSpeed, 0.06), sprintSpeed: s(W.sprintSpeed, 0.06), accel: s(W.accel, 0.1), strideBase: s(W.strideBase, 0.04), stridePerSpeed: s(W.stridePerSpeed, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1) },
+    stats: { walkSpeed: s(W.walkSpeed, 0.06), sprintSpeed: s(W.sprintSpeed, 0.06), accel: s(W.accel, 0.1), strideBase: s(R.strideBase!, 0.04), stridePerSpeed: s(R.stridePerSpeed!, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1) },
   },
   {
     id: "legs-stilt", name: "Stilt legs", kind: "legs", tags: ["legs"], weight: 4.5, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 1,
-    stats: { walkSpeed: s(7.2, 0.06), sprintSpeed: s(10, 0.06), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1) },
+    stats: { walkSpeed: s(7.2, 0.06), sprintSpeed: s(10, 0.06), accel: s(3.8, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1) },
   },
   {
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1) },
+    stats: { walkSpeed: s(5, 0.06), sprintSpeed: s(7, 0.06), accel: s(2.2, 0.1), strideBase: s(SG.strideBase!, 0.04), stridePerSpeed: s(SG.stridePerSpeed!, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1) },
   },
   {
     // Hover legs (Keith 2026-11-02: "a floating leg that can't support heavy hulls... hovers instead of walking"): the
     // Stilt's legs on a hover drive, feet hanging; quick and floaty, no stomp, light hulls only (the Cuirass, the
     // Salvager). A model of their own comes later: the Stilt's legs stand in.
     id: "legs-hover", name: "Hover legs", kind: "legs", tags: ["legs", "hover"], weight: 3, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.7,
-    stats: { walkSpeed: s(7.5, 0.06), sprintSpeed: s(10, 0.06), accel: s(4, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), lifts: s(6, 0) },
+    stats: { walkSpeed: s(7.5, 0.06), sprintSpeed: s(10, 0.06), accel: s(4, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), lifts: s(6, 0) },
   },
   // Hulls: hull points, torso turn, mounts.
   {

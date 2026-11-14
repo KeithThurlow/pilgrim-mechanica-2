@@ -2524,7 +2524,7 @@ export class WalkerSim {
     const down = smooth(0, 0.35, -this.grade);
     const sprintCrouch = v.boundCrouch * (0.4 + 0.6 * this.speedShare());
     if (!this.dashMove) { const e = Math.max(0, 1 - dt * 3); this.dashRoll *= e; this.dashPitch *= e; this.dashDipNow *= e; }
-    let yT = ref + v.hipHeight - v.downhillCrouch * down - (v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
+    let yT = ref + v.hipHeight - v.downhillCrouch * down - Math.max(v.walkCrouch * smooth(0.5, v.walkSpeed, this.speed), v.runCrouch * run) * (1 - rk) - sprintCrouch * rk - this.crouch + this.dashDipNow;
     if (rk > 0) {
       // The hull never dips into rising ground: the hips keep runClear over the highest ground ahead (the legs take it).
       const clear = this.groundAhead(Math.max(1.5, this.speed * v.runLookAhead)) + v.runClear;

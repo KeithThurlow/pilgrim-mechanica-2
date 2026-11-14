@@ -310,6 +310,17 @@ export function unsocket(item: Item, i: number): Item | null {
 }
 
 /** An item's stats with its Protocols' item-scope changes applied. */
+/**
+ * Leg items rolled before 2026-11-14 carry the old, short strides per m/s (Keith 2026-11-14: walking steps too short):
+ * rolls inside the old range are carried over to the same place in the new one.
+ */
+const OLD_STRIDE_PER_SPEED: Record<string, number> = { "legs-rampart": 0.45, "legs-stilt": 0.45, "legs-hover": 0.45, "legs-siege": 0.36 };
+function strideNow(base: string, st: Record<string, number>): Record<string, number> {
+  const old = OLD_STRIDE_PER_SPEED[base], now = BASE_BY_ID[base]?.stats.stridePerSpeed?.base;
+  if (!old || !now || !(st.stridePerSpeed < old * 1.1)) return st;
+  return { ...st, stridePerSpeed: st.stridePerSpeed * (now / old) };
+}
+
 export function effectiveStats(item: Item): Record<string, number> {
   const out = { ...item.stats };
   const ws = stackWeights(item.socketed);
@@ -380,7 +391,7 @@ export interface Resolved {
 }
 
 export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Resolved {
-  const legs = lo.legs ? effectiveStats(lo.legs) : BASE_STATS("legs-rampart");
+  const legs = lo.legs ? strideNow(lo.legs.base, effectiveStats(lo.legs)) : BASE_STATS("legs-rampart");
   const hull = lo.hull ? effectiveStats(lo.hull) : BASE_STATS("hull-rampart");
   const pack = lo.pack?.kind === "pack" ? effectiveStats(lo.pack) : null;
   const sensor = lo.sensor ? effectiveStats(lo.sensor) : null;
