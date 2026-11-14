@@ -28,6 +28,7 @@ export const GUARDIAN_DEFAULTS = {
   guardLeash: 45,
   guardRespawn: 40,
   /** Perf 2026-11-07: steps a second for a guardian off the screen (its legs, torso and guns; 120 on screen). */
+  guardHz: 120,
   guardLodHz: 60,
 };
 export type GuardianValues = typeof GUARDIAN_DEFAULTS;
@@ -43,6 +44,7 @@ export const GUARDIAN_PARAMS: Param[] = [
   { key: "guardHold", label: "Holds off a target (m)", min: 5, max: 60, step: 1, group: G },
   { key: "guardLeash", label: "Leash from station (m)", min: 0, max: 150, step: 5, group: G, tip: "Never further than this from its station, whatever it is chasing" },
   { key: "guardRespawn", label: "Back out after (s)", min: 3, max: 300, step: 1, group: G, tip: "A destroyed guardian walks back out of the convoy this long after" },
+  { key: "guardHz", label: "Steps a second on the screen", min: 30, max: 120, step: 30, group: G, tip: "A guardian's legs, torso and guns step this often (yours: 120). It is drawn between ticks either way, and walks the same line at 30 (walker probe 2026-11-14: same cadence, same place after 40 s); phones use 30" },
   { key: "guardLodHz", label: "Steps a second off the screen", min: 15, max: 120, step: 15, group: G, tip: "Perf 2026-11-07: a guardian off the screen steps its legs, torso and guns this often (120 on screen, the same as yours)" },
 ];
 export const GUARDIAN_GROUPS = [G];
@@ -131,7 +133,7 @@ export class Guardians {
       const u = g.unit;
       // Off the screen it steps its legs and guns at a lower rate (nobody sees the gait): one step of 1/guardLodHz s
       // once that much time has gone by.
-      const pp = u.sim.pos, hz = this.bf.view.sees(pp.x, pp.y + 2, pp.z, 7) ? 120 : Math.max(15, Math.min(120, v.guardLodHz));
+      const pp = u.sim.pos, hz = this.bf.view.sees(pp.x, pp.y + 2, pp.z, 7) ? Math.max(30, Math.min(120, v.guardHz)) : Math.max(15, Math.min(120, v.guardLodHz));
       u.subHz = hz;
       g.acc = (g.acc ?? 0) + dt;
       const due = hz >= 120 || g.acc >= 1 / hz - 1e-6, sdt = g.acc;

@@ -10,6 +10,7 @@ import type * as THREE from "three/webgpu";
 
 
 const F = 10; // floats per part: position 3, quaternion 4, scale 3
+const QUIET = 30; // ticks still before a part is only looked at now and then
 
 export class TreeInterp {
   private parts: THREE.Object3D[] = [];
@@ -31,6 +32,9 @@ export class TreeInterp {
   // The tree is walked again only after a part was added or taken out (every node tells us: three's childadded and
   // childremoved). Walking 2,800 parts every tick to find the same list was half of this file's cost (convoy profile,
   // 2026-11-13).
+  /** Ticks in a row each part has held still (up to QUIET). */
+  private quiet = new Uint8Array(0);
+  private tickNo = 0;
   private dirty = true;
   private heard = new Set<THREE.Object3D>();
   private onTree = () => { this.dirty = true; };
@@ -47,13 +51,26 @@ export class TreeInterp {
       if (!same) {
         const n = list.length * F;
         this.parts = list.slice(); this.prev = new Float64Array(n); this.cur = new Float64Array(n); this.shown = new Float64Array(n);
-        this.on = new Uint8Array(list.length); this.captured = 0;
+        this.on = new Uint8Array(list.length); this.quiet = new Uint8Array(list.length); this.captured = 0;
       }
     }
     // The last tick's pose and this one's swap places (no copy), then this tick's is read.
     const t = this.prev; this.prev = this.cur; this.cur = t;
-    const c = this.cur, parts = this.parts;
-    for (let i = 0; i < parts.length; i++) read(parts[i], c, i * F);
+    const c = this.cur, p = this.prev, parts = this.parts, q = this.quiet, tick = this.tickNo++;
+    for (let i = 0; i < parts.length; i++) {
+      const k = i * F;
+      // Most parts of a model never move on their joint. One that has held still for a second is looked at every
+      // 8th tick only (its two poses are the same, so there is nothing to keep); when it does move it shows the
+      // tick's pose unblended until it's seen, then blends again.
+      if (q[i] >= QUIET) {
+        if ((tick + i) & 7) continue;
+        read(parts[i], c, k);
+        if (!still(p, c, k)) { q[i] = 0; for (let j = 0; j < F; j++) p[k + j] = c[k + j]; }
+        continue;
+      }
+      read(parts[i], c, k);
+      if (still(p, c, k)) q[i]++; else q[i] = 0;
+    }
     // A new tree (or the first tick, or the first after sleep()) has no last pose: hold this one.
     if (this.captured++ === 0) this.prev.set(c);
   }

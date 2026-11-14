@@ -38,9 +38,16 @@ function trim(a: THREE.BufferAttribute, count: number) {
  */
 export function trimInstanceUploads(scene: THREE.Object3D) {
   stats.trimmed = 0; stats.savedKB = 0; stats.empty = 0;
-  scene.traverseVisible((o) => {
-    const m = o as THREE.InstancedMesh;
-    if (!m.isInstancedMesh) return;
+  // The scene's instanced meshes are looked up again every half second or so, not every frame: walking the whole
+  // scene for them was 1-1.6 ms a frame in the convoy lab (profile 2026-11-14). A pool made since the last look
+  // sends its whole buffer until then, as it did before this file; one taken out is skipped (not under the scene).
+  if (pools.scene !== scene || --pools.age <= 0) {
+    pools.scene = scene; pools.age = 20;
+    pools.list.length = 0;
+    scene.traverse((o) => { if ((o as THREE.InstancedMesh).isInstancedMesh) pools.list.push(o as THREE.InstancedMesh); });
+  }
+  for (const m of pools.list) {
+    if (!shownUnder(m, scene)) continue;
     trim(m.instanceMatrix, m.count);
     if (m.instanceColor) trim(m.instanceColor, m.count);
     const g = m.geometry;
@@ -49,10 +56,17 @@ export function trimInstanceUploads(scene: THREE.Object3D) {
       if (a.isInstancedBufferAttribute && !(a as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) trim(a, m.count);
     }
     if (m.count === 0 && m.children.length === 0) hidden.push(m);
-  });
+  }
   for (const m of hidden) m.visible = false;
   stats.empty = hidden.length;
   return stats;
+}
+
+const pools = { scene: null as THREE.Object3D | null, age: 0, list: [] as THREE.InstancedMesh[] };
+/** In the scene with nothing hidden on the way up (what traverseVisible would have reached). */
+function shownUnder(o: THREE.Object3D, scene: THREE.Object3D) {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) { if (!p.visible) return false; if (p === scene) return true; }
+  return false;
 }
 
 /** Show the pools trimInstanceUploads hid for the render. */
