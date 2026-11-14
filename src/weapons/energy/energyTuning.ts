@@ -76,6 +76,13 @@ export const ENERGY_DEFAULTS = {
   arcKeep: 0.75,
   arcEnergy: 0.06,
   arcShow: 0.12,
+  /** The spool (Keith 2026-11-14: "a winding up noise ... like a capacitor charging. And then they fire"): held, the
+   *  capacitors charge over arcSpool s (a rising whine, a crackling glow at the muzzle) before the first zap; let go,
+   *  they drain over arcSpinDown s, so a quick re-press fires sooner. */
+  arcSpool: 0.5,
+  arcSpinDown: 0.6,
+  arcWhineLevel: 0.8,
+  arcGlow: 1,
   // Sunder beam (Keith 2026-11-02: "like the walkers... charge up a beam and then you blast"): one press commits it: it
   // charges, then a heavy beam burns for its channel time while you steer it (slowly), cutting through everything under
   // it, then it ends and cools down. The whole cost is paid when it starts.
@@ -165,6 +172,10 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "arcKeep", label: "Damage kept per jump", min: 0, max: 1, step: 0.01, group: AR },
   { key: "arcEnergy", label: "Energy per zap (bars)", min: 0, max: 0.5, step: 0.005, group: AR },
   { key: "arcShow", label: "Bolt shows for (s)", min: 0.03, max: 0.5, step: 0.01, group: AR },
+  { key: "arcSpool", label: "Spool-up (s)", min: 0, max: 2, step: 0.05, group: AR, tip: "Held, the capacitors charge this long before the first zap (0: fires at once)" },
+  { key: "arcSpinDown", label: "Spool drains in (s)", min: 0.05, max: 3, step: 0.05, group: AR, tip: "Let go, a full charge drains over this long; a re-press before then fires sooner" },
+  { key: "arcWhineLevel", label: "Charge whine level", min: 0, max: 1.5, step: 0.01, group: AR },
+  { key: "arcGlow", label: "Charge glow size", min: 0, max: 3, step: 0.05, group: AR, tip: "The ball and crackle at the muzzle while it charges and fires" },
   { key: "sunderDps", label: "Damage/s", min: 50, max: 2500, step: 10, group: SU, tip: "To everything under the beam at once" },
   { key: "sunderAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: SU },
   { key: "sunderTicks", label: "Burn ticks/s", min: 2, max: 30, step: 1, group: SU },

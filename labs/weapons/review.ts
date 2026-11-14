@@ -57,7 +57,7 @@ const SOUNDS: Record<string, string[]> = {
   "sh-mortar": ["mortar"], "sh-linemortar": ["mortar"],
   "flamer-light": ["flameIgnite", "flameRoar"], "inferno-medium": ["flameIgnite", "flameRoar"], "sh-napalm": ["mortar", "napalmBurst"], "frost-light": ["cryoHiss"], "cryo-medium": ["cryoHiss"],
   "laser-medium": ["pulseZap"], "beam-medium": ["beamHum"], "lance-medium": ["lanceCharge", "lanceFire"], "plasma-medium": ["plasmaShot", "plasmaHit"],
-  "orb-medium": ["orbLaunch"], "arc-medium": ["arcZap"], "sunder-medium": ["sunderCharge", "sunderHum"],
+  "orb-medium": ["orbLaunch"], "arc-medium": ["arcWhine", "arcZap"], "sunder-medium": ["sunderCharge", "sunderHum"],
   "sword-light": ["swordSwing", "swordHit", "swordBlock"], "sword-heavy": ["swordSwing", "swordHit", "swordBlock"], "sword-short": ["swordSwing", "swordHit", "swordBlock"],
 };
 const ROUGH = new Set([...ENERGY_IDS, ...MELEE_IDS, ...FIRE_IDS]);

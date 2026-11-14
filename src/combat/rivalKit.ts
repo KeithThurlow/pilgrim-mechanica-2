@@ -66,7 +66,7 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     if (isEnergy(g.cls)) {
       // Energy weapons (rivals rolled them since 2026-11-02 but never fired them): their own stats as the arsenal reads them.
       const st = energyStats(g.cls, o, v);
-      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, energy: st }));
+      out.push(w(ctl, g.cls, { range: st.range, damage: st.damage, rate: st.rate, speed: st.speed > 0 ? st.speed : Infinity, blast: st.radius || st.blast, charge: st.charge, cooldown: st.cooldown, spinUp: st.spool, energy: st }));
     } else if (isRoundGun(g.cls)) out.push(w(ctl, "minigun", { range: g.range, damage: g.damage * (g.pellets ?? 1), rate: g.fireRate, spinUp: 0, spread: g.spread }));
     else if (!g.cls || g.cls === "minigun") out.push(w(ctl, "minigun", { range: g.range, damage: g.damage, rate: g.fireRate, spinUp: g.spinUp, spread: g.spread }));
     else if (g.cls === "rail") {

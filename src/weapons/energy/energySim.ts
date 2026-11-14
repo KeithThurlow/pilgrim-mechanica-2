@@ -8,7 +8,8 @@
 //          `charge` s (charge 0..1), then burns for `channel` s (on, ticks at `rate`), then `cooldown`. Letting go
 //          changes nothing; a dash or the sprint cuts it off (the energy is lost).
 //   plasma, orb, arc  fire like the pulse laser (a shot every 1/rate s while held, each paying its energy); the glue
-//          flies the plasma bolt and the orb and runs the arc's jumps.
+//          flies the plasma bolt and the orb and runs the arc's jumps. The arc spools first (Keith 2026-11-14): held, `spin`
+//          fills over `spool` s (free) and it fires only once full; let go, it drains over `spinDown` s.
 // A dash or the sprint drops any charge and stops the beam (drop()). Ownership: the player's own (their weapons).
 import type { EnergyValues } from "./energyTuning";
 
@@ -47,6 +48,9 @@ export interface EnergyStats {
   /** Sunder: how long the blast burns (s). It also uses charge, cooldown, speed (its sweep, °/s) and radius (the cut's
    *  half-width). */
   channel: number;
+  /** Arc: seconds to spool up before the first zap, and for a full spool to drain once let go. */
+  spool: number;
+  spinDown: number;
   /** Protocols (Keith 2026-11-04, by trait): lances fired at once, fanned (Splitter); extra zaps an orb throws each burn
    *  tick at bodies just outside it (Arc link). Area and chain fold into radius, blast and hops. */
   split: number;
@@ -75,14 +79,15 @@ export function withProtocols(st: EnergyStats, p: { split?: number; area?: numbe
 /** A weapon's numbers: its rolled stats (own) or the sliders. */
 export function energyStats(cls: EnergyClass, own: Record<string, number> | null | undefined, v: EnergyValues): EnergyStats {
   const o = own ?? {};
-  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0, speed: 0, radius: 0, ticks: 0, hops: 0, hopRange: 0, keep: 0, seek: 0, channel: 0, split: 1, zaps: 0, reflect: 0 };
+  const base = { cls, charge: 0, cooldown: 0, minCharge: 0, blast: 0, blastDamage: 0, speed: 0, radius: 0, ticks: 0, hops: 0, hopRange: 0, keep: 0, seek: 0, channel: 0, spool: 0, spinDown: 0, split: 1, zaps: 0, reflect: 0 };
   if (cls === "plasma") return { ...base, damage: o.damage ?? v.plasmaDamage, ap: o.ap ?? v.plasmaAp, range: o.range ?? v.plasmaRange, rate: o.fireRate ?? v.plasmaRate, energy: o.energyShot ?? v.plasmaEnergy,
     speed: o.shellSpeed ?? v.plasmaSpeed, radius: o.splash ?? v.plasmaSplash };
   // An orb's damage is per second to each body inside it.
   if (cls === "orb") return { ...base, damage: o.damage ?? v.orbDps, ap: o.ap ?? v.orbAp, range: o.range ?? v.orbRange, rate: o.fireRate ?? v.orbRate, energy: o.energyShot ?? v.orbEnergy,
     speed: o.shellSpeed ?? v.orbSpeed, radius: o.splash ?? v.orbRadius, ticks: v.orbTicks, blastDamage: o.blastDamage ?? v.orbPop };
   if (cls === "arc") return { ...base, damage: o.damage ?? v.arcDamage, ap: o.ap ?? v.arcAp, range: o.range ?? v.arcRange, rate: o.fireRate ?? v.arcRate, energy: o.energyShot ?? v.arcEnergy,
-    hops: Math.round(o.hops ?? v.arcHops), hopRange: o.hopRange ?? v.arcHopRange, keep: v.arcKeep, seek: v.arcAim };
+    hops: Math.round(o.hops ?? v.arcHops), hopRange: o.hopRange ?? v.arcHopRange, keep: v.arcKeep, seek: v.arcAim,
+    spool: o.spool ?? v.arcSpool, spinDown: v.arcSpinDown };
   if (cls === "sunder") {
     const ticks = o.fireRate ?? v.sunderTicks;
     return { ...base, damage: o.damage ?? v.sunderDps / Math.max(1, ticks), ap: o.ap ?? v.sunderAp, range: o.range ?? v.sunderRange, rate: ticks, energy: o.energyShot ?? v.sunderEnergy,
@@ -114,6 +119,8 @@ export class EnergySim {
   t = 0;
   /** Sunder: the blast's time left as a share (1 at its start). */
   left = 0;
+  /** Arc: the spool 0..1 (full: it fires). */
+  spin = 0;
   /** The trigger is held but there's no energy to pay (the HUD says so). */
   dry = false;
   readonly out: EnergyOut = { shots: 0, power: 0, fizzled: false };
@@ -125,6 +132,12 @@ export class EnergySim {
     this.dry = false;
     this.cool = Math.max(-1, this.cool - dt);
     const pay = (n: number) => free || n <= 0 || pool.use(n);
+    if (st.cls === "arc") {
+      if (st.spool <= 0) this.spin = held ? 1 : 0;
+      else if (held) this.spin = Math.min(1, this.spin + dt / st.spool);
+      else this.spin = Math.max(0, this.spin - dt / Math.max(0.05, st.spinDown));
+      if (held && this.spin < 1 - 1e-6) { this.cool = Math.max(0, this.cool); return out; }
+    }
     if (st.cls === "laser" || st.cls === "plasma" || st.cls === "orb" || st.cls === "arc") {
       if (!held) { this.cool = Math.max(0, this.cool); return out; }
       const gap = 1 / Math.max(0.05, st.rate);
@@ -182,5 +195,5 @@ export class EnergySim {
   }
 
   /** A dash or the sprint: the charge is lost, the beam stops. */
-  drop() { this.charge = 0; this.holding = false; this.on = false; this.tick = 0; this.phase = 0; this.t = 0; this.left = 0; }
+  drop() { this.spin = 0; this.charge = 0; this.holding = false; this.on = false; this.tick = 0; this.phase = 0; this.t = 0; this.left = 0; }
 }
