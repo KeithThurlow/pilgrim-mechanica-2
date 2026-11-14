@@ -3,8 +3,10 @@
 //   laser  pulse laser: a bolt every 1/rate s while held, each paying its energy.
 //   beam   beam laser: on while held and paid for (energy per second), its damage landing in `rate` ticks a second.
 //   lance  nova lance: held, it charges over `charge` s, paying as it goes (out of energy the charge holds); released at
-//          `minCharge` or more it fires at that power (0..1), less fizzles. Then `cooldown`.
-//   sunder sunder beam: a press commits it (paying all its energy then; not enough and it won't start): it charges for
+//          `minCharge` or more it fires at that power (0..1), less fizzles. Then `cooldown`. A reactor smaller than
+//          its full charge's energy stops the charge at the share it holds (Keith 2026-11-14, soft limits).
+//   sunder sunder beam: a press commits it (paying all its energy then; not enough and it won't start; a reactor too small
+//          to ever hold that much and it never starts: underpowered, Keith 2026-11-14): it charges for
 //          `charge` s (charge 0..1), then burns for `channel` s (on, ticks at `rate`), then `cooldown`. Letting go
 //          changes nothing; a dash or the sprint cuts it off (the energy is lost).
 //   plasma, orb, arc  fire like the pulse laser (a shot every 1/rate s while held, each paying its energy); the glue
@@ -17,8 +19,22 @@ export type EnergyClass = "laser" | "beam" | "lance" | "plasma" | "orb" | "arc" 
 export const ENERGY_CLASSES: readonly EnergyClass[] = ["laser", "beam", "lance", "plasma", "orb", "arc", "sunder"];
 export const isEnergy = (cls: string | undefined | null): cls is EnergyClass => !!cls && (ENERGY_CLASSES as readonly string[]).includes(cls);
 
-/** Where the energy comes from (the hull's reactor, src/mech/reactor.ts). use(n) spends n bars' worth or nothing. */
-export interface EnergyPool { readonly energy: number; use(n: number): boolean }
+/** Where the energy comes from (the hull's reactor, src/mech/reactor.ts). use(n) spends n bars' worth or nothing; cap
+ *  what it holds when full (no cap: unlimited, nothing is gated). */
+export interface EnergyPool { readonly energy: number; readonly cap?: number; use(n: number): boolean }
+
+/** Capacitor-gated firing (Keith 2026-11-14, soft limits: "if you don't have enough capacitor or energy, you literally
+ *  can't fire some crazy weapons"): the bars a weapon commits to one shot that must fit in the reactor at once. A sunder
+ *  beam's whole cost at the press, a lance's full charge; per-shot weapons and beams aren't gated (0). */
+export function energyNeed(cls: string | null | undefined, energy: number): number {
+  return cls === "sunder" || cls === "lance" ? Math.max(0, energy) : 0;
+}
+
+/** How much of a weapon's shot a reactor of `cap` bars can hold: 1 fits, under 1 a lance charges only that far, a
+ *  sunder beam can't fire at all. */
+export function powerShare(need: number, cap: number | undefined): number {
+  return need <= 0 || cap === undefined || need <= cap + 1e-9 ? 1 : Math.max(0, cap / need);
+}
 
 export interface EnergyStats {
   cls: EnergyClass;
@@ -123,6 +139,9 @@ export class EnergySim {
   spin = 0;
   /** The trigger is held but there's no energy to pay (the HUD says so). */
   dry = false;
+  /** The reactor is too small for this weapon's shot (energyNeed > its capacity): a sunder beam won't start, a lance
+   *  charges only to `powerShare`. */
+  under = false;
   readonly out: EnergyOut = { shots: 0, power: 0, fizzled: false };
 
   /** One step: `held` the trigger, `free` energy costs nothing (the Energy slider at 0). */
@@ -130,6 +149,9 @@ export class EnergySim {
     const out = this.out;
     out.shots = 0; out.power = 0; out.fizzled = false;
     this.dry = false;
+    // Capacitor gating: what share of a full shot the reactor can hold (energy free: all of it).
+    const share = free ? 1 : powerShare(energyNeed(st.cls, st.energy), pool.cap);
+    this.under = share < 1;
     this.cool = Math.max(-1, this.cool - dt);
     const pay = (n: number) => free || n <= 0 || pool.use(n);
     if (st.cls === "arc") {
@@ -160,6 +182,8 @@ export class EnergySim {
     if (st.cls === "sunder") {
       if (this.phase === 0) {
         if (!held || this.cool > 0) return out;
+        // Underpowered: it won't start however long the reactor sits full.
+        if (share < 1) { this.dry = true; return out; }
         if (!pay(st.energy)) { this.dry = true; return out; }
         this.phase = 1; this.t = 0; this.charge = 0; this.holding = true;
       }
@@ -181,7 +205,8 @@ export class EnergySim {
     // Lance.
     if (held && this.cool <= 0) {
       this.holding = true;
-      const dc = Math.min(1 - this.charge, dt / Math.max(0.05, st.charge));
+      // Underpowered, the charge stops at the share the reactor holds (a weaker shot).
+      const dc = Math.min(share - this.charge, dt / Math.max(0.05, st.charge));
       if (dc > 0) { if (pay(dc * st.energy)) this.charge += dc; else this.dry = true; }
       return out;
     }

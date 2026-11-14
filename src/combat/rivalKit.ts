@@ -7,11 +7,11 @@ import { isRoundGun } from "../weapons/guns";
 import { BASES, BASE_BY_ID, type Base } from "../items/bases";
 import { rng, rollItem, type LootValues } from "../items/generate";
 import { RARITIES, type Rarity } from "../items/rarity";
-import { emptyLoadout, fit, fitProblem, hullMount, MOUNTS, SIDES, SLOTS, type Loadout, type Resolved, type SlotId } from "../items/loadout";
+import { effectiveStats, emptyLoadout, fit, fitProblem, resolve, hullMount, MOUNTS, SIDES, SLOTS, type Loadout, type Resolved, type SlotId } from "../items/loadout";
 import { itemName } from "../items/bayState";
 import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
-import { energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
+import { energyNeed, energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
 
 export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | EnergyClass;
 /** An energy weapon (Keith 2026-11-02, on the reactor): pulse laser, beam laser, nova lance, plasma, orb, arc, sunder. */
@@ -175,6 +175,15 @@ export function rollRivalLoadout(seed: number, v: LootValues, o: { rarity?: Rari
   if (lo.mountL?.kind === "arm" && lo.mountR?.kind === "arm" && r() < 0.25) put("heldR", pickBase(r, ofKind("weapon", "H")).id);
   put("pack", pickBase(r, r() < 0.45 ? ofKind("shoulder") : ofKind("pack")).id);
   for (const s of SIDES) put(MOUNTS[s].waist, pickBase(r, ofKind("waist").filter((b) => b.tags.includes("ammo"))).id);
+  // A heavy energy weapon its reactor can't hold a shot of (Keith 2026-11-14, capacitor gating) would never fire: a
+  // nova lance in its place (no draw, so every seed still rolls the same rival otherwise).
+  const cap = resolve(lo).values.reactorCap;
+  for (const s of SIDES) {
+    const g = lo[MOUNTS[s].mount], b = g ? BASE_BY_ID[g.base] : undefined;
+    if (!g || !b?.cls || energyNeed(b.cls, effectiveStats(g).energyShot ?? 0) <= cap + 1e-9) continue;
+    const swap = roll("lance-medium");
+    if (!fitProblem(lo, MOUNTS[s].mount, swap)) fit(lo, MOUNTS[s].mount, swap);
+  }
   return lo;
 }
 

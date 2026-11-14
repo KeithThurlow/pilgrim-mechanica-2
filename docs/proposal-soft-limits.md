@@ -37,14 +37,15 @@ the further you go. Everything fits; the bay shows what it costs.
 
 - Each energy weapon has a **need**: the bars it commits to one shot (a lance at full charge, a sunder beam at the
   press, a bolt or tick for the rest). The mech's **capacity** is the reactor plus capacitor gear: the capacitor bank
-  (shoulder) and capacitor pack add capacity as well as their regen.
+  (shoulder) adds +1.5 bars of capacity as well as its regen (the capacitor pack is the dash's kinetic bars: unchanged).
 - **Commit weapons** (sunder beam): need more than the capacity and it won't fire at all ("underpowered"). **Charged
   weapons** (nova lance): the charge stops at capacity / need, so the shot is weaker. Per-shot weapons are never
   gated (their need is tiny).
-- The sunder beam's need goes up to 4.5 bars: over the Rampart's 4 and the Salvager's 3, under the Siege hull's 5.5;
-  a capacitor bank brings a Rampart up to it. Bay: the weapon's card and the summary say "needs 4.5 bars, you have 4";
-  HUD: the reactor bar shows a need tick and the weapon reads underpowered.
-- Aligns with the arc caster's capacitor spool-up (another thread): the same capacity number.
+- The sunder beam's need goes up to 3.5 bars: the Rampart (4) and Siege (5.5) hulls fire it, the Salvager and Cuirass
+  (3) need a capacitor bank (+1.5 bars capacity). The lance (0.9) stays ungated on every hull for now.
+- Shown: the reactor bar's gold line at the biggest shot (red and flashing when underpowered), the inventory's
+  Reactor figure (cap / need), the bay summary's Biggest energy shot.
+- The arc caster's spool-up (merged 2026-11-14) stays free and ungated: its zaps are tiny per shot.
 
 ## Open questions for Keith
 
@@ -52,5 +53,5 @@ the further you go. Everything fits; the bay shows what it costs.
 - Should weight also slow the dash, the sprint's top end only, or the torso turn?
 - Which other hard rules should go soft next: two-handers on one arm (wild spread), cluster sensors on a head socket
   (half range), more Protocols than sockets?
-- The sunder beam at 4.5 bars: right as the first "big hull only" weapon?
+- The sunder beam at 3.5 bars: right as the first "big reactor only" weapon? More of them (a lance needing 5+ bars)?
 - Should a weak reactor also charge heavy weapons slower (a draw rate per hull), not just cap them?

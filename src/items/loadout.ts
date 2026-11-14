@@ -13,7 +13,7 @@
 // The hull item says which mounts it offers and what each takes (`Base.mounts` in bases.ts). More mounts later: add
 // a side to `MountSide` and its slots to `MOUNTS` and `SLOTS`; the rules below work per side.
 // Loadouts are changed in place; fit and unfit return what came off, for the caller to put in stash.
-import { isEnergy } from "../weapons/energy/energySim";
+import { energyNeed, isEnergy } from "../weapons/energy/energySim";
 import { REACTOR_DEFAULTS } from "../mech/reactor";
 import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, tagsOf, STATS, SENSOR_SOCKET, SHOULDER_FAMILY, type MountSide, type SensorStyle, type ShoulderFamily, type ShoulderWeapon } from "./bases";
@@ -503,6 +503,12 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
     values[k] = values[k] * (m.mul ?? 1) + (m.add ?? 0);
   }
   values.dashCharges = Math.max(1, Math.round(values.dashCharges));
+  // Capacitor banks on the shoulders let the reactor hold more (Keith 2026-11-14, soft limits: what heavy energy weapons
+  // need to charge; an item saved before this has its base's).
+  for (const s of ["shoulderL", "shoulderR"] as const) {
+    const it = lo[s];
+    if (it?.kind === "shoulder" && BASE_BY_ID[it.base]?.shoulder === "capacitor") values.reactorCap += effectiveStats(it).capBonus ?? BASE_BY_ID[it.base]?.stats.capBonus?.base ?? 0;
+  }
   // Too heavy for the legs: slower, slower to speed up and turn (Keith 2026-11-14), after the Protocols' walk mods.
   const load = legLoad(lo, bare);
   values.walkSpeed *= load.speed; values.sprintSpeed *= load.speed; values.accel *= load.accel; values.turnRate *= load.turn;
@@ -559,6 +565,15 @@ function BASE_STATS(id: string): Record<string, number> {
 
 // ---- For the bay screen: a flat list of what a loadout gives, to compare two ----
 
+/** The biggest shot a fitted energy weapon commits at once (energyNeed: a sunder beam's press, a lance's full charge),
+ *  or null with none: over the reactor's capacity it's underpowered (Keith 2026-11-14, soft limits). Rolled stats; an
+ *  unrolled base item's are its base's (the sliders can differ). */
+export function energyNeedOf(r: Resolved): number | null {
+  let need = 0;
+  for (const g of [r.guns.left, r.guns.right]) if (g && isEnergy(g.cls)) need = Math.max(need, energyNeed(g.cls, g.energy ?? 0));
+  return need > 0 ? need : null;
+}
+
 export interface SummaryLine { key: string; label: string; value: number | null; better: 1 | -1; decimals: number }
 
 export function summary(r: Resolved): SummaryLine[] {
@@ -571,7 +586,7 @@ export function summary(r: Resolved): SummaryLine[] {
     line("trample", "Trample reach ×", v.trample, 1, 2), line("crush", "Trample damage ×", v.crush, 1, 2),
     line("cargo", "Cargo rack rows", r.cargoRackRows, 1, 0), line("hull", "Hull", v.hull, 1, 0), line("armour", "Armour", v.armour, 1, 1), line("torsoTurnRate", "Torso turn (°/s)", v.torsoTurnRate, 1, 0),
     line("dashCharges", "Dash charges", v.dashCharges, 1, 0), line("dashRecharge", "Dash recharge (s)", v.dashRecharge, -1, 2), line("boostFuel", "Boost fuel (s)", v.boostFuel, 1, 1),
-    line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
+    line("reactorCap", "Reactor (bars)", v.reactorCap, 1, 1), line("energyNeed", "Biggest energy shot (bars)", energyNeedOf(r), -1, 1), line("reactorRegen", "Reactor regen (bars/s)", v.reactorRegen, 1, 2),
     line("mechRadar", "Mech radar (m)", v.mechRadar, 1, 0), line("sensorLock", "Lock cone + (°)", v.sensorLock, 1, 1), line("seekers", "Seeker modes", r.seekers.length, 1, 0), line("gearSalvage", "Salvage speed ×", v.gearSalvage, 1, 2),
   ];
   for (const [name, g] of [["L", r.guns.left], ["R", r.guns.right]] as const) {
