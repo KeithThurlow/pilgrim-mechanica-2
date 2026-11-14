@@ -26,7 +26,7 @@ well, **B** a careful code model that reads but is plain up close, **C** boxes a
 | Thing | Built how | Grade | Verdict |
 | --- | --- | --- | --- |
 | Rampart legs, hull, pods (+ 7 variants: stilt, turret, railgun, rocket, salvager, siege, wildcat) | Blender, layered (skill v0.8), 34.6k tris | A | Keep. The quality bar for everything else |
-| Arms (Rampart, Wildcat, Loader) | boxes in `rampart.ts` | C | Build: three arms on one rig, `Shoulder` and `Grip` sockets, 1.5k each |
+| Arms (Rampart, Siege, Loader, light) | `tools/blender/parts/arms.py` (2026-11-14), boxes until loaded | B | Done: one GLB per hull arm, pieces Joint/Stub/Upper/Elbow/Fore/Hand |
 | Power packs (stand-in, capacitor, medic, replica bay, booster) | one box pack for all five | C | Build first: the back is what the game camera sees most. Five packs that each say what they do |
 | Sensors (visor, twin-optic, mast, dish, long array) | code shapes in `sensorModels.ts` | B- | Build: two heads, three clusters, 1k each |
 | Waist kit (drums, full drum, autoloader, cargo rack, cutting kit) | drums converted; the rest share them or nothing | C / none | Build the three with no model |

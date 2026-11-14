@@ -1,0 +1,81 @@
+{
+ "id": "arm-wildcat",
+ "kind": "arm",
+ "name": "Light arm",
+ "maker": "Novus-Lux",
+ "says": "slim shells, open piston",
+ "tris": 1300,
+ "meshes": 6,
+ "size": [
+  0.474,
+  1.654,
+  0.44
+ ],
+ "min": [
+  -0.237,
+  -0.2145,
+  -0.22
+ ],
+ "max": [
+  0.237,
+  1.44,
+  0.22
+ ],
+ "sockets": {
+  "Upper_End": [
+   0.0,
+   1.45,
+   -0.0
+  ],
+  "Fore_End": [
+   0.0,
+   1.45,
+   -0.0
+  ]
+ },
+ "moving": {
+  "Joint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Stub": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Upper": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Elbow": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Fore": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Hand": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/arms.py"
+}

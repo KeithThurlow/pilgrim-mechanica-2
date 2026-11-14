@@ -343,6 +343,7 @@ loop.setupFortMechs({ look: toon, loadBody: () => RampartBody.load(toon), threat
 let hvtNow: Lair | null = null, hvtLair: Lair | null = null;
 // For poking at from the console: window.__quests (the board, lairs, the HVT, the cable).
 (window as unknown as { __quests: unknown }).__quests = loop.quests;
+(window as unknown as { __loop: unknown }).__loop = loop;
 // No sand prints or dust from footfalls on the steel deck (they'd be left hanging in the air as it rolls on).
 {
   const fall = sim.onFootfall, lift = sim.onLiftOff;
@@ -649,6 +650,13 @@ function restart() {
     loop.columns.place(x, z, Math.max(1, Number(params.get("warband")) || 6), m.x, m.z, 0.7);
     carry.armed = true;
   }
+  // ?lance[=N]: a bandit mech lance (N mechs, 2 by default) hunting the mech from 200 m ahead (Keith 2026-11-14).
+  if (params.has("lance")) {
+    const m = sim.pos, ang = p.heading;
+    const x = m.x + Math.sin(ang) * 200, z = m.z + Math.cos(ang) * 200;
+    loop.lances.place(x, z, Math.max(1, Number(params.get("lance")) || 2), m, 0.3);
+    carry.armed = true;
+  }
   // ?siege[=N]: out on the sand beside the workshop car, a robot pack of N (40) coming at the mech from 200 m off that
   // side, for the convoy's defence (Keith 2026-11-01); add ?warband for vehicles too.
   if (params.has("siege")) {
@@ -685,7 +693,7 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // The run's threat level (runThreat.ts) set that high (m of depth) from the start, e.g. ?out&runthreat=1500.
@@ -698,7 +706,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);
@@ -798,6 +806,7 @@ selector = new Selector(app, {
     { topic: "fortress", label: "Fortress gates", objects: () => loop.forts.gatesDraw.meshes() },
     { topic: "fortress", label: "Fortress spawner shacks", objects: () => loop.forts.spawnersDraw.meshes() },
     { topic: "fortress", label: "Fortress bandit mechs", objects: () => loop.forts.mechs.objects() },
+    { topic: "raiders", label: "Bandit mechs", objects: () => loop.fieldMechs.objects() },
     { topic: "fortress", label: "Fortress lookout towers", objects: () => loop.forts.towersDraw.meshes() },
     { topic: "fortress", label: "Hub fabricators", objects: () => loop.hubs.draw.meshes() },
     { topic: "fortress", label: "Fortress garrison", objects: () => loop.forts.draw.group.children },

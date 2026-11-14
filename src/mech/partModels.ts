@@ -63,3 +63,34 @@ export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group 
   }
   return root;
 }
+
+/** The pieces of a hull's arm model (tools/blender/parts/arms.py), as the two-bone arm draws them. */
+export const ARM_PIECES = ["joint", "stub", "upper", "elbow", "fore", "hand"] as const;
+export type ArmPiece = (typeof ARM_PIECES)[number];
+
+/**
+ * A hull arm's pieces from its GLB, each one geometry in its own frame in the unit look (Keith 2026-11-14: arms to suit
+ * the hull): the joint, elbow and hand centred on their points; the stub, upper arm and forearm along +Y from 0 to 1,
+ * so the arm stretches each to its bone as it did the stand-in boxes (the bones were modelled at the arm sliders'
+ * lengths, so the stretch is near 1). Null when a piece is missing. Drawing only.
+ */
+export function armFromGlb(scene: THREE.Object3D, look: ToonLook): Record<ArmPiece, THREE.Mesh> | null {
+  scene.updateMatrixWorld(true);
+  const len = (name: string) => { const o = scene.getObjectByName(name); return o ? o.getWorldPosition(new THREE.Vector3()).y : 0; };
+  const unit: Partial<Record<ArmPiece, number>> = { stub: 1, upper: len("Upper_End"), fore: len("Fore_End") };
+  const out: Partial<Record<ArmPiece, THREE.Mesh>> = {};
+  for (const p of ARM_PIECES) {
+    const node = scene.getObjectByName(p[0].toUpperCase() + p.slice(1));
+    let src: THREE.Mesh | undefined;
+    node?.traverse((o) => { if (!src && (o as THREE.Mesh).isMesh) src = o as THREE.Mesh; });
+    if (!src) return null;
+    const g = plain(src.geometry).applyMatrix4(src.matrixWorld);
+    const L = unit[p];
+    if (L !== undefined) { if (L <= 0) return null; g.scale(1, 1 / L, 1); }
+    const m = new THREE.Mesh(g);
+    m.name = "arm_" + p;
+    look.apply(m);
+    out[p] = m;
+  }
+  return out as Record<ArmPiece, THREE.Mesh>;
+}
