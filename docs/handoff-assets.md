@@ -14,9 +14,13 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
 
 - Batch 3: the inventory's layout (`src/ui/inventory.ts` `TILES`, `dollBox`, `statStrip`, `cargoColumn`; `inventory.css`).
 
+- Batch 4: `sensors.py` (five, in `public/models/sensors/`), `waist.py` (three), `RampartBody.setWaist`. Arms were
+  built in another thread (PR 356, `arms.py`). Kit gotchas: `V.blk` takes the box's bottom (use the local `B` for a
+  centre); a node's pieces are authored about the node's pivot.
+
 ## Next, in order
-1. Arms ×3, sensors ×5, waist kit ×3 (part kit; budgets are already in `tools/assets-check.ts`).
-2. Robots. Then as the plan's table.
+1. Robots: scrapper, cutter, excavator, quads; drones and the scrap swarm (instanced: one merged geometry a kind).
+2. Then as the plan's table (`docs/asset-pipeline.md`).
 
 ## How to test
 - Shots here: `npm run build`, then `CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome node tools/shots.mjs "<lab url>"`.

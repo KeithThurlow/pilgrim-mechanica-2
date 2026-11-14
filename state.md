@@ -212,7 +212,7 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   (8-16 s a frame here), not played.
 
 ## In progress
-- Model and asset rebuild (Keith 2026-11-13; Claude on `claude/project-thread-vum2tc`, backup `wip/assets`): the review of every model, the pipeline and the build order are in `docs/asset-pipeline.md`; handoff `docs/handoff-assets.md`. Batches 0 (plan, Blender in the cloud) and 1 (power packs, the part kit and loader) merged. Batch 2 (inventory pictures from the models, the contract check) merged. Batch 3 (the inventory's layout) merged. Next: arms, sensors, waist kit, robots.
+- Model and asset rebuild (Keith 2026-11-13; Claude on `claude/project-thread-vum2tc`, backup `wip/assets`): the review of every model, the pipeline and the build order are in `docs/asset-pipeline.md`; handoff `docs/handoff-assets.md`. Batches 0 (plan, Blender in the cloud) and 1 (power packs, the part kit and loader) merged. Batch 2 (inventory pictures from the models, the contract check) merged. Batch 3 (the inventory's layout) merged. Batch 4 (sensors, waist kit) merged. Next: robots.
 
 - Architecture migration (Keith 2026-11-07; Claude): `docs/architecture-review.md` stages, one PR each. Merged: 1 (the clock; 60 Hz is the only clock), 2 (the ECS core, `src/ecs/`), 3 (`src/game/combatRules.ts`), 4.1-4.4 (robot and infantry swarms own their state as ECS columns; health bars from the world), 5a-5c (mechs, vehicles, crushers, striders as entities, `src/ecs/heavy.ts`), 6a-6e (drawn between ticks), 7a (one block snapshot format), 7b (bandit camps' infantry in the worker), 7c part 1 (a mech's looks and sounds out of MechUnit: `src/game/mechFx.ts`). Next: 7d, the rules in the worker; 7c part 2 (muzzles without the posed model) waits for a mech play-test (proposal `docs/proposal-stage7.md`). Handoff `docs/handoff-architecture.md`. **New per-system worker remotes wait for stage 7.**
 - Render path: fewer objects for three (Keith 2026-11-07 via the coordinator, Claude on `claude/project-thread-90s30y`, backup `wip/draw-merge`): docs/engine-options.md A.1-A.4 one PR each (merged parts, matrix work, terrain shadow batch done; what's left is small, see the handoff). Handoff `docs/handoff-drawcost.md`.
@@ -323,6 +323,14 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
   in the terrain so the dust table has something to read.
 
 ## Changes
+
+### 2026-11-14 · Asset rebuild, batch 4: five sensor models and three waist kit models (Keith 2026-11-13: "start building assets for all mecha parts"; Claude on `claude/project-thread-vum2tc`)
+- Sensors (`tools/blender/parts/sensors.py`, `public/models/sensors/`): visor head (armoured block, visor band, one amber lens), twin-optic head (white drum, two teal lenses), mast (braced post, small dish, beacon), survey dish (big turning dish, lit feed), long array (five panels on two posts). Each keeps the stand-in's size and its Head / HeadPitch / Sweep nodes, so they turn as before; 448 to 740 triangles. The code stand-ins stay as the fallback.
+- Waist kit (`waist.py`, `public/models/parts/`): autoloader (shell carousel, rammer, feed chute), cargo rack (tube cage, crates, jerrycan, bedroll), cutting kit (two gas bottles, hose reel, torch); 788 to 908 triangles. They had no model at all: `RampartBody.setWaist` hangs them where the drums hang (`parts.waistL/R` from the loadout).
+- The part kit: a moving node's pieces are authored about its pivot, and a node can carry a lit piece (`node_glow`). `sensorModels.fromGlb` dresses a GLB the way parts are (it would have recursed on the outline shells). `assets-check` covers `public/models/sensors/` too.
+- Inventory pictures redrawn: 58 (the three waist items new, the sensors from their models).
+- Checked: `assets-check` 17 parts; one loadout-lab shot with the dish, autoloader and cutting kit fitted; `npm test`.
+- Try: `labs/loadout/?fresh&fit=sensor:sensor-dish,waistL:waist-autoloader,waistR:waist-kit`, `labs/walker/?cam=head&sensor=sensor-optic` (also `sensor-visor`, `sensor-mast`, `sensor-array`), `labs/inventory/?fresh&roll=40`.
 
 ### 2026-11-14 · Bandit mechs in the field, fewer robots (Keith; Claude on `claude/project-thread-yutjcl`)
 - Bandit mech lances roam and hunt like the robot packs, half the raids and first fights are lances, bandit camps can keep guard mechs (`src/expedition/lances.ts`, `fieldMechs.ts`, glue in `loop.ts`, `humans.ts` camp states; convoy lab `?lance[=N]`, `window.__loop`).
