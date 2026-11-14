@@ -46,7 +46,7 @@ import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
 import { ExpeditionHud } from "./expeditionHud";
-import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth } from "./depth";
+import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth, dangerOf } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
 import { PadDraw } from "./padDraw";
 import { Unlocks, UNLOCK_DEFAULTS, UNLOCK_PARAMS, UNLOCK_GROUP } from "./unlocks";
@@ -68,12 +68,13 @@ import type { Raider } from "../combat/warband";
 import { mechOwner } from "../game/registerOwners";
 import { QuestLoop, QUEST_DEFAULTS, QUEST_PARAMS, QUEST_GROUPS } from "../quests/questLoop";
 import { SafeZone, SAFE_DEFAULTS, SAFE_PARAMS } from "../convoy/safeZone";
+import { RunThreat, RUN_THREAT_DEFAULTS, RUN_THREAT_PARAMS, RUN_THREAT_GROUP } from "./runThreat";
 
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS, ...PAD_DEFAULTS, ...UNLOCK_DEFAULTS,
   ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS,
-  ...QUEST_DEFAULTS,
+  ...QUEST_DEFAULTS, ...RUN_THREAT_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
   ...HUB_LIFE_DEFAULTS,
   ...SAFE_DEFAULTS,
@@ -83,7 +84,7 @@ export const LOOP_DEFAULTS = {
 };
 export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
-  ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
+  ...RUN_THREAT_PARAMS, ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
   ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
   ...QUEST_PARAMS,
@@ -96,7 +97,7 @@ export const LOOP_PARAMS: Param[] = [
 ];
 /** Topics for the lab's panel. */
 export const LOOP_TOPICS = [
-  { id: "expedition", label: "Expedition", groups: ["Expedition", DEPTH_GROUP, SMALL_GROUP, "Fuel", "Way home", "Radar"] },
+  { id: "expedition", label: "Expedition", groups: ["Expedition", RUN_THREAT_GROUP, DEPTH_GROUP, SMALL_GROUP, "Fuel", "Way home", "Radar"] },
   { id: "quests", label: "Contracts and HVTs", groups: QUEST_GROUPS },
   { id: "extraction", label: "Extraction and unlocks", groups: [PAD_GROUP, PAD_PLACE_GROUP, UNLOCK_GROUP] },
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
@@ -138,6 +139,8 @@ export class ExpeditionLoop {
   readonly camps: CampField;
   /** Distance from the road and the danger it makes (depth.ts). */
   readonly depth: DepthField;
+  /** The run's threat level (runThreat.ts): the deepest the player has been, falling only at home. */
+  readonly runThreat: RunThreat;
   readonly swarms: SwarmCamps;
   /** Humanoid squads that come with the robot camps, packs and raids. */
   readonly droids: DroidCamps;
@@ -253,6 +256,7 @@ export class ExpeditionLoop {
     this.padDraw = new PadDraw(field, scene);
     this.sites = new FieldSites(v, field, bf, scene, blocked);
     this.depth = new DepthField(route, v);
+    this.runThreat = new RunThreat(v);
     this.camps = new CampField(v);
     this.camps.danger = this.depth.danger;
     this.swarms = new SwarmCamps(v, field, bf, scene, this.camps, player, blocked);
@@ -262,7 +266,7 @@ export class ExpeditionLoop {
     this.striders = new StriderCamps(v, bf, scene, field, player, this.swarms, undefined, deaths);
     this.crushers = new CrusherSites(v, bf, scene, field, player, this.sites, this.swarms);
     // Robots spawned out deep are at the area's level (one curve with the items: docs/proposal-balance.md).
-    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.depth.depth(x, z) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
+    this.swarms.power = (x, z) => (v.enemyLevels > 0 ? levelPower(1 + this.runThreat.effective(this.depth.depth(x, z)) / Math.max(1, v.levelMetres), v.enemyGrowth) : 1);
     // The raider faction: bandit camps at POIs and wrecks (never at the wreckage a clash leaves), war band columns.
     this.bandits = new BanditField(v, (x0, z0, x1, z1) => this.sites.poisIn(x0, z0, x1, z1).filter((q) => !q.id.startsWith("clash:")));
     this.bandits.danger = this.depth.danger;
@@ -371,7 +375,13 @@ export class ExpeditionLoop {
 
   /** Where a drop rolls (loot rolls by depth and salvage heat). */
   private dropCtx(x: number, z: number) {
-    return { danger: this.depth.liveDanger(x, z), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth: this.depth.liveDepth(x, z) };
+    const depth = this.runThreat.effective(this.depth.liveDepth(x, z));
+    return { danger: dangerOf(this.v, depth), heat: Math.min(1, this.sites.salvage.heat / Math.max(0.05, this.v.heatMax)), depth };
+  }
+
+  /** Live danger at a place, with the run's threat (the deeper of the two). */
+  private threatDanger(x: number, z: number) {
+    return dangerOf(this.v, this.runThreat.effective(this.depth.liveDepth(x, z)));
   }
 
   /** The summoner's units as prey (src/summon/aggro.ts; the lab sets it): each enemy kind's group near one may go for it. */
@@ -428,6 +438,7 @@ export class ExpeditionLoop {
     this.columns.reset();
     this.skirmish.reset();
     this.threats.reset();
+    this.runThreat.set(0);
     this.blasts.length = 0;
     this.quests.reset();
     this.sites.keepClear(x, z, 190);
@@ -442,7 +453,7 @@ export class ExpeditionLoop {
 
   /** Salvage heat crossed a threshold: pull in the nearest pack, or send a small raid at the stripper. */
   private heatAnswer(what: "pack" | "raid") {
-    const m = { x: this.at.x, z: this.at.z, out: true, loud: true, danger: this.depth.liveDanger(this.at.x, this.at.z) };
+    const m = { x: this.at.x, z: this.at.z, out: true, loud: true, danger: this.threatDanger(this.at.x, this.at.z) };
     if (what === "pack") {
       if (this.threats.pull(m)) this.hud.note("The noise is drawing a pack in", "#ffcf7a", 3);
     } else {
@@ -484,6 +495,12 @@ export class ExpeditionLoop {
     // The pilot killed on foot out there: the expedition is over, the at-risk list lost (Keith 2026-10-26).
     const pl = inp.pilot, foot = !!pl?.onFoot;
     if (foot && !pl!.alive && exp.state === "out") exp.pilotKilled();
+    // The run's threat: ratchets up to the deepest point out there, falls only aboard or by the convoy (Keith 2026-11-14).
+    {
+      const tx = foot ? pl!.x : p.x, tz = foot ? pl!.z : p.z;
+      const home = exp.state !== "out" || convoyDepth(this.route, tx, tz, v.depthTrain) < v.threatHome;
+      this.runThreat.update(dt, exp.state === "out" ? this.depth.liveDepth(tx, tz) : 0, exp.state === "out", home);
+    }
     // Salvage: E while out, on the sand, alive; on foot from where the pilot stands (shorter reach, slower, quieter).
     const onSand = carry.state === "walking" || carry.state === "inRange";
     // Item drops are taken with E (Keith 2026-11-06: a choice, not a walk-over). E goes to the nearest drop in reach
@@ -652,6 +669,7 @@ export class ExpeditionLoop {
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive,
       pad: this.padHud(), depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
+      threat: v.threatOn > 0 && (exp.state === "out" || this.runThreat.m > 1) ? { level: this.runThreat.level(v.levelMetres), m: this.runThreat.m, falling: this.runThreat.falling, rising: this.runThreat.m < this.runThreat.peak - 1 } : null,
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");
@@ -758,7 +776,7 @@ export class ExpeditionLoop {
       if (left > 0 || !f || !hunting) { if (!f) this.fortCalls.set(poi, -1); continue; }
       // Out of the fortress on the mech's side, a little round from it, hunting the mech.
       const a = Math.atan2(m.x - f.L.x, m.z - f.L.z) + 0.9, R = f.L.reach + 30;
-      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.depth.liveDanger(f.L.x, f.L.z));
+      this.columns.place(f.L.x + Math.sin(a) * R, f.L.z + Math.cos(a) * R, Math.round(v.fortReinforce), m.x, m.z, this.threatDanger(f.L.x, f.L.z));
       this.hud.note("War band out of the fortress", "#ff7ad0", 4);
       this.fortCalls.set(poi, -1);
     }
@@ -799,7 +817,7 @@ export class ExpeditionLoop {
     this.loud = loud;
     if (swarms.anyAwake || this.banditCamps.anyAlert || this.forts.anyAlert) threats.engaged = true;
     this.at.x = p.x; this.at.z = p.z;
-    this.events = threats.update(dt, { x: p.x, z: p.z, out: hunting, loud, danger: hunting ? this.depth.liveDanger(p.x, p.z) : 0 }, this.events);
+    this.events = threats.update(dt, { x: p.x, z: p.z, out: hunting, loud, danger: hunting ? this.threatDanger(p.x, p.z) : 0 }, this.events);
     if (this.pending.length) { if (hunting) this.events.push(...this.pending); this.pending.length = 0; }
     for (const e of this.events) {
       if (e.type === "engage") {
