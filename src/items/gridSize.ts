@@ -10,20 +10,20 @@ import type { Param } from "../core/tweaks";
 import { BASE_BY_ID, type Base } from "./bases";
 import type { Item } from "./item";
 
-/** The size classes. Layout (Keith 2026-11-03): every weapon stands upright (w × h, taller than wide or square); hull
+/** The size classes. Layout (Keith 2026-11-14, was upright 2026-11-03): every weapon lies horizontal, wider than tall; hull
  *  weapons are sized one by one from their models (HULL_GUN_CELLS), the rest by class. */
 export const GRID_CLASSES = {
-  hullGun: { label: "Hull weapon (any not in HULL_GUN_CELLS)", w: 2, h: 4 },
+  hullGun: { label: "Hull weapon (any not in HULL_GUN_CELLS)", w: 4, h: 2 },
   hull: { label: "Hull", w: 3, h: 2 },
   hullBig: { label: "Big hull", w: 4, h: 2 },
   legs: { label: "Legs", w: 2, h: 3 },
   arm: { label: "Arm", w: 2, h: 2 },
-  held: { label: "Held weapon", w: 2, h: 2 },
-  heldLong: { label: "Long held weapon", w: 2, h: 3 },
-  swordBig: { label: "Big sword", w: 2, h: 4 },
-  sword: { label: "Sword", w: 1, h: 4 },
-  swordShort: { label: "Short sword", w: 1, h: 3 },
-  shoulder: { label: "Shoulder gear", w: 2, h: 2 },
+  held: { label: "Held weapon", w: 3, h: 2 },
+  heldLong: { label: "Long held weapon", w: 4, h: 2 },
+  swordBig: { label: "Big sword", w: 4, h: 2 },
+  sword: { label: "Sword", w: 4, h: 1 },
+  swordShort: { label: "Short sword", w: 3, h: 1 },
+  shoulder: { label: "Shoulder gear", w: 3, h: 2 },
   pack: { label: "Pack", w: 2, h: 2 },
   waist: { label: "Waist mount", w: 2, h: 1 },
   sensor: { label: "Sensor", w: 2, h: 1 },
@@ -44,23 +44,23 @@ export type GridClass = keyof typeof GRID_CLASSES;
 export const GRID_CLASS_IDS = Object.keys(GRID_CLASSES) as GridClass[];
 
 /** Hull weapons each sized roughly by their model (Keith 2026-11-03: "base the grid size roughly off the actual
- *  weapon size"), standing upright like every weapon (Keith 2026-11-03: "weapons should be vertical"): long barrels tall,
+ *  weapon size"), lying horizontal like every weapon (Keith 2026-11-14: weapons wider than tall): long barrels wide,
  *  launchers and projectors squat. Claude's picks; every one a slider. */
 export const HULL_GUN_CELLS: Record<string, Cells> = {
-  "mg-medium": { w: 2, h: 4 }, // Minigun: barrel cluster on a drum
-  "ac-medium": { w: 2, h: 5 }, // Autocannon: one long barrel
-  "rpg-medium": { w: 3, h: 3 }, // Rocket launcher: a boxy tube pack
-  "rail-medium": { w: 2, h: 8 }, // Rail cannon: the longest
-  "sniper-medium": { w: 2, h: 7 }, // Longshot rifle
-  "flak-medium": { w: 3, h: 4 }, // Flak cannon: twin stubby barrels
-  "cannon-medium": { w: 3, h: 6 }, // Breach cannon: heavy breech, long tube
-  "laser-medium": { w: 2, h: 4 }, // Pulse laser
-  "beam-medium": { w: 2, h: 5 }, // Beam laser
-  "lance-medium": { w: 2, h: 7 }, // Nova lance
-  "plasma-medium": { w: 3, h: 4 }, // Plasma cannon: fat chamber
-  "orb-medium": { w: 3, h: 3 }, // Particle orb projector: a sphere
-  "arc-medium": { w: 2, h: 4 }, // Arc caster
-  "sunder-medium": { w: 2, h: 8 }, // Sunder beam
+  "mg-medium": { w: 4, h: 2 }, // Minigun: barrel cluster on a drum
+  "ac-medium": { w: 5, h: 2 }, // Autocannon: one long barrel
+  "rpg-medium": { w: 4, h: 3 }, // Rocket launcher: a boxy tube pack
+  "rail-medium": { w: 8, h: 2 }, // Rail cannon: the longest
+  "sniper-medium": { w: 7, h: 2 }, // Longshot rifle
+  "flak-medium": { w: 4, h: 3 }, // Flak cannon: twin stubby barrels
+  "cannon-medium": { w: 6, h: 3 }, // Breach cannon: heavy breech, long tube
+  "laser-medium": { w: 4, h: 2 }, // Pulse laser
+  "beam-medium": { w: 5, h: 2 }, // Beam laser
+  "lance-medium": { w: 7, h: 2 }, // Nova lance
+  "plasma-medium": { w: 4, h: 3 }, // Plasma cannon: fat chamber
+  "orb-medium": { w: 4, h: 3 }, // Particle orb projector: a sphere
+  "arc-medium": { w: 4, h: 2 }, // Arc caster
+  "sunder-medium": { w: 8, h: 2 }, // Sunder beam
 };
 
 /** Bases that aren't what the fallback would give them. */
