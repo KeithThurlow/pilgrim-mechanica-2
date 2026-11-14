@@ -688,6 +688,8 @@ function restart() {
   if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
+  // The run's threat level (runThreat.ts) set that high (m of depth) from the start, e.g. ?out&runthreat=1500.
+  if (params.has("runthreat")) loop.runThreat.set(Number(params.get("runthreat")) || 1500);
   // ?items=N: N random items at risk (for the banking count-in and the loss).
   for (let k = 0; k < (Number(params.get("items")) || 0); k++) { const it = rollLoot(9001 + k * 7919, V, undefined, 1 + (k % 4) * 3); loop.exp.add({ kind: "item", item: it, label: itemName(it) }); }
   // ?lowfuel turns fuel on (it is off by default, Keith 2026-11-01) and leaves little in the pack.
