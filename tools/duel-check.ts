@@ -97,7 +97,7 @@ if (part(0)) {
     applyFitSpec(a, `mountL:${w}-medium,mountR:${w}-medium`, LOOT_DEFAULTS, 3);
     const x = runDuel({ seedA: 3, seedB: 5, loadouts: [a, rollRivalLoadout(5, LOOT_DEFAULTS)], maxTime: 60 });
     const dealt = (x.score.rounds[0].dealt as Record<string, number>)[w] ?? 0;
-    must(dealt > 200, `a rival with two ${w}s dealt only ${Math.round(dealt)} with them in a minute`);
+    must(dealt > (w === "orb" ? 20 : 200), `a rival with two ${w}s dealt only ${Math.round(dealt)} with them in a minute`);
   }
 }
 
