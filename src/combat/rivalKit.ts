@@ -94,7 +94,7 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     if (s.weapon === "mortar") out.push(w(ctl, "mortar", { range: v.mortarMaxRange, minRange: 10, damage: o?.damage ?? v.mortarDamage, blast: o?.blast ?? v.mortarBlast, cooldown: o?.cooldown ?? v.mortarCooldown, flight: v.mortarFlight, count: v.mortarShells }));
     else if (s.weapon === "linemortar") out.push(w(ctl, "linemortar", { range: v.salvoMaxRange, minRange: v.salvoMinRange, damage: o?.damage ?? v.salvoDamage, blast: o?.blast ?? v.salvoBlast, cooldown: o?.cooldown ?? v.salvoCooldown, count: o?.shells ?? v.salvoRockets, speed: v.salvoSpeed }));
     else if (s.weapon === "missiles") out.push(w(ctl, "missiles", { range: v.rpgRange, damage: o?.damage ?? v.swarmDamage, blast: o?.blast ?? v.swarmBlast, cooldown: o?.cooldown ?? v.swarmCooldown, count: o?.rockets ?? v.swarmMissiles, speed: v.swarmSpeed }));
-    else out.push(w(ctl, "shrpg", { range: v.rpgRange, damage: o?.damage ?? v.rpgDamage, blast: o?.blast ?? v.rpgBlast, speed: o?.shellSpeed ?? v.rpgSpeed, cooldown: o?.cooldown ?? v.rpgShoulderCooldown }));
+    else out.push(w(ctl, "shrpg", { range: v.rpgRange, damage: o?.damage ?? v.rpgDamage * v.rpgShoulderDamage, blast: o?.blast ?? v.rpgBlast * v.rpgShoulderBlast, speed: o?.shellSpeed ?? v.rpgSpeed, cooldown: o?.cooldown ?? v.rpgShoulderCooldown }));
   }
   return out;
 }

@@ -23,6 +23,8 @@ import type { TargetCandidate } from "../game/targeting";
 import type { WeaponValues } from "./tuning";
 import { newPaint, clearPaint, type Paint, type Strip, type Vec3 } from "./painter";
 import { LineAim } from "./lineAim";
+import { StrikeSim, strikeStats, isSelfStrike, type StrikeKind, type StrikeEvent } from "./strikes";
+import { StrikeFire, STRIKE_COL } from "./strikeFire";
 
 /** The shoulder weapons that paint a strip (line mortar, napalm launcher): click-and-drag aim. */
 const isLine = (w: string) => w === "linemortar" || w === "napalm";
@@ -127,6 +129,8 @@ export interface Shoulder {
   own: Record<string, number> | null;
   /** Feeds and power: the key's state (null on a launcher). */
   gear: GearSim | null;
+  /** Strikes (Keith 2026-11-14, src/weapons/strikes.ts): the key's strike (null on the others). */
+  strike: StrikeSim | null;
   model: WeaponModel | null;
   paint: Paint;
   /** The strip a line mortar was fired at, shown until its shells are down. */
@@ -155,9 +159,9 @@ const v3 = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 const swordBuf: SheetHit<Hittable>[] = [];
 /** A power cut's swish (Keith 2026-11-02): blue for players, red for enemies. */
 const POWER_BLUE = new THREE.Color(0x3fa8ff), POWER_RED = new THREE.Color(0xff3a2a);
-const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", flamer: "flamer", inferno: "inferno projector", frost: "frost thrower", cryo: "cryo projector", napalm: "napalm launcher", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
+const NAMES: Record<string, string> = { laser: "pulse laser", beam: "beam laser", lance: "nova lance", plasma: "plasma cannon", orb: "particle orb", arc: "arc caster", sunder: "sunder beam", flamer: "flamer", inferno: "inferno projector", frost: "frost thrower", cryo: "cryo projector", napalm: "napalm launcher", quake: "quake hammer", orbital: "orbital lance", stasis: "cryo bomb", gravity: "singularity", artillery: "artillery beacon", melee: "sword", rail: "rail cannon", autocannon: "autocannon", cannon: "breach cannon", rpg: "rocket launcher", minigun: "minigun", smg: "SMG", rifle: "battle rifle", shotgun: "scattergun", sniper: "longshot rifle", flak: "flak cannon", missiles: "missile pod", mortar: "big mortar", linemortar: "line mortar", beltfeed: "belt feed", incendiary: "incendiary feed", capacitor: "capacitor bank" };
 /** Short names for the action bar's buttons. */
-const SHORT: Record<string, string> = { rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", napalm: "Napalm", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
+const SHORT: Record<string, string> = { quake: "Quake", orbital: "Orbital", stasis: "Cryo bomb", gravity: "Singularity", artillery: "Artillery", rpg: "Rockets", missiles: "Missiles", mortar: "Mortar", linemortar: "Line mortar", napalm: "Napalm", beltfeed: "Overdrive", incendiary: "Ignite", capacitor: "Discharge" };
 /** A shoulder or back key's state for the action bar (seconds; coolMax/leftMax when the sim knows them). */
 export interface KeySlot { key: string; name: string; cool: number; coolMax?: number; left: number; leftMax?: number; aiming: boolean; off: boolean; rounds?: string; reloading?: boolean }
 const newLaser = (): Laser => ({ on: false, from: new THREE.Vector3(), to: new THREE.Vector3(), k: 0 });
@@ -175,6 +179,8 @@ export class Arsenal implements MechWeapons {
   readonly energy: EnergyGuns;
   /** Flamers on either side (Keith 2026-11-05, src/weapons/fire/): the stream's reach, roar, gobs and splashes. */
   readonly fire: FireGuns;
+  /** The shoulder strikes' damage and effects (src/weapons/strikeFire.ts; the draw reads its rings). */
+  readonly strikeFx: StrikeFire;
   /** Camera shake asked for (the lab decays it). */
   onShake: ((k: number) => void) | null = null;
   /** Called as a weapon fires (its kind), before its damage lands: the lab's per-shot readout. */
@@ -210,6 +216,7 @@ export class Arsenal implements MechWeapons {
     this.energy.onShake = (k) => this.onShake?.(k);
     this.energy.onFire = (k) => this.onFire?.(k);
     this.fire = new FireGuns(bf, unit, v);
+    this.strikeFx = new StrikeFire(bf, unit.team, v, (k) => this.onShake?.(k));
     addWeaponSounds(bf.sfx, v);
     // The flak pellets' explosion storm reads its sliders from the first arsenal (the player's).
     bf.popTuning ??= v;
@@ -259,10 +266,14 @@ export class Arsenal implements MechWeapons {
       const mk: ModelKind = x.weapon === "rpg" ? "shoulderRpg" : x.weapon;
       const model = body.mount ? WEAPON_MODELS[mk](this.look, x.mount === "shoulderL" ? "left" : "right") : null;
       if (model && body.mount) body.mount(x.mount).add(model.root);
-      const gear = x.family === "launcher" ? null : new GearSim(gearStats(x.weapon, x.own, this.v));
+      const gear = x.family === "feed" || x.family === "power" ? new GearSim(gearStats(x.weapon, x.own, this.v)) : null;
+      const sk = x.weapon as StrikeKind;
+      // A refit keeps a strike already running on that key (its cooldown too), so swapping gear can't reset it.
+      const was = this.shoulders.find((o) => o.key === x.key && o.strike?.kind === sk)?.strike;
+      const strike = x.family === "strike" ? was ?? new StrikeSim(sk, strikeStats(sk, x.own, this.v), seedFrom(`${this.unit.uid}:strike:${x.key}`)) : null;
       const mag = newMag(x.own?.magazine ?? this.v.rpgShoulderMag, x.own?.reload ?? this.v.rpgShoulderReload);
       if (model) model.clip = x.weapon === "rpg" ? mag : null;
-      return { ...x, gear, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), aim: new LineAim(), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
+      return { ...x, gear, strike, model, paint: newPaint(), fired: newPaint(), held: false, cool: 0, mag, idle: 0, seat: -1, line: new SalvoSim(this.v), aim: new LineAim(), mortar: new MortarSim(this.v), swarm: new SwarmSim(this.v), strip: null, at: { x: 0, z: 0 }, laser: newLaser() };
     });
     // Passives that last as long as the gear is fitted: a feed's drum (the fire rate and spin-up follow each frame, so the
     // sliders stay live), a capacitor's faster refill.
@@ -330,7 +341,7 @@ export class Arsenal implements MechWeapons {
     const v = this.v;
     if (o) return { damage: o.damage, blast: o.blast, speed: o.shellSpeed, cooldown: o.cooldown, ap: o.ap ?? v.rpgAp };
     if (light) return { damage: v.rpgDamage * v.podDamage, blast: v.podBlast, speed: v.rpgSpeed, cooldown: v.podCooldown, ap: v.rpgAp };
-    return { damage: v.rpgDamage, blast: v.rpgBlast, speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
+    return { damage: v.rpgDamage * (shoulder ? v.rpgShoulderDamage : 1), blast: v.rpgBlast * (shoulder ? v.rpgShoulderBlast : 1), speed: v.rpgSpeed, cooldown: shoulder ? v.rpgShoulderCooldown : v.rpgCooldown, ap: v.rpgAp };
   }
   /**
    * The pose lab (labs/pose/): hold a side's sword at a point of a move (clip, time in s, reach 0 close .. 1 far)
@@ -492,8 +503,10 @@ export class Arsenal implements MechWeapons {
 
     // Shoulders: hold the key to paint, release to fire.
     // Sprinting with the weapons off, a painted shot is dropped, not fired (stepShoulder).
+    this.strikeFx.update(dt);
     for (const sh of this.shoulders) {
-      if (sh.gear) this.stepGear(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1]);
+      if (sh.strike) this.stepStrike(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1]);
+      else if (sh.gear) this.stepGear(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1]);
       else this.stepShoulder(sh, dt, alive && !u.gunsOff && !!u.keys[sh.key - 1], laserK);
     }
     // Each side's guns run on their feeds' passives and overdrives (a side with two feeds multiplies them).
@@ -890,6 +903,63 @@ export class Arsenal implements MechWeapons {
     bf.sfx.playSound("railCharge", u.sim.pelvis, 0.5, st.family === "power" ? 2.6 : 1.9);
     this.onFire?.(sh.weapon);
     this.onShake?.(0.03);
+  }
+
+  /**
+   * A strike's key (Keith 2026-11-14, src/weapons/strikes.ts): a self strike (quake, cryo bomb) goes off on the press;
+   * an aimed one paints its ring while held (at the cursor, pulled in to its range) and fires on the release. While it
+   * runs, its spot's ring stays painted in its colour; the orbital lance drifts onto the nearest enemy.
+   */
+  private stepStrike(sh: Shoulder, dt: number, down: boolean) {
+    const sim = sh.strike!, u = this.unit, v = this.v, p = sh.paint, bf = this.bf;
+    const st = strikeStats(sim.kind, sh.own, v);
+    const from = this.shoulderMuzzle(sh, 0, this.tmp2);
+    const emit = (e: StrikeEvent) => this.strikeFx.play(sim, e, from);
+    if (sim.kind === "orbital" && sim.phase === "live" && v.orbitalTrack > 0) {
+      let best: TargetCandidate | null = null, bd = v.orbitalSeek * v.orbitalSeek;
+      for (const c of this.candidates()) { const d = (c.x - sim.x) ** 2 + (c.z - sim.z) ** 2; if (d < bd) { bd = d; best = c; } }
+      if (best) sim.steer(best.x, best.z, v.orbitalTrack, dt);
+    }
+    sim.update(dt, v, emit);
+    const pressed = down && !sh.held;
+    const col = STRIKE_COL[sim.kind === "orbital" ? "orbitalAim" : sim.kind];
+    const ringR = sim.kind === "orbital" ? st.finalRadius : sim.kind === "gravity" ? st.radius : st.radius;
+    if (isSelfStrike(sim.kind)) {
+      if (pressed && sim.fire(u.sim.pos.x, u.sim.pos.z, from.x, from.z, st, emit)) {
+        this.onFire?.(sim.kind);
+        if (sh.model) sh.model.recoil.position.y = -0.25;
+      }
+      clearPaint(p);
+    } else {
+      const cur = u.cursor;
+      if (down && cur) {
+        const range = sim.kind === "orbital" ? v.orbitalRange : sim.kind === "gravity" ? v.gravityRange : v.artilleryRange;
+        const dx = cur.x - u.sim.pos.x, dz = cur.z - u.sim.pos.z, d = Math.hypot(dx, dz), k = d > range ? range / d : 1;
+        sh.at = { x: u.sim.pos.x + dx * k, z: u.sim.pos.z + dz * k };
+        p.on = true; p.held += dt; p.charge = 1; p.beamScale = 1; p.tint = sim.ready ? col : null;
+        p.beamFrom = { x: from.x, y: from.y, z: from.z };
+        p.strip = null; p.arc.length = 0;
+        p.ring = { x: sh.at.x, z: sh.at.z, r: ringR }; p.ready = sim.ready;
+        p.beamTo = { x: sh.at.x, y: bf.field.height(sh.at.x, sh.at.z) + 0.1, z: sh.at.z };
+      } else if (sh.held && u.alive && !u.gunsOff) {
+        if (sim.fire(sh.at.x, sh.at.z, from.x, from.z, st, emit)) {
+          this.onFire?.(sim.kind);
+          if (sh.model) sh.model.recoil.position.y = -0.2;
+        }
+        clearPaint(p);
+      } else clearPaint(p);
+    }
+    sh.held = down;
+    // While an aimed strike runs, its ring stays on the sand in its colour.
+    const fp = sh.fired;
+    if (sim.busy && !isSelfStrike(sim.kind)) {
+      fp.on = true; fp.held += dt; fp.ready = true; fp.charge = 0.6; fp.beamScale = 0; fp.tint = col; fp.strip = null; fp.arc.length = 0;
+      fp.ring = { x: sim.x, z: sim.z, r: sim.kind === "orbital" && sim.phase === "live" ? st.radius : ringR };
+      const g = { x: sim.x, y: bf.field.height(sim.x, sim.z) + 0.1, z: sim.z };
+      fp.beamFrom = g; fp.beamTo = g;
+    } else if (fp.on) { clearPaint(fp); fp.tint = null; }
+    if (sh.model) sh.model.recoil.position.y += (0 - sh.model.recoil.position.y) * Math.min(1, dt * 5);
+    for (const mat of sh.model?.glow ?? []) mat.opacity = sim.busy ? 0.6 + 0.4 * Math.sin(this.clock * 20) : sim.ready ? 0.95 : 0.12;
   }
 
   /**
@@ -1430,6 +1500,10 @@ export class Arsenal implements MechWeapons {
         const g = sh.gear, st = g.stats;
         return { key: String(sh.key), name, cool: g.cool, coolMax: st.cooldown, left: g.left, leftMax: st.time, aiming: false, off };
       }
+      if (sh.strike) {
+        const k = sh.strike;
+        return { key: String(sh.key), name, cool: k.busy ? 0 : k.cool, coolMax: k.stats.cooldown, left: k.busy ? 1 - k.liveShare() : 0, leftMax: k.busy ? 1 : undefined, aiming: sh.held && !isSelfStrike(k.kind), off };
+      }
       const cd = sh.weapon === "linemortar" || sh.weapon === "napalm" ? sh.line.cooldown : sh.weapon === "mortar" ? sh.mortar.cooldown : sh.weapon === "missiles" ? sh.swarm.cooldown : Math.max(sh.cool, sh.mag.reloading);
       return { key: String(sh.key), name, cool: cd, left: 0, aiming: sh.held, off, rounds: sh.weapon === "rpg" ? `${Math.ceil(sh.mag.left)}/${sh.mag.size}` : undefined, reloading: sh.mag.reloading > 0 };
     });
@@ -1452,6 +1526,12 @@ export class Arsenal implements MechWeapons {
       out.push(`${b} ${NAMES[s.kind === "energy" ? this.energy.sides[i].cls ?? s.kind : s.kind]}${s.light ? " (hand)" : ""} ${state}`);
     });
     for (const sh of this.shoulders) {
+      if (sh.strike) {
+        const k = sh.strike;
+        const how = k.busy ? `<b style="color:#ffb347">${k.phase === "warn" ? "incoming" : "live"}</b>` : k.cool > 0 ? `${k.cool.toFixed(1)} s` : isSelfStrike(k.kind) ? "press" : sh.held ? "aiming: let go to fire" : "hold to aim";
+        out.push(`${sh.key} ${NAMES[sh.weapon] ?? sh.weapon} ${how}`);
+        continue;
+      }
       if (sh.gear) {
         const g = sh.gear, st = g.stats;
         const what = st.family === "power" ? "discharge" : st.round ? "ignited rounds" : "overdrive";

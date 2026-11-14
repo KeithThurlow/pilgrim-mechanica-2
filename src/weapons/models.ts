@@ -18,7 +18,9 @@ export type MeleeKind = "sword";
 export type GunKind = "smg" | "rifle" | "shotgun" | "sniper" | "flak" | "breach" | "flamer" | "inferno" | "frost" | "cryo";
 /** The drum and chute behind the Rampart's own minigun pod (Keith 2026-11-02). */
 export type FeedKind = "minigunFeed";
-export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind | FeedKind;
+/** The shoulder strikes (src/weapons/strikes.ts). */
+export type StrikeModelKind = "quake" | "orbital" | "stasis" | "gravity" | "artillery";
+export type ModelKind = LauncherKind | GearKind | MeleeKind | GunKind | FeedKind | StrikeModelKind;
 
 export interface WeaponModel {
   kind: ModelKind;
@@ -273,6 +275,74 @@ function capacitorModel(look: ToonLook): WeaponModel {
   for (const x of [-0.3, 0.3]) add(recoil, cyl, DARK, [0.07, 0.7, 0.07], [x, 0.0, -0.4], [0.5, 0, 0]);
   return m;
 }
+
+// ---- Shoulder strikes (Keith 2026-11-14): stand-ins, one look each, a lamp the arsenal lights when it's ready ----
+const PURPLE = 0xb070ff, FROST = 0x9fe6ff, AMBER = 0xffb060;
+
+/** Quake hammer: a braced block with a heavy piston standing on it and a hammer head on top. */
+function quakeModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("quake", look);
+  add(recoil, box, DARK, [0.9, 0.4, 0.9], [0, 0.2, 0]);
+  add(recoil, cyl, STEEL, [0.34, 0.9, 0.34], [0, 0.85, 0]);
+  add(recoil, box, OLIVE, [0.8, 0.45, 0.6], [0, 1.45, 0]);
+  add(recoil, box, KHAKI, [0.86, 0.08, 0.66], [0, 1.7, 0]);
+  for (const x of [-0.36, 0.36]) add(recoil, box, STEEL, [0.08, 0.9, 0.12], [x, 0.75, 0.3], [0.25, 0, 0]);
+  glow(recoil, box, AMBER, [0.1, 0.06, 0.03], [0.3, 1.45, 0.31]);
+  muzzle(recoil, [0, 1.8, 0]);
+  return m;
+}
+
+/** Orbital lance: an uplink dish tilted at the sky on a short mast, a bright emitter at its focus. */
+function orbitalModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("orbital", look);
+  add(recoil, box, DARK, [0.6, 0.3, 0.6], [0, 0.15, 0]);
+  add(recoil, cyl, STEEL, [0.12, 0.6, 0.12], [0, 0.6, 0]);
+  const dish = group(recoil, [0, 0.95, 0], [-0.6, 0, 0]);
+  add(dish, bell, KHAKI, [1.1, 0.25, 1.1], [0, 0, 0]);
+  add(dish, cyl, DARK, [0.05, 0.55, 0.05], [0, 0.3, 0]);
+  glow(dish, sphere, GLOW, [0.16, 0.16, 0.16], [0, 0.58, 0]);
+  muzzle(dish, [0, 0.6, 0]);
+  return m;
+}
+
+/** Cryo bomb: an upright pressure canister ringed with frost-blue glowing bands. */
+function stasisModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("stasis", look);
+  add(recoil, box, DARK, [0.7, 0.25, 0.7], [0, 0.12, 0]);
+  add(recoil, cyl, PALE_STEEL, [0.55, 1.0, 0.55], [0, 0.75, 0]);
+  add(recoil, sphere, PALE_STEEL, [0.55, 0.35, 0.55], [0, 1.25, 0]);
+  for (const y of [0.45, 0.75, 1.05]) glow(recoil, ring, FROST, [0.62, 0.62, 0.62], [0, y, 0], [Math.PI / 2, 0, 0]);
+  muzzle(recoil, [0, 1.4, 0]);
+  return m;
+}
+
+/** Singularity: a dark sphere held in three prongs over a base, a violet core glowing through it. */
+function gravityModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle } = kit("gravity", look);
+  add(recoil, cyl, DARK, [0.8, 0.25, 0.8], [0, 0.12, 0]);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    add(recoil, box, STEEL, [0.08, 0.8, 0.12], [Math.cos(a) * 0.32, 0.6, Math.sin(a) * 0.32], [Math.sin(a) * 0.3, 0, -Math.cos(a) * 0.3]);
+  }
+  add(recoil, sphere, DARK, [0.5, 0.5, 0.5], [0, 0.85, 0]);
+  glow(recoil, sphere, PURPLE, [0.32, 0.32, 0.32], [0, 0.85, 0.12]);
+  muzzle(recoil, [0, 0.9, 0]);
+  return m;
+}
+
+/** Artillery beacon: a small box with a whip antenna and one stubby flare tube pointing up and ahead. */
+function artilleryModel(look: ToonLook): WeaponModel {
+  const { m, recoil, add, glow, muzzle, group } = kit("artillery", look);
+  add(recoil, box, OLIVE, [0.6, 0.45, 0.7], [0, 0.22, 0]);
+  add(recoil, box, KHAKI, [0.64, 0.06, 0.74], [0, 0.46, 0]);
+  add(recoil, cyl, DARK, [0.03, 1.2, 0.03], [-0.22, 1.05, -0.2]);
+  const tube = group(recoil, [0.1, 0.5, 0.1], [-0.9, 0, 0]);
+  add(tube, cyl, STEEL, [0.2, 0.55, 0.2], [0, 0, 0.25], ALONG);
+  glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.22, 0.3, 0.36]);
+  muzzle(tube, [0, 0, 0.55]);
+  return m;
+}
+const PALE_STEEL = 0xc9d2d6;
 
 /** An energy weapon's box fallback while its library model loads: the rail's boxes. */
 function energyBox(kind: EnergyKind) {
@@ -575,6 +645,11 @@ export const BOX_MODELS: Record<ModelKind, (look: ToonLook, side?: "left" | "rig
   beltfeed: beltFeedModel,
   incendiary: incendiaryFeedModel,
   capacitor: capacitorModel,
+  quake: quakeModel,
+  orbital: orbitalModel,
+  stasis: stasisModel,
+  gravity: gravityModel,
+  artillery: artilleryModel,
   sword: swordModel,
   laser: energyBox("laser"),
   beam: energyBox("beam"),
