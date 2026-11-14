@@ -505,23 +505,23 @@ export const BASES: Base[] = [
   // Strikes (Keith 2026-11-14: "activated weapons ... some sort of drastic effect ... a cooldown", src/weapons/strikes.ts):
   // one key, one big moment, a long cooldown. Shoulders only (not the back). Base values from the strike sliders.
   {
-    id: "sh-quake", name: "Quake hammer", kind: "shoulder", shoulder: "quake", tags: ["shoulder", "strike", "explosive", "quake"], weight: 3.0, makers: ["Stratford-Aegis"], look: "rampart-siege", drop: 0.7,
+    id: "sh-quake", name: "Quake hammer", kind: "shoulder", shoulder: "quake", tags: ["shoulder", "strike", "explosive", "quake"], weight: 3.0, makers: ["Stratford-Aegis"], look: "rampart-siege", drop: 1.0,
     stats: { damage: s(WD.quakeDamage, 0.12), blast: s(WD.quakeRadius, 0.08), ap: s(WD.quakeAp, 0), cooldown: s(WD.quakeCooldown, 0.1) },
   },
   {
-    id: "sh-orbital", name: "Orbital lance", kind: "shoulder", shoulder: "orbital", tags: ["shoulder", "strike", "energy", "orbital"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.5,
+    id: "sh-orbital", name: "Orbital lance", kind: "shoulder", shoulder: "orbital", tags: ["shoulder", "strike", "energy", "orbital"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.7,
     stats: { damage: s(WD.orbitalTickDamage, 0.12), finalDamage: s(WD.orbitalFinalDamage, 0.12), blast: s(WD.orbitalFinalRadius, 0.08), effectTime: s(WD.orbitalTime, 0.1), ap: s(WD.orbitalAp, 0), cooldown: s(WD.orbitalCooldown, 0.1) },
   },
   {
-    id: "sh-stasis", name: "Cryo bomb", kind: "shoulder", shoulder: "stasis", tags: ["shoulder", "strike", "cold", "freeze"], weight: 2.0, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart", drop: 0.6,
+    id: "sh-stasis", name: "Cryo bomb", kind: "shoulder", shoulder: "stasis", tags: ["shoulder", "strike", "cold", "freeze"], weight: 2.0, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart", drop: 0.9,
     stats: { damage: s(WD.stasisDamage, 0.12), blast: s(WD.stasisRadius, 0.08), cooldown: s(WD.stasisCooldown, 0.1) },
   },
   {
-    id: "sh-gravity", name: "Singularity", kind: "shoulder", shoulder: "gravity", tags: ["shoulder", "strike", "energy", "gravity"], weight: 2.6, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.5,
+    id: "sh-gravity", name: "Singularity", kind: "shoulder", shoulder: "gravity", tags: ["shoulder", "strike", "energy", "gravity"], weight: 2.6, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.7,
     stats: { damage: s(WD.gravityDps, 0.12), finalDamage: s(WD.gravityFinalDamage, 0.12), blast: s(WD.gravityFinalRadius, 0.08), wellRadius: s(WD.gravityRadius, 0.08), effectTime: s(WD.gravityTime, 0.1), ap: s(WD.gravityAp, 0), cooldown: s(WD.gravityCooldown, 0.1) },
   },
   {
-    id: "sh-artillery", name: "Artillery beacon", kind: "shoulder", shoulder: "artillery", tags: ["shoulder", "strike", "explosive", "mortar"], weight: 1.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart", drop: 0.6,
+    id: "sh-artillery", name: "Artillery beacon", kind: "shoulder", shoulder: "artillery", tags: ["shoulder", "strike", "explosive", "mortar"], weight: 1.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart", drop: 0.9,
     stats: { shells: s(WD.artilleryShells, 0.15), damage: s(WD.artilleryDamage, 0.12), blast: s(WD.artilleryBlast, 0.08), ap: s(WD.artilleryAp, 0), cooldown: s(WD.artilleryCooldown, 0.1) },
   },
 ];

@@ -15,7 +15,8 @@ for (let i = 0; i < N; i++) {
   kinds[d.item.kind] = (kinds[d.item.kind] ?? 0) + 1;
   bases[d.item.base] = (bases[d.item.base] ?? 0) + 1;
   const b = BASE_BY_ID[d.item.base];
-  if (b?.kind === "shoulder" && ["rockets", "mortar"].some((t) => b.tags.includes(t))) launchers++;
+  // Shoulder weapons: the launchers and (2026-11-14) the strikes; not feeds, power or summoner gear.
+  if (b?.kind === "shoulder" && (b.family === "launcher" || b.family === "strike")) launchers++;
 }
 const pct = (n: number) => ((100 * n) / N).toFixed(1) + "%";
 const fails: string[] = [];
