@@ -323,7 +323,13 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
-- 2026-11-14: Inventory Show chips are multi-select toggle tags; no tags selected shows everything (the All chip is gone). `src/ui/inventory.ts`. Checked: typecheck, npm test. Claude (Keith's request).
+### 2026-11-14 · Inventory filter tags (Keith; Claude)
+- Inventory Show chips are multi-select toggle tags; no tags selected shows everything (the All chip is gone). `src/ui/inventory.ts`. Checked: typecheck, npm test. Claude (Keith's request).
+
+### 2026-11-14 · Loot slot mix: every slot drops, shoulder launchers more often (Keith; Claude on `claude/project-thread-5qd0w5`)
+- Keith felt only weapons dropped and wasn't sure he'd seen a shoulder weapon. Measured (40k field drops): weapons 38% (+ weapon quads' own gun drops on top), Protocols 20%, legs/hull/sensor/pack/waist ~6% each, shoulder launchers 6.6% (five of them, ~1.3% each). Cause: one pool picked by base, and 28 weapon bases outweighed everything.
+- Now a random part or weapon picks its slot first (`kindWeapon` 30, `kindShoulder` 20, legs/hull/sensor/pack/waist 10 each; group "Loot slot mix", Loot topics), then a base in it by the bases' drop weights. Shoulder launchers' drop weights up (rocket 1.5, missile pod 1.5, mortars 1.2, napalm 1). Measured after: weapons 24%, Protocols 20%, shoulder 16% (launchers 9.7%), each other slot ~8%.
+- Files: `src/items/generate.ts` (`kindWeights`, `rollItem`), `src/items/bases.ts`, topic lists in `src/expedition/loop.ts` and the loadout, convoy, inventory labs; new `tools/lootmix-check.ts` (each slot ≥ 6%, weapons ≤ 40%, launchers ≥ 8%, every droppable base turns up). Checked: `npm test` 110/110.
 
 ### 2026-11-14 · Weapons lie horizontal in the inventory (Keith; Claude on `claude/project-thread-gbjf4z`)
 - Every weapon's grid footprint is wider than tall: hull guns swapped (rail 8×2, autocannon 5×2, rocket launcher 4×3...), held 3×2, long held 4×2, swords 4×1 / 3×1 / 4×2, shoulder gear 3×2 (`src/items/gridSize.ts`). Pictures were already drawn tall and turned when flat, so they lie along the footprint with no new art; the doll tile no longer turns them again. Old saved layouts: `syncGrid` re-places any item whose size changed, so weapons just land in the first free spot. Checked: `grid-check` updated, full `npm test` 108/108. Open for Keith: the held 2×2→3×2 and shoulder 2×2→3×2 growth (sliders, Item sizes).
