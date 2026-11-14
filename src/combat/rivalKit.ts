@@ -3,6 +3,7 @@
 // each weapon on its control (left or right trigger, keys 1-3), its kind, range, projectile speed, blast and rate,
 // read from the item's own rolled stats or the weapon sliders exactly as the arsenal reads them (src/weapons/arsenal.ts),
 // and the range the rival likes to fight at. Ownership: host (the rival's loadout is loot later: factions step 5).
+import { strikeStats, isSelfStrike, type StrikeKind } from "../weapons/strikes";
 import { isRoundGun } from "../weapons/guns";
 import { BASES, BASE_BY_ID, type Base } from "../items/bases";
 import { rng, rollItem, type LootValues } from "../items/generate";
@@ -13,7 +14,7 @@ import { itemDpsPair } from "../items/dps";
 import type { WeaponValues } from "../weapons/tuning";
 import { energyNeed, energyStats, isEnergy, type EnergyClass, type EnergyStats } from "../weapons/energy/energySim";
 
-export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | EnergyClass;
+export type KitKind = "minigun" | "rail" | "autocannon" | "rpg" | "mortar" | "linemortar" | "missiles" | "shrpg" | "sword" | "strike" | EnergyClass;
 /** An energy weapon (Keith 2026-11-02, on the reactor): pulse laser, beam laser, nova lance, plasma, orb, arc, sunder. */
 export const isEnergyKind = (k: KitKind): k is EnergyClass => isEnergy(k);
 /** Which control fires it: a trigger side (0 left, 1 right) or a shoulder key (1-3). */
@@ -48,7 +49,7 @@ export interface KitWeapon {
 }
 
 /** The range each kind likes (m), capped at 80% of its reach. */
-export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4,
+export const IDEAL: Record<KitKind, number> = { minigun: 32, rail: 50, autocannon: 40, rpg: 34, shrpg: 36, mortar: 55, linemortar: 38, missiles: 42, sword: 4, strike: 40,
   // Energy weapons: the hitscan ones mid range, the slow orb and the short arc close, the lance and sunder long.
   laser: 34, beam: 26, lance: 50, plasma: 32, orb: 24, arc: 17, sunder: 40 };
 
@@ -89,6 +90,15 @@ export function kitOf(r: Resolved, v: WeaponValues): KitWeapon[] {
     }
   });
   for (const s of r.shoulders) {
+    // Strikes (Keith 2026-11-14, src/weapons/strikes.ts): painted and released like a launcher; a self strike (quake,
+    // cryo bomb) goes off round the mech, so its "range" is most of its reach.
+    if (s.family === "strike") {
+      const st = strikeStats(s.weapon as StrikeKind, s.own, v);
+      const self = isSelfStrike(st.kind);
+      const range = self ? st.radius * 0.7 : st.kind === "orbital" ? v.orbitalRange : st.kind === "gravity" ? v.gravityRange : v.artilleryRange;
+      out.push(w({ key: s.key } as KitControl, "strike", { range, damage: st.finalDamage || st.damage, blast: st.finalRadius || st.radius, cooldown: st.cooldown, flight: self ? 0 : st.kind === "orbital" ? v.orbitalDelay : st.kind === "gravity" ? v.gravityFlight : v.artilleryDelay }));
+      continue;
+    }
     if (s.family !== "launcher") continue;
     const ctl = { key: s.key } as KitControl, o = s.own;
     if (s.weapon === "mortar") out.push(w(ctl, "mortar", { range: v.mortarMaxRange, minRange: 10, damage: o?.damage ?? v.mortarDamage, blast: o?.blast ?? v.mortarBlast, cooldown: o?.cooldown ?? v.mortarCooldown, flight: v.mortarFlight, count: v.mortarShells }));
