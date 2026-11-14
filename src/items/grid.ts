@@ -128,12 +128,13 @@ export interface GridValues {
   stashRows: number;
   gridTurn: number;
   gridCellPx: number;
+  invDollShare: number;
   salvagePerBlock: number;
   salvageLevel: number;
   [k: string]: number;
 }
 
-export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 34, salvagePerBlock: 25, salvageLevel: 0 };
+export const GRID_DEFAULTS: GridValues = { cargoCols: 10, cargoRows: 8, stashCols: 12, stashRows: 12, gridTurn: 1, gridCellPx: 36, invDollShare: 0.5, salvagePerBlock: 25, salvageLevel: 0 };
 
 const G = "Grid";
 export const GRID_PARAMS: Param[] = [
@@ -142,7 +143,8 @@ export const GRID_PARAMS: Param[] = [
   { key: "stashCols", label: "Stash columns", min: 6, max: 30, step: 1, group: G, tip: "The convoy's stash grid: as wide as this, at least this tall, and it grows to take everything (no limit yet)" },
   { key: "stashRows", label: "Stash rows", min: 6, max: 30, step: 1, group: G },
   { key: "gridTurn", label: "Items can turn", min: 0, max: 1, step: 1, group: G, tip: "1: R (or right click) turns an item 90° while you hold it. Items are always placed upright on their own" },
-  { key: "gridCellPx", label: "Cell size (px)", min: 16, max: 64, step: 1, group: G },
+  { key: "gridCellPx", label: "Cell size (px)", min: 16, max: 64, step: 1, group: G, tip: "On a screen 1080 px tall; the cells grow and shrink with the screen's height (×0.8 to ×1.6)" },
+  { key: "invDollShare", label: "Doll height (screen share)", min: 0.3, max: 0.8, step: 0.05, group: G, tip: "How much of the screen's height the inventory's mech doll takes (Keith 2026-11-14: about half); its tiles and the text grow with it" },
   { key: "salvagePerBlock", label: "Scrap per salvage block", min: 5, max: 200, step: 5, group: "Salvage blocks", tip: "Out in the field the scrap at risk shows in the cargo grid as blocks of this much" },
   { key: "salvageLevel", label: "Compactor level (labs without a convoy)", min: 0, max: 3, step: 1, group: "Salvage blocks", tip: "Stand-in for the convoy's Salvage compactor unlock where there's no convoy (the inventory lab); the convoy lab uses what's bought" },
 ];
