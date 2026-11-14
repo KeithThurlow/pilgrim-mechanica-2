@@ -589,7 +589,7 @@ export function inventoryScreen(o: InventoryOptions) {
         // The item's own picture, as big as the tile takes (guns and swords laid flat), and its grid size beside the
         // label (Keith 2026-11-03: "once I move an item onto the mech doll, I can't see how many grid spaces that
         // item needs").
-        const c = itemCells(shown, gv()), flat = c.h >= 2 * c.w && TALL.includes(gridClassOf(shown));
+        const c = itemCells(shown, gv()), flat = !TALL.includes(gridClassOf(shown)) && c.h >= 2 * c.w; // weapons are drawn wide already (Keith 2026-11-14)
         const pic0 = tilePic(), fw = flat ? c.h : c.w, fh = flat ? c.w : c.h, px = Math.min(pic0.w / fw, pic0.h / fh, pic0.h / 1.6);
         const svg = itemIcon(shown, RARITY[shown.rarity].color, flat, gv());
         svg.style.width = `${fw * px}px`; svg.style.height = `${fh * px}px`;
