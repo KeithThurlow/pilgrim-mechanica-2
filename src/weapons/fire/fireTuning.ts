@@ -127,15 +127,15 @@ export const FIRE_DEFAULTS = {
   flameShake: 0.01,
   // Napalm launcher (shoulder): canisters up a strip like the line mortar (its ripple, flight and arc sliders), each a
   // small burst and a burning pool.
-  napalmShells: 6,
+  napalmShells: 8,
   napalmLength: 30,
-  napalmDamage: 40,
+  napalmDamage: 70,
   napalmBlast: 2.5,
   napalmAp: 0.2,
   napalmCooldown: 9,
   napalmPool: 3.6,
   napalmPoolTime: 7,
-  napalmPoolDps: 35,
+  napalmPoolDps: 55,
   napalmBurnTime: 4,
   napalmBurnDps: 30,
   // Pools (napalm, and a flamer's stream where it splashes on the sand: flameSplash × a small short pool).

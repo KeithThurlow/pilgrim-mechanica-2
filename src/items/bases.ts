@@ -17,19 +17,21 @@ import type { GunClass } from "../mech/upper";
 import type { ItemKind, Size, SeekerMode } from "./item";
 import { ENERGY_BASES, ENERGY_STATS } from "../weapons/energy/energyBases";
 import { traitsOf } from "./traits";
+import type { StrikeKind } from "../weapons/strikes";
 
 /** Shoulder gear (Keith 2026-10-25, widened 2026-10-30): on a hull's shoulder (keys 1 and 2, whatever its hull mount
  *  holds) or, for launchers, on the pack mount as a back weapon (key 3, in place of the pack). Every one has a key. */
-export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar" | "napalm" | "beltfeed" | "incendiary" | "capacitor";
+export type ShoulderWeapon = "rpg" | "missiles" | "mortar" | "linemortar" | "napalm" | "beltfeed" | "incendiary" | "capacitor" | StrikeKind;
 /** What a shoulder item is (Keith 2026-10-30): a launcher (its key paints and fires it), a feed (boosts its own side's
  *  gun; its key overdrives it or loads special rounds) or power (faster energy refill; its key discharges a bar). */
-export type ShoulderFamily = "launcher" | "feed" | "power";
+export type ShoulderFamily = "launcher" | "feed" | "power" | "strike";
 /** Special rounds a feed's key can load into its gun (only incendiary so far; armour-piercing and explosive come
  *  later: add the name here, its numbers in src/weapons/gear.ts and its effect in src/game/shots.ts). */
 export type RoundType = "incendiary";
 /** A shoulder weapon's family. */
 export const SHOULDER_FAMILY: Record<ShoulderWeapon, ShoulderFamily> = {
   rpg: "launcher", missiles: "launcher", mortar: "launcher", linemortar: "launcher", napalm: "launcher", beltfeed: "feed", incendiary: "feed", capacitor: "power",
+  quake: "strike", orbital: "strike", stasis: "strike", gravity: "strike", artillery: "strike",
 };
 
 export interface StatInfo {
@@ -128,6 +130,9 @@ export const STATS: Record<string, StatInfo> = {
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
   /** A capacitor bank's extra reactor capacity (bars; Keith 2026-11-14, soft limits: what lets heavy energy weapons charge). */
   capBonus: { label: "Reactor capacity + (bars)", better: 1, decimals: 1 },
+  // Shoulder strikes (Keith 2026-11-14, src/weapons/strikes.ts): the big last blast, the well's size.
+  finalDamage: { label: "Final blast damage", better: 1, decimals: 0 },
+  wellRadius: { label: "Well radius (m)", better: 1, decimals: 1 },
   // Summoner gear (Keith 2026-11-02, src/summon/gear.ts): the pack builds mech replicas, the shoulders carry drones and
   // the scrap swarm.
   replicas: { label: "Mech replicas", better: 1, decimals: 0, whole: true },
@@ -398,7 +403,7 @@ export const BASES: Base[] = [
   // Shoulder weapons (Keith 2026-10-25), keys 1-3: the RPG rocket, the missile pod, the big mortar, the line mortar.
   {
     id: "sh-rpg", name: "Shoulder rocket", kind: "shoulder", shoulder: "rpg", tags: ["shoulder", "explosive", "rocket"], weight: 1.8, makers: ["Suzaku"], look: "rampart-rocket", drop: 1.5,
-    stats: { damage: s(WD.rpgDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgShoulderCooldown, 0.1), magazine: s(WD.rpgShoulderMag, 0.3), reload: s(WD.rpgShoulderReload, 0.1) },
+    stats: { damage: s(WD.rpgDamage * WD.rpgShoulderDamage, 0.1), ap: s(WD.rpgAp, 0), blast: s(WD.rpgBlast * WD.rpgShoulderBlast, 0.08), shellSpeed: s(WD.rpgSpeed, 0.08), cooldown: s(WD.rpgShoulderCooldown, 0.1), magazine: s(WD.rpgShoulderMag, 0.3), reload: s(WD.rpgShoulderReload, 0.1) },
   },
   {
     id: "sh-missiles", name: "Missile pod", kind: "shoulder", shoulder: "missiles", tags: ["shoulder", "explosive", "missiles"], weight: 2.4, makers: ["Suzaku", "Novus-Lux"], look: "rampart-rocket", drop: 1.5,
@@ -497,6 +502,28 @@ export const BASES: Base[] = [
   },
   // Energy weapons (Keith 2026-11-02): hull weapons on the energy bars, src/weapons/energy/energyBases.ts.
   ...ENERGY_BASES,
+  // Strikes (Keith 2026-11-14: "activated weapons ... some sort of drastic effect ... a cooldown", src/weapons/strikes.ts):
+  // one key, one big moment, a long cooldown. Shoulders only (not the back). Base values from the strike sliders.
+  {
+    id: "sh-quake", name: "Quake hammer", kind: "shoulder", shoulder: "quake", tags: ["shoulder", "strike", "explosive", "quake"], weight: 3.0, makers: ["Stratford-Aegis"], look: "rampart-siege", drop: 1.0,
+    stats: { damage: s(WD.quakeDamage, 0.12), blast: s(WD.quakeRadius, 0.08), ap: s(WD.quakeAp, 0), cooldown: s(WD.quakeCooldown, 0.1) },
+  },
+  {
+    id: "sh-orbital", name: "Orbital lance", kind: "shoulder", shoulder: "orbital", tags: ["shoulder", "strike", "energy", "orbital"], weight: 2.2, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.7,
+    stats: { damage: s(WD.orbitalTickDamage, 0.12), finalDamage: s(WD.orbitalFinalDamage, 0.12), blast: s(WD.orbitalFinalRadius, 0.08), effectTime: s(WD.orbitalTime, 0.1), ap: s(WD.orbitalAp, 0), cooldown: s(WD.orbitalCooldown, 0.1) },
+  },
+  {
+    id: "sh-stasis", name: "Cryo bomb", kind: "shoulder", shoulder: "stasis", tags: ["shoulder", "strike", "cold", "freeze"], weight: 2.0, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart", drop: 0.9,
+    stats: { damage: s(WD.stasisDamage, 0.12), blast: s(WD.stasisRadius, 0.08), cooldown: s(WD.stasisCooldown, 0.1) },
+  },
+  {
+    id: "sh-gravity", name: "Singularity", kind: "shoulder", shoulder: "gravity", tags: ["shoulder", "strike", "energy", "gravity"], weight: 2.6, makers: ["Novus-Lux"], look: "rampart-railgun", drop: 0.7,
+    stats: { damage: s(WD.gravityDps, 0.12), finalDamage: s(WD.gravityFinalDamage, 0.12), blast: s(WD.gravityFinalRadius, 0.08), wellRadius: s(WD.gravityRadius, 0.08), effectTime: s(WD.gravityTime, 0.1), ap: s(WD.gravityAp, 0), cooldown: s(WD.gravityCooldown, 0.1) },
+  },
+  {
+    id: "sh-artillery", name: "Artillery beacon", kind: "shoulder", shoulder: "artillery", tags: ["shoulder", "strike", "explosive", "mortar"], weight: 1.4, makers: ["Suzaku", "Stratford-Aegis"], look: "rampart", drop: 0.9,
+    stats: { shells: s(WD.artilleryShells, 0.15), damage: s(WD.artilleryDamage, 0.12), blast: s(WD.artilleryBlast, 0.08), ap: s(WD.artilleryAp, 0), cooldown: s(WD.artilleryCooldown, 0.1) },
+  },
 ];
 
 // Every shoulder item has a family (launcher unless it says otherwise: the older four).
