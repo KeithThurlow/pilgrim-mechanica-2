@@ -79,7 +79,7 @@ export class EnergyBar {
 
   constructor(parent: HTMLElement = leftStack()) {
     this.root = document.createElement("div");
-    Object.assign(this.root.style, { display: "flex", flexDirection: "column-reverse", gap: "6px", order: "0" } as Partial<CSSStyleDeclaration>);
+    Object.assign(this.root.style, { display: "flex", flexDirection: "column-reverse", gap: "6px", order: "2" } as Partial<CSSStyleDeclaration>);
     parent.appendChild(this.root);
   }
 
