@@ -441,10 +441,42 @@ const mk = (base: string, id = base + Math.random().toString(36).slice(2, 6)) =>
   for (const b of BASES) if (b.kind === "hull") must(!!b.mounts && b.mounts.hull.length >= 2, `${b.id}: a hull with no hull mounts`);
   const armed = defaultLoadout();
   fit(armed, "mountL", mk("arm-rampart")); fit(armed, "mountR", mk("arm-rampart"));
-  // (Legs that lift only light hulls, hover legs, on the lightest hull.)
+  // (Hover legs on the lightest hull, as when they took only light ones.)
   const light = defaultLoadout();
   light.hull = makeItem(BASES.filter((b) => b.kind === "hull").sort((a, b) => a.weight - b.weight)[0].id);
   for (const b of BASES) must(SLOTS.some((s) => !fitProblem(armed, s, makeItem(b.id)) || !fitProblem(defaultLoadout(), s, makeItem(b.id)) || !fitProblem(light, s, makeItem(b.id))), `${b.id} fits no slot`);
+}
+
+// ---- Leg load (Keith 2026-11-14, soft limits): any legs carry any hull, slower the further over their best load ----
+{
+  const lo = defaultLoadout(), r0 = resolve(lo);
+  must(r0.load.speed === 1 && r0.load.over === 0, `the default mech is over its legs' best load (${r0.load.tonnes.toFixed(1)} / ${r0.load.best} t)`);
+  const hover = makeItem("legs-hover"), siege = makeItem("hull-siege");
+  must(!fitProblem(lo, "legs", hover), "hover legs refused under the Rampart hull (soft limits: they fit, slower)");
+  // Heavier and heavier on hover legs: never faster, never under the floor, slower than unloaded.
+  lo.legs = hover;
+  let last = Infinity;
+  for (const h of ["hull-cuirass", "hull-salvager", "hull-rampart", "hull-siege"]) {
+    lo.hull = makeItem(h);
+    const r = resolve(lo);
+    must(r.load.speed <= last + 1e-9, `${h} on hover legs: a heavier hull walked faster`);
+    must(r.load.speed >= LOADOUT_DEFAULTS.loadFloor - 1e-9 && r.values.walkSpeed >= hover.stats.walkSpeed * LOADOUT_DEFAULTS.loadFloor - 1e-6, `${h}: under the floor`);
+    last = r.load.speed;
+  }
+  lo.hull = siege;
+  const heavy = resolve(lo);
+  must(heavy.load.speed < 0.85 && heavy.values.walkSpeed < hover.stats.walkSpeed * 0.85, `a Siege hull on hover legs barely slowed (× ${heavy.load.speed.toFixed(2)})`);
+  must(heavy.values.accel < hover.stats.accel && heavy.values.turnRate < hover.stats.turnRate, "overload didn't cut the speed-up and turn");
+  // 10% over on legs with strain 1 costs loadSpeedSlope × 10% of the walk.
+  const ten = defaultLoadout();
+  ten.legs = { ...ten.legs!, stats: { ...ten.legs!.stats, carry: resolve(ten).load.tonnes / 1.1, strain: 1 } };
+  const rt = resolve(ten);
+  must(Math.abs(rt.load.speed - (1 - LOADOUT_DEFAULTS.loadSpeedSlope * 0.1)) < 1e-6, `10% over: speed × ${rt.load.speed.toFixed(3)}`);
+  // Legs saved before leg load (no carry stat) fall back on their base's.
+  const old = defaultLoadout(), st = { ...old.legs!.stats }; delete st.carry; delete st.strain;
+  old.legs = { ...old.legs!, stats: st };
+  must(resolve(old).load.best === BASE_BY_ID["legs-rampart"].stats.carry.base, "old legs without a carry stat didn't use their base's");
+  console.log(`leg load: default ${r0.load.tonnes.toFixed(1)} / ${r0.load.best} t · Siege hull on hover legs ${heavy.load.tonnes.toFixed(1)} / ${heavy.load.best} t, speed × ${heavy.load.speed.toFixed(2)}, walk ${heavy.values.walkSpeed.toFixed(2)} m/s`);
 }
 
 // ---- Cargo ----

@@ -553,12 +553,16 @@ export function inventoryScreen(o: InventoryOptions) {
 
   /** The mech as fitted, in a line of figures under the doll. */
   function statStrip() {
-    const r = resolve(st.loadout, o.tuning).values, fitted = Object.values(st.loadout).filter((x): x is Item => !!x);
+    const rr = resolve(st.loadout, o.tuning), r = rr.values, fitted = Object.values(st.loadout).filter((x): x is Item => !!x);
     const power = fitted.reduce((n, x) => n + itemPower(x), 0), dps = fitted.reduce((n, x) => n + (itemDps(x) ?? 0), 0);
     const box = el("div", "inv-stats");
     const cell = (k: string, v: string) => { const c = el("div", "inv-statcell"); c.append(el("span", "", k), el("b", "", v)); box.append(c); };
     cell("Power", `${Math.round(power)}`); cell("DPS", `${Math.round(dps)}`); cell("Hull", `${Math.round(r.hull)}`); cell("Armour", `${Math.round(r.armour)}`);
-    cell("Walk", `${fmt(r.walkSpeed, 1)} m/s`); cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
+    cell("Walk", `${fmt(r.walkSpeed, 1)} m/s`);
+    // Leg load (Keith 2026-11-14): the weight on the legs against their best load, and the speed it costs over it.
+    const ld = rr.load;
+    cell("Load", `${fmt(ld.tonnes, 1)}/${fmt(ld.best, 0)} t${ld.speed < 0.995 ? ` −${Math.round((1 - ld.speed) * 100)}%` : ""}`);
+    cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
     return box;
   }
 
