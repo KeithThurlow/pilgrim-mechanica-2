@@ -515,7 +515,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
     app.hud.set("hull", () => `hull ${bar} ${hull}/${player.maxHealth}${player.alive ? "" : ` · destroyed, rebuilt in ${Math.max(0, V.respawn - player.deadFor).toFixed(1)} s`}${auto ? " · demo" : ""}`);
     app.hud.set("deaths", () => `bodies ${deaths.dead.length} (${deaths.liveCount} moving)${craters.count ? ` · craters ${craters.count} (last fit ${craters.stats.addMs.toFixed(1)} ms, chunk patch ${patchMs.toFixed(1)} ms, ${patchN} patches)` : ""}`);
     energyHud().update(player.dash, foot.driving);
-    reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
+    reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)), arsenal.energy.need(), arsenal.energy.underpowered());
     const dashDots = "●".repeat(player.dash.charges) + "○".repeat(Math.max(0, Math.round(V.dashCharges) - player.dash.charges))
       + (V.boostFuel > 0 ? ` booster ${"▮".repeat(Math.round(10 * player.dash.fuel / V.boostFuel)).padEnd(10, "▯")}` : "");
     const fl = bf.fx.last;

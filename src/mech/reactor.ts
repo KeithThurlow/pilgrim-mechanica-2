@@ -33,6 +33,7 @@ export class Reactor {
 
   constructor(public v: ReactorValues) { this.charge = v.reactorCap; }
 
+  /** What it holds when full (EnergyPool.cap: heavy weapons need their shot to fit, src/weapons/energy/energySim.ts). */
   get cap() { return Math.max(0.1, this.v.reactorCap); }
   /** What there is now (the energy weapons' EnergyPool). */
   get energy() { return this.charge; }

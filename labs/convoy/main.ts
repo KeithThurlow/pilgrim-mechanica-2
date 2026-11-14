@@ -1184,7 +1184,7 @@ app.onTick((rawDt) => {
   app.hud.set("pilot", foot.driving ? "" : `pilot: ${foot.mount.state}${foot.sim.alive ? "" : " (killed)"} · health ${Math.round(foot.sim.health)}/${V.pilotHealth}${foot.mount.onFoot ? ` · on ${foot.sim.on?.name ?? "the sand"} · ${foot.toMech.toFixed(1)} m from the mech (F within ${V.pilotRange})` : ""}`);
   app.hud.set("mech", () => `mech: ${carry.label}${carry.state === "inRange" ? ` (${Math.max(0, V.craneDwell - carry.timer).toFixed(1)} s)` : ""} · ${carry.distance(sim).toFixed(0)} m from the crane (range ${V.craneRange})${auto ? " · demo" : ""}`);
   energyHud().update(player.dash, foot.driving);
-  reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)));
+  reactorHud().update(player.reactor, foot.driving && player.upper.guns.some((g) => g.enabled && isEnergy(g.stats?.cls)), arsenal.energy.need(), arsenal.energy.underpowered());
   vitals.hideActions = bay.isOpen || inventory.isOpen;
   vitals.update(dt, { ...kitCtl.view(), abilities: abilityCtl.view(), keys: [...arsenal.keySlots(), ...summonKeys.slots(fitted, !!player.gunsOff)], healing: abilityCtl.healing(foot.driving ? player.uid : "pilot") }, player.hits, camera, sim.pelvis);
   if (vitals.lowNow) kitCtl.warn();
