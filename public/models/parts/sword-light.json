@@ -1,0 +1,35 @@
+{
+ "id": "sword-light",
+ "kind": "sword",
+ "name": "Breaker sword",
+ "maker": "Suzaku",
+ "says": "katana: slim, curved, single edge",
+ "tris": 568,
+ "meshes": 4,
+ "size": [
+  0.5,
+  0.571,
+  5.31
+ ],
+ "min": [
+  -0.25,
+  -0.2378,
+  -0.6
+ ],
+ "max": [
+  0.25,
+  0.333,
+  4.7098
+ ],
+ "sockets": {},
+ "moving": {
+  "Blade": {
+   "pivot": [
+    0.0,
+    0.0,
+    0.46
+   ]
+  }
+ },
+ "source": "tools/blender/parts/items.py"
+}

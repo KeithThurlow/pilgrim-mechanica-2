@@ -1,0 +1,35 @@
+{
+ "id": "sword-heavy",
+ "kind": "sword",
+ "name": "Buster sword",
+ "maker": "Stratford-Aegis",
+ "says": "cleaver: broad slab, chisel point, spine rail",
+ "tris": 1116,
+ "meshes": 4,
+ "size": [
+  0.344,
+  0.92,
+  6.096
+ ],
+ "min": [
+  -0.172,
+  -0.46,
+  -0.67
+ ],
+ "max": [
+  0.172,
+  0.46,
+  5.4259
+ ],
+ "sockets": {},
+ "moving": {
+  "Blade": {
+   "pivot": [
+    0.0,
+    0.0,
+    0.46
+   ]
+  }
+ },
+ "source": "tools/blender/parts/items.py"
+}
