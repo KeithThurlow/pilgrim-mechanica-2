@@ -126,6 +126,8 @@ export const STATS: Record<string, StatInfo> = {
   poolTime: { label: "Pool burns (s)", better: 1, decimals: 1 },
   poolDps: { label: "Pool damage/s", better: 1, decimals: 0 },
   dischargeBars: { label: "Reactor bars refilled by the key", better: 1, decimals: 0, whole: true },
+  /** A capacitor bank's extra reactor capacity (bars; Keith 2026-11-14, soft limits: what lets heavy energy weapons charge). */
+  capBonus: { label: "Reactor capacity + (bars)", better: 1, decimals: 1 },
   // Summoner gear (Keith 2026-11-02, src/summon/gear.ts): the pack builds mech replicas, the shoulders carry drones and
   // the scrap swarm.
   replicas: { label: "Mech replicas", better: 1, decimals: 0, whole: true },
@@ -195,6 +197,9 @@ export interface Base {
 export type SummonKind = "replicas" | "drones" | "swarm";
 
 const R = LEG_TYPES.rampart.values;
+// Leg items roll their stride around their leg type's (Keith 2026-11-14: the items' own, shorter strides overrode the
+// leg types' walk in every lab with a loadout).
+const ST = LEG_TYPES["rampart-stilt"].values, SG = LEG_TYPES["rampart-siege"].values;
 const W = { ...WALKER_DEFAULTS, ...R };
 const U = UPPER_DEFAULTS;
 const WD = WEAPON_DEFAULTS;
@@ -231,22 +236,22 @@ export const BASES: Base[] = [
   // Legs: walk, sprint, stride, stomp, turn and what they carry.
   {
     id: "legs-rampart", name: "Rampart legs", kind: "legs", tags: ["legs"], weight: 6, makers: ["Stratford-Aegis"], look: "rampart", drop: 1,
-    stats: { walkSpeed: s(W.walkSpeed, 0.03), sprintSpeed: s(W.sprintSpeed, 0.03), accel: s(W.accel, 0.1), strideBase: s(W.strideBase, 0.04), stridePerSpeed: s(W.stridePerSpeed, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1), carry: s(20, 0.05), strain: s(1, 0) },
+    stats: { walkSpeed: s(W.walkSpeed, 0.03), sprintSpeed: s(W.sprintSpeed, 0.03), accel: s(W.accel, 0.1), strideBase: s(R.strideBase!, 0.04), stridePerSpeed: s(R.stridePerSpeed!, 0.06), impact: s(W.impact, 0.1), turnRate: s(W.turnRate, 0.08), trample: s(1, 0.06), crush: s(1, 0.1), carry: s(20, 0.05), strain: s(1, 0) },
   },
   {
     id: "legs-stilt", name: "Stilt legs", kind: "legs", tags: ["legs"], weight: 4.5, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 1,
-    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(3.8, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1), carry: s(16, 0.05), strain: s(1.1, 0) },
+    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(3.8, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(1.4, 0.1), turnRate: s(140, 0.08), trample: s(0.8, 0.06), crush: s(0.75, 0.1), carry: s(16, 0.05), strain: s(1.1, 0) },
   },
   {
     id: "legs-siege", name: "Siege legs", kind: "legs", tags: ["legs"], weight: 8.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1,
-    stats: { walkSpeed: s(4.8, 0.03), sprintSpeed: s(6.2, 0.03), accel: s(2.2, 0.1), strideBase: s(2.1, 0.04), stridePerSpeed: s(0.36, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1), carry: s(27, 0.05), strain: s(0.8, 0) },
+    stats: { walkSpeed: s(4.8, 0.03), sprintSpeed: s(6.2, 0.03), accel: s(2.2, 0.1), strideBase: s(SG.strideBase!, 0.04), stridePerSpeed: s(SG.stridePerSpeed!, 0.06), impact: s(3.6, 0.1), turnRate: s(95, 0.08), trample: s(1.3, 0.06), crush: s(1.5, 0.1), carry: s(27, 0.05), strain: s(0.8, 0) },
   },
   {
     // Hover legs (Keith 2026-11-02: "a floating leg that can't support heavy hulls... hovers instead of walking"): the
     // Stilt's legs on a hover drive, feet hanging; quick and floaty, no stomp, best with light hulls (the Cuirass, the
     // Salvager): heavier ones fit and crawl (Keith 2026-11-14, soft limits). A model of their own comes later: the Stilt's legs stand in.
     id: "legs-hover", name: "Hover legs", kind: "legs", tags: ["legs", "hover"], weight: 3, makers: ["Novus-Lux"], look: "rampart-stilt", drop: 0.7,
-    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(4, 0.1), strideBase: s(2.5, 0.04), stridePerSpeed: s(0.45, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), carry: s(15, 0.05), strain: s(1.5, 0) },
+    stats: { walkSpeed: s(5.2, 0.03), sprintSpeed: s(6.8, 0.03), accel: s(4, 0.1), strideBase: s(ST.strideBase!, 0.04), stridePerSpeed: s(ST.stridePerSpeed!, 0.06), impact: s(0.6, 0.1), turnRate: s(160, 0.08), trample: s(0.5, 0.06), crush: s(0.4, 0.1), hover: s(1, 0), carry: s(15, 0.05), strain: s(1.5, 0) },
   },
   // Hulls: hull points, torso turn, mounts.
   {
@@ -422,7 +427,7 @@ export const BASES: Base[] = [
   // dash's kinetic bars: the passive speeds its regen, the key refills reactor bars at once.
   {
     id: "sh-capacitor", name: "Capacitor bank", kind: "shoulder", shoulder: "capacitor", tags: ["shoulder", "power", "energy"], weight: 1.6, makers: ["Novus-Lux", "Stratford-Aegis"], look: "rampart-railgun", drop: 0.9,
-    stats: { refill: s(WD.capRefill, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },
+    stats: { refill: s(WD.capRefill, 0.15), capBonus: s(WD.capCapacity, 0.15), dischargeBars: s(WD.capBars, 0.5), cooldown: s(WD.capCooldown, 0.1) },
   },
   // Power packs (the pack mount, high on the back): dash charges and recharge for now (energy weapons later). Charges are
   // energy bars (Keith 2026-10-27: 4 by default, recharge 30% faster; every pack scaled the same).

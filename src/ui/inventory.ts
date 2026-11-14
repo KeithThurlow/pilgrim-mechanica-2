@@ -36,7 +36,7 @@ import { levelOf } from "../items/level";
 import { itemPower, dpsText, itemDps, versusFitted } from "../items/power";
 import type { Item } from "../items/item";
 import { cargoCapacity, cargoSizing, scrapCells } from "../items/cargoSpace";
-import {
+import { energyNeedOf,
   SLOTS, SLOT_NAMES, armable, copyLoadout, isBuiltinArm, effectiveStats, fitProblem, isArm, isHullWeapon, isTwoHander, resolve, unfit,
   socket, socketProblem, unsocket,
   type LoadoutValues, type SlotId,
@@ -629,6 +629,9 @@ export function inventoryScreen(o: InventoryOptions) {
     // Leg load (Keith 2026-11-14): the weight on the legs against their best load, and the speed it costs over it.
     const ld = rr.load;
     cell("Load", `${fmt(ld.tonnes, 1)}/${fmt(ld.best, 0)} t${ld.speed < 0.995 ? ` −${Math.round((1 - ld.speed) * 100)}%` : ""}`);
+    // Capacitor gating (Keith 2026-11-14): with a heavy energy weapon fitted, the reactor against its biggest shot.
+    const need = energyNeedOf(rr);
+    if (need !== null) cell("Reactor", `${fmt(r.reactorCap, 1)}/${fmt(need, 1)}${need > r.reactorCap + 1e-9 ? " underpowered" : ""}`);
     cell("Radar", `${Math.round(r.mechRadar)} m`); cell("Cargo", `${capacity()} cells`);
     return box;
   }

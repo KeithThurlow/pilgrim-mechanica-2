@@ -93,7 +93,7 @@ export const ENERGY_DEFAULTS = {
   sunderCharge: 1.2,
   sunderChannel: 2.5,
   sunderCooldown: 3,
-  sunderEnergy: 2.5,
+  sunderEnergy: 3.5, // Keith 2026-11-14 (soft limits): over a light hull's 3-bar reactor, so it needs a Rampart or bigger, or a capacitor bank
   sunderTrack: 70,
   sunderWidth: 1,
   sunderSlow: 0.5,
