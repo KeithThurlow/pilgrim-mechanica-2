@@ -630,6 +630,8 @@ export class InfantrySwarm {
    * there as commands, so both agree).
    */
   remote: { step(dt: number, base: InfantryTarget): void; shots(): ArrayLike<number> } | null = null;
+  /** Snapshots from the sim worker taken onto this view so far (src/sim/infantryRemote.ts; the drawer blends between them). */
+  snapStamp = 0;
   /** True while a view replays commands it already handed the effects of: no deaths are raised. */
   silent = false;
 
