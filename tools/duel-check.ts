@@ -168,9 +168,10 @@ if (part(1)) {
   must(flat.vertCuts[1] === 0, "a sword rival made vertical cuts with the chance at 0");
   console.log(`sword rival: cut ${Math.round(cut)} in 30 s, ${r.powerCuts[1]} power cuts, ${r.vertCuts[1]} vertical`);
 }
-// A long duel nobody can win (huge hulls): no stuck states over a minute and a half.
+// A long duel nobody can win (huge hulls): no stuck states over two minutes.
 if (part(1)) {
-  const r = runDuel({ seedA: 21, seedB: 22, maxTime: 90, hull: 1e6 });
+  // Two minutes (2026-11-14: was 90 s; the longer walking strides moved seed 21's first push to 100 s).
+  const r = runDuel({ seedA: 21, seedB: 22, maxTime: 120, hull: 1e6 });
   must(r.stuckWorst < 12, `long duel: a mech went ${r.stuckWorst.toFixed(1)} s without moving 3 m or firing`);
   // (Either side: which one changes state depends on the rolled kits, and those move whenever a base joins the pool.
   // Seed 22 rolls hover legs since 2026-11-02, so this also runs a hover rival for a minute and a half.)

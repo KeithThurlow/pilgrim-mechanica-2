@@ -63,7 +63,7 @@ export const WALKER_DEFAULTS = {
   runBounce: 1,
   runCrouch: 0.18,
   // Keith 2026-11-14 (walk strides too short): the hips sit this much lower at walk speed, so the legs reach a longer step.
-  walkCrouch: 0.2,
+  walkCrouch: 0.15,
   impact: 2.2,
   weightShift: 0.08,
   crunchRoll: 4,
