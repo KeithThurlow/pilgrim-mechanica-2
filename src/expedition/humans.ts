@@ -67,6 +67,8 @@ export class BanditCamps {
   private abstracts = new Map<string, AbstractGroup>();
   /** A bandit died: its slot, generation and where (for item drops). */
   onKill: ((i: number, gen: number, x: number, z: number) => void) | null = null;
+  /** The run's threat at a camp (the loop sets it): its size × (never below 1) and its bandits' health × as it streams in. */
+  threat: ((c: BanditCamp) => { size: number; power: number }) | null = null;
   /** A camp opened fire / woke (for sound and notes). */
   onAlert: ((c: BanditCamp) => void) | null = null;
 
@@ -112,6 +114,16 @@ export class BanditCamps {
     this.camps.reset();
   }
 
+  /** The camps on the field and how awake each is (their guard mechs follow it: src/expedition/fieldMechs.ts). */
+  liveCamps(out: { camp: BanditCamp; state: "asleep" | "idle" | "alert" }[] = []) {
+    out.length = 0;
+    for (const l of this.live.values()) out.push({ camp: l.camp, state: l.state });
+    return out;
+  }
+
+  /** Alert a camp on the field by id (its guard mech was shot). */
+  alarmCamp(id: string) { const l = this.live.get(id); if (l) this.alarm(l); }
+
   private alarm(l: Live) { if (l.state !== "alert") { l.state = "alert"; this.onAlert?.(l.camp); } l.quiet = 0; }
 
   /**
@@ -125,10 +137,12 @@ export class BanditCamps {
     this.camps.campsNear(p.x, p.z, v.banditSpawn, this.near);
     for (const c of this.near) {
       if (this.live.has(c.id) || this.blocked(c.x, c.z)) continue;
-      const n = Math.min(CAMP_SLOT_MAX, this.left.get(c.id) ?? c.size);
+      const th = this.threat?.(c) ?? { size: 1, power: 1 };
+      const n = Math.min(CAMP_SLOT_MAX, this.left.get(c.id) ?? Math.round(c.size * th.size));
       if (n <= 0) continue;
       const slots = sw.spawn(n, c.x, c.z, c.radius);
       const hurt = this.hurt.get(c.id) ?? 0;
+      if (th.power !== 1) for (const i of slots) sw.scaleHp(i, th.power);
       const r = rng(hash4(c.seed, 3, 5, 7)), patrol = Math.round(slots.length * v.banditPatrolShare);
       slots.forEach((i, k) => {
         sw.setFrozen(i, 1);

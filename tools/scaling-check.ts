@@ -16,14 +16,14 @@ const fail = (m: string) => { failed++; console.error("FAIL scaling: " + m); };
 const D = { ...DEPTH_DEFAULTS }, L = { ...LOOT_DEFAULTS }, DR = { ...DROP_DEFAULTS }, B = { ...BANDIT_DEFAULTS }, T = { ...THREAT_DEFAULTS };
 const level = (m: number) => 1 + m / DR.levelMetres;
 
-// Robot camps on a 40 km strip, depth = |x| (the road along z).
+// Robot camps on a 120 km strip (wide enough to average fewer camps, Keith 2026-11-14), depth = |x| (the road along z).
 const cf = new CampField({ ...CAMP_DEFAULTS });
 cf.start = { x: 1e7, z: 0 };
 cf.danger = (x) => dangerOf(D, Math.abs(x));
 const C = CAMP_DEFAULTS.campCell;
 function campsAt(m0: number, m1: number) {
   let n = 0, size = 0, bigs = 0, cells = 0;
-  for (let j = -40; j < 40; j++) for (let i = Math.floor(m0 / C); i < Math.ceil(m1 / C); i++) {
+  for (let j = -120; j < 120; j++) for (let i = Math.floor(m0 / C); i < Math.ceil(m1 / C); i++) {
     cells++;
     const c = cf.camp(i, j);
     if (c && c.x >= m0 && c.x < m1) { n++; size += c.size; bigs += c.bigs; }
