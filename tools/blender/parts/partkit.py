@@ -101,6 +101,7 @@ class Build:
         self.body = V.Piece("Body", (0, 0, 0), seed)
         self.glow = V.Piece("Glow", (0, 0, 0), seed + 1)
         self.nodes = {}        # name -> (Piece, pivot, parent name or None, {"axis", "travel"} for the sidecar)
+        self.glows = {}        # node name -> its lit Piece
         self.sockets = {}      # name -> (position, forward or None)
         self.rng = random.Random(seed)
 
@@ -110,9 +111,15 @@ class Build:
         return S
 
     def node(self, name, pivot, parent=None, **move):
-        P = V.Piece(name, pivot, len(self.nodes) + 11)
+        P = V.Piece(name, (0, 0, 0), len(self.nodes) + 11)     # authored about its own pivot
         self.nodes[name] = (P, Vector(pivot), parent, move)
         return P
+
+    def node_glow(self, name):
+        """A lit piece riding a moving node (a lens on a head): authored about the node's pivot, like the node's own."""
+        if name not in self.glows:
+            self.glows[name] = V.Piece(name + "_Glow", (0, 0, 0), len(self.glows) + 31)
+        return self.glows[name]
 
     def socket(self, name, at, forward=None):
         self.sockets[name] = (Vector(at), Vector(forward) if forward else None)
@@ -200,6 +207,10 @@ def write(b, out_dir, wear=None):
         o = _emit(P, e, "Paint_plating", wear)
         if o:
             objs.append(o)
+        if name in b.glows:
+            o = _emit(b.glows[name], e, "Paint_lighting", wear)
+            if o:
+                objs.append(o)
     for name, (at, fwd) in b.sockets.items():
         e = V.new_empty(name, root, at)
         if fwd:

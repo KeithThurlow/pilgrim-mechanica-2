@@ -47,11 +47,9 @@ function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   return out;
 }
 
-/** A copy of a loaded part for one mech: the body in the unit look, the glow unlit (marked so paint leaves it alone). */
-export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group {
-  const root = new THREE.Group();
-  const copy = scene.clone(true);
-  root.add(copy);
+/** Dress a copied GLB tree for one mech: bodies in the unit look, `Paint_lighting` meshes unlit (marked so paint
+ *  leaves them alone). Node names and transforms are kept (a sensor's Head, HeadPitch and Sweep turn). */
+export function dressPart(copy: THREE.Object3D, look: ToonLook) {
   // Collected first: the unit look hangs an outline shell on each mesh it takes, which a live traverse would walk into.
   const meshes: THREE.Mesh[] = [];
   copy.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
@@ -61,6 +59,14 @@ export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group 
     if (lit) { m.material = new THREE.MeshBasicMaterial({ vertexColors: true }); m.userData.glow = true; }
     else look.apply(m);
   }
+}
+
+/** A copy of a loaded part for one mech: the body in the unit look, the glow unlit. */
+export function partFromGlb(scene: THREE.Object3D, look: ToonLook): THREE.Group {
+  const root = new THREE.Group();
+  const copy = scene.clone(true);
+  root.add(copy);
+  dressPart(copy, look);
   return root;
 }
 

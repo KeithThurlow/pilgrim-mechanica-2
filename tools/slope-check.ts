@@ -83,7 +83,10 @@ for (const [name, r] of [["side", side], ["up", up], ["down", down], ["steep", s
 // With Keith's low step (liftHeight 0.4, 2026-10-26; was 0.75) the swing never squashes the leg enough for the extra
 // fold to engage (the "no fold" run is the same), but the thigh still rises well clear of the old vertical (0°): the
 // check asks for the look, not for the mechanism (it used to ask the fold to add 12°).
-if (up.swingThigh < Math.max(30, flat.swingThigh + 6)) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
+// 2026-11-14 (feet reaching out ahead): the landing spot now times the hurried uphill steps right, so uphill feet land
+// nearer the hips (hips 0.22 m behind the feet, were 0.44) and the swing squashes less: the thigh rises about as on the
+// flat (30°, was 65°). Asks that it doesn't fall below the flat's.
+if (up.swingThigh < Math.max(25, flat.swingThigh)) problems.push(`uphill the thigh mid-swing only rises to ${up.swingThigh.toFixed(0)}° (flat ${flat.swingThigh.toFixed(0)}°, no fold ${upOff.swingThigh.toFixed(0)}°)`);
 // Downhill (same notes: "a maximum that the legs get to that doesn't look insane"): planted legs never past the cap.
 const CAP = WALKER_DEFAULTS.legReachMax, TOL = 0.025;
 for (const [name, r] of [["downhill 17°", down], ["downhill 33°", steep]] as const) if (r.stretch > CAP + TOL) problems.push(`${name}: a planted leg stretched to ${(r.stretch * 100).toFixed(0)}% (cap ${(CAP * 100).toFixed(0)}%)`);
