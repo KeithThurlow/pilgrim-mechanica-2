@@ -1,0 +1,35 @@
+{
+ "id": "sword-short",
+ "kind": "sword",
+ "name": "Short sword",
+ "maker": "Suzaku",
+ "says": "machete: leaf blade, knuckle bow",
+ "tris": 432,
+ "meshes": 4,
+ "size": [
+  0.2,
+  0.465,
+  3.921
+ ],
+ "min": [
+  -0.1,
+  -0.274,
+  -0.51
+ ],
+ "max": [
+  0.1,
+  0.191,
+  3.4109
+ ],
+ "sockets": {},
+ "moving": {
+  "Blade": {
+   "pivot": [
+    0.0,
+    0.0,
+    0.46
+   ]
+  }
+ },
+ "source": "tools/blender/parts/items.py"
+}

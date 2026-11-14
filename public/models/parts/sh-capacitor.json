@@ -1,0 +1,27 @@
+{
+ "id": "sh-capacitor",
+ "kind": "shoulder",
+ "name": "Capacitor bank",
+ "maker": "Novus-Lux",
+ "says": "three lit cells, heat sink, power cables",
+ "tris": 1144,
+ "meshes": 2,
+ "size": [
+  0.84,
+  1.436,
+  1.118
+ ],
+ "min": [
+  -0.42,
+  -0.4204,
+  -0.6378
+ ],
+ "max": [
+  0.42,
+  1.016,
+  0.48
+ ],
+ "sockets": {},
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}

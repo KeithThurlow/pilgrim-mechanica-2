@@ -1,0 +1,27 @@
+{
+ "id": "sh-drones",
+ "kind": "shoulder",
+ "name": "Drone rack",
+ "maker": "Novus-Lux",
+ "says": "launch frame, two docked drones",
+ "tris": 988,
+ "meshes": 2,
+ "size": [
+  0.86,
+  0.794,
+  1.054
+ ],
+ "min": [
+  -0.43,
+  0.0,
+  -0.532
+ ],
+ "max": [
+  0.43,
+  0.7936,
+  0.5224
+ ],
+ "sockets": {},
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}
